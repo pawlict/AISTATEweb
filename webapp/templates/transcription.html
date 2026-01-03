@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1 class="h1" data-i18n="page.transcription.title">Transcription</h1>
+
+  <div class="topgrid">
+    <div class="subcard">
+      <div class="label">Język</div>
+      <select id="tr_lang">
+        <option value="auto">auto</option>
+        <option value="pl">pl</option>
+        <option value="en">en</option>
+        <option value="de">de</option>
+        <option value="fr">fr</option>
+        <option value="es">es</option>
+        <option value="uk">uk</option>
+        <option value="ru">ru</option>
+      </select>
+      <div class="small">W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).</div>
+
+      <div class="hr"></div>
+
+      <div class="label">Model Whisper</div>
+      <select id="tr_model">
+        {% for m in whisper_models %}
+        <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
+        {% endfor %}
+      </select>
+
+      <div class="hr"></div>
+    </div>
+
+    <div class="subcard">
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn" id="tr_btn" data-i18n="btn.transcribe">Transcribe</button>
+        <a class="btn secondary" id="tr_download" href="#" style="display:none">Pobierz TXT</a>
+      </div>
+
+      <div class="small" style="margin-top:10px">
+        Status: <b id="tr_status">—</b> • Postęp: <span id="tr_pct">0%</span>
+      </div>
+      <div class="progress" style="margin-top:10px"><div id="tr_bar"></div></div>
+      <div class="small" style="margin-top:10px">Logi są dostępne w zakładce <b>Logi</b>.</div>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <div class="label">Wynik transkrypcji</div>
+  <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…"></textarea>
+  <div class="row" style="margin-top:10px; flex-wrap:wrap">
+    <button class="btn secondary" id="tr_save_txt">Zapisz transkrypcję w projekcie</button>
+  </div>
+  <div class="small">Zapis tworzy plik w projekcie (np. <code>transcript.txt</code>).</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function onDoneTranscribe(j){
+  if(j.result){
+    const out = (j.result.text_ts || j.result.text || "");
+    if(out) document.getElementById("tr_out").value = out;
+    if(j.project_id){
+      const dl = document.getElementById("tr_download");
+      dl.href = `/api/projects/${j.project_id}/download/transcript.txt`;
+      dl.style.display = "inline-flex";
+    }
+  }
+}
+
+document.getElementById("tr_btn").addEventListener("click", async ()=>{
+  const fd = new FormData();
+  fd.append("lang", document.getElementById("tr_lang").value);
+  fd.append("model", document.getElementById("tr_model").value);
+
+  await startTask("tr", "/api/transcribe", fd, onDoneTranscribe);
+});
+
+document.getElementById("tr_save_txt").addEventListener("click", async ()=>{
+  const pid = requireProjectId();
+  const text = document.getElementById("tr_out").value || "";
+  await api(`/api/projects/${pid}/save_transcript`, {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body: JSON.stringify({ text })
+  });
+  alert("Zapisano transkrypcję w projekcie.");
+});
+
+(async()=>{
+  await refreshCurrentProjectInfo();
+  const btn = document.getElementById("tr_btn");
+  if(btn) btn.disabled = !(AISTATE.projectId && AISTATE.audioFile);
+  await resumeTask("tr", onDoneTranscribe);
+})();
+</script>
+{% endblock %}
