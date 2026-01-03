@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1 class="h1">Info</h1>
+  <div class="small">Treść pochodzi z pliku <code>{{ source }}</code>.</div>
+  <div class="hr"></div>
+  <div style="line-height:1.6">{{ content|safe }}</div>
+</div>
+{% endblock %}

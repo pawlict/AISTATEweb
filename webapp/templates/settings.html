@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1 class="h1" data-i18n="nav.settings">Settings</h1>
+
+  <div class="grid">
+    <div class="subcard">
+      <div class="label">Hugging Face Token (pyannote)</div>
+      <input class="input" id="hf_token" type="password" data-i18n-placeholder="settings.hf_placeholder"
+             placeholder="Paste your token (stored locally on the server)" value="{{ settings.hf_token or '' }}"/>
+      <div class="small">Token jest przechowywany w pliku <code>settings.json</code> w katalogu konfiguracji.</div>
+
+      <div class="hr"></div>
+
+      <div class="label">Default Whisper model</div>
+      <select id="def_whisper">
+        {% for m in whisper_models %}
+        <option value="{{m}}" {% if m==settings.whisper_model %}selected{% endif %}>{{m}}</option>
+        {% endfor %}
+      </select>
+
+      <div class="hr"></div>
+
+      <div class="label" data-i18n="settings.ui_language">UI language</div>
+      <select id="ui_lang">
+        <option value="pl" data-i18n="lang.pl">Polski</option>
+        <option value="en" data-i18n="lang.en">English</option>
+      </select>
+
+      <div class="hr"></div>
+
+      <button class="btn" id="save_settings" type="button" data-i18n="settings.save">Save settings</button>
+      <span id="settings_msg" class="small" style="margin-left:10px;"></span>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // set current value from localStorage first, fallback to backend settings
+  const savedLang = localStorage.getItem("aistate_ui_lang");
+  const initialLang = savedLang || "{{ settings.ui_language or 'pl' }}";
+  document.getElementById("ui_lang").value = initialLang;
+
+  // apply i18n now (base calls applyI18n too, but settings needs options translated)
+  applyI18n();
+
+  document.getElementById("ui_lang").addEventListener("change", ()=>{
+    localStorage.setItem("aistate_ui_lang", document.getElementById("ui_lang").value);
+    location.reload();
+  });
+
+  document.getElementById("save_settings").addEventListener("click", async ()=>{
+    const payload = {
+      hf_token: document.getElementById("hf_token").value,
+      whisper_model: document.getElementById("def_whisper").value,
+      ui_language: document.getElementById("ui_lang").value
+    };
+    await api("/api/settings", {
+      method:"POST",
+      headers:{ "content-type":"application/json" },
+      body: JSON.stringify(payload)
+    });
+    document.getElementById("settings_msg").textContent = t("settings.saved");
+  });
+</script>
+{% endblock %}
