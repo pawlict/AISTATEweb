@@ -1,0 +1,702 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .speaker-mapping-container {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 10px;
+  }
+  
+  .speaker-mapping-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 80px;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 10px;
+    background: white;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+  }
+  
+  .speaker-mapping-row:hover {
+    border-color: #2196F3;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
+  }
+  
+  .speaker-label {
+    font-family: ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    background: #f0f0f0;
+    padding: 6px 10px;
+    border-radius: 4px;
+    text-align: center;
+  }
+  
+  .speaker-input {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+  
+  .speaker-input:focus {
+    outline: none;
+    border-color: #2196F3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+  }
+  
+  .speaker-count {
+    font-size: 12px;
+    color: #888;
+    text-align: right;
+  }
+  
+  .mapping-empty {
+    text-align: center;
+    padding: 30px;
+    color: #999;
+    font-style: italic;
+  }
+  
+  .advanced-toggle {
+    margin-top: 12px;
+    font-size: 12px;
+    color: #666;
+    cursor: pointer;
+    user-select: none;
+  }
+  
+  .advanced-toggle:hover {
+    color: #2196F3;
+  }
+  
+  .json-editor {
+    display: none;
+    margin-top: 10px;
+  }
+  
+  .json-editor.show {
+    display: block;
+  }
+</style>
+
+<div class="card">
+  <h1 class="h1" data-i18n="page.diarization.title">Diarization</h1>
+
+  <div class="topgrid">
+    <div class="subcard">
+      <div class="label">Tryb</div>
+      <select id="di_mode">
+        <option value="pyannote">pyannote (audio)</option>
+        <option value="text">diaryzacja tekstu (prosta)</option>
+      </select>
+      <div class="small">Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).</div>
+
+      <div class="hr"></div>
+
+      <div id="di_pyannote_block">
+        <div class="grid" style="grid-template-columns: 1fr 1fr">
+          <div>
+            <div class="label">Język</div>
+            <select id="di_lang">
+              <option value="auto">auto</option>
+              <option value="pl">pl</option>
+              <option value="en">en</option>
+              <option value="de">de</option>
+              <option value="fr">fr</option>
+              <option value="es">es</option>
+              <option value="uk">uk</option>
+              <option value="ru">ru</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Model Whisper (do segmentów)</div>
+            <select id="di_model">
+              {% for m in whisper_models %}
+              <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+      </div>
+
+      <div id="di_text_block" style="display:none">
+        <div class="label">Tekst wejściowy</div>
+        <textarea id="di_text_in" style="min-height:140px" placeholder="Wklej tekst do prostej diaryzacji…"></textarea>
+
+        <div class="hr"></div>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr">
+          <div>
+            <div class="label">Liczba mówców</div>
+            <input class="input" id="di_speakers" type="number" min="1" max="20" value="2"/>
+          </div>
+          <div>
+            <div class="label">Metoda</div>
+            <select id="di_method">
+              <option value="alternate">naprzemiennie</option>
+              <option value="block">blokami</option>
+              <option value="lines">po liniach</option>
+              <option value="sentences">po zdaniach</option>
+              <option value="sentences+merge">zdania + łączenie</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="label">Mapowanie mówców (JSON)</div>
+        <textarea id="di_map" style="min-height:90px" placeholder='np. {"SPK1":"Jan","SPK2":"Anna"}'></textarea>
+        <div class="small">Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.</div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="label">
+        Nazwy mówców
+        <span style="font-weight:normal;font-size:12px;color:#888;margin-left:8px;">
+          (wykryte automatycznie)
+        </span>
+      </div>
+      
+      <div id="speaker_mapping_ui" class="speaker-mapping-container">
+        <div class="mapping-empty">
+          Wykonaj diaryzację aby wykryć mówców 🎤
+        </div>
+      </div>
+      
+      <div class="advanced-toggle" id="toggle_json_editor">
+        ⚙️ Zaawansowane: edycja JSON
+      </div>
+      
+      <div id="json_editor_container" class="json-editor">
+        <textarea id="di_speaker_map" style="min-height:120px;font-family:monospace;font-size:12px;" placeholder='{"SPEAKER_00":"Jan","SPEAKER_01":"Anna"}'></textarea>
+        <div class="small" style="margin-top:6px">
+          ⚠️ Uwaga: ręczna edycja JSON - błędy składniowe spowodują problemy.
+          <button class="btn secondary" style="margin-left:10px;padding:4px 10px;font-size:12px;" id="sync_from_json">
+            Załaduj z JSON
+          </button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px; flex-wrap:wrap">
+        <button class="btn" id="di_apply_map" title="Zamień wszystkie wystąpienia w wyniku">
+          ✓ Zastosuj mapowanie
+        </button>
+        <button class="btn secondary" id="di_save_map" title="Zapisz mapowanie w project.json">
+          💾 Zapisz mapowanie
+        </button>
+        <button class="btn secondary" id="di_refresh_map" title="Wykryj mówców z wyniku">
+          🔄 Odśwież z wyniku
+        </button>
+      </div>
+      
+      <div class="small" style="margin-top:10px">
+        <strong>Jak użyć:</strong> Wpisz imiona w pola obok etykiet → Kliknij <strong>Zastosuj mapowanie</strong> → Wszystkie wystąpienia zostaną zamienione
+      </div>
+    </div>
+
+    <div class="subcard">
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn" id="di_btn" data-i18n="btn.diarize">Diaryzuj</button>
+        <a class="btn secondary" id="di_download" href="#" style="display:none">Pobierz TXT</a>
+      </div>
+
+      <div class="small" style="margin-top:10px">
+        Status: <b id="di_status">—</b> • Postęp: <span id="di_pct">0%</span>
+      </div>
+      <div class="progress" style="margin-top:10px"><div id="di_bar"></div></div>
+      <div class="small" style="margin-top:10px">Logi są dostępne w zakładce <b>Logi</b>.</div>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <div class="label">Wynik diaryzacji</div>
+  <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik…"></textarea>
+  <div class="row" style="margin-top:10px; flex-wrap:wrap">
+    <button class="btn secondary" id="di_save_txt" title="Zapisuje bieżący tekst do diarized.txt w projekcie">
+      💾 Zapisz wynik w projekcie
+    </button>
+  </div>
+  <div class="small" style="margin-top:6px">
+    <strong>Ważne:</strong> Jeśli zastosowałeś mapowanie nazw, pamiętaj żeby zapisać wynik! 
+    Inaczej przy ponownym załadowaniu będą oryginalne etykiety.
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* diarization page logic with improved speaker mapping UI */
+
+// Extract speaker labels from diarization output
+function extractSpeakerLabels(text){
+  const labels = new Set();
+  String(text || "").split(/\r?\n/).forEach(line=>{
+    const cleaned = line.replace(/^\s*\[[\d\.\-]+\]\s*/, '');
+    const m = cleaned.match(/^\s*([A-Za-z0-9_\-]{1,40})\s*:/);
+    if(m && m[1]) {
+      labels.add(m[1].trim());
+    }
+  });
+  
+  const result = Array.from(labels).sort();
+  console.log('🔍 Znalezione etykiety mówców:', result);
+  return result;
+}
+
+// Count occurrences of a speaker label in text
+function countSpeakerOccurrences(text, label){
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matches = text.match(new RegExp(escaped, 'g'));
+  return matches ? matches.length : 0;
+}
+
+// Render speaker mapping UI
+function renderSpeakerMappingUI(labels, outputText){
+  const container = document.getElementById('speaker_mapping_ui');
+  if(!container) return;
+  
+  if(!labels || labels.length === 0){
+    container.innerHTML = '<div class="mapping-empty">Wykonaj diaryzację aby wykryć mówców 🎤</div>';
+    return;
+  }
+  
+  // Get current mapping from JSON textarea (if exists)
+  let currentMapping = {};
+  try{
+    const raw = document.getElementById('di_speaker_map').value || '';
+    if(raw.trim()) currentMapping = JSON.parse(raw);
+  }catch(e){}
+  
+  container.innerHTML = '';
+  
+  labels.forEach(label => {
+    const row = document.createElement('div');
+    row.className = 'speaker-mapping-row';
+    
+    const labelEl = document.createElement('div');
+    labelEl.className = 'speaker-label';
+    labelEl.textContent = label;
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'speaker-input';
+    input.value = currentMapping[label] || label;
+    input.placeholder = `Wpisz imię dla ${label}`;
+    input.dataset.speaker = label;
+    
+    // Auto-save to hidden JSON on change
+    input.addEventListener('input', syncToJSON);
+    
+    const countEl = document.createElement('div');
+    countEl.className = 'speaker-count';
+    if(outputText){
+      const count = countSpeakerOccurrences(outputText, label);
+      countEl.textContent = count > 0 ? `${count}×` : '';
+    }
+    
+    row.appendChild(labelEl);
+    row.appendChild(input);
+    row.appendChild(countEl);
+    container.appendChild(row);
+  });
+  
+  console.log(`✅ Wygenerowano UI dla ${labels.length} mówców`);
+}
+
+// Sync UI inputs to hidden JSON textarea
+function syncToJSON(){
+  const inputs = document.querySelectorAll('.speaker-input');
+  const mapping = {};
+  
+  inputs.forEach(input => {
+    const label = input.dataset.speaker;
+    const value = input.value.trim() || label;
+    mapping[label] = value;
+  });
+  
+  const jsonTextarea = document.getElementById('di_speaker_map');
+  if(jsonTextarea){
+    jsonTextarea.value = JSON.stringify(mapping, null, 2);
+  }
+  
+  console.log('🔄 Zsynchronizowano mapowanie do JSON:', mapping);
+}
+
+// Sync JSON textarea to UI inputs
+function syncFromJSON(){
+  try{
+    const raw = document.getElementById('di_speaker_map').value || '';
+    if(!raw.trim()) return;
+    
+    const mapping = JSON.parse(raw);
+    const inputs = document.querySelectorAll('.speaker-input');
+    
+    inputs.forEach(input => {
+      const label = input.dataset.speaker;
+      if(mapping[label] !== undefined){
+        input.value = mapping[label];
+      }
+    });
+    
+    console.log('✅ Załadowano mapowanie z JSON do UI');
+    alert('✅ Mapowanie załadowane z JSON');
+  }catch(e){
+    alert('❌ Błąd parsowania JSON: ' + e.message);
+  }
+}
+
+// Legacy function for compatibility
+function mergeSpeakerMap(labels){
+  const ta = document.getElementById("di_speaker_map");
+  if(!ta) return;
+
+  let current = {};
+  const raw = (ta.value || "").trim();
+  
+  if(raw){
+    try{
+      const j = JSON.parse(raw);
+      if(j && typeof j === "object" && !Array.isArray(j)){
+        current = j;
+      }
+    }catch(e){
+      console.warn('⚠️ Niepoprawny JSON w mapowaniu, tworzę nowy:', e.message);
+      current = {};
+    }
+  }
+
+  let changed = false;
+  for(const lab of (labels || [])){
+    if(!(lab in current)){
+      current[lab] = lab;
+      changed = true;
+      console.log('➕ Dodano nową etykietę do mapowania:', lab);
+    }
+  }
+
+  if(changed || !raw){
+    ta.value = JSON.stringify(current, null, 2);
+    console.log('✅ Zaktualizowano mapowanie mówców:', current);
+  }
+  
+  // Also render UI
+  const outText = document.getElementById('di_out')?.value || '';
+  renderSpeakerMappingUI(labels, outText);
+}
+
+function setDownloadLink(projectId){
+  const dl = document.getElementById("di_download");
+  if(!dl) return;
+  dl.href = `/api/projects/${projectId}/download/diarized.txt`;
+  dl.style.display = "inline-flex";
+}
+
+let DI_HAS_AUDIO = false;
+
+async function updateAudioState(){
+  await refreshCurrentProjectInfo();
+  DI_HAS_AUDIO = Boolean(AISTATE.projectId && AISTATE.audioFile);
+  const btn = document.getElementById("di_btn");
+  if(btn){
+    const mode = (document.getElementById("di_mode")?.value || "pyannote");
+    const needAudio = (mode === "pyannote");
+    btn.disabled = needAudio && !DI_HAS_AUDIO;
+  }
+}
+
+async function loadProjectJson(projectId){
+  try{
+    const raw = await api(`/api/projects/${projectId}/download/project.json`);
+    return JSON.parse(String(raw || "{}"));
+  }catch(e){
+    return {};
+  }
+}
+
+const LS = {
+  get(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } },
+  set(key,val){ try{ localStorage.setItem(key, val); }catch(e){} },
+};
+
+function draftKeys(projectId){
+  return {
+    diarized: `aistateweb:draft:diarized:${projectId}`,
+    speakerMap: `aistateweb:draft:speaker_map:${projectId}`,
+  };
+}
+
+function setupDraftAutosave(projectId){
+  const keys = draftKeys(projectId);
+
+  const out = document.getElementById("di_out");
+  if(out){
+    out.addEventListener("input", ()=>{
+      LS.set(keys.diarized, out.value || "");
+    });
+  }
+
+  const sm = document.getElementById("di_speaker_map");
+  if(sm){
+    sm.addEventListener("input", ()=>{
+      LS.set(keys.speakerMap, sm.value || "");
+    });
+  }
+}
+
+async function restoreOutputs(projectId){
+  const keys = draftKeys(projectId);
+
+  const out = document.getElementById("di_out");
+  const sm = document.getElementById("di_speaker_map");
+
+  // 1) Prefer drafts
+  const draftOut = LS.get(keys.diarized);
+  if(out && !out.value.trim() && draftOut && String(draftOut).trim()){
+    out.value = String(draftOut);
+  }
+
+  const draftMap = LS.get(keys.speakerMap);
+  if(sm && !sm.value.trim() && draftMap && String(draftMap).trim()){
+    sm.value = String(draftMap);
+  }
+
+  // 2) Load from project files
+  const meta = await loadProjectJson(projectId);
+
+  if(sm && !sm.value.trim() && meta && typeof meta === "object" && meta.speaker_map){
+    try{
+      sm.value = JSON.stringify(meta.speaker_map, null, 2);
+    }catch(e){}
+  }
+
+  if(out && !out.value.trim()){
+    try{
+      const txt = await api(`/api/projects/${projectId}/download/diarized.txt`);
+      if(txt && String(txt).trim()){
+        out.value = String(txt);
+        setDownloadLink(projectId);
+      }
+    }catch(e){}
+  }
+
+  // Render UI
+  if(out && out.value.trim()){
+    console.log('🔄 Odświeżam mapowanie z załadowanego wyniku...');
+    const labels = extractSpeakerLabels(out.value);
+    if(labels.length) {
+      mergeSpeakerMap(labels);
+    }
+  }
+}
+
+function onDoneDiarize(j){
+  console.log('✅ Diaryzacja zakończona, przetwarzam wynik...');
+  
+  if(j.result && j.result.text){
+    const out = j.result.text;
+    const outEl = document.getElementById("di_out");
+    if(outEl) {
+      outEl.value = out;
+      console.log('📝 Wynik diaryzacji zapisany do pola tekstowego');
+    }
+
+    console.log('🔍 Wykrywam mówców z wyniku...');
+    const labels = extractSpeakerLabels(out);
+    
+    if(labels.length) {
+      console.log(`✅ Znaleziono ${labels.length} mówców:`, labels);
+      mergeSpeakerMap(labels);
+    } else {
+      console.warn('⚠️ Nie znaleziono żadnych etykiet mówców');
+    }
+
+    if(AISTATE.projectId){
+      const keys = draftKeys(AISTATE.projectId);
+      LS.set(keys.diarized, out);
+    }
+
+    if(j.project_id){
+      setDownloadLink(j.project_id);
+    }
+  }
+}
+
+function toggleMode(){
+  const mode = document.getElementById("di_mode").value;
+  document.getElementById("di_pyannote_block").style.display = (mode==="pyannote") ? "block" : "none";
+  document.getElementById("di_text_block").style.display = (mode==="text") ? "block" : "none";
+  updateAudioState();
+}
+document.getElementById("di_mode").addEventListener("change", toggleMode);
+toggleMode();
+
+document.getElementById("di_btn").addEventListener("click", async ()=>{
+  const mode = document.getElementById("di_mode").value;
+  const fd = new FormData();
+
+  if(mode === "pyannote"){
+    await updateAudioState();
+    if(!DI_HAS_AUDIO){
+      alert("Brak pliku audio w projekcie. Utwórz projekt w zakładce: Nowy projekt.");
+      window.location.href = "/new-project";
+      return;
+    }
+    fd.append("lang", document.getElementById("di_lang").value);
+    fd.append("model", document.getElementById("di_model").value);
+    await startTask("di", "/api/diarize_voice", fd, onDoneDiarize);
+  } else {
+    const text = document.getElementById("di_text_in").value || "";
+    if(!text.trim()){ alert("Wklej tekst wejściowy."); return; }
+    fd.append("text", text);
+    fd.append("speakers", document.getElementById("di_speakers").value || "2");
+    fd.append("method", document.getElementById("di_method").value || "alternate");
+    fd.append("mapping_json", document.getElementById("di_map").value || "");
+    await startTask("di", "/api/diarize_text", fd, onDoneDiarize);
+  }
+});
+
+document.getElementById("di_save_txt").addEventListener("click", async ()=>{
+  const pid = requireProjectId();
+  const text = document.getElementById("di_out").value || "";
+  
+  if(!text.trim()){
+    alert("Pole 'Wynik diaryzacji' jest puste - nie ma czego zapisać.");
+    return;
+  }
+  
+  await api(`/api/projects/${pid}/save_diarized`, {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body: JSON.stringify({ text })
+  });
+
+  setDownloadLink(pid);
+  const keys = draftKeys(pid);
+  LS.set(keys.diarized, text);
+
+  const hasMapping = text.includes("SPEAKER_");
+  const hint = hasMapping 
+    ? "\n\n💡 Wynik zawiera etykiety SPEAKER_XX. Jeśli chcesz je zamienić na imiona, użyj mapowania powyżej."
+    : "";
+    
+  alert(`✅ Zapisano wynik diaryzacji w projekcie (diarized.txt).${hint}`);
+});
+
+document.getElementById("di_apply_map").addEventListener("click", ()=>{
+  // Sync UI to JSON first
+  syncToJSON();
+  
+  let mapping = {};
+  const raw = document.getElementById("di_speaker_map").value || "";
+  if(raw.trim()){
+    try{ mapping = JSON.parse(raw); }catch(e){ alert("Niepoprawny JSON mapowania."); return; }
+  }
+  
+  const outEl = document.getElementById("di_out");
+  let out = outEl.value || "";
+  
+  let totalReplacements = 0;
+  const details = [];
+  
+  for(const [k,v] of Object.entries(mapping)){
+    if(k === v) continue;
+    const count = (out.match(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+    if(count > 0){
+      out = out.split(k).join(v);
+      totalReplacements += count;
+      details.push(`${k} → ${v} (${count}×)`);
+    }
+  }
+  
+  outEl.value = out;
+  
+  if(totalReplacements > 0){
+    console.log('✅ Zastosowano mapowanie mówców:', details.join(', '));
+    
+    // Update UI with new counts
+    const labels = extractSpeakerLabels(out);
+    renderSpeakerMappingUI(labels, out);
+    
+    alert(`✅ Zastosowano mapowanie:\n\n${details.join('\n')}\n\nRazem: ${totalReplacements} zamian\n\n💡 Pamiętaj aby zapisać wynik!`);
+  } else {
+    alert('ℹ️ Nie znaleziono żadnych wystąpień do zamiany. Sprawdź czy etykiety w mapowaniu pasują do tych w wyniku.');
+  }
+});
+
+document.getElementById("di_save_map").addEventListener("click", async ()=>{
+  syncToJSON();
+  
+  const pid = requireProjectId();
+  const raw = document.getElementById("di_speaker_map").value || "";
+  let mapping = {};
+  if(raw.trim()){
+    try{ mapping = JSON.parse(raw); }catch(e){ alert("Niepoprawny JSON mapowania."); return; }
+  }
+  
+  await api(`/api/projects/${pid}/speaker_map`, {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body: JSON.stringify({ mapping })
+  });
+
+  const keys = draftKeys(pid);
+  LS.set(keys.speakerMap, JSON.stringify(mapping, null, 2));
+
+  const count = Object.keys(mapping).length;
+  alert(`✅ Zapisano mapowanie w projekcie (project.json).\n\nLiczba mówców: ${count}\n\n💡 Mapowanie będzie automatycznie załadowane przy następnym otwarciu projektu.`);
+});
+
+document.getElementById("di_refresh_map").addEventListener("click", ()=>{
+  const outEl = document.getElementById("di_out");
+  if(!outEl || !outEl.value.trim()){
+    alert("Najpierw wykonaj diaryzację - pole 'Wynik diaryzacji' jest puste.");
+    return;
+  }
+  
+  console.log('🔄 Ręczne odświeżanie mapowania...');
+  const labels = extractSpeakerLabels(outEl.value);
+  
+  if(labels.length){
+    mergeSpeakerMap(labels);
+    alert(`✅ Znaleziono ${labels.length} mówców: ${labels.join(', ')}`);
+  } else {
+    alert("⚠️ Nie znaleziono etykiet mówców w wyniku. Sprawdź format (powinno być: SPEAKER_00: tekst)");
+  }
+});
+
+// Toggle JSON editor visibility
+document.getElementById("toggle_json_editor").addEventListener("click", ()=>{
+  const container = document.getElementById("json_editor_container");
+  container.classList.toggle("show");
+  
+  const toggle = document.getElementById("toggle_json_editor");
+  if(container.classList.contains("show")){
+    toggle.textContent = "⚙️ Zaawansowane: ukryj JSON";
+  } else {
+    toggle.textContent = "⚙️ Zaawansowane: edycja JSON";
+  }
+});
+
+// Sync from JSON button
+document.getElementById("sync_from_json").addEventListener("click", syncFromJSON);
+
+(async()=>{
+  await updateAudioState();
+  if(AISTATE.projectId){
+    setupDraftAutosave(AISTATE.projectId);
+    await restoreOutputs(AISTATE.projectId);
+  }
+  await resumeTask("di", onDoneDiarize);
+})();
+</script>
+{% endblock %}
