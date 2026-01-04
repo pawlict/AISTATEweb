@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1 class="h1" data-i18n="page.transcription.title">Transcription</h1>
+
+  <div class="topgrid">
+    <div class="subcard">
+      <div class="label">Język</div>
+      <select id="tr_lang">
+        <option value="auto">auto</option>
+        <option value="pl">pl</option>
+        <option value="en">en</option>
+        <option value="de">de</option>
+        <option value="fr">fr</option>
+        <option value="es">es</option>
+        <option value="uk">uk</option>
+        <option value="ru">ru</option>
+      </select>
+      <div class="small">W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).</div>
+
+      <div class="hr"></div>
+
+      <div class="label">Model Whisper</div>
+      <select id="tr_model">
+        {% for m in whisper_models %}
+        <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
+        {% endfor %}
+      </select>
+
+      <div class="hr"></div>
+    </div>
+
+    <div class="subcard">
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn" id="tr_btn" data-i18n="btn.transcribe">Transcribe</button>
+        <a class="btn secondary" id="tr_download" href="#" style="display:none">Pobierz TXT</a>
+      </div>
+
+      <div class="small" style="margin-top:10px">
+        Status: <b id="tr_status">—</b> • Postęp: <span id="tr_pct">0%</span>
+      </div>
+      <div class="progress" style="margin-top:10px"><div id="tr_bar"></div></div>
+      <div class="small" style="margin-top:10px">Logi są dostępne w zakładce <b>Logi</b>.</div>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <div class="label">Wynik transkrypcji</div>
+  <div class="small" style="margin-bottom:8px">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+  <div id="tr_blocks" class="blocklist" style="display:none"></div>
+  <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…"></textarea>
+  <div class="row" style="margin-top:10px; flex-wrap:wrap">
+    <button class="btn secondary" id="tr_save_txt">Zapisz transkrypcję w projekcie</button>
+  </div>
+  <div class="small">Zapis tworzy plik w projekcie (np. <code>transcript.txt</code>).</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// -------- Segmented playback + editing (transcription) --------
+const TR = {
+  segments: [],
+  audio: null,
+  audioUrl: "",
+  activeIdx: -1,
+  endWatch: null
+};
+
+function trAudioUrl(){
+  const pid = AISTATE.projectId || "";
+  const f = AISTATE.audioFile || "";
+  if(!pid || !f) return "";
+  return `/api/projects/${pid}/download/${encodeURIComponent(f)}`;
+}
+
+function trParseTs(s){
+  const raw = String(s||"").trim();
+  if(!raw) return null;
+  // float seconds
+  if(/^[0-9]+(\.[0-9]+)?$/.test(raw)) return parseFloat(raw);
+  // hh:mm:ss(.ms) or mm:ss(.ms)
+  const parts = raw.split(":").map(p=>p.trim());
+  if(parts.length < 2 || parts.length > 3) return null;
+  let h=0, m=0, sec=0;
+  if(parts.length === 2){
+    m = parseInt(parts[0]||"0",10);
+    sec = parseFloat(parts[1]||"0");
+  } else {
+    h = parseInt(parts[0]||"0",10);
+    m = parseInt(parts[1]||"0",10);
+    sec = parseFloat(parts[2]||"0");
+  }
+  if([h,m,sec].some(x=>Number.isNaN(x))) return null;
+  return h*3600 + m*60 + sec;
+}
+
+function trFmtTs(sec){
+  const s = Math.max(0, Number(sec)||0);
+  const hh = Math.floor(s/3600);
+  const mm = Math.floor((s%3600)/60);
+  const ss = s - hh*3600 - mm*60;
+  const ssInt = Math.floor(ss);
+  const ms = Math.round((ss-ssInt)*1000);
+  const pad2 = (n)=>String(n).padStart(2,"0");
+  const pad3 = (n)=>String(n).padStart(3,"0");
+  return `${pad2(hh)}:${pad2(mm)}:${pad2(ssInt)}.${pad3(ms)}`;
+}
+
+function trSegmentsFromTextTs(textTs){
+  const out=[];
+  const lines = String(textTs||"").split(/\r?\n/);
+  for(const ln of lines){
+    const m = ln.match(/^\s*\[([^\]]+)\]\s*(.*)$/);
+    if(!m) continue;
+    const inside = m[1];
+    const rest = (m[2]||"").trim();
+    const parts = inside.split(/\s*[-–]\s*/);
+    if(parts.length !== 2) continue;
+    const s0 = trParseTs(parts[0]);
+    const s1 = trParseTs(parts[1]);
+    if(s0===null || s1===null) continue;
+    out.push({start: s0, end: s1, text: rest});
+  }
+  return out;
+}
+
+function trBuildRawText(){
+  if(!TR.segments || !TR.segments.length) return (document.getElementById("tr_out").value||"");
+  return TR.segments.map(s=>`[${trFmtTs(s.start)} - ${trFmtTs(s.end)}] ${s.text||""}`.trim()).join("\n");
+}
+
+function trSetRawTextarea(){
+  document.getElementById("tr_out").value = trBuildRawText();
+}
+
+function trStopPlayback(){
+  if(TR.endWatch){ clearInterval(TR.endWatch); TR.endWatch=null; }
+  if(TR.audio){ try{ TR.audio.pause(); }catch(e){} }
+  if(TR.activeIdx>=0){
+    const old = document.querySelector(`.seg[data-idx='${TR.activeIdx}']`);
+    if(old) old.classList.remove("seg-active");
+  }
+  TR.activeIdx = -1;
+}
+
+function trPlaySegment(idx, fromStart=true){
+  if(!TR.audio || !TR.audioUrl) return;
+  const seg = TR.segments[idx];
+  if(!seg) return;
+
+  trStopPlayback();
+  TR.activeIdx = idx;
+  const elSeg = document.querySelector(`.seg[data-idx='${idx}']`);
+  if(elSeg) elSeg.classList.add("seg-active");
+
+  const endT = Math.max(0, Number(seg.end)||0);
+  const startT = Math.max(0, Number(seg.start)||0);
+  if(fromStart || TR.audio.currentTime < startT || TR.audio.currentTime > endT){
+    TR.audio.currentTime = startT;
+  }
+  TR.audio.play().catch(()=>{});
+
+  TR.endWatch = setInterval(()=>{
+    if(!TR.audio) return;
+    if(TR.audio.currentTime >= (endT - 0.02)){
+      try{ TR.audio.pause(); }catch(e){}
+      clearInterval(TR.endWatch);
+      TR.endWatch = null;
+    }
+  }, 50);
+}
+
+function trRender(){
+  const blocks = document.getElementById("tr_blocks");
+  const ta = document.getElementById("tr_out");
+  if(!TR.segments || TR.segments.length === 0){
+    blocks.style.display = "none";
+    ta.style.display = "block";
+    return;
+  }
+  blocks.style.display = "block";
+  ta.style.display = "none";
+  blocks.innerHTML = "";
+
+  TR.audioUrl = trAudioUrl();
+  if(TR.audioUrl){
+    if(!TR.audio){
+      TR.audio = new Audio();
+      TR.audio.preload = "metadata";
+    }
+    TR.audio.src = TR.audioUrl;
+  }
+
+  TR.segments.forEach((seg, idx)=>{
+    const d = document.createElement("div");
+    d.className = "seg";
+    d.dataset.idx = String(idx);
+    d.innerHTML = `
+      <div class="seg-time">${trFmtTs(seg.start)} → ${trFmtTs(seg.end)}</div>
+      <div class="seg-text"></div>
+    `;
+    d.querySelector(".seg-text").textContent = seg.text || "";
+
+    d.addEventListener("mouseenter", ()=> trPlaySegment(idx, true));
+    d.addEventListener("mouseleave", ()=> trStopPlayback());
+    blocks.appendChild(d);
+  });
+  trSetRawTextarea();
+}
+
+function onDoneTranscribe(j){
+  if(j.result){
+    // Prefer structured segments if available.
+    const segs = (j.result.segments && Array.isArray(j.result.segments)) ? j.result.segments : [];
+    if(segs.length){
+      TR.segments = segs.map(s=>({ start:Number(s.start)||0, end:Number(s.end)||0, text:String(s.text||"").trim() }));
+      trRender();
+    } else {
+      const out = (j.result.text_ts || j.result.text || "");
+      const parsed = trSegmentsFromTextTs(out);
+      if(parsed.length){
+        TR.segments = parsed;
+        trRender();
+      } else {
+        if(out) document.getElementById("tr_out").value = out;
+      }
+    }
+    if(j.project_id){
+      const dl = document.getElementById("tr_download");
+      dl.href = `/api/projects/${j.project_id}/download/transcript.txt`;
+      dl.style.display = "inline-flex";
+    }
+  }
+}
+
+document.getElementById("tr_btn").addEventListener("click", async ()=>{
+  const fd = new FormData();
+  fd.append("lang", document.getElementById("tr_lang").value);
+  fd.append("model", document.getElementById("tr_model").value);
+
+  await startTask("tr", "/api/transcribe", fd, onDoneTranscribe);
+});
+
+document.getElementById("tr_save_txt").addEventListener("click", async ()=>{
+  const pid = requireProjectId();
+  const text = trBuildRawText();
+  await api(`/api/projects/${pid}/save_transcript`, {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body: JSON.stringify({ text })
+  });
+  alert("Zapisano transkrypcję w projekcie.");
+});
+
+// Export global helpers for app.js integration
+window.TR = TR;
+window.trRender = trRender;
+window.trBuildRawText = trBuildRawText;
+
+(async()=>{
+  await refreshCurrentProjectInfo();
+  const btn = document.getElementById("tr_btn");
+  if(btn) btn.disabled = !(AISTATE.projectId && AISTATE.audioFile);
+  await resumeTask("tr", onDoneTranscribe);
+  // Try to load previously saved transcript (optional)
+  try{
+    const pid = AISTATE.projectId || "";
+    if(pid){
+      const txt = await api(`/api/projects/${pid}/download/transcript.txt`);
+      const parsed = trSegmentsFromTextTs(txt);
+      if(parsed.length){
+        TR.segments = parsed;
+        trRender();
+      } else {
+        document.getElementById("tr_out").value = txt || "";
+      }
+    }
+  }catch(e){ /* ignore */ }
+})();
+</script>
+{% endblock %}
