@@ -83,6 +83,82 @@
   .json-editor.show {
     display: block;
   }
+  
+  #speaker_toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(33, 150, 243, 0.95);
+    color: white;
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  
+  /* Diarization blocks styling (like transcription) */
+  .blocklist {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .seg {
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .seg:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+  }
+  
+  .seg-active {
+    border-color: #2196F3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
+  }
+  
+  .seg-time {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 4px;
+    font-family: ui-monospace, monospace;
+  }
+  
+  .seg-speaker {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+  
+  .seg-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+  }
+  
+  /* Speaker colors - pastel palette */
+  .speaker-0 { background-color: #E3F2FD; } /* Light Blue */
+  .speaker-1 { background-color: #F3E5F5; } /* Light Purple */
+  .speaker-2 { background-color: #E8F5E9; } /* Light Green */
+  .speaker-3 { background-color: #FFF3E0; } /* Light Orange */
+  .speaker-4 { background-color: #FCE4EC; } /* Light Pink */
+  .speaker-5 { background-color: #F1F8E9; } /* Light Lime */
+  .speaker-6 { background-color: #E0F2F1; } /* Light Teal */
+  .speaker-7 { background-color: #FFF9C4; } /* Light Yellow */
+  .speaker-8 { background-color: #FFEBEE; } /* Light Red */
+  .speaker-9 { background-color: #EDE7F6; } /* Light Deep Purple */
 </style>
 
 <div class="card">
@@ -220,6 +296,8 @@
   <div class="hr"></div>
 
   <div class="label">Wynik diaryzacji</div>
+  <div class="small" style="margin-bottom:8px">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+  <div id="di_blocks" class="blocklist" style="display:none"></div>
   <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik…"></textarea>
   <div class="row" style="margin-top:10px; flex-wrap:wrap">
     <button class="btn secondary" id="di_save_txt" title="Zapisuje bieżący tekst do diarized.txt w projekcie">
@@ -235,12 +313,169 @@
 
 {% block scripts %}
 <script>
-/* diarization page logic with improved speaker mapping UI */
+"use strict";
+
+// ========== Diarization State ==========
+const DI = {
+  segments: [],
+  audio: null,
+  audioUrl: "",
+  activeIdx: -1,
+  endWatch: null,
+  speakerColors: {}
+};
+
+// ========== Helper Functions ==========
+
+// Parse diarization line: [12.34-15.67] SPEAKER_00: text
+function parseDiarizedLine(line){
+  const m = line.match(/^\s*\[(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\]\s*([A-Za-z0-9_\-]+)\s*:\s*(.*)$/);
+  if(!m) return null;
+  return {
+    start: parseFloat(m[1]),
+    end: parseFloat(m[2]),
+    speaker: m[3].trim(),
+    text: m[4].trim()
+  };
+}
+
+// Parse entire diarized text into segments
+function parseDiarizedText(text){
+  const segments = [];
+  const lines = String(text || "").split(/\r?\n/);
+  for(const line of lines){
+    const seg = parseDiarizedLine(line);
+    if(seg) segments.push(seg);
+  }
+  return segments;
+}
+
+// Format timestamp for display
+function formatTime(sec){
+  const s = Math.max(0, Number(sec)||0);
+  const mm = Math.floor(s / 60);
+  const ss = (s % 60).toFixed(3);
+  return mm + ":" + String(ss).padStart(6,'0');
+}
+
+// Get audio URL
+function diAudioUrl(){
+  const pid = AISTATE.projectId || "";
+  const f = AISTATE.audioFile || "";
+  if(!pid || !f) return "";
+  return "/api/projects/" + pid + "/download/" + encodeURIComponent(f);
+}
+
+// Stop playback
+function diStopPlayback(){
+  if(DI.endWatch){ clearInterval(DI.endWatch); DI.endWatch=null; }
+  if(DI.audio){ try{ DI.audio.pause(); }catch(e){} }
+  if(DI.activeIdx>=0){
+    const old = document.querySelector(".seg[data-idx='" + DI.activeIdx + "']");
+    if(old) old.classList.remove("seg-active");
+  }
+  DI.activeIdx = -1;
+}
+
+// Play segment
+function diPlaySegment(idx, fromStart){
+  if(fromStart === undefined) fromStart = true;
+  if(!DI.audio || !DI.audioUrl) return;
+  const seg = DI.segments[idx];
+  if(!seg) return;
+
+  diStopPlayback();
+  DI.activeIdx = idx;
+  const elSeg = document.querySelector(".seg[data-idx='" + idx + "']");
+  if(elSeg) elSeg.classList.add("seg-active");
+
+  const endT = Math.max(0, Number(seg.end)||0);
+  const startT = Math.max(0, Number(seg.start)||0);
+  if(fromStart || DI.audio.currentTime < startT || DI.audio.currentTime > endT){
+    DI.audio.currentTime = startT;
+  }
+  DI.audio.play().catch(function(){});
+
+  DI.endWatch = setInterval(function(){
+    if(!DI.audio) return;
+    if(DI.audio.currentTime >= (endT - 0.02)){
+      try{ DI.audio.pause(); }catch(e){}
+      clearInterval(DI.endWatch);
+      DI.endWatch = null;
+    }
+  }, 50);
+}
+
+// Assign color to speaker
+function getSpeakerColor(speaker){
+  if(!DI.speakerColors[speaker]){
+    const idx = Object.keys(DI.speakerColors).length % 10;
+    DI.speakerColors[speaker] = "speaker-" + idx;
+  }
+  return DI.speakerColors[speaker];
+}
+
+// Build raw text from segments
+function diBuildRawText(){
+  if(!DI.segments || !DI.segments.length){
+    return document.getElementById("di_out").value || "";
+  }
+  return DI.segments.map(function(s){
+    return "[" + s.start.toFixed(2) + "-" + s.end.toFixed(2) + "] " + s.speaker + ": " + s.text;
+  }).join("\n");
+}
+
+// Update textarea with current segments
+function diSetRawTextarea(){
+  document.getElementById("di_out").value = diBuildRawText();
+}
+
+// Render blocks
+function diRender(){
+  const blocks = document.getElementById("di_blocks");
+  const ta = document.getElementById("di_out");
+  
+  if(!DI.segments || DI.segments.length === 0){
+    blocks.style.display = "none";
+    ta.style.display = "block";
+    return;
+  }
+  
+  blocks.style.display = "flex";
+  ta.style.display = "none";
+  blocks.innerHTML = "";
+
+  DI.audioUrl = diAudioUrl();
+  if(DI.audioUrl){
+    if(!DI.audio){
+      DI.audio = new Audio();
+      DI.audio.preload = "metadata";
+    }
+    DI.audio.src = DI.audioUrl;
+  }
+
+  DI.segments.forEach(function(seg, idx){
+    const d = document.createElement("div");
+    d.className = "seg " + getSpeakerColor(seg.speaker);
+    d.dataset.idx = String(idx);
+    
+    d.innerHTML='<div class="seg-time">'+formatTime(seg.start)+' → '+formatTime(seg.end)+' <strong>'+seg.speaker+'</strong></div>' +
+                  '<div class="seg-text"></div>';
+    d.querySelector(".seg-text").textContent = seg.text || "";
+
+    d.addEventListener("mouseenter", function(){ diPlaySegment(idx, true); });
+    d.addEventListener("mouseleave", function(){ diStopPlayback(); });
+    
+    blocks.appendChild(d);
+  });
+  
+  diSetRawTextarea();
+}
 
 // Extract speaker labels from diarization output
 function extractSpeakerLabels(text){
   const labels = new Set();
-  String(text || "").split(/\r?\n/).forEach(line=>{
+  String(text || "").split(/\r?\n/).forEach(function(line){
     const cleaned = line.replace(/^\s*\[[\d\.\-]+\]\s*/, '');
     const m = cleaned.match(/^\s*([A-Za-z0-9_\-]{1,40})\s*:/);
     if(m && m[1]) {
@@ -260,6 +495,25 @@ function countSpeakerOccurrences(text, label){
   return matches ? matches.length : 0;
 }
 
+// Show temporary toast notification
+function showToast(message, duration){
+  if(duration === undefined) duration = 2000;
+  let toast = document.getElementById('speaker_toast');
+  if(!toast){
+    toast = document.createElement('div');
+    toast.id = 'speaker_toast';
+    document.body.appendChild(toast);
+  }
+  
+  toast.textContent = message;
+  toast.style.opacity = '1';
+  
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(function(){
+    toast.style.opacity = '0';
+  }, duration);
+}
+
 // Render speaker mapping UI
 function renderSpeakerMappingUI(labels, outputText){
   const container = document.getElementById('speaker_mapping_ui');
@@ -270,7 +524,6 @@ function renderSpeakerMappingUI(labels, outputText){
     return;
   }
   
-  // Get current mapping from JSON textarea (if exists)
   let currentMapping = {};
   try{
     const raw = document.getElementById('di_speaker_map').value || '';
@@ -279,7 +532,7 @@ function renderSpeakerMappingUI(labels, outputText){
   
   container.innerHTML = '';
   
-  labels.forEach(label => {
+  labels.forEach(function(label){
     const row = document.createElement('div');
     row.className = 'speaker-mapping-row';
     
@@ -291,17 +544,16 @@ function renderSpeakerMappingUI(labels, outputText){
     input.type = 'text';
     input.className = 'speaker-input';
     input.value = currentMapping[label] || label;
-    input.placeholder = `Wpisz imię dla ${label}`;
+    input.placeholder = 'Wpisz imię dla ' + label;
     input.dataset.speaker = label;
     
-    // Auto-save to hidden JSON on change
     input.addEventListener('input', syncToJSON);
     
     const countEl = document.createElement('div');
     countEl.className = 'speaker-count';
     if(outputText){
       const count = countSpeakerOccurrences(outputText, label);
-      countEl.textContent = count > 0 ? `${count}×` : '';
+      countEl.textContent = count > 0 ? (count + '×') : '';
     }
     
     row.appendChild(labelEl);
@@ -310,7 +562,8 @@ function renderSpeakerMappingUI(labels, outputText){
     container.appendChild(row);
   });
   
-  console.log(`✅ Wygenerowano UI dla ${labels.length} mówców`);
+  console.log('✅ Wygenerowano UI dla ' + labels.length + ' mówców');
+  showToast('🔄 Zaktualizowano ' + labels.length + ' mówców');
 }
 
 // Sync UI inputs to hidden JSON textarea
@@ -318,7 +571,7 @@ function syncToJSON(){
   const inputs = document.querySelectorAll('.speaker-input');
   const mapping = {};
   
-  inputs.forEach(input => {
+  inputs.forEach(function(input){
     const label = input.dataset.speaker;
     const value = input.value.trim() || label;
     mapping[label] = value;
@@ -341,7 +594,7 @@ function syncFromJSON(){
     const mapping = JSON.parse(raw);
     const inputs = document.querySelectorAll('.speaker-input');
     
-    inputs.forEach(input => {
+    inputs.forEach(function(input){
       const label = input.dataset.speaker;
       if(mapping[label] !== undefined){
         input.value = mapping[label];
@@ -355,7 +608,7 @@ function syncFromJSON(){
   }
 }
 
-// Legacy function for compatibility
+// Merge speaker map (preserves manual names)
 function mergeSpeakerMap(labels){
   const ta = document.getElementById("di_speaker_map");
   if(!ta) return;
@@ -376,11 +629,14 @@ function mergeSpeakerMap(labels){
   }
 
   let changed = false;
-  for(const lab of (labels || [])){
+  for(let i=0; i<labels.length; i++){
+    const lab = labels[i];
     if(!(lab in current)){
       current[lab] = lab;
       changed = true;
       console.log('➕ Dodano nową etykietę do mapowania:', lab);
+    } else {
+      console.log('✓ Zachowano istniejącą nazwę dla:', lab, '→', current[lab]);
     }
   }
 
@@ -389,15 +645,14 @@ function mergeSpeakerMap(labels){
     console.log('✅ Zaktualizowano mapowanie mówców:', current);
   }
   
-  // Also render UI
-  const outText = document.getElementById('di_out')?.value || '';
+  const outText = document.getElementById('di_out') ? (document.getElementById('di_out').value || '') : '';
   renderSpeakerMappingUI(labels, outText);
 }
 
 function setDownloadLink(projectId){
   const dl = document.getElementById("di_download");
   if(!dl) return;
-  dl.href = `/api/projects/${projectId}/download/diarized.txt`;
+  dl.href = "/api/projects/" + projectId + "/download/diarized.txt";
   dl.style.display = "inline-flex";
 }
 
@@ -408,7 +663,8 @@ async function updateAudioState(){
   DI_HAS_AUDIO = Boolean(AISTATE.projectId && AISTATE.audioFile);
   const btn = document.getElementById("di_btn");
   if(btn){
-    const mode = (document.getElementById("di_mode")?.value || "pyannote");
+    const modeEl = document.getElementById("di_mode");
+    const mode = modeEl ? (modeEl.value || "pyannote") : "pyannote";
     const needAudio = (mode === "pyannote");
     btn.disabled = needAudio && !DI_HAS_AUDIO;
   }
@@ -416,7 +672,7 @@ async function updateAudioState(){
 
 async function loadProjectJson(projectId){
   try{
-    const raw = await api(`/api/projects/${projectId}/download/project.json`);
+    const raw = await api("/api/projects/" + projectId + "/download/project.json");
     return JSON.parse(String(raw || "{}"));
   }catch(e){
     return {};
@@ -424,14 +680,14 @@ async function loadProjectJson(projectId){
 }
 
 const LS = {
-  get(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } },
-  set(key,val){ try{ localStorage.setItem(key, val); }catch(e){} },
+  get: function(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } },
+  set: function(key,val){ try{ localStorage.setItem(key, val); }catch(e){} }
 };
 
 function draftKeys(projectId){
   return {
-    diarized: `aistateweb:draft:diarized:${projectId}`,
-    speakerMap: `aistateweb:draft:speaker_map:${projectId}`,
+    diarized: "aistateweb:draft:diarized:" + projectId,
+    speakerMap: "aistateweb:draft:speaker_map:" + projectId
   };
 }
 
@@ -440,14 +696,14 @@ function setupDraftAutosave(projectId){
 
   const out = document.getElementById("di_out");
   if(out){
-    out.addEventListener("input", ()=>{
+    out.addEventListener("input", function(){
       LS.set(keys.diarized, out.value || "");
     });
   }
 
   const sm = document.getElementById("di_speaker_map");
   if(sm){
-    sm.addEventListener("input", ()=>{
+    sm.addEventListener("input", function(){
       LS.set(keys.speakerMap, sm.value || "");
     });
   }
@@ -459,7 +715,6 @@ async function restoreOutputs(projectId){
   const out = document.getElementById("di_out");
   const sm = document.getElementById("di_speaker_map");
 
-  // 1) Prefer drafts
   const draftOut = LS.get(keys.diarized);
   if(out && !out.value.trim() && draftOut && String(draftOut).trim()){
     out.value = String(draftOut);
@@ -470,7 +725,6 @@ async function restoreOutputs(projectId){
     sm.value = String(draftMap);
   }
 
-  // 2) Load from project files
   const meta = await loadProjectJson(projectId);
 
   if(sm && !sm.value.trim() && meta && typeof meta === "object" && meta.speaker_map){
@@ -481,7 +735,7 @@ async function restoreOutputs(projectId){
 
   if(out && !out.value.trim()){
     try{
-      const txt = await api(`/api/projects/${projectId}/download/diarized.txt`);
+      const txt = await api("/api/projects/" + projectId + "/download/diarized.txt");
       if(txt && String(txt).trim()){
         out.value = String(txt);
         setDownloadLink(projectId);
@@ -489,9 +743,16 @@ async function restoreOutputs(projectId){
     }catch(e){}
   }
 
-  // Render UI
   if(out && out.value.trim()){
     console.log('🔄 Odświeżam mapowanie z załadowanego wyniku...');
+    
+    const segments = parseDiarizedText(out.value);
+    if(segments.length){
+      DI.segments = segments;
+      diRender();
+      console.log('✅ Wyrenderowano ' + segments.length + ' bloków z zapisanego wyniku');
+    }
+    
     const labels = extractSpeakerLabels(out.value);
     if(labels.length) {
       mergeSpeakerMap(labels);
@@ -510,11 +771,18 @@ function onDoneDiarize(j){
       console.log('📝 Wynik diaryzacji zapisany do pola tekstowego');
     }
 
+    const segments = parseDiarizedText(out);
+    if(segments.length){
+      DI.segments = segments;
+      diRender();
+      console.log('✅ Wyrenderowano ' + segments.length + ' bloków');
+    }
+
     console.log('🔍 Wykrywam mówców z wyniku...');
     const labels = extractSpeakerLabels(out);
     
     if(labels.length) {
-      console.log(`✅ Znaleziono ${labels.length} mówców:`, labels);
+      console.log('✅ Znaleziono ' + labels.length + ' mówców:', labels);
       mergeSpeakerMap(labels);
     } else {
       console.warn('⚠️ Nie znaleziono żadnych etykiet mówców');
@@ -537,10 +805,13 @@ function toggleMode(){
   document.getElementById("di_text_block").style.display = (mode==="text") ? "block" : "none";
   updateAudioState();
 }
+
+// ========== Event Listeners ==========
+
 document.getElementById("di_mode").addEventListener("change", toggleMode);
 toggleMode();
 
-document.getElementById("di_btn").addEventListener("click", async ()=>{
+document.getElementById("di_btn").addEventListener("click", async function(){
   const mode = document.getElementById("di_mode").value;
   const fd = new FormData();
 
@@ -565,19 +836,19 @@ document.getElementById("di_btn").addEventListener("click", async ()=>{
   }
 });
 
-document.getElementById("di_save_txt").addEventListener("click", async ()=>{
+document.getElementById("di_save_txt").addEventListener("click", async function(){
   const pid = requireProjectId();
-  const text = document.getElementById("di_out").value || "";
+  const text = diBuildRawText();
   
   if(!text.trim()){
     alert("Pole 'Wynik diaryzacji' jest puste - nie ma czego zapisać.");
     return;
   }
   
-  await api(`/api/projects/${pid}/save_diarized`, {
+  await api("/api/projects/" + pid + "/save_diarized", {
     method:"POST",
     headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ text })
+    body: JSON.stringify({ text: text })
   });
 
   setDownloadLink(pid);
@@ -589,11 +860,10 @@ document.getElementById("di_save_txt").addEventListener("click", async ()=>{
     ? "\n\n💡 Wynik zawiera etykiety SPEAKER_XX. Jeśli chcesz je zamienić na imiona, użyj mapowania powyżej."
     : "";
     
-  alert(`✅ Zapisano wynik diaryzacji w projekcie (diarized.txt).${hint}`);
+  alert("✅ Zapisano wynik diaryzacji w projekcie (diarized.txt)." + hint);
 });
 
-document.getElementById("di_apply_map").addEventListener("click", ()=>{
-  // Sync UI to JSON first
+document.getElementById("di_apply_map").addEventListener("click", function(){
   syncToJSON();
   
   let mapping = {};
@@ -608,13 +878,15 @@ document.getElementById("di_apply_map").addEventListener("click", ()=>{
   let totalReplacements = 0;
   const details = [];
   
-  for(const [k,v] of Object.entries(mapping)){
+  for(const k in mapping){
+    if(!mapping.hasOwnProperty(k)) continue;
+    const v = mapping[k];
     if(k === v) continue;
     const count = (out.match(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
     if(count > 0){
       out = out.split(k).join(v);
       totalReplacements += count;
-      details.push(`${k} → ${v} (${count}×)`);
+      details.push(k + ' → ' + v + ' (' + count + '×)');
     }
   }
   
@@ -623,17 +895,23 @@ document.getElementById("di_apply_map").addEventListener("click", ()=>{
   if(totalReplacements > 0){
     console.log('✅ Zastosowano mapowanie mówców:', details.join(', '));
     
-    // Update UI with new counts
+    const segments = parseDiarizedText(out);
+    if(segments.length){
+      DI.segments = segments;
+      DI.speakerColors = {};
+      diRender();
+    }
+    
     const labels = extractSpeakerLabels(out);
     renderSpeakerMappingUI(labels, out);
     
-    alert(`✅ Zastosowano mapowanie:\n\n${details.join('\n')}\n\nRazem: ${totalReplacements} zamian\n\n💡 Pamiętaj aby zapisać wynik!`);
+    alert("✅ Zastosowano mapowanie:\n\n" + details.join('\n') + "\n\nRazem: " + totalReplacements + " zamian\n\n💡 Pamiętaj aby zapisać wynik!");
   } else {
     alert('ℹ️ Nie znaleziono żadnych wystąpień do zamiany. Sprawdź czy etykiety w mapowaniu pasują do tych w wyniku.');
   }
 });
 
-document.getElementById("di_save_map").addEventListener("click", async ()=>{
+document.getElementById("di_save_map").addEventListener("click", async function(){
   syncToJSON();
   
   const pid = requireProjectId();
@@ -643,20 +921,20 @@ document.getElementById("di_save_map").addEventListener("click", async ()=>{
     try{ mapping = JSON.parse(raw); }catch(e){ alert("Niepoprawny JSON mapowania."); return; }
   }
   
-  await api(`/api/projects/${pid}/speaker_map`, {
+  await api("/api/projects/" + pid + "/speaker_map", {
     method:"POST",
     headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ mapping })
+    body: JSON.stringify({ mapping: mapping })
   });
 
   const keys = draftKeys(pid);
   LS.set(keys.speakerMap, JSON.stringify(mapping, null, 2));
 
   const count = Object.keys(mapping).length;
-  alert(`✅ Zapisano mapowanie w projekcie (project.json).\n\nLiczba mówców: ${count}\n\n💡 Mapowanie będzie automatycznie załadowane przy następnym otwarciu projektu.`);
+  alert("✅ Zapisano mapowanie w projekcie (project.json).\n\nLiczba mówców: " + count + "\n\n💡 Mapowanie będzie automatycznie załadowane przy następnym otwarciu projektu.");
 });
 
-document.getElementById("di_refresh_map").addEventListener("click", ()=>{
+document.getElementById("di_refresh_map").addEventListener("click", function(){
   const outEl = document.getElementById("di_out");
   if(!outEl || !outEl.value.trim()){
     alert("Najpierw wykonaj diaryzację - pole 'Wynik diaryzacji' jest puste.");
@@ -668,14 +946,20 @@ document.getElementById("di_refresh_map").addEventListener("click", ()=>{
   
   if(labels.length){
     mergeSpeakerMap(labels);
-    alert(`✅ Znaleziono ${labels.length} mówców: ${labels.join(', ')}`);
+    
+    const segments = parseDiarizedText(outEl.value);
+    if(segments.length){
+      DI.segments = segments;
+      diRender();
+    }
+    
+    alert("✅ Znaleziono " + labels.length + " mówców: " + labels.join(', '));
   } else {
     alert("⚠️ Nie znaleziono etykiet mówców w wyniku. Sprawdź format (powinno być: SPEAKER_00: tekst)");
   }
 });
 
-// Toggle JSON editor visibility
-document.getElementById("toggle_json_editor").addEventListener("click", ()=>{
+document.getElementById("toggle_json_editor").addEventListener("click", function(){
   const container = document.getElementById("json_editor_container");
   container.classList.toggle("show");
   
@@ -687,10 +971,43 @@ document.getElementById("toggle_json_editor").addEventListener("click", ()=>{
   }
 });
 
-// Sync from JSON button
 document.getElementById("sync_from_json").addEventListener("click", syncFromJSON);
 
-(async()=>{
+document.addEventListener('aistate:output-updated', function(e){
+  console.log('🔔 Received output-updated event:', e.detail);
+  
+  if(e.detail && e.detail.textareaId === 'di_out'){
+    const outEl = document.getElementById("di_out");
+    if(outEl && outEl.value.trim()){
+      console.log('🔄 Auto-refreshing speaker mapping and blocks from updated output...');
+      
+      const segments = parseDiarizedText(outEl.value);
+      if(segments.length){
+        DI.segments = segments;
+        diRender();
+        console.log('✅ Re-rendered ' + segments.length + ' blocks');
+      }
+      
+      const labels = extractSpeakerLabels(outEl.value);
+      if(labels.length){
+        mergeSpeakerMap(labels);
+        showToast('✅ Wykryto ' + labels.length + ' mówców');
+        console.log('✅ Auto-refresh complete: ' + labels.length + ' speakers found:', labels);
+      } else {
+        console.warn('⚠️ No speaker labels found in output');
+      }
+    }
+  }
+});
+
+// Export global helpers for app.js integration
+window.DI = DI;
+window.diRender = diRender;
+window.diBuildRawText = diBuildRawText;
+window.parseDiarizedText = parseDiarizedText;
+window.diStopPlayback = diStopPlayback;
+
+(async function(){
   await updateAudioState();
   if(AISTATE.projectId){
     setupDraftAutosave(AISTATE.projectId);
