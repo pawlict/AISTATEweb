@@ -22,9 +22,9 @@ const I18N = {
     "page.transcription.title": "Transkrypcja",
     "projects.current_auto": "(bieżący / auto)",
     "projects.unnamed": "projekt",
-"projects.none": "Brak projektów",
-"projects.no_file": "Brak pliku",
-"projects.no_data": "Brak danych",
+    "projects.none": "Brak projektów",
+    "projects.no_file": "Brak pliku",
+    "projects.no_data": "Brak danych",
     "settings.ui_language": "Język interfejsu",
     "settings.hf_placeholder": "Wklej token (zapis lokalnie na serwerze)",
     "settings.save": "Zapisz ustawienia",
@@ -74,7 +74,7 @@ const I18N = {
 function parseLineTimes(line){
   if(!line) return null;
 
-  // diarization seconds
+  // Diarization seconds format
   let m = line.match(/^\s*\[(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\]/);
   if(m){
     const s0 = parseFloat(m[1]);
@@ -82,7 +82,7 @@ function parseLineTimes(line){
     if(isFinite(s0) && isFinite(s1) && s1 > s0) return {start: s0, end: s1};
   }
 
-  // transcription HH:MM:SS(.ms)
+  // Transcription HH:MM:SS(.ms) format
   m = line.match(/^\s*\[(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?\s*-\s*(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?\]/);
   if(m){
     const h0=+m[1], mi0=+m[2], se0=+m[3], ms0=+(m[4]||"0");
@@ -96,7 +96,7 @@ function parseLineTimes(line){
 }
 
 
-// ---------- Helper: project audio URL ----------
+// ---------- Helper: get project audio URL ----------
 function getProjectAudioUrl(){
   try{
     const pid = (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) ? String(AISTATE.projectId) : "";
@@ -106,6 +106,8 @@ function getProjectAudioUrl(){
   }catch(e){
     return "";
   }
+}
+
 
 // ---------- Helper: enforce playback within a diarization/transcription block ----------
 // If `times` is provided, playback/seek is constrained to [start,end] seconds.
@@ -137,7 +139,7 @@ function attachSegmentGuards(audioEl, times){
     try{
       if(audioEl.currentTime >= (end - EPS)){
         audioEl.pause();
-        audioEl.currentTime = end; // stop at end of block
+        audioEl.currentTime = end; // Stop at end of block
       }
     }catch(e){}
   };
@@ -148,7 +150,7 @@ function attachSegmentGuards(audioEl, times){
   audioEl.addEventListener("timeupdate", onTimeUpdate);
   audioEl.addEventListener("seeking", onSeeking);
 
-  // initial clamp
+  // Initial clamp
   clamp();
 
   return function cleanup(){
@@ -158,8 +160,12 @@ function attachSegmentGuards(audioEl, times){
   };
 }
 
+// ---------- Helper: generate localStorage key for drafts ----------
+function draftKey(id){
+  return `aistate_draft_${id}`;
 }
 
+// ---------- i18n helpers ----------
 function getUiLang(){
   return localStorage.getItem("aistate_ui_lang") || "pl";
 }
@@ -184,7 +190,7 @@ function applyI18n(){
   });
 }
 
-// Minimal helper: create/load current project id from localStorage
+// ---------- Global state: current project ----------
 const AISTATE = {
   get projectId(){
     return localStorage.getItem("aistate_project_id") || "";
@@ -211,6 +217,7 @@ const AISTATE = {
   }
 };
 
+// ---------- API helper ----------
 async function api(url, opts={}){
   const res = await fetch(url, opts);
   const ct = (res.headers.get("content-type") || "").toLowerCase();
@@ -236,6 +243,7 @@ async function api(url, opts={}){
   return (dataJson !== null) ? dataJson : dataText;
 }
 
+// ---------- Legacy: ensure project exists ----------
 async function ensureProject(){
   // Legacy helper: create project if missing. Prefer requireProjectId() in new UX.
   if(AISTATE.projectId) return AISTATE.projectId;
@@ -244,17 +252,18 @@ async function ensureProject(){
   return j.project_id;
 }
 
+// ---------- Require active project ----------
 function requireProjectId(){
   const pid = AISTATE.projectId || "";
   if(!pid){
     alert("Najpierw utwórz projekt w: Nowy projekt (podaj nazwę i wybierz plik audio). ");
     window.location.href = "/new-project";
-    throw new Error("Brak aktywnego projektu");
+    throw new Error("No active project");
   }
   return pid;
 }
 
-
+// ---------- Refresh current project info in UI ----------
 async function refreshCurrentProjectInfo(){
   const elCur = document.getElementById("current_project");
   const elAud = document.getElementById("current_audio");
@@ -283,6 +292,7 @@ async function refreshCurrentProjectInfo(){
   }
 }
 
+// ---------- DOM helpers ----------
 function el(id){ return document.getElementById(id); }
 
 function setStatus(prefix, status){
@@ -296,24 +306,25 @@ function setLogs(prefix, text){
   const lb = el(prefix+"_logs"); if(lb) lb.textContent = text;
 }
 
+// ---------- Task management ----------
 async function startTask(prefix, endpoint, formData, onDone){
   try{
-    setStatus(prefix, "Startuję…");
+    setStatus(prefix, "Starting…");
     setProgress(prefix, 0);
     setLogs(prefix, "");
 
-    // New UX: project must exist (created in "Nowy projekt").
+    // New UX: project must exist (created in "New project" page).
     const project_id = requireProjectId();
     formData.set("project_id", project_id);
 
     const j = await api(endpoint, {method:"POST", body: formData});
     const task_id = j.task_id;
     AISTATE.setTaskId(prefix, task_id);
-    setStatus(prefix, "W toku…");
+    setStatus(prefix, "Running…");
     pollTask(prefix, task_id, onDone);
   }catch(e){
-    const msg = (e && e.message) ? e.message : "Błąd";
-    setStatus(prefix, "Błąd ❌: " + msg);
+    const msg = (e && e.message) ? e.message : "Error";
+    setStatus(prefix, "Error ❌: " + msg);
     alert(msg);
     throw e;
   }
@@ -327,17 +338,17 @@ async function pollTask(prefix, taskId, onDone){
     setProgress(prefix, j.progress || 0);
     setLogs(prefix, (j.logs || []).join("\n"));
     if(j.status === "done"){
-      setStatus(prefix, "Zakończono ✅");
+      setStatus(prefix, "Completed ✅");
       done=true;
       AISTATE.setTaskId(prefix, "");
       if(onDone) onDone(j);
     }else if(j.status === "error"){
-      const msg = (j.error || "Błąd");
-      setStatus(prefix, "Błąd ❌: " + msg);
+      const msg = (j.error || "Error");
+      setStatus(prefix, "Error ❌: " + msg);
       done=true;
       AISTATE.setTaskId(prefix, "");
     }else{
-      setStatus(prefix, j.status === "running" ? "W toku…" : j.status);
+      setStatus(prefix, j.status === "running" ? "Running…" : j.status);
     }
   }
 }
@@ -353,23 +364,24 @@ async function resumeTask(prefix, onDone){
     setLogs(prefix, (j.logs || []).join("\n"));
 
     if(j.status === "done"){
-      setStatus(prefix, "Zakończono ✅");
+      setStatus(prefix, "Completed ✅");
       AISTATE.setTaskId(prefix, "");
       if(onDone) onDone(j);
       return;
     }
     if(j.status === "error"){
-      setStatus(prefix, "Błąd ❌");
+      setStatus(prefix, "Error ❌");
       AISTATE.setTaskId(prefix, "");
       return;
     }
-    setStatus(prefix, "W toku… (wznowiono)");
+    setStatus(prefix, "Running… (resumed)");
     pollTask(prefix, tid, onDone);
   }catch(e){
     AISTATE.setTaskId(prefix, "");
   }
 }
 
+// ---------- Project list management ----------
 async function refreshProjects(selectId){
   const j = await api("/api/projects");
   const sel = el(selectId);
@@ -397,7 +409,7 @@ async function setProjectFromSelect(selectId){
   location.reload();
 }
 
-// Export helpers globally (templates call these functions directly)
+// ---------- Export global helpers ----------
 window.AISTATE = AISTATE;
 window.api = api;
 window.applyI18n = applyI18n;
@@ -411,300 +423,401 @@ window.setProjectFromSelect = setProjectFromSelect;
 window.ensureModal = ensureModal;
 window.findBlock = findBlock;
 window.openManualEditor = openManualEditor;
-  window.parseLineTimes = parseLineTimes;
-  window.getProjectAudioUrl = getProjectAudioUrl;
-  window.attachSegmentGuards = attachSegmentGuards;
+window.parseLineTimes = parseLineTimes;
+window.getProjectAudioUrl = getProjectAudioUrl;
+window.attachSegmentGuards = attachSegmentGuards;
 
 
-  // ===== Block editor modal (Transcription-like UI) =====
-  function ensureModal(){
-    let m = document.getElementById("aistate_modal");
-    if(m) return m;
+// ===== Block editor modal =====
+function ensureModal(){
+  let m = document.getElementById("aistate_modal");
+  if(m) return m;
 
-    m = document.createElement("div");
-    m.id = "aistate_modal";
-    m.style.position = "fixed";
-    m.style.inset = "0";
-    m.style.background = "rgba(0,0,0,0.45)";
+  m = document.createElement("div");
+  m.id = "aistate_modal";
+  m.style.position = "fixed";
+  m.style.inset = "0";
+  m.style.background = "rgba(0,0,0,0.45)";
+  m.style.display = "none";
+  m.style.zIndex = "9999";
+  m.style.padding = "18px";
+  m.style.boxSizing = "border-box";
+
+  // Build modal HTML in parts to avoid editor parsing issues
+  var html = '';
+  html += '<div style="max-width:1200px;margin:0 auto;background:#fff;border-radius:14px;padding:14px 14px 16px 14px;box-shadow:0 12px 36px rgba(0,0,0,.22);">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">';
+  html += '<div style="flex:1;min-width:200px;">';
+  html += '<div style="font-weight:800;font-size:18px;line-height:1;">Edit Block</div>';
+  html += '<div id="aistate_block_range" style="margin-top:6px;font-size:12px;opacity:.75;">—</div>';
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">';
+  html += '<div style="display:flex;align-items:center;gap:8px;">';
+  html += '<label style="font-size:13px;font-weight:600;color:#555;">🎤 Speaker:</label>';
+  html += '<input id="aistate_speaker_name" class="input" type="text" placeholder="SPEAKER_00" style="width:140px;padding:6px 10px;font-size:13px;">';
+  html += '<button id="aistate_apply_speaker" class="btn secondary" type="button" title="Replace speaker in this block" style="padding:6px 12px;font-size:12px;">✓ Change</button>';
+  html += '</div>';
+  html += '<button id="aistate_modal_close" class="btn secondary" type="button">✕ Close</button>';
+  html += '</div>';
+  html += '</div>';
+  
+  html += '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">';
+  html += '<button id="aistate_play" class="btn" type="button" title="Play">▶️ Play</button>';
+  html += '<button id="aistate_pause" class="btn secondary" type="button" title="Pause">⏸️ Pause</button>';
+  html += '<button id="aistate_stop" class="btn secondary" type="button" title="Stop">⏹️ Stop</button>';
+  html += '<span style="width:1px;height:22px;background:#ddd;margin:0 4px;"></span>';
+  html += '<button id="aistate_back3" class="btn secondary" type="button">⏪ -3s</button>';
+  html += '<button id="aistate_back1" class="btn secondary" type="button">◀️ -1s</button>';
+  html += '<button id="aistate_fwd1" class="btn secondary" type="button">▶️ +1s</button>';
+  html += '<button id="aistate_fwd3" class="btn secondary" type="button">⏩ +3s</button>';
+  html += '<span style="width:1px;height:22px;background:#ddd;margin:0 4px;"></span>';
+  html += '<div style="display:flex;align-items:center;gap:8px;">';
+  html += '<span style="font-size:12px;opacity:.8;">🎵 Speed:</span>';
+  html += '<select id="aistate_rate" class="input" style="min-width:82px;">';
+  html += '<option value="0.5">0.5×</option>';
+  html += '<option value="0.75">0.75×</option>';
+  html += '<option value="1" selected>1×</option>';
+  html += '<option value="1.25">1.25×</option>';
+  html += '<option value="1.5">1.5×</option>';
+  html += '<option value="2">2×</option>';
+  html += '</select>';
+  html += '</div>';
+  html += '</div>';
+  
+  html += '<div style="margin-top:10px;">';
+  html += '<audio id="aistate_block_audio" controls style="width:100%"></audio>';
+  html += '</div>';
+  
+  html += '<div style="margin-top:10px;">';
+  html += '<textarea id="aistate_edit" style="width:100%;min-height:240px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,\'Liberation Mono\',\'Courier New\',monospace;"></textarea>';
+  html += '</div>';
+  
+  html += '<div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">';
+  html += '<button id="aistate_apply" class="btn" type="button">✅ Apply</button>';
+  html += '<button id="aistate_save_project" class="btn secondary" type="button">💾 Save to Project</button>';
+  html += '<span style="font-size:12px;opacity:.7;align-self:center;margin-left:auto;">Shortcuts: Esc close • Ctrl+Enter apply</span>';
+  html += '</div>';
+  html += '</div>';
+  
+  m.innerHTML = html;
+
+  document.body.appendChild(m);
+
+  function close(){
     m.style.display = "none";
-    m.style.zIndex = "9999";
-    m.style.padding = "18px";
-    m.style.boxSizing = "border-box";
+    m._ctx = null;
+    const a = m.querySelector("#aistate_block_audio");
+    try{ a.pause(); }catch(e){}
+    try{ if(m._cleanupAudio){ m._cleanupAudio(); m._cleanupAudio = null; } }catch(e){}
+  }
+  m.querySelector("#aistate_modal_close").addEventListener("click", close);
+  m.addEventListener("click", (e)=>{ if(e.target === m) close(); });
 
-    m.innerHTML = `
-      <div style="max-width:1200px;margin:0 auto;background:#fff;border-radius:14px;padding:14px 14px 16px 14px;box-shadow:0 12px 36px rgba(0,0,0,.22);">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-          <div>
-            <div style="font-weight:800;font-size:18px;line-height:1;">Edycja bloku</div>
-            <div id="aistate_block_range" style="margin-top:6px;font-size:12px;opacity:.75;">—</div>
-          </div>
-          <button id="aistate_modal_close" class="btn secondary" type="button">Zamknij</button>
-        </div>
-
-        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-          <button id="aistate_play" class="btn" type="button" title="Play">
-            ▶
-          </button>
-          <button id="aistate_pause" class="btn secondary" type="button" title="Pause">
-            ⏸
-          </button>
-          <button id="aistate_stop" class="btn secondary" type="button" title="Stop">
-            ⏹
-          </button>
-
-          <span style="width:1px;height:22px;background:#ddd;margin:0 4px;"></span>
-
-          <button id="aistate_back3" class="btn secondary" type="button">-3s</button>
-          <button id="aistate_back1" class="btn secondary" type="button">-1s</button>
-          <button id="aistate_fwd1"  class="btn secondary" type="button">+1s</button>
-          <button id="aistate_fwd3"  class="btn secondary" type="button">+3s</button>
-
-          <span style="width:1px;height:22px;background:#ddd;margin:0 4px;"></span>
-
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:12px;opacity:.8;">Tempo:</span>
-            <select id="aistate_rate" class="input" style="min-width:82px;">
-              <option value="0.5">0.5×</option>
-              <option value="0.75">0.75×</option>
-              <option value="1" selected>1×</option>
-              <option value="1.25">1.25×</option>
-              <option value="1.5">1.5×</option>
-              <option value="2">2×</option>
-            </select>
-          </div>
-
-          <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
-            <span style="font-size:12px;opacity:.8;">Loop:</span>
-            <input id="aistate_loop_start" class="input" type="number" step="0.1" placeholder="start (s)" style="width:110px;">
-            <input id="aistate_loop_end"   class="input" type="number" step="0.1" placeholder="koniec (s)" style="width:110px;">
-            <button id="aistate_set_start" class="btn secondary" type="button">Ustaw start</button>
-            <button id="aistate_set_end"   class="btn secondary" type="button">Ustaw koniec</button>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.85;">
-              <input id="aistate_loop_on" type="checkbox"> włącz
-            </label>
-          </div>
-        </div>
-
-        <div style="margin-top:10px;">
-          <audio id="aistate_block_audio" controls style="width:100%"></audio>
-        </div>
-
-        <div style="margin-top:10px;">
-          <textarea id="aistate_edit" style="width:100%;min-height:240px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;"></textarea>
-        </div>
-
-        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
-          <button id="aistate_apply" class="btn" type="button">Zastosuj</button>
-          <button id="aistate_save_project" class="btn secondary" type="button">Zapisz w projekcie</button>
-          <span style="font-size:12px;opacity:.7;align-self:center;margin-left:auto;">
-            Skróty: Esc zamknij • Ctrl+Enter zastosuj
-          </span>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(m);
-
-    function close(){
-      m.style.display = "none";
-      m._ctx = null;
-      const a = m.querySelector("#aistate_block_audio");
-      try{ a.pause(); }catch(e){}
-      try{ if(m._cleanupAudio){ m._cleanupAudio(); m._cleanupAudio = null; } }catch(e){}
+  document.addEventListener("keydown", (e)=>{
+    if(m.style.display === "none") return;
+    if(e.key === "Escape"){ e.preventDefault(); close(); }
+    if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){
+      e.preventDefault();
+      m.querySelector("#aistate_apply").click();
     }
-    m.querySelector("#aistate_modal_close").addEventListener("click", close);
-    m.addEventListener("click", (e)=>{ if(e.target === m) close(); });
+  });
 
-    document.addEventListener("keydown", (e)=>{
-      if(m.style.display === "none") return;
-      if(e.key === "Escape"){ e.preventDefault(); close(); }
-      if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){
-        e.preventDefault();
-        m.querySelector("#aistate_apply").click();
+  return m;
+}
+
+// ---------- Find block based on cursor position or block index ----------
+function findBlock(textarea, lineIndexOrBlockIdx){
+  const lines = (textarea.value || "").split("\n");
+
+  // Diarization with blocks: use block index directly
+  if(textarea.id === "di_out"){
+    // Check if we have block-based segments
+    if(typeof window.DI !== 'undefined' && window.DI.segments && window.DI.segments.length > 0){
+      const idx = Math.max(0, Math.min(lineIndexOrBlockIdx, window.DI.segments.length - 1));
+      const seg = window.DI.segments[idx];
+      if(seg){
+        // Return the formatted line for this segment
+        const text = `[${seg.start.toFixed(2)}-${seg.end.toFixed(2)}] ${seg.speaker}: ${seg.text}`;
+        return { start: idx, end: idx, text: text, mode: "block-segment" };
       }
-    });
-
-    return m;
+    }
+    
+    // Fallback: treat as line-based
+    const idx = Math.max(0, Math.min(lineIndexOrBlockIdx, lines.length - 1));
+    return { start: idx, end: idx, text: lines[idx] || "" };
   }
 
-  function findBlock(textarea, lineIndex){
-    const lines = (textarea.value || "").split("\n");
-
-    // Diaryzacja: zawsze 1 linia = 1 blok
-    if(textarea.id === "di_out"){
-      const idx = Math.max(0, Math.min(lineIndex, lines.length - 1));
-      return { start: idx, end: idx, text: lines[idx] || "" };
-    }
-
-    // Transkrypcja: jeśli jest zaznaczenie, edytuj zaznaczenie
-    try{
-      const s = textarea.selectionStart, e = textarea.selectionEnd;
-      if(typeof s === "number" && typeof e === "number" && e > s){
-        const txt = textarea.value.slice(s, e);
-        return { start: null, end: null, text: txt, selStart: s, selEnd: e, mode: "selection" };
+  // Transcription with blocks: use block index directly
+  if(textarea.id === "tr_out"){
+    // Check if we have block-based segments
+    if(typeof window.TR !== 'undefined' && window.TR.segments && window.TR.segments.length > 0){
+      const idx = Math.max(0, Math.min(lineIndexOrBlockIdx, window.TR.segments.length - 1));
+      const seg = window.TR.segments[idx];
+      if(seg){
+        const formatTs = (s) => {
+          const hh = Math.floor(s/3600);
+          const mm = Math.floor((s%3600)/60);
+          const ss = s - hh*3600 - mm*60;
+          const pad = (n) => String(Math.floor(n)).padStart(2,'0');
+          const pad3 = (n) => String(Math.round((ss-Math.floor(ss))*1000)).padStart(3,'0');
+          return `${pad(hh)}:${pad(mm)}:${pad(ss)}.${pad3(ss)}`;
+        };
+        const text = `[${formatTs(seg.start)} - ${formatTs(seg.end)}] ${seg.text || ""}`;
+        return { start: idx, end: idx, text: text, mode: "block-segment" };
       }
+    }
+  }
+
+  // Transcription fallback: if there's a selection, edit selection
+  try{
+    const s = textarea.selectionStart, e = textarea.selectionEnd;
+    if(typeof s === "number" && typeof e === "number" && e > s){
+      const txt = textarea.value.slice(s, e);
+      return { start: null, end: null, text: txt, selStart: s, selEnd: e, mode: "selection" };
+    }
+  }catch(e){}
+
+  // Otherwise: paragraph/block until empty line
+  let start = Math.max(0, Math.min(lineIndexOrBlockIdx, lines.length - 1));
+  let end = start;
+
+  while(start > 0 && (lines[start-1] || "").trim() !== "") start--;
+  while(end < lines.length-1 && (lines[end+1] || "").trim() !== "") end++;
+
+  return { start, end, text: lines.slice(start, end+1).join("\n"), mode: "paragraph" };
+}
+
+// ---------- Open manual editor modal ----------
+function openManualEditor(textarea, lineIndex){
+  const modal = ensureModal();
+  const taEdit = modal.querySelector("#aistate_edit");
+  const rangeLbl = modal.querySelector("#aistate_block_range");
+  const audio = modal.querySelector("#aistate_block_audio");
+  const speakerInput = modal.querySelector("#aistate_speaker_name");
+
+  // Remove previous block guards (if any)
+  try{ if(modal._cleanupAudio){ modal._cleanupAudio(); modal._cleanupAudio = null; } }catch(e){}
+
+  const block = findBlock(textarea, lineIndex);
+  taEdit.value = block.text || "";
+
+  // Show modal early (so UI appears even if audio helpers fail)
+  modal.style.display = "block";
+
+  // Time range (if we have timestamp in first line of block)
+  const firstLine = (block.text || "").split("\n")[0] || "";
+  const times = parseLineTimes(firstLine);
+  if(times){
+    rangeLbl.textContent = `${times.start.toFixed(3)}s → ${times.end.toFixed(3)}s`;
+  }else{
+    rangeLbl.textContent = "—";
+  }
+
+  // Detect current speaker from first line
+  let currentSpeaker = "";
+  const cleanedLine = firstLine.replace(/^\s*\[[\d\.\-]+\]\s*/, '');
+  const speakerMatch = cleanedLine.match(/^\s*([A-Za-z0-9_\-]{1,40})\s*:/);
+  if(speakerMatch && speakerMatch[1]){
+    currentSpeaker = speakerMatch[1].trim();
+  }
+  
+  if(speakerInput){
+    speakerInput.value = currentSpeaker;
+    speakerInput.placeholder = currentSpeaker || "SPEAKER_00";
+  }
+
+  // Set audio src to project file
+  const url = getProjectAudioUrl();
+  if(url){
+    if(audio.getAttribute("data-src") !== url){
+      audio.src = url;
+      audio.setAttribute("data-src", url);
+    }
+    if(times){
+      audio.currentTime = Math.max(0, times.start);
+    }
+  }
+
+  // Constrain playback to this block (start→end) by default
+  try{ modal._cleanupAudio = attachSegmentGuards(audio, times); }catch(e){}
+
+  // Playback speed
+  const rateSel = modal.querySelector("#aistate_rate");
+  const applyRate = ()=>{ try{ audio.playbackRate = parseFloat(rateSel.value || "1"); }catch(e){} };
+  rateSel.onchange = applyRate;
+  applyRate();
+
+  // Playback controls
+  modal.querySelector("#aistate_play").onclick  = ()=>{ audio.play().catch(()=>{}); };
+  modal.querySelector("#aistate_pause").onclick = ()=>{ try{ audio.pause(); }catch(e){} };
+  modal.querySelector("#aistate_stop").onclick  = ()=>{
+    try{ 
+      audio.pause(); 
+      audio.currentTime = times ? Math.max(0, times.start) : 0; 
     }catch(e){}
+  };
 
-    // W przeciwnym razie: akapit/blok do pustej linii
-    let start = Math.max(0, Math.min(lineIndex, lines.length - 1));
-    let end = start;
+  const seek = (delta)=>{
+    try{ audio.currentTime = Math.max(0, (audio.currentTime || 0) + delta); }catch(e){}
+  };
+  modal.querySelector("#aistate_back3").onclick = ()=>seek(-3);
+  modal.querySelector("#aistate_back1").onclick = ()=>seek(-1);
+  modal.querySelector("#aistate_fwd1").onclick  = ()=>seek(+1);
+  modal.querySelector("#aistate_fwd3").onclick  = ()=>seek(+3);
 
-    while(start > 0 && (lines[start-1] || "").trim() !== "") start--;
-    while(end < lines.length-1 && (lines[end+1] || "").trim() !== "") end++;
-
-    return { start, end, text: lines.slice(start, end+1).join("\n"), mode: "paragraph" };
+  // Speaker change button
+  const applySpeakerBtn = modal.querySelector("#aistate_apply_speaker");
+  if(applySpeakerBtn){
+    applySpeakerBtn.onclick = ()=>{
+      const newSpeaker = (speakerInput.value || "").trim();
+      if(!newSpeaker){
+        alert("Enter speaker name (e.g. John, SPEAKER_02)");
+        return;
+      }
+      
+      if(!currentSpeaker){
+        alert("Could not detect original speaker name in this block.");
+        return;
+      }
+      
+      if(newSpeaker === currentSpeaker){
+        alert("New name is the same as current.");
+        return;
+      }
+      
+      // Replace all occurrences of currentSpeaker with newSpeaker in edited text
+      let text = taEdit.value || "";
+      const escapedOld = currentSpeaker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapedOld, 'g');
+      const count = (text.match(regex) || []).length;
+      
+      text = text.split(currentSpeaker).join(newSpeaker);
+      taEdit.value = text;
+      
+      // Update input
+      speakerInput.value = newSpeaker;
+      currentSpeaker = newSpeaker;
+      
+      console.log(`✅ Changed speaker: ${count} occurrences`);
+      alert(`✅ Changed speaker in block (${count} occurrences)\n\n💡 Click "Apply" to save changes to output.`);
+    };
   }
 
-  function openManualEditor(textarea, lineIndex){
-    const modal = ensureModal();
-    const taEdit = modal.querySelector("#aistate_edit");
-    const rangeLbl = modal.querySelector("#aistate_block_range");
-    const audio = modal.querySelector("#aistate_block_audio");
+  // Context for saving
+  modal._ctx = {
+    textareaId: textarea.id,
+    block,
+    times
+  };
 
-    // remove previous block guards (if any)
-    try{ if(modal._cleanupAudio){ modal._cleanupAudio(); modal._cleanupAudio = null; } }catch(e){}
+  // Apply to output
+  modal.querySelector("#aistate_apply").onclick = ()=>{
+    const ctx = modal._ctx;
+    if(!ctx) return;
+    const outTa = document.getElementById(ctx.textareaId);
+    if(!outTa) return;
 
-    const block = findBlock(textarea, lineIndex);
-    taEdit.value = block.text || "";
-
-    
-
-    // Show modal early (so UI appears even if audio helpers fail)
-    modal.style.display = "block";
-// zakres czasu (jeśli mamy timestamp w pierwszej linii bloku)
-    const firstLine = (block.text || "").split("\n")[0] || "";
-    const times = parseLineTimes(firstLine); // masz już tę funkcję w pliku
-    if(times){
-      rangeLbl.textContent = `${times.start.toFixed(3)}s → ${times.end.toFixed(3)}s`;
-    }else{
-      rangeLbl.textContent = "—";
-    }
-
-    // ustaw audio src do pliku projektu
-    const url = getProjectAudioUrl(); // masz już tę funkcję w pliku
-    if(url){
-      if(audio.getAttribute("data-src") !== url){
-        audio.src = url;
-        audio.setAttribute("data-src", url);
-      }
-      if(times){
-        audio.currentTime = Math.max(0, times.start);
-      }
-    }
-
-    // Constrain playback to this block (start→end) by default
-    try{ modal._cleanupAudio = attachSegmentGuards(audio, times); }catch(e){}
-
-
-    // tempo
-    const rateSel = modal.querySelector("#aistate_rate");
-    const applyRate = ()=>{ try{ audio.playbackRate = parseFloat(rateSel.value || "1"); }catch(e){} };
-    rateSel.onchange = applyRate;
-    applyRate();
-
-    // loop
-    const loopOn = modal.querySelector("#aistate_loop_on");
-    const loopStart = modal.querySelector("#aistate_loop_start");
-    const loopEnd = modal.querySelector("#aistate_loop_end");
-    const setStart = modal.querySelector("#aistate_set_start");
-    const setEnd = modal.querySelector("#aistate_set_end");
-
-    if(times){
-      loopStart.value = String(times.start.toFixed(1));
-      loopEnd.value = String(times.end.toFixed(1));
-    }
-
-    setStart.onclick = ()=>{ loopStart.value = String((audio.currentTime||0).toFixed(1)); };
-    setEnd.onclick   = ()=>{ loopEnd.value = String((audio.currentTime||0).toFixed(1)); };
-
-    // loop enforcement
-    const loopHandler = ()=>{
-      if(!loopOn.checked) return;
-      const s = parseFloat(loopStart.value || "0");
-      const e = parseFloat(loopEnd.value || "0");
-      if(isFinite(s) && isFinite(e) && e > s && (audio.currentTime || 0) >= e){
-        audio.currentTime = Math.max(0, s);
-        audio.play().catch(()=>{});
-      }
-    };
-    audio.ontimeupdate = loopHandler;
-
-    // sterowanie
-    modal.querySelector("#aistate_play").onclick  = ()=>{ audio.play().catch(()=>{}); };
-    modal.querySelector("#aistate_pause").onclick = ()=>{ try{ audio.pause(); }catch(e){} };
-    modal.querySelector("#aistate_stop").onclick  = ()=>{
-      try{ audio.pause(); audio.currentTime = times ? Math.max(0, times.start) : 0; }catch(e){}
-    };
-
-    const seek = (delta)=>{
-      try{ audio.currentTime = Math.max(0, (audio.currentTime || 0) + delta); }catch(e){}
-    };
-    modal.querySelector("#aistate_back3").onclick = ()=>seek(-3);
-    modal.querySelector("#aistate_back1").onclick = ()=>seek(-1);
-    modal.querySelector("#aistate_fwd1").onclick  = ()=>seek(+1);
-    modal.querySelector("#aistate_fwd3").onclick  = ()=>seek(+3);
-
-    // kontekst do zapisania
-    modal._ctx = {
-      textareaId: textarea.id,
-      block,
-      times
-    };
-
-    // zastosuj do wyniku
-    modal.querySelector("#aistate_apply").onclick = ()=>{
-      const ctx = modal._ctx;
-      if(!ctx) return;
-      const outTa = document.getElementById(ctx.textareaId);
-      if(!outTa) return;
-
-      if(ctx.block.mode === "selection"){
-        outTa.value = outTa.value.slice(0, ctx.block.selStart) + taEdit.value + outTa.value.slice(ctx.block.selEnd);
-      }else{
-        const arr = (outTa.value || "").split("\n");
-        if(ctx.block.start != null && ctx.block.end != null){
-          const replacement = (taEdit.value || "").split("\n");
-          arr.splice(ctx.block.start, ctx.block.end - ctx.block.start + 1, ...replacement);
-          outTa.value = arr.join("\n");
+    // Handle block-segment mode (from DI.segments or TR.segments)
+    if(ctx.block.mode === "block-segment"){
+      // Update the segment in memory
+      if(ctx.textareaId === "di_out" && typeof window.DI !== 'undefined' && window.DI.segments){
+        const idx = ctx.block.start;
+        if(window.DI.segments[idx]){
+          // Parse the edited text to extract speaker and text
+          const edited = taEdit.value || "";
+          const match = edited.match(/^\s*\[[\d\.\-]+\]\s*([A-Za-z0-9_\-]+)\s*:\s*(.*)$/);
+          if(match){
+            window.DI.segments[idx].speaker = match[1].trim();
+            window.DI.segments[idx].text = match[2].trim();
+          } else {
+            // If format is broken, just update text
+            window.DI.segments[idx].text = edited;
+          }
+          // Rebuild textarea and re-render blocks
+          if(typeof window.diBuildRawText === 'function'){
+            outTa.value = window.diBuildRawText();
+          }
+          if(typeof window.diRender === 'function'){
+            window.diRender();
+          }
+        }
+      } else if(ctx.textareaId === "tr_out" && typeof window.TR !== 'undefined' && window.TR.segments){
+        const idx = ctx.block.start;
+        if(window.TR.segments[idx]){
+          // Parse edited text
+          const edited = taEdit.value || "";
+          const match = edited.match(/^\s*\[[^\]]+\]\s*(.*)$/);
+          if(match){
+            window.TR.segments[idx].text = match[1].trim();
+          } else {
+            window.TR.segments[idx].text = edited;
+          }
+          // Rebuild and re-render
+          if(typeof window.trBuildRawText === 'function'){
+            outTa.value = window.trBuildRawText();
+          }
+          if(typeof window.trRender === 'function'){
+            window.trRender();
+          }
         }
       }
-
-      // zapisz draft, żeby nie znikało po przełączeniu zakładek
-      try{ localStorage.setItem(draftKey(outTa.id), outTa.value || ""); }catch(e){}
-    };
-
-    // zapis do projektu (jak masz już endpointy save_transcript/save_diarized)
-    modal.querySelector("#aistate_save_project").onclick = async ()=>{
-      const ctx = modal._ctx;
-      if(!ctx) return;
-      const outTa = document.getElementById(ctx.textareaId);
-      if(!outTa) return;
-      const pid = requireProjectId();
-
-      try{
-        if(ctx.textareaId === "tr_out"){
-          await api(`/api/projects/${pid}/save_transcript`, {
-            method:"POST",
-            headers:{ "content-type":"application/json" },
-            body: JSON.stringify({ text: outTa.value || "" })
-          });
-          alert("Zapisano transkrypcję ✅");
-        }else if(ctx.textareaId === "di_out"){
-          await api(`/api/projects/${pid}/save_diarized`, {
-            method:"POST",
-            headers:{ "content-type":"application/json" },
-            body: JSON.stringify({ text: outTa.value || "" })
-          });
-          alert("Zapisano diaryzację ✅");
-        }
-      }catch(e){
-        alert(e.message || "Błąd zapisu");
+    } else if(ctx.block.mode === "selection"){
+      outTa.value = outTa.value.slice(0, ctx.block.selStart) + taEdit.value + outTa.value.slice(ctx.block.selEnd);
+    } else {
+      const arr = (outTa.value || "").split("\n");
+      if(ctx.block.start != null && ctx.block.end != null){
+        const replacement = (taEdit.value || "").split("\n");
+        arr.splice(ctx.block.start, ctx.block.end - ctx.block.start + 1, ...replacement);
+        outTa.value = arr.join("\n");
       }
-    };
+    }
 
+    // Save draft (so it doesn't disappear when switching tabs)
+    try{ localStorage.setItem(draftKey(outTa.id), outTa.value || ""); }catch(e){}
     
-  }
-// ===== Global PPM handler (event delegation) =====
+    // Dispatch event to notify UI to refresh speaker mapping
+    try{
+      const event = new CustomEvent('aistate:output-updated', { 
+        detail: { textareaId: ctx.textareaId }
+      });
+      document.dispatchEvent(event);
+      console.log('✅ Dispatched output-updated event');
+    }catch(e){
+      console.warn('Could not dispatch event:', e);
+    }
+  };
+
+  // Save to project
+  modal.querySelector("#aistate_save_project").onclick = async ()=>{
+    const ctx = modal._ctx;
+    if(!ctx) return;
+    const outTa = document.getElementById(ctx.textareaId);
+    if(!outTa) return;
+    const pid = requireProjectId();
+
+    try{
+      if(ctx.textareaId === "tr_out"){
+        await api(`/api/projects/${pid}/save_transcript`, {
+          method:"POST",
+          headers:{ "content-type":"application/json" },
+          body: JSON.stringify({ text: outTa.value || "" })
+        });
+        alert("Saved transcription ✅");
+      }else if(ctx.textareaId === "di_out"){
+        await api(`/api/projects/${pid}/save_diarized`, {
+          method:"POST",
+          headers:{ "content-type":"application/json" },
+          body: JSON.stringify({ text: outTa.value || "" })
+        });
+        alert("Saved diarization ✅");
+      }
+    }catch(e){
+      alert(e.message || "Save error");
+    }
+  };
+}
+
+// ===== Global PPM (right-click) handler =====
 (function(){
   function _lineIndexFromMouse(el, evt){
     const rect = el.getBoundingClientRect();
@@ -728,38 +841,34 @@ window.openManualEditor = openManualEditor;
     else el.textContent = txt;
   }
 
+  function _toast(msg){
+    try{
+      console.error(msg);
+      let t = document.getElementById("_aistate_toast");
+      if(!t){
+        t = document.createElement("div");
+        t.id = "_aistate_toast";
+        t.style.position = "fixed";
+        t.style.left = "18px";
+        t.style.bottom = "18px";
+        t.style.zIndex = "10000";
+        t.style.background = "rgba(20,20,20,0.92)";
+        t.style.color = "#fff";
+        t.style.padding = "10px 12px";
+        t.style.borderRadius = "10px";
+        t.style.boxShadow = "0 10px 30px rgba(0,0,0,.25)";
+        t.style.fontSize = "12px";
+        t.style.maxWidth = "420px";
+        t.style.display = "none";
+        document.body.appendChild(t);
+      }
+      t.textContent = msg;
+      t.style.display = "block";
+      clearTimeout(t._timer);
+      t._timer = setTimeout(()=>{ t.style.display = "none"; }, 3500);
+    }catch(e){}
+  }
 
-
-function _toast(msg){
-  try{
-    console.error(msg);
-    let t = document.getElementById("_aistate_toast");
-    if(!t){
-      t = document.createElement("div");
-      t.id = "_aistate_toast";
-      t.style.position = "fixed";
-      t.style.left = "18px";
-      t.style.bottom = "18px";
-      t.style.zIndex = "10000";
-      t.style.background = "rgba(20,20,20,0.92)";
-      t.style.color = "#fff";
-      t.style.padding = "10px 12px";
-      t.style.borderRadius = "10px";
-      t.style.boxShadow = "0 10px 30px rgba(0,0,0,.25)";
-      t.style.fontSize = "12px";
-      t.style.maxWidth = "420px";
-      t.style.display = "none";
-      document.body.appendChild(t);
-    }
-    t.textContent = msg;
-    t.style.display = "block";
-    clearTimeout(t._timer);
-    t._timer = setTimeout(()=>{ t.style.display = "none"; }, 3500);
-  }catch(e){}
-}
-
-  // jeśli Twoje openManualEditor oczekuje textarea, to robimy wrapper
-  // Open editor for textarea/div (di_out/tr_out are textareas in this app)
   function _openEditorFor(el, lineIdx){
     try{
       if(typeof openManualEditor === "function"){
@@ -768,27 +877,60 @@ function _toast(msg){
       if(typeof window.openManualEditor === "function"){
         return window.openManualEditor(el, lineIdx);
       }
-      _toast("Brak openManualEditor() — app.js nie załadował się poprawnie.");
+      _toast("Missing openManualEditor() – app.js did not load correctly.");
     }catch(e){
-      _toast(e && e.message ? e.message : "Błąd otwierania edytora");
+      _toast(e && e.message ? e.message : "Error opening editor");
     }
   }
 
   document.addEventListener("contextmenu", (evt)=>{
     const t = evt.target;
-    const el =
-      t?.closest?.("#tr_out") ||
-      t?.closest?.("#di_out") ||
-      t?.closest?.("[data-editor='tr_out']") ||
-      t?.closest?.("[data-editor='di_out']");
+    let el = null;
+    
+    // Check if element has closest method
+    if(t && typeof t.closest === 'function'){
+      el = t.closest("#tr_out") ||
+           t.closest("#di_out") ||
+           t.closest("[data-editor='tr_out']") ||
+           t.closest("[data-editor='di_out']") ||
+           t.closest(".seg"); // Support for block-based views
+    }
+    
     if(!el) return;
 
     evt.preventDefault();
     evt.stopPropagation();
     if(typeof evt.stopImmediatePropagation === 'function') evt.stopImmediatePropagation();
 
-    const idx = _lineIndexFromMouse(el, evt);
-    try{ _openEditorFor(el, idx); }catch(e){ _toast(e && e.message ? e.message : "Błąd PPM"); }
+    // Handle block clicks differently
+    if(el.classList && el.classList.contains('seg')){
+      const idx = parseInt(el.dataset.idx || '0', 10);
+      
+      // Determine which textarea to use based on parent container
+      let textarea = null;
+      if(el.closest('#di_blocks')){
+        textarea = document.getElementById('di_out');
+      } else if(el.closest('#tr_blocks')){
+        textarea = document.getElementById('tr_out');
+      }
+      
+      if(textarea){
+        try{ 
+          _openEditorFor(textarea, idx); 
+        }catch(e){ 
+          _toast(e && e.message ? e.message : "PPM error"); 
+        }
+      }
+    } else {
+      // Original textarea-based handling
+      const idx = _lineIndexFromMouse(el, evt);
+      try{ 
+        _openEditorFor(el, idx); 
+      }catch(e){ 
+        _toast(e && e.message ? e.message : "PPM error"); 
+      }
+    }
+    
     return false;
   }, true);
 })();
