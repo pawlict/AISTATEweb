@@ -80,7 +80,7 @@
   <canvas id="main-canvas"></canvas>
   <canvas id="overlay-canvas"></canvas>
   <div class="scan-line"></div>
-  <div class="hint">AI S.T.A.T.E Web · Artificial Intelligence Speech‑To‑Analysis‑Translation Engine 2026 · ESC = stop · CLICK = replay</div>
+	  <div class="hint">AI S.T.A.T.E Web · Artificial Intelligence Speech‑To‑Analysis‑Translation Engine 2026 · ESC = skip · CLICK = replay</div>
 
 <script>
 (() => {
@@ -88,6 +88,18 @@
   const LOGO_SRC = "logo.png";
   const DURATION = 13.3;        // Extended by 40% (was 9.5s)
   const FPS_CAP = 60;
+	  
+	  // Where to go after the intro finishes
+	  const qs = new URLSearchParams(window.location.search);
+	  const NEXT_URL = qs.get("next") || "/transcription";
+	  const REDIRECT_DELAY_MS = 900; // small hold on the final logo
+	  let redirectArmed = false;
+	  function finishIntro() {
+	    if (redirectArmed) return;
+	    redirectArmed = true;
+	    try { sessionStorage.setItem('aistate_intro_seen', '1'); } catch (e) {}
+	    window.location.href = NEXT_URL;
+	  }
   
   // Color palette - cyberpunk cyan-magenta
   const C1 = [80, 220, 255];   // Cyan
@@ -132,6 +144,18 @@
   const lerp = (a, b, t) => a + (b - a) * t;
   const rand = (a, b) => a + (b - a) * Math.random();
   const randInt = (a, b) => Math.floor(rand(a, b + 1));
+	  
+	  // Finish intro and continue to the app
+	  let finished = false;
+	  function finishIntro() {
+	    if (finished) return;
+	    finished = true;
+	    try { sessionStorage.setItem('aistate_intro_seen', '1'); } catch (e) {}
+	    // Small hold on the logo, then continue
+	    setTimeout(() => {
+	      try { window.location.assign(NEXT_URL); } catch (e) { window.location.href = NEXT_URL; }
+	    }, REDIRECT_DELAY_MS);
+	  }
   
   // Easing functions
   const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -1258,7 +1282,8 @@
       requestAnimationFrame(frame);
     } else {
       // Hold on logo
-      running = false;
+	      running = false;
+	      finishIntro();
     }
   }
   
@@ -1273,7 +1298,8 @@
   // Event listeners
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      running = false;
+	      running = false;
+	      finishIntro();
     }
   });
   

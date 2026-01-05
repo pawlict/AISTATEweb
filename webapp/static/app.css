@@ -67,9 +67,15 @@ a{color:inherit; text-decoration:none}
   display:flex; align-items:center; justify-content:center;
   overflow:hidden;
 }
-.logo img{width:100%; height:100%; object-fit:contain}
+.logo img{width:100%; height:100%; object-fit:contain; display:block}
 .logo-lg{
-  width:84px; height:84px; border-radius:18px; /* 2x bigger */
+  width:110px; height:110px; border-radius:22px; /* +30% */
+}
+
+/* Sidebar main logo: no extra background/frame (keep PNG transparency) */
+.logo.logo-lg{
+  background: transparent;
+  border: none;
 }
 
 .brand-text{display:flex; flex-direction:column; gap:2px}
