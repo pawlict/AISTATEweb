@@ -164,10 +164,18 @@ textarea{min-height:220px; resize:vertical}
 
 .grid{display:grid; gap:14px}
 .topgrid{display:grid; grid-template-columns: 1fr 420px; gap:14px}
+.topgrid3{display:grid; grid-template-columns: 1fr 1fr 420px; gap:14px; align-items:start}
 @media (max-width: 1100px){
   .sidebar{position:relative; height:auto}
   .container{flex-direction:column}
   .topgrid{grid-template-columns:1fr}
+  .topgrid3{grid-template-columns:1fr}
+}
+
+@media (max-width: 1400px) and (min-width: 1101px){
+  /* Two columns + full-width third card for medium screens */
+  .topgrid3{grid-template-columns: 1fr 1fr}
+  .topgrid3 > :nth-child(3){grid-column: 1 / -1}
 }
 
 /* -------- segmented transcript/diarization UI (hover playback + editing) -------- */

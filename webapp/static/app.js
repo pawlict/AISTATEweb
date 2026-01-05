@@ -1,7 +1,7 @@
 // ---------- UI language (i18n) ----------
 const I18N = {
   pl: {
-    "nav.new_project": "Nowy projekt",
+    "nav.new_project": "Projekty",
     "nav.transcription": "Transkrypcja",
     "nav.diarization": "Diaryzacja",
     "nav.settings": "Ustawienia",
@@ -17,9 +17,27 @@ const I18N = {
     "btn.diarize": "Diaryzuj",
     "btn.transcribe": "Transkrybuj",
     "page.new_project.title": "Nowy projekt",
+    "page.new_project.subtitle": "Utwórz nowy projekt i wybierz plik audio",
     "page.logs.title": "Logi",
     "page.diarization.title": "Diaryzacja",
     "page.transcription.title": "Transkrypcja",
+    "projects.open.title": "Otwórz projekt",
+    "projects.open.choose": "Wybierz zapisany projekt",
+    "projects.open.open_btn": "Otwórz",
+    "projects.open.refresh_btn": "Odśwież listę",
+    "projects.open.details": "Szczegóły",
+    "projects.open.no_selection": "Wybierz projekt z listy.",
+    "projects.open.tr_yes": "transkrypcja ✅",
+    "projects.open.tr_no": "transkrypcja —",
+    "projects.open.di_yes": "diaryzacja ✅",
+    "projects.open.di_no": "diaryzacja —",
+    "projects.open.audio": "audio",
+    "projects.open.created": "utworzono",
+    "projects.open.updated": "aktualizacja",
+    "projects.new.name": "Nazwa projektu",
+    "projects.export.title": "Eksport",
+    "projects.export.zip_btn": "Eksportuj ZIP bieżącego projektu",
+    "projects.export.zip_hint": "Eksportuje folder projektu (audio, wyniki, raporty, metadata).",
     "projects.current_auto": "(bieżący / auto)",
     "projects.unnamed": "projekt",
     "projects.none": "Brak projektów",
@@ -33,7 +51,7 @@ const I18N = {
     "lang.en": "English",
   },
   en: {
-    "nav.new_project": "New project",
+    "nav.new_project": "Projects",
     "nav.transcription": "Transcription",
     "nav.diarization": "Diarization",
     "nav.settings": "Settings",
@@ -49,9 +67,27 @@ const I18N = {
     "btn.diarize": "Diarize",
     "btn.transcribe": "Transcribe",
     "page.new_project.title": "New project",
+    "page.new_project.subtitle": "Create a new project and choose an audio file",
     "page.logs.title": "Logs",
     "page.diarization.title": "Diarization",
     "page.transcription.title": "Transcription",
+    "projects.open.title": "Open project",
+    "projects.open.choose": "Select a saved project",
+    "projects.open.open_btn": "Open",
+    "projects.open.refresh_btn": "Refresh list",
+    "projects.open.details": "Details",
+    "projects.open.no_selection": "Select a project from the list.",
+    "projects.open.tr_yes": "transcription ✅",
+    "projects.open.tr_no": "transcription —",
+    "projects.open.di_yes": "diarization ✅",
+    "projects.open.di_no": "diarization —",
+    "projects.open.audio": "audio",
+    "projects.open.created": "created",
+    "projects.open.updated": "updated",
+    "projects.new.name": "Project name",
+    "projects.export.title": "Export",
+    "projects.export.zip_btn": "Export ZIP of current project",
+    "projects.export.zip_hint": "Exports the project folder (audio, results, reports, metadata).",
     "projects.current_auto": "(current / auto)",
     "projects.unnamed": "project",
     "projects.none": "(none)",
@@ -256,7 +292,7 @@ async function ensureProject(){
 function requireProjectId(){
   const pid = AISTATE.projectId || "";
   if(!pid){
-    alert("Najpierw utwórz projekt w: Nowy projekt (podaj nazwę i wybierz plik audio). ");
+    alert("Najpierw utwórz lub otwórz projekt w zakładce: Projekty (sekcja \"Nowy projekt\" lub \"Otwórz projekt\").");
     window.location.href = "/new-project";
     throw new Error("No active project");
   }
