@@ -299,6 +299,26 @@ app = FastAPI(title=f"{APP_NAME} Web", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 
 
+# --- Ensure UTF-8 across the app (templates + JSON + JS/CSS) ---
+@app.middleware("http")
+async def _force_utf8_charset(request: Request, call_next):
+    response = await call_next(request)
+    try:
+        ct = response.headers.get("content-type") or ""
+        ctl = ct.lower()
+        # Only add charset when missing and it's a text-like response
+        if ct and ("charset=" not in ctl) and (
+            ctl.startswith("text/")
+            or ctl.startswith("application/json")
+            or ctl.startswith("application/javascript")
+            or ctl.startswith("application/x-javascript")
+        ):
+            response.headers["content-type"] = f"{ct}; charset=utf-8"
+    except Exception:
+        pass
+    return response
+
+
 @app.get("/", response_class=HTMLResponse)
 def home() -> Any:
     # Default route: play Intro (once per browser session) then go to the app.

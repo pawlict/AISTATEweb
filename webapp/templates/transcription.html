@@ -5,7 +5,7 @@
 
   <div class="topgrid">
     <div class="subcard">
-      <div class="label">Język</div>
+      <div class="label" data-i18n="tr.label.language">Język</div>
       <select id="tr_lang">
         <option value="auto">auto</option>
         <option value="pl">pl</option>
@@ -16,11 +16,11 @@
         <option value="uk">uk</option>
         <option value="ru">ru</option>
       </select>
-      <div class="small">W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).</div>
+      <div class="small" data-i18n-html="tr.hint.auto_html">W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).</div>
 
       <div class="hr"></div>
 
-      <div class="label">Model Whisper</div>
+      <div class="label" data-i18n="tr.label.model">Model Whisper</div>
       <select id="tr_model">
         {% for m in whisper_models %}
         <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
@@ -33,27 +33,27 @@
     <div class="subcard">
       <div class="row" style="flex-wrap:wrap">
         <button class="btn" id="tr_btn" data-i18n="btn.transcribe">Transcribe</button>
-        <a class="btn secondary" id="tr_download" href="#" style="display:none">Pobierz TXT</a>
+        <a class="btn secondary" id="tr_download" href="#" style="display:none" data-i18n="tr.btn.download_txt">Pobierz TXT</a>
       </div>
 
       <div class="small" style="margin-top:10px">
-        Status: <b id="tr_status">—</b> • Postęp: <span id="tr_pct">0%</span>
+        <span data-i18n="common.status">Status</span>: <b id="tr_status">—</b> • <span data-i18n="common.progress">Postęp</span>: <span id="tr_pct">0%</span>
       </div>
       <div class="progress" style="margin-top:10px"><div id="tr_bar"></div></div>
-      <div class="small" style="margin-top:10px">Logi są dostępne w zakładce <b>Logi</b>.</div>
+      <div class="small" style="margin-top:10px" data-i18n-html="common.logs_in_tab_html">Logi są dostępne w zakładce <b>Logi</b>.</div>
     </div>
   </div>
 
   <div class="hr"></div>
 
-  <div class="label">Wynik transkrypcji</div>
-  <div class="small" style="margin-bottom:8px">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+  <div class="label" data-i18n="tr.label.result">Wynik transkrypcji</div>
+  <div class="small" style="margin-bottom:8px" data-i18n="tr.hint.hover">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
   <div id="tr_blocks" class="blocklist" style="display:none"></div>
-  <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…"></textarea>
+  <textarea id="tr_out" class="bigarea" data-i18n-placeholder="tr.placeholder.result" placeholder="Tutaj pojawi się wynik…"></textarea>
   <div class="row" style="margin-top:10px; flex-wrap:wrap">
-    <button class="btn secondary" id="tr_save_txt">Zapisz transkrypcję w projekcie</button>
+    <button class="btn secondary" id="tr_save_txt" data-i18n="tr.btn.save_project">Zapisz transkrypcję w projekcie</button>
   </div>
-  <div class="small">Zapis tworzy plik w projekcie (np. <code>transcript.txt</code>).</div>
+  <div class="small" data-i18n-html="tr.hint.save_file_html">Zapis tworzy plik w projekcie (np. <code>transcript.txt</code>).</div>
 </div>
 {% endblock %}
 
@@ -251,7 +251,7 @@ document.getElementById("tr_save_txt").addEventListener("click", async ()=>{
     headers:{ "content-type":"application/json" },
     body: JSON.stringify({ text })
   });
-  alert("Zapisano transkrypcję w projekcie.");
+  alert(t("tr.alert.saved"));
 });
 
 // Export global helpers for app.js integration

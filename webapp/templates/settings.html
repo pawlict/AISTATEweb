@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card">
-  <h1 class="h1" data-i18n="nav.settings">Settings</h1>
+  <h1 class="h1" data-i18n="settings.page_title">Settings</h1>
 
   <div class="grid">
     <div class="subcard">
-      <div class="label">Hugging Face Token (pyannote)</div>
+      <div class="label" data-i18n="settings.hf_label">Hugging Face Token (pyannote)</div>
       <input class="input" id="hf_token" type="password" data-i18n-placeholder="settings.hf_placeholder"
              placeholder="Paste your token (stored locally on the server)" value="{{ settings.hf_token or '' }}"/>
-      <div class="small">Token jest przechowywany w pliku <code>settings.json</code> w katalogu konfiguracji.</div>
+      <div class="small" data-i18n-html="settings.hf_hint_html">Token jest przechowywany w pliku <code>settings.json</code> w katalogu konfiguracji.</div>
 
       <div class="hr"></div>
 
-      <div class="label">Default Whisper model</div>
+      <div class="label" data-i18n="settings.whisper_default_label">Default Whisper model</div>
       <select id="def_whisper">
         {% for m in whisper_models %}
         <option value="{{m}}" {% if m==settings.whisper_model %}selected{% endif %}>{{m}}</option>

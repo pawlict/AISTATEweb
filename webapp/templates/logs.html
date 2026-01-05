@@ -4,22 +4,22 @@
   <h1 class="h1" data-i18n="page.logs.title">Logs</h1>
   <div class="grid">
     <div>
-      <div class="label">Ostatnie zadania</div>
+      <div class="label" data-i18n="logs.label.last_tasks">Ostatnie zadania</div>
       <select id="task_select"></select>
       <div class="row" style="margin-top:10px">
-        <button class="btn secondary" id="task_refresh">Odśwież</button>
-        <button class="btn danger" id="task_clear">Wyczyść listę zadań (server)</button>
+        <button class="btn secondary" id="task_refresh" data-i18n="logs.btn.refresh">Odśwież</button>
+        <button class="btn danger" id="task_clear" data-i18n="logs.btn.clear">Wyczyść listę zadań (server)</button>
       </div>
-      <div class="small">Logi pokazują wyjście workerów (stderr) + postęp.</div>
+      <div class="small" data-i18n="logs.hint">Logi pokazują wyjście workerów (stderr) + postęp.</div>
 
       <div class="hr"></div>
-      <div class="small">Status: <b id="lg_status">—</b> • Postęp: <span id="lg_pct">0%</span></div>
+      <div class="small"><span data-i18n="common.status">Status</span>: <b id="lg_status">—</b> • <span data-i18n="common.progress">Postęp</span>: <span id="lg_pct">0%</span></div>
       <div class="progress" style="margin-top:10px"><div id="lg_bar"></div></div>
     </div>
 
     <div>
-      <div class="label">Logi</div>
-      <textarea id="lg_logs" style="min-height:340px" readonly placeholder="Logi pojawią się tutaj…"></textarea>
+      <div class="label" data-i18n="logs.label.logs">Logi</div>
+      <textarea id="lg_logs" style="min-height:340px" readonly data-i18n-placeholder="logs.placeholder" placeholder="Logi pojawią się tutaj…"></textarea>
       <div class="row" style="margin-top:10px; flex-wrap:wrap">
         <button class="btn secondary" id="lg_copy_sel"><span data-i18n="logs.copy_sel">Copy selection</span></button>
         <button class="btn secondary" id="lg_copy_all"><span data-i18n="logs.copy_all">Copy all</span></button>
@@ -62,7 +62,7 @@ async function showSelected(){
 document.getElementById("task_refresh").addEventListener("click", async ()=>{ await refreshTasks(); await showSelected(); });
 document.getElementById("task_select").addEventListener("change", showSelected);
 document.getElementById("task_clear").addEventListener("click", async ()=>{
-  if(!confirm("Na pewno wyczyścić listę zadań na serwerze? (nie usuwa projektów)")) return;
+  if(!confirm(t("logs.alert.clear_confirm"))) return;
   await api("/api/tasks/clear", {method:"POST"});
   await refreshTasks(); await showSelected();
 });
@@ -87,7 +87,7 @@ async function _copyToClipboard(text){
 document.getElementById("lg_copy_all").addEventListener("click", async ()=>{
   const ta = document.getElementById("lg_logs");
   await _copyToClipboard(ta.value || "");
-  alert("Skopiowano ✅");
+  alert(t("logs.alert.copied"));
 });
 
 document.getElementById("lg_copy_sel").addEventListener("click", async ()=>{
@@ -96,7 +96,7 @@ document.getElementById("lg_copy_sel").addEventListener("click", async ()=>{
   const end = ta.selectionEnd || 0;
   const txt = (end>start) ? ta.value.substring(start, end) : (ta.value || "");
   await _copyToClipboard(txt);
-  alert("Skopiowano ✅");
+  alert(t("logs.alert.copied"));
 });
 
 // Auto-refresh while user watches logs

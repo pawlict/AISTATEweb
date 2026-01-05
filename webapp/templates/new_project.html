@@ -13,21 +13,21 @@
       <div class="hr"></div>
 
       <div class="label" data-i18n="projects.new.name">Nazwa projektu</div>
-      <input class="input" id="np_name" type="text" placeholder="np. Wywiad_2026_01_03"/>
-      <div class="small">Nazwa jest przechowywana w <code>project.json</code> w folderze projektu.</div>
+      <input class="input" id="np_name" type="text" data-i18n-placeholder="np.name_placeholder" placeholder="np. Wywiad_2026_01_03"/>
+      <div class="small" data-i18n-html="np.name_hint_html">Nazwa jest przechowywana w <code>project.json</code> w folderze projektu.</div>
 
       <div class="hr"></div>
 
-      <div class="label">Plik źródłowy audio</div>
+      <div class="label" data-i18n="np.audio_label">Plik źródłowy audio</div>
       <input class="input" id="np_file" type="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.mp4,.aac"/>
-      <div class="small">Ten plik będzie plikiem źródłowym projektu (transkrypcja i diaryzacja pracują na tym samym pliku).</div>
+      <div class="small" data-i18n="np.audio_hint">Ten plik będzie plikiem źródłowym projektu (transkrypcja i diaryzacja pracują na tym samym pliku).</div>
 
       <div class="hr"></div>
 
       <div class="row" style="flex-wrap:wrap">
-        <button class="btn" id="np_create">Utwórz projekt</button>
+        <button class="btn" id="np_create" data-i18n="np.btn_create">Utwórz projekt</button>
       </div>
-      <div class="small" style="margin-top:10px">Status: <b id="np_status">—</b></div>
+      <div class="small" style="margin-top:10px"><span data-i18n="common.status">Status</span>: <b id="np_status">—</b></div>
     </div>
 
     <div class="subcard">
@@ -52,14 +52,14 @@
     </div>
 
     <div class="subcard">
-      <div class="label" style="font-weight:900;color:var(--text);font-size:16px">Jak to działa</div>
+      <div class="label" style="font-weight:900;color:var(--text);font-size:16px" data-i18n="np.how.title">Jak to działa</div>
       <ul class="small" style="line-height:1.5; margin:0; padding-left:18px">
-        <li>Po utworzeniu projektu powstaje folder w <code>data_www/projects/&lt;project_id&gt;</code>.</li>
-        <li>W folderze zapisywany jest <code>project.json</code> oraz wskazany plik audio.</li>
-        <li>Zakładki <b>Transkrypcja</b> i <b>Diaryzacja</b> korzystają z pliku audio projektu (nie wybiera się go ponownie).</li>
+        <li data-i18n-html="np.how.li1_html">Po utworzeniu projektu powstaje folder w <code>data_www/projects/&lt;project_id&gt;</code>.</li>
+        <li data-i18n-html="np.how.li2_html">W folderze zapisywany jest <code>project.json</code> oraz wskazany plik audio.</li>
+        <li data-i18n-html="np.how.li3_html">Zakładki <b>Transkrypcja</b> i <b>Diaryzacja</b> korzystają z pliku audio projektu (nie wybiera się go ponownie).</li>
       </ul>
       <div class="hr"></div>
-      <div class="small">Aktywny projekt jest trzymany w przeglądarce (localStorage). Utworzenie nowego projektu ustawi go jako aktywny.</div>
+      <div class="small" data-i18n="np.how.note">Aktywny projekt jest trzymany w przeglądarce (localStorage). Utworzenie nowego projektu ustawi go jako aktywny.</div>
     </div>
   </div>
 
@@ -89,25 +89,25 @@ document.getElementById("np_name").value = suggestName();
 document.getElementById("np_create").addEventListener("click", async ()=>{
   const name = (document.getElementById("np_name").value || "").trim();
   const f = document.getElementById("np_file").files[0];
-  if(!name){ alert("Podaj nazwę projektu."); return; }
-  if(!f){ alert("Wskaż plik audio."); return; }
+  if(!name){ alert(t("np.alert.enter_name")); return; }
+  if(!f){ alert(t("np.alert.select_audio")); return; }
 
   const fd = new FormData();
   fd.append("name", name);
   fd.append("audio", f);
 
-  document.getElementById("np_status").textContent = "Tworzę…";
+  document.getElementById("np_status").textContent = t("np.status.creating");
 
   try{
     const j = await api("/api/projects/create", {method:"POST", body: fd});
     AISTATE.projectId = j.project_id;
-    document.getElementById("np_status").textContent = `Gotowe ✅ (${j.project_id.slice(0,8)})`;
+    document.getElementById("np_status").textContent = tFmt("np.status.done", {id: j.project_id.slice(0,8)});
     await refreshProjects('project_select');
     await refreshCurrentProjectInfo();
     window.location.href = "/transcription";
   }catch(e){
-    document.getElementById("np_status").textContent = "Błąd ❌";
-    alert(e.message || "Błąd tworzenia projektu");
+    document.getElementById("np_status").textContent = t("np.status.error");
+    alert(e.message || t("np.alert.create_error"));
   }
 });
 

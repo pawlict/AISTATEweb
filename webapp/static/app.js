@@ -49,6 +49,126 @@ const I18N = {
     "settings.saved": "Zapisano ✅",
     "lang.pl": "Polski",
     "lang.en": "English",
+
+    // ---- Block editor modal ----
+    "modal.edit_block.title": "Edycja bloku",
+    "modal.speaker.label": "🎤 Mówca:",
+    "modal.speaker.placeholder": "SPEAKER_00",
+    "modal.speaker.change": "✓ Zmień",
+    "modal.close": "✕ Zamknij",
+    "modal.play": "▶️ Odtwórz",
+    "modal.pause": "⏸️ Pauza",
+    "modal.stop": "⏹️ Stop",
+    "modal.speed": "🎵 Prędkość:",
+    "modal.apply": "✅ Zastosuj",
+    "modal.save_project": "💾 Zapisz w projekcie",
+    "modal.shortcuts": "Skróty: Esc zamknij • Ctrl+Enter zastosuj",
+    "modal.alert.enter_speaker": "Wpisz nazwę mówcy (np. Jan, SPEAKER_02)",
+    "modal.alert.no_original_speaker": "Nie udało się wykryć oryginalnej nazwy mówcy w tym bloku.",
+    "modal.alert.same_speaker": "Nowa nazwa jest taka sama jak obecna.",
+    "modal.alert.changed_speaker": "✅ Zmieniono mówcę w bloku ({count} wystąpień)\n\n💡 Kliknij \"Zastosuj\", aby zapisać zmiany w wyniku.",
+    "modal.alert.saved_transcription": "Zapisano transkrypcję ✅",
+    "modal.alert.saved_diarization": "Zapisano diaryzację ✅",
+    "modal.alert.save_error": "Błąd zapisu",
+    "alert.no_active_project": "Najpierw utwórz lub otwórz projekt w zakładce: Projekty (sekcja \"Nowy projekt\" lub \"Otwórz projekt\").",
+    "common.status": "Status",
+    "common.progress": "Postęp",
+    "common.logs_in_tab_html": "Logi są dostępne w zakładce <b>Logi</b>.",
+    "np.name_placeholder": "np. Wywiad_2026_01_03",
+    "np.name_hint_html": "Nazwa jest przechowywana w <code>project.json</code> w folderze projektu.",
+    "np.audio_label": "Plik źródłowy audio",
+    "np.audio_hint": "Ten plik będzie plikiem źródłowym projektu (transkrypcja i diaryzacja pracują na tym samym pliku).",
+    "np.btn_create": "Utwórz projekt",
+    "np.status.creating": "Tworzę…",
+    "np.status.done": "Gotowe ✅ ({id})",
+    "np.status.error": "Błąd ❌",
+    "np.alert.enter_name": "Podaj nazwę projektu.",
+    "np.alert.select_audio": "Wskaż plik audio.",
+    "np.alert.create_error": "Błąd tworzenia projektu",
+    "np.how.title": "Jak to działa",
+    "np.how.li1_html": "Po utworzeniu projektu powstaje folder w <code>data_www/projects/&lt;project_id&gt;</code>.",
+    "np.how.li2_html": "W folderze zapisywany jest <code>project.json</code> oraz wskazany plik audio.",
+    "np.how.li3_html": "Zakładki <b>Transkrypcja</b> i <b>Diaryzacja</b> korzystają z pliku audio projektu (nie wybiera się go ponownie).",
+    "np.how.note": "Aktywny projekt jest trzymany w przeglądarce (localStorage). Utworzenie nowego projektu ustawi go jako aktywny.",
+    "tr.label.language": "Język",
+    "tr.hint.auto_html": "W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).",
+    "tr.label.model": "Model Whisper",
+    "tr.btn.download_txt": "Pobierz TXT",
+    "tr.label.result": "Wynik transkrypcji",
+    "tr.hint.hover": "Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.",
+    "tr.placeholder.result": "Tutaj pojawi się wynik…",
+    "tr.btn.save_project": "Zapisz transkrypcję w projekcie",
+    "tr.hint.save_file_html": "Zapis tworzy plik w projekcie (np. <code>transcript.txt</code>).",
+    "tr.alert.saved": "Zapisano transkrypcję w projekcie.",
+    "logs.label.last_tasks": "Ostatnie zadania",
+    "logs.btn.refresh": "Odśwież",
+    "logs.btn.clear": "Wyczyść listę zadań (server)",
+    "logs.hint": "Logi pokazują wyjście workerów (stderr) + postęp.",
+    "logs.label.logs": "Logi",
+    "logs.placeholder": "Logi pojawią się tutaj…",
+    "logs.alert.clear_confirm": "Na pewno wyczyścić listę zadań na serwerze? (nie usuwa projektów)",
+    "logs.alert.copied": "Skopiowano ✅",
+    "settings.page_title": "Ustawienia",
+    "settings.hf_label": "Hugging Face Token (pyannote)",
+    "settings.hf_hint_html": "Token jest przechowywany w pliku <code>settings.json</code> w katalogu konfiguracji.",
+    "settings.whisper_default_label": "Domyślny model Whisper",
+    "info.title": "Info",
+    "info.source_prefix": "Treść pochodzi z pliku",
+    "di.label.mode": "Tryb",
+    "di.mode.pyannote": "pyannote (audio)",
+    "di.mode.text": "diaryzacja tekstu (prosta)",
+    "di.hint.pyannote_html": "Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).",
+    "di.label.language": "Język",
+    "di.label.model_segments": "Model Whisper (do segmentów)",
+    "di.label.input_text": "Tekst wejściowy",
+    "di.placeholder.input_text": "Wklej tekst do prostej diaryzacji…",
+    "di.label.speaker_count": "Liczba mówców",
+    "di.label.method": "Metoda",
+    "di.method.alternate": "naprzemiennie",
+    "di.method.block": "blokami",
+    "di.method.lines": "po liniach",
+    "di.method.sentences": "po zdaniach",
+    "di.method.sentences_merge": "zdania + łączenie",
+    "di.label.mapping_json": "Mapowanie mówców (JSON)",
+    "di.placeholder.mapping_json": "np. {\"SPK1\":\"Jan\",\"SPK2\":\"Anna\"}",
+    "di.hint.mapping_optional_html": "Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.",
+    "di.label.speaker_names": "Nazwy mówców",
+    "di.speaker_names.detected": "(wykryte automatycznie)",
+    "di.mapping.empty": "Wykonaj diaryzację aby wykryć mówców 🎤",
+    "di.advanced.toggle": "⚙️ Zaawansowane: edycja JSON",
+    "di.advanced.warning": "⚠️ Uwaga: ręczna edycja JSON - błędy składniowe spowodują problemy.",
+    "di.advanced.load_json": "Załaduj z JSON",
+    "di.btn.apply_map": "✓ Zastosuj mapowanie",
+    "di.btn.save_map": "💾 Zapisz mapowanie",
+    "di.btn.refresh_map": "🔄 Odśwież z wyniku",
+    "di.title.apply_map": "Zamień wszystkie wystąpienia w wyniku",
+    "di.title.save_map": "Zapisz mapowanie w project.json",
+    "di.title.refresh_map": "Wykryj mówców z wyniku",
+    "di.title.save_result": "Zapisuje bieżący tekst do diarized.txt w projekcie",
+    "di.how_use_html": "<strong>Jak użyć:</strong> Wpisz imiona w pola obok etykiet → Kliknij <strong>Zastosuj mapowanie</strong> → Wszystkie wystąpienia zostaną zamienione",
+    "di.btn.download_txt": "Pobierz TXT",
+    "di.label.result": "Wynik diaryzacji",
+    "di.hint.hover": "Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.",
+    "di.placeholder.result": "Tutaj pojawi się wynik…",
+    "di.btn.save_result": "💾 Zapisz wynik w projekcie",
+    "di.hint.important_html": "<strong>Ważne:</strong> Jeśli zastosowałeś mapowanie nazw, pamiętaj żeby zapisać wynik! Inaczej przy ponownym załadowaniu będą oryginalne etykiety.",
+    "di.alert.no_audio": "Brak pliku audio w projekcie. Utwórz projekt w zakładce: Projekty.",
+    "di.alert.paste_text": "Wklej tekst wejściowy.",
+    "di.alert.empty_output": "Pole \"Wynik diaryzacji\" jest puste - nie ma czego zapisać.",
+    "di.alert.saved_output": "✅ Zapisano wynik diaryzacji w projekcie (diarized.txt).{hint}",
+    "di.alert.bad_json": "Niepoprawny JSON mapowania.",
+    "di.alert.applied_map": "✅ Zastosowano mapowanie:\n\n{details}\n\nRazem: {total} zamian\n\n💡 Pamiętaj aby zapisać wynik!",
+    "di.alert.saved_map": "✅ Zapisano mapowanie w projekcie (project.json).\n\nLiczba mówców: {count}\n\n💡 Mapowanie będzie automatycznie załadowane przy następnym otwarciu projektu.",
+    "di.alert.need_diarize": "Najpierw wykonaj diaryzację - pole \"Wynik diaryzacji\" jest puste.",
+    "di.alert.found_speakers": "✅ Znaleziono {count} mówców: {list}",
+    "di.alert.no_speaker_labels": "⚠️ Nie znaleziono etykiet mówców w wyniku. Sprawdź format (powinno być: SPEAKER_00: tekst)",
+    "di.alert.no_replacements": "ℹ️ Nie znaleziono żadnych wystąpień do zamiany. Sprawdź czy etykiety w mapowaniu pasują do tych w wyniku.",
+    "di.hint.speaker_labels": "\n\n💡 Wynik zawiera etykiety SPEAKER_XX. Jeśli chcesz je zamienić na imiona, użyj mapowania powyżej.",
+    "di.placeholder.speaker_name": "Wpisz imię dla {label}",
+    "di.toast.updated_speakers": "🔄 Zaktualizowano {count} mówców",
+    "di.alert.map_loaded": "✅ Mapowanie załadowane z JSON",
+    "di.alert.json_parse_error": "❌ Błąd parsowania JSON: {msg}"
+
   },
   en: {
     "nav.new_project": "Projects",
@@ -99,6 +219,126 @@ const I18N = {
     "settings.saved": "Saved ✅",
     "lang.pl": "Polish",
     "lang.en": "English",
+
+    // ---- Block editor modal ----
+    "modal.edit_block.title": "Edit block",
+    "modal.speaker.label": "🎤 Speaker:",
+    "modal.speaker.placeholder": "SPEAKER_00",
+    "modal.speaker.change": "✓ Change",
+    "modal.close": "✕ Close",
+    "modal.play": "▶️ Play",
+    "modal.pause": "⏸️ Pause",
+    "modal.stop": "⏹️ Stop",
+    "modal.speed": "🎵 Speed:",
+    "modal.apply": "✅ Apply",
+    "modal.save_project": "💾 Save to project",
+    "modal.shortcuts": "Shortcuts: Esc close • Ctrl+Enter apply",
+    "modal.alert.enter_speaker": "Enter speaker name (e.g. John, SPEAKER_02)",
+    "modal.alert.no_original_speaker": "Could not detect original speaker name in this block.",
+    "modal.alert.same_speaker": "New name is the same as current.",
+    "modal.alert.changed_speaker": "✅ Changed speaker in block ({count} occurrences)\n\n💡 Click \"Apply\" to save changes to output.",
+    "modal.alert.saved_transcription": "Saved transcription ✅",
+    "modal.alert.saved_diarization": "Saved diarization ✅",
+    "modal.alert.save_error": "Save error",
+    "alert.no_active_project": "First create or open a project in: Projects (section \"New project\" or \"Open project\").",
+    "common.status": "Status",
+    "common.progress": "Progress",
+    "common.logs_in_tab_html": "Logs are available in the <b>Logs</b> tab.",
+    "np.name_placeholder": "e.g. Interview_2026_01_03",
+    "np.name_hint_html": "The name is stored in <code>project.json</code> inside the project folder.",
+    "np.audio_label": "Source audio file",
+    "np.audio_hint": "This file becomes the project source (transcription and diarization use the same file).",
+    "np.btn_create": "Create project",
+    "np.status.creating": "Creating…",
+    "np.status.done": "Done ✅ ({id})",
+    "np.status.error": "Error ❌",
+    "np.alert.enter_name": "Enter a project name.",
+    "np.alert.select_audio": "Select an audio file.",
+    "np.alert.create_error": "Project creation error",
+    "np.how.title": "How it works",
+    "np.how.li1_html": "After creation, a folder is created in <code>data_www/projects/&lt;project_id&gt;</code>.",
+    "np.how.li2_html": "The folder stores <code>project.json</code> and the chosen audio file.",
+    "np.how.li3_html": "The <b>Transcription</b> and <b>Diarization</b> tabs use the project audio file (you don't re-select it).",
+    "np.how.note": "The active project is kept in the browser (localStorage). Creating a new project sets it active.",
+    "tr.label.language": "Language",
+    "tr.hint.auto_html": "In Whisper: <code>auto</code> = auto-detect (if the model supports it).",
+    "tr.label.model": "Whisper model",
+    "tr.btn.download_txt": "Download TXT",
+    "tr.label.result": "Transcription output",
+    "tr.hint.hover": "Hover a block to play it • Right-click a block to edit.",
+    "tr.placeholder.result": "Output will appear here…",
+    "tr.btn.save_project": "Save transcription to project",
+    "tr.hint.save_file_html": "Saving creates a file in the project (e.g. <code>transcript.txt</code>).",
+    "tr.alert.saved": "Saved transcription to project.",
+    "logs.label.last_tasks": "Recent tasks",
+    "logs.btn.refresh": "Refresh",
+    "logs.btn.clear": "Clear task list (server)",
+    "logs.hint": "Logs show worker output (stderr) + progress.",
+    "logs.label.logs": "Logs",
+    "logs.placeholder": "Logs will appear here…",
+    "logs.alert.clear_confirm": "Clear task list on the server? (projects are not deleted)",
+    "logs.alert.copied": "Copied ✅",
+    "settings.page_title": "Settings",
+    "settings.hf_label": "Hugging Face Token (pyannote)",
+    "settings.hf_hint_html": "The token is stored in <code>settings.json</code> in the config directory.",
+    "settings.whisper_default_label": "Default Whisper model",
+    "info.title": "Info",
+    "info.source_prefix": "Content comes from file",
+    "di.label.mode": "Mode",
+    "di.mode.pyannote": "pyannote (audio)",
+    "di.mode.text": "text diarization (simple)",
+    "di.hint.pyannote_html": "<b>pyannote</b> mode requires an HF token (in Settings).",
+    "di.label.language": "Language",
+    "di.label.model_segments": "Whisper model (for segments)",
+    "di.label.input_text": "Input text",
+    "di.placeholder.input_text": "Paste text for simple diarization…",
+    "di.label.speaker_count": "Number of speakers",
+    "di.label.method": "Method",
+    "di.method.alternate": "alternating",
+    "di.method.block": "by blocks",
+    "di.method.lines": "by lines",
+    "di.method.sentences": "by sentences",
+    "di.method.sentences_merge": "sentences + merge",
+    "di.label.mapping_json": "Speaker mapping (JSON)",
+    "di.placeholder.mapping_json": "e.g. {\"SPK1\":\"John\",\"SPK2\":\"Anna\"}",
+    "di.hint.mapping_optional_html": "Optional: replace <code>SPK1</code>, <code>SPK2</code>, etc. with names.",
+    "di.label.speaker_names": "Speaker names",
+    "di.speaker_names.detected": "(auto-detected)",
+    "di.mapping.empty": "Run diarization to detect speakers 🎤",
+    "di.advanced.toggle": "⚙️ Advanced: edit JSON",
+    "di.advanced.warning": "⚠️ Note: manual JSON editing — syntax errors will cause issues.",
+    "di.advanced.load_json": "Load from JSON",
+    "di.btn.apply_map": "✓ Apply mapping",
+    "di.btn.save_map": "💾 Save mapping",
+    "di.btn.refresh_map": "🔄 Refresh from output",
+    "di.title.apply_map": "Replace all occurrences in the output",
+    "di.title.save_map": "Save mapping to project.json",
+    "di.title.refresh_map": "Detect speakers from output",
+    "di.title.save_result": "Save current text to diarized.txt in the project",
+    "di.how_use_html": "<strong>How to use:</strong> Type names next to labels → Click <strong>Apply mapping</strong> → All occurrences will be replaced",
+    "di.btn.download_txt": "Download TXT",
+    "di.label.result": "Diarization output",
+    "di.hint.hover": "Hover a block to play it • Right-click a block to edit.",
+    "di.placeholder.result": "Output will appear here…",
+    "di.btn.save_result": "💾 Save output to project",
+    "di.hint.important_html": "<strong>Important:</strong> If you applied name mapping, remember to save the output! Otherwise, original labels will appear after reload.",
+    "di.alert.no_audio": "No audio file in the project. Create a project in the Projects tab.",
+    "di.alert.paste_text": "Paste input text.",
+    "di.alert.empty_output": "The 'Diarization output' field is empty — nothing to save.",
+    "di.alert.saved_output": "✅ Saved diarization output to project (diarized.txt).{hint}",
+    "di.alert.bad_json": "Invalid mapping JSON.",
+    "di.alert.applied_map": "✅ Applied mapping:\n\n{details}\n\nTotal: {total} replacements\n\n💡 Remember to save the output!",
+    "di.alert.saved_map": "✅ Saved mapping to project (project.json).\n\nSpeakers: {count}\n\n💡 Mapping will auto-load next time you open the project.",
+    "di.alert.need_diarize": "Run diarization first — the output field is empty.",
+    "di.alert.found_speakers": "✅ Found {count} speakers: {list}",
+    "di.alert.no_speaker_labels": "⚠️ No speaker labels found in output. Expected format: SPEAKER_00: text",
+    "di.alert.no_replacements": "ℹ️ No occurrences found to replace. Check if the mapping labels match those in the output.",
+    "di.hint.speaker_labels": "\n\n💡 Output contains SPEAKER_XX labels. If you want to replace them with names, use the mapping above.",
+    "di.placeholder.speaker_name": "Enter name for {label}",
+    "di.toast.updated_speakers": "🔄 Updated {count} speakers",
+    "di.alert.map_loaded": "✅ Mapping loaded from JSON",
+    "di.alert.json_parse_error": "❌ JSON parse error: {msg}"
+
   }
 };
 
@@ -213,16 +453,43 @@ function t(key){
   return (I18N[lang] && I18N[lang][key]) || (I18N.en && I18N.en[key]) || key;
 }
 
+// Very small templating helper: tFmt("key", {count: 3}) -> replaces {count}
+function tFmt(key, vars={}){
+  let s = String(t(key));
+  try{
+    Object.keys(vars || {}).forEach(k=>{
+      s = s.split(`{${k}}`).join(String(vars[k]));
+    });
+  }catch(e){}
+  return s;
+}
+
 function applyI18n(){
   const lang = getUiLang();
   document.documentElement.lang = lang;
+
+  // Text content
   document.querySelectorAll("[data-i18n]").forEach(el=>{
     const key = el.getAttribute("data-i18n");
     if(key) el.textContent = t(key);
   });
+
+  // HTML content (use carefully; trusted templates only)
+  document.querySelectorAll("[data-i18n-html]").forEach(el=>{
+    const key = el.getAttribute("data-i18n-html");
+    if(key) el.innerHTML = t(key);
+  });
+
+  // Placeholders
   document.querySelectorAll("[data-i18n-placeholder]").forEach(el=>{
     const key = el.getAttribute("data-i18n-placeholder");
     if(key) el.setAttribute("placeholder", t(key));
+  });
+
+  // Title attributes
+  document.querySelectorAll("[data-i18n-title]").forEach(el=>{
+    const key = el.getAttribute("data-i18n-title");
+    if(key) el.setAttribute("title", t(key));
   });
 }
 
@@ -292,7 +559,7 @@ async function ensureProject(){
 function requireProjectId(){
   const pid = AISTATE.projectId || "";
   if(!pid){
-    alert("Najpierw utwórz lub otwórz projekt w zakładce: Projekty (sekcja \"Nowy projekt\" lub \"Otwórz projekt\").");
+    alert(t("alert.no_active_project"));
     window.location.href = "/new-project";
     throw new Error("No active project");
   }
@@ -484,23 +751,23 @@ function ensureModal(){
   html += '<div style="max-width:1200px;margin:0 auto;background:#fff;border-radius:14px;padding:14px 14px 16px 14px;box-shadow:0 12px 36px rgba(0,0,0,.22);">';
   html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">';
   html += '<div style="flex:1;min-width:200px;">';
-  html += '<div style="font-weight:800;font-size:18px;line-height:1;">Edit Block</div>';
+  html += '<div style="font-weight:800;font-size:18px;line-height:1;" data-i18n="modal.edit_block.title">Edit Block</div>';
   html += '<div id="aistate_block_range" style="margin-top:6px;font-size:12px;opacity:.75;">—</div>';
   html += '</div>';
   html += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">';
   html += '<div style="display:flex;align-items:center;gap:8px;">';
-  html += '<label style="font-size:13px;font-weight:600;color:#555;">🎤 Speaker:</label>';
-  html += '<input id="aistate_speaker_name" class="input" type="text" placeholder="SPEAKER_00" style="width:140px;padding:6px 10px;font-size:13px;">';
-  html += '<button id="aistate_apply_speaker" class="btn secondary" type="button" title="Replace speaker in this block" style="padding:6px 12px;font-size:12px;">✓ Change</button>';
+  html += '<label style="font-size:13px;font-weight:600;color:#555;" data-i18n="modal.speaker.label">🎤 Speaker:</label>';
+  html += '<input id="aistate_speaker_name" class="input" type="text" data-i18n-placeholder="modal.speaker.placeholder" placeholder="SPEAKER_00" style="width:140px;padding:6px 10px;font-size:13px;">';
+  html += '<button id="aistate_apply_speaker" class="btn secondary" type="button" title="Replace speaker in this block" style="padding:6px 12px;font-size:12px;" data-i18n="modal.speaker.change">✓ Change</button>';
   html += '</div>';
-  html += '<button id="aistate_modal_close" class="btn secondary" type="button">✕ Close</button>';
+  html += '<button id="aistate_modal_close" class="btn secondary" type="button" data-i18n="modal.close">✕ Close</button>';
   html += '</div>';
   html += '</div>';
   
   html += '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">';
-  html += '<button id="aistate_play" class="btn" type="button" title="Play">▶️ Play</button>';
-  html += '<button id="aistate_pause" class="btn secondary" type="button" title="Pause">⏸️ Pause</button>';
-  html += '<button id="aistate_stop" class="btn secondary" type="button" title="Stop">⏹️ Stop</button>';
+  html += '<button id="aistate_play" class="btn" type="button" title="Play" data-i18n="modal.play">▶️ Play</button>';
+  html += '<button id="aistate_pause" class="btn secondary" type="button" title="Pause" data-i18n="modal.pause">⏸️ Pause</button>';
+  html += '<button id="aistate_stop" class="btn secondary" type="button" title="Stop" data-i18n="modal.stop">⏹️ Stop</button>';
   html += '<span style="width:1px;height:22px;background:#ddd;margin:0 4px;"></span>';
   html += '<button id="aistate_back3" class="btn secondary" type="button">⏪ -3s</button>';
   html += '<button id="aistate_back1" class="btn secondary" type="button">◀️ -1s</button>';
@@ -508,7 +775,7 @@ function ensureModal(){
   html += '<button id="aistate_fwd3" class="btn secondary" type="button">⏩ +3s</button>';
   html += '<span style="width:1px;height:22px;background:#ddd;margin:0 4px;"></span>';
   html += '<div style="display:flex;align-items:center;gap:8px;">';
-  html += '<span style="font-size:12px;opacity:.8;">🎵 Speed:</span>';
+  html += '<span style="font-size:12px;opacity:.8;" data-i18n="modal.speed">🎵 Speed:</span>';
   html += '<select id="aistate_rate" class="input" style="min-width:82px;">';
   html += '<option value="0.5">0.5×</option>';
   html += '<option value="0.75">0.75×</option>';
@@ -525,19 +792,42 @@ function ensureModal(){
   html += '</div>';
   
   html += '<div style="margin-top:10px;">';
-  html += '<textarea id="aistate_edit" style="width:100%;min-height:240px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,\'Liberation Mono\',\'Courier New\',monospace;"></textarea>';
+  html += '<textarea id="aistate_edit" style="width:100%;min-height:240px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,\'DejaVu Sans Mono\',\'Noto Sans Mono\',\'Liberation Mono\',\'Courier New\',monospace;"></textarea>';
   html += '</div>';
   
   html += '<div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">';
-  html += '<button id="aistate_apply" class="btn" type="button">✅ Apply</button>';
-  html += '<button id="aistate_save_project" class="btn secondary" type="button">💾 Save to Project</button>';
-  html += '<span style="font-size:12px;opacity:.7;align-self:center;margin-left:auto;">Shortcuts: Esc close • Ctrl+Enter apply</span>';
+  html += '<button id="aistate_apply" class="btn" type="button" data-i18n="modal.apply">✅ Apply</button>';
+  html += '<button id="aistate_save_project" class="btn secondary" type="button" data-i18n="modal.save_project">💾 Save to Project</button>';
+  html += '<span style="font-size:12px;opacity:.7;align-self:center;margin-left:auto;" data-i18n="modal.shortcuts">Shortcuts: Esc close • Ctrl+Enter apply</span>';
   html += '</div>';
   html += '</div>';
   
   m.innerHTML = html;
 
   document.body.appendChild(m);
+
+  // Localize freshly-created modal
+  try{ applyI18n(); }catch(e){}
+
+  // Allow AltGr/Polish programmer layout in modal inputs (avoid global shortcut interference)
+  function _shieldAltGrInput(el){
+    if(!el) return;
+    const stop = (e)=>{
+      const isAltGr = (e.key === "AltGraph") || (e.code === "AltRight") || (e.ctrlKey && e.altKey);
+      if(isAltGr){
+        try{ e.stopImmediatePropagation(); }catch(_){}
+        try{ e.stopPropagation(); }catch(_){}
+        // Do NOT preventDefault — we want the character to be inserted.
+      }
+    };
+    ["keydown","keypress","keyup"].forEach(evt=>{
+      try{ el.addEventListener(evt, stop, true); }catch(_){}
+    });
+  }
+  try{
+    _shieldAltGrInput(m.querySelector("#aistate_edit"));
+    _shieldAltGrInput(m.querySelector("#aistate_speaker_name"));
+  }catch(e){}
 
   function close(){
     m.style.display = "none";
@@ -626,6 +916,8 @@ function findBlock(textarea, lineIndexOrBlockIdx){
 // ---------- Open manual editor modal ----------
 function openManualEditor(textarea, lineIndex){
   const modal = ensureModal();
+  // Refresh localized labels each time we open (in case language changed)
+  try{ applyI18n(); }catch(e){}
   const taEdit = modal.querySelector("#aistate_edit");
   const rangeLbl = modal.querySelector("#aistate_block_range");
   const audio = modal.querySelector("#aistate_block_audio");
@@ -652,15 +944,20 @@ function openManualEditor(textarea, lineIndex){
   // Detect current speaker from first line
   let currentSpeaker = "";
   const cleanedLine = firstLine.replace(/^\s*\[[\d\.\-]+\]\s*/, '');
-  const speakerMatch = cleanedLine.match(/^\s*([A-Za-z0-9_\-]{1,40})\s*:/);
+  // Allow Unicode letters in speaker name (e.g. Łukasz) in addition to SPEAKER_00
+  const speakerMatch = cleanedLine.match(/^\s*([\p{L}0-9_\-]{1,40})\s*:/u);
   if(speakerMatch && speakerMatch[1]){
     currentSpeaker = speakerMatch[1].trim();
   }
   
   if(speakerInput){
     speakerInput.value = currentSpeaker;
-    speakerInput.placeholder = currentSpeaker || "SPEAKER_00";
+    speakerInput.placeholder = currentSpeaker || t("modal.speaker.placeholder");
+    try{ speakerInput.setAttribute("lang", getUiLang()); }catch(e){}
   }
+
+  // Ensure editor uses current UI language (helps with IME/diacritics on some systems)
+  try{ taEdit.setAttribute("lang", getUiLang()); }catch(e){}
 
   // Set audio src to project file
   const url = getProjectAudioUrl();
@@ -707,17 +1004,17 @@ function openManualEditor(textarea, lineIndex){
     applySpeakerBtn.onclick = ()=>{
       const newSpeaker = (speakerInput.value || "").trim();
       if(!newSpeaker){
-        alert("Enter speaker name (e.g. John, SPEAKER_02)");
+        alert(t("modal.alert.enter_speaker"));
         return;
       }
       
       if(!currentSpeaker){
-        alert("Could not detect original speaker name in this block.");
+        alert(t("modal.alert.no_original_speaker"));
         return;
       }
       
       if(newSpeaker === currentSpeaker){
-        alert("New name is the same as current.");
+        alert(t("modal.alert.same_speaker"));
         return;
       }
       
@@ -735,7 +1032,7 @@ function openManualEditor(textarea, lineIndex){
       currentSpeaker = newSpeaker;
       
       console.log(`✅ Changed speaker: ${count} occurrences`);
-      alert(`✅ Changed speaker in block (${count} occurrences)\n\n💡 Click "Apply" to save changes to output.`);
+      alert(tFmt("modal.alert.changed_speaker", {count}));
     };
   }
 
@@ -761,7 +1058,8 @@ function openManualEditor(textarea, lineIndex){
         if(window.DI.segments[idx]){
           // Parse the edited text to extract speaker and text
           const edited = taEdit.value || "";
-          const match = edited.match(/^\s*\[[\d\.\-]+\]\s*([A-Za-z0-9_\-]+)\s*:\s*(.*)$/);
+          // Allow Unicode letters in speaker name
+          const match = edited.match(/^\s*\[[\d\.\-]+\]\s*([\p{L}0-9_\-]+)\s*:\s*(.*)$/u);
           if(match){
             window.DI.segments[idx].speaker = match[1].trim();
             window.DI.segments[idx].text = match[2].trim();
@@ -838,17 +1136,17 @@ function openManualEditor(textarea, lineIndex){
           headers:{ "content-type":"application/json" },
           body: JSON.stringify({ text: outTa.value || "" })
         });
-        alert("Saved transcription ✅");
+        alert(t("modal.alert.saved_transcription"));
       }else if(ctx.textareaId === "di_out"){
         await api(`/api/projects/${pid}/save_diarized`, {
           method:"POST",
           headers:{ "content-type":"application/json" },
           body: JSON.stringify({ text: outTa.value || "" })
         });
-        alert("Saved diarization ✅");
+        alert(t("modal.alert.saved_diarization"));
       }
     }catch(e){
-      alert(e.message || "Save error");
+      alert(e.message || t("modal.alert.save_error"));
     }
   };
 }

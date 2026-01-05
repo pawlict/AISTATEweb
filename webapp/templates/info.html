@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card">
-  <h1 class="h1">Info</h1>
-  <div class="small">Treść pochodzi z pliku <code>{{ source }}</code>.</div>
+  <h1 class="h1" data-i18n="info.title">Info</h1>
+  <div class="small"><span data-i18n="info.source_prefix">Treść pochodzi z pliku</span> <code>{{ source }}</code>.</div>
   <div class="hr"></div>
   <div style="line-height:1.6">{{ content|safe }}</div>
 </div>
