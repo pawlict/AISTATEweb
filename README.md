@@ -1,4 +1,4 @@
-# AISTATEweb (1.0 beta)
+# AISTATEweb (2.0 beta)
 
 **AISTATEweb** (Artificial Intelligence Speech‑To‑Analysis‑Translation Engine) to webowa wersja narzędzia do:
 - transkrypcji audio (OpenAI Whisper),
@@ -29,6 +29,11 @@ Repozytorium zawiera **wyłącznie** wersję WWW (bez starego GUI/Qt).
 ---
 
 ## Instalacja (Linux / Kali)
+**FFmpeg (Debian/Kali/Ubuntu):**
+```bash
+sudo apt update
+sudo apt install -y ffmpeg
+```
 
 ```bash
 git clone https://github.com/pawlict/AISTATEweb.git
@@ -41,18 +46,14 @@ pip install -U pip
 pip install -r requirements.txt
 ```
 
-**FFmpeg (Debian/Kali/Ubuntu):**
-```bash
-sudo apt update
-sudo apt install -y ffmpeg
-```
+
 
 ---
 
 ## Uruchomienie
 
 ```bash
-python3 run_www.py
+python3 AISTATEweb.py
 ```
 
 Domyślnie aplikacja startuje pod: `http://127.0.0.1:8000`
