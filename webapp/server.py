@@ -301,8 +301,34 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent /
 
 @app.get("/", response_class=HTMLResponse)
 def home() -> Any:
-    # default route
-    return HTMLResponse('<meta http-equiv="refresh" content="0; url=/transcription">')
+    # Default route: play Intro (once per browser session) then go to the app.
+    # We keep it client-side via sessionStorage so it doesn't require cookies.
+    html = """<!doctype html>
+<html lang=\"pl\"><head>
+  <meta charset=\"utf-8\"/>
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>
+  <title>AI S.T.A.T.E Web</title>
+  <meta http-equiv=\"cache-control\" content=\"no-cache\"/>
+  <meta http-equiv=\"pragma\" content=\"no-cache\"/>
+  <meta http-equiv=\"expires\" content=\"0\"/>
+</head><body>
+<script>
+  (function(){
+    var NEXT = '/transcription';
+    try {
+      if (sessionStorage.getItem('aistate_intro_seen') === '1') {
+        location.replace(NEXT);
+      } else {
+        location.replace('/static/Intro.html?next=' + encodeURIComponent(NEXT));
+      }
+    } catch (e) {
+      // If storage is blocked, just show Intro and then continue.
+      location.replace('/static/Intro.html?next=' + encodeURIComponent(NEXT));
+    }
+  })();
+</script>
+</body></html>"""
+    return HTMLResponse(html)
 
 
 def render_page(request: Request, tpl: str, title: str, active: str, current_project: Optional[str] = None, **ctx: Any):
