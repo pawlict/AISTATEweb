@@ -1,11 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card">
-  <h1 class="h1" data-i18n="page.new_project.title">New project</h1>
-
-  <div class="topgrid">
+  <div class="topgrid3">
     <div class="subcard">
-      <div class="label">Nazwa projektu</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <div class="label" style="font-weight:900;color:var(--text);font-size:16px" data-i18n="page.new_project.title">Nowy projekt</div>
+          <div class="small" data-i18n="page.new_project.subtitle">Utwórz nowy projekt i wybierz plik audio</div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="label" data-i18n="projects.new.name">Nazwa projektu</div>
       <input class="input" id="np_name" type="text" placeholder="np. Wywiad_2026_01_03"/>
       <div class="small">Nazwa jest przechowywana w <code>project.json</code> w folderze projektu.</div>
 
@@ -24,7 +31,28 @@
     </div>
 
     <div class="subcard">
-      <div class="label">Jak to działa</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <div class="label" style="font-weight:900;color:var(--text);font-size:16px" data-i18n="projects.open.title">Otwórz projekt</div>
+          <div class="small" data-i18n="projects.open.choose">Wybierz zapisany projekt</div>
+        </div>
+        <button class="btn secondary" id="op_refresh" type="button" data-i18n="projects.open.refresh_btn">Odśwież listę</button>
+      </div>
+
+      <div class="hr"></div>
+
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center">
+        <select id="op_select"></select>
+        <button class="btn" id="op_open" type="button" data-i18n="projects.open.open_btn">Otwórz</button>
+      </div>
+
+      <div class="hr"></div>
+      <div class="label" data-i18n="projects.open.details">Szczegóły</div>
+      <div class="small" id="op_meta" data-i18n="projects.open.no_selection">Wybierz projekt z listy.</div>
+    </div>
+
+    <div class="subcard">
+      <div class="label" style="font-weight:900;color:var(--text);font-size:16px">Jak to działa</div>
       <ul class="small" style="line-height:1.5; margin:0; padding-left:18px">
         <li>Po utworzeniu projektu powstaje folder w <code>data_www/projects/&lt;project_id&gt;</code>.</li>
         <li>W folderze zapisywany jest <code>project.json</code> oraz wskazany plik audio.</li>
@@ -32,6 +60,17 @@
       </ul>
       <div class="hr"></div>
       <div class="small">Aktywny projekt jest trzymany w przeglądarce (localStorage). Utworzenie nowego projektu ustawi go jako aktywny.</div>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <div class="subcard">
+    <div class="label" style="font-weight:900;color:var(--text);font-size:16px" data-i18n="projects.export.title">Eksport</div>
+    <div class="small" data-i18n="projects.export.zip_hint">Eksportuje folder projektu (audio, wyniki, raporty, metadata).</div>
+    <div class="hr"></div>
+    <div class="row" style="flex-wrap:wrap">
+      <a class="btn secondary" id="export_zip_btn" href="#" data-i18n="projects.export.zip_btn">Eksportuj ZIP bieżącego projektu</a>
     </div>
   </div>
 </div>
@@ -71,5 +110,70 @@ document.getElementById("np_create").addEventListener("click", async ()=>{
     alert(e.message || "Błąd tworzenia projektu");
   }
 });
+
+async function updateOpenMeta(){
+  const pid = (document.getElementById('op_select')?.value || '').trim();
+  const box = document.getElementById('op_meta');
+  if(!box) return;
+  if(!pid){
+    box.textContent = t('projects.open.no_selection');
+    return;
+  }
+  try{
+    const meta = await api(`/api/projects/${pid}/meta`);
+    const name = meta.name || t('projects.unnamed');
+    const audio = meta.audio_file || t('projects.no_file');
+    const created = meta.created_at || '—';
+    const updated = meta.updated_at || '—';
+    const flags = [
+      meta.has_transcript ? t('projects.open.tr_yes') : t('projects.open.tr_no'),
+      meta.has_diarized ? t('projects.open.di_yes') : t('projects.open.di_no'),
+    ].join(' · ');
+    box.innerHTML = `<b>${escapeHtml(name)}</b> <span style="opacity:.8">(${pid.slice(0,8)})</span><br>`
+      + `${escapeHtml(flags)}<br>`
+      + `<span style="opacity:.85">${escapeHtml(t('projects.open.audio'))}:</span> <code>${escapeHtml(audio)}</code><br>`
+      + `<span style="opacity:.85">${escapeHtml(t('projects.open.created'))}:</span> ${escapeHtml(created)} · <span style="opacity:.85">${escapeHtml(t('projects.open.updated'))}:</span> ${escapeHtml(updated)}`;
+  }catch(e){
+    box.textContent = '—';
+  }
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function refreshOpenProjects(){
+  await refreshProjects('op_select');
+  await updateOpenMeta();
+}
+
+document.getElementById('op_refresh').addEventListener('click', async ()=>{
+  await refreshOpenProjects();
+});
+
+document.getElementById('op_select').addEventListener('change', async ()=>{
+  await updateOpenMeta();
+});
+
+document.getElementById('op_open').addEventListener('click', async ()=>{
+  const pid = (document.getElementById('op_select')?.value || '').trim();
+  if(!pid){
+    alert(t('projects.open.no_selection'));
+    return;
+  }
+  AISTATE.projectId = pid;
+  AISTATE.audioFile = '';
+  await refreshCurrentProjectInfo();
+  window.location.href = '/transcription';
+});
+
+document.getElementById('export_zip_btn').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  const pid = requireProjectId();
+  window.location = `/api/projects/${pid}/export.zip`;
+});
+
+// Initialize saved-project list
+refreshOpenProjects();
 </script>
 {% endblock %}

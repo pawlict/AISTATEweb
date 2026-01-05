@@ -18,13 +18,6 @@
 
       <div class="hr"></div>
 
-      <div class="label">Eksport</div>
-      <div class="row">
-        <a class="btn secondary" id="export_zip" href="#">Eksportuj ZIP bieżącego projektu</a>
-      </div>
-      <div class="small">Eksportuje folder projektu (audio, wyniki, raporty, metadata).</div>
-      <div class="hr"></div>
-
       <div class="label">Raporty</div>
       <div class="row" style="flex-wrap:wrap">
         <a class="btn secondary" href="#" onclick="event.preventDefault(); downloadReport('txt')">TXT</a>
@@ -67,12 +60,6 @@ document.getElementById("new_pid").addEventListener("click", async ()=>{
   const j = await api("/api/projects/new", {method:"POST"});
   AISTATE.projectId = j.project_id;
   location.reload();
-});
-
-document.getElementById("export_zip").addEventListener("click", async (e)=>{
-  e.preventDefault();
-  const pid = await ensureProject();
-  window.location = `/api/projects/${pid}/export.zip`;
 });
 
 (async()=>{ await showProjects(); })();
