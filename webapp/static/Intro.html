@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -74,37 +74,376 @@
       0% { top: 0; }
       100% { top: 100%; }
     }
+    
+    /* Loading Screen */
+    #loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.5s ease;
+    }
+    
+    #loading-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    .loading-text {
+      font-family: 'Orbitron', monospace;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #50dcff, #8c64ff, #ff5adc);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 30px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+    
+    .progress-container {
+      width: 300px;
+      height: 4px;
+      background: rgba(80, 220, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #50dcff, #8c64ff, #ff5adc);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px rgba(80, 220, 255, 0.5);
+    }
+    
+    .progress-percent {
+      font-family: 'Rajdhani', monospace;
+      font-size: 14px;
+      color: rgba(80, 220, 255, 0.8);
+      margin-top: 15px;
+      letter-spacing: 2px;
+    }
+    
+    /* Start Button */
+    #start-button {
+      margin-top: 40px;
+      padding: 15px 40px;
+      font-family: 'Orbitron', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, #50dcff, #8c64ff, #ff5adc);
+      border: none;
+      border-radius: 5px;
+      color: #000;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.5s ease, transform 0.2s ease;
+      box-shadow: 0 0 20px rgba(80, 220, 255, 0.5);
+    }
+    
+    #start-button.show {
+      opacity: 1;
+    }
+    
+    #start-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 30px rgba(80, 220, 255, 0.8);
+    }
+    
+    #start-button:active {
+      transform: scale(0.98);
+    }
+    
+    /* Cinematic Subtitles */
+    .subtitle-container {
+      position: fixed;
+      bottom: 80px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+      pointer-events: none;
+    }
+    
+    .subtitle {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 32px;
+      font-weight: 500;
+      color: #fff;
+      text-align: center;
+      padding: 12px 40px;
+      background: rgba(0, 0, 0, 0.75);
+      border-radius: 4px;
+      letter-spacing: 1.5px;
+      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9);
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+      max-width: 90%;
+      line-height: 1.4;
+    }
+    
+    .subtitle.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    .subtitle.fade-out {
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    
+    /* Subtle final text */
+    #final-text {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 15;
+      opacity: 0;
+      pointer-events: none;
+      font-family: 'Orbitron', monospace;
+      font-size: 72px;
+      font-weight: 700;
+      letter-spacing: 8px;
+      background: linear-gradient(135deg, rgba(80, 220, 255, 0.6), rgba(140, 100, 255, 0.5), rgba(255, 90, 220, 0.6));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 30px rgba(80, 220, 255, 0.3);
+      transition: opacity 2s ease;
+    }
+    
+    #final-text.show {
+      opacity: 1;
+    }
+    
+    @media (max-width: 768px) {
+      .subtitle {
+        font-size: 24px;
+        padding: 10px 30px;
+        bottom: 60px;
+      }
+      #final-text {
+        font-size: 48px;
+        letter-spacing: 4px;
+      }
+      .loading-text {
+        font-size: 18px;
+      }
+      .progress-container {
+        width: 250px;
+      }
+      #start-button {
+        font-size: 16px;
+        padding: 12px 30px;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .subtitle {
+        font-size: 18px;
+        padding: 8px 20px;
+        bottom: 50px;
+      }
+      #final-text {
+        font-size: 32px;
+        letter-spacing: 2px;
+      }
+      .loading-text {
+        font-size: 16px;
+      }
+      .progress-container {
+        width: 200px;
+      }
+      #start-button {
+        font-size: 14px;
+        padding: 10px 25px;
+      }
+    }
   </style>
 </head>
 <body>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loading-text">LOADING</div>
+    <div class="progress-container">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div class="progress-percent" id="progress-percent">0%</div>
+    <button id="start-button">START</button>
+  </div>
+  
   <canvas id="main-canvas"></canvas>
   <canvas id="overlay-canvas"></canvas>
   <div class="scan-line"></div>
-	  <div class="hint">AI S.T.A.T.E Web · Artificial Intelligence Speech‑To‑Analysis‑Translation Engine 2026 · ESC = skip · CLICK = replay</div>
+  <div class="hint">AI S.T.A.T.E Web · Artificial Intelligence Speech‑To‑Analysis‑Translation Engine 2026 · ESC = skip</div>
+  
+  <!-- Subtitle Container -->
+  <div class="subtitle-container">
+    <div class="subtitle" id="subtitle"></div>
+  </div>
+  
+  <!-- Subtle final text -->
+  <div id="final-text">AI S.T.A.T.E</div>
+  
+  <!-- Audio -->
+  <audio id="narrator-audio" preload="auto">
+    <source src="narrator.mp3" type="audio/mpeg">
+  </audio>
 
 <script>
 (() => {
   // ============== CONFIGURATION ==============
-  const LOGO_SRC = "logo.png";
-  const DURATION = 13.3;        // Extended by 40% (was 9.5s)
+  const DURATION = 25.0; // Matched to audio duration (22.67s)
   const FPS_CAP = 60;
-	  
-	  // Where to go after the intro finishes
-	  const qs = new URLSearchParams(window.location.search);
-	  const NEXT_URL = qs.get("next") || "/transcription";
-	  const REDIRECT_DELAY_MS = 900; // small hold on the final logo
-	  let redirectArmed = false;
-	  function finishIntro() {
-	    if (redirectArmed) return;
-	    redirectArmed = true;
-	    try { sessionStorage.setItem('aistate_intro_seen', '1'); } catch (e) {}
-	    window.location.href = NEXT_URL;
-	  }
   
-  // Color palette - cyberpunk cyan-magenta
-  const C1 = [80, 220, 255];   // Cyan
-  const C2 = [255, 90, 220];   // Magenta
-  const C3 = [140, 100, 255];  // Purple accent
+  // Where to go after the intro finishes
+  const qs = new URLSearchParams(window.location.search);
+  const NEXT_URL = qs.get("next") || "/transcription";
+  const REDIRECT_DELAY_MS = 900;
+  let redirectArmed = false;
+  
+  // ============== LOADING SYSTEM ==============
+  const loadingScreen = document.getElementById('loading-screen');
+  const progressBar = document.getElementById('progress-bar');
+  const progressPercent = document.getElementById('progress-percent');
+  const startButton = document.getElementById('start-button');
+  const audio = document.getElementById('narrator-audio');
+  
+  let loadingProgress = 0;
+  let audioLoaded = false;
+  let canvasReady = false;
+  
+  function updateProgress(percent) {
+    loadingProgress = Math.max(loadingProgress, percent);
+    progressBar.style.width = loadingProgress + '%';
+    progressPercent.textContent = Math.round(loadingProgress) + '%';
+  }
+  
+  // Audio loading
+  audio.addEventListener('canplaythrough', () => {
+    console.log('Audio loaded successfully - Duration:', audio.duration, 'seconds');
+    audioLoaded = true;
+    updateProgress(80);
+    checkAllLoaded();
+  });
+  
+  audio.addEventListener('error', (e) => {
+    console.error('Audio loading error:', e);
+    console.error('Audio src:', audio.src);
+    audioLoaded = true;
+    updateProgress(80);
+    checkAllLoaded();
+  });
+  
+  console.log('Loading audio from:', audio.src);
+  audio.load();
+  
+  function checkAllLoaded() {
+    if (audioLoaded && canvasReady) {
+      updateProgress(100);
+      setTimeout(() => {
+        startButton.classList.add('show');
+      }, 300);
+    }
+  }
+  
+  // Start button click
+  startButton.addEventListener('click', () => {
+    loadingScreen.classList.add('hidden');
+    setTimeout(() => {
+      if (ready) startAnimation();
+    }, 500);
+  });
+  
+  // ============== SUBTITLE SYSTEM (SYNCED TO 22.67s AUDIO) ==============
+  const subtitleElement = document.getElementById('subtitle');
+  
+  // Adjusted timing to match actual audio narration
+  const subtitles = [
+    { start: 1.0, end: 5.0, text: "Data flows faster than thought." },
+    { start: 6.0, end: 10.0, text: "Information multiplies every microsecond." },
+    { start: 11.0, end: 14.5, text: "You need more than human speed." },
+    { start: 15.0, end: 19.0, text: "AI S.T.A.T.E: Neural-powered speech analysis." },
+    { start: 19.5, end: 26.0, text: "The future processes itself." }
+  ];
+  
+  let currentSubtitleIndex = -1;
+  
+  function updateSubtitles(time) {
+    let newIndex = -1;
+    
+    for (let i = 0; i < subtitles.length; i++) {
+      if (time >= subtitles[i].start && time <= subtitles[i].end) {
+        newIndex = i;
+        break;
+      }
+    }
+    
+    if (newIndex !== currentSubtitleIndex) {
+      if (currentSubtitleIndex >= 0) {
+        subtitleElement.classList.remove('active');
+        subtitleElement.classList.add('fade-out');
+      }
+      
+      currentSubtitleIndex = newIndex;
+      
+      if (newIndex >= 0) {
+        setTimeout(() => {
+          subtitleElement.textContent = subtitles[newIndex].text;
+          subtitleElement.classList.remove('fade-out');
+          subtitleElement.classList.add('active');
+        }, 150);
+      }
+    }
+  }
+  
+  // ============== FINAL TEXT ==============
+  const finalText = document.getElementById('final-text');
+  let textShown = false;
+  
+  function showFinalText() {
+    finalText.classList.add('show');
+  }
+  
+  function hideFinalText() {
+    finalText.classList.remove('show');
+  }
+  
+  function finishIntro() {
+    if (redirectArmed) return;
+    redirectArmed = true;
+    audio.pause();
+    audio.currentTime = 0;
+    try { sessionStorage.setItem('aistate_intro_seen', '1'); } catch (e) {}
+    window.location.href = NEXT_URL;
+  }
+  
+  // Color palette
+  const C1 = [80, 220, 255];
+  const C2 = [255, 90, 220];
+  const C3 = [140, 100, 255];
   
   // Canvas setup
   const canvas = document.getElementById("main-canvas");
@@ -135,52 +474,24 @@
   window.addEventListener("resize", resize);
   resize();
   
-  // ============== LOGO ==============
-  const logo = new Image();
-  logo.src = LOGO_SRC;
+  canvasReady = true;
+  updateProgress(50);
+  checkAllLoaded();
   
   // ============== UTILITIES ==============
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
   const rand = (a, b) => a + (b - a) * Math.random();
   const randInt = (a, b) => Math.floor(rand(a, b + 1));
-	  
-	  // Finish intro and continue to the app
-	  let finished = false;
-	  function finishIntro() {
-	    if (finished) return;
-	    finished = true;
-	    try { sessionStorage.setItem('aistate_intro_seen', '1'); } catch (e) {}
-	    // Small hold on the logo, then continue
-	    setTimeout(() => {
-	      try { window.location.assign(NEXT_URL); } catch (e) { window.location.href = NEXT_URL; }
-	    }, REDIRECT_DELAY_MS);
-	  }
   
-  // Easing functions
   const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
-  const easeInCubic = t => t * t * t;
-  const easeOutQuart = t => 1 - Math.pow(1 - t, 4);
-  const easeInOutQuart = t => t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
-  const easeOutElastic = t => {
-    const c4 = (2 * Math.PI) / 3;
-    return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
-  };
   
   function gradient(x1, y1, x2, y2, alpha = 1) {
     const g = ctx.createLinearGradient(x1, y1, x2, y2);
     g.addColorStop(0, `rgba(${C1[0]},${C1[1]},${C1[2]},${alpha})`);
     g.addColorStop(0.5, `rgba(${C3[0]},${C3[1]},${C3[2]},${alpha})`);
     g.addColorStop(1, `rgba(${C2[0]},${C2[1]},${C2[2]},${alpha})`);
-    return g;
-  }
-  
-  function radialGrad(cx, cy, r1, r2, alpha = 1) {
-    const g = ctx.createRadialGradient(cx, cy, r1, cx, cy, r2);
-    g.addColorStop(0, `rgba(${C1[0]},${C1[1]},${C1[2]},${alpha})`);
-    g.addColorStop(0.6, `rgba(${C3[0]},${C3[1]},${C3[2]},${alpha * 0.5})`);
-    g.addColorStop(1, `rgba(${C2[0]},${C2[1]},${C2[2]},0)`);
     return g;
   }
   
@@ -200,21 +511,19 @@
       this.allPossibleConnections = [];
       this.initNetwork();
       this.connectionRebuildTimer = 0;
-      this.connectionRebuildInterval = 1.3; // Balanced speed
+      this.connectionRebuildInterval = 1.3;
       this.nodeRebuildTimer = 0;
-      this.nodeRebuildInterval = 2.5; // Extended for longer animation
+      this.nodeRebuildInterval = 2.5;
       this.pulseWaves = [];
       this.pulseTimer = 0;
-      this.pulseInterval = 2.8; // Extended spacing between waves
+      this.pulseInterval = 2.8;
       this.nextNodeId = 0;
     }
     
     initNetwork() {
-      // Define potential node positions (more than we'll show at once)
       const layers = [8, 12, 16, 12, 8];
       const layerSpacing = W / (layers.length + 1);
       
-      // Create ALL possible node positions
       for (let l = 0; l < layers.length; l++) {
         const nodesInLayer = layers[l];
         const layerHeight = H * 0.6;
@@ -236,20 +545,13 @@
         }
       }
       
-      // Start with some initial nodes
       this.rebuildNodes();
-      
-      // Create all possible connections (will be filtered based on active nodes)
       this.updatePossibleConnections();
-      
-      // Start with some initial connections
       this.rebuildConnections();
     }
     
     updatePossibleConnections() {
       this.allPossibleConnections = [];
-      
-      // Only create connections between active nodes
       const activeNodes = this.nodes.filter(n => !n.fadingOut && n.alpha > 0.1);
       
       for (let i = 0; i < activeNodes.length; i++) {
@@ -257,7 +559,6 @@
           const n1 = activeNodes[i];
           const n2 = activeNodes[j];
           
-          // Connect nodes in adjacent layers or same layer occasionally
           const layerDiff = Math.abs(n2.layer - n1.layer);
           if ((layerDiff === 1 && n2.layer > n1.layer) || (layerDiff === 0 && Math.random() < 0.1)) {
             this.allPossibleConnections.push({
@@ -272,301 +573,125 @@
     }
     
     rebuildNodes() {
-      // Mark some existing nodes for fade out
       const activeNodes = this.nodes.filter(n => !n.fadingOut);
       
       if (activeNodes.length > 0) {
         const removeCount = Math.floor(activeNodes.length * rand(0.2, 0.35));
         for (let i = 0; i < removeCount; i++) {
-          const node = activeNodes[Math.floor(Math.random() * activeNodes.length)];
-          if (node && !node.fadingOut) {
-            node.fadingOut = true;
-            node.targetAlpha = 0;
-          }
+          const idx = randInt(0, activeNodes.length - 1);
+          activeNodes[idx].fadingOut = true;
         }
       }
       
-      // Add new nodes from pool
-      const inactiveNodes = this.allPossibleNodes.filter(template => 
-        !this.nodes.some(n => n.templateId === template.id && !n.fadingOut)
+      const unusedNodes = this.allPossibleNodes.filter(n => 
+        !this.nodes.some(existing => existing.id === n.id)
       );
       
-      // Decide how many nodes to add per layer
-      const layers = [8, 12, 16, 12, 8];
-      const targetCounts = layers.map(max => Math.floor(max * rand(0.5, 0.85)));
-      
-      inactiveNodes.forEach(template => {
-        const currentCount = this.nodes.filter(n => 
-          n.layer === template.layer && !n.fadingOut && n.alpha > 0.1
-        ).length;
-        
-        if (currentCount < targetCounts[template.layer]) {
-          // Add this node with random offset for organic feel
-          const xOffset = rand(-20, 20);
-          const yOffset = rand(-15, 15);
-          
-          this.nodes.push({
-            id: this.nextNodeId++,
-            templateId: template.id,
-            layer: template.layer,
-            x: template.baseX + xOffset,
-            y: template.baseY + yOffset,
-            targetX: template.baseX + xOffset,
-            targetY: template.baseY + yOffset,
-            radius: template.radius,
-            activation: 0,
-            targetActivation: Math.random(),
-            pulsePhase: Math.random() * Math.PI * 2,
-            colorMix: template.colorMix,
-            scale: 0.3,
-            targetScale: 1,
-            waveActivation: 0,
-            alpha: 0,
-            targetAlpha: 1,
-            fadingOut: false,
-            driftPhase: Math.random() * Math.PI * 2
-          });
-        }
-      });
-      
-      // Update possible connections after nodes change
-      this.updatePossibleConnections();
-    }
-    
-    createPulseWave() {
-      // Start from a random active node in the first layer
-      const startLayer = this.nodes.filter(n => n.layer === 0 && !n.fadingOut && n.alpha > 0.5);
-      if (startLayer.length === 0) return;
-      
-      const startNode = startLayer[Math.floor(Math.random() * startLayer.length)];
-      
-      this.pulseWaves.push({
-        currentLayer: 0,
-        affectedNodes: new Set([startNode.id]),
-        intensity: 1,
-        age: 0
-      });
-      
-      startNode.targetScale = 1.5;
-      startNode.targetActivation = 1;
-    }
-    
-    updatePulseWaves(dt) {
-      for (let i = this.pulseWaves.length - 1; i >= 0; i--) {
-        const wave = this.pulseWaves[i];
-        wave.age += dt;
-        
-        // Propagate to next layer every 0.2 seconds
-        if (wave.age > (wave.currentLayer + 1) * 0.2 && wave.currentLayer < 4) {
-          wave.currentLayer++;
-          wave.intensity *= 0.7; // Diminish
-          
-          // Find active nodes in next layer
-          const nextLayerNodes = this.nodes.filter(n => 
-            n.layer === wave.currentLayer && !n.fadingOut && n.alpha > 0.5
-          );
-          
-          nextLayerNodes.forEach(node => {
-            if (Math.random() < 0.6) { // 60% chance to activate
-              wave.affectedNodes.add(node.id);
-              node.targetScale = 1.3;
-              node.targetActivation = Math.max(node.targetActivation, 0.8 * wave.intensity);
-              node.waveActivation = wave.intensity;
-            }
-          });
-        }
-        
-        // Remove old waves
-        if (wave.age > 3) {
-          this.pulseWaves.splice(i, 1);
+      if (unusedNodes.length > 0) {
+        const addCount = Math.min(randInt(3, 8), unusedNodes.length);
+        for (let i = 0; i < addCount; i++) {
+          const idx = randInt(0, unusedNodes.length - 1);
+          const newNode = { ...unusedNodes[idx], alpha: 0, fadingOut: false };
+          this.nodes.push(newNode);
+          unusedNodes.splice(idx, 1);
         }
       }
     }
     
     rebuildConnections() {
-      // Mark existing connections for fade out
-      this.connections.forEach(conn => {
-        if (!conn.fadingOut) {
-          conn.fadingOut = true;
-        }
-      });
+      const activeConnections = this.connections.filter(c => !c.fadingOut);
       
-      // Update possible connections based on current active nodes
+      if (activeConnections.length > 0) {
+        const removeCount = Math.floor(activeConnections.length * rand(0.3, 0.5));
+        for (let i = 0; i < removeCount; i++) {
+          const idx = randInt(0, activeConnections.length - 1);
+          activeConnections[idx].fadingOut = true;
+        }
+      }
+      
       this.updatePossibleConnections();
       
-      // Balanced connection count
-      const connectionCount = Math.floor(this.allPossibleConnections.length * rand(0.15, 0.22));
-      const shuffled = [...this.allPossibleConnections].sort(() => Math.random() - 0.5);
-      
-      for (let i = 0; i < connectionCount && i < shuffled.length; i++) {
-        const template = shuffled[i];
-        
-        // Check if nodes still exist and are active
-        const fromExists = this.nodes.find(n => n.id === template.from.id && !n.fadingOut);
-        const toExists = this.nodes.find(n => n.id === template.to.id && !n.fadingOut);
-        
-        if (!fromExists || !toExists) continue;
-        
-        // Check if this connection already exists
-        const exists = this.connections.some(c => 
-          !c.fadingOut && c.from.id === template.from.id && c.to.id === template.to.id
-        );
-        
-        if (!exists) {
-          // 1 in 50 connections is highlighted (20% more visible)
-          const isHighlighted = Math.random() < 0.02; // 2% = 1/50
+      if (this.allPossibleConnections.length > 0) {
+        const addCount = Math.min(randInt(5, 15), this.allPossibleConnections.length);
+        for (let i = 0; i < addCount; i++) {
+          const idx = randInt(0, this.allPossibleConnections.length - 1);
+          const conn = this.allPossibleConnections[idx];
           
-          this.connections.push({
-            from: template.from,
-            to: template.to,
-            weight: template.weight,
-            colorMix: template.colorMix,
-            flow: Math.random(),
-            flowSpeed: rand(0.6, 2.0),
-            alpha: 0,
-            targetAlpha: 1,
-            fadingOut: false,
-            age: 0,
-            birthAnimation: 1.0,
-            highlighted: isHighlighted
-          });
+          if (!this.connections.some(c => c.from.id === conn.from.id && c.to.id === conn.to.id)) {
+            this.connections.push({ ...conn, alpha: 0, fadingOut: false });
+          }
         }
       }
     }
     
-    update(dt, progress) {
-      // Rebuild nodes periodically
+    update(dt, t) {
       this.nodeRebuildTimer += dt;
-      if (this.nodeRebuildTimer > this.nodeRebuildInterval) {
+      if (this.nodeRebuildTimer >= this.nodeRebuildInterval) {
         this.nodeRebuildTimer = 0;
         this.rebuildNodes();
       }
       
-      // Rebuild connections periodically
       this.connectionRebuildTimer += dt;
-      if (this.connectionRebuildTimer > this.connectionRebuildInterval) {
+      if (this.connectionRebuildTimer >= this.connectionRebuildInterval) {
         this.connectionRebuildTimer = 0;
         this.rebuildConnections();
       }
       
-      // Create pulse waves periodically
-      this.pulseTimer += dt;
-      if (this.pulseTimer > this.pulseInterval && progress > 0.3) {
-        this.pulseTimer = 0;
-        this.createPulseWave();
-      }
-      
-      // Update pulse waves
-      this.updatePulseWaves(dt);
-      
-      // Update nodes
       for (let i = this.nodes.length - 1; i >= 0; i--) {
-        const node = this.nodes[i];
+        const n = this.nodes[i];
+        n.xOffset = Math.sin(t * 0.5 + n.id * 0.3) * 15;
+        n.yOffset = Math.cos(t * 0.7 + n.id * 0.2) * 15;
         
-        // Update alpha (fade in/out)
-        if (node.fadingOut) {
-          node.alpha = lerp(node.alpha, node.targetAlpha, 0.06);
-          node.scale = lerp(node.scale, 0.2, 0.08);
-          
-          // Remove if fully faded
-          if (node.alpha < 0.01) {
-            // Also remove any connections involving this node
-            this.connections = this.connections.filter(c => 
-              c.from.id !== node.id && c.to.id !== node.id
-            );
+        if (n.fadingOut) {
+          n.alpha -= dt * 0.8;
+          if (n.alpha <= 0) {
             this.nodes.splice(i, 1);
-            continue;
           }
         } else {
-          node.alpha = lerp(node.alpha, node.targetAlpha, 0.04);
-        }
-        
-        // Subtle drift motion
-        node.driftPhase += dt * 0.5;
-        const driftX = Math.sin(node.driftPhase) * 5;
-        const driftY = Math.cos(node.driftPhase * 0.7) * 5;
-        node.targetX = node.x + driftX;
-        node.targetY = node.y + driftY;
-        
-        // Smooth position
-        node.x = lerp(node.x, node.targetX, 0.02);
-        node.y = lerp(node.y, node.targetY, 0.02);
-        
-        // Update activation
-        node.activation = lerp(
-          node.activation, 
-          node.targetActivation, 
-          0.05
-        );
-        
-        // Decay wave activation
-        node.waveActivation *= 0.95;
-        
-        // Pulse effect
-        node.pulsePhase += dt * 2;
-        const pulse = Math.sin(node.pulsePhase) * 0.5 + 0.5;
-        node.displayActivation = node.activation * 0.7 + pulse * 0.3 + node.waveActivation * 0.3;
-        
-        // Scale animation
-        node.scale = lerp(node.scale, node.targetScale, 0.1);
-        
-        // Randomize target occasionally
-        if (Math.random() < 0.02) {
-          node.targetActivation = Math.random();
-          if (!node.fadingOut) {
-            node.targetScale = rand(0.8, 1.2);
-          }
-        }
-        
-        // Return to normal scale
-        if (Math.random() < 0.01) {
-          node.targetScale = 1;
+          n.alpha = Math.min(1, n.alpha + dt * 1.5);
         }
       }
       
-      // Update connections
       for (let i = this.connections.length - 1; i >= 0; i--) {
-        const conn = this.connections[i];
-        conn.age += dt;
+        const c = this.connections[i];
         
-        // Decay birth animation
-        if (conn.birthAnimation > 0) {
-          conn.birthAnimation -= dt * 2.5; // Fast decay
-          if (conn.birthAnimation < 0) conn.birthAnimation = 0;
-        }
-        
-        // Check if connected nodes still exist
-        const fromExists = this.nodes.find(n => n.id === conn.from.id);
-        const toExists = this.nodes.find(n => n.id === conn.to.id);
+        const fromExists = this.nodes.some(n => n.id === c.from.id && !n.fadingOut);
+        const toExists = this.nodes.some(n => n.id === c.to.id && !n.fadingOut);
         
         if (!fromExists || !toExists) {
-          this.connections.splice(i, 1);
-          continue;
+          c.fadingOut = true;
         }
         
-        // If either node is fading, fade the connection too
-        if (fromExists.fadingOut || toExists.fadingOut) {
-          conn.fadingOut = true;
-        }
-        
-        // Update flow
-        conn.flow += conn.flowSpeed * dt;
-        if (conn.flow > 1) conn.flow = 0;
-        
-        // Update alpha (fade in/out)
-        if (conn.fadingOut) {
-          conn.targetAlpha = 0;
-          conn.alpha = lerp(conn.alpha, conn.targetAlpha, 0.12); // Faster fade out
-          
-          // Remove if fully faded
-          if (conn.alpha < 0.01) {
+        if (c.fadingOut) {
+          c.alpha -= dt * 1.2;
+          if (c.alpha <= 0) {
             this.connections.splice(i, 1);
           }
         } else {
-          // Match alpha to connected nodes
-          const minNodeAlpha = Math.min(fromExists.alpha, toExists.alpha);
-          conn.targetAlpha = minNodeAlpha;
-          conn.alpha = lerp(conn.alpha, conn.targetAlpha, 0.15); // Much faster fade in!
+          c.alpha = Math.min(1, c.alpha + dt * 2);
+        }
+      }
+      
+      this.pulseTimer += dt;
+      if (this.pulseTimer >= this.pulseInterval && this.connections.length > 0) {
+        this.pulseTimer = 0;
+        const conn = this.connections[randInt(0, this.connections.length - 1)];
+        if (conn && !conn.fadingOut) {
+          this.pulseWaves.push({
+            connection: conn,
+            progress: 0,
+            speed: rand(0.3, 0.6),
+            color: colorMix(Math.random())
+          });
+        }
+      }
+      
+      for (let i = this.pulseWaves.length - 1; i >= 0; i--) {
+        const wave = this.pulseWaves[i];
+        wave.progress += dt * wave.speed;
+        
+        if (wave.progress >= 1) {
+          this.pulseWaves.splice(i, 1);
         }
       }
     }
@@ -577,157 +702,66 @@
       const alpha = easeInOutCubic(progress) * intensity;
       
       ctx.save();
+      ctx.globalAlpha = alpha;
       
-      // Draw connections with reduced visibility (30% less) except highlighted ones
-      this.connections.forEach(conn => {
-        if (conn.alpha < 0.05) return; // Skip very faint connections
+      this.connections.forEach(c => {
+        if (c.alpha <= 0) return;
         
-        // Highlighted connections are 20% more visible than base
-        // Normal connections are 30% less visible than original
-        const visibilityMultiplier = conn.highlighted ? 0.84 : 0.70; // 0.84 = 0.70 * 1.20
+        const fx = c.from.baseX + c.from.xOffset;
+        const fy = c.from.baseY + c.from.yOffset;
+        const tx = c.to.baseX + c.to.xOffset;
+        const ty = c.to.baseY + c.to.yOffset;
         
-        const activation = (conn.from.displayActivation + conn.to.displayActivation) / 2;
-        const lineAlpha = (activation * 0.5 + 0.2) * visibilityMultiplier;
-        
-        const [r, g, b] = colorMix(conn.colorMix);
-        
-        // Birth animation creates a subtle flash
-        const birthBoost = conn.birthAnimation > 0 ? conn.birthAnimation * 0.4 * visibilityMultiplier : 0;
-        const effectiveAlpha = Math.min(1, conn.alpha + birthBoost);
-        
-        // MAIN CONNECTION LINE
-        ctx.globalAlpha = alpha * effectiveAlpha * 0.4 * visibilityMultiplier;
-        ctx.strokeStyle = `rgba(${r},${g},${b},${lineAlpha})`;
-        ctx.lineWidth = (1.5 + activation * 2) * visibilityMultiplier;
-        
-        // Highlighted connections have slight extra glow
-        if (conn.highlighted) {
-          ctx.shadowColor = `rgba(${r},${g},${b},0.3)`;
-          ctx.shadowBlur = 3;
-        }
+        const [r, g, b] = colorMix(c.colorMix);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${c.alpha * 0.3})`;
+        ctx.lineWidth = 1 + c.weight * 2;
         
         ctx.beginPath();
-        ctx.moveTo(conn.from.x, conn.from.y);
-        ctx.lineTo(conn.to.x, conn.to.y);
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(tx, ty);
         ctx.stroke();
-        
-        ctx.shadowBlur = 0;
-        
-        // Subtle glow effect
-        ctx.globalAlpha = alpha * effectiveAlpha * 0.2 * visibilityMultiplier;
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.6)`;
-        ctx.lineWidth = (5 + activation * 3) * visibilityMultiplier;
-        ctx.shadowColor = `rgba(${r},${g},${b},0.5)`;
-        ctx.shadowBlur = 10 * visibilityMultiplier;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        
-        // Birth animation: subtle energy points
-        if (conn.birthAnimation > 0.5) {
-          ctx.globalAlpha = alpha * conn.birthAnimation * 0.3 * visibilityMultiplier;
-          
-          // Fewer energy points along the connection
-          const pointCount = conn.highlighted ? 5 : 4;
-          for (let p = 0; p <= 1; p += 1 / pointCount) {
-            const px = lerp(conn.from.x, conn.to.x, p);
-            const py = lerp(conn.from.y, conn.to.y, p);
-            
-            ctx.fillStyle = `rgba(${r},${g},${b},0.8)`;
-            ctx.beginPath();
-            ctx.arc(px, py, 2 * conn.birthAnimation * visibilityMultiplier, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        
-        // Balanced flow particles
-        if (activation > 0.25 && conn.alpha > 0.4) {
-          const particleCount = conn.highlighted ? 2 : 2;
-          
-          for (let p = 0; p < particleCount; p++) {
-            const flowOffset = (conn.flow + p / particleCount) % 1;
-            const fx = lerp(conn.from.x, conn.to.x, flowOffset);
-            const fy = lerp(conn.from.y, conn.to.y, flowOffset);
-            
-            // Main particle
-            ctx.globalAlpha = alpha * conn.alpha * 0.7 * visibilityMultiplier;
-            ctx.fillStyle = `rgba(${r},${g},${b},1)`;
-            ctx.beginPath();
-            const particleSize = conn.highlighted ? 2.4 : 2;
-            ctx.arc(fx, fy, particleSize, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Subtle particle glow
-            ctx.globalAlpha = alpha * conn.alpha * 0.3 * visibilityMultiplier;
-            ctx.fillStyle = `rgba(${r},${g},${b},0.6)`;
-            ctx.shadowColor = `rgba(${r},${g},${b},0.5)`;
-            ctx.shadowBlur = 8 * visibilityMultiplier;
-            ctx.beginPath();
-            ctx.arc(fx, fy, 4 * visibilityMultiplier, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-          }
-        }
       });
       
-      // Draw nodes with dynamic alpha and scaling
-      this.nodes.forEach(node => {
-        if (node.alpha < 0.05) return; // Skip very faint nodes
+      this.pulseWaves.forEach(wave => {
+        const c = wave.connection;
+        const fx = c.from.baseX + c.from.xOffset;
+        const fy = c.from.baseY + c.from.yOffset;
+        const tx = c.to.baseX + c.to.xOffset;
+        const ty = c.to.baseY + c.to.yOffset;
         
-        const nodeAlpha = alpha * node.alpha;
-        const size = (node.radius + node.displayActivation * 4) * node.scale;
-        const [r, g, b] = colorMix(node.colorMix);
+        const px = lerp(fx, tx, wave.progress);
+        const py = lerp(fy, ty, wave.progress);
         
-        // Glow - larger when appearing/disappearing
-        const glowMultiplier = node.fadingOut ? 
-          (1 + (1 - node.alpha) * 0.5) : 
-          (1 + (1 - node.alpha) * 0.5);
+        const waveAlpha = Math.sin(wave.progress * Math.PI) * c.alpha;
         
-        ctx.globalAlpha = nodeAlpha * node.displayActivation * 0.5; // Slightly stronger
-        ctx.fillStyle = radialGrad(node.x, node.y, 0, size * 3 * glowMultiplier, 1);
+        ctx.fillStyle = `rgba(${wave.color[0]},${wave.color[1]},${wave.color[2]},${waveAlpha})`;
         ctx.beginPath();
-        ctx.arc(node.x, node.y, size * 3 * glowMultiplier, 0, Math.PI * 2);
+        ctx.arc(px, py, 4, 0, Math.PI * 2);
         ctx.fill();
         
-        // Core
-        ctx.globalAlpha = nodeAlpha;
-        ctx.fillStyle = `rgba(${r},${g},${b},${node.displayActivation})`;
+        ctx.fillStyle = `rgba(${wave.color[0]},${wave.color[1]},${wave.color[2]},${waveAlpha * 0.3})`;
         ctx.beginPath();
-        ctx.arc(node.x, node.y, size, 0, Math.PI * 2);
+        ctx.arc(px, py, 8, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      
+      this.nodes.forEach(n => {
+        if (n.alpha <= 0) return;
+        
+        const x = n.baseX + n.xOffset;
+        const y = n.baseY + n.yOffset;
+        
+        const [r, g, b] = colorMix(n.colorMix);
+        
+        ctx.fillStyle = `rgba(${r},${g},${b},${n.alpha * 0.2})`;
+        ctx.beginPath();
+        ctx.arc(x, y, n.radius * 2, 0, Math.PI * 2);
         ctx.fill();
         
-        // Outer ring - brighter
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.85)`; // Slightly reduced
-        ctx.lineWidth = 1.5; // Back to original thickness
-        ctx.stroke();
-        
-        // Inner highlight when scaled up or newly appearing
-        if (node.scale > 1.05 || node.alpha < 0.8) {
-          const highlightAlpha = node.scale > 1.05 ? 
-            (node.scale - 1) * 0.5 : 
-            (1 - node.alpha) * 0.3;
-          
-          ctx.globalAlpha = nodeAlpha * highlightAlpha;
-          ctx.fillStyle = `rgba(255,255,255,0.4)`; // Brighter highlight
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, size * 0.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        
-        // "Materialization" particles for new nodes
-        if (node.alpha < 0.95 && !node.fadingOut) {
-          ctx.globalAlpha = nodeAlpha * (1 - node.alpha) * 0.6;
-          for (let p = 0; p < 8; p++) {
-            const angle = (p / 8) * Math.PI * 2;
-            const dist = size * (2 + (1 - node.alpha) * 3);
-            const px = node.x + Math.cos(angle) * dist;
-            const py = node.y + Math.sin(angle) * dist;
-            
-            ctx.fillStyle = `rgba(${r},${g},${b},1)`;
-            ctx.beginPath();
-            ctx.arc(px, py, 1.5, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
+        ctx.fillStyle = `rgba(${r},${g},${b},${n.alpha})`;
+        ctx.beginPath();
+        ctx.arc(x, y, n.radius, 0, Math.PI * 2);
+        ctx.fill();
       });
       
       ctx.restore();
@@ -736,224 +770,120 @@
   
   const neuralNet = new NeuralNetwork();
   
-  // ============== PARTICLE SYSTEM 3D ==============
+  // ============== PARTICLE SYSTEM ==============
   class Particle3D {
     constructor() {
       this.reset();
     }
     
     reset() {
-      // Spawn in 3D space
       this.x = rand(-W * 0.5, W * 1.5);
       this.y = rand(-H * 0.5, H * 1.5);
       this.z = rand(0, 1000);
-      
       this.vx = rand(-20, 20);
       this.vy = rand(-20, 20);
-      this.vz = rand(-50, 50);
-      
-      this.size = rand(1, 3);
-      this.life = 0;
-      this.maxLife = rand(3, 8);
+      this.vz = rand(50, 150);
       this.colorMix = Math.random();
-      this.rotationSpeed = rand(-2, 2);
-      this.rotation = rand(0, Math.PI * 2);
-      this.trailLength = randInt(3, 8);
-      this.trail = [];
+      this.life = 1;
+      this.maxLife = rand(3, 8);
+      this.size = rand(1, 3);
     }
     
     update(dt, time) {
-      this.life += dt;
-      
-      // Swirl motion
-      const swirl = Math.sin(time * 0.5 + this.y * 0.01) * 30;
-      this.vx += swirl * dt * 0.1;
-      
       this.x += this.vx * dt;
       this.y += this.vy * dt;
-      this.z += this.vz * dt;
+      this.z -= this.vz * dt;
       
-      this.rotation += this.rotationSpeed * dt;
+      this.life += dt;
       
-      // Trail
-      this.trail.unshift({ x: this.x, y: this.y, z: this.z });
-      if (this.trail.length > this.trailLength) this.trail.pop();
-      
-      if (this.life > this.maxLife || this.z < -100 || this.z > 1000) {
+      if (this.z < 0 || this.life > this.maxLife) {
         this.reset();
+        this.z = rand(500, 1000);
       }
     }
     
     draw(progress, intensity) {
-      const fadeIn = clamp(this.life / 0.5, 0, 1);
-      const fadeOut = clamp((this.maxLife - this.life) / 1, 0, 1);
-      const fade = Math.min(fadeIn, fadeOut);
+      if (progress <= 0) return;
       
-      // Perspective projection
-      const perspective = 1 / (1 + this.z / 500);
-      const px = W / 2 + (this.x - W / 2) * perspective;
-      const py = H / 2 + (this.y - H / 2) * perspective;
-      const ps = this.size * perspective;
+      const scale = 500 / (this.z + 500);
+      const sx = W * 0.5 + (this.x - W * 0.5) * scale;
+      const sy = H * 0.5 + (this.y - H * 0.5) * scale;
       
-      if (px < -100 || px > W + 100 || py < -100 || py > H + 100) return;
+      if (sx < -50 || sx > W + 50 || sy < -50 || sy > H + 50) return;
       
-      const alpha = fade * progress * intensity;
+      const fade = 1 - (this.life / this.maxLife);
+      const alpha = fade * progress * intensity * 0.6;
+      const size = this.size * scale * 2;
+      
       const [r, g, b] = colorMix(this.colorMix);
       
-      ctx.save();
-      
-      // Trail
-      ctx.globalAlpha = alpha * 0.3;
-      ctx.strokeStyle = `rgba(${r},${g},${b},0.6)`;
-      ctx.lineWidth = ps * 0.5;
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha * 0.3})`;
       ctx.beginPath();
-      
-      this.trail.forEach((p, i) => {
-        const tp = 1 / (1 + p.z / 500);
-        const tx = W / 2 + (p.x - W / 2) * tp;
-        const ty = H / 2 + (p.y - H / 2) * tp;
-        
-        if (i === 0) ctx.moveTo(tx, ty);
-        else ctx.lineTo(tx, ty);
-      });
-      ctx.stroke();
-      
-      // Particle glow
-      ctx.globalAlpha = alpha * 0.5;
-      ctx.fillStyle = radialGrad(px, py, 0, ps * 5, 1);
-      ctx.beginPath();
-      ctx.arc(px, py, ps * 5, 0, Math.PI * 2);
+      ctx.arc(sx, sy, size * 2, 0, Math.PI * 2);
       ctx.fill();
       
-      // Particle core
-      ctx.globalAlpha = alpha;
-      ctx.translate(px, py);
-      ctx.rotate(this.rotation);
-      
-      ctx.fillStyle = `rgba(${r},${g},${b},1)`;
-      ctx.fillRect(-ps, -ps, ps * 2, ps * 2);
-      
-      ctx.restore();
-    }
-  }
-  
-  const particles3D = Array.from({ length: 280 }, () => new Particle3D()); // More particles for extended animation
-  
-  // ============== HOLOGRAPHIC GRID ==============
-  function drawHoloGrid(time, progress, intensity) {
-    if (progress <= 0) return;
-    
-    const alpha = progress * intensity * 0.4;
-    
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = gradient(0, 0, W, H, 0.3);
-    ctx.lineWidth = 0.5;
-    
-    // Perspective grid
-    const gridSize = 60;
-    const horizon = H * 0.45;
-    const vanishX = W * 0.5;
-    
-    // Horizontal lines
-    for (let i = 0; i < 15; i++) {
-      const y = H - (i * gridSize);
-      const perspective = (y - horizon) / (H - horizon);
-      
-      if (perspective > 0) {
-        const offset = Math.sin(time * 2 + i * 0.3) * 20;
-        ctx.beginPath();
-        
-        for (let x = 0; x <= W; x += 5) {
-          const toVanish = lerp(1, 0.3, perspective);
-          const px = lerp(x, vanishX, 1 - toVanish) + offset;
-          const py = lerp(y, horizon, 1 - toVanish);
-          
-          if (x === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-      }
-    }
-    
-    // Vertical lines  
-    for (let i = -10; i <= 10; i++) {
-      const x = vanishX + i * gridSize * 2;
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
       ctx.beginPath();
-      ctx.moveTo(x, H);
-      ctx.lineTo(vanishX, horizon);
-      ctx.stroke();
+      ctx.arc(sx, sy, size, 0, Math.PI * 2);
+      ctx.fill();
     }
-    
-    ctx.restore();
   }
   
-  // ============== MATRIX DATA STREAM ==============
+  const particles3D = Array.from({ length: 150 }, () => new Particle3D());
+  
+  // ============== MATRIX RAIN ==============
   class MatrixColumn {
-    constructor() {
+    constructor(x) {
+      this.x = x;
       this.reset();
     }
     
     reset() {
-      this.x = rand(0, W);
       this.y = rand(-H, 0);
       this.speed = rand(100, 300);
       this.chars = [];
-      this.length = randInt(10, 30);
-      
-      for (let i = 0; i < this.length; i++) {
-        this.chars.push({
-          char: Math.random() > 0.5 ? "1" : "0",
-          brightness: Math.random()
-        });
+      const len = randInt(10, 30);
+      for (let i = 0; i < len; i++) {
+        this.chars.push(String.fromCharCode(randInt(0x30A0, 0x30FF)));
       }
+      this.colorMix = Math.random();
     }
     
     update(dt) {
       this.y += this.speed * dt;
       
-      // Update characters
-      if (Math.random() < 0.1) {
-        const idx = randInt(0, this.chars.length - 1);
-        this.chars[idx].char = Math.random() > 0.5 ? "1" : "0";
-        this.chars[idx].brightness = Math.random();
+      if (this.y - this.chars.length * 20 > H) {
+        this.reset();
       }
-      
-      if (this.y > H + this.length * 20) this.reset();
     }
     
     draw(progress, intensity) {
-      const alpha = progress * intensity;
+      if (progress <= 0) return;
+      
+      const baseAlpha = progress * intensity * 0.6;
       
       ctx.save();
-      ctx.font = "bold 14px 'Orbitron', monospace";
-      ctx.textAlign = "center";
+      ctx.font = "16px monospace";
       
-      this.chars.forEach((ch, i) => {
-        const y = this.y + i * 18;
-        if (y < 0 || y > H) return;
+      this.chars.forEach((char, i) => {
+        const cy = this.y - i * 20;
+        if (cy < -20 || cy > H + 20) return;
         
-        const fadeHead = i === 0 ? 1 : clamp(1 - i / 5, 0.3, 1);
-        const [r, g, b] = colorMix(ch.brightness);
+        const fade = 1 - (i / this.chars.length);
+        const alpha = baseAlpha * fade;
         
-        // Glow
-        ctx.globalAlpha = alpha * ch.brightness * 0.3 * fadeHead;
-        ctx.fillStyle = `rgba(${r},${g},${b},1)`;
-        ctx.shadowColor = `rgba(${r},${g},${b},0.8)`;
-        ctx.shadowBlur = 15;
-        ctx.fillText(ch.char, this.x, y);
-        
-        // Main char
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = alpha * fadeHead;
-        ctx.fillText(ch.char, this.x, y);
+        const [r, g, b] = colorMix(this.colorMix);
+        ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+        ctx.fillText(char, this.x, cy);
       });
       
       ctx.restore();
     }
   }
   
-  const matrixColumns = Array.from({ length: 55 }, () => new MatrixColumn()); // More columns for extended animation
+  const matrixColumns = Array.from({ length: 40 }, (_, i) => 
+    new MatrixColumn((i / 40) * W)
+  );
   
   // ============== ENERGY PULSES ==============
   class EnergyPulse {
@@ -962,27 +892,27 @@
     }
     
     reset() {
-      this.x = rand(W * 0.2, W * 0.8);
-      this.y = rand(H * 0.3, H * 0.7);
+      this.x = W * 0.5;
+      this.y = H * 0.5;
       this.radius = 0;
-      this.maxRadius = rand(100, 300);
+      this.maxRadius = Math.max(W, H) * 0.8;
       this.speed = rand(200, 400);
-      this.life = 0;
-      this.maxLife = this.maxRadius / this.speed;
       this.colorMix = Math.random();
-      this.segments = randInt(6, 12);
     }
     
     update(dt) {
-      this.life += dt;
       this.radius += this.speed * dt;
       
-      if (this.life > this.maxLife) this.reset();
+      if (this.radius > this.maxRadius) {
+        this.reset();
+      }
     }
     
     draw(progress, intensity) {
-      const fade = clamp(1 - this.radius / this.maxRadius, 0, 1);
-      const alpha = fade * progress * intensity * 0.6;
+      if (progress <= 0 || this.radius <= 0) return;
+      
+      const fade = 1 - (this.radius / this.maxRadius);
+      const alpha = fade * progress * intensity * 0.4;
       
       const [r, g, b] = colorMix(this.colorMix);
       
@@ -991,55 +921,67 @@
       ctx.strokeStyle = `rgba(${r},${g},${b},1)`;
       ctx.lineWidth = 2;
       
-      // Segmented ring
       ctx.beginPath();
-      for (let i = 0; i < this.segments; i++) {
-        const a1 = (i / this.segments) * Math.PI * 2;
-        const a2 = ((i + 0.5) / this.segments) * Math.PI * 2;
-        
-        ctx.arc(this.x, this.y, this.radius, a1, a2);
-        ctx.moveTo(
-          this.x + Math.cos(a2 + Math.PI / this.segments) * this.radius,
-          this.y + Math.sin(a2 + Math.PI / this.segments) * this.radius
-        );
-      }
+      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
       ctx.stroke();
       
       ctx.restore();
     }
   }
   
-  const energyPulses = Array.from({ length: 10 }, () => new EnergyPulse()); // More pulses for longer duration
+  const energyPulses = Array.from({ length: 5 }, () => new EnergyPulse());
   
-  // ============== GLITCH EFFECTS ==============
-  function drawGlitchEffect(time, progress, intensity) {
-    if (progress <= 0 || Math.random() > 0.95) return;
+  // ============== HOLOGRAPHIC GRID ==============
+  function drawHoloGrid(time, progress, intensity) {
+    if (progress <= 0) return;
     
-    const alpha = progress * intensity;
+    const alpha = progress * intensity * 0.3;
     
-    // Chromatic aberration blocks
-    const glitchCount = randInt(3, 8);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = gradient(0, 0, W, H, 0.4);
+    ctx.lineWidth = 1;
     
-    for (let i = 0; i < glitchCount; i++) {
-      const gx = rand(0, W);
-      const gy = rand(0, H);
-      const gw = rand(50, 300);
-      const gh = rand(5, 30);
-      const offset = rand(-10, 10);
-      
-      ctx.save();
-      
-      // Red channel
-      ctx.globalAlpha = alpha * 0.3;
-      ctx.fillStyle = `rgba(${C1[0]}, 0, 0, 0.5)`;
-      ctx.fillRect(gx + offset, gy, gw, gh);
-      
-      // Cyan channel
-      ctx.fillStyle = `rgba(0, ${C1[1]}, ${C1[2]}, 0.5)`;
-      ctx.fillRect(gx - offset, gy, gw, gh);
-      
-      ctx.restore();
+    const gridSize = 80;
+    const offsetX = (time * 20) % gridSize;
+    const offsetY = (time * 30) % gridSize;
+    
+    for (let x = -gridSize + offsetX; x < W + gridSize; x += gridSize) {
+      const wave = Math.sin(x / 100 + time) * 10;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H + wave);
+      ctx.stroke();
     }
+    
+    for (let y = -gridSize + offsetY; y < H + gridSize; y += gridSize) {
+      const wave = Math.cos(y / 100 - time) * 10;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W + wave, y);
+      ctx.stroke();
+    }
+    
+    ctx.restore();
+  }
+  
+  // ============== GLITCH EFFECT ==============
+  function drawGlitchEffect(time, progress, intensity) {
+    if (progress <= 0) return;
+    
+    if (Math.random() < 0.95) return;
+    
+    const glitchHeight = randInt(2, 20);
+    const glitchY = randInt(0, H - glitchHeight);
+    const offset = randInt(-10, 10);
+    
+    ctx.save();
+    ctx.globalAlpha = progress * intensity * 0.3;
+    
+    const imageData = ctx.getImageData(0, glitchY, W, glitchHeight);
+    ctx.putImageData(imageData, offset, glitchY);
+    
+    ctx.restore();
   }
   
   // ============== PROCEDURAL GEOMETRY ==============
@@ -1053,7 +995,6 @@
     ctx.strokeStyle = gradient(0, 0, W, H, 0.5);
     ctx.lineWidth = 1;
     
-    // Rotating hexagons
     const hexCount = 5;
     for (let i = 0; i < hexCount; i++) {
       const hx = W * (0.2 + i * 0.15);
@@ -1082,9 +1023,23 @@
     ctx.restore();
   }
   
-  // ============== WAVEFORM ==============
+  // ============== WAVEFORM WITH HEARTBEAT ==============
+  let heartbeatTime = 0;
+  const HEARTBEAT_INTERVAL = 0.8;
+  
   function drawWaveform(time, progress) {
     if (progress <= 0) return;
+    
+    heartbeatTime += 0.016;
+    
+    const heartbeatPhase = (heartbeatTime % HEARTBEAT_INTERVAL) / HEARTBEAT_INTERVAL;
+    
+    let heartbeat = 0;
+    if (heartbeatPhase < 0.15) {
+      heartbeat = Math.sin(heartbeatPhase / 0.15 * Math.PI) * 30;
+    } else if (heartbeatPhase > 0.2 && heartbeatPhase < 0.3) {
+      heartbeat = Math.sin((heartbeatPhase - 0.2) / 0.1 * Math.PI) * 15;
+    }
     
     const alpha = easeInOutCubic(progress);
     const cx = W * 0.5;
@@ -1103,64 +1058,23 @@
       const x = cx - width/2 + (i / points) * width;
       const k = i / points;
       const envelope = Math.sin(k * Math.PI) ** 1.2;
-      const y = cy 
+      
+      let y = cy 
         + Math.sin(k * 12 * Math.PI + time * 8) * amp * envelope * 0.6
         + Math.sin(k * 6 * Math.PI - time * 4) * amp * 0.2 * envelope;
+      
+      if (k > 0.3 && k < 0.7) {
+        y += heartbeat * envelope * (Math.random() * 0.3 + 0.85);
+      }
       
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.stroke();
     
-    // Glow
     ctx.globalAlpha = alpha * 0.3;
     ctx.lineWidth = 12;
     ctx.stroke();
-    
-    ctx.restore();
-  }
-  
-  // ============== LOGO RENDERING ==============
-  function computeLogoRect() {
-    const maxW = Math.min(W * 0.6, 800);
-    const ratio = logo.naturalWidth ? logo.naturalHeight / logo.naturalWidth : 0.6;
-    const w = maxW;
-    const h = w * ratio;
-    return {
-      x: (W - w) / 2,
-      y: (H - h) / 2,
-      w, h
-    };
-  }
-  
-  function drawLogo(progress) {
-    if (progress <= 0) return;
-    
-    const { x, y, w, h } = computeLogoRect();
-    const scale = lerp(0.8, 1, easeOutElastic(progress));
-    const alpha = easeOutCubic(progress);
-    
-    const sw = w * scale;
-    const sh = h * scale;
-    const sx = x + (w - sw) / 2;
-    const sy = y + (h - sh) / 2;
-    
-    ctx.save();
-    
-    // Epic glow
-    ctx.globalAlpha = alpha * 0.4;
-    ctx.shadowColor = `rgba(${C1[0]},${C1[1]},${C1[2]},0.8)`;
-    ctx.shadowBlur = 40;
-    ctx.drawImage(logo, sx, sy, sw, sh);
-    
-    ctx.shadowColor = `rgba(${C2[0]},${C2[1]},${C2[2]},0.8)`;
-    ctx.shadowBlur = 40;
-    ctx.drawImage(logo, sx, sy, sw, sh);
-    
-    // Main logo
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(logo, sx, sy, sw, sh);
     
     ctx.restore();
   }
@@ -1192,11 +1106,12 @@
   }
   
   // ============== MAIN LOOP ==============
-  let running = true;
+  let running = false;
   let perfTime = 0;
-  let start = performance.now();
-  let last = start;
+  let start = 0;
+  let last = 0;
   let ready = false;
+  let audioStarted = false;
   
   function frame(now) {
     if (!running) return;
@@ -1207,23 +1122,20 @@
     
     const t = clamp(perfTime / DURATION, 0, 1);
     
+    // Update subtitles
+    updateSubtitles(perfTime);
+    
+    // Show final text
+    if (perfTime >= 18.0 && !textShown) {
+      showFinalText();
+      textShown = true;
+    }
+    
     // Clear
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, W, H);
     
     // ============== TIMELINE ==============
-    // Extended timeline with more breathing room (40% longer)
-    // 0.00-0.20: Holographic grid intro (longer)
-    // 0.10-0.35: Neural network fade in (extended)
-    // 0.25-0.55: Particle system (more time)
-    // 0.20-0.65: Matrix data streams (longer)
-    // 0.40-0.70: Energy pulses (extended)
-    // 0.50-0.75: Waveform (more time)
-    // 0.60-0.78: Procedural geometry
-    // 0.65-0.88: Everything intensifies (longer buildup)
-    // 0.70-0.92: Glitch effects (extended)
-    // 0.88-1.00: Logo reveal with epic entrance (longer reveal)
-    
     const pGrid = clamp((t - 0.00) / 0.20, 0, 1);
     const pNeural = clamp((t - 0.10) / 0.25, 0, 1);
     const pParticles = clamp((t - 0.25) / 0.30, 0, 1);
@@ -1232,9 +1144,7 @@
     const pWave = clamp((t - 0.50) / 0.25, 0, 1);
     const pGeometry = clamp((t - 0.60) / 0.18, 0, 1);
     const pGlitch = clamp((t - 0.70) / 0.22, 0, 1);
-    const pLogo = clamp((t - 0.88) / 0.12, 0, 1);
     
-    // Overall intensity that peaks before logo
     const intensity = t < 0.88 ? 
       lerp(0.3, 1, Math.sin(t * Math.PI)) : 
       lerp(1, 0.2, (t - 0.88) / 0.12);
@@ -1244,7 +1154,7 @@
     drawProcGeometry(perfTime, pGeometry, intensity);
     
     // Neural network
-    neuralNet.update(dt, t);
+    neuralNet.update(dt, perfTime);
     neuralNet.draw(pNeural, intensity);
     
     // Particle system
@@ -1262,17 +1172,14 @@
     // Matrix streams
     matrixColumns.forEach(col => {
       col.update(dt);
-      col.draw(pMatrix, intensity * 0.7);
+      col.draw(pMatrix, intensity * 0.84);
     });
     
-    // Waveform
+    // Waveform with heartbeat
     drawWaveform(perfTime, pWave);
     
     // Glitch
     drawGlitchEffect(perfTime, pGlitch, intensity);
-    
-    // Logo (on top of everything)
-    drawLogo(pLogo);
     
     // Overlay effects
     drawScanlines();
@@ -1281,45 +1188,53 @@
     if (t < 1) {
       requestAnimationFrame(frame);
     } else {
-      // Hold on logo
-	      running = false;
-	      finishIntro();
+      running = false;
+      finishIntro();
     }
   }
   
   function startAnimation() {
+    if (!audioLoaded) {
+      console.warn('Audio not loaded yet');
+      return;
+    }
+    
     start = performance.now();
     last = start;
     perfTime = 0;
+    heartbeatTime = 0;
+    textShown = false;
+    currentSubtitleIndex = -1;
+    subtitleElement.classList.remove('active', 'fade-out');
+    subtitleElement.textContent = '';
+    hideFinalText();
     running = true;
+    
+    // Start audio with user interaction
+    if (!audioStarted) {
+      audio.currentTime = 0;
+      audio.volume = 1.0;
+      audio.play().then(() => {
+        console.log('Audio playing successfully');
+        audioStarted = true;
+      }).catch(e => {
+        console.error('Audio play error:', e);
+        audioStarted = true;
+      });
+    }
+    
     requestAnimationFrame(frame);
   }
   
   // Event listeners
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-	      running = false;
-	      finishIntro();
+      running = false;
+      finishIntro();
     }
   });
   
-  window.addEventListener("click", () => {
-    if (ready) startAnimation();
-  });
-  
-  // Start when logo loads
-  logo.onload = () => {
-    ready = true;
-    startAnimation();
-  };
-  
-  // Fallback
-  setTimeout(() => {
-    if (!ready) {
-      ready = true;
-      startAnimation();
-    }
-  }, 500);
+  ready = true;
   
 })();
 </script>
