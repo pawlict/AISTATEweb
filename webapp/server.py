@@ -7,6 +7,7 @@ import os
 import shutil
 import threading
 import time
+import tempfile
 import uuid
 import zipfile
 from dataclasses import dataclass, asdict, field
@@ -37,6 +38,122 @@ TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "tem
 DATA_DIR = Path(os.environ.get("AISTATEWEB_DATA_DIR") or os.environ.get("AISTATEWWW_DATA_DIR") or os.environ.get("AISTATE_DATA_DIR") or str(ROOT / "data_www")).resolve()
 PROJECTS_DIR = DATA_DIR / "projects"
 PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+# ---------- Helpers: default name + secure delete (best-effort) ----------
+from datetime import datetime
+
+def default_project_name() -> str:
+    # Default name: AISTATE_YYYY-MM-DD (editable in UI)
+    return f"AISTATE_{datetime.now().date().isoformat()}"
+
+def _overwrite_path_bytes(path: Path, pattern: bytes, chunk_size: int = 1024 * 1024) -> None:
+    size = path.stat().st_size
+    if size <= 0:
+        return
+    with open(path, "r+b", buffering=0) as f:
+        remaining = size
+        if not pattern:
+            raise ValueError("Empty overwrite pattern")
+        buf = (pattern * (chunk_size // len(pattern) + 1))[:chunk_size]
+        while remaining > 0:
+            n = min(chunk_size, remaining)
+            f.write(buf[:n])
+            remaining -= n
+        f.flush()
+        os.fsync(f.fileno())
+
+def _overwrite_path_random(path: Path, passes: int = 1, chunk_size: int = 1024 * 1024) -> None:
+    size = path.stat().st_size
+    if size <= 0:
+        return
+    for _ in range(passes):
+        with open(path, "r+b", buffering=0) as f:
+            remaining = size
+            while remaining > 0:
+                n = min(chunk_size, remaining)
+                f.write(os.urandom(n))
+                remaining -= n
+            f.flush()
+            os.fsync(f.fileno())
+
+def _gutmann_patterns() -> List[bytes]:
+    # Gutmann 35-pass sequence (classic). Patterns for passes 5-31 are based on Gutmann's table.
+    # Passes 1-4 and 32-35 are random.
+    # Source: Peter Gutmann, USENIX Security '96. citeturn0search2
+    P: List[bytes] = []
+    P.append(b"\x55")
+    P.append(b"\xAA")
+    P.append(bytes([0x92, 0x49, 0x24]))
+    P.append(bytes([0x49, 0x24, 0x92]))
+    P.append(bytes([0x24, 0x92, 0x49]))
+    P.extend([bytes([x]) for x in [
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99,
+        0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF
+    ]])
+    P.append(bytes([0x92, 0x49, 0x24]))
+    P.append(bytes([0x49, 0x24, 0x92]))
+    P.append(bytes([0x24, 0x92, 0x49]))
+    P.append(bytes([0x6D, 0xB6, 0xDB]))
+    P.append(bytes([0xB6, 0xDB, 0x6D]))
+    P.append(bytes([0xDB, 0x6D, 0xB6]))
+    return P  # 27 pattern passes
+
+def secure_delete_project_dir(pdir: Path, method: str) -> None:
+    # Best-effort file wiping inside project directory, then removal.
+    # NOTE: On SSD/VM/CoW filesystems, overwriting may not guarantee secure erase.
+    # For HMG IS5 Enhanced (0x00, 0xFF, Random) see e.g. LSoft KillDisk manual. citeturn0search31
+    method = (method or "none").lower().strip()
+
+    if method == "none":
+        shutil.rmtree(pdir)
+        return
+
+    files = [fp for fp in pdir.rglob("*") if fp.is_file()]
+
+    if method == "random1":
+        for fp in files:
+            try:
+                _overwrite_path_random(fp, passes=1)
+            except Exception:
+                pass
+            try:
+                fp.unlink()
+            except Exception:
+                pass
+
+    elif method == "hmg_is5":
+        for fp in files:
+            try:
+                _overwrite_path_bytes(fp, b"\x00")
+                _overwrite_path_bytes(fp, b"\xFF")
+                _overwrite_path_random(fp, passes=1)
+            except Exception:
+                pass
+            try:
+                fp.unlink()
+            except Exception:
+                pass
+
+    elif method == "gutmann":
+        patterns = _gutmann_patterns()
+        for fp in files:
+            try:
+                _overwrite_path_random(fp, passes=4)
+                for pat in patterns:
+                    _overwrite_path_bytes(fp, pat)
+                _overwrite_path_random(fp, passes=4)
+            except Exception:
+                pass
+            try:
+                fp.unlink()
+            except Exception:
+                pass
+
+    else:
+        shutil.rmtree(pdir)
+        return
+
+    shutil.rmtree(pdir, ignore_errors=True)
+
 
 WHISPER_MODELS = [
     "tiny", "base", "small", "medium", "large", "large-v2", "large-v3",
@@ -181,6 +298,10 @@ class TaskManager:
                 t.result = json.loads(out)
                 t.status = "done"
                 t.progress = 100
+                try:
+                    _persist_task_outputs(t)
+                except Exception as e:
+                    t.add_log(f"PERSIST ERROR: {e}")
             except Exception as e:
                 import re
 
@@ -196,6 +317,10 @@ class TaskManager:
                     t.result = recovered
                     t.status = "done"
                     t.progress = 100
+                    try:
+                        _persist_task_outputs(t)
+                    except Exception as e:
+                        t.add_log(f"PERSIST ERROR: {e}")
                 else:
                     t.status = "error"
                     t.error = f"Invalid JSON from worker: {e}"
@@ -474,7 +599,7 @@ async def api_create_project(
     # Always create a new project with user-provided name + source audio file.
     pid = ensure_project(None)
     meta = read_project_meta(pid)
-    meta["name"] = str(name or "projekt").strip() or "projekt"
+    meta["name"] = str(name or "").strip() or default_project_name()
     meta["created_at"] = meta.get("created_at") or now_iso()
     meta["updated_at"] = now_iso()
     write_project_meta(pid, meta)
@@ -574,22 +699,134 @@ def api_save_speaker_map(project_id: str, payload: Dict[str, Any]) -> Any:
     write_project_meta(project_id, meta)
     return {"ok": True, "count": len(clean)}
 
+@app.get("/api/projects/{project_id}/export.aistate")
 @app.get("/api/projects/{project_id}/export.zip")
 def api_export_project(project_id: str) -> Any:
-    pdir = project_path(project_id)
-    if not pdir.exists():
+    """Export the whole project folder as a portable package.
+
+    NOTE: .aistate is a ZIP container with a custom extension.
+    """
+    pdir = (PROJECTS_DIR / project_id).resolve()
+    root = PROJECTS_DIR.resolve()
+    if root not in pdir.parents or not pdir.exists() or not pdir.is_dir():
         raise HTTPException(status_code=404, detail="Nie ma takiego projektu.")
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
         for fp in pdir.rglob("*"):
             if fp.is_file():
                 z.write(fp, arcname=str(fp.relative_to(pdir)))
     buf.seek(0)
+
     return StreamingResponse(
         buf,
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="project-{project_id}.zip"'},
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="project-{project_id}.aistate"'},
     )
+
+
+def _safe_extract_zip(zf: zipfile.ZipFile, dst: Path) -> None:
+    """Protect against Zip Slip (path traversal)."""
+    dst = dst.resolve()
+    for member in zf.infolist():
+        name = member.filename
+        # Disallow absolute paths
+        if name.startswith("/") or name.startswith("\\"):
+            raise HTTPException(status_code=400, detail="Nieprawidłowa paczka (ścieżka absolutna).")
+        target = (dst / name).resolve()
+        if dst != target and dst not in target.parents:
+            raise HTTPException(status_code=400, detail="Nieprawidłowa paczka (path traversal).")
+    zf.extractall(dst)
+
+
+def _pick_extracted_root(tmp_dir: Path) -> Path:
+    # If archive contains a single top-level folder, use it; otherwise use tmp_dir.
+    entries = [p for p in tmp_dir.iterdir() if p.name not in ("__MACOSX", ".DS_Store")]
+    if len(entries) == 1 and entries[0].is_dir():
+        return entries[0]
+    return tmp_dir
+
+
+@app.post("/api/projects/import")
+async def api_import_project(file: UploadFile = File(...)) -> Any:
+    fname = (file.filename or "").lower()
+    if not fname.endswith(".aistate"):
+        raise HTTPException(status_code=400, detail="Plik musi mieć rozszerzenie .aistate")
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="aistate_import_"))
+    tmp_file = tmp_dir / "upload.aistate"
+    try:
+        # Stream upload to disk (avoid keeping whole audio in RAM)
+        with tmp_file.open("wb") as out:
+            shutil.copyfileobj(file.file, out)
+
+        extract_dir = tmp_dir / "extracted"
+        extract_dir.mkdir(parents=True, exist_ok=True)
+
+        with zipfile.ZipFile(str(tmp_file), "r") as zf:
+            _safe_extract_zip(zf, extract_dir)
+
+        extracted_root = _pick_extracted_root(extract_dir)
+
+        # Determine preferred project id (if present and unused)
+        preferred_id = None
+        pj = extracted_root / "project.json"
+        if pj.exists():
+            try:
+                meta = json.loads(pj.read_text(encoding="utf-8"))
+                if isinstance(meta, dict) and isinstance(meta.get("project_id"), str):
+                    preferred_id = meta.get("project_id").strip() or None
+            except Exception:
+                preferred_id = None
+
+        final_id = preferred_id
+        if not final_id or (PROJECTS_DIR / final_id).exists():
+            final_id = uuid.uuid4().hex
+
+        dest = (PROJECTS_DIR / final_id).resolve()
+        root = PROJECTS_DIR.resolve()
+        if root not in dest.parents:
+            raise HTTPException(status_code=400, detail="Nieprawidłowy docelowy katalog projektu.")
+        if dest.exists():
+            raise HTTPException(status_code=409, detail="Projekt o takim ID już istnieje.")
+
+        shutil.copytree(extracted_root, dest)
+
+        # Normalize project.json
+        meta = read_project_meta(final_id)
+        meta["project_id"] = final_id
+        meta["created_at"] = meta.get("created_at") or now_iso()
+        meta["updated_at"] = now_iso()
+        write_project_meta(final_id, meta)
+
+        return {"ok": True, "project_id": final_id}
+
+    except HTTPException:
+        raise
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Nieprawidłowa paczka .aistate (uszkodzony ZIP).")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Błąd importu: {e}")
+    finally:
+        try:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
+@app.delete("/api/projects/{project_id}")
+def api_delete_project(project_id: str, wipe_method: str = "none") -> Any:
+    pdir = (PROJECTS_DIR / project_id).resolve()
+    root = PROJECTS_DIR.resolve()
+    if root not in pdir.parents or not pdir.exists() or not pdir.is_dir():
+        raise HTTPException(status_code=404, detail="Nie ma takiego projektu.")
+
+    try:
+        secure_delete_project_dir(pdir, wipe_method)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Błąd usuwania projektu: {e}")
+
+    return {"ok": True}
 
 
 
@@ -850,6 +1087,42 @@ async def api_diarize_text(
 _persist_lock = threading.Lock()
 _persisted: set[str] = set()
 
+
+def _persist_task_outputs(t: "TaskState") -> None:
+    """Persist finished task outputs into stable project files.
+    We also update project.json flags so UI can show what exists.
+    """
+    pdir = project_path(t.project_id)
+    meta = read_project_meta(t.project_id)
+    wrote_any = False
+    # Transcription
+    if t.kind == "transcribe" and isinstance(t.result, dict):
+        if ("text_ts" in t.result) or ("text" in t.result):
+            out_txt = str(t.result.get("text_ts") or t.result.get("text") or "")
+            (pdir / "transcript.txt").write_text(out_txt, encoding="utf-8")
+            meta["has_transcript"] = True
+            wrote_any = True
+    # Diarization
+    if t.kind in ("diarize_voice", "diarize_text") and isinstance(t.result, dict):
+        if "text" in t.result:
+            text_out = str(t.result.get("text") or "")
+            # Apply speaker_map if present (best-effort)
+            mapping = meta.get("speaker_map") or {}
+            if isinstance(mapping, dict) and mapping:
+                for k, v in mapping.items():
+                    if isinstance(k, str) and isinstance(v, str):
+                        text_out = text_out.replace(k, v)
+            (pdir / "diarized.txt").write_text(text_out, encoding="utf-8")
+            meta["has_diarized"] = True
+            wrote_any = True
+    if wrote_any:
+        meta["updated_at"] = now_iso()
+        write_project_meta(t.project_id, meta)
+    else:
+        # still bump timestamp for completed tasks
+        meta["updated_at"] = now_iso()
+        write_project_meta(t.project_id, meta)
+
 def _persist_loop() -> None:
     while True:
         time.sleep(1.0)
@@ -863,24 +1136,12 @@ def _persist_loop() -> None:
                     continue
                 _persisted.add(key)
             try:
-                pdir = project_path(t.project_id)
-                if t.kind == "transcribe" and t.result and ("text" in t.result or "text_ts" in t.result):
-                    # Prefer timestamped output if available (needed for per-block playback + editing UX)
-                    out_txt = str(t.result.get("text_ts") or t.result.get("text") or "")
-                    (pdir / "transcript.txt").write_text(out_txt, encoding="utf-8")
-                if t.kind in ("diarize_voice", "diarize_text") and t.result and "text" in t.result:
-                    text_out = str(t.result.get("text") or "")
-                    meta0 = read_project_meta(t.project_id)
-                    mapping = meta0.get("speaker_map") or {}
-                    if isinstance(mapping, dict) and mapping:
-                        for k, v in mapping.items():
-                            if isinstance(k, str) and isinstance(v, str):
-                                text_out = text_out.replace(k, v)
-                    (pdir / "diarized.txt").write_text(text_out, encoding="utf-8")
-                meta = read_project_meta(t.project_id)
-                meta["updated_at"] = now_iso()
-                write_project_meta(t.project_id, meta)
-            except Exception:
-                pass
+                _persist_task_outputs(t)
+            except Exception as e:
+                # keep server running but leave a breadcrumb in task logs
+                try:
+                    t.add_log(f"PERSIST ERROR: {e}")
+                except Exception:
+                    pass
 
 threading.Thread(target=_persist_loop, daemon=True).start()

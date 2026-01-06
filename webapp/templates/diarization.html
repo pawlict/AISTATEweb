@@ -299,15 +299,7 @@
   <div class="small" style="margin-bottom:8px" data-i18n="di.hint.hover">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
   <div id="di_blocks" class="blocklist" style="display:none"></div>
   <textarea id="di_out" class="bigarea" data-i18n-placeholder="di.placeholder.result" placeholder="Tutaj pojawi się wynik…"></textarea>
-  <div class="row" style="margin-top:10px; flex-wrap:wrap">
-    <button class="btn secondary" id="di_save_txt" data-i18n="di.btn.save_result" data-i18n-title="di.title.save_result" title="Zapisuje bieżący tekst do diarized.txt w projekcie">
-      💾 Zapisz wynik w projekcie
-    </button>
-  </div>
-  <div class="small" style="margin-top:6px" data-i18n-html="di.hint.important_html">
-    <strong>Ważne:</strong> Jeśli zastosowałeś mapowanie nazw, pamiętaj żeby zapisać wynik! 
-    Inaczej przy ponownym załadowaniu będą oryginalne etykiety.
-  </div>
+  <div class="small" style="margin-top:6px" data-i18n-html="di.hint.important_html"><strong>Ważne:</strong> Wynik jest zapisywany automatycznie do projektu (plik <code>diarized.txt</code>).</div>
 </div>
 {% endblock %}
 
@@ -796,6 +788,20 @@ function onDoneDiarize(j){
     if(j.project_id){
       setDownloadLink(j.project_id);
     }
+
+    // Autosave to project (no button needed)
+    try{
+      const pid = AISTATE.projectId || j.project_id || "";
+      if(pid){
+        const text = diBuildRawText();
+        api("/api/projects/" + pid + "/save_diarized", {
+          method:"POST",
+          headers:{ "content-type":"application/json" },
+          body: JSON.stringify({ text: text })
+        }).catch(e=>console.warn("Autosave diarized failed:", e));
+      }
+    }catch(e){ console.warn("Autosave diarized failed:", e); }
+
   }
 }
 
@@ -834,33 +840,6 @@ document.getElementById("di_btn").addEventListener("click", async function(){
     fd.append("mapping_json", document.getElementById("di_map").value || "");
     await startTask("di", "/api/diarize_text", fd, onDoneDiarize);
   }
-});
-
-document.getElementById("di_save_txt").addEventListener("click", async function(){
-  const pid = requireProjectId();
-  const text = diBuildRawText();
-  
-  if(!text.trim()){
-    alert(t("di.alert.empty_output"));
-    return;
-  }
-  
-  await api("/api/projects/" + pid + "/save_diarized", {
-    method:"POST",
-    headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ text: text })
-  });
-
-  setDownloadLink(pid);
-  const keys = draftKeys(pid);
-  LS.set(keys.diarized, text);
-
-  const hasMapping = text.includes("SPEAKER_");
-  const hint = hasMapping 
-    ? t("di.hint.speaker_labels")
-    : "";
-    
-  alert(tFmt("di.alert.saved_output", {hint}));
 });
 
 document.getElementById("di_apply_map").addEventListener("click", function(){

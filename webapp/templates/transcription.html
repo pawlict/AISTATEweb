@@ -50,10 +50,7 @@
   <div class="small" style="margin-bottom:8px" data-i18n="tr.hint.hover">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
   <div id="tr_blocks" class="blocklist" style="display:none"></div>
   <textarea id="tr_out" class="bigarea" data-i18n-placeholder="tr.placeholder.result" placeholder="Tutaj pojawi się wynik…"></textarea>
-  <div class="row" style="margin-top:10px; flex-wrap:wrap">
-    <button class="btn secondary" id="tr_save_txt" data-i18n="tr.btn.save_project">Zapisz transkrypcję w projekcie</button>
-  </div>
-  <div class="small" data-i18n-html="tr.hint.save_file_html">Zapis tworzy plik w projekcie (np. <code>transcript.txt</code>).</div>
+  <div class="small" data-i18n-html="tr.hint.save_file_html">Wynik jest zapisywany automatycznie do projektu (plik <code>transcript.txt</code>).</div>
 </div>
 {% endblock %}
 
@@ -232,6 +229,20 @@ function onDoneTranscribe(j){
       dl.href = `/api/projects/${j.project_id}/download/transcript.txt`;
       dl.style.display = "inline-flex";
     }
+
+    // Autosave to project (no button needed)
+    try{
+      const pid = AISTATE.projectId || j.project_id || "";
+      if(pid){
+        const text = trBuildRawText();
+        api(`/api/projects/${pid}/save_transcript`, {
+          method:"POST",
+          headers:{ "content-type":"application/json" },
+          body: JSON.stringify({ text })
+        }).catch(e=>console.warn("Autosave transcript failed:", e));
+      }
+    }catch(e){ console.warn("Autosave transcript failed:", e); }
+
   }
 }
 
@@ -241,17 +252,6 @@ document.getElementById("tr_btn").addEventListener("click", async ()=>{
   fd.append("model", document.getElementById("tr_model").value);
 
   await startTask("tr", "/api/transcribe", fd, onDoneTranscribe);
-});
-
-document.getElementById("tr_save_txt").addEventListener("click", async ()=>{
-  const pid = requireProjectId();
-  const text = trBuildRawText();
-  await api(`/api/projects/${pid}/save_transcript`, {
-    method:"POST",
-    headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ text })
-  });
-  alert(t("tr.alert.saved"));
 });
 
 // Export global helpers for app.js integration
