@@ -107,4 +107,4 @@ Open in browser:
     * `diarized.txt`
 
 * * *
-
+“This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
