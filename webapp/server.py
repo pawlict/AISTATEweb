@@ -485,7 +485,7 @@ def render_page(request: Request, tpl: str, title: str, active: str, current_pro
             "title": title,
             "active": active,
             "app_name": APP_NAME,
-            "app_fullname": "Artificial Intelligence Speech‑To‑Analysis‑Translation Engine (Light)",
+            "app_fullname": "Artificial Intelligence Speech‑To‑Analysis‑Translation Engine",
             "app_version": APP_VERSION,
             "whisper_models": WHISPER_MODELS,
             "default_whisper_model": getattr(settings, "whisper_model", "large-v3") or "large-v3",
@@ -555,18 +555,41 @@ def page_save(request: Request) -> Any:
 
 @app.get("/info", response_class=HTMLResponse)
 def page_info(request: Request) -> Any:
-    # prefer Polish; add ?lang=en to switch
-    lang = (request.query_params.get("lang") or "").lower()
-    md_path = ROOT / "docs" / ("info_en.md" if lang.startswith("en") else "info_pl.md")
+    # language priority:
+    # 1) explicit ?lang=en|pl
+    # 2) UI language from settings
+    lang = (request.query_params.get("lang") or "").lower().strip()
+    if not lang:
+        try:
+            s = load_settings()
+            lang = (getattr(s, "ui_language", "") or "").lower().strip()
+        except Exception:
+            lang = ""
+    if not lang:
+        lang = "pl"
+
+    static_root = ROOT / "webapp" / "static"
+    md_path = static_root / ("info_en.md" if lang.startswith("en") else "info_pl.md")
+
+    # safety fallback if file missing
+    if not md_path.exists():
+        md_path = static_root / "info_pl.md"
+
     source = str(md_path.relative_to(ROOT))
     text = md_path.read_text(encoding="utf-8", errors="ignore")
+
+    # optional placeholders
+    text = (text
+        .replace("{APP_NAME}", APP_NAME)
+        .replace("{APP_VERSION}", APP_VERSION)
+    )
+
     if md_to_html:
         html = md_to_html(text, extensions=["fenced_code", "tables"])
     else:
-        # fallback: very naive
         html = "<pre>" + text.replace("&", "&amp;").replace("<", "&lt;") + "</pre>"
-    return render_page(request, "info.html", "Info", "info", content=html, source=source)
 
+    return render_page(request, "info.html", "Info", "info", content=html, source=source)
 
 # ---------- API: settings ----------
 
