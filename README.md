@@ -1,114 +1,110 @@
 # AISTATEweb (2.0 beta)
 
-**AISTATEweb** (Artificial Intelligence Speech‑To‑Analysis‑Translation Engine) to webowa wersja narzędzia do:
-- transkrypcji audio (OpenAI Whisper),
-- diaryzacji mówców (pyannote.audio),
-- pracy „projektowej” (źródłowy plik audio + wyniki + raporty),
-- generowania raportów (HTML/TXT/PDF).
+![Version](https://img.shields.io/badge/Version-2.0%20beta-orange)
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
+![Platform](https://img.shields.io/badge/Platform-Web-lightgrey)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-Repozytorium zawiera **wyłącznie** wersję WWW (bez starego GUI/Qt).
+* * *
 
----
+AISTATE Web is a web-based transcription and diarization tool with a project workflow.
 
-## Funkcje
+#### Feedback / Support
 
-- ✅ **Nowy projekt**: nazwa projektu + wybór pliku audio (trzymany w projekcie)
-- ✅ **Transkrypcja**: Whisper (modele od szybkich po dokładniejsze)
-- ✅ **Diaryzacja**: pyannote.audio (wymaga tokena Hugging Face)
-- ✅ **Logi**: podgląd i kopiowanie treści
-- ✅ **Raporty**: HTML / TXT / PDF (z metadanymi projektu)
+If you have any issues, suggestions, or feature requests, please contact me at: **pawlict@proton.me**
 
----
+* * *
 
-## Wymagania
+## ✨ Main functionalities
 
-- Python 3.10+ (zalecane 3.11/3.12)
-- `ffmpeg` w systemie (`ffmpeg -version`)
-- (Opcjonalnie) GPU CUDA dla szybszej pracy modeli
+  * Audio → text transcription (Whisper-based workflow).
+  * Speaker diarization (who spoke when).
+  * Project mode: store outputs and metadata inside a project directory.
+  * Automatic save after processing:
+    * transcription → `transcript.txt`
+    * diarization → `diarized.txt`
+  * Secure delete / wipe modes for project files (in progress):
+    * Fast: delete (no overwrite)
+    * Normal: pseudorandom wipe (x1)
+    * Thorough: British HMG IS5 (x3)
+    * Very thorough: Gutmann (x35)
 
----
+* * *
 
-## Instalacja (Linux / Kali)
-**FFmpeg (Debian/Kali/Ubuntu):**
+## Requirements
+
+### System (Linux)
+
+Install base packages (example):
+    sudo apt update -y
+    sudo apt install -y python3 python3-venv python3-pip git
+
+### Python
+
+Recommended: Python 3.11+.
+
+* * *
+## pyannote / Hugging Face (required for diarization)
+
+Diarization uses **pyannote.audio** pipelines hosted on the **Hugging Face Hub**. Some pyannote models are **gated**, which means you must:
+  * have a Hugging Face account,
+  * accept the user conditions on the model pages,
+  * generate a **READ** access token and provide it to the app.
+
+### Step-by-step (token + permissions)
+
+  1. Create / sign in to your Hugging Face account.
+  2. Open the required pyannote model pages and click **“Agree / Accept”** (user conditions).  
+     Typical models you may need to accept (depending on version):
+     * `pyannote/segmentation` (or `pyannote/segmentation-3.0`)
+     * `pyannote/speaker-diarization` (or `pyannote/speaker-diarization-3.1`)
+  3. Go to your Hugging Face **Settings → Access Tokens** and create a new token with role **READ**.
+  4. Paste the token into AISTATE Web settings (or provide it as an environment variable — depending on your setup).
+
+### Security note
+
+Never commit your Hugging Face token to GitHub. Treat it like a password.
+
+* * *
+## Program installation
+
 ```bash
 sudo apt update
 sudo apt install -y ffmpeg
 ```
-
-```bash
+```
+mkdir -p ~/projects
+cd ~/projects
 git clone https://github.com/pawlict/AISTATEweb.git
 cd AISTATEweb
 
 python3 -m venv .venv
 source .venv/bin/activate
 
-pip install -U pip
+python -m pip install --upgrade pip wheel setuptools
 pip install -r requirements.txt
 ```
+* * *
 
+## Run
 
+Example (uvicorn):
+    python -m uvicorn webapp.server:app --host 0.0.0.0 --port 8000
 
----
+Open in browser:
+    http://127.0.0.1:8000
 
-## Uruchomienie
+* * *
 
-```bash
-python3 AISTATEweb.py
-```
+## Project structure (important files)
 
-Domyślnie aplikacja startuje pod: `http://127.0.0.1:8000`
+  * `webapp/server.py` — backend (API, project handling, wipe implementation)
+  * `webapp/static/app.js` — frontend logic
+  * `webapp/templates/` — HTML templates
+  * `projects/` (or your configured project dir) — created projects with:
+    * `project.json`
+    * `transcript.txt`
+    * `diarized.txt`
 
-### Zmienne środowiskowe
+* * *
 
-- `AISTATEWEB_HOST` (domyślnie `0.0.0.0`)
-- `AISTATEWEB_PORT` (domyślnie `8000`)
-- `AISTATEWEB_DATA_DIR` (domyślnie `./data_www`) – gdzie trzymane są projekty i pliki
-
-Przykład:
-```bash
-AISTATEWEB_HOST=127.0.0.1 AISTATEWEB_PORT=8080 python3 run_www.py
-```
-
----
-
-## Struktura projektu
-
-```
-AISTATEweb/
-  backend/          logika: projekty, taski, adaptery (Whisper/pyannote)
-  webapp/           FastAPI + templates + static
-  generators/       generatory raportów HTML/TXT/PDF
-  assets/           fonty do PDF
-  docs/             treści zakładki Info (Markdown)
-  run_www.py        uruchomienie serwera
-  requirements.txt  zależności
-```
-
----
-
-## Rozwiązywanie problemów
-
-### 1) `FileNotFoundError: ffmpeg`
-Zainstaluj `ffmpeg` i upewnij się, że jest w PATH:
-```bash
-ffmpeg -version
-```
-
-### 2) Diaryzacja „nic nie robi”
-Najczęściej brak tokena HF lub model nie ma uprawnień. Ustaw token w zakładce **Ustawienia** (Hugging Face).
-
-### 3) CPU: „FP16 is not supported”
-To normalne na CPU – Whisper przełącza się na FP32.
-
----
-
-## Licencja
-
-MIT License (AS IS) – zob. plik `LICENSE`.
-
----
-
-## English (short)
-
-AISTATEweb is a web-first tool for audio transcription (Whisper) and speaker diarization (pyannote.audio),
-with project-based workflow and report export (HTML/TXT/PDF). Licensed under MIT (AS IS).
