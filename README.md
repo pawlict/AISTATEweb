@@ -108,3 +108,7 @@ Open in browser:
 
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
+
+## beta 2.1 Fix: Logging overhaul (Whisper + pyannote) + Export to file
+
+This update focuses on improving observability and usability of application logs.
