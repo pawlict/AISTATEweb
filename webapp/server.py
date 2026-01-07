@@ -14,6 +14,8 @@ from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from collections import deque
+
 from fastapi import FastAPI, File, Form, UploadFile, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -199,9 +201,32 @@ class TaskManager:
         self._lock = threading.Lock()
         self._tasks: Dict[str, TaskState] = {}
 
+        # A persistent "system" task to collect server-side application events.
+        # This lets the Logs tab show more than just worker stderr.
+        sys_task = TaskState(
+            task_id="system",
+            kind="system",
+            project_id="-",
+            status="running",
+            progress=0,
+        )
+        self._tasks[sys_task.task_id] = sys_task
+
+    def system_log(self, msg: str) -> None:
+        """Append an application-level log line (English only)."""
+        try:
+            t = self.get("system")
+            t.add_log(f"{now_iso()} | {msg}")
+        except Exception:
+            # Best-effort: never break the request because of logging.
+            pass
+
     def list_tasks(self) -> List[TaskState]:
         with self._lock:
-            return list(self._tasks.values())[::-1]
+            tasks = list(self._tasks.values())
+            system = [t for t in tasks if t.task_id == "system"]
+            rest = [t for t in tasks if t.task_id != "system"][::-1]
+            return system + rest
 
     def get(self, task_id: str) -> TaskState:
         with self._lock:
@@ -211,7 +236,15 @@ class TaskManager:
 
     def clear(self) -> None:
         with self._lock:
+            # Clear all tasks and reset the persistent system log task.
             self._tasks.clear()
+            self._tasks["system"] = TaskState(
+                task_id="system",
+                kind="system",
+                project_id="-",
+                status="running",
+                progress=0,
+            )
 
     def _set(self, t: TaskState) -> None:
         with self._lock:
@@ -231,9 +264,34 @@ class TaskManager:
         t = TaskState(task_id=task_id, kind=kind, project_id=project_id, status="running", progress=0)
         self._set(t)
 
+        # Task header (always visible even if worker is quiet for a while)
+        t.add_log(f"Task started: kind={kind}, project_id={project_id}, task_id={task_id}")
+        try:
+            self.system_log(f"Task started: {kind} (project_id={project_id}, task_id={task_id})")
+        except Exception:
+            pass
+
         proc_env = os.environ.copy()
         if env:
             proc_env.update(env)
+
+        # Redact obvious secrets (HF token) from command line in logs.
+        def _redact_cmd(argv: List[str]) -> str:
+            out: List[str] = []
+            skip_next = False
+            for a in argv:
+                if skip_next:
+                    out.append("***")
+                    skip_next = False
+                    continue
+                if a in ("--hf_token", "--token", "--api_key", "--apikey", "--key"):
+                    out.append(a)
+                    skip_next = True
+                    continue
+                out.append(a)
+            return " ".join(out)
+
+        t.add_log(f"Command: {_redact_cmd(cmd)}")
 
         p = subprocess.Popen(
             cmd,
@@ -261,11 +319,33 @@ class TaskManager:
                         pass
                 else:
                     t.add_log(line)
+                    try:
+                        if t.task_id != "system" and line.strip():
+                            self.system_log(f"[{kind}:{task_id[:8]}] {line}")
+                    except Exception:
+                        pass
+
+            # Always flush a final marker for readability.
+            t.add_log("(stderr stream closed)")
 
         def read_stdout() -> None:
             assert p.stdout is not None
             for line in p.stdout:
-                stdout_buf.append(line)
+                s = line.rstrip("\n")
+                # Worker stdout should end with JSON. Any other stdout lines
+                # are treated as logs (many libs print to stdout).
+                if s.strip().startswith("{") or s.strip().startswith("["):
+                    stdout_buf.append(line)
+                else:
+                    if s.strip():
+                        t.add_log(f"STDOUT: {s}")
+                        try:
+                            if t.task_id != "system" and s.strip():
+                                self.system_log(f"[{kind}:{task_id[:8]}] STDOUT: {s}")
+                        except Exception:
+                            pass
+
+            t.add_log("(stdout stream closed)")
 
         th1 = threading.Thread(target=read_stderr, daemon=True)
         th2 = threading.Thread(target=read_stdout, daemon=True)
@@ -284,12 +364,20 @@ class TaskManager:
                 t.error = f"Process exited with code {rc}"
                 if out:
                     t.add_log("STDOUT (last): " + out[-2000:])
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> ERROR (rc={rc})")
+                except Exception:
+                    pass
                 return
             # parse JSON result
             if not out:
                 t.result = {}
                 t.status = "done"
                 t.progress = 100
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE")
+                except Exception:
+                    pass
                 return
 
             # Be robust: if stdout contains any accidental extra output,
@@ -302,6 +390,10 @@ class TaskManager:
                     _persist_task_outputs(t)
                 except Exception as e:
                     t.add_log(f"PERSIST ERROR: {e}")
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE")
+                except Exception:
+                    pass
             except Exception as e:
                 import re
 
@@ -321,11 +413,19 @@ class TaskManager:
                         _persist_task_outputs(t)
                     except Exception as e:
                         t.add_log(f"PERSIST ERROR: {e}")
+                    try:
+                        self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE (recovered JSON)")
+                    except Exception:
+                        pass
                 else:
                     t.status = "error"
                     t.error = f"Invalid JSON from worker: {e}"
                     # Keep a tail for debugging (avoid huge payloads)
                     t.add_log("STDOUT (tail): " + out[-2000:])
+                    try:
+                        self.system_log(f"Task finished: {kind} (task_id={task_id}) -> ERROR (invalid JSON)")
+                    except Exception:
+                        pass
 
         threading.Thread(target=finalize, daemon=True).start()
         return t
@@ -335,23 +435,58 @@ class TaskManager:
         t = TaskState(task_id=task_id, kind=kind, project_id=project_id, status="running", progress=0)
         self._set(t)
 
+        # Task header
+        t.add_log(f"Task started: kind={kind}, project_id={project_id}, task_id={task_id}")
+        try:
+            self.system_log(f"Task started: {kind} (project_id={project_id}, task_id={task_id})")
+        except Exception:
+            pass
+
         def run() -> None:
             try:
                 def log_cb(msg: str) -> None:
                     t.add_log(str(msg))
                 def progress_cb(pct: int) -> None:
                     t.progress = max(0, min(100, int(pct)))
-                kwargs.setdefault("log_cb", log_cb)
-                kwargs.setdefault("progress_cb", progress_cb)
-                res = fn(*args, **kwargs)
+
+                # Only pass callbacks if the function supports them.
+                import inspect
+
+                call_kwargs = dict(kwargs)
+                try:
+                    sig = inspect.signature(fn)
+                    params = sig.parameters
+                    accepts_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+                    if accepts_varkw or "log_cb" in params:
+                        call_kwargs.setdefault("log_cb", log_cb)
+                    if accepts_varkw or "progress_cb" in params:
+                        call_kwargs.setdefault("progress_cb", progress_cb)
+                except Exception:
+                    # If introspection fails, try best-effort with callbacks.
+                    call_kwargs.setdefault("log_cb", log_cb)
+                    call_kwargs.setdefault("progress_cb", progress_cb)
+
+                try:
+                    res = fn(*args, **call_kwargs)
+                except TypeError:
+                    # Fallback: some callables reject unexpected kwargs.
+                    res = fn(*args)
                 t.result = res if isinstance(res, dict) else {"result": res}
                 t.status = "done"
                 t.progress = 100
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE")
+                except Exception:
+                    pass
             except Exception as e:
                 import traceback
                 t.status = "error"
                 t.error = str(e)
                 t.add_log(traceback.format_exc())
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> ERROR: {e}")
+                except Exception:
+                    pass
             finally:
                 t.finished_at = now_iso()
 
@@ -360,6 +495,14 @@ class TaskManager:
 
 
 TASKS = TaskManager()
+
+
+def app_log(msg: str) -> None:
+    """Server-side app log (English only). Visible in Logs tab as "system" task."""
+    try:
+        TASKS.system_log(msg)
+    except Exception:
+        pass
 
 
 def project_path(project_id: str) -> Path:
@@ -621,13 +764,21 @@ async def api_create_project(
 ) -> Any:
     # Always create a new project with user-provided name + source audio file.
     pid = ensure_project(None)
+    pname = str(name or "").strip() or default_project_name()
+    app_log(f"Project create: project_id={pid}, name='{pname}', upload='{audio.filename or ''}'")
     meta = read_project_meta(pid)
-    meta["name"] = str(name or "").strip() or default_project_name()
+    meta["name"] = pname
     meta["created_at"] = meta.get("created_at") or now_iso()
     meta["updated_at"] = now_iso()
     write_project_meta(pid, meta)
 
     audio_path = save_upload(pid, audio)
+    size_b = 0
+    try:
+        size_b = audio_path.stat().st_size
+    except Exception:
+        size_b = 0
+    app_log(f"Project upload saved: project_id={pid}, file='{audio_path.name}', size_bytes={size_b}")
     meta = read_project_meta(pid)
     meta["updated_at"] = now_iso()
     write_project_meta(pid, meta)
@@ -684,6 +835,7 @@ def api_download(project_id: str, filename: str) -> Any:
 @app.post("/api/projects/{project_id}/save_transcript")
 def api_save_transcript(project_id: str, payload: Dict[str, Any]) -> Any:
     text = str(payload.get("text") or "")
+    app_log(f"Project save transcript: project_id={project_id}, chars={len(text)}")
     path = project_path(project_id) / "transcript.txt"
     path.write_text(text, encoding="utf-8")
     meta = read_project_meta(project_id)
@@ -696,6 +848,7 @@ def api_save_transcript(project_id: str, payload: Dict[str, Any]) -> Any:
 @app.post("/api/projects/{project_id}/save_diarized")
 def api_save_diarized(project_id: str, payload: Dict[str, Any]) -> Any:
     text = str(payload.get("text") or "")
+    app_log(f"Project save diarized: project_id={project_id}, chars={len(text)}")
     path = project_path(project_id) / "diarized.txt"
     path.write_text(text, encoding="utf-8")
     meta = read_project_meta(project_id)
@@ -718,6 +871,7 @@ def api_save_speaker_map(project_id: str, payload: Dict[str, Any]) -> Any:
             clean[k.strip()] = v.strip()
     meta = read_project_meta(project_id)
     meta["speaker_map"] = clean
+    app_log(f"Project save speaker map: project_id={project_id}, entries={len(clean)}")
     meta["updated_at"] = now_iso()
     write_project_meta(project_id, meta)
     return {"ok": True, "count": len(clean)}
@@ -953,6 +1107,8 @@ def api_generate_report(project_id: str, format: str = "pdf", include_logs: int 
     out_name = f"report_{ts}.{fmt}"
     out_path = pdir / out_name
 
+    app_log(f"Report requested: project_id={project_id}, format={fmt}, include_logs={bool(include_logs)}")
+
     data = _collect_report_data(project_id, export_formats=[fmt], include_logs=bool(include_logs))
 
     if fmt == "txt":
@@ -1023,6 +1179,7 @@ async def api_transcribe(
         "--model", model,
         "--lang", lang,
     ]
+    app_log(f"Transcription requested: project_id={project_id}, audio='{audio_path.name}', model={model}, lang={lang}")
     t = TASKS.start_subprocess(kind="transcribe", project_id=project_id, cmd=cmd, cwd=ROOT)
     return {"task_id": t.task_id, "project_id": project_id}
 
@@ -1061,6 +1218,7 @@ async def api_diarize_voice(
         "--lang", lang,
         "--hf_token", hf_token,
     ]
+    app_log(f"Voice diarization requested: project_id={project_id}, audio='{audio_path.name}', model={model}, lang={lang}")
     t = TASKS.start_subprocess(kind="diarize_voice", project_id=project_id, cmd=cmd, cwd=ROOT)
     return {"task_id": t.task_id, "project_id": project_id}
 
@@ -1086,11 +1244,15 @@ async def api_diarize_text(
     speakers = max(1, min(50, int(speakers or 2)))
     method = str(method or "alternate")
 
-    def fn(txt: str) -> Dict[str, Any]:
-        res = diarize_text_simple(txt, speakers=speakers, method=method)
+    app_log(f"Text diarization requested: project_id={project_id}, speakers={speakers}, method={method}, input_chars={len(text or '')}")
+
+    def fn(txt: str, log_cb=None, progress_cb=None) -> Dict[str, Any]:
+        res = diarize_text_simple(txt, speakers=speakers, method=method, log_cb=log_cb, progress_cb=progress_cb)
         out_text = str(res.get("text") or "")
         # Optional mapping: replace "SPK1:" -> "Jan:" etc
         if mapping:
+            if log_cb:
+                log_cb(f"Speaker mapping: applying {len(mapping)} replacements")
             for k, v in mapping.items():
                 if not isinstance(k, str) or not isinstance(v, str):
                     continue
