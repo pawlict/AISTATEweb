@@ -1,6 +1,6 @@
-# AISTATEweb (2.0 beta)
+# AISTATEweb (2.1 beta)
 
-![Version](https://img.shields.io/badge/Version-2.0%20beta-orange)
+![Version](https://img.shields.io/badge/Version-2.1%20beta-orange)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Web-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
