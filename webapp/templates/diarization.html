@@ -166,19 +166,19 @@
 
   <div class="topgrid">
     <div class="subcard">
-      <div class="label" data-i18n="di.label.mode">Tryb</div>
+      <div class="label">Tryb</div>
       <select id="di_mode">
-        <option value="pyannote" data-i18n="di.mode.pyannote">pyannote (audio)</option>
-        <option value="text" data-i18n="di.mode.text">diaryzacja tekstu (prosta)</option>
+        <option value="pyannote">pyannote (audio)</option>
+        <option value="text">diaryzacja tekstu (prosta)</option>
       </select>
-      <div class="small" data-i18n-html="di.hint.pyannote_html">Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).</div>
+      <div class="small">Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).</div>
 
       <div class="hr"></div>
 
       <div id="di_pyannote_block">
         <div class="grid" style="grid-template-columns: 1fr 1fr">
           <div>
-            <div class="label" data-i18n="di.label.language">Język</div>
+            <div class="label">Język</div>
             <select id="di_lang">
               <option value="auto">auto</option>
               <option value="pl">pl</option>
@@ -191,7 +191,7 @@
             </select>
           </div>
           <div>
-            <div class="label" data-i18n="di.label.model_segments">Model Whisper (do segmentów)</div>
+            <div class="label">Model Whisper (do segmentów)</div>
             <select id="di_model">
               {% for m in whisper_models %}
               <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
@@ -204,102 +204,99 @@
       </div>
 
       <div id="di_text_block" style="display:none">
-        <div class="label" data-i18n="di.label.input_text">Tekst wejściowy</div>
-        <textarea id="di_text_in" style="min-height:140px" data-i18n-placeholder="di.placeholder.input_text" placeholder="Wklej tekst do prostej diaryzacji…"></textarea>
+        <div class="label">Tekst wejściowy</div>
+        <textarea id="di_text_in" style="min-height:140px" placeholder="Wklej tekst do prostej diaryzacji…"></textarea>
 
         <div class="hr"></div>
 
         <div class="grid" style="grid-template-columns: 1fr 1fr">
           <div>
-            <div class="label" data-i18n="di.label.speaker_count">Liczba mówców</div>
+            <div class="label">Liczba mówców</div>
             <input class="input" id="di_speakers" type="number" min="1" max="20" value="2"/>
           </div>
           <div>
-            <div class="label" data-i18n="di.label.method">Metoda</div>
+            <div class="label">Metoda</div>
             <select id="di_method">
-              <option value="alternate" data-i18n="di.method.alternate">naprzemiennie</option>
-              <option value="block" data-i18n="di.method.block">blokami</option>
-              <option value="lines" data-i18n="di.method.lines">po liniach</option>
-              <option value="sentences" data-i18n="di.method.sentences">po zdaniach</option>
-              <option value="sentences+merge" data-i18n="di.method.sentences_merge">zdania + łączenie</option>
+              <option value="alternate">naprzemiennie</option>
+              <option value="block">blokami</option>
+              <option value="lines">po liniach</option>
+              <option value="sentences">po zdaniach</option>
+              <option value="sentences+merge">zdania + łączenie</option>
             </select>
           </div>
         </div>
 
         <div class="hr"></div>
 
-        <div class="label" data-i18n="di.label.mapping_json">Mapowanie mówców (JSON)</div>
-        <textarea id="di_map" style="min-height:90px" data-i18n-placeholder="di.placeholder.mapping_json" placeholder='np. {"SPK1":"Jan","SPK2":"Anna"}'></textarea>
-        <div class="small" data-i18n-html="di.hint.mapping_optional_html">Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.</div>
+        <div class="label">Mapowanie mówców (JSON)</div>
+        <textarea id="di_map" style="min-height:90px" placeholder='np. {"SPK1":"Jan","SPK2":"Anna"}'></textarea>
+        <div class="small">Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.</div>
       </div>
 
       <div class="hr"></div>
 
       <div class="label">
-        <span data-i18n="di.label.speaker_names">Nazwy mówców</span>
+        Nazwy mówców
         <span style="font-weight:normal;font-size:12px;color:#888;margin-left:8px;">
-          <span data-i18n="di.speaker_names.detected">(wykryte automatycznie)</span>
+          (wykryte automatycznie)
         </span>
       </div>
       
       <div id="speaker_mapping_ui" class="speaker-mapping-container">
         <div class="mapping-empty">
-          <span data-i18n="di.mapping.empty">Wykonaj diaryzację aby wykryć mówców 🎤</span>
+          Wykonaj diaryzację aby wykryć mówców 🎤
         </div>
       </div>
       
       <div class="advanced-toggle" id="toggle_json_editor">
-        <span data-i18n="di.advanced.toggle">⚙️ Zaawansowane: edycja JSON</span>
+        ⚙️ Zaawansowane: edycja JSON
       </div>
       
       <div id="json_editor_container" class="json-editor">
         <textarea id="di_speaker_map" style="min-height:120px;font-family:monospace;font-size:12px;" placeholder='{"SPEAKER_00":"Jan","SPEAKER_01":"Anna"}'></textarea>
         <div class="small" style="margin-top:6px">
-          <span data-i18n="di.advanced.warning">⚠️ Uwaga: ręczna edycja JSON - błędy składniowe spowodują problemy.</span>
+          ⚠️ Uwaga: ręczna edycja JSON - błędy składniowe spowodują problemy.
           <button class="btn secondary" style="margin-left:10px;padding:4px 10px;font-size:12px;" id="sync_from_json">
-            <span data-i18n="di.advanced.load_json">Załaduj z JSON</span>
+            Załaduj z JSON
           </button>
         </div>
       </div>
 
       <div class="row" style="margin-top:14px; flex-wrap:wrap">
-        <button class="btn" id="di_apply_map" data-i18n="di.btn.apply_map" data-i18n-title="di.title.apply_map" title="Zamień wszystkie wystąpienia w wyniku">
-          ✓ Zastosuj mapowanie
-        </button>
-        <button class="btn secondary" id="di_save_map" data-i18n="di.btn.save_map" data-i18n-title="di.title.save_map" title="Zapisz mapowanie w project.json">
-          💾 Zapisz mapowanie
-        </button>
-        <button class="btn secondary" id="di_refresh_map" data-i18n="di.btn.refresh_map" data-i18n-title="di.title.refresh_map" title="Wykryj mówców z wyniku">
-          🔄 Odśwież z wyniku
+        <button class="btn" id="di_apply_map" title="Zamień wszystkie wystąpienia SPEAKER_XX na wpisane imiona">
+          ✨ Wprowadź zmiany
         </button>
       </div>
       
-      <div class="small" style="margin-top:10px" data-i18n-html="di.how_use_html">
-        <strong>Jak użyć:</strong> Wpisz imiona w pola obok etykiet → Kliknij <strong>Zastosuj mapowanie</strong> → Wszystkie wystąpienia zostaną zamienione
+      <div class="small" style="margin-top:10px">
+        <strong>Jak użyć:</strong> Wpisz imiona w pola obok etykiet (zapisują się automatycznie) → Kliknij <strong>"Wprowadź zmiany"</strong> aby zamienić etykiety SPEAKER_XX na imiona w tekście
       </div>
     </div>
 
     <div class="subcard">
       <div class="row" style="flex-wrap:wrap">
         <button class="btn" id="di_btn" data-i18n="btn.diarize">Diaryzuj</button>
-        <a class="btn secondary" id="di_download" href="#" style="display:none" data-i18n="di.btn.download_txt">Pobierz TXT</a>
+        <a class="btn secondary" id="di_download" href="#" style="display:none">Pobierz TXT</a>
       </div>
 
       <div class="small" style="margin-top:10px">
-        <span data-i18n="common.status">Status</span>: <b id="di_status">—</b> • <span data-i18n="common.progress">Postęp</span>: <span id="di_pct">0%</span>
+        Status: <b id="di_status">—</b> • Postęp: <span id="di_pct">0%</span>
       </div>
       <div class="progress" style="margin-top:10px"><div id="di_bar"></div></div>
-      <div class="small" style="margin-top:10px" data-i18n-html="common.logs_in_tab_html">Logi są dostępne w zakładce <b>Logi</b>.</div>
+      <div class="small" style="margin-top:10px">Logi są dostępne w zakładce <b>Logi</b>.</div>
     </div>
   </div>
 
   <div class="hr"></div>
 
-  <div class="label" data-i18n="di.label.result">Wynik diaryzacji</div>
-  <div class="small" style="margin-bottom:8px" data-i18n="di.hint.hover">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+  <div class="label">Wynik diaryzacji</div>
+  <div class="small" style="margin-bottom:8px">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
   <div id="di_blocks" class="blocklist" style="display:none"></div>
-  <textarea id="di_out" class="bigarea" data-i18n-placeholder="di.placeholder.result" placeholder="Tutaj pojawi się wynik…"></textarea>
-  <div class="small" style="margin-top:6px" data-i18n-html="di.hint.important_html"><strong>Ważne:</strong> Wynik jest zapisywany automatycznie do projektu (plik <code>diarized.txt</code>).</div>
+  <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik…"></textarea>
+  
+  <div class="small" style="margin-top:10px;padding:12px;background:#e8f5e9;border-radius:8px;border:1px solid #81c784;">
+    ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
+  </div>
 </div>
 {% endblock %}
 
@@ -316,6 +313,10 @@ const DI = {
   endWatch: null,
   speakerColors: {}
 };
+
+// ========== Auto-save ==========
+let autoSaveTimeout = null;
+let hasUnsavedChanges = false;
 
 // ========== Helper Functions ==========
 
@@ -512,7 +513,7 @@ function renderSpeakerMappingUI(labels, outputText){
   if(!container) return;
   
   if(!labels || labels.length === 0){
-    container.innerHTML = '<div class="mapping-empty">' + t('di.mapping.empty') + '</div>';
+    container.innerHTML = '<div class="mapping-empty">Wykonaj diaryzację aby wykryć mówców 🎤</div>';
     return;
   }
   
@@ -536,10 +537,13 @@ function renderSpeakerMappingUI(labels, outputText){
     input.type = 'text';
     input.className = 'speaker-input';
     input.value = currentMapping[label] || label;
-    input.placeholder = tFmt('di.placeholder.speaker_name', {label});
+    input.placeholder = 'Wpisz imię dla ' + label;
     input.dataset.speaker = label;
     
-    input.addEventListener('input', syncToJSON);
+    input.addEventListener('input', function(){
+      syncToJSON();
+      scheduleAutoSave();
+    });
     
     const countEl = document.createElement('div');
     countEl.className = 'speaker-count';
@@ -555,7 +559,7 @@ function renderSpeakerMappingUI(labels, outputText){
   });
   
   console.log('✅ Wygenerowano UI dla ' + labels.length + ' mówców');
-  showToast(tFmt('di.toast.updated_speakers', {count: labels.length}));
+  showToast('🔄 Zaktualizowano ' + labels.length + ' mówców');
 }
 
 // Sync UI inputs to hidden JSON textarea
@@ -594,9 +598,9 @@ function syncFromJSON(){
     });
     
     console.log('✅ Załadowano mapowanie z JSON do UI');
-    alert(t("di.alert.map_loaded"));
+    alert('✅ Mapowanie załadowane z JSON');
   }catch(e){
-    alert(tFmt("di.alert.json_parse_error", {msg: e.message}));
+    alert('❌ Błąd parsowania JSON: ' + e.message);
   }
 }
 
@@ -688,8 +692,30 @@ function setupDraftAutosave(projectId){
 
   const out = document.getElementById("di_out");
   if(out){
+    let refreshTimeout = null;
     out.addEventListener("input", function(){
       LS.set(keys.diarized, out.value || "");
+      
+      clearTimeout(refreshTimeout);
+      refreshTimeout = setTimeout(function(){
+        const text = out.value || "";
+        if(text.trim()){
+          const labels = extractSpeakerLabels(text);
+          if(labels.length){
+            mergeSpeakerMap(labels);
+            console.log('🔄 Auto-refreshed speaker mapping from textarea edit');
+          }
+          
+          const segments = parseDiarizedText(text);
+          if(segments.length){
+            DI.segments = segments;
+            diRender();
+            console.log('🔄 Auto-refreshed ' + segments.length + ' blocks from textarea edit');
+          }
+        }
+      }, 500);
+      
+      scheduleAutoSave();
     });
   }
 
@@ -697,6 +723,7 @@ function setupDraftAutosave(projectId){
   if(sm){
     sm.addEventListener("input", function(){
       LS.set(keys.speakerMap, sm.value || "");
+      scheduleAutoSave();
     });
   }
 }
@@ -752,6 +779,64 @@ async function restoreOutputs(projectId){
   }
 }
 
+// ========== Auto-save Functions ==========
+
+async function autoSaveAll(){
+  const pid = AISTATE.projectId;
+  if(!pid) return;
+  
+  try{
+    const text = diBuildRawText();
+    if(text.trim()){
+      await api("/api/projects/" + pid + "/save_diarized", {
+        method:"POST",
+        headers:{ "content-type":"application/json" },
+        body: JSON.stringify({ text: text })
+      });
+      console.log('✅ Auto-saved diarization to project');
+      
+      const keys = draftKeys(pid);
+      LS.set(keys.diarized, text);
+    }
+    
+    const raw = document.getElementById("di_speaker_map").value || "";
+    if(raw.trim()){
+      try{
+        const mapping = JSON.parse(raw);
+        await api("/api/projects/" + pid + "/speaker_map", {
+          method:"POST",
+          headers:{ "content-type":"application/json" },
+          body: JSON.stringify({ mapping: mapping })
+        });
+        console.log('✅ Auto-saved speaker mapping to project');
+        
+        const keys = draftKeys(pid);
+        LS.set(keys.speakerMap, raw);
+      }catch(e){
+        console.warn('⚠️ Invalid speaker mapping JSON, skipping mapping save');
+      }
+    }
+    
+    markSaved();
+  }catch(e){
+    console.warn('⚠️ Auto-save failed:', e);
+  }
+}
+
+function scheduleAutoSave(){
+  markUnsaved();
+  clearTimeout(autoSaveTimeout);
+  autoSaveTimeout = setTimeout(autoSaveAll, 1000);
+}
+
+function markUnsaved(){
+  hasUnsavedChanges = true;
+}
+
+function markSaved(){
+  hasUnsavedChanges = false;
+}
+
 function onDoneDiarize(j){
   console.log('✅ Diaryzacja zakończona, przetwarzam wynik...');
   
@@ -788,20 +873,6 @@ function onDoneDiarize(j){
     if(j.project_id){
       setDownloadLink(j.project_id);
     }
-
-    // Autosave to project (no button needed)
-    try{
-      const pid = AISTATE.projectId || j.project_id || "";
-      if(pid){
-        const text = diBuildRawText();
-        api("/api/projects/" + pid + "/save_diarized", {
-          method:"POST",
-          headers:{ "content-type":"application/json" },
-          body: JSON.stringify({ text: text })
-        }).catch(e=>console.warn("Autosave diarized failed:", e));
-      }
-    }catch(e){ console.warn("Autosave diarized failed:", e); }
-
   }
 }
 
@@ -824,7 +895,7 @@ document.getElementById("di_btn").addEventListener("click", async function(){
   if(mode === "pyannote"){
     await updateAudioState();
     if(!DI_HAS_AUDIO){
-      alert(t("di.alert.no_audio"));
+      alert("Brak pliku audio w projekcie. Utwórz projekt w zakładce: Nowy projekt.");
       window.location.href = "/new-project";
       return;
     }
@@ -833,7 +904,7 @@ document.getElementById("di_btn").addEventListener("click", async function(){
     await startTask("di", "/api/diarize_voice", fd, onDoneDiarize);
   } else {
     const text = document.getElementById("di_text_in").value || "";
-    if(!text.trim()){ alert(t("di.alert.paste_text")); return; }
+    if(!text.trim()){ alert("Wklej tekst wejściowy."); return; }
     fd.append("text", text);
     fd.append("speakers", document.getElementById("di_speakers").value || "2");
     fd.append("method", document.getElementById("di_method").value || "alternate");
@@ -848,7 +919,7 @@ document.getElementById("di_apply_map").addEventListener("click", function(){
   let mapping = {};
   const raw = document.getElementById("di_speaker_map").value || "";
   if(raw.trim()){
-    try{ mapping = JSON.parse(raw); }catch(e){ alert(t("di.alert.bad_json")); return; }
+    try{ mapping = JSON.parse(raw); }catch(e){ alert("Niepoprawny JSON mapowania."); return; }
   }
   
   const outEl = document.getElementById("di_out");
@@ -884,57 +955,11 @@ document.getElementById("di_apply_map").addEventListener("click", function(){
     const labels = extractSpeakerLabels(out);
     renderSpeakerMappingUI(labels, out);
     
-    alert(tFmt("di.alert.applied_map", {details: details.join("\n"), total: totalReplacements}));
-  } else {
-    alert(t("di.alert.no_replacements"));
-  }
-});
-
-document.getElementById("di_save_map").addEventListener("click", async function(){
-  syncToJSON();
-  
-  const pid = requireProjectId();
-  const raw = document.getElementById("di_speaker_map").value || "";
-  let mapping = {};
-  if(raw.trim()){
-    try{ mapping = JSON.parse(raw); }catch(e){ alert(t("di.alert.bad_json")); return; }
-  }
-  
-  await api("/api/projects/" + pid + "/speaker_map", {
-    method:"POST",
-    headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ mapping: mapping })
-  });
-
-  const keys = draftKeys(pid);
-  LS.set(keys.speakerMap, JSON.stringify(mapping, null, 2));
-
-  const count = Object.keys(mapping).length;
-  alert(tFmt("di.alert.saved_map", {count}));
-});
-
-document.getElementById("di_refresh_map").addEventListener("click", function(){
-  const outEl = document.getElementById("di_out");
-  if(!outEl || !outEl.value.trim()){
-    alert(t("di.alert.need_diarize"));
-    return;
-  }
-  
-  console.log('🔄 Ręczne odświeżanie mapowania...');
-  const labels = extractSpeakerLabels(outEl.value);
-  
-  if(labels.length){
-    mergeSpeakerMap(labels);
+    scheduleAutoSave();
     
-    const segments = parseDiarizedText(outEl.value);
-    if(segments.length){
-      DI.segments = segments;
-      diRender();
-    }
-    
-    alert(tFmt("di.alert.found_speakers", {count: labels.length, list: labels.join(", ")}));
+    alert("✅ Wprowadzono zmiany:\n\n" + details.join('\n') + "\n\nRazem: " + totalReplacements + " zamian");
   } else {
-    alert(t("di.alert.no_speaker_labels"));
+    alert('ℹ️ Nie znaleziono żadnych wystąpień do zamiany. Sprawdź czy etykiety w mapowaniu pasują do tych w wyniku.');
   }
 });
 
@@ -975,11 +1000,12 @@ document.addEventListener('aistate:output-updated', function(e){
       } else {
         console.warn('⚠️ No speaker labels found in output');
       }
+      
+      scheduleAutoSave();
     }
   }
 });
 
-// Export global helpers for app.js integration
 window.DI = DI;
 window.diRender = diRender;
 window.diBuildRawText = diBuildRawText;
