@@ -486,15 +486,20 @@ def diarize_voice_whisper_pyannote(
     except Exception as e:
         raise RuntimeError("Missing 'openai-whisper'. Install: pip install openai-whisper") from e
 
+    if log_cb:
+        log_cb(f"Whisper: load '{model}' (auto-download if missing)")
     wmodel = whisper.load_model(model)
     lang = None if language == "auto" else language
     if log_cb:
-        log_cb("Whisper: transcribe with segments")
+        log_cb(f"Whisper: transcribe with segments (language={lang or 'auto'})")
     if progress_cb:
         progress_cb(5)
 
     wres = wmodel.transcribe(audio_path, language=lang, verbose=False)
     segments = wres.get("segments") or []
+
+    if log_cb:
+        log_cb(f"Whisper: segments={len(segments)}")
 
     if progress_cb:
         progress_cb(35)
@@ -529,6 +534,13 @@ def diarize_voice_whisper_pyannote(
 
         audio_np, sr = sf.read(wav_path, dtype="float32", always_2d=True)  # (time, channels)
         waveform = torch.from_numpy(audio_np.T)  # -> (channels, time)
+
+        if log_cb:
+            try:
+                dur = float(waveform.shape[1]) / float(sr) if int(sr) > 0 else 0.0
+                log_cb(f"Audio: loaded waveform (channels={waveform.shape[0]}, sample_rate={sr}, duration_s={dur:.2f})")
+            except Exception:
+                pass
 
         file_dict = {
             "waveform": waveform,
