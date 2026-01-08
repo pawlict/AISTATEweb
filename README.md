@@ -1,6 +1,6 @@
-# AISTATEweb (2.1 beta)
+# AISTATEweb (2.2 beta)
 
-![Version](https://img.shields.io/badge/Version-2.1%20beta-orange)
+![Version](https://img.shields.io/badge/Version-2.2%20beta-orange)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Web-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -109,6 +109,8 @@ Open in browser:
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
 
-## beta 2.1 Fix: Logging overhaul (Whisper + pyannote) + Export to file
+## beta 2.1 -2.2 
 
-This update focuses on improving observability and usability of application logs.
+- Change of block editing methodology
+- This update focuses on improving observability and usability of application logs.
+- Fix: Logging overhaul (Whisper + pyannote) + Export to file
