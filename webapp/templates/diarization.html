@@ -105,7 +105,145 @@
     box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
   }
   
-  .seg-time {
+  
+  .seg-editing{
+  border-color: #ff9800;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.25);
+  transform: scale(1.015);
+}
+.seg-editing:hover{
+  transform: scale(1.015);
+}
+
+/* Inline editor INSIDE the clicked block (PPM) */
+.seg-editor{
+  margin-top: 10px;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 10px;
+  backdrop-filter: blur(6px);
+}
+.seg-editor .seg-editor-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom: 8px;
+}
+.seg-editor .seg-editor-title{
+  font-weight: 800;
+  font-size: 13px;
+}
+.seg-editor .seg-editor-meta{
+  font-size: 11px;
+  opacity: 0.75;
+  font-family: ui-monospace, monospace;
+  margin-top: 2px;
+}
+.seg-editor .seg-editor-close{
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 10px;
+  padding: 4px 10px;
+  cursor: pointer;
+  line-height: 1;
+}
+.seg-editor .seg-editor-close:hover{
+  border-color:#ff9800;
+  background:#fff7ec;
+}
+.seg-editor .seg-editor-grid{
+  display:grid;
+  grid-template-columns: 1fr 220px;
+  gap: 10px;
+  margin-top: 8px;
+}
+@media (max-width: 900px){
+  .seg-editor .seg-editor-grid{
+    grid-template-columns: 1fr;
+  }
+}
+.seg-editor textarea{
+  width: 100%;
+  min-height: 86px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 13px;
+  resize: vertical;
+  background:#fff;
+}
+.seg-editor .seg-speaker-input{
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 13px;
+  background:#fff;
+}
+.seg-editor .seg-audio-row{
+  display:flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.seg-editor .seg-audio-btn{
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+}
+.seg-editor .seg-audio-btn:hover{
+  border-color:#2196F3;
+  background:#f0f7ff;
+}
+.seg-editor .seg-audio-btn:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.seg-editor .seg-speed{
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background: #fff;
+}
+.seg-editor .seg-audio-info{
+  margin-left:auto;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/* Inline editor in Sterowanie (shown on right-click) */
+  .di-inline-editor{
+    margin-top: 14px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .di-inline-editor .di-editor-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .di-inline-editor .di-editor-head .label{
+    margin:0;
+  }
+  .di-inline-editor textarea{
+    width:100%;
+    padding:10px;
+    border:1px solid #ddd;
+    border-radius:8px;
+    font-size:13px;
+    resize:vertical;
+  }
+.seg-time {
     font-size: 11px;
     color: #888;
     margin-bottom: 4px;
@@ -266,6 +404,43 @@
     color: #2196F3;
     font-weight: bold;
   }
+  /* Notatka tooltip (dymek) */
+  .note-tooltip{
+    position: fixed;
+    z-index: 10001;
+    display: none;
+    max-width: 360px;
+    background: rgba(20,20,20,0.92);
+    color: #fff;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    line-height: 1.35;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.35);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+  }
+
+  .note-tooltip::after{
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    transform: translateX(-50%);
+    border-width: 6px 6px 0 6px;
+    border-style: solid;
+    border-color: rgba(20,20,20,0.92) transparent transparent transparent;
+  }
+
+  .note-tooltip.below::after{
+    top: -6px;
+    bottom: auto;
+    border-width: 0 6px 6px 6px;
+    border-color: transparent transparent rgba(20,20,20,0.92) transparent;
+  }
+
 
   /* Responsywność notatek */
   @media (max-width: 1200px) {
@@ -290,6 +465,21 @@
       box-shadow: 0 0 20px rgba(33, 150, 243, 0.5);
       transform: translateY(-2px);
     }
+  }
+
+  /* ========== DIARYZUJ w Sterowaniu ========== */
+  .di-run{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    background: #fff;
+    min-width: 260px;
+  }
+  .di-run .progress{
+    margin-top: 0;
   }
 </style>
 
@@ -385,13 +575,16 @@
   <div class="subcard">
     <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">🎮 Sterowanie</div>
     
-    <div class="row" style="flex-wrap:wrap; gap:10px">
+    <div class="row" style="flex-wrap:wrap; gap:10px; align-items:center">
       <button class="btn" id="di_apply_map" title="Zamień wszystkie wystąpienia SPEAKER_XX na wpisane imiona">
         ✨ Wprowadź zmiany
       </button>
       <button class="btn secondary" id="di_export_toggle" title="Eksportuj raport diaryzacji">
         📥 Eksportuj raport
       </button>
+
+            <button class="btn" id="di_btn" data-i18n="btn.diarize">Diaryzuj</button>
+      <a class="btn secondary" id="di_download" href="#" style="display:none">Pobierz TXT</a>
     </div>
     
     <!-- Panel eksportu raportów (ukryty domyślnie) -->
@@ -432,24 +625,16 @@
         💡 Raporty zostaną zapisane w folderze projektu i będą dostępne do pobrania.
       </div>
     </div>
-  </div>
 
-  <div class="hr"></div>
-
-  <!-- Sekcja 4: Status -->
-  <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">📊 Status</div>
     
-    <div class="row" style="flex-wrap:wrap">
-      <button class="btn" id="di_btn" data-i18n="btn.diarize">Diaryzuj</button>
-      <a class="btn secondary" id="di_download" href="#" style="display:none">Pobierz TXT</a>
-    </div>
+    
 
-    <div class="small" style="margin-top:10px">
-      Status: <b id="di_status">—</b> • Postęp: <span id="di_pct">0%</span>
+<div class="small" style="margin-top:10px">
+      Postęp: <span id="di_pct">0%</span>
     </div>
     <div class="progress" style="margin-top:10px"><div id="di_bar"></div></div>
     <div class="small" style="margin-top:10px">Logi są dostępne w zakładce <b>Logi</b>.</div>
+
   </div>
 
   <div class="hr"></div>
@@ -493,16 +678,7 @@
 
       <div class="hr" style="margin:12px 0"></div>
 
-      <!-- Akcje -->
-      <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn secondary" id="di_notes_save" title="Zapisz notatki w projekcie" style="font-size:12px;padding:6px 12px">
-          💾 Zapisz notatki
-        </button>
-        <button class="btn secondary" id="di_notes_export" title="Eksportuj notatki jako JSON" style="font-size:12px;padding:6px 12px">
-          📤 Eksportuj
-        </button>
       </div>
-    </div>
   </div>
 </div>
 {% endblock %}
@@ -519,6 +695,7 @@ const DI = {
   activeIdx: -1,
   endWatch: null,
   speakerColors: {},
+  edit: { active: false, idx: -1 },
   notes: {
     global: "",
     blocks: {}  // { "0": "notatka do bloku 0", "3": "notatka do bloku 3" }
@@ -531,6 +708,127 @@ let hasUnsavedChanges = false;
 let notesAutoSaveTimeout = null;
 
 // ========== Notes Functions ==========
+
+// --- Notes tooltip (dymek) ---
+let noteTooltipEl = null;
+let noteTooltipHideTimer = null;
+
+function ensureNoteTooltip(){
+  if(noteTooltipEl) return noteTooltipEl;
+  const el = document.createElement('div');
+  el.id = 'note_tooltip';
+  el.className = 'note-tooltip';
+  el.style.display = 'none';
+  document.body.appendChild(el);
+  noteTooltipEl = el;
+  return el;
+}
+
+function positionNoteTooltip(anchorEl){
+  const el = ensureNoteTooltip();
+  if(!anchorEl) return;
+
+  const r = anchorEl.getBoundingClientRect();
+  const margin = 10;
+
+  el.classList.remove('below');
+  el.style.left = (r.left + r.width/2) + 'px';
+  el.style.top = (r.top - margin) + 'px';
+  el.style.transform = 'translate(-50%, -100%)';
+
+  // Clamp X after we have a size
+  const tr = el.getBoundingClientRect();
+  let left = r.left + r.width/2;
+  if(tr.left < 8) left += (8 - tr.left);
+  if(tr.right > window.innerWidth - 8) left -= (tr.right - (window.innerWidth - 8));
+  el.style.left = left + 'px';
+
+  // If too high, show below
+  const tr2 = el.getBoundingClientRect();
+  if(tr2.top < 8){
+    el.classList.add('below');
+    el.style.top = (r.bottom + margin) + 'px';
+    el.style.transform = 'translate(-50%, 0)';
+  }
+}
+
+function showNoteTooltip(anchorEl, text){
+  if(!text || !String(text).trim()) return;
+  const el = ensureNoteTooltip();
+  el.textContent = String(text);
+  el.style.display = 'block';
+  positionNoteTooltip(anchorEl);
+  if(noteTooltipHideTimer){
+    clearTimeout(noteTooltipHideTimer);
+    noteTooltipHideTimer = null;
+  }
+}
+
+function hideNoteTooltip(){
+  const el = ensureNoteTooltip();
+  if(noteTooltipHideTimer) clearTimeout(noteTooltipHideTimer);
+  noteTooltipHideTimer = setTimeout(function(){
+    el.style.display = 'none';
+    el.classList.remove('below');
+  }, 80);
+}
+
+function bindNoteIconEvents(iconEl, idx){
+  if(!iconEl) return;
+
+  // click -> edit note
+  iconEl.onclick = function(e){
+    e.stopPropagation();
+    editBlockNote(idx);
+  };
+
+  // hover -> bubble, only when note exists
+  iconEl.addEventListener('mouseenter', function(e){
+    e.stopPropagation();
+    if(hasBlockNote(idx)){
+      showNoteTooltip(iconEl, getBlockNote(idx));
+    }
+  });
+  iconEl.addEventListener('mousemove', function(){
+    if(hasBlockNote(idx) && noteTooltipEl && noteTooltipEl.style.display === 'block'){
+      positionNoteTooltip(iconEl);
+    }
+  });
+  iconEl.addEventListener('mouseleave', function(){
+    hideNoteTooltip();
+  });
+}
+
+function refreshAllNoteIcons(){
+  if(!DI.segments || !DI.segments.length) return;
+  for(let i=0; i<DI.segments.length; i++){
+    updateBlockNoteIconInSeg(i);
+  }
+}
+
+// --- Notes auto-save: project + local draft ---
+let notesSaving = false;
+
+async function saveNotesToProjectSilent(){
+  const pid = AISTATE.projectId;
+  if(!pid) return;
+  if(notesSaving) return;
+
+  notesSaving = true;
+  try{
+    await api(`/api/projects/${pid}/notes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(DI.notes)
+    });
+    console.log('📝 Auto-saved notes to project');
+  }catch(e){
+    console.warn('⚠️ Auto-save notes to project failed (keeping local draft):', e);
+  }finally{
+    notesSaving = false;
+  }
+}
+
 
 function updateGlobalNote() {
   const textarea = document.getElementById('di_notes_global');
@@ -547,8 +845,10 @@ function updateBlockNote(idx, text) {
     delete DI.notes.blocks[String(idx)];
   }
   renderBlockNotesList();
+  hideNoteTooltip();
   scheduleNotesSave();
 }
+
 
 function getBlockNote(idx) {
   return DI.notes.blocks[String(idx)] || "";
@@ -559,8 +859,12 @@ function hasBlockNote(idx) {
 }
 
 function scheduleNotesSave() {
+  // Szybki draft lokalny + cichy zapis do projektu (debounce)
   clearTimeout(notesAutoSaveTimeout);
-  notesAutoSaveTimeout = setTimeout(saveNotesToDraft, 2000);
+  notesAutoSaveTimeout = setTimeout(async function(){
+    saveNotesToDraft();
+    await saveNotesToProjectSilent();
+  }, 800);
 }
 
 function saveNotesToDraft() {
@@ -583,6 +887,7 @@ function loadNotesFromDraft() {
       DI.notes = JSON.parse(data);
       renderGlobalNote();
       renderBlockNotesList();
+            refreshAllNoteIcons();
       console.log('📝 Loaded notes from localStorage');
     }
   } catch (e) {
@@ -665,6 +970,7 @@ function deleteBlockNote(idx) {
     delete DI.notes.blocks[String(idx)];
     renderBlockNotesList();
     updateBlockNoteIconInSeg(idx);
+    hideNoteTooltip();
     scheduleNotesSave();
   }
 }
@@ -677,10 +983,7 @@ function updateBlockNoteIconInSeg(idx) {
   if (!icon) {
     icon = document.createElement('span');
     icon.className = 'seg-note-icon';
-    icon.onclick = (e) => {
-      e.stopPropagation();
-      editBlockNote(idx);
-    };
+    bindNoteIconEvents(icon, idx);
     const timeEl = seg.querySelector('.seg-time');
     if (timeEl) {
       timeEl.appendChild(icon);
@@ -731,6 +1034,7 @@ async function loadNotesFromProject() {
       };
       renderGlobalNote();
       renderBlockNotesList();
+            refreshAllNoteIcons();
       console.log('📝 Loaded notes from project');
     }
   } catch (e) {
@@ -755,7 +1059,7 @@ function exportNotesAsJSON() {
 
 // Parse diarization line: [12.34-15.67] SPEAKER_00: text
 function parseDiarizedLine(line){
-  const m = line.match(/^\s*\[(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\]\s*([A-Za-z0-9_\-]+)\s*:\s*(.*)$/);
+  const m = line.match(/^\s*\[(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\]\s*([^:]{1,80})\s*:\s*(.*)$/u);
   if(!m) return null;
   return {
     start: parseFloat(m[1]),
@@ -832,6 +1136,372 @@ function diPlaySegment(idx, fromStart){
   }, 50);
 }
 
+// --- Inline block editor INSIDE the clicked block (PPM) ---
+(function(){
+  // If the global modal editor exists (app.js), disable it on this page.
+  try{
+    if (typeof window.openManualEditor === "function") {
+      window.openManualEditor = function(){ /* disabled on diarization page (inline editor used) */ };
+    }
+  }catch(e){}
+
+  function _qs(id){ return document.getElementById(id); }
+
+  function diHasAudio(){
+    DI.audioUrl = DI.audioUrl || diAudioUrl();
+    return Boolean(DI.audioUrl);
+  }
+
+  function diEnsureAudio(){
+    DI.audioUrl = DI.audioUrl || diAudioUrl();
+    if (!DI.audioUrl) return false;
+
+    if (!DI.audio){
+      DI.audio = new Audio(DI.audioUrl);
+      DI.audio.preload = "auto";
+    } else if (DI.audio.src !== DI.audioUrl){
+      DI.audio.src = DI.audioUrl;
+    }
+
+    // apply last speed
+    try{
+      var r = parseFloat(localStorage.getItem("aistateweb:audio_speed") || "1");
+      if (!isNaN(r) && r > 0) DI.audio.playbackRate = r;
+    }catch(e){}
+
+    return true;
+  }
+
+  
+  function _shieldAltGrInline(el){
+    if(!el) return;
+    const stop = (e)=>{
+      const isAltGr = (e.key === "AltGraph") || (e.code === "AltRight") || (e.ctrlKey && e.altKey);
+      if(isAltGr){
+        try{ e.stopImmediatePropagation(); }catch(_){}
+        try{ e.stopPropagation(); }catch(_){}
+        // do NOT preventDefault -> allow Polish chars
+      }
+    };
+    ["keydown","keypress","keyup"].forEach((evt)=>{
+      el.addEventListener(evt, stop, true);
+      el.addEventListener(evt, stop, false);
+    });
+  }
+
+function diEditorSeek(delta){
+    if (!DI.audio) return;
+    var t = (DI.audio.currentTime || 0) + delta;
+    if (t < 0) t = 0;
+    try{
+      if (DI.audio.duration && !isNaN(DI.audio.duration)) t = Math.min(t, DI.audio.duration - 0.01);
+    }catch(e){}
+    DI.audio.currentTime = t;
+  }
+
+  function removeSpeakerClass(el){
+    if(!el) return;
+    Array.from(el.classList).forEach(function(c){
+      if (c.indexOf("speaker-") === 0) el.classList.remove(c);
+    });
+  }
+
+  let _mapRefreshTimer = null;
+  function scheduleMappingRefresh(){
+    clearTimeout(_mapRefreshTimer);
+    _mapRefreshTimer = setTimeout(function(){
+      try{
+        var outEl = _qs("di_out");
+        if(!outEl) return;
+        var labels = extractSpeakerLabels(outEl.value || "");
+        if(labels && labels.length) mergeSpeakerMap(labels);
+      }catch(e){}
+    }, 350);
+  }
+
+  function closeCurrentEditor(){
+    if(!DI.edit.active) return;
+    var idx = DI.edit.idx;
+    var segEl = document.querySelector('#di_blocks .seg[data-idx="' + idx + '"]');
+    if(segEl){
+      segEl.classList.remove("seg-editing");
+      var ed = segEl.querySelector(".seg-editor");
+      if(ed) ed.remove();
+
+      // restore text view
+      var txt = segEl.querySelector(".seg-text");
+      if(txt){
+        var seg = DI.segments[idx];
+        txt.textContent = seg ? (seg.text || "") : (txt.textContent || "");
+        txt.style.display = "";
+      }
+    }
+
+    DI.edit.active = false;
+    DI.edit.idx = -1;
+
+    // stop segment watcher (do not force-stop audio)
+    if(DI.endWatch){
+      clearInterval(DI.endWatch);
+      DI.endWatch = null;
+    }
+  }
+
+  function buildEditorEl(idx){
+    var seg = DI.segments[idx];
+    var ed = document.createElement("div");
+    ed.className = "seg-editor";
+    ed.innerHTML = `
+      <div class="seg-editor-head">
+        <div>
+          <div class="seg-editor-title">✏️ Edycja bloku #${idx}</div>
+          <div class="seg-editor-meta">${formatTime(seg.start)} → ${formatTime(seg.end)}</div>
+        </div>
+        <button class="seg-editor-close" title="Zamknij (Esc)">✕</button>
+      </div>
+
+      <div class="seg-editor-grid">
+        <div>
+          <div class="small" style="margin-bottom:6px;opacity:0.75">Tekst (auto-save)</div>
+          <textarea class="seg-edit-text" placeholder="Edytuj treść bloku…"></textarea>
+        </div>
+        <div>
+          <div class="small" style="margin-bottom:6px;opacity:0.75">Mówca (dla tego bloku)</div>
+          <input class="seg-speaker-input" type="text" placeholder="np. Jan / SPEAKER_00" />
+          <div class="small" style="margin-top:6px;opacity:0.65">Zmiana dotyczy tylko tego bloku.</div>
+        </div>
+      </div>
+
+      <div class="seg-audio-row">
+        <button class="seg-audio-btn" data-act="playSeg" title="Odtwórz ten blok">▶️</button>
+        <button class="seg-audio-btn" data-act="pause" title="Pauza">⏸</button>
+        <button class="seg-audio-btn" data-act="stop" title="Stop">⏹</button>
+        <button class="seg-audio-btn" data-act="m3" title="Cofnij 3s">-3s</button>
+        <button class="seg-audio-btn" data-act="m1" title="Cofnij 1s">-1s</button>
+        <button class="seg-audio-btn" data-act="p1" title="Dalej 1s">+1s</button>
+        <button class="seg-audio-btn" data-act="p3" title="Dalej 3s">+3s</button>
+
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="small">Prędkość</span>
+          <select class="seg-speed">
+            <option value="0.5">0.5×</option>
+            <option value="0.75">0.75×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.25">1.25×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+          </select>
+        </div>
+
+        <div class="seg-audio-info"></div>
+      </div>
+
+      <div class="small" style="margin-top:8px;opacity:0.7">Auto-save ✓ (tekst + mówca zapisują się automatycznie)</div>
+    `;
+
+    return ed;
+  }
+
+  function wireEditor(segEl, idx, ed){
+    var seg = DI.segments[idx];
+    var closeBtn = ed.querySelector(".seg-editor-close");
+    if(closeBtn){
+      closeBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        closeCurrentEditor();
+      });
+    }
+
+    // Text
+    var ta = ed.querySelector(".seg-edit-text");
+    if(ta){
+      
+      try{ ta.setAttribute('lang', document.documentElement.lang || 'pl'); }catch(e){}
+      _shieldAltGrInline(ta);
+ta.value = seg.text || "";
+      var tmr = null;
+      ta.addEventListener("input", function(ev){
+        clearTimeout(tmr);
+        tmr = setTimeout(function(){
+          seg.text = ta.value || "";
+          diSetRawTextarea();
+          scheduleAutoSave();
+        }, 120);
+      });
+    }
+
+    // Speaker
+    var sp = ed.querySelector(".seg-speaker-input");
+    if(sp){
+      
+      try{ sp.setAttribute('lang', document.documentElement.lang || 'pl'); }catch(e){}
+      _shieldAltGrInline(sp);
+sp.value = seg.speaker || "";
+      var tmr2 = null;
+
+      function applySpeaker(){
+        var v = (sp.value || '').trim();
+        v = v.replace(/[:\n\r\t]+/g,' ').replace(/\s+/g,' ').trim();
+        if(!v) v = seg.speaker || 'SPK1';
+        if(v.length > 80) v = v.slice(0,80);
+        if(seg.speaker !== v){
+          seg.speaker = v;
+          // update chip + color
+          removeSpeakerClass(segEl);
+          segEl.classList.add(getSpeakerColor(seg.speaker));
+          var strong = segEl.querySelector(".seg-time strong");
+          if(strong) strong.textContent = seg.speaker;
+
+          diSetRawTextarea();
+          scheduleMappingRefresh();
+          scheduleAutoSave();
+        }
+      }
+
+      sp.addEventListener("input", function(){
+        clearTimeout(tmr2);
+        tmr2 = setTimeout(applySpeaker, 160);
+      });
+      sp.addEventListener("blur", applySpeaker);
+    }
+
+    // Audio state + handlers
+    var hasAudio = diHasAudio();
+    var info = ed.querySelector(".seg-audio-info");
+    if(info){
+      info.textContent = hasAudio ? ("Audio: " + (AISTATE.audioFile || "")) : "Brak audio w projekcie";
+    }
+
+    ed.querySelectorAll(".seg-audio-btn").forEach(function(btn){
+      btn.disabled = !hasAudio;
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        var act = btn.getAttribute("data-act") || "";
+
+        if(!diEnsureAudio()) return;
+
+        if(act === "playSeg"){
+          diPlaySegment(idx, true);
+        } else if(act === "pause"){
+          try{ DI.audio.pause(); }catch(e){}
+        } else if(act === "stop"){
+          try{
+            DI.audio.pause();
+            DI.audio.currentTime = Math.max(0, Number(DI.segments[idx].start)||0);
+          }catch(e){}
+          if(DI.endWatch){ clearInterval(DI.endWatch); DI.endWatch = null; }
+        } else if(act === "m3"){
+          diEditorSeek(-3);
+        } else if(act === "m1"){
+          diEditorSeek(-1);
+        } else if(act === "p1"){
+          diEditorSeek(1);
+        } else if(act === "p3"){
+          diEditorSeek(3);
+        }
+      });
+    });
+
+    var sel = ed.querySelector(".seg-speed");
+    if(sel){
+      // init from storage
+      try{
+        var r0 = parseFloat(localStorage.getItem("aistateweb:audio_speed") || "1");
+        if (!isNaN(r0) && r0 > 0) sel.value = String(r0);
+      }catch(e){}
+
+      sel.disabled = !hasAudio;
+      sel.addEventListener("change", function(ev){
+        var r = parseFloat(sel.value || "1");
+        if (!isNaN(r) && r > 0){
+          if (DI.audio) DI.audio.playbackRate = r;
+          try{ localStorage.setItem("aistateweb:audio_speed", String(r)); }catch(e){}
+        }
+      });
+    }
+
+    // Prevent the editor from triggering hover playback
+    ed.addEventListener("mouseenter", function(ev){ ev.stopPropagation(); });
+    ed.addEventListener("mouseleave", function(ev){ ev.stopPropagation(); });
+  }
+
+  function diOpenInlineEditor(idx){
+    if (idx == null || idx < 0 || idx >= DI.segments.length) return;
+
+    // toggle
+    if(DI.edit.active && DI.edit.idx === idx){
+      // focus textarea
+      var existing = document.querySelector('#di_blocks .seg[data-idx="' + idx + '"] .seg-editor textarea');
+      if(existing){ try{ existing.focus(); }catch(e){} }
+      return;
+    }
+
+    closeCurrentEditor();
+    DI.edit.active = true;
+    DI.edit.idx = idx;
+
+    // stop hover playback
+    diStopPlayback();
+    try{ hideNoteTooltip(); }catch(e){}
+
+    var segEl = document.querySelector('#di_blocks .seg[data-idx="' + idx + '"]');
+    if(!segEl) return;
+    segEl.classList.add("seg-editing");
+
+    // hide original text (we restore on close)
+    var txt = segEl.querySelector(".seg-text");
+    if(txt) txt.style.display = "none";
+
+    // build editor
+    var ed = buildEditorEl(idx);
+    wireEditor(segEl, idx, ed);
+
+    // remove any previous editor (safety)
+    var prev = segEl.querySelector(".seg-editor");
+    if(prev) prev.remove();
+    segEl.appendChild(ed);
+
+    // focus text for quick edit
+    try{
+      var ta = ed.querySelector("textarea");
+      if(ta) ta.focus();
+    }catch(e){}
+  }
+
+  // ESC closes editor
+  document.addEventListener("keydown", function(ev){
+    if (ev.key === "Escape" && DI.edit.active){
+      closeCurrentEditor();
+    }
+  });
+
+  // Right-click on block -> open inline editor inside that block
+  document.addEventListener("contextmenu", function(ev){
+    try{
+      var segEl = ev.target && ev.target.closest ? ev.target.closest(".seg") : null;
+      if (!segEl) return;
+      if (!segEl.closest || !segEl.closest("#di_blocks")) return;
+
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+      var idx = parseInt(segEl.getAttribute("data-idx") || "-1", 10);
+      if (!isNaN(idx) && idx >= 0){
+        diOpenInlineEditor(idx);
+      }
+      return false;
+    }catch(e){}
+  }, true);
+
+  // Expose to window for app.js integration
+  window.diOpenInlineEditor = diOpenInlineEditor;
+  window.diCloseInlineEditor = closeCurrentEditor;
+})();
+
+
 // Assign color to speaker
 function getSpeakerColor(speaker){
   if(!DI.speakerColors[speaker]){
@@ -890,10 +1560,7 @@ function diRender(){
     noteIcon.className = 'seg-note-icon' + (hasBlockNote(idx) ? ' has-note' : '');
     noteIcon.textContent = '📝';
     noteIcon.title = hasBlockNote(idx) ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę';
-    noteIcon.onclick = function(e) {
-      e.stopPropagation();
-      editBlockNote(idx);
-    };
+    bindNoteIconEvents(noteIcon, idx);
     
     const timeDiv = document.createElement('div');
     timeDiv.className = 'seg-time';
@@ -907,8 +1574,8 @@ function diRender(){
     d.appendChild(timeDiv);
     d.appendChild(textDiv);
 
-    d.addEventListener("mouseenter", function(){ diPlaySegment(idx, true); });
-    d.addEventListener("mouseleave", function(){ diStopPlayback(); });
+    d.addEventListener("mouseenter", function(){ if(!DI.edit.active){ diPlaySegment(idx, true); } });
+    d.addEventListener("mouseleave", function(){ if(!DI.edit.active){ diStopPlayback(); } });
     
     blocks.appendChild(d);
   });
@@ -921,9 +1588,10 @@ function extractSpeakerLabels(text){
   const labels = new Set();
   String(text || "").split(/\r?\n/).forEach(function(line){
     const cleaned = line.replace(/^\s*\[[\d\.\-]+\]\s*/, '');
-    const m = cleaned.match(/^\s*([A-Za-z0-9_\-]{1,40})\s*:/);
+    const m = cleaned.match(/^\s*([^:]{1,80})\s*:/u);
     if(m && m[1]) {
-      labels.add(m[1].trim());
+      const lab = String(m[1]).replace(/\s+/g,' ').trim();
+      if(lab) labels.add(lab);
     }
   });
   
@@ -935,7 +1603,7 @@ function extractSpeakerLabels(text){
 // Count occurrences of a speaker label in text
 function countSpeakerOccurrences(text, label){
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const matches = text.match(new RegExp(escaped, 'g'));
+  const matches = text.match(new RegExp(escaped, 'gu'));
   return matches ? matches.length : 0;
 }
 
@@ -1476,7 +2144,7 @@ document.getElementById("di_apply_map").addEventListener("click", function(){
     if(!mapping.hasOwnProperty(k)) continue;
     const v = mapping[k];
     if(k === v) continue;
-    const count = (out.match(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+    const count = (out.match(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gu')) || []).length;
     if(count > 0){
       out = out.split(k).join(v);
       totalReplacements += count;
