@@ -876,6 +876,86 @@ def api_save_speaker_map(project_id: str, payload: Dict[str, Any]) -> Any:
     write_project_meta(project_id, meta)
     return {"ok": True, "count": len(clean)}
 
+
+# ---------- API: notes (two-level: global + per-block) ----------
+
+@app.post("/api/projects/{project_id}/notes")
+def api_save_notes(project_id: str, payload: Dict[str, Any]) -> Any:
+    """Save notes to project (global + per-block).
+    
+    Structure:
+    {
+      "global": "Global note for entire conversation...",
+      "blocks": {
+        "0": "Note for block 0",
+        "3": "Note for block 3"
+      }
+    }
+    """
+    notes = payload.get("notes") or payload
+    
+    if not isinstance(notes, dict):
+        raise HTTPException(status_code=400, detail="notes must be a JSON object (dict).")
+    
+    # Validate structure
+    global_note = notes.get("global", "")
+    blocks = notes.get("blocks", {})
+    
+    if not isinstance(global_note, str):
+        global_note = ""
+    
+    if not isinstance(blocks, dict):
+        blocks = {}
+    
+    # Clean blocks: only str->str with non-empty values
+    clean_blocks: Dict[str, str] = {}
+    for k, v in blocks.items():
+        if isinstance(k, str) and isinstance(v, str) and v.strip():
+            clean_blocks[k.strip()] = v.strip()
+    
+    clean_notes = {
+        "global": global_note.strip(),
+        "blocks": clean_blocks
+    }
+    
+    # Save to project.json
+    meta = read_project_meta(project_id)
+    meta["notes"] = clean_notes
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    
+    app_log(f"Project save notes: project_id={project_id}, global_len={len(global_note)}, blocks={len(clean_blocks)}")
+    
+    return {
+        "ok": True,
+        "notes": clean_notes,
+        "blocks_count": len(clean_blocks)
+    }
+
+
+@app.get("/api/projects/{project_id}/notes")
+def api_get_notes(project_id: str) -> Any:
+    """Get notes from project.
+    
+    Returns:
+    {
+      "global": "...",
+      "blocks": {"0": "...", "3": "..."}
+    }
+    """
+    meta = read_project_meta(project_id)
+    notes = meta.get("notes", {})
+    
+    # Ensure proper structure
+    if not isinstance(notes, dict):
+        notes = {"global": "", "blocks": {}}
+    
+    notes.setdefault("global", "")
+    notes.setdefault("blocks", {})
+    
+    return notes
+
+
 @app.get("/api/projects/{project_id}/export.aistate")
 @app.get("/api/projects/{project_id}/export.zip")
 def api_export_project(project_id: str) -> Any:
