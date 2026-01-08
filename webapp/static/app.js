@@ -134,8 +134,11 @@ const I18N = {
     "logs.hint": "Logi pokazują wyjście workerów (stderr) + postęp.",
     "logs.label.logs": "Logi",
     "logs.placeholder": "Logi pojawią się tutaj…",
+    "logs.save_file": "Zapisz do pliku",
+    "logs.file_placeholder": "aistate_logs_YYYYMMDD_HHMMSS.txt",
     "logs.alert.clear_confirm": "Na pewno wyczyścić listę zadań na serwerze? (nie usuwa projektów)",
     "logs.alert.copied": "Skopiowano ✅",
+    "logs.alert.saved": "Zapisano ✅",
     "settings.page_title": "Ustawienia",
     "settings.hf_label": "Hugging Face Token (pyannote)",
     "settings.hf_hint_html": "Token jest przechowywany w pliku <code>settings.json</code> w katalogu konfiguracji.",
@@ -332,8 +335,11 @@ const I18N = {
     "logs.hint": "Logs show worker output (stderr) + progress.",
     "logs.label.logs": "Logs",
     "logs.placeholder": "Logs will appear here…",
+    "logs.save_file": "Save to file",
+    "logs.file_placeholder": "aistate_logs_YYYYMMDD_HHMMSS.txt",
     "logs.alert.clear_confirm": "Clear task list on the server? (projects are not deleted)",
     "logs.alert.copied": "Copied ✅",
+    "logs.alert.saved": "Saved ✅",
     "settings.page_title": "Settings",
     "settings.hf_label": "Hugging Face Token (pyannote)",
     "settings.hf_hint_html": "The token is stored in <code>settings.json</code> in the config directory.",
@@ -1305,6 +1311,16 @@ function openManualEditor(textarea, lineIndex){
         textarea = document.getElementById('tr_out');
       }
       
+      // Diarization page: prefer inline editor in Sterowanie (no modal window)
+      if(el.closest && el.closest('#di_blocks') && typeof window.diOpenInlineEditor === 'function'){
+        try{
+          window.diOpenInlineEditor(idx);
+        }catch(e){
+          _toast(e && e.message ? e.message : "PPM error");
+        }
+        return false;
+      }
+
       if(textarea){
         try{ 
           _openEditorFor(textarea, idx); 
