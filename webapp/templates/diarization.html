@@ -63,27 +63,6 @@
     font-style: italic;
   }
   
-  .advanced-toggle {
-    margin-top: 12px;
-    font-size: 12px;
-    color: #666;
-    cursor: pointer;
-    user-select: none;
-  }
-  
-  .advanced-toggle:hover {
-    color: #2196F3;
-  }
-  
-  .json-editor {
-    display: none;
-    margin-top: 10px;
-  }
-  
-  .json-editor.show {
-    display: block;
-  }
-  
   #speaker_toast {
     position: fixed;
     bottom: 20px;
@@ -194,181 +173,336 @@
       grid-template-columns: 1fr !important;
     }
   }
+
+  /* ========== NOTATKI PANEL ========== */
+  .notes-panel {
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 16px;
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+  }
+
+  .notes-section {
+    margin-bottom: 12px;
+  }
+
+  .block-notes-list {
+    max-height: 320px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 8px;
+  }
+
+  .block-note-item {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 12px;
+  }
+
+  .block-note-item:hover {
+    border-color: #2196F3;
+    box-shadow: 0 2px 6px rgba(33, 150, 243, 0.15);
+    transform: translateX(2px);
+  }
+
+  .block-note-item strong {
+    color: #2196F3;
+    font-weight: 700;
+  }
+
+  .block-note-preview {
+    color: #555;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .block-note-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .block-note-actions button {
+    font-size: 11px;
+    padding: 3px 8px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .block-note-actions button:hover {
+    border-color: #2196F3;
+    background: #f0f7ff;
+  }
+
+  .seg-note-icon {
+    display: inline-block;
+    margin-left: 8px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .seg-note-icon:hover {
+    opacity: 1;
+  }
+
+  .seg-note-icon.has-note {
+    opacity: 1;
+    color: #2196F3;
+    font-weight: bold;
+  }
+
+  /* Responsywność notatek */
+  @media (max-width: 1200px) {
+    div[style*="grid-template-columns:1fr 380px"] {
+      grid-template-columns: 1fr !important;
+    }
+    .notes-panel {
+      position: relative;
+      top: 0;
+      max-height: none;
+      margin-top: 16px;
+    }
+  }
+
+  /* Animacja podświetlenia bloku */
+  @keyframes pulse-highlight {
+    0%, 100% { 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transform: translateY(-1px);
+    }
+    50% { 
+      box-shadow: 0 0 20px rgba(33, 150, 243, 0.5);
+      transform: translateY(-2px);
+    }
+  }
 </style>
 
 <div class="card">
   <h1 class="h1" data-i18n="page.diarization.title">Diarization</h1>
 
-  <div class="topgrid">
-    <div class="subcard">
-      <div class="di-config-grid">
-        <div>
-          <div class="label">Tryb</div>
-          <select id="di_mode">
-            <option value="pyannote">pyannote (audio)</option>
-            <option value="text">diaryzacja tekstu (prosta)</option>
-          </select>
-        </div>
-        <div id="di_lang_block">
-          <div class="label">Język</div>
-          <select id="di_lang">
-            <option value="auto">auto</option>
-            <option value="pl">pl</option>
-            <option value="en">en</option>
-            <option value="de">de</option>
-            <option value="fr">fr</option>
-            <option value="es">es</option>
-            <option value="uk">uk</option>
-            <option value="ru">ru</option>
-          </select>
-        </div>
-        <div id="di_model_block">
-          <div class="label">Model Whisper</div>
-          <select id="di_model">
-            {% for m in whisper_models %}
-            <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
-            {% endfor %}
-          </select>
-        </div>
+  <!-- Sekcja 1: Ustawienia -->
+  <div class="subcard">
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">⚙️ Ustawienia</div>
+    
+    <div class="di-config-grid">
+      <div>
+        <div class="label">Tryb</div>
+        <select id="di_mode">
+          <option value="pyannote">pyannote (audio)</option>
+          <option value="text">diaryzacja tekstu (prosta)</option>
+        </select>
       </div>
-      <div class="small" style="margin-top: 6px">Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).</div>
-
-      <div class="hr"></div>
-
-      <div id="di_text_block" style="display:none">
-        <div class="label">Tekst wejściowy</div>
-        <textarea id="di_text_in" style="min-height:140px" placeholder="Wklej tekst do prostej diaryzacji…"></textarea>
-
-        <div class="hr"></div>
-
-        <div class="grid" style="grid-template-columns: 1fr 1fr">
-          <div>
-            <div class="label">Liczba mówców</div>
-            <input class="input" id="di_speakers" type="number" min="1" max="20" value="2"/>
-          </div>
-          <div>
-            <div class="label">Metoda</div>
-            <select id="di_method">
-              <option value="alternate">naprzemiennie</option>
-              <option value="block">blokami</option>
-              <option value="lines">po liniach</option>
-              <option value="sentences">po zdaniach</option>
-              <option value="sentences+merge">zdania + łączenie</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="hr"></div>
-
-        <div class="label">Mapowanie mówców (JSON)</div>
-        <textarea id="di_map" style="min-height:90px" placeholder='np. {"SPK1":"Jan","SPK2":"Anna"}'></textarea>
-        <div class="small">Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.</div>
+      <div id="di_lang_block">
+        <div class="label">Język</div>
+        <select id="di_lang">
+          <option value="auto">auto</option>
+          <option value="pl">pl</option>
+          <option value="en">en</option>
+          <option value="de">de</option>
+          <option value="fr">fr</option>
+          <option value="es">es</option>
+          <option value="uk">uk</option>
+          <option value="ru">ru</option>
+        </select>
       </div>
-
-      <div class="hr"></div>
-
-      <div class="label">
-        Nazwy mówców
-        <span style="font-weight:normal;font-size:12px;color:#888;margin-left:8px;">
-          (wykryte automatycznie)
-        </span>
-      </div>
-      
-      <div id="speaker_mapping_ui" class="speaker-mapping-container">
-        <div class="mapping-empty">
-          Wykonaj diaryzację aby wykryć mówców 🎤
-        </div>
-      </div>
-      
-      <div class="advanced-toggle" id="toggle_json_editor">
-        ⚙️ Zaawansowane: edycja JSON
-      </div>
-      
-      <div id="json_editor_container" class="json-editor">
-        <textarea id="di_speaker_map" style="min-height:120px;font-family:monospace;font-size:12px;" placeholder='{"SPEAKER_00":"Jan","SPEAKER_01":"Anna"}'></textarea>
-        <div class="small" style="margin-top:6px">
-          ⚠️ Uwaga: ręczna edycja JSON - błędy składniowe spowodują problemy.
-          <button class="btn secondary" style="margin-left:10px;padding:4px 10px;font-size:12px;" id="sync_from_json">
-            Załaduj z JSON
-          </button>
-        </div>
-      </div>
-
-      <div class="row" style="margin-top:14px; flex-wrap:wrap; gap:10px">
-        <button class="btn" id="di_apply_map" title="Zamień wszystkie wystąpienia SPEAKER_XX na wpisane imiona">
-          ✨ Wprowadź zmiany
-        </button>
-        <button class="btn secondary" id="di_export_toggle" title="Eksportuj raport diaryzacji">
-          📥 Eksportuj raport
-        </button>
-      </div>
-      
-      <!-- Panel eksportu raportów (ukryty domyślnie) -->
-      <div id="di_export_panel" style="display:none; margin-top:14px; background:#f0f4fa; border:1px solid #ddd; border-radius:8px; padding:16px;">
-        <div class="label">Wybierz formaty raportów (możesz zaznaczyć kilka)</div>
-        <div class="row" style="gap:12px; margin-bottom:12px; flex-wrap:wrap;">
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-            <input type="checkbox" id="di_format_txt"> 📄 TXT
-          </label>
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-            <input type="checkbox" id="di_format_html" checked> 📊 HTML
-          </label>
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-            <input type="checkbox" id="di_format_pdf"> 📕 PDF
-          </label>
-        </div>
-        
-        <div class="label">Opcje eksportu</div>
-        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-            <input type="checkbox" id="di_report_logs"> Dołącz logi systemowe
-          </label>
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-            <input type="checkbox" id="di_report_timestamps" checked> Uwzględnij timestampy
-          </label>
-        </div>
-        
-        <div class="row" style="gap:10px;">
-          <button class="btn" id="di_generate_report">
-            🚀 Generuj raporty
-          </button>
-          <button class="btn secondary" id="di_export_cancel">
-            ✕ Anuluj
-          </button>
-        </div>
-        
-        <div class="small" style="margin-top:10px; opacity:0.8;">
-          💡 Raporty zostaną zapisane w folderze projektu i będą dostępne do pobrania.
-        </div>
-      </div>
-      
-      <div class="small" style="margin-top:10px">
-        <strong>Jak użyć:</strong> Wpisz imiona w pola obok etykiet (zapisują się automatycznie) → Kliknij <strong>"Wprowadź zmiany"</strong> aby zamienić etykiety SPEAKER_XX na imiona w tekście
+      <div id="di_model_block">
+        <div class="label">Model Whisper</div>
+        <select id="di_model">
+          {% for m in whisper_models %}
+          <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
+          {% endfor %}
+        </select>
       </div>
     </div>
+    <div class="small" style="margin-top:6px">Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).</div>
 
-    <div class="subcard">
-      <div class="row" style="flex-wrap:wrap">
-        <button class="btn" id="di_btn" data-i18n="btn.diarize">Diaryzuj</button>
-        <a class="btn secondary" id="di_download" href="#" style="display:none">Pobierz TXT</a>
+    <div id="di_text_block" style="display:none">
+      <div class="hr"></div>
+      <div class="label">Tekst wejściowy</div>
+      <textarea id="di_text_in" style="min-height:140px" placeholder="Wklej tekst do prostej diaryzacji…"></textarea>
+
+      <div class="hr"></div>
+
+      <div class="grid" style="grid-template-columns: 1fr 1fr">
+        <div>
+          <div class="label">Liczba mówców</div>
+          <input class="input" id="di_speakers" type="number" min="1" max="20" value="2"/>
+        </div>
+        <div>
+          <div class="label">Metoda</div>
+          <select id="di_method">
+            <option value="alternate">naprzemiennie</option>
+            <option value="block">blokami</option>
+            <option value="lines">po liniach</option>
+            <option value="sentences">po zdaniach</option>
+            <option value="sentences+merge">zdania + łączenie</option>
+          </select>
+        </div>
       </div>
 
-      <div class="small" style="margin-top:10px">
-        Status: <b id="di_status">—</b> • Postęp: <span id="di_pct">0%</span>
-      </div>
-      <div class="progress" style="margin-top:10px"><div id="di_bar"></div></div>
-      <div class="small" style="margin-top:10px">Logi są dostępne w zakładce <b>Logi</b>.</div>
+      <div class="hr"></div>
+
+      <div class="label">Mapowanie mówców (JSON)</div>
+      <textarea id="di_map" style="min-height:90px" placeholder='np. {"SPK1":"Jan","SPK2":"Anna"}'></textarea>
+      <div class="small">Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.</div>
     </div>
   </div>
 
   <div class="hr"></div>
 
-  <div class="label">Wynik diaryzacji</div>
-  <div class="small" style="margin-bottom:8px">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
-  <div id="di_blocks" class="blocklist" style="display:none"></div>
-  <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik…"></textarea>
-  <div class="small" style="margin-top:6px">
-    ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
+  <!-- Sekcja 2: Nazwy mówców -->
+  <div class="subcard">
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">🎤 Nazwy mówców</div>
+    
+    <div id="speaker_mapping_ui" class="speaker-mapping-container">
+      <div class="mapping-empty">
+        Wykonaj diaryzację aby wykryć mówców 🎤
+      </div>
+    </div>
+    
+    <textarea id="di_speaker_map" style="display:none"></textarea>
+  </div>
+
+  <div class="hr"></div>
+
+  <!-- Sekcja 3: Sterowanie -->
+  <div class="subcard">
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">🎮 Sterowanie</div>
+    
+    <div class="row" style="flex-wrap:wrap; gap:10px">
+      <button class="btn" id="di_apply_map" title="Zamień wszystkie wystąpienia SPEAKER_XX na wpisane imiona">
+        ✨ Wprowadź zmiany
+      </button>
+      <button class="btn secondary" id="di_export_toggle" title="Eksportuj raport diaryzacji">
+        📥 Eksportuj raport
+      </button>
+    </div>
+    
+    <!-- Panel eksportu raportów (ukryty domyślnie) -->
+    <div id="di_export_panel" style="display:none; margin-top:14px; background:#f0f4fa; border:1px solid #ddd; border-radius:8px; padding:16px;">
+      <div class="label">Wybierz formaty raportów (możesz zaznaczyć kilka)</div>
+      <div class="row" style="gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="di_format_txt"> 📄 TXT
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="di_format_html" checked> 📊 HTML
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="di_format_pdf"> 📕 PDF
+        </label>
+      </div>
+      
+      <div class="label">Opcje eksportu</div>
+      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="di_report_logs"> Dołącz logi systemowe
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="di_report_timestamps" checked> Uwzględnij timestampy
+        </label>
+      </div>
+      
+      <div class="row" style="gap:10px;">
+        <button class="btn" id="di_generate_report">
+          🚀 Generuj raporty
+        </button>
+        <button class="btn secondary" id="di_export_cancel">
+          ✕ Anuluj
+        </button>
+      </div>
+      
+      <div class="small" style="margin-top:10px; opacity:0.8;">
+        💡 Raporty zostaną zapisane w folderze projektu i będą dostępne do pobrania.
+      </div>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <!-- Sekcja 4: Status -->
+  <div class="subcard">
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">📊 Status</div>
+    
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn" id="di_btn" data-i18n="btn.diarize">Diaryzuj</button>
+      <a class="btn secondary" id="di_download" href="#" style="display:none">Pobierz TXT</a>
+    </div>
+
+    <div class="small" style="margin-top:10px">
+      Status: <b id="di_status">—</b> • Postęp: <span id="di_pct">0%</span>
+    </div>
+    <div class="progress" style="margin-top:10px"><div id="di_bar"></div></div>
+    <div class="small" style="margin-top:10px">Logi są dostępne w zakładce <b>Logi</b>.</div>
+  </div>
+
+  <div class="hr"></div>
+
+  <!-- 2-kolumnowy layout: Wynik + Notatki -->
+  <div style="display:grid; grid-template-columns:1fr 380px; gap:16px; align-items:start;">
+    <!-- Lewa kolumna: Wynik diaryzacji -->
+    <div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">📄 Wynik diaryzacji</div>
+      <div class="small" style="margin-bottom:8px">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+      <div id="di_blocks" class="blocklist" style="display:none"></div>
+      <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik…"></textarea>
+      <div class="small" style="margin-top:6px">
+        ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
+      </div>
+    </div>
+
+    <!-- Prawa kolumna: Notatki -->
+    <div class="notes-panel">
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">📝 Notatki</div>
+      
+      <!-- Notatka globalna -->
+      <div class="notes-section">
+        <div class="label" style="font-size:13px;margin-bottom:6px">🌍 Notatka globalna</div>
+        <textarea id="di_notes_global" placeholder="Notatka do całej rozmowy (kontekst, cel, wnioski...)" style="min-height:120px;width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:vertical;"></textarea>
+        <div class="small" style="margin-top:4px;opacity:0.7;">Auto-save ✓</div>
+      </div>
+
+      <div class="hr" style="margin:12px 0"></div>
+
+      <!-- Notatki do bloków -->
+      <div class="notes-section">
+        <div class="label" style="font-size:13px;margin-bottom:8px">📌 Notatki do bloków</div>
+        <div id="di_block_notes_list" class="block-notes-list">
+          <div class="small" style="opacity:0.6;text-align:center;padding:20px;">
+            Brak notatek do bloków.<br>
+            Kliknij 📝 obok bloku aby dodać.
+          </div>
+        </div>
+      </div>
+
+      <div class="hr" style="margin:12px 0"></div>
+
+      <!-- Akcje -->
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn secondary" id="di_notes_save" title="Zapisz notatki w projekcie" style="font-size:12px;padding:6px 12px">
+          💾 Zapisz notatki
+        </button>
+        <button class="btn secondary" id="di_notes_export" title="Eksportuj notatki jako JSON" style="font-size:12px;padding:6px 12px">
+          📤 Eksportuj
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -384,12 +518,238 @@ const DI = {
   audioUrl: "",
   activeIdx: -1,
   endWatch: null,
-  speakerColors: {}
+  speakerColors: {},
+  notes: {
+    global: "",
+    blocks: {}  // { "0": "notatka do bloku 0", "3": "notatka do bloku 3" }
+  }
 };
 
 // ========== Auto-save ==========
 let autoSaveTimeout = null;
 let hasUnsavedChanges = false;
+let notesAutoSaveTimeout = null;
+
+// ========== Notes Functions ==========
+
+function updateGlobalNote() {
+  const textarea = document.getElementById('di_notes_global');
+  if (!textarea) return;
+  
+  DI.notes.global = textarea.value || "";
+  scheduleNotesSave();
+}
+
+function updateBlockNote(idx, text) {
+  if (text && text.trim()) {
+    DI.notes.blocks[String(idx)] = text.trim();
+  } else {
+    delete DI.notes.blocks[String(idx)];
+  }
+  renderBlockNotesList();
+  scheduleNotesSave();
+}
+
+function getBlockNote(idx) {
+  return DI.notes.blocks[String(idx)] || "";
+}
+
+function hasBlockNote(idx) {
+  return Boolean(DI.notes.blocks[String(idx)]);
+}
+
+function scheduleNotesSave() {
+  clearTimeout(notesAutoSaveTimeout);
+  notesAutoSaveTimeout = setTimeout(saveNotesToDraft, 2000);
+}
+
+function saveNotesToDraft() {
+  if (!AISTATE.projectId) return;
+  try {
+    const key = `aistateweb:notes:${AISTATE.projectId}`;
+    localStorage.setItem(key, JSON.stringify(DI.notes));
+    console.log('📝 Auto-saved notes to localStorage');
+  } catch (e) {
+    console.warn('Failed to save notes to localStorage:', e);
+  }
+}
+
+function loadNotesFromDraft() {
+  if (!AISTATE.projectId) return;
+  try {
+    const key = `aistateweb:notes:${AISTATE.projectId}`;
+    const data = localStorage.getItem(key);
+    if (data) {
+      DI.notes = JSON.parse(data);
+      renderGlobalNote();
+      renderBlockNotesList();
+      console.log('📝 Loaded notes from localStorage');
+    }
+  } catch (e) {
+    console.warn('Failed to load notes from localStorage:', e);
+  }
+}
+
+function renderGlobalNote() {
+  const textarea = document.getElementById('di_notes_global');
+  if (textarea) {
+    textarea.value = DI.notes.global || "";
+  }
+}
+
+function renderBlockNotesList() {
+  const container = document.getElementById('di_block_notes_list');
+  if (!container) return;
+  
+  const noteEntries = Object.entries(DI.notes.blocks);
+  
+  if (noteEntries.length === 0) {
+    container.innerHTML = `
+      <div class="small" style="opacity:0.6;text-align:center;padding:20px;">
+        Brak notatek do bloków.<br>
+        Kliknij 📝 obok bloku aby dodać.
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = '';
+  
+  noteEntries.forEach(([idx, text]) => {
+    const item = document.createElement('div');
+    item.className = 'block-note-item';
+    
+    const preview = text.length > 60 ? text.substring(0, 60) + '...' : text;
+    
+    item.innerHTML = `
+      <div><strong>Blok #${idx}</strong></div>
+      <div class="block-note-preview">${escapeHtml(preview)}</div>
+      <div class="block-note-actions">
+        <button onclick="scrollToBlock(${idx})">📍 Pokaż</button>
+        <button onclick="editBlockNote(${idx})">✏️ Edytuj</button>
+        <button onclick="deleteBlockNote(${idx})">🗑️ Usuń</button>
+      </div>
+    `;
+    
+    container.appendChild(item);
+  });
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function scrollToBlock(idx) {
+  const seg = document.querySelector(`.seg[data-idx="${idx}"]`);
+  if (seg) {
+    seg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    seg.style.animation = 'pulse-highlight 1s';
+    setTimeout(() => seg.style.animation = '', 1000);
+  }
+}
+
+function editBlockNote(idx) {
+  const currentNote = getBlockNote(idx);
+  const newNote = prompt(`Notatka do bloku #${idx}:`, currentNote);
+  
+  if (newNote !== null) {
+    updateBlockNote(idx, newNote);
+    updateBlockNoteIconInSeg(idx);
+  }
+}
+
+function deleteBlockNote(idx) {
+  if (confirm(`Usunąć notatkę do bloku #${idx}?`)) {
+    delete DI.notes.blocks[String(idx)];
+    renderBlockNotesList();
+    updateBlockNoteIconInSeg(idx);
+    scheduleNotesSave();
+  }
+}
+
+function updateBlockNoteIconInSeg(idx) {
+  const seg = document.querySelector(`.seg[data-idx="${idx}"]`);
+  if (!seg) return;
+  
+  let icon = seg.querySelector('.seg-note-icon');
+  if (!icon) {
+    icon = document.createElement('span');
+    icon.className = 'seg-note-icon';
+    icon.onclick = (e) => {
+      e.stopPropagation();
+      editBlockNote(idx);
+    };
+    const timeEl = seg.querySelector('.seg-time');
+    if (timeEl) {
+      timeEl.appendChild(icon);
+    }
+  }
+  
+  if (hasBlockNote(idx)) {
+    icon.textContent = '📝';
+    icon.classList.add('has-note');
+    icon.title = 'Ma notatkę - kliknij aby edytować';
+  } else {
+    icon.textContent = '📝';
+    icon.classList.remove('has-note');
+    icon.title = 'Dodaj notatkę';
+  }
+}
+
+async function saveNotesToProject() {
+  const pid = AISTATE.projectId;
+  if (!pid) {
+    alert('Brak aktywnego projektu');
+    return;
+  }
+  
+  try {
+    await api(`/api/projects/${pid}/notes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(DI.notes)
+    });
+    
+    showToast('✅ Notatki zapisane w projekcie');
+  } catch (e) {
+    alert('❌ Błąd zapisu notatek: ' + e.message);
+  }
+}
+
+async function loadNotesFromProject() {
+  const pid = AISTATE.projectId;
+  if (!pid) return;
+  
+  try {
+    const data = await api(`/api/projects/${pid}/notes`);
+    if (data && typeof data === 'object') {
+      DI.notes = {
+        global: data.global || "",
+        blocks: data.blocks || {}
+      };
+      renderGlobalNote();
+      renderBlockNotesList();
+      console.log('📝 Loaded notes from project');
+    }
+  } catch (e) {
+    console.log('No notes in project yet');
+  }
+}
+
+function exportNotesAsJSON() {
+  const dataStr = JSON.stringify(DI.notes, null, 2);
+  const blob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `notes_${AISTATE.projectId || 'export'}_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📤 Notatki wyeksportowane');
+}
+
 
 // ========== Helper Functions ==========
 
@@ -525,9 +885,27 @@ function diRender(){
     d.className = "seg " + getSpeakerColor(seg.speaker);
     d.dataset.idx = String(idx);
     
-    d.innerHTML='<div class="seg-time">'+formatTime(seg.start)+' → '+formatTime(seg.end)+' <strong>'+seg.speaker+'</strong></div>' +
-                  '<div class="seg-text"></div>';
-    d.querySelector(".seg-text").textContent = seg.text || "";
+    // Ikona notatki
+    const noteIcon = document.createElement('span');
+    noteIcon.className = 'seg-note-icon' + (hasBlockNote(idx) ? ' has-note' : '');
+    noteIcon.textContent = '📝';
+    noteIcon.title = hasBlockNote(idx) ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę';
+    noteIcon.onclick = function(e) {
+      e.stopPropagation();
+      editBlockNote(idx);
+    };
+    
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'seg-time';
+    timeDiv.innerHTML = formatTime(seg.start)+' → '+formatTime(seg.end)+' <strong>'+seg.speaker+'</strong>';
+    timeDiv.appendChild(noteIcon);
+    
+    const textDiv = document.createElement('div');
+    textDiv.className = 'seg-text';
+    textDiv.textContent = seg.text || "";
+    
+    d.appendChild(timeDiv);
+    d.appendChild(textDiv);
 
     d.addEventListener("mouseenter", function(){ diPlaySegment(idx, true); });
     d.addEventListener("mouseleave", function(){ diStopPlayback(); });
@@ -655,28 +1033,6 @@ function syncToJSON(){
 }
 
 // Sync JSON textarea to UI inputs
-function syncFromJSON(){
-  try{
-    const raw = document.getElementById('di_speaker_map').value || '';
-    if(!raw.trim()) return;
-    
-    const mapping = JSON.parse(raw);
-    const inputs = document.querySelectorAll('.speaker-input');
-    
-    inputs.forEach(function(input){
-      const label = input.dataset.speaker;
-      if(mapping[label] !== undefined){
-        input.value = mapping[label];
-      }
-    });
-    
-    console.log('✅ Załadowano mapowanie z JSON do UI');
-    alert('✅ Mapowanie załadowane z JSON');
-  }catch(e){
-    alert('❌ Błąd parsowania JSON: ' + e.message);
-  }
-}
-
 // Merge speaker map (preserves manual names)
 function mergeSpeakerMap(labels){
   const ta = document.getElementById("di_speaker_map");
@@ -1152,24 +1508,26 @@ document.getElementById("di_apply_map").addEventListener("click", function(){
   }
 });
 
-document.getElementById("toggle_json_editor").addEventListener("click", function(){
-  const container = document.getElementById("json_editor_container");
-  container.classList.toggle("show");
-  
-  const toggle = document.getElementById("toggle_json_editor");
-  if(container.classList.contains("show")){
-    toggle.textContent = "⚙️ Zaawansowane: ukryj JSON";
-  } else {
-    toggle.textContent = "⚙️ Zaawansowane: edycja JSON";
-  }
-});
-
-document.getElementById("sync_from_json").addEventListener("click", syncFromJSON);
-
 // Export report listeners
 document.getElementById("di_export_toggle").addEventListener("click", toggleExportPanel);
 document.getElementById("di_export_cancel").addEventListener("click", closeExportPanel);
 document.getElementById("di_generate_report").addEventListener("click", generateDiarReport);
+
+// ========== Notes Event Listeners ==========
+const notesGlobalTextarea = document.getElementById('di_notes_global');
+if (notesGlobalTextarea) {
+  notesGlobalTextarea.addEventListener('input', updateGlobalNote);
+}
+
+const notesSaveBtn = document.getElementById('di_notes_save');
+if (notesSaveBtn) {
+  notesSaveBtn.addEventListener('click', saveNotesToProject);
+}
+
+const notesExportBtn = document.getElementById('di_notes_export');
+if (notesExportBtn) {
+  notesExportBtn.addEventListener('click', exportNotesAsJSON);
+}
 
 
 document.addEventListener('aistate:output-updated', function(e){
@@ -1214,6 +1572,13 @@ window.diStopPlayback = diStopPlayback;
   if(AISTATE.projectId){
     setupDraftAutosave(AISTATE.projectId);
     await restoreOutputs(AISTATE.projectId);
+    
+    // Load notes from project
+    await loadNotesFromProject();
+    // Fallback to localStorage draft if project has no notes
+    if (!DI.notes.global && Object.keys(DI.notes.blocks).length === 0) {
+      loadNotesFromDraft();
+    }
   }
   await resumeTask("di", onDoneDiarize);
 })();
