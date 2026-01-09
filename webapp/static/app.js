@@ -1,408 +1,138 @@
 // ---------- UI language (i18n) ----------
-const I18N = {
-  pl: {
-    "nav.new_project": "Projekty",
-    "nav.transcription": "Transkrypcja",
-    "nav.diarization": "Diaryzacja",
-    "nav.settings": "Ustawienia",
-    "nav.logs": "Logi",
-    "nav.info": "Info",
-    "nav.save": "Zapis",
-    "top.current_project": "Bieżący projekt",
-    "top.source_file": "Plik źródłowy projektu",
-    "btn.refresh": "Odśwież",
-    "logs.copy_sel": "Kopiuj zaznaczenie",
-    "logs.copy_all": "Kopiuj wszystko",
-    "btn.create_project": "Utwórz projekt",
-    "btn.diarize": "Diaryzuj",
-    "btn.transcribe": "Transkrybuj",
-    "page.new_project.title": "Nowy projekt",
-    "page.new_project.subtitle": "Utwórz nowy projekt i wybierz plik audio",
-    "page.logs.title": "Logi",
-    "page.diarization.title": "Diaryzacja",
-    "page.transcription.title": "Transkrypcja",
-    "projects.open.title": "Otwórz projekt",
-    "projects.open.choose": "Wybierz zapisany projekt",
-    "projects.open.open_btn": "Otwórz",
-    "projects.open.refresh_btn": "Odśwież listę",
-    "projects.open.details": "Szczegóły",
-    "projects.open.no_selection": "Wybierz projekt z listy.",
-    "projects.open.tr_yes": "transkrypcja ✅",
-    "projects.open.tr_no": "transkrypcja —",
-    "projects.open.di_yes": "diaryzacja ✅",
-    "projects.open.di_no": "diaryzacja —",
-    "projects.open.audio": "audio",
-    "projects.open.created": "utworzono",
-    "projects.open.updated": "aktualizacja",
-    "projects.new.name": "Nazwa projektu",
-    "projects.export.title": "Eksport",
-"projects.export.btn": "Eksportuj",
-"projects.export.desc": "Eksportuje projekt do pliku .aistate, aby uruchomić go na innej maszynie z zainstalowanym AiSTATEweb.",
-"projects.export.error": "Błąd eksportu",
-"projects.import.title": "Import",
-"projects.import.desc": "Importuje plik .aistate i dodaje projekt do katalogu projektów tej instancji.",
-"projects.delete.title": "Usuń",
-"projects.delete.desc": "Usuwa wybrany projekt z programu (opcjonalnie z nadpisaniem plików).",
-"projects.delete.modal.title": "Usuń projekt",
-"projects.delete.modal.choose": "Wybierz projekt do usunięcia",
-"projects.delete.modal.choose_hint": "Możesz usunąć bieżący projekt lub dowolny istniejący na dysku.",
-"projects.delete.modal.current": "bieżący",
-"projects.delete.modal.method": "Metoda nadpisywania",
-"projects.delete.modal.note": "Uwaga: na SSD/VM/CoW nadpisywanie może nie gwarantować pełnego „secure erase”.",
-"projects.delete.modal.confirm": "Usuń",
-"projects.delete.modal.no_choice": "Wybierz projekt do usunięcia.",
-"projects.delete.modal.confirm2": "Na pewno usunąć wybrany projekt wraz z plikami?",
-"projects.delete.wipe.none": "Szybkie (bez nadpisywania)",
-"projects.delete.wipe.random1": "Pseudolosowy (1x)",
-"projects.delete.wipe.hmg": "British HMG IS5 (3x)",
-"projects.delete.wipe.gutmann": "Gutmann (35x)",
-"common.cancel": "Anuluj",
-    "projects.export.zip_btn": "Eksportuj",
-    "projects.export.zip_hint": "Eksportuje projekt do pliku .aistate (audio, wyniki, raporty, metadata).",
-    "projects.import.btn": "Import",
-    "projects.import.bad_ext": "Nieprawidłowy plik. Wybierz plik z rozszerzeniem .aistate",
-    "projects.import.error": "Błąd importu",
-    "projects.delete.btn": "Usuń",
-    "projects.delete.confirm": "Na pewno usunąć bieżący projekt ({id}) wraz z plikami?",
-    "projects.delete.done": "Usunięto projekt ✅",
-    "projects.delete.error": "Błąd usuwania",
-    "projects.current_auto": "(bieżący / auto)",
-    "projects.unnamed": "projekt",
-    "projects.none": "Brak projektów",
-    "projects.no_file": "Brak pliku",
-    "projects.no_data": "Brak danych",
-    "settings.ui_language": "Język interfejsu",
-    "settings.hf_placeholder": "Wklej token (zapis lokalnie na serwerze)",
-    "settings.save": "Zapisz ustawienia",
-    "settings.saved": "Zapisano ✅",
-    "lang.pl": "Polski",
-    "lang.en": "English",
+// ---------- UI language (i18n) ----------
+// Translations are stored in: webapp/static/lang/{lang}.json
+// (e.g., /static/lang/pl.json, /static/lang/en.json)
 
-    // ---- Block editor modal ----
-    "modal.edit_block.title": "Edycja bloku",
-    "modal.speaker.label": "🎤 Mówca:",
-    "modal.speaker.placeholder": "SPEAKER_00",
-    "modal.speaker.change": "✓ Zmień",
-    "modal.close": "✕ Zamknij",
-    "modal.play": "▶️ Odtwórz",
-    "modal.pause": "⏸️ Pauza",
-    "modal.stop": "⏹️ Stop",
-    "modal.speed": "🎵 Prędkość:",
-    "modal.apply": "✅ Zastosuj",
-    "modal.save_project": "💾 Zapisz w projekcie",
-    "modal.shortcuts": "Skróty: Esc zamknij • Ctrl+Enter zastosuj",
-    "modal.alert.enter_speaker": "Wpisz nazwę mówcy (np. Jan, SPEAKER_02)",
-    "modal.alert.no_original_speaker": "Nie udało się wykryć oryginalnej nazwy mówcy w tym bloku.",
-    "modal.alert.same_speaker": "Nowa nazwa jest taka sama jak obecna.",
-    "modal.alert.changed_speaker": "✅ Zmieniono mówcę w bloku ({count} wystąpień)\n\n💡 Kliknij \"Zastosuj\", aby zapisać zmiany w wyniku.",
-    "modal.alert.saved_transcription": "Zapisano transkrypcję ✅",
-    "modal.alert.saved_diarization": "Zapisano diaryzację ✅",
-    "modal.alert.save_error": "Błąd zapisu",
-    "alert.no_active_project": "Najpierw utwórz lub otwórz projekt w zakładce: Projekty (sekcja \"Nowy projekt\" lub \"Otwórz projekt\").",
-    "common.status": "Status",
-    "common.progress": "Postęp",
-    "common.logs_in_tab_html": "Logi są dostępne w zakładce <b>Logi</b>.",
-    "np.name_placeholder": "np. Wywiad_2026_01_03",
-    "np.name_hint_html": "Nazwa jest przechowywana w <code>project.json</code> w folderze projektu.",
-    "np.audio_label": "Plik źródłowy audio",
-    "np.audio_hint": "Ten plik będzie plikiem źródłowym projektu (transkrypcja i diaryzacja pracują na tym samym pliku).",
-    "np.btn_create": "Utwórz projekt",
-    "np.status.creating": "Tworzę…",
-    "np.status.done": "Gotowe ✅ ({id})",
-    "np.status.error": "Błąd ❌",
-    "np.alert.enter_name": "Podaj nazwę projektu.",
-    "np.alert.select_audio": "Wskaż plik audio.",
-    "np.alert.create_error": "Błąd tworzenia projektu",
-    "np.how.title": "Jak to działa",
-    "np.how.li1_html": "Po utworzeniu projektu powstaje folder w <code>data_www/projects/&lt;project_id&gt;</code>.",
-    "np.how.li2_html": "W folderze zapisywany jest <code>project.json</code> oraz wskazany plik audio.",
-    "np.how.li3_html": "Zakładki <b>Transkrypcja</b> i <b>Diaryzacja</b> korzystają z pliku audio projektu (nie wybiera się go ponownie).",
-    "np.how.note": "Aktywny projekt jest trzymany w przeglądarce (localStorage). Utworzenie nowego projektu ustawi go jako aktywny.",
-    "tr.label.language": "Język",
-    "tr.hint.auto_html": "W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).",
-    "tr.label.model": "Model Whisper",
-    "tr.btn.download_txt": "Pobierz TXT",
-    "tr.label.result": "Wynik transkrypcji",
-    "tr.hint.hover": "Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.",
-    "tr.placeholder.result": "Tutaj pojawi się wynik…",
-    "tr.btn.save_project": "Zapisz transkrypcję w projekcie",
-    "tr.hint.save_file_html": "Wynik jest zapisywany automatycznie do projektu (plik <code>transcript.txt</code>).",
-    "tr.alert.saved": "Zapisano transkrypcję w projekcie.",
-    "logs.label.last_tasks": "Ostatnie zadania",
-    "logs.btn.refresh": "Odśwież",
-    "logs.btn.clear": "Wyczyść listę zadań (server)",
-    "logs.hint": "Logi pokazują wyjście workerów (stderr) + postęp.",
-    "logs.label.logs": "Logi",
-    "logs.placeholder": "Logi pojawią się tutaj…",
-    "logs.save_file": "Zapisz do pliku",
-    "logs.file_placeholder": "aistate_logs_YYYYMMDD_HHMMSS.txt",
-    "logs.alert.clear_confirm": "Na pewno wyczyścić listę zadań na serwerze? (nie usuwa projektów)",
-    "logs.alert.copied": "Skopiowano ✅",
-    "logs.alert.saved": "Zapisano ✅",
-    "settings.page_title": "Ustawienia",
-    "settings.hf_label": "Hugging Face Token (pyannote)",
-    "settings.hf_hint_html": "Token jest przechowywany w pliku <code>settings.json</code> w katalogu konfiguracji.",
-    "settings.whisper_default_label": "Domyślny model Whisper",
-    "info.title": "Info",
-    "info.source_prefix": "Treść pochodzi z pliku",
-    "di.label.mode": "Tryb",
-    "di.mode.pyannote": "pyannote (audio)",
-    "di.mode.text": "diaryzacja tekstu (prosta)",
-    "di.hint.pyannote_html": "Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).",
-    "di.label.language": "Język",
-    "di.label.model_segments": "Model Whisper (do segmentów)",
-    "di.label.input_text": "Tekst wejściowy",
-    "di.placeholder.input_text": "Wklej tekst do prostej diaryzacji…",
-    "di.label.speaker_count": "Liczba mówców",
-    "di.label.method": "Metoda",
-    "di.method.alternate": "naprzemiennie",
-    "di.method.block": "blokami",
-    "di.method.lines": "po liniach",
-    "di.method.sentences": "po zdaniach",
-    "di.method.sentences_merge": "zdania + łączenie",
-    "di.label.mapping_json": "Mapowanie mówców (JSON)",
-    "di.placeholder.mapping_json": "np. {\"SPK1\":\"Jan\",\"SPK2\":\"Anna\"}",
-    "di.hint.mapping_optional_html": "Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.",
-    "di.label.speaker_names": "Nazwy mówców",
-    "di.speaker_names.detected": "(wykryte automatycznie)",
-    "di.mapping.empty": "Wykonaj diaryzację aby wykryć mówców 🎤",
-    "di.advanced.toggle": "⚙️ Zaawansowane: edycja JSON",
-    "di.advanced.warning": "⚠️ Uwaga: ręczna edycja JSON - błędy składniowe spowodują problemy.",
-    "di.advanced.load_json": "Załaduj z JSON",
-    "di.btn.apply_map": "✓ Zastosuj mapowanie",
-    "di.btn.save_map": "💾 Zapisz mapowanie",
-    "di.btn.refresh_map": "🔄 Odśwież z wyniku",
-    "di.title.apply_map": "Zamień wszystkie wystąpienia w wyniku",
-    "di.title.save_map": "Zapisz mapowanie w project.json",
-    "di.title.refresh_map": "Wykryj mówców z wyniku",
-    "di.title.save_result": "Zapisuje bieżący tekst do diarized.txt w projekcie",
-    "di.how_use_html": "<strong>Jak użyć:</strong> Wpisz imiona w pola obok etykiet → Kliknij <strong>Zastosuj mapowanie</strong> → Wszystkie wystąpienia zostaną zamienione",
-    "di.btn.download_txt": "Pobierz TXT",
-    "di.label.result": "Wynik diaryzacji",
-    "di.hint.hover": "Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.",
-    "di.placeholder.result": "Tutaj pojawi się wynik…",
-    "di.btn.save_result": "💾 Zapisz wynik w projekcie",
-    "di.hint.important_html": "<strong>Ważne:</strong> Wynik jest zapisywany automatycznie do projektu (plik <code>diarized.txt</code>).",
-    "di.alert.no_audio": "Brak pliku audio w projekcie. Utwórz projekt w zakładce: Projekty.",
-    "di.alert.paste_text": "Wklej tekst wejściowy.",
-    "di.alert.empty_output": "Pole \"Wynik diaryzacji\" jest puste - nie ma czego zapisać.",
-    "di.alert.saved_output": "✅ Zapisano wynik diaryzacji w projekcie (diarized.txt).{hint}",
-    "di.alert.bad_json": "Niepoprawny JSON mapowania.",
-    "di.alert.applied_map": "✅ Zastosowano mapowanie:\n\n{details}\n\nRazem: {total} zamian\n\n💡 Pamiętaj aby zapisać wynik!",
-    "di.alert.saved_map": "✅ Zapisano mapowanie w projekcie (project.json).\n\nLiczba mówców: {count}\n\n💡 Mapowanie będzie automatycznie załadowane przy następnym otwarciu projektu.",
-    "di.alert.need_diarize": "Najpierw wykonaj diaryzację - pole \"Wynik diaryzacji\" jest puste.",
-    "di.alert.found_speakers": "✅ Znaleziono {count} mówców: {list}",
-    "di.alert.no_speaker_labels": "⚠️ Nie znaleziono etykiet mówców w wyniku. Sprawdź format (powinno być: SPEAKER_00: tekst)",
-    "di.alert.no_replacements": "ℹ️ Nie znaleziono żadnych wystąpień do zamiany. Sprawdź czy etykiety w mapowaniu pasują do tych w wyniku.",
-    "di.hint.speaker_labels": "\n\n💡 Wynik zawiera etykiety SPEAKER_XX. Jeśli chcesz je zamienić na imiona, użyj mapowania powyżej.",
-    "di.placeholder.speaker_name": "Wpisz imię dla {label}",
-    "di.toast.updated_speakers": "🔄 Zaktualizowano {count} mówców",
-    "di.alert.map_loaded": "✅ Mapowanie załadowane z JSON",
-    "di.alert.json_parse_error": "❌ Błąd parsowania JSON: {msg}"
+const LANG_BASE = "/static/lang";
+let I18N = { en: {} };
+let LANG_INDEX = null;
+const _I18N_LOADED = Object.create(null);
 
-  },
-  en: {
-    "nav.new_project": "Projects",
-    "nav.transcription": "Transcription",
-    "nav.diarization": "Diarization",
-    "nav.settings": "Settings",
-    "nav.logs": "Logs",
-    "nav.info": "Info",
-    "nav.save": "Save",
-    "top.current_project": "Current project",
-    "top.source_file": "Project source file",
-    "btn.refresh": "Refresh",
-    "logs.copy_sel": "Copy selection",
-    "logs.copy_all": "Copy all",
-    "btn.create_project": "Create project",
-    "btn.diarize": "Diarize",
-    "btn.transcribe": "Transcribe",
-    "page.new_project.title": "New project",
-    "page.new_project.subtitle": "Create a new project and choose an audio file",
-    "page.logs.title": "Logs",
-    "page.diarization.title": "Diarization",
-    "page.transcription.title": "Transcription",
-    "projects.open.title": "Open project",
-    "projects.open.choose": "Select a saved project",
-    "projects.open.open_btn": "Open",
-    "projects.open.refresh_btn": "Refresh list",
-    "projects.open.details": "Details",
-    "projects.open.no_selection": "Select a project from the list.",
-    "projects.open.tr_yes": "transcription ✅",
-    "projects.open.tr_no": "transcription —",
-    "projects.open.di_yes": "diarization ✅",
-    "projects.open.di_no": "diarization —",
-    "projects.open.audio": "audio",
-    "projects.open.created": "created",
-    "projects.open.updated": "updated",
-    "projects.new.name": "Project name",
-    "projects.export.title": "Export",
-"projects.export.btn": "Export",
-"projects.export.desc": "Exports the project to a .aistate file so it can be opened on another machine with AiSTATEweb installed.",
-"projects.export.error": "Export error",
-"projects.import.title": "Import",
-"projects.import.desc": "Imports a .aistate file and adds the project to this instance's projects directory.",
-"projects.delete.title": "Delete",
-"projects.delete.desc": "Deletes the selected project (optionally with file overwriting).",
-"projects.delete.modal.title": "Delete project",
-"projects.delete.modal.choose": "Select a project to delete",
-"projects.delete.modal.choose_hint": "You can delete the current project or any project that exists on disk.",
-"projects.delete.modal.current": "current",
-"projects.delete.modal.method": "Overwrite method",
-"projects.delete.modal.note": "Note: on SSD/VM/CoW, overwriting may not guarantee a full secure erase.",
-"projects.delete.modal.confirm": "Delete",
-"projects.delete.modal.no_choice": "Select a project to delete.",
-"projects.delete.modal.confirm2": "Are you sure you want to delete the selected project and its files?",
-"projects.delete.wipe.none": "Fast (no overwrite)",
-"projects.delete.wipe.random1": "Pseudorandom (1x)",
-"projects.delete.wipe.hmg": "British HMG IS5 (3x)",
-"projects.delete.wipe.gutmann": "Gutmann (35x)",
-"common.cancel": "Cancel",
-    "projects.export.zip_btn": "Export",
-    "projects.export.zip_hint": "Exports the project as a .aistate file (audio, results, reports, metadata).",
-    "projects.import.btn": "Import",
-    "projects.import.bad_ext": "Invalid file. Please choose a .aistate file",
-    "projects.import.error": "Import error",
-    "projects.delete.btn": "Delete",
-    "projects.delete.confirm": "Delete the current project ({id}) and all its files?",
-    "projects.delete.done": "Project deleted ✅",
-    "projects.delete.error": "Delete error",
-    "projects.current_auto": "(current / auto)",
-    "projects.unnamed": "project",
-    "projects.none": "(none)",
-    "projects.no_file": "(no file)",
-    "projects.no_data": "(no data)",
-    "settings.ui_language": "UI language",
-    "settings.hf_placeholder": "Paste token (stored locally on server)",
-    "settings.save": "Save settings",
-    "settings.saved": "Saved ✅",
-    "lang.pl": "Polish",
-    "lang.en": "English",
+// Try to reuse the same cache-busting version used for /static/app.js?v=...
+function _assetVersion(){
+  try{
+    const s = document.querySelector('script[src*="/static/app.js"]');
+    if(s){
+      const u = new URL(s.src, location.href);
+      return u.searchParams.get("v") || "";
+    }
+  }catch(e){}
+  return "";
+}
+const _ASSET_V = _assetVersion();
 
-    // ---- Block editor modal ----
-    "modal.edit_block.title": "Edit block",
-    "modal.speaker.label": "🎤 Speaker:",
-    "modal.speaker.placeholder": "SPEAKER_00",
-    "modal.speaker.change": "✓ Change",
-    "modal.close": "✕ Close",
-    "modal.play": "▶️ Play",
-    "modal.pause": "⏸️ Pause",
-    "modal.stop": "⏹️ Stop",
-    "modal.speed": "🎵 Speed:",
-    "modal.apply": "✅ Apply",
-    "modal.save_project": "💾 Save to project",
-    "modal.shortcuts": "Shortcuts: Esc close • Ctrl+Enter apply",
-    "modal.alert.enter_speaker": "Enter speaker name (e.g. John, SPEAKER_02)",
-    "modal.alert.no_original_speaker": "Could not detect original speaker name in this block.",
-    "modal.alert.same_speaker": "New name is the same as current.",
-    "modal.alert.changed_speaker": "✅ Changed speaker in block ({count} occurrences)\n\n💡 Click \"Apply\" to save changes to output.",
-    "modal.alert.saved_transcription": "Saved transcription ✅",
-    "modal.alert.saved_diarization": "Saved diarization ✅",
-    "modal.alert.save_error": "Save error",
-    "alert.no_active_project": "First create or open a project in: Projects (section \"New project\" or \"Open project\").",
-    "common.status": "Status",
-    "common.progress": "Progress",
-    "common.logs_in_tab_html": "Logs are available in the <b>Logs</b> tab.",
-    "np.name_placeholder": "e.g. Interview_2026_01_03",
-    "np.name_hint_html": "The name is stored in <code>project.json</code> inside the project folder.",
-    "np.audio_label": "Source audio file",
-    "np.audio_hint": "This file becomes the project source (transcription and diarization use the same file).",
-    "np.btn_create": "Create project",
-    "np.status.creating": "Creating…",
-    "np.status.done": "Done ✅ ({id})",
-    "np.status.error": "Error ❌",
-    "np.alert.enter_name": "Enter a project name.",
-    "np.alert.select_audio": "Select an audio file.",
-    "np.alert.create_error": "Project creation error",
-    "np.how.title": "How it works",
-    "np.how.li1_html": "After creation, a folder is created in <code>data_www/projects/&lt;project_id&gt;</code>.",
-    "np.how.li2_html": "The folder stores <code>project.json</code> and the chosen audio file.",
-    "np.how.li3_html": "The <b>Transcription</b> and <b>Diarization</b> tabs use the project audio file (you don't re-select it).",
-    "np.how.note": "The active project is kept in the browser (localStorage). Creating a new project sets it active.",
-    "tr.label.language": "Language",
-    "tr.hint.auto_html": "In Whisper: <code>auto</code> = auto-detect (if the model supports it).",
-    "tr.label.model": "Whisper model",
-    "tr.btn.download_txt": "Download TXT",
-    "tr.label.result": "Transcription output",
-    "tr.hint.hover": "Hover a block to play it • Right-click a block to edit.",
-    "tr.placeholder.result": "Output will appear here…",
-    "tr.btn.save_project": "Save transcription to project",
-    "tr.hint.save_file_html": "Result is auto-saved to the project (file <code>transcript.txt</code>).",
-    "tr.alert.saved": "Saved transcription to project.",
-    "logs.label.last_tasks": "Recent tasks",
-    "logs.btn.refresh": "Refresh",
-    "logs.btn.clear": "Clear task list (server)",
-    "logs.hint": "Logs show worker output (stderr) + progress.",
-    "logs.label.logs": "Logs",
-    "logs.placeholder": "Logs will appear here…",
-    "logs.save_file": "Save to file",
-    "logs.file_placeholder": "aistate_logs_YYYYMMDD_HHMMSS.txt",
-    "logs.alert.clear_confirm": "Clear task list on the server? (projects are not deleted)",
-    "logs.alert.copied": "Copied ✅",
-    "logs.alert.saved": "Saved ✅",
-    "settings.page_title": "Settings",
-    "settings.hf_label": "Hugging Face Token (pyannote)",
-    "settings.hf_hint_html": "The token is stored in <code>settings.json</code> in the config directory.",
-    "settings.whisper_default_label": "Default Whisper model",
-    "info.title": "Info",
-    "info.source_prefix": "Content comes from file",
-    "di.label.mode": "Mode",
-    "di.mode.pyannote": "pyannote (audio)",
-    "di.mode.text": "text diarization (simple)",
-    "di.hint.pyannote_html": "<b>pyannote</b> mode requires an HF token (in Settings).",
-    "di.label.language": "Language",
-    "di.label.model_segments": "Whisper model (for segments)",
-    "di.label.input_text": "Input text",
-    "di.placeholder.input_text": "Paste text for simple diarization…",
-    "di.label.speaker_count": "Number of speakers",
-    "di.label.method": "Method",
-    "di.method.alternate": "alternating",
-    "di.method.block": "by blocks",
-    "di.method.lines": "by lines",
-    "di.method.sentences": "by sentences",
-    "di.method.sentences_merge": "sentences + merge",
-    "di.label.mapping_json": "Speaker mapping (JSON)",
-    "di.placeholder.mapping_json": "e.g. {\"SPK1\":\"John\",\"SPK2\":\"Anna\"}",
-    "di.hint.mapping_optional_html": "Optional: replace <code>SPK1</code>, <code>SPK2</code>, etc. with names.",
-    "di.label.speaker_names": "Speaker names",
-    "di.speaker_names.detected": "(auto-detected)",
-    "di.mapping.empty": "Run diarization to detect speakers 🎤",
-    "di.advanced.toggle": "⚙️ Advanced: edit JSON",
-    "di.advanced.warning": "⚠️ Note: manual JSON editing — syntax errors will cause issues.",
-    "di.advanced.load_json": "Load from JSON",
-    "di.btn.apply_map": "✓ Apply mapping",
-    "di.btn.save_map": "💾 Save mapping",
-    "di.btn.refresh_map": "🔄 Refresh from output",
-    "di.title.apply_map": "Replace all occurrences in the output",
-    "di.title.save_map": "Save mapping to project.json",
-    "di.title.refresh_map": "Detect speakers from output",
-    "di.title.save_result": "Save current text to diarized.txt in the project",
-    "di.how_use_html": "<strong>How to use:</strong> Type names next to labels → Click <strong>Apply mapping</strong> → All occurrences will be replaced",
-    "di.btn.download_txt": "Download TXT",
-    "di.label.result": "Diarization output",
-    "di.hint.hover": "Hover a block to play it • Right-click a block to edit.",
-    "di.placeholder.result": "Output will appear here…",
-    "di.btn.save_result": "💾 Save output to project",
-    "di.hint.important_html": "<strong>Important:</strong> Result is auto-saved to the project (file <code>diarized.txt</code>).",
-    "di.alert.no_audio": "No audio file in the project. Create a project in the Projects tab.",
-    "di.alert.paste_text": "Paste input text.",
-    "di.alert.empty_output": "The 'Diarization output' field is empty — nothing to save.",
-    "di.alert.saved_output": "✅ Saved diarization output to project (diarized.txt).{hint}",
-    "di.alert.bad_json": "Invalid mapping JSON.",
-    "di.alert.applied_map": "✅ Applied mapping:\n\n{details}\n\nTotal: {total} replacements\n\n💡 Remember to save the output!",
-    "di.alert.saved_map": "✅ Saved mapping to project (project.json).\n\nSpeakers: {count}\n\n💡 Mapping will auto-load next time you open the project.",
-    "di.alert.need_diarize": "Run diarization first — the output field is empty.",
-    "di.alert.found_speakers": "✅ Found {count} speakers: {list}",
-    "di.alert.no_speaker_labels": "⚠️ No speaker labels found in output. Expected format: SPEAKER_00: text",
-    "di.alert.no_replacements": "ℹ️ No occurrences found to replace. Check if the mapping labels match those in the output.",
-    "di.hint.speaker_labels": "\n\n💡 Output contains SPEAKER_XX labels. If you want to replace them with names, use the mapping above.",
-    "di.placeholder.speaker_name": "Enter name for {label}",
-    "di.toast.updated_speakers": "🔄 Updated {count} speakers",
-    "di.alert.map_loaded": "✅ Mapping loaded from JSON",
-    "di.alert.json_parse_error": "❌ JSON parse error: {msg}"
+function _langUrl(file){
+  return `${LANG_BASE}/${file}${_ASSET_V ? `?v=${encodeURIComponent(_ASSET_V)}` : ""}`;
+}
 
+async function _fetchJson(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  return await res.json();
+}
+
+async function loadLangIndex(){
+  if(LANG_INDEX) return LANG_INDEX;
+  try{
+    LANG_INDEX = await _fetchJson(_langUrl("index.json"));
+  }catch(e){
+    // Fallback if index.json is missing
+    LANG_INDEX = {
+      "default": "pl",
+      "supported": [
+        {"code":"pl","name":"Polski"},
+        {"code":"en","name":"English"}
+      ]
+    };
   }
-};
+  return LANG_INDEX;
+}
+
+function _normalizeLang(code, supported, fallback){
+  if(!code) return fallback;
+  const c = String(code);
+  if(supported.includes(c)) return c;
+
+  const base = c.split("-")[0];
+  if(supported.includes(base)) return base;
+
+  const lower = c.toLowerCase();
+  const exact = supported.find(s => String(s).toLowerCase() === lower);
+  if(exact) return exact;
+
+  const baseLower = base.toLowerCase();
+  const byBase = supported.find(s => String(s).split("-")[0].toLowerCase() === baseLower);
+  if(byBase) return byBase;
+
+  return fallback;
+}
+
+function detectBrowserLang(supported, fallback){
+  try{
+    const cands = [];
+    if(Array.isArray(navigator.languages)) cands.push(...navigator.languages);
+    if(navigator.language) cands.push(navigator.language);
+
+    for(const c of cands){
+      const n = _normalizeLang(c, supported, null);
+      if(n) return n;
+    }
+  }catch(e){}
+  return fallback;
+}
+
+async function loadI18n(lang){
+  const idx = await loadLangIndex();
+  const supported = (idx.supported || []).map(o => o.code);
+  const fallback = idx.default || "pl";
+  const chosen = _normalizeLang(lang, supported, fallback);
+
+  // Always load EN as fallback (if present)
+  if(!_I18N_LOADED.en){
+    try{ I18N.en = await _fetchJson(_langUrl("en.json")); }catch(e){ I18N.en = I18N.en || {}; }
+    _I18N_LOADED.en = true;
+  }
+
+  if(!_I18N_LOADED[chosen]){
+    try{ I18N[chosen] = await _fetchJson(_langUrl(`${chosen}.json`)); }catch(e){ I18N[chosen] = I18N[chosen] || {}; }
+    _I18N_LOADED[chosen] = true;
+  }
+
+  return chosen;
+}
+
+// Call this once at startup before applyI18n()
+async function initI18n(){
+  const idx = await loadLangIndex();
+  const supported = (idx.supported || []).map(o => o.code);
+  const fallback = idx.default || "pl";
+
+  const saved = localStorage.getItem("aistate_ui_lang");
+  const initial = saved || detectBrowserLang(supported, fallback);
+  const chosen = await loadI18n(initial);
+
+  // Persist normalized choice
+  localStorage.setItem("aistate_ui_lang", chosen);
+  return chosen;
+}
+
+// Optional helper: populate <select> from lang/index.json (future-proof for many languages)
+async function populateUiLangSelect(selectEl){
+  if(!selectEl) return;
+  const idx = await loadLangIndex();
+  const list = idx.supported || [];
+  // Replace options with index.json list
+  selectEl.innerHTML = "";
+  for(const it of list){
+    const opt = document.createElement("option");
+    opt.value = it.code;
+    opt.textContent = it.name || it.code;
+    selectEl.appendChild(opt);
+  }
+}
+
+
+
 
 
 // ---------- Helper: parse timestamps from a line ----------
