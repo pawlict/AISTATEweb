@@ -329,11 +329,11 @@
 
   <!-- Sekcja 1: Ustawienia -->
   <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">⚙️ Ustawienia</div>
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="section.settings">⚙️ Ustawienia</div>
     
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div>
-        <div class="label">Język</div>
+        <div class="label" data-i18n="label.language">Język</div>
         <select id="tr_lang">
           <option value="auto">auto</option>
           <option value="pl">pl</option>
@@ -344,11 +344,11 @@
           <option value="uk">uk</option>
           <option value="ru">ru</option>
         </select>
-        <div class="small">W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).</div>
+        <div class="small" data-i18n-html="hint.whisper_auto">W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).</div>
       </div>
 
       <div>
-        <div class="label">Model Whisper</div>
+        <div class="label" data-i18n="label.whisper_model">Model Whisper</div>
         <select id="tr_model">
           {% for m in whisper_models %}
           <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
@@ -362,19 +362,17 @@
 
   <!-- Sekcja 2: Sterowanie -->
   <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">🎮 Sterowanie</div>
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="section.controls">🎮 Sterowanie</div>
     
     <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
       <button class="btn" id="tr_btn" data-i18n="btn.transcribe">Transcribe</button>
-      <a class="btn secondary" id="tr_download" href="#" style="display:none">Pobierz TXT</a>
-      <button class="btn secondary" id="tr_export_toggle" title="Eksportuj raport transkrypcji" style="display:none">
-        📥 Eksportuj raport
-      </button>
+      <a class="btn secondary" id="tr_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
+      <button class="btn secondary" id="tr_export_toggle" data-i18n-title="tr.export.title" style="display:none" data-i18n="btn.export_report">📥 Eksportuj raport</button>
     </div>
     
     <!-- Panel eksportu raportów (ukryty domyślnie) -->
     <div id="tr_export_panel" class="export-panel">
-      <div class="label">Wybierz formaty raportów (możesz zaznaczyć kilka)</div>
+      <div class="label" data-i18n="export.choose_formats">Wybierz formaty raportów (możesz zaznaczyć kilka)</div>
       <div class="row" style="gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" id="tr_format_txt"> 📄 TXT
@@ -387,28 +385,28 @@
         </label>
       </div>
       
-      <div class="label">Opcje eksportu</div>
+      <div class="label" data-i18n="export.options">Opcje eksportu</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="tr_report_logs"> Dołącz logi systemowe
+          <input type="checkbox" id="tr_report_logs"> <span data-i18n="export.include_logs">Dołącz logi systemowe</span>
         </label>
       </div>
       
       <div class="row" style="gap:10px">
-        <button class="btn" id="tr_generate_report">🚀 Generuj raporty</button>
-        <button class="btn secondary" id="tr_export_cancel">✕ Anuluj</button>
+        <button class="btn" id="tr_generate_report" data-i18n="btn.generate_reports">🚀 Generuj raporty</button>
+        <button class="btn secondary" id="tr_export_cancel" data-i18n="btn.cancel">✕ Anuluj</button>
       </div>
       
       <div class="small" style="margin-top:10px;opacity:0.8">
-        💡 Raporty zostaną zapisane w folderze projektu i będą dostępne do pobrania.
+        <span data-i18n="export.saved_hint">💡 Raporty zostaną zapisane w folderze projektu i będą dostępne do pobrania.</span>
       </div>
     </div>
 
     <div class="small" style="margin-top:10px">
-      Status: <b id="tr_status">—</b> • Postęp: <span id="tr_pct">0%</span>
+      <span data-i18n="label.status">Status</span>: <b id="tr_status">—</b> • <span data-i18n="label.progress">Postęp</span>: <span id="tr_pct">0%</span>
     </div>
     <div class="progress" style="margin-top:10px"><div id="tr_bar"></div></div>
-    <div class="small" style="margin-top:10px">Logi są dostępne w zakładce <b>Logi</b>.</div>
+    <div class="small" style="margin-top:10px" data-i18n-html="hint.logs_in_tab">Logi są dostępne w zakładce <b>Logi</b>.</div>
   </div>
 
   <div class="hr"></div>
@@ -417,35 +415,34 @@
   <div style="display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start">
     <!-- Lewa kolumna: Wynik transkrypcji -->
     <div>
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">📄 Wynik transkrypcji</div>
-      <div class="small" style="margin-bottom:8px">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="tr.result.title">📄 Wynik transkrypcji</div>
+      <div class="small" style="margin-bottom:8px" data-i18n="hint.hover_to_play_edit">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
       <div id="tr_blocks" class="blocklist" style="display:none"></div>
-      <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…"></textarea>
-      <div class="small" style="margin-top:6px">
+      <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…" data-i18n-placeholder="placeholder.result_here"></textarea>
+      <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
         ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
       </div>
     </div>
 
     <!-- Prawa kolumna: Notatki (EXACT COPY from diarization) -->
     <div class="notes-panel">
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">📝 Notatki</div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title">📝 Notatki</div>
       
       <!-- Notatka globalna -->
       <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:6px">🌍 Notatka globalna</div>
-        <textarea id="tr_notes_global" placeholder="Notatka do całej transkrypcji (kontekst, cel, wnioski...)" style="min-height:120px;width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:vertical"></textarea>
-        <div class="small" style="margin-top:4px;opacity:0.7">Auto-save ✓</div>
+        <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title">🌍 Notatka globalna</div>
+        <textarea id="tr_notes_global" placeholder="Notatka do całej transkrypcji (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+        <div class="small" style="margin-top:4px;opacity:0.7" data-i18n="notes.autosave">Auto-save ✓</div>
       </div>
 
       <div class="hr" style="margin:12px 0"></div>
 
       <!-- Notatki do bloków -->
       <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:8px">📌 Notatki do bloków</div>
+        <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title">📌 Notatki do bloków</div>
         <div id="tr_block_notes_list" class="block-notes-list">
-          <div class="small" style="opacity:0.6;text-align:center;padding:20px">
-            Brak notatek do bloków.<br>
-            Kliknij 📝 obok bloku aby dodać.
+          <div class="small" style="opacity:0.6;text-align:center;padding:20px" data-i18n-html="notes.blocks.empty_html">
+            ${t("notes.blocks.empty_html")}
           </div>
         </div>
       </div>
@@ -454,8 +451,8 @@
 
       <!-- Akcje na notatkach -->
       <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn" id="tr_notes_save" title="Zapisz notatki w projekcie">💾 Zapisz</button>
-        <button class="btn secondary" id="tr_notes_export" title="Eksportuj notatki do JSON">📤 JSON</button>
+        <button class="btn" id="tr_notes_save" data-i18n-title="notes.btn.save_title" data-i18n="notes.btn.save">💾 Zapisz</button>
+        <button class="btn secondary" id="tr_notes_export" data-i18n-title="notes.btn.export_json_title" data-i18n="notes.btn.export_json">📤 JSON</button>
       </div>
     </div>
   </div>

@@ -488,18 +488,18 @@
 
   <!-- Sekcja 1: Ustawienia -->
   <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">⚙️ Ustawienia</div>
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="section.settings">⚙️ Ustawienia</div>
     
     <div class="di-config-grid">
       <div>
-        <div class="label">Tryb</div>
+        <div class="label" data-i18n="label.mode">Tryb</div>
         <select id="di_mode">
-          <option value="pyannote">pyannote (audio)</option>
-          <option value="text">diaryzacja tekstu (prosta)</option>
+          <option value="pyannote" data-i18n="di.mode.pyannote">pyannote (audio)</option>
+          <option value="text" data-i18n="di.mode.text">diaryzacja tekstu (prosta)</option>
         </select>
       </div>
       <div id="di_lang_block">
-        <div class="label">Język</div>
+        <div class="label" data-i18n="label.language">Język</div>
         <select id="di_lang">
           <option value="auto">auto</option>
           <option value="pl">pl</option>
@@ -512,7 +512,7 @@
         </select>
       </div>
       <div id="di_model_block">
-        <div class="label">Model Whisper</div>
+        <div class="label" data-i18n="label.whisper_model">Model Whisper</div>
         <select id="di_model">
           {% for m in whisper_models %}
           <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
@@ -520,37 +520,37 @@
         </select>
       </div>
     </div>
-    <div class="small" style="margin-top:6px">Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).</div>
+    <div class="small" style="margin-top:6px" data-i18n-html="hint.pyannote_requires_token">Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).</div>
 
     <div id="di_text_block" style="display:none">
       <div class="hr"></div>
-      <div class="label">Tekst wejściowy</div>
-      <textarea id="di_text_in" style="min-height:140px" placeholder="Wklej tekst do prostej diaryzacji…"></textarea>
+      <div class="label" data-i18n="label.input_text">Tekst wejściowy</div>
+      <textarea id="di_text_in" style="min-height:140px" placeholder="Wklej tekst do prostej diaryzacji…" data-i18n-placeholder="placeholder.paste_text_simple_diarization"></textarea>
 
       <div class="hr"></div>
 
       <div class="grid" style="grid-template-columns: 1fr 1fr">
         <div>
-          <div class="label">Liczba mówców</div>
+          <div class="label" data-i18n="label.speakers_count">Liczba mówców</div>
           <input class="input" id="di_speakers" type="number" min="1" max="20" value="2"/>
         </div>
         <div>
-          <div class="label">Metoda</div>
+          <div class="label" data-i18n="label.method">Metoda</div>
           <select id="di_method">
-            <option value="alternate">naprzemiennie</option>
-            <option value="block">blokami</option>
-            <option value="lines">po liniach</option>
-            <option value="sentences">po zdaniach</option>
-            <option value="sentences+merge">zdania + łączenie</option>
+            <option value="alternate" data-i18n="di.method.alternate">naprzemiennie</option>
+            <option value="block" data-i18n="di.method.block">blokami</option>
+            <option value="lines" data-i18n="di.method.lines">po liniach</option>
+            <option value="sentences" data-i18n="di.method.sentences">po zdaniach</option>
+            <option value="sentences+merge" data-i18n="di.method.sentences_merge">zdania + łączenie</option>
           </select>
         </div>
       </div>
 
       <div class="hr"></div>
 
-      <div class="label">Mapowanie mówców (JSON)</div>
-      <textarea id="di_map" style="min-height:90px" placeholder='np. {"SPK1":"Jan","SPK2":"Anna"}'></textarea>
-      <div class="small">Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.</div>
+      <div class="label" data-i18n="label.speaker_mapping_json">Mapowanie mówców (JSON)</div>
+      <textarea id="di_map" style="min-height:90px" placeholder='np. {"SPK1":"Jan","SPK2":"Anna"}' data-i18n-placeholder="placeholder.speaker_mapping_json"></textarea>
+      <div class="small" data-i18n-html="hint.speaker_mapping_optional_html">Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.</div>
     </div>
   </div>
 
@@ -558,11 +558,11 @@
 
   <!-- Sekcja 2: Nazwy mówców -->
   <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">🎤 Nazwy mówców</div>
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="di.speakers.title">🎤 Nazwy mówców</div>
     
     <div id="speaker_mapping_ui" class="speaker-mapping-container">
       <div class="mapping-empty">
-        Wykonaj diaryzację aby wykryć mówców 🎤
+        <span data-i18n="di.speakers.empty">Wykonaj diaryzację aby wykryć mówców 🎤</span>
       </div>
     </div>
     
@@ -573,23 +573,19 @@
 
   <!-- Sekcja 3: Sterowanie -->
   <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">🎮 Sterowanie</div>
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="section.controls">🎮 Sterowanie</div>
     
     <div class="row" style="flex-wrap:wrap; gap:10px; align-items:center">
-      <button class="btn" id="di_apply_map" title="Zamień wszystkie wystąpienia SPEAKER_XX na wpisane imiona">
-        ✨ Wprowadź zmiany
-      </button>
-      <button class="btn secondary" id="di_export_toggle" title="Eksportuj raport diaryzacji">
-        📥 Eksportuj raport
-      </button>
+      <button class="btn" id="di_apply_map" data-i18n-title="di.apply_map.title" data-i18n="btn.apply_changes">✨ Wprowadź zmiany</button>
+      <button class="btn secondary" id="di_export_toggle" data-i18n-title="di.export.title" data-i18n="btn.export_report">📥 Eksportuj raport</button>
 
             <button class="btn" id="di_btn" data-i18n="btn.diarize" type="button" onclick="if(!window.__diBtnListenerAttached && window.diStartDiarize){ window.diStartDiarize(); } return false;" >Diaryzuj</button>
-      <a class="btn secondary" id="di_download" href="#" style="display:none">Pobierz TXT</a>
+      <a class="btn secondary" id="di_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
     </div>
     
     <!-- Panel eksportu raportów (ukryty domyślnie) -->
     <div id="di_export_panel" style="display:none; margin-top:14px; background:#f0f4fa; border:1px solid #ddd; border-radius:8px; padding:16px;">
-      <div class="label">Wybierz formaty raportów (możesz zaznaczyć kilka)</div>
+      <div class="label" data-i18n="export.choose_formats">Wybierz formaty raportów (możesz zaznaczyć kilka)</div>
       <div class="row" style="gap:12px; margin-bottom:12px; flex-wrap:wrap;">
         <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
           <input type="checkbox" id="di_format_txt"> 📄 TXT
@@ -602,27 +598,23 @@
         </label>
       </div>
       
-      <div class="label">Opcje eksportu</div>
+      <div class="label" data-i18n="export.options">Opcje eksportu</div>
       <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-          <input type="checkbox" id="di_report_logs"> Dołącz logi systemowe
+          <input type="checkbox" id="di_report_logs"> <span data-i18n="export.include_logs">Dołącz logi systemowe</span>
         </label>
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-          <input type="checkbox" id="di_report_timestamps" checked> Uwzględnij timestampy
+          <input type="checkbox" id="di_report_timestamps" checked> <span data-i18n="export.include_timestamps">Uwzględnij timestampy</span>
         </label>
       </div>
       
       <div class="row" style="gap:10px;">
-        <button class="btn" id="di_generate_report">
-          🚀 Generuj raporty
-        </button>
-        <button class="btn secondary" id="di_export_cancel">
-          ✕ Anuluj
-        </button>
+        <button class="btn" id="di_generate_report" data-i18n="btn.generate_reports">🚀 Generuj raporty</button>
+        <button class="btn secondary" id="di_export_cancel" data-i18n="btn.cancel">✕ Anuluj</button>
       </div>
       
       <div class="small" style="margin-top:10px; opacity:0.8;">
-        💡 Raporty zostaną zapisane w folderze projektu i będą dostępne do pobrania.
+        <span data-i18n="export.saved_hint">💡 Raporty zostaną zapisane w folderze projektu i będą dostępne do pobrania.</span>
       </div>
     </div>
 
@@ -630,10 +622,10 @@
     
 
 <div class="small" style="margin-top:10px">
-      Postęp: <span id="di_pct">0%</span>
+      <span data-i18n="label.progress">Postęp</span>: <span id="di_pct">0%</span>
     </div>
     <div class="progress" style="margin-top:10px"><div id="di_bar"></div></div>
-    <div class="small" style="margin-top:10px">Logi są dostępne w zakładce <b>Logi</b>.</div>
+    <div class="small" style="margin-top:10px" data-i18n-html="hint.logs_in_tab">Logi są dostępne w zakładce <b>Logi</b>.</div>
 
   </div>
 
@@ -643,35 +635,34 @@
   <div style="display:grid; grid-template-columns:1fr 380px; gap:16px; align-items:start;">
     <!-- Lewa kolumna: Wynik diaryzacji -->
     <div>
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">📄 Wynik diaryzacji</div>
-      <div class="small" style="margin-bottom:8px">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="di.result.title">📄 Wynik diaryzacji</div>
+      <div class="small" style="margin-bottom:8px" data-i18n="hint.hover_to_play_edit">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
       <div id="di_blocks" class="blocklist" style="display:none"></div>
-      <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik…"></textarea>
-      <div class="small" style="margin-top:6px">
+      <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik…" data-i18n-placeholder="placeholder.result_here"></textarea>
+      <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
         ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
       </div>
     </div>
 
     <!-- Prawa kolumna: Notatki -->
     <div class="notes-panel">
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px">📝 Notatki</div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title">📝 Notatki</div>
       
       <!-- Notatka globalna -->
       <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:6px">🌍 Notatka globalna</div>
-        <textarea id="di_notes_global" placeholder="Notatka do całej rozmowy (kontekst, cel, wnioski...)" style="min-height:120px;width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:vertical;"></textarea>
-        <div class="small" style="margin-top:4px;opacity:0.7;">Auto-save ✓</div>
+        <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title">🌍 Notatka globalna</div>
+        <textarea id="di_notes_global" placeholder="Notatka do całej rozmowy (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:vertical;"></textarea>
+        <div class="small" style="margin-top:4px;opacity:0.7;" data-i18n="notes.autosave">Auto-save ✓</div>
       </div>
 
       <div class="hr" style="margin:12px 0"></div>
 
       <!-- Notatki do bloków -->
       <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:8px">📌 Notatki do bloków</div>
+        <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title">📌 Notatki do bloków</div>
         <div id="di_block_notes_list" class="block-notes-list">
-          <div class="small" style="opacity:0.6;text-align:center;padding:20px;">
-            Brak notatek do bloków.<br>
-            Kliknij 📝 obok bloku aby dodać.
+          <div class="small" style="opacity:0.6;text-align:center;padding:20px;" data-i18n-html="notes.blocks.empty_html">
+            ${t("notes.blocks.empty_html")}
           </div>
         </div>
       </div>

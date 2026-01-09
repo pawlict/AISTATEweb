@@ -47,6 +47,7 @@
 <script src="/static/app.js?v={{ app_version }}"></script>
 <script>
   (async()=>{
+    await initI18n();
     await refreshCurrentProjectInfo();
     applyI18n();
   })();
