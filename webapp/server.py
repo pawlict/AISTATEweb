@@ -1003,6 +1003,260 @@ def _pick_extracted_root(tmp_dir: Path) -> Path:
         return entries[0]
     return tmp_dir
 
+@app.post("/api/projects/{project_id}/notes/transcription")
+def api_save_notes_transcription(project_id: str, request: Request) -> Any:
+    """Save transcription-specific notes to project (global + per-block).
+    
+    Structure:
+    {
+      "global": "Global note for entire transcription...",
+      "blocks": {
+        "0": "Note for block 0",
+        "3": "Note for block 3"
+      }
+    }
+    """
+    import asyncio
+    payload = asyncio.run(request.json())
+    notes = payload.get("notes") or payload
+    
+    if not isinstance(notes, dict):
+        raise HTTPException(status_code=400, detail="notes must be a JSON object (dict).")
+    
+    # Validate structure
+    global_note = notes.get("global", "")
+    blocks = notes.get("blocks", {})
+    
+    if not isinstance(global_note, str):
+        global_note = ""
+    
+    if not isinstance(blocks, dict):
+        blocks = {}
+    
+    # Clean blocks: only str->str with non-empty values
+    clean_blocks: Dict[str, str] = {}
+    for k, v in blocks.items():
+        if isinstance(k, str) and isinstance(v, str) and v.strip():
+            clean_blocks[k.strip()] = v.strip()
+    
+    clean_notes = {
+        "global": global_note.strip(),
+        "blocks": clean_blocks
+    }
+    
+    # Save to project.json under "notes_transcription"
+    meta = read_project_meta(project_id)
+    meta["notes_transcription"] = clean_notes
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    
+    app_log(f"Project save transcription notes: project_id={project_id}, global_len={len(global_note)}, blocks={len(clean_blocks)}")
+    
+    return {
+        "ok": True,
+        "notes": clean_notes,
+        "blocks_count": len(clean_blocks)
+    }
+
+
+@app.get("/api/projects/{project_id}/notes/transcription")
+def api_get_notes_transcription(project_id: str) -> Any:
+    """Get transcription notes from project.
+    
+    Returns:
+    {
+      "global": "...",
+      "blocks": {"0": "...", "3": "..."}
+    }
+    """
+    meta = read_project_meta(project_id)
+    notes = meta.get("notes_transcription", {})
+    
+    # Ensure proper structure
+    if not isinstance(notes, dict):
+        notes = {"global": "", "blocks": {}}
+    
+    notes.setdefault("global", "")
+    notes.setdefault("blocks", {})
+    
+    return notes
+
+
+@app.post("/api/projects/{project_id}/notes/diarization")
+def api_save_notes_diarization(project_id: str, request: Request) -> Any:
+    """Save diarization-specific notes to project (global + per-block).
+    
+    Same structure as transcription notes.
+    """
+    import asyncio
+    payload = asyncio.run(request.json())
+    notes = payload.get("notes") or payload
+    
+    if not isinstance(notes, dict):
+        raise HTTPException(status_code=400, detail="notes must be a JSON object (dict).")
+    
+    # Validate structure
+    global_note = notes.get("global", "")
+    blocks = notes.get("blocks", {})
+    
+    if not isinstance(global_note, str):
+        global_note = ""
+    
+    if not isinstance(blocks, dict):
+        blocks = {}
+    
+    # Clean blocks: only str->str with non-empty values
+    clean_blocks: Dict[str, str] = {}
+    for k, v in blocks.items():
+        if isinstance(k, str) and isinstance(v, str) and v.strip():
+            clean_blocks[k.strip()] = v.strip()
+    
+    clean_notes = {
+        "global": global_note.strip(),
+        "blocks": clean_blocks
+    }
+    
+    # Save to project.json under "notes_diarization"
+    meta = read_project_meta(project_id)
+    meta["notes_diarization"] = clean_notes
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    
+    app_log(f"Project save diarization notes: project_id={project_id}, global_len={len(global_note)}, blocks={len(clean_blocks)}")
+    
+    return {
+        "ok": True,
+        "notes": clean_notes,
+        "blocks_count": len(clean_blocks)
+    }
+
+
+@app.get("/api/projects/{project_id}/notes/diarization")
+def api_get_notes_diarization(project_id: str) -> Any:
+    """Get diarization notes from project.
+    
+    Returns:
+    {
+      "global": "...",
+      "blocks": {"0": "...", "3": "..."}
+    }
+    """
+    meta = read_project_meta(project_id)
+    notes = meta.get("notes_diarization", {})
+    
+    # Ensure proper structure
+    if not isinstance(notes, dict):
+        notes = {"global": "", "blocks": {}}
+    
+    notes.setdefault("global", "")
+    notes.setdefault("blocks", {})
+    
+    return notes
+
+
+# Dodaj endpoint do zapisu transkrypcji (text/plain)
+# Ten endpoint pozwala na wysyłanie zwykłego tekstu zamiast JSON
+@app.post("/api/projects/{project_id}/save/transcript")
+async def api_save_transcript_text(project_id: str, request: Request) -> Any:
+    """Save transcript text (accepts text/plain).
+    
+    This is an alternative to /api/projects/{project_id}/save_transcript
+    that accepts plain text instead of JSON payload.
+    """
+    text = (await request.body()).decode("utf-8")
+    app_log(f"Project save transcript (text): project_id={project_id}, chars={len(text)}")
+    path = project_path(project_id) / "transcript.txt"
+    path.write_text(text, encoding="utf-8")
+    meta = read_project_meta(project_id)
+    meta["has_transcript"] = True
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    return {"ok": True}
+
+
+# Dodaj endpoint do generowania raportów specyficznych dla transkrypcji
+@app.get("/api/projects/{project_id}/report/transcription")
+def api_generate_transcription_report(project_id: str, format: str = "pdf", include_logs: int = 0) -> Any:
+    """Generate report specifically for transcription (without diarization data).
+    
+    Similar to /api/projects/{project_id}/report but focuses only on transcription.
+    """
+    project_path(project_id)  # ensure exists
+    fmt = (format or "").lower()
+    if fmt not in ("txt", "html", "pdf"):
+        raise HTTPException(status_code=400, detail="format must be txt|html|pdf")
+
+    pdir = project_path(project_id)
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    out_name = f"transcription_report_{ts}.{fmt}"
+    out_path = pdir / out_name
+
+    app_log(f"Transcription report requested: project_id={project_id}, format={fmt}, include_logs={bool(include_logs)}")
+
+    # Collect data similar to _collect_report_data but transcription-focused
+    data = _collect_transcription_report_data(project_id, export_formats=[fmt], include_logs=bool(include_logs))
+
+    if fmt == "txt":
+        generate_txt_report(data, logs=bool(include_logs), output_path=str(out_path))
+        return FileResponse(str(out_path), filename=out_name)
+    if fmt == "html":
+        generate_html_report(data, logs=bool(include_logs), output_path=str(out_path))
+        return FileResponse(str(out_path), filename=out_name)
+    generate_pdf_report(data, logs=bool(include_logs), output_path=str(out_path))
+    return FileResponse(str(out_path), filename=out_name)
+
+
+def _collect_transcription_report_data(project_id: str, export_formats: List[str], include_logs: bool) -> Dict[str, Any]:
+    """Collect data for transcription-specific report.
+    
+    Similar to _collect_report_data but focuses only on transcription.
+    """
+    meta = read_project_meta(project_id)
+    pdir = project_path(project_id)
+
+    audio_file = meta.get("audio_file") or ""
+    audio_duration = ""
+    audio_specs = ""
+    if audio_file:
+        ap = pdir / audio_file
+        if ap.exists():
+            audio_duration, audio_specs = _probe_audio_basic(ap)
+
+    transcript_lines: List[str] = []
+    if (pdir / "transcript.txt").exists():
+        transcript_lines = [ln.rstrip() for ln in (pdir / "transcript.txt").read_text(encoding="utf-8", errors="ignore").splitlines() if ln.strip()]
+
+    s = load_settings()
+    logs_text = ""
+    if include_logs:
+        # best effort: concatenate last logs from transcription tasks
+        parts = []
+        for t in TASKS.list_tasks():
+            if t.project_id == project_id and t.kind == "tr":  # only transcription tasks
+                parts.append(f"=== TASK {t.task_id} (transcription) ===")
+                parts.extend(t.logs[-400:])
+                parts.append("")
+        logs_text = "\n".join(parts).strip()
+
+    data = {
+        "program_name": APP_NAME,
+        "program_version": APP_VERSION,
+        "author_email": AUTHOR_EMAIL,
+        "processed_at": now_iso(),
+        "audio_file": audio_file,
+        "audio_duration": audio_duration,
+        "audio_specs": audio_specs,
+        "whisper_model": getattr(s, "whisper_model", "") or "",
+        "language": meta.get("language", "auto"),
+        "segments_count": len(transcript_lines),
+        "transcript": transcript_lines,
+        "raw_transcript": transcript_lines,
+        "export_formats": export_formats,
+        "logs": logs_text,
+        "ui_language": "pl",
+        "section_title": "Transkrypcja",
+    }
+    return data
 
 @app.post("/api/projects/import")
 async def api_import_project(file: UploadFile = File(...)) -> Any:
