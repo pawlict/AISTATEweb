@@ -583,7 +583,7 @@
         📥 Eksportuj raport
       </button>
 
-            <button class="btn" id="di_btn" data-i18n="btn.diarize">Diaryzuj</button>
+            <button class="btn" id="di_btn" data-i18n="btn.diarize" type="button" onclick="if(!window.__diBtnListenerAttached && window.diStartDiarize){ window.diStartDiarize(); } return false;" >Diaryzuj</button>
       <a class="btn secondary" id="di_download" href="#" style="display:none">Pobierz TXT</a>
     </div>
     
@@ -1175,17 +1175,61 @@ function diPlaySegment(idx, fromStart){
   
   function _shieldAltGrInline(el){
     if(!el) return;
-    const stop = (e)=>{
-      const isAltGr = (e.key === "AltGraph") || (e.code === "AltRight") || (e.ctrlKey && e.altKey);
-      if(isAltGr){
+
+    // Best-effort fix for Polish diacritics in editors:
+    // - block app hotkeys (stop propagation)
+    // - if browser doesn't insert character for AltGr combos, insert it manually.
+    const PL_MAP = {
+      "a":"ą","A":"Ą",
+      "c":"ć","C":"Ć",
+      "e":"ę","E":"Ę",
+      "l":"ł","L":"Ł",
+      "n":"ń","N":"Ń",
+      "o":"ó","O":"Ó",
+      "s":"ś","S":"Ś",
+      "x":"ź","X":"Ź",
+      "z":"ż","Z":"Ż"
+    };
+
+    const stopOrInsert = (e)=>{
+      const isAltGr =
+        (e.key === "AltGraph") ||
+        (e.code === "AltRight") ||
+        (typeof e.getModifierState === "function" && e.getModifierState("AltGraph")) ||
+        (e.ctrlKey && e.altKey && !e.metaKey);
+
+      if(!isAltGr) return;
+
+      const ch = PL_MAP[e.key];
+      if(ch && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")){
+        try{ e.preventDefault(); }catch(_){}
         try{ e.stopImmediatePropagation(); }catch(_){}
         try{ e.stopPropagation(); }catch(_){}
-        // do NOT preventDefault -> allow Polish chars
+
+        try{
+          const s = el.selectionStart ?? null;
+          const en = el.selectionEnd ?? null;
+          if(s !== null && en !== null && typeof el.setRangeText === "function"){
+            el.setRangeText(ch, s, en, "end");
+          }else{
+            const v = el.value || "";
+            const a = (s!==null)? s : v.length;
+            const b = (en!==null)? en : v.length;
+            el.value = v.slice(0,a) + ch + v.slice(b);
+          }
+          try{ el.dispatchEvent(new Event("input", {bubbles:true})); }catch(_){}
+        }catch(_){}
+        return;
       }
+
+      try{ e.stopImmediatePropagation(); }catch(_){}
+      try{ e.stopPropagation(); }catch(_){}
+      // do NOT preventDefault -> allow browser to insert the char.
     };
+
     ["keydown","keypress","keyup"].forEach((evt)=>{
-      el.addEventListener(evt, stop, true);
-      el.addEventListener(evt, stop, false);
+      try{ el.addEventListener(evt, stopOrInsert, true); }catch(_){}
+      try{ el.addEventListener(evt, stopOrInsert, false); }catch(_){}
     });
   }
 
@@ -1347,6 +1391,8 @@ sp.value = seg.speaker || "";
         if(v.length > 80) v = v.slice(0,80);
         if(seg.speaker !== v){
           seg.speaker = v;
+          try{ mergeSpeakerMap([v]); }catch(e){}
+
           // update chip + color
           removeSpeakerClass(segEl);
           segEl.classList.add(getSpeakerColor(seg.speaker));
@@ -2100,8 +2146,8 @@ async function generateDiarReport(){
 document.getElementById("di_mode").addEventListener("change", toggleMode);
 toggleMode();
 
-document.getElementById("di_btn").addEventListener("click", async function(){
-  const mode = document.getElementById("di_mode").value;
+async function diStartDiarize(){
+const mode = document.getElementById("di_mode").value;
   const fd = new FormData();
 
   if(mode === "pyannote"){
@@ -2123,8 +2169,11 @@ document.getElementById("di_btn").addEventListener("click", async function(){
     fd.append("mapping_json", document.getElementById("di_map").value || "");
     await startTask("di", "/api/diarize_text", fd, onDoneDiarize);
   }
-});
+}
+window.diStartDiarize = diStartDiarize;
 
+const __diBtn = document.getElementById("di_btn");
+if(__diBtn){ __diBtn.addEventListener("click", (e)=>{ e.preventDefault(); diStartDiarize(); }); window.__diBtnListenerAttached = true; }
 document.getElementById("di_apply_map").addEventListener("click", function(){
   syncToJSON();
   
