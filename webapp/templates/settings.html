@@ -29,40 +29,194 @@
 
       <div class="hr"></div>
 
-      <button class="btn" id="save_settings" type="button" data-i18n="settings.save">Save settings</button>
-      <span id="settings_msg" class="small" style="margin-left:10px;"></span>
+      <div id="settings_msg" class="small muted"></div>
+    </div>
+
+    <div class="subcard">
+<div class="label" data-i18n="settings.llm_title">🤖 Modele LLM (Ollama)</div>
+
+<style>
+  /* Inline layout only for Settings -> LLM section */
+  .llm-toolbar-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .llm-toolbar-row .spacer{ flex:1 1 auto; }
+  .llm-row{ display:grid; grid-template-columns: minmax(360px, 520px) 1fr; gap:14px; align-items:start; }
+  .llm-info-box{
+    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(0,0,0,0.08);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .llm-info-title{ font-weight:600; margin-bottom:6px; }
+  .llm-info-box .plain-list{ margin:6px 0 0 18px; }
+  .llm-info-box .hr{ margin:10px 0; }
+  .llm-inline-warn{ margin-top:10px; }
+  .llm-install-row{ display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .llm-install-row .small{ margin:0; }
+  @media (max-width: 980px){
+    .llm-row{ grid-template-columns: 1fr; }
+  }
+.llm-mini-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+}
+.llm-mini-col{ line-height:1.45; }
+.llm-mini-h{ font-weight:600; margin-bottom:6px; opacity:.95; }
+.llm-mini-cases{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:4px 12px;
+  margin-top:6px;
+}
+.llm-mini-case{ line-height:1.35; }
+.llm-mini-rec{ line-height:1.45; margin-top:6px; }
+@media (max-width: 980px){
+  .llm-mini-grid{ grid-template-columns: 1fr; }
+  .llm-mini-cases{ grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="ollama-status-row llm-toolbar-row" id="llm_ollama_status">
+  <span class="status-dot offline" id="llm_status_dot"></span>
+  <span class="small" id="llm_status_text" data-i18n="settings.llm_checking">Sprawdzanie…</span>
+  <span class="small muted" id="llm_status_url"></span>
+  <span class="spacer"></span>
+  <button class="btn secondary mini" id="llm_refresh_btn" type="button">🔄 <span data-i18n="settings.llm_refresh">Odśwież listę modeli</span></button>
+</div>
+
+<div class="small muted" id="llm_refresh_msg" style="margin-top:6px;"></div>
+
+<div class="hr"></div>
+
+<!-- QUICK -->
+<div class="llm-row llm-group">
+  <div>
+    <div class="label" data-i18n="settings.llm_quick_title">⚡ Szybka analiza</div>
+    <div class="small muted" data-i18n="settings.llm_quick_hint">Model do automatycznej analizy w tle (kilka sekund).</div>
+    <select id="llm_quick_select" class="input"></select>
+
+    <div class="llm-install-row">
+      <button class="btn primary mini" type="button" id="llm_quick_install_btn" style="display:none;">⬇️ <span data-i18n="settings.llm_install">Instaluj</span></button>
+      <span class="small muted" id="llm_quick_warn"></span>
+    </div>
+  </div>
+
+  <div>
+    <div class="llm-info-box">
+      <div class="llm-info-title small">ℹ️ <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
+      <div class="small" id="llm_quick_info_name">—</div>
+      <div id="llm_quick_info_body" class="small muted" style="margin-top:6px;"></div>
+      <div class="llm-warn llm-inline-warn" id="llm_quick_info_warning" style="display:none"></div>
     </div>
   </div>
 </div>
+
+<div class="hr"></div>
+
+<!-- DEEP -->
+<div class="llm-row llm-group">
+  <div>
+    <div class="label" data-i18n="settings.llm_deep_title">🔍 Głęboka analiza</div>
+    <div class="small muted" data-i18n="settings.llm_deep_hint">Model do szczegółowych raportów (dziesiątki sekund / minuty).</div>
+    <select id="llm_deep_select" class="input"></select>
+
+    <div class="llm-install-row">
+      <button class="btn primary mini" type="button" id="llm_deep_install_btn" style="display:none;">⬇️ <span data-i18n="settings.llm_install">Instaluj</span></button>
+      <span class="small muted" id="llm_deep_warn"></span>
+    </div>
+  </div>
+
+  <div>
+    <div class="llm-info-box">
+      <div class="llm-info-title small">ℹ️ <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
+      <div class="small" id="llm_deep_info_name">—</div>
+      <div id="llm_deep_info_body" class="small muted" style="margin-top:6px;"></div>
+      <div class="llm-warn llm-inline-warn" id="llm_deep_info_warning" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+    </div>
+  </div>
+</div>
+
+
+
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/settings_models.js"></script>
 <script>
   // set current value from localStorage first, fallback to backend settings
   const savedLang = localStorage.getItem("aistate_ui_lang");
   const initialLang = savedLang || "{{ settings.ui_language or 'pl' }}";
-  document.getElementById("ui_lang").value = initialLang;
+  const uiLangEl = document.getElementById("ui_lang");
+  if(uiLangEl) uiLangEl.value = initialLang;
 
   // apply i18n now (base calls applyI18n too, but settings needs options translated)
   applyI18n();
 
-  document.getElementById("ui_lang").addEventListener("change", ()=>{
-    localStorage.setItem("aistate_ui_lang", document.getElementById("ui_lang").value);
-    location.reload();
-  });
+  async function saveSettingsPartial(payload){
+    try{
+      await api("/api/settings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const msg = document.getElementById("settings_msg");
+      if(msg) msg.textContent = t("settings.autosaved") || t("settings.saved") || "Saved ✅";
+    }catch(e){
+      const msg = document.getElementById("settings_msg");
+      if(msg) msg.textContent = (t("settings.save_error") || "Save error") + ": " + (e?.message || e);
+      console.warn(e);
+    }
+  }
 
-  document.getElementById("save_settings").addEventListener("click", async ()=>{
-    const payload = {
-      hf_token: document.getElementById("hf_token").value,
-      whisper_model: document.getElementById("def_whisper").value,
-      ui_language: document.getElementById("ui_lang").value
-    };
-    await api("/api/settings", {
-      method:"POST",
-      headers:{ "content-type":"application/json" },
-      body: JSON.stringify(payload)
+  // init Ollama model settings UI
+  (async ()=>{
+    try{
+      if(window.ModelSettings && typeof window.ModelSettings.init === "function"){
+        await window.ModelSettings.init();
+      }
+    }catch(e){
+      console.warn(e);
+    }
+  })();
+
+  // Auto-save HF token (paste => immediate, typing => debounced)
+  const hf = document.getElementById("hf_token");
+  let hfTimer = null;
+  if(hf){
+    hf.addEventListener("paste", ()=>{
+      setTimeout(()=> saveSettingsPartial({ hf_token: hf.value }), 0);
     });
-    document.getElementById("settings_msg").textContent = t("settings.saved");
-  });
+
+    hf.addEventListener("input", ()=>{
+      clearTimeout(hfTimer);
+      hfTimer = setTimeout(()=> saveSettingsPartial({ hf_token: hf.value }), 800);
+    });
+
+    hf.addEventListener("change", ()=>{
+      saveSettingsPartial({ hf_token: hf.value });
+    });
+  }
+
+  // Auto-save default Whisper model
+  const defWhisper = document.getElementById("def_whisper");
+  if(defWhisper){
+    defWhisper.addEventListener("change", ()=>{
+      saveSettingsPartial({ whisper_model: defWhisper.value });
+    });
+  }
+
+  // UI language: save first, then reload
+  if(uiLangEl){
+    uiLangEl.addEventListener("change", async ()=>{
+      const v = uiLangEl.value;
+      localStorage.setItem("aistate_ui_lang", v);
+      await saveSettingsPartial({ ui_language: v });
+      location.reload();
+    });
+  }
 </script>
 {% endblock %}

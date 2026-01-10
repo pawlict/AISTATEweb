@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import asyncio
 import json
 import os
 import shutil
@@ -16,14 +17,31 @@ from typing import Any, Dict, List, Optional
 
 from collections import deque
 
-from fastapi import FastAPI, File, Form, UploadFile, Request, HTTPException
+from fastapi import FastAPI, File, Form, UploadFile, Request, HTTPException, Body
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
 from backend.settings import APP_NAME, APP_VERSION
 from backend.settings_store import load_settings, save_settings
 from backend.legacy_adapter import diarize_text_simple
+from backend.prompts.manager import PromptManager
+
+# Analysis: documents + Ollama
+from backend.document_processor import extract_text, DocumentProcessingError, SUPPORTED_EXTS
+from backend.ollama_client import OllamaClient, OllamaError, quick_analyze, deep_analyze, stream_analyze
+from backend.document_processor import extract_text, DocumentProcessingError, SUPPORTED_EXTS
+from backend.ollama_client import OllamaClient, OllamaError, quick_analyze, deep_analyze, stream_analyze
+
+# Analysis + documents
+from starlette.concurrency import run_in_threadpool
+from backend.document_processor import extract_text, DocumentProcessingError, SUPPORTED_EXTS
+from backend.ollama_client import OllamaClient, OllamaError, quick_analyze as ollama_quick_analyze, deep_analyze as ollama_deep_analyze, stream_analyze as ollama_stream_analyze
+
+# Step 4: Analysis report generator (HTML/DOCX/MD)
+from backend.report_generator import save_report, ReportSaveError
+from backend.models_info import MODELS_INFO, MODELS_GROUPS, DEFAULT_MODELS
 
 from generators import generate_txt_report, generate_html_report, generate_pdf_report
 from backend.settings import AUTHOR_EMAIL
@@ -40,6 +58,111 @@ TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "tem
 DATA_DIR = Path(os.environ.get("AISTATEWEB_DATA_DIR") or os.environ.get("AISTATEWWW_DATA_DIR") or os.environ.get("AISTATE_DATA_DIR") or str(ROOT / "data_www")).resolve()
 PROJECTS_DIR = DATA_DIR / "projects"
 PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+PROMPTS = PromptManager(PROJECTS_DIR)
+
+# Ollama client (local LLM). Used by Analysis endpoints.
+OLLAMA = OllamaClient()
+
+# Ollama model install tasks (background pulls).
+# Stored so the UI can query /api/ollama/install/status and the Logs tab can show progress.
+# Shape:
+#   {"status": "idle|running|done|error", "progress": int(0..100), "stage": str, "scope": "quick|deep|unknown", "error": str|None, "started_at": iso, "updated_at": iso}
+OLLAMA_INSTALL_TASKS: Dict[str, Dict[str, Any]] = {}
+_OLLAMA_INSTALL_LOCK = threading.Lock()
+
+def _set_install_state(model: str, **updates: Any) -> None:
+    with _OLLAMA_INSTALL_LOCK:
+        st = OLLAMA_INSTALL_TASKS.get(model) or {
+            "status": "idle",
+            "progress": 0,
+            "stage": "",
+            "scope": "unknown",
+            "error": None,
+            "started_at": None,
+            "updated_at": None,
+        }
+        st.update(updates)
+        st["updated_at"] = now_iso()
+        OLLAMA_INSTALL_TASKS[model] = st
+
+def _ollama_pull_stream(model: str, base_url: str) -> None:
+    """Pull model using Ollama HTTP API: POST {base}/api/pull with stream=true.
+
+    Streams JSON lines with fields like: status, completed, total.
+    """
+    import urllib.request
+
+    url = base_url.rstrip("/") + "/api/pull"
+    payload = json.dumps({"name": model, "stream": True}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, method="POST", headers={"Content-Type": "application/json"})
+
+    last_logged_bucket = -1
+    last_stage = None
+
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        for raw in resp:
+            line = raw.decode("utf-8", errors="ignore").strip()
+            if not line:
+                continue
+            try:
+                evt = json.loads(line)
+            except Exception:
+                evt = {"status": line}
+
+            stage = str(evt.get("status") or evt.get("message") or "").strip()
+            completed = evt.get("completed")
+            total = evt.get("total")
+
+            progress = None
+            if isinstance(completed, (int, float)) and isinstance(total, (int, float)) and total:
+                try:
+                    progress = int((float(completed) / float(total)) * 100)
+                    progress = max(0, min(100, progress))
+                except Exception:
+                    progress = None
+
+            if stage and stage != last_stage:
+                last_stage = stage
+                _set_install_state(model, stage=stage)
+                app_log(f"Ollama pull stage: model={model} | {stage}")
+
+            if progress is not None:
+                _set_install_state(model, progress=progress)
+                # log every 5% to avoid log spam
+                bucket = progress // 5
+                if bucket != last_logged_bucket:
+                    last_logged_bucket = bucket
+                    app_log(f"Ollama pull progress: model={model} | {progress}%")
+
+            if evt.get("error"):
+                raise RuntimeError(str(evt["error"])[:4000])
+
+def _ollama_install_worker(model: str, scope: str = "unknown") -> None:
+    """Background worker to install/pull a model.
+
+    Important: it continues even if user leaves the Settings tab (server-side thread).
+    Also: it logs progress to the system Logs tab.
+    """
+    base_url = os.getenv("OLLAMA_HOST") or "http://127.0.0.1:11434"
+    _set_install_state(model, status="running", progress=0, stage="starting", scope=scope, error=None, started_at=now_iso())
+    app_log(f"Ollama install requested: model={model}, scope={scope}")
+
+    try:
+        # Preferred: streaming HTTP pull (gives progress).
+        try:
+            _ollama_pull_stream(model, base_url=base_url)
+        except Exception as e:
+            # Fallback to client ensure_model (best-effort) if streaming pull fails.
+            app_log(f"Ollama pull stream failed: model={model} | {e} | fallback to ensure_model()")
+            asyncio.run(OLLAMA.ensure_model(model))
+
+        _set_install_state(model, status="done", progress=100, stage="done", error=None)
+        app_log(f"Ollama install done: model={model}, scope={scope}")
+    except Exception as e:
+        _set_install_state(model, status="error", error=str(e)[:4000], stage="error")
+        app_log(f"Ollama install error: model={model}, scope={scope} | {e}")
+
+
 # ---------- Helpers: default name + secure delete (best-effort) ----------
 from datetime import datetime
 
@@ -220,6 +343,18 @@ class TaskManager:
         except Exception:
             # Best-effort: never break the request because of logging.
             pass
+
+    def create_task(self, kind: str, project_id: str) -> TaskState:
+        """Create an in-memory task (used for async/streaming operations)."""
+        task_id = uuid.uuid4().hex
+        t = TaskState(task_id=task_id, kind=kind, project_id=project_id, status="running", progress=0)
+        self._set(t)
+        t.add_log(f"Task started: kind={kind}, project_id={project_id}, task_id={task_id}")
+        try:
+            self.system_log(f"Task started: {kind} (project_id={project_id}, task_id={task_id})")
+        except Exception:
+            pass
+        return t
 
     def list_tasks(self) -> List[TaskState]:
         with self._lock:
@@ -680,6 +815,16 @@ def page_diarize(request: Request) -> Any:
     return render_page(request, "diarization.html", "Diaryzacja", "diarization")
 
 
+
+@app.get("/analysis", response_class=HTMLResponse)
+def page_analysis(request: Request) -> Any:
+    return render_page(request, "analysis.html", "Analiza", "analysis")
+
+
+@app.get("/analiza", response_class=HTMLResponse)
+def page_analiza(request: Request) -> Any:
+    return page_analysis(request)
+
 @app.get("/settings", response_class=HTMLResponse)
 def page_settings(request: Request) -> Any:
     s = load_settings()
@@ -753,6 +898,123 @@ def api_save_settings(payload: Dict[str, Any]) -> Any:
         s.ui_language = str(payload.get("ui_language") or "pl")
     save_settings(s)
     return {"ok": True}
+
+
+# ---------- API: global model settings (Ollama LLM) ----------
+
+GLOBAL_SETTINGS_REL = Path("_global") / "settings.json"
+
+
+def _global_settings_path() -> Path:
+    # Stored under DATA_DIR/projects/_global/settings.json
+    g = (PROJECTS_DIR / GLOBAL_SETTINGS_REL).resolve()
+    g.parent.mkdir(parents=True, exist_ok=True)
+    return g
+
+
+def _read_global_settings() -> Dict[str, Any]:
+    fp = _global_settings_path()
+    if not fp.exists():
+        return {}
+    try:
+        obj = json.loads(fp.read_text(encoding="utf-8"))
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_global_settings(obj: Dict[str, Any]) -> None:
+    fp = _global_settings_path()
+    fp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _get_model_settings() -> Dict[str, str]:
+    obj = _read_global_settings()
+    models = obj.get("models") if isinstance(obj.get("models"), dict) else {}
+    quick = str((models or {}).get("quick") or DEFAULT_MODELS["quick"]).strip()
+    deep = str((models or {}).get("deep") or DEFAULT_MODELS["deep"]).strip()
+    return {"quick": quick or DEFAULT_MODELS["quick"], "deep": deep or DEFAULT_MODELS["deep"]}
+
+
+@app.get("/api/settings/models")
+async def api_get_model_settings() -> Any:
+    """Return saved global model selection (quick/deep)."""
+    return _get_model_settings()
+
+
+@app.post("/api/settings/models")
+async def api_save_model_settings(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Persist global model selection.
+
+    Request: {"quick": "...", "deep": "..."}
+    """
+    quick = str(payload.get("quick") or DEFAULT_MODELS["quick"]).strip()
+    deep = str(payload.get("deep") or DEFAULT_MODELS["deep"]).strip()
+    if not quick:
+        quick = DEFAULT_MODELS["quick"]
+    if not deep:
+        deep = DEFAULT_MODELS["deep"]
+    obj = _read_global_settings()
+    obj["models"] = {"quick": quick, "deep": deep}
+    _write_global_settings(obj)
+    app_log(f"Model settings saved: quick={quick}, deep={deep}")
+    return {"status": "saved", "models": {"quick": quick, "deep": deep}}
+
+
+@app.get("/api/models/info/{model_name}")
+async def api_model_info(model_name: str) -> Any:
+    """Return static info for a specific model."""
+    name = str(model_name or "").strip()
+    info = MODELS_INFO.get(name)
+    if not info:
+        raise HTTPException(status_code=404, detail="Model not found")
+    out = {"id": name, **info}
+    # best-effort installed flag
+    try:
+        installed = await OLLAMA.list_model_names()
+    except Exception:
+        installed = []
+    out["installed"] = name in installed
+    return out
+
+
+@app.get("/api/models/list")
+async def api_models_list() -> Any:
+    """Return recommended models grouped by category with install status."""
+    st = await OLLAMA.status()
+    installed: List[str] = []
+    if st.status == "online":
+        installed = st.models or []
+    def _entry(mid: str, category: str) -> Dict[str, Any]:
+        info = MODELS_INFO.get(mid) or {}
+        perf = info.get("performance") or {}
+        at = None
+        try:
+            at = (perf.get("analysis_time") or {}).get(category)
+        except Exception:
+            at = None
+        return {
+            "id": mid,
+            "display_name": str(info.get("display_name") or mid),
+            "installed": mid in installed,
+            "default": bool((info.get("defaults") or {}).get(category)),
+            "vram": str(((info.get("hardware") or {}).get("vram")) or ""),
+            "speed": str(at or ""),
+            "requires_multi_gpu": bool(info.get("requires_multi_gpu") or False),
+            "warning": str(info.get("warning") or ""),
+        }
+
+    quick_list = [_entry(mid, "quick") for mid in MODELS_GROUPS.get("quick", []) if mid in MODELS_INFO]
+    deep_list = [_entry(mid, "deep") for mid in MODELS_GROUPS.get("deep", []) if mid in MODELS_INFO]
+
+    return {
+        "quick": quick_list,
+        "deep": deep_list,
+        "ollama_status": st.status,
+        "ollama_version": st.version,
+        "ollama_url": getattr(OLLAMA, "base_url", "http://127.0.0.1:11434"),
+        "models_count": len(installed),
+    }
 
 
 # ---------- API: projects ----------
@@ -1482,6 +1744,833 @@ def api_task(task_id: str) -> Any:
     return data
 
 
+
+# ---------- API: prompts (system + user) ----------
+
+@app.get("/api/prompts/list")
+async def api_prompts_list() -> Any:
+    """Return all prompts (system + user)."""
+    return PROMPTS.list_all()
+
+
+@app.post("/api/prompts/create")
+async def api_prompts_create(data: Dict[str, Any] = Body(...)) -> Any:
+    """Create a new user prompt (stored in projects/_global/prompts)."""
+    try:
+        pid = PROMPTS.create_user_prompt(data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "created", "id": pid}
+
+
+@app.put("/api/prompts/{prompt_id}")
+async def api_prompts_update(prompt_id: str, updates: Dict[str, Any] = Body(...)) -> Any:
+    """Update an existing user prompt."""
+    try:
+        PROMPTS.update_user_prompt(prompt_id, updates)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Prompt not found.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "updated", "id": prompt_id}
+
+
+@app.delete("/api/prompts/{prompt_id}")
+async def api_prompts_delete(prompt_id: str) -> Any:
+    """Delete a user prompt."""
+    try:
+        PROMPTS.delete_user_prompt(prompt_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Prompt not found.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "deleted", "id": prompt_id}
+
+
+@app.get("/api/prompts/{prompt_id}/export")
+async def api_prompts_export(prompt_id: str) -> Any:
+    """Export a user prompt as a JSON file."""
+    try:
+        fp = PROMPTS.export_user_prompt_path(prompt_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Prompt not found.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return FileResponse(str(fp), media_type="application/json", filename=fp.name)
+
+
+@app.post("/api/prompts/import")
+async def api_prompts_import(file: UploadFile = File(...)) -> Any:
+    """Import a prompt from a JSON file (creates a new user prompt)."""
+    try:
+        raw = await file.read()
+        obj = json.loads(raw.decode("utf-8", errors="strict"))
+        if not isinstance(obj, dict):
+            raise ValueError("JSON must be an object.")
+        pid = PROMPTS.import_user_prompt(obj)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON file.")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File is not valid UTF-8.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "imported", "id": pid}
+
+
+
+# ---------- API: documents (project-level attachments) ----------
+
+def _documents_dir(project_id: str) -> Path:
+    pdir = project_path(project_id)
+    ddir = pdir / "documents"
+    ddir.mkdir(parents=True, exist_ok=True)
+    (ddir / ".cache").mkdir(parents=True, exist_ok=True)
+    return ddir
+
+
+def _doc_cache_paths(doc_path: Path) -> tuple[Path, Path]:
+    cache_dir = doc_path.parent / ".cache"
+    cache_txt = cache_dir / f"{doc_path.name}.txt"
+    cache_meta = cache_dir / f"{doc_path.name}.meta.json"
+    return cache_txt, cache_meta
+
+
+async def _extract_and_cache_document(doc_path: Path) -> Dict[str, Any]:
+    """Extract text and store cache files. Returns extraction summary."""
+    cache_txt, cache_meta = _doc_cache_paths(doc_path)
+
+    # cache hit if cache newer than doc and non-empty
+    if cache_txt.exists() and cache_txt.stat().st_mtime >= doc_path.stat().st_mtime and cache_txt.stat().st_size > 0:
+        try:
+            meta = json.loads(cache_meta.read_text(encoding="utf-8")) if cache_meta.exists() else {}
+        except Exception:
+            meta = {}
+        return {
+            "cached": True,
+            "cache_txt": str(cache_txt.name),
+            "chars": int(cache_txt.stat().st_size),
+            "metadata": meta,
+        }
+
+    # do extraction in threadpool (can be heavy)
+    try:
+        extracted = await run_in_threadpool(extract_text, doc_path)
+        cache_txt.write_text(extracted.text or "", encoding="utf-8")
+        cache_meta.write_text(json.dumps(extracted.metadata or {}, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {
+            "cached": False,
+            "cache_txt": str(cache_txt.name),
+            "chars": len(extracted.text or ""),
+            "metadata": extracted.metadata or {},
+        }
+    except DocumentProcessingError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Document processing failed: {e}")
+
+
+@app.post("/api/documents/upload")
+async def api_documents_upload(project_id: str = Form(""), file: UploadFile = File(...)) -> Any:
+    """Upload a document to a project and cache extracted text."""
+    project_id = ensure_project(project_id or None)
+    ddir = _documents_dir(project_id)
+
+    original_name = safe_filename(file.filename or "document")
+    ext = Path(original_name).suffix.lower()
+    if ext and ext not in SUPPORTED_EXTS:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {ext}")
+
+    dst = ddir / original_name
+    raw = await file.read()
+    dst.write_bytes(raw)
+    app_log(f"Document upload: project_id={project_id}, file='{dst.name}', bytes={len(raw)}")
+
+    extraction = await _extract_and_cache_document(dst)
+    return {
+        "status": "uploaded",
+        "project_id": project_id,
+        "filename": dst.name,
+        "size": dst.stat().st_size,
+        "type": ext.lstrip("."),
+        "extraction": extraction,
+    }
+
+
+@app.get("/api/documents/{project_id}/list")
+async def api_documents_list(project_id: str) -> Any:
+    """List documents in a project."""
+    ddir = _documents_dir(project_id)
+    out: List[Dict[str, Any]] = []
+    for fp in sorted(ddir.iterdir()):
+        if fp.is_dir():
+            continue
+        if fp.name.startswith("."):
+            continue
+        cache_txt, _ = _doc_cache_paths(fp)
+        out.append(
+            {
+                "filename": fp.name,
+                "size": fp.stat().st_size,
+                "type": fp.suffix.lower().lstrip("."),
+                "cached": cache_txt.exists() and cache_txt.stat().st_size > 0,
+                "download_url": f"/api/documents/{project_id}/download/{fp.name}",
+            }
+        )
+    return out
+
+
+@app.get("/api/documents/{project_id}/download/{filename}")
+async def api_documents_download(project_id: str, filename: str) -> Any:
+    ddir = _documents_dir(project_id)
+    fname = safe_filename(filename)
+    path = (ddir / fname).resolve()
+    # ensure inside documents dir
+    if ddir.resolve() not in path.parents:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    require_existing_file(path, "Plik nie istnieje.")
+    return FileResponse(str(path), filename=fname)
+
+
+@app.delete("/api/documents/{project_id}/{filename}")
+async def api_documents_delete(project_id: str, filename: str) -> Any:
+    ddir = _documents_dir(project_id)
+    fname = safe_filename(filename)
+    path = (ddir / fname).resolve()
+    if ddir.resolve() not in path.parents:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # delete caches
+    cache_txt, cache_meta = _doc_cache_paths(path)
+    cache_txt.unlink(missing_ok=True)  # type: ignore[arg-type]
+    cache_meta.unlink(missing_ok=True)  # type: ignore[arg-type]
+    path.unlink(missing_ok=True)  # type: ignore[arg-type]
+    app_log(f"Document delete: project_id={project_id}, file='{fname}'")
+    return {"status": "deleted", "filename": fname}
+
+
+
+# ---------- API: Ollama (status/models) ----------
+
+@app.get("/api/ollama/status")
+async def api_ollama_status() -> Any:
+    st = await OLLAMA.status()
+    d = st.to_dict()
+    d["url"] = getattr(OLLAMA, "base_url", "http://127.0.0.1:11434")
+    d["models_count"] = len(d.get("models") or [])
+    return d
+
+
+@app.get("/api/ollama/models")
+async def api_ollama_models() -> Any:
+    """Return available Ollama models (best-effort raw list)."""
+    try:
+        models = await OLLAMA.list_models()
+        return models
+    except OllamaError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
+
+@app.post("/api/ollama/install")
+async def api_ollama_install(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Install (pull) an Ollama model in the background so the UI can offer an 'Install' button."""
+    model = str((payload or {}).get("model") or "").strip()
+    scope = str((payload or {}).get("scope") or "unknown").strip() or "unknown"
+    if not model:
+        raise HTTPException(status_code=400, detail="model required")
+
+    st = await OLLAMA.status()
+    if st.status != "online":
+        raise HTTPException(status_code=503, detail="Ollama offline. Start: ollama serve")
+
+    # If already installed, return ok.
+    try:
+        installed = await OLLAMA.list_model_names()
+    except Exception:
+        installed = []
+    if model in installed:
+        _set_install_state(model, status="done", progress=100, stage="already installed", scope=scope, error=None, started_at=now_iso())
+        app_log(f"Ollama install skipped (already installed): model={model}, scope={scope}")
+        return {"status": "done", "model": model, "scope": scope}
+
+    # If task is already running, do not start again.
+    if OLLAMA_INSTALL_TASKS.get(model, {}).get("status") == "running":
+        return {"status": "running", "model": model, "scope": scope}
+
+    # Start background pull
+    t = threading.Thread(target=_ollama_install_worker, args=(model, scope), daemon=True)
+    t.start()
+    return {"status": "started", "model": model, "scope": scope}
+
+
+@app.get("/api/ollama/install/status")
+async def api_ollama_install_status(model: str) -> Any:
+    """Return current install status for a model."""
+    mid = str(model or "").strip()
+    if not mid:
+        raise HTTPException(status_code=400, detail="model required")
+    return OLLAMA_INSTALL_TASKS.get(mid, {"status": "idle", "progress": 0, "stage": "", "scope": "unknown", "error": None})
+
+
+
+
+# ---------- API: analysis (quick + deep) ----------
+
+def _analysis_dir(project_id: str) -> Path:
+    adir = project_path(project_id) / "analysis"
+    adir.mkdir(parents=True, exist_ok=True)
+    (adir / "reports").mkdir(parents=True, exist_ok=True)
+    (adir / "prompts").mkdir(parents=True, exist_ok=True)
+    return adir
+
+
+def _analysis_reports_dir(project_id: str) -> Path:
+    return _analysis_dir(project_id) / "reports"
+
+
+def _safe_child_path(parent: Path, filename: str) -> Path:
+    """Resolve a child file path and prevent path traversal."""
+    fname = safe_filename(filename)
+    candidate = (parent / fname).resolve()
+    parent_res = parent.resolve()
+    if parent_res not in candidate.parents and candidate != parent_res:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    return candidate
+
+
+def _load_text_file(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+async def _gather_analysis_sources(project_id: str, include_sources: Dict[str, Any]) -> str:
+    """Load selected sources and return a combined string (best-effort)."""
+    pdir = project_path(project_id)
+    parts: List[str] = []
+
+    # transcript / diarization
+    if include_sources.get("transcript", True):
+        tp = pdir / "transcript.txt"
+        if tp.exists():
+            parts.append("## Transkrypcja\n" + _load_text_file(tp).strip())
+    if include_sources.get("diarization", True):
+        dp = pdir / "diarized.txt"
+        if dp.exists():
+            parts.append("## Diaryzacja\n" + _load_text_file(dp).strip())
+
+    # notes: prefer spec files if present, fallback to project.json fields
+    notes_global = ""
+    notes_blocks: Dict[str, str] = {}
+
+    # Spec filenames (if user created manually)
+    ng = pdir / "notes_global.txt"
+    nb = pdir / "notes_blocks.json"
+    if ng.exists():
+        notes_global = _load_text_file(ng)
+    if nb.exists():
+        try:
+            obj = json.loads(_load_text_file(nb))
+            if isinstance(obj, dict):
+                notes_blocks = {str(k): str(v) for k, v in obj.items() if str(v).strip()}
+        except Exception:
+            pass
+
+    # Project meta notes
+    meta = read_project_meta(project_id)
+    for key in ("notes", "notes_transcription", "notes_diarization"):
+        v = meta.get(key)
+        if isinstance(v, dict):
+            g = v.get("global")
+            b = v.get("blocks")
+            if isinstance(g, str) and g.strip():
+                notes_global += ("\n\n" if notes_global.strip() else "") + f"[{key}]\n" + g.strip()
+            if isinstance(b, dict):
+                for bk, bv in b.items():
+                    if isinstance(bv, str) and bv.strip():
+                        notes_blocks.setdefault(str(bk), bv.strip())
+
+    if include_sources.get("notes_global", False) and notes_global.strip():
+        parts.append("## Notatki globalne\n" + notes_global.strip())
+    if include_sources.get("notes_blocks", False) and notes_blocks:
+        # Keep it readable
+        blocks_md = "\n".join([f"- Blok {k}: {v}" for k, v in sorted(notes_blocks.items(), key=lambda x: x[0])])
+        parts.append("## Notatki do bloków\n" + blocks_md)
+
+    # Documents
+    docs = include_sources.get("documents") or []
+    if isinstance(docs, list) and docs:
+        ddir = _documents_dir(project_id)
+        for name in docs:
+            fname = safe_filename(str(name))
+            fp = (ddir / fname).resolve()
+            if ddir.resolve() not in fp.parents or not fp.exists():
+                continue
+            cache_txt, _ = _doc_cache_paths(fp)
+            if not cache_txt.exists() or cache_txt.stat().st_mtime < fp.stat().st_mtime:
+                # (re)extract
+                try:
+                    await _extract_and_cache_document(fp)
+                except Exception:
+                    pass
+            if cache_txt.exists() and cache_txt.stat().st_size > 0:
+                parts.append(f"## Dokument: {fname}\n" + _load_text_file(cache_txt).strip())
+
+    # Cap size (avoid accidental huge prompts)
+    combined = "\n\n---\n\n".join([p for p in parts if p.strip()]).strip()
+    max_chars = int(include_sources.get("max_chars") or 200_000)
+    if len(combined) > max_chars:
+        combined = combined[:max_chars] + "\n\n[... ucięto materiał: przekroczono limit znaków ...]"
+    return combined
+
+
+async def _run_quick_analysis(project_id: str) -> Dict[str, Any]:
+    pdir = project_path(project_id)
+    adir = _analysis_dir(project_id)
+    qs_path = adir / "quick_summary.json"
+
+    # Prefer transcript; fallback to diarized
+    t = _load_text_file(pdir / "transcript.txt")
+    d = _load_text_file(pdir / "diarized.txt")
+    text = (t.strip() + "\n\n" + d.strip()).strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Brak transkrypcji/diaryzacji do analizy.")
+
+    t0 = time.time()
+    try:
+        model_sel = _get_model_settings().get("quick") or DEFAULT_MODELS["quick"]
+        result = await quick_analyze(OLLAMA, text, model=model_sel)
+    except OllamaError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Quick analysis failed: {e}")
+    dt = time.time() - t0
+
+    qs_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Save metadata sidecar (model + timestamps) for UI display
+    try:
+        meta = {
+            "model": model_sel,
+            "generated_at": now_iso(),
+            "generation_time": round(dt, 2),
+        }
+        (adir / "quick_summary.meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    return {"status": "success", "result": result, "generation_time": round(dt, 2), "meta": meta if "meta" in locals() else None}
+
+
+@app.get("/api/analysis/quick/{project_id}")
+async def api_analysis_get_quick(project_id: str) -> Any:
+    """Return cached quick summary if present."""
+    qs = _analysis_dir(project_id) / "quick_summary.json"
+    if not qs.exists():
+        raise HTTPException(status_code=404, detail="Brak szybkiej analizy")
+    try:
+        data = json.loads(qs.read_text(encoding="utf-8"))
+        meta_path = qs.with_name("quick_summary.meta.json")
+        meta = None
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:
+                meta = None
+        return {"status": "success", "result": data, "meta": meta}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Nie można odczytać quick_summary.json")
+
+
+@app.post("/api/analysis/quick")
+async def api_analysis_quick(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Run quick analysis (auto after transcription) and store quick_summary.json."""
+    project_id = str(payload.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id required")
+    app_log(f"Quick analysis requested: project_id={project_id}")
+    return await _run_quick_analysis(project_id)
+
+
+@app.post("/api/analysis/deep")
+async def api_analysis_deep(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Deep analysis (non-stream) - returns generated text.
+
+    Report saving/formatting is implemented in step 4.
+    """
+    project_id = str(payload.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id required")
+
+    template_ids = payload.get("template_ids") or []
+    if isinstance(template_ids, str):
+        template_ids = [t.strip() for t in template_ids.split(",") if t.strip()]
+    if not isinstance(template_ids, list):
+        template_ids = []
+
+    custom_prompt = payload.get("custom_prompt")
+    model = str(payload.get("model") or _get_model_settings().get("deep") or DEFAULT_MODELS["deep"])
+    output_format = str(payload.get("output_format") or payload.get("format") or "").lower().strip()
+    title = str(payload.get("title") or payload.get("report_title") or "").strip() or None
+    include_sources = payload.get("include_sources") or {}
+    if not isinstance(include_sources, dict):
+        include_sources = {}
+
+    # Combine prompt templates
+    try:
+        instruction = PROMPTS.build_combined_prompt([str(x) for x in template_ids], str(custom_prompt) if custom_prompt else None)
+        for pid in template_ids:
+            try:
+                PROMPTS.bump_usage(str(pid))
+            except Exception:
+                pass
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid prompt selection: {e}")
+
+    sources_text = await _gather_analysis_sources(project_id, include_sources)
+    if not sources_text.strip():
+        raise HTTPException(status_code=400, detail="Brak źródeł do analizy")
+
+    final_prompt = (instruction.strip() + "\n\n---\n\n" if instruction.strip() else "") + "# Materiał źródłowy\n\n" + sources_text
+
+    # Keep a copy of the prompt used (for reproducibility)
+    adir = _analysis_dir(project_id)
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    (adir / "prompts" / f"deep_{ts}.md").write_text(final_prompt, encoding="utf-8")
+
+    t0 = time.time()
+    try:
+        text = await deep_analyze(
+            OLLAMA,
+            final_prompt,
+            model=model,
+            system="Jesteś ekspertem w analizie dokumentów i rozmów. Twórz raporty po polsku, jasno i strukturalnie.",
+            options={"temperature": 0.7, "num_ctx": 32768},
+        )
+    except OllamaError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deep analysis failed: {e}")
+    dt = time.time() - t0
+
+    # store last output
+    (adir / "deep_last.md").write_text(text, encoding="utf-8")
+
+    report_info: Optional[Dict[str, Any]] = None
+    if output_format:
+        try:
+            res = save_report(
+                reports_dir=_analysis_reports_dir(project_id),
+                content=text,
+                output_format=output_format,
+                title=title or ("_".join(template_ids) if template_ids else "Analiza"),
+                template_ids=[str(x) for x in template_ids],
+                project_id=project_id,
+                model=model,
+            )
+            download_url = f"/api/analysis/reports/{project_id}/download/{res.filename}"
+            report_info = {
+                "filename": res.filename,
+                "format": res.format,
+                "size_bytes": res.size_bytes,
+                "download_url": download_url,
+            }
+        except ReportSaveError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Report save failed: {e}")
+
+    # Persist last deep analysis result inside the project so it is visible after reload/export/import.
+    try:
+        adir = _analysis_dir(project_id)
+        deep_payload = {
+            "content": text,
+            "meta": {
+                "model": model,
+                "generated_at": now_iso(),
+                "generation_time": round(dt, 2),
+                "template_ids": [str(x) for x in template_ids],
+                "include_sources": include_sources,
+                "stream": False,
+            },
+            "report": report_info,
+        }
+        (adir / "deep_latest.json").write_text(json.dumps(deep_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "preview": text[:4000],
+        "content": text,
+        "generation_time": round(dt, 2),
+        "tokens_used": None,
+        "report": report_info,
+    }
+
+
+
+@app.get("/api/analysis/deep/{project_id}")
+async def api_analysis_get_deep(project_id: str) -> Any:
+    """Return last saved deep analysis if present (content + meta)."""
+    path = _analysis_dir(project_id) / "deep_latest.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Brak głębokiej analizy")
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Nie można odczytać deep_latest.json")
+    return {"status": "success", "result": obj}
+
+
+
+@app.get("/api/analysis/stream")
+async def api_analysis_stream(request: Request) -> Any:
+    """Streaming deep analysis (SSE). Designed for EventSource usage."""
+    qp = request.query_params
+    project_id = str(qp.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id required")
+
+    model = str(qp.get("model") or "").strip() or (_get_model_settings().get("deep") or DEFAULT_MODELS["deep"])
+    tids = str(qp.get("template_ids") or "").strip()
+    template_ids = [t.strip() for t in tids.split(",") if t.strip()]
+
+    # Optional include_sources as JSON in query (best-effort)
+    include_sources: Dict[str, Any] = {"transcript": True, "diarization": True, "notes_global": True, "notes_blocks": True, "documents": []}
+    inc_raw = qp.get("include_sources")
+    if inc_raw:
+        try:
+            obj = json.loads(str(inc_raw))
+            if isinstance(obj, dict):
+                include_sources.update(obj)
+        except Exception:
+            pass
+
+    # Create a visible task (so the Logs tab can show progress for analysis).
+    task = TASKS.create_task(kind="analysis", project_id=project_id)
+
+    async def generate() -> Any:
+        """SSE generator: emits chunks + progress info."""
+
+        def _emit(*, chunk: str = "", done: bool = False, stage: str = "", progress: int | None = None) -> str:
+            payload: Dict[str, Any] = {"chunk": chunk, "done": done, "task_id": task.task_id}
+            if stage:
+                payload["stage"] = stage
+            if progress is not None:
+                payload["progress"] = int(progress)
+            return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+
+        # Helper: update task state
+        def _set(stage: str, pct: int) -> None:
+            task.progress = int(pct)
+            task.status = "running" if pct < 100 else "done"
+            if stage:
+                task.add_log(f"{pct}% | {stage}")
+
+        try:
+            _set("Preparing prompts and sources", 2)
+            yield _emit(stage="Przygotowanie…", progress=2)
+
+            # 1) Build instruction from templates
+            try:
+                instruction = PROMPTS.build_combined_prompt(template_ids, None)
+                for pid in template_ids:
+                    try:
+                        PROMPTS.bump_usage(str(pid))
+                    except Exception:
+                        pass
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid prompt selection: {e}")
+
+            _set("Gathering sources", 8)
+            yield _emit(stage="Zbieranie źródeł…", progress=8)
+
+            # 2) Gather sources text (transcript/diarization/notes/docs)
+            sources_text = await _gather_analysis_sources(project_id, include_sources)
+            if not sources_text.strip():
+                raise HTTPException(status_code=400, detail="Brak źródeł do analizy")
+
+            final_prompt = (instruction.strip() + "\n\n---\n\n" if instruction.strip() else "") + "# Materiał źródłowy\n\n" + sources_text
+
+            # Keep a copy of the prompt used (for reproducibility)
+            adir = _analysis_dir(project_id)
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            (adir / "prompts" / f"stream_{ts}.md").write_text(final_prompt, encoding="utf-8")
+
+            task.add_log(f"Model: {model}")
+            task.add_log(f"Templates: {','.join(template_ids) if template_ids else '-'}")
+            try:
+                task.add_log(f"Sources: {json.dumps(include_sources, ensure_ascii=False)}")
+            except Exception:
+                pass
+
+            # 3) Ensure model exists (auto-pull if missing)
+            _set("Ensuring Ollama model (auto-pull if missing)", 15)
+            yield _emit(stage="Sprawdzanie modelu Ollama…", progress=15)
+            ensure_res = await OLLAMA.ensure_model(model)
+            task.add_log(f"Ollama ensure_model: {ensure_res}")
+
+            # 4) Stream generation
+            _set("Generating", 20)
+            yield _emit(stage="Generowanie…", progress=20)
+
+            system_msg = "Jesteś ekspertem w analizie dokumentów i rozmów. Twórz raporty po polsku, jasno i strukturalnie."
+            options = {"temperature": 0.7, "num_ctx": 32768}
+
+            msgs = [{"role": "system", "content": system_msg}, {"role": "user", "content": final_prompt}]
+
+            chunks = []
+
+            chars = 0
+            last_pct = 20
+            last_log_bucket = 20
+            async for chunk in OLLAMA.stream_chat(model=model, messages=msgs, options=options):
+                if not isinstance(chunk, str) or not chunk:
+                    continue
+                chars += len(chunk)
+                chunks.append(chunk)
+                # Best-effort progress: grow with emitted characters, cap at 95%.
+                pct = min(95, 20 + int(chars / 400))
+                if pct != last_pct:
+                    task.progress = int(pct)
+                    last_pct = int(pct)
+                # log every ~5%
+                if last_pct - last_log_bucket >= 5:
+                    last_log_bucket = last_pct
+                    task.add_log(f"Progress: {last_pct}%")
+                yield _emit(chunk=chunk, done=False, stage="Generowanie…", progress=last_pct)
+
+
+            # Persist last deep analysis (stream) into project for reload/export/import.
+            try:
+                adir = _analysis_dir(project_id)
+                deep_payload = {
+                    "content": "".join(chunks),
+                    "meta": {
+                        "model": model,
+                        "generated_at": now_iso(),
+                        "template_ids": [str(x) for x in template_ids],
+                        "include_sources": include_sources,
+                        "stream": True,
+                    },
+                    "report": None,
+                }
+                (adir / "deep_latest.json").write_text(json.dumps(deep_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+                task.add_log(f"Saved deep_latest.json (model={model})")
+            except Exception as e:
+                task.add_log(f"WARNING: Failed to save deep_latest.json: {e}")
+
+            task.progress = 100
+            task.status = "done"
+            task.add_log("Done")
+            yield _emit(chunk="", done=True, stage="Zakończono.", progress=100)
+
+        except HTTPException as e:
+            task.status = "error"
+            task.progress = max(task.progress, 100)
+            task.error = str(e.detail)
+            task.add_log(f"ERROR: {e.detail}")
+            yield _emit(chunk=f"\n\n[ERROR] {e.detail}", done=True, stage="Błąd.", progress=task.progress)
+        except Exception as e:
+            task.status = "error"
+            task.progress = max(task.progress, 100)
+            task.error = str(e)
+            task.add_log(f"ERROR: {e}")
+            yield _emit(chunk=f"\n\n[ERROR] {e}", done=True, stage="Błąd.", progress=task.progress)
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.get("/api/analysis/reports/{project_id}/list")
+async def api_analysis_reports_list(project_id: str) -> Any:
+    """List saved analysis reports (best-effort)."""
+    rdir = _analysis_reports_dir(project_id)
+    items: List[Dict[str, Any]] = []
+    if not rdir.exists():
+        return {"reports": []}
+
+    for fp in sorted(rdir.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
+        if not fp.is_file():
+            continue
+        # hide metadata sidecars
+        if fp.name.endswith(".meta.json"):
+            continue
+        if fp.suffix.lower() not in (".md", ".html", ".docx"):
+            continue
+        try:
+            st = fp.stat()
+            items.append({
+                "filename": fp.name,
+                "format": fp.suffix.lstrip(".").lower(),
+                "size_bytes": st.st_size,
+                "modified_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime)),
+                "download_url": f"/api/analysis/reports/{project_id}/download/{fp.name}",
+            })
+        except Exception:
+            continue
+    return {"reports": items}
+
+
+@app.get("/api/analysis/reports/{project_id}/download/{filename}")
+async def api_analysis_reports_download(project_id: str, filename: str) -> Any:
+    rdir = _analysis_reports_dir(project_id)
+    path = _safe_child_path(rdir, filename)
+    require_existing_file(path, "Plik raportu nie istnieje.")
+    return FileResponse(str(path), filename=path.name)
+
+
+@app.post("/api/analysis/save")
+async def api_analysis_save(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Save analysis content as HTML/DOCX/Markdown in projects/{id}/analysis/reports/."""
+    project_id = str(payload.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id required")
+
+    content = str(payload.get("content") or "")
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="content required")
+
+    output_format = str(payload.get("format") or payload.get("output_format") or "md").lower().strip()
+    title = str(payload.get("title") or payload.get("report_title") or "").strip() or None
+    model = str(payload.get("model") or "").strip() or (_get_model_settings().get("deep") or DEFAULT_MODELS["deep"])
+
+    template_ids = payload.get("template_ids") or []
+    if isinstance(template_ids, str):
+        template_ids = [t.strip() for t in template_ids.split(",") if t.strip()]
+    if not isinstance(template_ids, list):
+        template_ids = []
+
+    try:
+        res = save_report(
+            reports_dir=_analysis_reports_dir(project_id),
+            content=content,
+            output_format=output_format,
+            title=title or ("_".join([str(x) for x in template_ids]) if template_ids else "Analiza"),
+            template_ids=[str(x) for x in template_ids],
+            project_id=project_id,
+            model=model,
+        )
+    except ReportSaveError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report save failed: {e}")
+
+    download_url = f"/api/analysis/reports/{project_id}/download/{res.filename}"
+    return {
+        "status": "success",
+        "report": {
+            "filename": res.filename,
+            "format": res.format,
+            "size_bytes": res.size_bytes,
+            "download_url": download_url,
+        },
+        "preview": content[:4000],
+    }
+
+
+
 # ---------- API: transcribe / diarize ----------
 
 @app.post("/api/transcribe")
@@ -1621,6 +2710,8 @@ def _persist_task_outputs(t: "TaskState") -> None:
             (pdir / "transcript.txt").write_text(out_txt, encoding="utf-8")
             meta["has_transcript"] = True
             wrote_any = True
+            # Auto quick analysis (best-effort) similar to Whisper model auto-download.
+            _schedule_quick_analysis_background(t.project_id)
     # Diarization
     if t.kind in ("diarize_voice", "diarize_text") and isinstance(t.result, dict):
         if "text" in t.result:
@@ -1641,6 +2732,33 @@ def _persist_task_outputs(t: "TaskState") -> None:
         # still bump timestamp for completed tasks
         meta["updated_at"] = now_iso()
         write_project_meta(t.project_id, meta)
+
+
+def _schedule_quick_analysis_background(project_id: str) -> None:
+    """Run quick analysis in a daemon thread if quick_summary is missing/outdated."""
+    try:
+        pdir = project_path(project_id)
+        transcript = pdir / "transcript.txt"
+        if not transcript.exists():
+            return
+        qs = _analysis_dir(project_id) / "quick_summary.json"
+        if qs.exists() and qs.stat().st_mtime >= transcript.stat().st_mtime:
+            return
+    except Exception:
+        return
+
+    def _runner() -> None:
+        try:
+            asyncio.run(_run_quick_analysis(project_id))
+            app_log(f"Auto quick analysis completed: project_id={project_id}")
+        except Exception as e:
+            # keep it silent-ish: quick analysis is optional
+            try:
+                app_log(f"Auto quick analysis skipped/failed: project_id={project_id}, error={e}")
+            except Exception:
+                pass
+
+    threading.Thread(target=_runner, daemon=True).start()
 
 def _persist_loop() -> None:
     while True:

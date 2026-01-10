@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="analysis-page">
+
+  <div class="card analysis-toolbar" id="analysis_toolbar">
+    <div class="analysis-toolbar-left">
+      <div class="h1" style="margin:0" data-i18n="analysis.title">🧠 Analiza</div>
+      <div class="small" id="analysis_status_line"></div>
+    </div>
+
+    <div class="analysis-toolbar-right">
+
+
+<div class="analysis-models" id="analysis_models">
+  <div class="analysis-model">
+    <span class="small" title="Quick model">⚡</span>
+    <label class="small" for="an_model_quick" data-i18n="analysis.model_quick">Quick</label>
+    <select class="input mini-select" id="an_model_quick" disabled>
+      <option data-i18n="analysis.models_loading">Ładowanie…</option>
+    </select>
+  </div>
+  <div class="analysis-model">
+    <span class="small" title="Deep model">🔍</span>
+    <label class="small" for="an_model_deep" data-i18n="analysis.model_deep">Deep</label>
+    <select class="input mini-select" id="an_model_deep" disabled>
+      <option data-i18n="analysis.models_loading">Ładowanie…</option>
+    </select>
+  </div>
+</div>
+      <div class="analysis-format">
+        <label class="small" data-i18n="analysis.format">Format</label>
+        <label class="pill"><input type="radio" name="an_format" value="html" checked> HTML</label>
+        <label class="pill"><input type="radio" name="an_format" value="docx"> DOCX</label>
+        <label class="pill"><input type="radio" name="an_format" value="md"> MD</label>
+      </div>
+
+      <button class="btn" id="an_generate_btn">🚀 <span data-i18n="analysis.generate">Generuj</span></button>
+    </div>
+  </div>
+
+  <div class="analysis-container">
+    <aside class="analysis-sidebar" id="analysis_sidebar">
+
+      <section class="card analysis-sidecard">
+        <div class="analysis-sidehdr">
+          <div class="h2" data-i18n="analysis.sources">📁 Źródła danych</div>
+        </div>
+
+        <div class="analysis-sidebody">
+          <label class="check"><input type="checkbox" id="src_transcript" checked> <span data-i18n="analysis.src_transcript">Transkrypcja</span></label>
+          <label class="check"><input type="checkbox" id="src_diarization" checked> <span data-i18n="analysis.src_diarization">Diaryzacja</span></label>
+          <label class="check"><input type="checkbox" id="src_notes_global"> <span data-i18n="analysis.src_notes_global">Notatki globalne</span></label>
+          <label class="check"><input type="checkbox" id="src_notes_blocks"> <span data-i18n="analysis.src_notes_blocks">Notatki do bloków</span></label>
+
+          <div class="analysis-docs">
+            <div class="analysis-docs-top">
+              <div class="h3" data-i18n="analysis.documents">📎 Dokumenty</div>
+              <div class="analysis-docs-actions">
+                <button class="btn secondary" id="docs_upload_btn">+ <span data-i18n="analysis.add">Dodaj</span></button>
+              </div>
+            </div>
+            <div class="small" id="docs_hint" data-i18n="analysis.docs_hint">Zaznacz dokumenty, które mają wejść do analizy.</div>
+            <div id="docs_list" class="docs-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card analysis-sidecard">
+        <div class="analysis-sidehdr">
+          <div class="h2" data-i18n="analysis.prompts">🎯 Prompty</div>
+          <div class="small" id="an_selected_count">0</div>
+        </div>
+
+        <div class="analysis-sidebody">
+          <div id="prompts_box" class="prompts-box"></div>
+
+          <div class="analysis-side-actions">
+            <button class="btn secondary" id="prompt_new_btn">+ <span data-i18n="analysis.new_prompt">Nowy</span></button>
+            <button class="btn secondary" id="prompt_import_btn">📥 <span data-i18n="analysis.import">Import</span></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card analysis-sidecard analysis-collapsible" data-collapsed="true">
+        <div class="analysis-sidehdr clickable" id="an_settings_hdr">
+          <div class="h2">⚙️ <span data-i18n="analysis.settings">Ustawienia</span></div>
+          <div class="small" id="an_settings_state">+</div>
+        </div>
+        <div class="analysis-sidebody" id="an_settings_body" style="display:none">
+          <div class="small" data-i18n="analysis.settings_hint">Dodatkowe opcje pojawią się w kolejnych krokach.</div>
+        </div>
+      </section>
+
+    </aside>
+
+    <main class="analysis-main">
+
+      <div class="card quick-analysis" id="quick_box">
+        <div class="analysis-sidehdr">
+          <div>
+            <div class="h2" data-i18n="analysis.quick">⚡ Szybka analiza</div>
+            <div class="small" id="quick_state"></div>
+          </div>
+          <button class="btn secondary" id="quick_toggle_btn">−</button>
+        </div>
+        <div id="quick_body" class="quick-body">
+          <div class="small" data-i18n="analysis.quick_loading">Ładowanie…</div>
+        </div>
+      </div>
+
+      <div class="card deep-analysis" id="deep_box">
+        <div class="analysis-sidehdr">
+          <div class="h2" data-i18n="analysis.deep">🔍 Głęboka analiza</div>
+          <div class="small" id="deep_state"></div>
+        </div>
+
+        <!-- Progress (similar to Transcription/Di... ) -->
+        <div class="an-progress" id="an_progress">
+          <div class="small"><span data-i18n="common.progress">Postęp</span>: <span id="an_prog_pct">0%</span></div>
+          <div class="progress"><div id="an_prog_bar"></div></div>
+        </div>
+
+        <div id="deep_result" class="deep-result">
+          <div class="small" data-i18n="analysis.deep_hint">Wybierz źródła i prompty, potem kliknij „Generuj”.</div>
+        </div>
+      </div>
+
+      <div class="analysis-actions" id="analysis_actions">
+        <button class="btn secondary" id="an_copy_btn">📋 <span data-i18n="analysis.copy">Kopiuj</span></button>
+        <button class="btn secondary" id="an_save_btn">💾 <span data-i18n="analysis.save">Zapisz</span></button>
+        <button class="btn secondary" id="an_stop_btn" style="display:none">⛔ <span data-i18n="analysis.stop">Stop</span></button>
+        <span id="an_download_slot"></span>
+      </div>
+
+    </main>
+  </div>
+
+  <button class="analysis-sidebar-toggle" id="analysis_sidebar_toggle" title="Toggle sidebar">◀︎</button>
+
+  <!-- Hidden file inputs -->
+  <input type="file" id="docs_file_input" style="display:none" multiple>
+  <input type="file" id="prompt_import_input" style="display:none" accept="application/json">
+
+  <!-- Prompt dialog -->
+  <dialog id="prompt_dialog" class="an-dialog">
+    <form method="dialog" class="an-dialog-form">
+      <div class="h2" id="prompt_dialog_title">Prompt</div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div>
+          <div class="label" data-i18n="analysis.prompt_name">Nazwa</div>
+          <input class="input" id="prompt_name" placeholder="Np. Mój raport" required>
+        </div>
+        <div>
+          <div class="label" data-i18n="analysis.prompt_icon">Ikona</div>
+          <input class="input" id="prompt_icon" placeholder="📋">
+        </div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div>
+          <div class="label" data-i18n="analysis.prompt_category">Kategoria</div>
+          <input class="input" id="prompt_category" placeholder="Biznesowe">
+        </div>
+        <div>
+          <div class="label" data-i18n="analysis.prompt_description">Opis</div>
+          <input class="input" id="prompt_description" placeholder="">
+        </div>
+      </div>
+
+      <div>
+        <div class="label" data-i18n="analysis.prompt_text">Treść promptu</div>
+        <textarea class="input" id="prompt_text" style="min-height:180px" placeholder="Wpisz treść promptu..."></textarea>
+      </div>
+
+      <div class="an-dialog-actions">
+        <button class="btn secondary" value="cancel" data-i18n="btn.cancel">✕ Anuluj</button>
+        <button class="btn danger" id="prompt_delete_btn" type="button" style="display:none">🗑 Usuń</button>
+        <button class="btn" id="prompt_save_btn" value="ok">💾 Zapisz</button>
+      </div>
+    </form>
+  </dialog>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/analysis.js?v={{ app_version }}"></script>
+<script>
+(async()=>{
+  try{
+    if(window.AnalysisManager){
+      await AnalysisManager.init();
+    }
+  }catch(e){
+    console.error(e);
+  }
+})();
+</script>
+{% endblock %}
