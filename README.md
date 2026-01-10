@@ -1,6 +1,6 @@
-# AISTATEweb (2.2 beta)
+# AISTATEweb (3.0 beta)
 
-![Version](https://img.shields.io/badge/Version-2.2%20beta-orange)
+![Version](https://img.shields.io/badge/Version-3.0%20beta-orange)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Web-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -19,6 +19,7 @@ If you have any issues, suggestions, or feature requests, please contact me at: 
 
   * Audio → text transcription (Whisper-based workflow).
   * Speaker diarization (who spoke when).
+  * LLM Ollama modules for data analysis 
   * Project mode: store outputs and metadata inside a project directory.
   * Automatic save after processing:
     * transcription → `transcript.txt`
@@ -109,6 +110,8 @@ Open in browser:
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
 
+## beta 3.0 
+- LLM Ollama modules for data analysis introduced
 ## beta 2.1 -2.2 
 
 - Change of block editing methodology
