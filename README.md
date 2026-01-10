@@ -72,6 +72,8 @@ Never commit your Hugging Face token to GitHub. Treat it like a password.
 ```bash
 sudo apt update
 sudo apt install -y ffmpeg
+curl -fsSL https://ollama.com/install.sh | sh
+
 ```
 ```
 mkdir -p ~/projects
