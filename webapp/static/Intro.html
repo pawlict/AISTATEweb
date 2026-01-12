@@ -1,0 +1,1242 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI S.T.A.T.E Artificial Intelligence Speech‑To‑Analysis‑Translation Engine</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap');
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    html, body { 
+      height: 100%; 
+      overflow: hidden; 
+      background: #000;
+    }
+    
+    body { 
+      font-family: 'Rajdhani', 'Orbitron', monospace;
+      color: #fff;
+    }
+    
+    canvas { 
+      display: block; 
+      width: 100vw; 
+      height: 100vh; 
+      position: fixed;
+      top: 0;
+      left: 0;
+    }
+    
+    #main-canvas {
+      z-index: 1;
+    }
+    
+    #overlay-canvas {
+      z-index: 2;
+      pointer-events: none;
+    }
+    
+    .hint {
+      position: fixed; 
+      left: 20px; 
+      bottom: 20px;
+      color: rgba(80, 220, 255, 0.6);
+      font-size: 11px;
+      font-family: 'Rajdhani', monospace;
+      font-weight: 300;
+      letter-spacing: 1px;
+      user-select: none;
+      z-index: 10;
+      text-shadow: 0 0 10px rgba(80, 220, 255, 0.8);
+    }
+    
+    .scan-line {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, 
+        transparent, 
+        rgba(80, 220, 255, 0.3) 20%, 
+        rgba(255, 90, 220, 0.3) 80%, 
+        transparent
+      );
+      animation: scan 4s linear infinite;
+      z-index: 3;
+      pointer-events: none;
+      opacity: 0.4;
+    }
+    
+    @keyframes scan {
+      0% { top: 0; }
+      100% { top: 100%; }
+    }
+    
+    /* Loading Screen */
+    #loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.5s ease;
+    }
+    
+    #loading-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    .loading-text {
+      font-family: 'Orbitron', monospace;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #50dcff, #8c64ff, #ff5adc);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 30px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+    
+    .progress-container {
+      width: 300px;
+      height: 4px;
+      background: rgba(80, 220, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #50dcff, #8c64ff, #ff5adc);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px rgba(80, 220, 255, 0.5);
+    }
+    
+    .progress-percent {
+      font-family: 'Rajdhani', monospace;
+      font-size: 14px;
+      color: rgba(80, 220, 255, 0.8);
+      margin-top: 15px;
+      letter-spacing: 2px;
+    }
+    
+    /* Start Button */
+    #start-button {
+      margin-top: 40px;
+      padding: 15px 40px;
+      font-family: 'Orbitron', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, #50dcff, #8c64ff, #ff5adc);
+      border: none;
+      border-radius: 5px;
+      color: #000;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.5s ease, transform 0.2s ease;
+      box-shadow: 0 0 20px rgba(80, 220, 255, 0.5);
+    }
+    
+    #start-button.show {
+      opacity: 1;
+    }
+    
+    #start-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 30px rgba(80, 220, 255, 0.8);
+    }
+    
+    #start-button:active {
+      transform: scale(0.98);
+    }
+    
+    /* Cinematic Subtitles */
+    .subtitle-container {
+      position: fixed;
+      bottom: 80px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+      pointer-events: none;
+    }
+    
+    .subtitle {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 32px;
+      font-weight: 500;
+      color: #fff;
+      text-align: center;
+      padding: 12px 40px;
+      background: rgba(0, 0, 0, 0.75);
+      border-radius: 4px;
+      letter-spacing: 1.5px;
+      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9);
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+      max-width: 90%;
+      line-height: 1.4;
+    }
+    
+    .subtitle.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    .subtitle.fade-out {
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    
+    /* Subtle final text */
+    #final-text {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 15;
+      opacity: 0;
+      pointer-events: none;
+      font-family: 'Orbitron', monospace;
+      font-size: 72px;
+      font-weight: 700;
+      letter-spacing: 8px;
+      background: linear-gradient(135deg, rgba(80, 220, 255, 0.6), rgba(140, 100, 255, 0.5), rgba(255, 90, 220, 0.6));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 30px rgba(80, 220, 255, 0.3);
+      transition: opacity 2s ease;
+    }
+    
+    #final-text.show {
+      opacity: 1;
+    }
+    
+    @media (max-width: 768px) {
+      .subtitle {
+        font-size: 24px;
+        padding: 10px 30px;
+        bottom: 60px;
+      }
+      #final-text {
+        font-size: 48px;
+        letter-spacing: 4px;
+      }
+      .loading-text {
+        font-size: 18px;
+      }
+      .progress-container {
+        width: 250px;
+      }
+      #start-button {
+        font-size: 16px;
+        padding: 12px 30px;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .subtitle {
+        font-size: 18px;
+        padding: 8px 20px;
+        bottom: 50px;
+      }
+      #final-text {
+        font-size: 32px;
+        letter-spacing: 2px;
+      }
+      .loading-text {
+        font-size: 16px;
+      }
+      .progress-container {
+        width: 200px;
+      }
+      #start-button {
+        font-size: 14px;
+        padding: 10px 25px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loading-text">LOADING</div>
+    <div class="progress-container">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div class="progress-percent" id="progress-percent">0%</div>
+    <button id="start-button">START</button>
+  </div>
+  
+  <canvas id="main-canvas"></canvas>
+  <canvas id="overlay-canvas"></canvas>
+  <div class="scan-line"></div>
+  <div class="hint">AI S.T.A.T.E Web · Artificial Intelligence Speech‑To‑Analysis‑Translation Engine 2026 · ESC = skip</div>
+  
+  <!-- Subtitle Container -->
+  <div class="subtitle-container">
+    <div class="subtitle" id="subtitle"></div>
+  </div>
+  
+  <!-- Subtle final text -->
+  <div id="final-text">AI S.T.A.T.E</div>
+  
+  <!-- Audio -->
+  <audio id="narrator-audio" preload="auto">
+    <source src="narrator.mp3" type="audio/mpeg">
+  </audio>
+
+<script>
+(() => {
+  // ============== CONFIGURATION ==============
+  const DURATION = 25.0; // Matched to audio duration (22.67s)
+  const FPS_CAP = 60;
+  
+  // Where to go after the intro finishes
+  const qs = new URLSearchParams(window.location.search);
+  const NEXT_URL = qs.get("next") || "/transcription";
+  const REDIRECT_DELAY_MS = 900;
+  let redirectArmed = false;
+  
+  // ============== LOADING SYSTEM ==============
+  const loadingScreen = document.getElementById('loading-screen');
+  const progressBar = document.getElementById('progress-bar');
+  const progressPercent = document.getElementById('progress-percent');
+  const startButton = document.getElementById('start-button');
+  const audio = document.getElementById('narrator-audio');
+  
+  let loadingProgress = 0;
+  let audioLoaded = false;
+  let canvasReady = false;
+  
+  function updateProgress(percent) {
+    loadingProgress = Math.max(loadingProgress, percent);
+    progressBar.style.width = loadingProgress + '%';
+    progressPercent.textContent = Math.round(loadingProgress) + '%';
+  }
+  
+  // Audio loading
+  audio.addEventListener('canplaythrough', () => {
+    console.log('Audio loaded successfully - Duration:', audio.duration, 'seconds');
+    audioLoaded = true;
+    updateProgress(80);
+    checkAllLoaded();
+  });
+  
+  audio.addEventListener('error', (e) => {
+    console.error('Audio loading error:', e);
+    console.error('Audio src:', audio.src);
+    audioLoaded = true;
+    updateProgress(80);
+    checkAllLoaded();
+  });
+  
+  console.log('Loading audio from:', audio.src);
+  audio.load();
+  
+  function checkAllLoaded() {
+    if (audioLoaded && canvasReady) {
+      updateProgress(100);
+      setTimeout(() => {
+        startButton.classList.add('show');
+      }, 300);
+    }
+  }
+  
+  // Start button click
+  startButton.addEventListener('click', () => {
+    loadingScreen.classList.add('hidden');
+    setTimeout(() => {
+      if (ready) startAnimation();
+    }, 500);
+  });
+  
+  // ============== SUBTITLE SYSTEM (SYNCED TO 22.67s AUDIO) ==============
+  const subtitleElement = document.getElementById('subtitle');
+  
+  // Adjusted timing to match actual audio narration
+  const subtitles = [
+    { start: 1.0, end: 5.0, text: "Data flows faster than thought." },
+    { start: 6.0, end: 10.0, text: "Information multiplies every microsecond." },
+    { start: 11.0, end: 14.5, text: "You need more than human speed." },
+    { start: 15.0, end: 19.0, text: "AI S.T.A.T.E: Neural-powered speech analysis." },
+    { start: 19.5, end: 26.0, text: "The future processes itself." }
+  ];
+  
+  let currentSubtitleIndex = -1;
+  
+  function updateSubtitles(time) {
+    let newIndex = -1;
+    
+    for (let i = 0; i < subtitles.length; i++) {
+      if (time >= subtitles[i].start && time <= subtitles[i].end) {
+        newIndex = i;
+        break;
+      }
+    }
+    
+    if (newIndex !== currentSubtitleIndex) {
+      if (currentSubtitleIndex >= 0) {
+        subtitleElement.classList.remove('active');
+        subtitleElement.classList.add('fade-out');
+      }
+      
+      currentSubtitleIndex = newIndex;
+      
+      if (newIndex >= 0) {
+        setTimeout(() => {
+          subtitleElement.textContent = subtitles[newIndex].text;
+          subtitleElement.classList.remove('fade-out');
+          subtitleElement.classList.add('active');
+        }, 150);
+      }
+    }
+  }
+  
+  // ============== FINAL TEXT ==============
+  const finalText = document.getElementById('final-text');
+  let textShown = false;
+  
+  function showFinalText() {
+    finalText.classList.add('show');
+  }
+  
+  function hideFinalText() {
+    finalText.classList.remove('show');
+  }
+  
+  function finishIntro() {
+    if (redirectArmed) return;
+    redirectArmed = true;
+    audio.pause();
+    audio.currentTime = 0;
+    try { sessionStorage.setItem('aistate_intro_seen', '1'); } catch (e) {}
+    window.location.href = NEXT_URL;
+  }
+  
+  // Color palette
+  const C1 = [80, 220, 255];
+  const C2 = [255, 90, 220];
+  const C3 = [140, 100, 255];
+  
+  // Canvas setup
+  const canvas = document.getElementById("main-canvas");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  const overlayCanvas = document.getElementById("overlay-canvas");
+  const octx = overlayCanvas.getContext("2d", { alpha: true });
+  
+  let W = 0, H = 0;
+  const DPR = Math.min(2, window.devicePixelRatio || 1);
+  
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    
+    overlayCanvas.width = W * DPR;
+    overlayCanvas.height = H * DPR;
+    overlayCanvas.style.width = W + "px";
+    overlayCanvas.style.height = H + "px";
+    octx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  
+  window.addEventListener("resize", resize);
+  resize();
+  
+  canvasReady = true;
+  updateProgress(50);
+  checkAllLoaded();
+  
+  // ============== UTILITIES ==============
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const rand = (a, b) => a + (b - a) * Math.random();
+  const randInt = (a, b) => Math.floor(rand(a, b + 1));
+  
+  const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+  
+  function gradient(x1, y1, x2, y2, alpha = 1) {
+    const g = ctx.createLinearGradient(x1, y1, x2, y2);
+    g.addColorStop(0, `rgba(${C1[0]},${C1[1]},${C1[2]},${alpha})`);
+    g.addColorStop(0.5, `rgba(${C3[0]},${C3[1]},${C3[2]},${alpha})`);
+    g.addColorStop(1, `rgba(${C2[0]},${C2[1]},${C2[2]},${alpha})`);
+    return g;
+  }
+  
+  function colorMix(t) {
+    const r = Math.floor(lerp(C1[0], C2[0], t));
+    const g = Math.floor(lerp(C1[1], C2[1], t));
+    const b = Math.floor(lerp(C1[2], C2[2], t));
+    return [r, g, b];
+  }
+  
+  // ============== NEURAL NETWORK ==============
+  class NeuralNetwork {
+    constructor() {
+      this.nodes = [];
+      this.connections = [];
+      this.allPossibleNodes = [];
+      this.allPossibleConnections = [];
+      this.initNetwork();
+      this.connectionRebuildTimer = 0;
+      this.connectionRebuildInterval = 1.3;
+      this.nodeRebuildTimer = 0;
+      this.nodeRebuildInterval = 2.5;
+      this.pulseWaves = [];
+      this.pulseTimer = 0;
+      this.pulseInterval = 2.8;
+      this.nextNodeId = 0;
+    }
+    
+    initNetwork() {
+      const layers = [8, 12, 16, 12, 8];
+      const layerSpacing = W / (layers.length + 1);
+      
+      for (let l = 0; l < layers.length; l++) {
+        const nodesInLayer = layers[l];
+        const layerHeight = H * 0.6;
+        const startY = (H - layerHeight) / 2;
+        
+        for (let n = 0; n < nodesInLayer; n++) {
+          const baseY = startY + (layerHeight / (nodesInLayer - 1)) * n;
+          
+          this.allPossibleNodes.push({
+            id: this.nextNodeId++,
+            layer: l,
+            baseX: layerSpacing * (l + 1),
+            baseY: baseY,
+            xOffset: 0,
+            yOffset: 0,
+            radius: rand(3, 6),
+            colorMix: Math.random()
+          });
+        }
+      }
+      
+      this.rebuildNodes();
+      this.updatePossibleConnections();
+      this.rebuildConnections();
+    }
+    
+    updatePossibleConnections() {
+      this.allPossibleConnections = [];
+      const activeNodes = this.nodes.filter(n => !n.fadingOut && n.alpha > 0.1);
+      
+      for (let i = 0; i < activeNodes.length; i++) {
+        for (let j = 0; j < activeNodes.length; j++) {
+          const n1 = activeNodes[i];
+          const n2 = activeNodes[j];
+          
+          const layerDiff = Math.abs(n2.layer - n1.layer);
+          if ((layerDiff === 1 && n2.layer > n1.layer) || (layerDiff === 0 && Math.random() < 0.1)) {
+            this.allPossibleConnections.push({
+              from: n1,
+              to: n2,
+              weight: Math.random(),
+              colorMix: Math.random()
+            });
+          }
+        }
+      }
+    }
+    
+    rebuildNodes() {
+      const activeNodes = this.nodes.filter(n => !n.fadingOut);
+      
+      if (activeNodes.length > 0) {
+        const removeCount = Math.floor(activeNodes.length * rand(0.2, 0.35));
+        for (let i = 0; i < removeCount; i++) {
+          const idx = randInt(0, activeNodes.length - 1);
+          activeNodes[idx].fadingOut = true;
+        }
+      }
+      
+      const unusedNodes = this.allPossibleNodes.filter(n => 
+        !this.nodes.some(existing => existing.id === n.id)
+      );
+      
+      if (unusedNodes.length > 0) {
+        const addCount = Math.min(randInt(3, 8), unusedNodes.length);
+        for (let i = 0; i < addCount; i++) {
+          const idx = randInt(0, unusedNodes.length - 1);
+          const newNode = { ...unusedNodes[idx], alpha: 0, fadingOut: false };
+          this.nodes.push(newNode);
+          unusedNodes.splice(idx, 1);
+        }
+      }
+    }
+    
+    rebuildConnections() {
+      const activeConnections = this.connections.filter(c => !c.fadingOut);
+      
+      if (activeConnections.length > 0) {
+        const removeCount = Math.floor(activeConnections.length * rand(0.3, 0.5));
+        for (let i = 0; i < removeCount; i++) {
+          const idx = randInt(0, activeConnections.length - 1);
+          activeConnections[idx].fadingOut = true;
+        }
+      }
+      
+      this.updatePossibleConnections();
+      
+      if (this.allPossibleConnections.length > 0) {
+        const addCount = Math.min(randInt(5, 15), this.allPossibleConnections.length);
+        for (let i = 0; i < addCount; i++) {
+          const idx = randInt(0, this.allPossibleConnections.length - 1);
+          const conn = this.allPossibleConnections[idx];
+          
+          if (!this.connections.some(c => c.from.id === conn.from.id && c.to.id === conn.to.id)) {
+            this.connections.push({ ...conn, alpha: 0, fadingOut: false });
+          }
+        }
+      }
+    }
+    
+    update(dt, t) {
+      this.nodeRebuildTimer += dt;
+      if (this.nodeRebuildTimer >= this.nodeRebuildInterval) {
+        this.nodeRebuildTimer = 0;
+        this.rebuildNodes();
+      }
+      
+      this.connectionRebuildTimer += dt;
+      if (this.connectionRebuildTimer >= this.connectionRebuildInterval) {
+        this.connectionRebuildTimer = 0;
+        this.rebuildConnections();
+      }
+      
+      for (let i = this.nodes.length - 1; i >= 0; i--) {
+        const n = this.nodes[i];
+        n.xOffset = Math.sin(t * 0.5 + n.id * 0.3) * 15;
+        n.yOffset = Math.cos(t * 0.7 + n.id * 0.2) * 15;
+        
+        if (n.fadingOut) {
+          n.alpha -= dt * 0.8;
+          if (n.alpha <= 0) {
+            this.nodes.splice(i, 1);
+          }
+        } else {
+          n.alpha = Math.min(1, n.alpha + dt * 1.5);
+        }
+      }
+      
+      for (let i = this.connections.length - 1; i >= 0; i--) {
+        const c = this.connections[i];
+        
+        const fromExists = this.nodes.some(n => n.id === c.from.id && !n.fadingOut);
+        const toExists = this.nodes.some(n => n.id === c.to.id && !n.fadingOut);
+        
+        if (!fromExists || !toExists) {
+          c.fadingOut = true;
+        }
+        
+        if (c.fadingOut) {
+          c.alpha -= dt * 1.2;
+          if (c.alpha <= 0) {
+            this.connections.splice(i, 1);
+          }
+        } else {
+          c.alpha = Math.min(1, c.alpha + dt * 2);
+        }
+      }
+      
+      this.pulseTimer += dt;
+      if (this.pulseTimer >= this.pulseInterval && this.connections.length > 0) {
+        this.pulseTimer = 0;
+        const conn = this.connections[randInt(0, this.connections.length - 1)];
+        if (conn && !conn.fadingOut) {
+          this.pulseWaves.push({
+            connection: conn,
+            progress: 0,
+            speed: rand(0.3, 0.6),
+            color: colorMix(Math.random())
+          });
+        }
+      }
+      
+      for (let i = this.pulseWaves.length - 1; i >= 0; i--) {
+        const wave = this.pulseWaves[i];
+        wave.progress += dt * wave.speed;
+        
+        if (wave.progress >= 1) {
+          this.pulseWaves.splice(i, 1);
+        }
+      }
+    }
+    
+    draw(progress, intensity) {
+      if (progress <= 0) return;
+      
+      const alpha = easeInOutCubic(progress) * intensity;
+      
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      
+      this.connections.forEach(c => {
+        if (c.alpha <= 0) return;
+        
+        const fx = c.from.baseX + c.from.xOffset;
+        const fy = c.from.baseY + c.from.yOffset;
+        const tx = c.to.baseX + c.to.xOffset;
+        const ty = c.to.baseY + c.to.yOffset;
+        
+        const [r, g, b] = colorMix(c.colorMix);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${c.alpha * 0.3})`;
+        ctx.lineWidth = 1 + c.weight * 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+      });
+      
+      this.pulseWaves.forEach(wave => {
+        const c = wave.connection;
+        const fx = c.from.baseX + c.from.xOffset;
+        const fy = c.from.baseY + c.from.yOffset;
+        const tx = c.to.baseX + c.to.xOffset;
+        const ty = c.to.baseY + c.to.yOffset;
+        
+        const px = lerp(fx, tx, wave.progress);
+        const py = lerp(fy, ty, wave.progress);
+        
+        const waveAlpha = Math.sin(wave.progress * Math.PI) * c.alpha;
+        
+        ctx.fillStyle = `rgba(${wave.color[0]},${wave.color[1]},${wave.color[2]},${waveAlpha})`;
+        ctx.beginPath();
+        ctx.arc(px, py, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = `rgba(${wave.color[0]},${wave.color[1]},${wave.color[2]},${waveAlpha * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(px, py, 8, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      
+      this.nodes.forEach(n => {
+        if (n.alpha <= 0) return;
+        
+        const x = n.baseX + n.xOffset;
+        const y = n.baseY + n.yOffset;
+        
+        const [r, g, b] = colorMix(n.colorMix);
+        
+        ctx.fillStyle = `rgba(${r},${g},${b},${n.alpha * 0.2})`;
+        ctx.beginPath();
+        ctx.arc(x, y, n.radius * 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = `rgba(${r},${g},${b},${n.alpha})`;
+        ctx.beginPath();
+        ctx.arc(x, y, n.radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      
+      ctx.restore();
+    }
+  }
+  
+  const neuralNet = new NeuralNetwork();
+  
+  // ============== PARTICLE SYSTEM ==============
+  class Particle3D {
+    constructor() {
+      this.reset();
+    }
+    
+    reset() {
+      this.x = rand(-W * 0.5, W * 1.5);
+      this.y = rand(-H * 0.5, H * 1.5);
+      this.z = rand(0, 1000);
+      this.vx = rand(-20, 20);
+      this.vy = rand(-20, 20);
+      this.vz = rand(50, 150);
+      this.colorMix = Math.random();
+      this.life = 1;
+      this.maxLife = rand(3, 8);
+      this.size = rand(1, 3);
+    }
+    
+    update(dt, time) {
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.z -= this.vz * dt;
+      
+      this.life += dt;
+      
+      if (this.z < 0 || this.life > this.maxLife) {
+        this.reset();
+        this.z = rand(500, 1000);
+      }
+    }
+    
+    draw(progress, intensity) {
+      if (progress <= 0) return;
+      
+      const scale = 500 / (this.z + 500);
+      const sx = W * 0.5 + (this.x - W * 0.5) * scale;
+      const sy = H * 0.5 + (this.y - H * 0.5) * scale;
+      
+      if (sx < -50 || sx > W + 50 || sy < -50 || sy > H + 50) return;
+      
+      const fade = 1 - (this.life / this.maxLife);
+      const alpha = fade * progress * intensity * 0.6;
+      const size = this.size * scale * 2;
+      
+      const [r, g, b] = colorMix(this.colorMix);
+      
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha * 0.3})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, size * 2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  
+  const particles3D = Array.from({ length: 150 }, () => new Particle3D());
+  
+  // ============== MATRIX RAIN ==============
+  class MatrixColumn {
+    constructor(x) {
+      this.x = x;
+      this.reset();
+    }
+    
+    reset() {
+      this.y = rand(-H, 0);
+      this.speed = rand(100, 300);
+      this.chars = [];
+      const len = randInt(10, 30);
+      for (let i = 0; i < len; i++) {
+        this.chars.push(String.fromCharCode(randInt(0x30A0, 0x30FF)));
+      }
+      this.colorMix = Math.random();
+    }
+    
+    update(dt) {
+      this.y += this.speed * dt;
+      
+      if (this.y - this.chars.length * 20 > H) {
+        this.reset();
+      }
+    }
+    
+    draw(progress, intensity) {
+      if (progress <= 0) return;
+      
+      const baseAlpha = progress * intensity * 0.6;
+      
+      ctx.save();
+      ctx.font = "16px monospace";
+      
+      this.chars.forEach((char, i) => {
+        const cy = this.y - i * 20;
+        if (cy < -20 || cy > H + 20) return;
+        
+        const fade = 1 - (i / this.chars.length);
+        const alpha = baseAlpha * fade;
+        
+        const [r, g, b] = colorMix(this.colorMix);
+        ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+        ctx.fillText(char, this.x, cy);
+      });
+      
+      ctx.restore();
+    }
+  }
+  
+  const matrixColumns = Array.from({ length: 40 }, (_, i) => 
+    new MatrixColumn((i / 40) * W)
+  );
+  
+  // ============== ENERGY PULSES ==============
+  class EnergyPulse {
+    constructor() {
+      this.reset();
+    }
+    
+    reset() {
+      this.x = W * 0.5;
+      this.y = H * 0.5;
+      this.radius = 0;
+      this.maxRadius = Math.max(W, H) * 0.8;
+      this.speed = rand(200, 400);
+      this.colorMix = Math.random();
+    }
+    
+    update(dt) {
+      this.radius += this.speed * dt;
+      
+      if (this.radius > this.maxRadius) {
+        this.reset();
+      }
+    }
+    
+    draw(progress, intensity) {
+      if (progress <= 0 || this.radius <= 0) return;
+      
+      const fade = 1 - (this.radius / this.maxRadius);
+      const alpha = fade * progress * intensity * 0.4;
+      
+      const [r, g, b] = colorMix(this.colorMix);
+      
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = `rgba(${r},${g},${b},1)`;
+      ctx.lineWidth = 2;
+      
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      ctx.restore();
+    }
+  }
+  
+  const energyPulses = Array.from({ length: 5 }, () => new EnergyPulse());
+  
+  // ============== HOLOGRAPHIC GRID ==============
+  function drawHoloGrid(time, progress, intensity) {
+    if (progress <= 0) return;
+    
+    const alpha = progress * intensity * 0.3;
+    
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = gradient(0, 0, W, H, 0.4);
+    ctx.lineWidth = 1;
+    
+    const gridSize = 80;
+    const offsetX = (time * 20) % gridSize;
+    const offsetY = (time * 30) % gridSize;
+    
+    for (let x = -gridSize + offsetX; x < W + gridSize; x += gridSize) {
+      const wave = Math.sin(x / 100 + time) * 10;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H + wave);
+      ctx.stroke();
+    }
+    
+    for (let y = -gridSize + offsetY; y < H + gridSize; y += gridSize) {
+      const wave = Math.cos(y / 100 - time) * 10;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W + wave, y);
+      ctx.stroke();
+    }
+    
+    ctx.restore();
+  }
+  
+  // ============== GLITCH EFFECT ==============
+  function drawGlitchEffect(time, progress, intensity) {
+    if (progress <= 0) return;
+    
+    if (Math.random() < 0.95) return;
+    
+    const glitchHeight = randInt(2, 20);
+    const glitchY = randInt(0, H - glitchHeight);
+    const offset = randInt(-10, 10);
+    
+    ctx.save();
+    ctx.globalAlpha = progress * intensity * 0.3;
+    
+    const imageData = ctx.getImageData(0, glitchY, W, glitchHeight);
+    ctx.putImageData(imageData, offset, glitchY);
+    
+    ctx.restore();
+  }
+  
+  // ============== PROCEDURAL GEOMETRY ==============
+  function drawProcGeometry(time, progress, intensity) {
+    if (progress <= 0) return;
+    
+    const alpha = progress * intensity * 0.4;
+    
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = gradient(0, 0, W, H, 0.5);
+    ctx.lineWidth = 1;
+    
+    const hexCount = 5;
+    for (let i = 0; i < hexCount; i++) {
+      const hx = W * (0.2 + i * 0.15);
+      const hy = H * 0.5 + Math.sin(time + i) * 100;
+      const size = 40 + Math.sin(time * 0.5 + i) * 20;
+      const rotation = time * 0.5 + i * Math.PI / 3;
+      
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(rotation);
+      
+      ctx.beginPath();
+      for (let a = 0; a < 6; a++) {
+        const angle = (a / 6) * Math.PI * 2;
+        const x = Math.cos(angle) * size;
+        const y = Math.sin(angle) * size;
+        if (a === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      
+      ctx.restore();
+    }
+    
+    ctx.restore();
+  }
+  
+  // ============== WAVEFORM WITH HEARTBEAT ==============
+  let heartbeatTime = 0;
+  const HEARTBEAT_INTERVAL = 0.8;
+  
+  function drawWaveform(time, progress) {
+    if (progress <= 0) return;
+    
+    heartbeatTime += 0.016;
+    
+    const heartbeatPhase = (heartbeatTime % HEARTBEAT_INTERVAL) / HEARTBEAT_INTERVAL;
+    
+    let heartbeat = 0;
+    if (heartbeatPhase < 0.15) {
+      heartbeat = Math.sin(heartbeatPhase / 0.15 * Math.PI) * 30;
+    } else if (heartbeatPhase > 0.2 && heartbeatPhase < 0.3) {
+      heartbeat = Math.sin((heartbeatPhase - 0.2) / 0.1 * Math.PI) * 15;
+    }
+    
+    const alpha = easeInOutCubic(progress);
+    const cx = W * 0.5;
+    const cy = H * 0.5;
+    const width = Math.min(W * 0.7, 900);
+    const amp = 50;
+    
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.8;
+    ctx.strokeStyle = gradient(cx - width/2, cy, cx + width/2, cy, 1);
+    ctx.lineWidth = 3;
+    
+    ctx.beginPath();
+    const points = 300;
+    for (let i = 0; i <= points; i++) {
+      const x = cx - width/2 + (i / points) * width;
+      const k = i / points;
+      const envelope = Math.sin(k * Math.PI) ** 1.2;
+      
+      let y = cy 
+        + Math.sin(k * 12 * Math.PI + time * 8) * amp * envelope * 0.6
+        + Math.sin(k * 6 * Math.PI - time * 4) * amp * 0.2 * envelope;
+      
+      if (k > 0.3 && k < 0.7) {
+        y += heartbeat * envelope * (Math.random() * 0.3 + 0.85);
+      }
+      
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    
+    ctx.globalAlpha = alpha * 0.3;
+    ctx.lineWidth = 12;
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+  
+  // ============== OVERLAY EFFECTS ==============
+  function drawScanlines() {
+    octx.clearRect(0, 0, W, H);
+    octx.save();
+    octx.globalAlpha = 0.03;
+    
+    for (let y = 0; y < H; y += 4) {
+      octx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      octx.fillRect(0, y, W, 2);
+    }
+    
+    octx.restore();
+  }
+  
+  function drawVignette() {
+    octx.save();
+    const g = octx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W, H) * 0.7);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(1, "rgba(0,0,0,0.6)");
+    
+    octx.globalAlpha = 0.8;
+    octx.fillStyle = g;
+    octx.fillRect(0, 0, W, H);
+    octx.restore();
+  }
+  
+  // ============== MAIN LOOP ==============
+  let running = false;
+  let perfTime = 0;
+  let start = 0;
+  let last = 0;
+  let ready = false;
+  let audioStarted = false;
+  
+  function frame(now) {
+    if (!running) return;
+    
+    const dt = clamp((now - last) / 1000, 0, 1 / FPS_CAP * 2);
+    last = now;
+    perfTime = (now - start) / 1000;
+    
+    const t = clamp(perfTime / DURATION, 0, 1);
+    
+    // Update subtitles
+    updateSubtitles(perfTime);
+    
+    // Show final text
+    if (perfTime >= 18.0 && !textShown) {
+      showFinalText();
+      textShown = true;
+    }
+    
+    // Clear
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+    
+    // ============== TIMELINE ==============
+    const pGrid = clamp((t - 0.00) / 0.20, 0, 1);
+    const pNeural = clamp((t - 0.10) / 0.25, 0, 1);
+    const pParticles = clamp((t - 0.25) / 0.30, 0, 1);
+    const pMatrix = clamp((t - 0.20) / 0.45, 0, 1);
+    const pEnergy = clamp((t - 0.40) / 0.30, 0, 1);
+    const pWave = clamp((t - 0.50) / 0.25, 0, 1);
+    const pGeometry = clamp((t - 0.60) / 0.18, 0, 1);
+    const pGlitch = clamp((t - 0.70) / 0.22, 0, 1);
+    
+    const intensity = t < 0.88 ? 
+      lerp(0.3, 1, Math.sin(t * Math.PI)) : 
+      lerp(1, 0.2, (t - 0.88) / 0.12);
+    
+    // Background effects
+    drawHoloGrid(perfTime, pGrid, intensity);
+    drawProcGeometry(perfTime, pGeometry, intensity);
+    
+    // Neural network
+    neuralNet.update(dt, perfTime);
+    neuralNet.draw(pNeural, intensity);
+    
+    // Particle system
+    particles3D.forEach(p => {
+      p.update(dt, perfTime);
+      p.draw(pParticles, intensity);
+    });
+    
+    // Energy pulses
+    energyPulses.forEach(pulse => {
+      pulse.update(dt);
+      pulse.draw(pEnergy, intensity);
+    });
+    
+    // Matrix streams
+    matrixColumns.forEach(col => {
+      col.update(dt);
+      col.draw(pMatrix, intensity * 0.84);
+    });
+    
+    // Waveform with heartbeat
+    drawWaveform(perfTime, pWave);
+    
+    // Glitch
+    drawGlitchEffect(perfTime, pGlitch, intensity);
+    
+    // Overlay effects
+    drawScanlines();
+    drawVignette();
+    
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      running = false;
+      finishIntro();
+    }
+  }
+  
+  function startAnimation() {
+    if (!audioLoaded) {
+      console.warn('Audio not loaded yet');
+      return;
+    }
+    
+    start = performance.now();
+    last = start;
+    perfTime = 0;
+    heartbeatTime = 0;
+    textShown = false;
+    currentSubtitleIndex = -1;
+    subtitleElement.classList.remove('active', 'fade-out');
+    subtitleElement.textContent = '';
+    hideFinalText();
+    running = true;
+    
+    // Start audio with user interaction
+    if (!audioStarted) {
+      audio.currentTime = 0;
+      audio.volume = 1.0;
+      audio.play().then(() => {
+        console.log('Audio playing successfully');
+        audioStarted = true;
+      }).catch(e => {
+        console.error('Audio play error:', e);
+        audioStarted = true;
+      });
+    }
+    
+    requestAnimationFrame(frame);
+  }
+  
+  // Event listeners
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      running = false;
+      finishIntro();
+    }
+  });
+  
+  ready = true;
+  
+})();
+</script>
+</body>
+</html>

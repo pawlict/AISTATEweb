@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="light">
+  <title>{{ title }} — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css"/>
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-top">
+        <div class="logo logo-lg">
+          <img src="/static/logo.png" alt="AISTATEweb logo"/>
+        </div>
+        <div class="brand-text">
+          <div class="brand-name">{{ app_name }}</div>
+          <div class="brand-ver">{{ app_version }}</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="/new-project" class="{{ 'active' if active=='new_project' else '' }}" data-i18n="nav.new_project">Projekty</a>
+        <a href="/transcription" class="{{ 'active' if active=='transcription' else '' }}" data-i18n="nav.transcription">Transcription</a>
+        <a href="/diarization" class="{{ 'active' if active=='diarization' else '' }}" data-i18n="nav.diarization">Diarization</a>
+        <a href="/analysis" class="{{ 'active' if active=='analysis' else '' }}" data-i18n="nav.analysis">Analiza</a>
+        <a href="/settings" class="{{ 'active' if active=='settings' else '' }}" data-i18n="nav.settings">Settings</a>
+        <a href="/logs" class="{{ 'active' if active=='logs' else '' }}" data-i18n="nav.logs">Logs</a>
+        <a href="/info" class="{{ 'active' if active=='info' else '' }}" data-i18n="nav.info">Info</a>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="small"><span data-i18n="top.current_project">Bieżący projekt</span>: <b id="current_project">(…)</b></div>
+        <div class="small"><span data-i18n="top.source_file">Plik źródłowy projektu</span>: <b id="current_audio">(…)</b></div>
+      </div>
+    </div>
+
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script src="/static/app.js?v={{ app_version }}"></script>
+<script>
+  (async()=>{
+    await initI18n();
+    await refreshCurrentProjectInfo();
+    applyI18n();
+  })();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
