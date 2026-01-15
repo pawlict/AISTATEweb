@@ -1,6 +1,6 @@
-# AISTATEweb (3.0 beta)
+# AISTATEweb (3.1 beta)
 
-![Version](https://img.shields.io/badge/Version-3.0%20beta-orange)
+![Version](https://img.shields.io/badge/Version-3.1%20beta-orange)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Web-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -112,8 +112,33 @@ Open in browser:
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
 
-## beta 3.0 
+## beta 3.0 - 3.1
 - LLM Ollama modules for data analysis introduced
+- GPU Assignment / Scheduling (Update)
+
+This update introduces a **GPU Resource Manager** concept in the UI and internal flow to reduce the risk of **overlapping GPU-heavy workloads** (e.g., running diarization + transcription + LLM analysis at the same time).
+
+### What problem this solves
+When multiple GPU tasks start concurrently, it can lead to:
+- sudden VRAM exhaustion (OOM),
+- driver resets / CUDA errors,
+- extremely slow processing due to contention,
+- unstable behavior when multiple users trigger jobs at the same time.
+
+### What changed
+- Added an **Admin section** entry renamed to **GPU Settings** (formerly “Admin”).
+- The UI now clearly describes **what processes are GPU-managed**, such as:
+  - **Transcription** (e.g., Whisper)
+  - **Diarization** (e.g., Pyannote)
+  - **LLM / analysis** (e.g., Ollama models)
+- Introduced a **single point of control** for GPU task admission (conceptually: a “GPU queue / lock”):
+  - GPU workloads are **serialized** (or throttled) according to configured rules,
+  - tasks are **less likely to overlap**, minimizing VRAM conflicts.
+
+### Backwards compatibility
+- No changes in the functional layout of existing tabs.
+- Only GPU admission/coordination and admin labeling were updated.
+
 ## beta 2.1 -2.2 
 
 - Change of block editing methodology
