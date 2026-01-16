@@ -125,16 +125,6 @@ When multiple GPU tasks start concurrently, it can lead to:
 - extremely slow processing due to contention,
 - unstable behavior when multiple users trigger jobs at the same time.
 
-### What changed
-- Added an **Admin section** entry renamed to **GPU Settings** (formerly “Admin”).
-- The UI now clearly describes **what processes are GPU-managed**, such as:
-  - **Transcription** (e.g., Whisper)
-  - **Diarization** (e.g., Pyannote)
-  - **LLM / analysis** (e.g., Ollama models)
-- Introduced a **single point of control** for GPU task admission (conceptually: a “GPU queue / lock”):
-  - GPU workloads are **serialized** (or throttled) according to configured rules,
-  - tasks are **less likely to overlap**, minimizing VRAM conflicts.
-
 ### Backwards compatibility
 - No changes in the functional layout of existing tabs.
 - Only GPU admission/coordination and admin labeling were updated.
