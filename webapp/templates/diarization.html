@@ -1,0 +1,2570 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .speaker-mapping-container {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 10px;
+  }
+  
+  .speaker-mapping-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 80px;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 10px;
+    background: white;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+  }
+  
+  .speaker-mapping-row:hover {
+    border-color: #2196F3;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
+  }
+  
+  .speaker-label {
+    font-family: ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    background: #f0f0f0;
+    padding: 6px 10px;
+    border-radius: 4px;
+    text-align: center;
+  }
+  
+  .speaker-input {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+  
+  .speaker-input:focus {
+    outline: none;
+    border-color: #2196F3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+  }
+  
+  .speaker-count {
+    font-size: 12px;
+    color: #888;
+    text-align: right;
+  }
+  
+  .mapping-empty {
+    text-align: center;
+    padding: 30px;
+    color: #999;
+    font-style: italic;
+  }
+  
+  #speaker_toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(33, 150, 243, 0.95);
+    color: white;
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  
+  /* Diarization blocks styling (like transcription) */
+  .blocklist {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .seg {
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .seg:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+  }
+  
+  .seg-active {
+    border-color: #2196F3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
+  }
+  
+  
+  .seg-editing{
+  border-color: #ff9800;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.25);
+  transform: scale(1.015);
+}
+.seg-editing:hover{
+  transform: scale(1.015);
+}
+
+/* Inline editor INSIDE the clicked block (PPM) */
+.seg-editor{
+  margin-top: 10px;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 10px;
+  backdrop-filter: blur(6px);
+}
+.seg-editor .seg-editor-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom: 8px;
+}
+.seg-editor .seg-editor-title{
+  font-weight: 800;
+  font-size: 13px;
+}
+.seg-editor .seg-editor-meta{
+  font-size: 11px;
+  opacity: 0.75;
+  font-family: ui-monospace, monospace;
+  margin-top: 2px;
+}
+.seg-editor .seg-editor-close{
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 10px;
+  padding: 4px 10px;
+  cursor: pointer;
+  line-height: 1;
+}
+.seg-editor .seg-editor-close:hover{
+  border-color:#ff9800;
+  background:#fff7ec;
+}
+.seg-editor .seg-editor-grid{
+  display:grid;
+  grid-template-columns: 1fr 220px;
+  gap: 10px;
+  margin-top: 8px;
+}
+@media (max-width: 900px){
+  .seg-editor .seg-editor-grid{
+    grid-template-columns: 1fr;
+  }
+}
+.seg-editor textarea{
+  width: 100%;
+  min-height: 86px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 13px;
+  resize: vertical;
+  background:#fff;
+}
+.seg-editor .seg-speaker-input{
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 13px;
+  background:#fff;
+}
+.seg-editor .seg-audio-row{
+  display:flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.seg-editor .seg-audio-btn{
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+}
+.seg-editor .seg-audio-btn:hover{
+  border-color:#2196F3;
+  background:#f0f7ff;
+}
+.seg-editor .seg-audio-btn:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.seg-editor .seg-speed{
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background: #fff;
+}
+.seg-editor .seg-audio-info{
+  margin-left:auto;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/* Inline editor in Sterowanie (shown on right-click) */
+  .di-inline-editor{
+    margin-top: 14px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .di-inline-editor .di-editor-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .di-inline-editor .di-editor-head .label{
+    margin:0;
+  }
+  .di-inline-editor textarea{
+    width:100%;
+    padding:10px;
+    border:1px solid #ddd;
+    border-radius:8px;
+    font-size:13px;
+    resize:vertical;
+  }
+.seg-time {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 4px;
+    font-family: ui-monospace, monospace;
+  }
+  
+  .seg-speaker {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+  
+  .seg-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+  }
+  
+  /* Speaker colors - pastel palette */
+  .speaker-0 { background-color: #E3F2FD; } /* Light Blue */
+  .speaker-1 { background-color: #F3E5F5; } /* Light Purple */
+  .speaker-2 { background-color: #E8F5E9; } /* Light Green */
+  .speaker-3 { background-color: #FFF3E0; } /* Light Orange */
+  .speaker-4 { background-color: #FCE4EC; } /* Light Pink */
+  .speaker-5 { background-color: #F1F8E9; } /* Light Lime */
+  .speaker-6 { background-color: #E0F2F1; } /* Light Teal */
+  .speaker-7 { background-color: #FFF9C4; } /* Light Yellow */
+  .speaker-8 { background-color: #FFEBEE; } /* Light Red */
+  .speaker-9 { background-color: #EDE7F6; } /* Light Deep Purple */
+  
+  /* Responsywny grid dla trybu/języka/ASR/modelu */
+  .di-config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  
+  @media (max-width: 900px) {
+    .di-config-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+  }
+  
+  @media (max-width: 600px) {
+    .di-config-grid {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+  }
+
+  
+  /* Responsywność - pola w kolumnie na małych ekranach */
+  @media (max-width: 768px) {
+    .grid[style*="grid-template-columns: 1fr 1fr 1fr"] {
+      grid-template-columns: 1fr !important;
+    }
+  }
+
+  /* ========== NOTATKI PANEL ========== */
+  .notes-panel {
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 16px;
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+  }
+
+  .notes-section {
+    margin-bottom: 12px;
+  }
+
+  .block-notes-list {
+    max-height: 320px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 8px;
+  }
+
+  .block-note-item {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 12px;
+  }
+
+  .block-note-item:hover {
+    border-color: #2196F3;
+    box-shadow: 0 2px 6px rgba(33, 150, 243, 0.15);
+    transform: translateX(2px);
+  }
+
+  .block-note-item strong {
+    color: #2196F3;
+    font-weight: 700;
+  }
+
+  .block-note-preview {
+    color: #555;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .block-note-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .block-note-actions button {
+    font-size: 11px;
+    padding: 3px 8px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .block-note-actions button:hover {
+    border-color: #2196F3;
+    background: #f0f7ff;
+  }
+
+  .seg-note-icon {
+    display: inline-block;
+    margin-left: 8px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .seg-note-icon:hover {
+    opacity: 1;
+  }
+
+  .seg-note-icon.has-note {
+    opacity: 1;
+    color: #2196F3;
+    font-weight: bold;
+  }
+  /* Notatka tooltip (dymek) */
+  .note-tooltip{
+    position: fixed;
+    z-index: 10001;
+    display: none;
+    max-width: 360px;
+    background: rgba(20,20,20,0.92);
+    color: #fff;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    line-height: 1.35;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.35);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+  }
+
+  .note-tooltip::after{
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    transform: translateX(-50%);
+    border-width: 6px 6px 0 6px;
+    border-style: solid;
+    border-color: rgba(20,20,20,0.92) transparent transparent transparent;
+  }
+
+  .note-tooltip.below::after{
+    top: -6px;
+    bottom: auto;
+    border-width: 0 6px 6px 6px;
+    border-color: transparent transparent rgba(20,20,20,0.92) transparent;
+  }
+
+
+  /* Responsywność notatek */
+  @media (max-width: 1200px) {
+    div[style*="grid-template-columns:1fr 380px"] {
+      grid-template-columns: 1fr !important;
+    }
+    .notes-panel {
+      position: relative;
+      top: 0;
+      max-height: none;
+      margin-top: 16px;
+    }
+  }
+
+  /* Animacja podświetlenia bloku */
+  @keyframes pulse-highlight {
+    0%, 100% { 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transform: translateY(-1px);
+    }
+    50% { 
+      box-shadow: 0 0 20px rgba(33, 150, 243, 0.5);
+      transform: translateY(-2px);
+    }
+  }
+
+  /* ========== DIARYZUJ w Sterowaniu ========== */
+  .di-run{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    background: #fff;
+    min-width: 260px;
+  }
+  .di-run .progress{
+    margin-top: 0;
+  }
+</style>
+
+<div class="card">
+  <h1 class="h1" data-i18n="page.diarization.title">Diarization</h1>
+
+  <!-- Sekcja 1: Ustawienia -->
+  <div class="subcard">
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="section.settings">⚙️ Ustawienia</div>
+    
+    <div class="di-config-grid">
+      <div>
+        <div class="label" data-i18n="label.diarization_engine">Silnik diaryzacji</div>
+        <select id="di_mode">
+          <option value="pyannote" data-i18n="di.engine.pyannote">pyannote (audio)</option>
+          <option value="nemo_diar" data-i18n="di.engine.nemo_diar">NeMo diarization (audio)</option>
+          <option value="text" data-i18n="di.engine.text">diaryzacja tekstu (prosta)</option>
+        </select>
+      </div>
+      <div id="di_diar_model_block">
+        <div class="label" data-i18n="label.diarization_model">Model diaryzacji</div>
+        <select id="di_diar_model"></select>
+        <div id="di_diar_model_hint" class="small" style="margin-top:6px" data-i18n="hint.diarization_model_from_asr">Lista zawiera tylko modele zainstalowane w Ustawieniach ASR.</div>
+      </div>
+      <div id="di_lang_block">
+        <div class="label" data-i18n="label.language">Język</div>
+        <select id="di_lang">
+          <option value="auto">auto</option>
+          <option value="pl">pl</option>
+          <option value="en">en</option>
+          <option value="de">de</option>
+          <option value="fr">fr</option>
+          <option value="es">es</option>
+          <option value="uk">uk</option>
+          <option value="ru">ru</option>
+        </select>
+      </div>
+      <div id="di_asr_block">
+        <div class="label" data-i18n="label.asr_engine">Silnik ASR</div>
+        <select id="di_asr_engine" disabled>
+          <option value="whisper" selected>Whisper</option>
+        </select>
+      </div>
+      <div id="di_model_block">
+        <div class="label" data-i18n="label.whisper_model">Model Whisper</div>
+        <select id="di_model">
+          {% for m in whisper_models %}
+          <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div id="di_nemo_block" style="display:none">
+        <div class="label" data-i18n="label.nemo_model">Model NeMo</div>
+        <select id="di_nemo_model">
+          {% for m in nemo_models %}
+          <option value="{{m}}">{{m}}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div id="di_pyannote_hint" class="small" style="margin-top:6px" data-i18n-html="hint.pyannote_requires_token">Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).</div>
+
+    <div id="di_text_block" style="display:none">
+      <div class="hr"></div>
+      <div class="label" data-i18n="label.input_text">Tekst wejściowy</div>
+      <textarea id="di_text_in" style="min-height:140px" placeholder="Wklej tekst do prostej diaryzacji…" data-i18n-placeholder="placeholder.paste_text_simple_diarization"></textarea>
+
+      <div class="hr"></div>
+
+      <div class="grid" style="grid-template-columns: 1fr 1fr">
+        <div>
+          <div class="label" data-i18n="label.speakers_count">Liczba mówców</div>
+          <input class="input" id="di_speakers" type="number" min="1" max="20" value="2"/>
+        </div>
+        <div>
+          <div class="label" data-i18n="label.method">Metoda</div>
+          <select id="di_method">
+            <option value="alternate" data-i18n="di.method.alternate">naprzemiennie</option>
+            <option value="block" data-i18n="di.method.block">blokami</option>
+            <option value="lines" data-i18n="di.method.lines">po liniach</option>
+            <option value="sentences" data-i18n="di.method.sentences">po zdaniach</option>
+            <option value="sentences+merge" data-i18n="di.method.sentences_merge">zdania + łączenie</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="label" data-i18n="label.speaker_mapping_json">Mapowanie mówców (JSON)</div>
+      <textarea id="di_map" style="min-height:90px" placeholder='np. {"SPK1":"Jan","SPK2":"Anna"}' data-i18n-placeholder="placeholder.speaker_mapping_json"></textarea>
+      <div class="small" data-i18n-html="hint.speaker_mapping_optional_html">Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.</div>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <!-- Sekcja 2: Nazwy mówców -->
+  <div class="subcard">
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="di.speakers.title">🎤 Nazwy mówców</div>
+    
+    <div id="speaker_mapping_ui" class="speaker-mapping-container">
+      <div class="mapping-empty">
+        <span data-i18n="di.speakers.empty">Wykonaj diaryzację aby wykryć mówców 🎤</span>
+      </div>
+    </div>
+    
+    <textarea id="di_speaker_map" style="display:none"></textarea>
+  </div>
+
+  <div class="hr"></div>
+
+  <!-- Sekcja 3: Sterowanie -->
+  <div class="subcard">
+    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="section.controls">🎮 Sterowanie</div>
+    
+    <div class="row" style="flex-wrap:wrap; gap:10px; align-items:center">
+      <button class="btn" id="di_apply_map" data-i18n-title="di.apply_map.title" data-i18n="btn.apply_changes">✨ Wprowadź zmiany</button>
+      <button class="btn secondary" id="di_export_toggle" data-i18n-title="di.export.title" data-i18n="btn.export_report">📥 Eksportuj raport</button>
+
+            <button class="btn" id="di_btn" data-i18n="btn.diarize" type="button" onclick="if(!window.__diBtnListenerAttached && window.diStartDiarize){ window.diStartDiarize(); } return false;" >Diaryzuj</button>
+      <a class="btn secondary" id="di_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
+    </div>
+    
+    <!-- Panel eksportu raportów (ukryty domyślnie) -->
+    <div id="di_export_panel" style="display:none; margin-top:14px; background:#f0f4fa; border:1px solid #ddd; border-radius:8px; padding:16px;">
+      <div class="label" data-i18n="export.choose_formats">Wybierz formaty raportów (możesz zaznaczyć kilka)</div>
+      <div class="row" style="gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="di_format_txt"> 📄 TXT
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="di_format_html" checked> 📊 HTML
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="di_format_pdf"> 📕 PDF
+        </label>
+      </div>
+      
+      <div class="label" data-i18n="export.options">Opcje eksportu</div>
+      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="di_report_logs"> <span data-i18n="export.include_logs">Dołącz logi systemowe</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="di_report_timestamps" checked> <span data-i18n="export.include_timestamps">Uwzględnij timestampy</span>
+        </label>
+      </div>
+      
+      <div class="row" style="gap:10px;">
+        <button class="btn" id="di_generate_report" data-i18n="btn.generate_reports">🚀 Generuj raporty</button>
+        <button class="btn secondary" id="di_export_cancel" data-i18n="btn.cancel">✕ Anuluj</button>
+      </div>
+      
+      <div class="small" style="margin-top:10px; opacity:0.8;">
+        <span data-i18n="export.saved_hint">💡 Raporty zostaną zapisane w folderze projektu i będą dostępne do pobrania.</span>
+      </div>
+    </div>
+
+    
+    
+
+<div class="small" style="margin-top:10px">
+      <span data-i18n="label.progress">Postęp</span>: <span id="di_pct">0%</span>
+    </div>
+    <div class="progress" style="margin-top:10px"><div id="di_bar"></div></div>
+    <div class="small" style="margin-top:10px" data-i18n-html="hint.logs_in_tab">Logi są dostępne w zakładce <b>Logi</b>.</div>
+
+  </div>
+
+  <div class="hr"></div>
+
+  <!-- 2-kolumnowy layout: Wynik + Notatki -->
+  <div style="display:grid; grid-template-columns:1fr 380px; gap:16px; align-items:start;">
+    <!-- Lewa kolumna: Wynik diaryzacji -->
+    <div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="di.result.title">📄 Wynik diaryzacji</div>
+      <div class="small" style="margin-bottom:8px" data-i18n="hint.hover_to_play_edit">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+      <div id="di_blocks" class="blocklist" style="display:none"></div>
+      <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik…" data-i18n-placeholder="placeholder.result_here"></textarea>
+      <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
+        ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
+      </div>
+    </div>
+
+    <!-- Prawa kolumna: Notatki -->
+    <div class="notes-panel">
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title">📝 Notatki</div>
+      
+      <!-- Notatka globalna -->
+      <div class="notes-section">
+        <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title">🌍 Notatka globalna</div>
+        <textarea id="di_notes_global" placeholder="Notatka do całej rozmowy (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:vertical;"></textarea>
+        <div class="small" style="margin-top:4px;opacity:0.7;" data-i18n="notes.autosave">Auto-save ✓</div>
+      </div>
+
+      <div class="hr" style="margin:12px 0"></div>
+
+      <!-- Notatki do bloków -->
+      <div class="notes-section">
+        <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title">📌 Notatki do bloków</div>
+        <div id="di_block_notes_list" class="block-notes-list">
+          <div class="small" style="opacity:0.6;text-align:center;padding:20px;" data-i18n-html="notes.blocks.empty_html">
+            ${t("notes.blocks.empty_html")}
+          </div>
+        </div>
+      </div>
+
+      <div class="hr" style="margin:12px 0"></div>
+
+      </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+"use strict";
+
+// ========== Diarization State ==========
+const DI = {
+  segments: [],
+  audio: null,
+  audioUrl: "",
+  activeIdx: -1,
+  endWatch: null,
+  speakerColors: {},
+  edit: { active: false, idx: -1 },
+  notes: {
+    global: "",
+    blocks: {}  // { "0": "notatka do bloku 0", "3": "notatka do bloku 3" }
+  }
+};
+
+// ========== Auto-save ==========
+let autoSaveTimeout = null;
+let hasUnsavedChanges = false;
+let notesAutoSaveTimeout = null;
+
+// ========== Notes Functions ==========
+
+// --- Notes tooltip (dymek) ---
+let noteTooltipEl = null;
+let noteTooltipHideTimer = null;
+
+function ensureNoteTooltip(){
+  if(noteTooltipEl) return noteTooltipEl;
+  const el = document.createElement('div');
+  el.id = 'note_tooltip';
+  el.className = 'note-tooltip';
+  el.style.display = 'none';
+  document.body.appendChild(el);
+  noteTooltipEl = el;
+  return el;
+}
+
+function positionNoteTooltip(anchorEl){
+  const el = ensureNoteTooltip();
+  if(!anchorEl) return;
+
+  const r = anchorEl.getBoundingClientRect();
+  const margin = 10;
+
+  el.classList.remove('below');
+  el.style.left = (r.left + r.width/2) + 'px';
+  el.style.top = (r.top - margin) + 'px';
+  el.style.transform = 'translate(-50%, -100%)';
+
+  // Clamp X after we have a size
+  const tr = el.getBoundingClientRect();
+  let left = r.left + r.width/2;
+  if(tr.left < 8) left += (8 - tr.left);
+  if(tr.right > window.innerWidth - 8) left -= (tr.right - (window.innerWidth - 8));
+  el.style.left = left + 'px';
+
+  // If too high, show below
+  const tr2 = el.getBoundingClientRect();
+  if(tr2.top < 8){
+    el.classList.add('below');
+    el.style.top = (r.bottom + margin) + 'px';
+    el.style.transform = 'translate(-50%, 0)';
+  }
+}
+
+function showNoteTooltip(anchorEl, text){
+  if(!text || !String(text).trim()) return;
+  const el = ensureNoteTooltip();
+  el.textContent = String(text);
+  el.style.display = 'block';
+  positionNoteTooltip(anchorEl);
+  if(noteTooltipHideTimer){
+    clearTimeout(noteTooltipHideTimer);
+    noteTooltipHideTimer = null;
+  }
+}
+
+function hideNoteTooltip(){
+  const el = ensureNoteTooltip();
+  if(noteTooltipHideTimer) clearTimeout(noteTooltipHideTimer);
+  noteTooltipHideTimer = setTimeout(function(){
+    el.style.display = 'none';
+    el.classList.remove('below');
+  }, 80);
+}
+
+function bindNoteIconEvents(iconEl, idx){
+  if(!iconEl) return;
+
+  // click -> edit note
+  iconEl.onclick = function(e){
+    e.stopPropagation();
+    editBlockNote(idx);
+  };
+
+  // hover -> bubble, only when note exists
+  iconEl.addEventListener('mouseenter', function(e){
+    e.stopPropagation();
+    if(hasBlockNote(idx)){
+      showNoteTooltip(iconEl, getBlockNote(idx));
+    }
+  });
+  iconEl.addEventListener('mousemove', function(){
+    if(hasBlockNote(idx) && noteTooltipEl && noteTooltipEl.style.display === 'block'){
+      positionNoteTooltip(iconEl);
+    }
+  });
+  iconEl.addEventListener('mouseleave', function(){
+    hideNoteTooltip();
+  });
+}
+
+function refreshAllNoteIcons(){
+  if(!DI.segments || !DI.segments.length) return;
+  for(let i=0; i<DI.segments.length; i++){
+    updateBlockNoteIconInSeg(i);
+  }
+}
+
+// --- Notes auto-save: project + local draft ---
+let notesSaving = false;
+
+async function saveNotesToProjectSilent(){
+  const pid = AISTATE.projectId;
+  if(!pid) return;
+  if(notesSaving) return;
+
+  notesSaving = true;
+  try{
+    await api(`/api/projects/${pid}/notes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(DI.notes)
+    });
+    console.log('📝 Auto-saved notes to project');
+  }catch(e){
+    console.warn('⚠️ Auto-save notes to project failed (keeping local draft):', e);
+  }finally{
+    notesSaving = false;
+  }
+}
+
+
+function updateGlobalNote() {
+  const textarea = document.getElementById('di_notes_global');
+  if (!textarea) return;
+  
+  DI.notes.global = textarea.value || "";
+  scheduleNotesSave();
+}
+
+function updateBlockNote(idx, text) {
+  if (text && text.trim()) {
+    DI.notes.blocks[String(idx)] = text.trim();
+  } else {
+    delete DI.notes.blocks[String(idx)];
+  }
+  renderBlockNotesList();
+  hideNoteTooltip();
+  scheduleNotesSave();
+}
+
+
+function getBlockNote(idx) {
+  return DI.notes.blocks[String(idx)] || "";
+}
+
+function hasBlockNote(idx) {
+  return Boolean(DI.notes.blocks[String(idx)]);
+}
+
+function scheduleNotesSave() {
+  // Szybki draft lokalny + cichy zapis do projektu (debounce)
+  clearTimeout(notesAutoSaveTimeout);
+  notesAutoSaveTimeout = setTimeout(async function(){
+    saveNotesToDraft();
+    await saveNotesToProjectSilent();
+  }, 800);
+}
+
+function saveNotesToDraft() {
+  if (!AISTATE.projectId) return;
+  try {
+    const key = `aistateweb:notes:${AISTATE.projectId}`;
+    localStorage.setItem(key, JSON.stringify(DI.notes));
+    console.log('📝 Auto-saved notes to localStorage');
+  } catch (e) {
+    console.warn('Failed to save notes to localStorage:', e);
+  }
+}
+
+function loadNotesFromDraft() {
+  if (!AISTATE.projectId) return;
+  try {
+    const key = `aistateweb:notes:${AISTATE.projectId}`;
+    const data = localStorage.getItem(key);
+    if (data) {
+      DI.notes = JSON.parse(data);
+      renderGlobalNote();
+      renderBlockNotesList();
+            refreshAllNoteIcons();
+      console.log('📝 Loaded notes from localStorage');
+    }
+  } catch (e) {
+    console.warn('Failed to load notes from localStorage:', e);
+  }
+}
+
+function renderGlobalNote() {
+  const textarea = document.getElementById('di_notes_global');
+  if (textarea) {
+    textarea.value = DI.notes.global || "";
+  }
+}
+
+function renderBlockNotesList() {
+  const container = document.getElementById('di_block_notes_list');
+  if (!container) return;
+  
+  const noteEntries = Object.entries(DI.notes.blocks);
+  
+  if (noteEntries.length === 0) {
+    container.innerHTML = `
+      <div class="small" style="opacity:0.6;text-align:center;padding:20px;">
+        Brak notatek do bloków.<br>
+        Kliknij 📝 obok bloku aby dodać.
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = '';
+  
+  noteEntries.forEach(([idx, text]) => {
+    const item = document.createElement('div');
+    item.className = 'block-note-item';
+    
+    const preview = text.length > 60 ? text.substring(0, 60) + '...' : text;
+    
+    item.innerHTML = `
+      <div><strong>Blok #${idx}</strong></div>
+      <div class="block-note-preview">${escapeHtml(preview)}</div>
+      <div class="block-note-actions">
+        <button onclick="scrollToBlock(${idx})">📍 Pokaż</button>
+        <button onclick="editBlockNote(${idx})">✏️ Edytuj</button>
+        <button onclick="deleteBlockNote(${idx})">🗑️ Usuń</button>
+      </div>
+    `;
+    
+    container.appendChild(item);
+  });
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function scrollToBlock(idx) {
+  const seg = document.querySelector(`.seg[data-idx="${idx}"]`);
+  if (seg) {
+    seg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    seg.style.animation = 'pulse-highlight 1s';
+    setTimeout(() => seg.style.animation = '', 1000);
+  }
+}
+
+function editBlockNote(idx) {
+  const currentNote = getBlockNote(idx);
+  const newNote = prompt(`Notatka do bloku #${idx}:`, currentNote);
+  
+  if (newNote !== null) {
+    updateBlockNote(idx, newNote);
+    updateBlockNoteIconInSeg(idx);
+  }
+}
+
+function deleteBlockNote(idx) {
+  if (confirm(`Usunąć notatkę do bloku #${idx}?`)) {
+    delete DI.notes.blocks[String(idx)];
+    renderBlockNotesList();
+    updateBlockNoteIconInSeg(idx);
+    hideNoteTooltip();
+    scheduleNotesSave();
+  }
+}
+
+function updateBlockNoteIconInSeg(idx) {
+  const seg = document.querySelector(`.seg[data-idx="${idx}"]`);
+  if (!seg) return;
+  
+  let icon = seg.querySelector('.seg-note-icon');
+  if (!icon) {
+    icon = document.createElement('span');
+    icon.className = 'seg-note-icon';
+    bindNoteIconEvents(icon, idx);
+    const timeEl = seg.querySelector('.seg-time');
+    if (timeEl) {
+      timeEl.appendChild(icon);
+    }
+  }
+  
+  if (hasBlockNote(idx)) {
+    icon.textContent = '📝';
+    icon.classList.add('has-note');
+    icon.title = 'Ma notatkę - kliknij aby edytować';
+  } else {
+    icon.textContent = '📝';
+    icon.classList.remove('has-note');
+    icon.title = 'Dodaj notatkę';
+  }
+}
+
+async function saveNotesToProject() {
+  const pid = AISTATE.projectId;
+  if (!pid) {
+    alert('Brak aktywnego projektu');
+    return;
+  }
+  
+  try {
+    await api(`/api/projects/${pid}/notes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(DI.notes)
+    });
+    
+    showToast('✅ Notatki zapisane w projekcie');
+  } catch (e) {
+    alert('❌ Błąd zapisu notatek: ' + e.message);
+  }
+}
+
+async function loadNotesFromProject() {
+  const pid = AISTATE.projectId;
+  if (!pid) return;
+  
+  try {
+    const data = await api(`/api/projects/${pid}/notes`);
+    if (data && typeof data === 'object') {
+      DI.notes = {
+        global: data.global || "",
+        blocks: data.blocks || {}
+      };
+      renderGlobalNote();
+      renderBlockNotesList();
+            refreshAllNoteIcons();
+      console.log('📝 Loaded notes from project');
+    }
+  } catch (e) {
+    console.log('No notes in project yet');
+  }
+}
+
+function exportNotesAsJSON() {
+  const dataStr = JSON.stringify(DI.notes, null, 2);
+  const blob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `notes_${AISTATE.projectId || 'export'}_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📤 Notatki wyeksportowane');
+}
+
+
+// ========== Helper Functions ==========
+
+// Parse diarization line: [12.34-15.67] SPEAKER_00: text
+function parseDiarizedLine(line){
+  const m = line.match(/^\s*\[(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\]\s*([^:]{1,80})\s*:\s*(.*)$/u);
+  if(!m) return null;
+  return {
+    start: parseFloat(m[1]),
+    end: parseFloat(m[2]),
+    speaker: m[3].trim(),
+    text: m[4].trim()
+  };
+}
+
+// Parse entire diarized text into segments
+function parseDiarizedText(text){
+  const segments = [];
+  const lines = String(text || "").split(/\r?\n/);
+  for(const line of lines){
+    const seg = parseDiarizedLine(line);
+    if(seg) segments.push(seg);
+  }
+  return segments;
+}
+
+// Format timestamp for display
+function formatTime(sec){
+  const s = Math.max(0, Number(sec)||0);
+  const mm = Math.floor(s / 60);
+  const ss = (s % 60).toFixed(3);
+  return mm + ":" + String(ss).padStart(6,'0');
+}
+
+// Get audio URL
+function diAudioUrl(){
+  const pid = AISTATE.projectId || "";
+  const f = AISTATE.audioFile || "";
+  if(!pid || !f) return "";
+  return "/api/projects/" + pid + "/download/" + encodeURIComponent(f);
+}
+
+// Stop playback
+function diStopPlayback(){
+  if(DI.endWatch){ clearInterval(DI.endWatch); DI.endWatch=null; }
+  if(DI.audio){ try{ DI.audio.pause(); }catch(e){} }
+  if(DI.activeIdx>=0){
+    const old = document.querySelector(".seg[data-idx='" + DI.activeIdx + "']");
+    if(old) old.classList.remove("seg-active");
+  }
+  DI.activeIdx = -1;
+}
+
+// Play segment
+function diPlaySegment(idx, fromStart){
+  if(fromStart === undefined) fromStart = true;
+  if(!DI.audio || !DI.audioUrl) return;
+  const seg = DI.segments[idx];
+  if(!seg) return;
+
+  diStopPlayback();
+  DI.activeIdx = idx;
+  const elSeg = document.querySelector(".seg[data-idx='" + idx + "']");
+  if(elSeg) elSeg.classList.add("seg-active");
+
+  const endT = Math.max(0, Number(seg.end)||0);
+  const startT = Math.max(0, Number(seg.start)||0);
+  if(fromStart || DI.audio.currentTime < startT || DI.audio.currentTime > endT){
+    DI.audio.currentTime = startT;
+  }
+  DI.audio.play().catch(function(){});
+
+  DI.endWatch = setInterval(function(){
+    if(!DI.audio) return;
+    if(DI.audio.currentTime >= (endT - 0.02)){
+      try{ DI.audio.pause(); }catch(e){}
+      clearInterval(DI.endWatch);
+      DI.endWatch = null;
+    }
+  }, 50);
+}
+
+// --- Inline block editor INSIDE the clicked block (PPM) ---
+(function(){
+  // If the global modal editor exists (app.js), disable it on this page.
+  try{
+    if (typeof window.openManualEditor === "function") {
+      window.openManualEditor = function(){ /* disabled on diarization page (inline editor used) */ };
+    }
+  }catch(e){}
+
+  function _qs(id){ return document.getElementById(id); }
+
+  function diHasAudio(){
+    DI.audioUrl = DI.audioUrl || diAudioUrl();
+    return Boolean(DI.audioUrl);
+  }
+
+  function diEnsureAudio(){
+    DI.audioUrl = DI.audioUrl || diAudioUrl();
+    if (!DI.audioUrl) return false;
+
+    if (!DI.audio){
+      DI.audio = new Audio(DI.audioUrl);
+      DI.audio.preload = "auto";
+    } else if (DI.audio.src !== DI.audioUrl){
+      DI.audio.src = DI.audioUrl;
+    }
+
+    // apply last speed
+    try{
+      var r = parseFloat(localStorage.getItem("aistateweb:audio_speed") || "1");
+      if (!isNaN(r) && r > 0) DI.audio.playbackRate = r;
+    }catch(e){}
+
+    return true;
+  }
+
+  
+  function _shieldAltGrInline(el){
+    if(!el) return;
+
+    // Best-effort fix for Polish diacritics in editors:
+    // - block app hotkeys (stop propagation)
+    // - if browser doesn't insert character for AltGr combos, insert it manually.
+    const PL_MAP = {
+      "a":"ą","A":"Ą",
+      "c":"ć","C":"Ć",
+      "e":"ę","E":"Ę",
+      "l":"ł","L":"Ł",
+      "n":"ń","N":"Ń",
+      "o":"ó","O":"Ó",
+      "s":"ś","S":"Ś",
+      "x":"ź","X":"Ź",
+      "z":"ż","Z":"Ż"
+    };
+
+    const stopOrInsert = (e)=>{
+      const isAltGr =
+        (e.key === "AltGraph") ||
+        (e.code === "AltRight") ||
+        (typeof e.getModifierState === "function" && e.getModifierState("AltGraph")) ||
+        (e.ctrlKey && e.altKey && !e.metaKey);
+
+      if(!isAltGr) return;
+
+      const ch = PL_MAP[e.key];
+      if(ch && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")){
+        try{ e.preventDefault(); }catch(_){}
+        try{ e.stopImmediatePropagation(); }catch(_){}
+        try{ e.stopPropagation(); }catch(_){}
+
+        try{
+          const s = el.selectionStart ?? null;
+          const en = el.selectionEnd ?? null;
+          if(s !== null && en !== null && typeof el.setRangeText === "function"){
+            el.setRangeText(ch, s, en, "end");
+          }else{
+            const v = el.value || "";
+            const a = (s!==null)? s : v.length;
+            const b = (en!==null)? en : v.length;
+            el.value = v.slice(0,a) + ch + v.slice(b);
+          }
+          try{ el.dispatchEvent(new Event("input", {bubbles:true})); }catch(_){}
+        }catch(_){}
+        return;
+      }
+
+      try{ e.stopImmediatePropagation(); }catch(_){}
+      try{ e.stopPropagation(); }catch(_){}
+      // do NOT preventDefault -> allow browser to insert the char.
+    };
+
+    ["keydown","keypress","keyup"].forEach((evt)=>{
+      try{ el.addEventListener(evt, stopOrInsert, true); }catch(_){}
+      try{ el.addEventListener(evt, stopOrInsert, false); }catch(_){}
+    });
+  }
+
+function diEditorSeek(delta){
+    if (!DI.audio) return;
+    var t = (DI.audio.currentTime || 0) + delta;
+    if (t < 0) t = 0;
+    try{
+      if (DI.audio.duration && !isNaN(DI.audio.duration)) t = Math.min(t, DI.audio.duration - 0.01);
+    }catch(e){}
+    DI.audio.currentTime = t;
+  }
+
+  function removeSpeakerClass(el){
+    if(!el) return;
+    Array.from(el.classList).forEach(function(c){
+      if (c.indexOf("speaker-") === 0) el.classList.remove(c);
+    });
+  }
+
+  let _mapRefreshTimer = null;
+  function scheduleMappingRefresh(){
+    clearTimeout(_mapRefreshTimer);
+    _mapRefreshTimer = setTimeout(function(){
+      try{
+        var outEl = _qs("di_out");
+        if(!outEl) return;
+        var labels = extractSpeakerLabels(outEl.value || "");
+        if(labels && labels.length) mergeSpeakerMap(labels);
+      }catch(e){}
+    }, 350);
+  }
+
+  function closeCurrentEditor(){
+    if(!DI.edit.active) return;
+    var idx = DI.edit.idx;
+    var segEl = document.querySelector('#di_blocks .seg[data-idx="' + idx + '"]');
+    if(segEl){
+      segEl.classList.remove("seg-editing");
+      var ed = segEl.querySelector(".seg-editor");
+      if(ed) ed.remove();
+
+      // restore text view
+      var txt = segEl.querySelector(".seg-text");
+      if(txt){
+        var seg = DI.segments[idx];
+        txt.textContent = seg ? (seg.text || "") : (txt.textContent || "");
+        txt.style.display = "";
+      }
+    }
+
+    DI.edit.active = false;
+    DI.edit.idx = -1;
+
+    // stop segment watcher (do not force-stop audio)
+    if(DI.endWatch){
+      clearInterval(DI.endWatch);
+      DI.endWatch = null;
+    }
+  }
+
+  function buildEditorEl(idx){
+    var seg = DI.segments[idx];
+    var ed = document.createElement("div");
+    ed.className = "seg-editor";
+    ed.innerHTML = `
+      <div class="seg-editor-head">
+        <div>
+          <div class="seg-editor-title">✏️ Edycja bloku #${idx}</div>
+          <div class="seg-editor-meta">${formatTime(seg.start)} → ${formatTime(seg.end)}</div>
+        </div>
+        <button class="seg-editor-close" title="Zamknij (Esc)">✕</button>
+      </div>
+
+      <div class="seg-editor-grid">
+        <div>
+          <div class="small" style="margin-bottom:6px;opacity:0.75">Tekst (auto-save)</div>
+          <textarea class="seg-edit-text" placeholder="Edytuj treść bloku…"></textarea>
+        </div>
+        <div>
+          <div class="small" style="margin-bottom:6px;opacity:0.75">Mówca (dla tego bloku)</div>
+          <input class="seg-speaker-input" type="text" placeholder="np. Jan / SPEAKER_00" />
+          <div class="small" style="margin-top:6px;opacity:0.65">Zmiana dotyczy tylko tego bloku.</div>
+        </div>
+      </div>
+
+      <div class="seg-audio-row">
+        <button class="seg-audio-btn" data-act="playSeg" title="Odtwórz ten blok">▶️</button>
+        <button class="seg-audio-btn" data-act="pause" title="Pauza">⏸</button>
+        <button class="seg-audio-btn" data-act="stop" title="Stop">⏹</button>
+        <button class="seg-audio-btn" data-act="m3" title="Cofnij 3s">-3s</button>
+        <button class="seg-audio-btn" data-act="m1" title="Cofnij 1s">-1s</button>
+        <button class="seg-audio-btn" data-act="p1" title="Dalej 1s">+1s</button>
+        <button class="seg-audio-btn" data-act="p3" title="Dalej 3s">+3s</button>
+
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="small">Prędkość</span>
+          <select class="seg-speed">
+            <option value="0.5">0.5×</option>
+            <option value="0.75">0.75×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.25">1.25×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+          </select>
+        </div>
+
+        <div class="seg-audio-info"></div>
+      </div>
+
+      <div class="small" style="margin-top:8px;opacity:0.7">Auto-save ✓ (tekst + mówca zapisują się automatycznie)</div>
+    `;
+
+    return ed;
+  }
+
+  function wireEditor(segEl, idx, ed){
+    var seg = DI.segments[idx];
+    var closeBtn = ed.querySelector(".seg-editor-close");
+    if(closeBtn){
+      closeBtn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        closeCurrentEditor();
+      });
+    }
+
+    // Text
+    var ta = ed.querySelector(".seg-edit-text");
+    if(ta){
+      
+      try{ ta.setAttribute('lang', document.documentElement.lang || 'pl'); }catch(e){}
+      _shieldAltGrInline(ta);
+ta.value = seg.text || "";
+      var tmr = null;
+      ta.addEventListener("input", function(ev){
+        clearTimeout(tmr);
+        tmr = setTimeout(function(){
+          seg.text = ta.value || "";
+          diSetRawTextarea();
+          scheduleAutoSave();
+        }, 120);
+      });
+    }
+
+    // Speaker
+    var sp = ed.querySelector(".seg-speaker-input");
+    if(sp){
+      
+      try{ sp.setAttribute('lang', document.documentElement.lang || 'pl'); }catch(e){}
+      _shieldAltGrInline(sp);
+sp.value = seg.speaker || "";
+      var tmr2 = null;
+
+      function applySpeaker(){
+        var v = (sp.value || '').trim();
+        v = v.replace(/[:\n\r\t]+/g,' ').replace(/\s+/g,' ').trim();
+        if(!v) v = seg.speaker || 'SPK1';
+        if(v.length > 80) v = v.slice(0,80);
+        if(seg.speaker !== v){
+          seg.speaker = v;
+          try{ mergeSpeakerMap([v]); }catch(e){}
+
+          // update chip + color
+          removeSpeakerClass(segEl);
+          segEl.classList.add(getSpeakerColor(seg.speaker));
+          var strong = segEl.querySelector(".seg-time strong");
+          if(strong) strong.textContent = seg.speaker;
+
+          diSetRawTextarea();
+          scheduleMappingRefresh();
+          scheduleAutoSave();
+        }
+      }
+
+      sp.addEventListener("input", function(){
+        clearTimeout(tmr2);
+        tmr2 = setTimeout(applySpeaker, 160);
+      });
+      sp.addEventListener("blur", applySpeaker);
+    }
+
+    // Audio state + handlers
+    var hasAudio = diHasAudio();
+    var info = ed.querySelector(".seg-audio-info");
+    if(info){
+      info.textContent = hasAudio ? ("Audio: " + (AISTATE.audioFile || "")) : "Brak audio w projekcie";
+    }
+
+    ed.querySelectorAll(".seg-audio-btn").forEach(function(btn){
+      btn.disabled = !hasAudio;
+      btn.addEventListener("click", function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        var act = btn.getAttribute("data-act") || "";
+
+        if(!diEnsureAudio()) return;
+
+        if(act === "playSeg"){
+          diPlaySegment(idx, true);
+        } else if(act === "pause"){
+          try{ DI.audio.pause(); }catch(e){}
+        } else if(act === "stop"){
+          try{
+            DI.audio.pause();
+            DI.audio.currentTime = Math.max(0, Number(DI.segments[idx].start)||0);
+          }catch(e){}
+          if(DI.endWatch){ clearInterval(DI.endWatch); DI.endWatch = null; }
+        } else if(act === "m3"){
+          diEditorSeek(-3);
+        } else if(act === "m1"){
+          diEditorSeek(-1);
+        } else if(act === "p1"){
+          diEditorSeek(1);
+        } else if(act === "p3"){
+          diEditorSeek(3);
+        }
+      });
+    });
+
+    var sel = ed.querySelector(".seg-speed");
+    if(sel){
+      // init from storage
+      try{
+        var r0 = parseFloat(localStorage.getItem("aistateweb:audio_speed") || "1");
+        if (!isNaN(r0) && r0 > 0) sel.value = String(r0);
+      }catch(e){}
+
+      sel.disabled = !hasAudio;
+      sel.addEventListener("change", function(ev){
+        var r = parseFloat(sel.value || "1");
+        if (!isNaN(r) && r > 0){
+          if (DI.audio) DI.audio.playbackRate = r;
+          try{ localStorage.setItem("aistateweb:audio_speed", String(r)); }catch(e){}
+        }
+      });
+    }
+
+    // Prevent the editor from triggering hover playback
+    ed.addEventListener("mouseenter", function(ev){ ev.stopPropagation(); });
+    ed.addEventListener("mouseleave", function(ev){ ev.stopPropagation(); });
+  }
+
+  function diOpenInlineEditor(idx){
+    if (idx == null || idx < 0 || idx >= DI.segments.length) return;
+
+    // toggle
+    if(DI.edit.active && DI.edit.idx === idx){
+      // focus textarea
+      var existing = document.querySelector('#di_blocks .seg[data-idx="' + idx + '"] .seg-editor textarea');
+      if(existing){ try{ existing.focus(); }catch(e){} }
+      return;
+    }
+
+    closeCurrentEditor();
+    DI.edit.active = true;
+    DI.edit.idx = idx;
+
+    // stop hover playback
+    diStopPlayback();
+    try{ hideNoteTooltip(); }catch(e){}
+
+    var segEl = document.querySelector('#di_blocks .seg[data-idx="' + idx + '"]');
+    if(!segEl) return;
+    segEl.classList.add("seg-editing");
+
+    // hide original text (we restore on close)
+    var txt = segEl.querySelector(".seg-text");
+    if(txt) txt.style.display = "none";
+
+    // build editor
+    var ed = buildEditorEl(idx);
+    wireEditor(segEl, idx, ed);
+
+    // remove any previous editor (safety)
+    var prev = segEl.querySelector(".seg-editor");
+    if(prev) prev.remove();
+    segEl.appendChild(ed);
+
+    // focus text for quick edit
+    try{
+      var ta = ed.querySelector("textarea");
+      if(ta) ta.focus();
+    }catch(e){}
+  }
+
+  // ESC closes editor
+  document.addEventListener("keydown", function(ev){
+    if (ev.key === "Escape" && DI.edit.active){
+      closeCurrentEditor();
+    }
+  });
+
+  // Right-click on block -> open inline editor inside that block
+  document.addEventListener("contextmenu", function(ev){
+    try{
+      var segEl = ev.target && ev.target.closest ? ev.target.closest(".seg") : null;
+      if (!segEl) return;
+      if (!segEl.closest || !segEl.closest("#di_blocks")) return;
+
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+      var idx = parseInt(segEl.getAttribute("data-idx") || "-1", 10);
+      if (!isNaN(idx) && idx >= 0){
+        diOpenInlineEditor(idx);
+      }
+      return false;
+    }catch(e){}
+  }, true);
+
+  // Expose to window for app.js integration
+  window.diOpenInlineEditor = diOpenInlineEditor;
+  window.diCloseInlineEditor = closeCurrentEditor;
+})();
+
+
+// Assign color to speaker
+function getSpeakerColor(speaker){
+  if(!DI.speakerColors[speaker]){
+    const idx = Object.keys(DI.speakerColors).length % 10;
+    DI.speakerColors[speaker] = "speaker-" + idx;
+  }
+  return DI.speakerColors[speaker];
+}
+
+// Build raw text from segments
+function diBuildRawText(){
+  if(!DI.segments || !DI.segments.length){
+    return document.getElementById("di_out").value || "";
+  }
+  return DI.segments.map(function(s){
+    return "[" + s.start.toFixed(2) + "-" + s.end.toFixed(2) + "] " + s.speaker + ": " + s.text;
+  }).join("\n");
+}
+
+// Update textarea with current segments
+function diSetRawTextarea(){
+  document.getElementById("di_out").value = diBuildRawText();
+}
+
+// Render blocks
+function diRender(){
+  const blocks = document.getElementById("di_blocks");
+  const ta = document.getElementById("di_out");
+  
+  if(!DI.segments || DI.segments.length === 0){
+    blocks.style.display = "none";
+    ta.style.display = "block";
+    return;
+  }
+  
+  blocks.style.display = "flex";
+  ta.style.display = "none";
+  blocks.innerHTML = "";
+
+  DI.audioUrl = diAudioUrl();
+  if(DI.audioUrl){
+    if(!DI.audio){
+      DI.audio = new Audio();
+      DI.audio.preload = "metadata";
+    }
+    DI.audio.src = DI.audioUrl;
+  }
+
+  DI.segments.forEach(function(seg, idx){
+    const d = document.createElement("div");
+    d.className = "seg " + getSpeakerColor(seg.speaker);
+    d.dataset.idx = String(idx);
+    
+    // Ikona notatki
+    const noteIcon = document.createElement('span');
+    noteIcon.className = 'seg-note-icon' + (hasBlockNote(idx) ? ' has-note' : '');
+    noteIcon.textContent = '📝';
+    noteIcon.title = hasBlockNote(idx) ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę';
+    bindNoteIconEvents(noteIcon, idx);
+    
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'seg-time';
+    timeDiv.innerHTML = formatTime(seg.start)+' → '+formatTime(seg.end)+' <strong>'+seg.speaker+'</strong>';
+    timeDiv.appendChild(noteIcon);
+    
+    const textDiv = document.createElement('div');
+    textDiv.className = 'seg-text';
+    textDiv.textContent = seg.text || "";
+    
+    d.appendChild(timeDiv);
+    d.appendChild(textDiv);
+
+    d.addEventListener("mouseenter", function(){ if(!DI.edit.active){ diPlaySegment(idx, true); } });
+    d.addEventListener("mouseleave", function(){ if(!DI.edit.active){ diStopPlayback(); } });
+    
+    blocks.appendChild(d);
+  });
+  
+  diSetRawTextarea();
+}
+
+// Extract speaker labels from diarization output
+function extractSpeakerLabels(text){
+  const labels = new Set();
+  String(text || "").split(/\r?\n/).forEach(function(line){
+    const cleaned = line.replace(/^\s*\[[\d\.\-]+\]\s*/, '');
+    const m = cleaned.match(/^\s*([^:]{1,80})\s*:/u);
+    if(m && m[1]) {
+      const lab = String(m[1]).replace(/\s+/g,' ').trim();
+      if(lab) labels.add(lab);
+    }
+  });
+  
+  const result = Array.from(labels).sort();
+  console.log('🔍 Znalezione etykiety mówców:', result);
+  return result;
+}
+
+// Count occurrences of a speaker label in text
+function countSpeakerOccurrences(text, label){
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matches = text.match(new RegExp(escaped, 'gu'));
+  return matches ? matches.length : 0;
+}
+
+// Show temporary toast notification
+function showToast(message, duration){
+  if(duration === undefined) duration = 2000;
+  let toast = document.getElementById('speaker_toast');
+  if(!toast){
+    toast = document.createElement('div');
+    toast.id = 'speaker_toast';
+    document.body.appendChild(toast);
+  }
+  
+  toast.textContent = message;
+  toast.style.opacity = '1';
+  
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(function(){
+    toast.style.opacity = '0';
+  }, duration);
+}
+
+// Render speaker mapping UI
+function renderSpeakerMappingUI(labels, outputText){
+  const container = document.getElementById('speaker_mapping_ui');
+  if(!container) return;
+  
+  if(!labels || labels.length === 0){
+    container.innerHTML = '<div class="mapping-empty">Wykonaj diaryzację aby wykryć mówców 🎤</div>';
+    return;
+  }
+  
+  let currentMapping = {};
+  try{
+    const raw = document.getElementById('di_speaker_map').value || '';
+    if(raw.trim()) currentMapping = JSON.parse(raw);
+  }catch(e){}
+  
+  container.innerHTML = '';
+  
+  labels.forEach(function(label){
+    const row = document.createElement('div');
+    row.className = 'speaker-mapping-row';
+    
+    const labelEl = document.createElement('div');
+    labelEl.className = 'speaker-label';
+    labelEl.textContent = label;
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'speaker-input';
+    input.value = currentMapping[label] || label;
+    input.placeholder = 'Wpisz imię dla ' + label;
+    input.dataset.speaker = label;
+    
+    input.addEventListener('input', function(){
+      syncToJSON();
+      scheduleAutoSave(); // Auto-save mapowania i wyniku
+    });
+    
+    const countEl = document.createElement('div');
+    countEl.className = 'speaker-count';
+    if(outputText){
+      const count = countSpeakerOccurrences(outputText, label);
+      countEl.textContent = count > 0 ? (count + '×') : '';
+    }
+    
+    row.appendChild(labelEl);
+    row.appendChild(input);
+    row.appendChild(countEl);
+    container.appendChild(row);
+  });
+  
+  console.log('✅ Wygenerowano UI dla ' + labels.length + ' mówców');
+  showToast('🔄 Zaktualizowano ' + labels.length + ' mówców');
+}
+
+// Sync UI inputs to hidden JSON textarea
+function syncToJSON(){
+  const inputs = document.querySelectorAll('.speaker-input');
+  const mapping = {};
+  
+  inputs.forEach(function(input){
+    const label = input.dataset.speaker;
+    const value = input.value.trim() || label;
+    mapping[label] = value;
+  });
+  
+  const jsonTextarea = document.getElementById('di_speaker_map');
+  if(jsonTextarea){
+    jsonTextarea.value = JSON.stringify(mapping, null, 2);
+  }
+  
+  console.log('🔄 Zsynchronizowano mapowanie do JSON:', mapping);
+}
+
+// Sync JSON textarea to UI inputs
+// Merge speaker map (preserves manual names)
+function mergeSpeakerMap(labels){
+  const ta = document.getElementById("di_speaker_map");
+  if(!ta) return;
+
+  let current = {};
+  const raw = (ta.value || "").trim();
+  
+  if(raw){
+    try{
+      const j = JSON.parse(raw);
+      if(j && typeof j === "object" && !Array.isArray(j)){
+        current = j;
+      }
+    }catch(e){
+      console.warn('⚠️ Niepoprawny JSON w mapowaniu, tworzę nowy:', e.message);
+      current = {};
+    }
+  }
+
+  let changed = false;
+  for(let i=0; i<labels.length; i++){
+    const lab = labels[i];
+    if(!(lab in current)){
+      current[lab] = lab;
+      changed = true;
+      console.log('➕ Dodano nową etykietę do mapowania:', lab);
+    } else {
+      console.log('✓ Zachowano istniejącą nazwę dla:', lab, '→', current[lab]);
+    }
+  }
+
+  if(changed || !raw){
+    ta.value = JSON.stringify(current, null, 2);
+    console.log('✅ Zaktualizowano mapowanie mówców:', current);
+  }
+  
+  const outText = document.getElementById('di_out') ? (document.getElementById('di_out').value || '') : '';
+  renderSpeakerMappingUI(labels, outText);
+}
+
+function setDownloadLink(projectId){
+  const dl = document.getElementById("di_download");
+  if(!dl) return;
+  dl.href = "/api/projects/" + projectId + "/download/diarized.txt";
+  dl.style.display = "inline-flex";
+}
+
+let DI_HAS_AUDIO = false;
+
+async function updateAudioState(){
+  await refreshCurrentProjectInfo();
+  DI_HAS_AUDIO = Boolean(AISTATE.projectId && AISTATE.audioFile);
+  const btn = document.getElementById("di_btn");
+  if(btn){
+    const modeEl = document.getElementById("di_mode");
+    const mode = modeEl ? (modeEl.value || "pyannote") : "pyannote";
+    const needAudio = (mode !== "text");
+    btn.disabled = needAudio && !DI_HAS_AUDIO;
+  }
+}
+
+async function loadProjectJson(projectId){
+  try{
+    const raw = await api("/api/projects/" + projectId + "/download/project.json");
+    return JSON.parse(String(raw || "{}"));
+  }catch(e){
+    return {};
+  }
+}
+
+const LS = {
+  get: function(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } },
+  set: function(key,val){ try{ localStorage.setItem(key, val); }catch(e){} }
+};
+
+function draftKeys(projectId){
+  return {
+    diarized: "aistateweb:draft:diarized:" + projectId,
+    speakerMap: "aistateweb:draft:speaker_map:" + projectId
+  };
+}
+
+function setupDraftAutosave(projectId){
+  const keys = draftKeys(projectId);
+
+  const out = document.getElementById("di_out");
+  if(out){
+    let refreshTimeout = null;
+    out.addEventListener("input", function(){
+      // Zapisz do localStorage (draft)
+      LS.set(keys.diarized, out.value || "");
+      
+      // Auto-refresh mapowania (debounce 500ms - szybciej niż auto-save)
+      clearTimeout(refreshTimeout);
+      refreshTimeout = setTimeout(function(){
+        const text = out.value || "";
+        if(text.trim()){
+          // Automatycznie wykryj mówców i odśwież UI
+          const labels = extractSpeakerLabels(text);
+          if(labels.length){
+            mergeSpeakerMap(labels);
+            console.log('🔄 Auto-refreshed speaker mapping from textarea edit');
+          }
+          
+          // Odśwież segments i bloki
+          const segments = parseDiarizedText(text);
+          if(segments.length){
+            DI.segments = segments;
+            diRender();
+            console.log('🔄 Auto-refreshed ' + segments.length + ' blocks from textarea edit');
+          }
+        }
+      }, 500);
+      
+      // Auto-save wszystkiego (debounce 1s)
+      scheduleAutoSave();
+    });
+  }
+
+  const sm = document.getElementById("di_speaker_map");
+  if(sm){
+    sm.addEventListener("input", function(){
+      LS.set(keys.speakerMap, sm.value || "");
+      scheduleAutoSave(); // Auto-save mapowania
+    });
+  }
+}
+
+async function restoreOutputs(projectId){
+  const keys = draftKeys(projectId);
+
+  const out = document.getElementById("di_out");
+  const sm = document.getElementById("di_speaker_map");
+
+  const draftOut = LS.get(keys.diarized);
+  if(out && !out.value.trim() && draftOut && String(draftOut).trim()){
+    out.value = String(draftOut);
+  }
+
+  const draftMap = LS.get(keys.speakerMap);
+  if(sm && !sm.value.trim() && draftMap && String(draftMap).trim()){
+    sm.value = String(draftMap);
+  }
+
+  const meta = await loadProjectJson(projectId);
+
+  if(sm && !sm.value.trim() && meta && typeof meta === "object" && meta.speaker_map){
+    try{
+      sm.value = JSON.stringify(meta.speaker_map, null, 2);
+    }catch(e){}
+  }
+
+  if(out && !out.value.trim()){
+    try{
+      const txt = await api("/api/projects/" + projectId + "/download/diarized.txt");
+      if(txt && String(txt).trim()){
+        out.value = String(txt);
+        setDownloadLink(projectId);
+      }
+    }catch(e){}
+  }
+
+  if(out && out.value.trim()){
+    console.log('🔄 Odświeżam mapowanie z załadowanego wyniku...');
+    
+    const segments = parseDiarizedText(out.value);
+    if(segments.length){
+      DI.segments = segments;
+      diRender();
+      console.log('✅ Wyrenderowano ' + segments.length + ' bloków z zapisanego wyniku');
+    }
+    
+    const labels = extractSpeakerLabels(out.value);
+    if(labels.length) {
+      mergeSpeakerMap(labels);
+    }
+  }
+}
+
+// ========== Auto-save Functions ==========
+
+async function autoSaveAll(){
+  const pid = AISTATE.projectId;
+  if(!pid) return;
+  
+  try{
+    // 1. Zapisz wynik diaryzacji
+    const text = diBuildRawText();
+    if(text.trim()){
+      await api("/api/projects/" + pid + "/save_diarized", {
+        method:"POST",
+        headers:{ "content-type":"application/json" },
+        body: JSON.stringify({ text: text })
+      });
+      console.log('✅ Auto-saved diarization to project');
+      
+      const keys = draftKeys(pid);
+      LS.set(keys.diarized, text);
+    }
+    
+    // 2. Zapisz mapowanie mówców
+    const raw = document.getElementById("di_speaker_map").value || "";
+    if(raw.trim()){
+      try{
+        const mapping = JSON.parse(raw);
+        await api("/api/projects/" + pid + "/speaker_map", {
+          method:"POST",
+          headers:{ "content-type":"application/json" },
+          body: JSON.stringify({ mapping: mapping })
+        });
+        console.log('✅ Auto-saved speaker mapping to project');
+        
+        const keys = draftKeys(pid);
+        LS.set(keys.speakerMap, raw);
+      }catch(e){
+        console.warn('⚠️ Invalid speaker mapping JSON, skipping mapping save');
+      }
+    }
+    
+    markSaved();
+  }catch(e){
+    console.warn('⚠️ Auto-save failed:', e);
+  }
+}
+
+function scheduleAutoSave(){
+  markUnsaved();
+  clearTimeout(autoSaveTimeout);
+  autoSaveTimeout = setTimeout(autoSaveAll, 1000); // 1 sekunda debounce
+}
+
+function markUnsaved(){
+  hasUnsavedChanges = true;
+  // Opcjonalnie można dodać wizualny wskaźnik w przyszłości
+}
+
+function markSaved(){
+  hasUnsavedChanges = false;
+  // Opcjonalnie można dodać wizualny wskaźnik w przyszłości
+}
+
+function onDoneDiarize(j){
+  console.log('✅ Diaryzacja zakończona, przetwarzam wynik...');
+  
+  if(j.result && j.result.text){
+    const out = j.result.text;
+    const outEl = document.getElementById("di_out");
+    if(outEl) {
+      outEl.value = out;
+      console.log('📝 Wynik diaryzacji zapisany do pola tekstowego');
+    }
+
+    const segments = parseDiarizedText(out);
+    if(segments.length){
+      DI.segments = segments;
+      diRender();
+      console.log('✅ Wyrenderowano ' + segments.length + ' bloków');
+    }
+
+    console.log('🔍 Wykrywam mówców z wyniku...');
+    const labels = extractSpeakerLabels(out);
+    
+    if(labels.length) {
+      console.log('✅ Znaleziono ' + labels.length + ' mówców:', labels);
+      mergeSpeakerMap(labels);
+    } else {
+      console.warn('⚠️ Nie znaleziono żadnych etykiet mówców');
+    }
+
+    if(AISTATE.projectId){
+      const keys = draftKeys(AISTATE.projectId);
+      LS.set(keys.diarized, out);
+    }
+
+    if(j.project_id){
+      setDownloadLink(j.project_id);
+    }
+  }
+}
+
+
+function diPickDefaultAsrEngine(prefer = "whisper"){
+  try{
+    const list = (DI_INSTALLED && Array.isArray(DI_INSTALLED.asr_engines)) ? DI_INSTALLED.asr_engines : [];
+    const ids = list.map(e => (e && e.id) ? String(e.id) : "").filter(Boolean);
+    if(prefer && ids.includes(prefer)) return prefer;
+    if(ids.includes("whisper")) return "whisper";
+    if(ids.includes("nemo")) return "nemo";
+  }catch(e){}
+  return prefer || "whisper";
+}
+
+function toggleMode(){
+  const mode = (document.getElementById("di_mode") || {}).value || "text";
+  const isText = (mode === "text");
+  const isAudio = !isText;
+  const isPyannote = (mode === "pyannote");
+  const isNemoDiar = (mode === "nemo_diar");
+
+  const textBlock = document.getElementById("di_text_block");
+  const langBlock = document.getElementById("di_lang_block");
+  const asrBlock = document.getElementById("di_asr_block");
+  const whisperModelBlock = document.getElementById("di_model_block");
+  const nemoModelBlock = document.getElementById("di_nemo_block");
+  const diarModelBlock = document.getElementById("di_diar_model_block");
+  const pyHint = document.getElementById("di_pyannote_hint");
+
+  if(textBlock) textBlock.style.display = isText ? "block" : "none";
+  if(diarModelBlock) diarModelBlock.style.display = isAudio ? "block" : "none";
+  if(pyHint) pyHint.style.display = isPyannote ? "block" : "none";
+
+  // ASR selection is available ONLY for pyannote mode
+  const showAsr = isPyannote;
+  if(asrBlock) asrBlock.style.display = showAsr ? "block" : "none";
+
+  if(!showAsr){
+    if(whisperModelBlock) whisperModelBlock.style.display = "none";
+    if(nemoModelBlock) nemoModelBlock.style.display = "none";
+    if(langBlock) langBlock.style.display = "none";
+
+    // For NeMo diarization we still need a deterministic ASR choice for the backend.
+    // Pick a default silently (no UI selection).
+    if(isNemoDiar){
+      const engEl = document.getElementById("di_asr_engine");
+      if(engEl){
+        engEl.value = diPickDefaultAsrEngine("whisper");
+      }
+    }
+  } else {
+    updateAsrEngineUI();
+    updateLangUI();
+  }
+
+  if(isAudio){
+    updateDiarModelUI();
+  }
+
+  updateAudioState();
+}
+
+function updateAsrEngineUI(){
+  const modeEl = document.getElementById("di_mode");
+  const mode = modeEl ? (modeEl.value || "text") : "text";
+  const isPyannote = (mode === "pyannote");
+
+  const whisperBlock = document.getElementById("di_model_block");
+  const nemoBlock = document.getElementById("di_nemo_block");
+
+  // ASR UI is only for pyannote mode
+  if(!isPyannote){
+    if(whisperBlock) whisperBlock.style.display = "none";
+    if(nemoBlock) nemoBlock.style.display = "none";
+    return;
+  }
+
+  // In pyannote mode we expose ONLY Whisper (engine is fixed in UI).
+  const engEl = document.getElementById("di_asr_engine");
+  if(engEl){
+    engEl.value = "whisper";
+    engEl.disabled = true;
+  }
+
+  if(whisperBlock) whisperBlock.style.display = "block";
+  if(nemoBlock) nemoBlock.style.display = "none";
+
+  updateLangUI();
+}
+
+
+function updateLangUI(){
+  const modeEl = document.getElementById("di_mode");
+  const mode = modeEl ? (modeEl.value || "text") : "text";
+  const langBlock = document.getElementById("di_lang_block");
+  if(!langBlock) return;
+
+  // Language selector is tied to ASR selection and is only available in pyannote mode.
+  if(mode !== "pyannote"){
+    langBlock.style.display = "none";
+    return;
+  }
+
+  const engEl = document.getElementById("di_asr_engine");
+  const eng = engEl ? (engEl.value || "whisper") : "whisper";
+
+  let supports = false;
+  if(DI_INSTALLED && Array.isArray(DI_INSTALLED.asr_engines)) {
+    const found = DI_INSTALLED.asr_engines.find(e => e && e.id === eng);
+    supports = !!(found && found.supports_language);
+  } else {
+    supports = (eng === "whisper");
+  }
+
+  langBlock.style.display = supports ? "block" : "none";
+}
+
+
+
+// ========== Installed ASR/Diarization Options ==========
+let DI_INSTALLED = null;
+
+async function diFetchInstalledOptions(refresh = 0){
+  const url = `/api/asr/installed/diarization?refresh=${refresh ? 1 : 0}`;
+  const resp = await fetch(url, { credentials: "same-origin" });
+  if(!resp.ok){
+    throw new Error(await resp.text());
+  }
+  return resp.json();
+}
+
+function diFilterSelectToAllowed(selectEl, allowedValues){
+  if(!selectEl) return;
+  const allowed = new Set(allowedValues || []);
+  const current = selectEl.value;
+  // Remove options not allowed
+  Array.from(selectEl.options).forEach(opt => {
+    if(!allowed.has(opt.value)) opt.remove();
+  });
+  // Ensure a valid value
+  const stillAllowed = allowed.has(selectEl.value);
+  if(!stillAllowed){
+    selectEl.value = (allowedValues && allowedValues.length) ? allowedValues[0] : "";
+  } else {
+    selectEl.value = current;
+  }
+}
+
+function diFillSelect(selectEl, values, keepCurrent = true){
+  if(!selectEl) return;
+  const current = selectEl.value;
+  selectEl.innerHTML = "";
+
+  const list = values || [];
+  if(list.length === 0){
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "(brak)";
+    selectEl.appendChild(opt);
+    selectEl.value = "";
+    selectEl.disabled = true;
+    return;
+  }
+
+  selectEl.disabled = false;
+  list.forEach(v => {
+    const opt = document.createElement("option");
+    if(typeof v === "string"){
+      opt.value = v;
+      opt.textContent = v;
+    } else {
+      opt.value = v.id;
+      opt.textContent = v.label || v.id;
+    }
+    selectEl.appendChild(opt);
+  });
+
+  const hasCurrent = list.some(v => (typeof v === "string" ? v : v.id) === current);
+  if(keepCurrent && hasCurrent){
+    selectEl.value = current;
+  } else {
+    selectEl.value = (typeof list[0] === "string") ? list[0] : list[0].id;
+  }
+}
+
+function updateDiarModelUI(){
+  const modeEl = document.getElementById("di_mode");
+  const mode = modeEl ? modeEl.value : "text";
+  const block = document.getElementById("di_diar_model_block");
+  const sel = document.getElementById("di_diar_model");
+  if(!block || !sel) return;
+
+  const isAudioMode = (mode !== "text");
+  block.style.display = isAudioMode ? "block" : "none";
+  if(!isAudioMode){
+    sel.innerHTML = "";
+    return;
+  }
+
+  if(!DI_INSTALLED || !DI_INSTALLED.diarization_engines){
+    return;
+  }
+
+  const engine = DI_INSTALLED.diarization_engines.find(e => e.id === mode);
+  const models = engine ? (engine.models || []) : [];
+  diFillSelect(sel, models, true);
+}
+
+async function diInitInstalled(refresh = 0){
+  try{
+    DI_INSTALLED = await diFetchInstalledOptions(refresh);
+
+    // Diarization engines
+    const diarAllowed = (DI_INSTALLED.diarization_engines || []).map(e => e.id);
+    diFilterSelectToAllowed(document.getElementById("di_mode"), diarAllowed);
+
+    // ASR engine is fixed to Whisper in pyannote mode (no selection of other engines).
+    const engEl = document.getElementById("di_asr_engine");
+    if(engEl){
+      engEl.value = "whisper";
+      engEl.disabled = true;
+    }
+
+    // ASR models (Whisper only)
+    if(DI_INSTALLED.asr_models){
+      diFillSelect(document.getElementById("di_model"), DI_INSTALLED.asr_models.whisper || [], true);
+      // Keep hidden NeMo model selector empty/disabled to avoid accidental use.
+      diFillSelect(document.getElementById("di_nemo_model"), [], false);
+    }
+
+    updateAsrEngineUI();
+    updateDiarModelUI();
+
+    // Apply layout after filtering
+    toggleMode();
+  } catch(e){
+    console.warn("Failed to load installed ASR/diarization options:", e);
+  }
+}
+
+// ========== Export Report Functions ==========
+
+function toggleExportPanel(){
+  const panel = document.getElementById("di_export_panel");
+  if(!panel) return;
+  
+  if(panel.style.display === "none"){
+    panel.style.display = "block";
+  } else {
+    panel.style.display = "none";
+  }
+}
+
+function closeExportPanel(){
+  const panel = document.getElementById("di_export_panel");
+  if(panel) panel.style.display = "none";
+}
+
+async function generateDiarReport(){
+  const pid = AISTATE.projectId;
+  if(!pid){
+    alert("Brak aktywnego projektu. Najpierw utwórz projekt w zakładce 'Nowy projekt'.");
+    return;
+  }
+  
+  const outEl = document.getElementById("di_out");
+  if(!outEl || !outEl.value.trim()){
+    alert("Brak wyniku diaryzacji do wyeksportowania. Najpierw wykonaj diaryzację.");
+    return;
+  }
+  
+  // Zbierz zaznaczone formaty
+  const formats = [];
+  if(document.getElementById("di_format_txt").checked) formats.push("txt");
+  if(document.getElementById("di_format_html").checked) formats.push("html");
+  if(document.getElementById("di_format_pdf").checked) formats.push("pdf");
+  
+  if(formats.length === 0){
+    alert("Wybierz przynajmniej jeden format raportu (TXT, HTML lub PDF).");
+    return;
+  }
+  
+  const includeLogs = document.getElementById("di_report_logs").checked ? 1 : 0;
+  
+  try{
+    const btn = document.getElementById("di_generate_report");
+    const originalText = btn.textContent;
+    btn.textContent = "⏳ Generuję...";
+    btn.disabled = true;
+    
+    const results = [];
+    
+    // Generuj każdy zaznaczony format
+    for(const format of formats){
+      const url = `/api/projects/${pid}/report?format=${format}&include_logs=${includeLogs}`;
+      const response = await fetch(url);
+      
+      if(!response.ok){
+        const errorText = await response.text();
+        throw new Error(`${format.toUpperCase()}: ${errorText || 'HTTP ' + response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `diarization_report_${new Date().getTime()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+      
+      results.push(format.toUpperCase());
+      
+      // Małe opóźnienie między pobieraniami (dla stabilności przeglądarki)
+      if(formats.length > 1 && format !== formats[formats.length - 1]){
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+    
+    btn.textContent = originalText;
+    btn.disabled = false;
+    
+    closeExportPanel();
+    
+    const message = results.length === 1 
+      ? `✅ Raport ${results[0]} wygenerowany`
+      : `✅ Raporty wygenerowane: ${results.join(', ')}`;
+    
+    showToast(message + ' i zapisane w projekcie', 3000);
+    
+  }catch(e){
+    const btn = document.getElementById("di_generate_report");
+    btn.textContent = "🚀 Generuj raporty";
+    btn.disabled = false;
+    
+    alert(`❌ Błąd generowania raportu: ${e.message}`);
+    console.error('Report generation error:', e);
+  }
+}
+
+
+// ========== Event Listeners ==========
+
+const __modeEl = document.getElementById("di_mode");
+if(__modeEl){ __modeEl.addEventListener("change", toggleMode); }
+
+const __asrEl = document.getElementById("di_asr_engine");
+if(__asrEl){ __asrEl.addEventListener("change", () => { updateAsrEngineUI(); }); }
+
+
+// Initial layout
+toggleMode();
+// Load installed-only options (engines/models)
+diInitInstalled(0);
+
+async function diStartDiarize(){
+  const mode = document.getElementById("di_mode").value;
+  const fd = new FormData();
+
+  if(mode !== "text"){
+    await updateAudioState();
+    if(!DI_HAS_AUDIO){
+      alert("Brak pliku audio w projekcie. Utwórz projekt w zakładce: Nowy projekt.");
+      window.location.href = "/new-project";
+      return;
+    }
+
+    let eng = "whisper";
+    if(mode === "pyannote"){
+      eng = (document.getElementById("di_asr_engine").value || "whisper");
+      const __lb = document.getElementById("di_lang_block");
+      if(__lb && __lb.style.display !== "none"){
+        fd.append("lang", (document.getElementById("di_lang").value || "auto"));
+      }
+    } else {
+      // Non-pyannote diarization engines (e.g. NeMo diarization): no ASR choice in UI.
+      // Pick a deterministic default silently.
+      eng = diPickDefaultAsrEngine("whisper");
+    }
+
+    fd.append("asr_engine", eng);
+    fd.append("project_id", AISTATE.projectId || "");
+    fd.append("diar_engine", mode);
+
+    const diarModelEl = document.getElementById("di_diar_model");
+    const diarModel = diarModelEl ? diarModelEl.value : "";
+    fd.append("diar_model", diarModel);
+
+    if(eng === "nemo"){
+      fd.append("model", (document.getElementById("di_nemo_model") || {}).value || "");
+    } else {
+      fd.append("model", (document.getElementById("di_model") || {}).value || "");
+    }
+
+    await startTask("di", "/api/diarize_voice", fd, onDoneDiarize);
+  } else {
+    const text = document.getElementById("di_text_in").value || "";
+    if(!text.trim()){ alert("Wklej tekst wejściowy."); return; }
+    fd.append("text", text);
+    fd.append("speakers", document.getElementById("di_speakers").value || "2");
+    fd.append("method", document.getElementById("di_method").value || "alternate");
+    fd.append("mapping_json", document.getElementById("di_map").value || "");
+    await startTask("di", "/api/diarize_text", fd, onDoneDiarize);
+  }
+}
+window.diStartDiarize = diStartDiarize;
+
+const __diBtn = document.getElementById("di_btn");
+if(__diBtn){ __diBtn.addEventListener("click", (e)=>{ e.preventDefault(); diStartDiarize(); }); window.__diBtnListenerAttached = true; }
+document.getElementById("di_apply_map").addEventListener("click", function(){
+  syncToJSON();
+  
+  let mapping = {};
+  const raw = document.getElementById("di_speaker_map").value || "";
+  if(raw.trim()){
+    try{ mapping = JSON.parse(raw); }catch(e){ alert("Niepoprawny JSON mapowania."); return; }
+  }
+  
+  const outEl = document.getElementById("di_out");
+  let out = outEl.value || "";
+  
+  let totalReplacements = 0;
+  const details = [];
+  
+  for(const k in mapping){
+    if(!mapping.hasOwnProperty(k)) continue;
+    const v = mapping[k];
+    if(k === v) continue;
+    const count = (out.match(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gu')) || []).length;
+    if(count > 0){
+      out = out.split(k).join(v);
+      totalReplacements += count;
+      details.push(k + ' → ' + v + ' (' + count + '×)');
+    }
+  }
+  
+  outEl.value = out;
+  
+  if(totalReplacements > 0){
+    console.log('✅ Zastosowano mapowanie mówców:', details.join(', '));
+    
+    const segments = parseDiarizedText(out);
+    if(segments.length){
+      DI.segments = segments;
+      DI.speakerColors = {};
+      diRender();
+    }
+    
+    const labels = extractSpeakerLabels(out);
+    renderSpeakerMappingUI(labels, out);
+    
+    // ✨ Auto-save po zastosowaniu mapowania
+    scheduleAutoSave();
+    
+    alert("✅ Wprowadzono zmiany:\n\n" + details.join('\n') + "\n\nRazem: " + totalReplacements + " zamian");
+  } else {
+    alert('ℹ️ Nie znaleziono żadnych wystąpień do zamiany. Sprawdź czy etykiety w mapowaniu pasują do tych w wyniku.');
+  }
+});
+
+// Export report listeners
+document.getElementById("di_export_toggle").addEventListener("click", toggleExportPanel);
+document.getElementById("di_export_cancel").addEventListener("click", closeExportPanel);
+document.getElementById("di_generate_report").addEventListener("click", generateDiarReport);
+
+// ========== Notes Event Listeners ==========
+const notesGlobalTextarea = document.getElementById('di_notes_global');
+if (notesGlobalTextarea) {
+  notesGlobalTextarea.addEventListener('input', updateGlobalNote);
+}
+
+const notesSaveBtn = document.getElementById('di_notes_save');
+if (notesSaveBtn) {
+  notesSaveBtn.addEventListener('click', saveNotesToProject);
+}
+
+const notesExportBtn = document.getElementById('di_notes_export');
+if (notesExportBtn) {
+  notesExportBtn.addEventListener('click', exportNotesAsJSON);
+}
+
+
+document.addEventListener('aistate:output-updated', function(e){
+  console.log('🔔 Received output-updated event:', e.detail);
+  
+  if(e.detail && e.detail.textareaId === 'di_out'){
+    const outEl = document.getElementById("di_out");
+    if(outEl && outEl.value.trim()){
+      console.log('🔄 Auto-refreshing speaker mapping and blocks from updated output...');
+      
+      const segments = parseDiarizedText(outEl.value);
+      if(segments.length){
+        DI.segments = segments;
+        diRender();
+        console.log('✅ Re-rendered ' + segments.length + ' blocks');
+      }
+      
+      const labels = extractSpeakerLabels(outEl.value);
+      if(labels.length){
+        mergeSpeakerMap(labels);
+        showToast('✅ Wykryto ' + labels.length + ' mówców');
+        console.log('✅ Auto-refresh complete: ' + labels.length + ' speakers found:', labels);
+      } else {
+        console.warn('⚠️ No speaker labels found in output');
+      }
+      
+      // ✨ Auto-save po aktualizacji z edytora modalnego
+      scheduleAutoSave();
+    }
+  }
+});
+
+// Export global helpers for app.js integration
+window.DI = DI;
+window.diRender = diRender;
+window.diBuildRawText = diBuildRawText;
+window.parseDiarizedText = parseDiarizedText;
+window.diStopPlayback = diStopPlayback;
+
+(async function(){
+  await updateAudioState();
+  if(AISTATE.projectId){
+    setupDraftAutosave(AISTATE.projectId);
+    await restoreOutputs(AISTATE.projectId);
+    
+    // Load notes from project
+    await loadNotesFromProject();
+    // Fallback to localStorage draft if project has no notes
+    if (!DI.notes.global && Object.keys(DI.notes.blocks).length === 0) {
+      loadNotesFromDraft();
+    }
+  }
+  await resumeTask("di", onDoneDiarize);
+})();
+</script>
+{% endblock %}
