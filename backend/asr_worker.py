@@ -335,7 +335,7 @@ def predownload_nemo_diarization(model: str) -> None:
 
     Supported presets:
       - diar_msdd_telephonic
-      - titanet_large
+      (Speaker-embedding presets like "titanet_large" were removed from the UI.)
 
     We intentionally implement this as a best-effort loader, because NeMo
     moved diarization classes between versions.
@@ -348,6 +348,12 @@ def predownload_nemo_diarization(model: str) -> None:
     m = (model or "").strip().lower()
     if not m:
         raise SystemExit("Missing model")
+
+    # Backward-compat: the old UI exposed "titanet_large" as a preset, but it is no longer
+    # maintained/available in the project. Keep the message explicit if someone still tries
+    # to use it (e.g., old saved settings).
+    if m == "titanet_large":
+        raise SystemExit("Unsupported NeMo diarization preset: 'titanet_large'. Use 'diar_msdd_telephonic' instead.")
 
     # Backward-compat / legacy aliases (some IDs were never published as NeMo pretrained models)
     alias_map = {
