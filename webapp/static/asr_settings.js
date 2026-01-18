@@ -394,12 +394,12 @@ const ASR_MODEL_INFO = {
         },
         recommended_title: {pl: "Recommended:", en: "Recommended:"},
         recommended: {
-          pl: `⭐ NAJLEPSZY WYBÓR dla AISTATEweb. Świetna jakość na polskim,
-obsługuje 100+ języków out-of-the-box, nowoczesna architektura (2023),
-idealny balans prędkość/jakość. Twoje RTX 4090 x2 obsłużą bez problemu.`,
-          en: `⭐ BEST CHOICE for AISTATEweb. Excellent Polish quality,
-supports 100+ languages out-of-the-box, modern architecture (2023),
-ideal speed/quality balance. Your dual RTX 4090 will handle it easily.`,
+          pl: `Mocny model wielojęzyczny z bardzo dobrą jakością dla polskiego.
+Obsługuje 100+ języków out-of-the-box, nowoczesna architektura (2023)
+i dobry kompromis prędkość/jakość.`,
+          en: `Strong multilingual model with excellent Polish quality.
+Supports 100+ languages out-of-the-box, modern architecture (2023),
+and a good speed/quality balance.`,
         },
         offline: {pl: "✅ Całkowicie offline po pobraniu (~4GB download)", en: "✅ Fully offline after download (~4GB download)"},
       }
@@ -511,7 +511,7 @@ Blazing fast but less accurate than Transducer. Great for a quick
       offline: {pl: "✅ Offline po pobraniu wag.", en: "✅ Offline after weights are downloaded."},
       ram: "8–16 GB",
       disk: "~0.2–2 GB cache",
-      notes: {pl: "Zalecane jako stabilna alternatywa dla pyannote (bez HF tokena).", en: "Recommended as a stable alternative to pyannote (no HF token)."},
+      notes: {pl: "Może być używane jako stabilna alternatywa dla pyannote (bez HF tokena).", en: "Can be used as a stable alternative to pyannote (no HF token)."},
     },
 
     diar_msdd_telephonic: {
@@ -566,63 +566,10 @@ Blazing fast but less accurate than Transducer. Great for a quick
         },
         recommended_title: {pl: "Recommended:", en: "Recommended:"},
         recommended: {
-          pl: "⭐⭐⭐ NAJLEPSZY WYBÓR dla Twoich języków! Świetna jakość, stabilne, działa z każdym językiem. ZAMIEŃ pyannote na to!",
-          en: "⭐⭐⭐ BEST CHOICE for your languages! Great quality, stable, language-agnostic. Replace pyannote with this.",
+          pl: "MSDD (telephonic): wysoka jakość przy nakładającej się mowie i wielu mówcach; model jest language-agnostic.",
+          en: "MSDD (telephonic): high quality for overlapping speech and multiple speakers; language-agnostic.",
         },
         offline: {pl: "✅ Całkowicie offline (~1.5GB)", en: "✅ Fully offline (~1.5GB)"},
-      }
-    },
-
-    titanet_large: {
-      rich: {
-        model: "titanet_large",
-        vram: "2-3GB",
-        min_gpu: "RTX 2060 6GB",
-        optimal_gpu: "RTX 3060 8GB",
-        ram: "8GB",
-        speed: "RTF 0.2 (~5x faster than realtime)",
-        analysis_time: {pl: "1min audio = ~12 sekund", en: "1min audio = ~12 seconds"},
-        quality: "★★★★☆",
-        pl_quality: "★★★★☆",
-        ru_uk_quality: "★★★★☆",
-        max_speakers: {pl: "2-5 (najlepiej do 5)", en: "2-5 (best up to 5)"},
-        languages: {pl: "✅ WSZYSTKIE (language-agnostic)", en: "✅ ALL (language-agnostic)"},
-        architecture: {pl: "Embeddings (speaker recognition)", en: "Embeddings (speaker recognition)"},
-        model_size: "~500MB",
-        features_title: {pl: "Funkcje:", en: "Features:"},
-        features: {
-          pl: [
-            "Szybki",
-            "Prostsza architektura (embeddings)",
-            "Dobry dla małych grup (2-5 osób)",
-            "Lekki",
-          ],
-          en: [
-            "Fast",
-            "Simpler architecture (embeddings)",
-            "Great for small groups (2-5 people)",
-            "Lightweight",
-          ],
-        },
-        use_cases_title: {pl: "Use cases:", en: "Use cases:"},
-        use_cases: {
-          pl: [
-            "Spotkania 1:1 lub małe grupy (max 5 osób)",
-            "Gdy masz przewidywalną liczbę mówców",
-            "Szybka diaryzacja dla prostych przypadków",
-          ],
-          en: [
-            "1:1 meetings or small groups (max 5 people)",
-            "When the speaker count is predictable",
-            "Fast diarization for simpler cases",
-          ],
-        },
-        recommended_title: {pl: "Recommended:", en: "Recommended:"},
-        recommended: {
-          pl: "★★★ OK jeśli wiesz że masz max 5 osób. Jeśli więcej lub overlapping speech → użyj MSDD.",
-          en: "★★★ OK if you know it's max 5 speakers. For more or overlapping speech → use MSDD.",
-        },
-        offline: {pl: "✅ Całkowicie offline (~500MB)", en: "✅ Fully offline (~500MB)"},
       }
     },
   },
@@ -631,7 +578,7 @@ Blazing fast but less accurate than Transducer. Great for a quick
   pyannote: {
     _default: {
       functionality: {pl: "Diaryzacja mówców (speaker diarization).", en: "Speaker diarization."},
-      accuracy: {pl: "Zależna od pipeline; 3.1 zwykle najlepszy.", en: "Pipeline-dependent; 3.1 is usually best."},
+      accuracy: {pl: "Zależna od pipeline; 3.1 często daje najwyższą jakość.", en: "Pipeline-dependent; 3.1 often offers the highest quality."},
       offline: {pl: "❌ Wymaga tokena HF i połączenia z HuggingFace do pobrania/uruchomienia pipeline. Po zbuforowaniu może działać offline, ale token/akceptacja licencji nadal są wymagane.", en: "❌ Requires an HF token and an internet connection to download/run the pipeline from HuggingFace. After caching it may run offline, but token/license acceptance is still required."},
       vram: "~4–8 GB",
       min_gpu: "4–6 GB VRAM",

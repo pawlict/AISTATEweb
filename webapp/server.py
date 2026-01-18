@@ -364,8 +364,6 @@ NEMO_MODELS = [
 NEMO_DIARIZATION_MODELS = [
     # MSDD diarization (telephonic) – best quality for overlap + multi-language
     "diar_msdd_telephonic",
-    # Speaker embeddings (best for small groups; clustering-based diarization)
-    "titanet_large",
 ]
 
 PYANNOTE_PIPELINES = [
@@ -1810,7 +1808,7 @@ def _scan_nemo_cache(model_ids: List[str]) -> Dict[str, bool]:
 
     Why this is heuristic:
     - NeMo historically cached pretrained models under ~/.cache/torch/NeMo/... as a *directory*
-      (often named after the model id, e.g. "titanet_large"), not always leaving a *.nemo file.
+      (often named after the model id, e.g. "diar_msdd_telephonic"), not always leaving a *.nemo file.
     - Some environments override torch cache locations (TORCH_HOME).
 
     We therefore scan for both:
