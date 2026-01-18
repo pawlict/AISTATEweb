@@ -324,17 +324,34 @@
   }
 </style>
 
-<div class="card">
-  <h1 class="h1" data-i18n="page.transcription.title">Transcription</h1>
+<div class="analysis-page transcription-page">
 
-  <!-- Sekcja 1: Ustawienia -->
-  <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="section.settings">⚙️ Ustawienia</div>
-    
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div>
-        <div class="label" data-i18n="label.language">Język</div>
-        <select id="tr_lang">
+  <div class="card analysis-toolbar transcription-toolbar" id="tr_toolbar">
+    <div class="analysis-toolbar-left">
+      <div class="h1" style="margin:0">🎙️ <span data-i18n="page.transcription.title">Transcription</span></div>
+      <div class="small" id="tr_toolbar_hint_line"></div>
+    </div>
+
+    <div class="analysis-toolbar-right">
+
+      <!-- Transcribe -->
+      <button class="btn" id="tr_btn" data-i18n="btn.transcribe">Transcribe</button>
+
+      <!-- Models -->
+      <div class="analysis-models">
+        <div class="analysis-model">
+          <label class="small" for="tr_engine" data-i18n="label.asr_engine">Silnik ASR</label>
+          <select class="input mini-select" id="tr_engine"></select>
+        </div>
+
+        <div class="analysis-model">
+          <label class="small" for="tr_model" data-i18n="label.asr_model">Model ASR</label>
+          <select class="input mini-select" id="tr_model"></select>
+        </div>
+
+        <div class="analysis-model">
+          <label class="small" for="tr_lang" data-i18n="label.language">Język</label>
+          <select class="input mini-select" id="tr_lang">
           <option value="auto">auto</option>
           <option value="pl">pl</option>
           <option value="en">en</option>
@@ -344,76 +361,39 @@
           <option value="uk">uk</option>
           <option value="ru">ru</option>
         </select>
-        <div class="small" id="tr_whisper_hint" data-i18n-html="hint.whisper_auto">W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).</div>
-        <div class="small" id="tr_nemo_hint" style="display:none" data-i18n="hint.nemo_lang_note">W NeMo pole języka może być ignorowane (zależy od modelu).</div>
-      </div>
-
-      <div>
-        <div class="label" data-i18n="label.asr_engine">Silnik ASR</div>
-        <select id="tr_engine"></select>
-        <div class="small" id="tr_asr_no_models" style="display:none" data-i18n-html="hint.asr_no_models_html">Brak zainstalowanych modeli ASR. Zainstaluj je w Panelu administracyjnym → Ustawienia ASR.</div>
-        <div style="margin-top:10px">
-          <div class="label" data-i18n="label.asr_model">Model ASR</div>
-          <select id="tr_model"></select>
         </div>
       </div>
-    </div>
-  </div>
 
-  <div class="hr"></div>
+      <!-- Report formats (multi-select) -->
+      <div class="analysis-format" id="tr_report_formats">
+        <label class="small" data-i18n="analysis.report">Raport</label>
+        <label class="pill"><input type="checkbox" name="tr_report_fmt" value="html" checked> HTML</label>
+        <label class="pill"><input type="checkbox" name="tr_report_fmt" value="doc"> DOC</label>
+        <label class="pill"><input type="checkbox" name="tr_report_fmt" value="txt"> TXT</label>
+      </div>
 
-  <!-- Sekcja 2: Sterowanie -->
-  <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="section.controls">🎮 Sterowanie</div>
-    
-    <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
-      <button class="btn" id="tr_btn" data-i18n="btn.transcribe">Transcribe</button>
+      <button class="btn secondary" id="tr_report_save_btn">💾 <span data-i18n="analysis.report_save">Zapisz</span></button>
+
+      <!-- Optional: direct transcript download link (kept for compatibility) -->
       <a class="btn secondary" id="tr_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
-      <button class="btn secondary" id="tr_export_toggle" data-i18n-title="tr.export.title" style="display:none" data-i18n="btn.export_report">📥 Eksportuj raport</button>
-    </div>
-    
-    <!-- Panel eksportu raportów (ukryty domyślnie) -->
-    <div id="tr_export_panel" class="export-panel">
-      <div class="label" data-i18n="export.choose_formats">Wybierz formaty raportów (możesz zaznaczyć kilka)</div>
-      <div class="row" style="gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="tr_format_txt"> 📄 TXT
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="tr_format_html" checked> 📊 HTML
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="tr_format_pdf"> 📕 PDF
-        </label>
-      </div>
-      
-      <div class="label" data-i18n="export.options">Opcje eksportu</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="tr_report_logs"> <span data-i18n="export.include_logs">Dołącz logi systemowe</span>
-        </label>
-      </div>
-      
-      <div class="row" style="gap:10px">
-        <button class="btn" id="tr_generate_report" data-i18n="btn.generate_reports">🚀 Generuj raporty</button>
-        <button class="btn secondary" id="tr_export_cancel" data-i18n="btn.cancel">✕ Anuluj</button>
-      </div>
-      
-      <div class="small" style="margin-top:10px;opacity:0.8">
-        <span data-i18n="export.saved_hint">💡 Raporty zostaną zapisane w folderze projektu i będą dostępne do pobrania.</span>
-      </div>
-    </div>
 
-    <div class="small" style="margin-top:10px">
-      <span data-i18n="label.status">Status</span>: <b id="tr_status">—</b> • <span data-i18n="label.progress">Postęp</span>: <span id="tr_pct">0%</span>
     </div>
-    <div class="progress" style="margin-top:10px"><div id="tr_bar"></div></div>
-    <div class="small" style="margin-top:10px" data-i18n-html="hint.logs_in_tab">Logi są dostępne w zakładce <b>Logi</b>.</div>
   </div>
 
-  <div class="hr"></div>
+  <div class="card" id="tr_content">
 
-  <!-- 2-kolumnowy layout: Wynik + Notatki (EXACT COPY from diarization) -->
+    <div class="small" id="tr_asr_no_models" style="display:none" data-i18n-html="hint.asr_no_models_html">Brak zainstalowanych modeli ASR. Zainstaluj je w Panelu administracyjnym → Ustawienia ASR.</div>
+    <div class="small" id="tr_whisper_hint" data-i18n-html="hint.whisper_auto">W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).</div>
+    <div class="small" id="tr_nemo_hint" style="display:none" data-i18n="hint.nemo_lang_note">W NeMo pole języka może być ignorowane (zależy od modelu).</div>
+
+    <div class="an-progress" id="tr_progress">
+      <div class="small"><span data-i18n="label.status">Status</span>: <b id="tr_status">—</b> • <span data-i18n="label.progress">Postęp</span>: <span id="tr_pct">0%</span></div>
+      <div class="progress"><div id="tr_bar"></div></div>
+    </div>
+
+    <div class="hr"></div>
+
+    <!-- 2-kolumnowy layout: Wynik + Notatki (EXACT COPY from diarization) -->
   <div style="display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start">
     <!-- Lewa kolumna: Wynik transkrypcji -->
     <div>
@@ -458,8 +438,12 @@
       </div>
     </div>
   </div>
-</div>
 
+
+
+  </div>
+
+</div>
 <!-- Tooltip for note preview on hover -->
 <div class="note-tooltip" id="tr_note_tooltip"></div>
 
@@ -1217,60 +1201,63 @@ function scheduleAutoSave(){
   }, 2000);
 }
 
-// ========== Export reports ==========
-function trToggleExportPanel(){
-  const panel = document.getElementById("tr_export_panel");
-  if(!panel) return;
-  panel.style.display = panel.style.display === "none" ? "block" : "none";
+// ========== Export reports (toolbar) ==========
+function trGetSelectedReportFormats(){
+  const out = [];
+  document.querySelectorAll('input[name="tr_report_fmt"]:checked').forEach(cb=>{
+    const v = String(cb.value||"").toLowerCase().trim();
+    if(v) out.push(v);
+  });
+  return out;
 }
 
-function trCloseExportPanel(){
-  const panel = document.getElementById("tr_export_panel");
-  if(panel) panel.style.display = "none";
-}
-
-async function trGenerateReport(){
+async function trSaveReports(){
   const pid = AISTATE.projectId;
   if(!pid){
     alert("Brak aktywnego projektu");
     return;
   }
-  
-  const outEl = document.getElementById("tr_out");
-  if(!outEl || !outEl.value.trim()){
+
+  const text = (typeof trBuildRawText === "function") ? (trBuildRawText() || "") : (document.getElementById("tr_out")?.value || "");
+  if(!text.trim()){
     alert("Brak wyniku transkrypcji do wyeksportowania");
     return;
   }
-  
-  const formats = [];
-  if(document.getElementById("tr_format_txt").checked) formats.push("txt");
-  if(document.getElementById("tr_format_html").checked) formats.push("html");
-  if(document.getElementById("tr_format_pdf").checked) formats.push("pdf");
-  
+
+  const formats = trGetSelectedReportFormats();
   if(formats.length === 0){
     alert("Wybierz przynajmniej jeden format raportu");
     return;
   }
-  
-  const includeLogs = document.getElementById("tr_report_logs").checked ? 1 : 0;
-  
+
+  // Ensure latest transcript is persisted in the project before generating reports.
   try{
-    const btn = document.getElementById("tr_generate_report");
-    const originalText = btn.textContent;
-    btn.textContent = "⏳ Generuję...";
+    await fetch(`/api/projects/${pid}/save/transcript`, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain"},
+      body: text
+    });
+  }catch(e){ /* best-effort */ }
+
+  const btn = document.getElementById("tr_report_save_btn");
+  const originalText = btn ? btn.innerHTML : "";
+  if(btn){
+    btn.innerHTML = "⏳ " + (t?.("analysis.report_save") || "Zapisuję...");
     btn.disabled = true;
-    
+  }
+
+  try{
     const results = [];
-    
+
     for(const format of formats){
-      const url = `/api/projects/${pid}/report/transcription?format=${format}&include_logs=${includeLogs}`;
+      const url = `/api/projects/${pid}/report/transcription?format=${encodeURIComponent(format)}&include_logs=0`;
       const response = await fetch(url);
-      
+
       if(!response.ok){
         const errorText = await response.text();
         throw new Error(`${format.toUpperCase()}: ${errorText || "HTTP " + response.status}`);
       }
-      
+
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1280,32 +1267,29 @@ async function trGenerateReport(){
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(downloadUrl);
-      
+
       results.push(format.toUpperCase());
-      
+
       if(formats.length > 1 && format !== formats[formats.length - 1]){
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 250));
       }
     }
-    
-    btn.textContent = originalText;
-    btn.disabled = false;
-    
-    trCloseExportPanel();
-    
-    const message = results.length === 1 
+
+    const message = results.length === 1
       ? `✅ Raport ${results[0]} wygenerowany`
       : `✅ Raporty wygenerowane: ${results.join(", ")}`;
-    
+
     showToast(message + " i zapisane w projekcie", 3000);
-    
+
   }catch(e){
-    const btn = document.getElementById("tr_generate_report");
-    btn.textContent = "🚀 Generuj raporty";
-    btn.disabled = false;
-    
     alert(`❌ Błąd generowania raportu: ${e.message}`);
     console.error("Report generation error:", e);
+
+  }finally{
+    if(btn){
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }
   }
 }
 
@@ -1519,9 +1503,11 @@ document.getElementById("tr_btn").addEventListener("click", async ()=>{
   await startTask("tr", "/api/transcribe", fd, onDoneTranscribe);
 });
 
-document.getElementById("tr_export_toggle").addEventListener("click", trToggleExportPanel);
-document.getElementById("tr_export_cancel").addEventListener("click", trCloseExportPanel);
-document.getElementById("tr_generate_report").addEventListener("click", trGenerateReport);
+const trReportSaveBtn = document.getElementById("tr_report_save_btn");
+if(trReportSaveBtn){
+  trReportSaveBtn.addEventListener("click", trSaveReports);
+}
+
 
 const notesGlobalTextarea = document.getElementById("tr_notes_global");
 if(notesGlobalTextarea){

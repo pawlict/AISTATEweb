@@ -477,214 +477,206 @@
   }
 </style>
 
-<div class="card">
-  <h1 class="h1" data-i18n="page.diarization.title">Diarization</h1>
 
-  <!-- Sekcja 1: Ustawienia -->
-  <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="section.settings">⚙️ Ustawienia</div>
-    
-    <div class="di-config-grid">
-      <div>
-        <div class="label" data-i18n="label.diarization_engine">Silnik diaryzacji</div>
-        <select id="di_mode">
-          <option value="pyannote" data-i18n="di.engine.pyannote">pyannote (audio)</option>
-          <option value="nemo_diar" data-i18n="di.engine.nemo_diar">NeMo diarization (audio)</option>
-          <option value="text" data-i18n="di.engine.text">diaryzacja tekstu (prosta)</option>
-        </select>
-      </div>
-      <div id="di_diar_model_block">
-        <div class="label" data-i18n="label.diarization_model">Model diaryzacji</div>
-        <select id="di_diar_model"></select>
-        <div id="di_diar_model_hint" class="small" style="margin-top:6px" data-i18n="hint.diarization_model_from_asr">Lista zawiera tylko modele zainstalowane w Ustawieniach ASR.</div>
-      </div>
-      <div id="di_lang_block">
-        <div class="label" data-i18n="label.language">Język</div>
-        <select id="di_lang">
-          <option value="auto">auto</option>
-          <option value="pl">pl</option>
-          <option value="en">en</option>
-          <option value="de">de</option>
-          <option value="fr">fr</option>
-          <option value="es">es</option>
-          <option value="uk">uk</option>
-          <option value="ru">ru</option>
-        </select>
-      </div>
-      <div id="di_asr_block">
-        <div class="label" data-i18n="label.asr_engine">Silnik ASR</div>
-        <select id="di_asr_engine" disabled>
-          <option value="whisper" selected>Whisper</option>
-        </select>
-      </div>
-      <div id="di_model_block">
-        <div class="label" data-i18n="label.whisper_model">Model Whisper</div>
-        <select id="di_model">
-          {% for m in whisper_models %}
-          <option value="{{m}}" {% if m==default_whisper_model %}selected{% endif %}>{{m}}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div id="di_nemo_block" style="display:none">
-        <div class="label" data-i18n="label.nemo_model">Model NeMo</div>
-        <select id="di_nemo_model">
-          {% for m in nemo_models %}
-          <option value="{{m}}">{{m}}</option>
-          {% endfor %}
-        </select>
-      </div>
+
+<div class="analysis-page diarization-page">
+
+  <div class="card analysis-toolbar diarization-toolbar" id="di_toolbar">
+    <div class="analysis-toolbar-left">
+      <div class="h1" style="margin:0">🎭 <span data-i18n="page.diarization.title">Diarization</span></div>
+      <div class="small" id="di_toolbar_hint_line"></div>
     </div>
-    <div id="di_pyannote_hint" class="small" style="margin-top:6px" data-i18n-html="hint.pyannote_requires_token">Tryb <b>pyannote</b> wymaga tokena HF (w Ustawieniach).</div>
 
-    <div id="di_text_block" style="display:none">
-      <div class="hr"></div>
-      <div class="label" data-i18n="label.input_text">Tekst wejściowy</div>
-      <textarea id="di_text_in" style="min-height:140px" placeholder="Wklej tekst do prostej diaryzacji…" data-i18n-placeholder="placeholder.paste_text_simple_diarization"></textarea>
+    <div class="analysis-toolbar-right">
 
-      <div class="hr"></div>
+      <!-- Diarize -->
+      <button class="btn" id="di_btn" data-i18n="btn.diarize">Diarize</button>
 
-      <div class="grid" style="grid-template-columns: 1fr 1fr">
-        <div>
-          <div class="label" data-i18n="label.speakers_count">Liczba mówców</div>
-          <input class="input" id="di_speakers" type="number" min="1" max="20" value="2"/>
-        </div>
-        <div>
-          <div class="label" data-i18n="label.method">Metoda</div>
-          <select id="di_method">
-            <option value="alternate" data-i18n="di.method.alternate">naprzemiennie</option>
-            <option value="block" data-i18n="di.method.block">blokami</option>
-            <option value="lines" data-i18n="di.method.lines">po liniach</option>
-            <option value="sentences" data-i18n="di.method.sentences">po zdaniach</option>
-            <option value="sentences+merge" data-i18n="di.method.sentences_merge">zdania + łączenie</option>
+      <!-- Models / controls -->
+      <div class="analysis-models">
+
+        <div class="analysis-model">
+          <label class="small" for="di_mode" data-i18n="label.diarization_engine">Silnik diaryzacji</label>
+          <select class="input mini-select" id="di_mode" style="min-width:160px;max-width:220px">
+            <option value="pyannote" data-i18n="diar.engine.pyannote">Pyannote (Whisper)</option>
+            <option value="nemo_diar" data-i18n="diar.engine.nemo_diar">NeMo Diarization</option>
+            <option value="text" data-i18n="diar.engine.text">Text diarization</option>
           </select>
         </div>
+
+        <div class="analysis-model" id="di_diar_model_block">
+          <label class="small" for="di_diar_model" data-i18n="label.diarization_model">Model diaryzacji</label>
+          <select class="input mini-select" id="di_diar_model" style="min-width:200px;max-width:280px"></select>
+        </div>
+
+        <div class="analysis-model" id="di_lang_block">
+          <label class="small" for="di_lang" data-i18n="label.language">Język</label>
+          <select class="input mini-select" id="di_lang" style="min-width:110px;max-width:160px">
+            <option value="auto">auto</option>
+            <option value="pl">pl</option>
+            <option value="en">en</option>
+            <option value="de">de</option>
+            <option value="fr">fr</option>
+            <option value="es">es</option>
+            <option value="uk">uk</option>
+            <option value="ru">ru</option>
+          </select>
+        </div>
+
+        <!-- ASR engine is fixed (Whisper) for pyannote; keep hidden for compatibility -->
+        <div class="analysis-model" id="di_asr_block" style="display:none">
+          <label class="small" for="di_asr_engine" data-i18n="label.asr_engine">Silnik ASR</label>
+          <select class="input mini-select" id="di_asr_engine" disabled>
+            <option value="whisper">Whisper</option>
+          </select>
+        </div>
+
+        <div class="analysis-model" id="di_model_block">
+          <label class="small" for="di_model" data-i18n="label.asr_model">Model ASR</label>
+          <select class="input mini-select" id="di_model" style="min-width:200px;max-width:280px">
+            {% for model in whisper_models %}
+            <option value="{{ model }}">{{ model }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Legacy/hidden (kept for compatibility) -->
+        <div class="analysis-model" id="di_nemo_block" style="display:none">
+          <label class="small" for="di_nemo_model">Model NeMo</label>
+          <select class="input mini-select" id="di_nemo_model">
+            {% for model in nemo_models %}
+            <option value="{{ model }}">{{ model }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
       </div>
 
-      <div class="hr"></div>
-
-      <div class="label" data-i18n="label.speaker_mapping_json">Mapowanie mówców (JSON)</div>
-      <textarea id="di_map" style="min-height:90px" placeholder='np. {"SPK1":"Jan","SPK2":"Anna"}' data-i18n-placeholder="placeholder.speaker_mapping_json"></textarea>
-      <div class="small" data-i18n-html="hint.speaker_mapping_optional_html">Opcjonalnie: podmień etykiety <code>SPK1</code>, <code>SPK2</code> itd. na imiona.</div>
-    </div>
-  </div>
-
-  <div class="hr"></div>
-
-  <!-- Sekcja 2: Nazwy mówców -->
-  <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="di.speakers.title">🎤 Nazwy mówców</div>
-    
-    <div id="speaker_mapping_ui" class="speaker-mapping-container">
-      <div class="mapping-empty">
-        <span data-i18n="di.speakers.empty">Wykonaj diaryzację aby wykryć mówców 🎤</span>
+      <!-- Report formats (multi-select) -->
+      <div class="analysis-format" id="di_report_formats">
+        <label class="small" data-i18n="analysis.report">Raport</label>
+        <label class="pill"><input type="checkbox" name="di_report_fmt" value="html" checked> HTML</label>
+        <label class="pill"><input type="checkbox" name="di_report_fmt" value="doc"> DOC</label>
+        <label class="pill"><input type="checkbox" name="di_report_fmt" value="txt"> TXT</label>
       </div>
-    </div>
-    
-    <textarea id="di_speaker_map" style="display:none"></textarea>
-  </div>
 
-  <div class="hr"></div>
+      <button class="btn secondary" id="di_report_save_btn">💾 <span data-i18n="analysis.report_save">Zapisz</span></button>
 
-  <!-- Sekcja 3: Sterowanie -->
-  <div class="subcard">
-    <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="section.controls">🎮 Sterowanie</div>
-    
-    <div class="row" style="flex-wrap:wrap; gap:10px; align-items:center">
-      <button class="btn" id="di_apply_map" data-i18n-title="di.apply_map.title" data-i18n="btn.apply_changes">✨ Wprowadź zmiany</button>
-      <button class="btn secondary" id="di_export_toggle" data-i18n-title="di.export.title" data-i18n="btn.export_report">📥 Eksportuj raport</button>
-
-            <button class="btn" id="di_btn" data-i18n="btn.diarize" type="button" onclick="if(!window.__diBtnListenerAttached && window.diStartDiarize){ window.diStartDiarize(); } return false;" >Diaryzuj</button>
       <a class="btn secondary" id="di_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
-    </div>
-    
-    <!-- Panel eksportu raportów (ukryty domyślnie) -->
-    <div id="di_export_panel" style="display:none; margin-top:14px; background:#f0f4fa; border:1px solid #ddd; border-radius:8px; padding:16px;">
-      <div class="label" data-i18n="export.choose_formats">Wybierz formaty raportów (możesz zaznaczyć kilka)</div>
-      <div class="row" style="gap:12px; margin-bottom:12px; flex-wrap:wrap;">
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-          <input type="checkbox" id="di_format_txt"> 📄 TXT
-        </label>
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-          <input type="checkbox" id="di_format_html" checked> 📊 HTML
-        </label>
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-          <input type="checkbox" id="di_format_pdf"> 📕 PDF
-        </label>
-      </div>
-      
-      <div class="label" data-i18n="export.options">Opcje eksportu</div>
-      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-          <input type="checkbox" id="di_report_logs"> <span data-i18n="export.include_logs">Dołącz logi systemowe</span>
-        </label>
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-          <input type="checkbox" id="di_report_timestamps" checked> <span data-i18n="export.include_timestamps">Uwzględnij timestampy</span>
-        </label>
-      </div>
-      
-      <div class="row" style="gap:10px;">
-        <button class="btn" id="di_generate_report" data-i18n="btn.generate_reports">🚀 Generuj raporty</button>
-        <button class="btn secondary" id="di_export_cancel" data-i18n="btn.cancel">✕ Anuluj</button>
-      </div>
-      
-      <div class="small" style="margin-top:10px; opacity:0.8;">
-        <span data-i18n="export.saved_hint">💡 Raporty zostaną zapisane w folderze projektu i będą dostępne do pobrania.</span>
-      </div>
-    </div>
 
-    
-    
-
-<div class="small" style="margin-top:10px">
-      <span data-i18n="label.progress">Postęp</span>: <span id="di_pct">0%</span>
     </div>
-    <div class="progress" style="margin-top:10px"><div id="di_bar"></div></div>
-    <div class="small" style="margin-top:10px" data-i18n-html="hint.logs_in_tab">Logi są dostępne w zakładce <b>Logi</b>.</div>
-
   </div>
 
-  <div class="hr"></div>
+  <div class="card" id="di_content">
 
-  <!-- 2-kolumnowy layout: Wynik + Notatki -->
-  <div style="display:grid; grid-template-columns:1fr 380px; gap:16px; align-items:start;">
-    <!-- Lewa kolumna: Wynik diaryzacji -->
-    <div>
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="di.result.title">📄 Wynik diaryzacji</div>
-      <div class="small" style="margin-bottom:8px" data-i18n="hint.hover_to_play_edit">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
-      <div id="di_blocks" class="blocklist" style="display:none"></div>
-      <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik…" data-i18n-placeholder="placeholder.result_here"></textarea>
-      <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
-        ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
+    <div class="small" id="di_diar_model_hint" data-i18n-html="hint.diar_models_from_asr_settings_html">
+      Modele diaryzacji są ładowane z zainstalowanych silników w Panelu administracyjnym → Ustawienia ASR.
+    </div>
+
+    <div class="small" id="di_pyannote_hint" style="display:none" data-i18n-html="hint.pyannote_requires_token">
+      Pyannote może wymagać tokenu HuggingFace. Zainstaluj modele w Ustawieniach ASR.
+    </div>
+
+    <div class="an-progress" id="di_progress">
+      <div class="small"><span data-i18n="label.status">Status</span>: <b id="di_status">—</b> • <span data-i18n="label.progress">Postęp</span>: <span id="di_pct">0%</span></div>
+      <div class="progress"><div id="di_bar"></div></div>
+      <div class="small" style="margin-top:10px" data-i18n-html="hint.logs_in_tab">
+        Logi znajdziesz w zakładce <strong>Logs</strong> (panel administracyjny).
       </div>
     </div>
 
-    <!-- Prawa kolumna: Notatki -->
-    <div class="notes-panel">
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title">📝 Notatki</div>
-      
-      <!-- Notatka globalna -->
-      <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title">🌍 Notatka globalna</div>
-        <textarea id="di_notes_global" placeholder="Notatka do całej rozmowy (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:vertical;"></textarea>
-        <div class="small" style="margin-top:4px;opacity:0.7;" data-i18n="notes.autosave">Auto-save ✓</div>
+    <div class="hr"></div>
+
+    <!-- Input data (required for Text diarization) -->
+    <div class="subcard" id="di_text_block" style="display:none">
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.input.title">📥 Dane wejściowe</div>
+      <div class="small" data-i18n="diar.input.desc">Wklej tekst (np. transkrypcję). System spróbuje przypisać wypowiedzi do mówców.</div>
+      <textarea id="di_text_in" class="bigarea" placeholder="Wklej tekst do diaryzacji..." data-i18n-placeholder="placeholder.paste_text"></textarea>
+
+      <div class="row" style="margin-top:10px;gap:10px;flex-wrap:wrap">
+        <div style="min-width:220px">
+          <label class="label" data-i18n="diar.text.speakers">Liczba mówców</label>
+          <input id="di_speakers" class="input" type="number" min="2" max="20" value="2" />
+        </div>
+        <div style="min-width:240px">
+          <label class="label" data-i18n="diar.text.method">Metoda</label>
+          <select id="di_method" class="input">
+            <option value="alternate" data-i18n="diar.text.method.alternate">Naprzemiennie</option>
+            <option value="block" data-i18n="diar.text.method.block">Bloki</option>
+            <option value="lines" data-i18n="diar.text.method.lines">Linie</option>
+            <option value="sentences" data-i18n="diar.text.method.sentences">Zdania</option>
+            <option value="sentences+merge" data-i18n="diar.text.method.sentences_merge">Zdania + łączenie</option>
+            <option value="keep" data-i18n="diar.text.method.keep">Zachowaj istniejące etykiety</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:260px">
+          <label class="label" data-i18n="diar.text.map_json">Mapowanie (JSON, opcjonalnie)</label>
+          <input id="di_map" class="input" placeholder='{"SPK1":"Anna","SPK2":"Jan"}' />
+        </div>
       </div>
+    </div>
 
-      <div class="hr" style="margin:12px 0"></div>
+    <!-- Speaker mapping -->
+    <div class="subcard">
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.speakers.title">🎤 Nazwy mówców</div>
+      <div id="speaker_mapping_ui" class="speaker-mapping-container">
+        <div class="mapping-empty" data-i18n="diar.speakers.empty">Wykonaj diaryzację aby wykryć mówców.</div>
+      </div>
+      <textarea id="di_speaker_map" class="bigarea" placeholder='{"SPEAKER_00": "Jan", "SPEAKER_01": "Anna"}' style="display:none"></textarea>
 
-      <!-- Notatki do bloków -->
-      <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title">📌 Notatki do bloków</div>
-        <div id="di_block_notes_list" class="block-notes-list">
-          <div class="small" style="opacity:0.6;text-align:center;padding:20px;" data-i18n-html="notes.blocks.empty_html">
-            ${t("notes.blocks.empty_html")}
-          </div>
+      <div class="row" style="margin-top:12px;gap:10px;flex-wrap:wrap">
+        <button class="btn" id="di_apply_map" data-i18n-title="btn.apply_changes_hint" data-i18n="btn.apply_changes">✨ Wprowadź zmiany</button>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+
+    <!-- Result + Notes layout (unchanged) -->
+    <div style="display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start">
+      <!-- Left: diarization result -->
+      <div>
+        <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.result.title">📄 Wynik diaryzacji</div>
+        <div class="small" style="margin-bottom:8px" data-i18n="hint.hover_to_play_edit">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+        <div id="di_blocks" class="blocklist" style="display:none"></div>
+        <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik..." data-i18n-placeholder="placeholder.result_here"></textarea>
+        <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
+          ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
         </div>
       </div>
 
-      <div class="hr" style="margin:12px 0"></div>
+      <!-- Right: Notes (unchanged) -->
+      <div class="notes-panel">
+        <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title">📝 Notatki</div>
+
+        <div class="notes-section">
+          <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title">🌍 Notatka globalna</div>
+          <textarea id="di_notes_global" placeholder="Notatka do całej diaryzacji (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+          <div class="small" style="margin-top:4px;opacity:0.7" data-i18n="notes.autosave">Auto-save ✓</div>
+        </div>
+
+        <div class="hr" style="margin:12px 0"></div>
+
+        <div class="notes-section">
+          <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title">📌 Notatki do bloków</div>
+          <div id="di_block_notes_list" class="block-notes-list">
+            <div class="small" style="opacity:0.6;text-align:center;padding:20px" data-i18n-html="notes.blocks.empty_html">
+              ${t("notes.blocks.empty_html")}
+            </div>
+          </div>
+        </div>
+
+        <div class="hr" style="margin:12px 0"></div>
+
+        <div class="notes-section" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn secondary" id="di_notes_save" data-i18n="notes.save">💾 Zapisz notatki</button>
+          <button class="btn secondary" id="di_notes_export" data-i18n="notes.export">📤 Eksport JSON</button>
+        </div>
 
       </div>
+    </div>
+
   </div>
+
 </div>
 {% endblock %}
 
@@ -2048,9 +2040,9 @@ function diPickDefaultAsrEngine(prefer = "whisper"){
 function toggleMode(){
   const mode = (document.getElementById("di_mode") || {}).value || "text";
   const isText = (mode === "text");
-  const isAudio = !isText;
   const isPyannote = (mode === "pyannote");
   const isNemoDiar = (mode === "nemo_diar");
+  const isAudio = !isText;
 
   const textBlock = document.getElementById("di_text_block");
   const langBlock = document.getElementById("di_lang_block");
@@ -2060,30 +2052,34 @@ function toggleMode(){
   const diarModelBlock = document.getElementById("di_diar_model_block");
   const pyHint = document.getElementById("di_pyannote_hint");
 
+  // Text mode -> show input, hide audio-only options
   if(textBlock) textBlock.style.display = isText ? "block" : "none";
   if(diarModelBlock) diarModelBlock.style.display = isAudio ? "block" : "none";
   if(pyHint) pyHint.style.display = isPyannote ? "block" : "none";
 
-  // ASR selection is available ONLY for pyannote mode
-  const showAsr = isPyannote;
-  if(asrBlock) asrBlock.style.display = showAsr ? "block" : "none";
+  // ASR engine is fixed (Whisper) in pyannote mode and is not shown in UI.
+  if(asrBlock) asrBlock.style.display = "none";
+  const engEl = document.getElementById("di_asr_engine");
+  if(engEl){
+    // For pyannote keep whisper forced; for other engines keep deterministic default.
+    if(isPyannote){
+      engEl.value = "whisper";
+    } else if(isNemoDiar){
+      engEl.value = diPickDefaultAsrEngine("whisper");
+    } else {
+      engEl.value = "whisper";
+    }
+    engEl.disabled = true;
+  }
 
-  if(!showAsr){
+  if(isPyannote){
+    if(whisperModelBlock) whisperModelBlock.style.display = "block";
+    if(nemoModelBlock) nemoModelBlock.style.display = "none";
+    updateLangUI();
+  } else {
     if(whisperModelBlock) whisperModelBlock.style.display = "none";
     if(nemoModelBlock) nemoModelBlock.style.display = "none";
     if(langBlock) langBlock.style.display = "none";
-
-    // For NeMo diarization we still need a deterministic ASR choice for the backend.
-    // Pick a default silently (no UI selection).
-    if(isNemoDiar){
-      const engEl = document.getElementById("di_asr_engine");
-      if(engEl){
-        engEl.value = diPickDefaultAsrEngine("whisper");
-      }
-    }
-  } else {
-    updateAsrEngineUI();
-    updateLangUI();
   }
 
   if(isAudio){
@@ -2094,28 +2090,24 @@ function toggleMode(){
 }
 
 function updateAsrEngineUI(){
+  // Kept for backward compatibility; ASR engine selector is hidden and fixed.
   const modeEl = document.getElementById("di_mode");
   const mode = modeEl ? (modeEl.value || "text") : "text";
   const isPyannote = (mode === "pyannote");
 
   const whisperBlock = document.getElementById("di_model_block");
   const nemoBlock = document.getElementById("di_nemo_block");
+  const asrBlock = document.getElementById("di_asr_block");
 
-  // ASR UI is only for pyannote mode
-  if(!isPyannote){
-    if(whisperBlock) whisperBlock.style.display = "none";
-    if(nemoBlock) nemoBlock.style.display = "none";
-    return;
-  }
+  if(asrBlock) asrBlock.style.display = "none";
 
-  // In pyannote mode we expose ONLY Whisper (engine is fixed in UI).
   const engEl = document.getElementById("di_asr_engine");
   if(engEl){
     engEl.value = "whisper";
     engEl.disabled = true;
   }
 
-  if(whisperBlock) whisperBlock.style.display = "block";
+  if(whisperBlock) whisperBlock.style.display = isPyannote ? "block" : "none";
   if(nemoBlock) nemoBlock.style.display = "none";
 
   updateLangUI();
@@ -2128,22 +2120,22 @@ function updateLangUI(){
   const langBlock = document.getElementById("di_lang_block");
   if(!langBlock) return;
 
-  // Language selector is tied to ASR selection and is only available in pyannote mode.
+  // Language selector is available only in pyannote mode (Whisper).
   if(mode !== "pyannote"){
     langBlock.style.display = "none";
     return;
   }
 
-  const engEl = document.getElementById("di_asr_engine");
-  const eng = engEl ? (engEl.value || "whisper") : "whisper";
-
-  let supports = false;
-  if(DI_INSTALLED && Array.isArray(DI_INSTALLED.asr_engines)) {
-    const found = DI_INSTALLED.asr_engines.find(e => e && e.id === eng);
-    supports = !!(found && found.supports_language);
-  } else {
-    supports = (eng === "whisper");
-  }
+  // Whisper supports language selection (best-effort). If installed metadata says otherwise, respect it.
+  let supports = true;
+  try{
+    if(DI_INSTALLED && Array.isArray(DI_INSTALLED.asr_engines)){
+      const found = DI_INSTALLED.asr_engines.find(e => e && e.id === "whisper");
+      if(found && typeof found.supports_language !== 'undefined'){
+        supports = !!found.supports_language;
+      }
+    }
+  }catch(e){}
 
   langBlock.style.display = supports ? "block" : "none";
 }
@@ -2271,68 +2263,66 @@ async function diInitInstalled(refresh = 0){
   }
 }
 
-// ========== Export Report Functions ==========
-
-function toggleExportPanel(){
-  const panel = document.getElementById("di_export_panel");
-  if(!panel) return;
-  
-  if(panel.style.display === "none"){
-    panel.style.display = "block";
-  } else {
-    panel.style.display = "none";
-  }
+// ========== Export reports (toolbar) ==========
+function diGetSelectedReportFormats(){
+  const out = [];
+  document.querySelectorAll('input[name="di_report_fmt"]:checked').forEach(cb=>{
+    const v = String(cb.value||"").toLowerCase().trim();
+    if(v) out.push(v);
+  });
+  return out;
 }
 
-function closeExportPanel(){
-  const panel = document.getElementById("di_export_panel");
-  if(panel) panel.style.display = "none";
-}
-
-async function generateDiarReport(){
+async function diSaveReports(){
   const pid = AISTATE.projectId;
   if(!pid){
-    alert("Brak aktywnego projektu. Najpierw utwórz projekt w zakładce 'Nowy projekt'.");
+    alert("Brak aktywnego projektu");
     return;
   }
-  
-  const outEl = document.getElementById("di_out");
-  if(!outEl || !outEl.value.trim()){
-    alert("Brak wyniku diaryzacji do wyeksportowania. Najpierw wykonaj diaryzację.");
+
+  const text = (typeof diBuildRawText === "function")
+    ? (diBuildRawText() || "")
+    : (document.getElementById("di_out")?.value || "");
+
+  if(!text.trim()){
+    alert("Brak wyniku diaryzacji do wyeksportowania");
     return;
   }
-  
-  // Zbierz zaznaczone formaty
-  const formats = [];
-  if(document.getElementById("di_format_txt").checked) formats.push("txt");
-  if(document.getElementById("di_format_html").checked) formats.push("html");
-  if(document.getElementById("di_format_pdf").checked) formats.push("pdf");
-  
+
+  const formats = diGetSelectedReportFormats();
   if(formats.length === 0){
-    alert("Wybierz przynajmniej jeden format raportu (TXT, HTML lub PDF).");
+    alert("Wybierz przynajmniej jeden format raportu");
     return;
   }
-  
-  const includeLogs = document.getElementById("di_report_logs").checked ? 1 : 0;
-  
+
+  // Best-effort: persist latest diarization before generating reports.
   try{
-    const btn = document.getElementById("di_generate_report");
-    const originalText = btn.textContent;
-    btn.textContent = "⏳ Generuję...";
+    await api(`/api/projects/${pid}/save_diarized`, {
+      method:"POST",
+      headers:{"content-type":"application/json"},
+      body: JSON.stringify({ text: text })
+    });
+  }catch(e){}
+
+  const btn = document.getElementById("di_report_save_btn");
+  const originalText = btn ? btn.innerHTML : "";
+  if(btn){
+    btn.innerHTML = "⏳ " + (t?.("analysis.report_save") || "Zapisuję...");
     btn.disabled = true;
-    
+  }
+
+  try{
     const results = [];
-    
-    // Generuj każdy zaznaczony format
+
     for(const format of formats){
-      const url = `/api/projects/${pid}/report?format=${format}&include_logs=${includeLogs}`;
+      const url = `/api/projects/${pid}/report?format=${encodeURIComponent(format)}&include_logs=0`;
       const response = await fetch(url);
-      
+
       if(!response.ok){
         const errorText = await response.text();
-        throw new Error(`${format.toUpperCase()}: ${errorText || 'HTTP ' + response.status}`);
+        throw new Error(`${format.toUpperCase()}: ${errorText || "HTTP " + response.status}`);
       }
-      
+
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -2342,33 +2332,29 @@ async function generateDiarReport(){
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(downloadUrl);
-      
+
       results.push(format.toUpperCase());
-      
-      // Małe opóźnienie między pobieraniami (dla stabilności przeglądarki)
+
       if(formats.length > 1 && format !== formats[formats.length - 1]){
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 250));
       }
     }
-    
-    btn.textContent = originalText;
-    btn.disabled = false;
-    
-    closeExportPanel();
-    
-    const message = results.length === 1 
+
+    const message = results.length === 1
       ? `✅ Raport ${results[0]} wygenerowany`
       : `✅ Raporty wygenerowane: ${results.join(', ')}`;
-    
+
     showToast(message + ' i zapisane w projekcie', 3000);
-    
+
   }catch(e){
-    const btn = document.getElementById("di_generate_report");
-    btn.textContent = "🚀 Generuj raporty";
-    btn.disabled = false;
-    
     alert(`❌ Błąd generowania raportu: ${e.message}`);
     console.error('Report generation error:', e);
+
+  }finally{
+    if(btn){
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }
   }
 }
 
@@ -2492,10 +2478,9 @@ document.getElementById("di_apply_map").addEventListener("click", function(){
   }
 });
 
-// Export report listeners
-document.getElementById("di_export_toggle").addEventListener("click", toggleExportPanel);
-document.getElementById("di_export_cancel").addEventListener("click", closeExportPanel);
-document.getElementById("di_generate_report").addEventListener("click", generateDiarReport);
+// Export reports (toolbar)
+const diReportSaveBtn = document.getElementById("di_report_save_btn");
+if(diReportSaveBtn){ diReportSaveBtn.addEventListener("click", (e)=>{ e.preventDefault(); diSaveReports(); }); }
 
 // ========== Notes Event Listeners ==========
 const notesGlobalTextarea = document.getElementById('di_notes_global');
