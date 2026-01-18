@@ -3007,8 +3007,8 @@ def api_generate_transcription_report(project_id: str, format: str = "pdf", incl
     """
     project_path(project_id)  # ensure exists
     fmt = (format or "").lower()
-    if fmt not in ("txt", "html", "pdf"):
-        raise HTTPException(status_code=400, detail="format must be txt|html|pdf")
+    if fmt not in ("txt", "html", "pdf", "doc"):
+        raise HTTPException(status_code=400, detail="format must be txt|html|pdf|doc")
 
     pdir = project_path(project_id)
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -3025,6 +3025,21 @@ def api_generate_transcription_report(project_id: str, format: str = "pdf", incl
         return FileResponse(str(out_path), filename=out_name)
     if fmt == "html":
         generate_html_report(data, logs=bool(include_logs), output_path=str(out_path))
+        return FileResponse(str(out_path), filename=out_name)
+    if fmt == "doc":
+        # Word-compatible HTML saved with .doc extension (opens in Word/LibreOffice).
+        generate_html_report(data, logs=bool(include_logs), output_path=str(out_path))
+        try:
+            html = out_path.read_text(encoding="utf-8", errors="ignore")
+            if 'xmlns:w="urn:schemas-microsoft-com:office:word"' not in html:
+                html = html.replace(
+                    '<html',
+                    '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"',
+                    1,
+                )
+                out_path.write_text(html, encoding="utf-8")
+        except Exception:
+            pass
         return FileResponse(str(out_path), filename=out_name)
     generate_pdf_report(data, logs=bool(include_logs), output_path=str(out_path))
     return FileResponse(str(out_path), filename=out_name)
@@ -3257,8 +3272,8 @@ def _collect_report_data(project_id: str, export_formats: List[str], include_log
 def api_generate_report(project_id: str, format: str = "pdf", include_logs: int = 0) -> Any:
     project_path(project_id)  # ensure exists
     fmt = (format or "").lower()
-    if fmt not in ("txt", "html", "pdf"):
-        raise HTTPException(status_code=400, detail="format must be txt|html|pdf")
+    if fmt not in ("txt", "html", "pdf", "doc"):
+        raise HTTPException(status_code=400, detail="format must be txt|html|pdf|doc")
 
     pdir = project_path(project_id)
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -3274,6 +3289,21 @@ def api_generate_report(project_id: str, format: str = "pdf", include_logs: int 
         return FileResponse(str(out_path), filename=out_name)
     if fmt == "html":
         generate_html_report(data, logs=bool(include_logs), output_path=str(out_path))
+        return FileResponse(str(out_path), filename=out_name)
+    if fmt == "doc":
+        # Word-compatible: HTML saved as .doc (lightweight, opens in Word/LibreOffice).
+        generate_html_report(data, logs=bool(include_logs), output_path=str(out_path))
+        try:
+            html = out_path.read_text(encoding="utf-8", errors="ignore")
+            if 'xmlns:w="urn:schemas-microsoft-com:office:word"' not in html and '<html' in html:
+                html = html.replace(
+                    '<html',
+                    '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"',
+                    1,
+                )
+                out_path.write_text(html, encoding="utf-8")
+        except Exception:
+            pass
         return FileResponse(str(out_path), filename=out_name)
     generate_pdf_report(data, logs=bool(include_logs), output_path=str(out_path))
     return FileResponse(str(out_path), filename=out_name)
