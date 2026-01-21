@@ -90,7 +90,9 @@ pip install -r requirements.txt
 * * *
 
 ## Run
-
+```
+python3 AISTATEweb.py
+```
 Example (uvicorn):
     python -m uvicorn webapp.server:app --host 0.0.0.0 --port 8000
 
