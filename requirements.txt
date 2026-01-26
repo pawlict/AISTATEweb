@@ -1,6 +1,6 @@
-# AISTATEwww — requirements for Web service (no Docker)
+# AISTATEwww 
 
-# Core engines (same as desktop, but WITHOUT PySide6)
+# Core engines 
 openai-whisper>=20231117
 pyannote.audio==4.0.2
 huggingface_hub>=0.36.0,<1.0
@@ -30,7 +30,6 @@ pandas>=2.2.2
 markdown>=3.6
 
 # Translation module dependencies
-# Add these to your existing requirements.txt
 
 # Core translation
 transformers>=4.35.0
@@ -45,8 +44,3 @@ reportlab>=4.0.7
 
 # Language detection
 langdetect>=1.0.9
-
-# Already required by main app (verify these are present):
-# requests>=2.31.0  # for Ollama API calls
-# fastapi>=0.104.0
-# python-multipart>=0.0.6  # for file uploads
