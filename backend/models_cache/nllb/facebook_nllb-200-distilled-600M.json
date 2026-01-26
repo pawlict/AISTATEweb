@@ -1,0 +1,7 @@
+{
+  "model": "facebook/nllb-200-distilled-600M",
+  "mode": "fast",
+  "engine": "nllb",
+  "installed_at": "2026-01-24 14:38:41",
+  "python": "/home/kali/projects/AISTATEweb/.venv/bin/python3"
+}
