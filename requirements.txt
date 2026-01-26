@@ -28,3 +28,25 @@ pytesseract>=0.3.10
 Pillow>=10.4.0
 pandas>=2.2.2
 markdown>=3.6
+
+# Translation module dependencies
+# Add these to your existing requirements.txt
+
+# Core translation
+transformers>=4.35.0
+sentencepiece>=0.1.99
+torch>=2.0.0
+accelerate>=0.24.0
+
+# Document processing
+python-docx>=1.1.0
+pdfplumber>=0.10.3
+reportlab>=4.0.7
+
+# Language detection
+langdetect>=1.0.9
+
+# Already required by main app (verify these are present):
+# requests>=2.31.0  # for Ollama API calls
+# fastapi>=0.104.0
+# python-multipart>=0.0.6  # for file uploads
