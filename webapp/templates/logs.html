@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1 class="h1" data-i18n="page.logs.title">Logs</h1>
+  <div class="grid">
+    <div>
+      <div class="label" data-i18n="logs.label.last_tasks">Ostatnie zadania</div>
+      <select id="task_select"></select>
+      <div class="row" style="margin-top:10px">
+        <button class="btn secondary" id="task_refresh" data-i18n="logs.btn.refresh">Odśwież</button>
+        <button class="btn danger" id="task_clear" data-i18n="logs.btn.clear">Wyczyść listę zadań (server)</button>
+      </div>
+      <div class="small" data-i18n="logs.hint">Logi pokazują wyjście workerów (stderr) + postęp.</div>
+
+      <div class="hr"></div>
+      <div class="small"><span data-i18n="common.status">Status</span>: <b id="lg_status">—</b> • <span data-i18n="common.progress">Postęp</span>: <span id="lg_pct">0%</span></div>
+      <div class="progress" style="margin-top:10px"><div id="lg_bar"></div></div>
+    </div>
+
+    <div>
+      <div class="label" data-i18n="logs.label.logs">Logi</div>
+      <textarea id="lg_logs" style="min-height:340px" readonly data-i18n-placeholder="logs.placeholder" placeholder="Logi pojawią się tutaj…"></textarea>
+      <div class="row" style="margin-top:10px; flex-wrap:wrap">
+        <button class="btn secondary" id="lg_copy_sel"><span data-i18n="logs.copy_sel">Copy selection</span></button>
+        <button class="btn secondary" id="lg_copy_all"><span data-i18n="logs.copy_all">Copy all</span></button>
+<button class="btn" id="lg_save_file"><span data-i18n="logs.save_file">Save to file</span></button>
+      </div>
+<dialog id="lg_save_dlg">
+  <form method="dialog" style="min-width:min(520px, 92vw)">
+    <div class="label" data-i18n="logs.save_file">Save to file</div>
+    <div class="small" style="margin-bottom:8px" data-i18n="logs.save_hint">Choose filename and location for the log file.</div>
+    <input class="input" id="lg_dlg_filename" data-i18n-placeholder="logs.file_placeholder" placeholder="aistate_logs_YYYYMMDD_HHMMSS.txt"/>
+    <div class="row" style="justify-content:flex-end; margin-top:12px">
+      <button class="btn secondary" value="cancel" id="lg_dlg_cancel" data-i18n="common.cancel">Cancel</button>
+      <button class="btn" value="ok" id="lg_dlg_ok" data-i18n="btn.save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let LG_PINNED_TASK_ID = null;
+let LG_INIT_PICK_DONE = false;
+let LG_FOLLOW = true;
+function _lgIsNearBottom(ta){
+  try{
+    const threshold = 24;
+    return (ta.scrollHeight - ta.clientHeight - ta.scrollTop) <= threshold;
+  }catch(e){ return true; }
+}
+
+try{ LG_PINNED_TASK_ID = new URLSearchParams(location.search).get("task_id"); }catch(e){}
+async function refreshTasks(){
+  const j = await api("/api/tasks");
+  const tasks = (j && j.tasks) ? j.tasks : [];
+  const sel = document.getElementById("task_select");
+  const prev = sel.value || "";
+
+  sel.innerHTML = "";
+  const ids = new Set();
+  for(const t of tasks){
+    const o=document.createElement("option");
+    o.value=t.task_id;
+    o.textContent = `${t.task_id.slice(0,8)} — ${t.kind} — ${t.status}`;
+    sel.appendChild(o);
+    ids.add(t.task_id);
+  }
+
+  // Selection policy:
+  // 1) If URL pins a task_id -> always select it.
+  // 2) Else keep previously selected task if still present.
+  // 3) Else on first load: prefer lastTaskId, then most recent running/queued, then most recent non-system.
+  // 4) Fallback: first option.
+  const pinned = LG_PINNED_TASK_ID && ids.has(LG_PINNED_TASK_ID) ? LG_PINNED_TASK_ID : "";
+  if(pinned){
+    sel.value = pinned;
+    LG_INIT_PICK_DONE = true;
+    return;
+  }
+
+  if(prev && ids.has(prev)){
+    sel.value = prev;
+    return;
+  }
+
+  if(!LG_INIT_PICK_DONE){
+    let pick = "";
+    try{ pick = (window.AISTATE && AISTATE.lastTaskId) ? AISTATE.lastTaskId : (localStorage.getItem("aistate_last_task_id")||""); }catch(e){}
+    if(pick && ids.has(pick)){
+      sel.value = pick;
+      LG_INIT_PICK_DONE = true;
+      return;
+    }
+
+    for(const st of ["running","queued"]){
+      for(const t of tasks){
+        if(!t || t.task_id === "system") continue;
+        if((t.status||"") === st){ pick = t.task_id; break; }
+      }
+      if(pick) break;
+    }
+    if(!pick){
+      for(const t of tasks){
+        if(!t || t.task_id === "system") continue;
+        pick = t.task_id; break;
+      }
+    }
+
+    if(pick && ids.has(pick)) sel.value = pick;
+    else if(sel.options.length>0) sel.selectedIndex = 0;
+    LG_INIT_PICK_DONE = true;
+    return;
+  }
+
+  if(!sel.value && sel.options.length>0) sel.selectedIndex=0;
+}
+async function showSelected(){
+  const sel = document.getElementById("task_select");
+  if(!sel.value) return;
+  const j = await api(`/api/tasks/${sel.value}`);
+  document.getElementById("lg_status").textContent = j.status;
+  document.getElementById("lg_pct").textContent = `${j.progress||0}%`;
+  document.getElementById("lg_bar").style.width = `${j.progress||0}%`;
+
+  const ta = document.getElementById("lg_logs");
+  if(!ta) return;
+
+  // Auto-follow: keep scrolling to the newest logs unless user scrolls up.
+  const prevScrollTop = ta.scrollTop;
+  const wasNearBottom = _lgIsNearBottom(ta);
+
+  ta.value = (j.logs||[]).join("\n");
+
+  if(LG_FOLLOW && wasNearBottom){
+    ta.scrollTop = ta.scrollHeight;
+  }else{
+    ta.scrollTop = prevScrollTop;
+  }
+}
+document.getElementById("task_refresh").addEventListener("click", async ()=>{ await refreshTasks(); await showSelected(); });
+document.getElementById("task_select").addEventListener("change", showSelected);
+document.getElementById("task_clear").addEventListener("click", async ()=>{
+  if(!confirm(t("logs.alert.clear_confirm"))) return;
+  await api("/api/tasks/clear", {method:"POST"});
+  await refreshTasks(); await showSelected();
+});
+(async()=>{ await refreshTasks(); await showSelected(); })();
+
+// Track manual scrolling in the logs textarea
+try{
+  const ta = document.getElementById("lg_logs");
+  if(ta){
+    ta.addEventListener("scroll", ()=>{ LG_FOLLOW = _lgIsNearBottom(ta); });
+  }
+}catch(e){}
+
+
+async function _copyToClipboard(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    return true;
+  }catch(e){
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand('copy'); }catch(_){}
+    document.body.removeChild(ta);
+    return true;
+  }
+}
+
+document.getElementById("lg_copy_all").addEventListener("click", async ()=>{
+  const ta = document.getElementById("lg_logs");
+  await _copyToClipboard(ta.value || "");
+  alert(t("logs.alert.copied"));
+});
+
+document.getElementById("lg_copy_sel").addEventListener("click", async ()=>{
+  const ta = document.getElementById("lg_logs");
+  const start = ta.selectionStart || 0;
+  const end = ta.selectionEnd || 0;
+  const txt = (end>start) ? ta.value.substring(start, end) : (ta.value || "");
+  await _copyToClipboard(txt);
+  alert(t("logs.alert.copied"));
+});
+
+function _defaultLogFileName(){
+  const d = new Date();
+  const pad = (n)=>String(n).padStart(2,"0");
+  const ts = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  return `aistate_logs_${ts}.txt`;
+}
+
+async function _saveTextToFile(filename, content){
+  filename = (filename || "").trim() || _defaultLogFileName();
+  // Modern Chromium: File System Access API
+  if(window.showSaveFilePicker){
+    const handle = await window.showSaveFilePicker({
+      suggestedName: filename,
+      types: [{ description: "Text", accept: { "text/plain": [".txt"] } }],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(content);
+    await writable.close();
+    return;
+  }
+  // Fallback download
+  const blob = new Blob([content], {type:"text/plain;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("lg_save_file").addEventListener("click", async ()=>{
+  const ta = document.getElementById("lg_logs");
+  const start = ta.selectionStart || 0;
+  const end = ta.selectionEnd || 0;
+  const txt = (end>start) ? ta.value.substring(start, end) : (ta.value || "");
+// Ask for filename + location only after clicking "Save to file"
+const dlg = document.getElementById("lg_save_dlg");
+const inName = document.getElementById("lg_dlg_filename");
+
+// Default filename: aistate_logs_YYYYMMDD_HHMMSS.txt
+const d = new Date();
+const pad = (n)=> String(n).padStart(2,"0");
+const fnameDefault = `aistate_logs_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.txt`;
+
+if(inName && !inName.value){
+  inName.value = fnameDefault;
+}else if(inName){
+  inName.value = inName.value || fnameDefault;
+}
+
+let fname = fnameDefault;
+
+if(dlg && typeof dlg.showModal === "function"){
+  dlg.showModal();
+  const r = await new Promise(resolve=>{
+    const onClose = ()=>{ dlg.removeEventListener("close", onClose); resolve(dlg.returnValue); };
+    dlg.addEventListener("close", onClose);
+  });
+  if(r !== "ok"){ return; }
+  fname = (inName && inName.value ? inName.value.trim() : fnameDefault) || fnameDefault;
+}else{
+  // Fallback (no <dialog>): prompt only after click
+  const p = prompt(t("logs.file_placeholder"), fnameDefault);
+  if(!p){ return; }
+  fname = p.trim() || fnameDefault;
+}
+  try{
+    await _saveTextToFile(fname, txt);
+    alert(t("logs.alert.saved"));
+  }catch(e){
+    // User canceled or browser blocked
+  }
+});
+
+// Auto-refresh while user watches logs
+setInterval(()=>{ if(document.hidden) return; showSelected().catch(()=>{}); }, 1000);
+setInterval(()=>{ if(document.hidden) return; refreshTasks().then(showSelected).catch(()=>{}); }, 5000);
+</script>
+{% endblock %}

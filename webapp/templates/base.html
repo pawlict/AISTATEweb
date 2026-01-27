@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="light">
+  <title>{{ title }} — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css"/>
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar_brand">
+      <button id="sidebar_toggle" class="sidebar-toggle" type="button" aria-label="Toggle sidebar" data-i18n-title="sidebar.collapse">
+        <span class="sidebar-toggle-ico" aria-hidden="true">
+          <!-- collapse (when expanded) -->
+          <svg class="ico-collapse" viewBox="0 0 24 24">
+            <!-- left panel + arrow left -->
+            <rect class="brush" x="4.5" y="5" width="5" height="14" rx="1.6"/>
+            <path d="M10.5 12h9"/>
+            <path d="M14.5 8l-4 4 4 4"/>
+          </svg>
+          <!-- expand (when collapsed) -->
+          <svg class="ico-expand" viewBox="0 0 24 24">
+            <!-- left panel + arrow right -->
+            <rect class="brush" x="4.5" y="5" width="5" height="14" rx="1.6"/>
+            <path d="M10.5 12h9"/>
+            <path d="M15.5 8l4 4-4 4"/>
+          </svg>
+        </span>
+      </button>
+
+      <div class="brand-top">
+        <div class="logo logo-lg">
+          <img src="/static/logo.png" alt="AISTATEweb logo"/>
+        </div>
+        <div class="brand-text">
+          <div class="brand-name">{{ app_name }}</div>
+          <div class="brand-ver">{{ app_version }}</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="/new-project" data-icon="projects" class="{{ 'active' if active=='new_project' else '' }}" data-i18n-title="nav.new_project">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M3.5 8.5h7l2 2H20.5"/>
+              <path d="M4.5 8.5h7l2 2h6a1.5 1.5 0 0 1 1.5 1.5v7A2 2 0 0 1 19 21H6a2 2 0 0 1-2-2z"/>
+              <path d="M7.5 14h9"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.new_project">Projekty</span>
+        </a>
+        <a href="/transcription" data-icon="transcription" class="{{ 'active' if active=='transcription' else '' }}" data-i18n-title="nav.transcription">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M5 11a7 7 0 0 0 14 0"/>
+              <path d="M9 11V8a3 3 0 0 1 6 0v3a3 3 0 0 1-6 0z"/>
+              <path d="M12 14v4"/>
+              <path d="M8 18h8"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.transcription">Transcription</span>
+        </a>
+        <a href="/diarization" data-icon="diarization" class="{{ 'active' if active=='diarization' else '' }}" data-i18n-title="nav.diarization">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M7 13c1.5 1 3 1.5 5 1.5s3.5-.5 5-1.5"/>
+              <path d="M8.5 10.5a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+              <path d="M15.5 11.5a2.5 2.5 0 1 0-2.2-4"/>
+              <path d="M4.5 20c.8-3.2 3-5 6-5s5.2 1.8 6 5"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.diarization">Diarization</span>
+        </a>
+        <a href="/analysis" data-icon="analysis" class="{{ 'active' if active=='analysis' else '' }}" data-i18n-title="nav.analysis">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M6 16l4-5 3 3 5-8"/>
+              <path d="M5 19h14"/>
+              <path d="M6 19V6"/>
+              <path d="M8 12h3"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.analysis">Analiza</span>
+        </a>
+        <a href="/translation" data-icon="translation" class="{{ 'active' if active=='translation' else '' }}" data-i18n-title="nav.translation">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M6 8h6"/>
+              <path d="M7 8c0 4-1.5 6.8-4 9"/>
+              <path d="M10 8c0 2.7 1.5 5.4 4 7.5"/>
+              <path class="brush" d="M14 14h7"/>
+              <path d="M16 14l-2-2"/>
+              <path d="M19 14l2 2"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.translation">Tłumaczenie</span>
+        </a>
+        <a href="/info" data-icon="info" class="{{ 'active' if active=='info' else '' }}" data-i18n-title="nav.info">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M12 4a8 8 0 1 1 0 16a8 8 0 0 1 0-16"/>
+              <path d="M12 10v7"/>
+              <path d="M12 7h.01"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.info">Info</span>
+        </a>
+        <a href="/settings" data-icon="settings" class="{{ 'active' if active=='settings' else '' }}" data-i18n-title="nav.settings">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M12 3l2 3 3 1-1 3 1 3-3 1-2 3-2-3-3-1 1-3-1-3 3-1z"/>
+              <path d="M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.settings">Settings</span>
+        </a>
+        <div class="nav-section" data-i18n="nav.admin_panel">Panel Administracyjny</div>
+        <a href="/admin" data-icon="gpu" class="{{ 'active' if active=='admin' else '' }}" data-i18n-title="nav.admin">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M7 9h10"/>
+              <path d="M9 9V7h6v2"/>
+              <path d="M9 15h6"/>
+              <path d="M12 12h.01"/>
+              <path d="M6 12h-1"/>
+              <path d="M19 12h-1"/>
+              <path d="M12 6V5"/>
+              <path d="M12 19v-1"/>
+              <rect class="brush" x="8" y="10" width="8" height="6" rx="1.5"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.admin">Ustawienia GPU</span>
+        </a>
+        <a href="/llm-settings" data-icon="llm" class="{{ 'active' if active=='llm_settings' else '' }}" data-i18n-title="nav.llm_settings">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M12 5c3.5 0 6 2 6 5.5S15.5 16 12 16s-6-2-6-5.5S8.5 5 12 5"/>
+              <path d="M9 16v3l3-2 3 2v-3"/>
+              <path d="M8 11h8"/>
+              <path d="M10 9h4"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.llm_settings">Ustawienia LLM</span>
+        </a>
+        <a href="/asr-settings" data-icon="asr" class="{{ 'active' if active=='asr_settings' else '' }}" data-i18n-title="nav.asr_settings">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M4 12h16"/>
+              <path d="M7 8v8"/>
+              <path d="M12 6v12"/>
+              <path d="M17 9v6"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.asr_settings">Ustawienia ASR</span>
+        </a>
+        <a href="/nllb-settings" data-icon="nllb" class="{{ 'active' if active=='nllb_settings' else '' }}" data-i18n-title="nav.nllb_settings">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M7 8h10"/>
+              <path d="M17 8l-2-2"/>
+              <path d="M7 16h10"/>
+              <path d="M7 16l2 2"/>
+              <path class="brush" d="M12 5v14"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.nllb_settings">Ustawienia NLLB</span>
+        </a>
+        <a href="/logs" data-icon="logs" class="{{ 'active' if active=='logs' else '' }}" data-i18n-title="nav.logs">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brush" d="M6 8l3 3-3 3"/>
+              <path d="M11 14h7"/>
+              <path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.logs">Logi</span>
+        </a>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="small"><span data-i18n="top.current_project">Bieżący projekt</span>: <b id="current_project">(…)</b></div>
+        <div class="small"><span data-i18n="top.source_file">Plik źródłowy projektu</span>: <b id="current_audio">(…)</b></div>
+      </div>
+    </div>
+
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script src="/static/app.js?v={{ app_version }}"></script>
+<script>
+  (async()=>{
+    await initI18n();
+    await refreshCurrentProjectInfo();
+    applyI18n();
+    initSidebar();
+  })();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
