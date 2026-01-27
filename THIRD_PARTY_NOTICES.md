@@ -24,6 +24,22 @@ Access may require:
 - accepting model terms/conditions on the model page
 - using a Hugging Face access token (READ)
 
+### NLLB (No Language Left Behind) - Translation Models
+- Project: Meta AI NLLB-200
+- License: CC-BY-NC 4.0 (Creative Commons Attribution-NonCommercial 4.0)
+- Source: https://github.com/facebookresearch/fairseq/tree/nllb
+- Models on Hugging Face: https://huggingface.co/facebook/nllb-200-distilled-600M (and other variants)
+
+**Important license restrictions:**
+- **Non-commercial use only** — Commercial use requires separate licensing from Meta
+- Attribution required — Must credit Meta AI and the NLLB project
+- Model licenses may vary by specific variant (check each model card on Hugging Face)
+
+**Models commonly used:**
+- `facebook/nllb-200-distilled-600M` (600M parameters)
+- `facebook/nllb-200-distilled-1.3B` (1.3B parameters)
+- `facebook/nllb-200-3.3B` (3.3B parameters)
+
 Model licenses may differ per model repository (e.g., MIT, CC BY 4.0, etc.).
 Always check the model card and LICENSE file on the model page before use.
 
