@@ -61,7 +61,7 @@ Diarization uses **pyannote.audio** pipelines hosted on the **Hugging Face Hub**
   3. Go to your Hugging Face **Settings → Access Tokens** and create a new token with role **READ**.
   4. Paste the token into AISTATE Web settings (or provide it as an environment variable — depending on your setup).
 * * *
-## Program installation
+## Program installation linuks 
 
 ```bash
 sudo apt update
@@ -94,6 +94,21 @@ Open in browser:
     http://127.0.0.1:8000
 
 * * *
+# AISTATEweb — Windows (WSL2 + NVIDIA GPU) Setup
+
+Important: in WSL2 the **NVIDIA driver is installed on Windows**, not inside the Linux distribution. Installing Linux `nvidia-driver-*` packages in WSL2 can cause CUDA/NVML mismatches and unstable behavior. 
+
+---
+## 1. Windows prerequisites
+
+1. Enable WSL2 (Windows Features / PowerShell).
+2. Update WSL and reboot the WSL VM:
+   ```powershell
+   wsl --update
+   wsl --shutdown
+
+
+
 
 ## Project structure (important files)
 
