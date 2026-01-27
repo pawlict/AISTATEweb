@@ -1,6 +1,0 @@
-{
-  "pipeline": "pyannote/speaker-diarization-3.1",
-  "engine": "pyannote",
-  "installed_at": "2026-01-18 03:21:17",
-  "python": "/home/kali/projects/AISTATEweb/.venv/bin/python3"
-}
