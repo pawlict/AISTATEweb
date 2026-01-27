@@ -106,6 +106,136 @@ Important: in WSL2 the **NVIDIA driver is installed on Windows**, not inside the
    ```powershell
    wsl --update
    wsl --shutdown
+   ```
+3. Install the **NVIDIA Windows driver** that supports WSL2 (Game Ready / Studio) and reboot Windows.
+
+---
+
+## 2. Create / update your WSL distro
+
+Use Ubuntu/Debian/Kali (Ubuntu LTS is usually the easiest for packages).
+
+Inside WSL:
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+---
+
+## 3. GPU sanity check inside WSL2 (critical)
+
+### 3.1 Confirm you are really on WSL2
+```bash
+uname -a
+grep -i microsoft /proc/version || true
+```
+
+### 3.2 `nvidia-smi` should come from the WSL stub
+In WSL2 the expected `nvidia-smi` is typically located at:
+`/usr/lib/wsl/lib/nvidia-smi`
+
+Check:
+```bash
+which nvidia-smi
+ls -l /usr/lib/wsl/lib/nvidia-smi || true
+nvidia-smi
+```
+
+If `which nvidia-smi` points to `/usr/bin/nvidia-smi` via `update-alternatives`, you likely installed NVIDIA user-space packages inside the distro (not recommended for WSL2).
+
+### 3.3 Recommended fix: remove NVIDIA packages from the Linux distro
+> WSL2 uses the Windows driver; keeping Linux `nvidia-*` packages often creates mismatched NVML/CUDA tooling.
+
+```bash
+sudo apt purge -y 'nvidia-*' 'libnvidia-*'
+sudo apt autoremove --purge -y
+```
+
+Ensure the WSL stub path is visible:
+```bash
+echo 'export PATH=/usr/lib/wsl/lib:$PATH' | sudo tee /etc/profile.d/wsl-gpu.sh >/dev/null
+echo 'export LD_LIBRARY_PATH=/usr/lib/wsl/lib:${LD_LIBRARY_PATH}' | sudo tee -a /etc/profile.d/wsl-gpu.sh >/dev/null
+source /etc/profile.d/wsl-gpu.sh
+```
+
+Re-check:
+```bash
+which nvidia-smi
+nvidia-smi
+```
+
+---
+
+## 4. System dependencies (WSL)
+
+```bash
+sudo apt update
+sudo apt install -y git python3 python3-venv python3-pip ffmpeg
+```
+
+---
+
+## 5. Get the code
+
+```bash
+mkdir -p ~/projects
+cd ~/projects
+git clone https://github.com/pawlict/AISTATEweb.git
+cd AISTATEweb
+```
+
+---
+
+## 6. Python venv
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip setuptools wheel
+```
+
+---
+
+## 7. Install PyTorch (CUDA build)
+
+Install the CUDA-enabled PyTorch wheels from the official PyTorch index (example uses **cu128**):
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+```
+
+Verify GPU access:
+```bash
+python -c "import torch; print('cuda:', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
+```
+
+---
+
+## 8. Install AISTATEweb requirements
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## 9. Run AISTATEweb
+
+```bash
+python3 AISTATEweb.py
+```
+Open in browser: http://127.0.0.1:8000
+
+---
+
+## References
+
+- NVIDIA: CUDA on WSL User Guide  
+  https://docs.nvidia.com/cuda/wsl-user-guide/index.html
+- Microsoft Learn: CUDA in WSL  
+  https://learn.microsoft.com/windows/ai/directml/gpu-cuda-in-wsl
+- PyTorch: Get Started (installation selector)  
+  https://pytorch.org/get-started/locally/
+
 
 
 
