@@ -17,18 +17,17 @@ If you have any issues, suggestions, or feature requests, please contact me at: 
 
 ## ✨ Main functionalities
 
-  * Audio → text transcription (Whisper-based workflow).
-  * Speaker diarization (who spoke when).
-  * LLM Ollama modules for data analysis 
-  * Project mode: store outputs and metadata inside a project directory.
-  * Automatic save after processing:
-    * transcription → `transcript.txt`
-    * diarization → `diarized.txt`
-  * Secure delete / wipe modes for project files (in progress):
-    * Fast: delete (no overwrite)
-    * Normal: pseudorandom wipe (x1)
-    * Thorough: British HMG IS5 (x3)
-    * Very thorough: Gutmann (x35)
+ - Audio → text transcription (Whisper-based workflow).
+- Speaker diarization (who spoke when).
+- **Text translation (NLLB / Transformers)**
+  - Multi-target translation (e.g., PL → EN + ZH in one run).
+  - **Fast / Accurate** modes (depending on selected NLLB model).
+- LLM Ollama modules for data analysis.
+- Secure delete / wipe modes for project files (in progress):
+  - Fast: delete (no overwrite)
+  - Normal: pseudorandom wipe (x1)
+  - Thorough: British HMG IS5 (x3)
+  - Very thorough: Gutmann (x35)
 
 * * *
 
@@ -61,11 +60,6 @@ Diarization uses **pyannote.audio** pipelines hosted on the **Hugging Face Hub**
      * `pyannote/speaker-diarization` (or `pyannote/speaker-diarization-3.1`)
   3. Go to your Hugging Face **Settings → Access Tokens** and create a new token with role **READ**.
   4. Paste the token into AISTATE Web settings (or provide it as an environment variable — depending on your setup).
-
-### Security note
-
-Never commit your Hugging Face token to GitHub. Treat it like a password.
-
 * * *
 ## Program installation
 
@@ -113,6 +107,10 @@ Open in browser:
 
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
+
+## beta 3.2 (translation update)
+- Added Translation module 
+- Added NLLB Settings page 
 
 ## beta 3.0 - 3.1
 - LLM Ollama modules for data analysis introduced
