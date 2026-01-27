@@ -5,7 +5,7 @@ import os
 import sys
 
 def main() -> None:
-    host = os.environ.get("AISTATEWEB_HOST") or os.environ.get("AISTATEWWW_HOST") or "0.0.0.0"
+    host = os.environ.get("AISTATEWEB_HOST") or os.environ.get("AISTATEWWW_HOST") or "127.0.0.1"
     port = int(os.environ.get("AISTATEWEB_PORT") or os.environ.get("AISTATEWWW_PORT") or "8000")
     try:
         import uvicorn

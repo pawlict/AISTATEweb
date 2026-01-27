@@ -1,0 +1,334 @@
+"""
+Hybrid Translation Engine
+Combines NLLB-200 (fast) with Ollama/LLaMA (context-aware)
+"""
+
+import torch
+import logging
+import requests
+from typing import Optional, Dict, List
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+logger = logging.getLogger(__name__)
+
+
+class HybridTranslator:
+    """
+    Hybrid translator combining NLLB and Ollama
+    
+    NLLB: Fast, sentence-by-sentence translation
+    Ollama: Context-aware, preserves style and terminology
+    """
+    
+    # Language codes for NLLB
+    LANG_CODES_NLLB = {
+        'polish': 'pol_Latn',
+        'english': 'eng_Latn',
+        'russian': 'rus_Cyrl',
+        'belarusian': 'bel_Cyrl',
+        'ukrainian': 'ukr_Cyrl',
+        'chinese': 'zho_Hans'
+    }
+    
+    # Language names for Ollama prompts
+    LANG_NAMES = {
+        'polish': 'Polish',
+        'english': 'English',
+        'russian': 'Russian',
+        'belarusian': 'Belarusian',
+        'ukrainian': 'Ukrainian',
+        'chinese': 'Chinese'
+    }
+    
+    def __init__(
+        self,
+        nllb_model: str = "facebook/nllb-200-1.3B",
+        ollama_model: str = "llama3.1:8b",
+        ollama_url: str = "http://localhost:11434",
+        device: str = "auto"
+    ):
+        """
+        Initialize hybrid translator
+        
+        Args:
+            nllb_model: NLLB model name
+                - facebook/nllb-200-distilled-600M (2.4GB, fastest)
+                - facebook/nllb-200-1.3B (5GB, recommended)
+                - facebook/nllb-200-3.3B (13GB, best quality)
+            ollama_model: Ollama model name
+            ollama_url: Ollama API URL
+            device: 'cuda', 'cpu', or 'auto'
+        """
+        self.nllb_model_name = nllb_model
+        self.ollama_model = ollama_model
+        self.ollama_url = f"{ollama_url}/api/generate"
+        
+        # Auto-detect GPU
+        if device == "auto":
+            self.device = 0 if torch.cuda.is_available() else -1
+        elif device == "cuda":
+            self.device = 0
+        else:
+            self.device = -1
+        
+        logger.info(f"Loading NLLB model: {nllb_model}")
+        logger.info(f"Device: {'GPU' if self.device == 0 else 'CPU'}")
+        
+        # Load NLLB
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(nllb_model)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(nllb_model)
+            
+            if self.device == 0:
+                self.model = self.model.to('cuda')
+            
+            logger.info("NLLB model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load NLLB model: {e}")
+            raise
+        
+        # Translation memory (cache)
+        self.translation_memory: Dict[str, str] = {}
+        
+        # Glossary
+        self.glossary: Dict[str, str] = {}
+    
+    def translate_nllb(
+        self,
+        text: str,
+        source_lang: str,
+        target_lang: str,
+        max_length: int = 512
+    ) -> str:
+        """
+        Fast translation using NLLB
+        
+        Args:
+            text: Text to translate
+            source_lang: Source language (polish, english, etc.)
+            target_lang: Target language
+            max_length: Max sequence length
+            
+        Returns:
+            Translated text
+        """
+        if not text.strip():
+            return text
+        
+        src_code = self.LANG_CODES_NLLB.get(source_lang)
+        tgt_code = self.LANG_CODES_NLLB.get(target_lang)
+        
+        if not src_code or not tgt_code:
+            raise ValueError(f"Unsupported language pair: {source_lang} -> {target_lang}")
+        
+        # Check cache
+        cache_key = f"{src_code}_{tgt_code}_{hash(text)}"
+        if cache_key in self.translation_memory:
+            logger.debug("Using cached translation")
+            return self.translation_memory[cache_key]
+        
+        try:
+            # Split into chunks if too long
+            if len(text.split()) > 400:
+                chunks = self._split_text(text, max_words=400)
+                translated_chunks = []
+                
+                for chunk in chunks:
+                    translated = self._translate_chunk_nllb(
+                        chunk, src_code, tgt_code, max_length
+                    )
+                    translated_chunks.append(translated)
+                
+                result = ' '.join(translated_chunks)
+            else:
+                result = self._translate_chunk_nllb(
+                    text, src_code, tgt_code, max_length
+                )
+            
+            # Cache result
+            self.translation_memory[cache_key] = result
+            return result
+            
+        except Exception as e:
+            logger.error(f"NLLB translation failed: {e}")
+            raise
+    
+    def _translate_chunk_nllb(
+        self,
+        text: str,
+        src_code: str,
+        tgt_code: str,
+        max_length: int
+    ) -> str:
+        """Translate single chunk with NLLB"""
+        # Tokenize
+        inputs = self.tokenizer(
+            text,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=max_length
+        )
+        
+        if self.device == 0:
+            inputs = {k: v.to('cuda') for k, v in inputs.items()}
+        
+        # Generate translation
+        translated_tokens = self.model.generate(
+            **inputs,
+            forced_bos_token_id=self.tokenizer.lang_code_to_id[tgt_code],
+            max_length=max_length,
+            num_beams=5,
+            early_stopping=True
+        )
+        
+        # Decode
+        translated_text = self.tokenizer.decode(
+            translated_tokens[0],
+            skip_special_tokens=True
+        )
+        
+        return translated_text
+    
+    def translate_ollama(
+        self,
+        text: str,
+        source_lang: str,
+        target_lang: str,
+        use_glossary: bool = True
+    ) -> str:
+        """
+        Context-aware translation using Ollama
+        
+        Args:
+            text: Text to translate
+            source_lang: Source language
+            target_lang: Target language
+            use_glossary: Whether to use custom glossary
+            
+        Returns:
+            Translated text
+        """
+        if not text.strip():
+            return text
+        
+        src_name = self.LANG_NAMES.get(source_lang, source_lang)
+        tgt_name = self.LANG_NAMES.get(target_lang, target_lang)
+        
+        # Build prompt
+        system_prompt = f"""You are a professional translator. Translate the following text from {src_name} to {tgt_name}.
+
+Rules:
+1. Preserve the original meaning, style, and tone
+2. Maintain formatting (paragraphs, line breaks)
+3. Use appropriate terminology for the subject matter
+4. Consider the full context when translating"""
+        
+        if use_glossary and self.glossary:
+            terms_list = ', '.join(self.glossary.keys())
+            system_prompt += f"\n5. Do NOT translate these terms: {terms_list}"
+        
+        prompt = f"{system_prompt}\n\nText to translate:\n{text}\n\nTranslation:"
+        
+        try:
+            logger.info(f"Translating with Ollama ({source_lang} -> {target_lang})")
+            
+            response = requests.post(
+                self.ollama_url,
+                json={
+                    "model": self.ollama_model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.3,  # Lower for more consistent translation
+                        "top_p": 0.9,
+                    }
+                },
+                timeout=300  # 5 minutes max
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                translated = result.get("response", "").strip()
+                
+                if translated:
+                    logger.info(f"Ollama translation completed ({len(translated)} chars)")
+                    return translated
+                else:
+                    logger.error("Empty response from Ollama")
+                    raise RuntimeError("Empty translation from Ollama")
+            else:
+                logger.error(f"Ollama API error: {response.status_code}")
+                raise RuntimeError(f"Ollama API error: {response.status_code}")
+                
+        except requests.exceptions.Timeout:
+            logger.error("Ollama request timed out")
+            raise RuntimeError("Translation timeout")
+        except Exception as e:
+            logger.error(f"Ollama translation failed: {e}")
+            raise
+    
+    def translate_text(
+        self,
+        text: str,
+        source_lang: str,
+        target_lang: str,
+        mode: str = "accurate"
+    ) -> str:
+        """
+        Translate text using specified mode
+        
+        Args:
+            text: Text to translate
+            source_lang: Source language
+            target_lang: Target language
+            mode: 'fast' (NLLB) or 'accurate' (Ollama)
+            
+        Returns:
+            Translated text
+        """
+        if mode == "fast":
+            return self.translate_nllb(text, source_lang, target_lang)
+        else:
+            return self.translate_ollama(text, source_lang, target_lang)
+    
+    def set_glossary(self, glossary: Dict[str, str]):
+        """Set custom glossary for term protection"""
+        self.glossary = glossary
+        logger.info(f"Glossary updated with {len(glossary)} terms")
+    
+    def clear_memory(self):
+        """Clear translation memory cache"""
+        self.translation_memory.clear()
+        logger.info("Translation memory cleared")
+    
+    def _split_text(self, text: str, max_words: int = 400) -> List[str]:
+        """Split text into chunks by sentences"""
+        import re
+        
+        # Split by sentence endings
+        sentences = re.split(r'([.!?]+\s+)', text)
+        
+        chunks = []
+        current_chunk = ""
+        current_words = 0
+        
+        for i in range(0, len(sentences), 2):
+            sentence = sentences[i]
+            separator = sentences[i+1] if i+1 < len(sentences) else ""
+            
+            sentence_words = len(sentence.split())
+            
+            if current_words + sentence_words > max_words and current_chunk:
+                chunks.append(current_chunk.strip())
+                current_chunk = sentence + separator
+                current_words = sentence_words
+            else:
+                current_chunk += sentence + separator
+                current_words += sentence_words
+        
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+        
+        logger.debug(f"Split text into {len(chunks)} chunks")
+        return chunks
