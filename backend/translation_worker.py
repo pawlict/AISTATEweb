@@ -87,6 +87,17 @@ def main() -> int:
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 
+    # Respect GPU Resource Manager device assignment.
+    # If AISTATE_GPU_DEVICE is "cpu", force CPU execution by hiding CUDA devices
+    # BEFORE importing torch/transformers modules.
+    assigned_dev = str(os.environ.get("AISTATE_GPU_DEVICE", "")).strip().lower()
+    if assigned_dev == "cpu":
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        os.environ["AISTATE_GPU_ID"] = ""
+        eprint("translate: forced CPU (AISTATE_GPU_DEVICE=cpu)")
+    elif assigned_dev:
+        eprint(f"translate: assigned device hint: {assigned_dev}")
+
     progress(2)
 
     # Lazy imports (so the error shows clearly in logs)
