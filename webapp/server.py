@@ -1153,6 +1153,8 @@ class GPUResourceManager:
         self.kind_priorities: Dict[str, int] = {
             "transcribe": 300,
             "diarize_voice": 200,
+            "translate_fast": 180,
+            "translate_accurate": 180,
             "analysis_quick": 120,
             "analysis": 100,
         }
@@ -1206,24 +1208,28 @@ class GPUResourceManager:
 
     def _available_devices(self) -> List[str]:
         # Return device identifiers that still have free slots.
+        # Note: we always include CPU if it has free slots, even when GPUs exist.
+        # Actual dispatch policy is enforced in _loop (some job kinds may be GPU-only).
         with self._lock:
             if not self.enabled:
                 return []
 
+            out: List[str] = []
+
+            # GPU slots (if available)
             if self._cuda_available and self._gpus:
-                out: List[str] = []
                 for g in self._gpus:
                     dev = f"gpu:{g['id']}"
                     running = int(self._running.get(dev, 0))
                     if running < max(1, self.gpu_slots_per_gpu):
                         out.append(dev)
-                return out
 
-            # CPU fallback
-            running = int(self._running.get("cpu", 0))
-            if running < max(1, self.cpu_slots):
-                return ["cpu"]
-            return []
+            # CPU slot (trackable even when GPU exists)
+            running_cpu = int(self._running.get("cpu", 0))
+            if running_cpu < max(1, self.cpu_slots):
+                out.append("cpu")
+
+            return out
 
     def _prio(self, kind: str) -> int:
         try:
@@ -1442,6 +1448,15 @@ class GPUResourceManager:
                         for j in self._jobs:
                             if j.status != "queued":
                                 continue
+
+                            # If GPUs exist, reserve CPU slots for explicit CPU-fallback jobs
+                            # (e.g., translation). This prevents GPU-heavy kinds from running
+                            # on CPU and stalling multi-user servers.
+                            if dev == "cpu" and self._cuda_available and self._gpus:
+                                k = str(j.kind)
+                                if not k.startswith("translate_"):
+                                    continue
+
                             if (nxt is None) or (j.priority > nxt.priority):
                                 nxt = j
                     if not nxt:
@@ -1983,7 +1998,10 @@ async def api_translation_translate(
     }
 
     app_log(f"Translation requested: mode={mode}, model={model}, targets={','.join(targets)}")
-    task = TASKS.start_subprocess(kind=f"translate_{mode}", project_id="-", cmd=cmd, cwd=ROOT, env=env)
+    if GPU_RM.enabled:
+        task = GPU_RM.enqueue_subprocess(kind=f"translate_{mode}", project_id="-", cmd=cmd, cwd=ROOT, env=env)
+    else:
+        task = TASKS.start_subprocess(kind=f"translate_{mode}", project_id="-", cmd=cmd, cwd=ROOT, env=env)
 
     # Best-effort cleanup of the temp payload file after task ends.
     def _cleanup() -> None:
