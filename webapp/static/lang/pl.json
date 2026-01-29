@@ -561,5 +561,18 @@
   "translation.summary_detail.detailed": "Szczegółowe",
   "translation.summary_detail.label": "Szczegółowość podsumowania:",
   "translation.summary_detail.short": "Krótkie",
-  "nav.translation": "Tłumaczenie"
+  "nav.translation": "Tłumaczenie",
+  "admin.gpu.priorities": "Priorytety zadań",
+  "admin.gpu.priorities_desc": "Ustaw kolejność (1 = najwyższy). Przeciągnij ikony, aby zmienić priorytet.",
+  "admin.gpu.prio.transcription": "Transkrypcja",
+  "admin.gpu.prio.diarization": "Diaryzacja",
+  "admin.gpu.prio.translation": "Tłumaczenia",
+  "admin.gpu.prio.analysis_quick": "Szybka analiza",
+  "admin.gpu.prio.analysis_deep": "Głęboka analiza",
+  "admin.gpu.prio.drag": "Przeciągnij, aby zmienić kolejność",
+  "admin.gpu.prio.move_up": "Przenieś wyżej",
+  "admin.gpu.prio.move_down": "Przenieś niżej",
+  "admin.gpu.prio.saving": "Zapisuję…",
+  "admin.gpu.prio.saved": "Zapisano ✅",
+  "admin.gpu.prio.save_error": "Błąd zapisu:"
 }

@@ -1148,15 +1148,14 @@ class GPUResourceManager:
         self.cpu_slots: int = 1
         self.enabled: bool = True
 
-        # Job priorities: higher value = higher priority
-        # Default order: transcription > diarization > quick LLM > deep LLM
-        self.kind_priorities: Dict[str, int] = {
-            "transcribe": 300,
-            "diarize_voice": 200,
-            "translate_fast": 180,
-            "translate_accurate": 180,
-            "analysis_quick": 120,
-            "analysis": 100,
+        # Job priorities are configured per feature area (admin-facing).
+        # Higher value = higher priority.
+        self.category_priorities: Dict[str, int] = {
+            "transcription": 300,
+            "diarization": 200,
+            "translation": 180,
+            "analysis_quick": 140,
+            "analysis": 120,
         }
 
         self._stop = False
@@ -1170,16 +1169,19 @@ class GPUResourceManager:
             self.cpu_slots = int(cfg.get("cpu_slots", self.cpu_slots))
             self.enabled = bool(cfg.get("enabled", self.enabled))
 
-            # Optional per-kind priorities (persisted in global settings)
+            # Optional per-category priorities (persisted in global settings)
             pr = cfg.get("priorities")
             if isinstance(pr, dict):
-                merged = dict(self.kind_priorities)
+                merged = dict(self.category_priorities)
                 for k, v in pr.items():
+                    ks = str(k)
+                    if ks not in merged:
+                        continue
                     try:
-                        merged[str(k)] = int(v)
+                        merged[ks] = int(v)
                     except Exception:
                         continue
-                self.kind_priorities = merged
+                self.category_priorities = merged
 
     def _detect_gpus(self) -> None:
         # Best-effort; do not crash if torch is missing.
@@ -1232,8 +1234,22 @@ class GPUResourceManager:
             return out
 
     def _prio(self, kind: str) -> int:
+        """Resolve scheduling priority from job kind using category mapping."""
+        k = str(kind or "")
+        cat = ""
+        if k.startswith("transcribe"):
+            cat = "transcription"
+        elif k.startswith("diarize"):
+            cat = "diarization"
+        elif k.startswith("translate_"):
+            cat = "translation"
+        elif k.startswith("analysis_quick"):
+            cat = "analysis_quick"
+        elif k.startswith("analysis"):
+            cat = "analysis"
+
         try:
-            return int(self.kind_priorities.get(str(kind), 50))
+            return int(self.category_priorities.get(cat, 50))
         except Exception:
             return 50
 
@@ -1312,7 +1328,7 @@ class GPUResourceManager:
                     "gpu_slots_per_gpu": self.gpu_slots_per_gpu,
                     "cpu_slots": self.cpu_slots,
                     "enabled": self.enabled,
-                    "priorities": dict(self.kind_priorities),
+                    "priorities": dict(self.category_priorities),
                 },
             }
 
@@ -2771,21 +2787,46 @@ def _get_gpu_rm_settings() -> Dict[str, Any]:
     if not isinstance(raw, dict):
         raw = {}
 
-    # Defaults: transcription > diarization > quick LLM > deep LLM
+    # Priorities are configured per *feature area* (admin-facing), not per internal kind.
+    # Higher value means earlier dispatch.
+    # Default order: transcription > diarization > translation > analysis_quick > analysis
     default_prio = {
-        "transcribe": 300,
-        "diarize_voice": 200,
-        "analysis_quick": 120,
-        "analysis": 100,
+        "transcription": 300,
+        "diarization": 200,
+        "translation": 180,
+        "analysis_quick": 140,
+        "analysis": 120,
     }
+
+    # Backward compatible mapping from older per-kind keys.
     pr = raw.get("priorities")
     merged_prio = dict(default_prio)
     if isinstance(pr, dict):
-        for k, v in pr.items():
+        def _as_int(x, dv):
             try:
-                merged_prio[str(k)] = int(v)
+                return int(x)
             except Exception:
-                continue
+                return dv
+
+                # New keys (preferred)
+        if "transcription" in pr:
+            merged_prio["transcription"] = _as_int(pr.get("transcription"), merged_prio["transcription"])
+        if "diarization" in pr:
+            merged_prio["diarization"] = _as_int(pr.get("diarization"), merged_prio["diarization"])
+        if "translation" in pr:
+            merged_prio["translation"] = _as_int(pr.get("translation"), merged_prio["translation"])
+        if "analysis_quick" in pr:
+            merged_prio["analysis_quick"] = _as_int(pr.get("analysis_quick"), merged_prio["analysis_quick"])
+        if "analysis" in pr:
+            merged_prio["analysis"] = _as_int(pr.get("analysis"), merged_prio["analysis"])
+
+        # Old keys (migrate best-effort)
+        if "transcribe" in pr and "transcription" not in pr:
+            merged_prio["transcription"] = _as_int(pr.get("transcribe"), merged_prio["transcription"])
+        if "diarize_voice" in pr and "diarization" not in pr:
+            merged_prio["diarization"] = _as_int(pr.get("diarize_voice"), merged_prio["diarization"])
+        if ("translate_fast" in pr or "translate_accurate" in pr) and "translation" not in pr:
+            merged_prio["translation"] = _as_int(pr.get("translate_fast", pr.get("translate_accurate")), merged_prio["translation"])
 
     return {
         "enabled": bool(raw.get("enabled", True)),
@@ -2804,10 +2845,14 @@ def _save_gpu_rm_settings(cfg: Dict[str, Any]) -> None:
     pr = cfg.get("priorities")
     pr_out = None
     if isinstance(pr, dict):
+        # Persist only admin-facing keys.
+        allow = {"transcription", "diarization", "translation", "analysis_quick", "analysis"}
         pr_out = {}
-        for k, v in pr.items():
+        for k in allow:
+            if k not in pr:
+                continue
             try:
-                pr_out[str(k)] = int(v)
+                pr_out[k] = int(pr.get(k))
             except Exception:
                 continue
 
@@ -2905,6 +2950,92 @@ def api_admin_gpu_config(payload: Dict[str, Any]) -> Dict[str, Any]:
     GPU_RM.apply_config(cfg)
     app_log(f"Admin updated GPU RM config: mem_fraction={cfg['gpu_mem_fraction']}, slots_per_gpu={cfg['gpu_slots_per_gpu']}, cpu_slots={cfg['cpu_slots']}")
     return {"status": "ok", "config": cfg}
+
+
+@app.get("/api/admin/gpu/priorities")
+def api_admin_gpu_get_priorities() -> Dict[str, Any]:
+    cfg = _get_gpu_rm_settings()
+    return {"status": "ok", "priorities": cfg.get("priorities") or {}}
+
+
+@app.post("/api/admin/gpu/priorities")
+def api_admin_gpu_set_priorities(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Update admin-facing scheduling priorities.
+
+    Priorities are defined per feature area:
+      transcription, diarization, translation, analysis_quick, analysis
+
+    Two supported update modes:
+      1) {"priorities": {...}} - numeric per area
+      2) {"order": ["transcription","diarization","translation","analysis_quick","analysis"]} - 1..N ordering
+
+    Constraint: priorities must be unique across areas.
+    """
+    cfg = _get_gpu_rm_settings()
+    allow = ("transcription", "diarization", "translation", "analysis_quick", "analysis")
+
+    # Mode 2: ordering (1..N) - preserve the current numeric set, just reassign by order.
+    incoming_order = payload.get("order")
+    if isinstance(incoming_order, list):
+        order = [str(x) for x in incoming_order]
+        if len(order) != len(allow) or set(order) != set(allow):
+            raise HTTPException(status_code=400, detail="Invalid order")
+
+        # Build a stable pool of unique priority values.
+        cur = dict(GPU_RM.category_priorities)
+        if isinstance(cfg.get("priorities"), dict):
+            for k, v in (cfg.get("priorities") or {}).items():
+                if k in cur:
+                    try:
+                        cur[k] = int(v)
+                    except Exception:
+                        pass
+
+        vals = [int(cur.get(k, 100)) for k in allow]
+        # If current values are not unique (shouldn't happen, but be safe), fall back to defaults.
+        if len(set(vals)) != len(vals):
+            vals = [300, 200, 180, 140, 120]
+        vals_sorted = sorted(vals, reverse=True)
+
+        pr = {order[i]: int(vals_sorted[i]) for i in range(len(allow))}
+        cfg["priorities"] = pr
+        _save_gpu_rm_settings(cfg)
+        GPU_RM.apply_config(cfg)
+        app_log("Admin updated GPU RM priority order: " + " > ".join(order))
+        return {"status": "ok", "priorities": pr, "config": cfg}
+
+    # Mode 1: numeric priorities
+    pr = dict(cfg.get("priorities") or {})
+
+    incoming = payload.get("priorities") if isinstance(payload.get("priorities"), dict) else payload
+    if not isinstance(incoming, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    for k in allow:
+        if k not in incoming:
+            continue
+        try:
+            v = int(incoming.get(k))
+            # clamp to a sane range
+            v = max(1, min(1000, v))
+            pr[k] = v
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Invalid priority for {k}")
+
+    # Ensure all priorities exist (in case of partial update)
+    for k in allow:
+        if k not in pr:
+            pr[k] = int(_get_gpu_rm_settings().get("priorities", {}).get(k, 100))
+
+    vals = [int(pr.get(k)) for k in allow]
+    if len(set(vals)) != len(vals):
+        raise HTTPException(status_code=400, detail="Priorities must be unique for each area")
+
+    cfg["priorities"] = pr
+    _save_gpu_rm_settings(cfg)
+    GPU_RM.apply_config(cfg)
+    app_log("Admin updated GPU RM priorities: " + ", ".join([f"{k}={pr.get(k)}" for k in allow]))
+    return {"status": "ok", "priorities": pr, "config": cfg}
 
 
 @app.post("/api/admin/gpu/cancel")

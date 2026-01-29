@@ -561,5 +561,18 @@
   "translation.summary_detail.detailed": "Detailed",
   "translation.summary_detail.label": "Summary detail:",
   "translation.summary_detail.short": "Short",
-  "nav.translation": "Translation"
+  "nav.translation": "Translation",
+  "admin.gpu.priorities": "Job priorities",
+  "admin.gpu.priorities_desc": "Set the order (1 = highest). Drag icons to reorder.",
+  "admin.gpu.prio.transcription": "Transcription",
+  "admin.gpu.prio.diarization": "Diarization",
+  "admin.gpu.prio.translation": "Translation",
+  "admin.gpu.prio.analysis_quick": "Quick analysis",
+  "admin.gpu.prio.analysis_deep": "Deep analysis",
+  "admin.gpu.prio.drag": "Drag to reorder",
+  "admin.gpu.prio.move_up": "Move up",
+  "admin.gpu.prio.move_down": "Move down",
+  "admin.gpu.prio.saving": "Saving…",
+  "admin.gpu.prio.saved": "Saved ✅",
+  "admin.gpu.prio.save_error": "Save error:"
 }

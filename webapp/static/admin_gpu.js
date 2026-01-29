@@ -3,12 +3,76 @@
 
 function $(id){ return document.getElementById(id); }
 
+function tr(key){
+  try{ return (typeof window.t === "function") ? window.t(key) : key; }catch(_){ return key; }
+}
+
+function trLabel(key, fallbackPl, fallbackEn){
+  const v = tr(key);
+  if(v && v !== key) return v;
+  const lang = (localStorage.getItem("aistate_ui_lang") || "pl").toLowerCase();
+  if(lang.startsWith("pl")) return fallbackPl || fallbackEn || key;
+  return fallbackEn || fallbackPl || key;
+}
+
+
 let cfgDirty = false;
+let prioDirty = false;
+let prioSaveTimer = null;
+
+// SVG icons reused from sidebar (same paths/classes)
+const ICON_SVGS = {
+  transcription: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path class="brush" d="M5 11a7 7 0 0 0 14 0"/>
+      <path d="M9 11V8a3 3 0 0 1 6 0v3a3 3 0 0 1-6 0z"/>
+      <path d="M12 14v4"/>
+      <path d="M8 18h8"/>
+    </svg>`,
+  diarization: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path class="brush" d="M7 13c1.5 1 3 1.5 5 1.5s3.5-.5 5-1.5"/>
+      <path d="M8.5 10.5a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+      <path d="M15.5 11.5a2.5 2.5 0 1 0-2.2-4"/>
+      <path d="M4.5 20c.8-3.2 3-5 6-5s5.2 1.8 6 5"/>
+    </svg>`,
+  analysis: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path class="brush" d="M6 16l4-5 3 3 5-8"/>
+      <path d="M5 19h14"/>
+      <path d="M6 19V6"/>
+      <path d="M8 12h3"/>
+    </svg>`,
+  translation: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path class="brush" d="M6 8h6"/>
+      <path d="M7 8c0 4-1.5 6.8-4 9"/>
+      <path d="M10 8c0 2.7 1.5 5.4 4 7.5"/>
+      <path class="brush" d="M14 14h7"/>
+      <path d="M16 14l-2-2"/>
+      <path d="M19 14l2 2"/>
+    </svg>`,
+};
+
+const PRIO_CATS = [
+  { key: "transcription", icon: "transcription", titleKey: "admin.gpu.prio.transcription", fbPl: "Transkrypcja", fbEn: "Transcription" },
+  { key: "diarization", icon: "diarization", titleKey: "admin.gpu.prio.diarization", fbPl: "Diaryzacja", fbEn: "Diarization" },
+  { key: "translation", icon: "translation", titleKey: "admin.gpu.prio.translation", fbPl: "Tłumaczenia", fbEn: "Translation" },
+  { key: "analysis_quick", icon: "analysis", badge: "⚡", titleKey: "admin.gpu.prio.analysis_quick", fbPl: "Szybka analiza", fbEn: "Quick analysis" },
+  { key: "analysis", icon: "analysis", badge: "🔎", titleKey: "admin.gpu.prio.analysis_deep", fbPl: "Głęboka analiza", fbEn: "Deep analysis" },
+];
 
 function markCfgDirty(){
   cfgDirty = true;
   const msg = $("gpu_cfg_msg");
   if(msg && !msg.textContent) msg.textContent = "Unsaved changes…";
+}
+
+function markPrioDirty(){
+  prioDirty = true;
+  const msg = $("gpu_prio_msg");
+  if(msg) msg.textContent = trLabel("admin.gpu.prio.saving","Zapisuję…","Saving…");
+  scheduleSavePriorities();
 }
 
 async function apiJson(url, opts){
@@ -18,6 +82,11 @@ async function apiJson(url, opts){
     throw new Error(`HTTP ${r.status}: ${txt}`);
   }
   return await r.json();
+}
+
+function scheduleSavePriorities(){
+  if(prioSaveTimer) clearTimeout(prioSaveTimer);
+  prioSaveTimer = setTimeout(()=>{ savePriorities(); }, 450);
 }
 
 function fmtGB(bytes){
@@ -47,7 +116,11 @@ function renderStatus(data){
   if(!cfgDirty && spgIn && active !== spgIn) spgIn.value = data.config?.gpu_slots_per_gpu ?? 1;
   if(!cfgDirty && csIn && active !== csIn) csIn.value = data.config?.cpu_slots ?? 1;
 
-const body = $("gpu_table_body");
+  // Priorities (do not overwrite while user is editing)
+  const pr = data.config?.priorities || {};
+  renderPriorityList(pr);
+
+  const body = $("gpu_table_body");
   if(!body) return;
   body.innerHTML = "";
   const gpus = Array.isArray(data.gpus) ? data.gpus : [];
@@ -67,6 +140,167 @@ const body = $("gpu_table_body");
       <td>${esc(data.config?.gpu_slots_per_gpu ?? 1)}</td>
     `;
     body.appendChild(tr);
+  }
+}
+
+function orderFromPriorities(pr){
+  const p = pr || {};
+  const cats = PRIO_CATS.map(c => c.key);
+  cats.sort((a,b)=>{
+    const pa = (p[a] != null ? parseInt(p[a], 10) : 0);
+    const pb = (p[b] != null ? parseInt(p[b], 10) : 0);
+    // higher first
+    return (pb - pa) || a.localeCompare(b);
+  });
+  return cats;
+}
+
+function getOrderFromDOM(){
+  const list = $("prio_list");
+  if(!list) return [];
+  return Array.from(list.querySelectorAll(".prio-item")).map(el => el.getAttribute("data-cat")).filter(Boolean);
+}
+
+function updateRankBadges(){
+  const list = $("prio_list");
+  if(!list) return;
+  const items = Array.from(list.querySelectorAll(".prio-item"));
+  items.forEach((it, idx)=>{
+    const b = it.querySelector(".prio-rank");
+    if(b) b.textContent = String(idx+1);
+  });
+}
+
+function updatePriorityNumbers(pr){
+  const list = $("prio_list");
+  if(!list) return;
+  const p = pr || {};
+  Array.from(list.querySelectorAll(".prio-item")).forEach(it=>{
+    const cat = it.getAttribute("data-cat") || "";
+    const num = it.querySelector(".prio-num");
+    if(num) num.textContent = (p[cat] != null) ? `prio ${p[cat]}` : "";
+  });
+}
+
+function buildPriorityList(order, pr){
+  const list = $("prio_list");
+  if(!list) return;
+  list.innerHTML = "";
+  const priorities = pr || {};
+
+  const byKey = {};
+  PRIO_CATS.forEach(c=>{ byKey[c.key] = c; });
+
+  let dragged = null;
+
+  function clearDropTargets(){
+    list.querySelectorAll(".drop-target").forEach(el=>el.classList.remove("drop-target"));
+  }
+
+  function moveItem(item, dir){
+    if(!item) return;
+    if(dir === "up"){
+      const prev = item.previousElementSibling;
+      if(prev) list.insertBefore(item, prev);
+    }else{
+      const next = item.nextElementSibling;
+      if(next) list.insertBefore(item, next.nextSibling);
+    }
+    markPrioDirty();
+    updateRankBadges();
+  }
+
+  for(const cat of order){
+    const meta = byKey[cat] || { key: cat, icon: "analysis", titleKey: "" };
+
+    const row = document.createElement("div");
+    row.className = "prio-item";
+    row.setAttribute("draggable", "true");
+    row.setAttribute("data-cat", cat);
+    row.setAttribute("data-icon", meta.icon || "");
+
+    const svg = ICON_SVGS[meta.icon] || ICON_SVGS.analysis;
+    const badge = meta.badge ? `<span class="prio-badge" aria-hidden="true">${esc(meta.badge)}</span>` : "";
+
+    row.innerHTML = `
+      <div class="prio-left">
+        <div class="prio-rank">?</div>
+        <div class="prio-handle" title="${esc(trLabel('admin.gpu.prio.drag','Przeciągnij, aby zmienić kolejność','Drag to reorder'))}">⋮⋮</div>
+        <div class="prio-icon" data-tip="${esc(trLabel(meta.titleKey||'', meta.fbPl, meta.fbEn))}" role="img" aria-label="${esc(trLabel(meta.titleKey||'', meta.fbPl, meta.fbEn))}">
+          ${svg}
+          ${badge}
+          <span class="sr-only">${esc(trLabel(meta.titleKey||'', meta.fbPl, meta.fbEn))}</span>
+        </div>
+      </div>
+      <div class="prio-right">
+        <div class="prio-num">${(priorities[cat]!=null) ? `prio ${esc(priorities[cat])}` : ""}</div>
+        <div class="prio-move">
+          <button class="btn small" data-act="up" title="${esc(trLabel('admin.gpu.prio.move_up','Przenieś wyżej','Move up'))}">↑</button>
+          <button class="btn small" data-act="down" title="${esc(trLabel('admin.gpu.prio.move_down','Przenieś niżej','Move down'))}">↓</button>
+        </div>
+      </div>
+    `;
+    // Drag & drop
+    row.addEventListener("dragstart", (e)=>{
+      dragged = row;
+      row.classList.add("dragging");
+      try{ e.dataTransfer.effectAllowed = "move"; }catch(_){ }
+    });
+    row.addEventListener("dragend", ()=>{
+      row.classList.remove("dragging");
+      clearDropTargets();
+      dragged = null;
+      updateRankBadges();
+    });
+    row.addEventListener("dragover", (e)=>{
+      if(!dragged || dragged === row) return;
+      e.preventDefault();
+      row.classList.add("drop-target");
+    });
+    row.addEventListener("dragleave", ()=>row.classList.remove("drop-target"));
+    row.addEventListener("drop", (e)=>{
+      if(!dragged || dragged === row) return;
+      e.preventDefault();
+      row.classList.remove("drop-target");
+      const items = Array.from(list.querySelectorAll(".prio-item"));
+      const from = items.indexOf(dragged);
+      const to = items.indexOf(row);
+      if(from < 0 || to < 0) return;
+      if(from < to) list.insertBefore(dragged, row.nextSibling);
+      else list.insertBefore(dragged, row);
+      markPrioDirty();
+      updateRankBadges();
+    });
+
+    // Up/down
+    row.querySelectorAll("button[data-act]").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        const act = b.getAttribute("data-act");
+        moveItem(row, act);
+      });
+    });
+
+    list.appendChild(row);
+  }
+
+  updateRankBadges();
+
+  // Let i18n apply after DOM exists
+  if(window && typeof window.applyI18n === "function"){
+    try{ window.applyI18n(); }catch(_){ }
+  }
+}
+
+function renderPriorityList(pr){
+  const list = $("prio_list");
+  if(!list) return;
+
+  if(!prioDirty){
+    const order = orderFromPriorities(pr);
+    buildPriorityList(order, pr);
+  }else{
+    // User is reordering - only refresh numeric hints.
+    updatePriorityNumbers(pr);
   }
 }
 
@@ -147,9 +381,27 @@ async function saveConfig(){
   }
 }
 
+async function savePriorities(){
+  const msg = $("gpu_prio_msg");
+  if(msg) msg.textContent = trLabel("admin.gpu.prio.saving","Zapisuję…","Saving…");
+  try{
+    const resp = await apiJson("/api/admin/gpu/priorities", {
+      method: "POST",
+      headers: {"content-type":"application/json"},
+      body: JSON.stringify({order: getOrderFromDOM()})
+    });
+    prioDirty = false;
+    if(resp && resp.priorities) updatePriorityNumbers(resp.priorities);
+    if(msg) msg.textContent = trLabel("admin.gpu.prio.saved","Zapisano ✅","Saved ✅");
+  }catch(e){
+    if(msg) msg.textContent = trLabel("admin.gpu.prio.save_error","Błąd zapisu:","Save error:") + " " + String(e.message||e);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", ()=>{
   const btn = $("gpu_cfg_save");
   if(btn) btn.addEventListener("click", saveConfig);
+
   // mark dirty on edit so auto-refresh does not reset values
   const mfIn = $("gpu_mem_fraction");
   const spgIn = $("gpu_slots_per_gpu");
@@ -157,6 +409,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
   if(mfIn) mfIn.addEventListener("input", markCfgDirty);
   if(spgIn) spgIn.addEventListener("input", markCfgDirty);
   if(csIn) csIn.addEventListener("input", markCfgDirty);
+  // Priorities: autosave on reorder
+
   refreshAll().catch(e=>console.error(e));
   setInterval(()=>{ refreshAll().catch(()=>{}); }, 2000);
 });
