@@ -1734,6 +1734,11 @@ def page_diarize(request: Request) -> Any:
 
 
 
+@app.get("/chat", response_class=HTMLResponse)
+def page_chat(request: Request) -> Any:
+    return render_page(request, "chat.html", "Chat LLM", "chat")
+
+
 @app.get("/analysis", response_class=HTMLResponse)
 def page_analysis(request: Request) -> Any:
     return render_page(request, "analysis.html", "Analiza", "analysis")
@@ -5873,6 +5878,115 @@ def _schedule_quick_analysis_background(project_id: str) -> None:
                 pass
 
     threading.Thread(target=_runner, daemon=True).start()
+
+
+# ===================================================================
+# CHAT MODULE – conversational interface with Ollama LLMs
+# ===================================================================
+
+@app.get("/api/chat/models")
+async def api_chat_models() -> Any:
+    """Return installed Ollama models available for chat."""
+    try:
+        status = await OLLAMA.status()
+        if status.status != "online":
+            return JSONResponse({"status": "offline", "models": []})
+        models = status.models or []
+        return JSONResponse({"status": "online", "models": models})
+    except Exception as e:
+        return JSONResponse({"status": "error", "models": [], "error": str(e)})
+
+
+@app.get("/api/chat/stream")
+async def api_chat_stream(request: Request) -> Any:
+    """Stream a chat response via SSE.
+
+    Query params:
+      - model: Ollama model name
+      - messages: JSON-encoded list of {role, content} dicts
+      - temperature: float (default 0.7)
+      - system: optional system prompt
+    """
+    qp = request.query_params
+    model = str(qp.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="model required")
+
+    messages_raw = str(qp.get("messages") or "[]").strip()
+    try:
+        messages = json.loads(messages_raw)
+        if not isinstance(messages, list):
+            raise ValueError("messages must be a list")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid messages JSON: {e}")
+
+    system_prompt = str(qp.get("system") or "").strip()
+
+    try:
+        temperature = float(qp.get("temperature") or 0.7)
+    except (TypeError, ValueError):
+        temperature = 0.7
+
+    # Build final messages list
+    msgs: List[Dict[str, str]] = []
+    if system_prompt:
+        msgs.append({"role": "system", "content": system_prompt})
+    for m in messages:
+        if isinstance(m, dict) and "role" in m and "content" in m:
+            msgs.append({"role": str(m["role"]), "content": str(m["content"])})
+
+    if not msgs:
+        raise HTTPException(status_code=400, detail="No messages provided")
+
+    options = {"temperature": temperature}
+
+    async def generate() -> Any:
+        try:
+            await OLLAMA.ensure_model(model)
+            async for chunk in OLLAMA.stream_chat(model=model, messages=msgs, options=options):
+                payload = json.dumps({"chunk": chunk, "done": False}, ensure_ascii=False)
+                yield f"data: {payload}\n\n"
+            yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
+        except Exception as e:
+            err = json.dumps({"chunk": f"\n\n[ERROR] {e}", "done": True, "error": str(e)}, ensure_ascii=False)
+            yield f"data: {err}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/api/chat/complete")
+async def api_chat_complete(request: Request) -> Any:
+    """Non-streaming chat completion."""
+    body = await request.json()
+    model = str(body.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="model required")
+
+    messages = body.get("messages", [])
+    system_prompt = str(body.get("system") or "").strip()
+
+    try:
+        temperature = float(body.get("temperature", 0.7))
+    except (TypeError, ValueError):
+        temperature = 0.7
+
+    msgs: List[Dict[str, str]] = []
+    if system_prompt:
+        msgs.append({"role": "system", "content": system_prompt})
+    for m in messages:
+        if isinstance(m, dict) and "role" in m and "content" in m:
+            msgs.append({"role": str(m["role"]), "content": str(m["content"])})
+
+    if not msgs:
+        raise HTTPException(status_code=400, detail="No messages provided")
+
+    try:
+        await OLLAMA.ensure_model(model)
+        resp = await OLLAMA.chat(model=model, messages=msgs, options={"temperature": temperature})
+        content = str((resp.get("message") or {}).get("content") or "")
+        return JSONResponse({"content": content, "model": model})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def _persist_loop() -> None:
