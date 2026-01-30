@@ -244,6 +244,17 @@
            '<path d="M9.5 14c1 1 4 1 5 0" ' + _s("purple-ice") + " " + _w(1.2) + " " + S + ' fill="none"/>' +
            '<path d="M8 5V3M16 5V3M12 17v3M10 20h4" ' + _s("purple-ice") + " " + _w(1.2) + " " + S + ' fill="none"/>';
   };
+  icons.diarization = function () {
+    return '<circle cx="7" cy="8" r="2.8" ' + _s("blue-cyan") + " " + _w(1.4) + ' fill="none"/>' +
+           '<path d="M3 17c0-2.5 1.8-4 4-4s4 1.5 4 4" ' + _s("blue-cyan") + " " + _w(1.4) + " " + S + ' fill="none"/>' +
+           '<circle cx="17" cy="8" r="2.8" ' + _s("sky-purple") + " " + _w(1.4) + ' fill="none"/>' +
+           '<path d="M13 17c0-2.5 1.8-4 4-4s4 1.5 4 4" ' + _s("sky-purple") + " " + _w(1.4) + " " + S + ' fill="none"/>' +
+           '<path d="M10 10.5c.6.4 1.2.4 2 .4s1.4 0 2-.4" ' + _s("cyan-ice") + " " + _w(1.2) + " " + S + ' fill="none" stroke-dasharray="1.5 1"/>';
+  };
+  icons.transcription = function () {
+    return '<path d="M2 12c1-3 2 3 3 0s2 3 3 0 2-3 3 0" ' + _s("blue-cyan") + " " + _w(1.6) + " " + S + ' fill="none"/>' +
+           '<path d="M14 9v6M16 8v8M18 10v4" ' + _s("sky-purple") + " " + _w(1.8) + " " + S + ' fill="none" opacity=".85"/>';
+  };
   icons.globe = function () {
     return '<circle cx="12" cy="12" r="9" ' + _s("sky-cyan") + " " + _w(1.4) + ' fill="none"/>' +
            '<ellipse cx="12" cy="12" rx="4" ry="9" ' + _s("sky-cyan") + " " + _w(1) + ' fill="none" opacity=".5"/>' +
@@ -337,8 +348,8 @@
     "\uD83E\uDD16": "robot",       // 🤖
     "\uD83C\uDF10": "globe",       // 🌐
     "\uD83C\uDF0D": "globe",       // 🌍
-    "\uD83C\uDF99\uFE0F": "mic",   // 🎙️
-    "\uD83C\uDF99": "mic",         // 🎙
+    "\uD83C\uDF99\uFE0F": "transcription", // 🎙️
+    "\uD83C\uDF99": "transcription",     // 🎙
     "\uD83D\uDCB0": "finance",     // 💰
     "\uD83D\uDD27": "wrench",      // 🔧
     "\u2795":       "add",          // ➕
@@ -360,7 +371,10 @@
     "\u23F9\uFE0F": "stop",        // ⏹️
     "\u23EA":       "skip_back_3", // ⏪
     "\u23E9":       "skip_fwd_3",  // ⏩
-    "\u25C0\uFE0F": "skip_back_3"  // ◀️
+    "\u25C0\uFE0F": "skip_back_3", // ◀️
+    "\uD83C\uDFAD": "diarization", // 🎭 (theater masks → diarization)
+    "\u21BB":       "refresh",      // ↻
+    "\uD83D\uDD04": "refresh"      // 🔄
   };
 
   function _replaceEmojis() {
@@ -380,7 +394,9 @@
           var iconName = EMOJI_MAP[emoji];
           var size = 16;
           // Bigger icons for headers
-          if (el.classList.contains("h1") || el.classList.contains("h2") || el.classList.contains("h3")) size = 18;
+          if (el.classList.contains("h1") || el.tagName === "H1") size = 28;
+          else if (el.classList.contains("h2") || el.tagName === "H2") size = 20;
+          else if (el.classList.contains("h3") || el.tagName === "H3") size = 18;
           if (el.classList.contains("chat-welcome-icon")) size = 40;
           html = html.split(emoji).join(aiIcon(iconName, size));
           changed = true;
