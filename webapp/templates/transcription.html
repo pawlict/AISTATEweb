@@ -634,11 +634,11 @@ function trBuildEditorEl(idx){
     </div>
 
     <div class="seg-audio-row">
-      <button class="seg-audio-btn" data-act="playSeg" title="Play"><svg viewBox="0 0 24 24" width="16" height="16"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg></button>
-      <button class="seg-audio-btn" data-act="pause" title="Pause"><svg viewBox="0 0 24 24" width="16" height="16"><rect x="5" y="3" width="4" height="18" fill="currentColor"/><rect x="15" y="3" width="4" height="18" fill="currentColor"/></svg></button>
-      <button class="seg-audio-btn" data-act="stop" title="Stop"><svg viewBox="0 0 24 24" width="16" height="16"><rect x="4" y="4" width="16" height="16" fill="currentColor"/></svg></button>
-      <button class="seg-audio-btn" data-act="m3" title="-3s"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12.5 8V4l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" fill="currentColor" transform="scale(-1,1) translate(-24,0)"/></svg></button>
-      <button class="seg-audio-btn" data-act="p3" title="+3s"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12.5 8V4l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" fill="currentColor"/></svg></button>
+      <button class="seg-audio-btn" data-act="playSeg" title="Play">${typeof aiIcon==='function'?aiIcon('play',16):''}</button>
+      <button class="seg-audio-btn" data-act="pause" title="Pause">${typeof aiIcon==='function'?aiIcon('pause',16):''}</button>
+      <button class="seg-audio-btn" data-act="stop" title="Stop">${typeof aiIcon==='function'?aiIcon('stop',16):''}</button>
+      <button class="seg-audio-btn" data-act="m3" title="-3s">${typeof aiIcon==='function'?aiIcon('skip_back_3',16):''}</button>
+      <button class="seg-audio-btn" data-act="p3" title="+3s">${typeof aiIcon==='function'?aiIcon('skip_fwd_3',16):''}</button>
       <div class="seg-audio-info"></div>
     </div>
 
