@@ -827,3 +827,72 @@ textarea{min-height:220px; resize:vertical}
   .chat-container{flex-direction:column}
   .chat-sidebar{width:100%; max-height:200px}
 }
+
+/* ===== Audio Player Bar ===== */
+.audio-player-bar{
+  display:flex; align-items:center; gap:10px;
+  background:var(--card-bg,#fff);
+  border:1px solid var(--border,#e2e8f0);
+  border-radius:12px;
+  padding:10px 16px;
+  margin-bottom:14px;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
+  position:sticky; top:60px; z-index:50;
+}
+.ap-controls{display:flex; align-items:center; gap:4px}
+.ap-btn{
+  background:none; border:none; cursor:pointer;
+  color:var(--text,#1e293b); border-radius:8px;
+  width:36px; height:36px;
+  display:flex; align-items:center; justify-content:center;
+  transition:background .15s;
+}
+.ap-btn:hover{background:rgba(15,23,42,.08)}
+.ap-btn-play{
+  width:42px; height:42px;
+  background:var(--primary,#2563eb);
+  color:#fff; border-radius:50%;
+}
+.ap-btn-play:hover{background:var(--primary-hover,#1d4ed8)}
+
+.ap-progress-wrap{
+  flex:1; cursor:pointer; padding:6px 0;
+}
+.ap-progress-bar{
+  height:6px; border-radius:3px;
+  background:var(--border,#e2e8f0);
+  position:relative; overflow:hidden;
+}
+.ap-progress-fill{
+  height:100%; border-radius:3px;
+  background:var(--primary,#2563eb);
+  width:0; transition:width .1s linear;
+}
+
+.ap-time{
+  font-size:12px; color:var(--muted,#64748b);
+  white-space:nowrap; min-width:90px; text-align:center;
+}
+.ap-speed select,
+.ap-speed-sel{
+  font-size:12px; padding:2px 4px;
+  border:1px solid var(--border,#e2e8f0);
+  border-radius:6px; background:var(--card-bg,#fff);
+  color:var(--text,#1e293b); cursor:pointer;
+}
+
+/* Segment highlight when audio is playing */
+.seg-playing{
+  background:rgba(37,99,235,.10) !important;
+  border-left:3px solid var(--primary,#2563eb) !important;
+  transition:background .2s, border-left .2s;
+}
+
+/* Editor simplified icon buttons */
+.seg-audio-btn svg{pointer-events:none}
+.seg-audio-row{gap:4px}
+
+@media(max-width:640px){
+  .audio-player-bar{flex-wrap:wrap; gap:6px; padding:8px 10px}
+  .ap-progress-wrap{width:100%; order:10}
+}

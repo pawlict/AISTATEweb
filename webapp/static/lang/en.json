@@ -599,5 +599,8 @@
   "admin.gpu.prio.move_down": "Move down",
   "admin.gpu.prio.saving": "Saving…",
   "admin.gpu.prio.saved": "Saved ✅",
-  "admin.gpu.prio.save_error": "Save error:"
+  "admin.gpu.prio.save_error": "Save error:",
+  "player.play": "Play / Pause",
+  "player.back5": "Rewind 5s",
+  "player.fwd5": "Forward 5s"
 }

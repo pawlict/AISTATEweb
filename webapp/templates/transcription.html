@@ -399,6 +399,7 @@
     <div>
       <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="tr.result.title">📄 Wynik transkrypcji</div>
       <div class="small" style="margin-bottom:8px" data-i18n="hint.hover_to_play_edit">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+      <div id="tr_audio_player"></div>
       <div id="tr_blocks" class="blocklist" style="display:none"></div>
       <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…" data-i18n-placeholder="placeholder.result_here"></textarea>
       <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
@@ -450,6 +451,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/audio_player.js"></script>
 <script>
 "use strict";
 
@@ -632,26 +634,11 @@ function trBuildEditorEl(idx){
     </div>
 
     <div class="seg-audio-row">
-      <button class="seg-audio-btn" data-act="playSeg" title="Odtwórz ten blok">▶️</button>
-      <button class="seg-audio-btn" data-act="pause" title="Pauza">⏸</button>
-      <button class="seg-audio-btn" data-act="stop" title="Stop">⏹</button>
-      <button class="seg-audio-btn" data-act="m3" title="Cofnij 3s">-3s</button>
-      <button class="seg-audio-btn" data-act="m1" title="Cofnij 1s">-1s</button>
-      <button class="seg-audio-btn" data-act="p1" title="Dalej 1s">+1s</button>
-      <button class="seg-audio-btn" data-act="p3" title="Dalej 3s">+3s</button>
-
-      <div style="display:flex;align-items:center;gap:6px">
-        <span class="small">Prędkość</span>
-        <select class="seg-speed">
-          <option value="0.5">0.5×</option>
-          <option value="0.75">0.75×</option>
-          <option value="1" selected>1×</option>
-          <option value="1.25">1.25×</option>
-          <option value="1.5">1.5×</option>
-          <option value="2">2×</option>
-        </select>
-      </div>
-
+      <button class="seg-audio-btn" data-act="playSeg" title="Play"><svg viewBox="0 0 24 24" width="16" height="16"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg></button>
+      <button class="seg-audio-btn" data-act="pause" title="Pause"><svg viewBox="0 0 24 24" width="16" height="16"><rect x="5" y="3" width="4" height="18" fill="currentColor"/><rect x="15" y="3" width="4" height="18" fill="currentColor"/></svg></button>
+      <button class="seg-audio-btn" data-act="stop" title="Stop"><svg viewBox="0 0 24 24" width="16" height="16"><rect x="4" y="4" width="16" height="16" fill="currentColor"/></svg></button>
+      <button class="seg-audio-btn" data-act="m3" title="-3s"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12.5 8V4l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" fill="currentColor" transform="scale(-1,1) translate(-24,0)"/></svg></button>
+      <button class="seg-audio-btn" data-act="p3" title="+3s"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12.5 8V4l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" fill="currentColor"/></svg></button>
       <div class="seg-audio-info"></div>
     </div>
 
@@ -756,33 +743,11 @@ function trWireEditor(segEl, idx, ed){
         }
       } else if(act === "m3"){
         if(TR.audio) TR.audio.currentTime = Math.max(0, TR.audio.currentTime - 3);
-      } else if(act === "m1"){
-        if(TR.audio) TR.audio.currentTime = Math.max(0, TR.audio.currentTime - 1);
-      } else if(act === "p1"){
-        if(TR.audio) TR.audio.currentTime = Math.min(TR.audio.duration || 999999, TR.audio.currentTime + 1);
       } else if(act === "p3"){
         if(TR.audio) TR.audio.currentTime = Math.min(TR.audio.duration || 999999, TR.audio.currentTime + 3);
       }
     });
   });
-
-  // Speed selector
-  const sel = ed.querySelector(".seg-speed");
-  if(sel){
-    try{
-      const r0 = parseFloat(localStorage.getItem("aistateweb:audio_speed") || "1");
-      if(!isNaN(r0) && r0 > 0) sel.value = String(r0);
-    }catch(e){}
-
-    sel.disabled = !hasAudio;
-    sel.addEventListener("change", ()=>{
-      const r = parseFloat(sel.value || "1");
-      if(!isNaN(r) && r > 0){
-        if(TR.audio) TR.audio.playbackRate = r;
-        try{ localStorage.setItem("aistateweb:audio_speed", String(r)); }catch(e){}
-      }
-    });
-  }
 
   // Prevent editor from triggering hover playback
   ed.addEventListener("mouseenter", (ev)=>{ ev.stopPropagation(); });
@@ -1562,6 +1527,17 @@ window.trOpenBlockNoteEditor = trOpenBlockNoteEditor;
       }
     }
   }catch(e){ /* ignore */ }
+
+  // Initialize main audio player bar
+  if (typeof AudioPlayer === "function") {
+    window._trPlayer = new AudioPlayer({
+      containerId: "tr_audio_player",
+      getAudioUrl: trAudioUrl,
+      getSegments: function(){ return TR.segments || []; },
+      blocksContainerId: "tr_blocks"
+    });
+    window._trPlayer.init();
+  }
 })();
 </script>
 {% endblock %}
