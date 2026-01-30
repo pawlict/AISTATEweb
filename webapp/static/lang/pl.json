@@ -599,5 +599,8 @@
   "admin.gpu.prio.move_down": "Przenieś niżej",
   "admin.gpu.prio.saving": "Zapisuję…",
   "admin.gpu.prio.saved": "Zapisano ✅",
-  "admin.gpu.prio.save_error": "Błąd zapisu:"
+  "admin.gpu.prio.save_error": "Błąd zapisu:",
+  "player.play": "Odtwarzaj / Pauza",
+  "player.back5": "Cofnij 5s",
+  "player.fwd5": "Do przodu 5s"
 }

@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
-from backend.settings import APP_NAME, APP_VERSION
+from backend.settings import APP_NAME, APP_VERSION, AUTHOR_EMAIL
 from backend.settings_store import load_settings, save_settings
 from backend.legacy_adapter import diarize_text_simple
 from backend.prompts.manager import PromptManager
@@ -31,20 +31,17 @@ from backend.prompts.manager import PromptManager
 # Analysis: documents + Ollama
 from backend.document_processor import extract_text, DocumentProcessingError, SUPPORTED_EXTS
 from backend.ollama_client import OllamaClient, OllamaError, quick_analyze, deep_analyze, stream_analyze
-from backend.document_processor import extract_text, DocumentProcessingError, SUPPORTED_EXTS
-from backend.ollama_client import OllamaClient, OllamaError, quick_analyze, deep_analyze, stream_analyze
 
-# Analysis + documents
-from starlette.concurrency import run_in_threadpool
-from backend.document_processor import extract_text, DocumentProcessingError, SUPPORTED_EXTS
-from backend.ollama_client import OllamaClient, OllamaError, quick_analyze as ollama_quick_analyze, deep_analyze as ollama_deep_analyze, stream_analyze as ollama_stream_analyze
-
-# Step 4: Analysis report generator (HTML/DOCX/MD)
+# Analysis report generator (HTML/DOCX/MD)
 from backend.report_generator import save_report, ReportSaveError
 from backend.models_info import MODELS_INFO, MODELS_GROUPS, DEFAULT_MODELS
 
 from generators import generate_txt_report, generate_html_report, generate_pdf_report
-from backend.settings import AUTHOR_EMAIL
+
+# Routers (refactored modules)
+from webapp.routers import chat as chat_router
+from webapp.routers import admin as admin_router
+from webapp.routers import tasks as tasks_router
 
 try:
     from markdown import markdown as md_to_html  # type: ignore
@@ -1577,6 +1574,16 @@ def require_existing_file(path: Path, msg: str) -> None:
 app = FastAPI(title=f"{APP_NAME} Web", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 
+# --- Mount routers (refactored modules) ---
+chat_router.init(ollama_client=OLLAMA)
+app.include_router(chat_router.router)
+
+tasks_router.init(tasks_manager=TASKS)
+app.include_router(tasks_router.router)
+
+# Admin router is initialised later (after GPU_RM and helper functions are defined).
+# See: _mount_admin_router() below.
+
 
 # --- Ensure UTF-8 across the app (templates + JSON + JS/CSS) ---
 @app.middleware("http")
@@ -2878,6 +2885,15 @@ def _save_gpu_rm_settings(cfg: Dict[str, Any]) -> None:
 GPU_RM = GPUResourceManager()
 GPU_RM.apply_config(_get_gpu_rm_settings())
 
+# Mount admin router now that GPU_RM is ready
+admin_router.init(
+    gpu_rm=GPU_RM,
+    get_gpu_rm_settings=_get_gpu_rm_settings,
+    save_gpu_rm_settings=_save_gpu_rm_settings,
+    app_log_fn=app_log,
+)
+app.include_router(admin_router.router)
+
 def _read_custom_models() -> Dict[str, List[str]]:
     """Read user-added custom model ids grouped by category from global settings."""
     obj = _read_global_settings()
@@ -2920,136 +2936,7 @@ def _get_model_settings() -> Dict[str, str]:
 
 
 
-@app.get("/api/admin/gpu/status")
-def api_admin_gpu_status() -> Dict[str, Any]:
-    return GPU_RM.status_snapshot()
-
-
-@app.get("/api/admin/gpu/jobs")
-def api_admin_gpu_jobs() -> Dict[str, Any]:
-    return GPU_RM.jobs_snapshot()
-
-
-@app.post("/api/admin/gpu/config")
-def api_admin_gpu_config(payload: Dict[str, Any]) -> Dict[str, Any]:
-    # Validate / clamp a bit
-    cfg = _get_gpu_rm_settings()
-    try:
-        mf = float(payload.get("gpu_mem_fraction", cfg["gpu_mem_fraction"]))
-        mf = max(0.3, min(0.98, mf))
-        cfg["gpu_mem_fraction"] = mf
-    except Exception:
-        pass
-    try:
-        spg = int(payload.get("gpu_slots_per_gpu", cfg["gpu_slots_per_gpu"]))
-        cfg["gpu_slots_per_gpu"] = max(1, min(8, spg))
-    except Exception:
-        pass
-    try:
-        cs = int(payload.get("cpu_slots", cfg["cpu_slots"]))
-        cfg["cpu_slots"] = max(1, min(32, cs))
-    except Exception:
-        pass
-
-    _save_gpu_rm_settings(cfg)
-    GPU_RM.apply_config(cfg)
-    app_log(f"Admin updated GPU RM config: mem_fraction={cfg['gpu_mem_fraction']}, slots_per_gpu={cfg['gpu_slots_per_gpu']}, cpu_slots={cfg['cpu_slots']}")
-    return {"status": "ok", "config": cfg}
-
-
-@app.get("/api/admin/gpu/priorities")
-def api_admin_gpu_get_priorities() -> Dict[str, Any]:
-    cfg = _get_gpu_rm_settings()
-    return {"status": "ok", "priorities": cfg.get("priorities") or {}}
-
-
-@app.post("/api/admin/gpu/priorities")
-def api_admin_gpu_set_priorities(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Update admin-facing scheduling priorities.
-
-    Priorities are defined per feature area:
-      transcription, diarization, translation, analysis_quick, analysis
-
-    Two supported update modes:
-      1) {"priorities": {...}} - numeric per area
-      2) {"order": ["transcription","diarization","translation","analysis_quick","analysis"]} - 1..N ordering
-
-    Constraint: priorities must be unique across areas.
-    """
-    cfg = _get_gpu_rm_settings()
-    allow = ("transcription", "diarization", "translation", "analysis_quick", "analysis")
-
-    # Mode 2: ordering (1..N) - preserve the current numeric set, just reassign by order.
-    incoming_order = payload.get("order")
-    if isinstance(incoming_order, list):
-        order = [str(x) for x in incoming_order]
-        if len(order) != len(allow) or set(order) != set(allow):
-            raise HTTPException(status_code=400, detail="Invalid order")
-
-        # Build a stable pool of unique priority values.
-        cur = dict(GPU_RM.category_priorities)
-        if isinstance(cfg.get("priorities"), dict):
-            for k, v in (cfg.get("priorities") or {}).items():
-                if k in cur:
-                    try:
-                        cur[k] = int(v)
-                    except Exception:
-                        pass
-
-        vals = [int(cur.get(k, 100)) for k in allow]
-        # If current values are not unique (shouldn't happen, but be safe), fall back to defaults.
-        if len(set(vals)) != len(vals):
-            vals = [300, 200, 180, 140, 120]
-        vals_sorted = sorted(vals, reverse=True)
-
-        pr = {order[i]: int(vals_sorted[i]) for i in range(len(allow))}
-        cfg["priorities"] = pr
-        _save_gpu_rm_settings(cfg)
-        GPU_RM.apply_config(cfg)
-        app_log("Admin updated GPU RM priority order: " + " > ".join(order))
-        return {"status": "ok", "priorities": pr, "config": cfg}
-
-    # Mode 1: numeric priorities
-    pr = dict(cfg.get("priorities") or {})
-
-    incoming = payload.get("priorities") if isinstance(payload.get("priorities"), dict) else payload
-    if not isinstance(incoming, dict):
-        raise HTTPException(status_code=400, detail="Invalid payload")
-
-    for k in allow:
-        if k not in incoming:
-            continue
-        try:
-            v = int(incoming.get(k))
-            # clamp to a sane range
-            v = max(1, min(1000, v))
-            pr[k] = v
-        except Exception:
-            raise HTTPException(status_code=400, detail=f"Invalid priority for {k}")
-
-    # Ensure all priorities exist (in case of partial update)
-    for k in allow:
-        if k not in pr:
-            pr[k] = int(_get_gpu_rm_settings().get("priorities", {}).get(k, 100))
-
-    vals = [int(pr.get(k)) for k in allow]
-    if len(set(vals)) != len(vals):
-        raise HTTPException(status_code=400, detail="Priorities must be unique for each area")
-
-    cfg["priorities"] = pr
-    _save_gpu_rm_settings(cfg)
-    GPU_RM.apply_config(cfg)
-    app_log("Admin updated GPU RM priorities: " + ", ".join([f"{k}={pr.get(k)}" for k in allow]))
-    return {"status": "ok", "priorities": pr, "config": cfg}
-
-
-@app.post("/api/admin/gpu/cancel")
-def api_admin_gpu_cancel(payload: Dict[str, Any]) -> Dict[str, Any]:
-    task_id = str(payload.get("task_id", "")).strip()
-    if not task_id:
-        raise HTTPException(status_code=400, detail="task_id required")
-    ok = GPU_RM.cancel(task_id)
-    return {"status": "ok", "canceled": ok}
+# Admin GPU endpoints moved to webapp/routers/admin.py
 
 
 
@@ -4045,31 +3932,7 @@ def api_generate_report(project_id: str, format: str = "pdf", include_logs: int 
     return FileResponse(str(out_path), filename=out_name)
 
 
-# ---------- API: tasks ----------
-
-@app.get("/api/tasks")
-def api_tasks() -> Any:
-    tasks = TASKS.list_tasks()
-    return {"tasks": [{"task_id": t.task_id, "kind": t.kind, "status": t.status, "progress": t.progress, "project_id": t.project_id, "started_at": t.started_at, "finished_at": t.finished_at} for t in tasks]}
-
-
-@app.post("/api/tasks/clear")
-def api_tasks_clear() -> Any:
-    TASKS.clear()
-    return {"ok": True}
-
-
-@app.get("/api/tasks/{task_id}")
-def api_task(task_id: str) -> Any:
-    try:
-        t = TASKS.get(task_id)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Nie ma takiego zadania.")
-    data = asdict(t)
-    # Limit payload size
-    if len(data.get("logs") or []) > 400:
-        data["logs"] = data["logs"][-400:]
-    return data
+# Tasks endpoints moved to webapp/routers/tasks.py
 
 
 
@@ -5880,113 +5743,7 @@ def _schedule_quick_analysis_background(project_id: str) -> None:
     threading.Thread(target=_runner, daemon=True).start()
 
 
-# ===================================================================
-# CHAT MODULE – conversational interface with Ollama LLMs
-# ===================================================================
-
-@app.get("/api/chat/models")
-async def api_chat_models() -> Any:
-    """Return installed Ollama models available for chat."""
-    try:
-        status = await OLLAMA.status()
-        if status.status != "online":
-            return JSONResponse({"status": "offline", "models": []})
-        models = status.models or []
-        return JSONResponse({"status": "online", "models": models})
-    except Exception as e:
-        return JSONResponse({"status": "error", "models": [], "error": str(e)})
-
-
-@app.get("/api/chat/stream")
-async def api_chat_stream(request: Request) -> Any:
-    """Stream a chat response via SSE.
-
-    Query params:
-      - model: Ollama model name
-      - messages: JSON-encoded list of {role, content} dicts
-      - temperature: float (default 0.7)
-      - system: optional system prompt
-    """
-    qp = request.query_params
-    model = str(qp.get("model") or "").strip()
-    if not model:
-        raise HTTPException(status_code=400, detail="model required")
-
-    messages_raw = str(qp.get("messages") or "[]").strip()
-    try:
-        messages = json.loads(messages_raw)
-        if not isinstance(messages, list):
-            raise ValueError("messages must be a list")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid messages JSON: {e}")
-
-    system_prompt = str(qp.get("system") or "").strip()
-
-    try:
-        temperature = float(qp.get("temperature") or 0.7)
-    except (TypeError, ValueError):
-        temperature = 0.7
-
-    # Build final messages list
-    msgs: List[Dict[str, str]] = []
-    if system_prompt:
-        msgs.append({"role": "system", "content": system_prompt})
-    for m in messages:
-        if isinstance(m, dict) and "role" in m and "content" in m:
-            msgs.append({"role": str(m["role"]), "content": str(m["content"])})
-
-    if not msgs:
-        raise HTTPException(status_code=400, detail="No messages provided")
-
-    options = {"temperature": temperature}
-
-    async def generate() -> Any:
-        try:
-            await OLLAMA.ensure_model(model)
-            async for chunk in OLLAMA.stream_chat(model=model, messages=msgs, options=options):
-                payload = json.dumps({"chunk": chunk, "done": False}, ensure_ascii=False)
-                yield f"data: {payload}\n\n"
-            yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
-        except Exception as e:
-            err = json.dumps({"chunk": f"\n\n[ERROR] {e}", "done": True, "error": str(e)}, ensure_ascii=False)
-            yield f"data: {err}\n\n"
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
-
-
-@app.post("/api/chat/complete")
-async def api_chat_complete(request: Request) -> Any:
-    """Non-streaming chat completion."""
-    body = await request.json()
-    model = str(body.get("model") or "").strip()
-    if not model:
-        raise HTTPException(status_code=400, detail="model required")
-
-    messages = body.get("messages", [])
-    system_prompt = str(body.get("system") or "").strip()
-
-    try:
-        temperature = float(body.get("temperature", 0.7))
-    except (TypeError, ValueError):
-        temperature = 0.7
-
-    msgs: List[Dict[str, str]] = []
-    if system_prompt:
-        msgs.append({"role": "system", "content": system_prompt})
-    for m in messages:
-        if isinstance(m, dict) and "role" in m and "content" in m:
-            msgs.append({"role": str(m["role"]), "content": str(m["content"])})
-
-    if not msgs:
-        raise HTTPException(status_code=400, detail="No messages provided")
-
-    try:
-        await OLLAMA.ensure_model(model)
-        resp = await OLLAMA.chat(model=model, messages=msgs, options={"temperature": temperature})
-        content = str((resp.get("message") or {}).get("content") or "")
-        return JSONResponse({"content": content, "model": model})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# Chat, Admin and Tasks endpoints are in webapp/routers/ (chat.py, admin.py, tasks.py)
 
 
 def _persist_loop() -> None:
