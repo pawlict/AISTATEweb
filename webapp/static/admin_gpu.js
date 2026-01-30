@@ -20,37 +20,38 @@ let cfgDirty = false;
 let prioDirty = false;
 let prioSaveTimer = null;
 
-// SVG icons reused from sidebar (same paths/classes)
+// SVG icons — matching new Digital Brush sidebar icons
 const ICON_SVGS = {
   transcription: `
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path class="brush" d="M5 11a7 7 0 0 0 14 0"/>
-      <path d="M9 11V8a3 3 0 0 1 6 0v3a3 3 0 0 1-6 0z"/>
-      <path d="M12 14v4"/>
-      <path d="M8 18h8"/>
+      <path class="brush" d="M2 12c1-3 2 3 3 0s2 3 3 0 2-3 3 0"/>
+      <path d="M14 9v6M16 8v8M18 10v4" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M13 12l1.5-.5" opacity=".3" stroke-dasharray="1 1.5"/>
     </svg>`,
   diarization: `
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path class="brush" d="M7 13c1.5 1 3 1.5 5 1.5s3.5-.5 5-1.5"/>
-      <path d="M8.5 10.5a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
-      <path d="M15.5 11.5a2.5 2.5 0 1 0-2.2-4"/>
-      <path d="M4.5 20c.8-3.2 3-5 6-5s5.2 1.8 6 5"/>
+      <circle cx="7" cy="8" r="2.8" stroke-width="1.4"/>
+      <path d="M3 17c0-2.5 1.8-4 4-4s4 1.5 4 4" stroke-width="1.4" stroke-linecap="round"/>
+      <circle cx="17" cy="8" r="2.8" stroke-width="1.4"/>
+      <path d="M13 17c0-2.5 1.8-4 4-4s4 1.5 4 4" stroke-width="1.4" stroke-linecap="round"/>
+      <path class="brush" d="M10 10.5c.6.4 1.2.4 2 .4s1.4 0 2-.4" stroke-dasharray="1.5 1"/>
     </svg>`,
   analysis: `
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path class="brush" d="M6 16l4-5 3 3 5-8"/>
-      <path d="M5 19h14"/>
-      <path d="M6 19V6"/>
-      <path d="M8 12h3"/>
+      <path d="M12 3C8 3 5 5.5 5 9c0 2 .8 3.5 2 4.5L8 19h8l1-5.5c1.2-1 2-2.5 2-4.5 0-3.5-3-6-7-6z" stroke-linejoin="round"/>
+      <path d="M9 19h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 20.5V19z" stroke-width="1.3"/>
+      <path class="brush" d="M12 7v4M10 9h4" stroke-linecap="round" opacity=".6"/>
+      <circle cx="8.5" cy="11" r=".8" fill="currentColor" opacity=".5"/>
+      <circle cx="15.5" cy="11" r=".8" fill="currentColor" opacity=".5"/>
     </svg>`,
   translation: `
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path class="brush" d="M6 8h6"/>
-      <path d="M7 8c0 4-1.5 6.8-4 9"/>
-      <path d="M10 8c0 2.7 1.5 5.4 4 7.5"/>
-      <path class="brush" d="M14 14h7"/>
-      <path d="M16 14l-2-2"/>
-      <path d="M19 14l2 2"/>
+      <rect x="2" y="5" width="8" height="14" rx="2" stroke-width="1.3"/>
+      <rect x="14" y="5" width="8" height="14" rx="2" stroke-width="1.3"/>
+      <path class="brush" d="M5 9h3M5 11h2" stroke-linecap="round" opacity=".5"/>
+      <path d="M17 9h3M17 11h2" stroke-linecap="round" opacity=".5"/>
+      <path d="M10 10c.8-.3 1.5-.3 2-.3s1.2 0 2 .3" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M10 14c.8.3 1.5.3 2 .3s1.2 0 2-.3" stroke-width="1.5" stroke-linecap="round"/>
     </svg>`,
 };
 
@@ -58,8 +59,8 @@ const PRIO_CATS = [
   { key: "transcription", icon: "transcription", titleKey: "admin.gpu.prio.transcription", fbPl: "Transkrypcja", fbEn: "Transcription" },
   { key: "diarization", icon: "diarization", titleKey: "admin.gpu.prio.diarization", fbPl: "Diaryzacja", fbEn: "Diarization" },
   { key: "translation", icon: "translation", titleKey: "admin.gpu.prio.translation", fbPl: "Tłumaczenia", fbEn: "Translation" },
-  { key: "analysis_quick", icon: "analysis", badge: "⚡", titleKey: "admin.gpu.prio.analysis_quick", fbPl: "Szybka analiza", fbEn: "Quick analysis" },
-  { key: "analysis", icon: "analysis", badge: "🔎", titleKey: "admin.gpu.prio.analysis_deep", fbPl: "Głęboka analiza", fbEn: "Deep analysis" },
+  { key: "analysis_quick", icon: "analysis", badgeIcon: "lightning", titleKey: "admin.gpu.prio.analysis_quick", fbPl: "Szybka analiza", fbEn: "Quick analysis" },
+  { key: "analysis", icon: "analysis", badgeIcon: "deep_search", titleKey: "admin.gpu.prio.analysis_deep", fbPl: "Głęboka analiza", fbEn: "Deep analysis" },
 ];
 
 function markCfgDirty(){
@@ -220,7 +221,9 @@ function buildPriorityList(order, pr){
     row.setAttribute("data-icon", meta.icon || "");
 
     const svg = ICON_SVGS[meta.icon] || ICON_SVGS.analysis;
-    const badge = meta.badge ? `<span class="prio-badge" aria-hidden="true">${esc(meta.badge)}</span>` : "";
+    const badge = meta.badgeIcon && typeof aiIcon === "function"
+      ? `<span class="prio-badge" aria-hidden="true">${aiIcon(meta.badgeIcon, 14)}</span>`
+      : (meta.badge ? `<span class="prio-badge" aria-hidden="true">${esc(meta.badge)}</span>` : "");
 
     row.innerHTML = `
       <div class="prio-left">
