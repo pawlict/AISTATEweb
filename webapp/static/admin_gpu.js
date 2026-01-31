@@ -53,6 +53,11 @@ const ICON_SVGS = {
       <path d="M10 10c.8-.3 1.5-.3 2-.3s1.2 0 2 .3" stroke-width="1.5" stroke-linecap="round"/>
       <path d="M10 14c.8.3 1.5.3 2 .3s1.2 0 2-.3" stroke-width="1.5" stroke-linecap="round"/>
     </svg>`,
+  chat: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M21 12c0 4.4-4 8-9 8a9.9 9.9 0 0 1-3.4-.6L3 21l1.6-4A7.3 7.3 0 0 1 3 12c0-4.4 4-8 9-8s9 3.6 9 8z" stroke-linejoin="round"/>
+      <path class="brush" d="M8 11h8M8 14h5" stroke-linecap="round" opacity=".5"/>
+    </svg>`,
 };
 
 const PRIO_CATS = [
@@ -61,6 +66,7 @@ const PRIO_CATS = [
   { key: "translation", icon: "translation", titleKey: "admin.gpu.prio.translation", fbPl: "Tłumaczenia", fbEn: "Translation" },
   { key: "analysis_quick", icon: "analysis", badgeIcon: "lightning", titleKey: "admin.gpu.prio.analysis_quick", fbPl: "Szybka analiza", fbEn: "Quick analysis" },
   { key: "analysis", icon: "analysis", badgeIcon: "deep_search", titleKey: "admin.gpu.prio.analysis_deep", fbPl: "Głęboka analiza", fbEn: "Deep analysis" },
+  { key: "chat", icon: "chat", titleKey: "admin.gpu.prio.chat", fbPl: "Chat LLM", fbEn: "Chat LLM" },
 ];
 
 function markCfgDirty(){

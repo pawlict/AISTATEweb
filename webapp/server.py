@@ -1153,6 +1153,7 @@ class GPUResourceManager:
             "translation": 180,
             "analysis_quick": 140,
             "analysis": 120,
+            "chat": 60,
         }
 
         self._stop = False
@@ -1244,6 +1245,8 @@ class GPUResourceManager:
             cat = "analysis_quick"
         elif k.startswith("analysis"):
             cat = "analysis"
+        elif k.startswith("chat"):
+            cat = "chat"
 
         try:
             return int(self.category_priorities.get(cat, 50))
@@ -1575,7 +1578,7 @@ app = FastAPI(title=f"{APP_NAME} Web", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 
 # --- Mount routers (refactored modules) ---
-chat_router.init(ollama_client=OLLAMA)
+chat_router.init(ollama_client=OLLAMA, app_log_fn=app_log)
 app.include_router(chat_router.router)
 
 tasks_router.init(tasks_manager=TASKS)
@@ -2801,13 +2804,14 @@ def _get_gpu_rm_settings() -> Dict[str, Any]:
 
     # Priorities are configured per *feature area* (admin-facing), not per internal kind.
     # Higher value means earlier dispatch.
-    # Default order: transcription > diarization > translation > analysis_quick > analysis
+    # Default order: transcription > diarization > translation > analysis_quick > analysis > chat
     default_prio = {
         "transcription": 300,
         "diarization": 200,
         "translation": 180,
         "analysis_quick": 140,
         "analysis": 120,
+        "chat": 60,
     }
 
     # Backward compatible mapping from older per-kind keys.
@@ -2831,6 +2835,8 @@ def _get_gpu_rm_settings() -> Dict[str, Any]:
             merged_prio["analysis_quick"] = _as_int(pr.get("analysis_quick"), merged_prio["analysis_quick"])
         if "analysis" in pr:
             merged_prio["analysis"] = _as_int(pr.get("analysis"), merged_prio["analysis"])
+        if "chat" in pr:
+            merged_prio["chat"] = _as_int(pr.get("chat"), merged_prio["chat"])
 
         # Old keys (migrate best-effort)
         if "transcribe" in pr and "transcription" not in pr:
@@ -2858,7 +2864,7 @@ def _save_gpu_rm_settings(cfg: Dict[str, Any]) -> None:
     pr_out = None
     if isinstance(pr, dict):
         # Persist only admin-facing keys.
-        allow = {"transcription", "diarization", "translation", "analysis_quick", "analysis"}
+        allow = {"transcription", "diarization", "translation", "analysis_quick", "analysis", "chat"}
         pr_out = {}
         for k in allow:
             if k not in pr:

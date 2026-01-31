@@ -594,6 +594,7 @@
   "admin.gpu.prio.translation": "Translation",
   "admin.gpu.prio.analysis_quick": "Quick analysis",
   "admin.gpu.prio.analysis_deep": "Deep analysis",
+  "admin.gpu.prio.chat": "Chat LLM",
   "admin.gpu.prio.drag": "Drag to reorder",
   "admin.gpu.prio.move_up": "Move up",
   "admin.gpu.prio.move_down": "Move down",

@@ -29,6 +29,8 @@
     _bindEvents();
     await _loadModels();
     _renderHistory();
+    // Restore last active conversation so it survives tab switches
+    _restoreLastActive();
   }
 
   // ---------- Models ----------
@@ -225,6 +227,7 @@
   function _onNewConversation() {
     _messages = [];
     _activeConvId = null;
+    try { localStorage.removeItem(STORAGE_KEY + "_active"); } catch (_) {}
     const msgs = $id("chat_messages");
     if (msgs) msgs.innerHTML = "";
     const welcome = $id("chat_welcome");
@@ -309,7 +312,18 @@
       conv.ts = Date.now();
     }
     _saveConversations();
+    // Persist active conversation id so it survives page navigation
+    try { localStorage.setItem(STORAGE_KEY + "_active", _activeConvId); } catch (_) {}
     _renderHistory();
+  }
+
+  function _restoreLastActive() {
+    try {
+      const lastId = localStorage.getItem(STORAGE_KEY + "_active");
+      if (lastId && _conversations.find((c) => c.id === lastId)) {
+        _loadConversation(lastId);
+      }
+    } catch (_) {}
   }
 
   function _renderHistory() {
@@ -383,6 +397,7 @@
       _onNewConversation();
     }
     _saveConversations();
+    try { localStorage.removeItem(STORAGE_KEY + "_active"); } catch (_) {}
     _renderHistory();
   }
 
