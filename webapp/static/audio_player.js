@@ -250,6 +250,10 @@
     }
   };
 
+  AudioPlayer.prototype.isPlaying = function () {
+    return this.audio && !this.audio.paused;
+  };
+
   AudioPlayer.prototype.seekTo = function (sec) {
     if (this.audio) this.audio.currentTime = Math.max(0, sec);
   };

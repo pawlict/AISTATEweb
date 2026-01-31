@@ -1129,8 +1129,17 @@ function trRender(){
     d.appendChild(timeDiv);
     d.appendChild(textDiv);
 
-    d.addEventListener("mouseenter", ()=>{ if(!TR.edit.active){ trPlaySegment(idx, true); } });
-    d.addEventListener("mouseleave", ()=>{ if(!TR.edit.active){ trStopPlayback(); } });
+    d.addEventListener("mouseenter", ()=>{
+      // Hover-play only when main player is NOT playing and no editor is open
+      if(!TR.edit.active && !(typeof segTools!=="undefined" && segTools.isMainPlaying())){
+        trPlaySegment(idx, true);
+      }
+    });
+    d.addEventListener("mouseleave", ()=>{
+      if(!TR.edit.active && !(typeof segTools!=="undefined" && segTools.isMainPlaying())){
+        trStopPlayback();
+      }
+    });
     
     blocks.appendChild(d);
   });
