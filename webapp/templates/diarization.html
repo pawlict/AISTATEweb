@@ -1585,8 +1585,17 @@ function diRender(){
     d.appendChild(timeDiv);
     d.appendChild(textDiv);
 
-    d.addEventListener("mouseenter", function(){ if(!DI.edit.active){ diPlaySegment(idx, true); } });
-    d.addEventListener("mouseleave", function(){ if(!DI.edit.active){ diStopPlayback(); } });
+    d.addEventListener("mouseenter", function(){
+      // Hover-play only when main player is NOT playing and no editor is open
+      if(!DI.edit.active && !(typeof segTools!=="undefined" && segTools.isMainPlaying())){
+        diPlaySegment(idx, true);
+      }
+    });
+    d.addEventListener("mouseleave", function(){
+      if(!DI.edit.active && !(typeof segTools!=="undefined" && segTools.isMainPlaying())){
+        diStopPlayback();
+      }
+    });
     
     blocks.appendChild(d);
   });
