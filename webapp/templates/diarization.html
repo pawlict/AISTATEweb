@@ -1159,9 +1159,14 @@ function diPlaySegment(idx, fromStart){
     if (!DI.audioUrl) return false;
 
     if (!DI.audio){
-      DI.audio = new Audio(DI.audioUrl);
-      DI.audio.preload = "auto";
-    } else if (DI.audio.src !== DI.audioUrl){
+      // Use main player audio if available
+      if(window._diPlayer && window._diPlayer.audio){
+        DI.audio = window._diPlayer.audio;
+      } else {
+        DI.audio = new Audio(DI.audioUrl);
+        DI.audio.preload = "auto";
+      }
+    } else if (!DI.audio.src || !DI.audio.src.endsWith(DI.audioUrl.replace(/^.*\//, '/'))){
       DI.audio.src = DI.audioUrl;
     }
 
@@ -1555,10 +1560,18 @@ function diRender(){
   DI.audioUrl = diAudioUrl();
   if(DI.audioUrl){
     if(!DI.audio){
-      DI.audio = new Audio();
-      DI.audio.preload = "metadata";
+      // Use main player audio if available, otherwise create standalone
+      if(window._diPlayer && window._diPlayer.audio){
+        DI.audio = window._diPlayer.audio;
+      } else {
+        DI.audio = new Audio();
+        DI.audio.preload = "metadata";
+      }
     }
-    DI.audio.src = DI.audioUrl;
+    // Only update src if it differs (avoid resetting shared player audio)
+    if(!DI.audio.src || !DI.audio.src.endsWith(DI.audioUrl.replace(/^.*\//, '/'))){
+      DI.audio.src = DI.audioUrl;
+    }
   }
 
   DI.segments.forEach(function(seg, idx){
@@ -2542,6 +2555,10 @@ window.diStopPlayback = diStopPlayback;
       blocksContainerId: "di_blocks"
     });
     window._diPlayer.init();
+    // Share audio element so hover-play and main player never overlap
+    if (window._diPlayer.audio) {
+      DI.audio = window._diPlayer.audio;
+    }
   }
 
   // Initialize seg_tools (search, click-to-seek, waveform map, merge/split)
@@ -2555,6 +2572,7 @@ window.diStopPlayback = diStopPlayback;
         diRender();
       },
       getPlayer: function () { return window._diPlayer || null; },
+      stopHoverPlayback: function () { diStopPlayback(); },
       onChanged: function () {
         diSetRawTextarea();
         scheduleAutoSave();

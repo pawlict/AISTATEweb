@@ -1095,10 +1095,18 @@ function trRender(){
   TR.audioUrl = trAudioUrl();
   if(TR.audioUrl){
     if(!TR.audio){
-      TR.audio = new Audio();
-      TR.audio.preload = "metadata";
+      // Use main player audio if available, otherwise create standalone
+      if(window._trPlayer && window._trPlayer.audio){
+        TR.audio = window._trPlayer.audio;
+      } else {
+        TR.audio = new Audio();
+        TR.audio.preload = "metadata";
+      }
     }
-    TR.audio.src = TR.audioUrl;
+    // Only update src if it differs (avoid resetting shared player audio)
+    if(!TR.audio.src || !TR.audio.src.endsWith(TR.audioUrl.replace(/^.*\//, '/'))){
+      TR.audio.src = TR.audioUrl;
+    }
   }
 
   TR.segments.forEach((seg, idx)=>{
@@ -1554,6 +1562,10 @@ window.trOpenBlockNoteEditor = trOpenBlockNoteEditor;
       blocksContainerId: "tr_blocks"
     });
     window._trPlayer.init();
+    // Share audio element so hover-play and main player never overlap
+    if (window._trPlayer.audio) {
+      TR.audio = window._trPlayer.audio;
+    }
   }
 
   // Initialize seg_tools (search, click-to-seek, waveform map, merge/split)
@@ -1567,6 +1579,7 @@ window.trOpenBlockNoteEditor = trOpenBlockNoteEditor;
         trRender();
       },
       getPlayer: function () { return window._trPlayer || null; },
+      stopHoverPlayback: function () { trStopPlayback(); },
       onChanged: function () {
         trSetRawTextarea();
         scheduleAutoSave();
