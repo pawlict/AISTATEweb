@@ -214,9 +214,11 @@
            '<circle cx="12" cy="12" r="1" ' + _f("sky-purple") + "/>";
   };
   icons.brain = function () {
-    return '<path d="M12 3C8 3 5 5.5 5 9c0 2 .8 3.5 2 4.5L8 19h8l1-5.5c1.2-1 2-2.5 2-4.5 0-3.5-3-6-7-6z" ' + _s("sky-purple") + " " + _w(1.5) + ' ' + S + ' fill="none"/>' +
-           '<path d="M9 19h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3a1.5 1.5 0 0 1-1.5-1.5V19z" ' + _s("sky-purple") + " " + _w(1.3) + ' fill="none"/>' +
-           '<path d="M12 7v4M10 9h4" ' + _s("blue-cyan") + " " + _w(1.2) + " " + S + ' fill="none" opacity=".7"/>';
+    return '<path d="M12 2C8.5 2 5.5 4.5 5.5 8.5c0 2.2.9 3.8 2.2 5L8.5 18h7l.8-4.5c1.3-1.2 2.2-2.8 2.2-5C18.5 4.5 15.5 2 12 2z" ' + _s("sky-purple") + " " + _w(1.5) + ' ' + S + ' fill="none"/>' +
+           '<path d="M12 2v16" ' + _s("sky-purple") + " " + _w(1) + ' fill="none" opacity=".3"/>' +
+           '<path d="M8 7c1-1.5 2-1.5 4-1.5M16 7c-1-1.5-2-1.5-4-1.5" ' + _s("blue-cyan") + " " + _w(1.4) + " " + S + ' fill="none"/>' +
+           '<path d="M7.5 10c1.5.8 2.5 1.5 4.5 1.5M16.5 10c-1.5.8-2.5 1.5-4.5 1.5" ' + _s("blue-cyan") + " " + _w(1.1) + " " + S + ' fill="none" opacity=".5"/>' +
+           '<path d="M9 18h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3a1.5 1.5 0 0 1-1.5-1.5V18z" ' + _s("sky-purple") + " " + _w(1.3) + ' fill="none"/>';
   };
   icons.vision = function () {
     return '<rect x="3" y="5" width="18" height="14" rx="2.5" ' + _s("blue-cyan") + " " + _w(1.4) + ' fill="none"/>' +
@@ -227,6 +229,11 @@
     return '<path d="M4 19h16" ' + _s("blue-cyan") + " " + _w(1.3) + " " + S + ' fill="none"/>' +
            '<path d="M4 19V9l4-3 4 5 4-6 4 4v10" ' + _s("sky-purple") + " " + _w(1.4) + " " + S + ' fill="none"/>' +
            '<path d="M4 19V9l4-3 4 5 4-6 4 4v10" ' + _f("sky-purple") + ' fill-opacity=".08"/>';
+  };
+  icons.settings = function () {
+    return '<path d="M10.3 2h3.4l.4 2.4a7.5 7.5 0 0 1 2.1 1.2l2.3-.9 1.7 2.9-1.9 1.5a7.5 7.5 0 0 1 0 2.4l1.9 1.5-1.7 2.9-2.3-.9a7.5 7.5 0 0 1-2.1 1.2L13.7 22h-3.4l-.4-2.4a7.5 7.5 0 0 1-2.1-1.2l-2.3.9-1.7-2.9 1.9-1.5a7.5 7.5 0 0 1 0-2.4L3.8 11l1.7-2.9 2.3.9a7.5 7.5 0 0 1 2.1-1.2z" ' + _s("sky-purple") + " " + _w(1.3) + ' ' + S + ' fill="none"/>' +
+           '<circle cx="12" cy="12" r="3" ' + _s("blue-cyan") + " " + _w(1.4) + ' fill="none"/>' +
+           '<circle cx="12" cy="12" r="1" ' + _f("sky-purple") + ' opacity=".5"/>';
   };
   icons.wrench = function () {
     return '<path d="M14.7 6.3a7 7 0 0 0-1.3-.3c-1 0-1.9.3-2.6.8L6.5 11.1a2 2 0 0 0 0 2.8l3.6 3.6a2 2 0 0 0 2.8 0l4.3-4.3c.5-.7.8-1.6.8-2.6 0-.4-.1-.9-.3-1.3" ' + _s("sky-purple") + " " + _w(1.4) + ' ' + S + ' fill="none"/>' +
@@ -252,8 +259,10 @@
            '<path d="M10 10.5c.6.4 1.2.4 2 .4s1.4 0 2-.4" ' + _s("cyan-ice") + " " + _w(1.2) + " " + S + ' fill="none" stroke-dasharray="1.5 1"/>';
   };
   icons.transcription = function () {
-    return '<path d="M2 12c1-3 2 3 3 0s2 3 3 0 2-3 3 0" ' + _s("blue-cyan") + " " + _w(1.6) + " " + S + ' fill="none"/>' +
-           '<path d="M14 9v6M16 8v8M18 10v4" ' + _s("sky-purple") + " " + _w(1.8) + " " + S + ' fill="none" opacity=".85"/>';
+    return '<rect x="9" y="2" width="6" height="10" rx="3" ' + _s("blue-cyan") + " " + _w(1.4) + ' fill="none"/>' +
+           '<path d="M5 11a7 7 0 0 0 14 0" ' + _s("sky-purple") + " " + _w(1.4) + ' fill="none"/>' +
+           '<path d="M12 18v3M9 21h6" ' + _s("sky-purple") + " " + _w(1.3) + " " + S + ' fill="none"/>' +
+           '<path d="M10 6.5h4M10 9h4" ' + _s("blue-cyan") + " " + _w(.9) + " " + S + ' fill="none" opacity=".4"/>';
   };
   icons.globe = function () {
     return '<circle cx="12" cy="12" r="9" ' + _s("sky-cyan") + " " + _w(1.4) + ' fill="none"/>' +

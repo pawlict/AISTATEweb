@@ -69,8 +69,13 @@
 
     // Play / Pause
     html += '<button class="ap-btn ap-btn-play" data-act="play-pause" title="' + _t("player.play") + '">';
-    html += '<svg class="ap-icon-play" viewBox="0 0 24 24" width="22" height="22"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg>';
-    html += '<svg class="ap-icon-pause" viewBox="0 0 24 24" width="22" height="22" style="display:none"><rect x="5" y="3" width="4" height="18" rx="1" fill="currentColor"/><rect x="15" y="3" width="4" height="18" rx="1" fill="currentColor"/></svg>';
+    if (_ai) {
+      html += '<span class="ap-icon-play">' + _ai("play", 30) + '</span>';
+      html += '<span class="ap-icon-pause" style="display:none">' + _ai("pause", 30) + '</span>';
+    } else {
+      html += '<svg class="ap-icon-play" viewBox="0 0 24 24" width="22" height="22"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg>';
+      html += '<svg class="ap-icon-pause" viewBox="0 0 24 24" width="22" height="22" style="display:none"><rect x="5" y="3" width="4" height="18" rx="1" fill="currentColor"/><rect x="15" y="3" width="4" height="18" rx="1" fill="currentColor"/></svg>';
+    }
     html += '</button>';
 
     // Skip forward
