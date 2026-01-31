@@ -74,7 +74,7 @@ def api_admin_gpu_get_priorities() -> Dict[str, Any]:
 def api_admin_gpu_set_priorities(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Update admin-facing scheduling priorities."""
     cfg = _get_gpu_rm_settings()
-    allow = ("transcription", "diarization", "translation", "analysis_quick", "analysis")
+    allow = ("transcription", "diarization", "translation", "analysis_quick", "analysis", "chat")
 
     # Mode 2: ordering (1..N)
     incoming_order = payload.get("order")
@@ -94,7 +94,7 @@ def api_admin_gpu_set_priorities(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         vals = [int(cur.get(k, 100)) for k in allow]
         if len(set(vals)) != len(vals):
-            vals = [300, 200, 180, 140, 120]
+            vals = [300, 200, 180, 140, 120, 60]
         vals_sorted = sorted(vals, reverse=True)
 
         pr = {order[i]: int(vals_sorted[i]) for i in range(len(allow))}

@@ -12,12 +12,14 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 # Injected at mount time from server.py
 _ollama = None  # type: Any
+_app_log = None  # type: Any
 
 
-def init(ollama_client: Any) -> None:
+def init(ollama_client: Any, app_log_fn: Any = None) -> None:
     """Called once from server.py to inject the shared OllamaClient."""
-    global _ollama
+    global _ollama, _app_log
     _ollama = ollama_client
+    _app_log = app_log_fn
 
 
 def _get_ollama() -> Any:
@@ -87,6 +89,18 @@ async def api_chat_stream(request: Request) -> Any:
 
     options = {"temperature": temperature}
 
+    # Log chat request
+    user_preview = ""
+    for m in reversed(msgs):
+        if m.get("role") == "user":
+            user_preview = str(m.get("content", ""))[:120]
+            break
+    if _app_log:
+        try:
+            _app_log(f"[chat] stream model={model} msgs={len(msgs)} user=\"{user_preview}\"")
+        except Exception:
+            pass
+
     async def generate() -> Any:
         try:
             await ollama.ensure_model(model)
@@ -94,9 +108,19 @@ async def api_chat_stream(request: Request) -> Any:
                 payload = json.dumps({"chunk": chunk, "done": False}, ensure_ascii=False)
                 yield f"data: {payload}\n\n"
             yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
+            if _app_log:
+                try:
+                    _app_log(f"[chat] stream done model={model}")
+                except Exception:
+                    pass
         except Exception as e:
             err = json.dumps({"chunk": f"\n\n[ERROR] {e}", "done": True, "error": str(e)}, ensure_ascii=False)
             yield f"data: {err}\n\n"
+            if _app_log:
+                try:
+                    _app_log(f"[chat] stream error model={model}: {e}")
+                except Exception:
+                    pass
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
@@ -122,10 +146,26 @@ async def api_chat_complete(request: Request) -> Any:
     if not msgs:
         raise HTTPException(status_code=400, detail="No messages provided")
 
+    if _app_log:
+        try:
+            _app_log(f"[chat] complete model={model} msgs={len(msgs)}")
+        except Exception:
+            pass
+
     try:
         await ollama.ensure_model(model)
         resp = await ollama.chat(model=model, messages=msgs, options={"temperature": temperature})
         content = str((resp.get("message") or {}).get("content") or "")
+        if _app_log:
+            try:
+                _app_log(f"[chat] complete done model={model} len={len(content)}")
+            except Exception:
+                pass
         return JSONResponse({"content": content, "model": model})
     except Exception as e:
+        if _app_log:
+            try:
+                _app_log(f"[chat] complete error model={model}: {e}")
+            except Exception:
+                pass
         raise HTTPException(status_code=500, detail=str(e))
