@@ -75,24 +75,16 @@ a{color:inherit; text-decoration:none}
   width:40px;
   height:40px;
   border-radius: 16px;
-  border:none; /* no outline */
-  background: linear-gradient(135deg,
-    rgba(13,19,80,.12),
-    rgba(16,150,244,.10),
-    rgba(132,38,164,.08)
-  );
-  box-shadow: 0 8px 22px rgba(15,23,42,.08);
+  border:none;
+  background: none;
+  box-shadow: none;
   cursor:pointer;
   display:flex;
   align-items:center;
   justify-content:center;
   color: var(--brand-blue);
 }
-.sidebar-toggle:hover{background: linear-gradient(135deg,
-  rgba(13,19,80,.14),
-  rgba(16,150,244,.14),
-  rgba(132,38,164,.10)
-)}
+.sidebar-toggle:hover{background: rgba(15,23,42,.06)}
 .sidebar-toggle:active{transform: translateY(1px)}
 
 .sidebar-toggle svg{width:22px; height:22px; display:block}
@@ -808,10 +800,10 @@ textarea{min-height:220px; resize:vertical}
 .ap-btn svg{width:27px; height:27px}
 .ap-btn-play{
   width:56px; height:56px;
-  background:var(--primary,#2563eb);
-  color:#fff; border-radius:50%;
+  background:none;
+  color:var(--text,#1e293b); border-radius:50%;
 }
-.ap-btn-play:hover{background:var(--primary-hover,#1d4ed8)}
+.ap-btn-play:hover{background:rgba(15,23,42,.08)}
 .ap-btn-play svg{width:30px; height:30px}
 
 .ap-progress-wrap{
@@ -850,6 +842,133 @@ textarea{min-height:220px; resize:vertical}
 /* Editor simplified icon buttons */
 .seg-audio-btn svg{pointer-events:none}
 .seg-audio-row{gap:4px}
+
+/* ===== seg_tools.js — Search Bar ===== */
+.seg-search-bar{
+  margin-bottom:10px;
+  position:sticky;
+  top:0;
+  z-index:20;
+  background:var(--card-bg,#fff);
+  padding:6px 0;
+}
+.seg-search-inner{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 12px;
+  border:1px solid #e0e0e0;
+  border-radius:10px;
+  background:#f8f9fa;
+}
+.seg-search-input{
+  flex:1;
+  border:none;
+  background:transparent;
+  font-size:14px;
+  outline:none;
+  min-width:0;
+}
+.seg-search-count{
+  font-size:12px;
+  color:#888;
+  white-space:nowrap;
+}
+.seg-search-prev,
+.seg-search-next,
+.seg-search-close{
+  border:none;
+  background:none;
+  cursor:pointer;
+  font-size:18px;
+  line-height:1;
+  padding:2px 6px;
+  border-radius:6px;
+  color:#555;
+}
+.seg-search-prev:hover,
+.seg-search-next:hover,
+.seg-search-close:hover{
+  background:rgba(15,23,42,.08);
+}
+.seg-search-hit{
+  border-color:#1096f4 !important;
+  background:rgba(16,150,244,.04);
+}
+.seg-search-active{
+  border-color:#2946b7 !important;
+  box-shadow:0 0 0 3px rgba(41,70,183,.15) !important;
+}
+.seg-search-mark{
+  background:rgba(16,150,244,.25);
+  border-radius:2px;
+  padding:0 1px;
+}
+
+/* ===== seg_tools.js — Segment Map (waveform) ===== */
+.seg-map{
+  position:relative;
+  margin-bottom:10px;
+  border-radius:8px;
+  overflow:hidden;
+  cursor:pointer;
+  height:40px;
+  border:1px solid #e0e0e0;
+}
+.seg-map-canvas{
+  width:100%;
+  height:100%;
+  display:block;
+}
+.seg-map-playhead{
+  position:absolute;
+  top:0;
+  bottom:0;
+  width:2px;
+  background:var(--primary,#2946b7);
+  box-shadow:0 0 4px rgba(41,70,183,.4);
+  pointer-events:none;
+  transition:left 0.08s linear;
+}
+
+/* ===== seg_tools.js — Merge/Split Actions ===== */
+.seg-actions{
+  display:flex;
+  gap:6px;
+  margin-top:8px;
+  padding-top:6px;
+  border-top:1px dashed #e8e8e8;
+}
+.seg-action-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  border:1px solid #ddd;
+  background:#fff;
+  border-radius:8px;
+  padding:4px 10px;
+  cursor:pointer;
+  font-size:12px;
+  color:#555;
+  transition:all .15s;
+}
+.seg-action-btn:hover{
+  border-color:#2946b7;
+  background:rgba(41,70,183,.04);
+  color:#2946b7;
+}
+.seg-action-btn svg{
+  pointer-events:none;
+}
+
+/* ===== Click-to-seek cursor ===== */
+.blocklist .seg{
+  cursor:pointer;
+}
+.seg.seg-playing{
+  border-color:#1096f4;
+  background:rgba(16,150,244,.04);
+}
 
 @media(max-width:640px){
   .audio-player-bar{flex-wrap:wrap; gap:6px; padding:8px 10px}
