@@ -125,6 +125,8 @@
     if (playPauseBtn) {
       playPauseBtn.addEventListener("click", function () {
         if (self.audio.paused) {
+          // Stop any hover-playback endWatch before starting main player
+          if (typeof segTools !== "undefined" && segTools._stopHover) segTools._stopHover();
           self.audio.play().catch(function () {});
         } else {
           self.audio.pause();

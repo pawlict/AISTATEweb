@@ -227,6 +227,9 @@
       var segs = _seg();
       if (idx >= segs.length) return;
 
+      // Stop hover playback first to prevent overlap
+      if (CFG && CFG.stopHoverPlayback) CFG.stopHoverPlayback();
+
       var player = _player();
       if (player && player.audio) {
         // LPM click always seeks to segment start and starts main player
@@ -453,6 +456,9 @@
       var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       var time = pct * totalDur;
 
+      // Stop hover playback first to prevent overlap
+      if (CFG && CFG.stopHoverPlayback) CFG.stopHoverPlayback();
+
       var player = _player();
       if (player && player.audio) {
         player.seekTo(time);
@@ -631,6 +637,10 @@
     mergeWithNext: _mergeWithNext,
     splitSegment: _splitSegment,
     /** Check if main player is currently playing (used by pages for hover logic) */
-    isMainPlaying: _isMainPlaying
+    isMainPlaying: _isMainPlaying,
+    /** Stop hover playback (called from audio_player when main play button is pressed) */
+    _stopHover: function () {
+      if (CFG && CFG.stopHoverPlayback) CFG.stopHoverPlayback();
+    }
   };
 })();

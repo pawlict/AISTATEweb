@@ -146,8 +146,8 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
   border:none;
 }
 .nav-icon svg{width:24px; height:24px; display:block}
-.nav-icon svg path, .nav-icon svg rect, .nav-icon svg circle, .nav-icon svg line, .nav-icon svg polyline, .nav-icon svg polygon{stroke: currentColor; fill:none; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.0}
-.nav-icon svg .brush{stroke-width:3.2; opacity:.28}
+.nav-icon svg path, .nav-icon svg rect, .nav-icon svg circle, .nav-icon svg line, .nav-icon svg polyline, .nav-icon svg polygon{stroke: currentColor; fill:none; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.5}
+.nav-icon svg .brush{stroke-width:2.4; opacity:.28}
 
 /* Colorful, logo-aligned icons */
 .nav a[data-icon] .nav-icon{
