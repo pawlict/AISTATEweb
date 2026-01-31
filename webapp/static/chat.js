@@ -152,6 +152,9 @@
       });
     }
 
+    // Save immediately so user message survives tab switch
+    _saveActiveConversation();
+
     // Stream response
     _streaming = true;
     _toggleButtons(true);
@@ -163,6 +166,7 @@
     const contentEl = assistantEl.querySelector(".chat-msg-content");
 
     _abortCtrl = new AbortController();
+    let fullContent = "";
 
     try {
       const params = new URLSearchParams({
@@ -179,7 +183,7 @@
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let fullContent = "";
+      let lastSaveTs = Date.now();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -201,15 +205,28 @@
             if (obj.done) break;
           } catch (_) { /* skip parse errors */ }
         }
+
+        // Auto-save partial response every 2s so it survives tab switch
+        if (fullContent && Date.now() - lastSaveTs > 2000) {
+          _messages.push({ role: "assistant", content: fullContent });
+          _saveActiveConversation();
+          _messages.pop(); // remove partial; final version added below
+          lastSaveTs = Date.now();
+        }
       }
 
-      // Save assistant message
+      // Save final assistant message
       _messages.push({ role: "assistant", content: fullContent });
       _saveActiveConversation();
 
     } catch (e) {
       if (e.name !== "AbortError") {
         contentEl.innerHTML = '<span class="chat-error">[ERROR] ' + _esc(String(e)) + "</span>";
+      }
+      // Save partial response on abort/error so nothing is lost
+      if (fullContent) {
+        _messages.push({ role: "assistant", content: fullContent });
+        _saveActiveConversation();
       }
     } finally {
       _streaming = false;
@@ -443,6 +460,13 @@
     };
     return defaults[key] || key;
   }
+
+  // Save conversation on page unload (tab switch / close) so nothing is lost
+  window.addEventListener("beforeunload", () => {
+    if (_activeConvId) {
+      _saveActiveConversation();
+    }
+  });
 
   // Expose
   window.initChat = initChat;
