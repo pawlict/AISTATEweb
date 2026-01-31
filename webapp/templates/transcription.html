@@ -372,6 +372,8 @@
         <label class="pill"><input type="checkbox" name="tr_report_fmt" value="txt"> TXT</label>
       </div>
 
+      <button class="btn secondary" id="tr_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()">🔍 <span data-i18n="btn.search">Szukaj</span></button>
+
       <button class="btn secondary" id="tr_report_save_btn">💾 <span data-i18n="analysis.report_save">Zapisz</span></button>
 
       <!-- Optional: direct transcript download link (kept for compatibility) -->
@@ -452,6 +454,7 @@
 
 {% block scripts %}
 <script src="/static/audio_player.js"></script>
+<script src="/static/seg_tools.js"></script>
 <script>
 "use strict";
 
@@ -1134,6 +1137,11 @@ function trRender(){
   
   trSetRawTextarea();
   trRenderBlockNotesList();
+
+  // Update seg_tools (search, waveform map, merge/split)
+  if (typeof segTools !== "undefined") {
+    try { segTools.afterRender(); } catch(e) { console.warn("segTools.afterRender:", e); }
+  }
 }
 
 // ========== Auto-save ==========
@@ -1537,6 +1545,26 @@ window.trOpenBlockNoteEditor = trOpenBlockNoteEditor;
       blocksContainerId: "tr_blocks"
     });
     window._trPlayer.init();
+  }
+
+  // Initialize seg_tools (search, click-to-seek, waveform map, merge/split)
+  if (typeof segTools !== "undefined") {
+    segTools.init({
+      page: "transcription",
+      blocksId: "tr_blocks",
+      getSegments: function () { return TR.segments || []; },
+      setSegments: function (s) {
+        TR.segments = s;
+        trRender();
+      },
+      getPlayer: function () { return window._trPlayer || null; },
+      onChanged: function () {
+        trSetRawTextarea();
+        scheduleAutoSave();
+      }
+    });
+    // Initial afterRender if segments already loaded
+    if (TR.segments && TR.segments.length) segTools.afterRender();
   }
 })();
 </script>

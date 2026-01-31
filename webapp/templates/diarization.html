@@ -560,6 +560,8 @@
         <label class="pill"><input type="checkbox" name="di_report_fmt" value="txt"> TXT</label>
       </div>
 
+      <button class="btn secondary" id="di_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()">🔍 <span data-i18n="btn.search">Szukaj</span></button>
+
       <button class="btn secondary" id="di_report_save_btn">💾 <span data-i18n="analysis.report_save">Zapisz</span></button>
 
       <a class="btn secondary" id="di_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
@@ -683,6 +685,7 @@
 
 {% block scripts %}
 <script src="/static/audio_player.js"></script>
+<script src="/static/seg_tools.js"></script>
 <script>
 "use strict";
 
@@ -1587,8 +1590,13 @@ function diRender(){
     
     blocks.appendChild(d);
   });
-  
+
   diSetRawTextarea();
+
+  // Update seg_tools (search, waveform map, merge/split)
+  if (typeof segTools !== "undefined") {
+    try { segTools.afterRender(); } catch(e) { console.warn("segTools.afterRender:", e); }
+  }
 }
 
 // Extract speaker labels from diarization output
@@ -2525,6 +2533,26 @@ window.diStopPlayback = diStopPlayback;
       blocksContainerId: "di_blocks"
     });
     window._diPlayer.init();
+  }
+
+  // Initialize seg_tools (search, click-to-seek, waveform map, merge/split)
+  if (typeof segTools !== "undefined") {
+    segTools.init({
+      page: "diarization",
+      blocksId: "di_blocks",
+      getSegments: function () { return DI.segments || []; },
+      setSegments: function (s) {
+        DI.segments = s;
+        diRender();
+      },
+      getPlayer: function () { return window._diPlayer || null; },
+      onChanged: function () {
+        diSetRawTextarea();
+        scheduleAutoSave();
+      }
+    });
+    // Initial afterRender if segments already loaded
+    if (DI.segments && DI.segments.length) segTools.afterRender();
   }
 })();
 </script>
