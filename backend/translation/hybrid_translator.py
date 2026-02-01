@@ -63,16 +63,20 @@ class HybridTranslator:
         self.ollama_model = ollama_model
         self.ollama_url = f"{ollama_url}/api/generate"
         
-        # Auto-detect GPU
+        # Detect device — respect CUDA_VISIBLE_DEVICES set by GPU RM.
+        # Use "cuda" (no index) so PyTorch targets whichever GPU is visible.
         if device == "auto":
-            self.device = 0 if torch.cuda.is_available() else -1
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
         elif device == "cuda":
-            self.device = 0
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        elif device == "cpu":
+            self.device = "cpu"
         else:
-            self.device = -1
-        
+            # Allow explicit "cuda:1" etc.
+            self.device = device
+
         logger.info(f"Loading NLLB model: {nllb_model}")
-        logger.info(f"Device: {'GPU' if self.device == 0 else 'CPU'}")
+        logger.info(f"Device: {self.device}")
         
         # Load NLLB
         try:
@@ -85,8 +89,8 @@ class HybridTranslator:
                 self.tokenizer = AutoTokenizer.from_pretrained(nllb_model)
             self.model = AutoModelForSeq2SeqLM.from_pretrained(nllb_model)
             
-            if self.device == 0:
-                self.model = self.model.to('cuda')
+            if self.device != "cpu":
+                self.model = self.model.to(self.device)
             
             logger.info("NLLB model loaded successfully")
         except Exception as e:
@@ -218,8 +222,8 @@ class HybridTranslator:
             max_length=max_length
         )
         
-        if self.device == 0:
-            inputs = {k: v.to('cuda') for k, v in inputs.items()}
+        if self.device != "cpu":
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
         
         # Generate translation
         translated_tokens = self.model.generate(
