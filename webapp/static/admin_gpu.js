@@ -421,5 +421,16 @@ document.addEventListener("DOMContentLoaded", ()=>{
   // Priorities: autosave on reorder
 
   refreshAll().catch(e=>console.error(e));
-  setInterval(()=>{ refreshAll().catch(()=>{}); }, 2000);
+  // Auto-refresh GPU status — pause when tab hidden to save CPU/network
+  var _gpuTimer = setInterval(()=>{ refreshAll().catch(()=>{}); }, 3000);
+  document.addEventListener("visibilitychange", function() {
+    if (document.hidden) {
+      if (_gpuTimer) { clearInterval(_gpuTimer); _gpuTimer = null; }
+    } else {
+      if (!_gpuTimer) {
+        refreshAll().catch(()=>{});
+        _gpuTimer = setInterval(()=>{ refreshAll().catch(()=>{}); }, 3000);
+      }
+    }
+  });
 });

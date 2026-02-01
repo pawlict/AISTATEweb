@@ -282,16 +282,19 @@
   }
 
   /** Fallback: decode audio in browser via Web Audio API (heavy on CPU) */
+  var _waveformDecoding = false; // guard against multiple simultaneous decodes
   function _loadWaveformFromAudio(callback) {
+    if (_waveformDecoding) return; // already decoding
     var player = _player();
     if (!player || !player.audio || !player.audio.src) return;
 
+    _waveformDecoding = true;
     var url = player.audio.src;
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url, true);
     xhr.responseType = "arraybuffer";
     xhr.onload = function () {
-      if (xhr.status !== 200) return;
+      if (xhr.status !== 200) { _waveformDecoding = false; return; }
       try {
         var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         audioCtx.decodeAudioData(xhr.response, function (buffer) {
@@ -313,15 +316,19 @@
           _waveformPeaks = peaks;
           _waveformDuration = buffer.duration;
           audioCtx.close().catch(function(){});
+          _waveformDecoding = false;
           callback(peaks, buffer.duration);
         }, function () {
+          _waveformDecoding = false;
           console.warn("seg_tools: failed to decode audio for waveform");
         });
       } catch (e) {
+        _waveformDecoding = false;
         console.warn("seg_tools: Web Audio API error:", e);
       }
     };
     xhr.onerror = function () {
+      _waveformDecoding = false;
       console.warn("seg_tools: failed to fetch audio for waveform");
     };
     xhr.send();
