@@ -14,6 +14,12 @@ let TR_LAST_SAVED_AT = 0;
 // { fast: [modelId...], accurate: [modelId...] }
 let NLLB_INSTALLED = { fast: [], accurate: [] };
 
+// Whisper 2-letter language code → NLLB source_lang dropdown value
+const WHISPER_TO_NLLB = {
+    pl: 'polish', en: 'english', ru: 'russian',
+    be: 'belarusian', uk: 'ukrainian', zh: 'chinese'
+};
+
 function _byId(id){ return document.getElementById(id); }
 
 function _trProjectId(){
@@ -97,7 +103,12 @@ async function _trLoadServerDraft(){
             if(!res.ok) return null;
             const j = await res.json();
             const d = j && j.draft;
-            return (d && typeof d === 'object') ? d : null;
+            const draft = (d && typeof d === 'object') ? d : null;
+            // Attach Whisper detected_lang from project meta (returned alongside draft)
+            if(draft && j.detected_lang && !draft._detected_lang){
+                draft._detected_lang = String(j.detected_lang);
+            }
+            return draft;
         }
         // Global fallback (not tied to a project)
         const cid = _trGetOrCreateClientId();
@@ -356,8 +367,26 @@ async function _trRestoreDraft(){
     const server = await _trLoadServerDraft();
     const chosen = _trPickNewerDraft(local, server);
 
+    // Auto-set source_lang from Whisper detected language (if no explicit choice saved)
+    const detectedLang = (server && server._detected_lang) || (chosen && chosen._detected_lang) || null;
+    if(chosen && detectedLang){
+        const nllbName = WHISPER_TO_NLLB[detectedLang];
+        if(nllbName && (!chosen.source_lang || chosen.source_lang === 'auto')){
+            chosen.source_lang = nllbName;
+        }
+    }
+
     if(chosen){
         _trApplyDraftState(chosen);
+    }
+
+    // Even without a draft, auto-set source_lang from detected language
+    if(!chosen && detectedLang){
+        const nllbName = WHISPER_TO_NLLB[detectedLang];
+        if(nllbName){
+            const srcEl = _byId('source_lang');
+            if(srcEl) srcEl.value = nllbName;
+        }
     }
 
     TR_RESTORING = false;

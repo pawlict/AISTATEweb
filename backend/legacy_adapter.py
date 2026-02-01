@@ -1202,6 +1202,7 @@ def whisper_transcribe(audio_path: str, model: str, language: str, log_cb=None, 
 
     text = (result.get("text") or "").strip()
     segments = result.get("segments") or []
+    detected_lang = result.get("language") or None  # Whisper's detected language code (e.g. "pl", "en")
 
     # Export structured segments for the web UI (hover playback + per-block editing)
     segments_out = []
@@ -1218,7 +1219,7 @@ def whisper_transcribe(audio_path: str, model: str, language: str, log_cb=None, 
 
     if progress_cb: progress_cb(100)
     if log_cb: log_cb(f"Whisper: done. segments={len(segments)}")
-    return {"kind": "transcript", "text": text, "text_ts": text_ts, "segments": segments_out, "engine": "whisper", "model": model, "lang": language}
+    return {"kind": "transcript", "text": text, "text_ts": text_ts, "segments": segments_out, "engine": "whisper", "model": model, "lang": language, "detected_lang": detected_lang}
 def whisper_transcribe_safe(
     audio_path: str,
     model: str,

@@ -701,6 +701,17 @@ class TaskManager:
                     except Exception:
                         pass
 
+                # If transcription, persist Whisper's detected language to project meta.
+                try:
+                    if isinstance(kind, str) and kind.startswith("transcribe") and isinstance(data, dict):
+                        det = data.get("detected_lang")
+                        if det and project_id and project_id != "-":
+                            meta = read_project_meta(project_id)
+                            meta["detected_lang"] = str(det)
+                            write_project_meta(project_id, meta)
+                except Exception:
+                    pass
+
                 try:
                     self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE")
                 except Exception:
@@ -3274,12 +3285,19 @@ def api_get_translation_draft(project_id: str) -> Any:
     """Load translation draft for a project.
 
     Returns:
-      {"draft": {...}} or {"draft": null}
+      {"draft": {...}, "detected_lang": "pl"|null} or {"draft": null}
     """
     # Ensure the project exists
     project_path(project_id)
     draft = read_translation_draft(project_id)
-    return {"draft": draft or None}
+    # Include Whisper's detected language (if transcription ran) for auto source-lang
+    detected_lang = None
+    try:
+        meta = read_project_meta(project_id)
+        detected_lang = meta.get("detected_lang") or None
+    except Exception:
+        pass
+    return {"draft": draft or None, "detected_lang": detected_lang}
 
 
 @app.post("/api/projects/{project_id}/translation/draft")

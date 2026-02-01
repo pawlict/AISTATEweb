@@ -1,6 +1,11 @@
 /**
  * chat.js — Chat LLM module for AISTATEweb
  * Conversational interface with locally installed Ollama models.
+ *
+ * Background-job flow:
+ *   1. POST /api/chat/send  — starts server-side generation (survives tab switch)
+ *   2. GET  /api/chat/follow/{conv_id}  — SSE stream for live display
+ *   3. GET  /api/chat/result/{conv_id}  — poll completed/partial result on reload
  */
 
 /* global applyI18n, i18n */
@@ -16,7 +21,7 @@
 
   // Conversation history (in-memory, persisted to localStorage)
   const STORAGE_KEY = "aistate_chat_history";
-  let _conversations = []; // [{id, title, model, messages, ts}]
+  let _conversations = []; // [{id, title, model, messages, ts, pendingJobId}]
   let _activeConvId = null;
 
   // ---------- DOM refs ----------
@@ -30,7 +35,7 @@
     await _loadModels();
     _renderHistory();
     // Restore last active conversation so it survives tab switches
-    _restoreLastActive();
+    await _restoreLastActive();
   }
 
   // ---------- Models ----------
@@ -155,7 +160,7 @@
     // Save immediately so user message survives tab switch
     _saveActiveConversation();
 
-    // Stream response
+    // Stream response via background job
     _streaming = true;
     _toggleButtons(true);
 
@@ -169,21 +174,36 @@
     let fullContent = "";
 
     try {
-      const params = new URLSearchParams({
-        model: _model,
-        messages: JSON.stringify(_messages),
-        temperature: String(temperature),
+      // 1. Start background job on server
+      const sendResp = await fetch("/api/chat/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conv_id: _activeConvId,
+          model: _model,
+          messages: _messages,
+          system: systemPrompt,
+          temperature: temperature,
+        }),
       });
-      if (systemPrompt) params.set("system", systemPrompt);
+      const sendData = await sendResp.json();
+      if (sendData.status !== "started") {
+        throw new Error(sendData.error || "Failed to start chat job");
+      }
 
-      const response = await fetch("/api/chat/stream?" + params.toString(), {
+      // Mark conversation as having a pending server job
+      const conv = _conversations.find((c) => c.id === _activeConvId);
+      if (conv) conv.pendingJobId = _activeConvId;
+      _saveActiveConversation();
+
+      // 2. Follow SSE stream
+      const response = await fetch("/api/chat/follow/" + encodeURIComponent(_activeConvId), {
         signal: _abortCtrl.signal,
       });
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let lastSaveTs = Date.now();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -205,28 +225,31 @@
             if (obj.done) break;
           } catch (_) { /* skip parse errors */ }
         }
-
-        // Auto-save partial response every 2s so it survives tab switch
-        if (fullContent && Date.now() - lastSaveTs > 2000) {
-          _messages.push({ role: "assistant", content: fullContent });
-          _saveActiveConversation();
-          _messages.pop(); // remove partial; final version added below
-          lastSaveTs = Date.now();
-        }
       }
 
       // Save final assistant message
       _messages.push({ role: "assistant", content: fullContent });
+      // Clear pending flag
+      if (conv) delete conv.pendingJobId;
       _saveActiveConversation();
 
     } catch (e) {
-      if (e.name !== "AbortError") {
-        contentEl.innerHTML = '<span class="chat-error">[ERROR] ' + _esc(String(e)) + "</span>";
-      }
-      // Save partial response on abort/error so nothing is lost
-      if (fullContent) {
-        _messages.push({ role: "assistant", content: fullContent });
+      if (e.name === "AbortError") {
+        // User pressed Stop or navigated away — server keeps generating
+        // Save what we have so far; on reload we'll poll for the rest
+        if (fullContent) {
+          _messages.push({ role: "assistant", content: fullContent });
+        }
         _saveActiveConversation();
+      } else {
+        contentEl.innerHTML = '<span class="chat-error">[ERROR] ' + _esc(String(e)) + "</span>";
+        // Save partial on error too
+        if (fullContent) {
+          _messages.push({ role: "assistant", content: fullContent });
+          const conv = _conversations.find((c) => c.id === _activeConvId);
+          if (conv) delete conv.pendingJobId;
+          _saveActiveConversation();
+        }
       }
     } finally {
       _streaming = false;
@@ -334,13 +357,143 @@
     _renderHistory();
   }
 
-  function _restoreLastActive() {
+  async function _restoreLastActive() {
     try {
       const lastId = localStorage.getItem(STORAGE_KEY + "_active");
       if (lastId && _conversations.find((c) => c.id === lastId)) {
         _loadConversation(lastId);
+        // Check if there's a pending server-side job to recover
+        await _recoverPendingJob(lastId);
       }
     } catch (_) {}
+  }
+
+  /**
+   * If a conversation has a pendingJobId, poll the server for the completed response.
+   * This recovers from tab switches / page reloads.
+   */
+  async function _recoverPendingJob(convId) {
+    const conv = _conversations.find((c) => c.id === convId);
+    if (!conv || !conv.pendingJobId) return;
+
+    try {
+      const r = await fetch("/api/chat/result/" + encodeURIComponent(conv.pendingJobId));
+      const data = await r.json();
+
+      if (data.status === "not_found") {
+        // Job expired or never existed — clear flag
+        delete conv.pendingJobId;
+        _saveActiveConversation();
+        return;
+      }
+
+      if (data.status === "done" || data.status === "error") {
+        // Job completed while we were away — update messages
+        const content = data.content || "";
+        if (content) {
+          // Check if we already have a partial assistant message as last
+          const lastMsg = _messages[_messages.length - 1];
+          if (lastMsg && lastMsg.role === "assistant") {
+            // Update with full server content
+            lastMsg.content = content;
+          } else {
+            _messages.push({ role: "assistant", content: content });
+          }
+          // Re-render
+          _activeConvId = convId;
+          _reRenderMessages();
+        }
+        delete conv.pendingJobId;
+        _saveActiveConversation();
+        return;
+      }
+
+      if (data.status === "running") {
+        // Job still running — reconnect SSE to follow it live
+        _streaming = true;
+        _toggleButtons(true);
+
+        // Show what we have so far
+        let fullContent = data.content || "";
+        const assistantEl = _renderMessage("assistant", fullContent || "");
+        const contentEl = assistantEl.querySelector(".chat-msg-content");
+        if (fullContent) {
+          contentEl.innerHTML = _renderMarkdown(fullContent);
+        }
+
+        _abortCtrl = new AbortController();
+
+        try {
+          const response = await fetch(
+            "/api/chat/follow/" + encodeURIComponent(conv.pendingJobId),
+            { signal: _abortCtrl.signal }
+          );
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              try {
+                const obj = JSON.parse(line.slice(6));
+                if (obj.chunk) {
+                  fullContent += obj.chunk;
+                  contentEl.innerHTML = _renderMarkdown(fullContent);
+                  _scrollToBottom();
+                }
+                if (obj.done) break;
+              } catch (_) {}
+            }
+          }
+
+          // Done
+          const lastMsg = _messages[_messages.length - 1];
+          if (lastMsg && lastMsg.role === "assistant") {
+            lastMsg.content = fullContent;
+          } else {
+            _messages.push({ role: "assistant", content: fullContent });
+          }
+          delete conv.pendingJobId;
+          _saveActiveConversation();
+        } catch (e) {
+          // Disconnected again — save partial
+          if (fullContent) {
+            const lastMsg = _messages[_messages.length - 1];
+            if (lastMsg && lastMsg.role === "assistant") {
+              lastMsg.content = fullContent;
+            } else {
+              _messages.push({ role: "assistant", content: fullContent });
+            }
+            _saveActiveConversation();
+          }
+        } finally {
+          _streaming = false;
+          _abortCtrl = null;
+          _toggleButtons(false);
+        }
+      }
+    } catch (e) {
+      // Network error — keep pendingJobId for next reload
+      console.warn("Chat recovery failed:", e);
+    }
+  }
+
+  function _reRenderMessages() {
+    const container = $id("chat_messages");
+    if (container) container.innerHTML = "";
+    const welcome = $id("chat_welcome");
+    if (welcome) welcome.style.display = _messages.length ? "none" : "";
+    for (const m of _messages) {
+      _renderMessage(m.role, m.content);
+    }
   }
 
   function _renderHistory() {
@@ -394,17 +547,7 @@
     const sel = $id("chat_model");
     if (sel && _model) sel.value = _model;
 
-    // Re-render messages
-    const container = $id("chat_messages");
-    if (container) container.innerHTML = "";
-
-    const welcome = $id("chat_welcome");
-    if (welcome) welcome.style.display = _messages.length ? "none" : "";
-
-    for (const m of _messages) {
-      _renderMessage(m.role, m.content);
-    }
-
+    _reRenderMessages();
     _renderHistory();
   }
 
