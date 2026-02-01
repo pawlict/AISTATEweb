@@ -370,6 +370,7 @@
         <label class="pill"><input type="checkbox" name="tr_report_fmt" value="html" checked> HTML</label>
         <label class="pill"><input type="checkbox" name="tr_report_fmt" value="doc"> DOC</label>
         <label class="pill"><input type="checkbox" name="tr_report_fmt" value="txt"> TXT</label>
+        <label class="pill" style="margin-left:6px"><input type="checkbox" id="tr_include_notes" value="1"> Notatki</label>
       </div>
 
       <button class="btn secondary" id="tr_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()">🔍 <span data-i18n="btn.search">Szukaj</span></button>
@@ -389,7 +390,7 @@
     <div class="small" id="tr_nemo_hint" style="display:none" data-i18n="hint.nemo_lang_note">W NeMo pole języka może być ignorowane (zależy od modelu).</div>
 
     <div class="an-progress" id="tr_progress">
-      <div class="small"><span data-i18n="label.status">Status</span>: <b id="tr_status">—</b> • <span data-i18n="label.progress">Postęp</span>: <span id="tr_pct">0%</span></div>
+      <div class="small">Status: <b id="tr_status">—</b> <span id="tr_pct">0%</span></div>
       <div class="progress"><div id="tr_bar"></div></div>
     </div>
 
@@ -432,13 +433,7 @@
         </div>
       </div>
 
-      <div class="hr" style="margin:12px 0"></div>
-
-      <!-- Akcje na notatkach -->
-      <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn" id="tr_notes_save" data-i18n-title="notes.btn.save_title" data-i18n="notes.btn.save">💾 Zapisz</button>
-        <button class="btn secondary" id="tr_notes_export" data-i18n-title="notes.btn.export_json_title" data-i18n="notes.btn.export_json">📤 JSON</button>
-      </div>
+      <div class="small" style="margin-top:10px;color:#999">Notatki zapisywane automatycznie</div>
     </div>
   </div>
 
@@ -1309,8 +1304,10 @@ async function trSaveReports(){
   try{
     const results = [];
 
+    const includeNotes = document.getElementById("tr_include_notes")?.checked ? 1 : 0;
+
     for(const format of formats){
-      const url = `/api/projects/${pid}/report/transcription?format=${encodeURIComponent(format)}&include_logs=0`;
+      const url = `/api/projects/${pid}/report/transcription?format=${encodeURIComponent(format)}&include_logs=0&include_notes=${includeNotes}`;
       const response = await fetch(url);
 
       if(!response.ok){
@@ -1574,15 +1571,7 @@ if(notesGlobalTextarea){
   notesGlobalTextarea.addEventListener("input", trUpdateGlobalNote);
 }
 
-const notesSaveBtn = document.getElementById("tr_notes_save");
-if(notesSaveBtn){
-  notesSaveBtn.addEventListener("click", trSaveNotesToProject);
-}
-
-const notesExportBtn = document.getElementById("tr_notes_export");
-if(notesExportBtn){
-  notesExportBtn.addEventListener("click", trExportNotesAsJSON);
-}
+// Notes buttons removed — auto-save handles persistence
 
 // Expose for app.js
 window.TR = TR;

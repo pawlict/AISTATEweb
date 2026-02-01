@@ -92,6 +92,23 @@ def generate_txt_report(data: Dict[str, Any], logs: bool = False, output_path: s
     if isinstance(non_verbal, str):
         non_verbal = [ln.strip() for ln in non_verbal.splitlines() if ln.strip()]
 
+    # Inject notes into transcript lines if requested
+    notes = data.get("notes")
+    if notes and isinstance(notes, dict):
+        global_note = (notes.get("global") or "").strip()
+        block_notes = notes.get("blocks") or {}
+        if global_note or block_notes:
+            enriched: List[str] = []
+            if global_note:
+                enriched.append(f"  Notatka: {global_note}")
+                enriched.append("")
+            for i, ln in enumerate(transcript_lines):
+                enriched.append(ln)
+                bn = (block_notes.get(str(i)) or "").strip()
+                if bn:
+                    enriched.append(f"  Notatka: {bn}")
+            transcript_lines = enriched
+
     out = "\n".join(header) + "\n"
     if transcript_lines:
         out += "\n".join(transcript_lines) + "\n"

@@ -558,6 +558,7 @@
         <label class="pill"><input type="checkbox" name="di_report_fmt" value="html" checked> HTML</label>
         <label class="pill"><input type="checkbox" name="di_report_fmt" value="doc"> DOC</label>
         <label class="pill"><input type="checkbox" name="di_report_fmt" value="txt"> TXT</label>
+        <label class="pill" style="margin-left:6px"><input type="checkbox" id="di_include_notes" value="1"> Notatki</label>
       </div>
 
       <button class="btn secondary" id="di_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()">🔍 <span data-i18n="btn.search">Szukaj</span></button>
@@ -580,11 +581,8 @@
     </div>
 
     <div class="an-progress" id="di_progress">
-      <div class="small"><span data-i18n="label.status">Status</span>: <b id="di_status">—</b> • <span data-i18n="label.progress">Postęp</span>: <span id="di_pct">0%</span></div>
+      <div class="small">Status: <b id="di_status">—</b> <span id="di_pct">0%</span></div>
       <div class="progress"><div id="di_bar"></div></div>
-      <div class="small" style="margin-top:10px" data-i18n-html="hint.logs_in_tab">
-        Logi znajdziesz w zakładce <strong>Logs</strong> (panel administracyjny).
-      </div>
     </div>
 
     <div class="hr"></div>
@@ -668,12 +666,7 @@
           </div>
         </div>
 
-        <div class="hr" style="margin:12px 0"></div>
-
-        <div class="notes-section" style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn secondary" id="di_notes_save" data-i18n="notes.save">💾 Zapisz notatki</button>
-          <button class="btn secondary" id="di_notes_export" data-i18n="notes.export">📤 Eksport JSON</button>
-        </div>
+        <div class="small" style="margin-top:6px;color:#999">Notatki zapisywane automatycznie</div>
 
       </div>
     </div>
@@ -2380,8 +2373,10 @@ async function diSaveReports(){
   try{
     const results = [];
 
+    const includeNotes = document.getElementById("di_include_notes")?.checked ? 1 : 0;
+
     for(const format of formats){
-      const url = `/api/projects/${pid}/report?format=${encodeURIComponent(format)}&include_logs=0`;
+      const url = `/api/projects/${pid}/report?format=${encodeURIComponent(format)}&include_logs=0&include_notes=${includeNotes}`;
       const response = await fetch(url);
 
       if(!response.ok){
@@ -2554,15 +2549,7 @@ if (notesGlobalTextarea) {
   notesGlobalTextarea.addEventListener('input', updateGlobalNote);
 }
 
-const notesSaveBtn = document.getElementById('di_notes_save');
-if (notesSaveBtn) {
-  notesSaveBtn.addEventListener('click', saveNotesToProject);
-}
-
-const notesExportBtn = document.getElementById('di_notes_export');
-if (notesExportBtn) {
-  notesExportBtn.addEventListener('click', exportNotesAsJSON);
-}
+// Notes buttons removed — auto-save handles persistence
 
 
 document.addEventListener('aistate:output-updated', function(e){
