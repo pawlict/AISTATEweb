@@ -472,17 +472,37 @@
       mapEl.title = _fmtTime(pct * totalDur);
     });
 
-    // Playhead animation
+    // Playhead animation — only runs while audio is playing (saves CPU)
+    var _playheadRaf = null;
     function updatePlayhead() {
       var player = _player();
       if (player && player.audio && totalDur > 0) {
         var pct = (player.audio.currentTime || 0) / totalDur;
         playhead.style.left = (pct * 100) + "%";
-        playhead.style.display = player.audio.paused ? "none" : "";
+        if (player.audio.paused) {
+          playhead.style.display = "none";
+          _playheadRaf = null;
+          return; // stop loop when paused
+        }
+        playhead.style.display = "";
       }
-      requestAnimationFrame(updatePlayhead);
+      _playheadRaf = requestAnimationFrame(updatePlayhead);
     }
-    requestAnimationFrame(updatePlayhead);
+    // Start/stop playhead loop on audio play/pause events
+    var _phAudio = (function(){ var p = _player(); return p && p.audio; })();
+    if (_phAudio) {
+      _phAudio.addEventListener("play", function () {
+        if (!_playheadRaf) _playheadRaf = requestAnimationFrame(updatePlayhead);
+      });
+      _phAudio.addEventListener("pause", function () {
+        if (_playheadRaf) { cancelAnimationFrame(_playheadRaf); _playheadRaf = null; }
+        playhead.style.display = "none";
+      });
+      _phAudio.addEventListener("ended", function () {
+        if (_playheadRaf) { cancelAnimationFrame(_playheadRaf); _playheadRaf = null; }
+        playhead.style.display = "none";
+      });
+    }
   }
 
   /* =========================================================

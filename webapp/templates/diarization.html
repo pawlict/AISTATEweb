@@ -1130,12 +1130,12 @@ function diPlaySegment(idx, fromStart){
 
   DI.endWatch = setInterval(function(){
     if(!DI.audio) return;
-    if(DI.audio.currentTime >= (endT - 0.02)){
+    if(DI.audio.currentTime >= (endT - 0.05)){
       try{ DI.audio.pause(); }catch(e){}
       clearInterval(DI.endWatch);
       DI.endWatch = null;
     }
-  }, 50);
+  }, 150);
 }
 
 // --- Inline block editor INSIDE the clicked block (PPM) ---

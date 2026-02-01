@@ -602,12 +602,12 @@ function trPlaySegment(idx, fromStart=true){
 
   TR.endWatch = setInterval(()=>{
     if(!TR.audio) return;
-    if(TR.audio.currentTime >= (endT - 0.02)){
+    if(TR.audio.currentTime >= (endT - 0.05)){
       try{ TR.audio.pause(); }catch(e){}
       clearInterval(TR.endWatch);
       TR.endWatch = null;
     }
-  }, 50);
+  }, 150);
 }
 
 // ========== Inline editor (EXACT COPY from diarization) ==========
