@@ -2,8 +2,8 @@
  * chat.js — Chat LLM module for AISTATEweb
  * Conversational interface with locally installed Ollama models.
  *
- * Background-job flow:
- *   1. POST /api/chat/send  — starts server-side generation (survives tab switch)
+ * Background-job flow (routed through GPU Resource Manager):
+ *   1. POST /api/chat/send  — enqueues task in GPU RM queue
  *   2. GET  /api/chat/follow/{conv_id}  — SSE stream for live display
  *   3. GET  /api/chat/result/{conv_id}  — poll completed/partial result on reload
  */
@@ -174,7 +174,7 @@
     let fullContent = "";
 
     try {
-      // 1. Start background job on server
+      // 1. Start background job on server (goes through GPU RM queue)
       const sendResp = await fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -187,7 +187,7 @@
         }),
       });
       const sendData = await sendResp.json();
-      if (sendData.status !== "started") {
+      if (sendData.status !== "started" && sendData.status !== "queued") {
         throw new Error(sendData.error || "Failed to start chat job");
       }
 
@@ -196,36 +196,13 @@
       if (conv) conv.pendingJobId = _activeConvId;
       _saveActiveConversation();
 
-      // 2. Follow SSE stream
-      const response = await fetch("/api/chat/follow/" + encodeURIComponent(_activeConvId), {
-        signal: _abortCtrl.signal,
-      });
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const obj = JSON.parse(line.slice(6));
-            if (obj.chunk) {
-              fullContent += obj.chunk;
-              contentEl.innerHTML = _renderMarkdown(fullContent);
-              _scrollToBottom();
-            }
-            if (obj.done) break;
-          } catch (_) { /* skip parse errors */ }
-        }
+      // Show queued indicator
+      if (sendData.status === "queued") {
+        contentEl.innerHTML = '<span class="chat-typing">' + _t("chat.queued") + "</span>";
       }
+
+      // 2. Follow SSE stream
+      fullContent = await _followSSE(_activeConvId, contentEl, _abortCtrl.signal);
 
       // Save final assistant message
       _messages.push({ role: "assistant", content: fullContent });
@@ -258,6 +235,57 @@
     }
   }
 
+  /**
+   * Follow SSE stream from /api/chat/follow/{convId}.
+   * Returns the accumulated full content string.
+   */
+  async function _followSSE(convId, contentEl, signal) {
+    const response = await fetch(
+      "/api/chat/follow/" + encodeURIComponent(convId),
+      { signal }
+    );
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullContent = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const obj = JSON.parse(line.slice(6));
+          // Queued keepalive — show waiting indicator
+          if (obj.queued) {
+            contentEl.innerHTML = '<span class="chat-typing">' + _t("chat.queued") + "</span>";
+            continue;
+          }
+          if (obj.chunk) {
+            fullContent += obj.chunk;
+            contentEl.innerHTML = _renderMarkdown(fullContent);
+            _scrollToBottom();
+          }
+          if (obj.done) {
+            // Check for server-side error
+            if (obj.error && !fullContent) {
+              contentEl.innerHTML = '<span class="chat-error">[ERROR] ' + _esc(obj.error) + "</span>";
+            }
+            return fullContent;
+          }
+        } catch (_) { /* skip parse errors */ }
+      }
+    }
+
+    return fullContent;
+  }
+
   function _onStop() {
     if (_abortCtrl) {
       _abortCtrl.abort();
@@ -285,7 +313,7 @@
 
     const avatar = document.createElement("div");
     avatar.className = "chat-msg-avatar";
-    avatar.textContent = role === "user" ? "👤" : "🤖";
+    avatar.textContent = role === "user" ? "\u{1F464}" : "\u{1F916}";
 
     const body = document.createElement("div");
     body.className = "chat-msg-body";
@@ -381,7 +409,6 @@
       const data = await r.json();
 
       if (data.status === "not_found") {
-        // Job expired or never existed — clear flag
         delete conv.pendingJobId;
         _saveActiveConversation();
         return;
@@ -391,15 +418,12 @@
         // Job completed while we were away — update messages
         const content = data.content || "";
         if (content) {
-          // Check if we already have a partial assistant message as last
           const lastMsg = _messages[_messages.length - 1];
           if (lastMsg && lastMsg.role === "assistant") {
-            // Update with full server content
             lastMsg.content = content;
           } else {
             _messages.push({ role: "assistant", content: content });
           }
-          // Re-render
           _activeConvId = convId;
           _reRenderMessages();
         }
@@ -408,8 +432,8 @@
         return;
       }
 
-      if (data.status === "running") {
-        // Job still running — reconnect SSE to follow it live
+      if (data.status === "running" || data.status === "queued") {
+        // Job still running or queued — reconnect SSE to follow it live
         _streaming = true;
         _toggleButtons(true);
 
@@ -419,42 +443,16 @@
         const contentEl = assistantEl.querySelector(".chat-msg-content");
         if (fullContent) {
           contentEl.innerHTML = _renderMarkdown(fullContent);
+        } else if (data.status === "queued") {
+          contentEl.innerHTML = '<span class="chat-typing">' + _t("chat.queued") + "</span>";
         }
 
         _abortCtrl = new AbortController();
 
         try {
-          const response = await fetch(
-            "/api/chat/follow/" + encodeURIComponent(conv.pendingJobId),
-            { signal: _abortCtrl.signal }
-          );
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
+          fullContent = await _followSSE(conv.pendingJobId, contentEl, _abortCtrl.signal);
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              if (!line.startsWith("data: ")) continue;
-              try {
-                const obj = JSON.parse(line.slice(6));
-                if (obj.chunk) {
-                  fullContent += obj.chunk;
-                  contentEl.innerHTML = _renderMarkdown(fullContent);
-                  _scrollToBottom();
-                }
-                if (obj.done) break;
-              } catch (_) {}
-            }
-          }
-
-          // Done
+          // Done — merge full content
           const lastMsg = _messages[_messages.length - 1];
           if (lastMsg && lastMsg.role === "assistant") {
             lastMsg.content = fullContent;
@@ -517,11 +515,11 @@
 
       const meta = document.createElement("div");
       meta.className = "chat-history-meta small";
-      meta.textContent = conv.model + " · " + new Date(conv.ts).toLocaleString();
+      meta.textContent = conv.model + " \u00B7 " + new Date(conv.ts).toLocaleString();
 
       const delBtn = document.createElement("button");
       delBtn.className = "chat-history-del";
-      delBtn.textContent = "×";
+      delBtn.textContent = "\u00D7";
       delBtn.title = _t("chat.delete");
       delBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -594,12 +592,13 @@
       "chat.ready": "Gotowy",
       "chat.ollama_offline": "Ollama offline",
       "chat.no_models": "Brak modeli",
-      "chat.load_error": "Błąd ładowania",
+      "chat.load_error": "B\u0142\u0105d \u0142adowania",
       "chat.select_model": "Wybierz model.",
       "chat.you": "Ty",
-      "chat.no_conversations": "Brak rozmów",
-      "chat.untitled": "Bez tytułu",
-      "chat.delete": "Usuń",
+      "chat.no_conversations": "Brak rozm\u00F3w",
+      "chat.untitled": "Bez tytu\u0142u",
+      "chat.delete": "Usu\u0144",
+      "chat.queued": "\u23F3 W kolejce GPU\u2026",
     };
     return defaults[key] || key;
   }

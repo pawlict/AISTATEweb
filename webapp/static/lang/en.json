@@ -601,6 +601,7 @@
   "admin.gpu.prio.saving": "Saving…",
   "admin.gpu.prio.saved": "Saved ✅",
   "admin.gpu.prio.save_error": "Save error:",
+  "chat.queued": "\u23F3 In GPU queue\u2026",
   "player.play": "Play / Pause",
   "player.back5": "Rewind 5s",
   "player.fwd5": "Forward 5s"

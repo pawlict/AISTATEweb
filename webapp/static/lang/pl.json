@@ -601,6 +601,7 @@
   "admin.gpu.prio.saving": "Zapisuję…",
   "admin.gpu.prio.saved": "Zapisano ✅",
   "admin.gpu.prio.save_error": "Błąd zapisu:",
+  "chat.queued": "\u23F3 W kolejce GPU\u2026",
   "player.play": "Odtwarzaj / Pauza",
   "player.back5": "Cofnij 5s",
   "player.fwd5": "Do przodu 5s"

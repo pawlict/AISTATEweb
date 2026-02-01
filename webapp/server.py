@@ -1589,7 +1589,8 @@ app = FastAPI(title=f"{APP_NAME} Web", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 
 # --- Mount routers (refactored modules) ---
-chat_router.init(ollama_client=OLLAMA, app_log_fn=app_log)
+# Chat: inject ollama + log now; GPU_RM + TASKS injected later (after GPU_RM creation)
+chat_router.init(ollama_client=OLLAMA, app_log_fn=app_log, tasks=TASKS)
 app.include_router(chat_router.router)
 
 tasks_router.init(tasks_manager=TASKS)
@@ -2901,6 +2902,9 @@ def _save_gpu_rm_settings(cfg: Dict[str, Any]) -> None:
 # Global singleton (used by transcription/diarization + Admin panel)
 GPU_RM = GPUResourceManager()
 GPU_RM.apply_config(_get_gpu_rm_settings())
+
+# Inject GPU_RM into chat router (deferred — GPU_RM created after initial mount)
+chat_router.init(ollama_client=OLLAMA, app_log_fn=app_log, gpu_rm=GPU_RM, tasks=TASKS)
 
 # Mount admin router now that GPU_RM is ready
 admin_router.init(
