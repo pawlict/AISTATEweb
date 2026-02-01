@@ -267,8 +267,20 @@ if(dlg && typeof dlg.showModal === "function"){
   }
 });
 
-// Auto-refresh while user watches logs
-setInterval(()=>{ if(document.hidden) return; showSelected().catch(()=>{}); }, 1000);
-setInterval(()=>{ if(document.hidden) return; refreshTasks().then(showSelected).catch(()=>{}); }, 5000);
+// Auto-refresh while user watches logs — pause when tab hidden
+var _logsTimer1 = null, _logsTimer2 = null;
+function _logsStartPolling() {
+  if (_logsTimer1) return;
+  _logsTimer1 = setInterval(()=>{ showSelected().catch(()=>{}); }, 2000);
+  _logsTimer2 = setInterval(()=>{ refreshTasks().then(showSelected).catch(()=>{}); }, 8000);
+}
+function _logsStopPolling() {
+  if (_logsTimer1) { clearInterval(_logsTimer1); _logsTimer1 = null; }
+  if (_logsTimer2) { clearInterval(_logsTimer2); _logsTimer2 = null; }
+}
+document.addEventListener("visibilitychange", function() {
+  if (document.hidden) _logsStopPolling(); else _logsStartPolling();
+});
+_logsStartPolling();
 </script>
 {% endblock %}

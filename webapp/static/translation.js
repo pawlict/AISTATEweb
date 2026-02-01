@@ -874,19 +874,19 @@ async function monitorProgress() {
         trProgressInterval = null;
     }
 
+    // Cache DOM elements to avoid querySelector every poll
+    var _trProgFill = document.getElementById('progress-fill');
+    var _trProgText = document.getElementById('progress-text');
+    var _trProgStatus = document.getElementById('progress-status');
+
     trProgressInterval = setInterval(async () => {
         try {
             const response = await fetch(`/api/translation/progress/${currentTaskId}`);
             const data = await response.json();
-            
-            // Update progress bar
-            const progressFill = document.getElementById('progress-fill');
-            const progressText = document.getElementById('progress-text');
-            const progressStatus = document.getElementById('progress-status');
-            
-            progressFill.style.width = data.progress + '%';
-            progressText.textContent = data.progress + '%';
-            progressStatus.textContent = data.status;
+
+            if (_trProgFill) _trProgFill.style.width = data.progress + '%';
+            if (_trProgText) _trProgText.textContent = data.progress + '%';
+            if (_trProgStatus) _trProgStatus.textContent = data.status;
             
             // Check if completed
             if (data.status === 'completed') {
@@ -906,7 +906,7 @@ async function monitorProgress() {
             alert(trFmt('translation.alert.progress_error',{msg: error.message},'Błąd: {msg}'));
             resetUI();
         }
-    }, 1000);
+    }, 3000);
 }
 
 // Display translation results

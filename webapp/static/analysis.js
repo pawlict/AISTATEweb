@@ -533,7 +533,7 @@
       }catch(e){
         // ignore transient errors
       }
-      State.quickTaskTimer = setTimeout(tick, 1000);
+      State.quickTaskTimer = setTimeout(tick, 2500);
     };
 
     tick();
@@ -973,7 +973,7 @@ async function _regenQuickIfNeeded(){
 
       if(State.pollTimer) clearInterval(State.pollTimer);
       await _pollDeepTask();
-      State.pollTimer = setInterval(_pollDeepTask, 1200);
+      State.pollTimer = setInterval(_pollDeepTask, 3000);
     } catch(_e) {}
   }
 
@@ -1075,7 +1075,7 @@ async function _regenQuickIfNeeded(){
 
     // Immediate poll + periodic updates
     await _pollDeepTask();
-    State.pollTimer = setInterval(_pollDeepTask, 1200);
+    State.pollTimer = setInterval(_pollDeepTask, 3000);
   }
 
   async function _stopStream(){
