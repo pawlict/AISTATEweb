@@ -600,9 +600,15 @@
       if (_mapTooltip) _mapTooltip.style.display = "none";
     });
 
-    // Playhead animation — only runs while audio is playing (saves CPU)
+    // Playhead animation — throttled to ~15fps to save CPU
     var _playheadRaf = null;
-    function updatePlayhead() {
+    var _playheadLast = 0;
+    function updatePlayhead(ts) {
+      if (ts - _playheadLast < 66) {  // ~15fps
+        _playheadRaf = requestAnimationFrame(updatePlayhead);
+        return;
+      }
+      _playheadLast = ts;
       var player = _player();
       if (player && player.audio && totalDur > 0) {
         var pct = (player.audio.currentTime || 0) / totalDur;

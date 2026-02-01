@@ -205,9 +205,19 @@
   AudioPlayer.prototype._startAnimLoop = function () {
     if (this._raf) return; // already running
     var self = this;
-    function tick() {
-      self._updateProgress();
-      self._syncHighlight();
+    var lastProgress = 0;
+    var lastSync = 0;
+    function tick(ts) {
+      // Throttle progress bar updates to ~15fps (every 66ms)
+      if (ts - lastProgress >= 66) {
+        self._updateProgress();
+        lastProgress = ts;
+      }
+      // Throttle segment highlight sync to ~5fps (every 200ms)
+      if (ts - lastSync >= 200) {
+        self._syncHighlight();
+        lastSync = ts;
+      }
       self._raf = requestAnimationFrame(tick);
     }
     this._raf = requestAnimationFrame(tick);
@@ -221,18 +231,20 @@
   };
 
   AudioPlayer.prototype._updateProgress = function () {
-    var container = document.getElementById(this.opts.containerId);
-    if (!container || !this.audio) return;
-
+    if (!this.audio) return;
+    // Cache DOM elements to avoid querySelector every frame
+    if (!this._elCur || !this._elFill) {
+      var container = document.getElementById(this.opts.containerId);
+      if (!container) return;
+      this._elCur = container.querySelector(".ap-time-cur");
+      this._elFill = container.querySelector(".ap-progress-fill");
+    }
     var cur = this.audio.currentTime || 0;
     var dur = this.audio.duration || 0;
 
-    var curEl = container.querySelector(".ap-time-cur");
-    if (curEl) curEl.textContent = _fmtTime(cur);
-
-    var fill = container.querySelector(".ap-progress-fill");
-    if (fill && dur > 0) {
-      fill.style.width = ((cur / dur) * 100) + "%";
+    if (this._elCur) this._elCur.textContent = _fmtTime(cur);
+    if (this._elFill && dur > 0) {
+      this._elFill.style.width = ((cur / dur) * 100) + "%";
     }
   };
 
@@ -244,6 +256,12 @@
 
     var t = this.audio.currentTime;
     var newIdx = -1;
+
+    // Optimize: check current active segment first (common case — same segment)
+    if (this.activeIdx >= 0 && this.activeIdx < segments.length) {
+      var cur = segments[this.activeIdx];
+      if (t >= cur.start && t < cur.end) return; // still in same segment
+    }
 
     for (var i = 0; i < segments.length; i++) {
       if (t >= segments[i].start && t < segments[i].end) {
