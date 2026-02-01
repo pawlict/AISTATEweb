@@ -166,14 +166,22 @@
     }
 
     // Audio events
-    this.audio.addEventListener("play", function () { self._onPlayState(true); });
-    this.audio.addEventListener("pause", function () { self._onPlayState(false); });
-    this.audio.addEventListener("ended", function () { self._onPlayState(false); });
+    this.audio.addEventListener("play", function () {
+      self._onPlayState(true);
+      self._startAnimLoop();
+    });
+    this.audio.addEventListener("pause", function () {
+      self._onPlayState(false);
+      self._stopAnimLoop();
+      self._updateProgress(); // final update
+    });
+    this.audio.addEventListener("ended", function () {
+      self._onPlayState(false);
+      self._stopAnimLoop();
+      self._updateProgress();
+    });
     this.audio.addEventListener("loadedmetadata", function () { self._updateDuration(); });
     this.audio.addEventListener("durationchange", function () { self._updateDuration(); });
-
-    // Animation loop for progress + sync
-    this._startAnimLoop();
   };
 
   AudioPlayer.prototype._onPlayState = function (playing) {
@@ -195,6 +203,7 @@
   };
 
   AudioPlayer.prototype._startAnimLoop = function () {
+    if (this._raf) return; // already running
     var self = this;
     function tick() {
       self._updateProgress();
@@ -202,6 +211,13 @@
       self._raf = requestAnimationFrame(tick);
     }
     this._raf = requestAnimationFrame(tick);
+  };
+
+  AudioPlayer.prototype._stopAnimLoop = function () {
+    if (this._raf) {
+      cancelAnimationFrame(this._raf);
+      this._raf = null;
+    }
   };
 
   AudioPlayer.prototype._updateProgress = function () {
