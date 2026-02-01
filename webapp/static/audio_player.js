@@ -43,7 +43,7 @@
     }
 
     this.audio = new Audio(url);
-    this.audio.preload = "metadata";
+    this.audio.preload = "auto";
 
     // Restore speed
     try {

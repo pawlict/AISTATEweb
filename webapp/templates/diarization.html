@@ -1565,7 +1565,7 @@ function diRender(){
         DI.audio = window._diPlayer.audio;
       } else {
         DI.audio = new Audio();
-        DI.audio.preload = "metadata";
+        DI.audio.preload = "auto";
       }
     }
     // Only update src if it differs (avoid resetting shared player audio)

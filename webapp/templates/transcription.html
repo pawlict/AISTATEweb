@@ -1100,7 +1100,7 @@ function trRender(){
         TR.audio = window._trPlayer.audio;
       } else {
         TR.audio = new Audio();
-        TR.audio.preload = "metadata";
+        TR.audio.preload = "auto";
       }
     }
     // Only update src if it differs (avoid resetting shared player audio)
