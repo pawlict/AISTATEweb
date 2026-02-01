@@ -193,12 +193,12 @@ def _register_unicode_fonts():
         return None, None
 
     candidates_sans = [
-        os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "DejaVuSans.ttf"),
+        os.path.join(os.path.dirname(__file__), "..", "webapp", "static", "fonts", "DejaVuSans.ttf"),
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/TTF/DejaVuSans.ttf",
     ]
     candidates_mono = [
-        os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "DejaVuSansMono.ttf"),
+        os.path.join(os.path.dirname(__file__), "..", "webapp", "static", "fonts", "DejaVuSansMono.ttf"),
         "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
         "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
     ]
