@@ -818,7 +818,7 @@ async function saveNotesToProjectSilent(){
 
   notesSaving = true;
   try{
-    await api(`/api/projects/${pid}/notes`, {
+    await api(`/api/projects/${pid}/notes/diarization`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(DI.notes)
@@ -959,22 +959,93 @@ function scrollToBlock(idx) {
 
 function editBlockNote(idx) {
   const currentNote = getBlockNote(idx);
-  const newNote = prompt(`Notatka do bloku #${idx}:`, currentNote);
-  
-  if (newNote !== null) {
-    updateBlockNote(idx, newNote);
+  _openNoteModal(idx, currentNote, function(newText) {
+    updateBlockNote(idx, newText);
     updateBlockNoteIconInSeg(idx);
+  }, function() {
+    // delete callback
+    updateBlockNote(idx, "");
+    updateBlockNoteIconInSeg(idx);
+  });
+}
+
+/** Styled note editor modal (replaces browser prompt) */
+function _openNoteModal(idx, currentText, onSave, onDelete) {
+  // Remove any existing modal
+  var existing = document.querySelector('.note-editor-overlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.className = 'note-editor-overlay';
+
+  var hasExisting = !!(currentText && currentText.trim());
+  var title = hasExisting ? 'Edytuj notatkę — Blok #' + idx : 'Nowa notatka — Blok #' + idx;
+
+  overlay.innerHTML =
+    '<div class="note-editor-modal">' +
+      '<div class="note-editor-header">' +
+        '<h3>' + title + '</h3>' +
+        '<button class="note-editor-close" title="Zamknij">&times;</button>' +
+      '</div>' +
+      '<div class="note-editor-body">' +
+        '<textarea id="_note_editor_ta" placeholder="Wpisz notatkę do bloku…">' +
+          (currentText || '').replace(/</g, '&lt;') +
+        '</textarea>' +
+        '<div class="note-editor-hint">Ctrl+Enter = zapisz</div>' +
+      '</div>' +
+      '<div class="note-editor-footer">' +
+        (hasExisting ? '<button class="note-btn note-btn-danger" data-action="delete">Usuń notatkę</button>' : '') +
+        '<button class="note-btn" data-action="cancel">Anuluj</button>' +
+        '<button class="note-btn note-btn-primary" data-action="save">Zapisz</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+
+  var ta = document.getElementById('_note_editor_ta');
+  if (ta) {
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+
+  function close() { overlay.remove(); }
+  function save() {
+    var text = ta ? ta.value : '';
+    close();
+    if (onSave) onSave(text);
+  }
+
+  // Event delegation
+  overlay.addEventListener('click', function(e) {
+    var action = e.target.getAttribute('data-action');
+    if (action === 'save') { save(); return; }
+    if (action === 'cancel') { close(); return; }
+    if (action === 'delete') {
+      close();
+      if (onDelete) onDelete();
+      return;
+    }
+    if (e.target === overlay || e.target.classList.contains('note-editor-close')) {
+      close();
+    }
+  });
+
+  // Ctrl+Enter to save, Escape to close
+  if (ta) {
+    ta.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+    });
   }
 }
 
 function deleteBlockNote(idx) {
-  if (confirm(`Usunąć notatkę do bloku #${idx}?`)) {
-    delete DI.notes.blocks[String(idx)];
-    renderBlockNotesList();
-    updateBlockNoteIconInSeg(idx);
-    hideNoteTooltip();
-    scheduleNotesSave();
-  }
+  delete DI.notes.blocks[String(idx)];
+  renderBlockNotesList();
+  updateBlockNoteIconInSeg(idx);
+  hideNoteTooltip();
+  scheduleNotesSave();
+  showToast('Notatka usunięta');
 }
 
 function updateBlockNoteIconInSeg(idx) {
@@ -1011,7 +1082,7 @@ async function saveNotesToProject() {
   }
   
   try {
-    await api(`/api/projects/${pid}/notes`, {
+    await api(`/api/projects/${pid}/notes/diarization`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(DI.notes)
@@ -1028,7 +1099,7 @@ async function loadNotesFromProject() {
   if (!pid) return;
   
   try {
-    const data = await api(`/api/projects/${pid}/notes`);
+    const data = await api(`/api/projects/${pid}/notes/diarization`);
     if (data && typeof data === 'object') {
       DI.notes = {
         global: data.global || "",
@@ -2576,6 +2647,13 @@ window.diStopPlayback = diStopPlayback;
       onChanged: function () {
         diSetRawTextarea();
         scheduleAutoSave();
+      },
+      getNotes: function () { return DI.notes; },
+      setNotes: function (n) {
+        DI.notes = n;
+        renderBlockNotesList();
+        refreshAllNoteIcons();
+        scheduleNotesSave();
       }
     });
     // Initial afterRender if segments already loaded
