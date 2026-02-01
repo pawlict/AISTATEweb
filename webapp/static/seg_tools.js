@@ -243,10 +243,45 @@
    *  3. REAL AUDIO WAVEFORM MAP (Web Audio API)
    * ========================================================= */
 
-  /** Fetch and decode audio, extract peak amplitudes */
+  /**
+   * Load waveform peak data.
+   * 1. Try server-side cached peaks.json (instant, no CPU)
+   * 2. Fall back to client-side Web Audio API decode (heavy)
+   */
   function _loadWaveformData(callback) {
     if (_waveformPeaks) { callback(_waveformPeaks, _waveformDuration); return; }
 
+    // Try server-side cached peaks first
+    var pid = (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) ? AISTATE.projectId : "";
+    if (pid) {
+      var xhr2 = new XMLHttpRequest();
+      xhr2.open("GET", "/api/projects/" + encodeURIComponent(pid) + "/waveform", true);
+      xhr2.onload = function () {
+        if (xhr2.status === 200) {
+          try {
+            var data = JSON.parse(xhr2.responseText);
+            if (data && data.peaks && data.peaks.length) {
+              _waveformPeaks = new Float32Array(data.peaks);
+              _waveformDuration = data.duration || 0;
+              callback(_waveformPeaks, _waveformDuration);
+              return;
+            }
+          } catch (e) {}
+        }
+        // Server peaks unavailable — fall back to client-side decode
+        _loadWaveformFromAudio(callback);
+      };
+      xhr2.onerror = function () {
+        _loadWaveformFromAudio(callback);
+      };
+      xhr2.send();
+    } else {
+      _loadWaveformFromAudio(callback);
+    }
+  }
+
+  /** Fallback: decode audio in browser via Web Audio API (heavy on CPU) */
+  function _loadWaveformFromAudio(callback) {
     var player = _player();
     if (!player || !player.audio || !player.audio.src) return;
 
@@ -259,8 +294,8 @@
       try {
         var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         audioCtx.decodeAudioData(xhr.response, function (buffer) {
-          var rawData = buffer.getChannelData(0); // mono or left channel
-          var numPeaks = 800; // match canvas width
+          var rawData = buffer.getChannelData(0);
+          var numPeaks = 800;
           var blockSize = Math.floor(rawData.length / numPeaks);
           var peaks = new Float32Array(numPeaks);
 
