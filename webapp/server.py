@@ -3674,9 +3674,9 @@ async def api_save_transcript_text(project_id: str, request: Request) -> Any:
 
 # Dodaj endpoint do generowania raportów specyficznych dla transkrypcji
 @app.get("/api/projects/{project_id}/report/transcription")
-def api_generate_transcription_report(project_id: str, format: str = "pdf", include_logs: int = 0) -> Any:
+def api_generate_transcription_report(project_id: str, format: str = "pdf", include_logs: int = 0, include_notes: int = 0) -> Any:
     """Generate report specifically for transcription (without diarization data).
-    
+
     Similar to /api/projects/{project_id}/report but focuses only on transcription.
     """
     project_path(project_id)  # ensure exists
@@ -3689,10 +3689,10 @@ def api_generate_transcription_report(project_id: str, format: str = "pdf", incl
     out_name = f"transcription_report_{ts}.{fmt}"
     out_path = pdir / out_name
 
-    app_log(f"Transcription report requested: project_id={project_id}, format={fmt}, include_logs={bool(include_logs)}")
+    app_log(f"Transcription report requested: project_id={project_id}, format={fmt}, include_logs={bool(include_logs)}, include_notes={bool(include_notes)}")
 
     # Collect data similar to _collect_report_data but transcription-focused
-    data = _collect_transcription_report_data(project_id, export_formats=[fmt], include_logs=bool(include_logs))
+    data = _collect_transcription_report_data(project_id, export_formats=[fmt], include_logs=bool(include_logs), include_notes=bool(include_notes))
 
     if fmt == "txt":
         generate_txt_report(data, logs=bool(include_logs), output_path=str(out_path))
@@ -3719,11 +3719,29 @@ def api_generate_transcription_report(project_id: str, format: str = "pdf", incl
     return FileResponse(str(out_path), filename=out_name)
 
 
-def _collect_transcription_report_data(project_id: str, export_formats: List[str], include_logs: bool) -> Dict[str, Any]:
-    """Collect data for transcription-specific report.
-    
-    Similar to _collect_report_data but focuses only on transcription.
+def _gather_report_notes(meta: Dict[str, Any], notes_key: str) -> Dict[str, Any] | None:
+    """Read notes from project meta for inclusion in reports.
+
+    Returns {"global": str, "blocks": {idx_str: str}} or None.
     """
+    notes = meta.get(notes_key) or meta.get("notes") or {}
+    if not isinstance(notes, dict):
+        return None
+    global_note = str(notes.get("global") or "").strip()
+    blocks_raw = notes.get("blocks") or {}
+    blocks: Dict[str, str] = {}
+    if isinstance(blocks_raw, dict):
+        for k, v in blocks_raw.items():
+            txt = str(v or "").strip()
+            if txt:
+                blocks[str(k)] = txt
+    if not global_note and not blocks:
+        return None
+    return {"global": global_note, "blocks": blocks}
+
+
+def _collect_transcription_report_data(project_id: str, export_formats: List[str], include_logs: bool, include_notes: bool = False) -> Dict[str, Any]:
+    """Collect data for transcription-specific report."""
     meta = read_project_meta(project_id)
     pdir = project_path(project_id)
 
@@ -3742,14 +3760,18 @@ def _collect_transcription_report_data(project_id: str, export_formats: List[str
     s = load_settings()
     logs_text = ""
     if include_logs:
-        # best effort: concatenate last logs from transcription tasks
         parts = []
         for t in TASKS.list_tasks():
-            if t.project_id == project_id and t.kind == "tr":  # only transcription tasks
+            if t.project_id == project_id and t.kind == "tr":
                 parts.append(f"=== TASK {t.task_id} (transcription) ===")
                 parts.extend(t.logs[-400:])
                 parts.append("")
         logs_text = "\n".join(parts).strip()
+
+    # Gather notes if requested
+    notes_data = None
+    if include_notes:
+        notes_data = _gather_report_notes(meta, "notes_transcription")
 
     data = {
         "program_name": APP_NAME,
@@ -3768,6 +3790,7 @@ def _collect_transcription_report_data(project_id: str, export_formats: List[str
         "logs": logs_text,
         "ui_language": "pl",
         "section_title": "Transkrypcja",
+        "notes": notes_data,
     }
     return data
 
@@ -3985,7 +4008,7 @@ def _generate_waveform_peaks(project_id: str) -> bool:
     return True
 
 
-def _collect_report_data(project_id: str, export_formats: List[str], include_logs: bool) -> Dict[str, Any]:
+def _collect_report_data(project_id: str, export_formats: List[str], include_logs: bool, include_notes: bool = False) -> Dict[str, Any]:
     meta = read_project_meta(project_id)
     pdir = project_path(project_id)
 
@@ -4007,7 +4030,6 @@ def _collect_report_data(project_id: str, export_formats: List[str], include_log
     s = load_settings()
     logs_text = ""
     if include_logs:
-        # best effort: concatenate last logs from tasks related to this project
         parts = []
         for t in TASKS.list_tasks():
             if t.project_id == project_id:
@@ -4015,6 +4037,11 @@ def _collect_report_data(project_id: str, export_formats: List[str], include_log
                 parts.extend(t.logs[-400:])
                 parts.append("")
         logs_text = "\n".join(parts).strip()
+
+    # Gather notes if requested
+    notes_data = None
+    if include_notes:
+        notes_data = _gather_report_notes(meta, "notes_diarization")
 
     data = {
         "program_name": APP_NAME,
@@ -4039,12 +4066,13 @@ def _collect_report_data(project_id: str, export_formats: List[str], include_log
         "theme": "",
         "speaker_name_map": (meta.get("speaker_map") or {}),
         "section_title": "Transkrypcja / Diaryzacja",
+        "notes": notes_data,
     }
     return data
 
 
 @app.get("/api/projects/{project_id}/report")
-def api_generate_report(project_id: str, format: str = "pdf", include_logs: int = 0) -> Any:
+def api_generate_report(project_id: str, format: str = "pdf", include_logs: int = 0, include_notes: int = 0) -> Any:
     project_path(project_id)  # ensure exists
     fmt = (format or "").lower()
     if fmt not in ("txt", "html", "pdf", "doc"):
@@ -4055,9 +4083,9 @@ def api_generate_report(project_id: str, format: str = "pdf", include_logs: int 
     out_name = f"report_{ts}.{fmt}"
     out_path = pdir / out_name
 
-    app_log(f"Report requested: project_id={project_id}, format={fmt}, include_logs={bool(include_logs)}")
+    app_log(f"Report requested: project_id={project_id}, format={fmt}, include_logs={bool(include_logs)}, include_notes={bool(include_notes)}")
 
-    data = _collect_report_data(project_id, export_formats=[fmt], include_logs=bool(include_logs))
+    data = _collect_report_data(project_id, export_formats=[fmt], include_logs=bool(include_logs), include_notes=bool(include_notes))
 
     if fmt == "txt":
         generate_txt_report(data, logs=bool(include_logs), output_path=str(out_path))

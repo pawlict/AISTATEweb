@@ -19,6 +19,7 @@
   var CFG = null;
   var _waveformPeaks = null;   // Float32Array of peak amplitudes
   var _waveformDuration = 0;   // duration in seconds from decoded audio
+  var _noteMarkers = [];       // [{x, w, h, text, type}] – stored by _drawNoteMarkers
 
   function _seg() { return CFG && CFG.getSegments ? CFG.getSegments() : []; }
   function _player() { return CFG && CFG.getPlayer ? CFG.getPlayer() : null; }
@@ -453,6 +454,7 @@
 
   /** Draw note markers (pins) on the waveform timeline */
   function _drawNoteMarkers(canvas, segs, duration) {
+    _noteMarkers = [];
     if (!CFG || !CFG.getNotes) return;
     var notes = CFG.getNotes();
     if (!notes) return;
@@ -466,6 +468,7 @@
     // Global note marker at the very beginning
     if (notes.global && notes.global.trim()) {
       _drawPin(ctx, 4, 0, markerW, markerH, "rgba(255,152,0,0.95)");
+      _noteMarkers.push({ x: 4, w: markerW, h: markerH + 4, text: notes.global.trim(), type: "global" });
     }
 
     // Block note markers at each segment's start position
@@ -478,6 +481,7 @@
         var seg = segs[idx];
         var x = Math.round((seg.start / duration) * W);
         _drawPin(ctx, x, 0, markerW, markerH, "rgba(33,150,243,0.95)");
+        _noteMarkers.push({ x: x, w: markerW, h: markerH + 4, text: String(notes.blocks[key]).trim(), type: "block#" + idx });
       }
     }
   }
@@ -553,10 +557,47 @@
       }
     });
 
+    // Note tooltip element (lazy-created)
+    var _mapTooltip = null;
+    function _getMapTooltip() {
+      if (!_mapTooltip) {
+        _mapTooltip = document.createElement("div");
+        _mapTooltip.className = "seg-map-note-tip";
+        document.body.appendChild(_mapTooltip);
+      }
+      return _mapTooltip;
+    }
+
     mapEl.addEventListener("mousemove", function (e) {
       var rect = canvas.getBoundingClientRect();
       var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      mapEl.title = _fmtTime(pct * totalDur);
+      // Check if hovering over a note marker
+      var canvasX = pct * canvas.width;
+      var canvasY = ((e.clientY - rect.top) / rect.height) * canvas.height;
+      var hit = null;
+      for (var i = 0; i < _noteMarkers.length; i++) {
+        var m = _noteMarkers[i];
+        if (canvasX >= m.x - m.w / 2 - 2 && canvasX <= m.x + m.w / 2 + 2 && canvasY <= m.h + 4) {
+          hit = m;
+          break;
+        }
+      }
+      if (hit) {
+        var tip = _getMapTooltip();
+        var preview = hit.text.length > 120 ? hit.text.substring(0, 120) + "..." : hit.text;
+        tip.textContent = preview;
+        tip.style.display = "block";
+        tip.style.left = (e.clientX + 10) + "px";
+        tip.style.top = (e.clientY - 30) + "px";
+        mapEl.title = "";
+      } else {
+        if (_mapTooltip) _mapTooltip.style.display = "none";
+        mapEl.title = _fmtTime(pct * totalDur);
+      }
+    });
+
+    mapEl.addEventListener("mouseleave", function () {
+      if (_mapTooltip) _mapTooltip.style.display = "none";
     });
 
     // Playhead animation — only runs while audio is playing (saves CPU)

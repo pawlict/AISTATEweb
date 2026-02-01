@@ -167,13 +167,33 @@ def generate_html_report(data: Dict[str, Any], logs: bool = False, output_path: 
         safe = re.sub(r"[^A-Za-z0-9_]", "_", spk)
         speaker_css.append(f".seg.seg-{safe} {{ background: {bg}; border-color: {border}; color: {txtc}; }}")
 
+    # Gather notes for inline display
+    notes = data.get("notes")
+    notes_global = ""
+    notes_blocks: Dict[str, str] = {}
+    if notes and isinstance(notes, dict):
+        notes_global = (notes.get("global") or "").strip()
+        notes_blocks = notes.get("blocks") or {}
+
     seg_html: List[str] = []
-    for ts, spk, tags, txt in parsed_segments:
+
+    # Global note at the top
+    if notes_global:
+        seg_html.append(
+            f'<div class="note-inline"><span class="note-label">Notatka:</span> {_esc(notes_global)}</div>'
+        )
+
+    for seg_idx, (ts, spk, tags, txt) in enumerate(parsed_segments):
         safe = re.sub(r"[^A-Za-z0-9_]", "_", spk) if spk else "GEN"
         cls = f"seg seg-{safe}"
         tag_html = ""
         if tags:
             tag_html = " " + " ".join([f"<span class='tag'>[{_esc(t)}]</span>" for t in tags])
+
+        block_note_html = ""
+        bn = (notes_blocks.get(str(seg_idx)) or "").strip()
+        if bn:
+            block_note_html = f'<div class="note-inline"><span class="note-label">Notatka:</span> {_esc(bn)}</div>'
 
         seg_html.append(
             f"""
@@ -184,6 +204,7 @@ def generate_html_report(data: Dict[str, Any], logs: bool = False, output_path: 
                 {tag_html}
               </div>
               <div class="txt">{_esc(txt)}</div>
+              {block_note_html}
             </div>
             """
         )
@@ -311,6 +332,20 @@ def generate_html_report(data: Dict[str, Any], logs: bool = False, output_path: 
       }}
 
       {" ".join(speaker_css)}
+
+      .note-inline {{
+        margin-top: 6px;
+        padding: 5px 10px;
+        background: #fffbe6;
+        border-left: 3px solid #ffb300;
+        border-radius: 4px;
+        font-size: 0.88em;
+        color: #5a4e00;
+      }}
+      .note-label {{
+        font-weight: 700;
+        color: #b38600;
+      }}
 
       .footer {{
         margin-top: 14px;
