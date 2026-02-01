@@ -1577,6 +1577,13 @@ def save_upload(project_id: str, upload: UploadFile) -> Path:
     meta["audio_file"] = fname
     meta["updated_at"] = now_iso()
     write_project_meta(project_id, meta)
+    # Pre-generate waveform peaks in background so they're ready when user opens transcription
+    def _gen_peaks():
+        try:
+            _generate_waveform_peaks(project_id)
+        except Exception:
+            pass
+    threading.Thread(target=_gen_peaks, daemon=True).start()
     return dst
 
 
@@ -3251,6 +3258,22 @@ def api_project_meta(project_id: str) -> Any:
     }
 
 
+@app.get("/api/projects/{project_id}/waveform")
+def api_waveform(project_id: str) -> Any:
+    """Return cached waveform peaks.  Generate on first request if missing."""
+    pdir = project_path(project_id)
+    peaks_path = pdir / "peaks.json"
+    if not peaks_path.exists():
+        ok = _generate_waveform_peaks(project_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Nie można wygenerować fali dźwiękowej")
+    try:
+        data = json.loads(peaks_path.read_text(encoding="utf-8"))
+        return JSONResponse(data)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Błąd odczytu peaks.json")
+
+
 @app.get("/api/projects/{project_id}/download/{filename}")
 def api_download(project_id: str, filename: str) -> Any:
     path = project_path(project_id) / filename
@@ -3859,6 +3882,107 @@ def _probe_audio_basic(path: Path) -> tuple[str, str]:
     except Exception:
         pass
     return duration, specs
+
+
+WAVEFORM_NUM_PEAKS = 800  # Match canvas width in seg_tools.js
+
+
+def _generate_waveform_peaks(project_id: str) -> bool:
+    """Generate waveform peak amplitudes from project audio and save as peaks.json.
+
+    Uses soundfile (fast C library) for reading.  Falls back to wave stdlib.
+    Returns True if peaks.json was written successfully.
+    """
+    pdir = project_path(project_id)
+    meta = read_project_meta(project_id)
+    audio_file = meta.get("audio_file") or ""
+    if not audio_file:
+        return False
+    audio_path = pdir / audio_file
+    if not audio_path.exists():
+        return False
+
+    peaks_path = pdir / "peaks.json"
+    num_peaks = WAVEFORM_NUM_PEAKS
+
+    try:
+        # Try soundfile first (handles WAV, FLAC, OGG, etc.)
+        import soundfile as sf
+        import numpy as np
+        data, sr = sf.read(str(audio_path), dtype="float32", always_2d=True)
+        # Mix to mono
+        mono = np.mean(data, axis=1) if data.shape[1] > 1 else data[:, 0]
+        total = len(mono)
+        block = max(1, total // num_peaks)
+        peaks = []
+        for i in range(num_peaks):
+            start = i * block
+            end = min(start + block, total)
+            if start >= total:
+                peaks.append(0.0)
+            else:
+                peaks.append(float(np.max(np.abs(mono[start:end]))))
+        duration = total / sr if sr else 0.0
+    except Exception:
+        try:
+            # Fallback: stdlib wave (WAV only)
+            import wave
+            import struct
+            with wave.open(str(audio_path), "rb") as wf:
+                sr = wf.getframerate()
+                n = wf.getnframes()
+                ch = wf.getnchannels()
+                sw = wf.getsampwidth()
+                raw = wf.readframes(n)
+
+            # Decode to float samples
+            if sw == 2:
+                fmt = "<" + "h" * (n * ch)
+                samples = struct.unpack(fmt, raw)
+                scale = 32768.0
+            elif sw == 1:
+                fmt = "B" * (n * ch)
+                samples = struct.unpack(fmt, raw)
+                samples = [s - 128 for s in samples]
+                scale = 128.0
+            else:
+                return False
+
+            # Mix to mono
+            if ch > 1:
+                mono = [sum(samples[i:i + ch]) / ch for i in range(0, len(samples), ch)]
+            else:
+                mono = list(samples)
+
+            total = len(mono)
+            block = max(1, total // num_peaks)
+            peaks = []
+            for i in range(num_peaks):
+                start = i * block
+                end = min(start + block, total)
+                if start >= total:
+                    peaks.append(0.0)
+                else:
+                    mx = max(abs(mono[j]) for j in range(start, end))
+                    peaks.append(mx / scale)
+            duration = total / sr if sr else 0.0
+        except Exception:
+            return False
+
+    # Normalize peaks to 0..1
+    max_peak = max(peaks) if peaks else 1.0
+    if max_peak > 0:
+        peaks = [round(p / max_peak, 4) for p in peaks]
+
+    payload = {"peaks": peaks, "duration": round(duration, 3), "num_peaks": num_peaks}
+    try:
+        tmp = peaks_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        tmp.replace(peaks_path)
+    except Exception:
+        return False
+
+    return True
 
 
 def _collect_report_data(project_id: str, export_formats: List[str], include_logs: bool) -> Dict[str, Any]:
@@ -5693,6 +5817,13 @@ def _persist_task_outputs(t: "TaskState") -> None:
             (pdir / "transcript.txt").write_text(out_txt, encoding="utf-8")
             meta["has_transcript"] = True
             wrote_any = True
+            # Generate waveform peaks (best-effort, runs once per project)
+            try:
+                peaks_path = pdir / "peaks.json"
+                if not peaks_path.exists():
+                    _generate_waveform_peaks(t.project_id)
+            except Exception:
+                pass
             # Auto quick analysis (best-effort) similar to Whisper model auto-download.
             _schedule_quick_analysis_background(t.project_id)
     # Diarization
