@@ -446,6 +446,55 @@
         ctx.fillRect(x, 0, 1, H);
       }
     }
+
+    // Note markers on timeline
+    _drawNoteMarkers(canvas, segs, duration);
+  }
+
+  /** Draw note markers (pins) on the waveform timeline */
+  function _drawNoteMarkers(canvas, segs, duration) {
+    if (!CFG || !CFG.getNotes) return;
+    var notes = CFG.getNotes();
+    if (!notes) return;
+
+    var ctx = canvas.getContext("2d");
+    var W = canvas.width;
+    var H = canvas.height;
+    var markerH = 10;
+    var markerW = 8;
+
+    // Global note marker at the very beginning
+    if (notes.global && notes.global.trim()) {
+      _drawPin(ctx, 4, 0, markerW, markerH, "rgba(255,152,0,0.95)");
+    }
+
+    // Block note markers at each segment's start position
+    if (notes.blocks) {
+      for (var key in notes.blocks) {
+        if (!notes.blocks.hasOwnProperty(key)) continue;
+        if (!notes.blocks[key] || !String(notes.blocks[key]).trim()) continue;
+        var idx = parseInt(key, 10);
+        if (isNaN(idx) || idx < 0 || idx >= segs.length) continue;
+        var seg = segs[idx];
+        var x = Math.round((seg.start / duration) * W);
+        _drawPin(ctx, x, 0, markerW, markerH, "rgba(33,150,243,0.95)");
+      }
+    }
+  }
+
+  /** Draw a small pin/triangle marker */
+  function _drawPin(ctx, x, y, w, h, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - w / 2, y + h);
+    ctx.lineTo(x + w / 2, y + h);
+    ctx.closePath();
+    ctx.fill();
+    // Small stem
+    ctx.fillRect(x - 0.5, y + h, 1, 4);
+    ctx.restore();
   }
 
   /** Fallback pseudo-waveform (text-length based) while real one loads */
@@ -480,6 +529,9 @@
       var h = Math.max(8, Math.min(H - 4, 10 + (textLen / 3)));
       ctx.fillRect(x0, (H - h) / 2, w, h);
     }
+
+    // Note markers on pseudo-waveform too
+    _drawNoteMarkers(canvas, segs, totalDur);
   }
 
   function _bindMapEvents(mapEl, canvas, segs, totalDur, playhead) {
@@ -603,6 +655,9 @@
     a.text = (a.text || "") + " " + (b.text || "");
     segs.splice(idx + 1, 1);
 
+    // Transfer notes: merge note from idx+1 into idx, reindex all above
+    _notesOnMerge(idx);
+
     if (CFG.setSegments) CFG.setSegments(segs);
     _changed();
     _afterRender();
@@ -630,9 +685,73 @@
       { start: midTime, end: seg.end, text: textB, speaker: seg.speaker || null }
     );
 
+    // Transfer notes: keep note on first half, shift indices above
+    _notesOnSplit(idx);
+
     if (CFG.setSegments) CFG.setSegments(segs);
     _changed();
     _afterRender();
+  }
+
+  /** On merge of idx and idx+1: combine notes, reindex higher blocks */
+  function _notesOnMerge(idx) {
+    if (!CFG || !CFG.getNotes || !CFG.setNotes) return;
+    var notes = CFG.getNotes();
+    if (!notes || !notes.blocks) return;
+
+    var blocks = notes.blocks;
+    var keyA = String(idx);
+    var keyB = String(idx + 1);
+    var noteA = blocks[keyA] || "";
+    var noteB = blocks[keyB] || "";
+
+    // Combine notes (if both exist, concatenate with newline)
+    var combined = "";
+    if (noteA && noteB) combined = noteA + "\n" + noteB;
+    else if (noteA) combined = noteA;
+    else if (noteB) combined = noteB;
+
+    // Build new blocks with reindexed keys (shift everything above idx+1 down by 1)
+    var newBlocks = {};
+    for (var key in blocks) {
+      if (!blocks.hasOwnProperty(key)) continue;
+      var k = parseInt(key, 10);
+      if (isNaN(k)) continue;
+      if (k === idx || k === idx + 1) continue; // handled separately
+      if (k > idx + 1) {
+        newBlocks[String(k - 1)] = blocks[key];
+      } else {
+        newBlocks[key] = blocks[key];
+      }
+    }
+    if (combined.trim()) newBlocks[keyA] = combined;
+
+    notes.blocks = newBlocks;
+    CFG.setNotes(notes);
+  }
+
+  /** On split of idx into idx and idx+1: keep note on first, shift higher up */
+  function _notesOnSplit(idx) {
+    if (!CFG || !CFG.getNotes || !CFG.setNotes) return;
+    var notes = CFG.getNotes();
+    if (!notes || !notes.blocks) return;
+
+    var blocks = notes.blocks;
+    // Build new blocks: everything > idx shifts up by 1
+    var newBlocks = {};
+    for (var key in blocks) {
+      if (!blocks.hasOwnProperty(key)) continue;
+      var k = parseInt(key, 10);
+      if (isNaN(k)) continue;
+      if (k > idx) {
+        newBlocks[String(k + 1)] = blocks[key];
+      } else {
+        newBlocks[key] = blocks[key];
+      }
+    }
+
+    notes.blocks = newBlocks;
+    CFG.setNotes(notes);
   }
 
   /* =========================================================

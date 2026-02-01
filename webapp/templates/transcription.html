@@ -916,32 +916,102 @@ function trHideNoteTooltip(){
 }
 
 function trOpenBlockNoteEditor(idx){
-  const note = TR.notes.blocks[idx] || "";
-  const newNote = prompt(`📝 Notatka do bloku #${idx}:\n(Zostaw puste aby usunąć)`, note);
-  
-  if(newNote === null) return; // Cancelled
-  
-  if(newNote.trim()){
-    TR.notes.blocks[idx] = newNote.trim();
-  } else {
-    delete TR.notes.blocks[idx];
-  }
-  
-  // Update icon
-  const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
-  if(segEl){
-    const icon = segEl.querySelector(".seg-note-icon");
-    if(icon){
-      if(trHasBlockNote(idx)){
-        icon.classList.add("has-note");
-      } else {
-        icon.classList.remove("has-note");
+  const currentNote = TR.notes.blocks[idx] || "";
+  _openNoteModal(idx, currentNote, function(newText) {
+    if(newText && newText.trim()){
+      TR.notes.blocks[idx] = newText.trim();
+    } else {
+      delete TR.notes.blocks[idx];
+    }
+    // Update icon
+    const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
+    if(segEl){
+      const icon = segEl.querySelector(".seg-note-icon");
+      if(icon){
+        if(trHasBlockNote(idx)) icon.classList.add("has-note");
+        else icon.classList.remove("has-note");
       }
     }
+    trRenderBlockNotesList();
+    scheduleAutoSave();
+  }, function() {
+    // delete
+    delete TR.notes.blocks[idx];
+    const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
+    if(segEl){
+      const icon = segEl.querySelector(".seg-note-icon");
+      if(icon) icon.classList.remove("has-note");
+    }
+    trRenderBlockNotesList();
+    scheduleAutoSave();
+  });
+}
+
+/** Styled note editor modal (replaces browser prompt) */
+function _openNoteModal(idx, currentText, onSave, onDelete) {
+  var existing = document.querySelector('.note-editor-overlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.className = 'note-editor-overlay';
+
+  var hasExisting = !!(currentText && currentText.trim());
+  var title = hasExisting ? 'Edytuj notatkę — Blok #' + idx : 'Nowa notatka — Blok #' + idx;
+
+  overlay.innerHTML =
+    '<div class="note-editor-modal">' +
+      '<div class="note-editor-header">' +
+        '<h3>' + title + '</h3>' +
+        '<button class="note-editor-close" title="Zamknij">&times;</button>' +
+      '</div>' +
+      '<div class="note-editor-body">' +
+        '<textarea id="_note_editor_ta" placeholder="Wpisz notatkę do bloku…">' +
+          (currentText || '').replace(/</g, '&lt;') +
+        '</textarea>' +
+        '<div class="note-editor-hint">Ctrl+Enter = zapisz</div>' +
+      '</div>' +
+      '<div class="note-editor-footer">' +
+        (hasExisting ? '<button class="note-btn note-btn-danger" data-action="delete">Usuń notatkę</button>' : '') +
+        '<button class="note-btn" data-action="cancel">Anuluj</button>' +
+        '<button class="note-btn note-btn-primary" data-action="save">Zapisz</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+
+  var ta = document.getElementById('_note_editor_ta');
+  if (ta) {
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
   }
-  
-  trRenderBlockNotesList();
-  scheduleAutoSave();
+
+  function close() { overlay.remove(); }
+  function save() {
+    var text = ta ? ta.value : '';
+    close();
+    if (onSave) onSave(text);
+  }
+
+  overlay.addEventListener('click', function(e) {
+    var action = e.target.getAttribute('data-action');
+    if (action === 'save') { save(); return; }
+    if (action === 'cancel') { close(); return; }
+    if (action === 'delete') {
+      close();
+      if (onDelete) onDelete();
+      return;
+    }
+    if (e.target === overlay || e.target.classList.contains('note-editor-close')) {
+      close();
+    }
+  });
+
+  if (ta) {
+    ta.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+    });
+  }
 }
 
 function trRenderBlockNotesList(){
@@ -984,17 +1054,17 @@ function trScrollToBlock(idx){
 }
 
 function trDeleteBlockNote(idx){
-  if(!confirm(`Usunąć notatkę do bloku #${idx}?`)) return;
   delete TR.notes.blocks[idx];
-  
+
   const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
   if(segEl){
     const icon = segEl.querySelector(".seg-note-icon");
     if(icon) icon.classList.remove("has-note");
   }
-  
+
   trRenderBlockNotesList();
   scheduleAutoSave();
+  if(typeof showToast === 'function') showToast('Notatka usunięta');
 }
 
 function trUpdateGlobalNote(){
@@ -1582,6 +1652,14 @@ window.trOpenBlockNoteEditor = trOpenBlockNoteEditor;
       stopHoverPlayback: function () { trStopPlayback(); },
       onChanged: function () {
         trSetRawTextarea();
+        scheduleAutoSave();
+      },
+      getNotes: function () { return TR.notes; },
+      setNotes: function (n) {
+        TR.notes = n;
+        trRenderBlockNotesList();
+        // Re-render to update note icons on segments
+        trRender();
         scheduleAutoSave();
       }
     });
