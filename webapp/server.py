@@ -506,6 +506,17 @@ class TaskManager:
                     self.system_log(f"Task cancel requested: {t.kind} (task_id={task_id})")
                 except Exception:
                     pass
+                # SIGKILL fallback if SIGTERM doesn't work within 5s
+                def _force_kill() -> None:
+                    try:
+                        p.wait(timeout=5)
+                    except Exception:
+                        try:
+                            p.kill()
+                            t.add_log("Process did not exit after SIGTERM, sent SIGKILL.")
+                        except Exception:
+                            pass
+                threading.Thread(target=_force_kill, daemon=True).start()
                 return True
             except Exception as e:
                 t.add_log(f"Task cancellation failed: {e}")
@@ -1412,6 +1423,9 @@ class GPUResourceManager:
                     # isolate GPU
                     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
                     env["AISTATE_GPU_ID"] = str(gpu_id)
+                elif device == "cpu":
+                    # Explicitly hide GPUs so workers don't accidentally use CUDA
+                    env["CUDA_VISIBLE_DEVICES"] = ""
 
                 TASKS.start_subprocess_with_id(
                     task_id=job.task_id,
@@ -1437,14 +1451,26 @@ class GPUResourceManager:
 
         def watch_finish() -> None:
             # Wait until task finishes, then free slot.
+            finished = False
             for _ in range(60 * 60 * 24):  # up to 24h
                 try:
                     st = TASKS.get(job.task_id).status
                     if st in ("done", "error"):
+                        finished = True
                         break
                 except Exception:
                     break
                 time.sleep(1.0)
+            if not finished:
+                try:
+                    t = TASKS.get(job.task_id)
+                    t.status = "error"
+                    t.error = "Task stuck — forcibly freed after 24h timeout"
+                    t.finished_at = now_iso()
+                    t.add_log("GPU RM: 24h watchdog timeout — slot released")
+                    app_log(f"GPU RM watchdog: task {job.task_id} timed out after 24h on {device}")
+                except Exception:
+                    pass
             self._mark_running(device, -1)
 
         threading.Thread(target=watch_finish, daemon=True).start()
@@ -1476,9 +1502,9 @@ class GPUResourceManager:
                             if j.status != "queued":
                                 continue
 
-                            # If GPUs exist, reserve CPU slots for explicit CPU-fallback jobs
-                            # (e.g., translation). This prevents GPU-heavy kinds from running
-                            # on CPU and stalling multi-user servers.
+                            # When GPUs exist, reserve CPU slots for lightweight jobs
+                            # (translation). GPU-heavy jobs (ASR, diarization) stay on GPU.
+                            # When NO GPU exists, allow everything on CPU.
                             if dev == "cpu" and self._cuda_available and self._gpus:
                                 k = str(j.kind)
                                 if not k.startswith("translate_"):
@@ -3466,11 +3492,19 @@ def api_export_project(project_id: str) -> Any:
     if root not in pdir.parents or not pdir.exists() or not pdir.is_dir():
         raise HTTPException(status_code=404, detail="Nie ma takiego projektu.")
 
+    _skip_suffixes = {".tmp", ".bak", ".pyc"}
+    _skip_dirs = {"__pycache__", ".cache"}
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
         for fp in pdir.rglob("*"):
-            if fp.is_file():
-                z.write(fp, arcname=str(fp.relative_to(pdir)))
+            if not fp.is_file():
+                continue
+            if fp.suffix.lower() in _skip_suffixes:
+                continue
+            if any(part in _skip_dirs for part in fp.relative_to(pdir).parts):
+                continue
+            z.write(fp, arcname=str(fp.relative_to(pdir)))
     buf.seek(0)
 
     return StreamingResponse(
@@ -3716,6 +3750,8 @@ def api_generate_transcription_report(project_id: str, format: str = "pdf", incl
             pass
         return FileResponse(str(out_path), filename=out_name)
     generate_pdf_report(data, logs=bool(include_logs), output_path=str(out_path))
+
+    _cleanup_old_reports(pdir, "transcription_report_")
     return FileResponse(str(out_path), filename=out_name)
 
 
@@ -4071,6 +4107,23 @@ def _collect_report_data(project_id: str, export_formats: List[str], include_log
     return data
 
 
+def _cleanup_old_reports(pdir: Path, prefix: str = "report_", keep: int = 10) -> None:
+    """Remove old report files, keeping the *keep* most recent per prefix."""
+    try:
+        candidates = sorted(
+            [f for f in pdir.iterdir() if f.is_file() and f.name.startswith(prefix)],
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+        for old in candidates[keep:]:
+            try:
+                old.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 @app.get("/api/projects/{project_id}/report")
 def api_generate_report(project_id: str, format: str = "pdf", include_logs: int = 0, include_notes: int = 0) -> Any:
     project_path(project_id)  # ensure exists
@@ -4109,6 +4162,9 @@ def api_generate_report(project_id: str, format: str = "pdf", include_logs: int 
             pass
         return FileResponse(str(out_path), filename=out_name)
     generate_pdf_report(data, logs=bool(include_logs), output_path=str(out_path))
+
+    # Trim old reports (keep last 10 per prefix)
+    _cleanup_old_reports(pdir, "report_")
     return FileResponse(str(out_path), filename=out_name)
 
 
