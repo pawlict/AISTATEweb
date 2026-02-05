@@ -401,7 +401,7 @@
     <!-- Lewa kolumna: Wynik transkrypcji -->
     <div>
       <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="tr.result.title">📄 Wynik transkrypcji</div>
-      <div class="small" style="margin-bottom:8px" data-i18n="hint.hover_to_play_edit">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+      <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
       <div id="tr_audio_player"></div>
       <div id="tr_blocks" class="blocklist" style="display:none"></div>
       <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…" data-i18n-placeholder="placeholder.result_here"></textarea>
@@ -1194,26 +1194,27 @@ function trRender(){
       timeDiv.innerHTML = `${trFormatTime(seg.start)} → ${trFormatTime(seg.end)}`;
     }
     timeDiv.appendChild(noteIcon);
-    
+
+    // Confidence badge (if available)
+    if(typeof seg.confidence === "number"){
+      const conf = seg.confidence;
+      const badge = document.createElement("span");
+      badge.className = "seg-confidence";
+      if(conf >= 80) badge.classList.add("conf-high");
+      else if(conf >= 50) badge.classList.add("conf-mid");
+      else badge.classList.add("conf-low");
+      badge.textContent = (conf >= 80 ? "✓" : conf >= 50 ? "?" : "⚠") + " " + conf + "%";
+      badge.title = `Pewność: ${conf}%` + (seg.no_speech ? ` • Szum: ${seg.no_speech}%` : "");
+      timeDiv.appendChild(badge);
+    }
+
     const textDiv = document.createElement("div");
     textDiv.className = "seg-text";
     textDiv.textContent = seg.text || "";
-    
+
     d.appendChild(timeDiv);
     d.appendChild(textDiv);
 
-    d.addEventListener("mouseenter", ()=>{
-      // Hover-play only when main player is NOT playing and no editor is open
-      if(!TR.edit.active && !(typeof segTools!=="undefined" && segTools.isMainPlaying())){
-        trPlaySegment(idx, true);
-      }
-    });
-    d.addEventListener("mouseleave", ()=>{
-      if(!TR.edit.active && !(typeof segTools!=="undefined" && segTools.isMainPlaying())){
-        trStopPlayback();
-      }
-    });
-    
     blocks.appendChild(d);
   });
   
