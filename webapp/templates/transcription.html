@@ -1401,7 +1401,9 @@ function onDoneTranscribe(j){
         start:Number(s.start)||0,
         end:Number(s.end)||0,
         speaker: s.speaker || null,
-        text:String(s.text||"").trim()
+        text:String(s.text||"").trim(),
+        confidence: typeof s.confidence === "number" ? s.confidence : null,
+        no_speech: typeof s.no_speech === "number" ? s.no_speech : null
       }));
       trRender();
     } else {
