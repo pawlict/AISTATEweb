@@ -213,6 +213,7 @@
   "label.diarization_model": "Model diaryzacji",
   "label.input_text": "Tekst wejściowy",
   "label.language": "Język",
+  "label.sound_detection": "🔊 Detekcja dźwięków",
   "label.method": "Metoda",
   "label.mode": "Tryb",
   "label.nemo_model": "Model NeMo",

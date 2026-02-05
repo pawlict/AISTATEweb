@@ -364,6 +364,19 @@
         </div>
       </div>
 
+      <!-- Sound Detection -->
+      <div class="analysis-format" id="tr_sound_detection_section" style="margin-top:8px">
+        <label class="pill"><input type="checkbox" id="tr_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection">🔊 Detekcja dźwięków</span></label>
+        <select class="input mini-select" id="tr_sound_detection_model" style="margin-left:6px;width:auto" disabled>
+          <option value="">-- wybierz --</option>
+          <option value="yamnet">YAMNet</option>
+          <option value="panns_cnn6">PANNs CNN6</option>
+          <option value="panns_cnn14">PANNs CNN14</option>
+          <option value="beats">BEATs</option>
+        </select>
+        <span class="small muted" id="tr_sound_detection_hint" style="margin-left:6px"></span>
+      </div>
+
       <!-- Report formats (multi-select) -->
       <div class="analysis-format" id="tr_report_formats">
         <label class="small" data-i18n="analysis.report">Raport</label>
@@ -1584,10 +1597,61 @@ window.trScrollToBlock = trScrollToBlock;
 window.trDeleteBlockNote = trDeleteBlockNote;
 window.trOpenBlockNoteEditor = trOpenBlockNoteEditor;
 
+// Sound Detection UI handling
+async function trInitSoundDetection(){
+  try{
+    const state = await api('/api/sound-detection/models_state');
+    const sel = document.getElementById('tr_sound_detection_model');
+    const hint = document.getElementById('tr_sound_detection_hint');
+    if(!sel) return;
+
+    let hasAny = false;
+    for(const opt of Array.from(sel.options)){
+      const v = opt.value;
+      if(!v) continue;
+      const installed = state && state[v];
+      if(installed){
+        hasAny = true;
+        opt.textContent = opt.textContent.replace(' (niezainstalowany)', '');
+      } else {
+        if(!opt.textContent.includes('(niezainstalowany)')){
+          opt.textContent = opt.textContent + ' (niezainstalowany)';
+        }
+      }
+    }
+
+    if(hint){
+      if(hasAny) hint.textContent = '';
+      else hint.textContent = 'Zainstaluj model w Ustawieniach ASR';
+    }
+  }catch(e){ console.warn('Sound detection init failed', e); }
+}
+
+function trBindSoundDetectionUI(){
+  const cb = document.getElementById('tr_sound_detection_enabled');
+  const sel = document.getElementById('tr_sound_detection_model');
+  if(!cb || !sel) return;
+
+  cb.addEventListener('change', ()=>{
+    sel.disabled = !cb.checked;
+    if(cb.checked && !sel.value){
+      // Auto-select first installed model
+      for(const opt of Array.from(sel.options)){
+        if(opt.value && !opt.textContent.includes('(niezainstalowany)')){
+          sel.value = opt.value;
+          break;
+        }
+      }
+    }
+  });
+}
+
 // Initialize
 (async()=>{
   await refreshCurrentProjectInfo();
   await trInitAsrSelectors();
+  await trInitSoundDetection();
+  trBindSoundDetectionUI();
 
   const btn = document.getElementById("tr_btn");
   const modelEl = document.getElementById("tr_model");
