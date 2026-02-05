@@ -203,6 +203,43 @@
           </div>
         </div>
 
+        <div class="hr"></div>
+
+        <!-- GROUP: Sound Detection -->
+        <div class="label" data-i18n="asr.group.sound_detection">🔊 Detekcja dźwięków tła</div>
+        <div class="small muted" data-i18n="asr.group.sound_detection_desc">Modele do wykrywania dźwięków w tle (szczekanie, kaszlenie, muzyka, TV itp.).</div>
+
+        <div class="hr"></div>
+
+        <!-- Sound Detection Models -->
+        <div class="asr-model-row">
+          <div class="asr-model-left">
+            <div class="label">Sound Detection</div>
+            <div class="small" id="asr_sound_detection_status">—</div>
+            <select id="asr_sound_detection_select" class="input" data-engine="sound_detection">
+              <option value="" data-i18n="settings.llm_select_placeholder">Wybierz model…</option>
+              <option value="yamnet">YAMNet (14 MB, szybki)</option>
+              <option value="panns_cnn6">PANNs CNN6 (20 MB, szybki)</option>
+              <option value="panns_cnn14">PANNs CNN14 (300 MB, dokładny)</option>
+              <option value="beats">BEATs (90 MB, najdokładniejszy)</option>
+            </select>
+
+            <div class="asr-install-row">
+              <button class="btn primary mini" type="button" id="asr_sound_detection_install_btn" data-engine="sound_detection">⬇️ <span data-i18n="asr.btn.install">Instaluj</span></button>
+              <span class="small muted" id="asr_sound_detection_inline">—</span>
+            </div>
+            <div class="small muted" style="margin-top:6px;">Wykrywa dźwięki tła: szczekanie psa, kaszlenie, muzyka, TV, syreny, kroki itp.</div>
+          </div>
+
+          <div class="asr-model-right">
+            <div class="asr-info-box" id="asr_info_box_sound_detection">
+              <div class="asr-info-title small">ℹ️ <span data-i18n="asr.model_info">Informacje o modelu</span> — Sound Detection</div>
+              <div class="small" id="asr_info_name_sound_detection">—</div>
+              <div id="asr_info_body_sound_detection" class="small muted" style="margin-top:6px;"></div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
     </div>

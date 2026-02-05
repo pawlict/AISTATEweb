@@ -79,6 +79,8 @@
   "asr.btn.predownload": "Download model",
   "asr.group.diarization": "🎤 Diarization",
   "asr.group.diarization_desc": "pyannote and NeMo diarization.",
+  "asr.group.sound_detection": "🔊 Background Sound Detection",
+  "asr.group.sound_detection_desc": "Models for detecting background sounds (barking, coughing, music, TV, etc.).",
   "asr.group.transcription": "📝 Transcription",
   "asr.group.transcription_desc": "Whisper and NeMo ASR (transcription models).",
   "asr.hint_logs": "Install/download logs are available in the Logs tab.",

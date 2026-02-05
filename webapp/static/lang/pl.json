@@ -79,6 +79,8 @@
   "asr.btn.predownload": "Pobierz model",
   "asr.group.diarization": "🎤 Diaryzacja",
   "asr.group.diarization_desc": "pyannote oraz NeMo diarization.",
+  "asr.group.sound_detection": "🔊 Detekcja dźwięków tła",
+  "asr.group.sound_detection_desc": "Modele do wykrywania dźwięków w tle (szczekanie, kaszlenie, muzyka, TV itp.).",
   "asr.group.transcription": "📝 Transkrypcja",
   "asr.group.transcription_desc": "Whisper i NeMo ASR (modele do transkrypcji).",
   "asr.hint_logs": "Logi pobierania/instalacji są w zakładce Logi.",

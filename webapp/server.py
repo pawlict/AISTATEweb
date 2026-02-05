@@ -2714,6 +2714,155 @@ def api_asr_predownload(payload: Dict[str, Any] = Body(...)) -> Any:
     return {"task_id": t.task_id}
 
 
+# ---------- API: Sound Detection models ----------
+
+SOUND_DETECTION_MODELS = {
+    "yamnet": {
+        "name": "YAMNet",
+        "size_mb": 14,
+        "classes": 521,
+        "framework": "tensorflow",
+        "speed": "fast",
+        "accuracy": "good",
+    },
+    "panns_cnn14": {
+        "name": "PANNs CNN14",
+        "size_mb": 300,
+        "classes": 527,
+        "framework": "pytorch",
+        "speed": "medium",
+        "accuracy": "high",
+    },
+    "panns_cnn6": {
+        "name": "PANNs CNN6",
+        "size_mb": 20,
+        "classes": 527,
+        "framework": "pytorch",
+        "speed": "fast",
+        "accuracy": "good",
+    },
+    "beats": {
+        "name": "BEATs",
+        "size_mb": 90,
+        "classes": 527,
+        "framework": "pytorch",
+        "speed": "slow",
+        "accuracy": "highest",
+    },
+}
+
+
+def _sound_detection_registry_path() -> Path:
+    return PROJECTS_DIR / "_global" / "sound_detection_models.json"
+
+
+def _read_sound_detection_registry() -> Dict[str, Any]:
+    p = _sound_detection_registry_path()
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _write_sound_detection_registry(data: Dict[str, Any]) -> None:
+    p = _sound_detection_registry_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def scan_sound_detection_models() -> Dict[str, bool]:
+    """Scan for installed sound detection models via marker files."""
+    cache_dir = ROOT / "backend" / "models_cache" / "sound_detection"
+    result = {}
+
+    for model_id in SOUND_DETECTION_MODELS:
+        marker = cache_dir / f"{model_id}.json"
+        result[model_id] = marker.exists()
+
+    # Persist to registry
+    reg = {"models": result, "last_scan": now_iso()}
+    _write_sound_detection_registry(reg)
+
+    return result
+
+
+@app.get("/api/sound-detection/status")
+def api_sound_detection_status() -> Any:
+    """Return dependency status for sound detection frameworks."""
+    return {
+        "tensorflow": _pkg_info("tensorflow"),
+        "tensorflow_hub": _pkg_info("tensorflow_hub"),
+        "panns_inference": _pkg_info("panns_inference"),
+        "transformers": _pkg_info("transformers"),
+    }
+
+
+@app.get("/api/sound-detection/models")
+def api_sound_detection_models() -> Any:
+    """Return available sound detection models with metadata."""
+    return SOUND_DETECTION_MODELS
+
+
+@app.get("/api/sound-detection/models_state")
+def api_sound_detection_models_state(refresh: int = 0) -> Any:
+    """Return cached model-state map for sound detection models."""
+    if refresh:
+        return scan_sound_detection_models()
+    reg = _read_sound_detection_registry()
+    if not reg or not reg.get("models"):
+        try:
+            return scan_sound_detection_models()
+        except Exception:
+            return {}
+    return reg.get("models", {})
+
+
+@app.post("/api/sound-detection/install")
+def api_sound_detection_install(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Install dependencies for a sound detection model."""
+    model_id = str(payload.get("model") or "").strip()
+    if model_id not in SOUND_DETECTION_MODELS:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model_id}")
+
+    worker = ROOT / "backend" / "sound_detection_worker.py"
+    require_existing_file(worker, "Brak sound_detection_worker.py")
+
+    cmd = [
+        os.environ.get("PYTHON", sys.executable),
+        str(worker),
+        "--action", "install",
+        "--model", model_id,
+    ]
+
+    app_log(f"Sound detection install requested: model={model_id}")
+    t = TASKS.start_subprocess(kind=f"sound_detection_install_{model_id}", project_id="-", cmd=cmd, cwd=ROOT)
+    return {"task_id": t.task_id}
+
+
+@app.post("/api/sound-detection/predownload")
+def api_sound_detection_predownload(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Download/cache a sound detection model."""
+    model_id = str(payload.get("model") or "").strip()
+    if model_id not in SOUND_DETECTION_MODELS:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model_id}")
+
+    worker = ROOT / "backend" / "sound_detection_worker.py"
+    require_existing_file(worker, "Brak sound_detection_worker.py")
+
+    cmd = [
+        os.environ.get("PYTHON", sys.executable),
+        str(worker),
+        "--action", "predownload",
+        "--model", model_id,
+    ]
+
+    app_log(f"Sound detection predownload requested: model={model_id}")
+    t = TASKS.start_subprocess(kind=f"sound_detection_predownload_{model_id}", project_id="-", cmd=cmd, cwd=ROOT)
+    return {"task_id": t.task_id}
+
+
 # ---------- API: NLLB translation models ----------
 
 
