@@ -1,4 +1,4 @@
-# AISTATEweb (3.2.2 beta)
+# AISTATEweb (3.2.3 beta)
 
 ![Version](https://img.shields.io/badge/Version-3.2.1%20beta-orange)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
@@ -253,11 +253,12 @@ Open in browser: http://127.0.0.1:8000
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
 
-## beta 3.2.2 (translation update)
+## beta 3.2.3 (translation update)
 - Added Translation module 
 - Added NLLB Settings page
 - Added the ability to change task priorities
 - Added Chat LLM
+- Background sound analysis
 
 ## beta 3.0 - 3.1
 - LLM Ollama modules for data analysis introduced
