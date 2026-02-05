@@ -213,7 +213,7 @@ function updateInstallButton(engine){
 }
 
 function updateAllInstallButtons(){
-  ['whisper','nemo','pyannote','nemo_diar'].forEach(updateInstallButton);
+  ['whisper','nemo','pyannote','nemo_diar','sound_detection'].forEach(updateInstallButton);
 }
 
 function getSelected(engine){
@@ -845,7 +845,7 @@ function renderInfo(engine, id){
 
 
 function renderAllInfos(){
-  ["whisper","nemo","pyannote","nemo_diar"].forEach(eng=>{
+  ["whisper","nemo","pyannote","nemo_diar","sound_detection"].forEach(eng=>{
     renderInfo(eng, getSelected(eng));
   });
 }
