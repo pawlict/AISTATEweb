@@ -9,6 +9,8 @@ function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
 let ASR_STATUS = null;
 let ASR_MODELS_STATE = null;
+let SOUND_DETECTION_STATUS = null;
+let SOUND_DETECTION_MODELS_STATE = null;
 let ASR_CURRENT_TASK_ID = null;
 let ASR_ACTIVE = { engine: "pyannote", id: "" };
 
@@ -87,30 +89,87 @@ async function refreshModelStates(force){
   }
 }
 
+async function refreshSoundDetectionStatus(){
+  try{
+    SOUND_DETECTION_STATUS = await api('/api/sound-detection/status');
+    const el = qs('asr_sound_detection_status');
+    if(el && SOUND_DETECTION_STATUS){
+      const tf = SOUND_DETECTION_STATUS.tensorflow;
+      const panns = SOUND_DETECTION_STATUS.panns_inference;
+      if((tf && tf.installed) || (panns && panns.installed)){
+        el.textContent = '✅ framework ready';
+      } else {
+        el.textContent = '❌ frameworks not installed';
+      }
+    }
+    return SOUND_DETECTION_STATUS;
+  }catch(e){
+    console.warn('Sound detection status failed', e);
+    return null;
+  }
+}
+
+async function refreshSoundDetectionModels(force){
+  try{
+    const url = force ? '/api/sound-detection/models_state?refresh=1' : '/api/sound-detection/models_state';
+    SOUND_DETECTION_MODELS_STATE = await api(url);
+    // Also refresh status
+    await refreshSoundDetectionStatus();
+    return SOUND_DETECTION_MODELS_STATE;
+  }catch(e){
+    console.warn('Sound detection models_state failed', e);
+    SOUND_DETECTION_MODELS_STATE = null;
+    return null;
+  }
+}
+
 function updateSelectLabels(engine){
   const map = {
     pyannote: 'asr_pyannote_select',
     whisper: 'asr_whisper_select',
     nemo: 'asr_nemo_select',
     nemo_diar: 'asr_nemo_diar_select',
+    sound_detection: 'asr_sound_detection_select',
   };
   const sel = qs(map[engine]);
   if(!sel) return;
-  const st = (ASR_MODELS_STATE && ASR_MODELS_STATE[engine]) ? ASR_MODELS_STATE[engine] : null;
+
+  // For sound_detection, use SOUND_DETECTION_MODELS_STATE
+  let st;
+  if(engine === 'sound_detection'){
+    st = SOUND_DETECTION_MODELS_STATE || null;
+  } else {
+    st = (ASR_MODELS_STATE && ASR_MODELS_STATE[engine]) ? ASR_MODELS_STATE[engine] : null;
+  }
+
   const suff = notInstalledSuffix();
   for(const opt of Array.from(sel.options || [])){
     const v = opt.value || '';
     if(!v) continue;
     const ok = st ? !!st[v] : false;
-    opt.textContent = v + (ok ? '' : suff);
+    // For sound_detection, keep the readable label but add suffix
+    if(engine === 'sound_detection'){
+      const baseLabel = opt.textContent.replace(suff, '').trim();
+      opt.textContent = baseLabel + (ok ? '' : suff);
+    } else {
+      opt.textContent = v + (ok ? '' : suff);
+    }
   }
 }
 
 function updateAllSelectLabels(){
-  ['whisper','nemo','pyannote','nemo_diar'].forEach(updateSelectLabels);
+  ['whisper','nemo','pyannote','nemo_diar','sound_detection'].forEach(updateSelectLabels);
 }
 
 function enginePkgInstalled(engine){
+  if(engine === 'sound_detection'){
+    // Sound detection models have their own deps - check if at least TF or PyTorch is available
+    if(!SOUND_DETECTION_STATUS) return false;
+    const tf = SOUND_DETECTION_STATUS.tensorflow;
+    const panns = SOUND_DETECTION_STATUS.panns_inference;
+    const transformers = SOUND_DETECTION_STATUS.transformers;
+    return !!((tf && tf.installed) || (panns && panns.installed) || (transformers && transformers.installed));
+  }
   if(!ASR_STATUS) return false;
   const key = (engine === 'nemo_diar') ? 'nemo' : engine;
   const info = ASR_STATUS[key];
@@ -119,6 +178,9 @@ function enginePkgInstalled(engine){
 
 function modelCached(engine, id){
   if(!id) return false;
+  if(engine === 'sound_detection'){
+    return !!(SOUND_DETECTION_MODELS_STATE && SOUND_DETECTION_MODELS_STATE[id]);
+  }
   const st = (ASR_MODELS_STATE && ASR_MODELS_STATE[engine]) ? ASR_MODELS_STATE[engine] : null;
   return !!(st && st[id]);
 }
@@ -129,6 +191,7 @@ function updateInstallButton(engine){
     whisper: 'asr_whisper_install_btn',
     nemo: 'asr_nemo_install_btn',
     nemo_diar: 'asr_nemo_diar_install_btn',
+    sound_detection: 'asr_sound_detection_install_btn',
   };
   const btn = qs(btnMap[engine]);
   if(!btn) return;
@@ -159,6 +222,7 @@ function getSelected(engine){
     whisper: "asr_whisper_select",
     nemo: "asr_nemo_select",
     nemo_diar: "asr_nemo_diar_select",
+    sound_detection: "asr_sound_detection_select",
   };
   const el = qs(map[engine]);
   return el ? (el.value || "") : "";
@@ -170,6 +234,7 @@ function setInline(engine, txt){
     whisper: "asr_whisper_inline",
     nemo: "asr_nemo_inline",
     nemo_diar: "asr_nemo_diar_inline",
+    sound_detection: "asr_sound_detection_inline",
   };
   const el = qs(map[engine]);
   if(el) el.textContent = txt || "—";
@@ -590,6 +655,101 @@ Blazing fast but less accurate than Transducer. Great for a quick
     "pyannote/speaker-diarization-community-1": { accuracy: {pl:"Średnia", en:"Medium"}, notes: {pl:"Community (często mniej dokładny, ale wygodny).", en:"Community (often less accurate, but convenient)."} },
     "pyannote/speaker-diarization": { accuracy: {pl:"Średnia/wysoka (legacy)", en:"Medium/high (legacy)"}, notes: {pl:"Starszy pipeline (2.x/legacy).", en:"Older pipeline (2.x/legacy)."} },
   },
+
+  // Sound Detection models
+  sound_detection: {
+    _default: {
+      functionality: {pl: "Detekcja dźwięków tła (szczekanie, kaszlenie, muzyka, TV itp.).", en: "Background sound detection (barking, coughing, music, TV, etc.)."},
+      accuracy: {pl: "Zależna od modelu.", en: "Model-dependent."},
+      offline: {pl: "✅ Tak (po pobraniu modelu).", en: "✅ Yes (after model download)."},
+      vram: "CPU",
+      min_gpu: "—",
+      optimal_gpu: "—",
+      ram: "4–8 GB",
+      disk: "~15–300 MB",
+      notes: {pl: "Działa na CPU, nie wymaga GPU.", en: "Runs on CPU, no GPU required."},
+    },
+    yamnet: {
+      accuracy: {pl: "Dobra (521 kategorii)", en: "Good (521 categories)"},
+      vram: "CPU only",
+      ram: "4 GB",
+      disk: "~14 MB",
+      notes: {pl: "Najszybszy i najlżejszy. Google TensorFlow.", en: "Fastest and lightest. Google TensorFlow."},
+      rich: {
+        model: "YAMNet",
+        framework: "TensorFlow",
+        classes: 521,
+        speed: {pl: "Bardzo szybki (~0.1s/s audio)", en: "Very fast (~0.1s/s audio)"},
+        use_cases_title: {pl: "Wykrywa m.in.:", en: "Detects:"},
+        use_cases: {
+          pl: ["Szczekanie psa, miauczenie kota", "Kaszlenie, kichanie, śmiech, płacz", "Muzyka, TV, radio", "Syreny, alarmy, telefon", "Kroki, drzwi, dzwonek"],
+          en: ["Dog barking, cat meowing", "Coughing, sneezing, laughter, crying", "Music, TV, radio", "Sirens, alarms, phone", "Footsteps, door, doorbell"]
+        },
+        recommended_title: {pl: "Rekomendacja:", en: "Recommendation:"},
+        recommended: {pl: "Najlepszy wybór na start. Lekki, szybki, wystarczająco dokładny.", en: "Best choice to start. Light, fast, accurate enough."}
+      }
+    },
+    panns_cnn6: {
+      accuracy: {pl: "Dobra (527 kategorii)", en: "Good (527 categories)"},
+      vram: "CPU only",
+      ram: "4 GB",
+      disk: "~20 MB",
+      notes: {pl: "Lekki wariant PANNs. PyTorch.", en: "Lightweight PANNs variant. PyTorch."},
+      rich: {
+        model: "PANNs CNN6",
+        framework: "PyTorch",
+        classes: 527,
+        speed: {pl: "Szybki (~0.15s/s audio)", en: "Fast (~0.15s/s audio)"},
+        use_cases_title: {pl: "Wykrywa m.in.:", en: "Detects:"},
+        use_cases: {
+          pl: ["Wszystko co YAMNet", "Lepsza dokładność dla muzyki", "Dźwięki środowiskowe"],
+          en: ["Everything YAMNet detects", "Better accuracy for music", "Environmental sounds"]
+        },
+        recommended_title: {pl: "Rekomendacja:", en: "Recommendation:"},
+        recommended: {pl: "Dobra alternatywa jeśli wolisz PyTorch.", en: "Good alternative if you prefer PyTorch."}
+      }
+    },
+    panns_cnn14: {
+      accuracy: {pl: "Wysoka (527 kategorii)", en: "High (527 categories)"},
+      vram: "CPU only",
+      ram: "8 GB",
+      disk: "~300 MB",
+      notes: {pl: "Pełny PANNs CNN14. Najdokładniejszy z PANNs.", en: "Full PANNs CNN14. Most accurate PANNs."},
+      rich: {
+        model: "PANNs CNN14",
+        framework: "PyTorch",
+        classes: 527,
+        speed: {pl: "Średni (~0.3s/s audio)", en: "Medium (~0.3s/s audio)"},
+        use_cases_title: {pl: "Wykrywa m.in.:", en: "Detects:"},
+        use_cases: {
+          pl: ["Wszystkie kategorie AudioSet", "Subtelne dźwięki tła", "Precyzyjna klasyfikacja"],
+          en: ["All AudioSet categories", "Subtle background sounds", "Precise classification"]
+        },
+        recommended_title: {pl: "Rekomendacja:", en: "Recommendation:"},
+        recommended: {pl: "Wybierz gdy potrzebujesz wyższej dokładności.", en: "Choose when you need higher accuracy."}
+      }
+    },
+    beats: {
+      accuracy: {pl: "Najwyższa (527 kategorii, SOTA)", en: "Highest (527 categories, SOTA)"},
+      vram: "CPU only",
+      ram: "8 GB",
+      disk: "~90 MB",
+      notes: {pl: "Microsoft BEATs. State-of-the-art 2023.", en: "Microsoft BEATs. State-of-the-art 2023."},
+      rich: {
+        model: "BEATs",
+        framework: "PyTorch (Transformers)",
+        classes: 527,
+        speed: {pl: "Wolniejszy (~0.5s/s audio)", en: "Slower (~0.5s/s audio)"},
+        use_cases_title: {pl: "Wykrywa m.in.:", en: "Detects:"},
+        use_cases: {
+          pl: ["Najbardziej wymagające scenariusze", "Subtelne różnice między dźwiękami", "Badania naukowe"],
+          en: ["Most demanding scenarios", "Subtle differences between sounds", "Scientific research"]
+        },
+        recommended_title: {pl: "Rekomendacja:", en: "Recommendation:"},
+        recommended: {pl: "Najdokładniejszy, ale wolniejszy. Dla zaawansowanych.", en: "Most accurate, but slower. For advanced users."}
+      }
+    }
+  },
 };
 
 function infoFor(engine, id){
@@ -602,6 +762,7 @@ function infoFor(engine, id){
   const namePrefix = (e === "pyannote") ? "pyannote"
     : (e === "nemo") ? "NeMo ASR"
     : (e === "nemo_diar") ? "NeMo Diarization"
+    : (e === "sound_detection") ? "Sound Detection"
     : "Whisper";
   return {
     name: `${namePrefix} — ${key || "—"}`
@@ -624,6 +785,7 @@ function boxIds(engine){
     whisper:  { name: "asr_info_name_whisper",  body: "asr_info_body_whisper",  warn: "asr_info_warning_whisper" },
     nemo:     { name: "asr_info_name_nemo",     body: "asr_info_body_nemo",     warn: "asr_info_warning_nemo" },
     nemo_diar:{ name: "asr_info_name_nemo_diar",body: "asr_info_body_nemo_diar",warn: "asr_info_warning_nemo_diar" },
+    sound_detection: { name: "asr_info_name_sound_detection", body: "asr_info_body_sound_detection", warn: null },
   };
   return map[String(engine||"").toLowerCase()] || null;
 }
@@ -769,6 +931,28 @@ async function ensureAndDownload(engine){
     return;
   }
 
+  // Special handling for sound_detection
+  if(engine === 'sound_detection'){
+    // 1) Install deps for the selected model
+    setInline(engine, "🔄 Instaluję zależności...");
+    const t1 = await runTask("/api/sound-detection/install", {model: id});
+    if(t1.status === "error"){
+      await refreshSoundDetectionModels(true);
+      return;
+    }
+
+    // 2) Download model
+    setInline(engine, "🔄 Pobieram model...");
+    await runTask("/api/sound-detection/predownload", {model: id});
+
+    // 3) Refresh
+    await refreshSoundDetectionModels(true);
+    updateAllSelectLabels();
+    updateAllInstallButtons();
+    renderAllInfos();
+    return;
+  }
+
   const st = await refreshStatus() || {};
   const compInfo = st[engine];
   const component = (engine === "nemo_diar") ? "nemo" : engine;
@@ -803,6 +987,7 @@ function bindUI(){
     qs("asr_whisper_select"),
     qs("asr_nemo_select"),
     qs("asr_nemo_diar_select"),
+    qs("asr_sound_detection_select"),
   ].filter(Boolean);
 
   selects.forEach(sel=>{
@@ -816,6 +1001,7 @@ function bindUI(){
     qs("asr_whisper_install_btn"),
     qs("asr_nemo_install_btn"),
     qs("asr_nemo_diar_install_btn"),
+    qs("asr_sound_detection_install_btn"),
   ].filter(Boolean);
 
   btns.forEach(btn=>{
@@ -837,9 +1023,10 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   await resumeAsrTaskIfAny();
   await refreshStatus();
   await refreshModelStates(true);
+  await refreshSoundDetectionModels(true);
   updateAllSelectLabels();
 
-  ["whisper","nemo","pyannote","nemo_diar"].forEach(updateEngine);
+  ["whisper","nemo","pyannote","nemo_diar","sound_detection"].forEach(updateEngine);
 
   // Default active: transcription group first
   setActive("whisper");

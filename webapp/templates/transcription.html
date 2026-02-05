@@ -364,6 +364,19 @@
         </div>
       </div>
 
+      <!-- Sound Detection -->
+      <div class="analysis-format" id="tr_sound_detection_section" style="margin-top:8px">
+        <label class="pill"><input type="checkbox" id="tr_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection">🔊 Detekcja dźwięków</span></label>
+        <select class="input mini-select" id="tr_sound_detection_model" style="margin-left:6px;width:auto" disabled>
+          <option value="">-- wybierz --</option>
+          <option value="yamnet">YAMNet</option>
+          <option value="panns_cnn6">PANNs CNN6</option>
+          <option value="panns_cnn14">PANNs CNN14</option>
+          <option value="beats">BEATs</option>
+        </select>
+        <span class="small muted" id="tr_sound_detection_hint" style="margin-left:6px"></span>
+      </div>
+
       <!-- Report formats (multi-select) -->
       <div class="analysis-format" id="tr_report_formats">
         <label class="small" data-i18n="analysis.report">Raport</label>
@@ -404,6 +417,8 @@
       <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
       <div id="tr_audio_player"></div>
       <div id="tr_blocks" class="blocklist" style="display:none"></div>
+      <!-- Sound events panel -->
+      <div id="tr_sound_events" class="sound-events-panel" style="display:none"></div>
       <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…" data-i18n-placeholder="placeholder.result_here"></textarea>
       <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
         ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
@@ -1389,11 +1404,11 @@ function onDoneTranscribe(j){
   if(j.result){
     const segs = (j.result.segments && Array.isArray(j.result.segments)) ? j.result.segments : [];
     if(segs.length){
-      TR.segments = segs.map(s=>({ 
-        start:Number(s.start)||0, 
-        end:Number(s.end)||0, 
+      TR.segments = segs.map(s=>({
+        start:Number(s.start)||0,
+        end:Number(s.end)||0,
         speaker: s.speaker || null,
-        text:String(s.text||"").trim() 
+        text:String(s.text||"").trim()
       }));
       trRender();
     } else {
@@ -1412,7 +1427,89 @@ function onDoneTranscribe(j){
       dl.style.display = "inline-flex";
     }
   }
+  // Load sound events if sound detection was enabled
+  trLoadSoundEvents();
 }
+
+// Sound events storage and display
+let TR_SOUND_EVENTS = [];
+
+async function trLoadSoundEvents(){
+  if(!AISTATE.projectId) return;
+  try{
+    const data = await api(`/api/projects/${AISTATE.projectId}/sound_events`);
+    TR_SOUND_EVENTS = data.events || [];
+    trRenderSoundEvents(data);
+  }catch(e){
+    console.log("No sound events:", e);
+    TR_SOUND_EVENTS = [];
+  }
+}
+
+function trRenderSoundEvents(data){
+  const container = document.getElementById("tr_sound_events");
+  if(!container) return;
+
+  const events = data.events || [];
+  if(!events.length){
+    container.innerHTML = '<div class="sound-events-empty" data-i18n="label.no_sound_events">Brak wykrytych dźwięków</div>';
+    container.style.display = "none";
+    return;
+  }
+
+  container.style.display = "block";
+
+  // Group events by type
+  const grouped = {};
+  events.forEach(e => {
+    const key = e.type || e.label || "unknown";
+    if(!grouped[key]) grouped[key] = [];
+    grouped[key].push(e);
+  });
+
+  let html = `<div class="sound-events-header">
+    <span data-i18n="label.detected_sounds">🔊 Wykryte dźwięki</span>
+    <span class="sound-events-model">(${data.model || "?"})</span>
+  </div>`;
+  html += '<div class="sound-events-list">';
+
+  for(const [type, items] of Object.entries(grouped)){
+    const count = items.length;
+    const avgConf = Math.round(items.reduce((s,e)=>s+e.confidence,0)/count*100);
+    html += `<div class="sound-event-tag" data-type="${type}" onclick="trFilterSoundEvents('${type}')">
+      <span class="sound-event-icon">${trGetSoundIcon(type)}</span>
+      <span class="sound-event-label">${type}</span>
+      <span class="sound-event-count">${count}x</span>
+      <span class="sound-event-conf">${avgConf}%</span>
+    </div>`;
+  }
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function trGetSoundIcon(type){
+  const icons = {
+    dog: "🐕", cat: "🐈", bird: "🐦",
+    cough: "🤧", sneeze: "🤧", laughter: "😂", crying: "😢", baby_cry: "👶",
+    speech: "🗣️", music: "🎵", singing: "🎤", tv: "📺", radio: "📻",
+    vehicle: "🚗", engine: "🔧", siren: "🚨", alarm: "🔔", bell: "🔔",
+    phone: "📞", door: "🚪", knock: "👊", footsteps: "👣",
+    wind: "💨", rain: "🌧️", thunder: "⛈️", water: "💧",
+    noise: "📢"
+  };
+  return icons[type] || "🔊";
+}
+
+function trFilterSoundEvents(type){
+  // Highlight segments that overlap with sound events of this type
+  const events = TR_SOUND_EVENTS.filter(e => (e.type || e.label) === type);
+  console.log(`Sound events of type "${type}":`, events);
+  // TODO: Scroll to/highlight segments, show on waveform
+}
+
+window.trLoadSoundEvents = trLoadSoundEvents;
+window.trFilterSoundEvents = trFilterSoundEvents;
 
 
 // ========== ASR engine/model selectors (installed-only) ==========
@@ -1558,6 +1655,15 @@ document.getElementById("tr_btn").addEventListener("click", async ()=>{
   const eng = (document.getElementById("tr_engine")?.value || "whisper");
   fd.append("asr_engine", eng);
   fd.append("model", document.getElementById("tr_model").value);
+
+  // Sound detection parameters
+  const sdCheckbox = document.getElementById("tr_sound_detection_enabled");
+  const sdModel = document.getElementById("tr_sound_detection_model");
+  if(sdCheckbox && sdCheckbox.checked && sdModel && sdModel.value){
+    fd.append("sound_detection_enabled", "1");
+    fd.append("sound_detection_model", sdModel.value);
+  }
+
   await startTask("tr", "/api/transcribe", fd, onDoneTranscribe);
 });
 
@@ -1584,10 +1690,61 @@ window.trScrollToBlock = trScrollToBlock;
 window.trDeleteBlockNote = trDeleteBlockNote;
 window.trOpenBlockNoteEditor = trOpenBlockNoteEditor;
 
+// Sound Detection UI handling
+async function trInitSoundDetection(){
+  try{
+    const state = await api('/api/sound-detection/models_state');
+    const sel = document.getElementById('tr_sound_detection_model');
+    const hint = document.getElementById('tr_sound_detection_hint');
+    if(!sel) return;
+
+    let hasAny = false;
+    for(const opt of Array.from(sel.options)){
+      const v = opt.value;
+      if(!v) continue;
+      const installed = state && state[v];
+      if(installed){
+        hasAny = true;
+        opt.textContent = opt.textContent.replace(' (niezainstalowany)', '');
+      } else {
+        if(!opt.textContent.includes('(niezainstalowany)')){
+          opt.textContent = opt.textContent + ' (niezainstalowany)';
+        }
+      }
+    }
+
+    if(hint){
+      if(hasAny) hint.textContent = '';
+      else hint.textContent = 'Zainstaluj model w Ustawieniach ASR';
+    }
+  }catch(e){ console.warn('Sound detection init failed', e); }
+}
+
+function trBindSoundDetectionUI(){
+  const cb = document.getElementById('tr_sound_detection_enabled');
+  const sel = document.getElementById('tr_sound_detection_model');
+  if(!cb || !sel) return;
+
+  cb.addEventListener('change', ()=>{
+    sel.disabled = !cb.checked;
+    if(cb.checked && !sel.value){
+      // Auto-select first installed model
+      for(const opt of Array.from(sel.options)){
+        if(opt.value && !opt.textContent.includes('(niezainstalowany)')){
+          sel.value = opt.value;
+          break;
+        }
+      }
+    }
+  });
+}
+
 // Initialize
 (async()=>{
   await refreshCurrentProjectInfo();
   await trInitAsrSelectors();
+  await trInitSoundDetection();
+  trBindSoundDetectionUI();
 
   const btn = document.getElementById("tr_btn");
   const modelEl = document.getElementById("tr_model");
@@ -1595,8 +1752,9 @@ window.trOpenBlockNoteEditor = trOpenBlockNoteEditor;
   
   if(AISTATE.projectId){
     await trLoadNotesFromProject();
+    await trLoadSoundEvents();
   }
-  
+
   await resumeTask("tr", onDoneTranscribe);
   
   try{

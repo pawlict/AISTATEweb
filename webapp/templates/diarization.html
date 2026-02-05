@@ -574,6 +574,19 @@
         <label class="pill" style="margin-left:6px"><input type="checkbox" id="di_include_notes" value="1"> Notatki</label>
       </div>
 
+      <!-- Sound Detection -->
+      <div class="analysis-format" id="di_sound_detection_section" style="margin-top:8px">
+        <label class="pill"><input type="checkbox" id="di_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection">🔊 Detekcja dźwięków</span></label>
+        <select class="input mini-select" id="di_sound_detection_model" style="margin-left:6px;width:auto" disabled>
+          <option value="">-- wybierz --</option>
+          <option value="yamnet">YAMNet</option>
+          <option value="panns_cnn6">PANNs CNN6</option>
+          <option value="panns_cnn14">PANNs CNN14</option>
+          <option value="beats">BEATs</option>
+        </select>
+        <span class="small muted" id="di_sound_detection_hint" style="margin-left:6px"></span>
+      </div>
+
       <button class="btn secondary" id="di_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()">🔍 <span data-i18n="btn.search">Szukaj</span></button>
 
       <button class="btn secondary" id="di_report_save_btn">💾 <span data-i18n="analysis.report_save">Zapisz</span></button>
@@ -652,6 +665,8 @@
         <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
         <div id="di_audio_player"></div>
         <div id="di_blocks" class="blocklist" style="display:none"></div>
+        <!-- Sound events panel -->
+        <div id="di_sound_events" class="sound-events-panel" style="display:none"></div>
         <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik..." data-i18n-placeholder="placeholder.result_here"></textarea>
         <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
           ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
@@ -2075,7 +2090,7 @@ function markSaved(){
 
 function onDoneDiarize(j){
   console.log('✅ Diaryzacja zakończona, przetwarzam wynik...');
-  
+
   if(j.result && j.result.text){
     const out = j.result.text;
     const outEl = document.getElementById("di_out");
@@ -2093,7 +2108,7 @@ function onDoneDiarize(j){
 
     console.log('🔍 Wykrywam mówców z wyniku...');
     const labels = extractSpeakerLabels(out);
-    
+
     if(labels.length) {
       console.log('✅ Znaleziono ' + labels.length + ' mówców:', labels);
       mergeSpeakerMap(labels);
@@ -2110,7 +2125,89 @@ function onDoneDiarize(j){
       setDownloadLink(j.project_id);
     }
   }
+  // Load sound events if sound detection was enabled
+  diLoadSoundEvents();
 }
+
+// Sound events storage and display for diarization
+let DI_SOUND_EVENTS = [];
+
+async function diLoadSoundEvents(){
+  if(!AISTATE.projectId) return;
+  try{
+    const data = await api(`/api/projects/${AISTATE.projectId}/sound_events`);
+    DI_SOUND_EVENTS = data.events || [];
+    diRenderSoundEvents(data);
+  }catch(e){
+    console.log("No sound events:", e);
+    DI_SOUND_EVENTS = [];
+  }
+}
+
+function diRenderSoundEvents(data){
+  const container = document.getElementById("di_sound_events");
+  if(!container) return;
+
+  const events = data.events || [];
+  if(!events.length){
+    container.innerHTML = '<div class="sound-events-empty" data-i18n="label.no_sound_events">Brak wykrytych dźwięków</div>';
+    container.style.display = "none";
+    return;
+  }
+
+  container.style.display = "block";
+
+  // Group events by type
+  const grouped = {};
+  events.forEach(e => {
+    const key = e.type || e.label || "unknown";
+    if(!grouped[key]) grouped[key] = [];
+    grouped[key].push(e);
+  });
+
+  let html = `<div class="sound-events-header">
+    <span data-i18n="label.detected_sounds">🔊 Wykryte dźwięki</span>
+    <span class="sound-events-model">(${data.model || "?"})</span>
+  </div>`;
+  html += '<div class="sound-events-list">';
+
+  for(const [type, items] of Object.entries(grouped)){
+    const count = items.length;
+    const avgConf = Math.round(items.reduce((s,e)=>s+e.confidence,0)/count*100);
+    html += `<div class="sound-event-tag" data-type="${type}" onclick="diFilterSoundEvents('${type}')">
+      <span class="sound-event-icon">${diGetSoundIcon(type)}</span>
+      <span class="sound-event-label">${type}</span>
+      <span class="sound-event-count">${count}x</span>
+      <span class="sound-event-conf">${avgConf}%</span>
+    </div>`;
+  }
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function diGetSoundIcon(type){
+  const icons = {
+    dog: "🐕", cat: "🐈", bird: "🐦",
+    cough: "🤧", sneeze: "🤧", laughter: "😂", crying: "😢", baby_cry: "👶",
+    speech: "🗣️", music: "🎵", singing: "🎤", tv: "📺", radio: "📻",
+    vehicle: "🚗", engine: "🔧", siren: "🚨", alarm: "🔔", bell: "🔔",
+    phone: "📞", door: "🚪", knock: "👊", footsteps: "👣",
+    wind: "💨", rain: "🌧️", thunder: "⛈️", water: "💧",
+    noise: "📢"
+  };
+  return icons[type] || "🔊";
+}
+
+function diFilterSoundEvents(type){
+  // Highlight segments that overlap with sound events of this type
+  const events = DI_SOUND_EVENTS.filter(e => (e.type || e.label) === type);
+  console.log(`Sound events of type "${type}":`, events);
+  // TODO: Scroll to/highlight segments, show on waveform
+}
+
+window.diLoadSoundEvents = diLoadSoundEvents;
+window.diFilterSoundEvents = diFilterSoundEvents;
 
 
 function diPickDefaultAsrEngine(prefer = "whisper"){
@@ -2501,6 +2598,14 @@ async function diStartDiarize(){
       fd.append("model", (document.getElementById("di_model") || {}).value || "");
     }
 
+    // Sound detection parameters
+    const sdCheckbox = document.getElementById("di_sound_detection_enabled");
+    const sdModel = document.getElementById("di_sound_detection_model");
+    if(sdCheckbox && sdCheckbox.checked && sdModel && sdModel.value){
+      fd.append("sound_detection_enabled", "1");
+      fd.append("sound_detection_model", sdModel.value);
+    }
+
     await startTask("di", "/api/diarize_voice", fd, onDoneDiarize);
   } else {
     const text = document.getElementById("di_text_in").value || "";
@@ -2617,8 +2722,59 @@ window.diBuildRawText = diBuildRawText;
 window.parseDiarizedText = parseDiarizedText;
 window.diStopPlayback = diStopPlayback;
 
+// Sound Detection UI handling
+async function diInitSoundDetection(){
+  try{
+    const state = await api('/api/sound-detection/models_state');
+    const sel = document.getElementById('di_sound_detection_model');
+    const hint = document.getElementById('di_sound_detection_hint');
+    if(!sel) return;
+
+    let hasAny = false;
+    for(const opt of Array.from(sel.options)){
+      const v = opt.value;
+      if(!v) continue;
+      const installed = state && state[v];
+      if(installed){
+        hasAny = true;
+        opt.textContent = opt.textContent.replace(' (niezainstalowany)', '');
+      } else {
+        if(!opt.textContent.includes('(niezainstalowany)')){
+          opt.textContent = opt.textContent + ' (niezainstalowany)';
+        }
+      }
+    }
+
+    if(hint){
+      if(hasAny) hint.textContent = '';
+      else hint.textContent = 'Zainstaluj model w Ustawieniach ASR';
+    }
+  }catch(e){ console.warn('Sound detection init failed', e); }
+}
+
+function diBindSoundDetectionUI(){
+  const cb = document.getElementById('di_sound_detection_enabled');
+  const sel = document.getElementById('di_sound_detection_model');
+  if(!cb || !sel) return;
+
+  cb.addEventListener('change', function(){
+    sel.disabled = !cb.checked;
+    if(cb.checked && !sel.value){
+      // Auto-select first installed model
+      for(const opt of Array.from(sel.options)){
+        if(opt.value && !opt.textContent.includes('(niezainstalowany)')){
+          sel.value = opt.value;
+          break;
+        }
+      }
+    }
+  });
+}
+
 (async function(){
   await updateAudioState();
+  await diInitSoundDetection();
+  diBindSoundDetectionUI();
   if(AISTATE.projectId){
     setupDraftAutosave(AISTATE.projectId);
     await restoreOutputs(AISTATE.projectId);
@@ -2629,6 +2785,9 @@ window.diStopPlayback = diStopPlayback;
     if (!DI.notes.global && Object.keys(DI.notes.blocks).length === 0) {
       loadNotesFromDraft();
     }
+
+    // Load sound events if previously detected
+    await diLoadSoundEvents();
   }
   await resumeTask("di", onDoneDiarize);
 
