@@ -3763,6 +3763,37 @@ def api_get_notes_transcription(project_id: str) -> Any:
     return notes
 
 
+@app.get("/api/projects/{project_id}/sound_events")
+def api_get_sound_events(project_id: str) -> Any:
+    """Get detected sound events from project.
+
+    Returns:
+    {
+      "events": [
+        {"start": 12.5, "end": 13.1, "type": "dog", "label": "Dog bark", "confidence": 0.87},
+        ...
+      ],
+      "model": "yamnet",
+      "detected_at": "2024-01-15 10:30:00"
+    }
+    """
+    proj_dir = project_path(project_id)
+    events_file = proj_dir / "sound_events.json"
+
+    if not events_file.exists():
+        return {"events": [], "model": None, "detected_at": None}
+
+    try:
+        data = json.loads(events_file.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            # Old format: just list of events
+            return {"events": data, "model": None, "detected_at": None}
+        return data
+    except Exception as e:
+        app_log(f"Error reading sound events: {e}")
+        return {"events": [], "model": None, "detected_at": None}
+
+
 @app.post("/api/projects/{project_id}/notes/diarization")
 def api_save_notes_diarization(project_id: str, request: Request) -> Any:
     """Save diarization-specific notes to project (global + per-block).
@@ -5853,6 +5884,44 @@ async def api_analysis_save(payload: Dict[str, Any] = Body(...)) -> Any:
 
 # ---------- API: transcribe / diarize ----------
 
+def _start_sound_detection(project_id: str, audio_path: str, model_id: str) -> Optional[str]:
+    """Start sound detection as a separate CPU task (runs in parallel with transcription).
+
+    Returns task_id or None if model not installed.
+    """
+    # Check if model is installed
+    reg = _read_sound_detection_registry()
+    model_state = reg.get(model_id, {})
+    if not model_state.get("downloaded"):
+        app_log(f"Sound detection skipped: model '{model_id}' not installed")
+        return None
+
+    worker = ROOT / "backend" / "sound_detection_worker.py"
+    if not worker.exists():
+        app_log(f"Sound detection skipped: worker not found at {worker}")
+        return None
+
+    # Output file in project folder
+    proj_dir = project_path(project_id)
+    output_file = proj_dir / "sound_events.json"
+
+    cmd = [
+        os.environ.get("PYTHON", __import__("sys").executable),
+        str(worker),
+        "--action", "detect",
+        "--model", model_id,
+        "--audio", audio_path,
+        "--output", str(output_file),
+        "--threshold", "0.3",
+    ]
+
+    app_log(f"Sound detection requested: project_id={project_id}, model={model_id}")
+
+    # Always run on CPU (not GPU_RM) - these models are lightweight
+    t = TASKS.start_subprocess(kind="sound_detection", project_id=project_id, cmd=cmd, cwd=ROOT)
+    return t.task_id
+
+
 @app.post("/api/transcribe")
 async def api_transcribe(
     project_id: str = Form(""),
@@ -5860,6 +5929,8 @@ async def api_transcribe(
     model: str = Form("large-v3"),
     asr_engine: str = Form("whisper"),
     audio: Optional[UploadFile] = File(None),
+    sound_detection_enabled: int = Form(0),
+    sound_detection_model: str = Form(""),
 ) -> Any:
     project_id = ensure_project(project_id or None)
     if audio is not None:
@@ -5889,7 +5960,13 @@ async def api_transcribe(
         t = GPU_RM.enqueue_subprocess(kind="transcribe", project_id=project_id, cmd=cmd, cwd=ROOT)
     else:
         t = TASKS.start_subprocess(kind="transcribe", project_id=project_id, cmd=cmd, cwd=ROOT)
-    return {"task_id": t.task_id, "project_id": project_id}
+
+    # Run sound detection in parallel (on CPU) if enabled
+    sound_task_id = None
+    if sound_detection_enabled and sound_detection_model:
+        sound_task_id = _start_sound_detection(project_id, str(audio_path), sound_detection_model)
+
+    return {"task_id": t.task_id, "project_id": project_id, "sound_detection_task_id": sound_task_id}
 
 
 @app.post("/api/diarize_voice")
@@ -5901,6 +5978,8 @@ async def api_diarize_voice(
     model: str = Form("large-v3"),
     asr_engine: str = Form("whisper"),
     audio: Optional[UploadFile] = File(None),
+    sound_detection_enabled: int = Form(0),
+    sound_detection_model: str = Form(""),
 ) -> Any:
     """Diarize voice (audio) using the selected diarization engine.
 
@@ -5983,7 +6062,13 @@ async def api_diarize_voice(
         t = GPU_RM.enqueue_subprocess(kind="diarize_voice", project_id=project_id, cmd=cmd, cwd=ROOT)
     else:
         t = TASKS.start_subprocess(kind="diarize_voice", project_id=project_id, cmd=cmd, cwd=ROOT)
-    return {"task_id": t.task_id, "project_id": project_id}
+
+    # Run sound detection in parallel (on CPU) if enabled
+    sound_task_id = None
+    if sound_detection_enabled and sound_detection_model:
+        sound_task_id = _start_sound_detection(project_id, str(audio_path), sound_detection_model)
+
+    return {"task_id": t.task_id, "project_id": project_id, "sound_detection_task_id": sound_task_id}
 
 
 @app.post("/api/diarize_text")

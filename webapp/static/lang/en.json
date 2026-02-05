@@ -214,6 +214,8 @@
   "label.input_text": "Input text",
   "label.language": "Language",
   "label.sound_detection": "🔊 Sound detection",
+  "label.detected_sounds": "🔊 Detected sounds",
+  "label.no_sound_events": "No sounds detected",
   "label.method": "Method",
   "label.mode": "Mode",
   "label.nemo_model": "NeMo model",

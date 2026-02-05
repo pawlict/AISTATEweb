@@ -505,8 +505,17 @@ def main():
             _log("--audio required for detect action")
             sys.exit(1)
 
-        result = detect_sounds(args.audio, args.model, args.threshold)
+        events = detect_sounds(args.audio, args.model, args.threshold)
         success = True
+
+        # Build output with metadata
+        result = {
+            "events": events,
+            "model": args.model,
+            "detected_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "threshold": args.threshold,
+            "audio_file": os.path.basename(args.audio),
+        }
 
         if args.output:
             Path(args.output).write_text(json.dumps(result, indent=2, ensure_ascii=False))
