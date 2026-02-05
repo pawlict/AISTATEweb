@@ -368,13 +368,7 @@
       <div class="analysis-format" id="tr_sound_detection_section" style="margin-top:8px">
         <label class="pill"><input type="checkbox" id="tr_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection">🔊 Detekcja dźwięków</span></label>
         <select class="input mini-select" id="tr_sound_detection_model" style="margin-left:6px;width:auto" disabled>
-          <option value="">-- wybierz --</option>
-          <option value="yamnet">YAMNet</option>
-          <option value="panns_cnn6">PANNs CNN6</option>
-          <option value="panns_cnn14">PANNs CNN14</option>
-          <option value="beats">BEATs</option>
         </select>
-        <span class="small muted" id="tr_sound_detection_hint" style="margin-left:6px"></span>
       </div>
 
       <!-- Report formats (multi-select) -->
@@ -384,11 +378,10 @@
         <label class="pill"><input type="checkbox" name="tr_report_fmt" value="doc"> DOC</label>
         <label class="pill"><input type="checkbox" name="tr_report_fmt" value="txt"> TXT</label>
         <label class="pill" style="margin-left:6px"><input type="checkbox" id="tr_include_notes" value="1"> Notatki</label>
+        <button class="btn secondary" id="tr_report_save_btn" style="margin-left:8px">💾 <span data-i18n="analysis.report_save">Zapisz</span></button>
       </div>
 
       <button class="btn secondary" id="tr_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()">🔍 <span data-i18n="btn.search">Szukaj</span></button>
-
-      <button class="btn secondary" id="tr_report_save_btn">💾 <span data-i18n="analysis.report_save">Zapisz</span></button>
 
       <!-- Optional: direct transcript download link (kept for compatibility) -->
       <a class="btn secondary" id="tr_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
@@ -1691,31 +1684,37 @@ window.trDeleteBlockNote = trDeleteBlockNote;
 window.trOpenBlockNoteEditor = trOpenBlockNoteEditor;
 
 // Sound Detection UI handling
+const SOUND_MODELS_INFO = {
+  yamnet: "YAMNet",
+  panns_cnn6: "PANNs CNN6",
+  panns_cnn14: "PANNs CNN14",
+  beats: "BEATs"
+};
+
 async function trInitSoundDetection(){
   try{
     const state = await api('/api/sound-detection/models_state');
     const sel = document.getElementById('tr_sound_detection_model');
-    const hint = document.getElementById('tr_sound_detection_hint');
+    const section = document.getElementById('tr_sound_detection_section');
     if(!sel) return;
 
+    // Clear and populate with only installed models
+    sel.innerHTML = '';
     let hasAny = false;
-    for(const opt of Array.from(sel.options)){
-      const v = opt.value;
-      if(!v) continue;
-      const installed = state && state[v];
-      if(installed){
+
+    for(const [id, name] of Object.entries(SOUND_MODELS_INFO)){
+      if(state && state[id]){
         hasAny = true;
-        opt.textContent = opt.textContent.replace(' (niezainstalowany)', '');
-      } else {
-        if(!opt.textContent.includes('(niezainstalowany)')){
-          opt.textContent = opt.textContent + ' (niezainstalowany)';
-        }
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = name;
+        sel.appendChild(opt);
       }
     }
 
-    if(hint){
-      if(hasAny) hint.textContent = '';
-      else hint.textContent = 'Zainstaluj model w Ustawieniach ASR';
+    // Hide section if no models installed
+    if(section){
+      section.style.display = hasAny ? '' : 'none';
     }
   }catch(e){ console.warn('Sound detection init failed', e); }
 }
@@ -1727,14 +1726,8 @@ function trBindSoundDetectionUI(){
 
   cb.addEventListener('change', ()=>{
     sel.disabled = !cb.checked;
-    if(cb.checked && !sel.value){
-      // Auto-select first installed model
-      for(const opt of Array.from(sel.options)){
-        if(opt.value && !opt.textContent.includes('(niezainstalowany)')){
-          sel.value = opt.value;
-          break;
-        }
-      }
+    if(cb.checked && !sel.value && sel.options.length > 0){
+      sel.value = sel.options[0].value;
     }
   });
 }
