@@ -2822,45 +2822,75 @@ def api_sound_detection_models_state(refresh: int = 0) -> Any:
 @app.post("/api/sound-detection/install")
 def api_sound_detection_install(payload: Dict[str, Any] = Body(...)) -> Any:
     """Install dependencies for a sound detection model."""
-    model_id = str(payload.get("model") or "").strip()
-    if model_id not in SOUND_DETECTION_MODELS:
-        raise HTTPException(status_code=400, detail=f"Unknown model: {model_id}")
+    try:
+        model_id = str(payload.get("model") or "").strip()
+        app_log(f"Sound detection install requested: model='{model_id}'")
 
-    worker = ROOT / "backend" / "sound_detection_worker.py"
-    require_existing_file(worker, "Brak sound_detection_worker.py")
+        if not model_id:
+            raise HTTPException(status_code=400, detail="Nie podano modelu. Wybierz model z listy.")
 
-    cmd = [
-        os.environ.get("PYTHON", sys.executable),
-        str(worker),
-        "--action", "install",
-        "--model", model_id,
-    ]
+        if model_id not in SOUND_DETECTION_MODELS:
+            raise HTTPException(status_code=400, detail=f"Nieznany model: {model_id}")
 
-    app_log(f"Sound detection install requested: model={model_id}")
-    t = TASKS.start_subprocess(kind=f"sound_detection_install_{model_id}", project_id="-", cmd=cmd, cwd=ROOT)
-    return {"task_id": t.task_id}
+        worker = ROOT / "backend" / "sound_detection_worker.py"
+        if not worker.exists():
+            app_log(f"Worker not found: {worker}")
+            raise HTTPException(status_code=500, detail="Brak pliku sound_detection_worker.py")
+
+        cmd = [
+            os.environ.get("PYTHON", sys.executable),
+            str(worker),
+            "--action", "install",
+            "--model", model_id,
+        ]
+
+        app_log(f"Starting sound detection install task: cmd={cmd}")
+        t = TASKS.start_subprocess(kind=f"sound_detection_install_{model_id}", project_id="-", cmd=cmd, cwd=ROOT)
+        app_log(f"Sound detection install task started: task_id={t.task_id}")
+        return {"task_id": t.task_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"Sound detection install error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd instalacji: {e}")
 
 
 @app.post("/api/sound-detection/predownload")
 def api_sound_detection_predownload(payload: Dict[str, Any] = Body(...)) -> Any:
     """Download/cache a sound detection model."""
-    model_id = str(payload.get("model") or "").strip()
-    if model_id not in SOUND_DETECTION_MODELS:
-        raise HTTPException(status_code=400, detail=f"Unknown model: {model_id}")
+    try:
+        model_id = str(payload.get("model") or "").strip()
+        app_log(f"Sound detection predownload requested: model='{model_id}'")
 
-    worker = ROOT / "backend" / "sound_detection_worker.py"
-    require_existing_file(worker, "Brak sound_detection_worker.py")
+        if not model_id:
+            raise HTTPException(status_code=400, detail="Nie podano modelu. Wybierz model z listy.")
 
-    cmd = [
-        os.environ.get("PYTHON", sys.executable),
-        str(worker),
-        "--action", "predownload",
-        "--model", model_id,
-    ]
+        if model_id not in SOUND_DETECTION_MODELS:
+            raise HTTPException(status_code=400, detail=f"Nieznany model: {model_id}")
 
-    app_log(f"Sound detection predownload requested: model={model_id}")
-    t = TASKS.start_subprocess(kind=f"sound_detection_predownload_{model_id}", project_id="-", cmd=cmd, cwd=ROOT)
-    return {"task_id": t.task_id}
+        worker = ROOT / "backend" / "sound_detection_worker.py"
+        if not worker.exists():
+            app_log(f"Worker not found: {worker}")
+            raise HTTPException(status_code=500, detail="Brak pliku sound_detection_worker.py")
+
+        cmd = [
+            os.environ.get("PYTHON", sys.executable),
+            str(worker),
+            "--action", "predownload",
+            "--model", model_id,
+        ]
+
+        app_log(f"Starting sound detection predownload task: cmd={cmd}")
+        t = TASKS.start_subprocess(kind=f"sound_detection_predownload_{model_id}", project_id="-", cmd=cmd, cwd=ROOT)
+        app_log(f"Sound detection predownload task started: task_id={t.task_id}")
+        return {"task_id": t.task_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"Sound detection predownload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd pobierania modelu: {e}")
 
 
 # ---------- API: NLLB translation models ----------
