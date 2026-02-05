@@ -365,6 +365,20 @@ textarea{min-height:220px; resize:vertical}
 .seg-speaker{font-weight:800; margin-right:6px}
 .seg-text{white-space:pre-wrap; line-height:1.35}
 
+/* Confidence badge */
+.seg-confidence{
+  display:inline-block;
+  font-size:10px;
+  padding:2px 6px;
+  border-radius:8px;
+  margin-left:8px;
+  font-weight:600;
+  vertical-align:middle;
+}
+.seg-confidence.conf-high{background:#d4edda; color:#155724}
+.seg-confidence.conf-mid{background:#fff3cd; color:#856404}
+.seg-confidence.conf-low{background:#f8d7da; color:#721c24}
+
 .modal{
   position:fixed;
   inset:0;

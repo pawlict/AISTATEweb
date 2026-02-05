@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import re
+import math
 import tempfile
 import subprocess
 
@@ -1213,7 +1214,15 @@ def whisper_transcribe(audio_path: str, model: str, language: str, log_cb=None, 
         t = (seg.get("text") or "").strip()
         if not t:
             continue
-        segments_out.append({"start": s0, "end": s1, "text": t})
+        # Confidence: convert avg_logprob to 0-100% (exp of log-prob, clamped)
+        avg_logprob = seg.get("avg_logprob", 0.0)
+        confidence = max(0, min(100, int(math.exp(avg_logprob) * 100)))
+        no_speech = round(seg.get("no_speech_prob", 0.0) * 100)
+        segments_out.append({
+            "start": s0, "end": s1, "text": t,
+            "confidence": confidence,
+            "no_speech": no_speech
+        })
         lines.append(f"[{_fmt_ts(s0)} - {_fmt_ts(s1)}] {t}")
     text_ts = "\n".join(lines).strip() if lines else text
 

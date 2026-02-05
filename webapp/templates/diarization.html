@@ -6,54 +6,67 @@
     border-radius: 8px;
     padding: 16px;
     margin-top: 10px;
-  }
-  
-  .speaker-mapping-row {
     display: grid;
-    grid-template-columns: 140px 1fr 80px;
-    gap: 12px;
-    align-items: center;
-    margin-bottom: 10px;
+    gap: 10px;
+    grid-template-columns: 1fr;
+  }
+  /* Adaptive columns based on speaker count (set via JS) */
+  .speaker-mapping-container.cols-2 { grid-template-columns: 1fr 1fr; }
+  .speaker-mapping-container.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 900px) {
+    .speaker-mapping-container.cols-2,
+    .speaker-mapping-container.cols-3 { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    .speaker-mapping-container.cols-2,
+    .speaker-mapping-container.cols-3 { grid-template-columns: 1fr; }
+  }
+
+  .speaker-mapping-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     background: white;
-    padding: 10px 14px;
+    padding: 10px 12px;
     border-radius: 6px;
-    border: 1px solid #e0e0e0;
+    border: 2px solid #e0e0e0;
+    transition: border-color 0.2s, box-shadow 0.2s;
   }
-  
+
   .speaker-mapping-row:hover {
-    border-color: #2196F3;
-    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
-  
+
   .speaker-label {
     font-family: ui-monospace, monospace;
-    font-size: 13px;
-    font-weight: 600;
-    color: #555;
-    background: #f0f0f0;
-    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #333;
+    padding: 4px 8px;
     border-radius: 4px;
     text-align: center;
   }
-  
+
   .speaker-input {
-    padding: 8px 12px;
+    padding: 8px 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 14px;
     transition: all 0.2s;
+    width: 100%;
+    box-sizing: border-box;
   }
-  
+
   .speaker-input:focus {
     outline: none;
     border-color: #2196F3;
     box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
   }
-  
+
   .speaker-count {
-    font-size: 12px;
-    color: #888;
-    text-align: right;
+    font-size: 11px;
+    color: #666;
+    text-align: center;
   }
   
   .mapping-empty {
@@ -636,7 +649,7 @@
       <!-- Left: diarization result -->
       <div>
         <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.result.title">📄 Wynik diaryzacji</div>
-        <div class="small" style="margin-bottom:8px" data-i18n="hint.hover_to_play_edit">Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.</div>
+        <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
         <div id="di_audio_player"></div>
         <div id="di_blocks" class="blocklist" style="display:none"></div>
         <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik..." data-i18n-placeholder="placeholder.result_here"></textarea>
@@ -1591,6 +1604,23 @@ function getSpeakerColor(speaker){
   return DI.speakerColors[speaker];
 }
 
+// Get border color for speaker (darker versions of pastel palette)
+function getComputedColorForSpeaker(idx){
+  const borderColors = [
+    '#90CAF9', // Blue
+    '#CE93D8', // Purple
+    '#A5D6A7', // Green
+    '#FFCC80', // Orange
+    '#F48FB1', // Pink
+    '#C5E1A5', // Lime
+    '#80CBC4', // Teal
+    '#FFF176', // Yellow
+    '#EF9A9A', // Red
+    '#B39DDB'  // Deep Purple
+  ];
+  return borderColors[idx % borderColors.length];
+}
+
 // Build raw text from segments
 function diBuildRawText(){
   if(!DI.segments || !DI.segments.length){
@@ -1662,18 +1692,6 @@ function diRender(){
     d.appendChild(timeDiv);
     d.appendChild(textDiv);
 
-    d.addEventListener("mouseenter", function(){
-      // Hover-play only when main player is NOT playing and no editor is open
-      if(!DI.edit.active && !(typeof segTools!=="undefined" && segTools.isMainPlaying())){
-        diPlaySegment(idx, true);
-      }
-    });
-    d.addEventListener("mouseleave", function(){
-      if(!DI.edit.active && !(typeof segTools!=="undefined" && segTools.isMainPlaying())){
-        diStopPlayback();
-      }
-    });
-    
     blocks.appendChild(d);
   });
 
@@ -1732,40 +1750,50 @@ function showToast(message, duration){
 function renderSpeakerMappingUI(labels, outputText){
   const container = document.getElementById('speaker_mapping_ui');
   if(!container) return;
-  
+
   if(!labels || labels.length === 0){
     container.innerHTML = '<div class="mapping-empty">Wykonaj diaryzację aby wykryć mówców 🎤</div>';
+    container.classList.remove('cols-2', 'cols-3');
     return;
   }
-  
+
   let currentMapping = {};
   try{
     const raw = document.getElementById('di_speaker_map').value || '';
     if(raw.trim()) currentMapping = JSON.parse(raw);
   }catch(e){}
-  
+
   container.innerHTML = '';
-  
-  labels.forEach(function(label){
+
+  // Adaptive columns: 1 for ≤4, 2 for 5-8, 3 for >8
+  container.classList.remove('cols-2', 'cols-3');
+  if(labels.length > 8) container.classList.add('cols-3');
+  else if(labels.length > 4) container.classList.add('cols-2');
+
+  labels.forEach(function(label, idx){
     const row = document.createElement('div');
     row.className = 'speaker-mapping-row';
-    
+
+    // Apply speaker color (matching block colors)
+    const colorClass = getSpeakerColor(label);
+    row.style.borderColor = getComputedColorForSpeaker(idx);
+
     const labelEl = document.createElement('div');
-    labelEl.className = 'speaker-label';
+    labelEl.className = 'speaker-label ' + colorClass;
     labelEl.textContent = label;
-    
+
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'speaker-input';
     input.value = currentMapping[label] || label;
     input.placeholder = 'Wpisz imię dla ' + label;
     input.dataset.speaker = label;
-    
+
     input.addEventListener('input', function(){
       syncToJSON();
       scheduleAutoSave(); // Auto-save mapowania i wyniku
     });
-    
+
     const countEl = document.createElement('div');
     countEl.className = 'speaker-count';
     if(outputText){

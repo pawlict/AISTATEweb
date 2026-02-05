@@ -195,6 +195,7 @@
   "hint.autosave_all_html": "✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> (w tym notatki i nazwy mówców).",
   "hint.diarization_install_only": "Instalacja dostępna jest tylko w Ustawieniach ASR.",
   "hint.diarization_model_from_asr": "Lista zawiera tylko modele zainstalowane w Ustawieniach ASR.",
+  "hint.click_to_play_edit": "Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.",
   "hint.hover_to_play_edit": "Najedź myszką na blok aby odsłuchać fragment • Prawy przycisk myszy na bloku: edycja.",
   "hint.logs_in_tab": "Logi są dostępne w zakładce <b>Logi</b>.",
   "hint.nemo_lang_note": "W NeMo pole języka może być ignorowane (zależy od modelu).",

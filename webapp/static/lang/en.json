@@ -195,6 +195,7 @@
   "hint.autosave_all_html": "✨ <strong>All changes are saved automatically</strong> (including notes and speaker names).",
   "hint.diarization_install_only": "Installation is available only in ASR Settings.",
   "hint.diarization_model_from_asr": "The list contains only models installed in ASR Settings.",
+  "hint.click_to_play_edit": "Click a block to play it • Right-click: edit.",
   "hint.hover_to_play_edit": "Hover over a block to play it • Right-click a block: edit.",
   "hint.logs_in_tab": "Logs are available in the <b>Logs</b> tab.",
   "hint.nemo_lang_note": "In NeMo, the language selector may be ignored (depends on the model).",
