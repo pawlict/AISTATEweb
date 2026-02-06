@@ -2189,12 +2189,16 @@ function onDoneDiarize(j){
 // Sound events storage and display for diarization
 let DI_SOUND_EVENTS = [];
 
-async function diLoadSoundEvents(){
+async function diLoadSoundEvents(autoMerge = true){
   if(!AISTATE.projectId) return;
   try{
     const data = await api(`/api/projects/${AISTATE.projectId}/sound_events`);
     DI_SOUND_EVENTS = data.events || [];
     diRenderSoundEvents(data);
+    // Auto-merge sound events into diarization text
+    if(autoMerge && DI_SOUND_EVENTS.length && DI.segments.length){
+      diApplySoundEventsToText();
+    }
   }catch(e){
     console.log("No sound events:", e);
     DI_SOUND_EVENTS = [];
@@ -2225,6 +2229,9 @@ function diRenderSoundEvents(data){
   let html = `<div class="sound-events-header">
     <span data-i18n="label.detected_sounds">🔊 Wykryte dźwięki</span>
     <span class="sound-events-model">(${data.model || "?"})</span>
+    <button type="button" class="btn mini" onclick="diApplySoundEventsToText()" title="Wstaw znaczniki dźwięków do tekstu">
+      📝 Wstaw do tekstu
+    </button>
   </div>`;
   html += '<div class="sound-events-list">';
 
@@ -2256,15 +2263,97 @@ function diGetSoundIcon(type){
   return icons[type] || "🔊";
 }
 
+// Polish translations for sound event labels
+const DI_SOUND_LABELS_PL = {
+  dog: "szczek psa", cat: "miauczenie kota", bird: "śpiew ptaka",
+  cough: "kaszel", sneeze: "kichnięcie", laughter: "śmiech", crying: "płacz", baby_cry: "płacz dziecka",
+  speech: "rozmowa w tle", music: "muzyka w tle", singing: "śpiew", tv: "telewizor w tle", radio: "radio w tle",
+  vehicle: "przejeżdżający pojazd", engine: "dźwięk silnika", siren: "syrena", alarm: "alarm", bell: "dzwonek",
+  phone: "dzwonek telefonu", door: "dźwięk drzwi", knock: "pukanie", footsteps: "kroki",
+  wind: "wiatr", rain: "deszcz", thunder: "grzmot", water: "szum wody",
+  noise: "hałas w tle"
+};
+
+function diGetSoundLabelPL(type){
+  return DI_SOUND_LABELS_PL[type] || type;
+}
+
+// Merge sound events into segment text based on timestamp overlap
+function diMergeSoundEventsIntoSegments(segments, soundEvents, minConfidence = 0.5){
+  if(!soundEvents || !soundEvents.length) return segments;
+
+  return segments.map(seg => {
+    const segStart = seg.start;
+    const segEnd = seg.end;
+
+    // Find sound events that overlap with this segment
+    const overlapping = soundEvents.filter(ev => {
+      if((ev.confidence || 0) < minConfidence) return false;
+      const evStart = ev.start || 0;
+      const evEnd = ev.end || evStart + 0.5;
+      // Check overlap
+      return evStart < segEnd && evEnd > segStart;
+    });
+
+    if(!overlapping.length) return seg;
+
+    // Group by type and get unique types
+    const types = [...new Set(overlapping.map(e => e.type || e.label))];
+
+    // Build sound tags string
+    const tags = types.map(t => `«${diGetSoundLabelPL(t)}»`).join(" ");
+
+    // Append to segment text
+    return {
+      ...seg,
+      text: (seg.text || "").trim() + " " + tags,
+      _soundEvents: overlapping // Keep reference for potential editing
+    };
+  });
+}
+
+// Apply sound events to current segments and re-render
+function diApplySoundEventsToText(){
+  if(!DI_SOUND_EVENTS.length || !DI.segments.length) return;
+
+  // Check if already applied (avoid double-adding)
+  const alreadyApplied = DI.segments.some(s => s._soundEvents);
+  if(alreadyApplied){
+    console.log("Sound events already applied to segments");
+    return;
+  }
+
+  DI.segments = diMergeSoundEventsIntoSegments(DI.segments, DI_SOUND_EVENTS, 0.5);
+  diRender();
+  console.log("✅ Sound events merged into diarization text");
+}
+
 function diFilterSoundEvents(type){
   // Highlight segments that overlap with sound events of this type
   const events = DI_SOUND_EVENTS.filter(e => (e.type || e.label) === type);
   console.log(`Sound events of type "${type}":`, events);
-  // TODO: Scroll to/highlight segments, show on waveform
+
+  // Highlight matching segments in UI
+  if(events.length){
+    const blocks = document.querySelectorAll(".seg");
+    blocks.forEach((block, idx) => {
+      block.classList.remove("sound-highlight");
+      const seg = DI.segments[idx];
+      if(!seg) return;
+      // Check if segment overlaps with any event of this type
+      const hasMatch = events.some(ev => {
+        const evStart = ev.start || 0;
+        const evEnd = ev.end || evStart + 0.5;
+        return evStart < seg.end && evEnd > seg.start;
+      });
+      if(hasMatch) block.classList.add("sound-highlight");
+    });
+  }
 }
 
 window.diLoadSoundEvents = diLoadSoundEvents;
 window.diFilterSoundEvents = diFilterSoundEvents;
+window.diApplySoundEventsToText = diApplySoundEventsToText;
 
 
 function diPickDefaultAsrEngine(prefer = "whisper"){
