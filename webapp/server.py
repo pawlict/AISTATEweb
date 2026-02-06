@@ -1176,6 +1176,7 @@ class GPUResourceManager:
             "translation": 180,
             "analysis_quick": 140,
             "analysis": 120,
+            "sound_detection": 100,
             "chat": 60,
         }
 
@@ -1268,6 +1269,8 @@ class GPUResourceManager:
             cat = "analysis_quick"
         elif k.startswith("analysis"):
             cat = "analysis"
+        elif k.startswith("sound_detection"):
+            cat = "sound_detection"
         elif k.startswith("chat"):
             cat = "chat"
 
@@ -5954,7 +5957,7 @@ async def api_analysis_save(payload: Dict[str, Any] = Body(...)) -> Any:
 # ---------- API: transcribe / diarize ----------
 
 def _start_sound_detection(project_id: str, audio_path: str, model_id: str) -> Optional[str]:
-    """Start sound detection as a separate CPU task (runs in parallel with transcription).
+    """Start sound detection as a CPU task, queued through GPU_RM when available.
 
     Returns task_id or None if model not installed.
     """
@@ -5986,8 +5989,12 @@ def _start_sound_detection(project_id: str, audio_path: str, model_id: str) -> O
 
     app_log(f"Sound detection requested: project_id={project_id}, model={model_id}")
 
-    # Always run on CPU (not GPU_RM) - these models are lightweight
-    t = TASKS.start_subprocess(kind="sound_detection", project_id=project_id, cmd=cmd, cwd=ROOT)
+    # Route through GPU_RM queue so CPU-only machines don't get overloaded
+    # by concurrent detection + transcription/diarization processes.
+    if GPU_RM.enabled:
+        t = GPU_RM.enqueue_subprocess(kind="sound_detection", project_id=project_id, cmd=cmd, cwd=ROOT)
+    else:
+        t = TASKS.start_subprocess(kind="sound_detection", project_id=project_id, cmd=cmd, cwd=ROOT)
     return t.task_id
 
 
