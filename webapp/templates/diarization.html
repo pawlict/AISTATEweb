@@ -2005,26 +2005,62 @@ async function restoreOutputs(projectId){
     }catch(e){}
   }
 
-  if(out && !out.value.trim()){
-    try{
-      const txt = await api("/api/projects/" + projectId + "/download/diarized.txt");
-      if(txt && String(txt).trim()){
-        out.value = String(txt);
-        setDownloadLink(projectId);
+  // Try to load segments with confidence first
+  let loadedSegments = false;
+  try{
+    const segsData = await api("/api/projects/" + projectId + "/diarized_segments");
+    if(segsData.segments && segsData.segments.length){
+      DI.segments = segsData.segments.map(s=>({
+        start: Number(s.start)||0,
+        end: Number(s.end)||0,
+        speaker: s.speaker || "UNKNOWN",
+        text: String(s.text||"").trim(),
+        confidence: typeof s.confidence === "number" ? s.confidence : null,
+        no_speech: typeof s.no_speech === "number" ? s.no_speech : null
+      }));
+      diRender();
+      loadedSegments = true;
+      console.log("✅ Loaded diarized segments with confidence");
+
+      // Also load text for textarea
+      if(out && !out.value.trim()){
+        try{
+          const txt = await api("/api/projects/" + projectId + "/download/diarized.txt");
+          if(txt && String(txt).trim()){
+            out.value = String(txt);
+            setDownloadLink(projectId);
+          }
+        }catch(e){}
       }
-    }catch(e){}
+    }
+  }catch(e){ /* segments.json doesn't exist */ }
+
+  // Fallback to text parsing if segments not available
+  if(!loadedSegments){
+    if(out && !out.value.trim()){
+      try{
+        const txt = await api("/api/projects/" + projectId + "/download/diarized.txt");
+        if(txt && String(txt).trim()){
+          out.value = String(txt);
+          setDownloadLink(projectId);
+        }
+      }catch(e){}
+    }
+
+    if(out && out.value.trim()){
+      console.log('🔄 Odświeżam mapowanie z załadowanego wyniku...');
+
+      const segments = parseDiarizedText(out.value);
+      if(segments.length){
+        DI.segments = segments;
+        diRender();
+        console.log('✅ Wyrenderowano ' + segments.length + ' bloków z zapisanego wyniku');
+      }
+    }
   }
 
+  // Extract speaker labels for mapping
   if(out && out.value.trim()){
-    console.log('🔄 Odświeżam mapowanie z załadowanego wyniku...');
-    
-    const segments = parseDiarizedText(out.value);
-    if(segments.length){
-      DI.segments = segments;
-      diRender();
-      console.log('✅ Wyrenderowano ' + segments.length + ' bloków z zapisanego wyniku');
-    }
-    
     const labels = extractSpeakerLabels(out.value);
     if(labels.length) {
       mergeSpeakerMap(labels);

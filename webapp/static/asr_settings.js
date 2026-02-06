@@ -15,15 +15,7 @@ let ASR_CURRENT_TASK_ID = null;
 let ASR_ACTIVE = { engine: "pyannote", id: "" };
 
 function setTaskLogsLink(taskId){
-  const a = qs("asr_task_open_logs");
-  if(!a) return;
-  if(!taskId){
-    a.style.display = "none";
-    a.href = "/logs";
-    return;
-  }
-  a.href = `/logs?task_id=${encodeURIComponent(taskId)}`;
-  a.style.display = "inline-flex";
+  // Logs button removed - all logs go to main /logs page
 }
 
 function setBar(pct){

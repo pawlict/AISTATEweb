@@ -84,10 +84,25 @@ def pip_install(packages: list[str]) -> bool:
 
     try:
         cmd = [sys.executable, "-m", "pip", "install", "--upgrade"] + packages
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # Stream output live to stderr for logging
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
 
-        if result.returncode != 0:
-            _log(f"pip install failed: {result.stderr}")
+        # Stream output line by line
+        for line in process.stdout:
+            line = line.rstrip()
+            if line:
+                _log(line)
+
+        process.wait()
+
+        if process.returncode != 0:
+            _log(f"pip install failed with code {process.returncode}")
             return False
 
         _progress(90)
@@ -109,9 +124,13 @@ def install_model_deps(model_id: str) -> bool:
 
     if not packages:
         _log("No packages to install")
+        _progress(100)
         return True
 
-    return pip_install(packages)
+    result = pip_install(packages)
+    _progress(100)
+    _log(f"Installation {'completed' if result else 'failed'}")
+    return result
 
 
 # ============================================================================

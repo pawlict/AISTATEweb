@@ -3513,6 +3513,44 @@ def api_save_diarized(project_id: str, payload: Dict[str, Any]) -> Any:
     return {"ok": True}
 
 
+@app.get("/api/projects/{project_id}/transcript_segments")
+def api_get_transcript_segments(project_id: str) -> Any:
+    """Get transcription segments with confidence scores."""
+    pdir = project_path(project_id)
+    segments_file = pdir / "transcript_segments.json"
+
+    if not segments_file.exists():
+        return {"segments": []}
+
+    try:
+        data = json.loads(segments_file.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return {"segments": data}
+        return {"segments": []}
+    except Exception as e:
+        app_log(f"Error reading transcript segments: {e}")
+        return {"segments": []}
+
+
+@app.get("/api/projects/{project_id}/diarized_segments")
+def api_get_diarized_segments(project_id: str) -> Any:
+    """Get diarization segments with confidence scores."""
+    pdir = project_path(project_id)
+    segments_file = pdir / "diarized_segments.json"
+
+    if not segments_file.exists():
+        return {"segments": []}
+
+    try:
+        data = json.loads(segments_file.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return {"segments": data}
+        return {"segments": []}
+    except Exception as e:
+        app_log(f"Error reading diarized segments: {e}")
+        return {"segments": []}
+
+
 @app.get("/api/projects/{project_id}/translation/draft")
 def api_get_translation_draft(project_id: str) -> Any:
     """Load translation draft for a project.
@@ -6166,6 +6204,12 @@ def _persist_task_outputs(t: "TaskState") -> None:
             (pdir / "transcript.txt").write_text(out_txt, encoding="utf-8")
             meta["has_transcript"] = True
             wrote_any = True
+            # Save segments with confidence as JSON for persistence
+            segments = t.result.get("segments")
+            if segments and isinstance(segments, list):
+                (pdir / "transcript_segments.json").write_text(
+                    json.dumps(segments, indent=2, ensure_ascii=False), encoding="utf-8"
+                )
             # Generate waveform peaks (best-effort, runs once per project)
             try:
                 peaks_path = pdir / "peaks.json"
@@ -6188,6 +6232,12 @@ def _persist_task_outputs(t: "TaskState") -> None:
             (pdir / "diarized.txt").write_text(text_out, encoding="utf-8")
             meta["has_diarized"] = True
             wrote_any = True
+            # Save segments with confidence as JSON for persistence
+            segments = t.result.get("segments")
+            if segments and isinstance(segments, list):
+                (pdir / "diarized_segments.json").write_text(
+                    json.dumps(segments, indent=2, ensure_ascii=False), encoding="utf-8"
+                )
     if wrote_any:
         meta["updated_at"] = now_iso()
         write_project_meta(t.project_id, meta)

@@ -1751,17 +1751,40 @@ function trBindSoundDetectionUI(){
   }
 
   await resumeTask("tr", onDoneTranscribe);
-  
+
+  // Load existing transcript - try segments.json first (has confidence), fallback to text
   try{
     const pid = AISTATE.projectId || "";
     if(pid){
-      const txt = await api(`/api/projects/${pid}/download/transcript.txt`);
-      const parsed = trSegmentsFromTextTs(txt);
-      if(parsed.length){
-        TR.segments = parsed;
-        trRender();
-      } else {
-        document.getElementById("tr_out").value = txt || "";
+      // Try to load segments with confidence first
+      let loaded = false;
+      try{
+        const segsData = await api(`/api/projects/${pid}/transcript_segments`);
+        if(segsData.segments && segsData.segments.length){
+          TR.segments = segsData.segments.map(s=>({
+            start: Number(s.start)||0,
+            end: Number(s.end)||0,
+            speaker: s.speaker || null,
+            text: String(s.text||"").trim(),
+            confidence: typeof s.confidence === "number" ? s.confidence : null,
+            no_speech: typeof s.no_speech === "number" ? s.no_speech : null
+          }));
+          trRender();
+          loaded = true;
+          console.log("✅ Loaded transcript segments with confidence");
+        }
+      }catch(e){ /* segments.json doesn't exist, try text */ }
+
+      // Fallback to text parsing if segments not available
+      if(!loaded){
+        const txt = await api(`/api/projects/${pid}/download/transcript.txt`);
+        const parsed = trSegmentsFromTextTs(txt);
+        if(parsed.length){
+          TR.segments = parsed;
+          trRender();
+        } else {
+          document.getElementById("tr_out").value = txt || "";
+        }
       }
     }
   }catch(e){ /* ignore */ }
