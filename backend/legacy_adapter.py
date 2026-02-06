@@ -1703,11 +1703,12 @@ def diarize_voice_whisper_pyannote(
 
         out_lines.append(f"[{s0:.2f}-{s1:.2f}] {best_spk}: {txt}")
         seg_out = {"start": s0, "end": s1, "speaker": best_spk, "text": txt}
-        # Preserve confidence from Whisper if available
-        if "confidence" in seg:
-            seg_out["confidence"] = seg["confidence"]
-        if "no_speech" in seg:
-            seg_out["no_speech"] = seg["no_speech"]
+        # Calculate confidence from Whisper's avg_logprob (same as whisper_transcribe)
+        avg_logprob = seg.get("avg_logprob", 0.0)
+        confidence = max(0, min(100, int(math.exp(avg_logprob) * 100)))
+        no_speech = round(seg.get("no_speech_prob", 0.0) * 100)
+        seg_out["confidence"] = confidence
+        seg_out["no_speech"] = no_speech
         segments_out.append(seg_out)
 
     # Join diarized segments into final text.
