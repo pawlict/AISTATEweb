@@ -683,7 +683,13 @@ def diarize_voice_asr_nemo_diar(
                     best_spk = spk
 
             out_lines.append(f"[{s0:.2f}-{s1:.2f}] {best_spk}: {txt}")
-            segments_out.append({"start": s0, "end": s1, "speaker": best_spk, "text": txt})
+            seg_out = {"start": s0, "end": s1, "speaker": best_spk, "text": txt}
+            # Preserve confidence from Whisper if available
+            if "confidence" in seg:
+                seg_out["confidence"] = seg["confidence"]
+            if "no_speech" in seg:
+                seg_out["no_speech"] = seg["no_speech"]
+            segments_out.append(seg_out)
 
         if progress_cb:
             progress_cb(100)
@@ -1696,7 +1702,13 @@ def diarize_voice_whisper_pyannote(
                 best_spk = spk
 
         out_lines.append(f"[{s0:.2f}-{s1:.2f}] {best_spk}: {txt}")
-        segments_out.append({"start": s0, "end": s1, "speaker": best_spk, "text": txt})
+        seg_out = {"start": s0, "end": s1, "speaker": best_spk, "text": txt}
+        # Preserve confidence from Whisper if available
+        if "confidence" in seg:
+            seg_out["confidence"] = seg["confidence"]
+        if "no_speech" in seg:
+            seg_out["no_speech"] = seg["no_speech"]
+        segments_out.append(seg_out)
 
     # Join diarized segments into final text.
     text = "\n".join(out_lines) if out_lines else (wres.get("text") or "").strip()
