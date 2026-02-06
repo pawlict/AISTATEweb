@@ -446,6 +446,26 @@ textarea{min-height:220px; resize:vertical}
   font-style: italic;
 }
 
+/* Sound highlight for segments */
+.seg.sound-highlight{
+  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+  border-color: #ffc107;
+  box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.3);
+}
+
+/* Sound events header with button */
+.sound-events-header{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sound-events-header .btn.mini{
+  margin-left: auto;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
 .modal{
   position:fixed;
   inset:0;
