@@ -57,11 +57,18 @@ SOUND_DETECTION_MODELS = {
     },
     "beats": {
         "name": "BEATs",
-        "package": "transformers",
-        "packages": ["transformers"],
+        "package": "torch",
+        "packages": ["torch", "torchaudio"],
         "size_mb": 90,
         "classes": 527,
-        "model_id": "microsoft/BEATs-iter3",
+        "checkpoint_url": (
+            "https://valle.blob.core.windows.net/share/BEATs/"
+            "BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt"
+            "?sv=2020-08-04&st=2023-03-01T07%3A51%3A05Z"
+            "&se=2033-03-02T07%3A51%3A00Z&sr=c&sp=rl"
+            "&sig=QJXmSJG9DbMKf48UDIU1MfzIro8HQOf3sqlNXiflY1I%3D"
+        ),
+        "checkpoint_file": "BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt",
         "framework": "pytorch",
     },
 }
@@ -230,44 +237,59 @@ def predownload_panns(variant: str = "cnn14") -> bool:
 
 
 def predownload_beats() -> bool:
-    """Download and cache BEATs model."""
+    """Download and cache BEATs model checkpoint from Microsoft Research."""
     _log("=" * 50)
-    _log("Downloading BEATs model (HuggingFace)")
+    _log("Downloading BEATs model (Microsoft Research)")
     _log("Model size: ~90 MB")
     _log("=" * 50)
     _progress(5)
 
     try:
-        _log("Importing Transformers library...")
-        from transformers import AutoModel, AutoFeatureExtractor
-        import os
+        import urllib.request
 
-        # Enable HuggingFace progress
-        os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "0"
+        model_info = SOUND_DETECTION_MODELS["beats"]
+        checkpoint_url = model_info["checkpoint_url"]
+        checkpoint_file = model_info["checkpoint_file"]
+        dest = CACHE_DIR / checkpoint_file
 
         _progress(10)
-        model_id = "microsoft/BEATs-iter3"
-        _log(f"Model: {model_id}")
-        _log("Connecting to HuggingFace Hub...")
+        _log("Source: Microsoft Research (Azure Blob Storage)")
+        _log(f"Checkpoint: {checkpoint_file}")
 
-        _progress(20)
-        _log("Downloading feature extractor...")
-        AutoFeatureExtractor.from_pretrained(model_id)
+        if dest.exists():
+            _log("Checkpoint already exists, verifying...")
+        else:
+            _log("Downloading checkpoint (this may take a while)...")
 
-        _progress(40)
-        _log("Feature extractor downloaded")
-        _log("Downloading model weights (this may take a while)...")
+            # Download with a temp file to avoid partial downloads
+            temp_dest = dest.with_suffix(".pt.tmp")
+            try:
+                urllib.request.urlretrieve(checkpoint_url, str(temp_dest))
+                temp_dest.rename(dest)
+            except Exception:
+                temp_dest.unlink(missing_ok=True)
+                raise
 
-        AutoModel.from_pretrained(model_id)
+        _progress(80)
+        _log("Checkpoint downloaded, verifying...")
+
+        # Verify it's a valid PyTorch checkpoint
+        import torch
+        checkpoint = torch.load(str(dest), map_location="cpu", weights_only=False)
+        if "model" not in checkpoint or "cfg" not in checkpoint:
+            _log("ERROR: Downloaded file is not a valid BEATs checkpoint")
+            dest.unlink(missing_ok=True)
+            return False
 
         _progress(90)
-        _log("BEATs downloaded successfully")
-        _log("Verifying model...")
+        _log(f"Checkpoint verified (keys: {list(checkpoint.keys())})")
 
         # Write marker file
         marker = CACHE_DIR / "beats.json"
         marker.write_text(json.dumps({
             "model": "beats",
+            "checkpoint": str(dest),
+            "checkpoint_file": checkpoint_file,
             "downloaded_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "status": "ready"
         }))
@@ -278,10 +300,6 @@ def predownload_beats() -> bool:
 
     except Exception as e:
         _log(f"ERROR: BEATs download failed: {e}")
-        return False
-
-    except Exception as e:
-        _log(f"BEATs download failed: {e}")
         return False
 
 
