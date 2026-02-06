@@ -139,20 +139,33 @@ def install_model_deps(model_id: str) -> bool:
 
 def predownload_yamnet() -> bool:
     """Download and cache YAMNet model."""
-    _log("Downloading YAMNet model...")
-    _progress(10)
+    _log("=" * 50)
+    _log("Downloading YAMNet model (TensorFlow Hub)")
+    _log("Model size: ~14 MB")
+    _log("=" * 50)
+    _progress(5)
 
     try:
+        _log("Importing TensorFlow Hub...")
         import tensorflow_hub as hub
+        import os
 
-        _progress(30)
-        _log("Loading YAMNet from TensorFlow Hub...")
+        # Enable TF Hub logging
+        os.environ["TFHUB_DOWNLOAD_PROGRESS"] = "1"
+
+        _progress(10)
+        _log("Connecting to TensorFlow Hub...")
+        _log("URL: https://tfhub.dev/google/yamnet/1")
+
+        _progress(20)
+        _log("Downloading model weights...")
 
         # This downloads and caches the model
         model = hub.load("https://tfhub.dev/google/yamnet/1")
 
-        _progress(80)
-        _log("YAMNet loaded successfully")
+        _progress(90)
+        _log("Model downloaded and loaded successfully")
+        _log("Verifying model...")
 
         # Write marker file
         marker = CACHE_DIR / "yamnet.json"
@@ -163,31 +176,41 @@ def predownload_yamnet() -> bool:
         }))
 
         _progress(100)
+        _log("YAMNet ready!")
         return True
 
     except Exception as e:
-        _log(f"YAMNet download failed: {e}")
+        _log(f"ERROR: YAMNet download failed: {e}")
         return False
 
 
 def predownload_panns(variant: str = "cnn14") -> bool:
     """Download and cache PANNs model."""
-    _log(f"Downloading PANNs {variant} model...")
-    _progress(10)
+    size = "300 MB" if variant == "cnn14" else "20 MB"
+    _log("=" * 50)
+    _log(f"Downloading PANNs {variant.upper()} model")
+    _log(f"Model size: ~{size}")
+    _log("=" * 50)
+    _progress(5)
 
     try:
+        _log("Importing PANNs inference...")
         from panns_inference import AudioTagging
 
-        _progress(30)
-        _log(f"Loading PANNs {variant}...")
+        _progress(15)
+        _log(f"Initializing PANNs {variant.upper()}...")
+        _log("This will download model weights from Zenodo...")
+
+        _progress(25)
+        _log("Downloading model weights (this may take a while)...")
 
         # This downloads and caches the model
-        # variant can be "Cnn14", "Cnn6", etc.
         model_name = "Cnn14" if variant == "cnn14" else "Cnn6"
         at = AudioTagging(checkpoint_path=None, device="cpu")
 
-        _progress(80)
-        _log(f"PANNs {variant} loaded successfully")
+        _progress(90)
+        _log(f"PANNs {variant.upper()} downloaded successfully")
+        _log("Verifying model...")
 
         # Write marker file
         marker = CACHE_DIR / f"panns_{variant}.json"
@@ -198,33 +221,48 @@ def predownload_panns(variant: str = "cnn14") -> bool:
         }))
 
         _progress(100)
+        _log(f"PANNs {variant.upper()} ready!")
         return True
 
     except Exception as e:
-        _log(f"PANNs download failed: {e}")
+        _log(f"ERROR: PANNs download failed: {e}")
         return False
 
 
 def predownload_beats() -> bool:
     """Download and cache BEATs model."""
-    _log("Downloading BEATs model...")
-    _progress(10)
+    _log("=" * 50)
+    _log("Downloading BEATs model (HuggingFace)")
+    _log("Model size: ~90 MB")
+    _log("=" * 50)
+    _progress(5)
 
     try:
+        _log("Importing Transformers library...")
         from transformers import AutoModel, AutoFeatureExtractor
+        import os
 
-        _progress(30)
-        _log("Loading BEATs from HuggingFace...")
+        # Enable HuggingFace progress
+        os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "0"
 
+        _progress(10)
         model_id = "microsoft/BEATs-iter3"
+        _log(f"Model: {model_id}")
+        _log("Connecting to HuggingFace Hub...")
 
-        # Download model and feature extractor
+        _progress(20)
+        _log("Downloading feature extractor...")
         AutoFeatureExtractor.from_pretrained(model_id)
-        _progress(50)
+
+        _progress(40)
+        _log("Feature extractor downloaded")
+        _log("Downloading model weights (this may take a while)...")
+
         AutoModel.from_pretrained(model_id)
 
-        _progress(80)
-        _log("BEATs loaded successfully")
+        _progress(90)
+        _log("BEATs downloaded successfully")
+        _log("Verifying model...")
 
         # Write marker file
         marker = CACHE_DIR / "beats.json"
@@ -235,7 +273,12 @@ def predownload_beats() -> bool:
         }))
 
         _progress(100)
+        _log("BEATs ready!")
         return True
+
+    except Exception as e:
+        _log(f"ERROR: BEATs download failed: {e}")
+        return False
 
     except Exception as e:
         _log(f"BEATs download failed: {e}")
