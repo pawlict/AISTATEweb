@@ -3112,8 +3112,8 @@ def api_tts_synthesize(payload: Dict[str, Any] = Body(...)) -> Any:
         tts_dir.mkdir(parents=True, exist_ok=True)
         output_file = tts_dir / f"tts_{text_hash}.wav"
 
-        # If cached audio exists, return immediately
-        if output_file.exists():
+        # If cached audio exists and is non-empty, return immediately
+        if output_file.exists() and output_file.stat().st_size > 44:
             return {"status": "cached", "audio_url": f"/api/tts/audio/{output_file.name}"}
 
         cmd = [
