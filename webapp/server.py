@@ -1177,6 +1177,7 @@ class GPUResourceManager:
             "analysis_quick": 140,
             "analysis": 120,
             "sound_detection": 100,
+            "tts": 80,
             "chat": 60,
         }
 
@@ -1271,6 +1272,8 @@ class GPUResourceManager:
             cat = "analysis"
         elif k.startswith("sound_detection"):
             cat = "sound_detection"
+        elif k.startswith("tts"):
+            cat = "tts"
         elif k.startswith("chat"):
             cat = "chat"
 
@@ -1834,6 +1837,12 @@ def page_asr_settings(request: Request) -> Any:
 def page_nllb_settings(request: Request) -> Any:
     # Admin panel: NLLB translation models management
     return render_page(request, "nllb_settings.html", "Ustawienia NLLB", "nllb_settings")
+
+
+@app.get("/tts-settings", response_class=HTMLResponse)
+def page_tts_settings(request: Request) -> Any:
+    # Admin panel: TTS engine management
+    return render_page(request, "tts_settings.html", "Ustawienia TTS", "tts_settings")
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -2895,6 +2904,273 @@ def api_sound_detection_predownload(payload: Dict[str, Any] = Body(...)) -> Any:
     except Exception as e:
         app_log(f"Sound detection predownload error: {e}")
         raise HTTPException(status_code=500, detail=f"Błąd pobierania modelu: {e}")
+
+
+# ---------- API: TTS (Text-to-Speech) ----------
+
+TTS_ENGINES = {
+    "piper": {
+        "name": "Piper TTS",
+        "packages": ["piper-tts"],
+        "pip_check": "piper",
+        "size_mb": 30,
+        "languages": "~50",
+        "quality": "good",
+        "speed": "very_fast",
+        "license": "MIT",
+    },
+    "mms": {
+        "name": "MMS-TTS (Meta)",
+        "packages": ["transformers", "torch", "scipy"],
+        "pip_check": "transformers",
+        "size_mb": 30,
+        "languages": "1100+",
+        "quality": "ok",
+        "speed": "fast",
+        "license": "CC-BY-NC-4.0",
+    },
+    "kokoro": {
+        "name": "Kokoro TTS",
+        "packages": ["kokoro>=0.3", "soundfile"],
+        "pip_check": "kokoro",
+        "size_mb": 82,
+        "languages": "9",
+        "quality": "very_good",
+        "speed": "very_fast",
+        "license": "Apache 2.0",
+    },
+}
+
+TTS_REGISTRY_REL = Path("_global") / "tts_models.json"
+
+
+def _tts_registry_path() -> Path:
+    return PROJECTS_DIR / TTS_REGISTRY_REL
+
+
+def _read_tts_registry() -> Dict[str, Any]:
+    p = _tts_registry_path()
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _write_tts_registry(data: Dict[str, Any]) -> None:
+    p = _tts_registry_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def scan_tts_models() -> Dict[str, Any]:
+    """Scan cache dir for downloaded TTS models and update registry."""
+    cache_dir = ROOT / "backend" / "models_cache" / "tts"
+    reg: Dict[str, Any] = {}
+
+    if cache_dir.exists():
+        for marker in cache_dir.glob("*.json"):
+            try:
+                info = json.loads(marker.read_text(encoding="utf-8"))
+                engine = info.get("engine", "")
+                key = marker.stem  # e.g. "piper_en_US-amy-medium", "mms_pol", "kokoro"
+                reg[key] = {
+                    "engine": engine,
+                    "downloaded": info.get("status") == "ready",
+                    "downloaded_at": info.get("downloaded_at", ""),
+                    **{k: v for k, v in info.items() if k not in ("status",)},
+                }
+            except Exception:
+                continue
+
+    _write_tts_registry(reg)
+    return reg
+
+
+@app.get("/api/tts/status")
+def api_tts_status() -> Any:
+    """Return dependency status for TTS engines."""
+    return {
+        "piper": _pkg_info("piper"),
+        "mms": {
+            "installed": _pkg_info("transformers").get("installed", False)
+            and _pkg_info("torch").get("installed", False),
+            "transformers": _pkg_info("transformers"),
+            "torch": _pkg_info("torch"),
+        },
+        "kokoro": _pkg_info("kokoro"),
+    }
+
+
+@app.get("/api/tts/engines")
+def api_tts_engines() -> Any:
+    """Return TTS engine definitions."""
+    return TTS_ENGINES
+
+
+@app.get("/api/tts/models_state")
+def api_tts_models_state(refresh: int = 0) -> Any:
+    """Return cached model-state map for TTS voices."""
+    if refresh:
+        return scan_tts_models()
+    reg = _read_tts_registry()
+    if not reg:
+        try:
+            reg = scan_tts_models()
+        except Exception:
+            reg = {}
+    return reg
+
+
+@app.post("/api/tts/install")
+def api_tts_install(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Install dependencies for a TTS engine."""
+    try:
+        engine = str(payload.get("engine") or "").strip()
+        app_log(f"TTS install requested: engine='{engine}'")
+
+        if engine not in TTS_ENGINES:
+            raise HTTPException(status_code=400, detail=f"Nieznany silnik TTS: {engine}")
+
+        worker = ROOT / "backend" / "tts_worker.py"
+        require_existing_file(worker, "Brak pliku tts_worker.py")
+
+        cmd = [
+            os.environ.get("PYTHON", sys.executable),
+            str(worker),
+            "--action", "install",
+            "--engine", engine,
+        ]
+
+        t = TASKS.start_subprocess(kind=f"tts_install_{engine}", project_id="-", cmd=cmd, cwd=ROOT)
+        return {"task_id": t.task_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"TTS install error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd instalacji TTS: {e}")
+
+
+@app.post("/api/tts/predownload")
+def api_tts_predownload(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Download/cache a TTS voice or model."""
+    try:
+        engine = str(payload.get("engine") or "").strip()
+        voice = str(payload.get("voice") or "").strip()
+        app_log(f"TTS predownload requested: engine='{engine}', voice='{voice}'")
+
+        if engine not in TTS_ENGINES:
+            raise HTTPException(status_code=400, detail=f"Nieznany silnik TTS: {engine}")
+
+        worker = ROOT / "backend" / "tts_worker.py"
+        require_existing_file(worker, "Brak pliku tts_worker.py")
+
+        cmd = [
+            os.environ.get("PYTHON", sys.executable),
+            str(worker),
+            "--action", "predownload",
+            "--engine", engine,
+        ]
+        if voice:
+            cmd += ["--voice", voice]
+
+        t = TASKS.start_subprocess(kind=f"tts_predownload_{engine}", project_id="-", cmd=cmd, cwd=ROOT)
+        return {"task_id": t.task_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"TTS predownload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd pobierania modelu TTS: {e}")
+
+
+@app.post("/api/tts/synthesize")
+def api_tts_synthesize(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Synthesize speech from text. Returns task_id; audio file served via /api/tts/audio/."""
+    try:
+        engine = str(payload.get("engine") or "piper").strip()
+        text = str(payload.get("text") or "").strip()
+        voice = str(payload.get("voice") or "").strip()
+        lang = str(payload.get("lang") or "").strip()
+        project_id = str(payload.get("project_id") or "-").strip()
+
+        if not text:
+            raise HTTPException(status_code=400, detail="Brak tekstu do syntezowania.")
+
+        if engine not in TTS_ENGINES:
+            raise HTTPException(status_code=400, detail=f"Nieznany silnik TTS: {engine}")
+
+        worker = ROOT / "backend" / "tts_worker.py"
+        require_existing_file(worker, "Brak pliku tts_worker.py")
+
+        # Generate unique output filename
+        import hashlib
+        text_hash = hashlib.md5(f"{engine}:{voice}:{text[:200]}".encode()).hexdigest()[:12]
+        tts_dir = ROOT / "backend" / "models_cache" / "tts" / "audio_cache"
+        tts_dir.mkdir(parents=True, exist_ok=True)
+        output_file = tts_dir / f"tts_{text_hash}.wav"
+
+        # If cached audio exists, return immediately
+        if output_file.exists():
+            return {"status": "cached", "audio_url": f"/api/tts/audio/{output_file.name}"}
+
+        cmd = [
+            os.environ.get("PYTHON", sys.executable),
+            str(worker),
+            "--action", "synthesize",
+            "--engine", engine,
+            "--voice", voice,
+            "--lang", lang,
+            "--text", text,
+            "--output", str(output_file),
+        ]
+
+        if GPU_RM.enabled:
+            t = GPU_RM.enqueue_subprocess(kind="tts_synthesize", project_id=project_id, cmd=cmd, cwd=ROOT)
+        else:
+            t = TASKS.start_subprocess(kind="tts_synthesize", project_id=project_id, cmd=cmd, cwd=ROOT)
+
+        return {"task_id": t.task_id, "audio_url": f"/api/tts/audio/{output_file.name}"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"TTS synthesize error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd syntezy mowy: {e}")
+
+
+@app.get("/api/tts/audio/{filename}")
+def api_tts_audio(filename: str) -> Any:
+    """Serve generated TTS audio file."""
+    from fastapi.responses import FileResponse
+
+    # Sanitize filename
+    safe = Path(filename).name
+    audio_dir = ROOT / "backend" / "models_cache" / "tts" / "audio_cache"
+    audio_path = audio_dir / safe
+
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    return FileResponse(str(audio_path), media_type="audio/wav", filename=safe)
+
+
+@app.get("/api/tts/voices")
+def api_tts_voices() -> Any:
+    """Return language-to-voice mapping for all TTS engines."""
+    # Import from worker to keep single source of truth
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "tts_worker", str(ROOT / "backend" / "tts_worker.py")
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return getattr(mod, "LANG_VOICE_MAP", {})
+    except Exception:
+        return {}
 
 
 # ---------- API: NLLB translation models ----------
