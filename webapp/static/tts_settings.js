@@ -154,6 +154,22 @@
     updateInstallButtons();
   }
 
+  function _isVoiceDownloaded(engine, voiceId) {
+    if (!TTS_MODELS_STATE) return false;
+    // Build possible marker keys for this engine/voice
+    for (var k in TTS_MODELS_STATE) {
+      var m = TTS_MODELS_STATE[k];
+      if (m.engine !== engine || !m.downloaded) continue;
+      // Piper: marker key is "piper_{voiceId}", voice field matches
+      if (m.voice === voiceId) return true;
+      // MMS: marker key contains model_id or lang_code
+      if (m.model_id === voiceId) return true;
+      // Kokoro: single model, key is "kokoro"
+      if (engine === "kokoro" && k === "kokoro") return true;
+    }
+    return false;
+  }
+
   function updateInstallButtons() {
     var engines = ["piper", "mms", "kokoro"];
 
@@ -171,7 +187,6 @@
       var voiceDownloaded = false;
 
       if (TTS_MODELS_STATE && installed) {
-        // Check if any voice for this engine is downloaded
         for (var k in TTS_MODELS_STATE) {
           if (TTS_MODELS_STATE[k].engine === eng && TTS_MODELS_STATE[k].downloaded) {
             voiceDownloaded = true;
@@ -186,6 +201,26 @@
         inl.textContent = "⚠️ " + _tSafe("tts.no_voice", "Silnik OK, pobierz głos");
       } else {
         inl.textContent = "❌ " + _tSafe("tts.not_installed", "Niezainstalowany");
+      }
+
+      // Mark individual voice options as installed / not installed
+      if (voiceSelect) {
+        var opts = voiceSelect.options;
+        for (var i = 0; i < opts.length; i++) {
+          var opt = opts[i];
+          var origLabel = opt.getAttribute("data-orig-label");
+          if (!origLabel) {
+            // Save original label on first pass
+            origLabel = opt.textContent;
+            opt.setAttribute("data-orig-label", origLabel);
+          }
+          if (!installed) {
+            opt.textContent = origLabel;
+            continue;
+          }
+          var dl = _isVoiceDownloaded(eng, opt.value);
+          opt.textContent = dl ? origLabel : origLabel + " (" + _tSafe("tts.voice_not_downloaded", "niezainstalowany") + ")";
+        }
       }
     });
   }

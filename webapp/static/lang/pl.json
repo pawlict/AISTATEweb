@@ -621,6 +621,7 @@
   "tts.btn.install_voice": "Instaluj silnik + głos",
   "tts.btn.test": "Test",
   "tts.not_installed": "Niezainstalowany",
+  "tts.voice_not_downloaded": "niezainstalowany",
   "tts.ready": "Gotowy",
   "tts.no_voice": "Silnik OK, pobierz głos",
   "tts.test_no_text": "Wpisz tekst testowy",
