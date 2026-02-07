@@ -465,6 +465,29 @@ def predownload_engine(engine: str, voice: str = "") -> bool:
 # SPEECH SYNTHESIS
 # ---------------------------------------------------------------------------
 
+def _write_wav_manual(path: str, pcm_data: bytes, sample_rate: int,
+                      channels: int = 1, sample_width: int = 2) -> None:
+    """Write a WAV file manually, bypassing Python's wave module entirely."""
+    import struct
+    data_size = len(pcm_data)
+    byte_rate = sample_rate * channels * sample_width
+    block_align = channels * sample_width
+    bits = sample_width * 8
+    with open(path, "wb") as f:
+        # RIFF header
+        f.write(b"RIFF")
+        f.write(struct.pack("<I", 36 + data_size))
+        f.write(b"WAVE")
+        # fmt chunk
+        f.write(b"fmt ")
+        f.write(struct.pack("<IHHIIHH", 16, 1, channels, sample_rate,
+                            byte_rate, block_align, bits))
+        # data chunk
+        f.write(b"data")
+        f.write(struct.pack("<I", data_size))
+        f.write(pcm_data)
+
+
 def synthesize_piper(text: str, voice: str, output_path: str) -> bool:
     """Generate speech using Piper TTS."""
     _log(f"Piper TTS: synthesizing ({len(text)} chars)...")
@@ -494,18 +517,28 @@ def synthesize_piper(text: str, voice: str, output_path: str) -> bool:
         _progress(40)
         _log("Generating audio...")
 
-        import wave
-        with wave.open(output_path, "wb") as wav:
-            # Pre-set WAV params before synthesize() writes frames.
-            # Some piper-tts versions don't set them, causing
-            # "# channels not specified" from the wave module.
-            wav.setnchannels(1)
-            wav.setsampwidth(2)  # 16-bit PCM
-            wav.setframerate(pv.config.sample_rate)
-            pv.synthesize(text, wav)
+        # Collect raw PCM via the lowest-level API available.
+        # This avoids all wave module issues across piper-tts versions.
+        raw_audio = b""
+        if hasattr(pv, "synthesize_stream_raw"):
+            # Newer piper-tts: stream raw PCM directly
+            for chunk in pv.synthesize_stream_raw(text):
+                raw_audio += chunk
+        else:
+            # Older piper-tts: phonemize → ids → raw audio per sentence
+            for sentence_phonemes in pv.phonemize(text):
+                ids = pv.phonemes_to_ids(sentence_phonemes)
+                raw_audio += pv.synthesize_ids_to_raw(ids)
+
+        if not raw_audio:
+            _log("ERROR: No audio data generated")
+            return False
+
+        # Write WAV manually (bypasses Python wave module completely)
+        _write_wav_manual(output_path, raw_audio, pv.config.sample_rate)
 
         _progress(90)
-        _log(f"Audio saved to {output_path}")
+        _log(f"Audio saved to {output_path} ({len(raw_audio)} bytes PCM)")
         return True
 
     except Exception as e:
