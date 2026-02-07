@@ -2911,7 +2911,7 @@ def api_sound_detection_predownload(payload: Dict[str, Any] = Body(...)) -> Any:
 TTS_ENGINES = {
     "piper": {
         "name": "Piper TTS",
-        "packages": ["piper-tts"],
+        "packages": ["piper-tts", "pathvalidate"],
         "pip_check": "piper",
         "size_mb": 30,
         "languages": "~50",
