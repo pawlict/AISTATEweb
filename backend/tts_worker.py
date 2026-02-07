@@ -489,58 +489,80 @@ def _write_wav_manual(path: str, pcm_data: bytes, sample_rate: int,
 
 
 def synthesize_piper(text: str, voice: str, output_path: str) -> bool:
-    """Generate speech using Piper TTS."""
+    """Generate speech using Piper TTS via CLI subprocess.
+
+    Uses the ``piper`` command-line tool which handles WAV writing
+    internally, avoiding all Python wave-module compatibility issues.
+    """
     _log(f"Piper TTS: synthesizing ({len(text)} chars)...")
     _progress(10)
 
+    import shutil
+    import subprocess
+
+    voices_dir = CACHE_DIR / "piper_voices"
+    onnx_path = voices_dir / f"{voice}.onnx"
+
+    if not onnx_path.exists():
+        _log(f"Voice '{voice}' not found locally, attempting download...")
+        if not predownload_piper(voice):
+            _log(f"ERROR: Failed to download voice '{voice}'")
+            return False
+
+    if not onnx_path.exists():
+        _log(f"ERROR: Voice model file not found at {onnx_path}")
+        return False
+
+    # Locate piper executable (installed by piper-tts package)
+    piper_exe = shutil.which("piper")
+    if not piper_exe:
+        # Try in the same venv bin directory as the running Python
+        venv_piper = Path(sys.executable).parent / "piper"
+        if venv_piper.exists():
+            piper_exe = str(venv_piper)
+
+    if not piper_exe:
+        _log("ERROR: 'piper' CLI not found. Reinstall piper-tts: pip install piper-tts")
+        return False
+
+    _log(f"Using piper CLI: {piper_exe}")
+    _log(f"Model: {onnx_path.name}")
+    _progress(30)
+
     try:
-        from piper.voice import PiperVoice
+        result = subprocess.run(
+            [piper_exe, "--model", str(onnx_path),
+             "--output_file", output_path],
+            input=text,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
 
-        voices_dir = CACHE_DIR / "piper_voices"
-        onnx_path = voices_dir / f"{voice}.onnx"
+        _progress(80)
 
-        if not onnx_path.exists():
-            # Try downloading on-the-fly
-            _log(f"Voice '{voice}' not found locally, attempting download...")
-            if not predownload_piper(voice):
-                _log(f"ERROR: Failed to download voice '{voice}'")
-                return False
+        if result.stderr:
+            for line in result.stderr.strip().split("\n"):
+                if line.strip():
+                    _log(f"  piper: {line.strip()}")
 
-        if not onnx_path.exists():
-            _log(f"ERROR: Voice model file not found at {onnx_path}")
+        if result.returncode != 0:
+            _log(f"ERROR: piper CLI exited with code {result.returncode}")
             return False
 
-        _log(f"Loading model: {onnx_path.name}")
-        _progress(20)
-        pv = PiperVoice.load(str(onnx_path))
-
-        _progress(40)
-        _log("Generating audio...")
-
-        # Collect raw PCM via the lowest-level API available.
-        # This avoids all wave module issues across piper-tts versions.
-        raw_audio = b""
-        if hasattr(pv, "synthesize_stream_raw"):
-            # Newer piper-tts: stream raw PCM directly
-            for chunk in pv.synthesize_stream_raw(text):
-                raw_audio += chunk
-        else:
-            # Older piper-tts: phonemize → ids → raw audio per sentence
-            for sentence_phonemes in pv.phonemize(text):
-                ids = pv.phonemes_to_ids(sentence_phonemes)
-                raw_audio += pv.synthesize_ids_to_raw(ids)
-
-        if not raw_audio:
-            _log("ERROR: No audio data generated")
+        # Verify output file was created
+        out = Path(output_path)
+        if not out.exists() or out.stat().st_size < 50:
+            _log("ERROR: Output WAV file missing or empty")
             return False
-
-        # Write WAV manually (bypasses Python wave module completely)
-        _write_wav_manual(output_path, raw_audio, pv.config.sample_rate)
 
         _progress(90)
-        _log(f"Audio saved to {output_path} ({len(raw_audio)} bytes PCM)")
+        _log(f"Audio saved to {output_path} ({out.stat().st_size // 1024} KB)")
         return True
 
+    except subprocess.TimeoutExpired:
+        _log("ERROR: piper CLI timed out (120s)")
+        return False
     except Exception as e:
         _log(f"ERROR: Piper synthesis failed: {e}")
         return False

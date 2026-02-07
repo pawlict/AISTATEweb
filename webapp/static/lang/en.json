@@ -621,6 +621,7 @@
   "tts.btn.install_voice": "Install engine + voice",
   "tts.btn.test": "Test",
   "tts.not_installed": "Not installed",
+  "tts.voice_not_downloaded": "not installed",
   "tts.ready": "Ready",
   "tts.no_voice": "Engine OK, download a voice",
   "tts.test_no_text": "Enter test text",
