@@ -23,6 +23,50 @@
   gap: 15px;
 }
 
+/* TTS speak button */
+.tts-speak-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(16,150,244,0.12);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: background 0.15s, transform 0.1s;
+  z-index: 2;
+  padding: 0;
+}
+.tts-speak-btn:hover { background: rgba(16,150,244,0.25); transform: scale(1.08); }
+.tts-speak-btn:active { transform: scale(0.95); }
+.tts-speak-btn.loading { opacity: 0.6; pointer-events: none; }
+.tts-speak-btn.playing { background: rgba(132,38,164,0.20); border-color: rgba(132,38,164,0.3); }
+
+/* TTS icon in language tabs */
+.tab .tts-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-left: 4px;
+  padding: 0;
+  font-size: 13px;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s;
+  vertical-align: middle;
+}
+.tab .tts-tab-btn:hover { opacity: 1; background: rgba(16,150,244,0.15); }
+
 /* Use global app.css button styles on this page (same as Analysis) */
 /* Compact radio pills for mode selection in the toolbar */
 .mode-pill{display:flex; align-items:center; gap:6px}
@@ -398,8 +442,13 @@
         📄 <strong id="file-name"></strong> (<span id="file-size"></span>)
       </div>
 
-      <textarea class="textarea-large" id="input-text" data-i18n-placeholder="translation.input.placeholder"
-                placeholder="Wklej tekst do przetłumaczenia..."></textarea>
+      <div style="position:relative;">
+        <textarea class="textarea-large" id="input-text" data-i18n-placeholder="translation.input.placeholder"
+                  placeholder="Wklej tekst do przetłumaczenia..."></textarea>
+        <button class="tts-speak-btn" id="tts-input-btn" type="button" title="Odsłuchaj tekst źródłowy" data-i18n-title="translation.tts.listen_source" style="display:none;">
+          🔊
+        </button>
+      </div>
 
       <!-- PROGRESS BAR -->
       <div id="progress-container" class="progress-container hidden">
@@ -416,12 +465,19 @@
         <div class="tabs" id="language-tabs"></div>
 
         <div id="output-content">
-          <textarea class="textarea-large" id="output-text" data-i18n-placeholder="translation.output.placeholder"
-                    placeholder="Przetłumaczony tekst pojawi się tutaj..."></textarea>
-          <div style="margin-top: 10px;">
+          <div style="position:relative;">
+            <textarea class="textarea-large" id="output-text" data-i18n-placeholder="translation.output.placeholder"
+                      placeholder="Przetłumaczony tekst pojawi się tutaj..."></textarea>
+            <button class="tts-speak-btn" id="tts-output-btn" type="button" title="Odsłuchaj tłumaczenie" data-i18n-title="translation.tts.listen_translation">
+              🔊
+            </button>
+          </div>
+          <div style="margin-top: 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <button class="btn secondary" onclick="saveEdits()" data-i18n="translation.btn.save_edits">💾 Zapisz zmiany</button>
             <button class="btn" style="background: #999; color: white;" onclick="resetOutput()" data-i18n="translation.btn.reset">↻ Reset</button>
           </div>
+          <!-- TTS audio player (hidden, used for playback) -->
+          <audio id="tts-audio-player" style="display:none;"></audio>
         </div>
 
         <!-- SUMMARY -->

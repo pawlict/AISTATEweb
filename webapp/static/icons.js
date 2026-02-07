@@ -207,6 +207,18 @@
            '<path d="M5 20c0-3 3-5.5 7-5.5s7 2.5 7 5.5" ' + _s("blue-cyan") + " " + _w(1.4) + " " + S + ' fill="none"/>' +
            '<path d="M16 6c.8.3 1.5 1 1.5 2M17.8 4.5c1 .4 2 1.4 2 2.8" ' + _s("sky-cyan") + " " + _w(1.2) + " " + S + ' fill="none" opacity=".5"/>';
   };
+  icons.tts_read = function () {
+    return '<path d="M11 5L6 9H2v6h4l5 4V5z" ' + _s("sky-purple") + " " + _w(1.4) + ' ' + S + ' ' + _f("sky-purple") + ' fill-opacity=".12"/>' +
+           '<path d="M15.54 8.46a5 5 0 0 1 0 7.07" ' + _s("sky-cyan") + " " + _w(1.4) + " " + S + ' fill="none"/>' +
+           '<path d="M19.07 4.93a10 10 0 0 1 0 14.14" ' + _s("sky-cyan") + " " + _w(1.3) + " " + S + ' fill="none" opacity=".45"/>';
+  };
+  icons.tts_loading = function () {
+    return '<path d="M11 5L6 9H2v6h4l5 4V5z" ' + _s("blue-cyan") + " " + _w(1.4) + ' ' + S + ' ' + _f("blue-cyan") + ' fill-opacity=".12"/>' +
+           '<path d="M16 9a4 4 0 0 1 0 6" ' + _s("blue-cyan") + " " + _w(1.4) + " " + S + ' fill="none" opacity=".5">' +
+           '<animate attributeName="opacity" values=".5;1;.5" dur="1s" repeatCount="indefinite"/></path>' +
+           '<path d="M19 7a7 7 0 0 1 0 10" ' + _s("blue-cyan") + " " + _w(1.3) + " " + S + ' fill="none" opacity=".3">' +
+           '<animate attributeName="opacity" values=".3;.8;.3" dur="1s" begin=".3s" repeatCount="indefinite"/></path>';
+  };
   icons.target = function () {
     return '<circle cx="12" cy="12" r="9" ' + _s("sky-purple") + " " + _w(1.3) + ' fill="none" opacity=".3"/>' +
            '<circle cx="12" cy="12" r="6" ' + _s("sky-purple") + " " + _w(1.3) + ' fill="none" opacity=".5"/>' +
@@ -369,6 +381,7 @@
     "\uD83E\uDDFE": "receipt",     // 🧾
     "\uD83C\uDFA7": "headphones",  // 🎧
     "\uD83C\uDFA4": "speaker",     // 🎤
+    "\uD83D\uDD0A": "tts_read",    // 🔊
     "\uD83D\uDD2C": "deep_search", // 🔬
     "\uD83D\uDCC4": "document",    // 📄
     "\uD83D\uDDBC\uFE0F": "vision",// 🖼️
