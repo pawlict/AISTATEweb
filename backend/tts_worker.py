@@ -38,7 +38,7 @@ def _log(msg: str) -> None:
 TTS_ENGINES = {
     "piper": {
         "name": "Piper TTS",
-        "packages": ["piper-tts"],
+        "packages": ["piper-tts", "pathvalidate"],
         "size_mb": 30,
         "description": "Szybki, lekki silnik TTS oparty na VITS. Dziala offline, zoptymalizowany pod CPU. Modele 15-60 MB na jezyk.",
         "description_en": "Fast, lightweight VITS-based TTS engine. Fully offline, optimized for CPU. Models 15-60 MB per language.",
@@ -170,7 +170,7 @@ LANG_VOICE_MAP = {
         "kokoro": None,
     },
     "hindi": {
-        "piper": "hi-mya-medium",
+        "piper": "hi_IN-rohan-medium",
         "mms": "facebook/mms-tts-hin",
         "kokoro": "hf_alpha",
     },
@@ -245,58 +245,107 @@ def install_engine_deps(engine: str) -> bool:
 # MODEL DOWNLOAD / CACHE
 # ---------------------------------------------------------------------------
 
+def _piper_voice_url(voice_id: str) -> tuple[str, str]:
+    """Build HuggingFace download URLs for a Piper voice.
+
+    Voice ID format: {locale}-{name}-{quality}  e.g. pl_PL-gosia-medium
+    Quality can be: x_low, low, medium, high
+    Returns (onnx_url, json_url).
+    """
+    QUALITIES = ("x_low", "low", "medium", "high")
+
+    # Split: locale = "pl_PL", remainder = "gosia-medium"
+    first_dash = voice_id.index("-")
+    locale = voice_id[:first_dash]              # "pl_PL"
+    remainder = voice_id[first_dash + 1:]       # "gosia-medium"
+
+    # Match quality from known suffixes (handles x_low which contains a dash-like _)
+    quality = "medium"
+    name = remainder
+    for q in QUALITIES:
+        if remainder.endswith("-" + q):
+            quality = q
+            name = remainder[:-(len(q) + 1)]
+            break
+
+    lang_short = locale.split("_")[0]           # "pl"
+
+    base = (
+        f"https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/"
+        f"{lang_short}/{locale}/{name}/{quality}/{voice_id}"
+    )
+    return f"{base}.onnx", f"{base}.onnx.json"
+
+
+def _piper_voice_path(voice_id: str) -> Path:
+    """Return local path for a Piper voice .onnx file."""
+    return CACHE_DIR / "piper_voices" / f"{voice_id}.onnx"
+
+
 def predownload_piper(voice: str = "") -> bool:
-    """Download and cache a Piper voice model."""
+    """Download and cache a Piper voice model from HuggingFace."""
     _log("=" * 50)
     _log("Downloading Piper TTS voice")
     _log("=" * 50)
     _progress(5)
 
     try:
-        _log("Importing piper...")
-        # piper-tts downloads voices on first use to ~/.local/share/piper_tts/
-        # We trigger the download by listing/downloading the voice
-        import subprocess
+        import urllib.request
 
-        _progress(10)
         voice_id = voice or "en_US-amy-medium"
         _log(f"Voice: {voice_id}")
-        _log("Downloading voice data (onnx model + config)...")
 
-        # Use piper CLI to download the voice
-        cmd = [
-            sys.executable, "-m", "piper",
-            "--model", voice_id,
-            "--download-dir", str(CACHE_DIR / "piper_voices"),
-            "--update-voices",
-            "--output_file", "/dev/null",
-        ]
+        voices_dir = CACHE_DIR / "piper_voices"
+        voices_dir.mkdir(parents=True, exist_ok=True)
 
-        _progress(20)
+        onnx_path = voices_dir / f"{voice_id}.onnx"
+        json_path = voices_dir / f"{voice_id}.onnx.json"
 
-        # Feed empty stdin to just trigger the download, then exit
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        # Send empty input to produce no audio, just download
-        out, _ = proc.communicate(input="", timeout=300)
-        if out:
-            for line in out.strip().split("\n"):
-                if line.strip():
-                    _log(line.strip())
+        onnx_url, json_url = _piper_voice_url(voice_id)
+
+        # Download .onnx model
+        if onnx_path.exists():
+            _log(f"Model file already exists: {onnx_path.name}")
+        else:
+            _progress(10)
+            _log(f"Downloading: {onnx_url}")
+            _log("This may take a moment (~15-60 MB)...")
+            tmp = onnx_path.with_suffix(".onnx.tmp")
+            try:
+                urllib.request.urlretrieve(onnx_url, str(tmp))
+                tmp.rename(onnx_path)
+            except Exception:
+                tmp.unlink(missing_ok=True)
+                raise
+            _log(f"Downloaded: {onnx_path.name} ({onnx_path.stat().st_size // 1024} KB)")
+
+        # Download .onnx.json config
+        _progress(70)
+        if json_path.exists():
+            _log(f"Config file already exists: {json_path.name}")
+        else:
+            _log(f"Downloading config: {json_url}")
+            urllib.request.urlretrieve(json_url, str(json_path))
+            _log(f"Downloaded: {json_path.name}")
 
         _progress(85)
-        _log("Voice downloaded")
+
+        # Verify files
+        if not onnx_path.exists() or onnx_path.stat().st_size < 1000:
+            _log("ERROR: ONNX model file is missing or too small")
+            return False
+        if not json_path.exists():
+            _log("ERROR: Config JSON file is missing")
+            return False
+
+        _log("Voice files verified")
 
         # Write marker file
         marker = CACHE_DIR / f"piper_{voice_id}.json"
         marker.write_text(json.dumps({
             "engine": "piper",
             "voice": voice_id,
+            "onnx_path": str(onnx_path),
             "downloaded_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "status": "ready",
         }))
@@ -422,28 +471,28 @@ def synthesize_piper(text: str, voice: str, output_path: str) -> bool:
     _progress(10)
 
     try:
-        from piper import PiperVoice
+        from piper.voice import PiperVoice
 
         voices_dir = CACHE_DIR / "piper_voices"
-        # Find the model file
-        onnx_files = list(voices_dir.rglob(f"{voice}*.onnx"))
-        if not onnx_files:
+        onnx_path = voices_dir / f"{voice}.onnx"
+
+        if not onnx_path.exists():
             # Try downloading on-the-fly
             _log(f"Voice '{voice}' not found locally, attempting download...")
-            predownload_piper(voice)
-            onnx_files = list(voices_dir.rglob(f"{voice}*.onnx"))
+            if not predownload_piper(voice):
+                _log(f"ERROR: Failed to download voice '{voice}'")
+                return False
 
-        if not onnx_files:
-            _log(f"ERROR: Voice model file not found for '{voice}'")
+        if not onnx_path.exists():
+            _log(f"ERROR: Voice model file not found at {onnx_path}")
             return False
 
-        model_path = str(onnx_files[0])
-        _log(f"Using model: {model_path}")
-
+        _log(f"Loading model: {onnx_path.name}")
         _progress(20)
-        pv = PiperVoice.load(model_path)
+        pv = PiperVoice.load(str(onnx_path))
 
         _progress(40)
+        _log("Generating audio...")
         import wave
         with wave.open(output_path, "wb") as wav:
             pv.synthesize(text, wav)
