@@ -936,7 +936,7 @@ function displayResults(data) {
         const ttsBtn = document.createElement('span');
         ttsBtn.className = 'tts-tab-btn';
         ttsBtn.title = 'Odsłuchaj';
-        ttsBtn.textContent = '🔊';
+        ttsBtn.innerHTML = (typeof aiIcon === 'function') ? aiIcon('tts_read', 13) : '🔊';
         ttsBtn.onclick = (e) => { e.stopPropagation(); _ttsSpeak(lang, 'output'); };
         tab.appendChild(ttsBtn);
 

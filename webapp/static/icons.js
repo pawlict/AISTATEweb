@@ -381,7 +381,6 @@
     "\uD83E\uDDFE": "receipt",     // 🧾
     "\uD83C\uDFA7": "headphones",  // 🎧
     "\uD83C\uDFA4": "speaker",     // 🎤
-    "\uD83D\uDD0A": "tts_read",    // 🔊
     "\uD83D\uDD2C": "deep_search", // 🔬
     "\uD83D\uDCC4": "document",    // 📄
     "\uD83D\uDDBC\uFE0F": "vision",// 🖼️
