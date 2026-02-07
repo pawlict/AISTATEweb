@@ -494,18 +494,15 @@ def synthesize_piper(text: str, voice: str, output_path: str) -> bool:
         _progress(40)
         _log("Generating audio...")
 
-        # Use synthesize_stream_raw() and write WAV manually to avoid
-        # "# channels not specified" error from wave module.
-        raw_audio = b""
-        for chunk in pv.synthesize_stream_raw(text):
-            raw_audio += chunk
-
         import wave
         with wave.open(output_path, "wb") as wav:
+            # Pre-set WAV params before synthesize() writes frames.
+            # Some piper-tts versions don't set them, causing
+            # "# channels not specified" from the wave module.
             wav.setnchannels(1)
             wav.setsampwidth(2)  # 16-bit PCM
             wav.setframerate(pv.config.sample_rate)
-            wav.writeframes(raw_audio)
+            pv.synthesize(text, wav)
 
         _progress(90)
         _log(f"Audio saved to {output_path}")
