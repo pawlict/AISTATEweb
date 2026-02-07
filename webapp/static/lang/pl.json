@@ -647,5 +647,6 @@
   "tts.gpu.minimal": "Minimalny zysk (i tak szybki na CPU)",
   "tts.gpu.moderate": "Umiarkowany zysk (2-3x szybciej)",
   "translation.tts.listen_source": "Odsłuchaj tekst źródłowy",
-  "translation.tts.listen_translation": "Odsłuchaj tłumaczenie"
+  "translation.tts.listen_translation": "Odsłuchaj tłumaczenie",
+  "translation.tts.engine": "Lektor:"
 }
