@@ -5156,13 +5156,21 @@ async def _run_quick_analysis(project_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="Brak źródeł do analizy (transkrypcja, diaryzacja lub dokumenty).")
 
     t0 = time.time()
-    try:
-        model_sel = _get_model_settings().get("quick") or DEFAULT_MODELS["quick"]
-        result = await quick_analyze(OLLAMA, text, model=model_sel, source_type=_source_type)
-    except OllamaError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Quick analysis failed: {e}")
+
+    if _source_type == "bank_statement":
+        # Bank statement: use regex extractor (fast, accurate, no LLM needed)
+        from backend.finance.quick_extract import extract_bank_statement_quick
+        result = extract_bank_statement_quick(text)
+        model_sel = "regex"
+    else:
+        try:
+            model_sel = _get_model_settings().get("quick") or DEFAULT_MODELS["quick"]
+            result = await quick_analyze(OLLAMA, text, model=model_sel, source_type=_source_type)
+        except OllamaError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Quick analysis failed: {e}")
+
     dt = time.time() - t0
 
     qs_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

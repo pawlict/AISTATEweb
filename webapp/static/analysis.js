@@ -431,27 +431,23 @@
     }
 
     // Detect bank statement response
-    const isBankMode = !!(q.wlasciciel_rachunku || q.nr_rachunku_iban || q.laczna_kwota_obciazen != null);
+    const isBankMode = !!(q.wlasciciel_rachunku || q.nr_rachunku_iban || q.saldo_poczatkowe != null || q.saldo_dostepne != null);
     // Detect generic document response
     const isDocMode = !isBankMode && !!(q.typ_dokumentu || q.podmioty || q.kwoty || q.podsumowanie);
 
     if (isBankMode) {
       body.innerHTML = `
         <div class="quick-grid">
-          ${q.typ_dokumentu ? `<div class="quick-row"><b>Typ:</b> ${q.typ_dokumentu}</div>` : ``}
-          <div class="quick-row"><b>Wlasciciel:</b> ${q.wlasciciel_rachunku || "—"}</div>
+          <div class="quick-row"><b>Właściciel:</b> ${q.wlasciciel_rachunku || "—"}</div>
           <div class="quick-row"><b>Bank:</b> ${q.bank || "—"}</div>
           <div class="quick-row"><b>Nr rachunku (IBAN):</b> <span style="font-family:monospace">${q.nr_rachunku_iban || "—"}</span></div>
           ${q.okres ? `<div class="quick-row"><b>Okres:</b> ${q.okres}</div>` : ``}
           <div class="quick-stats">
             <span><b>Saldo pocz.:</b> ${_fmtPLN(q.saldo_poczatkowe)}</span>
-            <span><b>Saldo kon.:</b> ${_fmtPLN(q.saldo_koncowe)}</span>
+            <span><b>Saldo końc.:</b> ${_fmtPLN(q.saldo_koncowe)}</span>
           </div>
-          <div class="quick-stats">
-            <span style="color:var(--success, #2a2)"><b>Uznania:</b> ${_fmtPLN(q.laczna_kwota_uznan)}</span>
-            <span style="color:var(--danger, #c33)"><b>Obciazenia:</b> ${_fmtPLN(q.laczna_kwota_obciazen)}</span>
-          </div>
-          ${q.liczba_transakcji != null ? `<div class="small muted">Transakcje: ${q.liczba_transakcji} | Waluta: ${q.waluta || "PLN"}</div>` : ``}
+          ${q.saldo_dostepne != null ? `<div class="quick-row"><b>Saldo dostępne:</b> ${_fmtPLN(q.saldo_dostepne)}</div>` : ``}
+          ${q.liczba_transakcji != null ? `<div class="small muted">Transakcje: ~${q.liczba_transakcji} | Waluta: ${q.waluta || "PLN"}</div>` : ``}
         </div>
       `;
     } else if (isDocMode) {

@@ -44,6 +44,7 @@ class StatementInfo:
     period_to: Optional[str] = None
     opening_balance: Optional[float] = None
     closing_balance: Optional[float] = None
+    available_balance: Optional[float] = None
     currency: str = "PLN"
     raw_header: str = ""
 

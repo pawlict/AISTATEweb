@@ -26,6 +26,7 @@ from .parsers import get_parser
 from .parsers.base import ParseResult
 from .prompt_builder import build_finance_prompt
 from .scorer import ScoreBreakdown, compute_score
+from .spending_analysis import SpendingReport, analyze_spending
 
 log = logging.getLogger("aistate.finance")
 
@@ -194,6 +195,19 @@ def run_finance_pipeline(
         except Exception as e:
             _log(f"Błąd aktualizacji entity memory: {e}")
 
+    # Step 9: Spending pattern analysis
+    _log("Analiza wzorców wydatków...")
+    spending = analyze_spending(classified)
+    if spending.top_shops:
+        _log(f"Top sklepy: {', '.join(s.name for s in spending.top_shops[:3])}")
+    if spending.fuel_visits:
+        _log(f"Tankowania: {len(spending.fuel_visits)} wizyt, "
+             f"miasto bazowe: {spending.fuel_home_city or '?'}")
+    if spending.blik_transactions:
+        _log(f"BLIK: {spending.blik_phone_transfers} przelewów na tel, "
+             f"{spending.blik_online_purchases} zakupów, "
+             f"{spending.blik_other_payments} płatności")
+
     dt = time.time() - t0
     _log(f"Pipeline finansowy zakończony w {dt:.1f}s")
 
@@ -201,6 +215,7 @@ def run_finance_pipeline(
         "parse_result": parse_result,
         "classified": classified,
         "score": score,
+        "spending": spending,
         "pipeline_time_s": round(dt, 2),
     }
 
@@ -293,10 +308,12 @@ def build_enriched_prompt(
     Includes behavioral data if multi-month analysis was performed.
     """
     behavioral = pipeline_result.get("behavioral")
+    spending = pipeline_result.get("spending")
     return build_finance_prompt(
         parse_result=pipeline_result["parse_result"],
         classified=pipeline_result["classified"],
         score=pipeline_result["score"],
         original_instruction=original_instruction,
         behavioral=behavioral,
+        spending=spending,
     )
