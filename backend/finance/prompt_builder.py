@@ -20,6 +20,7 @@ def build_finance_prompt(
     score: ScoreBreakdown,
     original_instruction: str = "",
     behavioral=None,
+    spending=None,
 ) -> str:
     """Build the full enriched prompt for financial analysis.
 
@@ -47,6 +48,10 @@ def build_finance_prompt(
     # --- Recurring obligations ---
     parts.append(_build_recurring_section(classified))
 
+    # --- Spending patterns (shops, fuel, BLIK) ---
+    if spending is not None:
+        parts.append(_build_spending_section(spending))
+
     # --- Risk flags ---
     parts.append(_build_risk_flags(classified, score))
 
@@ -57,7 +62,11 @@ def build_finance_prompt(
     parts.append(_build_scoring_section(score))
 
     # --- Task instructions ---
-    parts.append(_build_task_instructions(original_instruction, has_behavioral=behavioral is not None))
+    parts.append(_build_task_instructions(
+        original_instruction,
+        has_behavioral=behavioral is not None,
+        has_spending=spending is not None and (spending.top_shops or spending.fuel_visits or spending.blik_transactions),
+    ))
 
     return "\n\n".join(p for p in parts if p)
 
@@ -347,7 +356,63 @@ def _build_behavioral_section(behavioral) -> str:
     return "\n".join(lines)
 
 
-def _build_task_instructions(original_instruction: str, has_behavioral: bool = False) -> str:
+def _build_spending_section(spending) -> str:
+    """Build spending patterns section (top shops, fuel, BLIK)."""
+    lines = ["## Analiza wzorców wydatków\n"]
+
+    # --- Top 5 shops ---
+    if spending.top_shops:
+        lines.append("### Najczęściej odwiedzane sklepy\n")
+        lines.append("| # | Sklep | Wizyt | Udział (%) | Łączna kwota |")
+        lines.append("|---|-------|-------|-----------|--------------|")
+        for i, shop in enumerate(spending.top_shops, 1):
+            lines.append(f"| {i} | {shop.name} | {shop.count} | {shop.percentage:.1f}% | {shop.total_amount:,.2f} PLN |")
+        lines.append(f"\n*Łącznie rozpoznano {spending.total_shopping_txns} transakcji zakupowych w znanych sieciach.*")
+    else:
+        lines.append("*Nie rozpoznano transakcji zakupowych w znanych sieciach handlowych.*")
+
+    # --- Fuel analysis ---
+    if spending.fuel_visits:
+        lines.append("\n### Tankowanie\n")
+        lines.append("| Stacja | Miasto | Wizyt | Kwota | Miasto bazowe? |")
+        lines.append("|--------|--------|-------|-------|----------------|")
+        for fv in spending.fuel_visits:
+            home_str = "✅ TAK" if fv.is_home_city else ("❌ Wyjazd" if fv.city else "?")
+            city_str = fv.city or "nieustalone"
+            lines.append(f"| {fv.station} | {city_str} | {fv.count} | {fv.total_amount:,.2f} PLN | {home_str} |")
+
+        if spending.fuel_home_city:
+            lines.append(f"\n- **Domniemane miasto zamieszkania** (najczęstsze zakupy): **{spending.fuel_home_city}**")
+        if spending.fuel_travel_cities:
+            lines.append(f"- **Miasta wyjazowe** (tankowanie poza miastem bazowym): {', '.join(spending.fuel_travel_cities)}")
+            lines.append("  *(tankowanie w innym mieście niż bazowe sugeruje podróż/dojazd)*")
+
+    # --- BLIK classification ---
+    if spending.blik_transactions:
+        lines.append("\n### Transakcje BLIK\n")
+        lines.append(f"- **Przelewy na telefon**: {spending.blik_phone_transfers}")
+        lines.append(f"- **Zakupy online**: {spending.blik_online_purchases}")
+        lines.append(f"- **Inne płatności BLIK**: {spending.blik_other_payments}")
+
+        if spending.blik_phone_transfers > 0 or spending.blik_online_purchases > 0:
+            lines.append("\n| Data | Typ | Kwota | Odbiorca / Tytuł |")
+            lines.append("|------|-----|-------|------------------|")
+            for bt in spending.blik_transactions[:20]:
+                type_str = {
+                    "phone_transfer": "📱 Przelew na tel",
+                    "online_purchase": "🛒 Zakup online",
+                    "payment": "💳 Płatność",
+                }.get(bt.blik_type, bt.blik_type)
+                desc = bt.counterparty
+                if bt.title and bt.title != bt.counterparty:
+                    desc = f"{desc} — {bt.title}" if desc else bt.title
+                desc = desc[:50] + "…" if len(desc) > 50 else desc
+                lines.append(f"| {bt.date} | {type_str} | {bt.amount:+,.2f} | {desc} |")
+
+    return "\n".join(lines)
+
+
+def _build_task_instructions(original_instruction: str, has_behavioral: bool = False, has_spending: bool = False) -> str:
     lines = ["""## ZADANIE DLA MODELU
 
 Na podstawie powyższych danych przeprowadź **szczegółową analizę finansową**. Twój raport powinien zawierać:
@@ -389,9 +454,19 @@ Konkretne zalecenia dotyczące poprawy sytuacji finansowej.
 - Jeśli dane są niewystarczające do wniosku, napisz to wprost
 - Pisz po polsku, profesjonalnie ale zrozumiale"""]
 
+    _section = 8
+    if has_spending:
+        lines.append(f"""
+### {_section}. Analiza wzorców zakupowych (dane dostępne powyżej w sekcji "Analiza wzorców wydatków")
+- **Top sklepy**: Gdzie najczęściej robi zakupy? Jaki % to spożywcze vs odzież vs elektronika?
+- **Tankowanie**: W jakim mieście tankuje najczęściej? Czy tankowanie w innym mieście sugeruje wyjazd/dojazd do pracy? Porównaj z miastem bazowym zakupów.
+- **BLIK**: Ile transakcji to przelewy na telefon (P2P) a ile to zakupy w internecie? Czy przelewy na telefon mogą sugerować nieformalny obrót (np. Vinted, OLX)?
+- Oceń ogólny profil konsumencki — oszczędny, umiarkowany, rozrzutny?""")
+        _section += 1
+
     if has_behavioral:
-        lines.append("""
-### 8. Analiza wielomiesięczna (DODATKOWA — dane behawioralne dostępne powyżej)
+        lines.append(f"""
+### {_section}. Analiza wielomiesięczna (DODATKOWA — dane behawioralne dostępne powyżej)
 - Porównaj miesiące: czy sytuacja się poprawia, pogarsza czy jest stabilna?
 - Zidentyfikuj trendy: rosnące wydatki, malejące dochody, nowe ryzyka
 - Oceń przewidywalność: czy zachowania finansowe są regularne czy chaotyczne?
