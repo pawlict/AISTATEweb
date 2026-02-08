@@ -648,5 +648,6 @@
   "tts.gpu.moderate": "Moderate benefit (2-3x faster)",
   "translation.tts.listen_source": "Listen to source text",
   "translation.tts.listen_translation": "Listen to translation",
-  "translation.tts.engine": "Reader:"
+  "translation.tts.engine": "Reader:",
+  "translation.tts.fallback": "{chosen} does not support this language. Using: {used}"
 }
