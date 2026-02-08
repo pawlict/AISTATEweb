@@ -116,6 +116,10 @@ def _build_transactions_table(classified: List[ClassifiedTransaction]) -> str:
         cats = ", ".join(ct.subcategories) if ct.subcategories else "—"
         if ct.is_recurring:
             cats = f"🔄 {cats}" if cats != "—" else "🔄 cykliczna"
+        if ct.entity_flagged:
+            cats = f"🚩 OZNACZONY {cats}" if cats != "—" else "🚩 OZNACZONY"
+        if ct.entity_notes:
+            cats += f" [{ct.entity_notes[:30]}]"
 
         lines.append(f"| {i} | {txn.date} | {direction} | {amount_str} | {balance_str} | {desc} | {cats} |")
 
@@ -215,6 +219,17 @@ def _build_risk_flags(classified: List[ClassifiedTransaction], score: ScoreBreak
 
     if score.recurring_pct > 60:
         flags.append(f"🔄 **WYSOKIE ZOBOWIĄZANIA CYKLICZNE**: {score.recurring_pct:.1f}% wpływów")
+
+    # Entity memory flags
+    flagged_entities = [ct for ct in classified if ct.entity_flagged]
+    if flagged_entities:
+        names = set()
+        total_flagged = 0.0
+        for ct in flagged_entities:
+            names.add(ct.transaction.counterparty or ct.transaction.title)
+            total_flagged += abs(ct.transaction.amount)
+        names_str = ", ".join(sorted(names)[:10])
+        flags.append(f"🚩 **OZNACZONE PODMIOTY (z pamięci)**: {len(flagged_entities)} transakcji ({total_flagged:,.2f} PLN) — {names_str}")
 
     if not flags:
         return "## Flagi ryzyka\n\nNie wykryto istotnych flag ryzyka."

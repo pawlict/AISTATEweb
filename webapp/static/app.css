@@ -653,6 +653,17 @@ textarea{min-height:220px; resize:vertical}
   padding: 14px;
 }
 
+/* Finance entities panel */
+.finance-entities-list{max-height:300px;overflow-y:auto;}
+.finance-entity-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--border);font-size:13px;}
+.finance-entity-row:hover{background:rgba(15,23,42,.04);}
+.finance-entity-row.flagged{background:rgba(220,38,38,.06);}
+.fe-name{flex:1;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fe-type{color:var(--muted);width:80px;text-align:center;}
+.fe-seen{color:var(--muted);width:40px;text-align:right;}
+.fe-amount{color:var(--muted);width:80px;text-align:right;}
+.fe-flag{cursor:pointer;font-size:16px;background:none;border:none;padding:2px 4px;}
+
 .analysis-actions{
   display:flex;
   gap:10px;

@@ -657,5 +657,7 @@
   "finance.pipeline.score": "Financial score: {score}/100",
   "finance.bank.detected": "Detected bank: {bank}",
   "finance.prompt.name": "Bank statement analysis",
-  "finance.prompt.desc": "Autonomous financial analysis of bank statements (PDF). Automatically detects bank, parses transactions, classifies risks and generates scoring."
+  "finance.prompt.desc": "Autonomous financial analysis of bank statements (PDF). Automatically detects bank, parses transactions, classifies risks and generates scoring.",
+  "finance.entities.title": "Entities (Intelligence Memory)",
+  "finance.entities.hint": "Flag entities as suspicious — they will be remembered in future analyses."
 }

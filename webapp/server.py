@@ -5606,9 +5606,28 @@ async def _run_deep_analysis_task(
                 pdf_path=fp,
                 cached_text=cached_text,
                 save_dir=finance_dir,
+                global_dir=PROJECTS_DIR,
                 log_cb=_log,
             )
             if result:
+                # LLM fallback for unclassified transactions
+                try:
+                    from backend.finance.llm_classifier import classify_with_llm
+                    llm_model = model  # use the same model user selected
+                    llm_updated = await classify_with_llm(
+                        result["classified"],
+                        OLLAMA,
+                        model=llm_model,
+                        log_cb=_log,
+                    )
+                    if llm_updated:
+                        # Recompute score with updated classifications
+                        from backend.finance.scorer import compute_score as recompute_score
+                        result["score"] = recompute_score(result["classified"])
+                        _log(f"Score po LLM fallback: {result['score'].total_score}/100")
+                except Exception as e:
+                    _log(f"LLM fallback pominięty: {e}")
+
                 _finance_prompt = build_finance_enriched_prompt(
                     result,
                     original_instruction=instruction,
@@ -6238,6 +6257,91 @@ async def api_analysis_reports_download(project_id: str, filename: str) -> Any:
     path = _safe_child_path(rdir, filename)
     require_existing_file(path, "Plik raportu nie istnieje.")
     return FileResponse(str(path), filename=path.name)
+
+
+# --- Finance entity memory API ---
+
+def _finance_memory(project_id: str):
+    """Get EntityMemory instance for a project."""
+    from backend.finance.entity_memory import EntityMemory
+    finance_dir = project_path(project_id) / "finance"
+    global_dir = PROJECTS_DIR / "_global"
+    return EntityMemory(finance_dir, global_dir)
+
+
+@app.get("/api/finance/entities/{project_id}")
+def api_finance_entities_list(project_id: str, flagged: int = 0, entity_type: str = "") -> Any:
+    """List known entities for a project."""
+    mem = _finance_memory(project_id)
+    return mem.list_entities(
+        flagged_only=bool(flagged),
+        entity_type=entity_type or None,
+    )
+
+
+@app.post("/api/finance/entities/{project_id}/flag")
+def api_finance_entity_flag(project_id: str, payload: Dict[str, Any] = Body(...)) -> Any:
+    """Flag/unflag an entity in the intelligence memory."""
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return {"error": "name is required"}
+    entity_type = str(payload.get("entity_type") or "").strip()
+    notes = str(payload.get("notes") or "").strip()
+    flagged = bool(payload.get("flagged", True))
+    propagate = bool(payload.get("propagate_global", False))
+
+    mem = _finance_memory(project_id)
+    ent = mem.flag_entity(
+        name=name,
+        entity_type=entity_type,
+        notes=notes,
+        flagged=flagged,
+        propagate_global=propagate,
+    )
+    return ent.to_dict()
+
+
+@app.post("/api/finance/entities/{project_id}/unflag")
+def api_finance_entity_unflag(project_id: str, payload: Dict[str, Any] = Body(...)) -> Any:
+    """Remove flag from an entity."""
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return {"error": "name is required"}
+    mem = _finance_memory(project_id)
+    ent = mem.unflag_entity(name)
+    if ent:
+        return ent.to_dict()
+    return {"error": "entity not found"}
+
+
+@app.delete("/api/finance/entities/{project_id}/{entity_name}")
+def api_finance_entity_delete(project_id: str, entity_name: str) -> Any:
+    """Delete an entity from project memory."""
+    mem = _finance_memory(project_id)
+    if mem.delete_entity(entity_name):
+        return {"ok": True}
+    return {"error": "entity not found"}
+
+
+@app.get("/api/finance/parsed/{project_id}")
+def api_finance_parsed(project_id: str) -> Any:
+    """Get latest parsed finance data for a project."""
+    finance_dir = project_path(project_id) / "finance" / "parsed"
+    if not finance_dir.exists():
+        return {"files": []}
+    files = []
+    for f in sorted(finance_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            files.append({
+                "filename": f.name,
+                "bank": data.get("bank", ""),
+                "transactions": len(data.get("transactions", [])),
+                "score": data.get("score", {}).get("total_score"),
+            })
+        except Exception:
+            pass
+    return {"files": files}
 
 
 @app.post("/api/analysis/save")

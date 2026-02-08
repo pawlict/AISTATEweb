@@ -145,6 +145,9 @@ class ClassifiedTransaction:
     confidence: float = 1.0  # 1.0 for rule-based, lower for LLM-based
     is_recurring: bool = False
     recurring_group: Optional[str] = None  # group key for recurring detection
+    entity_flagged: bool = False  # flagged in entity memory
+    entity_type: str = ""  # type from entity memory
+    entity_notes: str = ""  # user notes from entity memory
 
     def to_dict(self) -> Dict[str, Any]:
         d = self.transaction.to_dict()
@@ -153,11 +156,14 @@ class ClassifiedTransaction:
         d["confidence"] = self.confidence
         d["is_recurring"] = self.is_recurring
         d["recurring_group"] = self.recurring_group
+        d["entity_flagged"] = self.entity_flagged
+        d["entity_type"] = self.entity_type
+        d["entity_notes"] = self.entity_notes
         return d
 
 
-def classify_transaction(txn: RawTransaction) -> ClassifiedTransaction:
-    """Classify a single transaction using rules."""
+def classify_transaction(txn: RawTransaction, entity_memory=None) -> ClassifiedTransaction:
+    """Classify a single transaction using rules + entity memory."""
     _ensure_compiled()
 
     search_text = f"{txn.counterparty} {txn.title} {txn.raw_text}".lower()
@@ -169,17 +175,36 @@ def classify_transaction(txn: RawTransaction) -> ClassifiedTransaction:
             cats.add(category)
             subcats.add(f"{category}:{subcat}")
 
+    # Check entity memory
+    entity_flagged = False
+    entity_type = ""
+    entity_notes = ""
+    if entity_memory is not None:
+        cp_name = txn.counterparty or txn.title
+        ent = entity_memory.lookup(cp_name)
+        if ent is not None:
+            entity_flagged = ent.flagged
+            entity_type = ent.entity_type
+            entity_notes = ent.notes
+            # If entity has a known type, add it as category
+            if ent.entity_type and ent.entity_type not in ("legitimate", "unknown"):
+                cats.add(ent.entity_type)
+                subcats.add(f"{ent.entity_type}:memory")
+
     return ClassifiedTransaction(
         transaction=txn,
         categories=sorted(cats),
         subcategories=sorted(subcats),
         confidence=1.0 if cats else 0.0,
+        entity_flagged=entity_flagged,
+        entity_type=entity_type,
+        entity_notes=entity_notes,
     )
 
 
-def classify_all(transactions: List[RawTransaction]) -> List[ClassifiedTransaction]:
+def classify_all(transactions: List[RawTransaction], entity_memory=None) -> List[ClassifiedTransaction]:
     """Classify all transactions and detect recurring patterns."""
-    classified = [classify_transaction(txn) for txn in transactions]
+    classified = [classify_transaction(txn, entity_memory) for txn in transactions]
     _detect_recurring(classified)
     return classified
 
