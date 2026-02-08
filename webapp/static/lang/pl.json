@@ -657,5 +657,7 @@
   "finance.pipeline.score": "Scoring finansowy: {score}/100",
   "finance.bank.detected": "Rozpoznany bank: {bank}",
   "finance.prompt.name": "Analiza wyciągu bankowego",
-  "finance.prompt.desc": "Autonomiczna analiza finansowa wyciągu bankowego (PDF). Automatycznie rozpoznaje bank, parsuje transakcje, klasyfikuje ryzyka i generuje scoring."
+  "finance.prompt.desc": "Autonomiczna analiza finansowa wyciągu bankowego (PDF). Automatycznie rozpoznaje bank, parsuje transakcje, klasyfikuje ryzyka i generuje scoring.",
+  "finance.entities.title": "Podmioty (Intelligence Memory)",
+  "finance.entities.hint": "Oznacz podmioty jako podejrzane — zostaną zapamiętane w przyszłych analizach."
 }

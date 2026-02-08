@@ -919,6 +919,8 @@ async function _regenQuickIfNeeded(){
             _setProgress(100);
             _deepState("Zakończono.");
             try{ await _loadDeep({content:true}); }catch{}
+            // Show finance entities panel if finance analysis was run
+            _tryLoadFinanceEntities();
           }else{
             _deepState(task && task.error ? ("Błąd: " + String(task.error)) : "Zatrzymano / błąd.", true);
           }
@@ -1384,6 +1386,84 @@ if(dSel){
       await _editPrompt(promptId);
     }
   };
+
+  // --- Finance Entity Memory UI ---
+
+  async function _tryLoadFinanceEntities(){
+    if(!State.projectId) return;
+    // Check if finance parsed data exists
+    try{
+      const parsed = await _safeJson(`/api/finance/parsed/${encodeURIComponent(State.projectId)}`);
+      if(!parsed || !parsed.files || parsed.files.length === 0) return;
+      _loadFinanceEntities();
+    }catch{}
+  }
+
+  async function _loadFinanceEntities(){
+    const box = QS("#finance_entities_box");
+    const list = QS("#finance_entities_list");
+    if(!box || !list) return;
+
+    try{
+      const entities = await api(`/api/finance/entities/${encodeURIComponent(State.projectId)}`);
+      if(!entities || !Array.isArray(entities) || entities.length === 0){
+        box.style.display = "none";
+        return;
+      }
+
+      box.style.display = "";
+      list.innerHTML = "";
+
+      // Group: flagged first, then by type
+      for(const ent of entities){
+        const row = document.createElement("div");
+        row.className = "finance-entity-row" + (ent.flagged ? " flagged" : "");
+        row.innerHTML = `
+          <span class="fe-name">${_esc(ent.display_name || ent.name)}</span>
+          <span class="fe-type small">${_esc(ent.auto_category || ent.entity_type || "—")}</span>
+          <span class="fe-seen small">${ent.times_seen || 0}x</span>
+          <span class="fe-amount small">${(ent.total_amount||0).toFixed(0)} PLN</span>
+          <button class="btn mini fe-flag" title="${ent.flagged ? "Odznacz" : "Oznacz jako podejrzany"}">${ent.flagged ? "🚩" : "⚪"}</button>
+        `;
+        const btn = row.querySelector(".fe-flag");
+        btn.addEventListener("click", ()=> _toggleEntityFlag(ent.name, !ent.flagged, btn));
+        list.appendChild(row);
+      }
+    }catch(e){
+      box.style.display = "none";
+    }
+  }
+
+  async function _toggleEntityFlag(name, flagged, btn){
+    try{
+      const endpoint = flagged ? "flag" : "unflag";
+      await api(`/api/finance/entities/${encodeURIComponent(State.projectId)}/${endpoint}`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name: name, flagged: flagged}),
+      });
+      if(btn){
+        btn.textContent = flagged ? "🚩" : "⚪";
+        btn.title = flagged ? "Odznacz" : "Oznacz jako podejrzany";
+        const row = btn.closest(".finance-entity-row");
+        if(row) row.classList.toggle("flagged", flagged);
+      }
+    }catch(e){
+      console.error("Flag entity error:", e);
+    }
+  }
+
+  function _esc(s){
+    const d = document.createElement("div");
+    d.textContent = String(s || "");
+    return d.innerHTML;
+  }
+
+  // Bind refresh button
+  document.addEventListener("DOMContentLoaded", ()=>{
+    const refreshBtn = QS("#finance_entities_refresh");
+    if(refreshBtn) refreshBtn.addEventListener("click", ()=> _loadFinanceEntities());
+  });
 
   window.AnalysisManager = AnalysisManager;
 })();

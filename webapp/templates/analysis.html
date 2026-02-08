@@ -142,6 +142,18 @@
         </div>
       </div>
 
+      <!-- Finance entities panel (visible only after finance analysis) -->
+      <div class="card" id="finance_entities_box" style="display:none;">
+        <div class="analysis-sidehdr">
+          <div class="h2">🏦 <span data-i18n="finance.entities.title">Podmioty (Intelligence Memory)</span></div>
+          <button class="btn mini" id="finance_entities_refresh" title="Odśwież">↻</button>
+        </div>
+        <div class="small" style="margin-bottom:8px;" data-i18n="finance.entities.hint">
+          Oznacz podmioty jako podejrzane — zostaną zapamiętane w przyszłych analizach.
+        </div>
+        <div id="finance_entities_list" class="finance-entities-list"></div>
+      </div>
+
       <div class="analysis-actions" id="analysis_actions">
         <button class="btn secondary" id="an_copy_btn">📋 <span data-i18n="analysis.copy">Kopiuj</span></button>
         <button class="btn secondary" id="an_stop_btn" style="display:none">⛔ <span data-i18n="analysis.stop">Stop</span></button>

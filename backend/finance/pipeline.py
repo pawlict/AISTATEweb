@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .classifier import ClassifiedTransaction, classify_all
 from .detector import is_bank_statement
+from .entity_memory import EntityMemory
 from .parsers import get_parser
 from .parsers.base import ParseResult
 from .prompt_builder import build_finance_prompt
@@ -61,6 +62,7 @@ def run_finance_pipeline(
     pdf_path: Path,
     cached_text: Optional[str] = None,
     save_dir: Optional[Path] = None,
+    global_dir: Optional[Path] = None,
     log_cb=None,
 ) -> Optional[Dict[str, Any]]:
     """Run the full financial analysis pipeline on a PDF.
@@ -69,6 +71,7 @@ def run_finance_pipeline(
         pdf_path: Path to bank statement PDF
         cached_text: Pre-extracted text (from document_processor cache)
         save_dir: Directory to save intermediate results (e.g. project finance dir)
+        global_dir: Global projects dir for shared entity knowledge
         log_cb: Optional logging callback
 
     Returns:
@@ -119,12 +122,26 @@ def run_finance_pipeline(
         _log("UWAGA: Nie wyodrębniono żadnych transakcji. Dokument zostanie przesłany jako tekst surowy.")
         return None
 
-    # Step 5: Classify transactions
+    # Step 5: Load entity memory
+    memory = None
+    if save_dir:
+        try:
+            global_ents_dir = global_dir / "_global" if global_dir else None
+            memory = EntityMemory(save_dir, global_ents_dir)
+            flagged = memory.get_flagged_names()
+            if flagged:
+                _log(f"Entity memory: {len(flagged)} oznaczonych podmiotów")
+        except Exception as e:
+            _log(f"Nie udało się załadować entity memory: {e}")
+            memory = None
+
+    # Step 6: Classify transactions (with entity memory)
     _log("Klasyfikacja transakcji...")
-    classified = classify_all(parse_result.transactions)
+    classified = classify_all(parse_result.transactions, entity_memory=memory)
     tagged_count = sum(1 for ct in classified if ct.categories)
     recurring_count = sum(1 for ct in classified if ct.is_recurring)
-    _log(f"Sklasyfikowano: {tagged_count} otagowanych, {recurring_count} cyklicznych")
+    flagged_count = sum(1 for ct in classified if ct.entity_flagged)
+    _log(f"Sklasyfikowano: {tagged_count} otagowanych, {recurring_count} cyklicznych, {flagged_count} oznaczonych")
 
     # Step 6: Compute score
     _log("Obliczanie scoringu finansowego...")
@@ -150,6 +167,24 @@ def run_finance_pipeline(
             _log(f"Zapisano dane: {parsed_file}")
         except Exception as e:
             _log(f"Błąd zapisu danych: {e}")
+
+    # Step 8: Auto-update entity memory with seen counterparties
+    if memory:
+        try:
+            cp_data = []
+            for ct in classified:
+                cp_name = ct.transaction.counterparty or ct.transaction.title
+                if cp_name and len(cp_name.strip()) >= 3:
+                    cp_data.append({
+                        "name": cp_name,
+                        "category": ct.categories[0] if ct.categories else "",
+                        "amount": ct.transaction.amount,
+                        "date": ct.transaction.date,
+                    })
+            updated = memory.update_from_transactions(cp_data)
+            _log(f"Entity memory: zaktualizowano {updated} podmiotów")
+        except Exception as e:
+            _log(f"Błąd aktualizacji entity memory: {e}")
 
     dt = time.time() - t0
     _log(f"Pipeline finansowy zakończony w {dt:.1f}s")
