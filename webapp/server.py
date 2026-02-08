@@ -35,6 +35,9 @@ from backend.ollama_client import OllamaClient, OllamaError, quick_analyze, deep
 
 # Analysis report generator (HTML/DOCX/MD)
 from backend.report_generator import save_report, ReportSaveError
+
+# Financial intelligence pipeline
+from backend.finance.pipeline import run_finance_pipeline, build_enriched_prompt as build_finance_enriched_prompt
 from backend.models_info import MODELS_INFO, MODELS_GROUPS, DEFAULT_MODELS
 
 from generators import generate_txt_report, generate_html_report, generate_pdf_report
@@ -5572,11 +5575,58 @@ async def _run_deep_analysis_task(
     except Exception as e:
         raise RuntimeError(f"Invalid prompt selection: {e}")
 
-    sources_text = await _gather_analysis_sources(project_id, include_sources)
-    if not sources_text.strip():
-        raise RuntimeError("Brak źródeł do analizy")
+    # --- Finance pipeline: intercept when wyciag_bankowy template is selected ---
+    _finance_mode = "wyciag_bankowy" in [str(x) for x in template_ids]
+    _finance_prompt = None
 
-    final_prompt = (instruction.strip() + "\n\n---\n\n" if instruction.strip() else "") + "# Materiał źródłowy\n\n" + sources_text
+    if _finance_mode:
+        _log("Tryb analizy finansowej — uruchamiam pipeline...")
+        _prog(3)
+        docs = include_sources.get("documents") or []
+        ddir = _documents_dir(project_id)
+        finance_dir = project_path(project_id) / "finance"
+
+        for doc_name in docs:
+            fname = safe_filename(str(doc_name))
+            fp = (ddir / fname).resolve()
+            if not fp.exists() or fp.suffix.lower() != ".pdf":
+                continue
+
+            # Read cached text for detection
+            cache_txt_path, _ = _doc_cache_paths(fp)
+            cached_text = None
+            if cache_txt_path.exists():
+                try:
+                    cached_text = cache_txt_path.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    pass
+
+            result = await run_in_threadpool(
+                run_finance_pipeline,
+                pdf_path=fp,
+                cached_text=cached_text,
+                save_dir=finance_dir,
+                log_cb=_log,
+            )
+            if result:
+                _finance_prompt = build_finance_enriched_prompt(
+                    result,
+                    original_instruction=instruction,
+                )
+                _log(f"Finance pipeline: {len(result['classified'])} transakcji, score={result['score'].total_score}/100")
+                break  # Process first matching bank statement
+
+        if not _finance_prompt:
+            _log("Nie wykryto wyciągu bankowego w dokumentach — przechodzę do standardowej analizy.")
+            _finance_mode = False
+
+    if _finance_mode and _finance_prompt:
+        final_prompt = _finance_prompt
+    else:
+        sources_text = await _gather_analysis_sources(project_id, include_sources)
+        if not sources_text.strip():
+            raise RuntimeError("Brak źródeł do analizy")
+        final_prompt = (instruction.strip() + "\n\n---\n\n" if instruction.strip() else "") + "# Materiał źródłowy\n\n" + sources_text
 
     # keep reproducibility copy
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -5664,7 +5714,15 @@ async def _run_deep_analysis_task(
             return 75 + int((chars - 40000) / 40000 * 17)
         return 92
 
-    system_msg = "Jesteś ekspertem w analizie dokumentów i rozmów. Twórz raporty po polsku, jasno i strukturalnie."
+    if _finance_mode:
+        system_msg = (
+            "Jesteś doświadczonym analitykiem finansowym specjalizującym się w analizie wyciągów bankowych, "
+            "ocenie zdolności kredytowej i wykrywaniu anomalii transakcyjnych. "
+            "Tworzysz profesjonalne raporty po polsku. Dla każdego wniosku podajesz poziom pewności. "
+            "Zachowujesz ostrożność interpretacyjną — nie nadinterpretujesz danych."
+        )
+    else:
+        system_msg = "Jesteś ekspertem w analizie dokumentów i rozmów. Twórz raporty po polsku, jasno i strukturalnie."
     msgs = [
         {"role": "system", "content": system_msg},
         {"role": "user", "content": final_prompt},
@@ -5672,6 +5730,8 @@ async def _run_deep_analysis_task(
 
     # Use large context by default for deep.
     options = {"temperature": 0.7, "num_ctx": 32768}
+    if _finance_mode:
+        options["temperature"] = 0.4  # lower temp for factual financial analysis
 
     with out_path.open("a", encoding="utf-8") as f:
         async for chunk in OLLAMA.stream_chat(model=model, messages=msgs, options=options):

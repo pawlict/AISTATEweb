@@ -52,4 +52,14 @@ PROMPT_LIBRARY: Dict[str, Dict[str, Any]] = {
         "prompt": "Przeanalizuj koszty i wydatki wspomniane w materiale oraz w załączonych dokumentach (rachunki, faktury). Zidentyfikuj kwoty, waluty, kategorie wydatków, beneficjentów i potencjalne niezgodności.",
         "combinable": True,
     },
+    "wyciag_bankowy": {
+        "id": "wyciag_bankowy",
+        "name": "Analiza wyciągu bankowego",
+        "icon": "🏦",
+        "category": "System",
+        "description": "Autonomiczna analiza finansowa wyciągu bankowego (PDF). Automatycznie rozpoznaje bank, parsuje transakcje, klasyfikuje ryzyka (hazard, krypto, pożyczki) i generuje scoring finansowy.",
+        "prompt": "Przeprowadź kompleksową analizę finansową wyciągu bankowego. Zbadaj przepływy finansowe, powtarzalność zobowiązań, wykryj pożyczki, raty, koszty obsługi długu, zakupy kryptowalut, transakcje hazardowe i inne podejrzane podmioty. Oceń czy właściciel rachunku żyje w ramach wpływów czy generuje deficyt. Podaj scoring finansowy z uzasadnieniem.",
+        "combinable": False,
+        "_finance_mode": True,
+    },
 }

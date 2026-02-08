@@ -649,5 +649,13 @@
   "translation.tts.listen_source": "Listen to source text",
   "translation.tts.listen_translation": "Listen to translation",
   "translation.tts.engine": "Reader:",
-  "translation.tts.fallback": "{chosen} does not support this language. Using: {used}"
+  "translation.tts.fallback": "{chosen} does not support this language. Using: {used}",
+
+  "finance.mode.detected": "Financial analysis mode detected",
+  "finance.pipeline.running": "Running financial analysis pipeline...",
+  "finance.pipeline.transactions": "Found {count} transactions",
+  "finance.pipeline.score": "Financial score: {score}/100",
+  "finance.bank.detected": "Detected bank: {bank}",
+  "finance.prompt.name": "Bank statement analysis",
+  "finance.prompt.desc": "Autonomous financial analysis of bank statements (PDF). Automatically detects bank, parses transactions, classifies risks and generates scoring."
 }
