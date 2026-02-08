@@ -475,6 +475,12 @@
           <div style="margin-top: 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <button class="btn secondary" onclick="saveEdits()" data-i18n="translation.btn.save_edits">💾 Zapisz zmiany</button>
             <button class="btn" style="background: #999; color: white;" onclick="resetOutput()" data-i18n="translation.btn.reset">↻ Reset</button>
+            <span style="flex:1"></span>
+            <span class="small" id="tts-engine-box" style="display:none; align-items:center; gap:4px;">
+              <label class="small" for="tts-engine-select" data-i18n="translation.tts.engine">Lektor:</label>
+              <select class="input mini-select" id="tts-engine-select" style="min-width:100px;"></select>
+              <span class="small muted" id="tts-engine-warn" style="color:#d97706;display:none;"></span>
+            </span>
           </div>
           <!-- TTS audio player (hidden, used for playback) -->
           <audio id="tts-audio-player" style="display:none;"></audio>

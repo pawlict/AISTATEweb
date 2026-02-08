@@ -937,7 +937,7 @@ function displayResults(data) {
         ttsBtn.className = 'tts-tab-btn';
         ttsBtn.title = 'Odsłuchaj';
         ttsBtn.innerHTML = (typeof aiIcon === 'function') ? aiIcon('tts_read', 13) : '🔊';
-        ttsBtn.onclick = (e) => { e.stopPropagation(); _ttsSpeak(lang, 'output'); };
+        ttsBtn.onclick = (e) => { e.stopPropagation(); _ttsSpeak(lang, 'output', ttsBtn); };
         tab.appendChild(ttsBtn);
 
         tab.onclick = () => { switchLanguageTab(lang); };
@@ -1178,8 +1178,11 @@ function applyPreset(preset) {
 var _ttsVoiceMap = null;
 var _ttsStatus = null;
 var _ttsCurrentAudio = null;
+var _ttsCurrentBtn = null;   // button that triggered current playback
 
-/** Fetch TTS voice map + status once */
+var _TTS_ENGINE_NAMES = { piper: 'Piper', mms: 'MMS (Meta)', kokoro: 'Kokoro' };
+
+/** Fetch TTS voice map + status once, populate engine selector */
 async function _ttsInit() {
     if (_ttsVoiceMap !== null) return;
     try {
@@ -1194,47 +1197,101 @@ async function _ttsInit() {
         _ttsStatus = {};
     }
 
-    // Show/hide source TTS button based on availability
-    const srcBtn = document.getElementById('tts-input-btn');
-    if (srcBtn && _ttsHasAnyEngine()) {
-        srcBtn.style.display = '';
+    // Populate engine selector with only installed engines
+    const sel = document.getElementById('tts-engine-select');
+    const box = document.getElementById('tts-engine-box');
+    if (sel && _ttsHasAnyEngine()) {
+        sel.innerHTML = '';
+        const order = ['piper', 'kokoro', 'mms'];
+        for (const eng of order) {
+            if (_ttsEngineInstalled(eng)) {
+                const opt = document.createElement('option');
+                opt.value = eng;
+                opt.textContent = _TTS_ENGINE_NAMES[eng] || eng;
+                sel.appendChild(opt);
+            }
+        }
+        if (box) box.style.display = 'inline-flex';
+
+        // Show source TTS button
+        const srcBtn = document.getElementById('tts-input-btn');
+        if (srcBtn) srcBtn.style.display = '';
     }
 }
 
-function _ttsHasAnyEngine() {
+function _ttsEngineInstalled(eng) {
     if (!_ttsStatus) return false;
-    return (_ttsStatus.piper && _ttsStatus.piper.installed) ||
-           (_ttsStatus.mms && _ttsStatus.mms.installed) ||
-           (_ttsStatus.kokoro && _ttsStatus.kokoro.installed);
+    if (eng === 'mms') return _ttsStatus.mms && _ttsStatus.mms.installed;
+    return _ttsStatus[eng] && _ttsStatus[eng].installed;
 }
 
-/** Pick best available engine + voice for a language */
+function _ttsHasAnyEngine() {
+    return _ttsEngineInstalled('piper') || _ttsEngineInstalled('mms') || _ttsEngineInstalled('kokoro');
+}
+
+/** Pick voice for a language using user-selected engine.
+ *  Falls back to other engines if selected one lacks the language. */
 function _ttsPickVoice(lang) {
     if (!_ttsVoiceMap || !_ttsStatus) return null;
 
     const langEntry = _ttsVoiceMap[lang];
     if (!langEntry) return null;
 
-    // Priority: piper (fast) > kokoro (quality) > mms (coverage)
+    const warn = document.getElementById('tts-engine-warn');
+    const sel = document.getElementById('tts-engine-select');
+    const chosen = sel ? sel.value : '';
+
+    // Try user-selected engine first
+    if (chosen && langEntry[chosen] && _ttsEngineInstalled(chosen)) {
+        if (warn) warn.style.display = 'none';
+        return { engine: chosen, voice: langEntry[chosen], lang: lang };
+    }
+
+    // Selected engine doesn't have this language - try fallback
     const order = ['piper', 'kokoro', 'mms'];
     for (const eng of order) {
         const voice = langEntry[eng];
-        if (!voice) continue;
-
-        const installed = eng === 'mms'
-            ? (_ttsStatus.mms && _ttsStatus.mms.installed)
-            : (_ttsStatus[eng] && _ttsStatus[eng].installed);
-
-        if (installed) {
-            return { engine: eng, voice: voice, lang: lang };
+        if (!voice || !_ttsEngineInstalled(eng)) continue;
+        // Show warning about fallback
+        if (warn && chosen) {
+            warn.textContent = (_TTS_ENGINE_NAMES[chosen] || chosen) +
+                ' nie obsługuje tego języka. Użyto: ' + (_TTS_ENGINE_NAMES[eng] || eng);
+            warn.style.display = '';
         }
+        return { engine: eng, voice: voice, lang: lang };
     }
 
     return null;
 }
 
-/** Speak text for a given language */
-async function _ttsSpeak(lang, source) {
+/** Stop any currently playing TTS audio */
+function _ttsStop() {
+    if (_ttsCurrentAudio) {
+        _ttsCurrentAudio.pause();
+        _ttsCurrentAudio.currentTime = 0;
+        _ttsCurrentAudio = null;
+    }
+    if (_ttsCurrentBtn) {
+        _ttsCurrentBtn.classList.remove('playing', 'loading');
+        _ttsCurrentBtn = null;
+    }
+    // Also clear all tab btn playing states
+    document.querySelectorAll('.tts-tab-btn.playing, .tts-speak-btn.playing').forEach(
+        el => el.classList.remove('playing')
+    );
+}
+
+/** Toggle TTS: if playing from the same button, stop; otherwise start new */
+async function _ttsSpeak(lang, source, triggerBtn) {
+    // If the same button is already playing → stop
+    if (_ttsCurrentAudio && _ttsCurrentBtn === triggerBtn) {
+        _ttsStop();
+        return;
+    }
+
+    // Stop any previous playback
+    _ttsStop();
+
     await _ttsInit();
 
     const pick = _ttsPickVoice(lang);
@@ -1252,26 +1309,17 @@ async function _ttsSpeak(lang, source) {
         const el = document.getElementById('output-text');
         text = el ? el.value.trim() : '';
     }
-
     if (!text) return;
 
-    // Limit text length for TTS (avoid very long synthesis)
-    const maxChars = 2000;
-    if (text.length > maxChars) {
-        text = text.substring(0, maxChars);
-    }
-
-    // Stop current audio if playing
-    if (_ttsCurrentAudio) {
-        _ttsCurrentAudio.pause();
-        _ttsCurrentAudio = null;
-    }
+    // Limit text length
+    if (text.length > 2000) text = text.substring(0, 2000);
 
     // Show loading state
-    const btn = source === 'input'
+    const btn = triggerBtn || (source === 'input'
         ? document.getElementById('tts-input-btn')
-        : document.getElementById('tts-output-btn');
+        : document.getElementById('tts-output-btn'));
     if (btn) btn.classList.add('loading');
+    _ttsCurrentBtn = btn;
 
     try {
         const res = await fetch('/api/tts/synthesize', {
@@ -1286,15 +1334,14 @@ async function _ttsSpeak(lang, source) {
         });
 
         if (!res.ok) {
-            const err = await res.text();
-            console.error('TTS error:', err);
+            console.error('TTS error:', await res.text());
             return;
         }
 
         const data = await res.json();
 
-        // If cached, play immediately
         if (data.status === 'cached' && data.audio_url) {
+            if (btn) btn.classList.remove('loading');
             _ttsPlayUrl(data.audio_url, btn);
             return;
         }
@@ -1304,9 +1351,12 @@ async function _ttsSpeak(lang, source) {
             const audioUrl = data.audio_url;
             while (true) {
                 await new Promise(r => setTimeout(r, 600));
+                // If user stopped during polling, abort
+                if (_ttsCurrentBtn !== btn) return;
                 const tsk = await fetch('/api/tasks/' + data.task_id).then(r => r.ok ? r.json() : null);
                 if (!tsk) continue;
                 if (tsk.status === 'done') {
+                    if (btn) btn.classList.remove('loading');
                     _ttsPlayUrl(audioUrl, btn);
                     return;
                 }
@@ -1326,20 +1376,25 @@ async function _ttsSpeak(lang, source) {
 function _ttsPlayUrl(url, btn) {
     const audio = new Audio(url);
     _ttsCurrentAudio = audio;
+    _ttsCurrentBtn = btn;
 
     if (btn) btn.classList.add('playing');
 
     audio.onended = () => {
         _ttsCurrentAudio = null;
+        _ttsCurrentBtn = null;
         if (btn) btn.classList.remove('playing');
     };
     audio.onerror = () => {
         _ttsCurrentAudio = null;
+        _ttsCurrentBtn = null;
         if (btn) btn.classList.remove('playing');
     };
 
     audio.play().catch(e => {
         console.error('Audio playback error:', e);
+        _ttsCurrentAudio = null;
+        _ttsCurrentBtn = null;
         if (btn) btn.classList.remove('playing');
     });
 }
@@ -1348,22 +1403,22 @@ function _ttsPlayUrl(url, btn) {
 document.addEventListener('DOMContentLoaded', () => {
     _ttsInit();
 
-    // Bind source text TTS button
+    // Bind source text TTS button (toggle play/stop)
     const srcBtn = document.getElementById('tts-input-btn');
     if (srcBtn) {
         srcBtn.addEventListener('click', () => {
             const srcLang = document.getElementById('source_lang');
             const lang = srcLang ? srcLang.value : 'english';
-            _ttsSpeak(lang, 'input');
+            _ttsSpeak(lang, 'input', srcBtn);
         });
     }
 
-    // Bind output text TTS button
+    // Bind output text TTS button (toggle play/stop)
     const outBtn = document.getElementById('tts-output-btn');
     if (outBtn) {
         outBtn.addEventListener('click', () => {
             const activeLang = _trGetActiveOutputLang ? _trGetActiveOutputLang() : 'english';
-            _ttsSpeak(activeLang, 'output');
+            _ttsSpeak(activeLang, 'output', outBtn);
         });
     }
 });

@@ -2931,7 +2931,7 @@ TTS_ENGINES = {
     },
     "kokoro": {
         "name": "Kokoro TTS",
-        "packages": ["kokoro>=0.3", "soundfile"],
+        "packages": ["spacy>=3.7,<4.0", "kokoro>=0.3", "soundfile"],
         "pip_check": "kokoro",
         "size_mb": 82,
         "languages": "9",

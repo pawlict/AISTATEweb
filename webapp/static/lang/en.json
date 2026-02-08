@@ -647,5 +647,6 @@
   "tts.gpu.minimal": "Minimal benefit (already fast on CPU)",
   "tts.gpu.moderate": "Moderate benefit (2-3x faster)",
   "translation.tts.listen_source": "Listen to source text",
-  "translation.tts.listen_translation": "Listen to translation"
+  "translation.tts.listen_translation": "Listen to translation",
+  "translation.tts.engine": "Reader:"
 }
