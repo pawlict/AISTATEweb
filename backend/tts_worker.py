@@ -64,7 +64,7 @@ TTS_ENGINES = {
     },
     "kokoro": {
         "name": "Kokoro TTS",
-        "packages": ["kokoro>=0.3", "soundfile"],
+        "packages": ["spacy>=3.7,<4.0", "kokoro>=0.3", "soundfile"],
         "size_mb": 82,
         "description": "Bardzo szybki, naturalny glos. 82 MB model obslugujacy 9 jezykow z wysoką jakoscia.",
         "description_en": "Very fast, natural sounding. 82 MB single model supporting 9 languages with high quality.",
