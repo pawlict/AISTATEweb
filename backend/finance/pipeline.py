@@ -11,6 +11,14 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .behavioral import (
+    BehavioralReport,
+    MonthSnapshot,
+    build_month_snapshot,
+    compute_behavioral_report,
+    load_scoring_history,
+    save_scoring_history,
+)
 from .classifier import ClassifiedTransaction, classify_all
 from .detector import is_bank_statement
 from .entity_memory import EntityMemory
@@ -197,6 +205,84 @@ def run_finance_pipeline(
     }
 
 
+def run_multi_statement_pipeline(
+    pdf_paths: List[Tuple[Path, Optional[str]]],
+    save_dir: Optional[Path] = None,
+    global_dir: Optional[Path] = None,
+    log_cb=None,
+) -> Optional[Dict[str, Any]]:
+    """Run pipeline on multiple PDF bank statements and aggregate results.
+
+    Args:
+        pdf_paths: List of (pdf_path, cached_text) tuples
+        save_dir: Finance directory for the project
+        global_dir: Global projects dir
+        log_cb: Logging callback
+
+    Returns:
+        Dict with combined results + behavioral report, or None.
+    """
+    def _log(msg: str):
+        log.info(msg)
+        if log_cb:
+            try:
+                log_cb(msg)
+            except Exception:
+                pass
+
+    all_results: List[Dict[str, Any]] = []
+    month_snapshots: List[MonthSnapshot] = []
+
+    for pdf_path, cached_text in pdf_paths:
+        result = run_finance_pipeline(
+            pdf_path=pdf_path,
+            cached_text=cached_text,
+            save_dir=save_dir,
+            global_dir=global_dir,
+            log_cb=log_cb,
+        )
+        if result:
+            all_results.append(result)
+            pr = result["parse_result"]
+            snap = build_month_snapshot(
+                classified=result["classified"],
+                score=result["score"],
+                period=pr.info.period_from[:7] if pr.info.period_from else "",
+                bank=pr.bank,
+                source_file=pdf_path.name,
+            )
+            month_snapshots.append(snap)
+
+    if not all_results:
+        return None
+
+    # Load historical data and merge
+    if save_dir:
+        historical = load_scoring_history(save_dir)
+        # Merge: new snapshots override same-period historical
+        existing_periods = {s.period for s in month_snapshots}
+        for h in historical:
+            if h.period not in existing_periods:
+                month_snapshots.append(h)
+        # Save updated history
+        save_scoring_history(save_dir, month_snapshots)
+        _log(f"Scoring history: {len(month_snapshots)} miesięcy (w tym {len(historical)} historycznych)")
+
+    # Compute behavioral report
+    behavioral = None
+    if len(month_snapshots) >= 2:
+        behavioral = compute_behavioral_report(month_snapshots)
+        _log(f"Analiza behawioralna: {behavioral.total_months} miesięcy, trajektoria={behavioral.debt_trajectory}")
+
+    # Use the most recent statement as primary result
+    primary = all_results[-1]
+    primary["all_results"] = all_results
+    primary["behavioral"] = behavioral
+    primary["month_snapshots"] = month_snapshots
+
+    return primary
+
+
 def build_enriched_prompt(
     pipeline_result: Dict[str, Any],
     original_instruction: str = "",
@@ -204,10 +290,13 @@ def build_enriched_prompt(
     """Build the enriched prompt from pipeline results.
 
     This replaces the raw document text in the analysis prompt.
+    Includes behavioral data if multi-month analysis was performed.
     """
+    behavioral = pipeline_result.get("behavioral")
     return build_finance_prompt(
         parse_result=pipeline_result["parse_result"],
         classified=pipeline_result["classified"],
         score=pipeline_result["score"],
         original_instruction=original_instruction,
+        behavioral=behavioral,
     )

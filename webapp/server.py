@@ -37,7 +37,7 @@ from backend.ollama_client import OllamaClient, OllamaError, quick_analyze, deep
 from backend.report_generator import save_report, ReportSaveError
 
 # Financial intelligence pipeline
-from backend.finance.pipeline import run_finance_pipeline, build_enriched_prompt as build_finance_enriched_prompt
+from backend.finance.pipeline import run_finance_pipeline, run_multi_statement_pipeline, build_enriched_prompt as build_finance_enriched_prompt
 from backend.models_info import MODELS_INFO, MODELS_GROUPS, DEFAULT_MODELS
 
 from generators import generate_txt_report, generate_html_report, generate_pdf_report
@@ -5586,13 +5586,14 @@ async def _run_deep_analysis_task(
         ddir = _documents_dir(project_id)
         finance_dir = project_path(project_id) / "finance"
 
+        # Collect all PDF paths with cached text
+        pdf_paths = []
         for doc_name in docs:
             fname = safe_filename(str(doc_name))
             fp = (ddir / fname).resolve()
             if not fp.exists() or fp.suffix.lower() != ".pdf":
                 continue
 
-            # Read cached text for detection
             cache_txt_path, _ = _doc_cache_paths(fp)
             cached_text = None
             if cache_txt_path.exists():
@@ -5600,20 +5601,36 @@ async def _run_deep_analysis_task(
                     cached_text = cache_txt_path.read_text(encoding="utf-8", errors="replace")
                 except Exception:
                     pass
+            pdf_paths.append((fp, cached_text))
 
-            result = await run_in_threadpool(
-                run_finance_pipeline,
-                pdf_path=fp,
-                cached_text=cached_text,
-                save_dir=finance_dir,
-                global_dir=PROJECTS_DIR,
-                log_cb=_log,
-            )
+        if pdf_paths:
+            _log(f"Znaleziono {len(pdf_paths)} PDF-ów do analizy finansowej")
+
+            if len(pdf_paths) == 1:
+                # Single document — use simple pipeline
+                result = await run_in_threadpool(
+                    run_finance_pipeline,
+                    pdf_path=pdf_paths[0][0],
+                    cached_text=pdf_paths[0][1],
+                    save_dir=finance_dir,
+                    global_dir=PROJECTS_DIR,
+                    log_cb=_log,
+                )
+            else:
+                # Multiple documents — use multi-statement pipeline with behavioral analysis
+                result = await run_in_threadpool(
+                    run_multi_statement_pipeline,
+                    pdf_paths=pdf_paths,
+                    save_dir=finance_dir,
+                    global_dir=PROJECTS_DIR,
+                    log_cb=_log,
+                )
+
             if result:
-                # LLM fallback for unclassified transactions
+                # LLM fallback for unclassified transactions (on primary result)
                 try:
                     from backend.finance.llm_classifier import classify_with_llm
-                    llm_model = model  # use the same model user selected
+                    llm_model = model
                     llm_updated = await classify_with_llm(
                         result["classified"],
                         OLLAMA,
@@ -5621,7 +5638,6 @@ async def _run_deep_analysis_task(
                         log_cb=_log,
                     )
                     if llm_updated:
-                        # Recompute score with updated classifications
                         from backend.finance.scorer import compute_score as recompute_score
                         result["score"] = recompute_score(result["classified"])
                         _log(f"Score po LLM fallback: {result['score'].total_score}/100")
@@ -5632,8 +5648,14 @@ async def _run_deep_analysis_task(
                     result,
                     original_instruction=instruction,
                 )
-                _log(f"Finance pipeline: {len(result['classified'])} transakcji, score={result['score'].total_score}/100")
-                break  # Process first matching bank statement
+                n_txns = len(result["classified"])
+                score_val = result["score"].total_score
+                behavioral = result.get("behavioral")
+                if behavioral:
+                    _log(f"Finance pipeline: {n_txns} transakcji, score={score_val}/100, "
+                         f"behavioral={behavioral.total_months} mies., trajektoria={behavioral.debt_trajectory}")
+                else:
+                    _log(f"Finance pipeline: {n_txns} transakcji, score={score_val}/100")
 
         if not _finance_prompt:
             _log("Nie wykryto wyciągu bankowego w dokumentach — przechodzę do standardowej analizy.")
