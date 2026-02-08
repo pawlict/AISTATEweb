@@ -423,24 +423,45 @@
     }
 
     const q = State.quick;
-    const topics = (q.kluczowe_tematy || []).slice(0,12);
-    const people = (q.uczestnicy || []).slice(0,12);
-    const places = (q.miejsca || []).slice(0,12);
-    const dates = (q.terminy || []).slice(0,12);
 
-    body.innerHTML = `
-      <div class="quick-grid">
-        <div class="quick-row"><b>Tematy:</b> ${topics.length ? topics.join(", ") : "—"}</div>
-        <div class="quick-row"><b>Uczestnicy:</b> ${people.length ? people.join(", ") : "—"}</div>
-        <div class="quick-stats">
-          <span><b>Decyzje:</b> ${q.decyzje ?? "—"}</span>
-          <span><b>Zadania:</b> ${q.zadania ?? "—"}</span>
-          <span><b>Terminy:</b> ${dates.length}</span>
+    // Detect document-mode response (has typ_dokumentu or podmioty)
+    const isDocMode = !!(q.typ_dokumentu || q.podmioty || q.kwoty || q.podsumowanie);
+
+    if (isDocMode) {
+      const podmioty = (q.podmioty || []).slice(0,12);
+      const kwoty = (q.kwoty || []).slice(0,12);
+      const daty = (q.daty || []).slice(0,12);
+      const topics = (q.kluczowe_tematy || []).slice(0,12);
+      body.innerHTML = `
+        <div class="quick-grid">
+          ${q.typ_dokumentu ? `<div class="quick-row"><b>Typ dokumentu:</b> ${q.typ_dokumentu}</div>` : ``}
+          ${q.podsumowanie ? `<div class="quick-row"><b>Podsumowanie:</b> ${q.podsumowanie}</div>` : ``}
+          ${topics.length ? `<div class="quick-row"><b>Tematy:</b> ${topics.join(", ")}</div>` : ``}
+          ${podmioty.length ? `<div class="quick-row"><b>Podmioty:</b> ${podmioty.join(", ")}</div>` : ``}
+          ${kwoty.length ? `<div class="quick-row"><b>Kwoty:</b> ${kwoty.join(", ")}</div>` : ``}
+          ${daty.length ? `<div class="quick-row"><b>Daty:</b> ${daty.join(", ")}</div>` : ``}
+          ${q.waluta ? `<div class="small muted">Waluta: ${q.waluta}</div>` : ``}
         </div>
-        ${places.length ? `<div class="quick-row"><b>Miejsca:</b> ${places.join(", ")}</div>` : ``}
-        ${q.status ? `<div class="small muted">Status: ${q.status}</div>` : ``}
-      </div>
-    `;
+      `;
+    } else {
+      const topics = (q.kluczowe_tematy || []).slice(0,12);
+      const people = (q.uczestnicy || []).slice(0,12);
+      const places = (q.miejsca || []).slice(0,12);
+      const dates = (q.terminy || []).slice(0,12);
+      body.innerHTML = `
+        <div class="quick-grid">
+          <div class="quick-row"><b>Tematy:</b> ${topics.length ? topics.join(", ") : "—"}</div>
+          <div class="quick-row"><b>Uczestnicy:</b> ${people.length ? people.join(", ") : "—"}</div>
+          <div class="quick-stats">
+            <span><b>Decyzje:</b> ${q.decyzje ?? "—"}</span>
+            <span><b>Zadania:</b> ${q.zadania ?? "—"}</span>
+            <span><b>Terminy:</b> ${dates.length}</span>
+          </div>
+          ${places.length ? `<div class="quick-row"><b>Miejsca:</b> ${places.join(", ")}</div>` : ``}
+          ${q.status ? `<div class="small muted">Status: ${q.status}</div>` : ``}
+        </div>
+      `;
+    }
   }
 
   

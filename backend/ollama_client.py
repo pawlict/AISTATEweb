@@ -193,24 +193,45 @@ def _parse_json_best_effort(s: str) -> Dict[str, Any]:
     raise OllamaError("Model did not return valid JSON")
 
 
-async def quick_analyze(client: OllamaClient, text: str, *, model: str = "mistral:7b-instruct") -> Dict[str, Any]:
-    """Quick analysis: returns a dict matching the expected JSON schema."""
+async def quick_analyze(client: OllamaClient, text: str, *, model: str = "mistral:7b-instruct", source_type: str = "transcript") -> Dict[str, Any]:
+    """Quick analysis: returns a dict matching the expected JSON schema.
+
+    source_type: 'transcript' (default) or 'document' — selects prompt template.
+    """
     await client.ensure_model(model)
     snippet = (text or "")[:3000]
-    prompt = (
-        "Przeanalizuj poniższy materiał i zwróć WYŁĄCZNIE poprawny JSON (bez preambuły, bez markdown).\n\n"
-        "Wymagany format:\n"
-        "{\n"
-        '  "kluczowe_tematy": ["temat1", "temat2"],\n'
-        '  "uczestnicy": ["Osoba 1", "Osoba 2"],\n'
-        '  "decyzje": 0,\n'
-        '  "zadania": 0,\n'
-        '  "terminy": ["YYYY-MM-DD"],\n'
-        '  "miejsca": ["Miejscowość"],\n'
-        '  "status": "completed"\n'
-        "}\n\n"
-        "Materiał:\n" + snippet
-    )
+
+    if source_type == "document":
+        prompt = (
+            "Przeanalizuj poniższy dokument i zwróć WYŁĄCZNIE poprawny JSON (bez preambuły, bez markdown).\n\n"
+            "Wymagany format:\n"
+            "{\n"
+            '  "typ_dokumentu": "faktura|umowa|wyciąg bankowy|raport|inny",\n'
+            '  "kluczowe_tematy": ["temat1", "temat2"],\n'
+            '  "podmioty": ["Firma/Osoba 1", "Firma/Osoba 2"],\n'
+            '  "daty": ["YYYY-MM-DD"],\n'
+            '  "kwoty": ["1234.56 PLN"],\n'
+            '  "waluta": "PLN",\n'
+            '  "podsumowanie": "Krótki opis dokumentu w 1-2 zdaniach",\n'
+            '  "status": "completed"\n'
+            "}\n\n"
+            "Dokument:\n" + snippet
+        )
+    else:
+        prompt = (
+            "Przeanalizuj poniższy materiał i zwróć WYŁĄCZNIE poprawny JSON (bez preambuły, bez markdown).\n\n"
+            "Wymagany format:\n"
+            "{\n"
+            '  "kluczowe_tematy": ["temat1", "temat2"],\n'
+            '  "uczestnicy": ["Osoba 1", "Osoba 2"],\n'
+            '  "decyzje": 0,\n'
+            '  "zadania": 0,\n'
+            '  "terminy": ["YYYY-MM-DD"],\n'
+            '  "miejsca": ["Miejscowość"],\n'
+            '  "status": "completed"\n'
+            "}\n\n"
+            "Materiał:\n" + snippet
+        )
     resp = await client.chat(
         model=model,
         messages=[{"role": "user", "content": prompt}],
