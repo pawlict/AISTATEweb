@@ -424,10 +424,37 @@
 
     const q = State.quick;
 
-    // Detect document-mode response (has typ_dokumentu or podmioty)
-    const isDocMode = !!(q.typ_dokumentu || q.podmioty || q.kwoty || q.podsumowanie);
+    // Helper: format number as PLN
+    function _fmtPLN(v) {
+      if (v == null) return "—";
+      return Number(v).toLocaleString("pl-PL", {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " " + (q.waluta || "PLN");
+    }
 
-    if (isDocMode) {
+    // Detect bank statement response
+    const isBankMode = !!(q.wlasciciel_rachunku || q.nr_rachunku_iban || q.laczna_kwota_obciazen != null);
+    // Detect generic document response
+    const isDocMode = !isBankMode && !!(q.typ_dokumentu || q.podmioty || q.kwoty || q.podsumowanie);
+
+    if (isBankMode) {
+      body.innerHTML = `
+        <div class="quick-grid">
+          ${q.typ_dokumentu ? `<div class="quick-row"><b>Typ:</b> ${q.typ_dokumentu}</div>` : ``}
+          <div class="quick-row"><b>Wlasciciel:</b> ${q.wlasciciel_rachunku || "—"}</div>
+          <div class="quick-row"><b>Bank:</b> ${q.bank || "—"}</div>
+          <div class="quick-row"><b>Nr rachunku (IBAN):</b> <span style="font-family:monospace">${q.nr_rachunku_iban || "—"}</span></div>
+          ${q.okres ? `<div class="quick-row"><b>Okres:</b> ${q.okres}</div>` : ``}
+          <div class="quick-stats">
+            <span><b>Saldo pocz.:</b> ${_fmtPLN(q.saldo_poczatkowe)}</span>
+            <span><b>Saldo kon.:</b> ${_fmtPLN(q.saldo_koncowe)}</span>
+          </div>
+          <div class="quick-stats">
+            <span style="color:var(--success, #2a2)"><b>Uznania:</b> ${_fmtPLN(q.laczna_kwota_uznan)}</span>
+            <span style="color:var(--danger, #c33)"><b>Obciazenia:</b> ${_fmtPLN(q.laczna_kwota_obciazen)}</span>
+          </div>
+          ${q.liczba_transakcji != null ? `<div class="small muted">Transakcje: ${q.liczba_transakcji} | Waluta: ${q.waluta || "PLN"}</div>` : ``}
+        </div>
+      `;
+    } else if (isDocMode) {
       const podmioty = (q.podmioty || []).slice(0,12);
       const kwoty = (q.kwoty || []).slice(0,12);
       const daty = (q.daty || []).slice(0,12);

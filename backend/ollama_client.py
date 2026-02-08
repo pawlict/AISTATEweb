@@ -78,14 +78,34 @@ class OllamaClient:
 
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, json=payload) as r:
-                    r.raise_for_status()
+                    if r.status_code >= 400:
+                        # Read error body for diagnostics
+                        error_body = ""
+                        try:
+                            await r.aread()
+                            error_body = r.text[:500]
+                        except Exception:
+                            pass
+                        model_name = payload.get("model", "?")
+                        raise OllamaError(
+                            f"Ollama HTTP {r.status_code} (model={model_name}): "
+                            f"{error_body or r.reason_phrase}"
+                        )
                     async for line in r.aiter_lines():
                         if not line:
                             continue
                         try:
-                            yield json.loads(line)
+                            obj = json.loads(line)
+                            # Check for inline error from Ollama
+                            if obj.get("error"):
+                                raise OllamaError(f"Ollama error (model={payload.get('model', '?')}): {obj['error']}")
+                            yield obj
+                        except OllamaError:
+                            raise
                         except Exception:
                             continue
+        except OllamaError:
+            raise
         except Exception as e:
             raise OllamaError(f"Ollama stream failed: {e}")
 
@@ -196,17 +216,38 @@ def _parse_json_best_effort(s: str) -> Dict[str, Any]:
 async def quick_analyze(client: OllamaClient, text: str, *, model: str = "mistral:7b-instruct", source_type: str = "transcript") -> Dict[str, Any]:
     """Quick analysis: returns a dict matching the expected JSON schema.
 
-    source_type: 'transcript' (default) or 'document' — selects prompt template.
+    source_type: 'transcript', 'document', or 'bank_statement' — selects prompt template.
     """
     await client.ensure_model(model)
-    snippet = (text or "")[:3000]
+    snippet = (text or "")[:4000]
 
-    if source_type == "document":
+    if source_type == "bank_statement":
+        prompt = (
+            "Przeanalizuj poniższy wyciąg bankowy i zwróć WYŁĄCZNIE poprawny JSON (bez preambuły, bez markdown).\n\n"
+            "Wymagany format:\n"
+            "{\n"
+            '  "typ_dokumentu": "wyciąg bankowy",\n'
+            '  "wlasciciel_rachunku": "Imię Nazwisko lub Nazwa firmy",\n'
+            '  "bank": "Nazwa banku",\n'
+            '  "nr_rachunku_iban": "PL00 0000 0000 0000 0000 0000 0000",\n'
+            '  "okres": "od YYYY-MM-DD do YYYY-MM-DD",\n'
+            '  "waluta": "PLN",\n'
+            '  "saldo_poczatkowe": 0.00,\n'
+            '  "saldo_koncowe": 0.00,\n'
+            '  "laczna_kwota_obciazen": 0.00,\n'
+            '  "laczna_kwota_uznan": 0.00,\n'
+            '  "liczba_transakcji": 0,\n'
+            '  "status": "completed"\n'
+            "}\n\n"
+            "WAŻNE: Kwoty podaj jako liczby (nie stringi). Jeśli nie możesz odczytać danej wartości, wpisz null.\n\n"
+            "Wyciąg bankowy:\n" + snippet
+        )
+    elif source_type == "document":
         prompt = (
             "Przeanalizuj poniższy dokument i zwróć WYŁĄCZNIE poprawny JSON (bez preambuły, bez markdown).\n\n"
             "Wymagany format:\n"
             "{\n"
-            '  "typ_dokumentu": "faktura|umowa|wyciąg bankowy|raport|inny",\n'
+            '  "typ_dokumentu": "faktura|umowa|raport|inny",\n'
             '  "kluczowe_tematy": ["temat1", "temat2"],\n'
             '  "podmioty": ["Firma/Osoba 1", "Firma/Osoba 2"],\n'
             '  "daty": ["YYYY-MM-DD"],\n'
