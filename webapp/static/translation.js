@@ -1254,8 +1254,10 @@ function _ttsPickVoice(lang) {
         if (!voice || !_ttsEngineInstalled(eng)) continue;
         // Show warning about fallback
         if (warn && chosen) {
-            warn.textContent = (_TTS_ENGINE_NAMES[chosen] || chosen) +
-                ' nie obsługuje tego języka. Użyto: ' + (_TTS_ENGINE_NAMES[eng] || eng);
+            warn.textContent = tFmt('translation.tts.fallback', {
+                chosen: _TTS_ENGINE_NAMES[chosen] || chosen,
+                used: _TTS_ENGINE_NAMES[eng] || eng
+            });
             warn.style.display = '';
         }
         return { engine: eng, voice: voice, lang: lang };
