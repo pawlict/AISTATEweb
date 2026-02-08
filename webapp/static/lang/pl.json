@@ -649,5 +649,13 @@
   "translation.tts.listen_source": "Odsłuchaj tekst źródłowy",
   "translation.tts.listen_translation": "Odsłuchaj tłumaczenie",
   "translation.tts.engine": "Lektor:",
-  "translation.tts.fallback": "{chosen} nie obsługuje tego języka. Użyto: {used}"
+  "translation.tts.fallback": "{chosen} nie obsługuje tego języka. Użyto: {used}",
+
+  "finance.mode.detected": "Wykryto tryb analizy finansowej",
+  "finance.pipeline.running": "Uruchamiam pipeline analizy finansowej...",
+  "finance.pipeline.transactions": "Znaleziono {count} transakcji",
+  "finance.pipeline.score": "Scoring finansowy: {score}/100",
+  "finance.bank.detected": "Rozpoznany bank: {bank}",
+  "finance.prompt.name": "Analiza wyciągu bankowego",
+  "finance.prompt.desc": "Autonomiczna analiza finansowa wyciągu bankowego (PDF). Automatycznie rozpoznaje bank, parsuje transakcje, klasyfikuje ryzyka i generuje scoring."
 }
