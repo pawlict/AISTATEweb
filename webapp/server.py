@@ -5147,7 +5147,10 @@ async def _run_quick_analysis(project_id: str) -> Dict[str, Any]:
                     doc_parts.append(_load_text_file(cache_txt).strip())
         if doc_parts:
             text = "\n\n---\n\n".join(doc_parts)
-            _source_type = "document"
+            # Detect if this is a bank statement
+            from backend.finance.detector import is_bank_statement as _detect_bank_stmt
+            _is_bank, _, _ = _detect_bank_stmt(text[:10000])
+            _source_type = "bank_statement" if _is_bank else "document"
 
     if not text:
         raise HTTPException(status_code=400, detail="Brak źródeł do analizy (transkrypcja, diaryzacja lub dokumenty).")
@@ -5796,21 +5799,35 @@ async def _run_deep_analysis_task(
     if _finance_mode:
         options["temperature"] = 0.4  # lower temp for factual financial analysis
 
-    with out_path.open("a", encoding="utf-8") as f:
-        async for chunk in OLLAMA.stream_chat(model=model, messages=msgs, options=options):
-            if not chunk:
-                continue
-            f.write(chunk)
-            f.flush()
-            written += len(chunk)
-            if written - state.get("_last_chars", 0) >= 300:
-                # Update state at most every few hundred chars
-                state["_last_chars"] = written
-                p = _estimate_progress(written)
-                state["progress"] = p
-                state["updated_at"] = now_iso()
-                _persist_deep_task_state(project_id, {k: v for k, v in state.items() if not str(k).startswith("_")})
-                _prog(p)
+    # Try streaming with fallback to smaller context on failure
+    _ctx_sizes = [32768, 16384, 8192]
+    _stream_ok = False
+    for _ctx_attempt in _ctx_sizes:
+        options["num_ctx"] = _ctx_attempt
+        try:
+            with out_path.open("a", encoding="utf-8") as f:
+                async for chunk in OLLAMA.stream_chat(model=model, messages=msgs, options=options):
+                    if not chunk:
+                        continue
+                    f.write(chunk)
+                    f.flush()
+                    written += len(chunk)
+                    if written - state.get("_last_chars", 0) >= 300:
+                        state["_last_chars"] = written
+                        p = _estimate_progress(written)
+                        state["progress"] = p
+                        state["updated_at"] = now_iso()
+                        _persist_deep_task_state(project_id, {k: v for k, v in state.items() if not str(k).startswith("_")})
+                        _prog(p)
+            _stream_ok = True
+            break
+        except Exception as _stream_err:
+            if _ctx_attempt == _ctx_sizes[-1]:
+                raise  # last attempt, propagate error
+            _log(f"Ollama error z num_ctx={_ctx_attempt}: {_stream_err} — ponawiam z mniejszym kontekstem...")
+            # Reset output file for retry
+            out_path.write_text(prefix, encoding="utf-8")
+            written = len(prefix.encode("utf-8"))
 
     dt = time.time() - t0
     state["stage"] = "finalize"
