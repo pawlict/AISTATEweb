@@ -19,6 +19,7 @@ def build_finance_prompt(
     classified: List[ClassifiedTransaction],
     score: ScoreBreakdown,
     original_instruction: str = "",
+    behavioral=None,
 ) -> str:
     """Build the full enriched prompt for financial analysis.
 
@@ -29,6 +30,10 @@ def build_finance_prompt(
 
     # --- System context ---
     parts.append(_build_system_section())
+
+    # --- Behavioral analysis (if multi-month) ---
+    if behavioral is not None:
+        parts.append(_build_behavioral_section(behavioral))
 
     # --- Statement metadata ---
     parts.append(_build_info_section(parse_result))
@@ -52,7 +57,7 @@ def build_finance_prompt(
     parts.append(_build_scoring_section(score))
 
     # --- Task instructions ---
-    parts.append(_build_task_instructions(original_instruction))
+    parts.append(_build_task_instructions(original_instruction, has_behavioral=behavioral is not None))
 
     return "\n\n".join(p for p in parts if p)
 
@@ -283,7 +288,66 @@ def _score_bar(value: int, width: int = 10) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
-def _build_task_instructions(original_instruction: str) -> str:
+def _build_behavioral_section(behavioral) -> str:
+    """Build multi-month behavioral analysis section."""
+    if behavioral is None or behavioral.total_months < 2:
+        return ""
+
+    TRAJECTORY_PL = {
+        "stable": "Stabilna",
+        "improving": "Poprawa",
+        "worsening": "Pogarszanie się",
+        "occasional_deficit": "Sporadyczny deficyt",
+        "chronic_deficit": "Chroniczny deficyt",
+    }
+    DISCIPLINE_PL = {"high": "Wysoka", "medium": "Średnia", "low": "Niska"}
+    RISK_PL = {"stable": "Stabilne", "increasing": "Rosnące", "decreasing": "Malejące"}
+    DIRECTION_PL = {
+        "increasing": "↗ rośnie",
+        "decreasing": "↘ maleje",
+        "stable": "→ stabilny",
+        "volatile": "↕ niestabilny",
+    }
+
+    lines = [f"## Analiza behawioralna ({behavioral.total_months} miesięcy: {behavioral.period_from} — {behavioral.period_to})\n"]
+
+    # Monthly summary table
+    lines.append("### Podsumowanie miesięczne\n")
+    lines.append("| Okres | Wpływy | Wydatki | Bilans | Hazard | Krypto | Pożyczki | Score |")
+    lines.append("|-------|--------|---------|--------|--------|--------|----------|-------|")
+    for m in behavioral.months:
+        lines.append(
+            f"| {m.period} | {m.income:,.0f} | {m.expense:,.0f} | {m.net_flow:+,.0f} "
+            f"| {m.gambling_total:,.0f} | {m.crypto_total:,.0f} | {m.loans_total:,.0f} | {m.score}/100 |"
+        )
+
+    # Averages
+    lines.append(f"\n- **Średnie wpływy**: {behavioral.avg_income:,.0f} PLN/mies.")
+    lines.append(f"- **Średnie wydatki**: {behavioral.avg_expense:,.0f} PLN/mies.")
+    lines.append(f"- **Średni bilans**: {behavioral.avg_net:+,.0f} PLN/mies.")
+    lines.append(f"- **Skumulowany bilans**: {behavioral.cumulative_net:+,.0f} PLN")
+
+    # Trajectory assessments
+    lines.append(f"\n### Ocena trajektorii\n")
+    lines.append(f"- **Trajektoria zadłużenia**: {TRAJECTORY_PL.get(behavioral.debt_trajectory, behavioral.debt_trajectory)}")
+    lines.append(f"- **Dyscyplina budżetowa**: {DISCIPLINE_PL.get(behavioral.budget_discipline, behavioral.budget_discipline)}")
+    lines.append(f"- **Trajektoria ryzyka**: {RISK_PL.get(behavioral.risk_trajectory, behavioral.risk_trajectory)}")
+
+    # Trends
+    if behavioral.trends:
+        lines.append(f"\n### Wykryte trendy\n")
+        lines.append("| Metryka | Trend | Zmiana | Wartości |")
+        lines.append("|---------|-------|--------|---------|")
+        for t in behavioral.trends:
+            dir_str = DIRECTION_PL.get(t.direction, t.direction)
+            vals = " → ".join(f"{v:,.0f}" for v in t.values)
+            severity_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(t.severity, "")
+            lines.append(f"| {severity_icon} {t.description} | {dir_str} | {t.change_pct:+.1f}% | {vals} |")
+
+    return "\n".join(lines)
+
+
+def _build_task_instructions(original_instruction: str, has_behavioral: bool = False) -> str:
     lines = ["""## ZADANIE DLA MODELU
 
 Na podstawie powyższych danych przeprowadź **szczegółową analizę finansową**. Twój raport powinien zawierać:
@@ -324,6 +388,15 @@ Konkretne zalecenia dotyczące poprawy sytuacji finansowej.
 - Dla każdego wniosku podaj jawny **poziom pewności**: WYSOKI / ŚREDNI / NISKI
 - Jeśli dane są niewystarczające do wniosku, napisz to wprost
 - Pisz po polsku, profesjonalnie ale zrozumiale"""]
+
+    if has_behavioral:
+        lines.append("""
+### 8. Analiza wielomiesięczna (DODATKOWA — dane behawioralne dostępne powyżej)
+- Porównaj miesiące: czy sytuacja się poprawia, pogarsza czy jest stabilna?
+- Zidentyfikuj trendy: rosnące wydatki, malejące dochody, nowe ryzyka
+- Oceń przewidywalność: czy zachowania finansowe są regularne czy chaotyczne?
+- Czy widać symptomy spirali zadłużenia lub poprawy dyscypliny?
+- Odnieś się do trajektorii zadłużenia i ryzyka z danych behawioralnych""")
 
     if original_instruction and original_instruction.strip():
         lines.append(f"\n### Dodatkowe instrukcje użytkownika\n{original_instruction.strip()}")
