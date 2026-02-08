@@ -5127,13 +5127,35 @@ async def _run_quick_analysis(project_id: str) -> Dict[str, Any]:
     t = _load_text_file(pdir / "transcript.txt")
     d = _load_text_file(pdir / "diarized.txt")
     text = (t.strip() + "\n\n" + d.strip()).strip()
+
+    # Fallback: load text from uploaded documents
+    _source_type = "transcript"  # track source for prompt selection
     if not text:
-        raise HTTPException(status_code=400, detail="Brak transkrypcji/diaryzacji do analizy.")
+        ddir = _documents_dir(project_id)
+        doc_parts: list[str] = []
+        if ddir.exists():
+            for fp in sorted(ddir.iterdir()):
+                if fp.is_dir() or fp.name.startswith("."):
+                    continue
+                cache_txt, _ = _doc_cache_paths(fp)
+                if not cache_txt.exists() or cache_txt.stat().st_mtime < fp.stat().st_mtime:
+                    try:
+                        await _extract_and_cache_document(fp)
+                    except Exception:
+                        continue
+                if cache_txt.exists() and cache_txt.stat().st_size > 0:
+                    doc_parts.append(_load_text_file(cache_txt).strip())
+        if doc_parts:
+            text = "\n\n---\n\n".join(doc_parts)
+            _source_type = "document"
+
+    if not text:
+        raise HTTPException(status_code=400, detail="Brak źródeł do analizy (transkrypcja, diaryzacja lub dokumenty).")
 
     t0 = time.time()
     try:
         model_sel = _get_model_settings().get("quick") or DEFAULT_MODELS["quick"]
-        result = await quick_analyze(OLLAMA, text, model=model_sel)
+        result = await quick_analyze(OLLAMA, text, model=model_sel, source_type=_source_type)
     except OllamaError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
