@@ -15,19 +15,54 @@ If you have any issues, suggestions, or feature requests, please contact me at: 
 
 * * *
 
-## ✨ Main functionalities
+## 🚀 Main Functionalities
 
- - Audio → text transcription (Whisper-based workflow).
-- Speaker diarization (who spoke when).
-- **Text translation (NLLB / Transformers)**
-  - Multi-target translation (e.g., PL → EN + ZH in one run).
-  - **Fast / Accurate** modes (depending on selected NLLB model).
-- LLM Ollama modules for data analysis.
-- Secure delete / wipe modes for project files (in progress):
-  - Fast: delete (no overwrite)
-  - Normal: pseudorandom wipe (x1)
-  - Thorough: British HMG IS5 (x3)
-  - Very thorough: Gutmann (x35)
+### 🎙️ Speech Processing
+- Automatic speech recognition (ASR) using **Whisper**, **WhisperX**, and **NVIDIA NeMo**
+- Support for multilingual audio (PL / EN / UA / RU / BY and more)
+- Offline and local model execution (no cloud dependency)
+- High-quality transcription optimized for long recordings
+
+### 🧩 Speaker Diarization
+- Advanced speaker diarization using **pyannote** and **NeMo Diarization**
+- Automatic speaker detection and segmentation
+- Support for multi-speaker conversations (meetings, interviews, calls)
+- Configurable diarization engines and models
+
+### 🌍 Multilingual Translation
+- Neural machine translation powered by **NLLB-200**
+- Fully offline translation pipeline
+- Flexible source and target language selection
+- Designed for OSINT and multilingual analysis workflows
+
+### 🧠 Intelligence & Analysis
+- AI-assisted content analysis using local **LLM models**
+- Transformation of raw speech and text into structured insights
+- Support for analytical reports and intelligence-oriented workflows
+
+### ⚙️ GPU & Resource Management
+- Integrated **GPU Resource Manager**
+- Automatic task scheduling and prioritization (ASR, diarization, analysis)
+- Safe execution of concurrent tasks without GPU overload
+- CPU fallback when GPU resources are unavailable
+
+### 📂 Project-Based Workflow
+- Project-oriented data organization
+- Persistent storage of audio, transcripts, translations, and analyses
+- Reproducible analytical workflows
+- Separation of user data and system processes
+
+### 📄 Reporting & Export
+- Export results to **TXT**, **HTML**, and **DOC**
+- Structured reports combining transcription, diarization, and analysis
+- Ready-to-use outputs for research, documentation, and investigations
+
+### 🌐 Web-Based Interface
+- Modern web UI (**AISTATEweb**)
+- Real-time task status and logs
+- Multi-language interface (PL / EN)
+- Designed for both standalone and multi-user environments (soon)
+
 
 * * *
 
