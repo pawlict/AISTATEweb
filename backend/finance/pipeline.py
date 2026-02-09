@@ -23,7 +23,7 @@ from .classifier import ClassifiedTransaction, classify_all
 from .detector import is_bank_statement
 from .entity_memory import EntityMemory
 from .parsers import get_parser
-from .parsers.base import ParseResult, validate_balance_chain
+from .parsers.base import ParseResult, reconcile_balances, validate_balance_chain
 from .prompt_builder import build_finance_prompt
 from .scorer import ScoreBreakdown, compute_score
 from .spending_analysis import SpendingReport, analyze_spending
@@ -199,12 +199,24 @@ def run_finance_pipeline(
         _log("UWAGA: Nie wyodrębniono żadnych transakcji. Dokument zostanie przesłany jako tekst surowy.")
         return None
 
-    # Step 4b: Validate balance chain (including cross-validation against declared sums)
+    # Step 4b: Reconcile balances from multiple sources (table > header > computed)
+    _log("Rekoncyliacja sald (tabela > nagłówek > obliczone)...")
+    opening, closing, recon_notes = reconcile_balances(
+        parse_result.transactions,
+        parse_result.info,
+    )
+    for note in recon_notes:
+        _log(f"  {note}")
+    parse_result.warnings.extend(
+        n for n in recon_notes if "BRAK" in n or "≠" in n
+    )
+
+    # Step 4c: Validate balance chain (including cross-validation against declared sums)
     _log("Walidacja łańcucha sald...")
     bal_valid, bal_warnings = validate_balance_chain(
         parse_result.transactions,
-        parse_result.info.opening_balance,
-        parse_result.info.closing_balance,
+        opening,
+        closing,
         declared_credits_sum=parse_result.info.declared_credits_sum,
         declared_debits_sum=parse_result.info.declared_debits_sum,
         declared_credits_count=parse_result.info.declared_credits_count,

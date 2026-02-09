@@ -18,61 +18,89 @@ from .parsers.base import RawTransaction
 
 CATEGORY_RULES: Dict[str, Dict[str, List[str]]] = {
     "crypto": {
-        "exchange": [
-            r"binance", r"coinbase", r"bitbay", r"zonda\.exchange",
-            r"bybit", r"kraken", r"bitget", r"kucoin", r"gate\.io",
-            r"crypto\.com", r"bitstamp", r"gemini", r"okx",
-            r"kanga\s*exchange", r"coinflex", r"bitfinex",
+        "exchange_polish": [
+            # Polish crypto exchanges
+            r"\bzonda\b", r"zonda\.exchange", r"zonda\s*sp",
+            r"\bbitbay\b",  # old name of Zonda
+            r"\bkanga\b", r"kanga\s*exchange",
+            r"\bcoindeal\b",
+            r"\begera\b",  # Polish exchange
+        ],
+        "exchange_global": [
+            r"\bbinance\b", r"\bcoinbase\b",
+            r"\bbybit\b", r"\bkraken\b", r"\bbitget\b", r"\bkucoin\b",
+            r"gate\.io", r"crypto\.com", r"\bbitstamp\b", r"\bgemini\b",
+            r"\bokx\b", r"\bhtx\b", r"\bhuobi\b",
+            r"\bbitfinex\b", r"\bcoinflex\b",
+            r"\bbitpanda\b", r"\bcoinmate\b",
+            r"\buphold\b", r"\bnexo\b",
         ],
         "payment": [
-            r"simplex", r"moonpay", r"transak", r"ramp\s*network",
-            r"wyre", r"banxa",
+            r"\bsimplex\b", r"\bmoonpay\b", r"\btransak\b",
+            r"ramp\s*network", r"\bwyre\b", r"\bbanxa\b",
+            r"\bpaybis\b", r"\bchangelly\b",
         ],
         "keyword": [
             r"kryptowalut", r"bitcoin", r"\bbtc\b", r"\beth\b",
-            r"blockchain", r"token", r"wallet.*crypto",
+            r"\busdt\b", r"\busdc\b", r"blockchain", r"token",
+            r"wallet.*crypto", r"crypto.*wallet",
+            r"exchange.*crypto", r"crypto.*exchange",
+            r"\bdefi\b", r"\bnft\b",
         ],
     },
     "gambling": {
         "bookmaker": [
-            r"\bsts\b", r"sts\.pl", r"betclic", r"fortuna",
-            r"superbet", r"lvbet", r"betfan", r"totalbet",
-            r"betsson", r"unibet", r"bet365", r"noblebet",
-            r"ewinner", r"fuksiarz", r"betters",
+            r"\bsts\b", r"sts\.pl", r"\bbetclic\b", r"\bfortuna\b",
+            r"\bsuperbet\b", r"\blvbet\b", r"\bbetfan\b", r"\btotalbet\b",
+            r"\bbetsson\b", r"\bunibet\b", r"\bbet365\b", r"\bnoblebet\b",
+            r"\bewinner\b", r"\bfuksiarz\b", r"\bbetters\b",
+            r"\bbetx\b", r"\bpzbuk\b", r"\btotolotek\b",
+            r"\bforbet\b", r"\bgoplusbet\b",
+            r"\bbetway\b", r"\b1xbet\b", r"\bpinnacle\b",
+            r"\bbwin\b", r"\bwilliamhill\b", r"william\s*hill",
         ],
         "casino": [
-            r"casino", r"kasyno", r"slot", r"poker",
-            r"total\s*casino", r"goplusbet",
+            r"casino", r"kasyno", r"\bslot[sy]?\b", r"\bpoker\b",
+            r"total\s*casino", r"\bruleta\b", r"\broulette\b",
+            r"\bicebet\b", r"\bvulkan\b", r"\b22bet\b",
         ],
         "lottery": [
-            r"lotto", r"toto.*lotek", r"eurojackpot", r"multi\s*multi",
-            r"zdrapk", r"los.*loteri", r"mini\s*lotto",
+            r"\blotto\b", r"toto.*lotek", r"eurojackpot",
+            r"multi\s*multi", r"\bzdrapk", r"los.*loteri",
+            r"mini\s*lotto", r"\bkeno\b",
         ],
         "keyword": [
             r"bukmacher", r"zak[łl]ad.*sport", r"hazard",
-            r"gra.*online", r"gambling",
+            r"gra.*online", r"gambling", r"obstawianie",
         ],
     },
     "loans": {
         "payday": [
-            r"vivus", r"wonga", r"provident", r"incredit",
-            r"lendon", r"smartney", r"aasa", r"ferratum",
-            r"zaplo", r"netcredit", r"filarum", r"solcredit",
-            r"alegotowka", r"pozyczkomat", r"chwil[oó]wk",
-            r"kuki\.pl", r"hapipozyczki", r"Extra Portfel",
+            r"\bvivus\b", r"\bwonga\b", r"\bprovident\b", r"\bincredit\b",
+            r"\blendon\b", r"\bsmartney\b", r"\baasa\b", r"\bferratum\b",
+            r"\bzaplo\b", r"\bnetcredit\b", r"\bfilarum\b", r"\bsolcredit\b",
+            r"\balegotowka\b", r"pozyczkomat", r"chwil[oó]wk",
+            r"kuki\.pl", r"\bhapipozyczki\b", r"extra\s*portfel",
+            r"\bcashper\b", r"\bwandoo\b", r"\bkredito24\b",
+            r"\bmonedo\b", r"\btengo\b",
         ],
         "installment": [
             r"\brata\b", r"rat[ay]\s*(kredyt|po[żz]yczk)",
             r"sp[łl]ata\s*(kredyt|po[żz]yczk|rat)",
-            r"leasing", r"alior.*rata", r"santander.*rata",
+            r"\bleasing\b", r"alior.*rata", r"santander.*rata",
         ],
         "mortgage": [
             r"kredyt\s*mieszk", r"kredyt\s*hipotecz",
             r"hipoteka", r"mortgage",
         ],
+        "debt_collection": [
+            r"windykac", r"komorni", r"egzekuc",
+            r"kruk\s*s\.?a", r"\bbest\s*s\.?a\b",
+            r"ultimo", r"intrum", r"hoist\s*finance",
+            r"debt.*collect",
+        ],
         "keyword": [
-            r"po[żz]yczk", r"kredyt", r"debt.*collect",
-            r"windykac", r"komorni",
+            r"po[żz]yczk", r"kredyt(?!\s*mieszk|\s*hipotecz)",
         ],
     },
     "transfers": {
@@ -81,7 +109,7 @@ CATEGORY_RULES: Dict[str, Dict[str, List[str]]] = {
             r"premia", r"zasi[łl]ek", r"zleceni.*umow",
         ],
         "benefits": [
-            r"zus", r"krus", r"500\s*plus", r"800\s*plus",
+            r"\bzus\b", r"\bkrus\b", r"500\s*plus", r"800\s*plus",
             r"rodzinn", r"alimenty", r"stypend",
             r"zasi[łl]ek.*bezrobot",
         ],
@@ -90,29 +118,43 @@ CATEGORY_RULES: Dict[str, Dict[str, List[str]]] = {
             r"wsp[oó]lnota\s*mieszk", r"sp[oó][łl]dzielni",
         ],
         "utilities": [
-            r"energia|energa|tauron|pge|enea|innogy",
+            r"energi[ae]|energa|tauron|\bpge\b|enea|innogy|e\.?on",
             r"gaz.*pgnig|pgnig|polsk.*gaz",
             r"wod.*kan|wodoci[ąa]g|mpwik",
             r"ogrze|ciep[łl]o",
         ],
         "telecom": [
-            r"orange|t-mobile|plus.*gsm|play|vectra",
-            r"upc|polsat.*box|canal.*plus|netflix|spotify",
-            r"hbo|disney|amazon.*prime|youtube.*prem",
+            r"\borange\b|t-mobile|plus.*gsm|\bplay\b|vectra",
+            r"\bupc\b|polsat.*box|canal.*plus|netflix|spotify",
+            r"\bhbo\b|disney|amazon.*prime|youtube.*prem",
         ],
         "insurance": [
-            r"ubezpiecz|polisa|pzu|warta|ergo\s*hestia",
+            r"ubezpiecz|polisa|\bpzu\b|warta|ergo\s*hestia",
             r"allianz|aviva|generali|compensa|uniqa",
-            r"oc\s.*pojazd|ac\s.*pojazd|nnw",
+            r"\boc\s.*pojazd|\bac\s.*pojazd|\bnnw\b",
         ],
     },
     "risky": {
-        "unknown_foreign": [
+        "foreign_transfer": [
             r"western\s*union", r"moneygram", r"ria\s*money",
             r"remitly", r"wise.*transfer", r"transferwise",
+            r"\bswift\b.*przelew|przelew.*\bswift\b",
+            r"przelew\s*zagraniczny|zagraniczny\s*przelew",
         ],
         "pawnshop": [
             r"lombard", r"zastaw", r"skup\s*z[łl]ota",
+            r"skup.*srebr", r"komis\s*z[łl]ota",
+        ],
+        "p2p_lending": [
+            r"\bmintos\b", r"\bbondora\b", r"\btwino\b",
+            r"\bpeerberry\b", r"\bestateguru\b",
+            r"\brobocash\b",
+        ],
+        "suspicious_pattern": [
+            # Services commonly used for money movement
+            r"\brevolut\b.*przelew|przelew.*\brevolut\b",
+            r"\bskrill\b", r"\bneteller\b",
+            r"\bpaysera\b", r"\bpaypal\b.*przelew",
         ],
     },
 }

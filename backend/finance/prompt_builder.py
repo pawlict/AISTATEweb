@@ -94,27 +94,56 @@ def _build_info_section(result: ParseResult) -> str:
         if len(acct) > 10:
             acct = acct[:6] + "..." + acct[-4:]
         lines.append(f"- **Numer rachunku**: {acct}")
+    if info.account_holder:
+        lines.append(f"- **Posiadacz**: {info.account_holder}")
     if info.period_from or info.period_to:
         lines.append(f"- **Okres**: {info.period_from or '?'} — {info.period_to or '?'}")
     if info.opening_balance is not None:
         lines.append(f"- **Saldo początkowe**: {info.opening_balance:,.2f} {info.currency}")
     if info.closing_balance is not None:
         lines.append(f"- **Saldo końcowe**: {info.closing_balance:,.2f} {info.currency}")
-    # Computed closing balance from transactions
+    if info.available_balance is not None:
+        lines.append(f"- **Saldo dostępne**: {info.available_balance:,.2f} {info.currency}")
+
+    # Balance verification: compute from transactions and compare
+    balance_verified = False
     if info.opening_balance is not None and result.transactions:
         computed_closing = info.opening_balance + sum(t.amount for t in result.transactions)
-        lines.append(f"- **Saldo końcowe (obliczone)**: {computed_closing:,.2f} {info.currency}")
         if info.closing_balance is not None:
             diff = abs(computed_closing - info.closing_balance)
-            if diff > 0.02:
-                lines.append(f"- **⚠ ROZBIEŻNOŚĆ SALD**: {diff:,.2f} {info.currency} "
-                             f"(obliczone vs deklarowane — dane mogą być niedokładne)")
+            if diff <= 0.02:
+                balance_verified = True
+                lines.append(f"- **Status sald**: ✅ ZWERYFIKOWANE (otw. + Σ transakcji = końc., różnica {diff:.2f})")
+            else:
+                lines.append(f"- **Status sald**: ⚠️ ROZBIEŻNOŚĆ {diff:,.2f} {info.currency}")
+                lines.append(f"  - Obliczone końcowe: {computed_closing:,.2f}")
+                lines.append(f"  - Deklarowane końcowe: {info.closing_balance:,.2f}")
+                lines.append(f"  - Możliwe przyczyny: brakujące transakcje, błąd parsowania")
+        else:
+            lines.append(f"- **Status sald**: ⚠️ BRAK SALDA KOŃCOWEGO do weryfikacji")
+            lines.append(f"  - Obliczone końcowe: {computed_closing:,.2f}")
+    elif info.opening_balance is None and info.closing_balance is None:
+        lines.append(f"- **Status sald**: ❌ BRAK — nie udało się odczytać sald")
+    else:
+        lines.append(f"- **Status sald**: ⚠️ CZĘŚCIOWE — brak jednego z sald")
 
-    lines.append(f"- **Liczba transakcji**: {len(result.transactions)}")
+    # Cross-validation sums
+    if info.declared_credits_sum is not None:
+        lines.append(f"- **Suma uznań (deklarowana)**: {info.declared_credits_sum:,.2f} "
+                     f"({info.declared_credits_count or '?'} transakcji)")
+    if info.declared_debits_sum is not None:
+        lines.append(f"- **Suma obciążeń (deklarowana)**: {info.declared_debits_sum:,.2f} "
+                     f"({info.declared_debits_count or '?'} transakcji)")
+
+    lines.append(f"- **Liczba transakcji (sparsowane)**: {len(result.transactions)}")
     lines.append(f"- **Metoda parsowania**: {result.parse_method}")
 
-    if result.warnings:
-        lines.append(f"\n**Ostrzeżenia parsera**: {'; '.join(result.warnings)}")
+    # Warnings — filter out the OK messages, show only real warnings
+    real_warnings = [w for w in result.warnings if "OK" not in w and "✓" not in w]
+    if real_warnings:
+        lines.append(f"\n### Ostrzeżenia parsera\n")
+        for w in real_warnings:
+            lines.append(f"- ⚠️ {w}")
 
     return "\n".join(lines)
 
@@ -169,11 +198,11 @@ def _build_category_summary(classified: List[ClassifiedTransaction]) -> str:
 
     # Nice category names
     NAMES = {
-        "crypto": "🪙 Kryptowaluty",
-        "gambling": "🎰 Hazard",
-        "loans": "💳 Pożyczki / Kredyty",
+        "crypto": "🪙 Kryptowaluty / Giełdy",
+        "gambling": "🎰 Hazard / Bukmacherzy",
+        "loans": "💳 Pożyczki / Kredyty / Windykacja",
         "transfers": "📋 Przelewy (kategoryzowane)",
-        "risky": "⚠️ Ryzykowne",
+        "risky": "⚠️ Ryzykowne / Podejrzane",
         "_unclassified": "📦 Nieskategoryzowane",
     }
 
@@ -225,18 +254,55 @@ def _build_recurring_section(classified: List[ClassifiedTransaction]) -> str:
 
 def _build_risk_flags(classified: List[ClassifiedTransaction], score: ScoreBreakdown) -> str:
     flags: List[str] = []
+    budget = max(score.total_income, score.total_expense, 1)
 
     if score.gambling_total > 0:
-        pct = (score.gambling_total / max(score.total_income, score.total_expense, 1)) * 100
+        pct = (score.gambling_total / budget) * 100
         flags.append(f"🎰 **HAZARD**: {score.gambling_total:,.2f} PLN ({pct:.1f}% budżetu)")
 
     if score.crypto_total > 0:
-        pct = (score.crypto_total / max(score.total_income, score.total_expense, 1)) * 100
-        flags.append(f"🪙 **KRYPTOWALUTY**: {score.crypto_total:,.2f} PLN ({pct:.1f}% budżetu)")
+        pct = (score.crypto_total / budget) * 100
+        # List actual crypto entities found
+        crypto_names = set()
+        for ct in classified:
+            if "crypto" in ct.categories:
+                cp = ct.transaction.counterparty or ct.transaction.title
+                if cp:
+                    crypto_names.add(cp.strip()[:30])
+        names_str = f" — podmioty: {', '.join(sorted(crypto_names)[:5])}" if crypto_names else ""
+        flags.append(f"🪙 **KRYPTOWALUTY / GIEŁDY**: {score.crypto_total:,.2f} PLN ({pct:.1f}% budżetu){names_str}")
 
     if score.loans_total > 0:
-        pct = (score.loans_total / max(score.total_income, score.total_expense, 1)) * 100
-        flags.append(f"💳 **POŻYCZKI/RATY**: {score.loans_total:,.2f} PLN ({pct:.1f}% budżetu)")
+        pct = (score.loans_total / budget) * 100
+        # Distinguish debt collection from regular loans
+        debt_collection_total = sum(
+            abs(ct.transaction.amount)
+            for ct in classified
+            if any("debt_collection" in sc for sc in ct.subcategories)
+        )
+        msg = f"💳 **POŻYCZKI/RATY**: {score.loans_total:,.2f} PLN ({pct:.1f}% budżetu)"
+        if debt_collection_total > 0:
+            msg += f" — w tym WINDYKACJA: {debt_collection_total:,.2f} PLN"
+        flags.append(msg)
+
+    # Risky transactions (foreign transfers, pawnshops, P2P lending, suspicious)
+    risky_txns = [ct for ct in classified if "risky" in ct.categories]
+    if risky_txns:
+        risky_total = sum(abs(ct.transaction.amount) for ct in risky_txns)
+        pct = (risky_total / budget) * 100
+        risky_details = set()
+        for ct in risky_txns:
+            for sc in ct.subcategories:
+                if sc.startswith("risky:"):
+                    risky_details.add(sc.split(":")[1])
+        details_pl = {
+            "foreign_transfer": "przelewy zagraniczne",
+            "pawnshop": "lombardy/skup złota",
+            "p2p_lending": "P2P lending",
+            "suspicious_pattern": "podejrzane wzorce",
+        }
+        details_str = ", ".join(details_pl.get(d, d) for d in sorted(risky_details))
+        flags.append(f"⚠️ **RYZYKOWNE TRANSAKCJE**: {risky_total:,.2f} PLN ({pct:.1f}% budżetu) — {details_str}")
 
     if score.net_flow < 0:
         flags.append(f"📉 **DEFICYT**: wydatki przewyższają wpływy o {abs(score.net_flow):,.2f} PLN")
@@ -256,9 +322,9 @@ def _build_risk_flags(classified: List[ClassifiedTransaction], score: ScoreBreak
         flags.append(f"🚩 **OZNACZONE PODMIOTY (z pamięci)**: {len(flagged_entities)} transakcji ({total_flagged:,.2f} PLN) — {names_str}")
 
     if not flags:
-        return "## Flagi ryzyka\n\nNie wykryto istotnych flag ryzyka."
+        return "## Flagi ryzyka\n\nNie wykryto istotnych flag ryzyka. ✅"
 
-    lines = ["## Flagi ryzyka\n"]
+    lines = ["## ⚠️ Flagi ryzyka\n"]
     lines.extend(flags)
     return "\n".join(lines)
 
