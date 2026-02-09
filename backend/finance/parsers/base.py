@@ -432,6 +432,114 @@ class BankParser(ABC):
         return transactions
 
 
+def derive_balances_from_transactions(
+    transactions: List[RawTransaction],
+    info: StatementInfo,
+) -> Tuple[Optional[float], Optional[float], str]:
+    """Derive opening/closing balances from the transaction table's balance_after column.
+
+    This is the PRIMARY and most reliable source of balance data — it uses
+    structured table data rather than fragile header regex.
+
+    Returns:
+        (opening_balance, closing_balance, source_description)
+    """
+    # Collect transactions that have a balance_after value
+    with_balance = [t for t in transactions if t.balance_after is not None]
+    if not with_balance:
+        return None, None, "brak kolumny saldo w tabeli"
+
+    # Closing balance = last transaction's balance_after
+    closing_from_table = with_balance[-1].balance_after
+
+    # Opening balance = first transaction's balance_after - first transaction's amount
+    first = with_balance[0]
+    opening_from_table = first.balance_after - first.amount
+
+    return opening_from_table, closing_from_table, "tabela transakcji"
+
+
+def reconcile_balances(
+    transactions: List[RawTransaction],
+    info: StatementInfo,
+) -> Tuple[Optional[float], Optional[float], List[str]]:
+    """Reconcile balances from multiple sources: table > header > declared sums.
+
+    Priority:
+    1. Transaction table balance_after column (most reliable — structured data)
+    2. Header regex (fallback — fragile)
+    3. Computed from declared sums (last resort)
+
+    Updates info in-place and returns (opening, closing, reconciliation_notes).
+    """
+    notes: List[str] = []
+
+    # Source 1: Transaction table
+    tbl_opening, tbl_closing, tbl_source = derive_balances_from_transactions(transactions, info)
+
+    # Source 2: Header regex (already in info)
+    hdr_opening = info.opening_balance
+    hdr_closing = info.closing_balance
+
+    # Source 3: Computed from declared sums (if we have opening + declared sums)
+    computed_closing = None
+    if info.declared_credits_sum is not None and info.declared_debits_sum is not None:
+        if hdr_opening is not None:
+            computed_closing = hdr_opening + info.declared_credits_sum - info.declared_debits_sum
+        elif tbl_opening is not None:
+            computed_closing = tbl_opening + info.declared_credits_sum - info.declared_debits_sum
+
+    # Decide opening balance
+    opening = None
+    opening_source = ""
+    if tbl_opening is not None:
+        opening = tbl_opening
+        opening_source = "tabela"
+        if hdr_opening is not None and abs(tbl_opening - hdr_opening) > 0.02:
+            notes.append(
+                f"Saldo otw. z tabeli ({tbl_opening:,.2f}) ≠ nagłówek ({hdr_opening:,.2f}) "
+                f"— użyto tabeli"
+            )
+        else:
+            notes.append(f"Saldo otw.: {opening:,.2f} (tabela ✓)")
+    elif hdr_opening is not None:
+        opening = hdr_opening
+        opening_source = "nagłówek"
+        notes.append(f"Saldo otw.: {opening:,.2f} (nagłówek — brak kolumny saldo w tabeli)")
+    else:
+        notes.append("Saldo otw.: BRAK DANYCH")
+
+    # Decide closing balance
+    closing = None
+    closing_source = ""
+    if tbl_closing is not None:
+        closing = tbl_closing
+        closing_source = "tabela"
+        if hdr_closing is not None and abs(tbl_closing - hdr_closing) > 0.02:
+            notes.append(
+                f"Saldo końc. z tabeli ({tbl_closing:,.2f}) ≠ nagłówek ({hdr_closing:,.2f}) "
+                f"— użyto tabeli"
+            )
+        else:
+            notes.append(f"Saldo końc.: {closing:,.2f} (tabela ✓)")
+    elif hdr_closing is not None:
+        closing = hdr_closing
+        closing_source = "nagłówek"
+        notes.append(f"Saldo końc.: {closing:,.2f} (nagłówek — brak kolumny saldo w tabeli)")
+    elif computed_closing is not None:
+        closing = computed_closing
+        closing_source = "obliczone z sum"
+        notes.append(f"Saldo końc.: {closing:,.2f} (obliczone z deklarowanych sum)")
+    else:
+        notes.append("Saldo końc.: BRAK DANYCH")
+
+    # Update info with best-available balances
+    info.opening_balance = opening
+    info.closing_balance = closing
+
+    return opening, closing, notes
+
+
 def validate_balance_chain(
     transactions: List[RawTransaction],
     opening_balance: Optional[float],

@@ -38,6 +38,7 @@ class ScoreBreakdown:
     gambling_total: float = 0.0
     crypto_total: float = 0.0
     loans_total: float = 0.0
+    risky_total: float = 0.0  # foreign transfers, pawnshops, P2P lending, suspicious
     income_sources: int = 0
     expense_categories: int = 0
     transaction_count: int = 0
@@ -65,6 +66,7 @@ class ScoreBreakdown:
                 "gambling_total": round(self.gambling_total, 2),
                 "crypto_total": round(self.crypto_total, 2),
                 "loans_total": round(self.loans_total, 2),
+                "risky_total": round(self.risky_total, 2),
                 "income_sources": self.income_sources,
                 "transaction_count": self.transaction_count,
                 "period_days": self.period_days,
@@ -86,6 +88,7 @@ def compute_score(classified: List[ClassifiedTransaction]) -> ScoreBreakdown:
     gambling_amounts: List[float] = []
     crypto_amounts: List[float] = []
     loan_amounts: List[float] = []
+    risky_amounts: List[float] = []
     balances: List[float] = []
     dates: List[str] = []
     income_counterparties: set = set()
@@ -113,6 +116,8 @@ def compute_score(classified: List[ClassifiedTransaction]) -> ScoreBreakdown:
             crypto_amounts.append(abs(txn.amount))
         if "loans" in ct.categories:
             loan_amounts.append(abs(txn.amount))
+        if "risky" in ct.categories:
+            risky_amounts.append(abs(txn.amount))
 
     s.total_income = sum(incomes)
     s.total_expense = sum(expenses)
@@ -121,6 +126,7 @@ def compute_score(classified: List[ClassifiedTransaction]) -> ScoreBreakdown:
     s.gambling_total = sum(gambling_amounts)
     s.crypto_total = sum(crypto_amounts)
     s.loans_total = sum(loan_amounts)
+    s.risky_total = sum(risky_amounts)
     s.income_sources = len(income_counterparties)
     s.transaction_count = len(classified)
 
