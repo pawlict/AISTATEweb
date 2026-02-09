@@ -321,6 +321,16 @@ def _build_risk_flags(classified: List[ClassifiedTransaction], score: ScoreBreak
         names_str = ", ".join(sorted(names)[:10])
         flags.append(f"🚩 **OZNACZONE PODMIOTY (z pamięci)**: {len(flagged_entities)} transakcji ({total_flagged:,.2f} PLN) — {names_str}")
 
+    # Unclassified URLs — need user review
+    all_unclassified: set = set()
+    for ct in classified:
+        for url in ct.unclassified_urls:
+            all_unclassified.add(url)
+    if all_unclassified:
+        flags.append(f"🔗 **NIESKLASYFIKOWANE URL** ({len(all_unclassified)}): wymagają weryfikacji użytkownika")
+        for url in sorted(all_unclassified)[:10]:
+            flags.append(f"  - {url}")
+
     if not flags:
         return "## Flagi ryzyka\n\nNie wykryto istotnych flag ryzyka. ✅"
 
@@ -433,7 +443,7 @@ def _build_behavioral_section(behavioral) -> str:
 
 
 def _build_spending_section(spending) -> str:
-    """Build spending patterns section (top shops, fuel, BLIK)."""
+    """Build spending patterns section (top shops, fuel, BLIK, standing orders, P2P persons)."""
     lines = ["## Analiza wzorców wydatków\n"]
 
     # --- Top 5 shops ---
@@ -463,6 +473,15 @@ def _build_spending_section(spending) -> str:
             lines.append(f"- **Miasta wyjazowe** (tankowanie poza miastem bazowym): {', '.join(spending.fuel_travel_cities)}")
             lines.append("  *(tankowanie w innym mieście niż bazowe sugeruje podróż/dojazd)*")
 
+    # --- Standing orders (ST.ZLEC) ---
+    if spending.standing_orders:
+        lines.append("\n### Zlecenia stałe (ST.ZLEC)\n")
+        lines.append("| Odbiorca | Zleceń | Łączna kwota | Śr. kwota | Kategorie |")
+        lines.append("|----------|--------|--------------|-----------|-----------|")
+        for so in spending.standing_orders:
+            cats_str = ", ".join(so.categories) if so.categories else "❓ niesklasyfikowane"
+            lines.append(f"| {so.recipient[:50]} | {so.count} | {so.total_amount:,.2f} PLN | {so.avg_amount:,.2f} PLN | {cats_str} |")
+
     # --- BLIK classification ---
     if spending.blik_transactions:
         lines.append("\n### Transakcje BLIK\n")
@@ -484,6 +503,15 @@ def _build_spending_section(spending) -> str:
                     desc = f"{desc} — {bt.title}" if desc else bt.title
                 desc = desc[:50] + "…" if len(desc) > 50 else desc
                 lines.append(f"| {bt.date} | {type_str} | {bt.amount:+,.2f} | {desc} |")
+
+    # --- BLIK P2P persons summary ---
+    if spending.blik_p2p_persons:
+        lines.append("\n### Przelewy BLIK na telefon — per osoba\n")
+        lines.append("| Osoba | Przelewów | Łączna kwota | Ostatni |")
+        lines.append("|-------|-----------|--------------|---------|")
+        for person in spending.blik_p2p_persons:
+            lines.append(f"| {person.name[:40]} | {person.transfer_count} | {person.total_amount:,.2f} PLN | {person.last_date} |")
+        lines.append(f"\n*Częste przelewy BLIK na telefon do tej samej osoby mogą sugerować nieformalny obrót (np. Vinted, OLX) lub regularne wsparcie.*")
 
     return "\n".join(lines)
 
@@ -537,6 +565,9 @@ Konkretne zalecenia dotyczące poprawy sytuacji finansowej.
 - **Top sklepy**: Gdzie najczęściej robi zakupy? Jaki % to spożywcze vs odzież vs elektronika?
 - **Tankowanie**: W jakim mieście tankuje najczęściej? Czy tankowanie w innym mieście sugeruje wyjazd/dojazd do pracy? Porównaj z miastem bazowym zakupów.
 - **BLIK**: Ile transakcji to przelewy na telefon (P2P) a ile to zakupy w internecie? Czy przelewy na telefon mogą sugerować nieformalny obrót (np. Vinted, OLX)?
+- **Zlecenia stałe (ST.ZLEC)**: Do kogo są stałe zlecenia? Na jakie kwoty? Czy odbiorca jest sklasyfikowany — jeśli nie (❓), zaproponuj kategorię.
+- **Przelewy BLIK na telefon**: Czy widać regularne przelewy do tej samej osoby? Mogą sugerować nieformalny dochód, powtarzalną sprzedaż lub regularne wsparcie finansowe.
+- **Niesklasyfikowane URL**: Jeśli w flagach ryzyka widnieją niesklasyfikowane adresy URL, oceń je — czy sugerują hazard, krypto, zakupy, czy inną kategorię?
 - Oceń ogólny profil konsumencki — oszczędny, umiarkowany, rozrzutny?""")
         _section += 1
 

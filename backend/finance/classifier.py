@@ -159,6 +159,57 @@ CATEGORY_RULES: Dict[str, Dict[str, List[str]]] = {
     },
 }
 
+# --- URL extraction and domain classification ---
+
+_URL_RE = re.compile(r"https?://[^\s,;\"'<>]+", re.I)
+
+# Map known domains to (category, subcategory)
+_DOMAIN_CATEGORIES: Dict[str, tuple] = {
+    # Gambling
+    "lotto.pl": ("gambling", "lottery"),
+    "www.lotto.pl": ("gambling", "lottery"),
+    "sts.pl": ("gambling", "bookmaker"),
+    "www.sts.pl": ("gambling", "bookmaker"),
+    "betclic.pl": ("gambling", "bookmaker"),
+    "www.betclic.pl": ("gambling", "bookmaker"),
+    "fortuna.pl": ("gambling", "bookmaker"),
+    "www.fortuna.pl": ("gambling", "bookmaker"),
+    "superbet.pl": ("gambling", "bookmaker"),
+    "totalbet.pl": ("gambling", "bookmaker"),
+    "betfan.pl": ("gambling", "bookmaker"),
+    "lvbet.pl": ("gambling", "bookmaker"),
+    "totalcasino.pl": ("gambling", "casino"),
+    # Crypto
+    "zonda.exchange": ("crypto", "exchange_polish"),
+    "www.zonda.exchange": ("crypto", "exchange_polish"),
+    "bitbay.net": ("crypto", "exchange_polish"),
+    "kanga.exchange": ("crypto", "exchange_polish"),
+    "binance.com": ("crypto", "exchange_global"),
+    "www.binance.com": ("crypto", "exchange_global"),
+    "coinbase.com": ("crypto", "exchange_global"),
+    "bybit.com": ("crypto", "exchange_global"),
+    "kraken.com": ("crypto", "exchange_global"),
+    "crypto.com": ("crypto", "exchange_global"),
+    # Risky / suspicious
+    "skrill.com": ("risky", "suspicious_pattern"),
+    "neteller.com": ("risky", "suspicious_pattern"),
+    "paysera.com": ("risky", "suspicious_pattern"),
+}
+
+
+def _extract_domain(url: str) -> str:
+    """Extract domain from URL."""
+    url = url.lower().rstrip("/")
+    # Remove protocol
+    if "://" in url:
+        url = url.split("://", 1)[1]
+    # Remove path
+    domain = url.split("/")[0]
+    # Remove port
+    domain = domain.split(":")[0]
+    return domain
+
+
 # Flattened for fast lookup
 _COMPILED_RULES: List[tuple] = []
 
@@ -190,6 +241,8 @@ class ClassifiedTransaction:
     entity_flagged: bool = False  # flagged in entity memory
     entity_type: str = ""  # type from entity memory
     entity_notes: str = ""  # user notes from entity memory
+    urls: List[str] = field(default_factory=list)  # all URLs found in transaction text
+    unclassified_urls: List[str] = field(default_factory=list)  # URLs not matching known domains
 
     def to_dict(self) -> Dict[str, Any]:
         d = self.transaction.to_dict()
@@ -201,11 +254,13 @@ class ClassifiedTransaction:
         d["entity_flagged"] = self.entity_flagged
         d["entity_type"] = self.entity_type
         d["entity_notes"] = self.entity_notes
+        d["urls"] = self.urls
+        d["unclassified_urls"] = self.unclassified_urls
         return d
 
 
 def classify_transaction(txn: RawTransaction, entity_memory=None) -> ClassifiedTransaction:
-    """Classify a single transaction using rules + entity memory."""
+    """Classify a single transaction using rules + entity memory + URL analysis."""
     _ensure_compiled()
 
     search_text = f"{txn.counterparty} {txn.title} {txn.raw_text}".lower()
@@ -216,6 +271,18 @@ def classify_transaction(txn: RawTransaction, entity_memory=None) -> ClassifiedT
         if pattern.search(search_text):
             cats.add(category)
             subcats.add(f"{category}:{subcat}")
+
+    # Extract and classify URLs from transaction text
+    found_urls: List[str] = _URL_RE.findall(f"{txn.counterparty} {txn.title} {txn.raw_text}")
+    unclassified_urls: List[str] = []
+    for url in found_urls:
+        domain = _extract_domain(url)
+        if domain in _DOMAIN_CATEGORIES:
+            cat, subcat = _DOMAIN_CATEGORIES[domain]
+            cats.add(cat)
+            subcats.add(f"{cat}:{subcat}")
+        else:
+            unclassified_urls.append(url)
 
     # Check entity memory
     entity_flagged = False
@@ -241,6 +308,8 @@ def classify_transaction(txn: RawTransaction, entity_memory=None) -> ClassifiedT
         entity_flagged=entity_flagged,
         entity_type=entity_type,
         entity_notes=entity_notes,
+        urls=found_urls,
+        unclassified_urls=unclassified_urls,
     )
 
 

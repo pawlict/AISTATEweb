@@ -48,7 +48,7 @@ class MillenniumParser(BankParser):
                 mapping["balance"] = i
         return mapping
 
-    def parse_tables(self, tables: List[List[List[str]]], full_text: str) -> ParseResult:
+    def parse_tables(self, tables: List[List[List[str]]], full_text: str, header_words=None) -> ParseResult:
         info = self._extract_info(full_text)
         transactions: List[RawTransaction] = []
 

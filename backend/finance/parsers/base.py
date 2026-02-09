@@ -101,7 +101,7 @@ class BankParser(ABC):
         return min(hits / max(len(cls.DETECT_PATTERNS), 1), 1.0)
 
     @abstractmethod
-    def parse_tables(self, tables: List[List[List[str]]], full_text: str) -> ParseResult:
+    def parse_tables(self, tables: List[List[List[str]]], full_text: str, header_words=None) -> ParseResult:
         """Parse from pdfplumber tables (preferred path)."""
         ...
 
@@ -110,9 +110,9 @@ class BankParser(ABC):
         """Fallback: parse from raw extracted text."""
         ...
 
-    def parse(self, tables: List[List[List[str]]], full_text: str) -> ParseResult:
+    def parse(self, tables: List[List[List[str]]], full_text: str, header_words=None) -> ParseResult:
         """Try table parse first, fall back to text."""
-        result = self.parse_tables(tables, full_text)
+        result = self.parse_tables(tables, full_text, header_words=header_words)
         if result.transactions:
             result.parse_method = "table"
             return result
