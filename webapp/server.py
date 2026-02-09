@@ -5091,7 +5091,7 @@ async def _gather_analysis_sources(project_id: str, include_sources: Dict[str, A
         blocks_md = "\n".join([f"- Blok {k}: {v}" for k, v in sorted(notes_blocks.items(), key=lambda x: x[0])])
         parts.append("## Notatki do bloków\n" + blocks_md)
 
-    # Documents
+    # Documents — auto-detect bank statements and enrich with structured data
     docs = include_sources.get("documents") or []
     if isinstance(docs, list) and docs:
         ddir = _documents_dir(project_id)
@@ -5108,7 +5108,40 @@ async def _gather_analysis_sources(project_id: str, include_sources: Dict[str, A
                 except Exception:
                     pass
             if cache_txt.exists() and cache_txt.stat().st_size > 0:
-                parts.append(f"## Dokument: {fname}\n" + _load_text_file(cache_txt).strip())
+                doc_text = _load_text_file(cache_txt).strip()
+                # Auto-detect bank statements and provide structured extraction
+                if fp.suffix.lower() == ".pdf":
+                    try:
+                        from backend.finance.detector import is_bank_statement as _is_stmt
+                        _detected, _score, _ = _is_stmt(doc_text[:10000])
+                        if _detected:
+                            from backend.finance.quick_extract import extract_bank_statement_quick
+                            quick_data = extract_bank_statement_quick(doc_text)
+                            structured = "\n".join([
+                                f"## Dokument: {fname} [WYCIĄG BANKOWY — dane wyodrębnione automatycznie]\n",
+                                f"- **Bank**: {quick_data.get('bank') or 'nierozpoznany'}",
+                                f"- **Właściciel**: {quick_data.get('wlasciciel_rachunku') or '—'}",
+                                f"- **IBAN**: {quick_data.get('nr_rachunku_iban') or '—'}",
+                                f"- **Okres**: {quick_data.get('okres') or '—'}",
+                                f"- **Waluta**: {quick_data.get('waluta') or 'PLN'}",
+                                f"- **Saldo początkowe**: {quick_data.get('saldo_poczatkowe') or '—'}",
+                                f"- **Saldo końcowe**: {quick_data.get('saldo_koncowe') or '—'}",
+                                f"- **Saldo dostępne**: {quick_data.get('saldo_dostepne') or '—'}",
+                                f"- **Suma uznań**: {quick_data.get('suma_uznan') or '—'}",
+                                f"- **Suma obciążeń**: {quick_data.get('suma_obciazen') or '—'}",
+                                f"- **Liczba transakcji**: {quick_data.get('liczba_transakcji') or '—'}",
+                                "",
+                                "**UWAGA**: Powyższe dane wyodrębnione regexem z nagłówka PDF. "
+                                "Dla pełnej analizy finansowej użyj trybu 'Analiza wyciągu bankowego'.",
+                                "",
+                                "### Surowy tekst dokumentu\n",
+                                doc_text[:50000],
+                            ])
+                            parts.append(structured)
+                            continue
+                    except Exception:
+                        pass
+                parts.append(f"## Dokument: {fname}\n" + doc_text)
 
     # Cap size (avoid accidental huge prompts)
     combined = "\n\n---\n\n".join([p for p in parts if p.strip()]).strip()

@@ -14,32 +14,22 @@ class INGParser(BankParser):
     DETECT_PATTERNS = [
         r"ing\s*bank",
         r"ing\s*bank\s*[śs]l[ąa]ski",
-        r"historia\s*rachunku",
+        r"wyci[ąa]g\s*z\s*rachunku",
+        r"konto\s*z\s*lwem",
         r"www\.ing\.pl",
+        r"ingbplpw",
         r"ingbsk",
     ]
 
     def _extract_info(self, text: str) -> StatementInfo:
-        info = StatementInfo(bank=self.BANK_NAME)
+        # Use common extractor that handles all Polish bank formats
+        info = self.extract_info_common(text, bank_name=self.BANK_NAME)
 
-        # Account number: 26-digit IBAN or shorter
-        m = re.search(r"(\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4})", text)
+        # ING-specific: "Data księgowania / Data transakcji" header
+        # ING-specific: "KONTO Z LWEM" account type
+        m = re.search(r"nazwa\s*rachunku\s*:?\s*\n?\s*(.+?)(?:\n|$)", text, re.I)
         if m:
-            info.account_number = m.group(1).replace(" ", "")
-
-        # Period
-        m = re.search(r"(?:okres|za\s*okres|od)\s*:?\s*(\d{2}[.\-/]\d{2}[.\-/]\d{4})\s*(?:-|do|–)\s*(\d{2}[.\-/]\d{2}[.\-/]\d{4})", text, re.I)
-        if m:
-            info.period_from = self.parse_date(m.group(1))
-            info.period_to = self.parse_date(m.group(2))
-
-        # Opening/closing balance
-        m = re.search(r"(?:saldo\s*(?:pocz[ąa]tkowe|otwarcia))\s*:?\s*([\d\s,.\-]+)", text, re.I)
-        if m:
-            info.opening_balance = self.parse_amount(m.group(1))
-        m = re.search(r"(?:saldo\s*(?:ko[ńn]cowe|zamkni[ęe]cia))\s*:?\s*([\d\s,.\-]+)", text, re.I)
-        if m:
-            info.closing_balance = self.parse_amount(m.group(1))
+            info.raw_header = m.group(1).strip()
 
         return info
 

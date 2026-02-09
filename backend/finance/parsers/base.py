@@ -47,6 +47,11 @@ class StatementInfo:
     available_balance: Optional[float] = None
     currency: str = "PLN"
     raw_header: str = ""
+    # Cross-validation fields (from header summary)
+    declared_credits_sum: Optional[float] = None  # Suma uznań
+    declared_credits_count: Optional[int] = None
+    declared_debits_sum: Optional[float] = None   # Suma obciążeń
+    declared_debits_count: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -115,6 +120,130 @@ class BankParser(ABC):
         if not result.parse_method:
             result.parse_method = "text"
         return result
+
+    # --- Common header extraction (works for all Polish banks) ---
+
+    @staticmethod
+    def extract_info_common(text: str, bank_name: str = "") -> StatementInfo:
+        """Extract statement metadata using broad patterns that work across banks.
+
+        This handles multiple formats:
+        - "Nr 9 / 01.09.2025 - 30.09.2025" (ING)
+        - "Okres: 01.09.2025 - 30.09.2025"
+        - "od 01.09.2025 do 30.09.2025"
+        - Multi-line saldo labels
+        - Suma uznań/obciążeń for cross-validation
+        """
+        info = StatementInfo(bank=bank_name)
+
+        # --- Account number (26-digit IBAN) ---
+        m = re.search(r"(\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4})", text)
+        if m:
+            info.account_number = m.group(1).replace(" ", "")
+
+        # --- Period: multiple formats ---
+        period_patterns = [
+            # "Nr X / DD.MM.YYYY - DD.MM.YYYY" (ING style)
+            r"Nr\s*\d+\s*/\s*(\d{2}[.\-/]\d{2}[.\-/]\d{4})\s*[-–]\s*(\d{2}[.\-/]\d{2}[.\-/]\d{4})",
+            # "okres: DD.MM.YYYY - DD.MM.YYYY" or "za okres DD.MM.YYYY do DD.MM.YYYY"
+            r"(?:okres|za\s*okres|od)\s*:?\s*(\d{2}[.\-/]\d{2}[.\-/]\d{4})\s*(?:[-–]|do)\s*(\d{2}[.\-/]\d{2}[.\-/]\d{4})",
+            # "wyciąg za DD.MM.YYYY - DD.MM.YYYY"
+            r"wyci[ąa]g\s*(?:za|nr[^/]*/)?\s*(\d{2}[.\-/]\d{2}[.\-/]\d{4})\s*[-–]\s*(\d{2}[.\-/]\d{2}[.\-/]\d{4})",
+        ]
+        for pat in period_patterns:
+            m = re.search(pat, text, re.I)
+            if m:
+                info.period_from = BankParser.parse_date(m.group(1))
+                info.period_to = BankParser.parse_date(m.group(2))
+                break
+
+        # --- Opening balance: multiple patterns ---
+        # Simple patterns first (label + amount on same or next line via \s* crossing newlines),
+        # then multi-line fallback with [^\n\d]* to avoid consuming digits from the label line.
+        opening_patterns = [
+            # Simple: "Saldo początkowe: 5 000,00" or "Saldo początkowe:\n5 000,00"
+            r"saldo\s*(?:pocz[ąa]tkowe|otwarcia)\s*:?\s*([\d\s,.\-]+)",
+            # ING: "Saldo końcowe poprzedniego wyciągu...\n...\n1 053,83 PLN"
+            r"saldo\s*ko[ńn]cowe\s*poprzedniego\s*wyci[ąa]gu[^\n\d]*(?:\n[^\n\d]*){0,2}?\s*([\d\s]+[,\.]\d{2})\s*(?:PLN|EUR|USD)?",
+            # Multi-line fallback: label on one line, amount 1-2 lines later
+            r"saldo\s*pocz[ąa]tkowe[^\n\d]*(?:\n[^\n\d]*){0,2}?\s*([\d\s]+[,\.]\d{2})\s*(?:PLN|EUR|USD)?",
+        ]
+        for pat in opening_patterns:
+            m = re.search(pat, text, re.I)
+            if m:
+                val = BankParser.parse_amount(m.group(1))
+                if val is not None:
+                    info.opening_balance = val
+                    break
+
+        # --- Closing balance ---
+        # IMPORTANT: exclude "saldo końcowe poprzedniego wyciągu" — that's the opening balance!
+        closing_patterns = [
+            # Simple: "Saldo końcowe: 3 245,50" or "Saldo końcowe:\n138,49"
+            r"saldo\s*(?:ko[ńn]cowe(?!\s*poprzedniego)|zamkni[ęe]cia)\s*:?\s*([\d\s,.\-]+)",
+            # Multi-line fallback (no digit consumption in filler)
+            r"saldo\s*ko[ńn]cowe(?!\s*poprzedniego)[^\n\d]*(?:\n[^\n\d]*){0,2}?\s*([\d\s]+[,\.]\d{2})\s*(?:PLN|EUR|USD)?",
+        ]
+        for pat in closing_patterns:
+            m = re.search(pat, text, re.I)
+            if m:
+                val = BankParser.parse_amount(m.group(1))
+                if val is not None:
+                    info.closing_balance = val
+                    break
+
+        # --- Available balance ---
+        avail_patterns = [
+            r"saldo\s*dost[ęe]pn[eay]\s*:?\s*([\d\s,.\-]+)",
+            r"(?:dost[ęe]pne\s*[śs]rodki)\s*:?\s*([\d\s,.\-]+)",
+            r"(?:kwota\s*dost[ęe]pna)\s*:?\s*([\d\s,.\-]+)",
+        ]
+        for pat in avail_patterns:
+            m = re.search(pat, text, re.I)
+            if m:
+                val = BankParser.parse_amount(m.group(1))
+                if val is not None:
+                    info.available_balance = val
+                    break
+
+        # --- Cross-validation: Suma uznań / Suma obciążeń ---
+        # "Suma uznań (11): 20 934,74 PLN"
+        m = re.search(r"suma\s*uzna[ńn]\s*\((\d+)\)\s*:?\s*([\d\s,.\-]+)", text, re.I)
+        if m:
+            info.declared_credits_count = int(m.group(1))
+            info.declared_credits_sum = BankParser.parse_amount(m.group(2))
+
+        # "Suma obciążeń (182): 21 850,08 PLN"
+        m = re.search(r"suma\s*obci[ąa][żz]e[ńn]\s*\((\d+)\)\s*:?\s*([\d\s,.\-]+)", text, re.I)
+        if m:
+            info.declared_debits_count = int(m.group(1))
+            info.declared_debits_sum = BankParser.parse_amount(m.group(2))
+
+        # --- Currency ---
+        m = re.search(r"waluta\s*(?:rachunku)?\s*:?\s*([A-Z]{3})", text, re.I)
+        if m:
+            info.currency = m.group(1).upper()
+
+        # --- Account holder ---
+        holder_patterns = [
+            r"(?:w[łl]a[śs]ciciel|posiadacz)\s*(?:rachunku)?\s*:?\s*([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+){1,3})",
+            # "Dane posiadacza\nIMIĘ NAZWISKO\nULICA..." — capture only first line after label
+            r"(?:dane\s*posiadacza)[^\n]*\n\s*([^\n]+)",
+        ]
+        for pat in holder_patterns:
+            m = re.search(pat, text, re.I)
+            if m:
+                name = m.group(1).strip()
+                # Remove trailing digits/postal codes that might be address fragments
+                name = re.sub(r"\s*\d{2}[-\s]?\d{3}\s*.*$", "", name).strip()
+                words = name.split()
+                if 2 <= len(words) <= 4 and len(name) < 60:
+                    # Ensure each word looks like a name (starts with uppercase letter)
+                    if all(w[0].isupper() for w in words if w):
+                        info.account_holder = name
+                        break
+
+        return info
 
     # --- Helpers for subclasses ---
 
@@ -308,15 +437,25 @@ def validate_balance_chain(
     opening_balance: Optional[float],
     closing_balance: Optional[float],
     tolerance: float = 0.02,
+    declared_credits_sum: Optional[float] = None,
+    declared_debits_sum: Optional[float] = None,
+    declared_credits_count: Optional[int] = None,
+    declared_debits_count: Optional[int] = None,
 ) -> Tuple[bool, List[str]]:
-    """Verify that opening_balance + sum(amounts) ≈ closing_balance.
+    """Verify parsed data against declared statement values.
 
-    Also checks per-transaction balance_after consistency where available.
+    Checks:
+    1. opening_balance + sum(amounts) ≈ closing_balance
+    2. Per-transaction balance_after chain consistency
+    3. Sum of credits vs declared suma uznań
+    4. Sum of debits vs declared suma obciążeń
+    5. Transaction count vs declared count
 
     Returns:
         (is_valid, list_of_warnings)
     """
     warnings: List[str] = []
+    is_valid = True
 
     if opening_balance is None or closing_balance is None:
         warnings.append("Brak salda początkowego lub końcowego — walidacja niemożliwa")
@@ -332,8 +471,6 @@ def validate_balance_chain(
             f"różnica = {diff:,.2f} PLN"
         )
         is_valid = False
-    else:
-        is_valid = True
 
     # Per-transaction balance_after chain check
     prev_balance = opening_balance
@@ -360,5 +497,51 @@ def validate_balance_chain(
     if chain_breaks > 0:
         is_valid = False
         warnings.insert(0, f"Wykryto {chain_breaks} przerwań w łańcuchu sald transakcji")
+
+    # Cross-validation: suma uznań / suma obciążeń
+    parsed_credits = sum(t.amount for t in transactions if t.amount > 0)
+    parsed_debits = sum(abs(t.amount) for t in transactions if t.amount < 0)
+    parsed_credits_count = sum(1 for t in transactions if t.amount > 0)
+    parsed_debits_count = sum(1 for t in transactions if t.amount < 0)
+
+    if declared_credits_sum is not None:
+        credits_diff = abs(parsed_credits - declared_credits_sum)
+        if credits_diff > tolerance:
+            warnings.append(
+                f"SUMA UZNAŃ: sparsowano {parsed_credits:,.2f}, "
+                f"deklarowane {declared_credits_sum:,.2f}, "
+                f"różnica {credits_diff:,.2f} PLN"
+            )
+            is_valid = False
+        else:
+            warnings.append(f"Suma uznań: OK ({parsed_credits:,.2f} ✓)")
+
+    if declared_debits_sum is not None:
+        debits_diff = abs(parsed_debits - declared_debits_sum)
+        if debits_diff > tolerance:
+            warnings.append(
+                f"SUMA OBCIĄŻEŃ: sparsowano {parsed_debits:,.2f}, "
+                f"deklarowane {declared_debits_sum:,.2f}, "
+                f"różnica {debits_diff:,.2f} PLN"
+            )
+            is_valid = False
+        else:
+            warnings.append(f"Suma obciążeń: OK ({parsed_debits:,.2f} ✓)")
+
+    if declared_credits_count is not None:
+        if parsed_credits_count != declared_credits_count:
+            warnings.append(
+                f"LICZBA UZNAŃ: sparsowano {parsed_credits_count}, "
+                f"deklarowane {declared_credits_count}"
+            )
+            is_valid = False
+
+    if declared_debits_count is not None:
+        if parsed_debits_count != declared_debits_count:
+            warnings.append(
+                f"LICZBA OBCIĄŻEŃ: sparsowano {parsed_debits_count}, "
+                f"deklarowane {declared_debits_count}"
+            )
+            is_valid = False
 
     return is_valid, warnings
