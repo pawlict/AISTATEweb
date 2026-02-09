@@ -169,6 +169,26 @@ class BlikTransaction:
 
 
 @dataclass
+class BlikPersonSummary:
+    """Aggregated BLIK P2P transfer summary per person."""
+    name: str
+    transfer_count: int = 0
+    total_amount: float = 0.0
+    last_date: str = ""
+
+
+@dataclass
+class StandingOrderSummary:
+    """Aggregated standing order (ST.ZLEC) summary per recipient."""
+    recipient: str
+    count: int = 0
+    total_amount: float = 0.0
+    avg_amount: float = 0.0
+    categories: List[str] = field(default_factory=list)
+    is_classified: bool = False
+
+
+@dataclass
 class SpendingReport:
     """Complete spending analysis report."""
     top_shops: List[ShopFrequency] = field(default_factory=list)
@@ -179,6 +199,8 @@ class SpendingReport:
     blik_phone_transfers: int = 0
     blik_online_purchases: int = 0
     blik_other_payments: int = 0
+    blik_p2p_persons: List[BlikPersonSummary] = field(default_factory=list)
+    standing_orders: List[StandingOrderSummary] = field(default_factory=list)
     total_shopping_txns: int = 0
 
 
@@ -218,8 +240,11 @@ def _classify_blik(txn: ClassifiedTransaction) -> Optional[BlikTransaction]:
     """Classify a BLIK transaction. Returns None if not BLIK."""
     search_text = f"{txn.transaction.counterparty} {txn.transaction.title} {txn.transaction.raw_text}".lower()
 
-    # Must contain "blik" keyword
-    if "blik" not in search_text:
+    # Check bank_category first (more reliable than text matching for ING)
+    is_blik_by_code = txn.transaction.bank_category.upper() == "P.BLIK" if txn.transaction.bank_category else False
+
+    # Must contain "blik" keyword or have P.BLIK bank_category
+    if not is_blik_by_code and "blik" not in search_text:
         return None
 
     # Check phone transfer patterns
@@ -232,6 +257,16 @@ def _classify_blik(txn: ClassifiedTransaction) -> Optional[BlikTransaction]:
                 blik_type="phone_transfer",
                 title=txn.transaction.title,
             )
+
+    # P.BLIK with "Przelew na telefon" in title → phone transfer
+    if is_blik_by_code and re.search(r"przelew\s*(na|z)\s*telefon", search_text, re.I):
+        return BlikTransaction(
+            date=txn.transaction.date,
+            amount=txn.transaction.amount,
+            counterparty=txn.transaction.counterparty or txn.transaction.title,
+            blik_type="phone_transfer",
+            title=txn.transaction.title,
+        )
 
     # Check purchase patterns
     for p in _BLIK_PURCHASE_PATTERNS:
@@ -361,5 +396,59 @@ def analyze_spending(classified: List[ClassifiedTransaction]) -> SpendingReport:
             travel_cities.add(city)
 
     report.fuel_travel_cities = sorted(travel_cities)
+
+    # --- BLIK P2P person aggregation ---
+    p2p_persons: Dict[str, Dict[str, Any]] = {}
+    for bt in report.blik_transactions:
+        if bt.blik_type == "phone_transfer":
+            name = bt.counterparty.strip()
+            if not name or len(name) < 2:
+                continue
+            key = name.lower()
+            if key not in p2p_persons:
+                p2p_persons[key] = {"name": name, "count": 0, "total": 0.0, "last_date": ""}
+            p2p_persons[key]["count"] += 1
+            p2p_persons[key]["total"] += abs(bt.amount)
+            if bt.date > p2p_persons[key]["last_date"]:
+                p2p_persons[key]["last_date"] = bt.date
+
+    for data in sorted(p2p_persons.values(), key=lambda d: -d["total"]):
+        report.blik_p2p_persons.append(BlikPersonSummary(
+            name=data["name"],
+            transfer_count=data["count"],
+            total_amount=round(data["total"], 2),
+            last_date=data["last_date"],
+        ))
+
+    # --- Standing order (ST.ZLEC) aggregation ---
+    st_groups: Dict[str, Dict[str, Any]] = {}
+    for ct in classified:
+        if ct.transaction.bank_category and ct.transaction.bank_category.upper() == "ST.ZLEC":
+            recipient = (ct.transaction.counterparty or ct.transaction.title).strip()
+            if not recipient or len(recipient) < 2:
+                continue
+            key = recipient.lower()
+            if key not in st_groups:
+                st_groups[key] = {
+                    "recipient": recipient,
+                    "count": 0,
+                    "total": 0.0,
+                    "cats": set(),
+                }
+            st_groups[key]["count"] += 1
+            st_groups[key]["total"] += abs(ct.transaction.amount)
+            for cat in ct.categories:
+                st_groups[key]["cats"].add(cat)
+
+    for data in sorted(st_groups.values(), key=lambda d: -d["total"]):
+        cats_list = sorted(data["cats"])
+        report.standing_orders.append(StandingOrderSummary(
+            recipient=data["recipient"],
+            count=data["count"],
+            total_amount=round(data["total"], 2),
+            avg_amount=round(data["total"] / data["count"], 2) if data["count"] > 0 else 0.0,
+            categories=cats_list,
+            is_classified=bool(cats_list),
+        ))
 
     return report

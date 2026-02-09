@@ -85,6 +85,29 @@ _TABLE_STRATEGIES: List[Dict[str, Any]] = [
 ]
 
 
+def extract_header_words(pdf_path: Path, max_pages: int = 2) -> List[Dict[str, Any]]:
+    """Extract positioned words from first pages for spatial header parsing.
+
+    Uses pdfplumber's extract_words() which returns word-level bounding boxes.
+    This enables spatial analysis of columnar layouts where extract_text()
+    would flatten columns into incorrect line sequences.
+    """
+    try:
+        import pdfplumber
+    except ImportError:
+        return []
+
+    words: List[Dict[str, Any]] = []
+    try:
+        with pdfplumber.open(str(pdf_path)) as pdf:
+            for pg in pdf.pages[:max_pages]:
+                page_words = pg.extract_words() or []
+                words.extend(page_words)
+    except Exception:
+        pass
+    return words
+
+
 def extract_pdf_tables(pdf_path: Path) -> Tuple[List[List[List[str]]], str, int]:
     """Extract tables and text from PDF using pdfplumber.
 
@@ -189,9 +212,16 @@ def run_finance_pipeline(
     parser = get_parser(full_text[:5000])
     _log(f"Rozpoznany bank: {parser.BANK_NAME} (parser: {parser.BANK_ID})")
 
+    # Step 3b: Extract spatial header words for parsers that need it (ING columnar layout)
+    header_words = None
+    if parser.BANK_ID == "ing":
+        _log("Ekstrakcja pozycyjnych słów nagłówka (ING — układ kolumnowy)...")
+        header_words = extract_header_words(pdf_path)
+        _log(f"Wyodrębniono {len(header_words)} słów z nagłówka")
+
     # Step 4: Parse transactions
     _log("Parsowanie transakcji...")
-    parse_result = parser.parse(tables, full_text)
+    parse_result = parser.parse(tables, full_text, header_words=header_words)
     parse_result.page_count = page_count
     _log(f"Znaleziono {len(parse_result.transactions)} transakcji")
 
