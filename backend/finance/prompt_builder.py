@@ -100,6 +100,16 @@ def _build_info_section(result: ParseResult) -> str:
         lines.append(f"- **Saldo początkowe**: {info.opening_balance:,.2f} {info.currency}")
     if info.closing_balance is not None:
         lines.append(f"- **Saldo końcowe**: {info.closing_balance:,.2f} {info.currency}")
+    # Computed closing balance from transactions
+    if info.opening_balance is not None and result.transactions:
+        computed_closing = info.opening_balance + sum(t.amount for t in result.transactions)
+        lines.append(f"- **Saldo końcowe (obliczone)**: {computed_closing:,.2f} {info.currency}")
+        if info.closing_balance is not None:
+            diff = abs(computed_closing - info.closing_balance)
+            if diff > 0.02:
+                lines.append(f"- **⚠ ROZBIEŻNOŚĆ SALD**: {diff:,.2f} {info.currency} "
+                             f"(obliczone vs deklarowane — dane mogą być niedokładne)")
+
     lines.append(f"- **Liczba transakcji**: {len(result.transactions)}")
     lines.append(f"- **Metoda parsowania**: {result.parse_method}")
 

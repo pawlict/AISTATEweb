@@ -38,7 +38,7 @@ class SantanderParser(BankParser):
 
     def _is_header_row(self, row: List[str]) -> bool:
         joined = " ".join(c.lower() for c in row if c)
-        return "data" in joined and ("kwota" in joined or "saldo" in joined)
+        return "data" in joined and ("kwota" in joined or "saldo" in joined or "obci" in joined or "uzna" in joined)
 
     def _find_column_mapping(self, header: List[str]) -> Dict[str, int]:
         mapping: Dict[str, int] = {}
@@ -54,7 +54,11 @@ class SantanderParser(BankParser):
                 mapping["title"] = i
             elif re.search(r"nadawca|odbiorca|kontrahent", cell_l):
                 mapping["counterparty"] = i
-            elif re.search(r"kwota|warto[śs]", cell_l):
+            elif re.search(r"obci[ąa][żz]|wyp[łl]at|debit|wydatki", cell_l):
+                mapping["debit"] = i
+            elif re.search(r"uzna|wp[łl]at|credit|wp[łl]yw", cell_l):
+                mapping["credit"] = i
+            elif re.search(r"kwota|warto[śs]", cell_l) and "debit" not in mapping:
                 mapping["amount"] = i
             elif re.search(r"saldo", cell_l):
                 mapping["balance"] = i
@@ -75,7 +79,8 @@ class SantanderParser(BankParser):
             if header_idx is None:
                 continue
             col_map = self._find_column_mapping(table[header_idx])
-            if "date" not in col_map or "amount" not in col_map:
+            has_amount = "amount" in col_map or "debit" in col_map or "credit" in col_map
+            if "date" not in col_map or not has_amount:
                 continue
             for row in table[header_idx + 1:]:
                 if not row or all(not (c or "").strip() for c in row):
@@ -83,7 +88,7 @@ class SantanderParser(BankParser):
                 date_str = self.parse_date(row[col_map["date"]] if col_map["date"] < len(row) else "")
                 if not date_str:
                     continue
-                amount = self.parse_amount(row[col_map["amount"]] if col_map["amount"] < len(row) else "")
+                amount = self.resolve_amount_from_row(row, col_map)
                 if amount is None:
                     continue
                 txn = RawTransaction(
