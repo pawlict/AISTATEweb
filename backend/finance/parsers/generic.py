@@ -38,7 +38,7 @@ class GenericParser(BankParser):
         header = " ".join(c.lower() for c in table[0] if c)
         if "data" in header:
             score += 2
-        if re.search(r"kwota|warto[śs]|suma", header):
+        if re.search(r"kwota|warto[śs]|suma|obci[ąa][żz]|uzna", header):
             score += 2
         if re.search(r"saldo", header):
             score += 1
@@ -55,7 +55,10 @@ class GenericParser(BankParser):
         return score
 
     def _find_date_and_amount_cols(self, table: List[List[str]]) -> Optional[Dict[str, int]]:
-        """Try to identify date and amount columns by content analysis."""
+        """Try to identify date and amount columns by content analysis.
+
+        Also detects dual debit/credit column layouts.
+        """
         if not table or len(table) < 3:
             return None
 
@@ -77,32 +80,53 @@ class GenericParser(BankParser):
         if date_col is not None and date_scores[date_col] < 2:
             date_col = None
 
-        # Find amount column(s) - pick the one with most numeric values
+        if date_col is None:
+            return None
+
+        # Check header for explicit debit/credit column names
+        header = table[0] if table else []
+        dual_cols = self.find_debit_credit_columns(header)
+
+        # Find amount column(s) — pick the one with most numeric values
         # that isn't the date column
-        amount_col = None
-        best = 0
+        amount_cols_ranked = []
         for i in range(ncols):
             if i == date_col:
                 continue
-            if amount_scores[i] > best:
-                best = amount_scores[i]
-                amount_col = i
+            if amount_scores[i] > 0:
+                amount_cols_ranked.append((i, amount_scores[i]))
+        amount_cols_ranked.sort(key=lambda x: -x[1])
 
-        if date_col is None or amount_col is None:
+        # If we found dual columns via header, use those
+        if "debit" in dual_cols and "credit" in dual_cols:
+            result = {"date": date_col, "debit": dual_cols["debit"], "credit": dual_cols["credit"]}
+        elif len(amount_cols_ranked) >= 2 and amount_cols_ranked[1][1] >= 2:
+            # Two strong numeric columns — likely debit/credit split
+            col_a, col_b = amount_cols_ranked[0][0], amount_cols_ranked[1][0]
+            # The one that appears first is usually debit (obciążenia)
+            if col_a < col_b:
+                result = {"date": date_col, "debit": col_a, "credit": col_b}
+            else:
+                result = {"date": date_col, "debit": col_b, "credit": col_a}
+        elif amount_cols_ranked:
+            result = {"date": date_col, "amount": amount_cols_ranked[0][0]}
+        else:
             return None
 
-        # Guess title column: widest text column that's not date/amount
+        # Guess title column: widest text column that's not date/amount/debit/credit
+        used = {date_col, result.get("amount"), result.get("debit"), result.get("credit")} - {None}
         title_col = None
         best_width = 0
         for i in range(ncols):
-            if i in (date_col, amount_col):
+            if i in used:
                 continue
             total_len = sum(len((row[i] if i < len(row) else "") or "") for row in table[1:])
             if total_len > best_width:
                 best_width = total_len
                 title_col = i
 
-        return {"date": date_col, "amount": amount_col, "title": title_col}
+        result["title"] = title_col
+        return result
 
     def parse_tables(self, tables: List[List[List[str]]], full_text: str) -> ParseResult:
         info = self._extract_info(full_text)
@@ -139,7 +163,7 @@ class GenericParser(BankParser):
             date_str = self.parse_date(row[cols["date"]] if cols["date"] < len(row) else "")
             if not date_str:
                 continue
-            amount = self.parse_amount(row[cols["amount"]] if cols["amount"] < len(row) else "")
+            amount = self.resolve_amount_from_row(row, cols)
             if amount is None:
                 continue
             title = self.clean_text(row[cols["title"]] if cols.get("title") is not None and cols["title"] < len(row) else "")
@@ -174,6 +198,11 @@ class GenericParser(BankParser):
                         title=self.clean_text(m.group(2)), raw_text=line,
                     ))
 
-        if transactions:
+        if not transactions:
+            transactions = self.parse_text_multiline(text)
+            if transactions:
+                warnings.append(f"Użyto parser generyczny wieloliniowy — {len(transactions)} transakcji")
+
+        if transactions and not any("wieloliniow" in w for w in warnings):
             warnings.append(f"Użyto parser generyczny (tekstowy) — {len(transactions)} transakcji")
         return ParseResult(bank=self.BANK_ID, info=info, transactions=transactions, warnings=warnings)

@@ -23,7 +23,7 @@ from .classifier import ClassifiedTransaction, classify_all
 from .detector import is_bank_statement
 from .entity_memory import EntityMemory
 from .parsers import get_parser
-from .parsers.base import ParseResult
+from .parsers.base import ParseResult, validate_balance_chain
 from .prompt_builder import build_finance_prompt
 from .scorer import ScoreBreakdown, compute_score
 from .spending_analysis import SpendingReport, analyze_spending
@@ -31,8 +31,65 @@ from .spending_analysis import SpendingReport, analyze_spending
 log = logging.getLogger("aistate.finance")
 
 
+def _try_extract_tables_with_settings(
+    page: Any,
+    settings_list: List[Dict[str, Any]],
+) -> List[List[List[str]]]:
+    """Try multiple table extraction strategies, return first non-empty result.
+
+    pdfplumber's default settings rely on visible lines which many Polish bank
+    PDFs lack.  This helper tries increasingly aggressive detection methods.
+    """
+    for settings in settings_list:
+        try:
+            raw = page.extract_tables(table_settings=settings) or []
+            result: List[List[List[str]]] = []
+            for tbl in raw:
+                if tbl and isinstance(tbl, list) and len(tbl) <= 500:
+                    clean = [[(c or "").strip() for c in row] for row in tbl]
+                    # Skip tables where every row is a single cell (not real tables)
+                    non_empty_cols = max(
+                        (sum(1 for c in row if c) for row in clean), default=0
+                    )
+                    if non_empty_cols >= 3:
+                        result.append(clean)
+            if result:
+                return result
+        except Exception:
+            continue
+    return []
+
+
+# Table extraction strategies ordered from strictest to most lenient.
+_TABLE_STRATEGIES: List[Dict[str, Any]] = [
+    # Strategy 1: default (line-based) — works for PDFs with visible grid
+    {},
+    # Strategy 2: text-edge based — works for PDFs without visible lines
+    {
+        "vertical_strategy": "text",
+        "horizontal_strategy": "text",
+        "snap_tolerance": 5,
+        "join_tolerance": 5,
+        "min_words_vertical": 2,
+        "min_words_horizontal": 1,
+    },
+    # Strategy 3: relaxed text-edge — wider snapping for loosely formatted PDFs
+    {
+        "vertical_strategy": "text",
+        "horizontal_strategy": "text",
+        "snap_tolerance": 8,
+        "join_tolerance": 8,
+        "min_words_vertical": 1,
+        "min_words_horizontal": 1,
+    },
+]
+
+
 def extract_pdf_tables(pdf_path: Path) -> Tuple[List[List[List[str]]], str, int]:
     """Extract tables and text from PDF using pdfplumber.
+
+    Uses multiple extraction strategies to handle PDFs both with and without
+    visible table borders (common in Polish bank statements).
 
     Returns:
         (tables, full_text, page_count)
@@ -53,15 +110,8 @@ def extract_pdf_tables(pdf_path: Path) -> Tuple[List[List[List[str]]], str, int]
             t = (pg.extract_text() or "").strip()
             if t:
                 text_parts.append(t)
-            try:
-                ptables = pg.extract_tables() or []
-                for tbl in ptables:
-                    if tbl and isinstance(tbl, list) and len(tbl) <= 500:
-                        # Normalize None cells to empty strings
-                        clean = [[(c or "").strip() for c in row] for row in tbl]
-                        tables.append(clean)
-            except Exception:
-                pass
+            page_tables = _try_extract_tables_with_settings(pg, _TABLE_STRATEGIES)
+            tables.extend(page_tables)
 
     full_text = "\n\n".join(text_parts)
     return tables, full_text, page_count
@@ -95,6 +145,24 @@ def run_finance_pipeline(
                 pass
 
     t0 = time.time()
+
+    # Step 0: Check for cached parsed results
+    if save_dir:
+        parsed_cache = save_dir / "parsed" / f"{pdf_path.stem}.json"
+        if parsed_cache.exists():
+            try:
+                cache_mtime = parsed_cache.stat().st_mtime
+                pdf_mtime = pdf_path.stat().st_mtime
+                if cache_mtime >= pdf_mtime:
+                    _log(f"Znaleziono cache sparsowanych danych: {parsed_cache.name}")
+                    cached = json.loads(parsed_cache.read_text(encoding="utf-8"))
+                    # Validate cache has essential fields
+                    if cached.get("transactions") and cached.get("score"):
+                        _log(f"Cache zawiera {len(cached['transactions'])} transakcji — pomijam re-parsowanie")
+                    else:
+                        _log("Cache niekompletny — ponowne parsowanie")
+            except Exception as e:
+                _log(f"Błąd odczytu cache: {e}")
 
     # Step 1: Check if this looks like a bank statement
     preview_text = cached_text or ""
@@ -130,6 +198,22 @@ def run_finance_pipeline(
     if not parse_result.transactions:
         _log("UWAGA: Nie wyodrębniono żadnych transakcji. Dokument zostanie przesłany jako tekst surowy.")
         return None
+
+    # Step 4b: Validate balance chain
+    _log("Walidacja łańcucha sald...")
+    bal_valid, bal_warnings = validate_balance_chain(
+        parse_result.transactions,
+        parse_result.info.opening_balance,
+        parse_result.info.closing_balance,
+    )
+    if bal_warnings:
+        for w in bal_warnings:
+            _log(f"  ⚠ {w}")
+        parse_result.warnings.extend(bal_warnings)
+    if bal_valid:
+        _log("Łańcuch sald: OK ✓")
+    else:
+        _log("Łańcuch sald: ROZBIEŻNOŚCI — wyniki mogą być niedokładne")
 
     # Step 5: Load entity memory
     memory = None
