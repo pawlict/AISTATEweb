@@ -199,12 +199,16 @@ def run_finance_pipeline(
         _log("UWAGA: Nie wyodrębniono żadnych transakcji. Dokument zostanie przesłany jako tekst surowy.")
         return None
 
-    # Step 4b: Validate balance chain
+    # Step 4b: Validate balance chain (including cross-validation against declared sums)
     _log("Walidacja łańcucha sald...")
     bal_valid, bal_warnings = validate_balance_chain(
         parse_result.transactions,
         parse_result.info.opening_balance,
         parse_result.info.closing_balance,
+        declared_credits_sum=parse_result.info.declared_credits_sum,
+        declared_debits_sum=parse_result.info.declared_debits_sum,
+        declared_credits_count=parse_result.info.declared_credits_count,
+        declared_debits_count=parse_result.info.declared_debits_count,
     )
     if bal_warnings:
         for w in bal_warnings:

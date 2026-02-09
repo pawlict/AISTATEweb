@@ -20,20 +20,12 @@ class MBankParser(BankParser):
     ]
 
     def _extract_info(self, text: str) -> StatementInfo:
-        info = StatementInfo(bank=self.BANK_NAME)
-        m = re.search(r"(\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4})", text)
-        if m:
-            info.account_number = m.group(1).replace(" ", "")
-        m = re.search(r"(?:okres|za\s*okres|od)\s*:?\s*(\d{2}[.\-/]\d{2}[.\-/]\d{4})\s*(?:-|do|–)\s*(\d{2}[.\-/]\d{2}[.\-/]\d{4})", text, re.I)
-        if m:
-            info.period_from = self.parse_date(m.group(1))
-            info.period_to = self.parse_date(m.group(2))
-        m = re.search(r"saldo\s*(?:pocz[ąa]tkowe|otwarcia)\s*:?\s*([\d\s,.\-]+)", text, re.I)
-        if m:
-            info.opening_balance = self.parse_amount(m.group(1))
-        m = re.search(r"saldo\s*(?:ko[ńn]cowe|zamkni[ęe]cia|po\s*operacji)\s*:?\s*([\d\s,.\-]+)", text, re.I)
-        if m:
-            info.closing_balance = self.parse_amount(m.group(1))
+        info = self.extract_info_common(text, bank_name=self.BANK_NAME)
+        # mBank-specific: "saldo po operacji"
+        if info.closing_balance is None:
+            m = re.search(r"saldo\s*po\s*operacji\s*:?\s*([\d\s,.\-]+)", text, re.I)
+            if m:
+                info.closing_balance = self.parse_amount(m.group(1))
         return info
 
     def _is_header_row(self, row: List[str]) -> bool:

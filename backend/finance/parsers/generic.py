@@ -18,17 +18,7 @@ class GenericParser(BankParser):
     DETECT_PATTERNS = []  # never auto-detected; used as fallback
 
     def _extract_info(self, text: str) -> StatementInfo:
-        info = StatementInfo(bank=self.BANK_NAME)
-        m = re.search(r"(\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4})", text)
-        if m:
-            info.account_number = m.group(1).replace(" ", "")
-        m = re.search(r"saldo\s*(?:pocz[ąa]tkowe|otwarcia)\s*:?\s*([\d\s,.\-]+)", text, re.I)
-        if m:
-            info.opening_balance = self.parse_amount(m.group(1))
-        m = re.search(r"saldo\s*(?:ko[ńn]cowe|zamkni[ęe]cia)\s*:?\s*([\d\s,.\-]+)", text, re.I)
-        if m:
-            info.closing_balance = self.parse_amount(m.group(1))
-        return info
+        return self.extract_info_common(text, bank_name=self.BANK_NAME)
 
     def _score_table_as_transactions(self, table: List[List[str]]) -> int:
         """Heuristic: how likely is this table to contain transactions?"""
