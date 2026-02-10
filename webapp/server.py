@@ -46,6 +46,7 @@ from generators import generate_txt_report, generate_html_report, generate_pdf_r
 from webapp.routers import chat as chat_router
 from webapp.routers import admin as admin_router
 from webapp.routers import tasks as tasks_router
+from webapp.routers import aml as aml_router
 
 try:
     from markdown import markdown as md_to_html  # type: ignore
@@ -1638,6 +1639,17 @@ app.include_router(chat_router.router)
 
 tasks_router.init(tasks_manager=TASKS)
 app.include_router(tasks_router.router)
+
+# AML/DB router (SQL-backed project management + AML analysis)
+app.include_router(aml_router.router)
+
+# Initialize SQLite database on startup
+try:
+    from backend.db.engine import init_db
+    init_db()
+except Exception as _db_err:
+    import logging as _lg
+    _lg.getLogger("aistate").warning("DB init deferred: %s", _db_err)
 
 # Admin router is initialised later (after GPU_RM and helper functions are defined).
 # See: _mount_admin_router() below.

@@ -1,0 +1,303 @@
+# AML Rules Configuration
+# Version: 1.0.0
+# Deterministic rules for transaction classification and risk scoring.
+# All patterns are case-insensitive regex.
+
+version: "1.0.0"
+
+# ============================================================
+# SCORING WEIGHTS (additive, 0-100 scale)
+# ============================================================
+scoring:
+  CRYPTO_RELATED: 25
+  GAMBLING: 30
+  LARGE_OUTLIER: 20
+  NEW_COUNTERPARTY_LARGE: 15
+  P2P_BURST: 15
+  CASH_CLUSTER: 10
+  CASH_INTENSIVE: 10
+  SPENDING_OVER_INCOME: 10
+  DEBT_COLLECTION: 15
+  PAYDAY_LOAN: 10
+  MIXER_SUSPECTED: 40
+  MONEY_MULE_PATTERN: 35
+  STRUCTURING_SUSPECTED: 30
+  WHITELIST_MATCH: -10
+  BLACKLIST_MATCH: 30
+
+# ============================================================
+# CATEGORY RULES
+# Pattern → (category, subcategory)
+# ============================================================
+categories:
+  crypto:
+    exchange_polish:
+      - "\\bzonda\\b"
+      - "zonda\\.exchange"
+      - "zonda\\s*sp"
+      - "\\bbitbay\\b"
+      - "\\bkanga\\b"
+      - "kanga\\s*exchange"
+      - "\\bcoindeal\\b"
+      - "\\begera\\b"
+    exchange_global:
+      - "\\bbinance\\b"
+      - "\\bcoinbase\\b"
+      - "\\bbybit\\b"
+      - "\\bkraken\\b"
+      - "\\bbitget\\b"
+      - "\\bkucoin\\b"
+      - "gate\\.io"
+      - "crypto\\.com"
+      - "\\bbitstamp\\b"
+      - "\\bgemini\\b"
+      - "\\bokx\\b"
+      - "\\bhtx\\b"
+      - "\\bhuobi\\b"
+      - "\\bbitfinex\\b"
+      - "\\bbitpanda\\b"
+      - "\\bcoinmate\\b"
+      - "\\buphold\\b"
+      - "\\bnexo\\b"
+    payment_processor:
+      - "\\bsimplex\\b"
+      - "\\bmoonpay\\b"
+      - "\\btransak\\b"
+      - "ramp\\s*network"
+      - "\\bwyre\\b"
+      - "\\bbanxa\\b"
+      - "\\bpaybis\\b"
+      - "\\bchangelly\\b"
+    keyword:
+      - "kryptowalut"
+      - "bitcoin"
+      - "\\bbtc\\b"
+      - "\\beth\\b"
+      - "\\busdt\\b"
+      - "\\busdc\\b"
+      - "blockchain"
+      - "\\bdefi\\b"
+      - "\\bnft\\b"
+
+  gambling:
+    bookmaker:
+      - "\\bsts\\b"
+      - "sts\\.pl"
+      - "\\bbetclic\\b"
+      - "\\bfortuna\\b"
+      - "\\bsuperbet\\b"
+      - "\\blvbet\\b"
+      - "\\bbetfan\\b"
+      - "\\btotalbet\\b"
+      - "\\bbetsson\\b"
+      - "\\bunibet\\b"
+      - "\\bbet365\\b"
+      - "\\bnoblebet\\b"
+      - "\\bfuksiarz\\b"
+      - "\\bpzbuk\\b"
+      - "\\btotolotek\\b"
+      - "\\bforbet\\b"
+      - "\\bbetway\\b"
+      - "\\b1xbet\\b"
+      - "\\bpinnacle\\b"
+      - "\\bbwin\\b"
+      - "william\\s*hill"
+    casino:
+      - "casino"
+      - "kasyno"
+      - "\\bslot[sy]?\\b"
+      - "\\bpoker\\b"
+      - "total\\s*casino"
+      - "\\bruleta\\b"
+      - "\\b22bet\\b"
+    lottery:
+      - "\\blotto\\b"
+      - "toto.*lotek"
+      - "eurojackpot"
+      - "multi\\s*multi"
+      - "\\bzdrapk"
+      - "mini\\s*lotto"
+      - "\\bkeno\\b"
+    keyword:
+      - "bukmacher"
+      - "zakl?ad.*sport"
+      - "hazard"
+      - "gambling"
+      - "obstawianie"
+
+  loans:
+    payday:
+      - "\\bvivus\\b"
+      - "\\bwonga\\b"
+      - "\\bprovident\\b"
+      - "\\bincredit\\b"
+      - "\\blendon\\b"
+      - "\\bsmartney\\b"
+      - "\\baasa\\b"
+      - "\\bferratum\\b"
+      - "\\bzaplo\\b"
+      - "\\bnetcredit\\b"
+      - "\\bfilarum\\b"
+      - "\\bsolcredit\\b"
+      - "\\balegotowka\\b"
+      - "pozyczkomat"
+      - "chwil[oó]wk"
+      - "\\bcashper\\b"
+      - "\\bwandoo\\b"
+    installment:
+      - "\\brata\\b"
+      - "rat[ay]\\s*(kredyt|po[zż]yczk)"
+      - "spl?ata\\s*(kredyt|po[zż]yczk|rat)"
+      - "\\bleasing\\b"
+    mortgage:
+      - "kredyt\\s*mieszk"
+      - "kredyt\\s*hipotecz"
+      - "hipoteka"
+    debt_collection:
+      - "windykac"
+      - "komorni"
+      - "egzekuc"
+      - "kruk\\s*s\\.?a"
+      - "\\bbest\\s*s\\.?a\\b"
+      - "ultimo"
+      - "intrum"
+      - "hoist\\s*finance"
+
+  transfers:
+    salary:
+      - "wynagrodzeni"
+      - "pensj[aę]"
+      - "wypl?ata"
+      - "premia"
+    benefits:
+      - "\\bzus\\b"
+      - "\\bkrus\\b"
+      - "500\\s*plus"
+      - "800\\s*plus"
+      - "rodzinn"
+      - "alimenty"
+      - "stypend"
+    rent:
+      - "czynsz"
+      - "najem"
+      - "wynaj[eę]"
+      - "opl?ata.*mieszk"
+      - "wspo[lł]nota\\s*mieszk"
+      - "spo[lł]dzielni"
+    utilities:
+      - "energi[ae]|energa|tauron|\\bpge\\b|enea"
+      - "gaz.*pgnig|pgnig"
+      - "wod.*kan|wodoci[ąa]g|mpwik"
+    telecom:
+      - "\\borange\\b|t-mobile|plus.*gsm|\\bplay\\b|vectra"
+      - "\\bupc\\b|polsat.*box|canal.*plus"
+      - "netflix|spotify|\\bhbo\\b|disney"
+    insurance:
+      - "ubezpiecz|polisa|\\bpzu\\b|warta|ergo\\s*hestia"
+      - "allianz|aviva|generali|compensa|uniqa"
+
+  risky:
+    foreign_transfer:
+      - "western\\s*union"
+      - "moneygram"
+      - "ria\\s*money"
+      - "remitly"
+      - "wise.*transfer|transferwise"
+      - "przelew\\s*zagraniczny"
+    pawnshop:
+      - "lombard"
+      - "zastaw"
+      - "skup\\s*zl?ota"
+    p2p_lending:
+      - "\\bmintos\\b"
+      - "\\bbondora\\b"
+      - "\\btwino\\b"
+      - "\\bpeerberry\\b"
+    suspicious_services:
+      - "\\brevolut\\b.*przelew|przelew.*\\brevolut\\b"
+      - "\\bskrill\\b"
+      - "\\bneteller\\b"
+      - "\\bpaysera\\b"
+    mixer_suspected:
+      - "tornado.*cash"
+      - "mixer"
+      - "tumbler"
+      - "wasabi.*wallet"
+      - "coinjoin"
+
+# ============================================================
+# RISK DICTIONARY (additional patterns for risk tagging)
+# ============================================================
+risk_dictionary:
+  structuring:
+    - "przelew.*9\\s*[89]\\d{2}"
+    - "wpl?ata.*9\\s*[89]\\d{2}"
+  money_mule:
+    - "przelew.*dalej"
+    - "forward.*transfer"
+
+# ============================================================
+# URL DOMAIN CLASSIFICATION
+# ============================================================
+url_domains:
+  "lotto.pl":
+    category: "gambling"
+    subcategory: "lottery"
+  "www.lotto.pl":
+    category: "gambling"
+    subcategory: "lottery"
+  "sts.pl":
+    category: "gambling"
+    subcategory: "bookmaker"
+  "www.sts.pl":
+    category: "gambling"
+    subcategory: "bookmaker"
+  "betclic.pl":
+    category: "gambling"
+    subcategory: "bookmaker"
+  "fortuna.pl":
+    category: "gambling"
+    subcategory: "bookmaker"
+  "superbet.pl":
+    category: "gambling"
+    subcategory: "bookmaker"
+  "totalcasino.pl":
+    category: "gambling"
+    subcategory: "casino"
+  "zonda.exchange":
+    category: "crypto"
+    subcategory: "exchange_polish"
+  "www.zonda.exchange":
+    category: "crypto"
+    subcategory: "exchange_polish"
+  "bitbay.net":
+    category: "crypto"
+    subcategory: "exchange_polish"
+  "binance.com":
+    category: "crypto"
+    subcategory: "exchange_global"
+  "www.binance.com":
+    category: "crypto"
+    subcategory: "exchange_global"
+  "coinbase.com":
+    category: "crypto"
+    subcategory: "exchange_global"
+  "crypto.com":
+    category: "crypto"
+    subcategory: "exchange_global"
+  "skrill.com":
+    category: "risky"
+    subcategory: "suspicious_services"
+  "neteller.com":
+    category: "risky"
+    subcategory: "suspicious_services"
+
+# ============================================================
+# ANOMALY THRESHOLDS (used by baseline engine)
+# ============================================================
+anomaly:
+  outlier_zscore: 2.5          # z-score threshold for amount outlier
+  new_cp_large_pct: 0.3        # new counterparty + amount > 30% of monthly avg
+  p2p_burst_count: 5           # >5 P2P transfers in 7 days
+  cash_cluster_count: 3        # >3 cash operations in 3 days
+  spending_over_income_pct: 1.2  # monthly spend > 120% of income
