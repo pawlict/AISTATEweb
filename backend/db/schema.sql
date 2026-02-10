@@ -372,3 +372,26 @@ CREATE TABLE IF NOT EXISTS field_rules (
 
 CREATE INDEX IF NOT EXISTS idx_fr_bank ON field_rules(bank_id);
 CREATE INDEX IF NOT EXISTS idx_fr_type ON field_rules(rule_type);
+
+-- ============================================================
+-- PARSE TEMPLATES (column mapping for bank statement formats)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS parse_templates (
+    id              TEXT PRIMARY KEY,
+    bank_id         TEXT NOT NULL,
+    bank_name       TEXT DEFAULT '',
+    name            TEXT NOT NULL DEFAULT '',
+    column_mapping  TEXT NOT NULL DEFAULT '{}',  -- JSON: {col_index: field_type}
+    header_row      INTEGER DEFAULT 0,           -- which row is header
+    data_start_row  INTEGER DEFAULT 1,           -- first data row
+    sample_headers  TEXT DEFAULT '[]',            -- JSON: original header cells for matching
+    is_default      INTEGER DEFAULT 0,           -- default template for this bank
+    is_active       INTEGER NOT NULL DEFAULT 1,  -- soft-delete
+    times_used      INTEGER DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pt_bank ON parse_templates(bank_id);
+CREATE INDEX IF NOT EXISTS idx_pt_default ON parse_templates(is_default) WHERE is_default = 1;

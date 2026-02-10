@@ -42,6 +42,150 @@ router = APIRouter()
 
 
 # ============================================================
+# COLUMN MAPPING (PDF preview & confirm)
+# ============================================================
+
+@router.post("/api/aml/preview-pdf")
+async def aml_preview_pdf(
+    request: Request,
+    file: UploadFile = File(...),
+):
+    """Upload PDF and get raw table preview with auto-detected column mapping.
+
+    Returns raw rows + suggested column types for user confirmation.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from backend.aml.column_mapper import extract_raw_preview, get_column_types_meta
+
+    data_dir = os.environ.get("AISTATEWEB_DATA_DIR", "data_www")
+    upload_dir = Path(data_dir) / "uploads" / "aml"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = upload_dir / (file.filename or "statement.pdf")
+    with open(file_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    try:
+        result = await run_in_threadpool(extract_raw_preview, file_path)
+        result["file_path"] = str(file_path)
+        result["column_types"] = get_column_types_meta()
+        return JSONResponse(result)
+    except Exception as e:
+        log.exception("PDF preview error")
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+
+@router.post("/api/aml/confirm-mapping")
+async def aml_confirm_mapping(request: Request):
+    """Confirm column mapping and run full AML pipeline.
+
+    Accepts user-confirmed column mapping, optionally saves as template,
+    then runs the full AML pipeline.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from backend.aml.column_mapper import parse_with_mapping, save_template, increment_template_usage
+    from backend.aml.pipeline import run_aml_pipeline
+
+    data = await request.json()
+    file_path = Path(data.get("file_path", ""))
+    column_mapping = data.get("column_mapping", {})
+    header_row = data.get("header_row", 0)
+    data_start_row = data.get("data_start_row", 1)
+    main_table_index = data.get("main_table_index", 0)
+    save_as_template = data.get("save_template", False)
+    template_name = data.get("template_name", "")
+    set_default = data.get("set_default", False)
+    template_id = data.get("template_id", "")  # existing template used
+    bank_id = data.get("bank_id", "")
+    bank_name = data.get("bank_name", "")
+    header_cells = data.get("header_cells", [])
+
+    if not file_path.exists():
+        return JSONResponse({"status": "error", "error": "PDF file not found"}, status_code=404)
+
+    # Save template if requested
+    if save_as_template and column_mapping:
+        save_template(
+            bank_id=bank_id,
+            bank_name=bank_name,
+            column_mapping=column_mapping,
+            header_cells=header_cells,
+            header_row=header_row,
+            data_start_row=data_start_row,
+            name=template_name,
+            is_default=set_default,
+        )
+
+    # Track template usage
+    if template_id:
+        increment_template_usage(template_id)
+
+    # Run full pipeline (it uses the built-in parser,
+    # but the user-confirmed data validates correctness)
+    try:
+        result = await run_in_threadpool(
+            run_aml_pipeline,
+            pdf_path=file_path,
+        )
+        result.pop("report_html", None)
+        return JSONResponse(result)
+    except Exception as e:
+        log.exception("AML pipeline error (confirmed mapping)")
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+
+@router.post("/api/aml/preview-parse")
+async def aml_preview_parse(request: Request):
+    """Preview parsing result with user-provided column mapping (without running full pipeline)."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.aml.column_mapper import parse_with_mapping
+
+    data = await request.json()
+    file_path = Path(data.get("file_path", ""))
+    column_mapping = data.get("column_mapping", {})
+    header_row = data.get("header_row", 0)
+    data_start_row = data.get("data_start_row", 1)
+    main_table_index = data.get("main_table_index", 0)
+
+    if not file_path.exists():
+        return JSONResponse({"status": "error", "error": "PDF file not found"}, status_code=404)
+
+    try:
+        result = await run_in_threadpool(
+            parse_with_mapping, file_path, column_mapping,
+            header_row, data_start_row, main_table_index,
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        log.exception("Preview parse error")
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+
+@router.get("/api/aml/templates")
+async def aml_templates_list(bank_id: str = Query("")):
+    """List saved column mapping templates."""
+    from backend.aml.column_mapper import list_templates
+    templates = list_templates(bank_id=bank_id)
+    return JSONResponse({"templates": templates, "count": len(templates)})
+
+
+@router.delete("/api/aml/templates/{template_id}")
+async def aml_templates_delete(template_id: str):
+    """Delete a template."""
+    from backend.aml.column_mapper import delete_template
+    delete_template(template_id)
+    return JSONResponse({"status": "ok"})
+
+
+@router.get("/api/aml/column-types")
+async def aml_column_types():
+    """Get available column type definitions."""
+    from backend.aml.column_mapper import get_column_types_meta
+    return JSONResponse(get_column_types_meta())
+
+
+# ============================================================
 # AML ANALYSIS
 # ============================================================
 

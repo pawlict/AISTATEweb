@@ -1,5 +1,5 @@
 // Transaction Review UI module (AISTATEweb)
-// Tab "Przeglad transakcji" — columnar view with classification, header blocks, account profiles
+// Integrated into AML tab — columnar view with classification, header blocks, account profiles
 
 (function(){
   "use strict";
@@ -46,31 +46,12 @@
     header: null,
     classifications: {},  // tx_id -> classification
     profile: null,
-    allStatements: [],
     headerDirty: {},      // field -> new value
   };
 
   // ============================================================
   // INIT & LOAD
   // ============================================================
-
-  async function _loadStatementList(){
-    const data = await _safeApi("/api/aml/history?limit=50");
-    if(data && Array.isArray(data.items)){
-      St.allStatements = data.items;
-    }
-    _fillStatementSelect();
-  }
-
-  function _fillStatementSelect(){
-    const sel = QS("#rv_statement_select");
-    if(!sel) return;
-    sel.innerHTML = '<option value="">-- Wybierz wyciag --</option>';
-    for(const s of St.allStatements){
-      const label = [s.bank_name, s.period_from, "\u2014", s.period_to, `(${s.tx_count || 0} tx)`].filter(Boolean).join(" ");
-      sel.innerHTML += `<option value="${_esc(s.statement_id)}">${_esc(label)}</option>`;
-    }
-  }
 
   async function _loadReview(statementId){
     if(!statementId) return;
@@ -92,21 +73,11 @@
     const profileData = await _safeApi("/api/aml/accounts/for-statement/" + encodeURIComponent(statementId));
     St.profile = profileData ? profileData.profile : null;
 
-    // Show all sections
-    _show("rv_account_card");
-    _show("rv_header_card");
-    _show("rv_stats_card");
-    _show("rv_table_card");
-    _show("rv_rules_card");
-    _show("rv_accounts_card");
-
     _renderAccountProfile();
     _renderHeader();
     _renderStats();
     _fillChannelFilter();
     _filterAndRender();
-    _loadFieldRules();
-    _loadAccountsList();
   }
 
   // ============================================================
@@ -452,95 +423,10 @@
   }
 
   // ============================================================
-  // FIELD RULES
-  // ============================================================
-
-  async function _loadFieldRules(){
-    const bankId = _getBlock("bank_id");
-    const list = QS("#rv_rules_list");
-    if(!list) return;
-
-    const data = await _safeApi("/api/aml/field-rules" + (bankId ? "?bank_id=" + encodeURIComponent(bankId) : ""));
-    if(!data || !data.rules || !data.rules.length){
-      list.innerHTML = '<div class="small muted">Brak regul mapowania.</div>';
-      return;
-    }
-
-    list.innerHTML = data.rules.map(r => `
-      <div class="rv-rule-row">
-        <span class="rv-rule-bank">${_esc(r.bank_id)}</span>
-        <span class="rv-rule-type">${_esc(r.rule_type)}</span>
-        <span class="rv-rule-fields">${_esc(r.source_field)} \u2192 ${_esc(r.target_field)}</span>
-        <span class="rv-rule-note small muted">${_esc(r.note || "")}</span>
-        <button class="rv-rule-del" data-id="${_esc(r.id)}" title="Usun">\u2715</button>
-      </div>
-    `).join("");
-
-    QSA(".rv-rule-del", list).forEach(btn => {
-      btn.addEventListener("click", async () => {
-        await _safeApi("/api/aml/field-rules/" + encodeURIComponent(btn.getAttribute("data-id")), {method:"DELETE"});
-        _loadFieldRules();
-      });
-    });
-  }
-
-  // ============================================================
-  // ACCOUNTS LIST
-  // ============================================================
-
-  async function _loadAccountsList(){
-    const list = QS("#rv_accounts_list");
-    if(!list) return;
-
-    const data = await _safeApi("/api/aml/accounts");
-    if(!data || !data.profiles || !data.profiles.length){
-      list.innerHTML = '<div class="small muted">Brak profili kont.</div>';
-      return;
-    }
-
-    list.innerHTML = data.profiles.map(p => {
-      const typeLabel = p.account_type === "business" ? "Firmowe" : "Prywatne";
-      const typeClass = p.account_type === "business" ? "rv-acct-business" : "rv-acct-private";
-      return `<div class="rv-acct-row ${typeClass}">
-        <span class="rv-acct-label">${_esc(p.owner_label || p.display_name)}</span>
-        <span class="rv-acct-bank">${_esc(p.bank_name || "")}</span>
-        <span class="rv-acct-type">${typeLabel}</span>
-        <span class="small muted">${p.statement_count || 0} wyciag(ow)</span>
-        <select class="rv-acct-type-sel" data-id="${_esc(p.id)}" title="Typ konta">
-          <option value="private" ${p.account_type === "private" ? "selected" : ""}>Prywatne</option>
-          <option value="business" ${p.account_type === "business" ? "selected" : ""}>Firmowe</option>
-        </select>
-      </div>`;
-    }).join("");
-
-    QSA(".rv-acct-type-sel", list).forEach(sel => {
-      sel.addEventListener("change", async () => {
-        const profileId = sel.getAttribute("data-id");
-        const newType = sel.value;
-        const isAnon = newType === "private" ? true : false;
-        await _safeApi("/api/aml/accounts/" + encodeURIComponent(profileId), {
-          method:"PATCH",
-          headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({account_type: newType, is_anonymized: isAnon}),
-        });
-        _loadAccountsList();
-        _renderAccountProfile();
-      });
-    });
-  }
-
-  // ============================================================
   // BIND UI
   // ============================================================
 
   function _bindEvents(){
-    const sel = QS("#rv_statement_select");
-    if(sel){
-      sel.addEventListener("change", () => {
-        if(sel.value) _loadReview(sel.value);
-      });
-    }
-
     const search = QS("#rv_search");
     if(search) search.addEventListener("input", () => _filterAndRender());
 
@@ -558,9 +444,6 @@
 
     const anonToggle = QS("#rv_anonymize_toggle");
     if(anonToggle) anonToggle.addEventListener("change", () => _updateAccountProfile());
-
-    const rulesRefresh = QS("#rv_rules_refresh");
-    if(rulesRefresh) rulesRefresh.addEventListener("click", () => _loadFieldRules());
   }
 
   // ============================================================
@@ -581,7 +464,11 @@
       if(this._initialized) return;
       this._initialized = true;
       _bindEvents();
-      await _loadStatementList();
+    },
+
+    async loadForStatement(statementId){
+      if(!this._initialized) this.init();
+      await _loadReview(statementId);
     }
   };
 

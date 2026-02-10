@@ -51,9 +51,6 @@
     <button class="analysis-tab" data-tab="aml" id="tab_aml">
       <span class="analysis-tab-icon">🔍</span> Analiza AML
     </button>
-    <button class="analysis-tab" data-tab="review" id="tab_review">
-      <span class="analysis-tab-icon">📋</span> Przeglad transakcji
-    </button>
   </div>
 
   <!-- LLM Analysis content (existing) -->
@@ -195,6 +192,54 @@
       </div>
     </div>
 
+    <!-- Column Mapping (shown after PDF upload, before analysis) -->
+    <div id="aml_mapping_card" style="display:none">
+      <div class="card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Podglad kolumn wyciagu</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span class="small muted" id="cm_bank_label"></span>
+            <button class="btn secondary" id="cm_back_btn">Cofnij</button>
+          </div>
+        </div>
+        <div class="small muted" style="margin:6px 0">Sprawdz czy kolumny sa poprawnie rozpoznane. Kliknij naglowek kolumny aby zmienic jej typ. Uzyj podgladu na zywo.</div>
+
+        <!-- Column header dropdowns -->
+        <div class="cm-headers" id="cm_headers"></div>
+
+        <!-- Raw table preview -->
+        <div class="cm-table-wrap" id="cm_table_wrap" style="max-height:400px;overflow:auto;margin-top:8px">
+          <div class="small muted" style="padding:10px">Ladowanie danych...</div>
+        </div>
+
+        <!-- Parsed preview -->
+        <div style="margin-top:12px">
+          <div class="analysis-sidehdr">
+            <div class="h2" style="font-size:14px">Podglad sparsowanych transakcji</div>
+            <button class="btn mini" id="cm_refresh_preview">Odswiez podglad</button>
+          </div>
+          <div id="cm_parsed_preview" style="max-height:250px;overflow:auto;margin-top:6px">
+            <div class="small muted">Kliknij "Odswiez podglad" aby zobaczyc wynik parsowania.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Template & confirm -->
+      <div class="card" style="margin-top:12px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <label class="pill">
+            <input type="checkbox" id="cm_save_template"> Zapisz jako szablon
+          </label>
+          <label class="pill">
+            <input type="checkbox" id="cm_set_default"> Ustaw domyslny
+          </label>
+          <input class="input" id="cm_template_name" placeholder="Nazwa szablonu..." style="width:200px;padding:5px 10px;border-radius:10px;display:none">
+          <div style="flex:1"></div>
+          <button class="btn" id="cm_confirm_btn" style="min-width:180px">Potwierdz i analizuj</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Progress -->
     <div class="card aml-progress-card" id="aml_progress_card" style="display:none">
       <div class="analysis-sidehdr">
@@ -316,6 +361,59 @@
         <div id="aml_tx_table_wrap" style="max-height:450px;overflow:auto;margin-top:10px"></div>
       </div>
 
+      <!-- Transaction Review (classification) — integrated in AML -->
+      <div class="card" id="aml_review_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Przeglad i klasyfikacja transakcji</div>
+          <div class="rv-stats-bar" id="rv_stats_bar" style="flex:1;margin-left:12px;min-width:100px"></div>
+        </div>
+        <div class="rv-stats-legend" id="rv_stats_legend" style="margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+          <input class="input" id="rv_search" placeholder="Szukaj..." style="width:160px;padding:5px 10px;border-radius:10px">
+          <select class="input" id="rv_filter_class" style="padding:5px 8px;border-radius:10px;min-width:130px">
+            <option value="">Klasyfikacja: wszystkie</option>
+            <option value="neutral">Neutralne</option>
+            <option value="legitimate">Poprawne</option>
+            <option value="suspicious">Podejrzane</option>
+            <option value="monitoring">Obserwacja</option>
+          </select>
+          <select class="input" id="rv_filter_channel" style="padding:5px 8px;border-radius:10px;min-width:120px">
+            <option value="">Kanal: wszystkie</option>
+          </select>
+          <span class="small muted" id="rv_tx_count">0</span>
+        </div>
+        <div id="rv_table_wrap" style="max-height:500px;overflow:auto"></div>
+      </div>
+
+      <!-- Statement Header Blocks -->
+      <div class="card" id="rv_header_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Naglowek wyciagu</div>
+          <button class="btn mini" id="rv_header_save" title="Zapisz zmiany">Zapisz</button>
+        </div>
+        <div class="small muted" style="margin:6px 0">Kliknij pole aby poprawic. Zmiany tworza reguly mapowania dla przyszlych importow.</div>
+        <div class="rv-header-grid" id="rv_header_grid"></div>
+        <div id="rv_header_warnings" style="margin-top:8px"></div>
+      </div>
+
+      <!-- Account profile -->
+      <div class="card" id="rv_account_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Profil konta</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select class="input" id="rv_account_type" style="padding:5px 8px;border-radius:10px;min-width:120px">
+              <option value="private">Prywatne</option>
+              <option value="business">Firmowe</option>
+            </select>
+            <label class="pill" title="Anonimizacja">
+              <input type="checkbox" id="rv_anonymize_toggle" checked>
+              <span>Anonimizuj</span>
+            </label>
+          </div>
+        </div>
+        <div class="rv-account-info" id="rv_account_info"></div>
+      </div>
+
       <!-- Counterparty memory -->
       <div class="card" id="aml_memory_card">
         <div class="analysis-sidehdr">
@@ -342,105 +440,6 @@
     </div>
 
   </div><!-- /aml_content -->
-
-  <!-- Transaction Review content -->
-  <div class="analysis-tab-content" id="review_content" style="display:none">
-
-    <!-- Select statement to review -->
-    <div class="card" id="rv_select_card">
-      <div class="analysis-sidehdr">
-        <div class="h2">Wybierz wyciag do przejrzenia</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <select class="input" id="rv_statement_select" style="padding:5px 10px;border-radius:10px;min-width:250px">
-            <option value="">-- Wybierz wyciag --</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <!-- Account profile -->
-    <div class="card" id="rv_account_card" style="display:none">
-      <div class="analysis-sidehdr">
-        <div class="h2">Profil konta</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <select class="input" id="rv_account_type" style="padding:5px 8px;border-radius:10px;min-width:120px">
-            <option value="private">Prywatne</option>
-            <option value="business">Firmowe</option>
-          </select>
-          <label class="pill" title="Anonimizacja">
-            <input type="checkbox" id="rv_anonymize_toggle" checked>
-            <span>Anonimizuj</span>
-          </label>
-        </div>
-      </div>
-      <div class="rv-account-info" id="rv_account_info"></div>
-    </div>
-
-    <!-- Header blocks -->
-    <div class="card" id="rv_header_card" style="display:none">
-      <div class="analysis-sidehdr">
-        <div class="h2">Naglowek wyciagu</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn mini" id="rv_header_save" title="Zapisz zmiany">Zapisz</button>
-        </div>
-      </div>
-      <div class="small muted" style="margin:6px 0">Kliknij pole aby poprawic. Zmiany tworza reguly mapowania dla przyszlych importow.</div>
-      <div class="rv-header-grid" id="rv_header_grid"></div>
-      <div id="rv_header_warnings" style="margin-top:8px"></div>
-    </div>
-
-    <!-- Classification stats bar -->
-    <div class="card" id="rv_stats_card" style="display:none">
-      <div class="analysis-sidehdr">
-        <div class="h2">Klasyfikacja</div>
-        <div class="rv-stats-bar" id="rv_stats_bar"></div>
-      </div>
-      <div class="rv-stats-legend" id="rv_stats_legend"></div>
-    </div>
-
-    <!-- Transaction review table -->
-    <div class="card" id="rv_table_card" style="display:none">
-      <div class="analysis-sidehdr">
-        <div class="h2">Transakcje</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input class="input" id="rv_search" placeholder="Szukaj..." style="width:180px;padding:5px 10px;border-radius:10px">
-          <select class="input" id="rv_filter_class" style="padding:5px 8px;border-radius:10px;min-width:140px">
-            <option value="">Wszystkie</option>
-            <option value="neutral">Neutralne</option>
-            <option value="legitimate">Poprawne</option>
-            <option value="suspicious">Podejrzane</option>
-            <option value="monitoring">Obserwacja</option>
-          </select>
-          <select class="input" id="rv_filter_channel" style="padding:5px 8px;border-radius:10px;min-width:130px">
-            <option value="">Kanal: wszystkie</option>
-          </select>
-          <span class="small muted" id="rv_tx_count">0</span>
-        </div>
-      </div>
-      <div id="rv_table_wrap" style="max-height:600px;overflow:auto;margin-top:10px"></div>
-    </div>
-
-    <!-- Field rules -->
-    <div class="card" id="rv_rules_card" style="display:none">
-      <div class="analysis-sidehdr">
-        <div class="h2">Reguly mapowania pol</div>
-        <button class="btn mini" id="rv_rules_refresh">Odswiez</button>
-      </div>
-      <div id="rv_rules_list" style="margin-top:10px">
-        <div class="small muted">Brak regul.</div>
-      </div>
-    </div>
-
-    <!-- All accounts -->
-    <div class="card" id="rv_accounts_card" style="display:none">
-      <div class="analysis-sidehdr">
-        <div class="h2">Profile kont</div>
-      </div>
-      <div class="small muted" style="margin:6px 0">Zarzadzaj profilami kont z wielu bankow. Typ konta wplywa na anonimizacje.</div>
-      <div id="rv_accounts_list" style="margin-top:10px"></div>
-    </div>
-
-  </div><!-- /review_content -->
 
   <!-- Hidden file inputs -->
   <input type="file" id="docs_file_input" style="display:none" multiple>
@@ -498,11 +497,10 @@
     const tabs = document.querySelectorAll('.analysis-tab[data-tab]');
     const llmContent = document.getElementById('llm_content');
     const amlContent = document.getElementById('aml_content');
-    const reviewContent = document.getElementById('review_content');
     const toolbar = document.getElementById('analysis_toolbar');
     const sidebarToggle = document.getElementById('analysis_sidebar_toggle');
 
-    const allContents = [llmContent, amlContent, reviewContent];
+    const allContents = [llmContent, amlContent];
     const llmToolbar = ['analysis_models','analysis_report_formats','an_generate_btn','an_report_save_btn'];
 
     tabs.forEach(tab => {
@@ -526,11 +524,6 @@
             amlContent.style.display = '';
             if(window.AmlManager && !window.AmlManager._initialized){
               await AmlManager.init();
-            }
-          } else if(which === 'review'){
-            reviewContent.style.display = '';
-            if(window.ReviewManager && !window.ReviewManager._initialized){
-              await ReviewManager.init();
             }
           }
         }
