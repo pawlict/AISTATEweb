@@ -1,28 +1,31 @@
 """AML API router for AISTATEweb.
 
 Endpoints:
-- POST /api/aml/analyze      — upload PDF and run full AML pipeline
-- GET  /api/aml/report/{id}   — get generated report HTML
-- GET  /api/aml/graph/{id}    — get flow graph JSON (filterable)
+- POST /api/aml/analyze        — upload PDF and run full AML pipeline
+- GET  /api/aml/history        — list past analyses
+- GET  /api/aml/detail/{id}    — full analysis details (statement + transactions + alerts + graph)
+- GET  /api/aml/report/{id}    — get generated report HTML
+- GET  /api/aml/graph/{id}     — get flow graph JSON (filterable)
 
-- GET  /api/memory            — search/list counterparties
-- POST /api/memory            — create counterparty
-- PATCH /api/memory/{id}      — update label/note/tags
-- POST /api/memory/{id}/alias — add alias
+- GET  /api/memory             — search/list counterparties
+- POST /api/memory             — create counterparty
+- PATCH /api/memory/{id}       — update label/note/tags
+- POST /api/memory/{id}/alias  — add alias
 
-- GET  /api/memory/queue      — learning queue items
+- GET  /api/memory/queue       — learning queue items
 - POST /api/memory/queue/{id}/resolve — approve/reject
 
-- GET  /api/projects          — list projects
-- POST /api/projects          — create project
-- GET  /api/projects/{id}/cases — list cases
+- GET  /api/db/projects        — list projects
+- POST /api/db/projects        — create project
+- GET  /api/db/projects/{id}/cases — list cases
 
-- GET  /api/system/setup      — first-run check
-- POST /api/system/setup      — first-run setup
+- GET  /api/system/setup       — first-run check
+- POST /api/system/setup       — first-run setup
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -133,6 +136,108 @@ async def aml_graph(
         )
 
     return JSONResponse(graph)
+
+
+@router.get("/api/aml/history")
+async def aml_history(limit: int = Query(20)):
+    """List past AML analyses with basic info."""
+    from backend.db.engine import fetch_all
+
+    rows = fetch_all(
+        """SELECT s.id AS statement_id, s.case_id, s.bank_name, s.account_holder,
+                  s.period_from, s.period_to, s.opening_balance, s.closing_balance,
+                  s.currency, s.created_at,
+                  r.total_score AS risk_score,
+                  (SELECT COUNT(*) FROM transactions t WHERE t.statement_id = s.id) AS tx_count
+           FROM statements s
+           LEFT JOIN risk_assessments r ON r.statement_id = s.id
+           ORDER BY s.created_at DESC
+           LIMIT ?""",
+        (limit,),
+    )
+    items = []
+    for row in rows:
+        items.append({
+            "statement_id": row["statement_id"],
+            "case_id": row["case_id"],
+            "bank_name": row["bank_name"] or "",
+            "account_holder": row["account_holder"] or "",
+            "period_from": row["period_from"] or "",
+            "period_to": row["period_to"] or "",
+            "opening_balance": row["opening_balance"],
+            "closing_balance": row["closing_balance"],
+            "currency": row["currency"] or "PLN",
+            "risk_score": row["risk_score"],
+            "tx_count": row["tx_count"] or 0,
+            "created_at": row["created_at"] or "",
+        })
+    return JSONResponse({"items": items, "count": len(items)})
+
+
+@router.get("/api/aml/detail/{statement_id}")
+async def aml_detail(statement_id: str):
+    """Full analysis details: statement + transactions + risk + graph."""
+    from backend.db.engine import fetch_all, fetch_one
+
+    stmt = fetch_one("SELECT * FROM statements WHERE id = ?", (statement_id,))
+    if not stmt:
+        return JSONResponse({"error": "not found"}, status_code=404)
+
+    # Statement info
+    stmt_dict = dict(stmt)
+    for k in ("warnings",):
+        if stmt_dict.get(k):
+            try:
+                stmt_dict[k] = json.loads(stmt_dict[k])
+            except (json.JSONDecodeError, TypeError):
+                stmt_dict[k] = []
+
+    # Transactions
+    tx_rows = fetch_all(
+        """SELECT id, booking_date, amount, direction, counterparty_raw,
+                  channel, category, subcategory, risk_tags, risk_score,
+                  title, bank_category, balance_after, rule_explains
+           FROM transactions WHERE statement_id = ?
+           ORDER BY booking_date, id""",
+        (statement_id,),
+    )
+    transactions = []
+    for row in tx_rows:
+        tx = dict(row)
+        for jf in ("risk_tags", "rule_explains"):
+            if tx.get(jf):
+                try:
+                    tx[jf] = json.loads(tx[jf])
+                except (json.JSONDecodeError, TypeError):
+                    tx[jf] = []
+        transactions.append(tx)
+
+    # Risk assessment
+    risk_row = fetch_one(
+        """SELECT * FROM risk_assessments
+           WHERE statement_id = ? ORDER BY created_at DESC LIMIT 1""",
+        (statement_id,),
+    )
+    risk = None
+    if risk_row:
+        risk = dict(risk_row)
+        for jf in ("score_breakdown", "risk_reasons"):
+            if risk.get(jf):
+                try:
+                    risk[jf] = json.loads(risk[jf])
+                except (json.JSONDecodeError, TypeError):
+                    risk[jf] = {} if jf == "score_breakdown" else []
+
+    # Graph
+    from backend.aml.graph import get_graph_json
+    graph = get_graph_json(stmt_dict["case_id"])
+
+    return JSONResponse({
+        "statement": stmt_dict,
+        "transactions": transactions,
+        "risk": risk,
+        "graph": graph,
+    })
 
 
 # ============================================================
