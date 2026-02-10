@@ -32,6 +32,7 @@ from .memory import (
     get_counterparty_notes,
     resolve_entity,
 )
+from .anonymize import get_or_create_profile
 from .ml_anomaly import detect_ml_anomalies
 from .normalize import NormalizedTransaction, normalize_transactions
 from .report import generate_report
@@ -254,6 +255,18 @@ def run_aml_pipeline(
              f"{parser.BANK_ID}_v1", pdf_hash,
              json.dumps(warnings, ensure_ascii=False)),
         )
+
+    # --- Step 5b: Create/update account profile ---
+    if info.account_number:
+        try:
+            get_or_create_profile(
+                account_number=info.account_number,
+                bank_id=parser.BANK_ID,
+                bank_name=parser.BANK_NAME,
+                account_holder=info.account_holder or "",
+            )
+        except Exception as e:
+            log.warning("Account profile creation failed: %s", e)
 
     # --- Step 6: Normalize transactions ---
     _log("Normalizacja transakcji...")

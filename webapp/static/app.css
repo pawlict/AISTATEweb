@@ -1002,6 +1002,239 @@ textarea{min-height:220px; resize:vertical}
   position: relative;
 }
 
+/* ===================== Transaction Review Tab ===================== */
+
+/* Account profile */
+.rv-account-grid{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  font-size: 13px;
+  padding: 8px 0;
+}
+.rv-acct-field b{font-weight: 700}
+
+/* Header blocks grid */
+.rv-header-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.rv-hdr-block{
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255,255,255,.6);
+  transition: border-color .2s, box-shadow .2s;
+}
+.rv-hdr-editable{cursor: text}
+.rv-hdr-editable:hover{
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(31,90,166,.1);
+}
+.rv-hdr-label{
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  margin-bottom: 4px;
+}
+.rv-hdr-value{
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 20px;
+  outline: none;
+  word-break: break-all;
+}
+.rv-hdr-value[contenteditable]:focus{
+  border-radius: 4px;
+  background: rgba(31,90,166,.04);
+}
+.rv-hdr-changed{
+  border-color: #d97706 !important;
+  background: rgba(217,119,6,.05) !important;
+}
+
+/* Stats bar */
+.rv-stats-bar{
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(15,23,42,.06);
+  flex: 1;
+  margin-left: 12px;
+  min-width: 200px;
+}
+.rv-stats-seg{
+  height: 100%;
+  transition: width .3s;
+}
+.rv-stats-legend{
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.rv-stats-item{display: flex; align-items: center; gap: 4px}
+.rv-stats-dot{
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Review transaction table */
+.rv-tx-table{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.rv-tx-table th{
+  text-align: left;
+  padding: 7px 5px;
+  font-weight: 800;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--muted);
+  border-bottom: 2px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+  white-space: nowrap;
+}
+.rv-tx-table td{
+  padding: 5px;
+  border-bottom: 1px solid rgba(15,23,42,.05);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rv-tx-table tr:hover{background: rgba(15,23,42,.03)}
+.rv-col-date{font-family: monospace; font-size: 11px; min-width: 74px}
+.rv-col-type{font-size: 10px; font-weight: 700; color: var(--muted); max-width: 70px}
+.rv-col-cp{max-width: 160px}
+.rv-col-title{max-width: 180px; color: var(--muted)}
+.rv-col-amt{font-weight: 600; text-align: right; min-width: 90px; font-family: monospace; font-size: 12px}
+.rv-col-bal{font-size: 11px; text-align: right; color: var(--muted); font-family: monospace; min-width: 80px}
+.rv-col-ch{font-size: 10px; font-weight: 700}
+.rv-col-cat{font-size: 10px; color: var(--muted)}
+.rv-col-class{min-width: 120px}
+.rv-debit{color: #b91c1c}
+.rv-credit{color: #15803d}
+
+.rv-risk-tag{
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(185,28,28,.1);
+  color: #b91c1c;
+}
+
+/* Row highlighting */
+.rv-row-suspicious{background: rgba(185,28,28,.04)}
+.rv-row-monitoring{background: rgba(217,119,6,.04)}
+.rv-row-legitimate{background: rgba(21,128,61,.03)}
+.rv-row-anomaly{background: rgba(37,99,235,.03)}
+
+/* Classification buttons */
+.rv-cls-btns{
+  display: flex;
+  gap: 3px;
+}
+.rv-cls-btn{
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background: rgba(15,23,42,.04);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 22px;
+  text-align: center;
+  transition: all .15s;
+  padding: 0;
+}
+.rv-cls-btn:hover{
+  border-color: var(--cls-color);
+  background: rgba(15,23,42,.08);
+}
+.rv-cls-active{
+  border-color: var(--cls-color) !important;
+  background: var(--cls-color) !important;
+  color: white !important;
+}
+
+/* Field rules */
+.rv-rule-row{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(15,23,42,.06);
+  font-size: 13px;
+}
+.rv-rule-bank{font-weight: 700; min-width: 60px}
+.rv-rule-type{
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.06);
+  font-weight: 600;
+}
+.rv-rule-fields{flex: 1; font-family: monospace; font-size: 12px}
+.rv-rule-note{flex: 1}
+.rv-rule-del{
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--danger);
+  font-size: 14px;
+  border-radius: 4px;
+}
+.rv-rule-del:hover{background: rgba(185,28,28,.08)}
+
+/* Accounts list */
+.rv-acct-row{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(15,23,42,.06);
+  font-size: 13px;
+}
+.rv-acct-row:hover{background: rgba(15,23,42,.02)}
+.rv-acct-business{border-left: 3px solid var(--accent)}
+.rv-acct-private{border-left: 3px solid #6b7280}
+.rv-acct-label{font-weight: 700; flex: 1; min-width: 120px}
+.rv-acct-bank{min-width: 100px; color: var(--muted)}
+.rv-acct-type{
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.06);
+  font-weight: 600;
+  min-width: 60px;
+  text-align: center;
+}
+.rv-acct-type-sel{
+  padding: 3px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  background: var(--panel);
+  cursor: pointer;
+}
+
 /* ===================== Settings: LLM models (Ollama) ===================== */
 
 .ollama-status-row{

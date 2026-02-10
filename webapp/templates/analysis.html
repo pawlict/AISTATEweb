@@ -51,6 +51,9 @@
     <button class="analysis-tab" data-tab="aml" id="tab_aml">
       <span class="analysis-tab-icon">🔍</span> Analiza AML
     </button>
+    <button class="analysis-tab" data-tab="review" id="tab_review">
+      <span class="analysis-tab-icon">📋</span> Przeglad transakcji
+    </button>
   </div>
 
   <!-- LLM Analysis content (existing) -->
@@ -340,6 +343,105 @@
 
   </div><!-- /aml_content -->
 
+  <!-- Transaction Review content -->
+  <div class="analysis-tab-content" id="review_content" style="display:none">
+
+    <!-- Select statement to review -->
+    <div class="card" id="rv_select_card">
+      <div class="analysis-sidehdr">
+        <div class="h2">Wybierz wyciag do przejrzenia</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="input" id="rv_statement_select" style="padding:5px 10px;border-radius:10px;min-width:250px">
+            <option value="">-- Wybierz wyciag --</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Account profile -->
+    <div class="card" id="rv_account_card" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Profil konta</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="input" id="rv_account_type" style="padding:5px 8px;border-radius:10px;min-width:120px">
+            <option value="private">Prywatne</option>
+            <option value="business">Firmowe</option>
+          </select>
+          <label class="pill" title="Anonimizacja">
+            <input type="checkbox" id="rv_anonymize_toggle" checked>
+            <span>Anonimizuj</span>
+          </label>
+        </div>
+      </div>
+      <div class="rv-account-info" id="rv_account_info"></div>
+    </div>
+
+    <!-- Header blocks -->
+    <div class="card" id="rv_header_card" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Naglowek wyciagu</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn mini" id="rv_header_save" title="Zapisz zmiany">Zapisz</button>
+        </div>
+      </div>
+      <div class="small muted" style="margin:6px 0">Kliknij pole aby poprawic. Zmiany tworza reguly mapowania dla przyszlych importow.</div>
+      <div class="rv-header-grid" id="rv_header_grid"></div>
+      <div id="rv_header_warnings" style="margin-top:8px"></div>
+    </div>
+
+    <!-- Classification stats bar -->
+    <div class="card" id="rv_stats_card" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Klasyfikacja</div>
+        <div class="rv-stats-bar" id="rv_stats_bar"></div>
+      </div>
+      <div class="rv-stats-legend" id="rv_stats_legend"></div>
+    </div>
+
+    <!-- Transaction review table -->
+    <div class="card" id="rv_table_card" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Transakcje</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="input" id="rv_search" placeholder="Szukaj..." style="width:180px;padding:5px 10px;border-radius:10px">
+          <select class="input" id="rv_filter_class" style="padding:5px 8px;border-radius:10px;min-width:140px">
+            <option value="">Wszystkie</option>
+            <option value="neutral">Neutralne</option>
+            <option value="legitimate">Poprawne</option>
+            <option value="suspicious">Podejrzane</option>
+            <option value="monitoring">Obserwacja</option>
+          </select>
+          <select class="input" id="rv_filter_channel" style="padding:5px 8px;border-radius:10px;min-width:130px">
+            <option value="">Kanal: wszystkie</option>
+          </select>
+          <span class="small muted" id="rv_tx_count">0</span>
+        </div>
+      </div>
+      <div id="rv_table_wrap" style="max-height:600px;overflow:auto;margin-top:10px"></div>
+    </div>
+
+    <!-- Field rules -->
+    <div class="card" id="rv_rules_card" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Reguly mapowania pol</div>
+        <button class="btn mini" id="rv_rules_refresh">Odswiez</button>
+      </div>
+      <div id="rv_rules_list" style="margin-top:10px">
+        <div class="small muted">Brak regul.</div>
+      </div>
+    </div>
+
+    <!-- All accounts -->
+    <div class="card" id="rv_accounts_card" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Profile kont</div>
+      </div>
+      <div class="small muted" style="margin:6px 0">Zarzadzaj profilami kont z wielu bankow. Typ konta wplywa na anonimizacje.</div>
+      <div id="rv_accounts_list" style="margin-top:10px"></div>
+    </div>
+
+  </div><!-- /review_content -->
+
   <!-- Hidden file inputs -->
   <input type="file" id="docs_file_input" style="display:none" multiple>
   <input type="file" id="prompt_import_input" style="display:none" accept="application/json">
@@ -388,6 +490,7 @@
 {% block scripts %}
 <script src="/static/analysis.js?v={{ app_version }}"></script>
 <script src="/static/aml.js?v={{ app_version }}"></script>
+<script src="/static/review.js?v={{ app_version }}"></script>
 <script>
 (async()=>{
   try{
@@ -395,35 +498,41 @@
     const tabs = document.querySelectorAll('.analysis-tab[data-tab]');
     const llmContent = document.getElementById('llm_content');
     const amlContent = document.getElementById('aml_content');
+    const reviewContent = document.getElementById('review_content');
     const toolbar = document.getElementById('analysis_toolbar');
     const sidebarToggle = document.getElementById('analysis_sidebar_toggle');
+
+    const allContents = [llmContent, amlContent, reviewContent];
+    const llmToolbar = ['analysis_models','analysis_report_formats','an_generate_btn','an_report_save_btn'];
 
     tabs.forEach(tab => {
       tab.addEventListener('click', async () => {
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         const which = tab.getAttribute('data-tab');
-        if(which === 'aml'){
-          llmContent.style.display = 'none';
-          amlContent.style.display = '';
-          // Hide LLM-specific toolbar items
-          document.getElementById('analysis_models').style.display = 'none';
-          document.getElementById('analysis_report_formats').style.display = 'none';
-          document.getElementById('an_generate_btn').style.display = 'none';
-          document.getElementById('an_report_save_btn').style.display = 'none';
-          if(sidebarToggle) sidebarToggle.style.display = 'none';
-          // Init AML if not done
-          if(window.AmlManager && !window.AmlManager._initialized){
-            await AmlManager.init();
-          }
-        } else {
+
+        // Hide all content
+        allContents.forEach(c => { if(c) c.style.display = 'none'; });
+
+        if(which === 'llm'){
           llmContent.style.display = '';
-          amlContent.style.display = 'none';
-          document.getElementById('analysis_models').style.display = '';
-          document.getElementById('analysis_report_formats').style.display = '';
-          document.getElementById('an_generate_btn').style.display = '';
-          document.getElementById('an_report_save_btn').style.display = '';
+          llmToolbar.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = ''; });
           if(sidebarToggle) sidebarToggle.style.display = '';
+        } else {
+          llmToolbar.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+          if(sidebarToggle) sidebarToggle.style.display = 'none';
+
+          if(which === 'aml'){
+            amlContent.style.display = '';
+            if(window.AmlManager && !window.AmlManager._initialized){
+              await AmlManager.init();
+            }
+          } else if(which === 'review'){
+            reviewContent.style.display = '';
+            if(window.ReviewManager && !window.ReviewManager._initialized){
+              await ReviewManager.init();
+            }
+          }
         }
       });
     });
