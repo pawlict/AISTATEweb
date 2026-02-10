@@ -973,6 +973,35 @@ textarea{min-height:220px; resize:vertical}
 .aml-hist-tx{min-width: 50px; text-align: right}
 .aml-hist-date{min-width: 120px; text-align: right}
 
+/* ML anomaly rows */
+.aml-ml-row{
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(15,23,42,.06);
+}
+.aml-ml-row:hover{background: rgba(15,23,42,.03)}
+
+/* LLM analysis text */
+.aml-llm-text{
+  line-height: 1.7;
+  font-size: 14px;
+  padding: 16px;
+  background: rgba(15,23,42,.02);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  max-height: 600px;
+  overflow: auto;
+}
+.aml-llm-text h2{font-size: 18px; font-weight: 800; color: var(--accent)}
+.aml-llm-text h3{font-size: 16px; font-weight: 700}
+.aml-llm-text h4{font-size: 14px; font-weight: 700; color: var(--muted)}
+.aml-llm-text li{margin-bottom: 4px}
+.aml-llm-text strong{font-weight: 700}
+
+/* Chart container */
+#aml_chart_container{
+  position: relative;
+}
+
 /* ===================== Settings: LLM models (Ollama) ===================== */
 
 .ollama-status-row{

@@ -44,8 +44,12 @@
     caseId: null,
     history: [],
     cyInstance: null,      // Cytoscape.js instance
+    chartInstance: null,   // Chart.js instance
+    chartsData: {},        // all chart datasets
     allTransactions: [],   // current transactions for filtering
     cyLoaded: false,
+    chartjsLoaded: false,
+    llmRunning: false,
   };
 
   // ============================================================
@@ -210,6 +214,18 @@
       : (result.alerts || []);
     _renderAlerts(alerts);
 
+    // Charts
+    const charts = detail.charts || result.charts || {};
+    St.chartsData = charts;
+    _renderChart("balance_timeline");
+
+    // ML anomalies
+    const mlAnomalies = detail.ml_anomalies || [];
+    _renderMlAnomalies(mlAnomalies, transactions);
+
+    // LLM section
+    _setupLlmSection(detail.has_llm_prompt || result.has_llm_prompt);
+
     // Graph
     _renderGraph(graph);
 
@@ -291,6 +307,200 @@
         <div class="small">${_esc(a.explain || "")}</div>
       </div>`;
     }).join("");
+  }
+
+  // ============================================================
+  // CHARTS (Chart.js)
+  // ============================================================
+
+  function _ensureChartJs(cb){
+    if(window.Chart){
+      St.chartjsLoaded = true;
+      cb();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js";
+    script.onload = ()=>{
+      St.chartjsLoaded = true;
+      cb();
+    };
+    script.onerror = ()=>{
+      const container = QS("#aml_chart_container");
+      if(container) container.innerHTML = '<div class="small muted" style="padding:20px">Nie udalo sie zaladowac Chart.js</div>';
+    };
+    document.head.appendChild(script);
+  }
+
+  function _renderChart(chartKey){
+    const data = St.chartsData[chartKey];
+    if(!data){
+      const container = QS("#aml_chart_container");
+      if(container) container.innerHTML = '<div class="small muted" style="padding:20px">Brak danych wykresu</div>';
+      return;
+    }
+
+    _ensureChartJs(()=>{
+      const container = QS("#aml_chart_container");
+      if(!container) return;
+
+      // Ensure canvas exists
+      container.innerHTML = '<canvas id="aml_chart_canvas"></canvas>';
+      const canvas = QS("#aml_chart_canvas");
+      if(!canvas) return;
+
+      // Destroy previous chart
+      if(St.chartInstance){
+        St.chartInstance.destroy();
+        St.chartInstance = null;
+      }
+
+      const chartConfig = {
+        type: data.type || "bar",
+        data: {
+          labels: data.labels || [],
+          datasets: data.datasets || [],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: (data.datasets || []).length > 1 },
+          },
+        },
+      };
+
+      // Special options for specific chart types
+      if(data.options && data.options.indexAxis){
+        chartConfig.options.indexAxis = data.options.indexAxis;
+      }
+      if(data.type === "line"){
+        chartConfig.options.elements = { point: { radius: 1 } };
+      }
+      // Dual y-axis for channel distribution
+      if(data.datasets && data.datasets.some(ds => ds.yAxisID === "y1")){
+        chartConfig.options.scales = {
+          y: { type: "linear", display: true, position: "left" },
+          y1: { type: "linear", display: true, position: "right", grid: { drawOnChartArea: false } },
+        };
+      }
+
+      St.chartInstance = new Chart(canvas, chartConfig);
+    });
+  }
+
+  // ============================================================
+  // ML ANOMALIES
+  // ============================================================
+
+  function _renderMlAnomalies(anomalies, transactions){
+    const list = QS("#aml_ml_list");
+    const countEl = QS("#aml_ml_count");
+    if(!list) return;
+
+    const flagged = anomalies.filter(a => a.is_anomaly);
+    if(countEl) countEl.textContent = flagged.length;
+
+    if(!flagged.length){
+      list.innerHTML = '<div class="small muted">Brak wykrytych anomalii ML.</div>';
+      return;
+    }
+
+    // Build tx lookup
+    const txMap = {};
+    for(const tx of (transactions || [])){
+      txMap[tx.id] = tx;
+    }
+
+    const sorted = [...flagged].sort((a,b) => (b.anomaly_score || 0) - (a.anomaly_score || 0));
+
+    list.innerHTML = sorted.slice(0, 20).map(a => {
+      const tx = txMap[a.tx_id] || {};
+      const scorePct = Math.round((a.anomaly_score || 0) * 100);
+      const barColor = scorePct >= 70 ? "#b91c1c" : scorePct >= 40 ? "#d97706" : "#2563eb";
+      return `<div class="aml-ml-row">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="small" style="font-family:monospace">${_esc((a.tx_id || "").slice(0,8))}...</span>
+          <span class="small" style="font-weight:600;color:${barColor}">${scorePct}%</span>
+        </div>
+        <div style="background:var(--border);border-radius:4px;height:4px;margin:4px 0">
+          <div style="background:${barColor};height:100%;border-radius:4px;width:${scorePct}%"></div>
+        </div>
+        <div class="small muted">${_esc(tx.booking_date || "")} | ${_esc((tx.counterparty_raw || "").slice(0,30))} | ${_fmtAmount(tx.amount, "PLN")}</div>
+      </div>`;
+    }).join("");
+  }
+
+  // ============================================================
+  // LLM ANALYSIS
+  // ============================================================
+
+  function _setupLlmSection(hasPrompt){
+    const btn = QS("#aml_llm_run_btn");
+    const status = QS("#aml_llm_status");
+    if(!btn) return;
+
+    if(hasPrompt){
+      btn.disabled = false;
+      if(status) status.textContent = 'Kliknij "Generuj analize" aby uzyskac profesjonalny raport AML od modelu LLM (wymaga Ollama).';
+    } else {
+      btn.disabled = true;
+      if(status) status.textContent = "Brak danych do analizy LLM. Uruchom najpierw analize AML.";
+    }
+  }
+
+  async function _runLlmAnalysis(){
+    if(!St.statementId || St.llmRunning) return;
+    St.llmRunning = true;
+
+    const btn = QS("#aml_llm_run_btn");
+    const status = QS("#aml_llm_status");
+    const resultDiv = QS("#aml_llm_result");
+    const textDiv = QS("#aml_llm_text");
+
+    if(btn) btn.disabled = true;
+    if(status) status.textContent = "Generowanie analizy LLM... (to moze potrwac 30-120s)";
+    if(resultDiv) resultDiv.style.display = "none";
+
+    try{
+      const data = await _api("/api/aml/llm-analyze/" + encodeURIComponent(St.statementId), {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({}),
+      });
+
+      if(data && data.status === "ok" && data.analysis){
+        if(textDiv) textDiv.innerHTML = _formatLlmText(data.analysis);
+        if(resultDiv) resultDiv.style.display = "";
+        if(status) status.textContent = "Analiza wygenerowana pomyslnie.";
+      } else {
+        if(status) status.textContent = "Blad: " + (data && data.error ? data.error : "Nieznany blad");
+      }
+    } catch(e) {
+      if(status) status.textContent = "Blad: " + String(e.message || e);
+    } finally {
+      St.llmRunning = false;
+      if(btn) btn.disabled = false;
+    }
+  }
+
+  function _formatLlmText(text){
+    // Simple markdown-like formatting
+    let html = _esc(text);
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    // Headers
+    html = html.replace(/^### (.+)$/gm, '<h4 style="margin:12px 0 6px">$1</h4>');
+    html = html.replace(/^## (.+)$/gm, '<h3 style="margin:16px 0 8px">$1</h3>');
+    html = html.replace(/^# (.+)$/gm, '<h2 style="margin:20px 0 10px">$1</h2>');
+    // List items
+    html = html.replace(/^- (.+)$/gm, '<li style="margin-left:20px">$1</li>');
+    html = html.replace(/^\d+\. (.+)$/gm, '<li style="margin-left:20px">$1</li>');
+    // Paragraphs (double newline)
+    html = html.replace(/\n\n/g, "</p><p>");
+    // Single newlines
+    html = html.replace(/\n/g, "<br>");
+    return "<p>" + html + "</p>";
   }
 
   // ============================================================
@@ -684,6 +894,9 @@
         St.detail = null;
         St.statementId = null;
         St.caseId = null;
+        St.chartsData = {};
+        if(St.chartInstance){ St.chartInstance.destroy(); St.chartInstance = null; }
+        if(St.cyInstance){ St.cyInstance.destroy(); St.cyInstance = null; }
         _loadHistory();
         _showUpload();
       };
@@ -692,6 +905,18 @@
     const memRefresh = QS("#aml_memory_refresh");
     if(memRefresh){
       memRefresh.onclick = ()=> _loadMemory();
+    }
+
+    // Chart selector
+    const chartSel = QS("#aml_chart_select");
+    if(chartSel){
+      chartSel.onchange = ()=> _renderChart(chartSel.value);
+    }
+
+    // LLM analysis button
+    const llmBtn = QS("#aml_llm_run_btn");
+    if(llmBtn){
+      llmBtn.onclick = ()=> _runLlmAnalysis();
     }
   }
 

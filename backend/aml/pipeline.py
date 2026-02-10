@@ -1,7 +1,8 @@
 """AML Analysis Pipeline — end-to-end orchestration.
 
 upload PDF → detect bank → parse → normalize → rules → baseline →
-anomaly → graph → score → report HTML → audit log.
+anomaly (stats + ML) → graph → score → charts → LLM prompt →
+report HTML → audit log.
 
 Integrates with existing finance parsers (adapter pattern).
 """
@@ -23,12 +24,15 @@ from ..finance.parsers import get_parser
 from ..finance.parsers.base import reconcile_balances, validate_balance_chain
 
 from .baseline import AnomalyAlert, build_baseline, detect_anomalies
+from .charts import generate_all_charts
 from .graph import build_graph
+from .llm_analysis import build_aml_prompt
 from .memory import (
     get_counterparty_labels,
     get_counterparty_notes,
     resolve_entity,
 )
+from .ml_anomaly import detect_ml_anomalies
 from .normalize import NormalizedTransaction, normalize_transactions
 from .report import generate_report
 from .rules import classify_all, compute_risk_score, load_rules
@@ -291,12 +295,58 @@ def run_aml_pipeline(
     risk_score, risk_reasons = compute_risk_score(tx_list, rules_config)
     _log(f"Risk score: {risk_score:.0f}/100")
 
+    # --- Step 10b: ML anomaly detection ---
+    _log("Detekcja anomalii ML (Isolation Forest)...")
+    ml_anomalies = []
+    try:
+        ml_anomalies = detect_ml_anomalies(tx_list, known_cps)
+        ml_anom_count = sum(1 for a in ml_anomalies if a.get("is_anomaly"))
+        _log(f"ML anomalie: {ml_anom_count} z {len(ml_anomalies)} transakcji")
+    except Exception as e:
+        log.warning("ML anomaly detection failed: %s", e)
+        warnings.append(f"ML anomaly detection failed: {e}")
+
     # --- Step 11: Build flow graph ---
     _log("Budowa grafu przepływów...")
     account_label = info.account_holder or info.account_number or "Moje konto"
     graph_data = build_graph(tx_list, case_id=case_id, account_label=account_label)
     _log(f"Graf: {graph_data['stats']['total_nodes']} węzłów, "
          f"{graph_data['stats']['total_edges']} krawędzi")
+
+    # --- Step 11b: Generate chart data ---
+    _log("Generowanie wykresów...")
+    charts_data = {}
+    try:
+        charts_data = generate_all_charts(tx_list, opening_balance=opening)
+        _log(f"Wykresy: {len(charts_data)} typów")
+    except Exception as e:
+        log.warning("Chart generation failed: %s", e)
+        warnings.append(f"Chart generation failed: {e}")
+
+    # --- Step 11c: Build LLM prompt ---
+    llm_prompt = ""
+    try:
+        statement_info_for_llm = {
+            "bank_name": parser.BANK_NAME,
+            "account_holder": info.account_holder,
+            "account_number": info.account_number,
+            "period_from": info.period_from,
+            "period_to": info.period_to,
+            "opening_balance": info.opening_balance,
+            "closing_balance": info.closing_balance,
+            "currency": info.currency,
+        }
+        llm_prompt = build_aml_prompt(
+            statement_info=statement_info_for_llm,
+            transactions=tx_list,
+            alerts=[a.to_dict() for a in alerts],
+            risk_score=risk_score,
+            risk_reasons=risk_reasons,
+            ml_anomalies=ml_anomalies,
+        )
+        _log(f"LLM prompt: {len(llm_prompt)} znaków")
+    except Exception as e:
+        log.warning("LLM prompt build failed: %s", e)
 
     # --- Step 12: Save transactions to DB ---
     _log("Zapis transakcji do bazy...")
@@ -325,15 +375,28 @@ def run_aml_pipeline(
 
         # Save risk assessment
         assessment_id = new_id()
+        score_breakdown = {
+            "alerts": [a.to_dict() for a in alerts],
+            "ml_anomalies": ml_anomalies[:50],  # limit stored anomalies
+            "charts": charts_data,
+        }
         conn.execute(
             """INSERT INTO risk_assessments
                (id, statement_id, total_score, score_breakdown, risk_reasons, rules_version)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (assessment_id, statement_id, risk_score,
-             json.dumps({"alerts": [a.to_dict() for a in alerts]}, ensure_ascii=False),
+             json.dumps(score_breakdown, ensure_ascii=False),
              json.dumps(risk_reasons, ensure_ascii=False),
              rules_version),
         )
+
+        # Save LLM prompt for later use
+        if llm_prompt:
+            conn.execute(
+                """INSERT OR REPLACE INTO system_config (key, value)
+                   VALUES (?, ?)""",
+                (f"llm_prompt:{statement_id}", llm_prompt),
+            )
 
         # Audit log
         conn.execute(
@@ -419,6 +482,9 @@ def run_aml_pipeline(
         "alerts_count": len(alerts),
         "alerts": [a.to_dict() for a in alerts],
         "graph_stats": graph_data["stats"],
+        "ml_anomalies_count": sum(1 for a in ml_anomalies if a.get("is_anomaly")),
+        "charts": charts_data,
+        "has_llm_prompt": bool(llm_prompt),
         "balance_valid": bal_valid,
         "ocr_used": ocr_used,
         "warnings": warnings,
