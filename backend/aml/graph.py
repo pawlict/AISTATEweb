@@ -3,6 +3,7 @@
 Constructs a directed graph of money flows:
 - Nodes: ACCOUNT (own), COUNTERPARTY, MERCHANT, CASH_NODE, PAYMENT_PROVIDER
 - Edges: TRANSFER, CARD_PAYMENT, BLIK_P2P, BLIK_MERCHANT, CASH, REFUND, FEE
+- Clusters: group nodes by risk category (crypto, gambling, loans, etc.)
 
 Output: JSON structure suitable for Cytoscape.js or D3.
 """
@@ -16,6 +17,25 @@ from typing import Any, Dict, List, Optional
 from ..db.engine import get_conn, new_id
 from .normalize import NormalizedTransaction
 
+# Risk category → cluster mapping
+RISK_CLUSTERS = {
+    "crypto": "CRYPTO",
+    "crypto:exchange_polish": "CRYPTO",
+    "crypto:exchange_global": "CRYPTO",
+    "crypto:payment_processor": "CRYPTO",
+    "gambling": "GAMBLING",
+    "gambling:bookmaker": "GAMBLING",
+    "gambling:casino": "GAMBLING",
+    "gambling:lottery": "GAMBLING",
+    "loans": "LOANS",
+    "loans:payday": "LOANS",
+    "loans:installment": "LOANS",
+    "loans:debt_collection": "LOANS",
+    "risky": "RISKY",
+    "risky:foreign_transfer": "RISKY",
+    "risky:pawnshop": "RISKY",
+}
+
 
 def build_graph(
     transactions: List[NormalizedTransaction],
@@ -27,9 +47,9 @@ def build_graph(
 
     Returns:
         {
-            "nodes": [{id, type, label, risk_level, metadata}],
+            "nodes": [{id, type, label, risk_level, cluster, metadata}],
             "edges": [{id, source, target, type, tx_count, total_amount, ...}],
-            "stats": {total_nodes, total_edges, ...}
+            "stats": {total_nodes, total_edges, clusters, ...}
         }
     """
     nodes: Dict[str, Dict[str, Any]] = {}
@@ -42,6 +62,7 @@ def build_graph(
         "type": "ACCOUNT",
         "label": account_label,
         "risk_level": "none",
+        "cluster": "ACCOUNT",
         "metadata": {},
     }
 
@@ -70,6 +91,14 @@ def build_graph(
         elif tx.risk_score > 0:
             risk_level = "low"
 
+        # Determine cluster from risk tags
+        cluster = "NORMAL"
+        for tag in tx.risk_tags:
+            cl = RISK_CLUSTERS.get(tag)
+            if cl:
+                cluster = cl
+                break
+
         # Create/update counterparty node
         if cp_node_id not in nodes:
             nodes[cp_node_id] = {
@@ -77,18 +106,26 @@ def build_graph(
                 "type": node_type,
                 "label": cp_name[:60],
                 "risk_level": risk_level,
+                "cluster": cluster,
                 "entity_id": tx.counterparty_id,
                 "metadata": {
                     "categories": list(set(tx.risk_tags)),
                     "channel": tx.channel,
+                    "total_amount": float(abs(tx.amount)),
+                    "tx_count": 1,
                 },
             }
         else:
-            # Escalate risk level
+            # Escalate risk level and update metadata
             existing = nodes[cp_node_id]
             risk_priority = {"none": 0, "low": 1, "medium": 2, "high": 3}
             if risk_priority.get(risk_level, 0) > risk_priority.get(existing["risk_level"], 0):
                 existing["risk_level"] = risk_level
+            cluster_priority = {"NORMAL": 0, "LOANS": 1, "RISKY": 2, "GAMBLING": 3, "CRYPTO": 3}
+            if cluster_priority.get(cluster, 0) > cluster_priority.get(existing.get("cluster", "NORMAL"), 0):
+                existing["cluster"] = cluster
+            existing["metadata"]["total_amount"] = existing["metadata"].get("total_amount", 0) + float(abs(tx.amount))
+            existing["metadata"]["tx_count"] = existing["metadata"].get("tx_count", 0) + 1
 
         # Create edge
         edge_type = _channel_to_edge_type(tx.channel)
@@ -130,6 +167,11 @@ def build_graph(
         if len(edge["tx_ids"]) > 20:
             edge["tx_ids"] = edge["tx_ids"][:20]
 
+    # Compute cluster stats
+    cluster_counts: Dict[str, int] = defaultdict(int)
+    for node in nodes.values():
+        cluster_counts[node.get("cluster", "NORMAL")] += 1
+
     graph = {
         "nodes": list(nodes.values()),
         "edges": list(edges.values()),
@@ -137,6 +179,7 @@ def build_graph(
             "total_nodes": len(nodes),
             "total_edges": len(edges),
             "total_transactions": len(transactions),
+            "clusters": dict(cluster_counts),
         },
     }
 

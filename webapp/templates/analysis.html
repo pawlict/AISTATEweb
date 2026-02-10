@@ -237,6 +237,51 @@
         <div id="aml_alerts_list" style="margin-top:10px"></div>
       </div>
 
+      <!-- Charts -->
+      <div class="card" id="aml_charts_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Wykresy</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select class="input" id="aml_chart_select" style="padding:5px 8px;border-radius:10px;min-width:180px">
+              <option value="balance_timeline">Saldo w czasie</option>
+              <option value="category_distribution">Kategorie</option>
+              <option value="channel_distribution">Kanaly</option>
+              <option value="monthly_trend">Trend miesięczny</option>
+              <option value="daily_activity">Aktywnosc dzienna</option>
+              <option value="top_counterparties">Top kontrahenci</option>
+            </select>
+          </div>
+        </div>
+        <div id="aml_chart_container" style="height:380px;margin-top:10px;position:relative">
+          <canvas id="aml_chart_canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- LLM Analysis -->
+      <div class="card" id="aml_llm_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Analiza narracyjna (LLM)</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn" id="aml_llm_run_btn">Generuj analize</button>
+          </div>
+        </div>
+        <div id="aml_llm_status" class="small muted" style="margin:8px 0">Kliknij "Generuj analize" aby uzyskac profesjonalny raport AML od modelu LLM (wymaga Ollama).</div>
+        <div id="aml_llm_result" style="display:none;margin-top:10px">
+          <div id="aml_llm_text" class="aml-llm-text"></div>
+        </div>
+      </div>
+
+      <!-- ML Anomalies -->
+      <div class="card" id="aml_ml_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Anomalie ML</div>
+          <span class="small aml-badge" id="aml_ml_count">0</span>
+        </div>
+        <div id="aml_ml_list" style="max-height:300px;overflow:auto;margin-top:10px">
+          <div class="small muted">Brak anomalii.</div>
+        </div>
+      </div>
+
       <!-- Graph -->
       <div class="card" id="aml_graph_card">
         <div class="analysis-sidehdr">

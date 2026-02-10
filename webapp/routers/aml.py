@@ -138,6 +138,71 @@ async def aml_graph(
     return JSONResponse(graph)
 
 
+@router.get("/api/aml/charts/{statement_id}")
+async def aml_charts(statement_id: str):
+    """Get chart data for a statement (stored in risk_assessments.score_breakdown)."""
+    from backend.db.engine import fetch_one
+
+    risk_row = fetch_one(
+        """SELECT score_breakdown FROM risk_assessments
+           WHERE statement_id = ? ORDER BY created_at DESC LIMIT 1""",
+        (statement_id,),
+    )
+    if not risk_row or not risk_row["score_breakdown"]:
+        return JSONResponse({"error": "no chart data"}, status_code=404)
+
+    try:
+        breakdown = json.loads(risk_row["score_breakdown"])
+        charts = breakdown.get("charts", {})
+    except (json.JSONDecodeError, TypeError):
+        charts = {}
+
+    if not charts:
+        return JSONResponse({"error": "no chart data"}, status_code=404)
+
+    return JSONResponse(charts)
+
+
+@router.post("/api/aml/llm-analyze/{statement_id}")
+async def aml_llm_analyze(statement_id: str, request: Request):
+    """Run LLM narrative analysis on an existing AML analysis.
+
+    Retrieves the stored LLM prompt and sends it to Ollama.
+    Returns the LLM's analysis text.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from backend.db.engine import fetch_one
+    import asyncio
+
+    # Get stored LLM prompt
+    row = fetch_one(
+        "SELECT value FROM system_config WHERE key = ?",
+        (f"llm_prompt:{statement_id}",),
+    )
+    if not row or not row["value"]:
+        return JSONResponse({"error": "No LLM prompt found. Re-run the analysis."}, status_code=404)
+
+    prompt = row["value"]
+
+    # Optional: get model from request body
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    model = body.get("model", "")
+
+    try:
+        from backend.aml.llm_analysis import run_llm_analysis
+        result_text = await run_llm_analysis(prompt, model=model)
+        return JSONResponse({"status": "ok", "analysis": result_text})
+    except RuntimeError as e:
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=503)
+    except Exception as e:
+        log.exception("LLM analysis error")
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+
 @router.get("/api/aml/history")
 async def aml_history(limit: int = Query(20)):
     """List past AML analyses with basic info."""
@@ -219,6 +284,8 @@ async def aml_detail(statement_id: str):
         (statement_id,),
     )
     risk = None
+    charts = {}
+    ml_anomalies = []
     if risk_row:
         risk = dict(risk_row)
         for jf in ("score_breakdown", "risk_reasons"):
@@ -227,16 +294,31 @@ async def aml_detail(statement_id: str):
                     risk[jf] = json.loads(risk[jf])
                 except (json.JSONDecodeError, TypeError):
                     risk[jf] = {} if jf == "score_breakdown" else []
+        # Extract charts and ml_anomalies from score_breakdown
+        if isinstance(risk.get("score_breakdown"), dict):
+            charts = risk["score_breakdown"].get("charts", {})
+            ml_anomalies = risk["score_breakdown"].get("ml_anomalies", [])
 
     # Graph
     from backend.aml.graph import get_graph_json
     graph = get_graph_json(stmt_dict["case_id"])
+
+    # Check if LLM prompt is available
+    from backend.db.engine import fetch_one as _fo
+    llm_row = _fo(
+        "SELECT key FROM system_config WHERE key = ?",
+        (f"llm_prompt:{statement_id}",),
+    )
+    has_llm_prompt = llm_row is not None
 
     return JSONResponse({
         "statement": stmt_dict,
         "transactions": transactions,
         "risk": risk,
         "graph": graph,
+        "charts": charts,
+        "ml_anomalies": ml_anomalies,
+        "has_llm_prompt": has_llm_prompt,
     })
 
 
