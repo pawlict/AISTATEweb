@@ -43,6 +43,18 @@
     </div>
   </div>
 
+  <!-- Tab bar -->
+  <div class="analysis-tabs" id="analysis_tabs">
+    <button class="analysis-tab active" data-tab="llm" id="tab_llm">
+      <span class="analysis-tab-icon">🧠</span> Analiza LLM
+    </button>
+    <button class="analysis-tab" data-tab="aml" id="tab_aml">
+      <span class="analysis-tab-icon">🔍</span> Analiza AML
+    </button>
+  </div>
+
+  <!-- LLM Analysis content (existing) -->
+  <div class="analysis-tab-content" id="llm_content">
   <div class="analysis-container">
     <aside class="analysis-sidebar" id="analysis_sidebar">
 
@@ -164,6 +176,124 @@
   </div>
 
   <button class="analysis-sidebar-toggle" id="analysis_sidebar_toggle" title="Toggle sidebar">◀︎</button>
+  </div><!-- /llm_content -->
+
+  <!-- AML Analysis content -->
+  <div class="analysis-tab-content" id="aml_content" style="display:none">
+
+    <!-- Upload zone -->
+    <div class="card aml-upload-zone" id="aml_upload_zone">
+      <div class="aml-upload-inner" id="aml_drop_area">
+        <div class="aml-upload-icon">📄</div>
+        <div class="h2">Analiza AML wyciagu bankowego</div>
+        <div class="small muted">Przeciagnij plik PDF lub kliknij aby wybrac</div>
+        <button class="btn" id="aml_upload_btn">Wybierz plik</button>
+        <input type="file" id="aml_file_input" accept=".pdf" style="display:none">
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="card aml-progress-card" id="aml_progress_card" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Analizuje wyciag...</div>
+      </div>
+      <div class="an-progress" style="padding:10px 0">
+        <div class="progress"><div id="aml_prog_bar" style="width:0%"></div></div>
+        <div class="small muted" id="aml_prog_text">Przetwarzanie PDF...</div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="aml_results" style="display:none">
+
+      <!-- Summary row: risk score + bank info -->
+      <div class="aml-summary-row">
+        <div class="card aml-risk-card" id="aml_risk_card">
+          <div class="aml-risk-gauge">
+            <svg viewBox="0 0 120 80" class="aml-gauge-svg">
+              <path d="M 10 70 A 50 50 0 0 1 110 70" fill="none" stroke="rgba(0,0,0,.08)" stroke-width="10" stroke-linecap="round"/>
+              <path d="M 10 70 A 50 50 0 0 1 110 70" fill="none" stroke="var(--gauge-color, #15803d)" stroke-width="10" stroke-linecap="round"
+                    id="aml_gauge_arc" stroke-dasharray="0 157" />
+            </svg>
+            <div class="aml-risk-number" id="aml_risk_number">0</div>
+          </div>
+          <div class="aml-risk-label" id="aml_risk_label">Ryzyko AML</div>
+        </div>
+
+        <div class="card aml-info-card" id="aml_info_card">
+          <div class="h2">Informacje o wyciagu</div>
+          <div class="aml-info-grid" id="aml_info_grid">
+            <!-- Filled by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <div class="card" id="aml_alerts_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Alerty</div>
+          <span class="small aml-badge" id="aml_alerts_count">0</span>
+        </div>
+        <div id="aml_alerts_list" style="margin-top:10px"></div>
+      </div>
+
+      <!-- Graph -->
+      <div class="card" id="aml_graph_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Graf przeplywow</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select class="input" id="aml_graph_risk_filter" style="padding:5px 8px;border-radius:10px;min-width:130px">
+              <option value="">Wszystkie</option>
+              <option value="high">Wysokie ryzyko</option>
+              <option value="medium">Srednie</option>
+              <option value="low">Niskie</option>
+            </select>
+          </div>
+        </div>
+        <div id="aml_graph_container" style="height:420px;border:1px solid var(--border);border-radius:12px;margin-top:10px;background:rgba(15,23,42,.02)"></div>
+      </div>
+
+      <!-- Transactions table -->
+      <div class="card" id="aml_tx_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Transakcje</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="input" id="aml_tx_search" placeholder="Szukaj..." style="width:180px;padding:5px 10px;border-radius:10px">
+            <select class="input" id="aml_tx_channel_filter" style="padding:5px 8px;border-radius:10px;min-width:130px">
+              <option value="">Kanal: wszystkie</option>
+            </select>
+            <span class="small muted" id="aml_tx_count">0</span>
+          </div>
+        </div>
+        <div id="aml_tx_table_wrap" style="max-height:450px;overflow:auto;margin-top:10px"></div>
+      </div>
+
+      <!-- Counterparty memory -->
+      <div class="card" id="aml_memory_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Pamiec kontrahentow</div>
+          <button class="btn mini" id="aml_memory_refresh" title="Odswiez">&#x21bb;</button>
+        </div>
+        <div class="small muted" style="margin:6px 0">Oznacz podmioty jako podejrzane — zostana zapamietane w przyszlych analizach.</div>
+        <div id="aml_memory_list" style="max-height:300px;overflow:auto"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="analysis-actions">
+        <button class="btn" id="aml_download_report">Pobierz raport HTML</button>
+        <button class="btn secondary" id="aml_new_analysis">Nowa analiza</button>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="card" id="aml_history_card" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Historia analiz AML</div>
+      </div>
+      <div id="aml_history_list" style="margin-top:10px"></div>
+    </div>
+
+  </div><!-- /aml_content -->
 
   <!-- Hidden file inputs -->
   <input type="file" id="docs_file_input" style="display:none" multiple>
@@ -212,9 +342,47 @@
 
 {% block scripts %}
 <script src="/static/analysis.js?v={{ app_version }}"></script>
+<script src="/static/aml.js?v={{ app_version }}"></script>
 <script>
 (async()=>{
   try{
+    // Tab switching
+    const tabs = document.querySelectorAll('.analysis-tab[data-tab]');
+    const llmContent = document.getElementById('llm_content');
+    const amlContent = document.getElementById('aml_content');
+    const toolbar = document.getElementById('analysis_toolbar');
+    const sidebarToggle = document.getElementById('analysis_sidebar_toggle');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', async () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const which = tab.getAttribute('data-tab');
+        if(which === 'aml'){
+          llmContent.style.display = 'none';
+          amlContent.style.display = '';
+          // Hide LLM-specific toolbar items
+          document.getElementById('analysis_models').style.display = 'none';
+          document.getElementById('analysis_report_formats').style.display = 'none';
+          document.getElementById('an_generate_btn').style.display = 'none';
+          document.getElementById('an_report_save_btn').style.display = 'none';
+          if(sidebarToggle) sidebarToggle.style.display = 'none';
+          // Init AML if not done
+          if(window.AmlManager && !window.AmlManager._initialized){
+            await AmlManager.init();
+          }
+        } else {
+          llmContent.style.display = '';
+          amlContent.style.display = 'none';
+          document.getElementById('analysis_models').style.display = '';
+          document.getElementById('analysis_report_formats').style.display = '';
+          document.getElementById('an_generate_btn').style.display = '';
+          document.getElementById('an_report_save_btn').style.display = '';
+          if(sidebarToggle) sidebarToggle.style.display = '';
+        }
+      });
+    });
+
     if(window.AnalysisManager){
       await AnalysisManager.init();
     }
