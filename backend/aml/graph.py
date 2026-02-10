@@ -168,24 +168,32 @@ def _save_graph_to_db(case_id: str, graph: Dict[str, Any]) -> None:
         conn.execute("DELETE FROM graph_edges WHERE case_id = ?", (case_id,))
         conn.execute("DELETE FROM graph_nodes WHERE case_id = ?", (case_id,))
 
+        # Build mapping from graph-local IDs to DB-unique IDs
+        node_id_map: Dict[str, str] = {}
+
         # Insert nodes
         for node in graph["nodes"]:
+            db_id = f"{case_id}:{node['id']}"
+            node_id_map[node["id"]] = db_id
             conn.execute(
                 """INSERT INTO graph_nodes (id, case_id, node_type, label, entity_id, risk_level, metadata)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (node["id"], case_id, node["type"], node["label"],
+                (db_id, case_id, node["type"], node["label"],
                  node.get("entity_id", ""), node["risk_level"],
                  json.dumps(node.get("metadata", {}), ensure_ascii=False)),
             )
 
         # Insert edges
         for edge in graph["edges"]:
+            db_id = f"{case_id}:{edge['id']}"
             conn.execute(
                 """INSERT INTO graph_edges
                    (id, case_id, source_id, target_id, edge_type,
                     tx_count, total_amount, first_date, last_date, tx_ids, metadata)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (edge["id"], case_id, edge["source"], edge["target"],
+                (db_id, case_id,
+                 node_id_map.get(edge["source"], edge["source"]),
+                 node_id_map.get(edge["target"], edge["target"]),
                  edge["type"], edge["tx_count"], edge["total_amount"],
                  edge["first_date"], edge["last_date"],
                  json.dumps(edge["tx_ids"], ensure_ascii=False),
@@ -197,23 +205,33 @@ def get_graph_json(case_id: str) -> Dict[str, Any]:
     """Load graph from database for a case."""
     from ..db.engine import fetch_all
 
-    nodes = fetch_all("SELECT * FROM graph_nodes WHERE case_id = ?", (case_id,))
-    edges = fetch_all("SELECT * FROM graph_edges WHERE case_id = ?", (case_id,))
+    raw_nodes = fetch_all("SELECT * FROM graph_nodes WHERE case_id = ?", (case_id,))
+    raw_edges = fetch_all("SELECT * FROM graph_edges WHERE case_id = ?", (case_id,))
 
-    for node in nodes:
+    nodes = []
+    for row in raw_nodes:
+        node = dict(row)
         if node.get("metadata"):
             try:
                 node["metadata"] = json.loads(node["metadata"])
             except (json.JSONDecodeError, TypeError):
                 node["metadata"] = {}
+        nodes.append(node)
 
-    for edge in edges:
+    edges = []
+    for row in raw_edges:
+        edge = dict(row)
+        # Map DB column names to graph JSON names
+        edge["source"] = edge.pop("source_id", "")
+        edge["target"] = edge.pop("target_id", "")
+        edge["type"] = edge.pop("edge_type", "TRANSFER")
         for field in ("tx_ids", "metadata"):
             if edge.get(field):
                 try:
                     edge[field] = json.loads(edge[field])
                 except (json.JSONDecodeError, TypeError):
                     edge[field] = [] if field == "tx_ids" else {}
+        edges.append(edge)
 
     return {
         "nodes": nodes,
