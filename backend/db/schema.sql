@@ -312,3 +312,63 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_case ON audit_log(case_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
+
+-- ============================================================
+-- TRANSACTION CLASSIFICATIONS (user feedback for self-learning)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS tx_classifications (
+    id              TEXT PRIMARY KEY,
+    tx_id           TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    statement_id    TEXT NOT NULL REFERENCES statements(id) ON DELETE CASCADE,
+    classification  TEXT NOT NULL DEFAULT 'neutral',  -- neutral | legitimate | suspicious | monitoring
+    note            TEXT DEFAULT '',
+    created_by      TEXT DEFAULT '',    -- user id
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE(tx_id)  -- one classification per transaction
+);
+
+CREATE INDEX IF NOT EXISTS idx_txcl_statement ON tx_classifications(statement_id);
+CREATE INDEX IF NOT EXISTS idx_txcl_class ON tx_classifications(classification);
+
+-- ============================================================
+-- ACCOUNT PROFILES (multi-account, anonymization)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS account_profiles (
+    id              TEXT PRIMARY KEY,
+    account_number  TEXT NOT NULL DEFAULT '',     -- full IBAN (stored encrypted/hashed reference)
+    account_hash    TEXT NOT NULL UNIQUE,         -- SHA-256 for matching without exposing
+    account_type    TEXT NOT NULL DEFAULT 'private',  -- private | business
+    bank_id         TEXT DEFAULT '',
+    bank_name       TEXT DEFAULT '',
+    owner_label     TEXT DEFAULT '',              -- anonymized: "Klient A", "Firma XYZ"
+    display_name    TEXT DEFAULT '',              -- user-given friendly name
+    is_anonymized   INTEGER NOT NULL DEFAULT 1,  -- 1=hide details, 0=show
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ap_hash ON account_profiles(account_hash);
+CREATE INDEX IF NOT EXISTS idx_ap_type ON account_profiles(account_type);
+
+-- ============================================================
+-- FIELD MAPPING RULES (header/format corrections per bank)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS field_rules (
+    id              TEXT PRIMARY KEY,
+    bank_id         TEXT NOT NULL,
+    rule_type       TEXT NOT NULL,      -- header_remap | column_shift | field_format
+    source_field    TEXT NOT NULL,       -- original field name or position
+    target_field    TEXT NOT NULL,       -- corrected field name or position
+    condition_json  TEXT DEFAULT '{}',   -- JSON: optional match conditions
+    priority        INTEGER DEFAULT 0,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    note            TEXT DEFAULT '',
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_fr_bank ON field_rules(bank_id);
+CREATE INDEX IF NOT EXISTS idx_fr_type ON field_rules(rule_type);

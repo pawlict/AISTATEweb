@@ -400,6 +400,200 @@ async def memory_queue_resolve(item_id: str, request: Request):
 
 
 # ============================================================
+# TRANSACTION REVIEW & CLASSIFICATION
+# ============================================================
+
+@router.get("/api/aml/review/{statement_id}")
+async def aml_review_transactions(statement_id: str):
+    """Get transactions for review with existing classifications."""
+    from backend.aml.review import get_review_transactions, get_statement_header, get_classification_stats
+
+    transactions = get_review_transactions(statement_id)
+    header = get_statement_header(statement_id)
+    stats = get_classification_stats(statement_id)
+
+    return JSONResponse({
+        "transactions": transactions,
+        "header": header,
+        "classification_stats": stats,
+        "total": len(transactions),
+    })
+
+
+@router.get("/api/aml/review/{statement_id}/header")
+async def aml_review_header(statement_id: str):
+    """Get statement header blocks for review/correction."""
+    from backend.aml.review import get_statement_header
+    header = get_statement_header(statement_id)
+    if not header:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return JSONResponse(header)
+
+
+@router.post("/api/aml/review/{statement_id}/classify")
+async def aml_classify_transaction(statement_id: str, request: Request):
+    """Classify a single transaction."""
+    from backend.aml.review import classify_transaction
+    data = await request.json()
+    result = classify_transaction(
+        tx_id=data.get("tx_id", ""),
+        statement_id=statement_id,
+        classification=data.get("classification", "neutral"),
+        note=data.get("note", ""),
+    )
+    return JSONResponse({"status": "ok", **result})
+
+
+@router.post("/api/aml/review/{statement_id}/classify-batch")
+async def aml_classify_batch(statement_id: str, request: Request):
+    """Classify multiple transactions at once."""
+    from backend.aml.review import classify_batch
+    data = await request.json()
+    result = classify_batch(
+        items=data.get("items", []),
+        statement_id=statement_id,
+    )
+    return JSONResponse({"status": "ok", **result})
+
+
+@router.get("/api/aml/review/{statement_id}/stats")
+async def aml_classification_stats(statement_id: str):
+    """Get classification stats for a statement."""
+    from backend.aml.review import get_classification_stats
+    stats = get_classification_stats(statement_id)
+    return JSONResponse(stats)
+
+
+@router.get("/api/aml/review/global/stats")
+async def aml_global_stats():
+    """Get global classification stats."""
+    from backend.aml.review import get_global_classification_stats
+    return JSONResponse(get_global_classification_stats())
+
+
+@router.post("/api/aml/review/{statement_id}/header-update")
+async def aml_update_header(statement_id: str, request: Request):
+    """Update a statement header field (user correction)."""
+    from backend.aml.review import update_statement_field
+    data = await request.json()
+    ok = update_statement_field(
+        statement_id=statement_id,
+        field=data.get("field", ""),
+        value=data.get("value", ""),
+    )
+    if not ok:
+        return JSONResponse({"error": "Field not editable"}, status_code=400)
+    return JSONResponse({"status": "ok"})
+
+
+@router.get("/api/aml/classifications-meta")
+async def aml_classifications_meta():
+    """Get classification labels metadata."""
+    from backend.aml.review import get_classifications_meta
+    return JSONResponse(get_classifications_meta())
+
+
+# ============================================================
+# ACCOUNT PROFILES
+# ============================================================
+
+@router.get("/api/aml/accounts")
+async def aml_accounts_list():
+    """List all account profiles."""
+    from backend.aml.anonymize import list_profiles
+    profiles = list_profiles()
+    return JSONResponse({"profiles": profiles, "count": len(profiles)})
+
+
+@router.post("/api/aml/accounts")
+async def aml_accounts_create(request: Request):
+    """Create or get account profile."""
+    from backend.aml.anonymize import get_or_create_profile
+    data = await request.json()
+    profile = get_or_create_profile(
+        account_number=data.get("account_number", ""),
+        bank_id=data.get("bank_id", ""),
+        bank_name=data.get("bank_name", ""),
+        account_holder=data.get("account_holder", ""),
+        account_type=data.get("account_type", "private"),
+    )
+    return JSONResponse({"status": "ok", "profile": profile})
+
+
+@router.patch("/api/aml/accounts/{profile_id}")
+async def aml_accounts_update(profile_id: str, request: Request):
+    """Update account profile settings."""
+    from backend.aml.anonymize import update_profile
+    data = await request.json()
+    profile = update_profile(
+        profile_id=profile_id,
+        account_type=data.get("account_type"),
+        display_name=data.get("display_name"),
+        is_anonymized=data.get("is_anonymized"),
+    )
+    if not profile:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return JSONResponse({"status": "ok", "profile": profile})
+
+
+@router.get("/api/aml/accounts/for-statement/{statement_id}")
+async def aml_account_for_statement(statement_id: str):
+    """Get account profile linked to a statement."""
+    from backend.aml.anonymize import get_profile_for_statement, anonymize_iban, anonymize_holder
+    profile = get_profile_for_statement(statement_id)
+    if not profile:
+        return JSONResponse({"profile": None})
+
+    # Add anonymized display fields
+    profile["display_iban"] = anonymize_iban(
+        profile.get("account_number", ""),
+        profile.get("account_type", "private"),
+    )
+    profile["display_holder"] = anonymize_holder(
+        profile.get("display_name", ""),
+        profile.get("account_type", "private"),
+        profile.get("owner_label", ""),
+    )
+    return JSONResponse({"profile": profile})
+
+
+# ============================================================
+# FIELD MAPPING RULES
+# ============================================================
+
+@router.get("/api/aml/field-rules")
+async def aml_field_rules(bank_id: str = Query("")):
+    """List field mapping rules."""
+    from backend.aml.review import get_field_rules
+    rules = get_field_rules(bank_id=bank_id)
+    return JSONResponse({"rules": rules, "count": len(rules)})
+
+
+@router.post("/api/aml/field-rules")
+async def aml_field_rules_create(request: Request):
+    """Create a field mapping rule."""
+    from backend.aml.review import save_field_rule
+    data = await request.json()
+    rule_id = save_field_rule(
+        bank_id=data.get("bank_id", ""),
+        rule_type=data.get("rule_type", "header_remap"),
+        source_field=data.get("source_field", ""),
+        target_field=data.get("target_field", ""),
+        condition=data.get("condition"),
+        note=data.get("note", ""),
+    )
+    return JSONResponse({"status": "ok", "rule_id": rule_id})
+
+
+@router.delete("/api/aml/field-rules/{rule_id}")
+async def aml_field_rules_delete(rule_id: str):
+    """Deactivate a field mapping rule."""
+    from backend.aml.review import delete_field_rule
+    delete_field_rule(rule_id)
+    return JSONResponse({"status": "ok"})
+
+
+# ============================================================
 # PROJECTS & CASES
 # ============================================================
 
