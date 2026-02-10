@@ -282,8 +282,7 @@ def run_aml_pipeline(
     # --- Step 9: Baseline & anomaly detection ---
     _log("Detekcja anomalii...")
     baseline = build_baseline(tx_list)
-    known_cps = set(r["alias_normalized"] for r in
-                    (get_counterparty_labels() or {}).items())  # type: ignore
+    known_cps = set(get_counterparty_labels().keys())
     alerts = detect_anomalies(tx_list, baseline, known_cps)
     _log(f"Wykryto {len(alerts)} alertów")
 
@@ -304,6 +303,8 @@ def run_aml_pipeline(
     with get_conn() as conn:
         for tx in tx_list:
             d = tx.to_db_dict()
+            # FK constraint: empty counterparty_id must be NULL, not ""
+            cp_id = d.get("counterparty_id") or None
             conn.execute(
                 """INSERT INTO transactions
                    (id, statement_id, counterparty_id, booking_date, tx_date,
@@ -312,7 +313,7 @@ def run_aml_pipeline(
                     title, counterparty_raw, bank_category, raw_text,
                     rule_explains, tx_hash, is_recurring, recurring_group)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (d["id"], d["statement_id"], d.get("counterparty_id"),
+                (d["id"], d["statement_id"], cp_id,
                  d["booking_date"], d["tx_date"],
                  d["amount"], d["currency"], d["direction"], d.get("balance_after"),
                  d["channel"], d["category"], d["subcategory"],
