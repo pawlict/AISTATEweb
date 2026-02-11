@@ -50,12 +50,14 @@ async def aml_preview_pdf(
     request: Request,
     file: UploadFile = File(...),
 ):
-    """Upload PDF and get raw table preview with auto-detected column mapping.
+    """Upload PDF and get spatial parse preview with page images.
 
-    Returns raw rows + suggested column types for user confirmation.
+    Uses coordinate-based word extraction to detect column boundaries
+    and segment multi-line transactions.  Returns page image URLs +
+    column zones for the visual SVG mask overlay.
     """
     from starlette.concurrency import run_in_threadpool
-    from backend.aml.column_mapper import extract_raw_preview, get_column_types_meta
+    from backend.aml.column_mapper import extract_raw_preview
 
     data_dir = os.environ.get("AISTATEWEB_DATA_DIR", "data_www")
     upload_dir = Path(data_dir) / "uploads" / "aml"
@@ -66,14 +68,31 @@ async def aml_preview_pdf(
         content = await file.read()
         f.write(content)
 
+    image_dir = upload_dir / ".preview"
+
     try:
-        result = await run_in_threadpool(extract_raw_preview, file_path)
+        result = await run_in_threadpool(
+            extract_raw_preview, file_path, image_dir,
+        )
         result["file_path"] = str(file_path)
-        result["column_types"] = get_column_types_meta()
         return JSONResponse(result)
     except Exception as e:
-        log.exception("PDF preview error")
+        log.exception("PDF spatial preview error")
         return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+
+@router.get("/api/aml/page-image/{page_num}")
+async def aml_page_image(page_num: int):
+    """Serve a rendered PDF page image for the visual overlay."""
+    from fastapi.responses import FileResponse
+
+    data_dir = os.environ.get("AISTATEWEB_DATA_DIR", "data_www")
+    image_path = Path(data_dir) / "uploads" / "aml" / ".preview" / f"page_{page_num}.png"
+
+    if not image_path.exists():
+        return JSONResponse({"error": "Page image not found"}, status_code=404)
+
+    return FileResponse(str(image_path), media_type="image/png")
 
 
 @router.post("/api/aml/confirm-mapping")
@@ -137,16 +156,17 @@ async def aml_confirm_mapping(request: Request):
 
 @router.post("/api/aml/preview-parse")
 async def aml_preview_parse(request: Request):
-    """Preview parsing result with user-provided column mapping (without running full pipeline)."""
+    """Preview parsing result with user-adjusted column mapping.
+
+    Uses spatial parsing with optional user-dragged column boundaries.
+    """
     from starlette.concurrency import run_in_threadpool
     from backend.aml.column_mapper import parse_with_mapping
 
     data = await request.json()
     file_path = Path(data.get("file_path", ""))
     column_mapping = data.get("column_mapping", {})
-    header_row = data.get("header_row", 0)
-    data_start_row = data.get("data_start_row", 1)
-    main_table_index = data.get("main_table_index", 0)
+    column_bounds = data.get("column_bounds")  # [{x_min, x_max}, ...]
 
     if not file_path.exists():
         return JSONResponse({"status": "error", "error": "PDF file not found"}, status_code=404)
@@ -154,7 +174,7 @@ async def aml_preview_parse(request: Request):
     try:
         result = await run_in_threadpool(
             parse_with_mapping, file_path, column_mapping,
-            header_row, data_start_row, main_table_index,
+            column_bounds=column_bounds,
         )
         return JSONResponse(result)
     except Exception as e:

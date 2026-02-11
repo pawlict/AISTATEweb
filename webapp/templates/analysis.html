@@ -192,35 +192,40 @@
       </div>
     </div>
 
-    <!-- Column Mapping (shown after PDF upload, before analysis) -->
+    <!-- Column Mapping — Visual PDF overlay (shown after PDF upload) -->
     <div id="aml_mapping_card" style="display:none">
       <div class="card">
         <div class="analysis-sidehdr">
-          <div class="h2">Podglad kolumn wyciagu</div>
+          <div class="h2">Maska kolumn wyciagu</div>
           <div style="display:flex;gap:8px;align-items:center">
             <span class="small muted" id="cm_bank_label"></span>
+            <select class="input" id="cm_page_select" style="padding:3px 8px;border-radius:8px;min-width:90px;display:none"></select>
             <button class="btn secondary" id="cm_back_btn">Cofnij</button>
           </div>
         </div>
-        <div class="small muted" style="margin:6px 0">Sprawdz czy kolumny sa poprawnie rozpoznane. Kliknij naglowek kolumny aby zmienic jej typ. Uzyj podgladu na zywo.</div>
+        <div class="small muted" style="margin:6px 0">Przeciagnij pionowe linie aby poprawic granice kolumn. Kliknij naglowek aby zmienic typ. Kolory oznaczaja rozpoznane pola.</div>
+        <div id="cm_warnings" style="margin-bottom:6px"></div>
 
-        <!-- Column header dropdowns -->
-        <div class="cm-headers" id="cm_headers"></div>
-
-        <!-- Raw table preview -->
-        <div class="cm-table-wrap" id="cm_table_wrap" style="max-height:400px;overflow:auto;margin-top:8px">
-          <div class="small muted" style="padding:10px">Ladowanie danych...</div>
+        <!-- Visual PDF page with SVG mask overlay -->
+        <div id="cm_visual_wrap" style="position:relative;overflow:auto;max-height:600px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:#f8fafc">
+          <div id="cm_visual_container" style="position:relative;display:inline-block">
+            <img id="cm_page_img" src="" alt="" style="display:block;max-width:100%;height:auto">
+            <svg id="cm_overlay_svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></svg>
+          </div>
         </div>
 
-        <!-- Parsed preview -->
-        <div style="margin-top:12px">
-          <div class="analysis-sidehdr">
-            <div class="h2" style="font-size:14px">Podglad sparsowanych transakcji</div>
-            <button class="btn mini" id="cm_refresh_preview">Odswiez podglad</button>
-          </div>
-          <div id="cm_parsed_preview" style="max-height:250px;overflow:auto;margin-top:6px">
-            <div class="small muted">Kliknij "Odswiez podglad" aby zobaczyc wynik parsowania.</div>
-          </div>
+        <!-- Column type selectors (below the image) -->
+        <div class="cm-headers" id="cm_headers" style="margin-top:8px"></div>
+      </div>
+
+      <!-- Parsed transaction preview -->
+      <div class="card" style="margin-top:12px">
+        <div class="analysis-sidehdr">
+          <div class="h2" style="font-size:14px">Podglad sparsowanych transakcji</div>
+          <button class="btn mini" id="cm_refresh_preview">Odswiez podglad</button>
+        </div>
+        <div id="cm_parsed_preview" style="max-height:300px;overflow:auto;margin-top:6px">
+          <div class="small muted">Kliknij "Odswiez podglad" aby zobaczyc wynik parsowania z aktualnym mapowaniem.</div>
         </div>
       </div>
 

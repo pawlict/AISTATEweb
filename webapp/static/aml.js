@@ -50,10 +50,13 @@
     cyLoaded: false,
     chartjsLoaded: false,
     llmRunning: false,
-    // Column mapping state
-    cmPreview: null,      // from POST /api/aml/preview-pdf
+    // Spatial column mapping state
+    cmPreview: null,      // from POST /api/aml/preview-pdf (spatial data)
     cmMapping: {},        // {col_index_str: column_type}
     cmColumnTypes: {},    // metadata from API
+    cmColumns: [],        // [{label, col_type, x_min, x_max}] — detected/user-adjusted
+    cmPageScale: 1,       // image scale factor vs PDF coordinates
+    cmDragging: null,     // index of column boundary being dragged
   };
 
   // ============================================================
@@ -995,8 +998,15 @@
   }
 
   // ============================================================
-  // COLUMN MAPPING UI
+  // COLUMN MAPPING UI — Visual PDF overlay with SVG mask
   // ============================================================
+
+  const _TYPE_COLORS = {
+    date:"#3b82f6", value_date:"#60a5fa", description:"#8b5cf6",
+    counterparty:"#06b6d4", amount:"#f59e0b", debit:"#ef4444",
+    credit:"#22c55e", balance:"#6366f1", bank_type:"#a855f7",
+    reference:"#64748b", skip:"#94a3b8",
+  };
 
   function _renderColumnMapping(){
     const preview = St.cmPreview;
@@ -1004,38 +1014,204 @@
 
     // Bank label
     const bankLabel = QS("#cm_bank_label");
-    if(bankLabel) bankLabel.textContent = preview.bank_name || "Nieznany bank";
-
-    // Template info
-    if(preview.template && !preview.template._partial_match){
-      const bankL = QS("#cm_bank_label");
-      if(bankL) bankL.textContent = (preview.bank_name || "") + " (szablon: " + (preview.template.name || "domyslny") + ")";
+    if(bankLabel){
+      let label = preview.bank_name || "Nieznany bank";
+      if(preview.template && !preview.template._partial_match){
+        label += " (szablon: " + (preview.template.name || "domyslny") + ")";
+      }
+      bankLabel.textContent = label;
     }
 
-    // Render column headers with dropdowns
-    _renderCmHeaders(preview);
+    // Warnings
+    const warningsEl = QS("#cm_warnings");
+    if(warningsEl && preview.warnings && preview.warnings.length){
+      warningsEl.innerHTML = preview.warnings.map(w =>
+        `<div class="small" style="color:var(--danger);margin:2px 0">\u26A0 ${_esc(w)}</div>`
+      ).join("");
+    }
 
-    // Render raw table
-    _renderCmTable(preview);
+    // Store columns for SVG overlay
+    St.cmColumns = (preview.columns || []).map(c => ({...c}));
+
+    // Load first page image
+    _cmLoadPageImage(0);
+
+    // Render column type selectors
+    _renderCmHeaders();
+
+    // Auto-run preview parse
+    _cmPreviewParse();
   }
 
-  function _renderCmHeaders(preview){
+  function _cmLoadPageImage(pageNum){
+    const img = QS("#cm_page_img");
+    if(!img) return;
+
+    const preview = St.cmPreview;
+    const pages = preview.pages || [];
+    if(pageNum >= pages.length) return;
+
+    const pageInfo = pages[pageNum];
+    img.onload = () => {
+      // Calculate scale: rendered image size vs PDF coordinate space
+      St.cmPageScale = img.naturalWidth / pageInfo.width;
+      _cmRenderOverlay();
+    };
+    img.src = `/api/aml/page-image/${pageNum}?t=${Date.now()}`;
+
+    // Page selector
+    const pageSel = QS("#cm_page_select");
+    if(pageSel && pages.length > 1){
+      pageSel.style.display = "";
+      pageSel.innerHTML = pages.map((p, i) =>
+        `<option value="${i}" ${i === pageNum ? "selected" : ""}>Str. ${i + 1}</option>`
+      ).join("");
+    }
+  }
+
+  function _cmRenderOverlay(){
+    const svg = QS("#cm_overlay_svg");
+    const img = QS("#cm_page_img");
+    if(!svg || !img || !img.naturalWidth) return;
+
+    const scale = St.cmPageScale;
+    const imgW = img.naturalWidth;
+    const imgH = img.naturalHeight;
+
+    svg.setAttribute("viewBox", `0 0 ${imgW} ${imgH}`);
+    svg.style.pointerEvents = "none";
+
+    let markup = "";
+
+    // Draw column zones as semi-transparent colored rectangles
+    for(let i = 0; i < St.cmColumns.length; i++){
+      const col = St.cmColumns[i];
+      const x = col.x_min * scale;
+      const w = (col.x_max - col.x_min) * scale;
+      const color = _TYPE_COLORS[col.col_type] || "#94a3b8";
+      const y = (col.header_y || 0) * scale;
+
+      // Column fill (from header to bottom)
+      markup += `<rect x="${x}" y="${y}" width="${w}" height="${imgH - y}" fill="${color}" fill-opacity="0.10" />`;
+
+      // Column header band
+      markup += `<rect x="${x}" y="${y}" width="${w}" height="${20 * scale}" fill="${color}" fill-opacity="0.30" />`;
+
+      // Column label
+      const label = (St.cmColumnTypes[col.col_type] || {}).label || col.label || "";
+      markup += `<text x="${x + 4}" y="${y + 14 * scale}" font-size="${11 * scale}" fill="${color}" font-weight="bold" style="pointer-events:none">${_esc(label)}</text>`;
+
+      // Right boundary line (draggable)
+      if(i < St.cmColumns.length - 1){
+        const bx = col.x_max * scale;
+        markup += `<line x1="${bx}" y1="${y}" x2="${bx}" y2="${imgH}" stroke="${color}" stroke-width="2" stroke-dasharray="6,3" style="pointer-events:stroke;cursor:col-resize" data-boundary="${i}" />`;
+      }
+    }
+
+    // Detected transactions — alternating bands
+    const transactions = St.cmPreview.transactions || [];
+    // Show transaction markers (small ticks on the left)
+    for(let t = 0; t < Math.min(transactions.length, 50); t++){
+      const tx = transactions[t];
+      if(!tx.raw_fields) continue;
+    }
+
+    svg.innerHTML = markup;
+
+    // Enable drag on boundary lines
+    _cmBindBoundaryDrag(svg, scale);
+  }
+
+  function _cmBindBoundaryDrag(svg, scale){
+    const container = QS("#cm_visual_container");
+    if(!container) return;
+
+    // Use a transparent overlay for drag events
+    const lines = svg.querySelectorAll("line[data-boundary]");
+    lines.forEach(line => {
+      line.style.pointerEvents = "stroke";
+      line.style.cursor = "col-resize";
+    });
+
+    // Mouse/touch drag handling via overlay
+    let dragIdx = -1;
+    let startX = 0;
+
+    container.addEventListener("mousedown", (e) => {
+      // Check if click is near a boundary line
+      const rect = container.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+
+      for(let i = 0; i < St.cmColumns.length - 1; i++){
+        const bx = St.cmColumns[i].x_max * scale * (container.clientWidth / (QS("#cm_page_img")?.naturalWidth || 1));
+        if(Math.abs(mx - bx) < 8){
+          dragIdx = i;
+          startX = mx;
+          e.preventDefault();
+          container.style.cursor = "col-resize";
+          return;
+        }
+      }
+    });
+
+    const _onMove = (e) => {
+      if(dragIdx < 0) return;
+      const rect = container.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const img = QS("#cm_page_img");
+      if(!img) return;
+
+      const displayScale = container.clientWidth / img.naturalWidth;
+      const pdfX = mx / (displayScale * scale);
+
+      // Clamp to reasonable bounds
+      const minX = (dragIdx > 0 ? St.cmColumns[dragIdx].x_min + 10 : 10);
+      const maxX = (dragIdx + 2 < St.cmColumns.length ? St.cmColumns[dragIdx + 2].x_max - 10 : 9999);
+      const newX = Math.max(minX, Math.min(maxX, pdfX));
+
+      St.cmColumns[dragIdx].x_max = newX;
+      St.cmColumns[dragIdx + 1].x_min = newX;
+      _cmRenderOverlay();
+    };
+
+    const _onUp = () => {
+      if(dragIdx >= 0){
+        dragIdx = -1;
+        container.style.cursor = "";
+        // Update mapping from current column types
+        _cmSyncMapping();
+      }
+    };
+
+    document.addEventListener("mousemove", _onMove);
+    document.addEventListener("mouseup", _onUp);
+  }
+
+  function _cmSyncMapping(){
+    St.cmMapping = {};
+    for(let i = 0; i < St.cmColumns.length; i++){
+      if(St.cmColumns[i].col_type && St.cmColumns[i].col_type !== "skip"){
+        St.cmMapping[String(i)] = St.cmColumns[i].col_type;
+      }
+    }
+  }
+
+  function _renderCmHeaders(){
     const container = QS("#cm_headers");
     if(!container) return;
 
-    const headerCells = preview.header_cells || [];
     const types = St.cmColumnTypes;
-
     let html = '<div style="display:flex;gap:4px;overflow-x:auto;padding:4px 0">';
-    for(let i = 0; i < headerCells.length; i++){
-      const iStr = String(i);
-      const currentType = St.cmMapping[iStr] || "";
-      const meta = types[currentType] || {};
 
-      html += `<div class="cm-col-hdr" style="min-width:100px;flex:1">
-        <div class="small" style="margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_esc(headerCells[i])}">${_esc(headerCells[i] || "(pusta)")}</div>
+    for(let i = 0; i < St.cmColumns.length; i++){
+      const col = St.cmColumns[i];
+      const currentType = col.col_type || "";
+      const color = _TYPE_COLORS[currentType] || "#94a3b8";
+
+      html += `<div class="cm-col-hdr" style="min-width:80px;flex:1;border-top:3px solid ${color};padding-top:4px">
+        <div class="small" style="margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_esc(col.label)}">${_esc(col.label || "(pusta)")}</div>
         <select class="cm-type-select input" data-col="${i}" style="padding:3px 5px;border-radius:6px;font-size:12px;width:100%">
-          <option value="">\u2014 Pomija</option>`;
+          <option value="skip">\u2014 Pomin</option>`;
 
       for(const [key, tmeta] of Object.entries(types)){
         const sel = currentType === key ? " selected" : "";
@@ -1050,66 +1226,14 @@
     // Bind dropdown changes
     QSA(".cm-type-select", container).forEach(sel => {
       sel.addEventListener("change", () => {
-        const col = sel.getAttribute("data-col");
-        if(sel.value){
-          St.cmMapping[col] = sel.value;
-        } else {
-          delete St.cmMapping[col];
+        const idx = parseInt(sel.getAttribute("data-col"), 10);
+        if(idx < St.cmColumns.length){
+          St.cmColumns[idx].col_type = sel.value;
+          _cmSyncMapping();
+          _cmRenderOverlay();
         }
-        _renderCmTable(St.cmPreview);
       });
     });
-  }
-
-  function _renderCmTable(preview){
-    const wrap = QS("#cm_table_wrap");
-    if(!wrap || !preview) return;
-
-    const rows = preview.rows || [];
-    if(!rows.length){
-      wrap.innerHTML = '<div class="small muted" style="padding:10px">Brak danych w tabeli.</div>';
-      return;
-    }
-
-    const headerRow = preview.header_row || 0;
-    const dataStart = preview.data_start_row || headerRow + 1;
-    const types = St.cmColumnTypes;
-
-    // Build type color hints
-    const typeColors = {
-      date:"#3b82f6", value_date:"#60a5fa", description:"#8b5cf6",
-      counterparty:"#06b6d4", amount:"#f59e0b", debit:"#ef4444",
-      credit:"#22c55e", balance:"#6366f1", bank_type:"#a855f7",
-      reference:"#64748b", skip:"#d1d5db",
-    };
-
-    let html = '<table class="cm-preview-table" style="width:100%;font-size:12px;border-collapse:collapse">';
-
-    // Column type indicator row
-    html += '<tr>';
-    const colCount = rows[0] ? rows[0].cells.length : 0;
-    for(let c = 0; c < colCount; c++){
-      const cType = St.cmMapping[String(c)] || "";
-      const color = typeColors[cType] || "transparent";
-      const label = (types[cType] || {}).label || "";
-      html += `<td style="background:${color};color:#fff;font-size:10px;padding:2px 4px;text-align:center;white-space:nowrap">${_esc(label)}</td>`;
-    }
-    html += '</tr>';
-
-    for(const row of rows){
-      const isHdr = row.is_header;
-      const isData = row.index >= dataStart;
-      const style = isHdr ? "font-weight:bold;background:var(--bg-alt,#f1f5f9)" : "";
-      html += `<tr style="${style}">`;
-      for(let c = 0; c < row.cells.length; c++){
-        const cType = St.cmMapping[String(c)] || "";
-        const borderLeft = cType ? `border-left:2px solid ${typeColors[cType] || "#ccc"}` : "";
-        html += `<td style="padding:3px 5px;border-bottom:1px solid var(--border,#e2e8f0);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis;${borderLeft}" title="${_esc(row.cells[c])}">${_esc(row.cells[c])}</td>`;
-      }
-      html += '</tr>';
-    }
-    html += '</table>';
-    wrap.innerHTML = html;
   }
 
   async function _cmPreviewParse(){
@@ -1120,6 +1244,9 @@
     if(!container) return;
     container.innerHTML = '<div class="small muted">Parsowanie...</div>';
 
+    // Build column_bounds from current columns
+    const column_bounds = St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max}));
+
     try{
       const data = await _api("/api/aml/preview-parse", {
         method:"POST",
@@ -1127,9 +1254,7 @@
         body:JSON.stringify({
           file_path: preview.file_path,
           column_mapping: St.cmMapping,
-          header_row: preview.header_row || 0,
-          data_start_row: preview.data_start_row || 1,
-          main_table_index: preview.main_table_index || 0,
+          column_bounds: column_bounds,
         }),
       });
 
@@ -1149,18 +1274,18 @@
       return;
     }
 
-    let html = `<div class="small muted" style="margin-bottom:4px">Rozpoznano ${total} transakcji. Podglad pierwszych ${Math.min(transactions.length, 10)}:</div>`;
+    let html = `<div class="small muted" style="margin-bottom:4px">Rozpoznano <b>${total}</b> transakcji. Podglad:</div>`;
     html += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
     html += '<tr style="background:var(--bg-alt,#f1f5f9);font-weight:bold"><td style="padding:3px 5px">Data</td><td>Kontrahent</td><td>Tytul</td><td style="text-align:right">Kwota</td><td style="text-align:right">Saldo</td></tr>';
 
-    for(const tx of transactions.slice(0, 10)){
+    for(const tx of transactions.slice(0, 15)){
       const amt = Number(tx.amount || 0);
       const color = amt < 0 ? "var(--danger,#b91c1c)" : "var(--ok,#15803d)";
       html += `<tr style="border-bottom:1px solid var(--border,#e2e8f0)">
         <td style="padding:2px 5px;white-space:nowrap">${_esc(tx.date || "")}</td>
-        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc((tx.counterparty || "").slice(0,30))}</td>
-        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc((tx.title || "").slice(0,40))}</td>
-        <td style="text-align:right;color:${color};white-space:nowrap">${_fmtAmount(amt, "")}</td>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(tx.counterparty || "")}">${_esc((tx.counterparty || "").slice(0,35))}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(tx.title || "")}">${_esc((tx.title || "").slice(0,50))}</td>
+        <td style="text-align:right;color:${color};white-space:nowrap;font-weight:600">${_fmtAmount(amt, "")}</td>
         <td style="text-align:right;white-space:nowrap">${tx.balance_after != null ? _fmtAmount(tx.balance_after, "") : ""}</td>
       </tr>`;
     }
@@ -1179,16 +1304,13 @@
     const templateId = preview.template ? (preview.template.id || "") : "";
 
     _runFullPipeline(preview.file_path, St.cmMapping, {
-      header_row: preview.header_row,
-      data_start_row: preview.data_start_row,
-      main_table_index: preview.main_table_index,
       save_template: saveTemplate,
       template_name: templateName,
       set_default: setDefault,
       template_id: templateId,
       bank_id: preview.bank_id,
       bank_name: preview.bank_name,
-      header_cells: preview.header_cells,
+      header_cells: St.cmColumns.map(c => c.label),
     });
   }
 
@@ -1207,6 +1329,14 @@
     if(saveCheck && nameInput){
       saveCheck.addEventListener("change", ()=>{
         nameInput.style.display = saveCheck.checked ? "" : "none";
+      });
+    }
+
+    // Page selector
+    const pageSel = QS("#cm_page_select");
+    if(pageSel){
+      pageSel.addEventListener("change", ()=>{
+        _cmLoadPageImage(parseInt(pageSel.value, 10) || 0);
       });
     }
   }
