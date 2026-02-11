@@ -119,6 +119,8 @@ async def aml_confirm_mapping(request: Request):
     bank_id = data.get("bank_id", "")
     bank_name = data.get("bank_name", "")
     header_cells = data.get("header_cells", [])
+    column_bounds = data.get("column_bounds")  # [{x_min, x_max, label, col_type}, ...]
+    header_fields = data.get("header_fields", {})  # {field_type: value, ...}
 
     if not file_path.exists():
         return JSONResponse({"status": "error", "error": "PDF file not found"}, status_code=404)
@@ -140,12 +142,14 @@ async def aml_confirm_mapping(request: Request):
     if template_id:
         increment_template_usage(template_id)
 
-    # Run full pipeline (it uses the built-in parser,
-    # but the user-confirmed data validates correctness)
+    # Run full pipeline with user-confirmed column mapping and header fields
     try:
         result = await run_in_threadpool(
             run_aml_pipeline,
             pdf_path=file_path,
+            column_mapping=column_mapping,
+            column_bounds=column_bounds,
+            header_fields=header_fields,
         )
         result.pop("report_html", None)
         return JSONResponse(result)

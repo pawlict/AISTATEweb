@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..db.engine import ensure_initialized, get_conn, get_default_user_id, new_id
 from ..db.projects import add_case_file, create_case, get_case
-from ..finance.parsers.base import ParseResult
+from ..finance.parsers.base import ParseResult, RawTransaction, StatementInfo
 from ..finance.pipeline import extract_header_words, extract_pdf_tables
 from ..finance.parsers import get_parser
 from ..finance.parsers.base import reconcile_balances, validate_balance_chain
@@ -39,6 +39,16 @@ from .report import generate_report
 from .rules import classify_all, compute_risk_score, load_rules
 
 log = logging.getLogger("aistate.aml.pipeline")
+
+
+def _safe_float(val) -> Optional[float]:
+    """Convert value to float, returning None on failure."""
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
 
 
 def _compute_pdf_hash(path: Path) -> str:
@@ -110,6 +120,9 @@ def run_aml_pipeline(
     project_id: str = "",
     save_report: bool = True,
     log_cb=None,
+    column_mapping: Optional[Dict[str, str]] = None,
+    column_bounds: Optional[List[Dict[str, Any]]] = None,
+    header_fields: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Run the full AML analysis pipeline on a bank statement PDF.
 
@@ -119,6 +132,9 @@ def run_aml_pipeline(
         project_id: Project ID for new case creation
         save_report: Whether to save HTML report to disk
         log_cb: Optional progress callback
+        column_mapping: User-confirmed column type mapping (from spatial UI)
+        column_bounds: User-adjusted column boundaries [{x_min, x_max, ...}]
+        header_fields: User-confirmed header fields {field_type: value}
 
     Returns:
         Dict with all pipeline results including report HTML.
@@ -139,38 +155,108 @@ def run_aml_pipeline(
     rules_version = rules_config.get("version", "1.0.0")
     warnings: List[str] = []
 
-    # --- Step 1: Extract text and tables ---
-    _log("Ekstrakcja tekstu z PDF...")
-    tables, full_text, page_count = extract_pdf_tables(pdf_path)
-    _log(f"Wyodrębniono {len(tables)} tabel z {page_count} stron")
+    # Use spatial parser when user-confirmed column mapping is provided
+    use_spatial = bool(column_mapping)
 
-    # --- Step 2: OCR if needed ---
-    ocr_used = False
-    ocr_confidence = 0.0
-    if _check_ocr_needed(full_text, page_count):
-        _log("Brak warstwy tekstowej — uruchamiam OCR...")
-        ocr_text, ocr_confidence = _run_ocr(pdf_path)
-        if ocr_text:
-            full_text = ocr_text
-            ocr_used = True
-            _log(f"OCR zakończony (confidence: {ocr_confidence:.1%})")
-        else:
-            warnings.append("OCR nie powiódł się — brak wymaganych bibliotek (pytesseract, PyMuPDF)")
-            _log("OCR niedostępny")
+    if use_spatial:
+        _log("Parsowanie przestrzenne (potwierdzone przez użytkownika)...")
+        from backend.aml.column_mapper import parse_with_mapping
 
-    # --- Step 3: Detect bank and parse ---
-    _log("Rozpoznawanie banku...")
-    parser = get_parser(full_text[:5000])
-    _log(f"Bank: {parser.BANK_NAME}")
+        spatial_result = parse_with_mapping(
+            pdf_path, column_mapping,
+            column_bounds=column_bounds,
+        )
+        spatial_txs = spatial_result.get("transactions", [])
+        spatial_info = spatial_result.get("info", {})
 
-    header_words = None
-    if parser.BANK_ID == "ing":
-        _log("Ekstrakcja pozycyjna nagłówka (ING)...")
-        header_words = extract_header_words(pdf_path)
+        # Apply user-confirmed header field overrides
+        if header_fields:
+            for key, val in header_fields.items():
+                if val:
+                    spatial_info[key] = val
 
-    _log("Parsowanie transakcji...")
-    parse_result: ParseResult = parser.parse(tables, full_text, header_words=header_words)
-    parse_result.page_count = page_count
+        # Convert spatial dicts → RawTransaction objects
+        raw_transactions = []
+        for tx in spatial_txs:
+            raw_transactions.append(RawTransaction(
+                date=tx.get("date", ""),
+                date_valuation=tx.get("value_date"),
+                amount=float(tx.get("amount", 0)),
+                currency=tx.get("currency", "PLN"),
+                balance_after=tx.get("balance_after"),
+                counterparty=tx.get("counterparty", ""),
+                title=tx.get("title", ""),
+                raw_text=json.dumps(tx.get("raw_fields", {}), ensure_ascii=False),
+                direction="in" if float(tx.get("amount", 0)) >= 0 else "out",
+                bank_category=tx.get("bank_category", ""),
+            ))
+
+        # Build StatementInfo from spatial header + user overrides
+        info = StatementInfo(
+            bank=spatial_info.get("bank", ""),
+            account_number=spatial_info.get("account_number", ""),
+            account_holder=spatial_info.get("account_holder", ""),
+            period_from=spatial_info.get("period_from"),
+            period_to=spatial_info.get("period_to"),
+            opening_balance=_safe_float(spatial_info.get("opening_balance")),
+            closing_balance=_safe_float(spatial_info.get("closing_balance")),
+            currency=spatial_info.get("currency", "PLN"),
+        )
+
+        parse_result = ParseResult(
+            bank=info.bank,
+            info=info,
+            transactions=raw_transactions,
+            page_count=spatial_result.get("page_count", 0),
+            parse_method="spatial",
+        )
+
+        bank_id = spatial_result.get("bank_id", "spatial")
+        bank_name = info.bank or spatial_result.get("bank_name", "")
+
+        ocr_used = False
+        ocr_confidence = 0.0
+
+        _log(f"Znaleziono {len(raw_transactions)} transakcji (parsowanie przestrzenne)")
+
+    else:
+        # --- Step 1: Extract text and tables ---
+        _log("Ekstrakcja tekstu z PDF...")
+        tables, full_text, page_count = extract_pdf_tables(pdf_path)
+        _log(f"Wyodrębniono {len(tables)} tabel z {page_count} stron")
+
+        # --- Step 2: OCR if needed ---
+        ocr_used = False
+        ocr_confidence = 0.0
+        if _check_ocr_needed(full_text, page_count):
+            _log("Brak warstwy tekstowej — uruchamiam OCR...")
+            ocr_text, ocr_confidence = _run_ocr(pdf_path)
+            if ocr_text:
+                full_text = ocr_text
+                ocr_used = True
+                _log(f"OCR zakończony (confidence: {ocr_confidence:.1%})")
+            else:
+                warnings.append("OCR nie powiódł się — brak wymaganych bibliotek (pytesseract, PyMuPDF)")
+                _log("OCR niedostępny")
+
+        # --- Step 3: Detect bank and parse ---
+        _log("Rozpoznawanie banku...")
+        parser = get_parser(full_text[:5000])
+        _log(f"Bank: {parser.BANK_NAME}")
+
+        header_words = None
+        if parser.BANK_ID == "ing":
+            _log("Ekstrakcja pozycyjna nagłówka (ING)...")
+            header_words = extract_header_words(pdf_path)
+
+        _log("Parsowanie transakcji...")
+        parse_result = parser.parse(tables, full_text, header_words=header_words)
+        parse_result.page_count = page_count
+
+        bank_id = parser.BANK_ID
+        bank_name = parser.BANK_NAME
+        info = parse_result.info
+
     _log(f"Znaleziono {len(parse_result.transactions)} transakcji")
 
     if not parse_result.transactions:
@@ -241,7 +327,7 @@ def run_aml_pipeline(
                 parse_method, ocr_used, ocr_confidence,
                 parser_version, pdf_hash, warnings)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (statement_id, case_id, parser.BANK_ID, parser.BANK_NAME,
+            (statement_id, case_id, bank_id, bank_name,
              info.period_from, info.period_to,
              str(info.opening_balance) if info.opening_balance is not None else None,
              str(info.closing_balance) if info.closing_balance is not None else None,
@@ -252,7 +338,7 @@ def run_aml_pipeline(
              str(info.declared_debits_sum) if info.declared_debits_sum is not None else None,
              info.declared_debits_count,
              parse_result.parse_method, int(ocr_used), ocr_confidence,
-             f"{parser.BANK_ID}_v1", pdf_hash,
+             f"{bank_id}_v1", pdf_hash,
              json.dumps(warnings, ensure_ascii=False)),
         )
 
@@ -261,8 +347,8 @@ def run_aml_pipeline(
         try:
             get_or_create_profile(
                 account_number=info.account_number,
-                bank_id=parser.BANK_ID,
-                bank_name=parser.BANK_NAME,
+                bank_id=bank_id,
+                bank_name=bank_name,
                 account_holder=info.account_holder or "",
             )
         except Exception as e:
@@ -279,7 +365,7 @@ def run_aml_pipeline(
         if tx.counterparty_clean:
             cp_id, confidence = resolve_entity(
                 name=tx.counterparty_raw,
-                source_bank=parser.BANK_ID,
+                source_bank=bank_id,
                 amount=float(tx.amount),
                 date=tx.booking_date,
             )
@@ -340,7 +426,7 @@ def run_aml_pipeline(
     llm_prompt = ""
     try:
         statement_info_for_llm = {
-            "bank_name": parser.BANK_NAME,
+            "bank_name": bank_name,
             "account_holder": info.account_holder,
             "account_number": info.account_number,
             "period_from": info.period_from,
@@ -420,7 +506,7 @@ def run_aml_pipeline(
                  "statement_id": statement_id,
                  "pdf_hash": pdf_hash,
                  "ocr_used": ocr_used,
-                 "parser": parser.BANK_ID,
+                 "parser": bank_id,
                  "transactions": len(tx_list),
                  "alerts": len(alerts),
                  "risk_score": risk_score,
@@ -431,8 +517,8 @@ def run_aml_pipeline(
     # --- Step 13: Generate HTML report ---
     _log("Generowanie raportu HTML...")
     statement_info_dict = {
-        "bank": parser.BANK_ID,
-        "bank_name": parser.BANK_NAME,
+        "bank": bank_id,
+        "bank_name": bank_name,
         "period_from": info.period_from,
         "period_to": info.period_to,
         "opening_balance": info.opening_balance,
@@ -443,7 +529,7 @@ def run_aml_pipeline(
     audit_info = {
         "ocr_used": ocr_used,
         "ocr_confidence": ocr_confidence,
-        "parser_version": f"{parser.BANK_ID}_v1",
+        "parser_version": f"{bank_id}_v1",
         "rules_version": rules_version,
         "pdf_hash": pdf_hash,
         "warnings": warnings,
@@ -457,7 +543,7 @@ def run_aml_pipeline(
         risk_reasons=risk_reasons,
         statement_info=statement_info_dict,
         audit_info=audit_info,
-        title=f"Raport AML — {parser.BANK_NAME} {info.period_from or ''}",
+        title=f"Raport AML — {bank_name} {info.period_from or ''}",
     )
 
     # Save report
@@ -487,8 +573,8 @@ def run_aml_pipeline(
         "status": "ok",
         "case_id": case_id,
         "statement_id": statement_id,
-        "bank": parser.BANK_ID,
-        "bank_name": parser.BANK_NAME,
+        "bank": bank_id,
+        "bank_name": bank_name,
         "transaction_count": len(tx_list),
         "risk_score": risk_score,
         "risk_reasons": risk_reasons,

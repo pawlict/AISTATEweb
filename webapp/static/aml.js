@@ -57,6 +57,7 @@
     cmColumns: [],        // [{label, col_type, x_min, x_max}] — detected/user-adjusted
     cmPageScale: 1,       // image scale factor vs PDF coordinates
     cmDragging: null,     // index of column boundary being dragged
+    cmHeaderFields: [],   // [{field_type, value, raw_label}] — editable header fields
   };
 
   // ============================================================
@@ -198,6 +199,8 @@
         bank_id: opts.bank_id || "",
         bank_name: opts.bank_name || "",
         header_cells: opts.header_cells || [],
+        column_bounds: opts.column_bounds || null,
+        header_fields: opts.header_fields || {},
       };
 
       const result = await _api("/api/aml/confirm-mapping", {
@@ -1008,6 +1011,19 @@
     reference:"#64748b", skip:"#94a3b8",
   };
 
+  // Header field types that can be assigned
+  const _HEADER_FIELD_TYPES = {
+    bank_name:       {label:"Nazwa banku",       icon:"\uD83C\uDFE6"},
+    account_number:  {label:"Nr rachunku / IBAN", icon:"\uD83D\uDD22"},
+    account_holder:  {label:"Wlasciciel konta",  icon:"\uD83D\uDC64"},
+    period_from:     {label:"Okres od",           icon:"\uD83D\uDCC5"},
+    period_to:       {label:"Okres do",           icon:"\uD83D\uDCC5"},
+    opening_balance: {label:"Saldo poczatkowe",   icon:"\uD83D\uDCB0"},
+    closing_balance: {label:"Saldo koncowe",      icon:"\uD83D\uDCB0"},
+    currency:        {label:"Waluta",             icon:"\uD83D\uDCB1"},
+    skip:            {label:"Pomin",              icon:"\u23ED\uFE0F"},
+  };
+
   function _renderColumnMapping(){
     const preview = St.cmPreview;
     if(!preview) return;
@@ -1033,6 +1049,12 @@
     // Store columns for SVG overlay
     St.cmColumns = (preview.columns || []).map(c => ({...c}));
 
+    // Build header fields from detected header_region
+    _buildHeaderFields(preview.header_region);
+
+    // Render header fields editor
+    _renderHeaderFields();
+
     // Load first page image
     _cmLoadPageImage(0);
 
@@ -1041,6 +1063,248 @@
 
     // Auto-run preview parse
     _cmPreviewParse();
+  }
+
+  // ============================================================
+  // HEADER REGION EDITOR
+  // ============================================================
+
+  function _buildHeaderFields(region){
+    St.cmHeaderFields = [];
+    if(!region) return;
+
+    // Pre-populate from auto-detected fields
+    const fieldMap = {
+      account_number: "Nr rachunku",
+      opening_balance: "Saldo poczatkowe",
+      closing_balance: "Saldo koncowe",
+      period_from: "Okres od",
+      period_to: "Okres do",
+    };
+    for(const [key, rawLabel] of Object.entries(fieldMap)){
+      const val = region[key];
+      if(val != null && val !== ""){
+        St.cmHeaderFields.push({
+          field_type: key,
+          value: String(val),
+          raw_label: rawLabel,
+        });
+      }
+    }
+
+    // Add bank_name from preview
+    const preview = St.cmPreview;
+    if(preview && preview.bank_name){
+      St.cmHeaderFields.unshift({
+        field_type: "bank_name",
+        value: preview.bank_name,
+        raw_label: "Bank",
+      });
+    }
+
+    // If raw_text has content we didn't capture, add as unassigned
+    if(region.raw_text){
+      const captured = St.cmHeaderFields.map(f => f.value).join(" ");
+      // Check for IBAN-like patterns not yet captured
+      const ibanMatch = region.raw_text.match(/(?:PL\s*)?(\d{2}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4})/);
+      if(ibanMatch && !St.cmHeaderFields.find(f => f.field_type === "account_number")){
+        St.cmHeaderFields.push({
+          field_type: "account_number",
+          value: ibanMatch[0].replace(/\s/g, ""),
+          raw_label: "IBAN (wykryty)",
+        });
+      }
+    }
+  }
+
+  function _renderHeaderFields(){
+    const container = QS("#cm_header_fields");
+    if(!container) return;
+
+    if(!St.cmHeaderFields.length){
+      container.innerHTML = '<div class="small muted">Nie wykryto danych naglowka. Mozesz dodac pole recznie.</div>' +
+        '<button class="btn mini" id="cm_add_header_field" style="margin-top:4px">+ Dodaj pole</button>';
+      const addBtn = container.querySelector("#cm_add_header_field");
+      if(addBtn) addBtn.addEventListener("click", ()=> _addHeaderField());
+      return;
+    }
+
+    let html = '';
+    for(let i = 0; i < St.cmHeaderFields.length; i++){
+      const f = St.cmHeaderFields[i];
+      const meta = _HEADER_FIELD_TYPES[f.field_type] || _HEADER_FIELD_TYPES.skip;
+      html += `<div class="cm-hdr-field" style="display:flex;flex-direction:column;gap:2px;min-width:140px;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:var(--bg-alt,#f8fafc)">
+        <select class="cm-hdr-type-sel input" data-idx="${i}" style="padding:2px 5px;border-radius:5px;font-size:11px">`;
+
+      for(const [key, tmeta] of Object.entries(_HEADER_FIELD_TYPES)){
+        const sel = f.field_type === key ? " selected" : "";
+        html += `<option value="${_esc(key)}"${sel}>${tmeta.icon} ${_esc(tmeta.label)}</option>`;
+      }
+
+      html += `</select>
+        <input class="cm-hdr-value-input input" data-idx="${i}" value="${_esc(f.value)}" style="padding:3px 6px;border-radius:5px;font-size:12px;font-weight:600" title="Kliknij aby edytowac">
+        <button class="cm-hdr-del" data-idx="${i}" style="align-self:flex-end;background:none;border:none;color:var(--danger,#b91c1c);cursor:pointer;font-size:11px;padding:0" title="Usun pole">\u2715</button>
+      </div>`;
+    }
+
+    html += `<button class="btn mini" id="cm_add_header_field" style="align-self:center;min-width:40px" title="Dodaj pole naglowka">+</button>`;
+    container.innerHTML = html;
+
+    // Bind events
+    QSA(".cm-hdr-type-sel", container).forEach(sel => {
+      sel.addEventListener("change", ()=>{
+        const idx = parseInt(sel.getAttribute("data-idx"), 10);
+        if(idx < St.cmHeaderFields.length) St.cmHeaderFields[idx].field_type = sel.value;
+      });
+    });
+
+    QSA(".cm-hdr-value-input", container).forEach(inp => {
+      inp.addEventListener("change", ()=>{
+        const idx = parseInt(inp.getAttribute("data-idx"), 10);
+        if(idx < St.cmHeaderFields.length) St.cmHeaderFields[idx].value = inp.value.trim();
+      });
+    });
+
+    QSA(".cm-hdr-del", container).forEach(btn => {
+      btn.addEventListener("click", ()=>{
+        const idx = parseInt(btn.getAttribute("data-idx"), 10);
+        St.cmHeaderFields.splice(idx, 1);
+        _renderHeaderFields();
+      });
+    });
+
+    const addBtn = container.querySelector("#cm_add_header_field");
+    if(addBtn) addBtn.addEventListener("click", ()=> _addHeaderField());
+  }
+
+  function _addHeaderField(){
+    St.cmHeaderFields.push({
+      field_type: "skip",
+      value: "",
+      raw_label: "Nowe pole",
+    });
+    _renderHeaderFields();
+    // Focus the last input
+    const inputs = QSA(".cm-hdr-value-input");
+    if(inputs.length) inputs[inputs.length - 1].focus();
+  }
+
+  function _getHeaderFieldsForApi(){
+    const result = {};
+    for(const f of St.cmHeaderFields){
+      if(f.field_type !== "skip" && f.value.trim()){
+        result[f.field_type] = f.value.trim();
+      }
+    }
+    return result;
+  }
+
+  // ============================================================
+  // COLUMN OPERATIONS (add, split, remove, rename)
+  // ============================================================
+
+  function _cmAddColumn(){
+    // Add a new column at the right side
+    const lastCol = St.cmColumns.length ? St.cmColumns[St.cmColumns.length - 1] : null;
+    const newXMin = lastCol ? lastCol.x_max : 0;
+    const newXMax = newXMin + 80;
+
+    // If last column exists, take some space from it
+    if(lastCol && (lastCol.x_max - lastCol.x_min) > 60){
+      const splitX = lastCol.x_min + (lastCol.x_max - lastCol.x_min) * 0.6;
+      lastCol.x_max = splitX;
+      St.cmColumns.push({
+        label: "Nowa kolumna",
+        col_type: "skip",
+        x_min: splitX,
+        x_max: splitX + (newXMax - newXMin),
+        header_y: lastCol.header_y,
+      });
+    } else {
+      St.cmColumns.push({
+        label: "Nowa kolumna",
+        col_type: "skip",
+        x_min: newXMin,
+        x_max: newXMax,
+        header_y: St.cmColumns[0]?.header_y || 50,
+      });
+    }
+
+    _cmSyncMapping();
+    _renderCmHeaders();
+    _cmRenderOverlay();
+  }
+
+  function _cmSplitColumn(idx){
+    if(idx < 0 || idx >= St.cmColumns.length) return;
+    const col = St.cmColumns[idx];
+    const midX = (col.x_min + col.x_max) / 2;
+
+    // Create new column from the right half
+    const newCol = {
+      label: col.label + " (2)",
+      col_type: "skip",
+      x_min: midX,
+      x_max: col.x_max,
+      header_y: col.header_y,
+    };
+
+    // Shrink original to left half
+    col.x_max = midX;
+
+    // Insert new after current
+    St.cmColumns.splice(idx + 1, 0, newCol);
+
+    _cmSyncMapping();
+    _renderCmHeaders();
+    _cmRenderOverlay();
+  }
+
+  function _cmRemoveColumn(idx){
+    if(idx < 0 || idx >= St.cmColumns.length) return;
+    if(St.cmColumns.length <= 1) return; // Keep at least one
+
+    const removed = St.cmColumns[idx];
+
+    // Redistribute space to neighbors
+    if(idx > 0){
+      St.cmColumns[idx - 1].x_max = removed.x_max;
+    } else if(idx < St.cmColumns.length - 1){
+      St.cmColumns[idx + 1].x_min = removed.x_min;
+    }
+
+    St.cmColumns.splice(idx, 1);
+    _cmSyncMapping();
+    _renderCmHeaders();
+    _cmRenderOverlay();
+  }
+
+  function _cmRenameColumn(idx){
+    if(idx < 0 || idx >= St.cmColumns.length) return;
+    const col = St.cmColumns[idx];
+
+    // Find the label element and turn it into an input
+    const labelEl = QS(`.cm-col-label[data-col="${idx}"]`);
+    if(!labelEl) return;
+
+    const input = document.createElement("input");
+    input.className = "input";
+    input.style.cssText = "padding:2px 4px;font-size:11px;border-radius:4px;width:100%";
+    input.value = col.label;
+    labelEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const _finish = ()=>{
+      col.label = input.value.trim() || col.label;
+      _renderCmHeaders();
+      _cmRenderOverlay();
+    };
+    input.addEventListener("blur", _finish);
+    input.addEventListener("keydown", (e)=>{
+      if(e.key === "Enter") _finish();
+      if(e.key === "Escape"){ input.value = col.label; _finish(); }
+    });
   }
 
   function _cmLoadPageImage(pageNum){
@@ -1208,8 +1472,8 @@
       const currentType = col.col_type || "";
       const color = _TYPE_COLORS[currentType] || "#94a3b8";
 
-      html += `<div class="cm-col-hdr" style="min-width:80px;flex:1;border-top:3px solid ${color};padding-top:4px">
-        <div class="small" style="margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_esc(col.label)}">${_esc(col.label || "(pusta)")}</div>
+      html += `<div class="cm-col-hdr" style="min-width:80px;flex:1;border-top:3px solid ${color};padding-top:4px;position:relative">
+        <div class="cm-col-label small" data-col="${i}" style="margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer" title="Kliknij aby zmienic nazwe: ${_esc(col.label)}">${_esc(col.label || "(pusta)")}</div>
         <select class="cm-type-select input" data-col="${i}" style="padding:3px 5px;border-radius:6px;font-size:12px;width:100%">
           <option value="skip">\u2014 Pomin</option>`;
 
@@ -1218,12 +1482,17 @@
         html += `<option value="${_esc(key)}"${sel}>${tmeta.icon || ""} ${_esc(tmeta.label)}</option>`;
       }
 
-      html += `</select></div>`;
+      html += `</select>
+        <div style="display:flex;gap:2px;margin-top:3px">
+          <button class="cm-col-split" data-col="${i}" style="flex:1;background:none;border:1px solid var(--border,#ddd);border-radius:4px;font-size:10px;cursor:pointer;padding:1px 0;color:var(--text-muted,#64748b)" title="Podziel kolumne na dwie">\u2702</button>
+          <button class="cm-col-remove" data-col="${i}" style="flex:1;background:none;border:1px solid var(--border,#ddd);border-radius:4px;font-size:10px;cursor:pointer;padding:1px 0;color:var(--danger,#b91c1c)" title="Usun kolumne">\u2715</button>
+        </div>
+      </div>`;
     }
     html += '</div>';
     container.innerHTML = html;
 
-    // Bind dropdown changes
+    // Bind type dropdown changes
     QSA(".cm-type-select", container).forEach(sel => {
       sel.addEventListener("change", () => {
         const idx = parseInt(sel.getAttribute("data-col"), 10);
@@ -1232,6 +1501,30 @@
           _cmSyncMapping();
           _cmRenderOverlay();
         }
+      });
+    });
+
+    // Bind label click → rename
+    QSA(".cm-col-label", container).forEach(el => {
+      el.addEventListener("click", () => {
+        const idx = parseInt(el.getAttribute("data-col"), 10);
+        _cmRenameColumn(idx);
+      });
+    });
+
+    // Bind split
+    QSA(".cm-col-split", container).forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-col"), 10);
+        _cmSplitColumn(idx);
+      });
+    });
+
+    // Bind remove
+    QSA(".cm-col-remove", container).forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-col"), 10);
+        _cmRemoveColumn(idx);
       });
     });
   }
@@ -1311,6 +1604,8 @@
       bank_id: preview.bank_id,
       bank_name: preview.bank_name,
       header_cells: St.cmColumns.map(c => c.label),
+      column_bounds: St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type})),
+      header_fields: _getHeaderFieldsForApi(),
     });
   }
 
@@ -1331,6 +1626,10 @@
         nameInput.style.display = saveCheck.checked ? "" : "none";
       });
     }
+
+    // Add column button
+    const addColBtn = QS("#cm_add_col_btn");
+    if(addColBtn) addColBtn.addEventListener("click", ()=> _cmAddColumn());
 
     // Page selector
     const pageSel = QS("#cm_page_select");
