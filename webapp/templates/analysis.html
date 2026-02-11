@@ -194,16 +194,30 @@
 
     <!-- Column Mapping — Visual PDF overlay (shown after PDF upload) -->
     <div id="aml_mapping_card" style="display:none">
-      <div class="card">
+
+      <!-- Header region editor (bank info above table) -->
+      <div class="card" id="cm_header_card">
         <div class="analysis-sidehdr">
-          <div class="h2">Maska kolumn wyciagu</div>
+          <div class="h2">Naglowek wyciagu</div>
           <div style="display:flex;gap:8px;align-items:center">
             <span class="small muted" id="cm_bank_label"></span>
-            <select class="input" id="cm_page_select" style="padding:3px 8px;border-radius:8px;min-width:90px;display:none"></select>
             <button class="btn secondary" id="cm_back_btn">Cofnij</button>
           </div>
         </div>
-        <div class="small muted" style="margin:6px 0">Przeciagnij pionowe linie aby poprawic granice kolumn. Kliknij naglowek aby zmienic typ. Kolory oznaczaja rozpoznane pola.</div>
+        <div class="small muted" style="margin:6px 0">Kliknij pole aby poprawic wartosc. Uzyj listy rozwijanej aby przypisac typ pola.</div>
+        <div id="cm_header_fields" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"></div>
+      </div>
+
+      <!-- Visual PDF + columns -->
+      <div class="card" style="margin-top:12px">
+        <div class="analysis-sidehdr">
+          <div class="h2">Maska kolumn</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn mini" id="cm_add_col_btn" title="Dodaj kolumne">+ Kolumna</button>
+            <select class="input" id="cm_page_select" style="padding:3px 8px;border-radius:8px;min-width:90px;display:none"></select>
+          </div>
+        </div>
+        <div class="small muted" style="margin:6px 0">Przeciagnij pionowe linie aby poprawic granice kolumn. Kliknij nazwe kolumny aby edytowac podpis.</div>
         <div id="cm_warnings" style="margin-bottom:6px"></div>
 
         <!-- Visual PDF page with SVG mask overlay -->
