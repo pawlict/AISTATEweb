@@ -142,10 +142,7 @@
         St.cmMapping = result.auto_mapping || {};
         St.cmColumnTypes = result.column_types || {};
 
-        // If a saved template matches, use it
-        if(result.template && result.template.column_mapping && !result.template._partial_match){
-          St.cmMapping = result.template.column_mapping;
-        }
+        // Template auto-apply is handled in _renderColumnMapping() after columns are created
 
         _renderColumnMapping();
         _showMapping();
@@ -1064,9 +1061,18 @@
     // Store columns for SVG overlay
     St.cmColumns = (preview.columns || []).map(c => ({...c}));
 
-    // Apply mapping to columns (e.g. from template)
-    if(St.cmMapping && Object.keys(St.cmMapping).length){
-      _applyMappingToColumns(St.cmMapping);
+    // Auto-apply template to columns (exact match = auto-apply by label)
+    const tpl = preview.template;
+    if(tpl && tpl.column_mapping && !tpl._partial_match){
+      _applyTemplateToColumns(tpl);
+    } else if(St.cmMapping && Object.keys(St.cmMapping).length){
+      // Use auto-detected mapping (no template or partial match)
+      for(const [idxStr, colType] of Object.entries(St.cmMapping)){
+        const idx = parseInt(idxStr, 10);
+        if(idx >= 0 && idx < St.cmColumns.length){
+          St.cmColumns[idx].col_type = colType;
+        }
+      }
     }
 
     // Build header fields from detected header_region
@@ -1169,19 +1175,68 @@
     }
   }
 
-  function _applyMappingToColumns(mapping, resetFirst){
-    // Sync mapping dict → St.cmColumns[i].col_type
-    if(resetFirst){
-      for(let i = 0; i < St.cmColumns.length; i++){
-        St.cmColumns[i].col_type = "skip";
-      }
-    }
+  function _applyTemplateToColumns(tpl){
+    /**
+     * Applies a template's column_mapping to current St.cmColumns.
+     *
+     * Uses two strategies:
+     *   1) Label match — compare template's sample_headers with current column labels
+     *   2) Index fallback — if labels don't help, use numeric indices
+     *
+     * This ensures templates work even when spatial parser detects
+     * columns in a slightly different order or count.
+     */
+    const mapping = tpl.column_mapping || {};
+    const sampleHeaders = tpl.sample_headers || [];
+
+    // Build label→type map from template: sample_headers[i] → mapping[i]
+    const labelToType = {};
     for(const [idxStr, colType] of Object.entries(mapping)){
       const idx = parseInt(idxStr, 10);
-      if(idx >= 0 && idx < St.cmColumns.length){
-        St.cmColumns[idx].col_type = colType;
+      if(idx >= 0 && idx < sampleHeaders.length){
+        const label = String(sampleHeaders[idx] || "").trim().toLowerCase();
+        if(label) labelToType[label] = colType;
       }
     }
+
+    // Reset all columns
+    for(let i = 0; i < St.cmColumns.length; i++){
+      St.cmColumns[i].col_type = "skip";
+    }
+
+    let matched = 0;
+
+    // Strategy 1: match by label
+    if(Object.keys(labelToType).length > 0){
+      for(let i = 0; i < St.cmColumns.length; i++){
+        const curLabel = String(St.cmColumns[i].label || "").trim().toLowerCase();
+        if(curLabel && labelToType[curLabel]){
+          St.cmColumns[i].col_type = labelToType[curLabel];
+          matched++;
+        }
+      }
+    }
+
+    // Strategy 2: if no labels matched, fall back to index mapping
+    if(matched === 0){
+      for(const [idxStr, colType] of Object.entries(mapping)){
+        const idx = parseInt(idxStr, 10);
+        if(idx >= 0 && idx < St.cmColumns.length){
+          St.cmColumns[idx].col_type = colType;
+          matched++;
+        }
+      }
+    }
+
+    // Sync mapping dict from columns
+    _cmSyncMapping();
+
+    console.log("[AML] Template applied:", tpl.name,
+      "matched:", matched + "/" + St.cmColumns.length,
+      "strategy:", matched > 0 && Object.keys(labelToType).length > 0 ? "label" : "index",
+      "types:", St.cmColumns.map(c => c.col_type));
+
+    return matched;
   }
 
   function _applySelectedTemplate(){
@@ -1204,14 +1259,18 @@
     }
     if(!tpl || !tpl.column_mapping) return;
 
-    // Apply template mapping (reset all columns first for clean application)
-    St.cmMapping = tpl.column_mapping;
-    _applyMappingToColumns(St.cmMapping, true);
-    _cmSyncMapping();
+    const matched = _applyTemplateToColumns(tpl);
 
-    // Update the banner
+    // Update the banner with match count
     const subtitleEl = QS("#cm_tpl_subtitle");
-    if(subtitleEl) subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" zastosowany.";
+    if(subtitleEl){
+      const total = St.cmColumns.length;
+      if(matched > 0){
+        subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" zastosowany — dopasowano " + matched + "/" + total + " kolumn.";
+      } else {
+        subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" — nie udalo sie dopasowac kolumn. Sprawdz recznie.";
+      }
+    }
     const applyBtn = QS("#cm_tpl_apply_btn");
     if(applyBtn) applyBtn.style.display = "none";
 

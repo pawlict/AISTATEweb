@@ -125,6 +125,18 @@ _last_spatial_result: Dict[str, SpatialParseResult] = {}
 # Column type auto-detection is now handled by spatial_parser._classify_column()
 
 
+def _deserialize_template(td: Dict[str, Any]) -> Dict[str, Any]:
+    """Deserialize JSON fields in a template dict."""
+    for jf in ("column_mapping", "sample_headers"):
+        val = td.get(jf)
+        if isinstance(val, str):
+            try:
+                td[jf] = json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                td[jf] = {} if jf == "column_mapping" else []
+    return td
+
+
 def _find_matching_template(
     bank_id: str,
     header_cells: List[str],
@@ -142,31 +154,25 @@ def _find_matching_template(
     normalized_headers = [str(c or "").strip().lower() for c in header_cells]
 
     for t in templates:
-        td = dict(t)
-        try:
-            sample = json.loads(td.get("sample_headers", "[]"))
-        except (json.JSONDecodeError, TypeError):
-            sample = []
+        td = _deserialize_template(dict(t))
+        sample = td.get("sample_headers", [])
 
         # Check if headers match (fuzzy)
         if sample:
             sample_norm = [str(s or "").strip().lower() for s in sample]
             if sample_norm == normalized_headers:
-                td["column_mapping"] = json.loads(td.get("column_mapping", "{}"))
                 return td
 
     # Return default template for bank even if headers differ
     for t in templates:
-        td = dict(t)
+        td = _deserialize_template(dict(t))
         if td.get("is_default"):
-            td["column_mapping"] = json.loads(td.get("column_mapping", "{}"))
             td["_partial_match"] = True
             return td
 
     # Fallback: return most-used template (already sorted by times_used DESC)
     if templates:
-        td = dict(templates[0])
-        td["column_mapping"] = json.loads(td.get("column_mapping", "{}"))
+        td = _deserialize_template(dict(templates[0]))
         td["_partial_match"] = True
         return td
 
