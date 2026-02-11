@@ -418,7 +418,12 @@ def _parse_header_region(
     columns: List[ColumnZone],
     header_y_end: float,
 ) -> Optional[Dict[str, Any]]:
-    """Extract bank info from text above the table header."""
+    """Extract bank info from text above the table header.
+
+    Returns dict with field values and 'words' list with positions
+    for the frontend overlay, and 'field_boxes' with bounding rects
+    for each detected field.
+    """
     if not words or header_y_end <= 0:
         return None
 
@@ -427,17 +432,51 @@ def _parse_header_region(
     if not header_words:
         return None
 
-    header_text = " ".join(
-        w.text for w in sorted(header_words, key=lambda w: (w.top, w.x0))
-    )
+    sorted_words = sorted(header_words, key=lambda w: (w.top, w.x0))
+    header_text = " ".join(w.text for w in sorted_words)
 
-    # Extract known fields via regex
-    result: Dict[str, Any] = {"raw_text": header_text}
+    # Build word list with positions for frontend
+    word_items = [
+        {"text": w.text, "x0": w.x0, "top": w.top, "x1": w.x1, "bottom": w.bottom}
+        for w in sorted_words
+    ]
+
+    # Extract known fields via regex (on concatenated text)
+    result: Dict[str, Any] = {
+        "raw_text": header_text,
+        "words": word_items,
+        "field_boxes": [],
+    }
+
+    # Helper: find bounding box for a text span in header_words
+    def _find_box_for_text(text_fragment: str) -> Optional[Dict[str, float]]:
+        """Find bounding box of words that contain the text fragment."""
+        frag_clean = re.sub(r"\s+", "", text_fragment.lower())
+        # Sliding window over words
+        for start_i in range(len(sorted_words)):
+            accumulated = ""
+            for end_i in range(start_i, len(sorted_words)):
+                accumulated += sorted_words[end_i].text.lower().replace(" ", "")
+                if frag_clean in accumulated:
+                    span = sorted_words[start_i:end_i + 1]
+                    return {
+                        "x0": min(w.x0 for w in span),
+                        "top": min(w.top for w in span),
+                        "x1": max(w.x1 for w in span),
+                        "bottom": max(w.bottom for w in span),
+                    }
+        return None
 
     # IBAN
     iban_match = re.search(r"(?:PL\s*)?(\d{2}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4})", header_text)
     if iban_match:
-        result["account_number"] = re.sub(r"\s", "", iban_match.group(0))
+        val = re.sub(r"\s", "", iban_match.group(0))
+        result["account_number"] = val
+        box = _find_box_for_text(iban_match.group(0))
+        if box:
+            result["field_boxes"].append({
+                "field_type": "account_number", "value": val, **box,
+            })
 
     # Saldo
     for label, key in [
@@ -446,13 +485,35 @@ def _parse_header_region(
     ]:
         m = re.search(label + r"[^0-9\-]*(-?\d[\d\s]*[,\.]\d{2})", header_text, re.IGNORECASE)
         if m:
-            result[key] = _parse_amount_str(m.group(len(m.groups())))
+            parsed = _parse_amount_str(m.group(len(m.groups())))
+            result[key] = parsed
+            box = _find_box_for_text(m.group(0))
+            if box:
+                result["field_boxes"].append({
+                    "field_type": key,
+                    "value": str(parsed) if parsed is not None else "",
+                    **box,
+                })
 
     # Period
     dates = _DATE_RE.findall(header_text)
     if len(dates) >= 2:
         result["period_from"] = _normalize_date(dates[0])
         result["period_to"] = _normalize_date(dates[-1])
+        box_from = _find_box_for_text(dates[0])
+        box_to = _find_box_for_text(dates[-1])
+        if box_from:
+            result["field_boxes"].append({
+                "field_type": "period_from",
+                "value": result["period_from"],
+                **box_from,
+            })
+        if box_to:
+            result["field_boxes"].append({
+                "field_type": "period_to",
+                "value": result["period_to"],
+                **box_to,
+            })
 
     return result
 
