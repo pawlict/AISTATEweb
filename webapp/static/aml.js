@@ -228,6 +228,11 @@
         if(window.ReviewManager && result.statement_id){
           ReviewManager.loadForStatement(result.statement_id);
         }
+
+        // Auto-run LLM analysis if checkbox was checked
+        if(opts.run_llm && result.has_llm_prompt){
+          _runLlmAnalysis();
+        }
       } else {
         _showError(result && result.error ? String(result.error) : "Blad analizy");
         _showMapping();
@@ -2030,6 +2035,7 @@
     const setDefault = QS("#cm_set_default")?.checked || false;
     const templateName = QS("#cm_template_name")?.value || "";
     const templateId = preview.template ? (preview.template.id || "") : "";
+    const runLlm = QS("#cm_run_llm")?.checked || false;
 
     _runFullPipeline(preview.file_path, St.cmMapping, {
       save_template: saveTemplate,
@@ -2041,6 +2047,7 @@
       header_cells: St.cmColumns.map(c => c.label),
       column_bounds: St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type})),
       header_fields: _getHeaderFieldsForApi(),
+      run_llm: runLlm,
     });
   }
 
