@@ -1239,14 +1239,35 @@
   }
 
   function _addHeaderField(){
+    // Create a placeholder box in the header region center
+    let defaultBox = null;
+    if(St.cmHeaderWords && St.cmHeaderWords.length){
+      // Place new box near the bottom of existing header words
+      const allY = St.cmHeaderWords.map(w => w.bottom);
+      const maxY = Math.max(...allY);
+      const allX = St.cmHeaderWords.map(w => w.x0);
+      const midX = (Math.min(...allX) + Math.max(...St.cmHeaderWords.map(w => w.x1))) / 2;
+      defaultBox = {x0: midX - 50, top: maxY - 10, x1: midX + 50, bottom: maxY + 4};
+    } else if(St.cmColumns.length){
+      // Fallback: place above first column header
+      const hy = St.cmColumns[0].header_y || 50;
+      defaultBox = {x0: 30, top: hy - 20, x1: 200, bottom: hy - 5};
+    }
+
+    const newIdx = St.cmHeaderFields.length;
     St.cmHeaderFields.push({
       field_type: "skip",
       value: "",
       raw_label: "Nowe pole",
-      box: null,
+      box: defaultBox,
     });
+
+    // Auto-activate so user can immediately drag/resize the box
+    St.cmActiveHdrField = newIdx;
     _renderHeaderFields();
-    // Focus the last input
+    _cmRenderOverlay();
+
+    // Focus the value input
     const inputs = QSA(".cm-hdr-value-input");
     if(inputs.length) inputs[inputs.length - 1].focus();
   }
@@ -1518,10 +1539,27 @@
           markup += `<text x="${x + 4}" y="${y + 14 * scale}" font-size="${11 * scale}" fill="${color}" font-weight="bold" style="pointer-events:none">${_esc(label)}</text>`;
         }
 
-        // Right boundary line (draggable)
+        // Left edge of first column (draggable)
+        if(i === 0){
+          const lx = col.x_min * scale;
+          markup += `<line x1="${lx}" y1="${y}" x2="${lx}" y2="${imgH}" stroke="${color}" stroke-width="2" stroke-dasharray="3,3" style="cursor:col-resize" data-edge="left" />`;
+          // Invisible wider hit zone
+          markup += `<line x1="${lx}" y1="${y}" x2="${lx}" y2="${imgH}" stroke="transparent" stroke-width="${16 * scale}" style="pointer-events:stroke;cursor:col-resize" data-edge="left" />`;
+        }
+
+        // Right boundary line (draggable) — between columns
         if(i < St.cmColumns.length - 1){
           const bx = col.x_max * scale;
-          markup += `<line x1="${bx}" y1="${y}" x2="${bx}" y2="${imgH}" stroke="${color}" stroke-width="2" stroke-dasharray="6,3" style="pointer-events:stroke;cursor:col-resize" data-boundary="${i}" />`;
+          markup += `<line x1="${bx}" y1="${y}" x2="${bx}" y2="${imgH}" stroke="${color}" stroke-width="2" stroke-dasharray="6,3" style="cursor:col-resize" data-boundary="${i}" />`;
+          // Invisible wider hit zone
+          markup += `<line x1="${bx}" y1="${y}" x2="${bx}" y2="${imgH}" stroke="transparent" stroke-width="${16 * scale}" style="pointer-events:stroke;cursor:col-resize" data-boundary="${i}" />`;
+        }
+
+        // Right edge of last column (draggable)
+        if(i === St.cmColumns.length - 1){
+          const rx = col.x_max * scale;
+          markup += `<line x1="${rx}" y1="${y}" x2="${rx}" y2="${imgH}" stroke="${color}" stroke-width="2" stroke-dasharray="3,3" style="cursor:col-resize" data-edge="right" />`;
+          markup += `<line x1="${rx}" y1="${y}" x2="${rx}" y2="${imgH}" stroke="transparent" stroke-width="${16 * scale}" style="pointer-events:stroke;cursor:col-resize" data-edge="right" />`;
         }
       }
 
@@ -1593,15 +1631,41 @@
         return;
       }
 
-      // 3) Column boundary (by proximity)
+      // 3) Column boundary or outer edge (by proximity)
       const rect = wrap.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const img = wrap.querySelector("img");
       const dispScale = img ? wrap.clientWidth / img.naturalWidth : 1;
+      const hitZone = 16;
+
+      // Left outer edge
+      if(St.cmColumns.length > 0){
+        const lx = St.cmColumns[0].x_min * scale * dispScale;
+        if(Math.abs(mx - lx) < hitZone){
+          _dragState = {type: "edge-left", svg, scale};
+          e.preventDefault();
+          wrap.style.cursor = "col-resize";
+          return;
+        }
+      }
+
+      // Internal boundaries
       for(let i = 0; i < St.cmColumns.length - 1; i++){
         const bx = St.cmColumns[i].x_max * scale * dispScale;
-        if(Math.abs(mx - bx) < 8){
+        if(Math.abs(mx - bx) < hitZone){
           _dragState = {type: "boundary", idx: i, svg, scale};
+          e.preventDefault();
+          wrap.style.cursor = "col-resize";
+          return;
+        }
+      }
+
+      // Right outer edge
+      if(St.cmColumns.length > 0){
+        const lastCol = St.cmColumns[St.cmColumns.length - 1];
+        const rx = lastCol.x_max * scale * dispScale;
+        if(Math.abs(mx - rx) < hitZone){
+          _dragState = {type: "edge-right", svg, scale};
           e.preventDefault();
           wrap.style.cursor = "col-resize";
           return;
@@ -1626,7 +1690,7 @@
       const scale = d.scale;
       const wrap = svg ? svg.parentElement : null;
 
-      if(d.type === "boundary"){
+      if(d.type === "boundary" || d.type === "edge-left" || d.type === "edge-right"){
         if(!wrap) return;
         const img = wrap.querySelector("img");
         if(!img) return;
@@ -1634,17 +1698,47 @@
         const mx = e.clientX - rect.left;
         const displayScale = wrap.clientWidth / img.naturalWidth;
         const pdfX = mx / (displayScale * scale);
-        const minX = (d.idx > 0 ? St.cmColumns[d.idx].x_min + 10 : 10);
-        const maxX = (d.idx + 2 < St.cmColumns.length ? St.cmColumns[d.idx + 2].x_max - 10 : 9999);
-        const newX = Math.max(minX, Math.min(maxX, pdfX));
-        St.cmColumns[d.idx].x_max = newX;
-        St.cmColumns[d.idx + 1].x_min = newX;
-        // Fast update: move boundary lines on ALL page SVGs
-        for(const pe of (St.cmPageElements || [])){
-          const line = pe.svg.querySelector(`line[data-boundary="${d.idx}"]`);
-          if(line){
-            const sx = newX * (pe.scale || scale);
-            line.setAttribute("x1", sx); line.setAttribute("x2", sx);
+
+        if(d.type === "edge-left"){
+          // Move left edge of first column
+          const col0 = St.cmColumns[0];
+          if(!col0) return;
+          const maxX = col0.x_max - 10;
+          col0.x_min = Math.max(0, Math.min(maxX, pdfX));
+          // Fast update on all pages
+          for(const pe of (St.cmPageElements || [])){
+            const lines = pe.svg.querySelectorAll('line[data-edge="left"]');
+            lines.forEach(line => {
+              const sx = col0.x_min * (pe.scale || scale);
+              line.setAttribute("x1", sx); line.setAttribute("x2", sx);
+            });
+          }
+        } else if(d.type === "edge-right"){
+          // Move right edge of last column
+          const lastCol = St.cmColumns[St.cmColumns.length - 1];
+          if(!lastCol) return;
+          const minX = lastCol.x_min + 10;
+          lastCol.x_max = Math.max(minX, pdfX);
+          for(const pe of (St.cmPageElements || [])){
+            const lines = pe.svg.querySelectorAll('line[data-edge="right"]');
+            lines.forEach(line => {
+              const sx = lastCol.x_max * (pe.scale || scale);
+              line.setAttribute("x1", sx); line.setAttribute("x2", sx);
+            });
+          }
+        } else {
+          // Internal boundary
+          const minX = (d.idx > 0 ? St.cmColumns[d.idx].x_min + 10 : 10);
+          const maxX = (d.idx + 2 < St.cmColumns.length ? St.cmColumns[d.idx + 2].x_max - 10 : 9999);
+          const newX = Math.max(minX, Math.min(maxX, pdfX));
+          St.cmColumns[d.idx].x_max = newX;
+          St.cmColumns[d.idx + 1].x_min = newX;
+          for(const pe of (St.cmPageElements || [])){
+            // Update both visible and invisible hit zone lines
+            pe.svg.querySelectorAll(`line[data-boundary="${d.idx}"]`).forEach(line => {
+              const sx = newX * (pe.scale || scale);
+              line.setAttribute("x1", sx); line.setAttribute("x2", sx);
+            });
           }
         }
         return;
