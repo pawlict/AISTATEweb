@@ -108,6 +108,10 @@ def extract_raw_preview(
     )
     api["template"] = template
 
+    # Return all templates for this bank (for selector UI)
+    all_bank_templates = _list_bank_templates(result.bank_id)
+    api["bank_templates"] = all_bank_templates
+
     api["column_types"] = get_column_types_meta()
 
     return api
@@ -160,6 +164,32 @@ def _find_matching_template(
             return td
 
     return None
+
+
+def _list_bank_templates(bank_id: str) -> List[Dict[str, Any]]:
+    """Return all active templates for a given bank (for selector UI)."""
+    if not bank_id:
+        return []
+    ensure_initialized()
+    rows = fetch_all(
+        """SELECT id, bank_id, bank_name, name, is_default, times_used,
+                  sample_headers, column_mapping, created_at
+           FROM parse_templates
+           WHERE bank_id = ? AND is_active != 0
+           ORDER BY is_default DESC, times_used DESC""",
+        (bank_id,),
+    )
+    result = []
+    for r in rows:
+        d = dict(r)
+        for jf in ("column_mapping", "sample_headers"):
+            if d.get(jf):
+                try:
+                    d[jf] = json.loads(d[jf])
+                except (json.JSONDecodeError, TypeError):
+                    d[jf] = {} if jf == "column_mapping" else []
+        result.append(d)
+    return result
 
 
 def parse_with_mapping(
