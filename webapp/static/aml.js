@@ -1134,17 +1134,20 @@
       if(applyBtn) applyBtn.style.display = "";
     }
 
-    // Template selector (when multiple templates exist)
+    // Template selector — show when templates exist and wasn't auto-applied
+    const needSelector = bankTemplates.length > 1 || (bankTemplates.length === 1 && (!tpl || tpl._partial_match));
     if(selectEl){
-      if(bankTemplates.length > 1){
+      if(needSelector){
         selectEl.style.display = "";
-        selectEl.innerHTML = '<option value="">-- Wybierz szablon --</option>'
-          + bankTemplates.map(t => {
-            const selected = tpl && t.id === tpl.id ? " selected" : "";
-            const dflt = t.is_default ? " [domyslny]" : "";
-            const used = t.times_used ? " (" + t.times_used + "x)" : "";
-            return `<option value="${_esc(t.id)}"${selected}>${_esc(t.name || "Szablon")}${dflt}${used}</option>`;
-          }).join("");
+        const opts = bankTemplates.map(t => {
+          const selected = tpl && t.id === tpl.id ? " selected" : (bankTemplates.length === 1 ? " selected" : "");
+          const dflt = t.is_default ? " [domyslny]" : "";
+          const used = t.times_used ? " (" + t.times_used + "x)" : "";
+          return `<option value="${_esc(t.id)}"${selected}>${_esc(t.name || "Szablon")}${dflt}${used}</option>`;
+        }).join("");
+        selectEl.innerHTML = bankTemplates.length > 1
+          ? '<option value="">-- Wybierz szablon --</option>' + opts
+          : opts;
       } else {
         selectEl.style.display = "none";
       }
@@ -1166,8 +1169,13 @@
     }
   }
 
-  function _applyMappingToColumns(mapping){
+  function _applyMappingToColumns(mapping, resetFirst){
     // Sync mapping dict → St.cmColumns[i].col_type
+    if(resetFirst){
+      for(let i = 0; i < St.cmColumns.length; i++){
+        St.cmColumns[i].col_type = "skip";
+      }
+    }
     for(const [idxStr, colType] of Object.entries(mapping)){
       const idx = parseInt(idxStr, 10);
       if(idx >= 0 && idx < St.cmColumns.length){
@@ -1183,20 +1191,23 @@
     const selectEl = QS("#cm_tpl_select");
     const bankTemplates = preview.bank_templates || [];
 
-    // Find selected template
+    // Find selected template: dropdown → preview.template → first bank template
     let tpl = null;
     if(selectEl && selectEl.value){
       tpl = bankTemplates.find(t => t.id === selectEl.value);
     }
-    if(!tpl){
-      // Use the current template (partial match apply)
+    if(!tpl && preview.template && preview.template.column_mapping){
       tpl = preview.template;
+    }
+    if(!tpl && bankTemplates.length){
+      tpl = bankTemplates[0];
     }
     if(!tpl || !tpl.column_mapping) return;
 
-    // Apply template mapping
+    // Apply template mapping (reset all columns first for clean application)
     St.cmMapping = tpl.column_mapping;
-    _applyMappingToColumns(St.cmMapping);
+    _applyMappingToColumns(St.cmMapping, true);
+    _cmSyncMapping();
 
     // Update the banner
     const subtitleEl = QS("#cm_tpl_subtitle");
@@ -1210,8 +1221,9 @@
       banner.style.background = "var(--bg-success,#f0fdf4)";
     }
 
-    // Re-render column headers with new mapping
+    // Re-render column headers with new mapping + SVG overlay
     _renderCmHeaders();
+    _cmRenderOverlay();
 
     // Re-run preview parse
     _cmPreviewParse();
