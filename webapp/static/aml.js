@@ -1061,10 +1061,25 @@
     // Store columns for SVG overlay
     St.cmColumns = (preview.columns || []).map(c => ({...c}));
 
-    // Auto-apply template to columns (exact match = auto-apply by label)
+    // Auto-apply template to columns (exact match = auto-apply)
     const tpl = preview.template;
     if(tpl && tpl.column_mapping && !tpl._partial_match){
-      _applyTemplateToColumns(tpl);
+      // Full bounds restore if available
+      const tplBounds = tpl.column_bounds || [];
+      const tplMapping = tpl.column_mapping || {};
+      if(tplBounds.length > 0 && tplBounds[0] && tplBounds[0].x_min != null){
+        St.cmColumns = tplBounds.map((b, i) => ({
+          label: b.label || "",
+          col_type: tplMapping[String(i)] || b.col_type || "skip",
+          x_min: b.x_min,
+          x_max: b.x_max,
+          header_y: St.cmColumns[0] ? St.cmColumns[0].header_y : 50,
+        }));
+        _cmSyncMapping();
+        console.log("[AML] Auto-applied template (bounds):", tpl.name);
+      } else {
+        _applyTemplateToColumns(tpl);
+      }
     } else if(St.cmMapping && Object.keys(St.cmMapping).length){
       // Use auto-detected mapping (no template or partial match)
       for(const [idxStr, colType] of Object.entries(St.cmMapping)){
@@ -1179,24 +1194,21 @@
     /**
      * Applies a template's column_mapping to current St.cmColumns.
      *
-     * Uses two strategies:
-     *   1) Label match — compare template's sample_headers with current column labels
-     *   2) Index fallback — if labels don't help, use numeric indices
-     *
-     * This ensures templates work even when spatial parser detects
-     * columns in a slightly different order or count.
+     * Three strategies in order:
+     *   1) Exact label match — "Data" == "Data"
+     *   2) Fuzzy label match — "Opis" matches "Opis operacji" (contains/prefix)
+     *   3) Index fallback — use numeric indices if labels don't help
      */
     const mapping = tpl.column_mapping || {};
     const sampleHeaders = tpl.sample_headers || [];
 
-    // Build label→type map from template: sample_headers[i] → mapping[i]
-    const labelToType = {};
+    // Build ordered entries [{label, type, idx}] from template
+    const tplEntries = [];
     for(const [idxStr, colType] of Object.entries(mapping)){
       const idx = parseInt(idxStr, 10);
-      if(idx >= 0 && idx < sampleHeaders.length){
-        const label = String(sampleHeaders[idx] || "").trim().toLowerCase();
-        if(label) labelToType[label] = colType;
-      }
+      const label = (idx >= 0 && idx < sampleHeaders.length)
+        ? String(sampleHeaders[idx] || "").trim().toLowerCase() : "";
+      tplEntries.push({label, type: colType, idx});
     }
 
     // Reset all columns
@@ -1204,36 +1216,71 @@
       St.cmColumns[i].col_type = "skip";
     }
 
+    const usedTpl = new Set();  // template entries already consumed
     let matched = 0;
+    let strategy = "none";
 
-    // Strategy 1: match by label
-    if(Object.keys(labelToType).length > 0){
-      for(let i = 0; i < St.cmColumns.length; i++){
-        const curLabel = String(St.cmColumns[i].label || "").trim().toLowerCase();
-        if(curLabel && labelToType[curLabel]){
-          St.cmColumns[i].col_type = labelToType[curLabel];
+    // --- Strategy 1: Exact label match ---
+    for(let i = 0; i < St.cmColumns.length; i++){
+      const cur = String(St.cmColumns[i].label || "").trim().toLowerCase();
+      if(!cur) continue;
+      for(let j = 0; j < tplEntries.length; j++){
+        if(usedTpl.has(j) || !tplEntries[j].label) continue;
+        if(tplEntries[j].label === cur){
+          St.cmColumns[i].col_type = tplEntries[j].type;
+          usedTpl.add(j);
           matched++;
+          break;
         }
       }
     }
+    if(matched > 0) strategy = "exact";
 
-    // Strategy 2: if no labels matched, fall back to index mapping
+    // --- Strategy 2: Fuzzy label match (for remaining unmatched) ---
+    for(let i = 0; i < St.cmColumns.length; i++){
+      if(St.cmColumns[i].col_type !== "skip") continue;
+      const cur = String(St.cmColumns[i].label || "").trim().toLowerCase();
+      if(!cur) continue;
+
+      let bestJ = -1, bestScore = 0;
+      for(let j = 0; j < tplEntries.length; j++){
+        if(usedTpl.has(j) || !tplEntries[j].label) continue;
+        const tl = tplEntries[j].label;
+        let score = 0;
+        // Either string contains the other
+        if(cur.includes(tl) || tl.includes(cur)) score = 3;
+        // First word matches (>= 3 chars)
+        else {
+          const cw = cur.split(/\s/)[0];
+          const tw = tl.split(/\s/)[0];
+          if(cw.length >= 3 && cw === tw) score = 2;
+        }
+        if(score > bestScore){ bestScore = score; bestJ = j; }
+      }
+      if(bestJ >= 0){
+        St.cmColumns[i].col_type = tplEntries[bestJ].type;
+        usedTpl.add(bestJ);
+        matched++;
+        if(strategy === "none") strategy = "fuzzy";
+      }
+    }
+
+    // --- Strategy 3: Index fallback (only if nothing matched at all) ---
     if(matched === 0){
-      for(const [idxStr, colType] of Object.entries(mapping)){
-        const idx = parseInt(idxStr, 10);
-        if(idx >= 0 && idx < St.cmColumns.length){
-          St.cmColumns[idx].col_type = colType;
+      for(const e of tplEntries){
+        if(e.idx >= 0 && e.idx < St.cmColumns.length && St.cmColumns[e.idx].col_type === "skip"){
+          St.cmColumns[e.idx].col_type = e.type;
           matched++;
         }
       }
+      if(matched > 0) strategy = "index";
     }
 
-    // Sync mapping dict from columns
     _cmSyncMapping();
 
     console.log("[AML] Template applied:", tpl.name,
       "matched:", matched + "/" + St.cmColumns.length,
-      "strategy:", matched > 0 && Object.keys(labelToType).length > 0 ? "label" : "index",
+      "strategy:", strategy,
       "types:", St.cmColumns.map(c => c.col_type));
 
     return matched;
@@ -1259,16 +1306,37 @@
     }
     if(!tpl || !tpl.column_mapping) return;
 
-    const matched = _applyTemplateToColumns(tpl);
+    // If template has saved column_bounds, restore full column definitions
+    const tplBounds = tpl.column_bounds || [];
+    const tplMapping = tpl.column_mapping || {};
+    let matched = 0;
+
+    if(tplBounds.length > 0 && tplBounds[0] && tplBounds[0].x_min != null){
+      // Rebuild columns entirely from template bounds
+      St.cmColumns = tplBounds.map((b, i) => ({
+        label: b.label || "",
+        col_type: tplMapping[String(i)] || b.col_type || "skip",
+        x_min: b.x_min,
+        x_max: b.x_max,
+        header_y: St.cmColumns[0] ? St.cmColumns[0].header_y : 50,
+      }));
+      _cmSyncMapping();
+      matched = Object.keys(tplMapping).length;
+      console.log("[AML] Template applied (full bounds restore):", tpl.name,
+        "cols:", St.cmColumns.length, "types:", St.cmColumns.map(c => c.col_type));
+    } else {
+      // No bounds — use label/index matching on existing columns
+      matched = _applyTemplateToColumns(tpl);
+    }
 
     // Update the banner with match count
     const subtitleEl = QS("#cm_tpl_subtitle");
     if(subtitleEl){
       const total = St.cmColumns.length;
       if(matched > 0){
-        subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" zastosowany — dopasowano " + matched + "/" + total + " kolumn.";
+        subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" zastosowany — " + matched + "/" + total + " kolumn.";
       } else {
-        subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" — nie udalo sie dopasowac kolumn. Sprawdz recznie.";
+        subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" — nie udalo sie dopasowac. Sprawdz recznie.";
       }
     }
     const applyBtn = QS("#cm_tpl_apply_btn");
@@ -1280,11 +1348,9 @@
       banner.style.background = "var(--bg-success,#f0fdf4)";
     }
 
-    // Re-render column headers with new mapping + SVG overlay
+    // Re-render everything: headers, SVG overlay, and parse preview
     _renderCmHeaders();
     _cmRenderOverlay();
-
-    // Re-run preview parse
     _cmPreviewParse();
   }
 

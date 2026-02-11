@@ -127,13 +127,15 @@ _last_spatial_result: Dict[str, SpatialParseResult] = {}
 
 def _deserialize_template(td: Dict[str, Any]) -> Dict[str, Any]:
     """Deserialize JSON fields in a template dict."""
-    for jf in ("column_mapping", "sample_headers"):
+    for jf in ("column_mapping", "sample_headers", "column_bounds"):
         val = td.get(jf)
         if isinstance(val, str):
             try:
                 td[jf] = json.loads(val)
             except (json.JSONDecodeError, TypeError):
                 td[jf] = {} if jf == "column_mapping" else []
+        elif val is None:
+            td[jf] = {} if jf == "column_mapping" else []
     return td
 
 
@@ -184,9 +186,13 @@ def _list_bank_templates(bank_id: str) -> List[Dict[str, Any]]:
     if not bank_id:
         return []
     ensure_initialized()
+    # Ensure column_bounds column exists
+    with get_conn() as conn:
+        _ensure_template_columns(conn)
+
     rows = fetch_all(
         """SELECT id, bank_id, bank_name, name, is_default, times_used,
-                  sample_headers, column_mapping, created_at
+                  sample_headers, column_mapping, column_bounds, created_at
            FROM parse_templates
            WHERE bank_id = ? AND is_active != 0
            ORDER BY is_default DESC, times_used DESC""",
@@ -194,13 +200,7 @@ def _list_bank_templates(bank_id: str) -> List[Dict[str, Any]]:
     )
     result = []
     for r in rows:
-        d = dict(r)
-        for jf in ("column_mapping", "sample_headers"):
-            if d.get(jf):
-                try:
-                    d[jf] = json.loads(d[jf])
-                except (json.JSONDecodeError, TypeError):
-                    d[jf] = {} if jf == "column_mapping" else []
+        d = _deserialize_template(dict(r))
         result.append(d)
     return result
 
@@ -305,6 +305,15 @@ def parse_with_mapping(
 # TEMPLATE CRUD
 # ============================================================
 
+def _ensure_template_columns(conn):
+    """Add column_bounds column to parse_templates if it doesn't exist."""
+    try:
+        conn.execute("SELECT column_bounds FROM parse_templates LIMIT 0")
+    except Exception:
+        conn.execute("ALTER TABLE parse_templates ADD COLUMN column_bounds TEXT DEFAULT '[]'")
+        log.info("Added column_bounds column to parse_templates")
+
+
 def save_template(
     bank_id: str,
     bank_name: str,
@@ -314,6 +323,7 @@ def save_template(
     data_start_row: int = 1,
     name: str = "",
     is_default: bool = False,
+    column_bounds: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Save a column mapping template."""
     ensure_initialized()
@@ -322,7 +332,11 @@ def save_template(
     if not name:
         name = f"{bank_name} — szablon"
 
+    bounds_json = json.dumps(column_bounds or [], ensure_ascii=False)
+
     with get_conn() as conn:
+        _ensure_template_columns(conn)
+
         # If setting as default, unset previous defaults
         if is_default:
             conn.execute(
@@ -333,16 +347,17 @@ def save_template(
         conn.execute(
             """INSERT INTO parse_templates
                (id, bank_id, bank_name, name, column_mapping, header_row,
-                data_start_row, sample_headers, is_default)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                data_start_row, sample_headers, is_default, column_bounds)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (template_id, bank_id, bank_name, name,
              json.dumps(column_mapping, ensure_ascii=False),
              header_row, data_start_row,
              json.dumps(header_cells, ensure_ascii=False),
-             int(is_default)),
+             int(is_default),
+             bounds_json),
         )
 
-    log.info("Saved template %s for bank %s", template_id[:8], bank_id)
+    log.info("Saved template %s for bank %s (bounds: %d cols)", template_id[:8], bank_id, len(column_bounds or []))
     return template_id
 
 
