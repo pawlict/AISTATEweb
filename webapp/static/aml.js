@@ -57,7 +57,9 @@
     cmColumns: [],        // [{label, col_type, x_min, x_max}] — detected/user-adjusted
     cmPageScale: 1,       // image scale factor vs PDF coordinates
     cmDragging: null,     // index of column boundary being dragged
-    cmHeaderFields: [],   // [{field_type, value, raw_label}] — editable header fields
+    cmHeaderFields: [],   // [{field_type, value, raw_label, box}] — editable header fields
+    cmHeaderWords: [],    // [{text, x0, top, x1, bottom}] — all words in header region
+    cmActiveHdrField: -1, // index of currently highlighted header field (-1 = none)
   };
 
   // ============================================================
@@ -1073,6 +1075,9 @@
     St.cmHeaderFields = [];
     if(!region) return;
 
+    // Store field_boxes from backend detection for SVG overlay
+    const fieldBoxes = region.field_boxes || [];
+
     // Pre-populate from auto-detected fields
     const fieldMap = {
       account_number: "Nr rachunku",
@@ -1084,10 +1089,13 @@
     for(const [key, rawLabel] of Object.entries(fieldMap)){
       const val = region[key];
       if(val != null && val !== ""){
+        // Find matching box
+        const box = fieldBoxes.find(b => b.field_type === key);
         St.cmHeaderFields.push({
           field_type: key,
           value: String(val),
           raw_label: rawLabel,
+          box: box ? {x0: box.x0, top: box.top, x1: box.x1, bottom: box.bottom} : null,
         });
       }
     }
@@ -1099,22 +1107,26 @@
         field_type: "bank_name",
         value: preview.bank_name,
         raw_label: "Bank",
+        box: null,
       });
     }
 
     // If raw_text has content we didn't capture, add as unassigned
     if(region.raw_text){
-      const captured = St.cmHeaderFields.map(f => f.value).join(" ");
-      // Check for IBAN-like patterns not yet captured
       const ibanMatch = region.raw_text.match(/(?:PL\s*)?(\d{2}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4})/);
       if(ibanMatch && !St.cmHeaderFields.find(f => f.field_type === "account_number")){
+        const box = fieldBoxes.find(b => b.field_type === "account_number");
         St.cmHeaderFields.push({
           field_type: "account_number",
           value: ibanMatch[0].replace(/\s/g, ""),
           raw_label: "IBAN (wykryty)",
+          box: box ? {x0: box.x0, top: box.top, x1: box.x1, bottom: box.bottom} : null,
         });
       }
     }
+
+    // Store header words for overlay (all text in header region)
+    St.cmHeaderWords = region.words || [];
   }
 
   function _renderHeaderFields(){
@@ -1133,8 +1145,12 @@
     for(let i = 0; i < St.cmHeaderFields.length; i++){
       const f = St.cmHeaderFields[i];
       const meta = _HEADER_FIELD_TYPES[f.field_type] || _HEADER_FIELD_TYPES.skip;
-      html += `<div class="cm-hdr-field" style="display:flex;flex-direction:column;gap:2px;min-width:140px;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:var(--bg-alt,#f8fafc)">
-        <select class="cm-hdr-type-sel input" data-idx="${i}" style="padding:2px 5px;border-radius:5px;font-size:11px">`;
+      const hasBox = f.box != null;
+      const activeStyle = St.cmActiveHdrField === i
+        ? "border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,0.3)" : "";
+      html += `<div class="cm-hdr-field" data-idx="${i}" style="display:flex;flex-direction:column;gap:2px;min-width:140px;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:var(--bg-alt,#f8fafc);cursor:pointer;${activeStyle}">
+        <div style="display:flex;gap:4px;align-items:center">
+          <select class="cm-hdr-type-sel input" data-idx="${i}" style="padding:2px 5px;border-radius:5px;font-size:11px;flex:1">`;
 
       for(const [key, tmeta] of Object.entries(_HEADER_FIELD_TYPES)){
         const sel = f.field_type === key ? " selected" : "";
@@ -1142,8 +1158,10 @@
       }
 
       html += `</select>
+          <button class="cm-hdr-locate" data-idx="${i}" style="background:none;border:1px solid var(--border,#ddd);border-radius:4px;cursor:pointer;font-size:10px;padding:1px 4px;color:${hasBox ? "#3b82f6" : "var(--text-muted,#94a3b8)"}" title="${hasBox ? "Pokaz/edytuj pole na PDF" : "Zaznacz pole na PDF klikajac i przeciagajac"}">\u25A3</button>
+          <button class="cm-hdr-del" data-idx="${i}" style="background:none;border:none;color:var(--danger,#b91c1c);cursor:pointer;font-size:11px;padding:0" title="Usun pole">\u2715</button>
+        </div>
         <input class="cm-hdr-value-input input" data-idx="${i}" value="${_esc(f.value)}" style="padding:3px 6px;border-radius:5px;font-size:12px;font-weight:600" title="Kliknij aby edytowac">
-        <button class="cm-hdr-del" data-idx="${i}" style="align-self:flex-end;background:none;border:none;color:var(--danger,#b91c1c);cursor:pointer;font-size:11px;padding:0" title="Usun pole">\u2715</button>
       </div>`;
     }
 
@@ -1154,7 +1172,10 @@
     QSA(".cm-hdr-type-sel", container).forEach(sel => {
       sel.addEventListener("change", ()=>{
         const idx = parseInt(sel.getAttribute("data-idx"), 10);
-        if(idx < St.cmHeaderFields.length) St.cmHeaderFields[idx].field_type = sel.value;
+        if(idx < St.cmHeaderFields.length){
+          St.cmHeaderFields[idx].field_type = sel.value;
+          _cmRenderOverlay();
+        }
       });
     });
 
@@ -1166,10 +1187,43 @@
     });
 
     QSA(".cm-hdr-del", container).forEach(btn => {
-      btn.addEventListener("click", ()=>{
+      btn.addEventListener("click", (e)=>{
+        e.stopPropagation();
         const idx = parseInt(btn.getAttribute("data-idx"), 10);
         St.cmHeaderFields.splice(idx, 1);
+        if(St.cmActiveHdrField === idx) St.cmActiveHdrField = -1;
         _renderHeaderFields();
+        _cmRenderOverlay();
+      });
+    });
+
+    // Locate/highlight button: toggle active field highlight on PDF
+    QSA(".cm-hdr-locate", container).forEach(btn => {
+      btn.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        const idx = parseInt(btn.getAttribute("data-idx"), 10);
+        if(St.cmActiveHdrField === idx){
+          // Toggle off — deselect
+          St.cmActiveHdrField = -1;
+        } else {
+          St.cmActiveHdrField = idx;
+        }
+        _renderHeaderFields();
+        _cmRenderOverlay();
+      });
+    });
+
+    // Clicking the card itself also activates/deactivates
+    QSA(".cm-hdr-field", container).forEach(card => {
+      card.addEventListener("click", ()=>{
+        const idx = parseInt(card.getAttribute("data-idx"), 10);
+        if(St.cmActiveHdrField === idx){
+          St.cmActiveHdrField = -1;
+        } else {
+          St.cmActiveHdrField = idx;
+        }
+        _renderHeaderFields();
+        _cmRenderOverlay();
       });
     });
 
@@ -1182,6 +1236,7 @@
       field_type: "skip",
       value: "",
       raw_label: "Nowe pole",
+      box: null,
     });
     _renderHeaderFields();
     // Focus the last input
@@ -1204,28 +1259,31 @@
   // ============================================================
 
   function _cmAddColumn(){
-    // Add a new column at the right side
+    // Add a new column by splitting the last column
     const lastCol = St.cmColumns.length ? St.cmColumns[St.cmColumns.length - 1] : null;
-    const newXMin = lastCol ? lastCol.x_max : 0;
-    const newXMax = newXMin + 80;
 
-    // If last column exists, take some space from it
-    if(lastCol && (lastCol.x_max - lastCol.x_min) > 60){
+    if(lastCol && (lastCol.x_max - lastCol.x_min) > 30){
+      // Split last column: 60% stays, 40% becomes new
+      const origMax = lastCol.x_max;
       const splitX = lastCol.x_min + (lastCol.x_max - lastCol.x_min) * 0.6;
       lastCol.x_max = splitX;
       St.cmColumns.push({
         label: "Nowa kolumna",
         col_type: "skip",
         x_min: splitX,
-        x_max: splitX + (newXMax - newXMin),
+        x_max: origMax,
         header_y: lastCol.header_y,
       });
     } else {
+      // Fallback: get page width from preview and add column at end
+      const pageW = (St.cmPreview && St.cmPreview.pages && St.cmPreview.pages[0])
+        ? St.cmPreview.pages[0].width : 600;
+      const xMin = lastCol ? lastCol.x_max : 0;
       St.cmColumns.push({
         label: "Nowa kolumna",
         col_type: "skip",
-        x_min: newXMin,
-        x_max: newXMax,
+        x_min: xMin,
+        x_max: Math.min(xMin + 80, pageW),
         header_y: St.cmColumns[0]?.header_y || 50,
       });
     }
@@ -1333,6 +1391,14 @@
     }
   }
 
+  // Colors for header field boxes
+  const _HDR_FIELD_COLORS = {
+    bank_name: "#8b5cf6", account_number: "#3b82f6", account_holder: "#06b6d4",
+    period_from: "#22c55e", period_to: "#22c55e",
+    opening_balance: "#f59e0b", closing_balance: "#f59e0b", currency: "#64748b",
+    skip: "#94a3b8",
+  };
+
   function _cmRenderOverlay(){
     const svg = QS("#cm_overlay_svg");
     const img = QS("#cm_page_img");
@@ -1347,7 +1413,43 @@
 
     let markup = "";
 
-    // Draw column zones as semi-transparent colored rectangles
+    // --- Header field boxes (above table) ---
+    for(let i = 0; i < St.cmHeaderFields.length; i++){
+      const f = St.cmHeaderFields[i];
+      if(!f.box) continue;
+      const isActive = (St.cmActiveHdrField === i);
+      const color = _HDR_FIELD_COLORS[f.field_type] || "#94a3b8";
+      const opacity = isActive ? 0.25 : 0.08;
+      const strokeW = isActive ? 2.5 : 1.5;
+      const dash = isActive ? "" : "4,2";
+
+      const rx = f.box.x0 * scale;
+      const ry = f.box.top * scale;
+      const rw = (f.box.x1 - f.box.x0) * scale;
+      const rh = (f.box.bottom - f.box.top) * scale;
+      const pad = 3 * scale;
+
+      markup += `<rect x="${rx - pad}" y="${ry - pad}" width="${rw + 2 * pad}" height="${rh + 2 * pad}" fill="${color}" fill-opacity="${opacity}" stroke="${color}" stroke-width="${strokeW}" ${dash ? `stroke-dasharray="${dash}"` : ""} rx="${2 * scale}" data-hdr-field="${i}" style="pointer-events:visiblePainted;cursor:move" />`;
+
+      // Label
+      const meta = _HEADER_FIELD_TYPES[f.field_type] || _HEADER_FIELD_TYPES.skip;
+      markup += `<text x="${rx - pad}" y="${ry - pad - 2 * scale}" font-size="${9 * scale}" fill="${color}" font-weight="bold" style="pointer-events:none">${meta.icon || ""} ${_esc(meta.label)}</text>`;
+
+      // Resize handles (corners) for active field
+      if(isActive){
+        const handles = [
+          {cx: rx - pad, cy: ry - pad, cursor: "nwse-resize", corner: "tl"},
+          {cx: rx + rw + pad, cy: ry - pad, cursor: "nesw-resize", corner: "tr"},
+          {cx: rx - pad, cy: ry + rh + pad, cursor: "nesw-resize", corner: "bl"},
+          {cx: rx + rw + pad, cy: ry + rh + pad, cursor: "nwse-resize", corner: "br"},
+        ];
+        for(const h of handles){
+          markup += `<rect x="${h.cx - 3 * scale}" y="${h.cy - 3 * scale}" width="${6 * scale}" height="${6 * scale}" fill="${color}" stroke="white" stroke-width="1" rx="${1 * scale}" data-hdr-handle="${i}" data-corner="${h.corner}" style="pointer-events:visiblePainted;cursor:${h.cursor}" />`;
+        }
+      }
+    }
+
+    // --- Column zones ---
     for(let i = 0; i < St.cmColumns.length; i++){
       const col = St.cmColumns[i];
       const x = col.x_min * scale;
@@ -1372,18 +1474,13 @@
       }
     }
 
-    // Detected transactions — alternating bands
-    const transactions = St.cmPreview.transactions || [];
-    // Show transaction markers (small ticks on the left)
-    for(let t = 0; t < Math.min(transactions.length, 50); t++){
-      const tx = transactions[t];
-      if(!tx.raw_fields) continue;
-    }
-
     svg.innerHTML = markup;
 
     // Enable drag on boundary lines
     _cmBindBoundaryDrag(svg, scale);
+
+    // Enable drag on header field boxes
+    _cmBindHeaderFieldDrag(svg, scale);
   }
 
   function _cmBindBoundaryDrag(svg, scale){
@@ -1449,6 +1546,150 @@
 
     document.addEventListener("mousemove", _onMove);
     document.addEventListener("mouseup", _onUp);
+  }
+
+  function _cmBindHeaderFieldDrag(svg, scale){
+    const container = QS("#cm_visual_container");
+    if(!container) return;
+
+    let mode = null;     // "move" | "resize"
+    let fieldIdx = -1;
+    let corner = "";     // "tl" | "tr" | "bl" | "br"
+    let startMouse = {x: 0, y: 0};
+    let startBox = null; // copy of box before drag
+
+    const _pdfCoords = (e) => {
+      const rect = container.getBoundingClientRect();
+      const img = QS("#cm_page_img");
+      if(!img) return {x: 0, y: 0};
+      const displayScale = container.clientWidth / img.naturalWidth;
+      return {
+        x: (e.clientX - rect.left) / (displayScale * scale),
+        y: (e.clientY - rect.top) / (displayScale * scale),
+      };
+    };
+
+    // Click on header field rect → start move
+    svg.addEventListener("mousedown", (e) => {
+      const el = e.target;
+      if(!el) return;
+
+      // Handle corner → resize
+      if(el.hasAttribute("data-hdr-handle")){
+        fieldIdx = parseInt(el.getAttribute("data-hdr-handle"), 10);
+        corner = el.getAttribute("data-corner") || "";
+        const f = St.cmHeaderFields[fieldIdx];
+        if(!f || !f.box) return;
+        mode = "resize";
+        startMouse = _pdfCoords(e);
+        startBox = {...f.box};
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      // Handle field rect → move
+      if(el.hasAttribute("data-hdr-field")){
+        fieldIdx = parseInt(el.getAttribute("data-hdr-field"), 10);
+        const f = St.cmHeaderFields[fieldIdx];
+        if(!f || !f.box) return;
+        mode = "move";
+        startMouse = _pdfCoords(e);
+        startBox = {...f.box};
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Also set as active
+        if(St.cmActiveHdrField !== fieldIdx){
+          St.cmActiveHdrField = fieldIdx;
+          _renderHeaderFields();
+          _cmRenderOverlay();
+        }
+        return;
+      }
+    });
+
+    const _onMove2 = (e) => {
+      if(!mode || fieldIdx < 0 || !startBox) return;
+      const f = St.cmHeaderFields[fieldIdx];
+      if(!f) return;
+
+      const cur = _pdfCoords(e);
+      const dx = cur.x - startMouse.x;
+      const dy = cur.y - startMouse.y;
+
+      if(mode === "move"){
+        f.box = {
+          x0: startBox.x0 + dx,
+          top: startBox.top + dy,
+          x1: startBox.x1 + dx,
+          bottom: startBox.bottom + dy,
+        };
+      } else if(mode === "resize"){
+        f.box = {...startBox};
+        if(corner.includes("l")) f.box.x0 = startBox.x0 + dx;
+        if(corner.includes("r")) f.box.x1 = startBox.x1 + dx;
+        if(corner.includes("t")) f.box.top = startBox.top + dy;
+        if(corner.includes("b")) f.box.bottom = startBox.bottom + dy;
+        // Ensure min size
+        if(f.box.x1 - f.box.x0 < 10) f.box.x1 = f.box.x0 + 10;
+        if(f.box.bottom - f.box.top < 5) f.box.bottom = f.box.top + 5;
+      }
+      _cmRenderOverlay();
+    };
+
+    const _onUp2 = () => {
+      if(mode && fieldIdx >= 0){
+        // After drag: re-read text from words inside the box
+        const f = St.cmHeaderFields[fieldIdx];
+        if(f && f.box){
+          const wordsInBox = (St.cmHeaderWords || []).filter(w =>
+            w.x0 >= f.box.x0 - 2 && w.x1 <= f.box.x1 + 2 &&
+            w.top >= f.box.top - 2 && w.bottom <= f.box.bottom + 2
+          );
+          if(wordsInBox.length > 0){
+            const newVal = wordsInBox.map(w => w.text).join(" ");
+            f.value = newVal;
+            _renderHeaderFields();
+          }
+        }
+        mode = null;
+        fieldIdx = -1;
+        corner = "";
+        startBox = null;
+      }
+    };
+
+    document.addEventListener("mousemove", _onMove2);
+    document.addEventListener("mouseup", _onUp2);
+  }
+
+  // Allow creating a new header field box by clicking on PDF header area
+  function _cmBindHeaderFieldCreate(){
+    const container = QS("#cm_visual_container");
+    if(!container) return;
+
+    container.addEventListener("dblclick", (e) => {
+      // Only in header area and only when a field is active with no box
+      const activeIdx = St.cmActiveHdrField;
+      if(activeIdx < 0 || activeIdx >= St.cmHeaderFields.length) return;
+      const f = St.cmHeaderFields[activeIdx];
+      if(f.box) return; // already has a box
+
+      const rect = container.getBoundingClientRect();
+      const img = QS("#cm_page_img");
+      if(!img) return;
+      const scale = St.cmPageScale;
+      const displayScale = container.clientWidth / img.naturalWidth;
+      const pdfX = (e.clientX - rect.left) / (displayScale * scale);
+      const pdfY = (e.clientY - rect.top) / (displayScale * scale);
+
+      // Create a small box at click position
+      f.box = {x0: pdfX - 40, top: pdfY - 6, x1: pdfX + 40, bottom: pdfY + 6};
+
+      _renderHeaderFields();
+      _cmRenderOverlay();
+    });
   }
 
   function _cmSyncMapping(){
@@ -1537,8 +1778,10 @@
     if(!container) return;
     container.innerHTML = '<div class="small muted">Parsowanie...</div>';
 
-    // Build column_bounds from current columns
-    const column_bounds = St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max}));
+    // Build column_bounds from current columns (full info for backend)
+    const column_bounds = St.cmColumns.map(c => ({
+      x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type,
+    }));
 
     try{
       const data = await _api("/api/aml/preview-parse", {
@@ -1638,6 +1881,9 @@
         _cmLoadPageImage(parseInt(pageSel.value, 10) || 0);
       });
     }
+
+    // Double-click on PDF to place a header field box
+    _cmBindHeaderFieldCreate();
   }
 
   // ============================================================

@@ -92,8 +92,13 @@ def init_db(path: Optional[Path] = None) -> None:
 
 
 def ensure_initialized() -> None:
-    """Ensure DB is initialized (call from app startup)."""
+    """Ensure DB is initialized (call from app startup).
+
+    Also re-initializes if the DB file was deleted after first init.
+    """
     global _initialized
+    if _initialized and not get_db_path().exists():
+        _initialized = False
     if not _initialized:
         init_db()
 

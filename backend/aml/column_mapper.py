@@ -186,29 +186,38 @@ def parse_with_mapping(
     if cached is None:
         cached = spatial_parse_pdf(pdf_path, render_images=False)
 
-    # Apply user's column type overrides
+    # Rebuild columns from user-provided bounds (authoritative source)
+    # column_bounds carries full info: x_min, x_max, label, col_type
     columns = list(cached.columns)
-    for idx_str, col_type in column_mapping.items():
-        idx = int(idx_str)
-        if idx < len(columns):
-            columns[idx] = ColumnZone(
-                label=columns[idx].label,
-                col_type=col_type,
-                x_min=columns[idx].x_min,
-                x_max=columns[idx].x_max,
-                header_y=columns[idx].header_y,
-            )
+    default_header_y = columns[0].header_y if columns else 50.0
 
-    # Apply user-dragged column boundaries if provided
-    if column_bounds:
+    if column_bounds and len(column_bounds) > 0:
+        # User may have added/removed columns — rebuild entirely from bounds
+        columns = []
         for i, bounds in enumerate(column_bounds):
-            if i < len(columns) and bounds:
-                columns[i] = ColumnZone(
-                    label=columns[i].label,
-                    col_type=columns[i].col_type,
-                    x_min=float(bounds.get("x_min", columns[i].x_min)),
-                    x_max=float(bounds.get("x_max", columns[i].x_max)),
-                    header_y=columns[i].header_y,
+            if not bounds:
+                continue
+            col_type = bounds.get("col_type", "skip")
+            label = bounds.get("label", f"Kolumna {i + 1}")
+            columns.append(ColumnZone(
+                label=label,
+                col_type=col_type,
+                x_min=float(bounds.get("x_min", 0)),
+                x_max=float(bounds.get("x_max", 0)),
+                header_y=default_header_y,
+            ))
+
+    # Apply column_mapping type overrides on top
+    if column_mapping:
+        for idx_str, col_type in column_mapping.items():
+            idx = int(idx_str)
+            if idx < len(columns):
+                columns[idx] = ColumnZone(
+                    label=columns[idx].label,
+                    col_type=col_type,
+                    x_min=columns[idx].x_min,
+                    x_max=columns[idx].x_max,
+                    header_y=columns[idx].header_y,
                 )
 
     # Collect all words

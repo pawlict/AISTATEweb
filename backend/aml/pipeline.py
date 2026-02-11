@@ -155,8 +155,8 @@ def run_aml_pipeline(
     rules_version = rules_config.get("version", "1.0.0")
     warnings: List[str] = []
 
-    # Use spatial parser when user-confirmed column mapping is provided
-    use_spatial = bool(column_mapping)
+    # Use spatial parser when user-confirmed data is provided
+    use_spatial = column_mapping is not None or column_bounds is not None
 
     if use_spatial:
         _log("Parsowanie przestrzenne (potwierdzone przez użytkownika)...")
