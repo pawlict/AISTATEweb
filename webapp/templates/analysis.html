@@ -195,6 +195,19 @@
     <!-- Column Mapping — Visual PDF overlay (shown after PDF upload) -->
     <div id="aml_mapping_card" style="display:none">
 
+      <!-- Template notification banner -->
+      <div id="cm_template_banner" class="card" style="display:none;border-left:4px solid var(--ok,#15803d);background:var(--bg-success,#f0fdf4);margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="font-weight:600" id="cm_tpl_title"></div>
+            <div class="small muted" id="cm_tpl_subtitle"></div>
+          </div>
+          <select class="input" id="cm_tpl_select" style="padding:4px 10px;border-radius:8px;min-width:180px;display:none"></select>
+          <button class="btn mini" id="cm_tpl_apply_btn" style="display:none">Zastosuj szablon</button>
+          <button class="btn mini secondary" id="cm_tpl_ignore_btn">Ignoruj</button>
+        </div>
+      </div>
+
       <!-- Header region editor (bank info above table) -->
       <div class="card" id="cm_header_card">
         <div class="analysis-sidehdr">

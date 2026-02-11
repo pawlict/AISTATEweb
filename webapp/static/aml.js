@@ -1047,12 +1047,11 @@
     // Bank label
     const bankLabel = QS("#cm_bank_label");
     if(bankLabel){
-      let label = preview.bank_name || "Nieznany bank";
-      if(preview.template && !preview.template._partial_match){
-        label += " (szablon: " + (preview.template.name || "domyslny") + ")";
-      }
-      bankLabel.textContent = label;
+      bankLabel.textContent = preview.bank_name || "Nieznany bank";
     }
+
+    // Template banner
+    _renderTemplateBanner(preview);
 
     // Warnings
     const warningsEl = QS("#cm_warnings");
@@ -1064,6 +1063,11 @@
 
     // Store columns for SVG overlay
     St.cmColumns = (preview.columns || []).map(c => ({...c}));
+
+    // Apply mapping to columns (e.g. from template)
+    if(St.cmMapping && Object.keys(St.cmMapping).length){
+      _applyMappingToColumns(St.cmMapping);
+    }
 
     // Build header fields from detected header_region
     _buildHeaderFields(preview.header_region);
@@ -1078,6 +1082,138 @@
     _renderCmHeaders();
 
     // Auto-run preview parse
+    _cmPreviewParse();
+  }
+
+  // ============================================================
+  // TEMPLATE BANNER
+  // ============================================================
+
+  function _renderTemplateBanner(preview){
+    const banner = QS("#cm_template_banner");
+    if(!banner) return;
+
+    const tpl = preview.template;
+    const bankTemplates = preview.bank_templates || [];
+    const bankName = preview.bank_name || "Nieznany bank";
+
+    if(!tpl && !bankTemplates.length){
+      // No templates — hide banner
+      banner.style.display = "none";
+      return;
+    }
+
+    const titleEl = QS("#cm_tpl_title");
+    const subtitleEl = QS("#cm_tpl_subtitle");
+    const selectEl = QS("#cm_tpl_select");
+    const applyBtn = QS("#cm_tpl_apply_btn");
+    const ignoreBtn = QS("#cm_tpl_ignore_btn");
+
+    if(tpl && !tpl._partial_match){
+      // Exact match — auto-applied
+      if(titleEl) titleEl.textContent = "Rozpoznano: " + bankName;
+      if(subtitleEl) subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" zostal automatycznie zastosowany"
+        + (tpl.times_used ? " (uzywany " + tpl.times_used + "x)" : "") + ".";
+      banner.style.borderLeftColor = "var(--ok,#15803d)";
+      banner.style.background = "var(--bg-success,#f0fdf4)";
+      if(applyBtn) applyBtn.style.display = "none";
+    } else if(tpl && tpl._partial_match){
+      // Partial match (default template, headers differ)
+      if(titleEl) titleEl.textContent = "Rozpoznano: " + bankName;
+      if(subtitleEl) subtitleEl.textContent = "Znaleziono szablon \"" + (tpl.name || "domyslny")
+        + "\" ale naglowki sie roznia. Sprawdz mapowanie kolumn.";
+      banner.style.borderLeftColor = "#d97706";
+      banner.style.background = "#fffbeb";
+      if(applyBtn) applyBtn.style.display = "";
+    } else {
+      // No exact match but other templates exist
+      if(titleEl) titleEl.textContent = "Rozpoznano: " + bankName;
+      if(subtitleEl) subtitleEl.textContent = bankTemplates.length + " szablon(ow) dostepnych. Wybierz aby zastosowac.";
+      banner.style.borderLeftColor = "#3b82f6";
+      banner.style.background = "#eff6ff";
+      if(applyBtn) applyBtn.style.display = "";
+    }
+
+    // Template selector (when multiple templates exist)
+    if(selectEl){
+      if(bankTemplates.length > 1){
+        selectEl.style.display = "";
+        selectEl.innerHTML = '<option value="">-- Wybierz szablon --</option>'
+          + bankTemplates.map(t => {
+            const selected = tpl && t.id === tpl.id ? " selected" : "";
+            const dflt = t.is_default ? " [domyslny]" : "";
+            const used = t.times_used ? " (" + t.times_used + "x)" : "";
+            return `<option value="${_esc(t.id)}"${selected}>${_esc(t.name || "Szablon")}${dflt}${used}</option>`;
+          }).join("");
+      } else {
+        selectEl.style.display = "none";
+      }
+    }
+
+    banner.style.display = "";
+
+    // Bind events
+    if(applyBtn){
+      applyBtn.onclick = ()=> _applySelectedTemplate();
+    }
+    if(ignoreBtn){
+      ignoreBtn.onclick = ()=>{ banner.style.display = "none"; };
+    }
+    if(selectEl){
+      selectEl.onchange = ()=>{
+        if(applyBtn) applyBtn.style.display = selectEl.value ? "" : "none";
+      };
+    }
+  }
+
+  function _applyMappingToColumns(mapping){
+    // Sync mapping dict → St.cmColumns[i].col_type
+    for(const [idxStr, colType] of Object.entries(mapping)){
+      const idx = parseInt(idxStr, 10);
+      if(idx >= 0 && idx < St.cmColumns.length){
+        St.cmColumns[idx].col_type = colType;
+      }
+    }
+  }
+
+  function _applySelectedTemplate(){
+    const preview = St.cmPreview;
+    if(!preview) return;
+
+    const selectEl = QS("#cm_tpl_select");
+    const bankTemplates = preview.bank_templates || [];
+
+    // Find selected template
+    let tpl = null;
+    if(selectEl && selectEl.value){
+      tpl = bankTemplates.find(t => t.id === selectEl.value);
+    }
+    if(!tpl){
+      // Use the current template (partial match apply)
+      tpl = preview.template;
+    }
+    if(!tpl || !tpl.column_mapping) return;
+
+    // Apply template mapping
+    St.cmMapping = tpl.column_mapping;
+    _applyMappingToColumns(St.cmMapping);
+
+    // Update the banner
+    const subtitleEl = QS("#cm_tpl_subtitle");
+    if(subtitleEl) subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" zastosowany.";
+    const applyBtn = QS("#cm_tpl_apply_btn");
+    if(applyBtn) applyBtn.style.display = "none";
+
+    const banner = QS("#cm_template_banner");
+    if(banner){
+      banner.style.borderLeftColor = "var(--ok,#15803d)";
+      banner.style.background = "var(--bg-success,#f0fdf4)";
+    }
+
+    // Re-render column headers with new mapping
+    _renderCmHeaders();
+
+    // Re-run preview parse
     _cmPreviewParse();
   }
 
