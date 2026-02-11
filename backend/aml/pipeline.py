@@ -422,8 +422,33 @@ def run_aml_pipeline(
         log.warning("Chart generation failed: %s", e)
         warnings.append(f"Chart generation failed: {e}")
 
-    # --- Step 11c: Build LLM prompt ---
+    # --- Step 11c: Enrich transactions & build LLM prompt ---
+    enriched_result = None
     llm_prompt = ""
+    try:
+        from .enrich import enrich_transactions
+        # Build dicts suitable for enrichment (need date, amount, direction, counterparty, title, etc.)
+        enrich_input = []
+        for tx in tx_list:
+            enrich_input.append({
+                "date": tx.booking_date,
+                "amount": float(tx.amount),
+                "direction": tx.direction,
+                "counterparty": tx.counterparty_raw or "",
+                "title": tx.title or "",
+                "channel": tx.channel or "",
+                "category": tx.category or "",
+                "counterparty_account": "",
+                "raw_86": getattr(tx, "raw_86", ""),
+                "swift_code": getattr(tx, "swift_code", ""),
+            })
+        enriched_result = enrich_transactions(enrich_input)
+        _log(f"Wzbogacono transakcje: {len(enriched_result.channel_summary)} kanałów, "
+             f"{len(enriched_result.category_summary)} kategorii, "
+             f"{len(enriched_result.recurring)} wzorców cyklicznych")
+    except Exception as e:
+        log.warning("Transaction enrichment failed: %s", e)
+
     try:
         statement_info_for_llm = {
             "bank_name": bank_name,
@@ -434,6 +459,16 @@ def run_aml_pipeline(
             "opening_balance": info.opening_balance,
             "closing_balance": info.closing_balance,
             "currency": info.currency,
+            # Extra header fields
+            "previous_closing_balance": getattr(info, "previous_closing_balance", None),
+            "declared_credits_sum": info.declared_credits_sum,
+            "declared_credits_count": info.declared_credits_count,
+            "declared_debits_sum": info.declared_debits_sum,
+            "declared_debits_count": info.declared_debits_count,
+            "debt_limit": getattr(info, "debt_limit", None),
+            "overdue_commission": getattr(info, "overdue_commission", None),
+            "blocked_amount": getattr(info, "blocked_amount", None),
+            "available_balance": info.available_balance,
         }
         llm_prompt = build_aml_prompt(
             statement_info=statement_info_for_llm,
@@ -442,6 +477,7 @@ def run_aml_pipeline(
             risk_score=risk_score,
             risk_reasons=risk_reasons,
             ml_anomalies=ml_anomalies,
+            enriched=enriched_result,
         )
         _log(f"LLM prompt: {len(llm_prompt)} znaków")
     except Exception as e:

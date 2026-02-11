@@ -19,6 +19,9 @@ Endpoints:
 - POST /api/db/projects        — create project
 - GET  /api/db/projects/{id}/cases — list cases
 
+- POST /api/aml/upload-mt940  — upload & parse MT940/STA file
+- POST /api/aml/cross-validate — compare MT940 with PDF-parsed data
+
 - GET  /api/system/setup       — first-run check
 - POST /api/system/setup       — first-run setup
 """
@@ -839,6 +842,101 @@ async def system_setup(request: Request):
         "mode": mode,
         "admin_id": admin_id,
     })
+
+
+# ============================================================
+# MT940 IMPORT & CROSS-VALIDATION
+# ============================================================
+
+@router.post("/api/aml/upload-mt940")
+async def aml_upload_mt940(
+    request: Request,
+    file: UploadFile = File(...),
+):
+    """Upload MT940/STA file and parse it.
+
+    Returns parsed statement summary + all transactions.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from backend.aml.mt940_parser import parse_mt940, statement_summary
+
+    data_dir = os.environ.get("AISTATEWEB_DATA_DIR", "data_www")
+    upload_dir = Path(data_dir) / "uploads" / "aml"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = upload_dir / (file.filename or "statement.sta")
+    with open(file_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    try:
+        stmt = await run_in_threadpool(parse_mt940, file_path)
+        summary = statement_summary(stmt)
+
+        # Convert transactions to dicts for JSON
+        transactions = []
+        for tx in stmt.transactions:
+            sign = -1 if tx.direction == "DEBIT" else 1
+            transactions.append({
+                "row_index": tx.row_index,
+                "date": tx.entry_date,
+                "value_date": tx.value_date,
+                "amount": round(tx.amount * sign, 2),
+                "direction": tx.direction,
+                "counterparty": tx.counterparty,
+                "title": tx.title,
+                "counterparty_account": tx.counterparty_account,
+                "swift_code": tx.swift_code,
+                "reference": tx.reference,
+            })
+
+        return JSONResponse({
+            "status": "ok",
+            "source": "mt940",
+            "file_name": file.filename,
+            "summary": summary,
+            "transactions": transactions,
+        })
+
+    except Exception as e:
+        log.exception("MT940 parse failed: %s", e)
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=400)
+
+
+@router.post("/api/aml/cross-validate")
+async def aml_cross_validate(request: Request):
+    """Cross-validate MT940 data with PDF-parsed data.
+
+    Expects JSON body: {
+        mt940_file: str (filename in uploads/aml/),
+        pdf_transactions: [...],
+        pdf_statement_info: {...}
+    }
+    """
+    from starlette.concurrency import run_in_threadpool
+    from backend.aml.mt940_parser import parse_mt940, cross_validate
+
+    data = await request.json()
+    mt940_file = data.get("mt940_file", "")
+    pdf_transactions = data.get("pdf_transactions", [])
+    pdf_statement_info = data.get("pdf_statement_info", {})
+
+    data_dir = os.environ.get("AISTATEWEB_DATA_DIR", "data_www")
+    file_path = Path(data_dir) / "uploads" / "aml" / mt940_file
+
+    if not file_path.exists():
+        return JSONResponse(
+            {"status": "error", "error": "MT940 file not found"},
+            status_code=404,
+        )
+
+    try:
+        stmt = await run_in_threadpool(parse_mt940, file_path)
+        report = cross_validate(stmt, pdf_transactions, pdf_statement_info)
+        return JSONResponse({"status": "ok", **report})
+    except Exception as e:
+        log.exception("Cross-validation failed: %s", e)
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
 
 
 @router.post("/api/system/migrate")
