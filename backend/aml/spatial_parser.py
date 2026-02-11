@@ -478,6 +478,31 @@ def _parse_header_region(
                 "field_type": "account_number", "value": val, **box,
             })
 
+    # Account holder — look for "Posiadacz:" or "Właściciel:" or "Nazwa:" pattern
+    holder_match = re.search(
+        r"(?:posiadacz|w[lł]a[sś]ciciel|nazwa\s+klienta|klient)[:\s]+(.+?)(?=\s{2,}|\d{2}[.-]|\n|$)",
+        header_text, re.IGNORECASE,
+    )
+    if holder_match:
+        holder_val = holder_match.group(1).strip()
+        if holder_val and len(holder_val) > 3:
+            result["account_holder"] = holder_val
+            box = _find_box_for_text(holder_match.group(0))
+            if box:
+                result["field_boxes"].append({
+                    "field_type": "account_holder", "value": holder_val, **box,
+                })
+
+    # Currency
+    cur_match = re.search(r"\b(PLN|EUR|USD|GBP|CHF|CZK|SEK|NOK|DKK)\b", header_text)
+    if cur_match:
+        result["currency"] = cur_match.group(1)
+        box = _find_box_for_text(cur_match.group(0))
+        if box:
+            result["field_boxes"].append({
+                "field_type": "currency", "value": cur_match.group(1), **box,
+            })
+
     # Saldo
     for label, key in [
         (r"saldo\s*(pocz|otwarcia|na\s*pocz)", "opening_balance"),
@@ -514,6 +539,32 @@ def _parse_header_region(
                 "value": result["period_to"],
                 **box_to,
             })
+
+    # Bank name — try to find in first line(s) of header
+    # Group words by Y-line, take the first line that has >2 words as bank name
+    if sorted_words:
+        y_groups: Dict[int, List] = {}
+        for w in sorted_words:
+            y_key = int(w.top / 5) * 5  # group by ~5pt tolerance
+            y_groups.setdefault(y_key, []).append(w)
+        for y_key in sorted(y_groups.keys()):
+            line_words = y_groups[y_key]
+            line_text = " ".join(w.text for w in line_words).strip()
+            # Skip lines that are just numbers, dates, or very short
+            if len(line_text) > 5 and not re.match(r"^[\d\s.,-/]+$", line_text):
+                result["bank_name_detected"] = line_text
+                box = {
+                    "x0": min(w.x0 for w in line_words),
+                    "top": min(w.top for w in line_words),
+                    "x1": max(w.x1 for w in line_words),
+                    "bottom": max(w.bottom for w in line_words),
+                }
+                # Only add if no bank_name box yet
+                if not any(fb["field_type"] == "bank_name" for fb in result["field_boxes"]):
+                    result["field_boxes"].append({
+                        "field_type": "bank_name", "value": line_text, **box,
+                    })
+                break
 
     return result
 
