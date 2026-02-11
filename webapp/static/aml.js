@@ -1421,15 +1421,18 @@
       // Page wrapper (holds img + svg)
       const wrap = document.createElement("div");
       wrap.className = "cm-page-wrap";
-      wrap.style.cssText = "position:relative;display:inline-block;width:100%";
+      wrap.style.cssText = "position:relative;display:inline-block;width:100%;user-select:none;-webkit-user-select:none";
       wrap.setAttribute("data-page", String(i));
+      // Prevent browser image/text drag
+      wrap.addEventListener("dragstart", (ev) => ev.preventDefault());
 
       const img = document.createElement("img");
-      img.style.cssText = "display:block;max-width:100%;height:auto";
+      img.style.cssText = "display:block;max-width:100%;height:auto;user-select:none;-webkit-user-drag:none;pointer-events:none";
       img.alt = `Strona ${i + 1}`;
+      img.draggable = false;
 
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none";
+      svg.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all";
 
       wrap.appendChild(img);
       wrap.appendChild(svg);
