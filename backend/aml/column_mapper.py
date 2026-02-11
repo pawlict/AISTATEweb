@@ -163,6 +163,13 @@ def _find_matching_template(
             td["_partial_match"] = True
             return td
 
+    # Fallback: return most-used template (already sorted by times_used DESC)
+    if templates:
+        td = dict(templates[0])
+        td["column_mapping"] = json.loads(td.get("column_mapping", "{}"))
+        td["_partial_match"] = True
+        return td
+
     return None
 
 
