@@ -50,6 +50,10 @@
     cyLoaded: false,
     chartjsLoaded: false,
     llmRunning: false,
+    // Column mapping state
+    cmPreview: null,      // from POST /api/aml/preview-pdf
+    cmMapping: {},        // {col_index_str: column_type}
+    cmColumnTypes: {},    // metadata from API
   };
 
   // ============================================================
@@ -60,6 +64,7 @@
     _show("aml_upload_zone");
     _hide("aml_progress_card");
     _hide("aml_results");
+    _hide("aml_mapping_card");
     const histCard = QS("#aml_history_card");
     if(histCard && St.history.length) _show("aml_history_card");
   }
@@ -69,6 +74,7 @@
     _show("aml_progress_card");
     _hide("aml_results");
     _hide("aml_history_card");
+    _hide("aml_mapping_card");
     const el = QS("#aml_prog_text");
     if(el) el.textContent = text || "Przetwarzanie PDF...";
     const bar = QS("#aml_prog_bar");
@@ -80,6 +86,15 @@
     _hide("aml_progress_card");
     _show("aml_results");
     _hide("aml_history_card");
+    _hide("aml_mapping_card");
+  }
+
+  function _showMapping(){
+    _hide("aml_upload_zone");
+    _hide("aml_progress_card");
+    _hide("aml_results");
+    _hide("aml_history_card");
+    _show("aml_mapping_card");
   }
 
   function _showError(msg){
@@ -107,9 +122,42 @@
     }
 
     St.analyzing = true;
-    _showProgress("Przesylanie i analiza: " + file.name);
+    _showProgress("Przesylanie PDF i rozpoznawanie kolumn...");
 
-    // Simulate progress
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+
+    try{
+      const result = await _api("/api/aml/preview-pdf", {method:"POST", body:fd});
+
+      if(result && result.status === "ok"){
+        St.cmPreview = result;
+        St.cmMapping = result.auto_mapping || {};
+        St.cmColumnTypes = result.column_types || {};
+
+        // If a saved template matches, use it
+        if(result.template && result.template.column_mapping && !result.template._partial_match){
+          St.cmMapping = result.template.column_mapping;
+        }
+
+        _renderColumnMapping();
+        _showMapping();
+      } else if(result && result.status === "no_tables"){
+        _showError("Nie znaleziono tabel w PDF. Sprobuj inny plik.");
+      } else {
+        _showError(result && result.error ? String(result.error) : "Blad podgladu PDF");
+      }
+    } catch(e) {
+      _showError("Blad: " + String(e.message || e));
+    } finally {
+      St.analyzing = false;
+    }
+  }
+
+  async function _runFullPipeline(filePath, mapping, opts){
+    St.analyzing = true;
+    _showProgress("Analiza AML...");
+
     let pct = 0;
     const bar = QS("#aml_prog_bar");
     const progText = QS("#aml_prog_text");
@@ -119,8 +167,6 @@
     }, 800);
 
     const stages = [
-      "Ekstrakcja tekstu z PDF...",
-      "Rozpoznawanie banku...",
       "Parsowanie transakcji...",
       "Klasyfikacja regul...",
       "Detekcja anomalii...",
@@ -135,11 +181,28 @@
       }
     }, 2500);
 
-    const fd = new FormData();
-    fd.append("file", file, file.name);
-
     try{
-      const result = await _api("/api/aml/analyze", {method:"POST", body:fd});
+      const body = {
+        file_path: filePath,
+        column_mapping: mapping,
+        header_row: opts.header_row || 0,
+        data_start_row: opts.data_start_row || 1,
+        main_table_index: opts.main_table_index || 0,
+        save_template: opts.save_template || false,
+        template_name: opts.template_name || "",
+        set_default: opts.set_default || false,
+        template_id: opts.template_id || "",
+        bank_id: opts.bank_id || "",
+        bank_name: opts.bank_name || "",
+        header_cells: opts.header_cells || [],
+      };
+
+      const result = await _api("/api/aml/confirm-mapping", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body),
+      });
+
       clearInterval(progTimer);
       clearInterval(stageTimer);
 
@@ -148,17 +211,23 @@
         St.statementId = result.statement_id;
         St.caseId = result.case_id;
 
-        // Load full detail
         await _loadDetail(result.statement_id);
         _renderResults();
         _showResults();
+
+        // Trigger review module
+        if(window.ReviewManager && result.statement_id){
+          ReviewManager.loadForStatement(result.statement_id);
+        }
       } else {
         _showError(result && result.error ? String(result.error) : "Blad analizy");
+        _showMapping();
       }
     } catch(e) {
       clearInterval(progTimer);
       clearInterval(stageTimer);
       _showError("Blad: " + String(e.message || e));
+      _showMapping();
     } finally {
       St.analyzing = false;
     }
@@ -234,6 +303,11 @@
 
     // Memory
     _loadMemory();
+
+    // Trigger review module for integrated view
+    if(window.ReviewManager && St.statementId){
+      ReviewManager.loadForStatement(St.statementId);
+    }
   }
 
   function _renderRiskGauge(score){
@@ -921,6 +995,223 @@
   }
 
   // ============================================================
+  // COLUMN MAPPING UI
+  // ============================================================
+
+  function _renderColumnMapping(){
+    const preview = St.cmPreview;
+    if(!preview) return;
+
+    // Bank label
+    const bankLabel = QS("#cm_bank_label");
+    if(bankLabel) bankLabel.textContent = preview.bank_name || "Nieznany bank";
+
+    // Template info
+    if(preview.template && !preview.template._partial_match){
+      const bankL = QS("#cm_bank_label");
+      if(bankL) bankL.textContent = (preview.bank_name || "") + " (szablon: " + (preview.template.name || "domyslny") + ")";
+    }
+
+    // Render column headers with dropdowns
+    _renderCmHeaders(preview);
+
+    // Render raw table
+    _renderCmTable(preview);
+  }
+
+  function _renderCmHeaders(preview){
+    const container = QS("#cm_headers");
+    if(!container) return;
+
+    const headerCells = preview.header_cells || [];
+    const types = St.cmColumnTypes;
+
+    let html = '<div style="display:flex;gap:4px;overflow-x:auto;padding:4px 0">';
+    for(let i = 0; i < headerCells.length; i++){
+      const iStr = String(i);
+      const currentType = St.cmMapping[iStr] || "";
+      const meta = types[currentType] || {};
+
+      html += `<div class="cm-col-hdr" style="min-width:100px;flex:1">
+        <div class="small" style="margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_esc(headerCells[i])}">${_esc(headerCells[i] || "(pusta)")}</div>
+        <select class="cm-type-select input" data-col="${i}" style="padding:3px 5px;border-radius:6px;font-size:12px;width:100%">
+          <option value="">\u2014 Pomija</option>`;
+
+      for(const [key, tmeta] of Object.entries(types)){
+        const sel = currentType === key ? " selected" : "";
+        html += `<option value="${_esc(key)}"${sel}>${tmeta.icon || ""} ${_esc(tmeta.label)}</option>`;
+      }
+
+      html += `</select></div>`;
+    }
+    html += '</div>';
+    container.innerHTML = html;
+
+    // Bind dropdown changes
+    QSA(".cm-type-select", container).forEach(sel => {
+      sel.addEventListener("change", () => {
+        const col = sel.getAttribute("data-col");
+        if(sel.value){
+          St.cmMapping[col] = sel.value;
+        } else {
+          delete St.cmMapping[col];
+        }
+        _renderCmTable(St.cmPreview);
+      });
+    });
+  }
+
+  function _renderCmTable(preview){
+    const wrap = QS("#cm_table_wrap");
+    if(!wrap || !preview) return;
+
+    const rows = preview.rows || [];
+    if(!rows.length){
+      wrap.innerHTML = '<div class="small muted" style="padding:10px">Brak danych w tabeli.</div>';
+      return;
+    }
+
+    const headerRow = preview.header_row || 0;
+    const dataStart = preview.data_start_row || headerRow + 1;
+    const types = St.cmColumnTypes;
+
+    // Build type color hints
+    const typeColors = {
+      date:"#3b82f6", value_date:"#60a5fa", description:"#8b5cf6",
+      counterparty:"#06b6d4", amount:"#f59e0b", debit:"#ef4444",
+      credit:"#22c55e", balance:"#6366f1", bank_type:"#a855f7",
+      reference:"#64748b", skip:"#d1d5db",
+    };
+
+    let html = '<table class="cm-preview-table" style="width:100%;font-size:12px;border-collapse:collapse">';
+
+    // Column type indicator row
+    html += '<tr>';
+    const colCount = rows[0] ? rows[0].cells.length : 0;
+    for(let c = 0; c < colCount; c++){
+      const cType = St.cmMapping[String(c)] || "";
+      const color = typeColors[cType] || "transparent";
+      const label = (types[cType] || {}).label || "";
+      html += `<td style="background:${color};color:#fff;font-size:10px;padding:2px 4px;text-align:center;white-space:nowrap">${_esc(label)}</td>`;
+    }
+    html += '</tr>';
+
+    for(const row of rows){
+      const isHdr = row.is_header;
+      const isData = row.index >= dataStart;
+      const style = isHdr ? "font-weight:bold;background:var(--bg-alt,#f1f5f9)" : "";
+      html += `<tr style="${style}">`;
+      for(let c = 0; c < row.cells.length; c++){
+        const cType = St.cmMapping[String(c)] || "";
+        const borderLeft = cType ? `border-left:2px solid ${typeColors[cType] || "#ccc"}` : "";
+        html += `<td style="padding:3px 5px;border-bottom:1px solid var(--border,#e2e8f0);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis;${borderLeft}" title="${_esc(row.cells[c])}">${_esc(row.cells[c])}</td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+    wrap.innerHTML = html;
+  }
+
+  async function _cmPreviewParse(){
+    const preview = St.cmPreview;
+    if(!preview) return;
+
+    const container = QS("#cm_parsed_preview");
+    if(!container) return;
+    container.innerHTML = '<div class="small muted">Parsowanie...</div>';
+
+    try{
+      const data = await _api("/api/aml/preview-parse", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          file_path: preview.file_path,
+          column_mapping: St.cmMapping,
+          header_row: preview.header_row || 0,
+          data_start_row: preview.data_start_row || 1,
+          main_table_index: preview.main_table_index || 0,
+        }),
+      });
+
+      if(data && data.status === "ok" && data.transactions){
+        _renderCmParsedPreview(container, data.transactions, data.transaction_count);
+      } else {
+        container.innerHTML = `<div class="small" style="color:var(--danger)">${_esc(data && data.error ? data.error : "Blad parsowania")}</div>`;
+      }
+    } catch(e){
+      container.innerHTML = `<div class="small" style="color:var(--danger)">Blad: ${_esc(e.message || e)}</div>`;
+    }
+  }
+
+  function _renderCmParsedPreview(container, transactions, total){
+    if(!transactions || !transactions.length){
+      container.innerHTML = '<div class="small muted">Brak rozpoznanych transakcji. Sprawdz mapowanie kolumn.</div>';
+      return;
+    }
+
+    let html = `<div class="small muted" style="margin-bottom:4px">Rozpoznano ${total} transakcji. Podglad pierwszych ${Math.min(transactions.length, 10)}:</div>`;
+    html += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
+    html += '<tr style="background:var(--bg-alt,#f1f5f9);font-weight:bold"><td style="padding:3px 5px">Data</td><td>Kontrahent</td><td>Tytul</td><td style="text-align:right">Kwota</td><td style="text-align:right">Saldo</td></tr>';
+
+    for(const tx of transactions.slice(0, 10)){
+      const amt = Number(tx.amount || 0);
+      const color = amt < 0 ? "var(--danger,#b91c1c)" : "var(--ok,#15803d)";
+      html += `<tr style="border-bottom:1px solid var(--border,#e2e8f0)">
+        <td style="padding:2px 5px;white-space:nowrap">${_esc(tx.date || "")}</td>
+        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc((tx.counterparty || "").slice(0,30))}</td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc((tx.title || "").slice(0,40))}</td>
+        <td style="text-align:right;color:${color};white-space:nowrap">${_fmtAmount(amt, "")}</td>
+        <td style="text-align:right;white-space:nowrap">${tx.balance_after != null ? _fmtAmount(tx.balance_after, "") : ""}</td>
+      </tr>`;
+    }
+
+    html += '</table>';
+    container.innerHTML = html;
+  }
+
+  function _cmConfirm(){
+    const preview = St.cmPreview;
+    if(!preview) return;
+
+    const saveTemplate = QS("#cm_save_template")?.checked || false;
+    const setDefault = QS("#cm_set_default")?.checked || false;
+    const templateName = QS("#cm_template_name")?.value || "";
+    const templateId = preview.template ? (preview.template.id || "") : "";
+
+    _runFullPipeline(preview.file_path, St.cmMapping, {
+      header_row: preview.header_row,
+      data_start_row: preview.data_start_row,
+      main_table_index: preview.main_table_index,
+      save_template: saveTemplate,
+      template_name: templateName,
+      set_default: setDefault,
+      template_id: templateId,
+      bank_id: preview.bank_id,
+      bank_name: preview.bank_name,
+      header_cells: preview.header_cells,
+    });
+  }
+
+  function _bindColumnMapping(){
+    const backBtn = QS("#cm_back_btn");
+    if(backBtn) backBtn.addEventListener("click", ()=> _showUpload());
+
+    const refreshBtn = QS("#cm_refresh_preview");
+    if(refreshBtn) refreshBtn.addEventListener("click", ()=> _cmPreviewParse());
+
+    const confirmBtn = QS("#cm_confirm_btn");
+    if(confirmBtn) confirmBtn.addEventListener("click", ()=> _cmConfirm());
+
+    const saveCheck = QS("#cm_save_template");
+    const nameInput = QS("#cm_template_name");
+    if(saveCheck && nameInput){
+      saveCheck.addEventListener("change", ()=>{
+        nameInput.style.display = saveCheck.checked ? "" : "none";
+      });
+    }
+  }
+
+  // ============================================================
   // HELPERS
   // ============================================================
 
@@ -940,6 +1231,7 @@
 
       _bindUpload();
       _bindActions();
+      _bindColumnMapping();
       await _loadHistory();
       _showUpload();
     }
