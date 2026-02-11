@@ -503,13 +503,33 @@ def _parse_header_region(
                 "field_type": "currency", "value": cur_match.group(1), **box,
             })
 
-    # Saldo
+    # Saldo końcowe poprzedniego wyciągu (must match before general saldo patterns)
+    prev_closing_m = re.search(
+        r"saldo\s*(?:końc|ko.c)\w*\s*(?:poprz|pop\.)\w*[^0-9\-]*(-?\d[\d\s]*[,\.]\d{2})",
+        header_text, re.IGNORECASE,
+    )
+    if prev_closing_m:
+        parsed = _parse_amount_str(prev_closing_m.group(1))
+        result["previous_closing_balance"] = parsed
+        box = _find_box_for_text(prev_closing_m.group(0))
+        if box:
+            result["field_boxes"].append({
+                "field_type": "previous_closing_balance",
+                "value": str(parsed) if parsed is not None else "",
+                **box,
+            })
+
+    # Saldo początkowe / końcowe
     for label, key in [
         (r"saldo\s*(pocz|otwarcia|na\s*pocz)", "opening_balance"),
         (r"saldo\s*(końc|zamkni|na\s*koniec|ko.c)", "closing_balance"),
     ]:
+        # Skip if already matched as previous_closing_balance
         m = re.search(label + r"[^0-9\-]*(-?\d[\d\s]*[,\.]\d{2})", header_text, re.IGNORECASE)
         if m:
+            # Don't re-match the "saldo końcowe poprzedniego" as regular closing_balance
+            if key == "closing_balance" and prev_closing_m and m.start() == prev_closing_m.start():
+                continue
             parsed = _parse_amount_str(m.group(len(m.groups())))
             result[key] = parsed
             box = _find_box_for_text(m.group(0))
@@ -519,6 +539,100 @@ def _parse_header_region(
                     "value": str(parsed) if parsed is not None else "",
                     **box,
                 })
+
+    # Suma uznań: "Suma uznań (123) \n 45 678,90"
+    credits_m = re.search(
+        r"(?:suma\s*uzna[ńn])\s*\(?(\d+)\)?[^0-9\-]*(-?\d[\d\s]*[,\.]\d{2})",
+        header_text, re.IGNORECASE,
+    )
+    if credits_m:
+        count_val = int(credits_m.group(1))
+        sum_val = _parse_amount_str(credits_m.group(2))
+        result["declared_credits_count"] = count_val
+        result["declared_credits_sum"] = sum_val
+        box = _find_box_for_text(credits_m.group(0))
+        if box:
+            result["field_boxes"].append({
+                "field_type": "declared_credits_count",
+                "value": str(count_val),
+                **box,
+            })
+            result["field_boxes"].append({
+                "field_type": "declared_credits_sum",
+                "value": str(sum_val) if sum_val is not None else "",
+                **box,
+            })
+
+    # Suma obciążeń: "Suma obciążeń (45) \n 12 345,67"
+    debits_m = re.search(
+        r"(?:suma\s*obci[ąa][żz]e[ńn])\s*\(?(\d+)\)?[^0-9\-]*(-?\d[\d\s]*[,\.]\d{2})",
+        header_text, re.IGNORECASE,
+    )
+    if debits_m:
+        count_val = int(debits_m.group(1))
+        sum_val = _parse_amount_str(debits_m.group(2))
+        result["declared_debits_count"] = count_val
+        result["declared_debits_sum"] = sum_val
+        box = _find_box_for_text(debits_m.group(0))
+        if box:
+            result["field_boxes"].append({
+                "field_type": "declared_debits_count",
+                "value": str(count_val),
+                **box,
+            })
+            result["field_boxes"].append({
+                "field_type": "declared_debits_sum",
+                "value": str(sum_val) if sum_val is not None else "",
+                **box,
+            })
+
+    # Limit zadłużenia
+    limit_m = re.search(
+        r"limit\s*(?:zad[łl]u[żz]enia|kredyt\w*)?[:\s]*(-?\d[\d\s]*[,\.]\d{2})",
+        header_text, re.IGNORECASE,
+    )
+    if limit_m:
+        parsed = _parse_amount_str(limit_m.group(1))
+        result["debt_limit"] = parsed
+        box = _find_box_for_text(limit_m.group(0))
+        if box:
+            result["field_boxes"].append({
+                "field_type": "debt_limit",
+                "value": str(parsed) if parsed is not None else "",
+                **box,
+            })
+
+    # Kwota prowizji zaległej
+    commission_m = re.search(
+        r"(?:kwota\s*)?prowizj[iy]\s*(?:za[lł]eg[lł]\w*)?[:\s]*(-?\d[\d\s]*[,\.]\d{2})",
+        header_text, re.IGNORECASE,
+    )
+    if commission_m:
+        parsed = _parse_amount_str(commission_m.group(1))
+        result["overdue_commission"] = parsed
+        box = _find_box_for_text(commission_m.group(0))
+        if box:
+            result["field_boxes"].append({
+                "field_type": "overdue_commission",
+                "value": str(parsed) if parsed is not None else "",
+                **box,
+            })
+
+    # Kwota zablokowana
+    blocked_m = re.search(
+        r"(?:kwota\s*)?zablok\w*[:\s]*(-?\d[\d\s]*[,\.]\d{2})",
+        header_text, re.IGNORECASE,
+    )
+    if blocked_m:
+        parsed = _parse_amount_str(blocked_m.group(1))
+        result["blocked_amount"] = parsed
+        box = _find_box_for_text(blocked_m.group(0))
+        if box:
+            result["field_boxes"].append({
+                "field_type": "blocked_amount",
+                "value": str(parsed) if parsed is not None else "",
+                **box,
+            })
 
     # Period
     dates = _DATE_RE.findall(header_text)

@@ -1016,15 +1016,23 @@
 
   // Header field types that can be assigned
   const _HEADER_FIELD_TYPES = {
-    bank_name:       {label:"Nazwa banku",       icon:"\uD83C\uDFE6"},
-    account_number:  {label:"Nr rachunku / IBAN", icon:"\uD83D\uDD22"},
-    account_holder:  {label:"Wlasciciel konta",  icon:"\uD83D\uDC64"},
-    period_from:     {label:"Okres od",           icon:"\uD83D\uDCC5"},
-    period_to:       {label:"Okres do",           icon:"\uD83D\uDCC5"},
-    opening_balance: {label:"Saldo poczatkowe",   icon:"\uD83D\uDCB0"},
-    closing_balance: {label:"Saldo koncowe",      icon:"\uD83D\uDCB0"},
-    currency:        {label:"Waluta",             icon:"\uD83D\uDCB1"},
-    skip:            {label:"Pomin",              icon:"\u23ED\uFE0F"},
+    bank_name:               {label:"Nazwa banku",              icon:"\uD83C\uDFE6"},
+    account_number:          {label:"Nr rachunku / IBAN",       icon:"\uD83D\uDD22"},
+    account_holder:          {label:"Wlasciciel konta",         icon:"\uD83D\uDC64"},
+    period_from:             {label:"Okres od",                 icon:"\uD83D\uDCC5"},
+    period_to:               {label:"Okres do",                 icon:"\uD83D\uDCC5"},
+    opening_balance:         {label:"Saldo poczatkowe",         icon:"\uD83D\uDCB0"},
+    closing_balance:         {label:"Saldo koncowe",            icon:"\uD83D\uDCB0"},
+    previous_closing_balance:{label:"Saldo konc. poprz. wyc.",  icon:"\uD83D\uDCB0"},
+    declared_credits_count:  {label:"Suma uznan (liczba)",      icon:"\uD83D\uDCE5"},
+    declared_credits_sum:    {label:"Suma uznan (kwota)",       icon:"\uD83D\uDCE5"},
+    declared_debits_count:   {label:"Suma obciazen (liczba)",   icon:"\uD83D\uDCE4"},
+    declared_debits_sum:     {label:"Suma obciazen (kwota)",    icon:"\uD83D\uDCE4"},
+    debt_limit:              {label:"Limit zadluzenia",         icon:"\uD83D\uDCCA"},
+    overdue_commission:      {label:"Kwota prowizji zaleglej",  icon:"\uD83D\uDCCB"},
+    blocked_amount:          {label:"Kwota zablokowana",        icon:"\uD83D\uDD12"},
+    currency:                {label:"Waluta",                   icon:"\uD83D\uDCB1"},
+    skip:                    {label:"Pomin",                    icon:"\u23ED\uFE0F"},
   };
 
   function _renderColumnMapping(){
@@ -1108,6 +1116,14 @@
       ["period_to", "Okres do"],
       ["opening_balance", "Saldo poczatkowe"],
       ["closing_balance", "Saldo koncowe"],
+      ["previous_closing_balance", "Saldo konc. poprz. wyciagu"],
+      ["declared_credits_count", "Suma uznan (liczba)"],
+      ["declared_credits_sum", "Suma uznan (kwota)"],
+      ["declared_debits_count", "Suma obciazen (liczba)"],
+      ["declared_debits_sum", "Suma obciazen (kwota)"],
+      ["debt_limit", "Limit zadluzenia"],
+      ["overdue_commission", "Kwota prowizji zaleglej"],
+      ["blocked_amount", "Kwota zablokowana"],
       ["currency", "Waluta"],
     ];
     for(const [key, rawLabel] of fieldMap){
@@ -1421,13 +1437,13 @@
       // Page wrapper (holds img + svg)
       const wrap = document.createElement("div");
       wrap.className = "cm-page-wrap";
-      wrap.style.cssText = "position:relative;display:inline-block;width:100%;user-select:none;-webkit-user-select:none";
+      wrap.style.cssText = "position:relative;display:block;user-select:none;-webkit-user-select:none";
       wrap.setAttribute("data-page", String(i));
       // Prevent browser image/text drag
       wrap.addEventListener("dragstart", (ev) => ev.preventDefault());
 
       const img = document.createElement("img");
-      img.style.cssText = "display:block;max-width:100%;height:auto;user-select:none;-webkit-user-drag:none;pointer-events:none";
+      img.style.cssText = "display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none;pointer-events:none";
       img.alt = `Strona ${i + 1}`;
       img.draggable = false;
 
@@ -1463,8 +1479,12 @@
   const _HDR_FIELD_COLORS = {
     bank_name: "#8b5cf6", account_number: "#3b82f6", account_holder: "#06b6d4",
     period_from: "#22c55e", period_to: "#22c55e",
-    opening_balance: "#f59e0b", closing_balance: "#f59e0b", currency: "#64748b",
-    skip: "#94a3b8",
+    opening_balance: "#f59e0b", closing_balance: "#f59e0b",
+    previous_closing_balance: "#d97706",
+    declared_credits_count: "#10b981", declared_credits_sum: "#10b981",
+    declared_debits_count: "#ef4444", declared_debits_sum: "#ef4444",
+    debt_limit: "#6366f1", overdue_commission: "#e11d48", blocked_amount: "#a855f7",
+    currency: "#64748b", skip: "#94a3b8",
   };
 
   function _cmRenderOverlay(){

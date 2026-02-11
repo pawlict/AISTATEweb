@@ -52,6 +52,10 @@ class StatementInfo:
     declared_credits_count: Optional[int] = None
     declared_debits_sum: Optional[float] = None   # Suma obciążeń
     declared_debits_count: Optional[int] = None
+    previous_closing_balance: Optional[float] = None  # Saldo końcowe poprzedniego wyciągu
+    debt_limit: Optional[float] = None            # Limit zadłużenia
+    overdue_commission: Optional[float] = None     # Kwota prowizji zaległej
+    blocked_amount: Optional[float] = None         # Kwota zablokowana
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
