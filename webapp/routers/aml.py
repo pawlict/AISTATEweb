@@ -446,6 +446,34 @@ async def aml_history(limit: int = Query(20)):
     return JSONResponse({"items": items, "count": len(items)})
 
 
+@router.delete("/api/aml/history/{statement_id}")
+async def aml_delete_analysis(statement_id: str):
+    """Delete an AML analysis (statement + related data)."""
+    from backend.db.engine import execute, fetch_one
+
+    stmt = fetch_one("SELECT id, case_id FROM statements WHERE id = ?", (statement_id,))
+    if not stmt:
+        return JSONResponse({"error": "not found"}, status_code=404)
+
+    case_id = stmt.get("case_id", "")
+
+    # Delete in dependency order
+    execute("DELETE FROM tx_classifications WHERE statement_id = ?", (statement_id,))
+    execute("DELETE FROM risk_assessments WHERE statement_id = ?", (statement_id,))
+    execute("DELETE FROM transactions WHERE statement_id = ?", (statement_id,))
+    # Graph data is per case; delete only if no other statements remain
+    other = fetch_one(
+        "SELECT id FROM statements WHERE case_id = ? AND id != ? LIMIT 1",
+        (case_id, statement_id),
+    )
+    if not other and case_id:
+        execute("DELETE FROM graph_edges WHERE case_id = ?", (case_id,))
+        execute("DELETE FROM graph_nodes WHERE case_id = ?", (case_id,))
+    execute("DELETE FROM statements WHERE id = ?", (statement_id,))
+
+    return JSONResponse({"status": "ok", "deleted": statement_id})
+
+
 @router.get("/api/aml/detail/{statement_id}")
 async def aml_detail(statement_id: str):
     """Full analysis details: statement + transactions + risk + graph."""
