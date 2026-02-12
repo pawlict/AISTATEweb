@@ -42,11 +42,21 @@ log = logging.getLogger("aistate.aml.pipeline")
 
 
 def _safe_float(val) -> Optional[float]:
-    """Convert value to float, returning None on failure."""
+    """Convert value to float, handling Polish number formats (spaces, commas)."""
     if val is None:
         return None
     try:
         return float(val)
+    except (ValueError, TypeError):
+        pass
+    # Try Polish format: "12 345,67" or "12 345.67" or "12345,67"
+    try:
+        s = str(val).strip().replace("\u00a0", "").replace(" ", "")
+        if "," in s and "." not in s:
+            s = s.replace(",", ".")
+        elif "," in s and "." in s:
+            s = s.replace(",", "")  # "12,345.67" → "12345.67"
+        return float(s)
     except (ValueError, TypeError):
         return None
 

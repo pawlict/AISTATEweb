@@ -1978,9 +1978,12 @@
 
       svg.innerHTML = markup;
 
+      // Store current scale on svg element (updated every re-render)
+      svg._currentScale = scale;
+
       // Bind drag handlers once per page-svg
       if(!svg._dragBound){
-        _cmBindDragHandlers(svg, scale);
+        _cmBindDragHandlers(svg);
         svg._dragBound = true;
       }
     }
@@ -1992,12 +1995,16 @@
   // ---- Shared drag state (one drag at a time) ----
   let _dragState = null; // {type: "boundary"|"hdr-move"|"hdr-resize", svg, scale, ...}
 
-  function _cmBindDragHandlers(svg, scale){
+  function _cmBindDragHandlers(svg){
     const wrap = svg.parentElement; // per-page wrapper
     if(!wrap) return;
 
+    // Read current scale dynamically (updated by _cmRenderOverlay)
+    const _getScale = () => svg._currentScale || St.cmPageScale || 1;
+
     // Compute PDF coordinates relative to this page wrapper
     const _pdfCoords = (e) => {
+      const scale = _getScale();
       const rect = wrap.getBoundingClientRect();
       const img = wrap.querySelector("img");
       if(!img || !img.naturalWidth) return {x: 0, y: 0};
@@ -2012,6 +2019,7 @@
     const _onDown = (e) => {
       if(_dragState) return;
       const el = e.target;
+      const scale = _getScale();
 
       // 1) Header field handle (resize)
       if(el && el.hasAttribute("data-hdr-handle")){
@@ -2049,42 +2057,67 @@
       const mx = e.clientX - rect.left;
       const img = wrap.querySelector("img");
       const dispScale = img ? wrap.clientWidth / img.naturalWidth : 1;
-      const hitZone = 16;
+      const hitZone = 20;
 
-      // Left outer edge
+      // Check all column boundaries: left edge, internal, right edge
+      // Build array of {screenX, action} sorted by distance from click
+      const edges = [];
       if(St.cmColumns.length > 0){
-        const lx = St.cmColumns[0].x_min * scale * dispScale;
-        if(Math.abs(mx - lx) < hitZone){
-          _dragState = {type: "edge-left", svg, scale};
-          e.preventDefault();
-          wrap.style.cursor = "col-resize";
-          return;
+        // Left outer edge
+        edges.push({
+          sx: St.cmColumns[0].x_min * scale * dispScale,
+          action: {type: "edge-left", svg, scale},
+        });
+        // Internal boundaries (right side of each column = left side of next)
+        for(let i = 0; i < St.cmColumns.length - 1; i++){
+          edges.push({
+            sx: St.cmColumns[i].x_max * scale * dispScale,
+            action: {type: "boundary", idx: i, svg, scale},
+          });
         }
+        // Right outer edge
+        edges.push({
+          sx: St.cmColumns[St.cmColumns.length - 1].x_max * scale * dispScale,
+          action: {type: "edge-right", svg, scale},
+        });
       }
 
-      // Internal boundaries
-      for(let i = 0; i < St.cmColumns.length - 1; i++){
-        const bx = St.cmColumns[i].x_max * scale * dispScale;
-        if(Math.abs(mx - bx) < hitZone){
-          _dragState = {type: "boundary", idx: i, svg, scale};
-          e.preventDefault();
-          wrap.style.cursor = "col-resize";
-          return;
+      // Find closest edge within hit zone
+      let bestDist = hitZone;
+      let bestAction = null;
+      for(const edge of edges){
+        const dist = Math.abs(mx - edge.sx);
+        if(dist < bestDist){
+          bestDist = dist;
+          bestAction = edge.action;
         }
       }
-
-      // Right outer edge
-      if(St.cmColumns.length > 0){
-        const lastCol = St.cmColumns[St.cmColumns.length - 1];
-        const rx = lastCol.x_max * scale * dispScale;
-        if(Math.abs(mx - rx) < hitZone){
-          _dragState = {type: "edge-right", svg, scale};
-          e.preventDefault();
-          wrap.style.cursor = "col-resize";
-          return;
-        }
+      if(bestAction){
+        _dragState = bestAction;
+        e.preventDefault();
+        wrap.style.cursor = "col-resize";
+        return;
       }
     };
+
+    // Show col-resize cursor on hover near boundaries
+    wrap.addEventListener("mousemove", (e) => {
+      if(_dragState) return;
+      const scale = _getScale();
+      const rect = wrap.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const img = wrap.querySelector("img");
+      const dispScale = img ? wrap.clientWidth / img.naturalWidth : 1;
+      const hoverZone = 12;
+
+      let nearEdge = false;
+      for(let i = 0; i < St.cmColumns.length; i++){
+        const col = St.cmColumns[i];
+        if(i === 0 && Math.abs(mx - col.x_min * scale * dispScale) < hoverZone){ nearEdge = true; break; }
+        if(Math.abs(mx - col.x_max * scale * dispScale) < hoverZone){ nearEdge = true; break; }
+      }
+      wrap.style.cursor = nearEdge ? "col-resize" : "";
+    });
 
     wrap.addEventListener("mousedown", _onDown);
     svg.addEventListener("mousedown", _onDown);
@@ -2218,7 +2251,7 @@
       _dragState = null;
       if(d.svg && d.svg.parentElement) d.svg.parentElement.style.cursor = "";
 
-      if(d.type === "boundary"){
+      if(d.type === "boundary" || d.type === "edge-left" || d.type === "edge-right"){
         _cmSyncMapping();
         _cmRenderOverlay();
         return;
