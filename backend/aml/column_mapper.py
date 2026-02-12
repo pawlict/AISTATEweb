@@ -300,6 +300,28 @@ def parse_with_mapping(
     log.info("parse_with_mapping: %d transactions from %d/%d pages",
              len(transactions), pages_parsed, cached.page_count)
 
+    # Build info dict with ALL detected header fields
+    info_dict: Dict[str, Any] = {
+        "bank": cached.bank_name,
+        "bank_name": cached.bank_name,
+        "account_number": header_info.get("account_number", ""),
+        "account_holder": header_info.get("account_holder", ""),
+        "period_from": header_info.get("period_from", ""),
+        "period_to": header_info.get("period_to", ""),
+        "opening_balance": header_info.get("opening_balance"),
+        "closing_balance": header_info.get("closing_balance"),
+        "available_balance": header_info.get("available_balance"),
+        "currency": header_info.get("currency", "PLN"),
+        "previous_closing_balance": header_info.get("previous_closing_balance"),
+        "declared_credits_count": header_info.get("declared_credits_count"),
+        "declared_credits_sum": header_info.get("declared_credits_sum"),
+        "declared_debits_count": header_info.get("declared_debits_count"),
+        "declared_debits_sum": header_info.get("declared_debits_sum"),
+        "debt_limit": header_info.get("debt_limit"),
+        "overdue_commission": header_info.get("overdue_commission"),
+        "blocked_amount": header_info.get("blocked_amount"),
+    }
+
     return {
         "status": "ok",
         "bank_id": cached.bank_id,
@@ -307,15 +329,7 @@ def parse_with_mapping(
         "transactions": transactions,
         "transaction_count": len(transactions),
         "pages_parsed": pages_parsed,
-        "info": {
-            "bank": cached.bank_name,
-            "account_number": header_info.get("account_number", ""),
-            "account_holder": header_info.get("account_holder", ""),
-            "period_from": header_info.get("period_from", ""),
-            "period_to": header_info.get("period_to", ""),
-            "opening_balance": header_info.get("opening_balance"),
-            "closing_balance": header_info.get("closing_balance"),
-        },
+        "info": info_dict,
         "page_count": cached.page_count,
     }
 

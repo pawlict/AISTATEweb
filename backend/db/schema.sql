@@ -103,6 +103,10 @@ CREATE TABLE IF NOT EXISTS statements (
     declared_credits_count INTEGER,
     declared_debits_sum    TEXT,
     declared_debits_count  INTEGER,
+    previous_closing_balance TEXT,
+    debt_limit      TEXT,
+    overdue_commission TEXT,
+    blocked_amount  TEXT,
     parse_method    TEXT DEFAULT '',     -- table | text | ocr
     ocr_used        INTEGER DEFAULT 0,
     ocr_confidence  REAL,

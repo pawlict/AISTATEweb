@@ -311,6 +311,10 @@ def get_statement_header(statement_id: str) -> Dict[str, Any]:
         {"field": "declared_credits_count", "label": "Liczba uznan", "value": stmt_dict.get("declared_credits_count", ""), "type": "number", "editable": True},
         {"field": "declared_debits_sum", "label": "Suma obciazen", "value": stmt_dict.get("declared_debits_sum", ""), "type": "amount", "editable": True},
         {"field": "declared_debits_count", "label": "Liczba obciazen", "value": stmt_dict.get("declared_debits_count", ""), "type": "number", "editable": True},
+        {"field": "previous_closing_balance", "label": "Saldo konc. poprz. wyciagu", "value": stmt_dict.get("previous_closing_balance", ""), "type": "amount", "editable": True},
+        {"field": "debt_limit", "label": "Limit zadluzenia", "value": stmt_dict.get("debt_limit", ""), "type": "amount", "editable": True},
+        {"field": "overdue_commission", "label": "Prowizja zalegla", "value": stmt_dict.get("overdue_commission", ""), "type": "amount", "editable": True},
+        {"field": "blocked_amount", "label": "Kwota zablokowana", "value": stmt_dict.get("blocked_amount", ""), "type": "amount", "editable": True},
         {"field": "parse_method", "label": "Metoda parsowania", "value": stmt_dict.get("parse_method", ""), "type": "text", "editable": False},
         {"field": "ocr_used", "label": "OCR", "value": "Tak" if stmt_dict.get("ocr_used") else "Nie", "type": "text", "editable": False},
         {"field": "parser_version", "label": "Wersja parsera", "value": stmt_dict.get("parser_version", ""), "type": "text", "editable": False},
@@ -336,6 +340,8 @@ def update_statement_field(statement_id: str, field: str, value: str) -> bool:
         "currency",
         "declared_credits_sum", "declared_credits_count",
         "declared_debits_sum", "declared_debits_count",
+        "previous_closing_balance", "debt_limit",
+        "overdue_commission", "blocked_amount",
     }
 
     if field not in editable_fields:

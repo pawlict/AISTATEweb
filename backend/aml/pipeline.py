@@ -61,6 +61,16 @@ def _safe_float(val) -> Optional[float]:
         return None
 
 
+def _safe_int(val) -> Optional[int]:
+    """Convert value to int, returning None on failure."""
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def _compute_pdf_hash(path: Path) -> str:
     """SHA-256 of PDF file (first 10MB)."""
     h = hashlib.sha256()
@@ -185,6 +195,9 @@ def run_aml_pipeline(
             for key, val in header_fields.items():
                 if val:
                     spatial_info[key] = val
+            # Frontend uses "bank_name" key; StatementInfo uses "bank"
+            if "bank_name" in header_fields and header_fields["bank_name"]:
+                spatial_info["bank"] = header_fields["bank_name"]
 
         # Convert spatial dicts → RawTransaction objects
         raw_transactions = []
@@ -211,7 +224,16 @@ def run_aml_pipeline(
             period_to=spatial_info.get("period_to"),
             opening_balance=_safe_float(spatial_info.get("opening_balance")),
             closing_balance=_safe_float(spatial_info.get("closing_balance")),
+            available_balance=_safe_float(spatial_info.get("available_balance")),
             currency=spatial_info.get("currency", "PLN"),
+            previous_closing_balance=_safe_float(spatial_info.get("previous_closing_balance")),
+            declared_credits_sum=_safe_float(spatial_info.get("declared_credits_sum")),
+            declared_credits_count=_safe_int(spatial_info.get("declared_credits_count")),
+            declared_debits_sum=_safe_float(spatial_info.get("declared_debits_sum")),
+            declared_debits_count=_safe_int(spatial_info.get("declared_debits_count")),
+            debt_limit=_safe_float(spatial_info.get("debt_limit")),
+            overdue_commission=_safe_float(spatial_info.get("overdue_commission")),
+            blocked_amount=_safe_float(spatial_info.get("blocked_amount")),
         )
 
         parse_result = ParseResult(
@@ -361,6 +383,14 @@ def run_aml_pipeline(
                 (case_id, project_id, case_name.strip(), "aml", "{}"),
             )
 
+        # Ensure extra columns exist (migration for existing DBs)
+        for col in ("previous_closing_balance", "debt_limit",
+                     "overdue_commission", "blocked_amount"):
+            try:
+                conn.execute(f"SELECT {col} FROM statements LIMIT 0")
+            except Exception:
+                conn.execute(f"ALTER TABLE statements ADD COLUMN {col} TEXT")
+
         # Save statement
         conn.execute(
             """INSERT INTO statements
@@ -369,9 +399,11 @@ def run_aml_pipeline(
                 account_number, account_holder,
                 declared_credits_sum, declared_credits_count,
                 declared_debits_sum, declared_debits_count,
+                previous_closing_balance, debt_limit,
+                overdue_commission, blocked_amount,
                 parse_method, ocr_used, ocr_confidence,
                 parser_version, pdf_hash, warnings)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (statement_id, case_id, bank_id, bank_name,
              info.period_from, info.period_to,
              str(info.opening_balance) if info.opening_balance is not None else None,
@@ -382,6 +414,10 @@ def run_aml_pipeline(
              info.declared_credits_count,
              str(info.declared_debits_sum) if info.declared_debits_sum is not None else None,
              info.declared_debits_count,
+             str(info.previous_closing_balance) if info.previous_closing_balance is not None else None,
+             str(info.debt_limit) if info.debt_limit is not None else None,
+             str(info.overdue_commission) if info.overdue_commission is not None else None,
+             str(info.blocked_amount) if info.blocked_amount is not None else None,
              parse_result.parse_method, int(ocr_used), ocr_confidence,
              f"{bank_id}_v1", pdf_hash,
              json.dumps(warnings, ensure_ascii=False)),
