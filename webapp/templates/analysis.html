@@ -223,7 +223,7 @@
       </div>
 
       <!-- Visual PDF + columns -->
-      <div class="card" style="margin-top:12px">
+      <div class="card" style="margin-top:12px;overflow:hidden">
         <div class="analysis-sidehdr">
           <div class="h2">Maska kolumn</div>
           <div style="display:flex;gap:6px;align-items:center">
@@ -235,8 +235,8 @@
         <div id="cm_warnings" style="margin-bottom:6px"></div>
 
         <!-- Visual PDF pages with SVG mask overlays (all pages stacked) -->
-        <div id="cm_visual_wrap" style="position:relative;overflow:hidden;overflow-y:auto;max-height:700px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:#f8fafc;width:100%;max-width:100%;box-sizing:border-box;padding:0 24px 0 0">
-          <div id="cm_pages_container" style="width:100%;max-width:100%;overflow:hidden"></div>
+        <div id="cm_visual_wrap" style="position:relative;overflow-x:hidden;overflow-y:auto;max-height:700px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:#f8fafc;box-sizing:border-box">
+          <div id="cm_pages_container" style="width:100%;box-sizing:border-box;padding-right:20px"></div>
         </div>
 
         <!-- Column type selectors (below the image) -->

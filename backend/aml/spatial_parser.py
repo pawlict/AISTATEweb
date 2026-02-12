@@ -175,7 +175,7 @@ def spatial_parse_pdf(
             img_path = None
             if render_images:
                 try:
-                    img = pg.to_image(resolution=150)
+                    img = pg.to_image(resolution=120)
                     img_file = image_dir / f"page_{pg_idx}.png"
                     img.save(str(img_file), format="PNG")
                     img_path = str(img_file)
@@ -712,6 +712,11 @@ def _segment_transactions(
 
     A new transaction starts whenever a date (DD.MM.YYYY) appears
     in the first column zone (date column).
+
+    Handles multi-page PDFs with per-page header detection:
+    page 0 uses the detected header_y_end, continuation pages detect
+    their own header boundary (repeated column headers may be at
+    different Y position since page 0 has bank info above).
     """
     if not columns or header_y_end <= 0:
         return []
@@ -727,8 +732,47 @@ def _segment_transactions(
     if date_col is None:
         date_col = columns[0]
 
-    # Find all date markers in the date column zone
-    data_words = [w for w in words if w.top >= header_y_end]
+    # Build per-page header_y_end to handle continuation pages correctly.
+    # Page 0 uses the provided header_y_end. Pages 1+ detect their own
+    # header position (repeated column headers at different Y than page 0
+    # because page 0 has bank info above the table header).
+    page_nums = sorted(set(w.page for w in words))
+    page_header_y: Dict[int, float] = {0: header_y_end}
+
+    for pg in page_nums:
+        if pg == 0:
+            continue
+        pg_words = [w for w in words if w.page == pg]
+        if not pg_words:
+            page_header_y[pg] = 0
+            continue
+
+        # Check top portion of the page for repeated column header keywords
+        # Use 60% of page-0 header_y_end as the scan zone (headers on
+        # continuation pages are typically shorter)
+        scan_limit = max(header_y_end * 1.2, 120)
+        top_words = [w for w in pg_words if w.top < scan_limit]
+        if not top_words:
+            page_header_y[pg] = 0
+            continue
+
+        # Group top words into lines and check for header keywords
+        top_lines = _group_by_y(top_words, tolerance=4.0)
+        best_hdr_bottom = 0.0
+        for _y, line_words in top_lines:
+            line_text = " ".join(w.text for w in line_words).lower()
+            hdr_score = sum(1 for kw in _HEADER_KEYWORDS if kw in line_text)
+            if hdr_score >= 2:
+                line_bottom = max(w.bottom for w in line_words) + 5
+                best_hdr_bottom = max(best_hdr_bottom, line_bottom)
+
+        page_header_y[pg] = best_hdr_bottom
+
+    # Filter data words using per-page header boundaries
+    data_words = [
+        w for w in words
+        if w.top >= page_header_y.get(w.page, 0)
+    ]
     date_starts: List[Tuple[float, int]] = []  # (y_position, page)
 
     for w in data_words:
