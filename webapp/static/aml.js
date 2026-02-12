@@ -1213,8 +1213,15 @@
     if(tpl && !tpl._partial_match){
       // Exact match — auto-applied
       if(titleEl) titleEl.textContent = "Rozpoznano: " + bankName;
-      if(subtitleEl) subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" zostal automatycznie zastosowany"
-        + (tpl.times_used ? " (uzywany " + tpl.times_used + "x)" : "") + ".";
+      const hfCount = Object.keys(tpl.header_fields || {}).length;
+      let subMsg = "Szablon \"" + (tpl.name || "domyslny") + "\" zastosowany automatycznie";
+      if(hfCount > 0){
+        subMsg += " (kolumny + " + hfCount + " pol naglowka)";
+      } else {
+        subMsg += " (kolumny). Brak pol naglowka — zapisz szablon ponownie";
+      }
+      subMsg += (tpl.times_used ? ". Uzywany " + tpl.times_used + "x" : "") + ".";
+      if(subtitleEl) subtitleEl.textContent = subMsg;
       banner.style.borderLeftColor = "var(--ok,#15803d)";
       banner.style.background = "var(--bg-success,#f0fdf4)";
       if(applyBtn) applyBtn.style.display = "none";
@@ -1429,7 +1436,24 @@
     }
 
     // Restore header fields from template (saldo, IBAN, etc.)
-    _restoreHeaderFieldsFromTemplate(tpl);
+    const hfRestored = _restoreHeaderFieldsFromTemplate(tpl);
+
+    // Update banner to include header field info
+    if(subtitleEl){
+      const total = St.cmColumns.length;
+      let msg = "Szablon \"" + (tpl.name || "domyslny") + "\" zastosowany";
+      msg += " — " + matched + "/" + total + " kolumn";
+      if(hfRestored > 0){
+        msg += ", " + hfRestored + " pol naglowka";
+      } else {
+        const hfCount = Object.keys(tpl.header_fields || {}).length;
+        if(hfCount === 0){
+          msg += ". Brak pol naglowka w szablonie — zapisz ponownie aby je zachowac";
+        }
+      }
+      msg += ".";
+      subtitleEl.textContent = msg;
+    }
 
     // Re-render everything: headers, SVG overlay, and parse preview
     _renderCmHeaders();
@@ -1439,18 +1463,24 @@
 
   function _restoreHeaderFieldsFromTemplate(tpl){
     const savedFields = tpl.header_fields;
-    if(!savedFields || typeof savedFields !== "object" || !Object.keys(savedFields).length) return;
+    console.log("[AML] Template header_fields:", JSON.stringify(savedFields),
+      "| current cmHeaderFields:", St.cmHeaderFields.length);
+    if(!savedFields || typeof savedFields !== "object" || !Object.keys(savedFields).length){
+      console.log("[AML] No header_fields in template — skipping restore");
+      return 0;
+    }
+
+    let restored = 0;
 
     // Merge template header fields into current St.cmHeaderFields
-    // For each saved field: if already detected, update value; if missing, add it
+    // For each saved field: overwrite if exists, add if missing
     for(const [fieldType, savedValue] of Object.entries(savedFields)){
       if(!savedValue || fieldType === "skip") continue;
       const existing = St.cmHeaderFields.find(f => f.field_type === fieldType);
       if(existing){
-        // Only overwrite if current value is empty or differs
-        if(!existing.value.trim()){
-          existing.value = String(savedValue);
-        }
+        // Always overwrite with template value — user saved it for a reason
+        existing.value = String(savedValue);
+        restored++;
       } else {
         // Add field that wasn't auto-detected this time
         const meta = _HEADER_FIELD_TYPES[fieldType];
@@ -1460,9 +1490,13 @@
           raw_label: meta ? meta.label : fieldType,
           box: null,
         });
+        restored++;
       }
     }
+
+    console.log("[AML] Restored", restored, "header fields from template");
     _renderHeaderFields();
+    return restored;
   }
 
   // ============================================================
@@ -2455,6 +2489,10 @@
     const templateId = preview.template ? (preview.template.id || "") : "";
     const runLlm = QS("#cm_run_llm")?.checked || false;
 
+    const _hfForApi = _getHeaderFieldsForApi();
+    console.log("[AML] Confirm — save_template:", saveTemplate,
+      "| header_fields:", JSON.stringify(_hfForApi));
+
     _runFullPipeline(preview.file_path, St.cmMapping, {
       save_template: saveTemplate,
       template_name: templateName,
@@ -2464,7 +2502,7 @@
       bank_name: preview.bank_name,
       header_cells: St.cmColumns.map(c => c.label),
       column_bounds: St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type})),
-      header_fields: _getHeaderFieldsForApi(),
+      header_fields: _hfForApi,
       run_llm: runLlm,
     });
   }
