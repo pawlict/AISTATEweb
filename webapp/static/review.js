@@ -36,6 +36,73 @@
   };
 
   // ============================================================
+  // INCOME KEYWORD AUTO-CLASSIFICATION
+  // ============================================================
+
+  // Regex patterns for income keywords (Polish, with/without diacritics, declensions)
+  const _INCOME_PATTERNS = [
+    /u[pP]osa[żźz]eni/i,                     // uposażenie / uposazenie
+    /[śs]wiadczeni\w*\s*(mieszk|wypocz)?/i,  // świadczenie, swiadczenie (mieszkaniowe, wypoczynkowe)
+    /dop[łl]at\w*\s*(do\s+wypocz)?/i,        // dopłata / doplata (do wypoczynku)
+    /wynagrodzeni/i,                          // wynagrodzenie
+    /pensj/i,                                 // pensja
+    /zasi[łl]e?k/i,                           // zasiłek / zasilek
+    /emerytur/i,                              // emerytura
+    /rent[ay]/i,                              // renta
+  ];
+
+  function _isIncomeKeyword(text){
+    if(!text) return false;
+    const s = String(text).toLowerCase();
+    return _INCOME_PATTERNS.some(rx => rx.test(s));
+  }
+
+  // ============================================================
+  // SUSPICIOUS TX COUNTERPARTY FILTERING
+  // ============================================================
+
+  /**
+   * Detect if counterparty string is just a bare transaction/reference number.
+   * Returns true for strings like "1234567890", "TX123456", "REF00123456789".
+   * Returns false for meaningful names like "www.lotto.pl", "Jan Kowalski", "BIEDRONKA".
+   */
+  function _isBareTransactionId(raw){
+    if(!raw) return true;
+    const s = String(raw).trim();
+    if(!s) return true;
+    // Pure digits (6+ chars)
+    if(/^\d{6,}$/.test(s)) return true;
+    // Short prefix + digits only (e.g. TX1234567, REF123456)
+    if(/^[A-Za-z]{1,5}\d{6,}$/.test(s)) return true;
+    // Digits separated by slashes/dashes (e.g. 12345/678/90)
+    if(/^[\d\/\-\.]{6,}$/.test(s)) return true;
+    return false;
+  }
+
+  /**
+   * Extract meaningful counterparty info from raw text.
+   * If the text starts with a transaction ID but contains more (URL, name),
+   * extract and return the meaningful part.
+   * Returns null if nothing meaningful found.
+   */
+  function _extractMeaningfulCounterparty(raw){
+    if(!raw) return null;
+    const s = String(raw).trim();
+    if(!s) return null;
+
+    // If the whole thing is a bare ID, nothing meaningful
+    if(_isBareTransactionId(s)) return null;
+
+    // Try to strip leading transaction-number-like prefix
+    // e.g. "1234567890 www.lotto.pl" → "www.lotto.pl"
+    const stripped = s.replace(/^[A-Za-z]{0,5}\d{6,}\s+/, "").trim();
+    if(stripped && !_isBareTransactionId(stripped)) return stripped;
+
+    // Return original if it's meaningful
+    return s;
+  }
+
+  // ============================================================
   // STATE
   // ============================================================
 
@@ -63,10 +130,31 @@
     St.transactions = data.transactions || [];
     St.header = data.header || null;
 
-    // Build classification map
+    // Build classification map + auto-classify income keywords
     St.classifications = {};
     for(const tx of St.transactions){
-      St.classifications[tx.id] = tx.classification || "neutral";
+      let cls = tx.classification || "neutral";
+
+      // Auto-classify incoming transactions with income keywords as "legitimate"
+      if(cls === "neutral"){
+        const amt = parseFloat(tx.amount || 0);
+        const isCredit = tx.direction === "CREDIT" || amt > 0;
+        if(isCredit){
+          const titleMatch = _isIncomeKeyword(tx.title);
+          const cpMatch = _isIncomeKeyword(tx.counterparty_raw);
+          if(titleMatch || cpMatch){
+            cls = "legitimate";
+            // Persist auto-classification to backend (fire-and-forget)
+            _safeApi("/api/aml/review/" + encodeURIComponent(statementId) + "/classify", {
+              method:"POST",
+              headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({tx_id: tx.id, classification: "legitimate", note: "Auto: słowo kluczowe przychodu"}),
+            });
+          }
+        }
+      }
+
+      St.classifications[tx.id] = cls;
     }
 
     // Load account profile
@@ -285,9 +373,16 @@
     const countEl = QS("#rv_suspicious_count");
     if(!container || !listEl) return;
 
-    const suspicious = St.transactions.filter(tx =>
+    const allSuspicious = St.transactions.filter(tx =>
       (St.classifications[tx.id] || "neutral") === "suspicious"
     );
+
+    // Filter: skip TX where counterparty is just a bare transaction ID
+    // (still suspicious in main table, but not shown in summary / not memorized)
+    const suspicious = allSuspicious.filter(tx => {
+      const meaningful = _extractMeaningfulCounterparty(tx.counterparty_raw);
+      return meaningful !== null;
+    });
 
     if(!suspicious.length){
       container.style.display = "none";
@@ -303,9 +398,10 @@
     for(const tx of suspicious){
       const amt = parseFloat(tx.amount || 0);
       const color = amt < 0 ? "#b91c1c" : "#15803d";
+      const cpDisplay = _extractMeaningfulCounterparty(tx.counterparty_raw) || tx.counterparty_raw || "";
       html += `<tr style="border-bottom:1px solid rgba(185,28,28,.15)">
         <td style="padding:3px 6px;white-space:nowrap">${_esc(tx.booking_date || "")}</td>
-        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(tx.counterparty_raw || "")}">${_esc((tx.counterparty_raw || "").slice(0,40))}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(tx.counterparty_raw || "")}">${_esc(cpDisplay.slice(0,40))}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(tx.title || "")}">${_esc((tx.title || "").slice(0,50))}</td>
         <td style="text-align:right;color:${color};font-weight:600;white-space:nowrap">${_fmtAmount(amt, "PLN")}</td>
         <td class="small muted">${_esc(tx.channel || "")}</td>
@@ -464,19 +560,23 @@
       body: JSON.stringify({tx_id: txId, classification: classification}),
     });
 
-    // If marked as suspicious, also remember counterparty in memory
+    // If marked as suspicious, remember counterparty in memory
+    // (skip if counterparty is just a bare transaction number)
     if(classification === "suspicious"){
       const tx = St.transactions.find(t => t.id === txId);
-      if(tx && tx.counterparty_raw){
-        _safeApi("/api/memory", {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({
-            name: tx.counterparty_raw,
-            label: "blacklist",
-            note: "Oznaczony jako podejrzany w analizie " + (St.statementId || "").slice(0,8),
-          }),
-        });
+      if(tx){
+        const meaningful = _extractMeaningfulCounterparty(tx.counterparty_raw);
+        if(meaningful){
+          _safeApi("/api/memory", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({
+              name: meaningful,
+              label: "blacklist",
+              note: "Oznaczony jako podejrzany w analizie " + (St.statementId || "").slice(0,8),
+            }),
+          });
+        }
       }
     }
   }
