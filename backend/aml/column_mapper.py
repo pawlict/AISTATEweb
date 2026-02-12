@@ -219,14 +219,17 @@ def parse_with_mapping(
     pdf_path: Path,
     column_mapping: Dict[str, str],
     column_bounds: Optional[List[Dict[str, Any]]] = None,
+    full_parse: bool = False,
     **_kwargs,
 ) -> Dict[str, Any]:
     """Re-parse a PDF using user-confirmed column mapping.
 
     column_mapping: {col_index_str: column_type}
     column_bounds: optional [{x_min, x_max}] from dragged UI boundaries
+    full_parse: if True, re-parse ALL pages (not just cached 5-page preview)
 
-    Uses cached spatial parse result when available, otherwise re-parses.
+    When full_parse=True (used by pipeline), ignores the 5-page cache and
+    parses the entire PDF to ensure all transactions are captured.
     """
     from .spatial_parser import (
         spatial_parse_pdf,
@@ -234,10 +237,15 @@ def parse_with_mapping(
         _segment_transactions,
     )
 
-    # Use cached result if available
-    cached = _last_spatial_result.get(str(pdf_path))
+    # For full pipeline: always re-parse ALL pages (ignore 5-page preview cache)
+    # For preview: use cached result if available
+    cached = None
+    if not full_parse:
+        cached = _last_spatial_result.get(str(pdf_path))
     if cached is None:
-        cached = spatial_parse_pdf(pdf_path, render_images=False)
+        max_pages = 9999 if full_parse else 5
+        log.info("Parsing PDF with max_pages=%s (full_parse=%s)", max_pages, full_parse)
+        cached = spatial_parse_pdf(pdf_path, max_preview_pages=max_pages, render_images=False)
 
     # Rebuild columns from user-provided bounds (authoritative source)
     # column_bounds carries full info: x_min, x_max, label, col_type
@@ -288,12 +296,17 @@ def parse_with_mapping(
     # Header region info
     header_info = cached.header_region or {}
 
+    pages_parsed = len(cached.pages)
+    log.info("parse_with_mapping: %d transactions from %d/%d pages",
+             len(transactions), pages_parsed, cached.page_count)
+
     return {
         "status": "ok",
         "bank_id": cached.bank_id,
         "bank_name": cached.bank_name,
         "transactions": transactions,
         "transaction_count": len(transactions),
+        "pages_parsed": pages_parsed,
         "info": {
             "bank": cached.bank_name,
             "account_number": header_info.get("account_number", ""),
@@ -341,43 +354,70 @@ def save_template(
     column_bounds: Optional[List[Dict[str, Any]]] = None,
     header_fields: Optional[Dict[str, str]] = None,
 ) -> str:
-    """Save a column mapping template (includes header fields like saldo/IBAN)."""
+    """Save a column mapping template (includes header fields like saldo/IBAN).
+
+    Uses UPSERT: if a template with the same bank_id and name exists,
+    it is updated instead of creating a duplicate.
+    """
     ensure_initialized()
-    template_id = new_id()
 
     if not name:
         name = f"{bank_name} — szablon"
 
     bounds_json = json.dumps(column_bounds or [], ensure_ascii=False)
     hf_json = json.dumps(header_fields or {}, ensure_ascii=False)
+    mapping_json = json.dumps(column_mapping, ensure_ascii=False)
+    headers_json = json.dumps(header_cells, ensure_ascii=False)
 
     with get_conn() as conn:
         _ensure_template_columns(conn)
 
-        # If setting as default, unset previous defaults
+        # Check for existing template with same bank_id + name
+        existing = conn.execute(
+            "SELECT id FROM parse_templates WHERE bank_id = ? AND name = ?",
+            (bank_id, name),
+        ).fetchone()
+
+        if existing:
+            # Update existing template instead of creating a duplicate
+            template_id = existing[0] if isinstance(existing, (tuple, list)) else existing["id"]
+            conn.execute(
+                """UPDATE parse_templates
+                   SET column_mapping = ?, header_row = ?, data_start_row = ?,
+                       sample_headers = ?, is_default = ?, column_bounds = ?,
+                       header_fields = ?, bank_name = ?
+                   WHERE id = ?""",
+                (mapping_json, header_row, data_start_row,
+                 headers_json, int(is_default), bounds_json,
+                 hf_json, bank_name, template_id),
+            )
+            log.info("Updated template %s for bank %s (bounds: %d cols, header_fields: %d)",
+                     template_id[:8], bank_id, len(column_bounds or []), len(header_fields or {}))
+        else:
+            # Create new template
+            template_id = new_id()
+
+            conn.execute(
+                """INSERT INTO parse_templates
+                   (id, bank_id, bank_name, name, column_mapping, header_row,
+                    data_start_row, sample_headers, is_default, column_bounds,
+                    header_fields)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (template_id, bank_id, bank_name, name,
+                 mapping_json, header_row, data_start_row,
+                 headers_json, int(is_default),
+                 bounds_json, hf_json),
+            )
+            log.info("Saved new template %s for bank %s (bounds: %d cols, header_fields: %d)",
+                     template_id[:8], bank_id, len(column_bounds or []), len(header_fields or {}))
+
+        # If setting as default, unset other defaults
         if is_default:
             conn.execute(
-                "UPDATE parse_templates SET is_default = 0 WHERE bank_id = ?",
-                (bank_id,),
+                "UPDATE parse_templates SET is_default = 0 WHERE bank_id = ? AND id != ?",
+                (bank_id, template_id),
             )
 
-        conn.execute(
-            """INSERT INTO parse_templates
-               (id, bank_id, bank_name, name, column_mapping, header_row,
-                data_start_row, sample_headers, is_default, column_bounds,
-                header_fields)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (template_id, bank_id, bank_name, name,
-             json.dumps(column_mapping, ensure_ascii=False),
-             header_row, data_start_row,
-             json.dumps(header_cells, ensure_ascii=False),
-             int(is_default),
-             bounds_json,
-             hf_json),
-        )
-
-    log.info("Saved template %s for bank %s (bounds: %d cols, header_fields: %d)",
-             template_id[:8], bank_id, len(column_bounds or []), len(header_fields or {}))
     return template_id
 
 
