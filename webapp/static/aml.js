@@ -1213,8 +1213,15 @@
     if(tpl && !tpl._partial_match){
       // Exact match — auto-applied
       if(titleEl) titleEl.textContent = "Rozpoznano: " + bankName;
-      if(subtitleEl) subtitleEl.textContent = "Szablon \"" + (tpl.name || "domyslny") + "\" zostal automatycznie zastosowany"
-        + (tpl.times_used ? " (uzywany " + tpl.times_used + "x)" : "") + ".";
+      const hfCount = Object.keys(tpl.header_fields || {}).length;
+      let subMsg = "Szablon \"" + (tpl.name || "domyslny") + "\" zastosowany automatycznie";
+      if(hfCount > 0){
+        subMsg += " (kolumny + " + hfCount + " pol naglowka)";
+      } else {
+        subMsg += " (kolumny). Brak pol naglowka — zapisz szablon ponownie";
+      }
+      subMsg += (tpl.times_used ? ". Uzywany " + tpl.times_used + "x" : "") + ".";
+      if(subtitleEl) subtitleEl.textContent = subMsg;
       banner.style.borderLeftColor = "var(--ok,#15803d)";
       banner.style.background = "var(--bg-success,#f0fdf4)";
       if(applyBtn) applyBtn.style.display = "none";
@@ -1429,7 +1436,24 @@
     }
 
     // Restore header fields from template (saldo, IBAN, etc.)
-    _restoreHeaderFieldsFromTemplate(tpl);
+    const hfRestored = _restoreHeaderFieldsFromTemplate(tpl);
+
+    // Update banner to include header field info
+    if(subtitleEl){
+      const total = St.cmColumns.length;
+      let msg = "Szablon \"" + (tpl.name || "domyslny") + "\" zastosowany";
+      msg += " — " + matched + "/" + total + " kolumn";
+      if(hfRestored > 0){
+        msg += ", " + hfRestored + " pol naglowka";
+      } else {
+        const hfCount = Object.keys(tpl.header_fields || {}).length;
+        if(hfCount === 0){
+          msg += ". Brak pol naglowka w szablonie — zapisz ponownie aby je zachowac";
+        }
+      }
+      msg += ".";
+      subtitleEl.textContent = msg;
+    }
 
     // Re-render everything: headers, SVG overlay, and parse preview
     _renderCmHeaders();
@@ -1439,18 +1463,24 @@
 
   function _restoreHeaderFieldsFromTemplate(tpl){
     const savedFields = tpl.header_fields;
-    if(!savedFields || typeof savedFields !== "object" || !Object.keys(savedFields).length) return;
+    console.log("[AML] Template header_fields:", JSON.stringify(savedFields),
+      "| current cmHeaderFields:", St.cmHeaderFields.length);
+    if(!savedFields || typeof savedFields !== "object" || !Object.keys(savedFields).length){
+      console.log("[AML] No header_fields in template — skipping restore");
+      return 0;
+    }
+
+    let restored = 0;
 
     // Merge template header fields into current St.cmHeaderFields
-    // For each saved field: if already detected, update value; if missing, add it
+    // For each saved field: overwrite if exists, add if missing
     for(const [fieldType, savedValue] of Object.entries(savedFields)){
       if(!savedValue || fieldType === "skip") continue;
       const existing = St.cmHeaderFields.find(f => f.field_type === fieldType);
       if(existing){
-        // Only overwrite if current value is empty or differs
-        if(!existing.value.trim()){
-          existing.value = String(savedValue);
-        }
+        // Always overwrite with template value — user saved it for a reason
+        existing.value = String(savedValue);
+        restored++;
       } else {
         // Add field that wasn't auto-detected this time
         const meta = _HEADER_FIELD_TYPES[fieldType];
@@ -1460,9 +1490,13 @@
           raw_label: meta ? meta.label : fieldType,
           box: null,
         });
+        restored++;
       }
     }
+
+    console.log("[AML] Restored", restored, "header fields from template");
     _renderHeaderFields();
+    return restored;
   }
 
   // ============================================================
@@ -1978,9 +2012,12 @@
 
       svg.innerHTML = markup;
 
+      // Store current scale on svg element (updated every re-render)
+      svg._currentScale = scale;
+
       // Bind drag handlers once per page-svg
       if(!svg._dragBound){
-        _cmBindDragHandlers(svg, scale);
+        _cmBindDragHandlers(svg);
         svg._dragBound = true;
       }
     }
@@ -1992,12 +2029,16 @@
   // ---- Shared drag state (one drag at a time) ----
   let _dragState = null; // {type: "boundary"|"hdr-move"|"hdr-resize", svg, scale, ...}
 
-  function _cmBindDragHandlers(svg, scale){
+  function _cmBindDragHandlers(svg){
     const wrap = svg.parentElement; // per-page wrapper
     if(!wrap) return;
 
+    // Read current scale dynamically (updated by _cmRenderOverlay)
+    const _getScale = () => svg._currentScale || St.cmPageScale || 1;
+
     // Compute PDF coordinates relative to this page wrapper
     const _pdfCoords = (e) => {
+      const scale = _getScale();
       const rect = wrap.getBoundingClientRect();
       const img = wrap.querySelector("img");
       if(!img || !img.naturalWidth) return {x: 0, y: 0};
@@ -2012,6 +2053,7 @@
     const _onDown = (e) => {
       if(_dragState) return;
       const el = e.target;
+      const scale = _getScale();
 
       // 1) Header field handle (resize)
       if(el && el.hasAttribute("data-hdr-handle")){
@@ -2049,42 +2091,67 @@
       const mx = e.clientX - rect.left;
       const img = wrap.querySelector("img");
       const dispScale = img ? wrap.clientWidth / img.naturalWidth : 1;
-      const hitZone = 16;
+      const hitZone = 20;
 
-      // Left outer edge
+      // Check all column boundaries: left edge, internal, right edge
+      // Build array of {screenX, action} sorted by distance from click
+      const edges = [];
       if(St.cmColumns.length > 0){
-        const lx = St.cmColumns[0].x_min * scale * dispScale;
-        if(Math.abs(mx - lx) < hitZone){
-          _dragState = {type: "edge-left", svg, scale};
-          e.preventDefault();
-          wrap.style.cursor = "col-resize";
-          return;
+        // Left outer edge
+        edges.push({
+          sx: St.cmColumns[0].x_min * scale * dispScale,
+          action: {type: "edge-left", svg, scale},
+        });
+        // Internal boundaries (right side of each column = left side of next)
+        for(let i = 0; i < St.cmColumns.length - 1; i++){
+          edges.push({
+            sx: St.cmColumns[i].x_max * scale * dispScale,
+            action: {type: "boundary", idx: i, svg, scale},
+          });
         }
+        // Right outer edge
+        edges.push({
+          sx: St.cmColumns[St.cmColumns.length - 1].x_max * scale * dispScale,
+          action: {type: "edge-right", svg, scale},
+        });
       }
 
-      // Internal boundaries
-      for(let i = 0; i < St.cmColumns.length - 1; i++){
-        const bx = St.cmColumns[i].x_max * scale * dispScale;
-        if(Math.abs(mx - bx) < hitZone){
-          _dragState = {type: "boundary", idx: i, svg, scale};
-          e.preventDefault();
-          wrap.style.cursor = "col-resize";
-          return;
+      // Find closest edge within hit zone
+      let bestDist = hitZone;
+      let bestAction = null;
+      for(const edge of edges){
+        const dist = Math.abs(mx - edge.sx);
+        if(dist < bestDist){
+          bestDist = dist;
+          bestAction = edge.action;
         }
       }
-
-      // Right outer edge
-      if(St.cmColumns.length > 0){
-        const lastCol = St.cmColumns[St.cmColumns.length - 1];
-        const rx = lastCol.x_max * scale * dispScale;
-        if(Math.abs(mx - rx) < hitZone){
-          _dragState = {type: "edge-right", svg, scale};
-          e.preventDefault();
-          wrap.style.cursor = "col-resize";
-          return;
-        }
+      if(bestAction){
+        _dragState = bestAction;
+        e.preventDefault();
+        wrap.style.cursor = "col-resize";
+        return;
       }
     };
+
+    // Show col-resize cursor on hover near boundaries
+    wrap.addEventListener("mousemove", (e) => {
+      if(_dragState) return;
+      const scale = _getScale();
+      const rect = wrap.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const img = wrap.querySelector("img");
+      const dispScale = img ? wrap.clientWidth / img.naturalWidth : 1;
+      const hoverZone = 12;
+
+      let nearEdge = false;
+      for(let i = 0; i < St.cmColumns.length; i++){
+        const col = St.cmColumns[i];
+        if(i === 0 && Math.abs(mx - col.x_min * scale * dispScale) < hoverZone){ nearEdge = true; break; }
+        if(Math.abs(mx - col.x_max * scale * dispScale) < hoverZone){ nearEdge = true; break; }
+      }
+      wrap.style.cursor = nearEdge ? "col-resize" : "";
+    });
 
     wrap.addEventListener("mousedown", _onDown);
     svg.addEventListener("mousedown", _onDown);
@@ -2218,7 +2285,7 @@
       _dragState = null;
       if(d.svg && d.svg.parentElement) d.svg.parentElement.style.cursor = "";
 
-      if(d.type === "boundary"){
+      if(d.type === "boundary" || d.type === "edge-left" || d.type === "edge-right"){
         _cmSyncMapping();
         _cmRenderOverlay();
         return;
@@ -2422,6 +2489,10 @@
     const templateId = preview.template ? (preview.template.id || "") : "";
     const runLlm = QS("#cm_run_llm")?.checked || false;
 
+    const _hfForApi = _getHeaderFieldsForApi();
+    console.log("[AML] Confirm — save_template:", saveTemplate,
+      "| header_fields:", JSON.stringify(_hfForApi));
+
     _runFullPipeline(preview.file_path, St.cmMapping, {
       save_template: saveTemplate,
       template_name: templateName,
@@ -2431,7 +2502,7 @@
       bank_name: preview.bank_name,
       header_cells: St.cmColumns.map(c => c.label),
       column_bounds: St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type})),
-      header_fields: _getHeaderFieldsForApi(),
+      header_fields: _hfForApi,
       run_llm: runLlm,
     });
   }
