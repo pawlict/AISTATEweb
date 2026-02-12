@@ -140,6 +140,32 @@
     }
   }
 
+  /** Show error inside the mapping card (visible when returning to mapping after pipeline failure). */
+  function _showMappingError(msg){
+    // Remove any previous mapping error
+    const prev = QS("#cm_pipeline_error");
+    if(prev) prev.remove();
+
+    // Insert error banner at top of mapping card
+    const mappingCard = QS("#aml_mapping_card");
+    if(!mappingCard) return;
+
+    const d = document.createElement("div");
+    d.id = "cm_pipeline_error";
+    d.style.cssText = "background:#fef2f2;border:1px solid #fecaca;border-left:4px solid var(--danger,#b91c1c);padding:10px 14px;border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:8px";
+    d.innerHTML = `<span style="font-size:18px">\u26A0\uFE0F</span>
+      <div>
+        <div style="font-weight:600;color:var(--danger,#b91c1c)">Blad analizy</div>
+        <div class="small" style="color:#7f1d1d">${_esc(msg)}</div>
+      </div>
+      <button style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:16px;color:#9ca3af" title="Zamknij">\u2715</button>`;
+    d.querySelector("button").onclick = ()=> d.remove();
+    mappingCard.insertBefore(d, mappingCard.firstChild);
+
+    // Auto-remove after 15s
+    setTimeout(()=>{ if(d.parentNode) d.remove(); }, 15000);
+  }
+
   async function _uploadAndAnalyze(file){
     if(!file || St.analyzing) return;
     if(!file.name.toLowerCase().endsWith(".pdf")){
@@ -251,13 +277,13 @@
           _runLlmAnalysis();
         }
       } else {
-        _showError(result && result.error ? String(result.error) : "Blad analizy");
+        _showMappingError(result && result.error ? String(result.error) : "Blad analizy");
         _showMapping();
       }
     } catch(e) {
       clearInterval(progTimer);
       clearInterval(stageTimer);
-      _showError("Blad: " + String(e.message || e));
+      _showMappingError("Blad: " + String(e.message || e));
       _showMapping();
     } finally {
       St.analyzing = false;
@@ -2632,7 +2658,7 @@
 
     // Build column_bounds from current columns (full info for backend)
     const column_bounds = St.cmColumns.map(c => ({
-      x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type,
+      x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type, header_y: c.header_y,
     }));
 
     try{
@@ -2648,6 +2674,9 @@
 
       if(data && data.status === "ok" && data.transactions){
         _renderCmParsedPreview(container, data.transactions, data.transaction_count, data.pages_parsed, data.page_count);
+        // Clear misleading initial warnings if preview-parse found transactions
+        const warningsEl = QS("#cm_warnings");
+        if(warningsEl && data.transaction_count > 0) warningsEl.innerHTML = "";
       } else {
         container.innerHTML = `<div class="small" style="color:var(--danger)">${_esc(data && data.error ? data.error : "Blad parsowania")}</div>`;
       }
@@ -2707,7 +2736,7 @@
       bank_id: preview.bank_id,
       bank_name: preview.bank_name,
       header_cells: St.cmColumns.map(c => c.label),
-      column_bounds: St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type})),
+      column_bounds: St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type, header_y: c.header_y})),
       header_fields: _hfForApi,
       run_llm: runLlm,
     });
@@ -2917,7 +2946,7 @@
       bank_id: preview.bank_id || "",
       bank_name: preview.bank_name || "",
       header_cells: finalColumns.map(c => c.label),
-      column_bounds: finalColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type})),
+      column_bounds: finalColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type, header_y: c.header_y})),
       header_fields: headerFields,
       case_id: St.batchCaseId,
     };
@@ -2995,7 +3024,7 @@
       bank_id: preview.bank_id || "",
       bank_name: preview.bank_name || "",
       header_cells: St.cmColumns.map(c => c.label),
-      column_bounds: St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type})),
+      column_bounds: St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type, header_y: c.header_y})),
       header_fields: _hfForApi,
       case_id: St.batchCaseId,
     };

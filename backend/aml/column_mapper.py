@@ -248,11 +248,24 @@ def parse_with_mapping(
         cached = spatial_parse_pdf(pdf_path, max_preview_pages=max_pages, render_images=False)
 
     # Rebuild columns from user-provided bounds (authoritative source)
-    # column_bounds carries full info: x_min, x_max, label, col_type
+    # column_bounds carries full info: x_min, x_max, label, col_type, header_y
     columns = list(cached.columns)
     default_header_y = columns[0].header_y if columns else 50.0
 
     if column_bounds and len(column_bounds) > 0:
+        # Prefer header_y from user bounds (frontend knows the correct value
+        # from the initial preview; auto-detection on full_parse may differ)
+        bounds_header_y = None
+        for b in column_bounds:
+            if b and b.get("header_y") is not None:
+                try:
+                    bounds_header_y = float(b["header_y"])
+                except (ValueError, TypeError):
+                    pass
+                break
+        if bounds_header_y is not None and bounds_header_y > 0:
+            default_header_y = bounds_header_y
+
         # User may have added/removed columns — rebuild entirely from bounds
         columns = []
         for i, bounds in enumerate(column_bounds):
@@ -260,12 +273,18 @@ def parse_with_mapping(
                 continue
             col_type = bounds.get("col_type", "skip")
             label = bounds.get("label", f"Kolumna {i + 1}")
+            hy = default_header_y
+            if bounds.get("header_y") is not None:
+                try:
+                    hy = float(bounds["header_y"])
+                except (ValueError, TypeError):
+                    pass
             columns.append(ColumnZone(
                 label=label,
                 col_type=col_type,
                 x_min=float(bounds.get("x_min", 0)),
                 x_max=float(bounds.get("x_max", 0)),
-                header_y=default_header_y,
+                header_y=hy,
             ))
 
     # Apply column_mapping type overrides on top
@@ -289,9 +308,21 @@ def parse_with_mapping(
     # Find header end Y
     header_y_end = max(c.header_y for c in columns) + 20 if columns else 0
 
+    log.info("parse_with_mapping: %d columns, header_y_end=%.1f, words=%d, pages=%d (full_parse=%s)",
+             len(columns), header_y_end, len(all_words), len(cached.pages), full_parse)
+    if columns:
+        for i, c in enumerate(columns):
+            log.debug("  col[%d]: type=%s x=%.1f..%.1f header_y=%.1f label=%s",
+                       i, c.col_type, c.x_min, c.x_max, c.header_y, c.label[:30])
+
     # Re-segment and re-extract with updated columns
     bands = _segment_transactions(all_words, columns, header_y_end)
     transactions = _extract_transactions(all_words, columns, bands)
+
+    if not transactions and all_words:
+        log.warning("parse_with_mapping: 0 transactions from %d words! "
+                     "header_y_end=%.1f, %d columns, %d bands",
+                     len(all_words), header_y_end, len(columns), len(bands))
 
     # Header region info
     header_info = cached.header_region or {}
