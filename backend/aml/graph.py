@@ -283,6 +283,68 @@ def get_graph_json(case_id: str) -> Dict[str, Any]:
     }
 
 
+def enrich_graph_with_classifications(
+    graph: Dict[str, Any],
+    statement_id: str,
+) -> Dict[str, Any]:
+    """Add classification status to graph nodes and edges from tx_classifications.
+
+    For each edge, look up the classifications of its linked transactions.
+    The dominant classification (suspicious > monitoring > legitimate > neutral)
+    is assigned to both the edge and the target/source counterparty node.
+    """
+    from ..db.engine import fetch_all
+
+    if not statement_id:
+        return graph
+
+    # Load all classifications for this statement
+    rows = fetch_all(
+        "SELECT tx_id, classification FROM tx_classifications WHERE statement_id = ?",
+        (statement_id,),
+    )
+    tx_class: Dict[str, str] = {row["tx_id"]: row["classification"] for row in rows}
+    if not tx_class:
+        return graph
+
+    cls_priority = {"neutral": 0, "legitimate": 1, "monitoring": 2, "suspicious": 3}
+
+    # Enrich edges — assign dominant classification from linked tx_ids
+    edge_node_class: Dict[str, str] = {}  # node_id → dominant classification
+    for edge in graph.get("edges", []):
+        tx_ids = edge.get("tx_ids", [])
+        if not tx_ids:
+            continue
+        best_cls = "neutral"
+        for tid in tx_ids:
+            c = tx_class.get(tid, "neutral")
+            if cls_priority.get(c, 0) > cls_priority.get(best_cls, 0):
+                best_cls = c
+        edge["class_status"] = best_cls
+
+        # Propagate to both endpoints (non-ACCOUNT)
+        for nid in (edge.get("source"), edge.get("target")):
+            if not nid:
+                continue
+            # Skip own account node (may have case_id: prefix or not)
+            if "account_own" in nid:
+                continue
+            old = edge_node_class.get(nid, "neutral")
+            if cls_priority.get(best_cls, 0) > cls_priority.get(old, 0):
+                edge_node_class[nid] = best_cls
+
+    # Enrich nodes
+    for node in graph.get("nodes", []):
+        nid = node["id"]
+        if nid in edge_node_class:
+            node["class_status"] = edge_node_class[nid]
+        # Also check node_type to avoid coloring own ACCOUNT
+        if node.get("node_type") == "ACCOUNT" or node.get("type") == "ACCOUNT":
+            node.pop("class_status", None)
+
+    return graph
+
+
 def filter_graph(
     graph: Dict[str, Any],
     date_from: str = "",
