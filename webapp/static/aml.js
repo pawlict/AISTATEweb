@@ -285,7 +285,7 @@
     const score = risk.total_score != null ? risk.total_score : (result.risk_score || 0);
     _renderRiskGauge(score);
 
-    // Bank info
+    // Bank info (merged with header fields: salda, IBAN, period, currency)
     _renderBankInfo(stmt, result);
 
     // Alerts
@@ -293,6 +293,11 @@
       ? risk.score_breakdown.alerts
       : (result.alerts || []);
     _renderAlerts(alerts);
+
+    // Review module (classification)
+    if(window.ReviewManager && St.statementId){
+      ReviewManager.loadForStatement(St.statementId);
+    }
 
     // Charts
     const charts = detail.charts || result.charts || {};
@@ -303,22 +308,11 @@
     const mlAnomalies = detail.ml_anomalies || [];
     _renderMlAnomalies(mlAnomalies, transactions);
 
-    // LLM section
-    _setupLlmSection(detail.has_llm_prompt || result.has_llm_prompt);
-
     // Graph
     _renderGraph(graph);
 
-    // Transactions
-    _renderTransactions(transactions);
-
-    // Memory
-    _loadMemory();
-
-    // Trigger review module for integrated view
-    if(window.ReviewManager && St.statementId){
-      ReviewManager.loadForStatement(St.statementId);
-    }
+    // LLM section
+    _setupLlmSection(detail.has_llm_prompt || result.has_llm_prompt);
   }
 
   function _renderRiskGauge(score){
@@ -351,18 +345,31 @@
     const iban = stmt.account_number || "";
     const period = [stmt.period_from, stmt.period_to].filter(Boolean).join(" \u2014 ");
     const cur = stmt.currency || "PLN";
+    const txCount = (result.transaction_count || St.allTransactions.length) || 0;
+    const prevClosing = stmt.previous_closing_balance;
+    const availBal = stmt.available_balance;
 
-    grid.innerHTML = `
-      ${bank ? `<div class="aml-info-row"><b>Bank:</b> ${_esc(bank)}</div>` : ""}
-      ${holder ? `<div class="aml-info-row"><b>Wlasciciel:</b> ${_esc(holder)}</div>` : ""}
-      ${iban ? `<div class="aml-info-row"><b>IBAN:</b> <span style="font-family:monospace">${_esc(iban)}</span></div>` : ""}
-      ${period ? `<div class="aml-info-row"><b>Okres:</b> ${_esc(period)}</div>` : ""}
-      <div class="aml-info-stats">
-        <span><b>Saldo pocz.:</b> ${_fmtAmount(stmt.opening_balance, cur)}</span>
-        <span><b>Saldo konc.:</b> ${_fmtAmount(stmt.closing_balance, cur)}</span>
-      </div>
-      <div class="small muted">Transakcje: ${(result.transaction_count || St.allTransactions.length) || 0} | Czas analizy: ${result.pipeline_time_s || "?"}s</div>
-    `;
+    let html = "";
+    if(bank) html += `<div class="aml-info-row"><b>Bank:</b> ${_esc(bank)}</div>`;
+    if(holder) html += `<div class="aml-info-row"><b>Wlasciciel:</b> ${_esc(holder)}</div>`;
+    if(iban) html += `<div class="aml-info-row"><b>IBAN:</b> <span style="font-family:monospace">${_esc(iban)}</span></div>`;
+    if(period) html += `<div class="aml-info-row"><b>Okres:</b> ${_esc(period)}</div>`;
+    if(cur && cur !== "PLN") html += `<div class="aml-info-row"><b>Waluta:</b> ${_esc(cur)}</div>`;
+
+    // Balances grid
+    html += '<div class="aml-info-stats">';
+    if(stmt.opening_balance != null) html += `<span><b>Saldo otw.:</b> ${_fmtAmount(stmt.opening_balance, cur)}</span>`;
+    if(stmt.closing_balance != null) html += `<span><b>Saldo konc.:</b> ${_fmtAmount(stmt.closing_balance, cur)}</span>`;
+    if(availBal != null) html += `<span><b>Saldo dost.:</b> ${_fmtAmount(availBal, cur)}</span>`;
+    if(prevClosing != null) html += `<span><b>Saldo konc. poprz.:</b> ${_fmtAmount(prevClosing, cur)}</span>`;
+    html += '</div>';
+
+    // Summary stats
+    html += `<div class="small muted" style="margin-top:4px">Transakcje: ${txCount}`;
+    if(result.pipeline_time_s) html += ` | Czas analizy: ${result.pipeline_time_s}s`;
+    html += `</div>`;
+
+    grid.innerHTML = html;
   }
 
   function _renderAlerts(alerts){

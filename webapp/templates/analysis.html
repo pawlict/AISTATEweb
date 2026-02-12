@@ -286,7 +286,7 @@
     <!-- Results -->
     <div id="aml_results" style="display:none">
 
-      <!-- Summary row: risk score + bank info -->
+      <!-- Summary row: risk score + bank info (merged with header fields) -->
       <div class="aml-summary-row">
         <div class="card aml-risk-card" id="aml_risk_card">
           <div class="aml-risk-gauge">
@@ -303,7 +303,7 @@
         <div class="card aml-info-card" id="aml_info_card">
           <div class="h2">Informacje o wyciagu</div>
           <div class="aml-info-grid" id="aml_info_grid">
-            <!-- Filled by JS -->
+            <!-- Filled by JS: bank, holder, IBAN, period, balances, currency -->
           </div>
         </div>
       </div>
@@ -315,6 +315,40 @@
           <span class="small aml-badge" id="aml_alerts_count">0</span>
         </div>
         <div id="aml_alerts_list" style="margin-top:10px"></div>
+      </div>
+
+      <!-- Transaction Review (classification) -->
+      <div class="card" id="aml_review_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Przeglad i klasyfikacja transakcji</div>
+          <div class="rv-stats-bar" id="rv_stats_bar" style="flex:1;margin-left:12px;min-width:100px"></div>
+        </div>
+        <div class="rv-stats-legend" id="rv_stats_legend" style="margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+          <input class="input" id="rv_search" placeholder="Szukaj..." style="width:160px;padding:5px 10px;border-radius:10px">
+          <select class="input" id="rv_filter_class" style="padding:5px 8px;border-radius:10px;min-width:130px">
+            <option value="">Klasyfikacja: wszystkie</option>
+            <option value="neutral">Neutralne</option>
+            <option value="legitimate">Poprawne</option>
+            <option value="suspicious">Podejrzane</option>
+            <option value="monitoring">Obserwacja</option>
+          </select>
+          <select class="input" id="rv_filter_channel" style="padding:5px 8px;border-radius:10px;min-width:120px">
+            <option value="">Kanal: wszystkie</option>
+          </select>
+          <span class="small muted" id="rv_tx_count">0</span>
+        </div>
+        <div id="rv_table_wrap" style="max-height:500px;overflow:auto"></div>
+
+        <!-- Suspicious transactions summary (shown when any tx marked suspicious) -->
+        <div id="rv_suspicious_summary" style="display:none;margin-top:16px;padding-top:12px;border-top:2px solid var(--danger,#b91c1c)">
+          <div class="analysis-sidehdr" style="margin-bottom:8px">
+            <div class="h2" style="color:var(--danger,#b91c1c)">Podejrzane transakcje</div>
+            <span class="small aml-badge" id="rv_suspicious_count" style="background:var(--danger,#b91c1c);color:#fff">0</span>
+          </div>
+          <div class="small muted" style="margin-bottom:8px">Transakcje oznaczone jako podejrzane. Kontrahenci i dane sa zapamietywane w pamieci wewnetrznej dla przyszlych analiz.</div>
+          <div id="rv_suspicious_list"></div>
+        </div>
       </div>
 
       <!-- Charts -->
@@ -337,33 +371,14 @@
         </div>
       </div>
 
-      <!-- LLM Analysis -->
-      <div class="card" id="aml_llm_card">
-        <div class="analysis-sidehdr">
-          <div class="h2">Analiza narracyjna (LLM)</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button class="btn" id="aml_llm_run_btn">Generuj analize</button>
-          </div>
-        </div>
-        <div id="aml_llm_status" class="small muted" style="margin:8px 0">Kliknij "Generuj analize" aby uzyskac profesjonalny raport AML od modelu LLM (wymaga Ollama).</div>
-        <div id="aml_llm_progress" style="display:none;margin:8px 0">
-          <div class="an-progress">
-            <div class="progress"><div id="aml_llm_prog_bar" style="width:0%;transition:width 0.3s"></div></div>
-          </div>
-          <div class="small muted" id="aml_llm_prog_text" style="margin-top:4px">Laczenie z Ollama...</div>
-        </div>
-        <div id="aml_llm_result" style="display:none;margin-top:10px">
-          <div id="aml_llm_text" class="aml-llm-text"></div>
-        </div>
-      </div>
-
       <!-- ML Anomalies -->
       <div class="card" id="aml_ml_card">
         <div class="analysis-sidehdr">
           <div class="h2">Anomalie ML</div>
           <span class="small aml-badge" id="aml_ml_count">0</span>
         </div>
-        <div id="aml_ml_list" style="max-height:300px;overflow:auto;margin-top:10px">
+        <div class="small muted" style="margin:8px 0">Algorytm Isolation Forest wykrywa transakcje odstajace od typowego wzorca zachowan na koncie — nietypowe kwoty, czestotliwosci lub kontrahentow. Im wyzszy wynik (%) tym bardziej nietypowa transakcja.</div>
+        <div id="aml_ml_list" style="max-height:300px;overflow:auto;margin-top:6px">
           <div class="small muted">Brak anomalii.</div>
         </div>
       </div>
@@ -384,82 +399,24 @@
         <div id="aml_graph_container" style="height:420px;border:1px solid var(--border);border-radius:12px;margin-top:10px;background:rgba(15,23,42,.02)"></div>
       </div>
 
-      <!-- Transactions table -->
-      <div class="card" id="aml_tx_card">
+      <!-- LLM Analysis -->
+      <div class="card" id="aml_llm_card">
         <div class="analysis-sidehdr">
-          <div class="h2">Transakcje</div>
+          <div class="h2">Analiza narracyjna (LLM)</div>
           <div style="display:flex;gap:8px;align-items:center">
-            <input class="input" id="aml_tx_search" placeholder="Szukaj..." style="width:180px;padding:5px 10px;border-radius:10px">
-            <select class="input" id="aml_tx_channel_filter" style="padding:5px 8px;border-radius:10px;min-width:130px">
-              <option value="">Kanal: wszystkie</option>
-            </select>
-            <span class="small muted" id="aml_tx_count">0</span>
+            <button class="btn" id="aml_llm_run_btn">Generuj analize</button>
           </div>
         </div>
-        <div id="aml_tx_table_wrap" style="max-height:450px;overflow:auto;margin-top:10px"></div>
-      </div>
-
-      <!-- Transaction Review (classification) — integrated in AML -->
-      <div class="card" id="aml_review_card">
-        <div class="analysis-sidehdr">
-          <div class="h2">Przeglad i klasyfikacja transakcji</div>
-          <div class="rv-stats-bar" id="rv_stats_bar" style="flex:1;margin-left:12px;min-width:100px"></div>
-        </div>
-        <div class="rv-stats-legend" id="rv_stats_legend" style="margin-bottom:8px"></div>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-          <input class="input" id="rv_search" placeholder="Szukaj..." style="width:160px;padding:5px 10px;border-radius:10px">
-          <select class="input" id="rv_filter_class" style="padding:5px 8px;border-radius:10px;min-width:130px">
-            <option value="">Klasyfikacja: wszystkie</option>
-            <option value="neutral">Neutralne</option>
-            <option value="legitimate">Poprawne</option>
-            <option value="suspicious">Podejrzane</option>
-            <option value="monitoring">Obserwacja</option>
-          </select>
-          <select class="input" id="rv_filter_channel" style="padding:5px 8px;border-radius:10px;min-width:120px">
-            <option value="">Kanal: wszystkie</option>
-          </select>
-          <span class="small muted" id="rv_tx_count">0</span>
-        </div>
-        <div id="rv_table_wrap" style="max-height:500px;overflow:auto"></div>
-      </div>
-
-      <!-- Statement Header Blocks -->
-      <div class="card" id="rv_header_card">
-        <div class="analysis-sidehdr">
-          <div class="h2">Naglowek wyciagu</div>
-          <button class="btn mini" id="rv_header_save" title="Zapisz zmiany">Zapisz</button>
-        </div>
-        <div class="small muted" style="margin:6px 0">Kliknij pole aby poprawic. Zmiany tworza reguly mapowania dla przyszlych importow.</div>
-        <div class="rv-header-grid" id="rv_header_grid"></div>
-        <div id="rv_header_warnings" style="margin-top:8px"></div>
-      </div>
-
-      <!-- Account profile -->
-      <div class="card" id="rv_account_card">
-        <div class="analysis-sidehdr">
-          <div class="h2">Profil konta</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <select class="input" id="rv_account_type" style="padding:5px 8px;border-radius:10px;min-width:120px">
-              <option value="private">Prywatne</option>
-              <option value="business">Firmowe</option>
-            </select>
-            <label class="pill" title="Anonimizacja">
-              <input type="checkbox" id="rv_anonymize_toggle" checked>
-              <span>Anonimizuj</span>
-            </label>
+        <div id="aml_llm_status" class="small muted" style="margin:8px 0">Kliknij "Generuj analize" aby uzyskac profesjonalny raport AML od modelu LLM (wymaga Ollama).</div>
+        <div id="aml_llm_progress" style="display:none;margin:8px 0">
+          <div class="an-progress">
+            <div class="progress"><div id="aml_llm_prog_bar" style="width:0%;transition:width 0.3s"></div></div>
           </div>
+          <div class="small muted" id="aml_llm_prog_text" style="margin-top:4px">Laczenie z Ollama...</div>
         </div>
-        <div class="rv-account-info" id="rv_account_info"></div>
-      </div>
-
-      <!-- Counterparty memory -->
-      <div class="card" id="aml_memory_card">
-        <div class="analysis-sidehdr">
-          <div class="h2">Pamiec kontrahentow</div>
-          <button class="btn mini" id="aml_memory_refresh" title="Odswiez">&#x21bb;</button>
+        <div id="aml_llm_result" style="display:none;margin-top:10px">
+          <div id="aml_llm_text" class="aml-llm-text"></div>
         </div>
-        <div class="small muted" style="margin:6px 0">Oznacz podmioty jako podejrzane — zostana zapamietane w przyszlych analizach.</div>
-        <div id="aml_memory_list" style="max-height:300px;overflow:auto"></div>
       </div>
 
       <!-- Actions -->
