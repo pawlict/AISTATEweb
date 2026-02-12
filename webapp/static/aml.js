@@ -973,6 +973,7 @@
   function _renderHistory(){
     const card = QS("#aml_history_card");
     const list = QS("#aml_history_list");
+    const countEl = QS("#aml_history_count");
     if(!card || !list) return;
 
     if(!St.history.length){
@@ -981,27 +982,50 @@
     }
 
     card.style.display = "";
+    if(countEl) countEl.textContent = St.history.length + " analiz";
+
     list.innerHTML = St.history.map(item => {
       const score = item.risk_score != null ? Math.round(item.risk_score) : "?";
       const scoreColor = score >= 60 ? "var(--danger)" : score >= 30 ? "#d97706" : "var(--ok)";
-      return `<div class="aml-history-item" data-sid="${_esc(item.statement_id)}">
-        <span class="aml-hist-bank">${_esc(item.bank_name || "?")}</span>
+      return `<div class="aml-history-item" data-sid="${_esc(item.statement_id)}" style="display:flex;align-items:center;gap:8px">
+        <span class="aml-hist-bank" style="flex:1">${_esc(item.bank_name || "?")}</span>
         <span class="aml-hist-period">${_esc(item.period_from || "")} \u2014 ${_esc(item.period_to || "")}</span>
         <span class="aml-hist-score" style="color:${scoreColor}">${score}</span>
         <span class="aml-hist-tx small muted">${item.tx_count || 0} tx</span>
         <span class="aml-hist-date small muted">${_fmtDate(item.created_at)}</span>
+        <button class="aml-hist-delete" data-sid="${_esc(item.statement_id)}" title="Usun analize" style="background:none;border:none;cursor:pointer;color:var(--danger,#b91c1c);font-size:16px;padding:2px 6px;border-radius:4px;opacity:0.5;line-height:1">&times;</button>
       </div>`;
     }).join("");
 
-    // Bind clicks
+    // Bind clicks (open analysis)
     QSA(".aml-history-item", list).forEach(el=>{
-      el.addEventListener("click", async ()=>{
+      el.addEventListener("click", async (e)=>{
+        // Ignore if delete button was clicked
+        if(e.target.closest(".aml-hist-delete")) return;
         const sid = el.getAttribute("data-sid");
         if(!sid) return;
         _showProgress("Ladowanie analizy...");
         await _loadDetail(sid);
         _renderResults();
         _showResults();
+      });
+    });
+
+    // Bind delete buttons
+    QSA(".aml-hist-delete", list).forEach(btn=>{
+      btn.addEventListener("mouseenter", ()=> btn.style.opacity = "1");
+      btn.addEventListener("mouseleave", ()=> btn.style.opacity = "0.5");
+      btn.addEventListener("click", async (e)=>{
+        e.stopPropagation();
+        const sid = btn.getAttribute("data-sid");
+        if(!sid) return;
+        if(!confirm("Usunac te analize? Operacja usunie wyciag i wszystkie powiazane transakcje.")) return;
+        const res = await _safeApi("/api/aml/history/" + encodeURIComponent(sid), {method:"DELETE"});
+        if(res){
+          // Remove from local state and re-render
+          St.history = St.history.filter(h => h.statement_id !== sid);
+          _renderHistory();
+        }
       });
     });
   }
@@ -1216,6 +1240,7 @@
     const selectEl = QS("#cm_tpl_select");
     const applyBtn = QS("#cm_tpl_apply_btn");
     const ignoreBtn = QS("#cm_tpl_ignore_btn");
+    const deleteBtn = QS("#cm_tpl_delete_btn");
 
     if(tpl && !tpl._partial_match){
       // Exact match — auto-applied
@@ -1270,6 +1295,11 @@
 
     banner.style.display = "";
 
+    // Show delete button when template is identified (exact or partial)
+    if(deleteBtn){
+      deleteBtn.style.display = (tpl && tpl.id) ? "" : "none";
+    }
+
     // Bind events
     if(applyBtn){
       applyBtn.onclick = ()=> _applySelectedTemplate();
@@ -1277,9 +1307,43 @@
     if(ignoreBtn){
       ignoreBtn.onclick = ()=>{ banner.style.display = "none"; };
     }
+    if(deleteBtn){
+      deleteBtn.onclick = async ()=>{
+        // Determine which template to delete
+        let tplId = "";
+        if(selectEl && selectEl.value){
+          tplId = selectEl.value;
+        } else if(tpl && tpl.id){
+          tplId = tpl.id;
+        }
+        if(!tplId){
+          deleteBtn.style.display = "none";
+          return;
+        }
+        if(!confirm("Czy na pewno usunac ten szablon? Operacja jest nieodwracalna.")) return;
+        const res = await _safeApi("/api/aml/templates/" + encodeURIComponent(tplId), {method:"DELETE"});
+        if(res){
+          if(subtitleEl) subtitleEl.textContent = "Szablon usuniety.";
+          banner.style.borderLeftColor = "#6b7280";
+          banner.style.background = "#f9fafb";
+          if(applyBtn) applyBtn.style.display = "none";
+          deleteBtn.style.display = "none";
+          if(selectEl){
+            // Remove deleted template from selector
+            const opt = selectEl.querySelector(`option[value="${tplId}"]`);
+            if(opt) opt.remove();
+            if(!selectEl.options.length || (selectEl.options.length === 1 && !selectEl.options[0].value)){
+              selectEl.style.display = "none";
+            }
+          }
+        }
+      };
+    }
     if(selectEl){
       selectEl.onchange = ()=>{
         if(applyBtn) applyBtn.style.display = selectEl.value ? "" : "none";
+        // Update delete button based on selection
+        if(deleteBtn) deleteBtn.style.display = selectEl.value ? "" : ((tpl && tpl.id) ? "" : "none");
       };
     }
   }
@@ -1868,7 +1932,7 @@
       // Page wrapper (holds img + svg)
       const wrap = document.createElement("div");
       wrap.className = "cm-page-wrap";
-      wrap.style.cssText = "position:relative;display:block;user-select:none;-webkit-user-select:none";
+      wrap.style.cssText = "position:relative;display:block;user-select:none;-webkit-user-select:none;overflow:hidden;width:100%;max-width:100%;box-sizing:border-box";
       wrap.setAttribute("data-page", String(i));
       // Prevent browser image/text drag
       wrap.addEventListener("dragstart", (ev) => ev.preventDefault());

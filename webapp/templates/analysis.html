@@ -193,7 +193,7 @@
     </div>
 
     <!-- Column Mapping — Visual PDF overlay (shown after PDF upload) -->
-    <div id="aml_mapping_card" style="display:none">
+    <div id="aml_mapping_card" style="display:none;overflow:hidden;max-width:100%;box-sizing:border-box">
 
       <!-- Template notification banner -->
       <div id="cm_template_banner" class="card" style="display:none;border-left:4px solid var(--ok,#15803d);background:var(--bg-success,#f0fdf4);margin-bottom:12px">
@@ -205,6 +205,7 @@
           <select class="input" id="cm_tpl_select" style="padding:4px 10px;border-radius:8px;min-width:180px;display:none"></select>
           <button class="btn mini" id="cm_tpl_apply_btn" style="display:none">Zastosuj szablon</button>
           <button class="btn mini secondary" id="cm_tpl_ignore_btn">Ignoruj</button>
+          <button class="btn mini" id="cm_tpl_delete_btn" style="display:none;background:var(--danger,#b91c1c);color:#fff;border-color:var(--danger,#b91c1c)" title="Usun szablon z bazy">Usun szablon</button>
         </div>
       </div>
 
@@ -234,8 +235,8 @@
         <div id="cm_warnings" style="margin-bottom:6px"></div>
 
         <!-- Visual PDF pages with SVG mask overlays (all pages stacked) -->
-        <div id="cm_visual_wrap" style="position:relative;overflow:auto;max-height:700px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:#f8fafc">
-          <div id="cm_pages_container"></div>
+        <div id="cm_visual_wrap" style="position:relative;overflow:hidden;overflow-y:auto;max-height:700px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:#f8fafc;width:100%;max-width:100%;box-sizing:border-box;padding:0 24px 0 0">
+          <div id="cm_pages_container" style="width:100%;max-width:100%;overflow:hidden"></div>
         </div>
 
         <!-- Column type selectors (below the image) -->
@@ -441,6 +442,7 @@
     <div class="card" id="aml_history_card" style="display:none">
       <div class="analysis-sidehdr">
         <div class="h2">Historia analiz AML</div>
+        <span class="small muted" id="aml_history_count"></span>
       </div>
       <div id="aml_history_list" style="margin-top:10px"></div>
     </div>
