@@ -1938,7 +1938,7 @@
       wrap.addEventListener("dragstart", (ev) => ev.preventDefault());
 
       const img = document.createElement("img");
-      img.style.cssText = "display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none;pointer-events:none";
+      img.style.cssText = "display:block;width:calc(100% - 20px);height:auto;user-select:none;-webkit-user-drag:none;pointer-events:none";
       img.alt = `Strona ${i + 1}`;
       img.draggable = false;
 

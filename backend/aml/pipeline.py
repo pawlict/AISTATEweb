@@ -238,6 +238,32 @@ def run_aml_pipeline(
                 f"mogą brakować transakcje z pozostałych stron"
             )
 
+        # Completeness validation: compare extracted TX count with declared counts
+        declared_credits = spatial_info.get("declared_credits_count")
+        declared_debits = spatial_info.get("declared_debits_count")
+        if header_fields:
+            declared_credits = declared_credits or header_fields.get("declared_credits_count")
+            declared_debits = declared_debits or header_fields.get("declared_debits_count")
+        if declared_credits is not None or declared_debits is not None:
+            try:
+                dc = int(declared_credits) if declared_credits is not None else 0
+                dd = int(declared_debits) if declared_debits is not None else 0
+            except (ValueError, TypeError):
+                dc, dd = 0, 0
+            declared_total = dc + dd
+            actual_count = len(raw_transactions)
+            if declared_total > 0 and actual_count < declared_total:
+                missing = declared_total - actual_count
+                _log(f"UWAGA: Zadeklarowano {declared_total} transakcji "
+                     f"(uznań: {dc}, obciążeń: {dd}), odczytano: {actual_count} "
+                     f"— brakuje {missing}")
+                warnings.append(
+                    f"Odczytano {actual_count} z {declared_total} "
+                    f"zadeklarowanych transakcji (uznań: {dc}, obciążeń: {dd})"
+                )
+            elif declared_total > 0:
+                _log(f"Walidacja kompletności OK: {actual_count}/{declared_total} transakcji")
+
     else:
         # --- Step 1: Extract text and tables ---
         _log("Ekstrakcja tekstu z PDF...")
