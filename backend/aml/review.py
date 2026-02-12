@@ -17,10 +17,10 @@ log = logging.getLogger("aistate.aml.review")
 
 # Classification labels with metadata
 CLASSIFICATIONS = {
-    "neutral": {"label": "Neutralny", "color": "#6b7280", "icon": "○", "description": "Brak opinii"},
+    "neutral": {"label": "Neutralny", "color": "#60a5fa", "icon": "○", "description": "Brak opinii"},
     "legitimate": {"label": "Poprawny", "color": "#15803d", "icon": "✓", "description": "Potwierdzona transakcja"},
-    "suspicious": {"label": "Podejrzany", "color": "#b91c1c", "icon": "⚠", "description": "Podejrzana transakcja"},
-    "monitoring": {"label": "Obserwacja", "color": "#d97706", "icon": "👁", "description": "Wymaga monitoringu"},
+    "suspicious": {"label": "Podejrzany", "color": "#dc2626", "icon": "⚠", "description": "Podejrzana transakcja"},
+    "monitoring": {"label": "Obserwacja", "color": "#ea580c", "icon": "👁", "description": "Wymaga monitoringu"},
 }
 
 

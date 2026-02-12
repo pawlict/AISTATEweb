@@ -233,17 +233,24 @@ def run_aml_pipeline(
             ))
 
         # Build StatementInfo from spatial header + user overrides
+        # Fallback: saldo początkowe = saldo końcowe poprzedniego wyciągu
+        _opening = _safe_float(spatial_info.get("opening_balance"))
+        _prev_closing = _safe_float(spatial_info.get("previous_closing_balance"))
+        if _opening is None and _prev_closing is not None:
+            _opening = _prev_closing
+            _log(f"Saldo początkowe nieznane — używam saldo końc. poprz. wyciągu: {_prev_closing}")
+
         info = StatementInfo(
             bank=spatial_info.get("bank", ""),
             account_number=spatial_info.get("account_number", ""),
             account_holder=spatial_info.get("account_holder", ""),
             period_from=spatial_info.get("period_from"),
             period_to=spatial_info.get("period_to"),
-            opening_balance=_safe_float(spatial_info.get("opening_balance")),
+            opening_balance=_opening,
             closing_balance=_safe_float(spatial_info.get("closing_balance")),
             available_balance=_safe_float(spatial_info.get("available_balance")),
             currency=spatial_info.get("currency", "PLN"),
-            previous_closing_balance=_safe_float(spatial_info.get("previous_closing_balance")),
+            previous_closing_balance=_prev_closing,
             declared_credits_sum=_safe_float(spatial_info.get("declared_credits_sum")),
             declared_credits_count=_safe_int(spatial_info.get("declared_credits_count")),
             declared_debits_sum=_safe_float(spatial_info.get("declared_debits_sum")),
