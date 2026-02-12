@@ -162,8 +162,11 @@
     d.querySelector("button").onclick = ()=> d.remove();
     mappingCard.insertBefore(d, mappingCard.firstChild);
 
-    // Auto-remove after 15s
-    setTimeout(()=>{ if(d.parentNode) d.remove(); }, 15000);
+    // Scroll to error so user can see it
+    d.scrollIntoView({behavior:"smooth", block:"start"});
+
+    // Auto-remove after 20s
+    setTimeout(()=>{ if(d.parentNode) d.remove(); }, 20000);
   }
 
   async function _uploadAndAnalyze(file){
@@ -249,11 +252,26 @@
         case_id: opts.case_id || "",
       };
 
-      const result = await _api("/api/aml/confirm-mapping", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(body),
-      });
+      console.log("[AML] Pipeline request:", filePath, "columns:", (opts.column_bounds||[]).length,
+        "mapping keys:", Object.keys(mapping).length);
+
+      // 120s timeout to prevent indefinite hang
+      const controller = new AbortController();
+      const timeoutId = setTimeout(()=> controller.abort(), 120000);
+
+      let result;
+      try {
+        result = await _api("/api/aml/confirm-mapping", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      console.log("[AML] Pipeline response:", result && result.status, "tx:", result && result.transaction_count);
 
       clearInterval(progTimer);
       clearInterval(stageTimer);
@@ -277,7 +295,15 @@
           _runLlmAnalysis();
         }
       } else {
-        _showMappingError(result && result.error ? String(result.error) : "Blad analizy");
+        clearInterval(progTimer);
+        clearInterval(stageTimer);
+        let errMsg = result && result.error ? String(result.error) : "Blad analizy";
+        // Translate known error codes to Polish messages
+        if(errMsg === "no_transactions"){
+          errMsg = "Nie znaleziono transakcji przy pelnym parsowaniu. Sprawdz granice kolumn i pole 'Data' — musi byc oznaczone poprawnie.";
+        }
+        console.error("[AML] Pipeline error:", errMsg, result);
+        _showMappingError(errMsg);
         _showMapping();
       }
     } catch(e) {
@@ -287,6 +313,9 @@
       _showMapping();
     } finally {
       St.analyzing = false;
+      // Restore confirm button
+      const _cb = QS("#cm_confirm_btn");
+      if(_cb){ _cb.disabled = false; _cb.textContent = "Potwierdz i analizuj"; }
     }
   }
 
@@ -2716,7 +2745,22 @@
 
   function _cmConfirm(){
     const preview = St.cmPreview;
-    if(!preview) return;
+    if(!preview){
+      console.warn("[AML] _cmConfirm: St.cmPreview is null — aborting");
+      _showMappingError("Brak danych podgladu PDF. Wrzuc plik ponownie.");
+      return;
+    }
+
+    // Disable confirm button to prevent double-clicks
+    const confirmBtn = QS("#cm_confirm_btn");
+    if(confirmBtn){
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Analizuje...";
+    }
+
+    // Remove any previous pipeline error
+    const prevErr = QS("#cm_pipeline_error");
+    if(prevErr) prevErr.remove();
 
     const saveTemplate = QS("#cm_save_template")?.checked || false;
     const setDefault = QS("#cm_set_default")?.checked || false;
