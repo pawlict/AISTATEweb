@@ -76,6 +76,7 @@
     _renderAccountProfile();
     _renderHeader();
     _renderStats();
+    _renderSuspiciousSummary();
     _fillChannelFilter();
     _filterAndRender();
   }
@@ -275,6 +276,47 @@
   }
 
   // ============================================================
+  // SUSPICIOUS TRANSACTIONS SUMMARY
+  // ============================================================
+
+  function _renderSuspiciousSummary(){
+    const container = QS("#rv_suspicious_summary");
+    const listEl = QS("#rv_suspicious_list");
+    const countEl = QS("#rv_suspicious_count");
+    if(!container || !listEl) return;
+
+    const suspicious = St.transactions.filter(tx =>
+      (St.classifications[tx.id] || "neutral") === "suspicious"
+    );
+
+    if(!suspicious.length){
+      container.style.display = "none";
+      return;
+    }
+
+    container.style.display = "";
+    if(countEl) countEl.textContent = suspicious.length;
+
+    let html = '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    html += '<tr style="background:rgba(185,28,28,.06);font-weight:bold"><td style="padding:4px 6px">Data</td><td>Kontrahent</td><td>Tytul</td><td style="text-align:right">Kwota</td><td>Kanal</td></tr>';
+
+    for(const tx of suspicious){
+      const amt = parseFloat(tx.amount || 0);
+      const color = amt < 0 ? "#b91c1c" : "#15803d";
+      html += `<tr style="border-bottom:1px solid rgba(185,28,28,.15)">
+        <td style="padding:3px 6px;white-space:nowrap">${_esc(tx.booking_date || "")}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(tx.counterparty_raw || "")}">${_esc((tx.counterparty_raw || "").slice(0,40))}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(tx.title || "")}">${_esc((tx.title || "").slice(0,50))}</td>
+        <td style="text-align:right;color:${color};font-weight:600;white-space:nowrap">${_fmtAmount(amt, "PLN")}</td>
+        <td class="small muted">${_esc(tx.channel || "")}</td>
+      </tr>`;
+    }
+
+    html += '</table>';
+    listEl.innerHTML = html;
+  }
+
+  // ============================================================
   // TRANSACTION TABLE
   // ============================================================
 
@@ -413,6 +455,7 @@
     }
 
     _renderStats();
+    _renderSuspiciousSummary();
 
     // Save to backend
     await _safeApi("/api/aml/review/" + encodeURIComponent(St.statementId) + "/classify", {
@@ -420,6 +463,22 @@
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({tx_id: txId, classification: classification}),
     });
+
+    // If marked as suspicious, also remember counterparty in memory
+    if(classification === "suspicious"){
+      const tx = St.transactions.find(t => t.id === txId);
+      if(tx && tx.counterparty_raw){
+        _safeApi("/api/memory", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({
+            name: tx.counterparty_raw,
+            label: "blacklist",
+            note: "Oznaczony jako podejrzany w analizie " + (St.statementId || "").slice(0,8),
+          }),
+        });
+      }
+    }
   }
 
   // ============================================================
