@@ -185,11 +185,21 @@
     <div class="card aml-upload-zone" id="aml_upload_zone">
       <div class="aml-upload-inner" id="aml_drop_area">
         <div class="aml-upload-icon">📄</div>
-        <div class="h2">Analiza AML wyciagu bankowego</div>
-        <div class="small muted">Przeciągnij plik PDF lub kliknij aby wybrać</div>
-        <button class="btn" id="aml_upload_btn">Wybierz plik</button>
-        <input type="file" id="aml_file_input" accept=".pdf" style="display:none">
+        <div class="h2">Analiza AML wyciągu bankowego</div>
+        <div class="small muted">Przeciągnij pliki PDF lub kliknij aby wybrać (można wiele na raz)</div>
+        <button class="btn" id="aml_upload_btn">Wybierz pliki</button>
+        <input type="file" id="aml_file_input" accept=".pdf" multiple style="display:none">
       </div>
+    </div>
+
+    <!-- Batch progress panel (shown during multi-file upload) -->
+    <div class="card" id="aml_batch_panel" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Analiza wielu wyciągów</div>
+        <span class="small muted" id="aml_batch_counter"></span>
+      </div>
+      <div id="aml_batch_list" style="margin-top:8px"></div>
+      <div id="aml_batch_validation" style="margin-top:12px;display:none"></div>
     </div>
 
     <!-- Column Mapping — Visual PDF overlay (shown after PDF upload) -->

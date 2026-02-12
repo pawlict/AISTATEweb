@@ -61,6 +61,12 @@
     cmHeaderWords: [],    // [{text, x0, top, x1, bottom}] — all words in header region
     cmActiveHdrField: -1, // index of currently highlighted header field (-1 = none)
     cmPageElements: [],   // [{img, svg, container, pageInfo, pageNum, scale}] per page
+    // Batch upload state
+    batchMode: false,
+    batchFiles: [],        // [{file, name, status, statementId, error, preview}]
+    batchIdx: -1,          // current file index being processed
+    batchCaseId: "",       // shared case_id for batch
+    batchResults: [],      // statement IDs of successfully processed files
   };
 
   // ============================================================
@@ -72,6 +78,7 @@
     _hide("aml_progress_card");
     _hide("aml_results");
     _hide("aml_mapping_card");
+    if(!St.batchMode) _hide("aml_batch_panel");
     const histCard = QS("#aml_history_card");
     if(histCard && St.history.length) _show("aml_history_card");
   }
@@ -82,6 +89,7 @@
     _hide("aml_results");
     _hide("aml_history_card");
     _hide("aml_mapping_card");
+    if(!St.batchMode) _hide("aml_batch_panel");
     const el = QS("#aml_prog_text");
     if(el) el.textContent = text || "Przetwarzanie PDF...";
     const bar = QS("#aml_prog_bar");
@@ -94,6 +102,7 @@
     _show("aml_results");
     _hide("aml_history_card");
     _hide("aml_mapping_card");
+    _hide("aml_batch_panel");
   }
 
   function _showMapping(){
@@ -102,6 +111,16 @@
     _hide("aml_results");
     _hide("aml_history_card");
     _show("aml_mapping_card");
+    if(!St.batchMode) _hide("aml_batch_panel");
+  }
+
+  function _showBatchPanel(){
+    _hide("aml_upload_zone");
+    _hide("aml_progress_card");
+    _hide("aml_results");
+    _hide("aml_history_card");
+    _hide("aml_mapping_card");
+    _show("aml_batch_panel");
   }
 
   function _showError(msg){
@@ -201,6 +220,7 @@
         header_cells: opts.header_cells || [],
         column_bounds: opts.column_bounds || null,
         header_fields: opts.header_fields || {},
+        case_id: opts.case_id || "",
       };
 
       const result = await _api("/api/aml/confirm-mapping", {
@@ -1112,8 +1132,13 @@
     }
     if(fileInput){
       fileInput.onchange = ()=>{
-        const f = fileInput.files && fileInput.files[0];
-        if(f) _uploadAndAnalyze(f);
+        const files = fileInput.files;
+        if(!files || !files.length) return;
+        if(files.length === 1){
+          _uploadAndAnalyze(files[0]);
+        } else {
+          _startBatch(Array.from(files));
+        }
         fileInput.value = "";
       };
     }
@@ -1129,8 +1154,13 @@
       dropArea.addEventListener("drop", (e)=>{
         e.preventDefault();
         dropArea.classList.remove("aml-dragover");
-        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if(f) _uploadAndAnalyze(f);
+        const files = e.dataTransfer && e.dataTransfer.files;
+        if(!files || !files.length) return;
+        if(files.length === 1){
+          _uploadAndAnalyze(files[0]);
+        } else {
+          _startBatch(Array.from(files));
+        }
       });
     }
   }
@@ -1155,6 +1185,7 @@
         St.chartsData = {};
         if(St.chartInstance){ St.chartInstance.destroy(); St.chartInstance = null; }
         if(St.cyInstance){ St.cyInstance.destroy(); St.cyInstance = null; }
+        _resetBatchState();
         _loadHistory();
         _showUpload();
       };
@@ -2714,6 +2745,478 @@
 
   function _show(id){ const el = QS("#" + id); if(el) el.style.display = ""; }
   function _hide(id){ const el = QS("#" + id); if(el) el.style.display = "none"; }
+
+  // ============================================================
+  // BATCH UPLOAD (multi-file)
+  // ============================================================
+
+  function _startBatch(files){
+    // Filter to PDF only
+    const pdfs = files.filter(f => f.name.toLowerCase().endsWith(".pdf"));
+    if(!pdfs.length){
+      _showError("Nie znaleziono plikow PDF.");
+      return;
+    }
+
+    St.batchMode = true;
+    St.batchFiles = pdfs.map(f => ({
+      file: f,
+      name: f.name,
+      status: "queued",   // queued | uploading | mapping | processing | done | error
+      statementId: null,
+      error: null,
+      preview: null,       // preview-pdf response (for auto-template check)
+    }));
+    St.batchIdx = -1;
+    St.batchCaseId = "";
+    St.batchResults = [];
+
+    console.log("[AML Batch] Starting batch:", pdfs.length, "files");
+    _renderBatchPanel();
+    _showBatchPanel();
+    _processBatchNext();
+  }
+
+  async function _processBatchNext(){
+    St.batchIdx++;
+    if(St.batchIdx >= St.batchFiles.length){
+      // All files processed — run cross-validation
+      await _batchFinalize();
+      return;
+    }
+
+    const entry = St.batchFiles[St.batchIdx];
+    entry.status = "uploading";
+    _renderBatchPanel();
+
+    const fd = new FormData();
+    fd.append("file", entry.file, entry.name);
+
+    try {
+      const result = await _api("/api/aml/preview-pdf", {method:"POST", body:fd});
+
+      if(result && result.status === "ok"){
+        entry.preview = result;
+        entry.status = "mapping";
+        _renderBatchPanel();
+
+        // Check if template auto-applies (exact match, not partial)
+        const tpl = result.template;
+        const hasFullTemplate = tpl && tpl.column_mapping && !tpl._partial_match;
+
+        if(hasFullTemplate){
+          // Auto-run pipeline — no manual mapping needed
+          console.log("[AML Batch] Auto-template for", entry.name, ":", tpl.name);
+          entry.status = "processing";
+          _renderBatchPanel();
+          await _batchRunPipeline(entry, result, tpl);
+        } else {
+          // Need manual mapping — show mapping UI for this file
+          console.log("[AML Batch] Manual mapping needed for", entry.name);
+          _batchShowMappingForFile(entry, result);
+          // _processBatchNext will be called from _batchConfirmMapping
+          return;
+        }
+      } else if(result && result.status === "no_tables"){
+        entry.status = "error";
+        entry.error = "Nie znaleziono tabel w PDF";
+        _renderBatchPanel();
+      } else {
+        entry.status = "error";
+        entry.error = result && result.error ? String(result.error) : "Blad podgladu PDF";
+        _renderBatchPanel();
+      }
+    } catch(e){
+      entry.status = "error";
+      entry.error = String(e.message || e);
+      _renderBatchPanel();
+    }
+
+    // Continue to next file
+    _processBatchNext();
+  }
+
+  async function _batchRunPipeline(entry, preview, tpl){
+    // Build column mapping from template
+    const columns = (preview.columns || []).map(c => ({...c}));
+    let mapping = {};
+    const tplBounds = tpl.column_bounds || [];
+    const tplMapping = tpl.column_mapping || {};
+    let finalColumns = columns;
+
+    if(tplBounds.length > 0 && tplBounds[0] && tplBounds[0].x_min != null){
+      finalColumns = tplBounds.map((b, i) => ({
+        label: b.label || "",
+        col_type: tplMapping[String(i)] || b.col_type || "skip",
+        x_min: b.x_min,
+        x_max: b.x_max,
+      }));
+      mapping = {...tplMapping};
+    } else {
+      // Apply by label matching (reuse logic from _applyTemplateToColumns)
+      const sampleHeaders = tpl.sample_headers || [];
+      for(const [idxStr, colType] of Object.entries(tplMapping)){
+        const tIdx = parseInt(idxStr, 10);
+        const tLabel = (tIdx >= 0 && tIdx < sampleHeaders.length)
+          ? String(sampleHeaders[tIdx] || "").trim().toLowerCase() : "";
+        // Try exact label match
+        let matched = false;
+        for(let i = 0; i < columns.length; i++){
+          const cur = String(columns[i].label || "").trim().toLowerCase();
+          if(cur && tLabel && cur === tLabel){
+            mapping[String(i)] = colType;
+            columns[i].col_type = colType;
+            matched = true;
+            break;
+          }
+        }
+        if(!matched){
+          // Fallback to index
+          if(tIdx >= 0 && tIdx < columns.length){
+            mapping[String(tIdx)] = colType;
+            columns[tIdx].col_type = colType;
+          }
+        }
+      }
+      finalColumns = columns;
+    }
+
+    // Build header fields from template
+    const headerFields = {};
+    const savedHf = tpl.header_fields || {};
+    const detectedHf = preview.header_region || {};
+    // Use detected values first, then overlay template values
+    const allFieldKeys = new Set([
+      ...Object.keys(detectedHf),
+      ...Object.keys(savedHf),
+    ]);
+    const skipKeys = new Set(["words","raw_text","field_boxes","bank_name_detected"]);
+    for(const key of allFieldKeys){
+      if(skipKeys.has(key)) continue;
+      let val = detectedHf[key];
+      if(savedHf[key]) val = savedHf[key]; // template overrides
+      if(val != null && val !== ""){
+        let sVal = String(val);
+        if(_AMOUNT_FIELDS.has(key) || _COUNT_FIELDS.has(key)){
+          sVal = _sanitizeNumericValue(sVal);
+        }
+        if(sVal) headerFields[key] = sVal;
+      }
+    }
+
+    const body = {
+      file_path: preview.file_path,
+      column_mapping: mapping,
+      header_row: 0,
+      data_start_row: 1,
+      main_table_index: 0,
+      save_template: false,
+      template_name: "",
+      set_default: false,
+      template_id: tpl.id || "",
+      bank_id: preview.bank_id || "",
+      bank_name: preview.bank_name || "",
+      header_cells: finalColumns.map(c => c.label),
+      column_bounds: finalColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type})),
+      header_fields: headerFields,
+      case_id: St.batchCaseId,
+    };
+
+    try {
+      const result = await _api("/api/aml/confirm-mapping", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(body),
+      });
+
+      if(result && result.status === "ok"){
+        entry.status = "done";
+        entry.statementId = result.statement_id;
+        // Capture case_id from first successful result
+        if(!St.batchCaseId && result.case_id){
+          St.batchCaseId = result.case_id;
+        }
+        St.batchResults.push(result.statement_id);
+        console.log("[AML Batch] Done:", entry.name, "stmt:", result.statement_id);
+      } else {
+        entry.status = "error";
+        entry.error = result && result.error ? String(result.error) : "Blad analizy";
+      }
+    } catch(e){
+      entry.status = "error";
+      entry.error = String(e.message || e);
+    }
+
+    _renderBatchPanel();
+  }
+
+  function _batchShowMappingForFile(entry, preview){
+    // Store the preview for normal mapping UI
+    St.cmPreview = preview;
+    St.cmMapping = preview.auto_mapping || {};
+    St.cmColumnTypes = preview.column_types || {};
+
+    _renderColumnMapping();
+    _showMapping();
+    // Also keep batch panel visible
+    _show("aml_batch_panel");
+
+    // Override the confirm button to use batch flow
+    const confirmBtn = QS("#cm_confirm_btn");
+    if(confirmBtn){
+      confirmBtn.onclick = ()=> _batchConfirmMapping(entry);
+    }
+  }
+
+  async function _batchConfirmMapping(entry){
+    const preview = St.cmPreview;
+    if(!preview) return;
+
+    entry.status = "processing";
+    _renderBatchPanel();
+
+    const saveTemplate = QS("#cm_save_template")?.checked || false;
+    const setDefault = QS("#cm_set_default")?.checked || false;
+    const templateName = QS("#cm_template_name")?.value || "";
+    const templateId = preview.template ? (preview.template.id || "") : "";
+
+    const _hfForApi = _getHeaderFieldsForApi();
+
+    const body = {
+      file_path: preview.file_path,
+      column_mapping: St.cmMapping,
+      header_row: 0,
+      data_start_row: 1,
+      main_table_index: 0,
+      save_template: saveTemplate,
+      template_name: templateName,
+      set_default: setDefault,
+      template_id: templateId,
+      bank_id: preview.bank_id || "",
+      bank_name: preview.bank_name || "",
+      header_cells: St.cmColumns.map(c => c.label),
+      column_bounds: St.cmColumns.map(c => ({x_min: c.x_min, x_max: c.x_max, label: c.label, col_type: c.col_type})),
+      header_fields: _hfForApi,
+      case_id: St.batchCaseId,
+    };
+
+    try {
+      const result = await _api("/api/aml/confirm-mapping", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(body),
+      });
+
+      if(result && result.status === "ok"){
+        entry.status = "done";
+        entry.statementId = result.statement_id;
+        if(!St.batchCaseId && result.case_id){
+          St.batchCaseId = result.case_id;
+        }
+        St.batchResults.push(result.statement_id);
+      } else {
+        entry.status = "error";
+        entry.error = result && result.error ? String(result.error) : "Blad analizy";
+      }
+    } catch(e){
+      entry.status = "error";
+      entry.error = String(e.message || e);
+    }
+
+    _renderBatchPanel();
+
+    // Restore original confirm button handler
+    const confirmBtn = QS("#cm_confirm_btn");
+    if(confirmBtn) confirmBtn.onclick = ()=> _cmConfirm();
+
+    // Continue batch
+    _processBatchNext();
+  }
+
+  async function _batchFinalize(){
+    console.log("[AML Batch] Finalize. Results:", St.batchResults.length, "/", St.batchFiles.length);
+    _renderBatchPanel();
+
+    // Run cross-validation if we have at least 2 statements
+    if(St.batchResults.length >= 2){
+      const valPanel = QS("#aml_batch_validation");
+      if(valPanel){
+        valPanel.style.display = "";
+        valPanel.innerHTML = '<div class="small muted">Walidacja krzyzowa...</div>';
+      }
+
+      try {
+        const result = await _api("/api/aml/validate-batch", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({statement_ids: St.batchResults}),
+        });
+
+        if(result && result.status === "ok"){
+          _renderBatchValidation(result);
+        }
+      } catch(e){
+        if(valPanel) valPanel.innerHTML = `<div class="small" style="color:var(--danger)">Blad walidacji: ${_esc(e.message || e)}</div>`;
+      }
+    }
+
+    // If we have any successful results, load the last one for review
+    if(St.batchResults.length > 0){
+      const lastStmtId = St.batchResults[St.batchResults.length - 1];
+      await _loadDetail(lastStmtId);
+    }
+  }
+
+  function _renderBatchPanel(){
+    const counterEl = QS("#aml_batch_counter");
+    const listEl = QS("#aml_batch_list");
+    if(!listEl) return;
+
+    const done = St.batchFiles.filter(f => f.status === "done").length;
+    const errs = St.batchFiles.filter(f => f.status === "error").length;
+    const total = St.batchFiles.length;
+
+    if(counterEl){
+      counterEl.textContent = `${done} / ${total} przetworzonych` + (errs > 0 ? ` (${errs} bledow)` : "");
+    }
+
+    const _statusIcon = (status) => {
+      switch(status){
+        case "queued": return "\u23F3";     // hourglass
+        case "uploading": return "\u2B06\uFE0F"; // up arrow
+        case "mapping": return "\uD83D\uDDC2\uFE0F"; // file cabinet
+        case "processing": return "\u2699\uFE0F"; // gear
+        case "done": return "\u2705";       // checkmark
+        case "error": return "\u274C";      // cross
+        default: return "\u2022";
+      }
+    };
+    const _statusLabel = (status) => {
+      switch(status){
+        case "queued": return "W kolejce";
+        case "uploading": return "Przesylanie...";
+        case "mapping": return "Mapowanie kolumn...";
+        case "processing": return "Analiza...";
+        case "done": return "Gotowe";
+        case "error": return "Blad";
+        default: return status;
+      }
+    };
+    const _statusColor = (status) => {
+      switch(status){
+        case "done": return "var(--ok,#15803d)";
+        case "error": return "var(--danger,#b91c1c)";
+        case "processing":
+        case "uploading":
+        case "mapping": return "#3b82f6";
+        default: return "var(--text-muted,#94a3b8)";
+      }
+    };
+
+    let html = "";
+    for(let i = 0; i < St.batchFiles.length; i++){
+      const f = St.batchFiles[i];
+      const isActive = (i === St.batchIdx && f.status !== "done" && f.status !== "error");
+      const bg = isActive ? "var(--bg-alt,#f1f5f9)" : "";
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:${bg}">
+        <span style="font-size:14px">${_statusIcon(f.status)}</span>
+        <span style="flex:1;font-size:13px;font-weight:${isActive ? "600" : "400"}">${_esc(f.name)}</span>
+        <span class="small" style="color:${_statusColor(f.status)}">${_statusLabel(f.status)}</span>`;
+      if(f.error){
+        html += `<span class="small" style="color:var(--danger)" title="${_esc(f.error)}">${_esc(f.error.slice(0,40))}</span>`;
+      }
+      html += `</div>`;
+    }
+
+    // Progress bar
+    const pct = total > 0 ? Math.round(((done + errs) / total) * 100) : 0;
+    html += `<div style="margin-top:8px;background:var(--border,#e2e8f0);border-radius:4px;height:6px;overflow:hidden">
+      <div style="width:${pct}%;height:100%;background:${errs > 0 ? "#d97706" : "var(--ok,#15803d)"};transition:width .3s"></div>
+    </div>`;
+
+    // If all done, show button to view results
+    if(done + errs === total && done > 0){
+      html += `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="aml_batch_view_results">Przegladaj wyniki (${done} wyciag${done > 1 ? "ow" : ""})</button>
+        <button class="btn btn-outline" id="aml_batch_new">Nowa analiza</button>
+      </div>`;
+    }
+
+    listEl.innerHTML = html;
+
+    // Bind view results button
+    const viewBtn = QS("#aml_batch_view_results");
+    if(viewBtn){
+      viewBtn.onclick = async ()=>{
+        if(St.batchResults.length > 0){
+          const lastId = St.batchResults[St.batchResults.length - 1];
+          await _loadDetail(lastId);
+          _renderResults();
+          _showResults();
+          // Keep batch panel hidden but accessible
+          _hide("aml_batch_panel");
+          if(window.ReviewManager && lastId){
+            ReviewManager.loadForStatement(lastId);
+          }
+        }
+      };
+    }
+
+    const newBtn = QS("#aml_batch_new");
+    if(newBtn){
+      newBtn.onclick = ()=>{
+        _resetBatchState();
+        _loadHistory();
+        _showUpload();
+      };
+    }
+  }
+
+  function _renderBatchValidation(result){
+    const panel = QS("#aml_batch_validation");
+    if(!panel) return;
+
+    const validations = result.validations || [];
+    const summary = result.summary || {};
+
+    let html = '<div style="border-top:1px solid var(--border,#e2e8f0);padding-top:8px">';
+    html += `<div style="font-weight:600;margin-bottom:6px">Walidacja krzyzowa</div>`;
+
+    // Summary
+    html += `<div class="small" style="margin-bottom:6px">
+      Wyciagi: ${summary.statement_count || 0} |
+      Transakcje: ${summary.total_transactions || 0} |
+      Okres: ${_esc(summary.period_from || "?")} \u2014 ${_esc(summary.period_to || "?")}
+    </div>`;
+
+    if(validations.length === 0){
+      html += `<div style="color:var(--ok,#15803d);font-weight:500">\u2705 Wszystkie kontrole przeszly pomyslnie.</div>`;
+    } else {
+      for(const v of validations){
+        const isErr = v.level === "error";
+        const icon = isErr ? "\u274C" : "\u26A0\uFE0F";
+        const color = isErr ? "var(--danger,#b91c1c)" : "#d97706";
+        html += `<div style="display:flex;align-items:start;gap:6px;padding:4px 0;color:${color}">
+          <span>${icon}</span>
+          <span class="small">${_esc(v.message)}</span>
+        </div>`;
+      }
+    }
+    html += '</div>';
+    panel.innerHTML = html;
+    panel.style.display = "";
+  }
+
+  function _resetBatchState(){
+    St.batchMode = false;
+    St.batchFiles = [];
+    St.batchIdx = -1;
+    St.batchCaseId = "";
+    St.batchResults = [];
+    _hide("aml_batch_panel");
+    const valPanel = QS("#aml_batch_validation");
+    if(valPanel){ valPanel.style.display = "none"; valPanel.innerHTML = ""; }
+  }
 
   // ============================================================
   // PUBLIC API
