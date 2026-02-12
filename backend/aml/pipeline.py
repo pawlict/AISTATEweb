@@ -42,16 +42,24 @@ log = logging.getLogger("aistate.aml.pipeline")
 
 
 def _safe_float(val) -> Optional[float]:
-    """Convert value to float, handling Polish number formats (spaces, commas)."""
+    """Convert value to float, handling Polish number formats and currency suffixes.
+
+    Handles: "65,35 PLN", "1 053,83 zł", "21 850,08PLN", "-73,14 PLN",
+             "12 345,67", "12345.67", plain numbers.
+    """
     if val is None:
         return None
     try:
         return float(val)
     except (ValueError, TypeError):
         pass
-    # Try Polish format: "12 345,67" or "12 345.67" or "12345,67"
     try:
-        s = str(val).strip().replace("\u00a0", "").replace(" ", "")
+        s = str(val).strip()
+        # Strip currency codes/symbols that may be appended to the number
+        import re as _re
+        s = _re.sub(r'\s*(PLN|EUR|USD|GBP|CHF|CZK|SEK|NOK|DKK|zł|zl)\s*$', '', s, flags=_re.IGNORECASE)
+        s = _re.sub(r'^\s*(PLN|EUR|USD|GBP|CHF|CZK|SEK|NOK|DKK|zł|zl)\s*', '', s, flags=_re.IGNORECASE)
+        s = s.strip().replace("\u00a0", "").replace(" ", "")
         if "," in s and "." not in s:
             s = s.replace(",", ".")
         elif "," in s and "." in s:
@@ -67,6 +75,15 @@ def _safe_int(val) -> Optional[int]:
         return None
     try:
         return int(val)
+    except (ValueError, TypeError):
+        pass
+    # Try stripping whitespace/currency then parse
+    try:
+        import re as _re
+        s = str(val).strip()
+        s = _re.sub(r'\s*(PLN|EUR|USD|GBP|CHF|zł|zl)\s*$', '', s, flags=_re.IGNORECASE)
+        s = s.strip().replace("\u00a0", "").replace(" ", "")
+        return int(float(s))
     except (ValueError, TypeError):
         return None
 

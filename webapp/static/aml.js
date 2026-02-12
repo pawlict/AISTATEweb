@@ -1125,22 +1125,22 @@
   const _HEADER_FIELD_TYPES = {
     bank_name:               {label:"Nazwa banku",              icon:"\uD83C\uDFE6"},
     account_number:          {label:"Nr rachunku / IBAN",       icon:"\uD83D\uDD22"},
-    account_holder:          {label:"Wlasciciel konta",         icon:"\uD83D\uDC64"},
+    account_holder:          {label:"W\u0142a\u015Bciciel konta",         icon:"\uD83D\uDC64"},
     period_from:             {label:"Okres od",                 icon:"\uD83D\uDCC5"},
     period_to:               {label:"Okres do",                 icon:"\uD83D\uDCC5"},
-    opening_balance:         {label:"Saldo poczatkowe",         icon:"\uD83D\uDCB0"},
-    closing_balance:         {label:"Saldo koncowe",            icon:"\uD83D\uDCB0"},
-    available_balance:       {label:"Saldo dostepne",           icon:"\uD83D\uDCB0"},
-    previous_closing_balance:{label:"Saldo konc. poprz. wyc.",  icon:"\uD83D\uDCB0"},
-    declared_credits_count:  {label:"Suma uznan (liczba)",      icon:"\uD83D\uDCE5"},
-    declared_credits_sum:    {label:"Suma uznan (kwota)",       icon:"\uD83D\uDCE5"},
-    declared_debits_count:   {label:"Suma obciazen (liczba)",   icon:"\uD83D\uDCE4"},
-    declared_debits_sum:     {label:"Suma obciazen (kwota)",    icon:"\uD83D\uDCE4"},
-    debt_limit:              {label:"Limit zadluzenia",         icon:"\uD83D\uDCCA"},
-    overdue_commission:      {label:"Kwota prowizji zaleglej",  icon:"\uD83D\uDCCB"},
+    opening_balance:         {label:"Saldo pocz\u0105tkowe",         icon:"\uD83D\uDCB0"},
+    closing_balance:         {label:"Saldo ko\u0144cowe",            icon:"\uD83D\uDCB0"},
+    available_balance:       {label:"Saldo dost\u0119pne",           icon:"\uD83D\uDCB0"},
+    previous_closing_balance:{label:"Saldo ko\u0144c. poprz. wyc.",  icon:"\uD83D\uDCB0"},
+    declared_credits_count:  {label:"Suma uzna\u0144 (liczba)",      icon:"\uD83D\uDCE5"},
+    declared_credits_sum:    {label:"Suma uzna\u0144 (kwota)",       icon:"\uD83D\uDCE5"},
+    declared_debits_count:   {label:"Suma obci\u0105\u017Ce\u0144 (liczba)",   icon:"\uD83D\uDCE4"},
+    declared_debits_sum:     {label:"Suma obci\u0105\u017Ce\u0144 (kwota)",    icon:"\uD83D\uDCE4"},
+    debt_limit:              {label:"Limit zad\u0142u\u017Cenia",         icon:"\uD83D\uDCCA"},
+    overdue_commission:      {label:"Kwota prowizji zaleg\u0142ej",  icon:"\uD83D\uDCCB"},
     blocked_amount:          {label:"Kwota zablokowana",        icon:"\uD83D\uDD12"},
     currency:                {label:"Waluta",                   icon:"\uD83D\uDCB1"},
-    skip:                    {label:"Pomin",                    icon:"\u23ED\uFE0F"},
+    skip:                    {label:"Pomi\u0144",                    icon:"\u23ED\uFE0F"},
   };
 
   function _renderColumnMapping(){
@@ -1608,16 +1608,16 @@
       ["account_holder", "Posiadacz"],
       ["period_from", "Okres od"],
       ["period_to", "Okres do"],
-      ["opening_balance", "Saldo poczatkowe"],
-      ["closing_balance", "Saldo koncowe"],
-      ["available_balance", "Saldo dostepne"],
-      ["previous_closing_balance", "Saldo konc. poprz. wyciagu"],
-      ["declared_credits_count", "Suma uznan (liczba)"],
-      ["declared_credits_sum", "Suma uznan (kwota)"],
-      ["declared_debits_count", "Suma obciazen (liczba)"],
-      ["declared_debits_sum", "Suma obciazen (kwota)"],
-      ["debt_limit", "Limit zadluzenia"],
-      ["overdue_commission", "Kwota prowizji zaleglej"],
+      ["opening_balance", "Saldo pocz\u0105tkowe"],
+      ["closing_balance", "Saldo ko\u0144cowe"],
+      ["available_balance", "Saldo dost\u0119pne"],
+      ["previous_closing_balance", "Saldo ko\u0144c. poprz. wyci\u0105gu"],
+      ["declared_credits_count", "Suma uzna\u0144 (liczba)"],
+      ["declared_credits_sum", "Suma uzna\u0144 (kwota)"],
+      ["declared_debits_count", "Suma obci\u0105\u017Ce\u0144 (liczba)"],
+      ["declared_debits_sum", "Suma obci\u0105\u017Ce\u0144 (kwota)"],
+      ["debt_limit", "Limit zad\u0142u\u017Cenia"],
+      ["overdue_commission", "Kwota prowizji zaleg\u0142ej"],
       ["blocked_amount", "Kwota zablokowana"],
       ["currency", "Waluta"],
     ];
@@ -1783,11 +1783,44 @@
     if(inputs.length) inputs[inputs.length - 1].focus();
   }
 
+  // Amount-type fields that need numeric sanitization
+  const _AMOUNT_FIELDS = new Set([
+    "opening_balance","closing_balance","available_balance",
+    "previous_closing_balance","declared_credits_sum","declared_debits_sum",
+    "debt_limit","overdue_commission","blocked_amount",
+  ]);
+  const _COUNT_FIELDS = new Set([
+    "declared_credits_count","declared_debits_count",
+  ]);
+
+  /** Strip currency suffix and normalize Polish number format to plain number string. */
+  function _sanitizeNumericValue(s){
+    if(!s) return s;
+    s = s.trim();
+    // Strip currency codes/symbols
+    s = s.replace(/\s*(PLN|EUR|USD|GBP|CHF|CZK|SEK|NOK|DKK|zł|zl)\s*$/i, "");
+    s = s.replace(/^\s*(PLN|EUR|USD|GBP|CHF|CZK|SEK|NOK|DKK|zł|zl)\s*/i, "");
+    s = s.trim();
+    // Normalize: "21 850,08" → "21850.08", "1.234,56" → "1234.56"
+    const noNbsp = s.replace(/\u00a0/g, "").replace(/\s/g, "");
+    if(noNbsp.includes(",") && !noNbsp.includes(".")){
+      return noNbsp.replace(",", ".");
+    } else if(noNbsp.includes(",") && noNbsp.includes(".")){
+      return noNbsp.replace(/,/g, "");  // "1,234.56" or "1.234,56"
+    }
+    return noNbsp;
+  }
+
   function _getHeaderFieldsForApi(){
     const result = {};
     for(const f of St.cmHeaderFields){
       if(f.field_type !== "skip" && f.value.trim()){
-        result[f.field_type] = f.value.trim();
+        let val = f.value.trim();
+        // Sanitize numeric fields — strip currency, normalize format
+        if(_AMOUNT_FIELDS.has(f.field_type) || _COUNT_FIELDS.has(f.field_type)){
+          val = _sanitizeNumericValue(val);
+        }
+        result[f.field_type] = val;
       }
     }
     return result;

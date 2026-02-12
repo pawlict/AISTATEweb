@@ -186,7 +186,7 @@
       <div class="aml-upload-inner" id="aml_drop_area">
         <div class="aml-upload-icon">📄</div>
         <div class="h2">Analiza AML wyciagu bankowego</div>
-        <div class="small muted">Przeciagnij plik PDF lub kliknij aby wybrac</div>
+        <div class="small muted">Przeciągnij plik PDF lub kliknij aby wybrać</div>
         <button class="btn" id="aml_upload_btn">Wybierz plik</button>
         <input type="file" id="aml_file_input" accept=".pdf" style="display:none">
       </div>
@@ -212,13 +212,13 @@
       <!-- Header region editor (bank info above table) -->
       <div class="card" id="cm_header_card">
         <div class="analysis-sidehdr">
-          <div class="h2">Naglowek wyciagu</div>
+          <div class="h2">Nagłówek wyciągu</div>
           <div style="display:flex;gap:8px;align-items:center">
             <span class="small muted" id="cm_bank_label"></span>
             <button class="btn secondary" id="cm_back_btn">Cofnij</button>
           </div>
         </div>
-        <div class="small muted" style="margin:6px 0">Kliknij pole aby poprawic wartosc. Kliknij <b>&#9635;</b> aby podswietlic pole na PDF — przeciagnij ramke lub narozniki. Dwuklik na PDF tworzy nowa ramke.</div>
+        <div class="small muted" style="margin:6px 0">Kliknij pole aby poprawić wartość. Kliknij <b>&#9635;</b> aby podświetlić pole na PDF — przeciągnij ramkę lub narożniki. Dwuklik na PDF tworzy nową ramkę.</div>
         <div id="cm_header_fields" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"></div>
       </div>
 
@@ -231,7 +231,7 @@
             <select class="input" id="cm_page_select" style="padding:3px 8px;border-radius:8px;min-width:90px;display:none"></select>
           </div>
         </div>
-        <div class="small muted" style="margin:6px 0">Przeciagnij pionowe linie aby poprawic granice kolumn. Kliknij nazwe kolumny aby edytowac podpis.</div>
+        <div class="small muted" style="margin:6px 0">Przeciągnij pionowe linie aby poprawić granice kolumn. Kliknij nazwę kolumny aby edytować podpis.</div>
         <div id="cm_warnings" style="margin-bottom:6px"></div>
 
         <!-- Visual PDF pages with SVG mask overlays (all pages stacked) -->
@@ -321,10 +321,10 @@
       <!-- Statement Header (editable review) -->
       <div class="card" id="rv_header_card">
         <div class="analysis-sidehdr">
-          <div class="h2">Naglowek wyciagu</div>
+          <div class="h2">Nagłówek wyciągu</div>
           <button class="btn mini" id="rv_header_save" title="Zapisz zmiany">Zapisz</button>
         </div>
-        <div class="small muted" style="margin:6px 0">Sprawdz odczytane dane i popraw jesli potrzeba. Zmiany tworza reguly mapowania dla przyszlych importow.</div>
+        <div class="small muted" style="margin:6px 0">Sprawdź odczytane dane i popraw jeśli potrzeba. Zmiany tworzą reguły mapowania dla przyszłych importów.</div>
         <div class="rv-header-grid" id="rv_header_grid"></div>
         <div id="rv_header_warnings" style="margin-top:8px"></div>
       </div>
