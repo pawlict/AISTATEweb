@@ -29,10 +29,10 @@
 
   // Classification metadata
   const CLS_META = {
-    neutral:    {label:"Neutralny",  color:"#6b7280", icon:"\u25CB", bg:"rgba(107,114,128,.08)"},
+    neutral:    {label:"Neutralny",  color:"#60a5fa", icon:"\u25CB", bg:"rgba(96,165,250,.08)"},
     legitimate: {label:"Poprawny",   color:"#15803d", icon:"\u2713", bg:"rgba(21,128,61,.08)"},
-    suspicious: {label:"Podejrzany", color:"#b91c1c", icon:"\u26A0", bg:"rgba(185,28,28,.08)"},
-    monitoring: {label:"Obserwacja", color:"#d97706", icon:"\uD83D\uDC41", bg:"rgba(217,119,6,.08)"},
+    suspicious: {label:"Podejrzany", color:"#dc2626", icon:"\u26A0", bg:"rgba(220,38,38,.08)"},
+    monitoring: {label:"Obserwacja", color:"#ea580c", icon:"\uD83D\uDC41", bg:"rgba(234,88,12,.08)"},
   };
 
   // ============================================================
@@ -559,6 +559,11 @@
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({tx_id: txId, classification: classification}),
     });
+
+    // Refresh graph colors to reflect classification
+    if(window.AmlManager && window.AmlManager.refreshGraphColors){
+      window.AmlManager.refreshGraphColors();
+    }
 
     // If marked as suspicious, remember counterparty in memory
     // (skip if counterparty is just a bare transaction number)

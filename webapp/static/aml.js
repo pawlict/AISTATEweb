@@ -2719,6 +2719,34 @@
   // PUBLIC API
   // ============================================================
 
+  /** Refresh graph with current classification colors (called after classify). */
+  async function _refreshGraphColors(){
+    if(!St.caseId || !St.cyInstance) return;
+    try {
+      const graph = await _safeApi("/api/aml/graph/" + encodeURIComponent(St.caseId));
+      if(graph && graph.nodes){
+        // Update node/edge data in place for smooth update
+        const cy = St.cyInstance;
+        for(const node of graph.nodes){
+          const ele = cy.getElementById(node.id);
+          if(ele.length){
+            ele.data("classStatus", node.class_status || "");
+          }
+        }
+        for(const edge of graph.edges){
+          const ele = cy.getElementById(edge.id);
+          if(ele.length){
+            ele.data("classStatus", edge.class_status || "");
+          }
+        }
+        // Force style recalculation
+        cy.style().update();
+      }
+    } catch(e){
+      console.warn("[AML] Graph color refresh failed:", e);
+    }
+  }
+
   const AmlManager = {
     _initialized: false,
 
@@ -2731,7 +2759,10 @@
       _bindColumnMapping();
       await _loadHistory();
       _showUpload();
-    }
+    },
+
+    /** Called by ReviewManager after classification change. */
+    refreshGraphColors: _refreshGraphColors,
   };
 
   window.AmlManager = AmlManager;
