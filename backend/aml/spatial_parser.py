@@ -540,6 +540,22 @@ def _parse_header_region(
                     **box,
                 })
 
+    # Saldo dostępne
+    avail_m = re.search(
+        r"saldo\s*dost[ęe]pn\w*[^0-9\-]*(-?\d[\d\s]*[,\.]\d{2})",
+        header_text, re.IGNORECASE,
+    )
+    if avail_m:
+        parsed = _parse_amount_str(avail_m.group(1))
+        result["available_balance"] = parsed
+        box = _find_box_for_text(avail_m.group(0))
+        if box:
+            result["field_boxes"].append({
+                "field_type": "available_balance",
+                "value": str(parsed) if parsed is not None else "",
+                **box,
+            })
+
     # Suma uznań: "Suma uznań (123) \n 45 678,90"
     credits_m = re.search(
         r"(?:suma\s*uzna[ńn])\s*\(?(\d+)\)?[^0-9\-]*(-?\d[\d\s]*[,\.]\d{2})",

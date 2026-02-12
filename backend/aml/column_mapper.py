@@ -136,6 +136,15 @@ def _deserialize_template(td: Dict[str, Any]) -> Dict[str, Any]:
                 td[jf] = {} if jf == "column_mapping" else []
         elif val is None:
             td[jf] = {} if jf == "column_mapping" else []
+    # header_fields is a dict (not a list)
+    hf = td.get("header_fields")
+    if isinstance(hf, str):
+        try:
+            td["header_fields"] = json.loads(hf)
+        except (json.JSONDecodeError, TypeError):
+            td["header_fields"] = {}
+    elif hf is None:
+        td["header_fields"] = {}
     return td
 
 
@@ -192,7 +201,8 @@ def _list_bank_templates(bank_id: str) -> List[Dict[str, Any]]:
 
     rows = fetch_all(
         """SELECT id, bank_id, bank_name, name, is_default, times_used,
-                  sample_headers, column_mapping, column_bounds, created_at
+                  sample_headers, column_mapping, column_bounds, header_fields,
+                  created_at
            FROM parse_templates
            WHERE bank_id = ? AND is_active != 0
            ORDER BY is_default DESC, times_used DESC""",
@@ -306,12 +316,17 @@ def parse_with_mapping(
 # ============================================================
 
 def _ensure_template_columns(conn):
-    """Add column_bounds column to parse_templates if it doesn't exist."""
+    """Add column_bounds and header_fields columns to parse_templates if they don't exist."""
     try:
         conn.execute("SELECT column_bounds FROM parse_templates LIMIT 0")
     except Exception:
         conn.execute("ALTER TABLE parse_templates ADD COLUMN column_bounds TEXT DEFAULT '[]'")
         log.info("Added column_bounds column to parse_templates")
+    try:
+        conn.execute("SELECT header_fields FROM parse_templates LIMIT 0")
+    except Exception:
+        conn.execute("ALTER TABLE parse_templates ADD COLUMN header_fields TEXT DEFAULT '{}'")
+        log.info("Added header_fields column to parse_templates")
 
 
 def save_template(
@@ -324,8 +339,9 @@ def save_template(
     name: str = "",
     is_default: bool = False,
     column_bounds: Optional[List[Dict[str, Any]]] = None,
+    header_fields: Optional[Dict[str, str]] = None,
 ) -> str:
-    """Save a column mapping template."""
+    """Save a column mapping template (includes header fields like saldo/IBAN)."""
     ensure_initialized()
     template_id = new_id()
 
@@ -333,6 +349,7 @@ def save_template(
         name = f"{bank_name} — szablon"
 
     bounds_json = json.dumps(column_bounds or [], ensure_ascii=False)
+    hf_json = json.dumps(header_fields or {}, ensure_ascii=False)
 
     with get_conn() as conn:
         _ensure_template_columns(conn)
@@ -347,17 +364,20 @@ def save_template(
         conn.execute(
             """INSERT INTO parse_templates
                (id, bank_id, bank_name, name, column_mapping, header_row,
-                data_start_row, sample_headers, is_default, column_bounds)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                data_start_row, sample_headers, is_default, column_bounds,
+                header_fields)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (template_id, bank_id, bank_name, name,
              json.dumps(column_mapping, ensure_ascii=False),
              header_row, data_start_row,
              json.dumps(header_cells, ensure_ascii=False),
              int(is_default),
-             bounds_json),
+             bounds_json,
+             hf_json),
         )
 
-    log.info("Saved template %s for bank %s (bounds: %d cols)", template_id[:8], bank_id, len(column_bounds or []))
+    log.info("Saved template %s for bank %s (bounds: %d cols, header_fields: %d)",
+             template_id[:8], bank_id, len(column_bounds or []), len(header_fields or {}))
     return template_id
 
 
