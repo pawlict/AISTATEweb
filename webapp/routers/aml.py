@@ -124,6 +124,7 @@ async def aml_confirm_mapping(request: Request):
     header_cells = data.get("header_cells", [])
     column_bounds = data.get("column_bounds")  # [{x_min, x_max, label, col_type}, ...]
     header_fields = data.get("header_fields", {})  # {field_type: value, ...}
+    case_id = data.get("case_id", "")  # Reuse existing case for batch uploads
 
     if not file_path.exists():
         return JSONResponse({"status": "error", "error": "PDF file not found"}, status_code=404)
@@ -152,6 +153,7 @@ async def aml_confirm_mapping(request: Request):
         result = await run_in_threadpool(
             run_aml_pipeline,
             pdf_path=file_path,
+            case_id=case_id,
             column_mapping=column_mapping,
             column_bounds=column_bounds,
             header_fields=header_fields,
@@ -315,6 +317,181 @@ async def aml_graph(
         )
 
     return JSONResponse(graph)
+
+
+@router.post("/api/aml/validate-batch")
+async def aml_validate_batch(request: Request):
+    """Cross-validate multiple statements (batch upload).
+
+    Checks: date continuity, balance chain, duplicates, account consistency,
+    period overlaps, and per-statement TX completeness.
+    """
+    from backend.db.engine import fetch_all, fetch_one
+
+    data = await request.json()
+    statement_ids = data.get("statement_ids", [])
+    if len(statement_ids) < 2:
+        return JSONResponse({"status": "ok", "validations": [], "summary": "Za mało wyciągów do walidacji krzyżowej."})
+
+    stmts = []
+    for sid in statement_ids:
+        row = fetch_one("SELECT * FROM statements WHERE id = ?", (sid,))
+        if row:
+            s = dict(row)
+            # Parse warnings
+            try:
+                s["warnings"] = json.loads(s.get("warnings", "[]"))
+            except (json.JSONDecodeError, TypeError):
+                s["warnings"] = []
+            # Count transactions
+            tx_count_row = fetch_one(
+                "SELECT COUNT(*) as cnt FROM transactions WHERE statement_id = ?", (sid,)
+            )
+            s["tx_count"] = tx_count_row["cnt"] if tx_count_row else 0
+            # TX date range
+            date_row = fetch_one(
+                """SELECT MIN(booking_date) as min_date, MAX(booking_date) as max_date
+                   FROM transactions WHERE statement_id = ?""", (sid,)
+            )
+            s["tx_min_date"] = date_row["min_date"] if date_row else None
+            s["tx_max_date"] = date_row["max_date"] if date_row else None
+            stmts.append(s)
+
+    if not stmts:
+        return JSONResponse({"status": "error", "error": "Nie znaleziono wyciągów"}, status_code=404)
+
+    # Sort by period_from
+    stmts.sort(key=lambda s: s.get("period_from") or "")
+
+    validations = []
+
+    # --- 1. Account consistency ---
+    accounts = set(s.get("account_number", "") for s in stmts if s.get("account_number"))
+    banks = set(s.get("bank_id", "") for s in stmts if s.get("bank_id"))
+    if len(accounts) > 1:
+        validations.append({
+            "type": "account_mismatch",
+            "level": "error",
+            "message": f"Wyciągi dotyczą różnych kont: {', '.join(accounts)}",
+        })
+    if len(banks) > 1:
+        validations.append({
+            "type": "bank_mismatch",
+            "level": "warning",
+            "message": f"Wyciągi z różnych banków: {', '.join(banks)}",
+        })
+
+    # --- 2. Duplicate detection (same pdf_hash) ---
+    hashes = {}
+    for s in stmts:
+        h = s.get("pdf_hash", "")
+        if h and h in hashes:
+            validations.append({
+                "type": "duplicate",
+                "level": "error",
+                "message": f"Duplikat PDF: wyciąg {s['id'][:8]} ma taki sam hash jak {hashes[h][:8]}",
+            })
+        elif h:
+            hashes[h] = s["id"]
+
+    # --- 3. Date continuity + balance chain ---
+    for i in range(len(stmts) - 1):
+        curr = stmts[i]
+        nxt = stmts[i + 1]
+        curr_to = curr.get("period_to", "")
+        nxt_from = nxt.get("period_from", "")
+
+        # Date continuity check
+        if curr_to and nxt_from:
+            from datetime import datetime, timedelta
+            try:
+                d_to = datetime.strptime(curr_to, "%Y-%m-%d")
+                d_from = datetime.strptime(nxt_from, "%Y-%m-%d")
+                gap = (d_from - d_to).days
+                if gap > 1:
+                    validations.append({
+                        "type": "date_gap",
+                        "level": "warning",
+                        "message": f"Luka w datach: {curr_to} → {nxt_from} ({gap - 1} dni przerwy)",
+                    })
+                elif gap < 0:
+                    validations.append({
+                        "type": "date_overlap",
+                        "level": "warning",
+                        "message": f"Nakładające się okresy: {curr_to} i {nxt_from} ({abs(gap)} dni)",
+                    })
+            except ValueError:
+                pass
+
+        # Balance chain check
+        curr_closing = curr.get("closing_balance")
+        nxt_opening = nxt.get("opening_balance")
+        if curr_closing is not None and nxt_opening is not None:
+            try:
+                c = float(curr_closing)
+                o = float(nxt_opening)
+                if abs(c - o) > 0.01:
+                    validations.append({
+                        "type": "balance_break",
+                        "level": "error",
+                        "message": f"Przerwanie łańcucha sald: saldo końcowe {c:.2f} ≠ saldo początkowe {o:.2f} (następny wyciąg)",
+                    })
+            except (ValueError, TypeError):
+                pass
+
+    # --- 4. TX date range vs statement period ---
+    for s in stmts:
+        p_from = s.get("period_from", "")
+        p_to = s.get("period_to", "")
+        tx_min = s.get("tx_min_date", "")
+        tx_max = s.get("tx_max_date", "")
+        if p_from and tx_min and tx_min < p_from:
+            validations.append({
+                "type": "tx_before_period",
+                "level": "warning",
+                "message": f"Transakcje sprzed okresu wyciągu: TX od {tx_min}, okres od {p_from} (wyciąg {s['id'][:8]})",
+            })
+        if p_to and tx_max and tx_max > p_to:
+            validations.append({
+                "type": "tx_after_period",
+                "level": "warning",
+                "message": f"Transakcje po okresie wyciągu: TX do {tx_max}, okres do {p_to} (wyciąg {s['id'][:8]})",
+            })
+
+    # --- 5. Per-statement TX completeness ---
+    for s in stmts:
+        dc = s.get("declared_credits_count") or 0
+        dd = s.get("declared_debits_count") or 0
+        declared = int(dc) + int(dd) if dc or dd else 0
+        actual = s.get("tx_count", 0)
+        if declared > 0 and actual < declared:
+            validations.append({
+                "type": "tx_incomplete",
+                "level": "warning",
+                "message": f"Niekompletne transakcje w wyciągu {s['id'][:8]}: odczytano {actual}/{declared}",
+            })
+
+    # Summary
+    total_tx = sum(s.get("tx_count", 0) for s in stmts)
+    errors = sum(1 for v in validations if v["level"] == "error")
+    warnings_count = sum(1 for v in validations if v["level"] == "warning")
+
+    period_from = stmts[0].get("period_from", "?") if stmts else "?"
+    period_to = stmts[-1].get("period_to", "?") if stmts else "?"
+
+    return JSONResponse({
+        "status": "ok",
+        "validations": validations,
+        "summary": {
+            "statement_count": len(stmts),
+            "total_transactions": total_tx,
+            "period_from": period_from,
+            "period_to": period_to,
+            "errors": errors,
+            "warnings": warnings_count,
+            "all_ok": errors == 0 and warnings_count == 0,
+        },
+    })
 
 
 @router.get("/api/aml/charts/{statement_id}")
