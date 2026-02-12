@@ -2515,7 +2515,7 @@
       });
 
       if(data && data.status === "ok" && data.transactions){
-        _renderCmParsedPreview(container, data.transactions, data.transaction_count);
+        _renderCmParsedPreview(container, data.transactions, data.transaction_count, data.pages_parsed, data.page_count);
       } else {
         container.innerHTML = `<div class="small" style="color:var(--danger)">${_esc(data && data.error ? data.error : "Blad parsowania")}</div>`;
       }
@@ -2524,13 +2524,16 @@
     }
   }
 
-  function _renderCmParsedPreview(container, transactions, total){
+  function _renderCmParsedPreview(container, transactions, total, pagesParsed, pageCount){
     if(!transactions || !transactions.length){
       container.innerHTML = '<div class="small muted">Brak rozpoznanych transakcji. Sprawdz mapowanie kolumn.</div>';
       return;
     }
 
-    let html = `<div class="small muted" style="margin-bottom:4px">Rozpoznano <b>${total}</b> transakcji. Podglad:</div>`;
+    const pgInfo = (pagesParsed && pageCount && pagesParsed < pageCount)
+      ? ` <span style="color:var(--warning,#d97706)">(podglad: ${pagesParsed}/${pageCount} stron — pelna analiza obejmie wszystkie)</span>`
+      : (pagesParsed && pageCount ? ` (${pagesParsed}/${pageCount} stron)` : "");
+    let html = `<div class="small muted" style="margin-bottom:4px">Rozpoznano <b>${total}</b> transakcji${pgInfo}. Podglad:</div>`;
     html += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
     html += '<tr style="background:var(--bg-alt,#f1f5f9);font-weight:bold"><td style="padding:3px 5px">Data</td><td>Kontrahent</td><td>Tytul</td><td style="text-align:right">Kwota</td><td style="text-align:right">Saldo</td></tr>';
 

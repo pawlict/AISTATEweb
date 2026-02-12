@@ -175,6 +175,7 @@ def run_aml_pipeline(
         spatial_result = parse_with_mapping(
             pdf_path, column_mapping,
             column_bounds=column_bounds,
+            full_parse=True,  # Parse ALL pages, not just 5-page preview cache
         )
         spatial_txs = spatial_result.get("transactions", [])
         spatial_info = spatial_result.get("info", {})
@@ -227,7 +228,15 @@ def run_aml_pipeline(
         ocr_used = False
         ocr_confidence = 0.0
 
-        _log(f"Znaleziono {len(raw_transactions)} transakcji (parsowanie przestrzenne)")
+        pages_parsed = spatial_result.get("pages_parsed", 0)
+        total_pages = spatial_result.get("page_count", 0)
+        _log(f"Znaleziono {len(raw_transactions)} transakcji (parsowanie przestrzenne, "
+             f"stron: {pages_parsed}/{total_pages})")
+        if pages_parsed < total_pages:
+            warnings.append(
+                f"Sparsowano {pages_parsed} z {total_pages} stron — "
+                f"mogą brakować transakcje z pozostałych stron"
+            )
 
     else:
         # --- Step 1: Extract text and tables ---
