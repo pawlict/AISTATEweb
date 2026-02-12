@@ -542,27 +542,101 @@
     const status = QS("#aml_llm_status");
     const resultDiv = QS("#aml_llm_result");
     const textDiv = QS("#aml_llm_text");
+    const progressDiv = QS("#aml_llm_progress");
+    const progBar = QS("#aml_llm_prog_bar");
+    const progText = QS("#aml_llm_prog_text");
 
     if(btn) btn.disabled = true;
-    if(status) status.textContent = "Generowanie analizy LLM... (to moze potrwac 30-120s)";
-    if(resultDiv) resultDiv.style.display = "none";
+    if(status) status.style.display = "none";
+    if(progressDiv) progressDiv.style.display = "";
+    if(progBar) progBar.style.width = "5%";
+    if(progText) progText.textContent = "Laczenie z Ollama...";
+    if(resultDiv){ resultDiv.style.display = ""; }
+    if(textDiv) textDiv.innerHTML = "";
+
+    // Animated progress: slowly fills as text streams in
+    let llmPct = 5;
+    const progTimer = setInterval(()=>{
+      llmPct = Math.min(llmPct + Math.random() * 3, 92);
+      if(progBar) progBar.style.width = llmPct + "%";
+    }, 1500);
+
+    let fullText = "";
+    let chunkCount = 0;
 
     try{
-      const data = await _api("/api/aml/llm-analyze/" + encodeURIComponent(St.statementId), {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({}),
-      });
+      const url = "/api/aml/llm-stream/" + encodeURIComponent(St.statementId);
+      const response = await fetch(url);
+      if(!response.ok) throw new Error("HTTP " + response.status);
 
-      if(data && data.status === "ok" && data.analysis){
-        if(textDiv) textDiv.innerHTML = _formatLlmText(data.analysis);
-        if(resultDiv) resultDiv.style.display = "";
-        if(status) status.textContent = "Analiza wygenerowana pomyslnie.";
-      } else {
-        if(status) status.textContent = "Blad: " + (data && data.error ? data.error : "Nieznany blad");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      if(progText) progText.textContent = "Generowanie analizy...";
+      if(progBar) progBar.style.width = "15%";
+
+      while(true){
+        const {done, value} = await reader.read();
+        if(done) break;
+
+        buffer += decoder.decode(value, {stream: true});
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for(const line of lines){
+          if(!line.startsWith("data: ")) continue;
+          try{
+            const obj = JSON.parse(line.slice(6));
+            if(obj.error){
+              throw new Error(obj.error);
+            }
+            if(obj.chunk){
+              fullText += obj.chunk;
+              chunkCount++;
+              if(textDiv) textDiv.innerHTML = _formatLlmText(fullText);
+              // Update progress based on chunks received
+              const estPct = Math.min(15 + chunkCount * 0.5, 95);
+              if(estPct > llmPct){
+                llmPct = estPct;
+                if(progBar) progBar.style.width = llmPct + "%";
+              }
+            }
+            if(obj.done){
+              break;
+            }
+          } catch(parseErr){
+            if(parseErr.message && !parseErr.message.startsWith("Unexpected")){
+              throw parseErr;
+            }
+          }
+        }
       }
+
+      clearInterval(progTimer);
+      if(progBar) progBar.style.width = "100%";
+      if(progText) progText.textContent = "Analiza zakonczona.";
+
+      setTimeout(()=>{
+        if(progressDiv) progressDiv.style.display = "none";
+        if(status){
+          status.textContent = "Analiza wygenerowana pomyslnie.";
+          status.style.display = "";
+        }
+      }, 1200);
+
+      if(fullText && textDiv){
+        textDiv.innerHTML = _formatLlmText(fullText);
+      }
+      if(resultDiv) resultDiv.style.display = "";
+
     } catch(e) {
-      if(status) status.textContent = "Blad: " + String(e.message || e);
+      clearInterval(progTimer);
+      if(progressDiv) progressDiv.style.display = "none";
+      if(status){
+        status.textContent = "Blad: " + String(e.message || e);
+        status.style.display = "";
+      }
     } finally {
       St.llmRunning = false;
       if(btn) btn.disabled = false;
@@ -1025,6 +1099,7 @@
     period_to:               {label:"Okres do",                 icon:"\uD83D\uDCC5"},
     opening_balance:         {label:"Saldo poczatkowe",         icon:"\uD83D\uDCB0"},
     closing_balance:         {label:"Saldo koncowe",            icon:"\uD83D\uDCB0"},
+    available_balance:       {label:"Saldo dostepne",           icon:"\uD83D\uDCB0"},
     previous_closing_balance:{label:"Saldo konc. poprz. wyc.",  icon:"\uD83D\uDCB0"},
     declared_credits_count:  {label:"Suma uznan (liczba)",      icon:"\uD83D\uDCE5"},
     declared_credits_sum:    {label:"Suma uznan (kwota)",       icon:"\uD83D\uDCE5"},
@@ -1092,6 +1167,11 @@
 
     // Build header fields from detected header_region
     _buildHeaderFields(preview.header_region);
+
+    // If template was auto-applied, merge saved header fields
+    if(tpl && tpl.column_mapping && !tpl._partial_match){
+      _restoreHeaderFieldsFromTemplate(tpl);
+    }
 
     // Render header fields editor
     _renderHeaderFields();
@@ -1348,10 +1428,41 @@
       banner.style.background = "var(--bg-success,#f0fdf4)";
     }
 
+    // Restore header fields from template (saldo, IBAN, etc.)
+    _restoreHeaderFieldsFromTemplate(tpl);
+
     // Re-render everything: headers, SVG overlay, and parse preview
     _renderCmHeaders();
     _cmRenderOverlay();
     _cmPreviewParse();
+  }
+
+  function _restoreHeaderFieldsFromTemplate(tpl){
+    const savedFields = tpl.header_fields;
+    if(!savedFields || typeof savedFields !== "object" || !Object.keys(savedFields).length) return;
+
+    // Merge template header fields into current St.cmHeaderFields
+    // For each saved field: if already detected, update value; if missing, add it
+    for(const [fieldType, savedValue] of Object.entries(savedFields)){
+      if(!savedValue || fieldType === "skip") continue;
+      const existing = St.cmHeaderFields.find(f => f.field_type === fieldType);
+      if(existing){
+        // Only overwrite if current value is empty or differs
+        if(!existing.value.trim()){
+          existing.value = String(savedValue);
+        }
+      } else {
+        // Add field that wasn't auto-detected this time
+        const meta = _HEADER_FIELD_TYPES[fieldType];
+        St.cmHeaderFields.push({
+          field_type: fieldType,
+          value: String(savedValue),
+          raw_label: meta ? meta.label : fieldType,
+          box: null,
+        });
+      }
+    }
+    _renderHeaderFields();
   }
 
   // ============================================================
@@ -1394,6 +1505,7 @@
       ["period_to", "Okres do"],
       ["opening_balance", "Saldo poczatkowe"],
       ["closing_balance", "Saldo koncowe"],
+      ["available_balance", "Saldo dostepne"],
       ["previous_closing_balance", "Saldo konc. poprz. wyciagu"],
       ["declared_credits_count", "Suma uznan (liczba)"],
       ["declared_credits_sum", "Suma uznan (kwota)"],
@@ -1757,7 +1869,7 @@
   const _HDR_FIELD_COLORS = {
     bank_name: "#8b5cf6", account_number: "#3b82f6", account_holder: "#06b6d4",
     period_from: "#22c55e", period_to: "#22c55e",
-    opening_balance: "#f59e0b", closing_balance: "#f59e0b",
+    opening_balance: "#f59e0b", closing_balance: "#f59e0b", available_balance: "#eab308",
     previous_closing_balance: "#d97706",
     declared_credits_count: "#10b981", declared_credits_sum: "#10b981",
     declared_debits_count: "#ef4444", declared_debits_sum: "#ef4444",

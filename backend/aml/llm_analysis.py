@@ -7,7 +7,7 @@ to Ollama for a written expert analysis in Polish.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 log = logging.getLogger("aistate.aml.llm_analysis")
 
@@ -528,6 +528,51 @@ async def run_llm_analysis(
     )
 
     return result
+
+
+async def stream_llm_analysis(
+    prompt: str,
+    model: str = "",
+    system_prompt: Optional[str] = None,
+) -> AsyncGenerator[str, None]:
+    """Stream AML analysis from Ollama — yields text chunks as they arrive."""
+    from ..ollama_client import OllamaClient, stream_analyze
+
+    client = OllamaClient()
+
+    status = await client.status()
+    if status.status != "online":
+        raise RuntimeError("Ollama nie jest dostepny. Uruchom Ollama aby uzyskac analize LLM.")
+
+    if not model:
+        models = status.models or []
+        preferred = ["llama3.1", "mistral", "qwen", "gemma"]
+        for pref in preferred:
+            for m in models:
+                if pref in m.lower():
+                    model = m
+                    break
+            if model:
+                break
+        if not model and models:
+            model = models[0]
+        if not model:
+            raise RuntimeError("Brak modeli LLM w Ollama. Pobierz model: ollama pull llama3.1")
+
+    log.info("Streaming LLM AML analysis with model: %s", model)
+
+    system = system_prompt or (
+        "Jestes ekspertem ds. AML (Anti-Money Laundering) i analityki finansowej. "
+        "Piszesz profesjonalne raporty analityczne po polsku. "
+        "Bazujesz wylacznie na dostarczonych danych — nie wymyslasz informacji. "
+        "Uzywasz konkretnych kwot, dat i nazw kontrahentow w swoich analizach."
+    )
+
+    async for chunk in stream_analyze(
+        client, prompt, model=model, system=system,
+        options={"temperature": 0.3, "num_ctx": 8192},
+    ):
+        yield chunk
 
 
 # ============================================================

@@ -140,6 +140,7 @@ async def aml_confirm_mapping(request: Request):
             name=template_name,
             is_default=set_default,
             column_bounds=column_bounds,
+            header_fields=header_fields,
         )
 
     # Track template usage
@@ -373,6 +374,40 @@ async def aml_llm_analyze(statement_id: str, request: Request):
     except Exception as e:
         log.exception("LLM analysis error")
         return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+
+@router.get("/api/aml/llm-stream/{statement_id}")
+async def aml_llm_stream(statement_id: str):
+    """SSE streaming LLM analysis — sends chunks as they arrive from Ollama."""
+    from starlette.responses import StreamingResponse
+    from backend.db.engine import fetch_one
+    import asyncio
+
+    row = fetch_one(
+        "SELECT value FROM system_config WHERE key = ?",
+        (f"llm_prompt:{statement_id}",),
+    )
+    if not row or not row["value"]:
+        async def err_gen():
+            yield f"data: {json.dumps({'error': 'No LLM prompt found', 'done': True})}\n\n"
+        return StreamingResponse(err_gen(), media_type="text/event-stream")
+
+    prompt = row["value"]
+
+    async def generate():
+        import json as _json
+        try:
+            from backend.aml.llm_analysis import stream_llm_analysis
+            chunk_count = 0
+            async for chunk in stream_llm_analysis(prompt):
+                chunk_count += 1
+                yield f"data: {_json.dumps({'chunk': chunk, 'done': False}, ensure_ascii=False)}\n\n"
+            yield f"data: {_json.dumps({'chunk': '', 'done': True, 'chunks': chunk_count})}\n\n"
+        except Exception as e:
+            log.exception("LLM stream error")
+            yield f"data: {_json.dumps({'error': str(e), 'done': True})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.get("/api/aml/history")
