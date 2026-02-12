@@ -139,6 +139,7 @@ async def aml_confirm_mapping(request: Request):
             data_start_row=data_start_row,
             name=template_name,
             is_default=set_default,
+            column_bounds=column_bounds,
         )
 
     # Track template usage
