@@ -693,6 +693,78 @@
     document.head.appendChild(script);
   }
 
+  // ============================================================
+  // GRAPH: classification-aware colors + multiple layouts
+  // ============================================================
+
+  // Classification → node color mapping
+  const _CLASS_COLORS = {
+    legitimate: "#15803d",   // green
+    suspicious: "#dc2626",   // red
+    monitoring: "#ea580c",   // orange
+    neutral:    "#60a5fa",   // light blue
+  };
+  // Fallback: risk-level → color (when no classification available)
+  const _RISK_COLORS = {
+    high:   "#dc2626",
+    medium: "#ea580c",
+    low:    "#60a5fa",
+    none:   "#60a5fa",
+  };
+  // Edge color mirrors the TARGET node color
+  const _EDGE_BASE = "#94a3b8";
+  const _TYPE_SHAPES = {ACCOUNT:"diamond", MERCHANT:"round-rectangle", CASH_NODE:"hexagon", PAYMENT_PROVIDER:"barrel"};
+
+  // Layout configs
+  const _LAYOUTS = {
+    cose: {
+      name:"cose", animate:true, animationDuration:400,
+      nodeRepulsion:function(){return 8000;},
+      idealEdgeLength:function(){return 120;},
+      edgeElasticity:function(){return 100;},
+      gravity:0.3, padding:30,
+    },
+    circle: {
+      name:"circle", animate:true, animationDuration:400,
+      padding:30, startAngle: 0,
+    },
+    grid: {
+      name:"grid", animate:true, animationDuration:400,
+      padding:30, rows:undefined, condense:true, avoidOverlap:true,
+    },
+    breadthfirst: {
+      name:"breadthfirst", animate:true, animationDuration:400,
+      directed:true, padding:30, spacingFactor:1.2,
+      roots:"#account_own",
+    },
+    concentric: {
+      name:"concentric", animate:true, animationDuration:400,
+      padding:30, minNodeSpacing:40,
+      concentric:function(node){
+        // ACCOUNT at center, then by risk level (high=outer)
+        if(node.data("type") === "ACCOUNT") return 100;
+        const rl = node.data("riskLevel") || "none";
+        return ({none:80, low:60, medium:40, high:20})[rl] || 50;
+      },
+      levelWidth:function(){ return 2; },
+    },
+  };
+
+  function _nodeColor(ele){
+    if(ele.data("type") === "ACCOUNT") return "#1f5aa6";
+    const cls = ele.data("classStatus");
+    if(cls && _CLASS_COLORS[cls]) return _CLASS_COLORS[cls];
+    return _RISK_COLORS[ele.data("riskLevel")] || "#60a5fa";
+  }
+  function _edgeColor(ele){
+    // Color edge by its target node color (muted)
+    const tgt = ele.target();
+    if(!tgt || !tgt.length) return _EDGE_BASE;
+    const c = _nodeColor(tgt);
+    // Lighten: mix with gray
+    return c;
+  }
+
   function _renderGraph(graphData){
     const container = QS("#aml_graph_container");
     if(!container) return;
@@ -703,9 +775,6 @@
     }
 
     _ensureCytoscape(()=>{
-      const riskColors = {high:"#b91c1c", medium:"#d97706", low:"#2563eb", none:"#6b7280"};
-      const typeShapes = {ACCOUNT:"diamond", MERCHANT:"round-rectangle", CASH_NODE:"hexagon", PAYMENT_PROVIDER:"barrel"};
-
       const elements = [];
 
       for(const node of graphData.nodes){
@@ -715,6 +784,7 @@
             label: node.label || node.id,
             type: node.node_type || node.type || "COUNTERPARTY",
             riskLevel: node.risk_level || "none",
+            classStatus: node.class_status || "",
           }
         });
       }
@@ -728,6 +798,7 @@
             label: _fmtAmount(edge.total_amount, "PLN") + " (" + (edge.tx_count||1) + "x)",
             edgeType: edge.edge_type || edge.type || "TRANSFER",
             amount: edge.total_amount || 0,
+            classStatus: edge.class_status || "",
           }
         });
       }
@@ -749,15 +820,11 @@
               "text-max-width": "100px",
               "width": 40,
               "height": 40,
-              "background-color": function(ele){
-                return riskColors[ele.data("riskLevel")] || "#6b7280";
-              },
+              "background-color": _nodeColor,
               "color": "#1e293b",
               "text-valign": "bottom",
               "text-margin-y": 6,
-              "shape": function(ele){
-                return typeShapes[ele.data("type")] || "ellipse";
-              },
+              "shape": function(ele){ return _TYPE_SHAPES[ele.data("type")] || "ellipse"; },
               "border-width": 2,
               "border-color": "rgba(0,0,0,.15)",
             }
@@ -776,8 +843,8 @@
             selector: "edge",
             style: {
               "width": function(ele){ return Math.min(1 + Math.sqrt(ele.data("amount")||1) / 20, 8); },
-              "line-color": "#94a3b8",
-              "target-arrow-color": "#64748b",
+              "line-color": _edgeColor,
+              "target-arrow-color": _edgeColor,
               "target-arrow-shape": "triangle",
               "curve-style": "bezier",
               "label": "data(label)",
@@ -788,20 +855,27 @@
             }
           }
         ],
-        layout: {
-          name: "cose",
-          animate: false,
-          nodeRepulsion: function(){ return 8000; },
-          idealEdgeLength: function(){ return 120; },
-          edgeElasticity: function(){ return 100; },
-          gravity: 0.3,
-          padding: 30,
-        },
+        layout: _LAYOUTS.cose,
         maxZoom: 3,
         minZoom: 0.3,
       });
 
-      // Risk filter
+      // --- Layout buttons ---
+      const layoutBtns = QSA(".aml-graph-layout-btn");
+      layoutBtns.forEach(btn=>{
+        btn.onclick = ()=>{
+          const layoutName = btn.getAttribute("data-layout");
+          if(!layoutName || !_LAYOUTS[layoutName] || !St.cyInstance) return;
+          // Highlight active button
+          layoutBtns.forEach(b=>{ b.style.background=""; b.style.color=""; });
+          btn.style.background = "var(--primary)";
+          btn.style.color = "#fff";
+          // Run layout
+          St.cyInstance.layout(_LAYOUTS[layoutName]).run();
+        };
+      });
+
+      // --- Risk filter ---
       const filterSel = QS("#aml_graph_risk_filter");
       if(filterSel){
         filterSel.onchange = ()=>{
@@ -817,13 +891,7 @@
               }
             });
             St.cyInstance.edges().forEach(e=>{
-              const src = e.source();
-              const tgt = e.target();
-              if(src.visible() && tgt.visible()){
-                e.show();
-              } else {
-                e.hide();
-              }
+              if(e.source().visible() && e.target().visible()){ e.show(); } else { e.hide(); }
             });
           }
         };

@@ -287,12 +287,18 @@ async def aml_graph(
     risk_level: str = Query(""),
     counterparty: str = Query(""),
 ):
-    """Get flow graph JSON for a case, with optional filters."""
-    from backend.aml.graph import filter_graph, get_graph_json
+    """Get flow graph JSON for a case, with optional filters and classification colors."""
+    from backend.aml.graph import filter_graph, get_graph_json, enrich_graph_with_classifications
+    from backend.db.engine import fetch_one
 
     graph = get_graph_json(case_id)
     if not graph["nodes"]:
         return JSONResponse({"error": "no graph data"}, status_code=404)
+
+    # Enrich with classification colors from review
+    stmt = fetch_one("SELECT id FROM statements WHERE case_id = ? LIMIT 1", (case_id,))
+    if stmt:
+        graph = enrich_graph_with_classifications(graph, stmt["id"])
 
     # Apply filters if any
     channels = [c.strip() for c in channel.split(",") if c.strip()] if channel else None
@@ -534,9 +540,10 @@ async def aml_detail(statement_id: str):
             charts = risk["score_breakdown"].get("charts", {})
             ml_anomalies = risk["score_breakdown"].get("ml_anomalies", [])
 
-    # Graph
-    from backend.aml.graph import get_graph_json
+    # Graph — enriched with classification colors
+    from backend.aml.graph import get_graph_json, enrich_graph_with_classifications
     graph = get_graph_json(stmt_dict["case_id"])
+    graph = enrich_graph_with_classifications(graph, statement_id)
 
     # Check if LLM prompt is available
     from backend.db.engine import fetch_one as _fo
