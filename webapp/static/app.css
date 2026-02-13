@@ -583,7 +583,7 @@ textarea{min-height:220px; resize:vertical}
 .analysis-sidebar.collapsed .analysis-sidecard{display:none}
 .analysis-sidebar.collapsed + .analysis-main{grid-column: 1 / span 2}
 
-.analysis-main{display:flex; flex-direction:column; gap:14px; overflow:auto}
+.analysis-main{display:flex; flex-direction:column; gap:14px; overflow-y:auto; overflow-x:hidden}
 
 .analysis-sidebar-toggle{
   position: fixed;
@@ -997,12 +997,19 @@ textarea{min-height:220px; resize:vertical}
 .aml-llm-text li{margin-bottom: 4px}
 .aml-llm-text strong{font-weight: 700}
 
+/* Charts card — prevent flex item from expanding beyond parent */
+#aml_charts_card{
+  min-width: 0;
+  overflow: hidden;
+}
+
 /* Chart scrollable wrapper */
 .aml-chart-scroll-wrap{
   overflow-x: auto;
   overflow-y: hidden;
   margin-top: 10px;
   position: relative;
+  max-width: 100%;
   scrollbar-width: thin;
   scrollbar-color: var(--border, #cbd5e1) transparent;
 }
