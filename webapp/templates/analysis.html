@@ -295,7 +295,10 @@
       <!-- Charts -->
       <div class="card" id="aml_charts_card">
         <div class="analysis-sidehdr">
-          <div class="h2">Wykresy</div>
+          <div>
+            <div class="h2">Wykresy</div>
+            <div class="small muted" id="aml_chart_hint" style="margin-top:2px">Ctrl + scroll myszy — zoom &nbsp;|&nbsp; Pasek na dole — przewijanie</div>
+          </div>
           <div style="display:flex;gap:8px;align-items:center">
             <select class="input" id="aml_chart_select" style="padding:5px 8px;border-radius:10px;min-width:180px">
               <option value="balance_timeline">Saldo w czasie</option>
@@ -307,9 +310,12 @@
             </select>
           </div>
         </div>
-        <div id="aml_chart_container" style="height:380px;margin-top:10px;position:relative">
-          <canvas id="aml_chart_canvas"></canvas>
+        <div id="aml_chart_scroll_wrap" class="aml-chart-scroll-wrap">
+          <div id="aml_chart_container" style="height:380px;position:relative;min-width:100%">
+            <canvas id="aml_chart_canvas"></canvas>
+          </div>
         </div>
+        <div id="aml_chart_gap_legend" class="aml-chart-gap-legend" style="display:none"></div>
       </div>
 
       <!-- ML Anomalies -->

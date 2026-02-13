@@ -368,8 +368,18 @@
   }
 
   // ============================================================
-  // CHARTS (Chart.js)
+  // CHARTS (Chart.js) — with zoom, scroll & gap detection
   // ============================================================
+
+  // Zoom state for balance_timeline
+  const _chartZoom = {
+    level: 1,          // 1 = fit-to-width, >1 = zoomed in
+    minLevel: 1,
+    maxLevel: 10,
+    pxPerPoint: 0,     // base px per data point (computed)
+    activeKey: null,    // currently rendered chart key
+    wheelBound: false,  // whether Ctrl+wheel listener is attached
+  };
 
   function _ensureChartJs(cb){
     if(window.Chart){
@@ -390,16 +400,176 @@
     document.head.appendChild(script);
   }
 
-  function _renderChart(chartKey){
-    const data = St.chartsData[chartKey];
-    if(!data){
-      const container = QS("#aml_chart_container");
-      if(container) container.innerHTML = '<div class="small muted" style="padding:20px">Brak danych wykresu</div>';
+  /** Build a Chart.js annotation-like box plugin for drawing gap zones. */
+  function _gapBoxPlugin(gaps, labels){
+    if(!gaps || !gaps.length) return null;
+    return {
+      id: "gapZones",
+      beforeDraw(chart){
+        const ctx = chart.ctx;
+        const xScale = chart.scales.x;
+        const yScale = chart.scales.y;
+        if(!xScale || !yScale) return;
+
+        const top = yScale.top;
+        const bottom = yScale.bottom;
+
+        ctx.save();
+        for(const gap of gaps){
+          const idx = gap.after_index;
+          if(idx < 0 || idx >= labels.length - 1) continue;
+
+          // Pixel positions: right edge of idx, left edge of idx+1
+          const x1 = xScale.getPixelForValue(idx);
+          const x2 = xScale.getPixelForValue(idx + 1);
+          const gapX = x1;
+          const gapW = x2 - x1;
+          if(gapW < 2) continue;
+
+          // Hashed background
+          ctx.fillStyle = "rgba(217,119,6,0.08)";
+          ctx.fillRect(gapX, top, gapW, bottom - top);
+
+          // Dashed borders
+          ctx.strokeStyle = "rgba(217,119,6,0.35)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(gapX, top);
+          ctx.lineTo(gapX, bottom);
+          ctx.moveTo(gapX + gapW, top);
+          ctx.lineTo(gapX + gapW, bottom);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Label at top
+          const label = gap.from_date + " \u2014 " + gap.to_date;
+          ctx.font = "10px sans-serif";
+          ctx.fillStyle = "rgba(217,119,6,0.7)";
+          ctx.textAlign = "center";
+          ctx.fillText(label, gapX + gapW / 2, top + 12);
+        }
+        ctx.restore();
+      }
+    };
+  }
+
+  /** Apply zoom level to balance_timeline chart container width. */
+  function _applyTimelineZoom(){
+    const container = QS("#aml_chart_container");
+    const scrollWrap = QS("#aml_chart_scroll_wrap");
+    if(!container || !scrollWrap) return;
+
+    const data = St.chartsData[_chartZoom.activeKey];
+    if(!data) return;
+
+    const pointCount = (data.labels || []).length;
+    const wrapWidth = scrollWrap.clientWidth;
+
+    if(pointCount <= 1 || _chartZoom.level <= 1){
+      container.style.width = "";
+      container.style.minWidth = "100%";
       return;
     }
 
+    // Base: fit all points in visible width
+    _chartZoom.pxPerPoint = wrapWidth / pointCount;
+    const targetWidth = Math.max(wrapWidth, pointCount * _chartZoom.pxPerPoint * _chartZoom.level);
+    container.style.width = Math.round(targetWidth) + "px";
+    container.style.minWidth = Math.round(targetWidth) + "px";
+
+    // Resize chart if it exists
+    if(St.chartInstance){
+      St.chartInstance.resize();
+    }
+  }
+
+  /** Bind Ctrl+wheel zoom on the scroll wrapper (once). */
+  function _bindChartZoomWheel(){
+    if(_chartZoom.wheelBound) return;
+    const scrollWrap = QS("#aml_chart_scroll_wrap");
+    if(!scrollWrap) return;
+    _chartZoom.wheelBound = true;
+
+    scrollWrap.addEventListener("wheel", (e)=>{
+      // Only zoom when Ctrl is held
+      if(!e.ctrlKey) return;
+      // Only for timeline-like scrollable charts
+      if(_chartZoom.activeKey !== "balance_timeline" && _chartZoom.activeKey !== "monthly_trend") return;
+
+      e.preventDefault();
+
+      const oldLevel = _chartZoom.level;
+      const delta = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      _chartZoom.level = Math.max(_chartZoom.minLevel, Math.min(_chartZoom.maxLevel, _chartZoom.level * delta));
+
+      if(Math.abs(_chartZoom.level - oldLevel) < 0.001) return;
+
+      // Preserve scroll position around mouse cursor
+      const rect = scrollWrap.getBoundingClientRect();
+      const mouseXRatio = (e.clientX - rect.left + scrollWrap.scrollLeft) /
+                          (scrollWrap.scrollWidth || 1);
+
+      _applyTimelineZoom();
+
+      // Restore scroll to keep mouse pointer at same data position
+      requestAnimationFrame(()=>{
+        const newScrollX = mouseXRatio * scrollWrap.scrollWidth - (e.clientX - rect.left);
+        scrollWrap.scrollLeft = Math.max(0, newScrollX);
+      });
+    }, {passive: false});
+  }
+
+  /** Render gap legend below the chart. */
+  function _renderGapLegend(gaps){
+    const legend = QS("#aml_chart_gap_legend");
+    if(!legend) return;
+    if(!gaps || !gaps.length){
+      legend.style.display = "none";
+      legend.innerHTML = "";
+      return;
+    }
+    legend.style.display = "";
+    let html = '<span class="gap-item"><span class="gap-swatch"></span> Brakujace okresy:</span>';
+    for(const g of gaps){
+      html += `<span class="gap-item" style="font-weight:500">${_esc(g.from_date)} \u2014 ${_esc(g.to_date)} (${g.days} dni)</span>`;
+    }
+    legend.innerHTML = html;
+  }
+
+  function _renderChart(chartKey){
+    const data = St.chartsData[chartKey];
+    const container = QS("#aml_chart_container");
+    const scrollWrap = QS("#aml_chart_scroll_wrap");
+    const hint = QS("#aml_chart_hint");
+    const gapLegend = QS("#aml_chart_gap_legend");
+
+    if(!data){
+      if(container) container.innerHTML = '<div class="small muted" style="padding:20px">Brak danych wykresu</div>';
+      if(gapLegend) gapLegend.style.display = "none";
+      return;
+    }
+
+    const isTimeline = (chartKey === "balance_timeline" || chartKey === "monthly_trend");
+
+    // Show/hide zoom hint
+    if(hint) hint.style.display = isTimeline ? "" : "none";
+
+    // Reset zoom for non-timeline charts
+    if(!isTimeline){
+      _chartZoom.level = 1;
+      _chartZoom.activeKey = null;
+      if(container){
+        container.style.width = "";
+        container.style.minWidth = "100%";
+      }
+    } else {
+      _chartZoom.activeKey = chartKey;
+      // Keep zoom if switching between timeline types, reset otherwise
+      if(_chartZoom.level < 1) _chartZoom.level = 1;
+    }
+
     _ensureChartJs(()=>{
-      const container = QS("#aml_chart_container");
       if(!container) return;
 
       // Ensure canvas exists
@@ -413,19 +583,31 @@
         St.chartInstance = null;
       }
 
+      const gaps = data.gaps || [];
+      const labels = data.labels || [];
+      const datasets = data.datasets || [];
+
+      // Show gaps legend for balance_timeline
+      if(chartKey === "balance_timeline"){
+        _renderGapLegend(gaps);
+      } else {
+        if(gapLegend){ gapLegend.style.display = "none"; gapLegend.innerHTML = ""; }
+      }
+
       const chartConfig = {
         type: data.type || "bar",
         data: {
-          labels: data.labels || [],
-          datasets: data.datasets || [],
+          labels: labels,
+          datasets: datasets,
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { display: (data.datasets || []).length > 1 },
+            legend: { display: datasets.length > 1 },
           },
         },
+        plugins: [],
       };
 
       // Special options for specific chart types
@@ -436,14 +618,26 @@
         chartConfig.options.elements = { point: { radius: 1 } };
       }
       // Dual y-axis for channel distribution
-      if(data.datasets && data.datasets.some(ds => ds.yAxisID === "y1")){
+      if(datasets.some(ds => ds.yAxisID === "y1")){
         chartConfig.options.scales = {
           y: { type: "linear", display: true, position: "left" },
           y1: { type: "linear", display: true, position: "right", grid: { drawOnChartArea: false } },
         };
       }
 
+      // Register gap-zone plugin for balance_timeline
+      if(chartKey === "balance_timeline" && gaps.length > 0){
+        const gapPlugin = _gapBoxPlugin(gaps, labels);
+        if(gapPlugin) chartConfig.plugins.push(gapPlugin);
+      }
+
       St.chartInstance = new Chart(canvas, chartConfig);
+
+      // Apply zoom (sets container width, triggers resize)
+      if(isTimeline){
+        _applyTimelineZoom();
+        _bindChartZoomWheel();
+      }
     });
   }
 
@@ -1132,6 +1326,12 @@
         St.chartsData = {};
         if(St.chartInstance){ St.chartInstance.destroy(); St.chartInstance = null; }
         if(St.cyInstance){ St.cyInstance.destroy(); St.cyInstance = null; }
+        _chartZoom.level = 1;
+        _chartZoom.activeKey = null;
+        const _cont = QS("#aml_chart_container");
+        if(_cont){ _cont.style.width = ""; _cont.style.minWidth = "100%"; }
+        const _gapL = QS("#aml_chart_gap_legend");
+        if(_gapL){ _gapL.style.display = "none"; _gapL.innerHTML = ""; }
         _resetBatchState();
         _loadHistory();
         _showUpload();

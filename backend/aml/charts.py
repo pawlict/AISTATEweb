@@ -37,6 +37,45 @@ def generate_all_charts(
     }
 
 
+def _detect_date_gaps(dates: List[str], max_gap_days: int = 5) -> List[Dict[str, Any]]:
+    """Find gaps in a sorted list of date strings (YYYY-MM-DD).
+
+    A gap is detected when the distance between two consecutive dates
+    exceeds *max_gap_days*.  Returns a list of gap descriptors:
+    ``{"after_index": int, "from_date": str, "to_date": str, "days": int}``
+    """
+    from datetime import timedelta
+
+    gaps: List[Dict[str, Any]] = []
+    prev_dt = None
+    prev_idx = -1
+
+    for i, ds in enumerate(dates):
+        if not ds or len(ds) < 10:
+            continue
+        try:
+            cur_dt = datetime.strptime(ds[:10], "%Y-%m-%d")
+        except ValueError:
+            continue
+
+        if prev_dt is not None:
+            delta = (cur_dt - prev_dt).days
+            if delta > max_gap_days:
+                gap_start = prev_dt + timedelta(days=1)
+                gap_end = cur_dt - timedelta(days=1)
+                gaps.append({
+                    "after_index": prev_idx,
+                    "from_date": gap_start.strftime("%Y-%m-%d"),
+                    "to_date": gap_end.strftime("%Y-%m-%d"),
+                    "days": delta,
+                })
+
+        prev_dt = cur_dt
+        prev_idx = i
+
+    return gaps
+
+
 def balance_timeline(
     transactions: List[NormalizedTransaction],
     opening_balance: Optional[float] = None,
@@ -60,6 +99,9 @@ def balance_timeline(
         data.append(round(balance, 2))
         colors.append("#b91c1c" if balance < 0 else "#1f5aa6")
 
+    # Detect gaps (missing statement periods)
+    gaps = _detect_date_gaps(labels)
+
     return {
         "type": "line",
         "labels": labels,
@@ -72,6 +114,7 @@ def balance_timeline(
             "tension": 0.2,
             "pointRadius": 1,
         }],
+        "gaps": gaps,
     }
 
 
