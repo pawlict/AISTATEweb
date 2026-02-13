@@ -498,6 +498,7 @@
       if(_chartZoom.activeKey !== "balance_timeline" && _chartZoom.activeKey !== "monthly_trend") return;
 
       e.preventDefault();
+      e.stopPropagation();
 
       const oldLevel = _chartZoom.level;
       const delta = e.deltaY < 0 ? 1.15 : 1 / 1.15;

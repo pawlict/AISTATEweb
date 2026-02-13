@@ -527,16 +527,322 @@ class INGParser(BankParser):
     # Standard BankParser interface (fallback when PyMuPDF unavailable)
     # ------------------------------------------------------------------
 
+    def _is_header_row(self, row: List[str]) -> bool:
+        joined = " ".join(c.lower() for c in row if c)
+        return "data" in joined and ("kwota" in joined or "saldo" in joined)
+
+    def _find_column_mapping(self, header: List[str]) -> Dict[str, int]:
+        mapping: Dict[str, int] = {}
+        for i, cell in enumerate(header):
+            cell_l = (cell or "").lower().strip()
+            if re.search(r"data\s*(ksi[ęe]g|operacji|transakcji)", cell_l):
+                mapping["date"] = i
+            elif re.search(r"data\s*waluty", cell_l):
+                mapping["date_valuation"] = i
+            elif "data" in cell_l and "date" not in mapping:
+                mapping["date"] = i
+            elif re.search(r"tytu[łl]", cell_l):
+                mapping["title"] = i
+            elif re.search(r"kontrahent|nadawca|odbiorca|nazwa", cell_l):
+                mapping["counterparty"] = i
+            elif re.search(r"kwota|warto[śs]", cell_l):
+                mapping["amount"] = i
+            elif re.search(r"saldo", cell_l):
+                mapping["balance"] = i
+        return mapping
+
     def parse_tables(
         self,
         tables: List[List[List[str]]],
         full_text: str,
         header_words=None,
     ) -> ParseResult:
-        """Fallback: ignore pdfplumber tables, parse from text lines."""
+        """Parse from pdfplumber tables (fallback when PyMuPDF unavailable)."""
+        info = self._parse_meta(
+            [self._norm(l) for l in full_text.split("\n") if self._norm(l)]
+        )
+        transactions: List[RawTransaction] = []
+
+        for table in tables:
+            if not table or len(table) < 2:
+                continue
+            header_idx = None
+            for idx, row in enumerate(table):
+                if self._is_header_row(row):
+                    header_idx = idx
+                    break
+            if header_idx is None:
+                continue
+            col_map = self._find_column_mapping(table[header_idx])
+            if "date" not in col_map or "amount" not in col_map:
+                continue
+
+            merged_rows = self.merge_continuation_rows(table, col_map, header_idx + 1)
+            for row in merged_rows:
+                # ING date cell may contain two dates: "01.03.2025\n01.03.2025"
+                # or "01.03.2025 01.03.2025" — take the first valid date
+                date_cell = (
+                    row[col_map["date"]] if col_map["date"] < len(row) else ""
+                )
+                date_str = None
+                date_valuation = None
+                for token in re.split(r"[\n\s]+", date_cell):
+                    d = self.parse_date(token.strip())
+                    if d and date_str is None:
+                        date_str = d
+                    elif d and date_valuation is None:
+                        date_valuation = d
+                if not date_str:
+                    continue
+                amount = self.resolve_amount_from_row(row, col_map)
+                if amount is None:
+                    continue
+                title = self.clean_text(
+                    row[col_map["title"]]
+                    if col_map.get("title") is not None
+                    and col_map["title"] < len(row)
+                    else ""
+                )
+                counterparty_raw = self.clean_text(
+                    row[col_map["counterparty"]]
+                    if col_map.get("counterparty") is not None
+                    and col_map["counterparty"] < len(row)
+                    else ""
+                )
+                # ING counterparty cell: "[account_nr] Nazwa i adres odbiorcy: NAME CITY"
+                # Remove account number prefix and the label
+                cp = re.sub(
+                    r"^[\d\s\-/]+Nazwa i adres (?:odbiorcy|płatnika)\s*:\s*",
+                    "",
+                    counterparty_raw,
+                )
+                if cp == counterparty_raw:
+                    # Try without account prefix
+                    cp = re.sub(
+                        r"Nazwa i adres (?:odbiorcy|płatnika)\s*:\s*",
+                        "",
+                        counterparty_raw,
+                    )
+                counterparty = cp.strip()
+                extra = self.collect_unmapped_text(row, col_map)
+                if extra:
+                    if title:
+                        title = title + " " + extra
+                    else:
+                        title = extra
+                txn = RawTransaction(
+                    date=date_str,
+                    date_valuation=date_valuation,
+                    amount=amount,
+                    balance_after=self.parse_amount(
+                        row[col_map["balance"]]
+                        if col_map.get("balance") is not None
+                        and col_map["balance"] < len(row)
+                        else ""
+                    ),
+                    counterparty=counterparty,
+                    title=title,
+                    raw_text=" | ".join(c or "" for c in row),
+                )
+                transactions.append(txn)
+
+        if transactions:
+            # Compute balance_after from opening_balance if table didn't have it
+            if info.opening_balance is not None and all(
+                t.balance_after is None for t in transactions
+            ):
+                running = info.opening_balance
+                for t in transactions:
+                    running = round(running + t.amount, 2)
+                    t.balance_after = running
+            return ParseResult(
+                bank=self.BANK_ID,
+                info=info,
+                transactions=transactions,
+                parse_method="table",
+            )
+
+        # Tables didn't yield results — try text parsing
         return self.parse_text(full_text)
+
+    # ING-specific text line regex — captures dates and full body (including amount)
+    _ING_LINE_RE = re.compile(
+        r"^(\d{2}\.\d{2}\.\d{4})\s+(\d{2}\.\d{2}\.\d{4})\s+"       # posting + transaction dates
+        r"(.+?)\s*PLN\s*$"                                            # body + amount (before PLN)
+    )
+    # Reference-anchored amount extraction patterns.
+    # ING reference numbers are 12-25 continuous digits (no spaces).
+    # Negative amounts: sign directly after reference (e.g. ...269860-30,90)
+    # Positive amounts: space after reference (e.g. ...238314 500,00)
+    _ING_AMT_SIGNED_RE = re.compile(
+        r"(\d{12,25})([+-](?:\d{1,3}(?:\s\d{3})*),\d{2})\s*$"
+    )
+    _ING_AMT_UNSIGNED_RE = re.compile(
+        r"(\d{12,25})\s+((?:\d{1,3}(?:\s\d{3})*),\d{2})\s*$"
+    )
+    _ING_AMT_FALLBACK_RE = re.compile(
+        r"([+-]?(?:\d{1,3}(?:\s\d{3})*),\d{2})\s*$"
+    )
+    _ING_COUNTERPARTY_RE = re.compile(
+        r"Nazwa i adres (?:odbiorcy|płatnika)\s*:\s*(.+?)\s+(Płatność\b|Przelew\b|Wypłata\b|Prowizja\b|Zwrot\b|Świadczenie\b|ŚW\b|PRZELEW\b|ST\.ZLEC\b|P\.BLIK\b|TR\.)"
+    )
+
+    @classmethod
+    def _extract_ing_amount(cls, body: str) -> Tuple[Optional[float], str]:
+        """Extract amount from end of ING transaction body text.
+
+        ING reference numbers (12-25 uninterrupted digits) always precede amounts.
+        This anchoring prevents the regex from accidentally pulling trailing digits
+        of the reference number into the amount (e.g. '...238314 500,00' parsed as
+        314500.00 instead of 500.00).
+        """
+        # Try 1: Signed amount directly after reference (no space between ref and sign)
+        m = cls._ING_AMT_SIGNED_RE.search(body)
+        if m:
+            amt = cls.parse_amount(m.group(2))
+            if amt is not None:
+                return amt, body[:m.start(2)].strip()
+
+        # Try 2: Unsigned amount after reference + space
+        m = cls._ING_AMT_UNSIGNED_RE.search(body)
+        if m:
+            amt = cls.parse_amount(m.group(2))
+            if amt is not None:
+                return amt, body[:m.start(2)].strip()
+
+        # Try 3: Fallback — last amount pattern (no reference anchor)
+        m = cls._ING_AMT_FALLBACK_RE.search(body)
+        if m:
+            amt = cls.parse_amount(m.group(1))
+            if amt is not None:
+                return amt, body[:m.start()].strip()
+
+        return None, body
+
+    def _parse_ing_text_lines(self, text: str) -> List[RawTransaction]:
+        """Parse ING transactions from pdfplumber's flattened text lines.
+
+        Each transaction is on one long line with the amount at the end.
+        Amount extraction is anchored to the reference number (12-25 continuous
+        digits) to prevent capturing trailing reference digits as part of the
+        amount in the Polish thousands-separator format.
+        """
+        transactions: List[RawTransaction] = []
+        for line in text.split("\n"):
+            line = self._norm(line)
+            if not line:
+                continue
+            m = self._ING_LINE_RE.match(line)
+            if not m:
+                continue
+            posting = m.group(1)
+            trans = m.group(2)
+            body_with_amount = m.group(3)
+
+            date_str = self._parse_date_iso(posting)
+            date_val = self._parse_date_iso(trans)
+            if not date_str:
+                continue
+            amount, body = self._extract_ing_amount(body_with_amount)
+            if amount is None:
+                continue
+
+            # Extract counterparty and title from body
+            counterparty = ""
+            title = ""
+
+            # Find "Nazwa i adres" label
+            label_m = re.search(
+                r"Nazwa i adres (?:odbiorcy|płatnika)\s*:\s*", body
+            )
+            if label_m:
+                after_label = body[label_m.end():]
+
+                # Strip channel keyword + reference at the end
+                channel_m = re.search(
+                    r"\s+(TR\.KART|TR\.BLIK|P\.BLIK|PRZELEW|ST\.ZLEC)\s+\S+\s*$",
+                    after_label,
+                )
+                if channel_m:
+                    name_and_title = after_label[: channel_m.start()].strip()
+                else:
+                    name_and_title = after_label.strip()
+
+                # Remove trailing "Zlecenie..." reference
+                name_and_title = re.sub(r"\s*Zlecenie\d+\s*$", "", name_and_title)
+
+                # Split counterparty from title at first title keyword
+                title_m = re.search(
+                    r"(Płatność\s+\S+|Przelew\s+\S+|Wypłata\s+\S+|Prowizja\b|"
+                    r"Zwrot\b|Świadczenie\b|ŚW\s+)",
+                    name_and_title,
+                )
+                if title_m:
+                    counterparty = name_and_title[: title_m.start()].strip()
+                    title_raw = name_and_title[title_m.start() :].strip()
+                    # Clean detail noise from title
+                    title_raw = re.sub(r"\s*Nr karty\s+\S+", "", title_raw)
+                    title_raw = re.sub(r"\s*Nr transakcji\s+\S+", "", title_raw)
+                    title_raw = re.sub(r"\s*www\.\S+", "", title_raw)
+                    title = self.clean_text(title_raw)
+                else:
+                    # No clear title keyword — everything is cp + title combined
+                    counterparty = name_and_title
+                    title = ""
+            else:
+                # No counterparty label at all — use whole body
+                title = self.clean_text(body)
+
+            transactions.append(RawTransaction(
+                date=date_str,
+                date_valuation=date_val,
+                amount=amount,
+                counterparty=counterparty,
+                title=title,
+                raw_text=line[:200],
+            ))
+        return transactions
 
     def parse_text(self, text: str) -> ParseResult:
         """Parse from pre-extracted text (e.g. pdfplumber extract_text)."""
         lines = [self._norm(l) for l in text.split("\n") if self._norm(l)]
-        return self._parse_from_lines(lines)
+
+        # Try PyMuPDF-style line parsing first
+        result = self._parse_from_lines(lines)
+        if result.transactions:
+            return result
+
+        # Try ING-specific flat-line parsing (pdfplumber extract_text format)
+        info = self._parse_meta(lines)
+        transactions = self._parse_ing_text_lines(text)
+        if transactions:
+            if info.opening_balance is not None:
+                running = info.opening_balance
+                for t in transactions:
+                    running = round(running + t.amount, 2)
+                    t.balance_after = running
+            return ParseResult(
+                bank=self.BANK_ID,
+                info=info,
+                transactions=transactions,
+                warnings=["Użyto parsera ING tekstowego (PyMuPDF niedostępny)"],
+                parse_method="text_ing_flat",
+            )
+
+        # Last resort: generic multiline parser
+        transactions = self.parse_text_multiline(text)
+        if transactions:
+            if info.opening_balance is not None:
+                running = info.opening_balance
+                for t in transactions:
+                    running = round(running + t.amount, 2)
+                    t.balance_after = running
+            return ParseResult(
+                bank=self.BANK_ID,
+                info=info,
+                transactions=transactions,
+                warnings=["Użyto parsera wieloliniowego (PyMuPDF niedostępny)"],
+                parse_method="text_multiline",
+            )
+
+        return result
