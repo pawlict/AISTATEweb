@@ -1186,16 +1186,7 @@
       uploadBtn.onclick = ()=> fileInput.click();
     }
     if(fileInput){
-      fileInput.onchange = ()=>{
-        const files = fileInput.files;
-        if(!files || !files.length) return;
-        if(files.length === 1){
-          _uploadAndAnalyze(files[0]);
-        } else {
-          _startBatch(Array.from(files));
-        }
-        fileInput.value = "";
-      };
+      fileInput.onchange = _fileInputDefaultHandler;
     }
 
     if(dropArea){
@@ -2906,7 +2897,7 @@
     }
 
     // Continue to next file
-    _processBatchNext();
+    await _processBatchNext();
   }
 
   async function _batchRunPipeline(entry, preview, tpl){
@@ -3013,7 +3004,11 @@
         console.log("[AML Batch] Done:", entry.name, "stmt:", result.statement_id);
       } else {
         entry.status = "error";
-        entry.error = result && result.error ? String(result.error) : "Blad analizy";
+        let errMsg = result && result.error ? String(result.error) : "Blad analizy";
+        if(errMsg === "no_transactions"){
+          errMsg = "Nie znaleziono transakcji — sprawdz granice kolumn";
+        }
+        entry.error = errMsg;
       }
     } catch(e){
       entry.status = "error";
@@ -3048,9 +3043,10 @@
     entry.status = "processing";
     _renderBatchPanel();
 
-    const saveTemplate = QS("#cm_save_template")?.checked || false;
+    // In batch mode, always save template so subsequent files auto-process
+    const saveTemplate = true;
     const setDefault = QS("#cm_set_default")?.checked || false;
-    const templateName = QS("#cm_template_name")?.value || "";
+    const templateName = QS("#cm_template_name")?.value || (preview.bank_name || "Batch template");
     const templateId = preview.template ? (preview.template.id || "") : "";
 
     const _hfForApi = _getHeaderFieldsForApi();
@@ -3087,9 +3083,14 @@
           St.batchCaseId = result.case_id;
         }
         St.batchResults.push(result.statement_id);
+        console.log("[AML Batch] Manual mapping done:", entry.name,
+          "stmt:", result.statement_id, "template saved:", saveTemplate);
       } else {
         entry.status = "error";
         entry.error = result && result.error ? String(result.error) : "Blad analizy";
+        if(entry.error === "no_transactions"){
+          entry.error = "Nie znaleziono transakcji — sprawdz granice kolumn";
+        }
       }
     } catch(e){
       entry.status = "error";
@@ -3098,16 +3099,16 @@
 
     _renderBatchPanel();
 
-    // Restore original confirm button handler
-    const confirmBtn = QS("#cm_confirm_btn");
-    if(confirmBtn) confirmBtn.onclick = ()=> _cmConfirm();
-
-    // Continue batch
-    _processBatchNext();
+    // Continue batch — await to ensure sequential processing
+    await _processBatchNext();
   }
 
   async function _batchFinalize(){
     console.log("[AML Batch] Finalize. Results:", St.batchResults.length, "/", St.batchFiles.length);
+
+    // Hide mapping card, show batch panel
+    _hide("aml_mapping_card");
+    _showBatchPanel();
     _renderBatchPanel();
 
     // Run cross-validation if we have at least 2 statements
@@ -3133,11 +3134,113 @@
       }
     }
 
-    // If we have any successful results, load the last one for review
+    // If we have any successful results, load the first one for St.detail
     if(St.batchResults.length > 0){
-      const lastStmtId = St.batchResults[St.batchResults.length - 1];
-      await _loadDetail(lastStmtId);
+      const firstStmtId = St.batchResults[0];
+      await _loadDetail(firstStmtId);
     }
+
+    // Show "add more documents" dialog
+    _showAddMoreDialog();
+  }
+
+  /** Show dialog asking if user wants to add more documents (e.g. from another bank). */
+  function _showAddMoreDialog(){
+    const panel = QS("#aml_batch_list");
+    if(!panel) return;
+
+    // Append the dialog after existing content
+    const existingDialog = QS("#aml_batch_add_more");
+    if(existingDialog) existingDialog.remove();
+
+    const d = document.createElement("div");
+    d.id = "aml_batch_add_more";
+    d.style.cssText = "margin-top:12px;padding:12px 16px;background:var(--bg-alt,#f1f5f9);border-radius:8px;border:1px solid var(--border,#e2e8f0)";
+    d.innerHTML = `
+      <div style="font-weight:600;margin-bottom:8px">Chcesz dodac inne dokumenty (np. z innego banku)?</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="aml_batch_add_yes">Tak — dodaj kolejne pliki</button>
+        <button class="btn btn-outline" id="aml_batch_add_no">Nie — przejdz do przegladu</button>
+      </div>
+    `;
+    panel.parentNode.insertBefore(d, panel.nextSibling);
+
+    QS("#aml_batch_add_yes").onclick = ()=>{
+      d.remove();
+      // Keep batch state, open file browser for additional files
+      const fileInput = QS("#aml_file_input");
+      if(fileInput){
+        fileInput.onchange = ()=>{
+          const files = fileInput.files;
+          if(!files || !files.length) return;
+          // Add new files to batch
+          const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith(".pdf"));
+          if(!pdfs.length) return;
+          for(const f of pdfs){
+            St.batchFiles.push({
+              file: f,
+              name: f.name,
+              status: "queued",
+              statementId: null,
+              error: null,
+              preview: null,
+            });
+          }
+          console.log("[AML Batch] Added", pdfs.length, "more files. Total:", St.batchFiles.length);
+          _renderBatchPanel();
+          // Continue processing from current index (next unprocessed)
+          St.batchIdx = St.batchFiles.length - pdfs.length - 1;
+          _processBatchNext();
+          fileInput.value = "";
+          // Restore normal onchange for future single uploads
+          fileInput.onchange = _fileInputDefaultHandler;
+        };
+        fileInput.click();
+      }
+    };
+
+    QS("#aml_batch_add_no").onclick = async ()=>{
+      d.remove();
+      // Proceed to review all statements
+      await _batchViewAllResults();
+    };
+  }
+
+  /** Load and show all batch results in review. */
+  async function _batchViewAllResults(){
+    if(!St.batchResults.length) return;
+
+    // Load detail for first statement (for risk/graph/charts)
+    if(!St.detail){
+      await _loadDetail(St.batchResults[0]);
+    }
+
+    _renderResults();
+    _showResults();
+    _hide("aml_batch_panel");
+
+    // Load ALL statements in ReviewManager
+    if(window.ReviewManager){
+      if(St.batchResults.length > 1){
+        ReviewManager.loadForBatch(St.batchResults);
+      } else {
+        ReviewManager.loadForStatement(St.batchResults[0]);
+      }
+    }
+  }
+
+  /** Default file input onchange handler (saved for restoring after batch add-more). */
+  function _fileInputDefaultHandler(){
+    const fileInput = QS("#aml_file_input");
+    if(!fileInput) return;
+    const files = fileInput.files;
+    if(!files || !files.length) return;
+    if(files.length === 1){
+      _uploadAndAnalyze(files[0]);
+    } else {
+      _startBatch(Array.from(files));
+    }
+    fileInput.value = "";
   }
 
   function _renderBatchPanel(){
@@ -3220,19 +3323,7 @@
     // Bind view results button
     const viewBtn = QS("#aml_batch_view_results");
     if(viewBtn){
-      viewBtn.onclick = async ()=>{
-        if(St.batchResults.length > 0){
-          const lastId = St.batchResults[St.batchResults.length - 1];
-          await _loadDetail(lastId);
-          _renderResults();
-          _showResults();
-          // Keep batch panel hidden but accessible
-          _hide("aml_batch_panel");
-          if(window.ReviewManager && lastId){
-            ReviewManager.loadForStatement(lastId);
-          }
-        }
-      };
+      viewBtn.onclick = ()=> _batchViewAllResults();
     }
 
     const newBtn = QS("#aml_batch_new");
