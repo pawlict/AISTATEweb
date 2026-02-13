@@ -730,6 +730,16 @@ async def aml_detail(statement_id: str):
     )
     has_llm_prompt = llm_row is not None
 
+    # Sibling statements in the same case (for batch review on reopen)
+    sibling_ids = []
+    case_id = stmt_dict.get("case_id", "")
+    if case_id:
+        sib_rows = fetch_all(
+            "SELECT id FROM statements WHERE case_id = ? ORDER BY period_from, created_at",
+            (case_id,),
+        )
+        sibling_ids = [r["id"] for r in sib_rows]
+
     return JSONResponse({
         "statement": stmt_dict,
         "transactions": transactions,
@@ -738,6 +748,7 @@ async def aml_detail(statement_id: str):
         "charts": charts,
         "ml_anomalies": ml_anomalies,
         "has_llm_prompt": has_llm_prompt,
+        "sibling_statement_ids": sibling_ids,
     })
 
 
