@@ -51,8 +51,13 @@ def _try_extract_tables_with_settings(
                     non_empty_cols = max(
                         (sum(1 for c in row if c) for row in clean), default=0
                     )
-                    if non_empty_cols >= 3:
+                    if non_empty_cols >= 2:
                         result.append(clean)
+                    elif non_empty_cols > 0:
+                        log.debug(
+                            "Odrzucono tabelę z %d wierszami i max %d niepustymi kolumnami",
+                            len(clean), non_empty_cols,
+                        )
             if result:
                 return result
         except Exception:

@@ -358,6 +358,75 @@ class BankParser(ABC):
         return re.sub(r"\s+", " ", text).strip()
 
     @staticmethod
+    def merge_continuation_rows(
+        table: List[List[str]],
+        col_map: Dict[str, int],
+        start_idx: int = 0,
+    ) -> List[List[str]]:
+        """Merge continuation rows (no date) into previous data rows.
+
+        pdfplumber often splits long descriptions across multiple table rows.
+        Rows without a valid date in the date column are treated as continuations
+        of the previous row — their text columns are appended.
+        """
+        if not table:
+            return []
+        date_col = col_map.get("date")
+        if date_col is None:
+            return [list(r) for r in table[start_idx:]]
+
+        merged: List[List[str]] = []
+        for row in table[start_idx:]:
+            if not row or all(not (c or "").strip() for c in row):
+                continue
+            date_cell = (row[date_col] if date_col < len(row) else "").strip()
+            has_date = bool(BankParser.parse_date(date_cell))
+            if has_date:
+                merged.append(list(row))
+            elif merged:
+                # Continuation row — merge text cells into previous row
+                prev = merged[-1]
+                for i, cell in enumerate(row):
+                    cell_text = (cell or "").strip()
+                    if not cell_text or i == date_col:
+                        continue
+                    if i < len(prev):
+                        prev_text = (prev[i] or "").strip()
+                        if prev_text:
+                            prev[i] = prev_text + " " + cell_text
+                        else:
+                            prev[i] = cell_text
+                    else:
+                        # Row is wider than previous — extend
+                        while len(prev) <= i:
+                            prev.append("")
+                        prev[i] = cell_text
+        return merged
+
+    @staticmethod
+    def collect_unmapped_text(
+        row: List[str],
+        col_map: Dict[str, int],
+    ) -> str:
+        """Collect text from columns not assigned to any known field.
+
+        Useful for catching address fragments, extra description fields, etc.
+        that weren't matched to title/counterparty during column mapping.
+        Skips numeric-only cells (amounts, balances, row numbers).
+        """
+        mapped_cols = set(col_map.values())
+        extra_parts: List[str] = []
+        for i, cell in enumerate(row):
+            if i in mapped_cols:
+                continue
+            text = (cell or "").strip()
+            # Skip empty, numeric-only, and very short cells (like row numbers)
+            if not text or re.match(r"^[\d,.\-+\s]*$", text) or len(text) < 2:
+                continue
+            extra_parts.append(text)
+        return " ".join(extra_parts)
+
+    @staticmethod
     def parse_text_multiline(text: str) -> List[RawTransaction]:
         """Parse transactions from raw text, handling multi-line descriptions.
 
