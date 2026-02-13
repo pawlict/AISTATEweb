@@ -391,9 +391,12 @@
     if(warningsEl){
       const warnings = St.header.warnings || [];
       if(warnings.length){
-        warningsEl.innerHTML = warnings.map(w =>
-          `<div class="small" style="color:var(--danger);margin:2px 0">\u26A0 ${_esc(w)}</div>`
-        ).join("");
+        warningsEl.innerHTML = warnings.map(w => {
+          const isOk = /OK\s*\(.*✓\)/.test(w) || /OK\s*\(.*\u2713\)/.test(w);
+          const color = isOk ? "var(--success, #16a34a)" : "var(--danger)";
+          const icon = isOk ? "\u2705" : "\u26A0";
+          return `<div class="small" style="color:${color};margin:2px 0">${icon} ${_esc(w)}</div>`;
+        }).join("");
       } else {
         warningsEl.innerHTML = "";
       }
@@ -443,9 +446,12 @@
         }
       }
       if(allWarnings.length){
-        warningsEl.innerHTML = allWarnings.map(w =>
-          `<div class="small" style="color:var(--danger);margin:2px 0">\u26A0 ${_esc(w)}</div>`
-        ).join("");
+        warningsEl.innerHTML = allWarnings.map(w => {
+          const isOk = /OK\s*\(.*✓\)/.test(w) || /OK\s*\(.*\u2713\)/.test(w);
+          const color = isOk ? "var(--success, #16a34a)" : "var(--danger)";
+          const icon = isOk ? "\u2705" : "\u26A0";
+          return `<div class="small" style="color:${color};margin:2px 0">${icon} ${_esc(w)}</div>`;
+        }).join("");
       } else {
         warningsEl.innerHTML = "";
       }
