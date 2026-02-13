@@ -484,7 +484,7 @@
     }
   }
 
-  /** Bind Ctrl+wheel zoom on the scroll wrapper (once). */
+  /** Bind Alt+wheel zoom on the scroll wrapper (once). */
   function _bindChartZoomWheel(){
     if(_chartZoom.wheelBound) return;
     const scrollWrap = QS("#aml_chart_scroll_wrap");
@@ -492,8 +492,8 @@
     _chartZoom.wheelBound = true;
 
     scrollWrap.addEventListener("wheel", (e)=>{
-      // Only zoom when Ctrl is held
-      if(!e.ctrlKey) return;
+      // Only zoom when left Alt is held (not AltGr which sets both ctrlKey+altKey)
+      if(!e.altKey || e.ctrlKey) return;
       // Only for timeline-like scrollable charts
       if(_chartZoom.activeKey !== "balance_timeline" && _chartZoom.activeKey !== "monthly_trend") return;
 

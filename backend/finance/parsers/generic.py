@@ -147,9 +147,8 @@ class GenericParser(BankParser):
                 start_idx = idx
                 break
 
-        for row in best_table[start_idx:]:
-            if not row or all(not (c or "").strip() for c in row):
-                continue
+        merged_rows = self.merge_continuation_rows(best_table, cols, start_idx)
+        for row in merged_rows:
             date_str = self.parse_date(row[cols["date"]] if cols["date"] < len(row) else "")
             if not date_str:
                 continue
@@ -157,6 +156,12 @@ class GenericParser(BankParser):
             if amount is None:
                 continue
             title = self.clean_text(row[cols["title"]] if cols.get("title") is not None and cols["title"] < len(row) else "")
+            extra = self.collect_unmapped_text(row, cols)
+            if extra:
+                if title:
+                    title = title + " " + extra
+                else:
+                    title = extra
             txn = RawTransaction(
                 date=date_str, amount=amount, title=title,
                 raw_text=" | ".join(c or "" for c in row),

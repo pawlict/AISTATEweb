@@ -70,22 +70,29 @@ class PKOParser(BankParser):
             if "date" not in col_map or not has_amount:
                 continue
 
-            for row in table[header_idx + 1:]:
-                if not row or all(not (c or "").strip() for c in row):
-                    continue
+            merged_rows = self.merge_continuation_rows(table, col_map, header_idx + 1)
+            for row in merged_rows:
                 date_str = self.parse_date(row[col_map["date"]] if col_map["date"] < len(row) else "")
                 if not date_str:
                     continue
                 amount = self.resolve_amount_from_row(row, col_map)
                 if amount is None:
                     continue
+                title = self.clean_text(row[col_map["title"]] if col_map.get("title") is not None and col_map["title"] < len(row) else "")
+                counterparty = self.clean_text(row[col_map["counterparty"]] if col_map.get("counterparty") is not None and col_map["counterparty"] < len(row) else "")
+                extra = self.collect_unmapped_text(row, col_map)
+                if extra:
+                    if title:
+                        title = title + " " + extra
+                    else:
+                        title = extra
                 txn = RawTransaction(
                     date=date_str,
                     date_valuation=self.parse_date(row[col_map["date_valuation"]] if col_map.get("date_valuation") is not None and col_map["date_valuation"] < len(row) else ""),
                     amount=amount,
                     balance_after=self.parse_amount(row[col_map["balance"]] if col_map.get("balance") is not None and col_map["balance"] < len(row) else ""),
-                    counterparty=self.clean_text(row[col_map["counterparty"]] if col_map.get("counterparty") is not None and col_map["counterparty"] < len(row) else ""),
-                    title=self.clean_text(row[col_map["title"]] if col_map.get("title") is not None and col_map["title"] < len(row) else ""),
+                    counterparty=counterparty,
+                    title=title,
                     raw_text=" | ".join(c or "" for c in row),
                 )
                 transactions.append(txn)
