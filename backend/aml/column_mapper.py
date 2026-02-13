@@ -316,8 +316,8 @@ def parse_with_mapping(
                        i, c.col_type, c.x_min, c.x_max, c.header_y, c.label[:30])
 
     # Re-segment and re-extract with updated columns
-    bands = _segment_transactions(all_words, columns, header_y_end)
-    transactions = _extract_transactions(all_words, columns, bands)
+    bands, page_header_y, page_footer_y = _segment_transactions(all_words, columns, header_y_end)
+    transactions = _extract_transactions(all_words, columns, bands, page_header_y, page_footer_y)
 
     if not transactions and all_words:
         log.warning("parse_with_mapping: 0 transactions from %d words! "

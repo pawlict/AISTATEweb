@@ -10,7 +10,7 @@ from .base import BankParser, ParseResult, RawTransaction, StatementInfo
 
 # Transaction type codes used by ING in the "Szczegóły transakcji" column
 _TYPE_CODE_RE = re.compile(
-    r"^(TR\.KART|ST\.ZLEC|P\.BLIK|PRZELEW|OP[ŁL]ATA|ODSETKI|PROWIZJA|ZLECENIE)\s*(.*)",
+    r"^(TR\.KART|TR\.BLIK|ST\.ZLEC|P\.BLIK|PRZELEW|OP[ŁL]ATA|ODSETKI|PROWIZJA|ZLECENIE)\s*(.*)",
     re.I,
 )
 
