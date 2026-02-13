@@ -1146,9 +1146,19 @@
         const sid = el.getAttribute("data-sid");
         if(!sid) return;
         _showProgress("Ladowanie analizy...");
-        await _loadDetail(sid);
+        const detail = await _loadDetail(sid);
         _renderResults();
         _showResults();
+
+        // Load Review & Classification (batch-aware via sibling statements)
+        if(window.ReviewManager){
+          const siblings = (detail && detail.sibling_statement_ids) || [];
+          if(siblings.length > 1){
+            await ReviewManager.loadForBatch(siblings);
+          } else {
+            await ReviewManager.loadForStatement(sid);
+          }
+        }
       });
     });
 
@@ -2948,20 +2958,22 @@
       finalColumns = columns;
     }
 
-    // Build header fields from template
+    // Build header fields: detected values from THIS file take priority,
+    // template values are fallbacks only (e.g. for fields not auto-detected).
+    // This prevents batch header contamination (all files getting File 1's period/balance).
     const headerFields = {};
     const savedHf = tpl.header_fields || {};
     const detectedHf = preview.header_region || {};
-    // Use detected values first, then overlay template values
     const allFieldKeys = new Set([
-      ...Object.keys(detectedHf),
       ...Object.keys(savedHf),
+      ...Object.keys(detectedHf),
     ]);
     const skipKeys = new Set(["words","raw_text","field_boxes","bank_name_detected"]);
     for(const key of allFieldKeys){
       if(skipKeys.has(key)) continue;
-      let val = detectedHf[key];
-      if(savedHf[key]) val = savedHf[key]; // template overrides
+      // Detected from THIS file wins; template only as fallback
+      let val = savedHf[key];
+      if(detectedHf[key] != null && detectedHf[key] !== "") val = detectedHf[key];
       if(val != null && val !== ""){
         let sVal = String(val);
         if(_AMOUNT_FIELDS.has(key) || _COUNT_FIELDS.has(key)){
