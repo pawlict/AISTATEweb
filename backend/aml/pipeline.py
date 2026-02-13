@@ -157,9 +157,6 @@ def run_aml_pipeline(
     project_id: str = "",
     save_report: bool = True,
     log_cb=None,
-    column_mapping: Optional[Dict[str, str]] = None,
-    column_bounds: Optional[List[Dict[str, Any]]] = None,
-    header_fields: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Run the full AML analysis pipeline on a bank statement PDF.
 
@@ -169,9 +166,6 @@ def run_aml_pipeline(
         project_id: Project ID for new case creation
         save_report: Whether to save HTML report to disk
         log_cb: Optional progress callback
-        column_mapping: User-confirmed column type mapping (from spatial UI)
-        column_bounds: User-adjusted column boundaries [{x_min, x_max, ...}]
-        header_fields: User-confirmed header fields {field_type: value}
 
     Returns:
         Dict with all pipeline results including report HTML.
@@ -192,161 +186,46 @@ def run_aml_pipeline(
     rules_version = rules_config.get("version", "1.0.0")
     warnings: List[str] = []
 
-    # Use spatial parser when user-confirmed data is provided
-    use_spatial = column_mapping is not None or column_bounds is not None
+    # --- Step 1: Parse PDF with PyMuPDF universal parser ---
+    _log("Parsowanie PDF (PyMuPDF)...")
+    from .universal_parser import parse_bank_statement
 
-    if use_spatial:
-        _log("Parsowanie przestrzenne (potwierdzone przez użytkownika)...")
-        from backend.aml.column_mapper import parse_with_mapping
+    ocr_used = False
+    ocr_confidence = 0.0
 
-        spatial_result = parse_with_mapping(
-            pdf_path, column_mapping,
-            column_bounds=column_bounds,
-            full_parse=True,  # Parse ALL pages, not just 5-page preview cache
-        )
-        spatial_txs = spatial_result.get("transactions", [])
-        spatial_info = spatial_result.get("info", {})
-
-        # Apply user-confirmed header field overrides
-        if header_fields:
-            for key, val in header_fields.items():
-                if val:
-                    spatial_info[key] = val
-            # Frontend uses "bank_name" key; StatementInfo uses "bank"
-            if "bank_name" in header_fields and header_fields["bank_name"]:
-                spatial_info["bank"] = header_fields["bank_name"]
-
-        # Convert spatial dicts → RawTransaction objects
-        raw_transactions = []
-        for tx in spatial_txs:
-            raw_transactions.append(RawTransaction(
-                date=tx.get("date", ""),
-                date_valuation=tx.get("value_date"),
-                amount=float(tx.get("amount", 0)),
-                currency=tx.get("currency", "PLN"),
-                balance_after=tx.get("balance_after"),
-                counterparty=tx.get("counterparty", ""),
-                title=tx.get("title", ""),
-                raw_text=json.dumps(tx.get("raw_fields", {}), ensure_ascii=False),
-                direction="in" if float(tx.get("amount", 0)) >= 0 else "out",
-                bank_category=tx.get("bank_category", ""),
-            ))
-
-        # Build StatementInfo from spatial header + user overrides
-        # Fallback: saldo początkowe = saldo końcowe poprzedniego wyciągu
-        _opening = _safe_float(spatial_info.get("opening_balance"))
-        _prev_closing = _safe_float(spatial_info.get("previous_closing_balance"))
-        if _opening is None and _prev_closing is not None:
-            _opening = _prev_closing
-            _log(f"Saldo początkowe nieznane — używam saldo końc. poprz. wyciągu: {_prev_closing}")
-
-        info = StatementInfo(
-            bank=spatial_info.get("bank", ""),
-            account_number=spatial_info.get("account_number", ""),
-            account_holder=spatial_info.get("account_holder", ""),
-            period_from=spatial_info.get("period_from"),
-            period_to=spatial_info.get("period_to"),
-            opening_balance=_opening,
-            closing_balance=_safe_float(spatial_info.get("closing_balance")),
-            available_balance=_safe_float(spatial_info.get("available_balance")),
-            currency=spatial_info.get("currency", "PLN"),
-            previous_closing_balance=_prev_closing,
-            declared_credits_sum=_safe_float(spatial_info.get("declared_credits_sum")),
-            declared_credits_count=_safe_int(spatial_info.get("declared_credits_count")),
-            declared_debits_sum=_safe_float(spatial_info.get("declared_debits_sum")),
-            declared_debits_count=_safe_int(spatial_info.get("declared_debits_count")),
-            debt_limit=_safe_float(spatial_info.get("debt_limit")),
-            overdue_commission=_safe_float(spatial_info.get("overdue_commission")),
-            blocked_amount=_safe_float(spatial_info.get("blocked_amount")),
-        )
-
-        parse_result = ParseResult(
-            bank=info.bank,
-            info=info,
-            transactions=raw_transactions,
-            page_count=spatial_result.get("page_count", 0),
-            parse_method="spatial",
-        )
-
-        bank_id = spatial_result.get("bank_id", "spatial")
-        bank_name = info.bank or spatial_result.get("bank_name", "")
-
-        ocr_used = False
-        ocr_confidence = 0.0
-
-        pages_parsed = spatial_result.get("pages_parsed", 0)
-        total_pages = spatial_result.get("page_count", 0)
-        _log(f"Znaleziono {len(raw_transactions)} transakcji (parsowanie przestrzenne, "
-             f"stron: {pages_parsed}/{total_pages})")
-        if pages_parsed < total_pages:
-            warnings.append(
-                f"Sparsowano {pages_parsed} z {total_pages} stron — "
-                f"mogą brakować transakcje z pozostałych stron"
-            )
-
-        # Completeness validation: compare extracted TX count with declared counts
-        declared_credits = spatial_info.get("declared_credits_count")
-        declared_debits = spatial_info.get("declared_debits_count")
-        if header_fields:
-            declared_credits = declared_credits or header_fields.get("declared_credits_count")
-            declared_debits = declared_debits or header_fields.get("declared_debits_count")
-        if declared_credits is not None or declared_debits is not None:
-            try:
-                dc = int(declared_credits) if declared_credits is not None else 0
-                dd = int(declared_debits) if declared_debits is not None else 0
-            except (ValueError, TypeError):
-                dc, dd = 0, 0
-            declared_total = dc + dd
-            actual_count = len(raw_transactions)
-            if declared_total > 0 and actual_count < declared_total:
-                missing = declared_total - actual_count
-                _log(f"UWAGA: Zadeklarowano {declared_total} transakcji "
-                     f"(uznań: {dc}, obciążeń: {dd}), odczytano: {actual_count} "
-                     f"— brakuje {missing}")
-                warnings.append(
-                    f"Odczytano {actual_count} z {declared_total} "
-                    f"zadeklarowanych transakcji (uznań: {dc}, obciążeń: {dd})"
-                )
-            elif declared_total > 0:
-                _log(f"Walidacja kompletności OK: {actual_count}/{declared_total} transakcji")
-
-    else:
-        # --- Step 1: Extract text and tables ---
-        _log("Ekstrakcja tekstu z PDF...")
+    try:
+        parse_result = parse_bank_statement(pdf_path)
+    except RuntimeError as e:
+        _log(f"Universal parser: {e}")
+        # Fallback to legacy pdfplumber-based parsers
+        _log("Fallback: parsowanie pdfplumber...")
         tables, full_text, page_count = extract_pdf_tables(pdf_path)
-        _log(f"Wyodrębniono {len(tables)} tabel z {page_count} stron")
 
-        # --- Step 2: OCR if needed ---
-        ocr_used = False
-        ocr_confidence = 0.0
         if _check_ocr_needed(full_text, page_count):
             _log("Brak warstwy tekstowej — uruchamiam OCR...")
             ocr_text, ocr_confidence = _run_ocr(pdf_path)
             if ocr_text:
                 full_text = ocr_text
                 ocr_used = True
-                _log(f"OCR zakończony (confidence: {ocr_confidence:.1%})")
             else:
-                warnings.append("OCR nie powiódł się — brak wymaganych bibliotek (pytesseract, PyMuPDF)")
-                _log("OCR niedostępny")
+                warnings.append("OCR nie powiódł się")
 
-        # --- Step 3: Detect bank and parse ---
-        _log("Rozpoznawanie banku...")
         parser = get_parser(full_text[:5000])
-        _log(f"Bank: {parser.BANK_NAME}")
+        _log(f"Bank (fallback): {parser.BANK_NAME}")
 
         header_words = None
         if parser.BANK_ID == "ing":
-            _log("Ekstrakcja pozycyjna nagłówka (ING)...")
             header_words = extract_header_words(pdf_path)
 
-        _log("Parsowanie transakcji...")
         parse_result = parser.parse(tables, full_text, header_words=header_words)
         parse_result.page_count = page_count
 
-        bank_id = parser.BANK_ID
-        bank_name = parser.BANK_NAME
-        info = parse_result.info
+    bank_name = parse_result.bank or parse_result.info.bank
+    # Derive bank_id from bank name
+    bank_id = bank_name.lower().replace(" ", "_")[:20] if bank_name else "unknown"
+    info = parse_result.info
+
+    _log(f"Bank: {bank_name} | Metoda: {parse_result.parse_method}")
 
     _log(f"Znaleziono {len(parse_result.transactions)} transakcji")
 
