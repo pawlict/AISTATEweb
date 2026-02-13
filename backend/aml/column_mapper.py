@@ -323,6 +323,25 @@ def parse_with_mapping(
         log.warning("parse_with_mapping: 0 transactions from %d words! "
                      "header_y_end=%.1f, %d columns, %d bands",
                      len(all_words), header_y_end, len(columns), len(bands))
+        # Diagnostic: find date column and show sample words in its area
+        date_col = None
+        for c in columns:
+            if c.col_type == "date":
+                date_col = c
+                break
+        if not date_col and columns:
+            date_col = columns[0]
+        if date_col:
+            import re
+            _dt_re = re.compile(r"\d{2}[./\-]\d{2}[./\-]\d{4}")
+            data_words = [w for w in all_words if w.top >= header_y_end]
+            date_words = [w for w in data_words
+                          if date_col.x_min - 10 <= (w.x0 + w.x1) / 2 <= date_col.x_max + 10]
+            date_matches = [w for w in date_words if _dt_re.match(w.text.strip())]
+            log.warning("  Date col: x=%.1f..%.1f  data_words=%d  in_date_col=%d  date_matches=%d",
+                        date_col.x_min, date_col.x_max, len(data_words), len(date_words), len(date_matches))
+            for w in date_words[:10]:
+                log.warning("    word: '%s' x=%.1f..%.1f y=%.1f page=%d", w.text, w.x0, w.x1, w.top, w.page)
 
     # Header region info
     header_info = cached.header_region or {}
