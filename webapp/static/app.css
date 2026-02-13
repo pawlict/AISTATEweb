@@ -997,9 +997,60 @@ textarea{min-height:220px; resize:vertical}
 .aml-llm-text li{margin-bottom: 4px}
 .aml-llm-text strong{font-weight: 700}
 
+/* Chart scrollable wrapper */
+.aml-chart-scroll-wrap{
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-top: 10px;
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border, #cbd5e1) transparent;
+}
+.aml-chart-scroll-wrap::-webkit-scrollbar{
+  height: 8px;
+}
+.aml-chart-scroll-wrap::-webkit-scrollbar-track{
+  background: transparent;
+}
+.aml-chart-scroll-wrap::-webkit-scrollbar-thumb{
+  background: var(--border, #cbd5e1);
+  border-radius: 4px;
+}
+.aml-chart-scroll-wrap::-webkit-scrollbar-thumb:hover{
+  background: var(--text-muted, #94a3b8);
+}
+
 /* Chart container */
 #aml_chart_container{
   position: relative;
+}
+
+/* Gap legend below chart */
+.aml-chart-gap-legend{
+  padding: 6px 0 2px;
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.aml-chart-gap-legend .gap-item{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.aml-chart-gap-legend .gap-swatch{
+  display: inline-block;
+  width: 16px;
+  height: 10px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(217,119,6,0.25) 0,
+    rgba(217,119,6,0.25) 3px,
+    transparent 3px,
+    transparent 6px
+  );
+  border-radius: 2px;
 }
 
 /* ===================== Transaction Review Tab ===================== */
