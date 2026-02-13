@@ -368,9 +368,10 @@ class INGParser(BankParser):
                 split_idx = idx
                 break
 
-        # Heuristic: for transfers, name is usually 1-2 lines; rest is title
+        # Heuristic: for transfers, name is usually 1-2 lines; rest is title.
+        # Keep at least 1 line for title when there are >= 2 lines.
         if split_idx is None and channel in {"PRZELEW", "ST.ZLEC"}:
-            split_idx = 2 if len(rest) >= 4 else len(rest)
+            split_idx = min(2, len(rest) - 1) if len(rest) >= 2 else len(rest)
 
         if split_idx is None:
             split_idx = len(rest)
