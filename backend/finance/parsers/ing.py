@@ -1,18 +1,19 @@
-"""ING Bank Śląski statement parser."""
+"""ING Bank Śląski statement parser — PyMuPDF line-based extraction.
+
+Uses fitz (PyMuPDF) to extract text lines from PDF, then a state-machine
+parser that walks through lines sequentially.  This replaces the previous
+pdfplumber table-based approach for ING, giving more reliable extraction
+of counterparty names, titles, structured details, and transaction channels.
+"""
 
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BankParser, ParseResult, RawTransaction, StatementInfo
-
-
-# Transaction type codes used by ING in the "Szczegóły transakcji" column
-_TYPE_CODE_RE = re.compile(
-    r"^(TR\.KART|TR\.BLIK|ST\.ZLEC|P\.BLIK|PRZELEW|OP[ŁL]ATA|ODSETKI|PROWIZJA|ZLECENIE)\s*(.*)",
-    re.I,
-)
 
 
 class INGParser(BankParser):
@@ -28,296 +29,513 @@ class INGParser(BankParser):
         r"ingbsk",
     ]
 
-    def _extract_info(self, text: str, header_words=None) -> StatementInfo:
-        # Use common extractor that handles all Polish bank formats
-        info = self.extract_info_common(text, bank_name=self.BANK_NAME)
+    # --- Regex constants ---
 
-        # ING-specific: "Data księgowania / Data transakcji" header
-        # ING-specific: "KONTO Z LWEM" account type
-        m = re.search(r"nazwa\s*rachunku\s*:?\s*\n?\s*(.+?)(?:\n|$)", text, re.I)
-        if m:
-            info.raw_header = m.group(1).strip()
+    NBSP = "\u00A0"
+    DATE_ONLY_RE = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
+    AMOUNT_LINE_RE = re.compile(
+        r"^[+-]?(?:\d{1,3}(?:[ \u00A0]\d{3})*|\d+)(?:,\d{2})\s*[A-Z]{3}$"
+    )
+    AMT_CUR_RE = re.compile(
+        r"([+-]?(?:\d{1,3}(?:[ \u00A0]\d{3})*|\d+)(?:,\d{2}))\s*([A-Z]{3})\b"
+    )
+    NRB_SPACED_RE = re.compile(r"^\d{2}(?:\s?\d{4}){6}$")
+    IBAN_RE = re.compile(r"^[A-Z]{2}\s?\d{2}(?:\s?\d{4}){6}(?:\s?\d{4})?$")
+    ING_INTERNAL_ID_RE = re.compile(r"^\d{8}-\d+/\d+$")
+    LONG_REF_RE = re.compile(r"^\d{12,20}$")
+    URL_RE = re.compile(r"^(https?://|www\.)\S+", re.IGNORECASE)
+    DOMAIN_RE = re.compile(r"^[a-z0-9.-]+\.[a-z]{2,}(/\S*)?$", re.IGNORECASE)
+    TITLE_START_RE = re.compile(
+        r"^(Płatność|Przelew|Wypłata|Zwrot|Prowizja|Świadczenie|ŚW\b)",
+        re.IGNORECASE,
+    )
+    DETAIL_LINE_RE = re.compile(
+        r"^(Nr karty|Nr transakcji|Zlecenie\d+|Dla\s+|Od\s+|Przelew na telefon\b)",
+        re.IGNORECASE,
+    )
+    CHANNELS = {"TR.KART", "TR.BLIK", "P.BLIK", "PRZELEW", "ST.ZLEC"}
 
-        # Override with spatial extraction if header_words are available
-        if header_words:
-            spatial = self._extract_spatial_balances(header_words)
-            if spatial.get("opening_balance") is not None:
-                info.opening_balance = spatial["opening_balance"]
-            if spatial.get("closing_balance") is not None:
-                info.closing_balance = spatial["closing_balance"]
-            if spatial.get("available_balance") is not None:
-                info.available_balance = spatial["available_balance"]
-            if spatial.get("credits_sum") is not None:
-                info.declared_credits_sum = spatial["credits_sum"]
-            if spatial.get("credits_sum_count") is not None:
-                info.declared_credits_count = spatial["credits_sum_count"]
-            if spatial.get("debits_sum") is not None:
-                info.declared_debits_sum = spatial["debits_sum"]
-            if spatial.get("debits_sum_count") is not None:
-                info.declared_debits_count = spatial["debits_sum_count"]
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _norm(s: str) -> str:
+        s = s.replace("\u00A0", " ")
+        s = re.sub(r"[ \t]+", " ", s)
+        return s.strip()
+
+    @classmethod
+    def _parse_money_pl(cls, s: str) -> Tuple[Optional[float], Optional[str]]:
+        s = cls._norm(s)
+        m = cls.AMT_CUR_RE.search(s)
+        if not m:
+            return None, None
+        num_raw = m.group(1).replace(" ", "").replace(",", ".")
+        ccy = m.group(2)
+        try:
+            return float(Decimal(num_raw)), ccy
+        except (InvalidOperation, ValueError):
+            return None, None
+
+    @staticmethod
+    def _parse_date_iso(d: str) -> Optional[str]:
+        m = re.match(r"^(\d{2})\.(\d{2})\.(\d{4})$", d.strip())
+        if not m:
+            return None
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+
+    @staticmethod
+    def _normalize_nrb_or_iban(s: str) -> str:
+        return re.sub(r"\s+", "", s)
+
+    @staticmethod
+    def _extract_lines_from_pdf(pdf_path: Path) -> Tuple[List[str], int]:
+        """Extract normalized text lines from PDF using PyMuPDF (fitz)."""
+        import fitz  # PyMuPDF
+
+        doc = fitz.open(str(pdf_path))
+        page_count = len(doc)
+        out: List[str] = []
+        for page in doc:
+            text = page.get_text("text") or ""
+            for ln in text.splitlines():
+                ln = INGParser._norm(ln)
+                if ln:
+                    out.append(ln)
+        return out, page_count
+
+    # ------------------------------------------------------------------
+    # Direct PDF parsing (preferred path — uses PyMuPDF)
+    # ------------------------------------------------------------------
+
+    def supports_direct_pdf(self) -> bool:
+        """Signal that this parser can read the PDF directly."""
+        return True
+
+    def parse_pdf(self, pdf_path: Path) -> ParseResult:
+        """Parse ING bank statement directly from PDF using PyMuPDF lines."""
+        lines, page_count = self._extract_lines_from_pdf(pdf_path)
+        return self._parse_from_lines(lines, page_count)
+
+    # ------------------------------------------------------------------
+    # Core parsing logic (works on normalized text lines)
+    # ------------------------------------------------------------------
+
+    def _parse_from_lines(self, lines: List[str], page_count: int = 0) -> ParseResult:
+        """Run the full parsing pipeline on pre-extracted text lines."""
+        info = self._parse_meta(lines)
+        transactions, warnings = self._parse_transactions(lines)
+
+        # Compute running balance_after from opening_balance
+        if info.opening_balance is not None and transactions:
+            running = info.opening_balance
+            for t in transactions:
+                running = round(running + t.amount, 2)
+                t.balance_after = running
+
+        # Quick reconciliation check
+        if (
+            info.opening_balance is not None
+            and info.closing_balance is not None
+            and transactions
+        ):
+            computed = round(
+                info.opening_balance + sum(t.amount for t in transactions), 2
+            )
+            if abs(computed - info.closing_balance) > 0.02:
+                warnings.append(
+                    f"Rekoncyliacja wewnętrzna: obliczone saldo końcowe = {computed:,.2f}, "
+                    f"deklarowane = {info.closing_balance:,.2f}"
+                )
+
+        return ParseResult(
+            bank=self.BANK_ID,
+            info=info,
+            transactions=transactions,
+            warnings=warnings,
+            page_count=page_count,
+            parse_method="text_lines",
+        )
+
+    # ------------------------------------------------------------------
+    # Meta extraction
+    # ------------------------------------------------------------------
+
+    def _parse_meta(self, lines: List[str]) -> StatementInfo:
+        """Extract statement metadata (holder, account, balances, sums)."""
+        info = StatementInfo(bank=self.BANK_NAME)
+
+        # --- Holder block ---
+        try:
+            idx = lines.index("Dane posiadacza")
+            start = idx + 1
+            if start < len(lines) and lines[start] == "Dane rachunku":
+                start += 1
+            holder_lines: List[str] = []
+            stop_labels = {
+                "Nazwa rachunku:", "Waluta rachunku:",
+                "Nr rachunku/NRB:", "Nr rachunku IBAN:",
+                "Nr BIC (SWIFT):", "Dane rachunku",
+            }
+            for i in range(start, min(start + 30, len(lines))):
+                l = lines[i]
+                if re.match(r"^Kod kraju:\s*[A-Z]{2}$", l):
+                    break
+                if l in stop_labels:
+                    break
+                holder_lines.append(l)
+            if holder_lines:
+                info.account_holder = holder_lines[0]
+        except ValueError:
+            pass
+
+        # --- Scan header area ---
+        for i, l in enumerate(lines[:500]):
+            # Period: "Nr 9 / 01.09.2025 - 30.09.2025"
+            m = re.match(
+                r"^Nr\s+(\d+)\s*/\s*(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})$",
+                l,
+            )
+            if m:
+                info.period_from = self._parse_date_iso(m.group(2))
+                info.period_to = self._parse_date_iso(m.group(3))
+
+            # Account number
+            if l in ("Nr rachunku/NRB:", "Nr rachunku IBAN:"):
+                if i + 1 < len(lines):
+                    info.account_number = self._normalize_nrb_or_iban(lines[i + 1])
+
+            # Currency
+            if l == "Waluta rachunku:" and i + 1 < len(lines):
+                info.currency = lines[i + 1].strip()
+
+            # Opening balance
+            if l.startswith("Saldo początkowe"):
+                for j in range(i, min(i + 8, len(lines))):
+                    if self.AMT_CUR_RE.search(lines[j]):
+                        amt, ccy = self._parse_money_pl(lines[j])
+                        if amt is not None:
+                            info.opening_balance = amt
+                            info.currency = info.currency or ccy
+                        break
+
+            # Closing balance
+            if l.startswith("Saldo końcowe:"):
+                if i + 1 < len(lines):
+                    amt, ccy = self._parse_money_pl(lines[i + 1])
+                    if amt is not None:
+                        info.closing_balance = amt
+                        info.currency = info.currency or ccy
+
+            # Credits sum: "Suma uznań (11):"
+            m = re.match(r"^Suma uznań\s*\((\d+)\):$", l)
+            if m:
+                info.declared_credits_count = int(m.group(1))
+                if i + 1 < len(lines):
+                    amt, _ = self._parse_money_pl(lines[i + 1])
+                    info.declared_credits_sum = amt
+
+            # Debits sum: "Suma obciążeń (182):"
+            m = re.match(r"^Suma obciążeń\s*\((\d+)\):$", l)
+            if m:
+                info.declared_debits_count = int(m.group(1))
+                if i + 1 < len(lines):
+                    amt, _ = self._parse_money_pl(lines[i + 1])
+                    info.declared_debits_sum = amt
+
+            # Extra ING-specific fields
+            if l == "Limit zadłużenia:" and i + 1 < len(lines):
+                amt, _ = self._parse_money_pl(lines[i + 1])
+                info.debt_limit = amt
+
+            if l == "Kwota prowizji zaległej:" and i + 1 < len(lines):
+                amt, _ = self._parse_money_pl(lines[i + 1])
+                info.overdue_commission = amt
+
+            if l == "Kwota zablokowana:" and i + 1 < len(lines):
+                amt, _ = self._parse_money_pl(lines[i + 1])
+                info.blocked_amount = amt
+
+            if l == "Saldo dostępne:" and i + 1 < len(lines):
+                amt, _ = self._parse_money_pl(lines[i + 1])
+                info.available_balance = amt
 
         return info
 
-    def _extract_spatial_balances(self, words: List[Dict]) -> Dict[str, Any]:
-        """Extract balances from positioned words using spatial analysis.
+    # ------------------------------------------------------------------
+    # Transaction parsing — state machine walking through lines
+    # ------------------------------------------------------------------
 
-        ING headers have a columnar layout — labels on top, values below.
-        pdfplumber's extract_words() gives us word positions (x0, x1, top, bottom)
-        so we can correctly associate labels with their values even across columns.
+    def _find_table_start(self, lines: List[str]) -> int:
+        """Find the first line of the transaction table header."""
+        for i in range(len(lines) - 1):
+            if lines[i] == "Data księgowania" and "/ Data transakcji" in lines[i + 1]:
+                return i
+        raise RuntimeError("ING: nie znaleziono nagłówka tabeli transakcji")
+
+    def _extract_structured_details(
+        self, raw_lines: List[str]
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        """Pull structured info (card, BLIK, etc.) from detail lines.
+
+        Returns (details_dict, remaining_free_lines).
         """
-        if not words:
-            return {}
+        details: Dict[str, Any] = {}
+        free: List[str] = []
 
-        # Cluster words into lines by 'top' coordinate (±3px tolerance)
-        line_map: Dict[int, List[Dict]] = {}
-        for w in words:
-            top_key = round(w.get("top", 0) / 3) * 3
-            if top_key not in line_map:
-                line_map[top_key] = []
-            line_map[top_key].append(w)
-
-        sorted_tops = sorted(line_map.keys())
-
-        # Sort words within each line by x0
-        for top_key in sorted_tops:
-            line_map[top_key].sort(key=lambda w: w.get("x0", 0))
-
-        # Target labels to find — map label text to result field name
-        targets = [
-            ("saldo początkowe", "opening_balance"),
-            ("saldo poczatkowe", "opening_balance"),
-            ("saldo końcowe", "closing_balance"),
-            ("saldo koncowe", "closing_balance"),
-            ("suma uznań", "credits_sum"),
-            ("suma uznan", "credits_sum"),
-            ("suma obciążeń", "debits_sum"),
-            ("suma obciazen", "debits_sum"),
-            ("saldo dostępne", "available_balance"),
-            ("saldo dostepne", "available_balance"),
-        ]
-
-        results: Dict[str, Any] = {}
-
-        for target_text, field_name in targets:
-            if field_name in results:
+        for l in raw_lines:
+            # Card payment
+            if re.match(r"^Płatność kartą\s+\d{2}\.\d{2}\.\d{4}$", l):
+                details["method"] = "card"
+                continue
+            if re.match(r"^Nr karty\s+.+$", l):
                 continue
 
-            target_words = target_text.split()
+            # BLIK payment
+            if re.match(r"^Płatność BLIK\s+\d{2}\.\d{2}\.\d{4}$", l):
+                details["method"] = "blik_payment"
+                continue
+            if re.match(r"^Nr transakcji\s+\d+$", l):
+                continue
 
-            for top_idx, top_key in enumerate(sorted_tops):
-                line_words = line_map[top_key]
-                line_text = " ".join(w.get("text", "") for w in line_words).lower()
+            # Phone transfer
+            if re.match(r"^Przelew na telefon\s+.+$", l):
+                details["method"] = "blik_phone_transfer"
+                continue
+            if l == "Przelew na telefon":
+                details["method"] = details.get("method") or "blik_phone_transfer"
+                continue
 
-                if target_text not in line_text:
-                    continue
+            # Dla / Od
+            if re.match(r"^(Dla|Od)\s+.+$", l):
+                continue
 
-                # Find x-range of words that form the label
-                label_x0 = float("inf")
-                label_x1 = float("-inf")
-                for w in line_words:
-                    w_text = w.get("text", "").lower()
-                    if any(tw in w_text for tw in target_words):
-                        label_x0 = min(label_x0, w.get("x0", 0))
-                        label_x1 = max(label_x1, w.get("x1", 0))
+            # Order ID
+            if re.match(r"^Zlecenie\d+$", l):
+                continue
 
-                if label_x0 == float("inf"):
-                    continue
+            # URLs / domains — skip (noise for counterparty/title)
+            if self.URL_RE.match(l) or self.DOMAIN_RE.match(l):
+                continue
 
-                # Also check for count in parentheses on label line (e.g. "Suma uznań (7):")
-                count_match = re.search(r"\((\d+)\)", line_text)
-                if count_match and field_name in ("credits_sum", "debits_sum"):
-                    results[field_name + "_count"] = int(count_match.group(1))
+            free.append(l)
 
-                # Look at next 1-3 lines below for a numeric value overlapping x-range
-                for next_idx in range(top_idx + 1, min(top_idx + 4, len(sorted_tops))):
-                    next_top = sorted_tops[next_idx]
-                    next_words = line_map[next_top]
+        return details, free
 
-                    # Filter words that overlap horizontally with the label
-                    # Allow 30px tolerance for slight misalignment
-                    overlapping = [
-                        w for w in next_words
-                        if w.get("x0", 0) < label_x1 + 30
-                        and w.get("x1", 0) > label_x0 - 30
-                    ]
+    def _split_counterparty_vs_title(
+        self, channel: Optional[str], rest: List[str]
+    ) -> Tuple[List[str], List[str]]:
+        """Split body lines into counterparty name/address vs title/details.
 
-                    if not overlapping:
-                        continue
+        Uses channel-specific markers to decide where the name ends and
+        the transaction description begins.
+        """
+        if not rest:
+            return [], []
 
-                    text_combined = " ".join(w.get("text", "") for w in overlapping)
-                    # Remove currency suffix
-                    text_combined = re.sub(r"\s*(PLN|EUR|USD|GBP|CHF)\s*$", "", text_combined, flags=re.I)
-                    val = self.parse_amount(text_combined)
-                    if val is not None:
-                        results[field_name] = val
-                        break
-                break  # found the label line, move to next target
+        markers: List[re.Pattern] = []
+        if channel == "TR.KART":
+            markers = [
+                re.compile(r"^Płatność kartą\b", re.I),
+                re.compile(r"^Nr karty\b", re.I),
+            ]
+        elif channel == "TR.BLIK":
+            markers = [
+                re.compile(r"^Płatność BLIK\b", re.I),
+                re.compile(r"^Nr transakcji\b", re.I),
+            ]
+        elif channel == "P.BLIK":
+            markers = [
+                re.compile(r"^Przelew na telefon\b", re.I),
+                re.compile(r"^Dla\b", re.I),
+                re.compile(r"^Od\b", re.I),
+            ]
+        else:
+            markers = [
+                re.compile(r"^Zlecenie\d+\b", re.I),
+                self.TITLE_START_RE,
+                self.DETAIL_LINE_RE,
+            ]
 
-        return results
+        split_idx: Optional[int] = None
+        for idx, l in enumerate(rest):
+            if (
+                any(p.match(l) for p in markers)
+                or self.URL_RE.match(l)
+                or self.DOMAIN_RE.match(l)
+            ):
+                split_idx = idx
+                break
 
-    def _is_header_row(self, row: List[str]) -> bool:
-        """Check if a table row is the transaction header."""
-        joined = " ".join(c.lower() for c in row if c)
-        return ("data" in joined and ("kwota" in joined or "saldo" in joined or "obci" in joined or "uzna" in joined))
+        # Heuristic: for transfers, name is usually 1-2 lines; rest is title
+        if split_idx is None and channel in {"PRZELEW", "ST.ZLEC"}:
+            split_idx = 2 if len(rest) >= 4 else len(rest)
 
-    def _find_column_mapping(self, header: List[str]) -> Dict[str, int]:
-        """Map column names to indices based on header row."""
-        mapping: Dict[str, int] = {}
-        for i, cell in enumerate(header):
-            cell_l = (cell or "").lower().strip()
-            if re.search(r"data\s*(ksi[ęe]g|transakcji|operacji)", cell_l):
-                mapping["date"] = i
-            elif "data" in cell_l and "waluty" in cell_l:
-                mapping["date_valuation"] = i
-            elif "data" in cell_l and "date" not in mapping:
-                mapping["date"] = i
-            elif re.search(r"szczeg[oó][łl]", cell_l):
-                # "Szczegóły transakcji" — separate from generic title
-                mapping["details"] = i
-            elif re.search(r"opis|tytu[łl]|tre[śs][ćc]", cell_l):
-                mapping["title"] = i
-            elif re.search(r"nadawca|odbiorca|kontrahent|dane\s*kontrahenta|nazwa", cell_l):
-                mapping["counterparty"] = i
-            elif re.search(r"obci[ąa][żz]|wyp[łl]at|debit|wydatki", cell_l):
-                mapping["debit"] = i
-            elif re.search(r"uzna|wp[łl]at|credit|wp[łl]yw", cell_l):
-                mapping["credit"] = i
-            elif re.search(r"kwota|warto[śs][ćc]", cell_l) and "debit" not in mapping:
-                mapping["amount"] = i
-            elif re.search(r"saldo|bilans", cell_l):
-                mapping["balance"] = i
-            elif re.search(r"walut", cell_l) and "date_valuation" not in cell_l:
-                mapping["currency"] = i
-        return mapping
+        if split_idx is None:
+            split_idx = len(rest)
 
-    def parse_tables(self, tables: List[List[List[str]]], full_text: str, header_words=None) -> ParseResult:
-        info = self._extract_info(full_text, header_words=header_words)
-        transactions: List[RawTransaction] = []
+        return rest[:split_idx], rest[split_idx:]
+
+    def _parse_transactions(
+        self, lines: List[str]
+    ) -> Tuple[List[RawTransaction], List[str]]:
+        """Walk through lines and extract all transactions."""
         warnings: List[str] = []
 
-        for table in tables:
-            if not table or len(table) < 2:
+        try:
+            start = self._find_table_start(lines)
+        except RuntimeError as e:
+            return [], [str(e)]
+
+        # Advance past header to first date line
+        i = start + 1
+        while i < len(lines) and not self.DATE_ONLY_RE.match(lines[i]):
+            i += 1
+
+        txs: List[RawTransaction] = []
+
+        while i < len(lines):
+            if not self.DATE_ONLY_RE.match(lines[i]):
+                i += 1
                 continue
-            # Find header row
-            header_idx = None
-            for idx, row in enumerate(table):
-                if self._is_header_row(row):
-                    header_idx = idx
+
+            # --- Posting date ---
+            posting = lines[i]
+            i += 1
+
+            # --- Transaction date (optional second date line) ---
+            trans = posting
+            if i < len(lines) and self.DATE_ONLY_RE.match(lines[i]):
+                trans = lines[i]
+                i += 1
+
+            # --- Contractor block (account number, ING id) ---
+            contractor_raw: List[str] = []
+            while i < len(lines):
+                l = lines[i]
+                if l.startswith("Nazwa i adres "):
                     break
-            if header_idx is None:
-                continue
-
-            col_map = self._find_column_mapping(table[header_idx])
-            has_amount = "amount" in col_map or "debit" in col_map or "credit" in col_map
-            if "date" not in col_map or not has_amount:
-                continue
-
-            for row in table[header_idx + 1 :]:
-                if not row or all(not (c or "").strip() for c in row):
+                if (
+                    l in self.CHANNELS
+                    or self.AMOUNT_LINE_RE.match(l)
+                    or self.DATE_ONLY_RE.match(l)
+                ):
+                    break
+                if l.lower().startswith("strona:") or l.lower().startswith(
+                    "wyciąg z rachunku"
+                ):
+                    i += 1
                     continue
-                date_str = self.parse_date(row[col_map["date"]] if col_map.get("date") is not None and col_map["date"] < len(row) else "")
-                if not date_str:
+                contractor_raw.append(l)
+                i += 1
+
+            counterparty_account: Optional[str] = None
+            for cl in contractor_raw:
+                if counterparty_account is None and (
+                    self.NRB_SPACED_RE.match(cl) or self.IBAN_RE.match(cl)
+                ):
+                    counterparty_account = self._normalize_nrb_or_iban(cl)
+
+            # --- Body lines (until channel keyword) ---
+            body_lines: List[str] = []
+            channel: Optional[str] = None
+            while i < len(lines):
+                l = lines[i]
+                if l.lower().startswith("strona:"):
+                    i += 1
                     continue
-                amount = self.resolve_amount_from_row(row, col_map)
-                if amount is None:
+                if l in self.CHANNELS:
+                    channel = l
+                    i += 1
+                    break
+                if self.AMOUNT_LINE_RE.match(l) or self.DATE_ONLY_RE.match(l):
+                    break
+                body_lines.append(l)
+                i += 1
+
+            # --- Reference lines (between channel and amount) ---
+            refs: List[str] = []
+            while i < len(lines):
+                l = lines[i]
+                if l.lower().startswith("strona:"):
+                    i += 1
                     continue
+                if self.AMOUNT_LINE_RE.match(l) or self.DATE_ONLY_RE.match(l):
+                    break
+                refs.append(l)
+                i += 1
 
-                # Read details column (ING: "Szczegóły transakcji" — contains type code + description)
-                details_text = ""
-                if col_map.get("details") is not None and col_map["details"] < len(row):
-                    details_text = self.clean_text(row[col_map["details"]])
-
-                # Extract type code from details (e.g. "TR.KART Sklep XYZ" → code="TR.KART", rest="Sklep XYZ")
-                bank_category = ""
-                title_from_details = ""
-                if details_text:
-                    code_match = _TYPE_CODE_RE.match(details_text)
-                    if code_match:
-                        bank_category = code_match.group(1).upper()
-                        title_from_details = code_match.group(2).strip()
-                    else:
-                        title_from_details = details_text
-
-                # Fallback: read standard "title" column if details didn't provide text
-                title_text = self.clean_text(row[col_map["title"]] if col_map.get("title") is not None and col_map["title"] < len(row) else "")
-                final_title = title_from_details or title_text
-
-                txn = RawTransaction(
-                    date=date_str,
-                    date_valuation=self.parse_date(row[col_map["date_valuation"]] if col_map.get("date_valuation") is not None and col_map["date_valuation"] < len(row) else ""),
-                    amount=amount,
-                    balance_after=self.parse_amount(row[col_map["balance"]] if col_map.get("balance") is not None and col_map["balance"] < len(row) else ""),
-                    counterparty=self.clean_text(row[col_map["counterparty"]] if col_map.get("counterparty") is not None and col_map["counterparty"] < len(row) else ""),
-                    title=final_title,
-                    currency=self.clean_text(row[col_map["currency"]] if col_map.get("currency") is not None and col_map["currency"] < len(row) else "PLN") or "PLN",
-                    raw_text=" | ".join(c or "" for c in row),
-                    bank_category=bank_category,
+            # --- Amount ---
+            amount: Optional[float] = None
+            currency: Optional[str] = None
+            if i < len(lines) and self.AMOUNT_LINE_RE.match(lines[i]):
+                amount, currency = self._parse_money_pl(lines[i])
+                i += 1
+            else:
+                amount, currency = self._parse_money_pl(
+                    " ".join(refs + body_lines)
                 )
-                transactions.append(txn)
 
-        return ParseResult(bank=self.BANK_ID, info=info, transactions=transactions, warnings=warnings)
+            if amount is None:
+                continue
+
+            # --- Counterparty / title split ---
+            counterparty_name = ""
+            title_lines = body_lines
+
+            if body_lines and body_lines[0].startswith("Nazwa i adres "):
+                label = body_lines[0]
+                rest = body_lines[1:]
+                first = ""
+                if ":" in label:
+                    first = label.split(":", 1)[1].strip()
+
+                cp_lines, title_lines = self._split_counterparty_vs_title(
+                    channel, rest
+                )
+                name_parts: List[str] = []
+                if first:
+                    name_parts.append(first)
+                name_parts.extend(cp_lines)
+                counterparty_name = ", ".join(p for p in name_parts if p).strip()
+
+            # --- Structured details from title lines ---
+            _, title_free = self._extract_structured_details(title_lines)
+            title = " ".join(title_free).strip()
+
+            raw_text = " | ".join(body_lines[:5])
+
+            txs.append(
+                RawTransaction(
+                    date=self._parse_date_iso(posting) or posting,
+                    date_valuation=self._parse_date_iso(trans),
+                    amount=amount,
+                    currency=currency or "PLN",
+                    balance_after=None,  # filled later from opening_balance
+                    counterparty=counterparty_name,
+                    title=title,
+                    raw_text=raw_text,
+                    bank_category=channel or "",
+                )
+            )
+
+        return txs, warnings
+
+    # ------------------------------------------------------------------
+    # Standard BankParser interface (fallback when PyMuPDF unavailable)
+    # ------------------------------------------------------------------
+
+    def parse_tables(
+        self,
+        tables: List[List[List[str]]],
+        full_text: str,
+        header_words=None,
+    ) -> ParseResult:
+        """Fallback: ignore pdfplumber tables, parse from text lines."""
+        return self.parse_text(full_text)
 
     def parse_text(self, text: str) -> ParseResult:
-        info = self._extract_info(text)
-        transactions: List[RawTransaction] = []
-        warnings: List[str] = []
-
-        # ING text format: lines with dates and amounts
-        # Pattern: DD.MM.YYYY or DD-MM-YYYY ... amount (with comma)
-        lines = text.split("\n")
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            # Match line starting with a date
-            m = re.match(r"(\d{2}[.\-/]\d{2}[.\-/]\d{4})\s+(.+?)\s+([\-+]?\d[\d\s]*[,\.]\d{2})\s*$", line)
-            if not m:
-                # Try: date ... amount ... balance
-                m = re.match(r"(\d{2}[.\-/]\d{2}[.\-/]\d{4})\s+(.+?)\s+([\-+]?\d[\d\s]*[,\.]\d{2})\s+([\-+]?\d[\d\s]*[,\.]\d{2})\s*$", line)
-                if m:
-                    date_str = self.parse_date(m.group(1))
-                    amount = self.parse_amount(m.group(3))
-                    balance = self.parse_amount(m.group(4))
-                    title = self.clean_text(m.group(2))
-                    if date_str and amount is not None:
-                        # Try to extract type code from title
-                        bank_cat = ""
-                        code_match = _TYPE_CODE_RE.match(title)
-                        if code_match:
-                            bank_cat = code_match.group(1).upper()
-                            title = code_match.group(2).strip()
-                        transactions.append(RawTransaction(
-                            date=date_str,
-                            amount=amount,
-                            balance_after=balance,
-                            title=title,
-                            raw_text=line,
-                            bank_category=bank_cat,
-                        ))
-                continue
-
-            date_str = self.parse_date(m.group(1))
-            amount = self.parse_amount(m.group(3))
-            title = self.clean_text(m.group(2))
-            if date_str and amount is not None:
-                bank_cat = ""
-                code_match = _TYPE_CODE_RE.match(title)
-                if code_match:
-                    bank_cat = code_match.group(1).upper()
-                    title = code_match.group(2).strip()
-                transactions.append(RawTransaction(
-                    date=date_str,
-                    amount=amount,
-                    title=title,
-                    raw_text=line,
-                    bank_category=bank_cat,
-                ))
-
-        if not transactions:
-            transactions = self.parse_text_multiline(text)
-            if transactions:
-                warnings.append("Użyto parsera wieloliniowego (fallback)")
-            else:
-                warnings.append("Nie udało się wyodrębnić transakcji z tekstu ING")
-
-        return ParseResult(bank=self.BANK_ID, info=info, transactions=transactions, warnings=warnings)
+        """Parse from pre-extracted text (e.g. pdfplumber extract_text)."""
+        lines = [self._norm(l) for l in text.split("\n") if self._norm(l)]
+        return self._parse_from_lines(lines)
