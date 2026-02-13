@@ -369,10 +369,8 @@
       : (result.alerts || []);
     _renderAlerts(alerts);
 
-    // Review module (classification)
-    if(window.ReviewManager && St.statementId){
-      ReviewManager.loadForStatement(St.statementId);
-    }
+    // Note: ReviewManager is loaded by the caller (single-file or batch flow)
+    // to avoid race conditions — do NOT call loadForStatement here.
 
     // Charts
     const charts = detail.charts || result.charts || {};
@@ -2908,12 +2906,17 @@
     const tplMapping = tpl.column_mapping || {};
     let finalColumns = columns;
 
+    // Fallback header_y from preview's detected columns (for old templates without it)
+    const detectedHeaderY = columns.length > 0 && columns[0].header_y != null
+      ? columns[0].header_y : undefined;
+
     if(tplBounds.length > 0 && tplBounds[0] && tplBounds[0].x_min != null){
       finalColumns = tplBounds.map((b, i) => ({
         label: b.label || "",
         col_type: tplMapping[String(i)] || b.col_type || "skip",
         x_min: b.x_min,
         x_max: b.x_max,
+        header_y: b.header_y != null ? b.header_y : detectedHeaderY,
       }));
       mapping = {...tplMapping};
     } else {
@@ -3219,12 +3222,12 @@
     _showResults();
     _hide("aml_batch_panel");
 
-    // Load ALL statements in ReviewManager
+    // Load ALL statements in ReviewManager (await to ensure rendering completes)
     if(window.ReviewManager){
       if(St.batchResults.length > 1){
-        ReviewManager.loadForBatch(St.batchResults);
+        await ReviewManager.loadForBatch(St.batchResults);
       } else {
-        ReviewManager.loadForStatement(St.batchResults[0]);
+        await ReviewManager.loadForStatement(St.batchResults[0]);
       }
     }
   }
