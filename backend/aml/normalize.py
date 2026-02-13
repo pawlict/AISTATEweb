@@ -126,6 +126,7 @@ def detect_channel(bank_category: str, title: str, counterparty: str) -> str:
         "TR.KART": "CARD",
         "PRZELEW": "TRANSFER",
         "P.BLIK": "BLIK_P2P",  # refined below
+        "TR.BLIK": "BLIK_MERCHANT",
         "ST.ZLEC": "TRANSFER",
         "OPŁATA": "FEE",
         "OPLATA": "FEE",

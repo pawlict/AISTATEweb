@@ -37,6 +37,30 @@ _DATE_RE = re.compile(r"\d{2}[.\-/]\d{2}[.\-/]\d{2,4}")
 # Amount pattern
 _AMOUNT_RE = re.compile(r"^-?\s*\d[\d\s]*[,\.]\d{2}(\s*(PLN|EUR|USD|GBP|CHF))?$")
 
+# Footer patterns to detect and exclude from transaction data
+_FOOTER_PATTERNS = [
+    re.compile(r"strona\s*:\s*\d+\s*z\s*\d+", re.I),
+    re.compile(r"wyci[ąa]g\s*z\s*rachunku", re.I),
+    re.compile(r"[śs]rodki\s*pieni[ęe][żz]ne\s*zgromadzone", re.I),
+    re.compile(r"dokument\s*sporz[ąa]dzony\s*na\s*podstawie", re.I),
+    re.compile(r"nie\s*wymaga\s*piecz[ęe]ci\s*ani\s*podpisu", re.I),
+    re.compile(r"ING\s*Bank\s*[Śś]l[ąa]ski\s*S\.?A\.?", re.I),
+    re.compile(r"szczeg[oó][łl]owe\s*informacje\s*mo[żz]na\s*znale[źz][ćc]", re.I),
+    re.compile(r"www\.bfg\.pl", re.I),
+]
+
+# Counterparty name prefixes to strip (ING-specific labels)
+_COUNTERPARTY_PREFIX_RE = re.compile(
+    r"^(Nazwa\s+i\s+adres\s+(odbiorcy|p[łl]atnika|nadawcy)\s*:?\s*)",
+    re.I,
+)
+
+# Card number pattern (e.g. "Nr karty 4246xx9674")
+_CARD_NUMBER_RE = re.compile(
+    r"Nr\s+karty\s+(\d{4}[xX*]{2,}\d{2,4})",
+    re.I,
+)
+
 
 @dataclass
 class WordBox:
@@ -203,11 +227,11 @@ def spatial_parse_pdf(
     # Parse header region (above table)
     header_region = _parse_header_region(all_words, columns, header_y_end)
 
-    # Segment into transaction bands
-    bands = _segment_transactions(all_words, columns, header_y_end)
+    # Segment into transaction bands (with footer/header detection)
+    bands, page_header_y, page_footer_y = _segment_transactions(all_words, columns, header_y_end)
 
-    # Extract transaction data from bands
-    transactions = _extract_transactions(all_words, columns, bands)
+    # Extract transaction data from bands (with cross-page support)
+    transactions = _extract_transactions(all_words, columns, bands, page_header_y, page_footer_y)
 
     warnings = []
     if not columns:
@@ -703,11 +727,59 @@ def _parse_header_region(
 # TRANSACTION SEGMENTATION
 # ============================================================
 
+def _detect_page_footers(
+    words: List[WordBox],
+) -> Dict[int, float]:
+    """Detect footer Y boundary for each page.
+
+    Scans the bottom portion of each page for footer patterns like
+    "Strona: X z Y. Wyciąg z rachunku" and returns the Y coordinate
+    above which content is valid (footer starts at or below this Y).
+
+    Returns:
+        Dict mapping page_num -> footer_y (words at or below this Y are footer).
+        Pages without detected footers have footer_y = 9999.
+    """
+    page_nums = sorted(set(w.page for w in words))
+    page_footer_y: Dict[int, float] = {}
+
+    for pg in page_nums:
+        pg_words = [w for w in words if w.page == pg]
+        if not pg_words:
+            page_footer_y[pg] = 9999
+            continue
+
+        # Look at bottom 15% of the page (typical footer region)
+        max_y = max(w.bottom for w in pg_words)
+        scan_start = max_y * 0.85
+        bottom_words = [w for w in pg_words if w.top >= scan_start]
+
+        if not bottom_words:
+            page_footer_y[pg] = 9999
+            continue
+
+        # Group into lines and check for footer patterns
+        bottom_lines = _group_by_y(bottom_words, tolerance=4.0)
+        footer_y = 9999
+
+        for _y, line_words in bottom_lines:
+            line_text = " ".join(w.text for w in line_words)
+            for pattern in _FOOTER_PATTERNS:
+                if pattern.search(line_text):
+                    line_top = min(w.top for w in line_words)
+                    footer_y = min(footer_y, line_top - 2)
+                    break
+
+        page_footer_y[pg] = footer_y
+
+    return page_footer_y
+
+
 def _segment_transactions(
     words: List[WordBox],
     columns: List[ColumnZone],
     header_y_end: float,
-) -> List[TransactionBand]:
+) -> Tuple[List[TransactionBand], Dict[int, float], Dict[int, float]]:
     """Segment data area into transaction bands.
 
     A new transaction starts whenever a date (DD.MM.YYYY) appears
@@ -717,9 +789,15 @@ def _segment_transactions(
     page 0 uses the detected header_y_end, continuation pages detect
     their own header boundary (repeated column headers may be at
     different Y position since page 0 has bank info above).
+
+    Returns:
+        Tuple of (bands, page_header_y, page_footer_y) where:
+        - bands: list of TransactionBand
+        - page_header_y: dict of page_num -> header end Y
+        - page_footer_y: dict of page_num -> footer start Y
     """
     if not columns or header_y_end <= 0:
-        return []
+        return [], {}, {}
 
     # Find the date column (first column typed as 'date')
     date_col = None
@@ -731,6 +809,9 @@ def _segment_transactions(
     # Fallback: use the first column
     if date_col is None:
         date_col = columns[0]
+
+    # Detect page footers
+    page_footer_y = _detect_page_footers(words)
 
     # Build per-page header_y_end to handle continuation pages correctly.
     # Page 0 uses the provided header_y_end. Pages 1+ detect their own
@@ -768,10 +849,11 @@ def _segment_transactions(
 
         page_header_y[pg] = best_hdr_bottom
 
-    # Filter data words using per-page header boundaries
+    # Filter data words: exclude headers AND footers
     data_words = [
         w for w in words
         if w.top >= page_header_y.get(w.page, 0)
+        and w.top < page_footer_y.get(w.page, 9999)
     ]
     date_starts: List[Tuple[float, int]] = []  # (y_position, page)
 
@@ -789,7 +871,7 @@ def _segment_transactions(
                 date_starts.append((w.top, w.page))
 
     if not date_starts:
-        return []
+        return [], page_header_y, page_footer_y
 
     # Build bands between consecutive date starts
     bands = []
@@ -802,11 +884,11 @@ def _segment_transactions(
             if next_pg == page:
                 y_end = next_y - 2
             else:
-                # Transaction spans to end of this page
-                y_end = 9999
+                # Transaction spans to end of this page (continues on next page)
+                y_end = page_footer_y.get(page, 9999)
         else:
-            # Last transaction — extends to bottom of data
-            y_end = 9999
+            # Last transaction — extends to bottom of data (before footer)
+            y_end = page_footer_y.get(page, 9999)
 
         bands.append(TransactionBand(
             y_start=y_start,
@@ -815,7 +897,7 @@ def _segment_transactions(
             row_index=i,
         ))
 
-    return bands
+    return bands, page_header_y, page_footer_y
 
 
 # ============================================================
@@ -826,22 +908,79 @@ def _extract_transactions(
     words: List[WordBox],
     columns: List[ColumnZone],
     bands: List[TransactionBand],
+    page_header_y: Optional[Dict[int, float]] = None,
+    page_footer_y: Optional[Dict[int, float]] = None,
 ) -> List[Dict[str, Any]]:
     """Extract structured transaction data from word positions.
 
     For each transaction band, collects all words within each column zone,
     sorts them by Y position, and joins into field text.
+
+    Cross-page handling: when a band ends at page bottom (next band is on
+    a different page), also collects continuation words from the next page
+    between page_header_y and the next band's y_start.
     """
+    if page_header_y is None:
+        page_header_y = {}
+    if page_footer_y is None:
+        page_footer_y = {}
+
     transactions = []
 
-    for band in bands:
-        # Get all words in this band
+    for band_idx, band in enumerate(bands):
+        # Get all words in this band on the current page
         band_words = [
             w for w in words
             if w.page == band.page
             and w.top >= band.y_start
             and w.top < band.y_end
         ]
+
+        # Cross-page continuation: if this band extends to page bottom
+        # and the next band is on a different page, collect continuation
+        # words from the next page (between header and next band start).
+        if band_idx + 1 < len(bands):
+            next_band = bands[band_idx + 1]
+            if next_band.page != band.page:
+                # This transaction continues on the next page.
+                # Collect words from next page: after header, before next band.
+                next_pg = next_band.page
+                next_header_y = page_header_y.get(next_pg, 0)
+                next_band_y = next_band.y_start
+                next_footer_y = page_footer_y.get(next_pg, 9999)
+
+                continuation_words = [
+                    w for w in words
+                    if w.page == next_pg
+                    and w.top >= next_header_y
+                    and w.top < next_band_y
+                    and w.top < next_footer_y
+                ]
+
+                if continuation_words:
+                    log.debug("Cross-page continuation: band %d (page %d) "
+                              "-> %d words from page %d (y %.1f..%.1f)",
+                              band_idx, band.page, len(continuation_words),
+                              next_pg, next_header_y, next_band_y)
+                    band_words.extend(continuation_words)
+        elif band.y_end >= page_footer_y.get(band.page, 9999):
+            # Last band and it extends to page bottom — check next page
+            # for continuation (no next band, so collect all data words)
+            next_pg = band.page + 1
+            if next_pg in page_header_y:
+                next_header_y = page_header_y.get(next_pg, 0)
+                next_footer_y = page_footer_y.get(next_pg, 9999)
+                continuation_words = [
+                    w for w in words
+                    if w.page == next_pg
+                    and w.top >= next_header_y
+                    and w.top < next_footer_y
+                ]
+                if continuation_words:
+                    log.debug("Cross-page continuation (last band): band %d "
+                              "(page %d) -> %d words from page %d",
+                              band_idx, band.page, len(continuation_words), next_pg)
+                    band_words.extend(continuation_words)
 
         if not band_words:
             continue
@@ -853,8 +992,8 @@ def _extract_transactions(
                 w for w in band_words
                 if col.contains_x(w.cx, tolerance=5)
             ]
-            # Sort by Y then X for multi-line content
-            col_words.sort(key=lambda w: (w.top, w.x0))
+            # Sort by page, then Y, then X for multi-line content
+            col_words.sort(key=lambda w: (w.page, w.top, w.x0))
             text = _join_words(col_words)
             tx_data[col.col_type] = text
 
@@ -935,6 +1074,17 @@ def _build_transaction(
     reference = fields.get("reference", "").strip()
     bank_category = fields.get("bank_type", "").strip()
 
+    # Clean counterparty: strip "Nazwa i adres odbiorcy:" etc. prefixes
+    counterparty = _COUNTERPARTY_PREFIX_RE.sub("", counterparty).strip()
+
+    # Extract card number from title/counterparty/reference
+    card_number = ""
+    for text_field in (title, counterparty, reference):
+        m = _CARD_NUMBER_RE.search(text_field)
+        if m:
+            card_number = m.group(1)
+            break
+
     return {
         "row_index": row_index,
         "date": booking_date,
@@ -945,6 +1095,7 @@ def _build_transaction(
         "title": title,
         "reference": reference,
         "bank_category": bank_category,
+        "card_number": card_number,
         "direction": "DEBIT" if amount < 0 else "CREDIT",
         "currency": "PLN",
         "raw_fields": {k: v for k, v in fields.items() if v},
