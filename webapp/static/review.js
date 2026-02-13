@@ -108,12 +108,16 @@
 
   const St = {
     statementId: null,
+    statementIds: [],     // for batch mode — all statement IDs
     transactions: [],
     filteredTx: [],
     header: null,
+    headers: [],          // for batch mode — [{id, header, label, periodFrom, periodTo}]
     classifications: {},  // tx_id -> classification
+    txStatementMap: {},   // tx_id -> statement_id (for batch classification)
     profile: null,
     headerDirty: {},      // field -> new value
+    batchMode: false,
   };
 
   // ============================================================
@@ -123,6 +127,10 @@
   async function _loadReview(statementId){
     if(!statementId) return;
     St.statementId = statementId;
+    St.statementIds = [statementId];
+    St.batchMode = false;
+    St.txStatementMap = {};
+    St.headers = [];
 
     const data = await _safeApi("/api/aml/review/" + encodeURIComponent(statementId));
     if(!data) return;
@@ -130,32 +138,13 @@
     St.transactions = data.transactions || [];
     St.header = data.header || null;
 
-    // Build classification map + auto-classify income keywords
-    St.classifications = {};
+    // Map tx -> statement
     for(const tx of St.transactions){
-      let cls = tx.classification || "neutral";
-
-      // Auto-classify incoming transactions with income keywords as "legitimate"
-      if(cls === "neutral"){
-        const amt = parseFloat(tx.amount || 0);
-        const isCredit = tx.direction === "CREDIT" || amt > 0;
-        if(isCredit){
-          const titleMatch = _isIncomeKeyword(tx.title);
-          const cpMatch = _isIncomeKeyword(tx.counterparty_raw);
-          if(titleMatch || cpMatch){
-            cls = "legitimate";
-            // Persist auto-classification to backend (fire-and-forget)
-            _safeApi("/api/aml/review/" + encodeURIComponent(statementId) + "/classify", {
-              method:"POST",
-              headers:{"Content-Type":"application/json"},
-              body: JSON.stringify({tx_id: tx.id, classification: "legitimate", note: "Auto: słowo kluczowe przychodu"}),
-            });
-          }
-        }
-      }
-
-      St.classifications[tx.id] = cls;
+      St.txStatementMap[tx.id] = statementId;
     }
+
+    // Build classification map + auto-classify income keywords
+    _buildClassifications(statementId);
 
     // Load account profile
     const profileData = await _safeApi("/api/aml/accounts/for-statement/" + encodeURIComponent(statementId));
@@ -167,6 +156,123 @@
     _renderSuspiciousSummary();
     _fillChannelFilter();
     _filterAndRender();
+  }
+
+  /** Load multiple statements for batch review. */
+  async function _loadReviewBatch(statementIds){
+    if(!statementIds || !statementIds.length) return;
+    St.statementIds = statementIds;
+    St.statementId = statementIds[0];
+    St.batchMode = true;
+    St.txStatementMap = {};
+    St.classifications = {};
+    St.headers = [];
+
+    // Load all statements in parallel
+    const allData = await Promise.all(
+      statementIds.map(id => _safeApi("/api/aml/review/" + encodeURIComponent(id)))
+    );
+
+    // Merge: collect headers and transactions
+    let allTx = [];
+    for(let i = 0; i < allData.length; i++){
+      const data = allData[i];
+      if(!data) continue;
+
+      const stmtId = statementIds[i];
+      const header = data.header || null;
+
+      // Extract period info from header blocks
+      let periodFrom = "", periodTo = "", bankName = "";
+      if(header && header.blocks){
+        for(const b of header.blocks){
+          if(b.field === "period_from") periodFrom = b.value || "";
+          if(b.field === "period_to") periodTo = b.value || "";
+          if(b.field === "bank_name") bankName = b.value || "";
+        }
+      }
+
+      const label = bankName
+        ? `${bankName}: ${periodFrom || "?"} \u2014 ${periodTo || "?"}`
+        : `Wyciag ${i+1}: ${periodFrom || "?"} \u2014 ${periodTo || "?"}`;
+
+      St.headers.push({id: stmtId, header, label, periodFrom, periodTo, bankName, idx: i});
+
+      const txs = data.transactions || [];
+      for(const tx of txs){
+        tx._statement_id = stmtId;
+        tx._statement_idx = i;
+        tx._statement_label = label;
+        St.txStatementMap[tx.id] = stmtId;
+        allTx.push(tx);
+      }
+    }
+
+    // Sort by period start, then by booking date
+    // First, sort headers by periodFrom
+    St.headers.sort((a, b) => (a.periodFrom || "").localeCompare(b.periodFrom || ""));
+    const headerOrder = {};
+    St.headers.forEach((h, idx) => { headerOrder[h.id] = idx; });
+
+    // Sort transactions: first by statement period order, then by booking_date
+    allTx.sort((a, b) => {
+      const orderA = headerOrder[a._statement_id] ?? 999;
+      const orderB = headerOrder[b._statement_id] ?? 999;
+      if(orderA !== orderB) return orderA - orderB;
+      const da = a.booking_date || "";
+      const db = b.booking_date || "";
+      return da.localeCompare(db);
+    });
+
+    St.transactions = allTx;
+
+    // Use first statement's header as primary
+    if(St.headers.length > 0){
+      St.header = St.headers[0].header;
+    }
+
+    // Build classifications for all statements
+    for(const stmtId of statementIds){
+      _buildClassifications(stmtId);
+    }
+
+    // Load account profile for first statement
+    const profileData = await _safeApi("/api/aml/accounts/for-statement/" + encodeURIComponent(statementIds[0]));
+    St.profile = profileData ? profileData.profile : null;
+
+    _renderAccountProfile();
+    _renderBatchHeaders();
+    _renderStats();
+    _renderSuspiciousSummary();
+    _fillChannelFilter();
+    _filterAndRender();
+  }
+
+  /** Build classification map + auto-classify income keywords for a statement. */
+  function _buildClassifications(statementId){
+    for(const tx of St.transactions){
+      if(St.txStatementMap[tx.id] !== statementId) continue;
+      let cls = tx.classification || "neutral";
+
+      if(cls === "neutral"){
+        const amt = parseFloat(tx.amount || 0);
+        const isCredit = tx.direction === "CREDIT" || amt > 0;
+        if(isCredit){
+          const titleMatch = _isIncomeKeyword(tx.title);
+          const cpMatch = _isIncomeKeyword(tx.counterparty_raw);
+          if(titleMatch || cpMatch){
+            cls = "legitimate";
+            _safeApi("/api/aml/review/" + encodeURIComponent(statementId) + "/classify", {
+              method:"POST",
+              headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({tx_id: tx.id, classification: "legitimate", note: "Auto: slowo kluczowe przychodu"}),
+            });
+          }
+        }
+      }
+
+      St.classifications[tx.id] = cls;
+    }
   }
 
   // ============================================================
@@ -294,6 +400,58 @@
     }
   }
 
+  /** Render compact header blocks for ALL statements in batch mode. */
+  function _renderBatchHeaders(){
+    const grid = QS("#rv_header_grid");
+    const warningsEl = QS("#rv_header_warnings");
+    if(!grid) return;
+
+    if(!St.headers.length){
+      _renderHeader(); // fallback to single-statement
+      return;
+    }
+
+    let html = "";
+    for(const hdr of St.headers){
+      const h = hdr.header;
+      if(!h || !h.blocks) continue;
+
+      // Period separator
+      html += `<div class="rv-batch-separator" style="grid-column:1/-1;padding:8px 10px;margin:4px 0;background:var(--bg-alt,#f1f5f9);border-radius:6px;border-left:4px solid var(--primary,#3b82f6);font-weight:600;font-size:13px">\uD83D\uDCC4 ${_esc(hdr.label)}</div>`;
+
+      // Show key blocks only (bank, period, balances)
+      const keyFields = ["bank_name","account_number","period_from","period_to","opening_balance","closing_balance","currency"];
+      const blocks = h.blocks.filter(b => keyFields.includes(b.field));
+      for(const b of blocks){
+        const typeIcon = b.type === "amount" ? "\uD83D\uDCB0" : b.type === "date" ? "\uD83D\uDCC5" : b.type === "iban" ? "\uD83C\uDFE6" : "";
+        html += `<div class="rv-hdr-block" data-field="${_esc(b.field)}" data-stmt="${_esc(hdr.id)}">
+          <div class="rv-hdr-label">${typeIcon} ${_esc(b.label)}</div>
+          <div class="rv-hdr-value">${_esc(b.value || "\u2014")}</div>
+        </div>`;
+      }
+    }
+
+    grid.innerHTML = html;
+
+    // Warnings (aggregate)
+    if(warningsEl){
+      let allWarnings = [];
+      for(const hdr of St.headers){
+        const ws = (hdr.header && hdr.header.warnings) || [];
+        for(const w of ws){
+          allWarnings.push(`[${hdr.label}] ${w}`);
+        }
+      }
+      if(allWarnings.length){
+        warningsEl.innerHTML = allWarnings.map(w =>
+          `<div class="small" style="color:var(--danger);margin:2px 0">\u26A0 ${_esc(w)}</div>`
+        ).join("");
+      } else {
+        warningsEl.innerHTML = "";
+      }
+    }
+  }
+
   async function _saveHeaderChanges(){
     if(!St.statementId || !Object.keys(St.headerDirty).length) return;
 
@@ -326,7 +484,6 @@
     const data = await _safeApi("/api/aml/review/" + encodeURIComponent(St.statementId));
     if(data) St.header = data.header || St.header;
     _renderHeader();
-    _loadFieldRules();
   }
 
   // ============================================================
@@ -452,7 +609,13 @@
 
     St.filteredTx = filtered;
     const countEl = QS("#rv_tx_count");
-    if(countEl) countEl.textContent = filtered.length + " / " + St.transactions.length;
+    if(countEl){
+      let label = filtered.length + " / " + St.transactions.length;
+      if(St.batchMode && St.statementIds.length > 1){
+        label += " (" + St.statementIds.length + " wyciag" + (St.statementIds.length > 1 ? "ow" : "") + ")";
+      }
+      countEl.textContent = label;
+    }
 
     _renderTable(filtered);
   }
@@ -465,6 +628,8 @@
       wrap.innerHTML = '<div class="small muted" style="padding:10px">Brak transakcji</div>';
       return;
     }
+
+    const colCount = 10;
 
     let html = `<table class="rv-tx-table">
       <thead><tr>
@@ -480,7 +645,18 @@
         <th class="rv-col-class">Klasyfikacja</th>
       </tr></thead><tbody>`;
 
+    let lastStmtId = null;
+
     for(const tx of transactions){
+      // Period separator row in batch mode
+      if(St.batchMode && tx._statement_id && tx._statement_id !== lastStmtId){
+        lastStmtId = tx._statement_id;
+        const label = tx._statement_label || "Wyciag";
+        html += `<tr class="rv-period-separator">
+          <td colspan="${colCount}" style="padding:8px 10px;background:var(--bg-alt,#f0f4f8);border-left:4px solid var(--primary,#3b82f6);font-weight:600;font-size:13px;color:var(--primary,#3b82f6)">\uD83D\uDCC4 ${_esc(label)}</td>
+        </tr>`;
+      }
+
       const amt = Number(tx.amount || 0);
       const isDebit = tx.direction === "DEBIT" || amt < 0;
       const amtClass = isDebit ? "rv-debit" : "rv-credit";
@@ -530,7 +706,11 @@
   }
 
   async function _classifyTx(txId, classification){
-    if(!St.statementId || !txId) return;
+    if(!txId) return;
+
+    // In batch mode, find the correct statement ID for this tx
+    const stmtId = St.txStatementMap[txId] || St.statementId;
+    if(!stmtId) return;
 
     St.classifications[txId] = classification;
 
@@ -553,8 +733,8 @@
     _renderStats();
     _renderSuspiciousSummary();
 
-    // Save to backend
-    await _safeApi("/api/aml/review/" + encodeURIComponent(St.statementId) + "/classify", {
+    // Save to backend (use correct statement ID per transaction)
+    await _safeApi("/api/aml/review/" + encodeURIComponent(stmtId) + "/classify", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({tx_id: txId, classification: classification}),
@@ -633,6 +813,16 @@
     async loadForStatement(statementId){
       if(!this._initialized) this.init();
       await _loadReview(statementId);
+    },
+
+    async loadForBatch(statementIds){
+      if(!this._initialized) this.init();
+      if(!statementIds || statementIds.length === 0) return;
+      if(statementIds.length === 1){
+        await _loadReview(statementIds[0]);
+        return;
+      }
+      await _loadReviewBatch(statementIds);
     }
   };
 
