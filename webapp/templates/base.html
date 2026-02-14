@@ -312,7 +312,38 @@
   .welcome-check input{margin:0;}
   .welcome-btn{padding:.5rem 1.4rem;border:none;border-radius:8px;background:var(--accent,#4a6cf7);color:#fff;font-size:.9rem;font-weight:600;cursor:pointer;transition:opacity .2s;}
   .welcome-btn:hover{opacity:.85;}
+
+  /* Call Center message modal */
+  .ccmsg-overlay{position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:1rem;}
+  .ccmsg-box{background:var(--card-bg,#fff);border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.15);max-width:540px;width:100%;padding:1.5rem 1.8rem;position:relative;max-height:85vh;overflow-y:auto;}
+  .ccmsg-badge{display:inline-block;background:#e74c3c;color:#fff;font-size:.65rem;font-weight:700;padding:.1rem .4rem;border-radius:8px;margin-left:.4rem;vertical-align:middle;}
+  .ccmsg-subject{font-size:1.1rem;font-weight:700;margin:0 0 .2rem;color:var(--text,#1a1a2e);}
+  .ccmsg-meta{font-size:.78rem;color:var(--muted,#888);margin-bottom:.8rem;}
+  .ccmsg-content{font-size:.92rem;line-height:1.6;color:var(--text,#333);margin-bottom:1rem;border-left:3px solid var(--accent,#4a6cf7);padding-left:.8rem;}
+  .ccmsg-content ul,.ccmsg-content ol{margin:.3rem 0 .3rem 1.2rem;}
+  .ccmsg-footer{display:flex;align-items:center;justify-content:flex-end;gap:.5rem;padding-top:.8rem;border-top:1px solid var(--border,#e0e3e8);}
+  .ccmsg-btn-read{padding:.45rem 1.2rem;border:none;border-radius:8px;background:#27ae60;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer;}
+  .ccmsg-btn-read:hover{opacity:.85;}
+  .ccmsg-btn-next{padding:.45rem 1rem;border:1px solid var(--border,#ddd);border-radius:8px;background:none;color:var(--text,#333);font-size:.85rem;cursor:pointer;}
+  .ccmsg-counter{font-size:.76rem;color:var(--muted,#888);flex:1;}
 </style>
+
+<!-- Call Center message modal (shown on app open for unread messages) -->
+<div id="ccMsgModal" class="ccmsg-overlay" style="display:none;">
+  <div class="ccmsg-box">
+    <div style="text-align:center;margin-bottom:.6rem;">
+      <span style="font-size:.9rem;font-weight:600;color:var(--accent,#4a6cf7);">Call Center</span>
+      <span class="ccmsg-badge" id="ccMsgBadge"></span>
+    </div>
+    <h3 class="ccmsg-subject" id="ccMsgSubject"></h3>
+    <div class="ccmsg-meta" id="ccMsgMeta"></div>
+    <div class="ccmsg-content" id="ccMsgContent"></div>
+    <div class="ccmsg-footer">
+      <span class="ccmsg-counter" id="ccMsgCounter"></span>
+      <button class="ccmsg-btn-read" id="ccMsgRead"></button>
+    </div>
+  </div>
+</div>
 
 <script src="/static/app.js?v={{ app_version }}"></script>
 <script>
@@ -401,6 +432,65 @@
     })();
 
     {% if multiuser and user %}
+    /* Call Center: check for unread messages on every page load */
+    (function(){
+      var _ccUnread = [];
+      var _ccIdx = 0;
+
+      function showCcMsg() {
+        if (_ccIdx >= _ccUnread.length) {
+          document.getElementById('ccMsgModal').style.display = 'none';
+          return;
+        }
+        var msg = _ccUnread[_ccIdx];
+        var lang = localStorage.getItem('aistate_ui_lang') || 'pl';
+        document.getElementById('ccMsgBadge').textContent = _ccUnread.length;
+        document.getElementById('ccMsgSubject').textContent = msg.subject || '';
+        var dt = msg.created_at ? msg.created_at.replace('T',' ').slice(0,16) : '';
+        var metaText = lang === 'en'
+          ? 'From: ' + (msg.author_name || '?') + ' \u2014 ' + dt
+          : 'Od: ' + (msg.author_name || '?') + ' \u2014 ' + dt;
+        document.getElementById('ccMsgMeta').textContent = metaText;
+        document.getElementById('ccMsgContent').innerHTML = msg.content || '';
+        var counterText = (_ccIdx + 1) + ' / ' + _ccUnread.length;
+        document.getElementById('ccMsgCounter').textContent = counterText;
+        var readBtn = document.getElementById('ccMsgRead');
+        if (_ccIdx < _ccUnread.length - 1) {
+          readBtn.textContent = lang === 'en' ? 'Read \u2192 Next' : 'Przeczytane \u2192 Dalej';
+        } else {
+          readBtn.textContent = lang === 'en' ? 'Read \u2714' : 'Przeczytane \u2714';
+        }
+        document.getElementById('ccMsgModal').style.display = 'flex';
+      }
+
+      fetch('/api/messages/unread').then(function(r){ return r.json(); }).then(function(data){
+        if (data.status !== 'ok' || !data.messages || data.messages.length === 0) return;
+        _ccUnread = data.messages;
+        _ccIdx = 0;
+        /* Wait for welcome modal to close (if visible), then show messages */
+        var wm = document.getElementById('welcomeModal');
+        function tryShow() {
+          if (wm && wm.style.display !== 'none') {
+            setTimeout(tryShow, 500);
+            return;
+          }
+          showCcMsg();
+        }
+        tryShow();
+      }).catch(function(){});
+
+      document.getElementById('ccMsgRead').addEventListener('click', function(){
+        var msg = _ccUnread[_ccIdx];
+        if (msg) {
+          fetch('/api/messages/' + msg.message_id + '/read', {
+            method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}'
+          }).catch(function(){});
+        }
+        _ccIdx++;
+        showCcMsg();
+      });
+    })();
+
     // User badge toggle
     (function(){
       var badge = document.getElementById('userBadge');

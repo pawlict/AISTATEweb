@@ -59,6 +59,7 @@ from webapp.routers import chat as chat_router
 from webapp.routers import admin as admin_router
 from webapp.routers import tasks as tasks_router
 from webapp.routers import aml as aml_router
+from webapp.routers import messages as messages_router
 
 try:
     from markdown import markdown as md_to_html  # type: ignore
@@ -75,10 +76,13 @@ PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 PROMPTS = PromptManager(PROJECTS_DIR)
 
 # --- Multi-user auth stores ---
+from webapp.auth.message_store import MessageStore
+
 _AUTH_CONFIG_DIR = _local_config_dir()
 DEPLOYMENT_STORE = DeploymentStore(_AUTH_CONFIG_DIR)
 USER_STORE = UserStore(_AUTH_CONFIG_DIR)
 SESSION_STORE = SessionStore(_AUTH_CONFIG_DIR)
+MESSAGE_STORE = MessageStore(_AUTH_CONFIG_DIR)
 
 
 def _get_session_timeout() -> int:
@@ -1675,6 +1679,12 @@ users_router.init(
     app_log_fn=app_log,
 )
 app.include_router(users_router.router)
+
+messages_router.init(
+    message_store=MESSAGE_STORE,
+    app_log_fn=app_log,
+)
+app.include_router(messages_router.router)
 
 setup_router.init(
     user_store=USER_STORE,

@@ -26,10 +26,76 @@
   </table>
 </div>
 
-<!-- Role-access matrix (CSS Grid layout) -->
-<div class="role-matrix-card" style="margin-top:1rem;padding:.8rem 1rem;max-width:780px;">
-  <h3 style="margin:0 0 .5rem;font-size:.82rem;">Ustawienia r&oacute;l &mdash; dost&#281;p do modu&#322;&oacute;w <span class="en">Role settings &mdash; module access</span></h3>
-  <div id="roleMatrixGrid" class="rm-grid"></div>
+<!-- Bottom panels: role matrix + call center side by side -->
+<div class="panels-row" style="display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap;align-items:flex-start;">
+
+  <!-- Role-access matrix (CSS Grid layout) -->
+  <div class="role-matrix-card" style="padding:.8rem 1rem;flex:1 1 480px;max-width:780px;">
+    <h3 style="margin:0 0 .5rem;font-size:.82rem;">Ustawienia r&oacute;l &mdash; dost&#281;p do modu&#322;&oacute;w <span class="en">Role settings &mdash; module access</span></h3>
+    <div id="roleMatrixGrid" class="rm-grid"></div>
+  </div>
+
+  <!-- Call Center -->
+  {% if user and user.is_superadmin %}
+  <div class="callcenter-card" style="padding:.8rem 1rem;flex:1 1 340px;max-width:560px;">
+    <h3 style="margin:0 0 .5rem;font-size:.82rem;">Call Center <span class="en">Call Center</span></h3>
+    <p style="color:var(--muted,#888);font-size:.74rem;margin:0 0 .6rem;">
+      Wyślij wiadomość do wybranych grup użytkowników.
+      <span class="en">Send a message to selected user groups.</span>
+    </p>
+
+    <!-- Compose form -->
+    <div class="field" style="margin-bottom:.5rem;">
+      <label for="ccSubject" style="font-size:.78rem;">Temat <span class="en">Subject</span></label>
+      <input type="text" id="ccSubject" style="font-size:.85rem;" placeholder="Temat wiadomości..."/>
+    </div>
+
+    <div class="field" style="margin-bottom:.5rem;">
+      <label style="font-size:.78rem;">Treść <span class="en">Content</span></label>
+      <div class="cc-toolbar" id="ccToolbar">
+        <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
+        <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+        <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
+        <button type="button" data-cmd="strikeThrough" title="Strike"><s>S</s></button>
+        <span class="cc-sep"></span>
+        <button type="button" data-cmd="insertUnorderedList" title="Bullet list">&#8226;</button>
+        <button type="button" data-cmd="insertOrderedList" title="Numbered list">1.</button>
+        <span class="cc-sep"></span>
+        <button type="button" data-cmd="justifyLeft" title="Align left">&#8676;</button>
+        <button type="button" data-cmd="justifyCenter" title="Align center">&#8596;</button>
+        <span class="cc-sep"></span>
+        <select id="ccFontSize" title="Font size" style="font-size:.72rem;padding:.1rem .2rem;border:1px solid var(--border,#ccc);border-radius:3px;">
+          <option value="2">Mały</option>
+          <option value="3" selected>Normalny</option>
+          <option value="4">Duży</option>
+          <option value="5">Bardzo duży</option>
+        </select>
+        <select id="ccFontColor" title="Color" style="font-size:.72rem;padding:.1rem .2rem;border:1px solid var(--border,#ccc);border-radius:3px;">
+          <option value="">Domyślny</option>
+          <option value="#e74c3c" style="color:#e74c3c;">Czerwony</option>
+          <option value="#27ae60" style="color:#27ae60;">Zielony</option>
+          <option value="#2980b9" style="color:#2980b9;">Niebieski</option>
+          <option value="#e67e22" style="color:#e67e22;">Pomarańczowy</option>
+        </select>
+      </div>
+      <div class="cc-editor" id="ccEditor" contenteditable="true"></div>
+    </div>
+
+    <div class="field" style="margin-bottom:.6rem;">
+      <label style="font-size:.78rem;">Grupy docelowe <span class="en">Target groups</span></label>
+      <div id="ccTargetGroups" class="cc-groups"></div>
+    </div>
+
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;align-items:center;">
+      <div class="error" id="ccError" style="color:#e74c3c;font-size:.78rem;flex:1;"></div>
+      <button class="btn" id="ccSend" style="font-size:.8rem;">Wyślij <span class="en">Send</span></button>
+    </div>
+
+    <!-- Sent messages list -->
+    <div id="ccSentList" style="margin-top:.8rem;"></div>
+  </div>
+  {% endif %}
+
 </div>
 
 <style>
@@ -45,6 +111,28 @@
   .rm-grid .rm-check { color: #27ae60; font-weight: 700; font-size: .9rem; }
   .rm-grid .rm-no { color: #e74c3c; font-weight: 700; font-size: .85rem; }
   .rm-grid .rm-row:hover .rm-cell { background: rgba(74,108,247,.04); }
+
+  /* Call Center panel */
+  .callcenter-card { background: var(--card-bg, #fff); border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,.05); border: 1px solid var(--border, #e0e3e8); }
+  .cc-toolbar { display: flex; align-items: center; gap: 2px; padding: .3rem; border: 1px solid var(--border, #ddd); border-bottom: none; border-radius: 6px 6px 0 0; background: #f8f9fa; flex-wrap: wrap; }
+  .cc-toolbar button { background: none; border: 1px solid transparent; border-radius: 3px; padding: .15rem .35rem; cursor: pointer; font-size: .78rem; color: var(--text, #333); line-height: 1; }
+  .cc-toolbar button:hover { background: var(--border, #e0e3e8); }
+  .cc-sep { width: 1px; height: 16px; background: var(--border, #ddd); margin: 0 2px; }
+  .cc-editor { min-height: 120px; max-height: 250px; overflow-y: auto; padding: .5rem; border: 1px solid var(--border, #ddd); border-radius: 0 0 6px 6px; font-size: .85rem; line-height: 1.5; background: #fff; outline: none; }
+  .cc-editor:focus { border-color: var(--accent, #4a6cf7); }
+  .cc-editor ul, .cc-editor ol { margin: .3rem 0 .3rem 1.2rem; }
+  .cc-groups { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .cc-groups label { font-size: .74rem; display: flex; align-items: center; gap: .2rem; padding: .15rem .4rem; border: 1px solid var(--border, #ddd); border-radius: 4px; cursor: pointer; background: #fafafa; }
+  .cc-groups label:hover { background: #f0f2f5; }
+  .cc-groups input { margin: 0; }
+  .cc-sent-item { background: #f8f9fa; border: 1px solid var(--border, #eee); border-radius: 6px; padding: .5rem .6rem; margin-bottom: .4rem; font-size: .76rem; }
+  .cc-sent-item .cc-sent-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .25rem; }
+  .cc-sent-item .cc-sent-subj { font-weight: 600; }
+  .cc-sent-item .cc-sent-date { color: var(--muted, #999); font-size: .68rem; }
+  .cc-sent-item .cc-sent-groups { color: var(--muted, #888); font-size: .68rem; }
+  .cc-sent-item .cc-sent-stats { color: var(--muted, #888); font-size: .68rem; margin-top: .2rem; }
+  .cc-sent-item .cc-sent-del { background: none; border: none; color: #e74c3c; cursor: pointer; font-size: .72rem; padding: .1rem .3rem; }
+  .cc-sent-item .cc-sent-del:hover { text-decoration: underline; }
 </style>
 
 <!-- Modal: Add/Edit User -->
@@ -232,4 +320,154 @@
 
 {% block scripts %}
 <script src="/static/users.js?v={{ app_version }}"></script>
+{% if user and user.is_superadmin %}
+<script>
+/* Call Center — rich text messaging for Główny Opiekun */
+(function(){
+  'use strict';
+
+  /* All target groups: user roles + admin roles + "all" */
+  var ALL_GROUPS = [
+    { key: 'all', pl: 'Wszyscy', en: 'Everyone' },
+    { key: 'Transkryptor', pl: 'Transkryptor', en: 'Transcriber' },
+    { key: 'Lingwista', pl: 'Lingwista', en: 'Linguist' },
+    { key: 'Analityk', pl: 'Analityk', en: 'Analyst' },
+    { key: 'Dialogista', pl: 'Dialogista', en: 'Dialogue Spec.' },
+    { key: 'Strateg', pl: 'Strateg', en: 'Strategist' },
+    { key: 'Mistrz Sesji', pl: 'Mistrz Sesji', en: 'Session Master' },
+    { key: 'Architekt Funkcji', pl: 'Architekt Funkcji', en: 'Function Architect' },
+    { key: 'Stra\u017cnik Dost\u0119pu', pl: 'Stra\u017cnik Dost\u0119pu', en: 'Access Guardian' },
+    { key: 'G\u0142\u00f3wny Opiekun', pl: 'G\u0142\u00f3wny Opiekun', en: 'Main Guardian' },
+  ];
+
+  /* Build target group checkboxes */
+  var groupsEl = document.getElementById('ccTargetGroups');
+  if (groupsEl) {
+    ALL_GROUPS.forEach(function(g) {
+      var label = document.createElement('label');
+      label.innerHTML = '<input type="checkbox" value="' + g.key + '"/> ' + g.pl + ' <span class="en">' + g.en + '</span>';
+      groupsEl.appendChild(label);
+    });
+  }
+
+  /* Rich text toolbar */
+  var toolbar = document.getElementById('ccToolbar');
+  var editor = document.getElementById('ccEditor');
+  if (toolbar && editor) {
+    toolbar.addEventListener('click', function(e) {
+      var btn = e.target.closest('button[data-cmd]');
+      if (!btn) return;
+      e.preventDefault();
+      document.execCommand(btn.dataset.cmd, false, null);
+      editor.focus();
+    });
+    var fontSize = document.getElementById('ccFontSize');
+    if (fontSize) {
+      fontSize.addEventListener('change', function() {
+        document.execCommand('fontSize', false, this.value);
+        editor.focus();
+      });
+    }
+    var fontColor = document.getElementById('ccFontColor');
+    if (fontColor) {
+      fontColor.addEventListener('change', function() {
+        if (this.value) {
+          document.execCommand('foreColor', false, this.value);
+        } else {
+          document.execCommand('removeFormat', false, null);
+        }
+        editor.focus();
+      });
+    }
+  }
+
+  /* Send message */
+  var sendBtn = document.getElementById('ccSend');
+  var errEl = document.getElementById('ccError');
+  if (sendBtn) {
+    sendBtn.addEventListener('click', async function() {
+      errEl.textContent = '';
+      var subject = document.getElementById('ccSubject').value.trim();
+      var content = editor.innerHTML.trim();
+      var groups = [];
+      document.querySelectorAll('#ccTargetGroups input:checked').forEach(function(cb) {
+        groups.push(cb.value);
+      });
+      if (!subject) { errEl.textContent = 'Podaj temat / Enter subject'; return; }
+      if (!content || content === '<br>') { errEl.textContent = 'Wpisz treść / Enter content'; return; }
+      if (groups.length === 0) { errEl.textContent = 'Wybierz grupy / Select groups'; return; }
+
+      try {
+        var res = await fetch('/api/messages', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ subject: subject, content: content, target_groups: groups }),
+        });
+        var data = await res.json();
+        if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
+        /* Clear form */
+        document.getElementById('ccSubject').value = '';
+        editor.innerHTML = '';
+        document.querySelectorAll('#ccTargetGroups input:checked').forEach(function(cb) { cb.checked = false; });
+        loadSentMessages();
+      } catch(e) {
+        errEl.textContent = 'Connection error';
+      }
+    });
+  }
+
+  /* Load & render sent messages */
+  async function loadSentMessages() {
+    var list = document.getElementById('ccSentList');
+    if (!list) return;
+    try {
+      var res = await fetch('/api/messages');
+      var data = await res.json();
+      if (data.status !== 'ok') return;
+      var msgs = data.messages || [];
+      if (msgs.length === 0) {
+        list.innerHTML = '<div style="color:var(--muted,#999);font-size:.74rem;">Brak wiadomości <span class="en">No messages</span></div>';
+        return;
+      }
+      list.innerHTML = '<div style="font-size:.74rem;font-weight:600;margin-bottom:.3rem;color:var(--muted,#666);">Wysłane wiadomości <span class="en">Sent messages</span> (' + msgs.length + ')</div>';
+      msgs.forEach(function(m) {
+        var item = document.createElement('div');
+        item.className = 'cc-sent-item';
+        var dt = m.created_at ? m.created_at.replace('T',' ').slice(0,16) : '';
+        var readCount = (m.read_by || []).length;
+        item.innerHTML =
+          '<div class="cc-sent-head">' +
+            '<span class="cc-sent-subj">' + escH(m.subject) + '</span>' +
+            '<span>' +
+              '<span class="cc-sent-date">' + escH(dt) + '</span> ' +
+              '<button class="cc-sent-del" data-mid="' + m.message_id + '">&#10005;</button>' +
+            '</span>' +
+          '</div>' +
+          '<div class="cc-sent-groups">&#8594; ' + (m.target_groups || []).join(', ') + '</div>' +
+          '<div class="cc-sent-stats">' + readCount + ' przeczytało <span class="en">read</span></div>';
+        list.appendChild(item);
+      });
+      /* Delete buttons */
+      list.querySelectorAll('.cc-sent-del').forEach(function(btn) {
+        btn.addEventListener('click', async function() {
+          if (!confirm('Usunąć wiadomość? / Delete message?')) return;
+          await fetch('/api/messages/' + btn.dataset.mid, { method: 'DELETE' });
+          loadSentMessages();
+        });
+      });
+      if (typeof applyBilingualMode === 'function') applyBilingualMode();
+    } catch(e) { /* ignore */ }
+  }
+
+  function escH(s) {
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  /* Init */
+  loadSentMessages();
+})();
+</script>
+{% endif %}
 {% endblock %}
