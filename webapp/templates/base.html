@@ -47,6 +47,13 @@
         </div>
       </div>
 
+      {% if not multiuser %}
+      <div class="user-badge-lang" id="singleUserLang" style="display:flex;justify-content:center;gap:.3rem;margin:.5rem 0;">
+        <button class="lang-chip" data-lang="pl">PL</button>
+        <button class="lang-chip" data-lang="en">EN</button>
+      </div>
+      {% endif %}
+
       {% if multiuser and user %}
       <div class="user-badge" id="userBadge">
         <div class="user-badge-role">{% if user.is_superadmin %}Główny Opiekun{% elif user.role %}{{ user.role }}{% elif user.admin_roles %}{{ user.admin_roles|join(', ') }}{% else %}—{% endif %}</div>
@@ -162,16 +169,6 @@
           <span class="nav-label" data-i18n="nav.info">Info</span>
         </a>
         {% if not multiuser or 'admin_settings' in user_modules %}
-        <a href="/settings" data-icon="settings" class="{{ 'active' if active=='settings' else '' }}" data-i18n-title="nav.settings">
-          <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M10.3 2h3.4l.4 2.4a7.5 7.5 0 0 1 2.1 1.2l2.3-.9 1.7 2.9-1.9 1.5a7.5 7.5 0 0 1 0 2.4l1.9 1.5-1.7 2.9-2.3-.9a7.5 7.5 0 0 1-2.1 1.2L13.7 22h-3.4l-.4-2.4a7.5 7.5 0 0 1-2.1-1.2l-2.3.9-1.7-2.9 1.9-1.5a7.5 7.5 0 0 1 0-2.4L3.8 11l1.7-2.9 2.3.9a7.5 7.5 0 0 1 2.1-1.2z" stroke-width="1.3" stroke-linejoin="round" fill="none"/>
-              <circle cx="12" cy="12" r="3" stroke-width="1.4" fill="none"/>
-              <circle class="brush" cx="12" cy="12" r="1" opacity=".5"/>
-            </svg>
-          </span>
-          <span class="nav-label" data-i18n="nav.settings">Settings</span>
-        </a>
         <div class="nav-section" data-i18n="nav.admin_panel">Panel Administracyjny</div>
         <a href="/admin" data-icon="gpu" class="{{ 'active' if active=='admin' else '' }}" data-i18n-title="nav.admin">
           <span class="nav-icon" aria-hidden="true">
@@ -386,12 +383,15 @@
     applyBilingualMode();
     initSidebar();
 
-    /* Welcome modal — shows on every page load until permanently dismissed via checkbox.
-       In multi-user mode the dismiss key includes user_id so each user is independent. */
+    /* Welcome modal — shows once per browser session (login).
+       Permanently dismissed via checkbox. Per-user keys in multi-user mode. */
     (function(){
       var _uid = '{{ user.user_id if multiuser and user else "" }}';
       var _dismissKey = _uid ? 'aistate_welcome_dismissed_' + _uid : 'aistate_welcome_dismissed';
+      var _shownKey  = _uid ? 'aistate_welcome_shown_' + _uid  : 'aistate_welcome_shown';
       if (localStorage.getItem(_dismissKey)) return;
+      if (sessionStorage.getItem(_shownKey)) return;
+      sessionStorage.setItem(_shownKey, '1');
       var lang = localStorage.getItem('aistate_ui_lang') || 'pl';
       var title, body, checkLabel, btnLabel;
       if (lang === 'en') {
@@ -489,6 +489,20 @@
         }
         _ccIdx++;
         showCcMsg();
+      });
+    })();
+
+    /* Single-user language switcher */
+    (function(){
+      var wrap = document.getElementById('singleUserLang');
+      if (!wrap) return;
+      var curLang = localStorage.getItem('aistate_ui_lang') || 'pl';
+      wrap.querySelectorAll('.lang-chip').forEach(function(b){ b.classList.toggle('active', b.dataset.lang === curLang); });
+      wrap.querySelectorAll('.lang-chip').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          localStorage.setItem('aistate_ui_lang', btn.dataset.lang);
+          location.reload();
+        });
       });
     })();
 

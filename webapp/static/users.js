@@ -225,7 +225,11 @@
         } else {
           acts.appendChild(btn('Banuj', function() { openBanModal(u); }, '#e67e22'));
         }
-        acts.appendChild(btn('Reset hasła', function() { openResetPwModal(u); }, '#8e44ad'));
+        if (u.password_reset_requested) {
+          acts.appendChild(btn('\u26A0 Wymagany reset', function() { openResetPwModal(u); }, '#e74c3c'));
+        } else {
+          acts.appendChild(btn('Reset has\u0142a', function() { openResetPwModal(u); }, '#8e44ad'));
+        }
         acts.appendChild(btn('Usuń', function() { openDeleteModal(u); }, '#e74c3c'));
       } else {
         acts.textContent = '—';
