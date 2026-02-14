@@ -66,7 +66,9 @@ async function refreshTasks(){
   for(const t of tasks){
     const o=document.createElement("option");
     o.value=t.task_id;
-    o.textContent = `${t.task_id.slice(0,8)} — ${t.kind} — ${t.status}`;
+    o.textContent = t.task_id === "system"
+      ? `Zdarzenia systemowe / System events — ${t.status}`
+      : `${t.task_id.slice(0,8)} — ${t.kind} — ${t.status}`;
     sel.appendChild(o);
     ids.add(t.task_id);
   }
@@ -97,6 +99,7 @@ async function refreshTasks(){
       return;
     }
 
+    // Prefer running/queued worker tasks first
     for(const st of ["running","queued"]){
       for(const t of tasks){
         if(!t || t.task_id === "system") continue;
@@ -104,9 +107,13 @@ async function refreshTasks(){
       }
       if(pick) break;
     }
+    // Fallback: system events task (most useful for admin/user audit)
+    if(!pick && ids.has("system")){
+      pick = "system";
+    }
     if(!pick){
       for(const t of tasks){
-        if(!t || t.task_id === "system") continue;
+        if(!t) continue;
         pick = t.task_id; break;
       }
     }

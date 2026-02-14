@@ -162,6 +162,9 @@ def is_route_allowed(path: str, user_modules: List[str]) -> bool:
     # Common routes for any logged-in user
     if path in COMMON_ROUTES:
         return True
+    for prefix in COMMON_PREFIXES:
+        if path.startswith(prefix):
+            return True
 
     # Check each module the user has
     for mod_name in user_modules:
