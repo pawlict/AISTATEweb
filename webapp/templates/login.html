@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Login — {{ app_name }}</title>
   <link rel="stylesheet" href="/static/app.css"/>
+  <script src="/static/ui.js?v={{ app_version }}"></script>
   <style>
     body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
     .login-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 400px; }
@@ -193,7 +194,7 @@
           var expMsg = curLang === 'en'
             ? 'Your password has expired. Please change it now.'
             : 'Twoje hasło wygasło. Zmień je teraz.';
-          alert(expMsg);
+          showToast(expMsg, 'warning');
           var newPw = prompt(curLang === 'en' ? 'New password:' : 'Nowe hasło:');
           if (newPw && newPw.length >= 6) {
             var curPw = document.getElementById('password').value;
@@ -203,9 +204,9 @@
               body: JSON.stringify({current_password: curPw, new_password: newPw}),
             }).then(function(r){ return r.json(); }).then(function(d) {
               if (d.status === 'ok') {
-                alert(curLang === 'en' ? 'Password changed!' : 'Hasło zmienione!');
+                showToast(curLang === 'en' ? 'Password changed!' : 'Hasło zmienione!', 'success');
               } else {
-                alert(d.message || 'Error');
+                showToast(d.message || 'Error', 'error');
               }
               location.href = '/';
             }).catch(function() { location.href = '/'; });

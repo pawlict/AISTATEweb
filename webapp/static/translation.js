@@ -516,7 +516,7 @@ function trFmt(key, vars={}, fallback){
 }
 
 function alertError(msg){
-    alert(tr('translation.alert.error_prefix','Błąd') + ': ' + msg);
+    showToast(tr('translation.alert.error_prefix','Błąd') + ': ' + msg, 'error');
 }
 
 async function loadNllbInstalledModels(){
@@ -760,7 +760,7 @@ async function handleFile(file) {
         
     } catch (error) {
         console.error('Upload error:', error);
-        alert(trFmt('translation.alert.upload_error',{msg: error.message},'Błąd podczas wczytywania pliku: {msg}'));
+        showToast(trFmt('translation.alert.upload_error',{msg: error.message},'Błąd podczas wczytywania pliku: {msg}'), 'error');
     }
 }
 
@@ -801,12 +801,12 @@ async function startTranslation() {
     const text = document.getElementById('input-text').value.trim();
     
     if (!text) {
-        alert(tr('translation.alert.enter_text','Proszę wprowadzić tekst do przetłumaczenia!'));
+        showToast(tr('translation.alert.enter_text','Proszę wprowadzić tekst do przetłumaczenia!'), 'warning');
         return;
     }
-    
+
     if (currentLanguages.length === 0) {
-        alert(tr('translation.alert.choose_target','Proszę wybrać przynajmniej jeden język docelowy!'));
+        showToast(tr('translation.alert.choose_target','Proszę wybrać przynajmniej jeden język docelowy!'), 'warning');
         return;
     }
     
@@ -819,7 +819,7 @@ async function startTranslation() {
     const preserveFormatting = document.getElementById('preserve_formatting').checked;
 
     if (!nllbModel) {
-        alert(tr('translation.alert.choose_model','Wybierz model NLLB (zainstalowany w Ustawieniach NLLB).'));
+        showToast(tr('translation.alert.choose_model','Wybierz model NLLB (zainstalowany w Ustawieniach NLLB).'), 'warning');
         return;
     }
     
@@ -862,7 +862,7 @@ async function startTranslation() {
         
     } catch (error) {
         console.error('Translation error:', error);
-        alert(trFmt('translation.alert.translate_error',{msg: error.message},'Błąd podczas tłumaczenia: {msg}'));
+        showToast(trFmt('translation.alert.translate_error',{msg: error.message},'Błąd podczas tłumaczenia: {msg}'), 'error');
         resetUI();
     }
 }
@@ -903,7 +903,7 @@ async function monitorProgress() {
             try{ clearInterval(trProgressInterval); }catch(e){}
             trProgressInterval = null;
             console.error('Progress monitoring error:', error);
-            alert(trFmt('translation.alert.progress_error',{msg: error.message},'Błąd: {msg}'));
+            showToast(trFmt('translation.alert.progress_error',{msg: error.message},'Błąd: {msg}'), 'error');
             resetUI();
         }
     }, 3000);
@@ -1044,14 +1044,15 @@ function saveEdits() {
     
     if (lang) {
         currentResults[lang] = document.getElementById('output-text').value;
-        alert(tr('translation.alert.saved','Zmiany zapisane ✅'));
+        showToast(tr('translation.alert.saved','Zmiany zapisane ✅'), 'success');
         _trScheduleSave('save_edits');
     }
 }
 
 // Reset output
-function resetOutput() {
-    if (confirm(tr('translation.confirm.reset','Czy na pewno chcesz zresetować wyniki?'))) {
+async function resetOutput() {
+    const ok = await showConfirm({title:'Reset wyników',message:tr('translation.confirm.reset','Czy na pewno chcesz zresetować wyniki?'),confirmText:'Resetuj',type:'warning'});
+    if (ok) {
         document.getElementById('output-container').classList.add('hidden');
         document.getElementById('summary-container').classList.add('hidden');
         currentResults = {};
@@ -1065,7 +1066,7 @@ async function exportAs(format) {
     const text = document.getElementById('output-text').value;
     
     if (!text) {
-        alert(tr('translation.alert.no_text_to_export','Brak tekstu do eksportu!'));
+        showToast(tr('translation.alert.no_text_to_export','Brak tekstu do eksportu!'), 'warning');
         return;
     }
     
@@ -1096,7 +1097,7 @@ async function exportAs(format) {
         
     } catch (error) {
         console.error('Export error:', error);
-        alert(trFmt('translation.alert.export_error',{msg: error.message},'Błąd podczas eksportu: {msg}'));
+        showToast(trFmt('translation.alert.export_error',{msg: error.message},'Błąd podczas eksportu: {msg}'), 'error');
     }
 }
 
@@ -1107,7 +1108,7 @@ async function exportSelectedReports() {
         .map(el => el.value);
 
     if (selected.length === 0) {
-        alert(tr('translation.alert.choose_report_format','Wybierz przynajmniej jeden format raportu (HTML / DOC / TXT).'));
+        showToast(tr('translation.alert.choose_report_format','Wybierz przynajmniej jeden format raportu (HTML / DOC / TXT).'), 'warning');
         return;
     }
 
@@ -1167,7 +1168,7 @@ function applyPreset(preset) {
     // Set detail
     document.getElementById('summary_detail').value = config.detail;
     
-    alert(trFmt('translation.alert.preset_loaded',{preset},'Preset załadowany: {preset}'));
+    showToast(trFmt('translation.alert.preset_loaded',{preset},'Preset załadowany: {preset}'), 'success');
 }
 
 
@@ -1298,7 +1299,7 @@ async function _ttsSpeak(lang, source, triggerBtn) {
 
     const pick = _ttsPickVoice(lang);
     if (!pick) {
-        alert('TTS: brak zainstalowanego silnika dla języka "' + lang + '". Zainstaluj silnik w Ustawieniach TTS.');
+        showToast('TTS: brak zainstalowanego silnika dla języka "' + lang + '". Zainstaluj silnik w Ustawieniach TTS.', 'warning');
         return;
     }
 

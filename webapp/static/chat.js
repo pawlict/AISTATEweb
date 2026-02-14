@@ -129,7 +129,7 @@
     const sel = $id("chat_model");
     _model = sel ? sel.value : "";
     if (!_model) {
-      alert(_t("chat.select_model"));
+      showToast(_t("chat.select_model"), 'warning');
       return;
     }
 

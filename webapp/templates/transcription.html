@@ -1102,7 +1102,7 @@ async function trLoadNotesFromProject(){
 
 async function trSaveNotesToProject(){
   if(!AISTATE.projectId){
-    alert("Brak aktywnego projektu");
+    showToast("Brak aktywnego projektu", 'warning');
     return;
   }
   
@@ -1124,7 +1124,7 @@ async function trSaveNotesToProject(){
       throw new Error("Failed to save notes");
     }
   }catch(e){
-    alert("❌ Błąd zapisu notatek: " + e.message);
+    showToast("Błąd zapisu notatek: " + e.message, 'error');
     console.error("Save notes error:", e);
   }
 }
@@ -1278,19 +1278,19 @@ function trGetSelectedReportFormats(){
 async function trSaveReports(){
   const pid = AISTATE.projectId;
   if(!pid){
-    alert("Brak aktywnego projektu");
+    showToast("Brak aktywnego projektu", 'warning');
     return;
   }
 
   const text = (typeof trBuildRawText === "function") ? (trBuildRawText() || "") : (document.getElementById("tr_out")?.value || "");
   if(!text.trim()){
-    alert("Brak wyniku transkrypcji do wyeksportowania");
+    showToast("Brak wyniku transkrypcji do wyeksportowania", 'warning');
     return;
   }
 
   const formats = trGetSelectedReportFormats();
   if(formats.length === 0){
-    alert("Wybierz przynajmniej jeden format raportu");
+    showToast("Wybierz przynajmniej jeden format raportu", 'warning');
     return;
   }
 
@@ -1348,7 +1348,7 @@ async function trSaveReports(){
     showToast(message + " i zapisane w projekcie", 3000);
 
   }catch(e){
-    alert(`❌ Błąd generowania raportu: ${e.message}`);
+    showToast(`Błąd generowania raportu: ${e.message}`, 'error');
     console.error("Report generation error:", e);
 
   }finally{

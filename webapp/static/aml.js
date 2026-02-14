@@ -1258,7 +1258,8 @@
         e.stopPropagation();
         const sid = btn.getAttribute("data-sid");
         if(!sid) return;
-        if(!confirm("Usunac te analize? Operacja usunie wyciag i wszystkie powiazane transakcje.")) return;
+        const ok = await showConfirm({title:'Usunięcie analizy',message:'Usunąć tę analizę? Operacja usunie wyciąg i wszystkie powiązane transakcje.',confirmText:'Usuń',type:'danger',warning:'Ta operacja jest nieodwracalna.'});
+        if(!ok) return;
         const res = await _safeApi("/api/aml/history/" + encodeURIComponent(sid), {method:"DELETE"});
         if(res){
           // Remove from local state and re-render

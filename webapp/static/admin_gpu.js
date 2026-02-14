@@ -347,7 +347,7 @@ function renderJobs(data){
         });
         await refreshAll();
       }catch(e){
-        alert(String(e.message||e));
+        showToast(String(e.message||e), 'error');
       }
     });
   });

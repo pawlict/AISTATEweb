@@ -844,4 +844,15 @@
       if (typeof applyBilingualMode === 'function') applyBilingualMode();
     });
   });
+
+  /* ---- Inline form validation ---- */
+  if (typeof attachValidation === 'function') {
+    attachValidation('uUsername', { required: true, minLength: 2, maxLength: 64, pattern: /^[a-zA-Z0-9_.\-]+$/, patternMsg: 'Tylko litery, cyfry, _ . -' });
+    attachValidation('uPassword', { minLength: 6 });
+    attachValidation('rpPassword', { required: true, minLength: 6 });
+  }
+  if (typeof attachPasswordMeter === 'function') {
+    attachPasswordMeter('uPassword', 'basic');
+    attachPasswordMeter('rpPassword', 'basic');
+  }
 })();

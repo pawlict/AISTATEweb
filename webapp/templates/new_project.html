@@ -141,7 +141,7 @@ document.getElementById("np_name").value = suggestName();
 document.getElementById("np_create").addEventListener("click", async ()=>{
   const name = (document.getElementById("np_name").value || "").trim();
   const f = document.getElementById("np_file").files[0];
-  if(!name){ alert(t("np.alert.enter_name")); return; }
+  if(!name){ showToast(t("np.alert.enter_name"), 'warning'); return; }
 
   const fd = new FormData();
   fd.append("name", name);
@@ -159,7 +159,7 @@ document.getElementById("np_create").addEventListener("click", async ()=>{
     window.location.href = hasAudio ? "/transcription" : "/analysis";
   }catch(e){
     document.getElementById("np_status").textContent = t("np.status.error");
-    alert(e.message || t("np.alert.create_error"));
+    showToast(e.message || t("np.alert.create_error"), 'error');
   }
 });
 
@@ -210,7 +210,7 @@ document.getElementById('op_select').addEventListener('change', async ()=>{
 document.getElementById('op_open').addEventListener('click', async ()=>{
   const pid = (document.getElementById('op_select')?.value || '').trim();
   if(!pid){
-    alert(t('projects.open.no_selection'));
+    showToast(t('projects.open.no_selection'), 'warning');
     return;
   }
   AISTATE.projectId = pid;
@@ -279,7 +279,7 @@ document.getElementById('op_open').addEventListener('click', async ()=>{
         await exportAistate();
       }catch(err){
         console.error(err);
-        alert((err && err.message) ? err.message : t('projects.export.error'));
+        showToast((err && err.message) ? err.message : t('projects.export.error'), 'error');
       }
     });
   }
@@ -296,7 +296,7 @@ document.getElementById('op_open').addEventListener('click', async ()=>{
 
       const name = (f.name || '').toLowerCase();
       if(!name.endsWith('.aistate')){
-        alert(t('projects.import.bad_ext'));
+        showToast(t('projects.import.bad_ext'), 'error');
         return;
       }
 
@@ -314,7 +314,7 @@ document.getElementById('op_open').addEventListener('click', async ()=>{
         }
       }catch(err){
         console.error(err);
-        alert((err && err.message) ? err.message : t('projects.import.error'));
+        showToast((err && err.message) ? err.message : t('projects.import.error'), 'error');
       }
     });
   }
@@ -362,13 +362,13 @@ document.getElementById('op_open').addEventListener('click', async ()=>{
 
   async function doDelete(){
     if(!modalSelect || !modalSelect.value){
-      alert(t('projects.delete.modal.no_choice'));
+      showToast(t('projects.delete.modal.no_choice'), 'warning');
       return;
     }
     const pid = modalSelect.value;
     const wipe = (wipeSelect && wipeSelect.value) ? wipeSelect.value : 'none';
 
-    const ok = confirm(t('projects.delete.modal.confirm2'));
+    const ok = await showConfirm({title:t('projects.delete.modal.confirm2'),message:t('projects.delete.modal.confirm2'),confirmText:t('projects.delete.modal.btn_delete') || 'Usuń',type:'danger',warning:t('projects.delete.modal.warning') || 'Ta operacja jest nieodwracalna.'});
     if(!ok) return;
 
     try{
@@ -380,10 +380,10 @@ document.getElementById('op_open').addEventListener('click', async ()=>{
       }
       await refreshOpenProjects();
       modalHide();
-      alert(t('projects.delete.done'));
+      showToast(t('projects.delete.done'), 'success');
     }catch(err){
       console.error(err);
-      alert((err && err.message) ? err.message : t('projects.delete.error'));
+      showToast((err && err.message) ? err.message : t('projects.delete.error'), 'error');
     }
   }
 
@@ -392,7 +392,7 @@ document.getElementById('op_open').addEventListener('click', async ()=>{
       try{ await openDeleteModal(); }
       catch(err){
         console.error(err);
-        alert((err && err.message) ? err.message : t('projects.delete.error'));
+        showToast((err && err.message) ? err.message : t('projects.delete.error'), 'error');
       }
     });
   }
