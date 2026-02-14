@@ -6,27 +6,40 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from webapp.auth.passwords import hash_password
+from webapp.auth.passwords import hash_password, validate_password_strength
 from webapp.auth.user_store import UserStore, UserRecord
 from webapp.auth.session_store import SessionStore
+from webapp.auth.audit_store import AuditStore
 from webapp.auth.permissions import ALL_USER_ROLES, ALL_ADMIN_ROLES, ROLE_MODULES, ADMIN_ROLE_MODULES, get_user_modules
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 _user_store: Optional[UserStore] = None
 _session_store: Optional[SessionStore] = None
+_audit_store: Optional[AuditStore] = None
 _app_log_fn: Optional[Callable] = None
+_get_settings: Optional[Callable] = None
 
 
 def init(
     user_store: UserStore,
     session_store: SessionStore,
     app_log_fn: Callable,
+    audit_store: Optional[AuditStore] = None,
+    get_settings: Optional[Callable] = None,
 ) -> None:
-    global _user_store, _session_store, _app_log_fn
+    global _user_store, _session_store, _app_log_fn, _audit_store, _get_settings
     _user_store = user_store
     _session_store = session_store
     _app_log_fn = app_log_fn
+    _audit_store = audit_store
+    _get_settings = get_settings
+
+
+def _pw_policy() -> str:
+    if _get_settings:
+        return getattr(_get_settings(), "password_policy", "basic")
+    return "basic"
 
 
 def _require_access_guard(request: Request) -> Optional[JSONResponse]:
@@ -61,6 +74,9 @@ def _user_to_dict(u: UserRecord) -> dict:
         "last_login": u.last_login,
         "language": u.language or "pl",
         "modules": get_user_modules(u.role, u.is_admin, u.admin_roles, u.is_superadmin),
+        "failed_login_count": getattr(u, "failed_login_count", 0),
+        "locked_until": getattr(u, "locked_until", None),
+        "password_changed_at": getattr(u, "password_changed_at", None),
     }
 
 
@@ -112,6 +128,12 @@ async def create_user(request: Request) -> JSONResponse:
         return JSONResponse({"status": "error", "message": "Username required"}, status_code=400)
     if len(password) < 6:
         return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
+
+    # Password policy check
+    pw_err = validate_password_strength(password, _pw_policy())
+    if pw_err:
+        return JSONResponse({"status": "error", "message": pw_err}, status_code=400)
+
     if not is_admin and role not in ALL_USER_ROLES:
         return JSONResponse({"status": "error", "message": f"Invalid role: {role}"}, status_code=400)
     if is_admin:
@@ -131,6 +153,7 @@ async def create_user(request: Request) -> JSONResponse:
             admin_roles=admin_roles if is_admin else [],
             is_superadmin=False,
             created_by=caller.user_id if caller else "system",
+            password_changed_at=datetime.now().isoformat(),
         )
         rec = _user_store.create_user(rec)
     except ValueError as e:
@@ -138,6 +161,9 @@ async def create_user(request: Request) -> JSONResponse:
 
     if _app_log_fn:
         _app_log_fn(f"Users: '{caller.username if caller else '?'}' created user '{username}' with role '{role or admin_roles}'")
+    if _audit_store:
+        _audit_store.log_event("user_created", user_id=rec.user_id, username=username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
 
     return JSONResponse({"status": "ok", "user": _user_to_dict(rec)}, status_code=201)
 
@@ -182,7 +208,11 @@ async def update_user(user_id: str, request: Request) -> JSONResponse:
     if "password" in body and body["password"]:
         if len(body["password"]) < 6:
             return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
+        pw_err = validate_password_strength(body["password"], _pw_policy())
+        if pw_err:
+            return JSONResponse({"status": "error", "message": pw_err}, status_code=400)
         updates["password_hash"] = hash_password(body["password"])
+        updates["password_changed_at"] = datetime.now().isoformat()
 
     try:
         updated = _user_store.update_user(user_id, updates)
@@ -218,6 +248,9 @@ async def delete_user(user_id: str, request: Request) -> JSONResponse:
 
     if _app_log_fn:
         _app_log_fn(f"Users: '{caller.username if caller else '?'}' deleted user '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("user_deleted", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
 
     return JSONResponse({"status": "ok"})
 
@@ -260,6 +293,9 @@ async def ban_user(user_id: str, request: Request) -> JSONResponse:
 
     if _app_log_fn:
         _app_log_fn(f"Users: '{caller.username if caller else '?'}' banned '{existing.username}' (reason: {reason}, sessions removed: {removed})")
+    if _audit_store:
+        _audit_store.log_event("user_banned", user_id=user_id, username=existing.username,
+                               detail=f"reason: {reason}", actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
 
     return JSONResponse({"status": "ok", "sessions_removed": removed})
 
@@ -280,6 +316,9 @@ async def unban_user(user_id: str, request: Request) -> JSONResponse:
     caller = getattr(request.state, "user", None)
     if _app_log_fn:
         _app_log_fn(f"Users: '{caller.username if caller else '?'}' unbanned '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("user_unbanned", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
 
     return JSONResponse({"status": "ok"})
 
@@ -327,6 +366,9 @@ async def approve_user(user_id: str, request: Request) -> JSONResponse:
     caller = getattr(request.state, "user", None)
     if _app_log_fn:
         _app_log_fn(f"Users: '{caller.username if caller else '?'}' approved user '{existing.username}' with role '{role or admin_roles}'")
+    if _audit_store:
+        _audit_store.log_event("user_approved", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
 
     return JSONResponse({"status": "ok", "user": _user_to_dict(updated)})
 
@@ -350,6 +392,9 @@ async def reject_user(user_id: str, request: Request) -> JSONResponse:
     caller = getattr(request.state, "user", None)
     if _app_log_fn:
         _app_log_fn(f"Users: '{caller.username if caller else '?'}' rejected pending user '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("user_rejected", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
 
     return JSONResponse({"status": "ok"})
 
@@ -374,14 +419,48 @@ async def reset_password(user_id: str, request: Request) -> JSONResponse:
     if len(new_pass) < 6:
         return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
 
+    # Password policy check
+    pw_err = validate_password_strength(new_pass, _pw_policy())
+    if pw_err:
+        return JSONResponse({"status": "error", "message": pw_err}, status_code=400)
+
     _user_store.update_user(user_id, {
         "password_hash": hash_password(new_pass),
         "password_reset_requested": False,
         "password_reset_requested_at": None,
+        "password_changed_at": datetime.now().isoformat(),
     })
 
     caller = getattr(request.state, "user", None)
     if _app_log_fn:
         _app_log_fn(f"Users: '{caller.username if caller else '?'}' reset password for '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("password_reset", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/{user_id}/unlock")
+async def unlock_user(user_id: str, request: Request) -> JSONResponse:
+    """Admin endpoint: manually unlock a locked account."""
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    _user_store.update_user(user_id, {"locked_until": None, "failed_login_count": 0})
+
+    caller = getattr(request.state, "user", None)
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' unlocked '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("account_unlocked", user_id=user_id, username=existing.username,
+                               detail="manual unlock by admin",
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
 
     return JSONResponse({"status": "ok"})

@@ -200,6 +200,12 @@
       var statusBadge = u.banned
         ? '<span style="color:#e74c3c;font-weight:600;">Zbanowany <span class="en">Banned</span></span>'
         : '<span style="color:#27ae60;">Aktywny <span class="en">Active</span></span>';
+      if (u.locked_until) {
+        var lockDt = new Date(u.locked_until);
+        if (lockDt > new Date()) {
+          statusBadge += '<br><span style="color:#e67e22;font-weight:600;font-size:.75rem;">\uD83D\uDD12 zablokowane <span class="en">locked</span></span>';
+        }
+      }
       if (u.password_reset_requested) {
         statusBadge += '<br><span style="color:#e67e22;font-weight:600;font-size:.75rem;">\u26A0 wymagany reset <span class="en">reset required</span></span>';
       }
@@ -224,6 +230,10 @@
           acts.appendChild(btn('Odbanuj', function() { unbanUser(u.user_id); }, '#27ae60'));
         } else {
           acts.appendChild(btn('Banuj', function() { openBanModal(u); }, '#e67e22'));
+        }
+        /* Unlock button for locked accounts */
+        if (u.locked_until && new Date(u.locked_until) > new Date()) {
+          acts.appendChild(btn('Odblokuj', function() { unlockUser(u.user_id); }, '#3498db'));
         }
         if (u.password_reset_requested) {
           acts.appendChild(btn('\u26A0 Wymagany reset', function() { openResetPwModal(u); }, '#e74c3c'));
@@ -648,7 +658,187 @@
     }
   });
 
+  /* ---- Unlock User ---- */
+
+  async function unlockUser(uid) {
+    try {
+      await fetch('/api/users/' + uid + '/unlock', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' });
+    } catch (e) { /* ignore */ }
+    loadUsers();
+  }
+
+  /* ---- Audit Log Tab ---- */
+
+  var EVENT_LABELS = {
+    'login':             { pl: 'Logowanie', en: 'Login' },
+    'login_failed':      { pl: 'Nieudane logowanie', en: 'Failed login' },
+    'logout':            { pl: 'Wylogowanie', en: 'Logout' },
+    'password_changed':  { pl: 'Zmiana hasła', en: 'Password changed' },
+    'password_reset':    { pl: 'Reset hasła', en: 'Password reset' },
+    'account_locked':    { pl: 'Konto zablokowane', en: 'Account locked' },
+    'account_unlocked':  { pl: 'Konto odblokowane', en: 'Account unlocked' },
+    'user_created':      { pl: 'Utworzenie konta', en: 'User created' },
+    'user_deleted':      { pl: 'Usunięcie konta', en: 'User deleted' },
+    'user_banned':       { pl: 'Ban', en: 'Banned' },
+    'user_unbanned':     { pl: 'Odbanowanie', en: 'Unbanned' },
+    'user_approved':     { pl: 'Zatwierdzenie', en: 'Approved' },
+    'user_rejected':     { pl: 'Odrzucenie', en: 'Rejected' },
+    'password_expired_redirect': { pl: 'Hasło wygasło', en: 'Password expired' },
+  };
+
+  var EVENT_COLORS = {
+    'login': '#27ae60',
+    'login_failed': '#e74c3c',
+    'account_locked': '#e67e22',
+    'account_unlocked': '#3498db',
+    'user_banned': '#e74c3c',
+    'user_deleted': '#e74c3c',
+    'password_expired_redirect': '#e67e22',
+  };
+
+  var auditData = [];
+  var auditFilterUser = '';
+  var auditFilterEvent = '';
+  var auditOffset = 0;
+  var auditTotal = 0;
+
+  async function loadAuditLog() {
+    var params = new URLSearchParams();
+    if (auditFilterUser) params.set('user_id', auditFilterUser);
+    if (auditFilterEvent) params.set('event', auditFilterEvent);
+    params.set('limit', '100');
+    params.set('offset', String(auditOffset));
+    try {
+      var res = await fetch('/api/auth/audit?' + params.toString());
+      var data = await res.json();
+      if (data.status === 'ok') {
+        auditData = data.events || [];
+        auditTotal = data.total || 0;
+        renderAuditLog();
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function renderAuditLog() {
+    var tbody = document.getElementById('auditBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    auditData.forEach(function(ev) {
+      var tr = document.createElement('tr');
+      var lab = EVENT_LABELS[ev.event] || { pl: ev.event, en: ev.event };
+      var color = EVENT_COLORS[ev.event] || 'var(--text, #333)';
+      var dt = ev.timestamp ? ev.timestamp.replace('T', ' ').slice(0, 19) : '—';
+      var actorInfo = ev.actor_name ? (' <span style="color:var(--muted,#999);font-size:.75rem;">(' + esc(ev.actor_name) + ')</span>') : '';
+      tr.innerHTML =
+        '<td style="font-size:.82rem;white-space:nowrap;">' + esc(dt) + '</td>' +
+        '<td><b>' + esc(ev.username || '—') + '</b></td>' +
+        '<td><span style="color:' + color + ';font-weight:600;">' + lab.pl + ' <span class="en">' + lab.en + '</span></span>' + actorInfo + '</td>' +
+        '<td style="font-size:.82rem;">' + esc(ev.ip || '—') + '</td>' +
+        '<td style="font-size:.8rem;color:var(--muted,#888);">' + esc(ev.detail || '') + '</td>';
+      tbody.appendChild(tr);
+    });
+
+    var info = document.getElementById('auditInfo');
+    if (info) {
+      var showing = Math.min(auditOffset + 100, auditTotal);
+      info.textContent = (auditOffset + 1) + '–' + showing + ' / ' + auditTotal;
+    }
+  }
+
+  /* Audit tab init (deferred to first click) */
+  var auditTabLoaded = false;
+
+  function initAuditTab() {
+    if (auditTabLoaded) return;
+    auditTabLoaded = true;
+
+    /* User filter dropdown */
+    var sel = document.getElementById('auditUserFilter');
+    if (sel) {
+      allUsers.forEach(function(u) {
+        var opt = document.createElement('option');
+        opt.value = u.user_id;
+        opt.textContent = u.username;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', function() { auditFilterUser = sel.value; auditOffset = 0; loadAuditLog(); });
+    }
+
+    /* Event filter */
+    var evtSel = document.getElementById('auditEventFilter');
+    if (evtSel) {
+      evtSel.addEventListener('change', function() { auditFilterEvent = evtSel.value; auditOffset = 0; loadAuditLog(); });
+    }
+
+    /* Pagination */
+    var prevBtn = document.getElementById('auditPrev');
+    var nextBtn = document.getElementById('auditNext');
+    if (prevBtn) prevBtn.addEventListener('click', function() { auditOffset = Math.max(0, auditOffset - 100); loadAuditLog(); });
+    if (nextBtn) nextBtn.addEventListener('click', function() { if (auditOffset + 100 < auditTotal) { auditOffset += 100; loadAuditLog(); } });
+
+    loadAuditLog();
+  }
+
+  /* ---- Security Settings Tab ---- */
+
+  async function loadSecuritySettings() {
+    try {
+      var res = await fetch('/api/settings/security');
+      var data = await res.json();
+      if (data.status === 'ok') {
+        var el;
+        el = document.getElementById('secLockoutThreshold');
+        if (el) el.value = data.account_lockout_threshold;
+        el = document.getElementById('secLockoutDuration');
+        if (el) el.value = data.account_lockout_duration;
+        el = document.getElementById('secPasswordPolicy');
+        if (el) el.value = data.password_policy;
+        el = document.getElementById('secPasswordExpiry');
+        if (el) el.value = data.password_expiry_days;
+        el = document.getElementById('secSessionTimeout');
+        if (el) el.value = data.session_timeout_hours;
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  window.saveSecuritySetting = saveSecuritySetting;
+  async function saveSecuritySetting(key, value) {
+    var payload = {};
+    payload[key] = value;
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      var msg = document.getElementById('secSaveMsg');
+      if (msg) { msg.textContent = 'Zapisano / Saved'; setTimeout(function(){ msg.textContent = ''; }, 2000); }
+    } catch (e) { /* ignore */ }
+  }
+
+  /* ---- Tabs ---- */
+
+  function initTabs() {
+    var tabs = document.querySelectorAll('.users-tab');
+    var panels = document.querySelectorAll('.users-panel');
+
+    tabs.forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        tabs.forEach(function(t) { t.classList.remove('active'); });
+        panels.forEach(function(p) { p.style.display = 'none'; });
+        tab.classList.add('active');
+        var target = tab.dataset.panel;
+        var panel = document.getElementById(target);
+        if (panel) panel.style.display = '';
+        if (target === 'auditPanel') initAuditTab();
+        if (target === 'securityPanel') loadSecuritySettings();
+      });
+    });
+  }
+
   /* ---- Init ---- */
+  initTabs();
   loadRoles().then(function() {
     loadUsers().then(function() {
       if (typeof applyBilingualMode === 'function') applyBilingualMode();

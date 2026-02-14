@@ -188,7 +188,37 @@
       if (res.ok && data.status === 'ok') {
         /* Sync user's server-side language preference to localStorage */
         if (data.language) localStorage.setItem('aistate_ui_lang', data.language);
+        /* Password expiry check — force password change before continuing */
+        if (data.password_expired) {
+          var expMsg = curLang === 'en'
+            ? 'Your password has expired. Please change it now.'
+            : 'Twoje hasło wygasło. Zmień je teraz.';
+          alert(expMsg);
+          var newPw = prompt(curLang === 'en' ? 'New password:' : 'Nowe hasło:');
+          if (newPw && newPw.length >= 6) {
+            var curPw = document.getElementById('password').value;
+            fetch('/api/auth/change-password', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({current_password: curPw, new_password: newPw}),
+            }).then(function(r){ return r.json(); }).then(function(d) {
+              if (d.status === 'ok') {
+                alert(curLang === 'en' ? 'Password changed!' : 'Hasło zmienione!');
+              } else {
+                alert(d.message || 'Error');
+              }
+              location.href = '/';
+            }).catch(function() { location.href = '/'; });
+            btn.disabled = false;
+            return;
+          }
+          location.href = '/';
+          btn.disabled = false;
+          return;
+        }
         location.href = '/';
+      } else if (data.code === 'locked') {
+        errEl.textContent = data.message || 'Account locked';
       } else if (data.code === 'pending') {
         pendingEl.style.display = 'block';
         var container = document.getElementById('pendingApprovers');

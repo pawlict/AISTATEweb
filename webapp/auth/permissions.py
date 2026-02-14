@@ -52,8 +52,8 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     },
     "user_mgmt": {
         "pages": ["/users"],
-        "api_prefixes": ["/api/users"],
-        "api_keywords": [],
+        "api_prefixes": ["/api/users", "/api/auth/audit"],
+        "api_keywords": ["settings/security"],
     },
 }
 
@@ -94,6 +94,7 @@ PUBLIC_ROUTES: Set[str] = {
     "/api/auth/login",
     "/api/auth/register",
     "/api/auth/request-reset",
+    "/api/auth/password-policy",
     "/api/setup/mode",
     "/api/setup/admin",
     "/api/setup/migrate",
@@ -114,6 +115,8 @@ COMMON_ROUTES: Set[str] = {
     "/api/auth/me",
     "/api/auth/change-password",
     "/api/auth/language",
+    "/api/auth/my-audit",
+    "/api/auth/password-policy",
 }
 
 COMMON_PREFIXES: List[str] = [
