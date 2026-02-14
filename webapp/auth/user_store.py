@@ -29,6 +29,8 @@ class UserRecord:
     created_at: str = ""
     created_by: str = ""                # user_id of creator or "system" or "self"
     last_login: Optional[str] = None
+    password_reset_requested: bool = False
+    password_reset_requested_at: Optional[str] = None
 
 
 class UserStore:
