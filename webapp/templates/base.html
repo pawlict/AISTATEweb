@@ -49,7 +49,7 @@
 
       {% if multiuser and user %}
       <div class="user-badge" id="userBadge">
-        <div class="user-badge-role">{{ user.role or (user.admin_roles|join(', ') if user.admin_roles else 'G\u0142\u00f3wny Opiekun') }}</div>
+        <div class="user-badge-role">{% if user.is_superadmin %}Główny Opiekun{% elif user.role %}{{ user.role }}{% elif user.admin_roles %}{{ user.admin_roles|join(', ') }}{% else %}—{% endif %}</div>
         <div class="user-badge-name">{{ user.display_name or user.username }}</div>
         <div class="user-badge-menu" id="userBadgeMenu" style="display:none;">
           <div class="user-badge-lang" id="userLangSwitch">
