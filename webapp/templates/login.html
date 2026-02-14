@@ -7,23 +7,30 @@
   <link rel="stylesheet" href="/static/app.css"/>
   <style>
     body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
-    .login-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 380px; }
+    .login-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 400px; }
     .login-logo { text-align: center; margin-bottom: 1.5rem; }
     .login-logo img { height: 64px; }
     .login-logo h1 { font-size: 1.3rem; margin: .5rem 0 0; color: var(--text, #1a1a2e); }
     .login-logo .ver { font-size: .75rem; color: var(--muted, #888); }
     .login-field { margin-bottom: 1rem; }
     .login-field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .3rem; color: var(--text, #1a1a2e); }
+    .login-field .en { font-size: .595rem; font-weight: 400; color: var(--muted, #999); font-style: italic; margin-left: .3rem; }
     .login-field input { width: 100%; padding: .6rem .75rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .95rem; box-sizing: border-box; outline: none; transition: border-color .2s; }
     .login-field input:focus { border-color: var(--accent, #4a6cf7); }
     .login-btn { width: 100%; padding: .7rem; border: none; border-radius: 8px; background: var(--accent, #4a6cf7); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; transition: opacity .2s; }
     .login-btn:hover { opacity: .9; }
     .login-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .login-btn .en { font-size: .7rem; font-weight: 400; font-style: italic; margin-left: .4rem; }
     .login-error { color: #e74c3c; font-size: .85rem; margin-top: .75rem; min-height: 1.2em; text-align: center; }
     .login-pending { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: .75rem; margin-top: .75rem; font-size: .85rem; color: #92400e; text-align: center; display: none; }
-    .login-pending b { display: block; margin-bottom: .3rem; }
+    .login-pending b { display: block; margin-bottom: .2rem; }
+    .login-pending .en { font-size: .595rem; color: #b8860b; font-style: italic; }
+    .login-pending .role-badges { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: center; margin-top: .4rem; }
+    .login-pending .role-badge { background: #fde68a; color: #92400e; padding: .2rem .5rem; border-radius: 5px; font-size: .78rem; font-weight: 600; }
+    .login-pending .role-badge .en { display: block; font-size: .55rem; font-weight: 400; margin-top: .05rem; }
     .login-link { text-align: center; margin-top: 1rem; font-size: .85rem; }
     .login-link a { color: var(--accent, #4a6cf7); text-decoration: none; font-weight: 600; }
+    .login-link .en { font-size: .595rem; color: var(--muted, #999); font-style: italic; }
   </style>
 </head>
 <body>
@@ -35,61 +42,78 @@
     </div>
     <form id="loginForm" autocomplete="on">
       <div class="login-field">
-        <label for="username" data-i18n="auth.username">Nazwa użytkownika</label>
+        <label for="username">Nazwa użytkownika <span class="en">Username</span></label>
         <input type="text" id="username" name="username" autocomplete="username" required autofocus/>
       </div>
       <div class="login-field">
-        <label for="password" data-i18n="auth.password">Hasło</label>
+        <label for="password">Hasło <span class="en">Password</span></label>
         <input type="password" id="password" name="password" autocomplete="current-password" required/>
       </div>
-      <button type="submit" class="login-btn" id="loginBtn" data-i18n="auth.login">Zaloguj się</button>
+      <button type="submit" class="login-btn" id="loginBtn">Zaloguj się <span class="en">Log in</span></button>
       <div class="login-error" id="loginError"></div>
       <div class="login-pending" id="loginPending">
-        <b data-i18n="auth.pending_title">Konto oczekuje na zatwierdzenie</b>
-        <span data-i18n="auth.pending_contact_short">Skontaktuj się z:</span>
-        <span id="pendingApprovers"></span>
+        <b>Konto oczekuje na zatwierdzenie</b>
+        <span class="en">Account pending approval</span>
+        <div style="margin-top:.4rem;">Zatwierdzenia konta dokonuje:</div>
+        <div class="en">Account approval is handled by:</div>
+        <div class="role-badges" id="pendingApprovers"></div>
       </div>
     </form>
     <div class="login-link">
-      <span data-i18n="auth.no_account">Nie masz konta?</span> <a href="/register" data-i18n="auth.register_link">Zarejestruj się</a>
+      <span>Nie masz konta?</span> <a href="/register">Zarejestruj się</a>
+      <div class="en">Don't have an account? <a href="/register" style="color:var(--accent,#4a6cf7);font-size:.595rem;">Register</a></div>
     </div>
   </div>
 <script>
-document.getElementById('loginForm').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  var btn = document.getElementById('loginBtn');
-  var errEl = document.getElementById('loginError');
-  var pendingEl = document.getElementById('loginPending');
-  btn.disabled = true;
-  errEl.textContent = '';
-  pendingEl.style.display = 'none';
+(function(){
+  var roleEN = {
+    'Super Admin': 'Super Admin',
+    'Strażnik Dostępu': 'Access Guardian',
+    'Architekt Funkcji': 'Function Architect'
+  };
 
-  try {
-    var res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        username: document.getElementById('username').value.trim(),
-        password: document.getElementById('password').value,
-      }),
-    });
-    var data = await res.json();
-    if (res.ok && data.status === 'ok') {
-      location.href = '/';
-    } else if (data.code === 'pending') {
-      // Show pending approval info
-      pendingEl.style.display = 'block';
-      var names = (data.approvers || []).join(', ') || '—';
-      document.getElementById('pendingApprovers').textContent = names;
-    } else {
-      errEl.textContent = data.message || 'Login failed';
+  document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('loginBtn');
+    var errEl = document.getElementById('loginError');
+    var pendingEl = document.getElementById('loginPending');
+    btn.disabled = true;
+    errEl.textContent = '';
+    pendingEl.style.display = 'none';
+
+    try {
+      var res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          username: document.getElementById('username').value.trim(),
+          password: document.getElementById('password').value,
+        }),
+      });
+      var data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        location.href = '/';
+      } else if (data.code === 'pending') {
+        pendingEl.style.display = 'block';
+        var container = document.getElementById('pendingApprovers');
+        container.innerHTML = '';
+        var roles = data.approvers || [];
+        roles.forEach(function(role) {
+          var badge = document.createElement('div');
+          badge.className = 'role-badge';
+          badge.innerHTML = role + (roleEN[role] ? '<span class="en">' + roleEN[role] + '</span>' : '');
+          container.appendChild(badge);
+        });
+      } else {
+        errEl.textContent = data.message || 'Login failed';
+      }
+    } catch (err) {
+      errEl.textContent = 'Connection error';
+    } finally {
+      btn.disabled = false;
     }
-  } catch (err) {
-    errEl.textContent = 'Connection error';
-  } finally {
-    btn.disabled = false;
-  }
-});
+  });
+})();
 </script>
 </body>
 </html>
