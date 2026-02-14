@@ -22,8 +22,10 @@ class UserRecord:
     banned: bool = False
     banned_until: Optional[str] = None  # ISO datetime or None
     ban_reason: Optional[str] = None
+    pending: bool = False               # True = waiting for admin approval
+    pending_role: Optional[str] = None  # requested role (shown to admin for approval)
     created_at: str = ""
-    created_by: str = ""                # user_id of creator or "system"
+    created_by: str = ""                # user_id of creator or "system" or "self"
     last_login: Optional[str] = None
 
 
@@ -128,3 +130,21 @@ class UserStore:
 
     def has_users(self) -> bool:
         return self.user_count() > 0
+
+    def has_approved_users(self) -> bool:
+        """Return True if at least one non-pending user exists."""
+        with self._lock:
+            data = self._read()
+        return any(not d.get("pending", False) for d in data.values())
+
+    def get_access_guard_names(self) -> List[str]:
+        """Return display names of users who can approve accounts."""
+        with self._lock:
+            data = self._read()
+        names: List[str] = []
+        for d in data.values():
+            if d.get("is_superadmin"):
+                names.append(d.get("display_name") or d.get("username", "?"))
+            elif d.get("is_admin") and "Strażnik Dostępu" in (d.get("admin_roles") or []):
+                names.append(d.get("display_name") or d.get("username", "?"))
+        return names

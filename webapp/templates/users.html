@@ -78,6 +78,51 @@
   </div>
 </div>
 
+<!-- Modal: Approve Pending User -->
+<div id="approveModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:420px;">
+    <h3 data-i18n="users.approve_title">Zatwierdź użytkownika</h3>
+    <p style="margin-bottom:.8rem;">
+      <span data-i18n="users.approve_for">Przypisz rolę dla:</span>
+      <b id="approveUsername"></b>
+    </p>
+    <div class="field" style="margin-bottom:.8rem;">
+      <label style="cursor:pointer;">
+        <input type="checkbox" id="approveIsAdmin"/> <span data-i18n="users.field_is_admin">Konto administratora</span>
+      </label>
+    </div>
+    <div id="approveRoleSection">
+      <div class="field" style="margin-bottom:.8rem;">
+        <label for="approveRole" data-i18n="users.field_role">Rola użytkownika</label>
+        <select id="approveRole"></select>
+      </div>
+    </div>
+    <div id="approveAdminRoleSection" style="display:none;">
+      <div class="field" style="margin-bottom:.8rem;">
+        <label data-i18n="users.field_admin_roles">Role administratora</label>
+        <div id="approveAdminRolesChecks"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1.2rem;">
+      <button class="btn btn-secondary" id="approveCancel" data-i18n="users.cancel">Anuluj</button>
+      <button class="btn" style="background:#27ae60;" id="approveConfirm" data-i18n="users.approve">Zatwierdź</button>
+    </div>
+    <div class="error" id="approveError" style="color:#e74c3c;font-size:.85rem;margin-top:.5rem;min-height:1.2em;"></div>
+  </div>
+</div>
+
+<!-- Modal: Reject Pending User -->
+<div id="rejectModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:360px;text-align:center;">
+    <h3 data-i18n="users.reject_title">Odrzuć rejestrację</h3>
+    <p id="rejectMsg"></p>
+    <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;">
+      <button class="btn btn-secondary" id="rejectCancel" data-i18n="users.cancel">Anuluj</button>
+      <button class="btn" style="background:#e74c3c;" id="rejectConfirm" data-i18n="users.reject">Odrzuć</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Ban -->
 <div id="banModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" style="max-width:400px;">

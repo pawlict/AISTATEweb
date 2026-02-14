@@ -1847,8 +1847,12 @@ async def _startup_nllb_autoscan() -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 @app.get("/", response_class=HTMLResponse)
-def home() -> Any:
-    # Default route: play Intro (once per browser session) then go to the app.
+def home(request: Request) -> Any:
+    # Multi-user mode: skip Intro animation, go directly to projects
+    if getattr(request.state, "multiuser", False):
+        return RedirectResponse(url="/new-project", status_code=302)
+
+    # Single-user mode: play Intro (once per browser session) then go to the app.
     # We keep it client-side via sessionStorage so it doesn't require cookies.
     html = """<!doctype html>
 <html lang=\"pl\"><head>
@@ -1899,6 +1903,20 @@ def page_banned(request: Request) -> Any:
     return TEMPLATES.TemplateResponse("banned.html", {
         "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
         "reason": reason,
+    })
+
+
+@app.get("/register", response_class=HTMLResponse)
+def page_register(request: Request) -> Any:
+    return TEMPLATES.TemplateResponse("register.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+    })
+
+
+@app.get("/pending", response_class=HTMLResponse)
+def page_pending(request: Request) -> Any:
+    return TEMPLATES.TemplateResponse("pending.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
     })
 
 

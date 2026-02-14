@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Oczekiwanie na zatwierdzenie — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css"/>
+  <style>
+    body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
+    .pending-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 440px; text-align: center; }
+    .pending-card h1 { font-size: 1.2rem; margin: 0 0 1rem; color: var(--text, #1a1a2e); }
+    .pending-icon { font-size: 3rem; margin-bottom: .5rem; }
+    .pending-card p { color: var(--muted, #666); font-size: .95rem; margin: .5rem 0; line-height: 1.5; }
+    .approver-box { background: #f0f7ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: .75rem 1rem; margin: 1rem 0; color: #1e40af; font-size: .9rem; }
+    .pending-card a { display: inline-block; margin-top: 1.5rem; color: var(--accent, #4a6cf7); text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="pending-card">
+    <div class="pending-icon">&#9203;</div>
+    <h1 data-i18n="auth.pending_title">Konto oczekuje na zatwierdzenie</h1>
+    <p data-i18n="auth.pending_message">Twoje konto zostało utworzone pomyślnie. Zanim będziesz mógł się zalogować, administrator musi zatwierdzić Twoje konto i przypisać rolę.</p>
+    <div class="approver-box" id="approverInfo" style="display:none;">
+      <b data-i18n="auth.pending_contact">Skontaktuj się z:</b>
+      <span id="approverNames"></span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted,#999);" data-i18n="auth.pending_hint">
+      Po zatwierdzeniu będziesz mógł zalogować się używając swojego loginu i hasła.
+    </p>
+    <a href="/login" data-i18n="auth.back_to_login">Powrót do logowania</a>
+  </div>
+<script>
+(function(){
+  var params = new URLSearchParams(location.search);
+  var approvers = params.get('approvers');
+  if (approvers) {
+    document.getElementById('approverInfo').style.display = 'block';
+    document.getElementById('approverNames').textContent = approvers;
+  }
+})();
+</script>
+</body>
+</html>

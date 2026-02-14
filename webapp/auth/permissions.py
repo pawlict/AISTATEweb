@@ -87,9 +87,12 @@ ALL_ADMIN_ROLES: List[str] = list(ADMIN_ROLE_MODULES.keys())
 
 PUBLIC_ROUTES: Set[str] = {
     "/login",
+    "/register",
+    "/pending",
     "/setup",
     "/banned",
     "/api/auth/login",
+    "/api/auth/register",
     "/api/setup/mode",
     "/api/setup/admin",
     "/api/setup/migrate",
@@ -98,6 +101,7 @@ PUBLIC_ROUTES: Set[str] = {
 PUBLIC_PREFIXES: List[str] = [
     "/static/",
     "/api/auth/login",
+    "/api/auth/register",
     "/api/setup/",
 ]
 

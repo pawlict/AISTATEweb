@@ -53,6 +53,8 @@ def _user_to_dict(u: UserRecord) -> dict:
         "banned": u.banned,
         "banned_until": u.banned_until,
         "ban_reason": u.ban_reason,
+        "pending": u.pending,
+        "pending_role": u.pending_role,
         "created_at": u.created_at,
         "created_by": u.created_by,
         "last_login": u.last_login,
@@ -272,6 +274,76 @@ async def unban_user(user_id: str, request: Request) -> JSONResponse:
     caller = getattr(request.state, "user", None)
     if _app_log_fn:
         _app_log_fn(f"Users: '{caller.username if caller else '?'}' unbanned '{existing.username}'")
+
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/{user_id}/approve")
+async def approve_user(user_id: str, request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    if not existing.pending:
+        return JSONResponse({"status": "error", "message": "User is not pending"}, status_code=400)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    role = body.get("role")
+    is_admin = bool(body.get("is_admin", False))
+    admin_roles = body.get("admin_roles") or []
+
+    if not is_admin and (not role or role not in ALL_USER_ROLES):
+        return JSONResponse({"status": "error", "message": f"Invalid role: {role}"}, status_code=400)
+    if is_admin:
+        for ar in admin_roles:
+            if ar not in ALL_ADMIN_ROLES:
+                return JSONResponse({"status": "error", "message": f"Invalid admin role: {ar}"}, status_code=400)
+
+    updates: dict = {
+        "pending": False,
+        "pending_role": None,
+        "role": role if not is_admin else None,
+        "is_admin": is_admin,
+        "admin_roles": admin_roles if is_admin else [],
+    }
+
+    updated = _user_store.update_user(user_id, updates)
+
+    caller = getattr(request.state, "user", None)
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' approved user '{existing.username}' with role '{role or admin_roles}'")
+
+    return JSONResponse({"status": "ok", "user": _user_to_dict(updated)})
+
+
+@router.post("/{user_id}/reject")
+async def reject_user(user_id: str, request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    if not existing.pending:
+        return JSONResponse({"status": "error", "message": "User is not pending"}, status_code=400)
+
+    _user_store.delete_user(user_id)
+
+    caller = getattr(request.state, "user", None)
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' rejected pending user '{existing.username}'")
 
     return JSONResponse({"status": "ok"})
 

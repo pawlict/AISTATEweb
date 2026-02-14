@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Rejestracja — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css"/>
+  <style>
+    body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
+    .reg-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 400px; }
+    .reg-logo { text-align: center; margin-bottom: 1.5rem; }
+    .reg-logo img { height: 56px; }
+    .reg-logo h1 { font-size: 1.2rem; margin: .5rem 0 0; color: var(--text, #1a1a2e); }
+    .reg-logo .ver { font-size: .75rem; color: var(--muted, #888); }
+    h2 { font-size: 1.05rem; margin: 0 0 .3rem; color: var(--text, #1a1a2e); }
+    .sub { font-size: .82rem; color: var(--muted, #888); margin: 0 0 1.2rem; }
+    .field { margin-bottom: .9rem; }
+    .field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .3rem; color: var(--text, #1a1a2e); }
+    .field input { width: 100%; padding: .6rem .75rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .95rem; box-sizing: border-box; outline: none; transition: border-color .2s; }
+    .field input:focus { border-color: var(--accent, #4a6cf7); }
+    .reg-btn { width: 100%; padding: .7rem; border: none; border-radius: 8px; background: var(--accent, #4a6cf7); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+    .reg-btn:hover { opacity: .9; }
+    .reg-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .reg-error { color: #e74c3c; font-size: .85rem; margin-top: .75rem; min-height: 1.2em; text-align: center; }
+    .reg-link { text-align: center; margin-top: 1rem; font-size: .85rem; }
+    .reg-link a { color: var(--accent, #4a6cf7); text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="reg-card">
+    <div class="reg-logo">
+      <img src="/static/logo.png" alt="Logo"/>
+      <h1>{{ app_name }}</h1>
+      <div class="ver">{{ app_version }}</div>
+    </div>
+    <h2 data-i18n="auth.register_title">Utwórz konto</h2>
+    <p class="sub" data-i18n="auth.register_desc">Po rejestracji konto musi zostać zatwierdzone przez administratora.</p>
+    <form id="regForm" autocomplete="on">
+      <div class="field">
+        <label for="username" data-i18n="auth.username">Nazwa użytkownika</label>
+        <input type="text" id="username" name="username" autocomplete="username" required autofocus minlength="3"/>
+      </div>
+      <div class="field">
+        <label for="display_name" data-i18n="auth.display_name">Wyświetlana nazwa (opcjonalna)</label>
+        <input type="text" id="display_name" name="display_name" autocomplete="name"/>
+      </div>
+      <div class="field">
+        <label for="password" data-i18n="auth.password">Hasło (min. 6 znaków)</label>
+        <input type="password" id="password" name="password" autocomplete="new-password" required minlength="6"/>
+      </div>
+      <div class="field">
+        <label for="password2" data-i18n="auth.password_confirm">Powtórz hasło</label>
+        <input type="password" id="password2" autocomplete="new-password" required/>
+      </div>
+      <button type="submit" class="reg-btn" id="regBtn" data-i18n="auth.register_submit">Zarejestruj się</button>
+      <div class="reg-error" id="regError"></div>
+    </form>
+    <div class="reg-link">
+      <span data-i18n="auth.have_account">Masz już konto?</span> <a href="/login" data-i18n="auth.login">Zaloguj się</a>
+    </div>
+  </div>
+<script>
+document.getElementById('regForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('regBtn');
+  var errEl = document.getElementById('regError');
+  btn.disabled = true;
+  errEl.textContent = '';
+
+  var password = document.getElementById('password').value;
+  var password2 = document.getElementById('password2').value;
+
+  if (password !== password2) {
+    errEl.textContent = 'Hasła nie są identyczne';
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    var res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        username: document.getElementById('username').value.trim(),
+        display_name: document.getElementById('display_name').value.trim(),
+        password: password,
+      }),
+    });
+    var data = await res.json();
+    if (res.ok && data.status === 'ok') {
+      // Redirect to pending page with approver info
+      var params = '';
+      if (data.approvers && data.approvers.length > 0) {
+        params = '?approvers=' + encodeURIComponent(data.approvers.join(', '));
+      }
+      location.href = '/pending' + params;
+    } else {
+      errEl.textContent = data.message || 'Registration failed';
+    }
+  } catch (err) {
+    errEl.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
