@@ -2,26 +2,48 @@
 (function(){
   'use strict';
 
-  let allUsers = [];
-  let userRoles = [];
-  let adminRoles = [];
-  let editingUserId = null;
+  var allUsers = [];
+  var userRoles = [];
+  var adminRoles = [];
+  var roleModules = {};     // role name → [module keys]
+  var adminRoleModules = {}; // admin role → [module keys]
+  var editingUserId = null;
+
+  /* Module key → PL/EN labels */
+  var MODULE_LABELS = {
+    projects:       { pl: 'Projekty',       en: 'Projects' },
+    transcription:  { pl: 'Transkrypcja',   en: 'Transcription' },
+    diarization:    { pl: 'Diaryzacja',     en: 'Diarization' },
+    translation:    { pl: 'Tłumaczenia',    en: 'Translation' },
+    analysis:       { pl: 'Analiza',        en: 'Analysis' },
+    chat:           { pl: 'Czat / LLM',     en: 'Chat / LLM' },
+    admin_settings: { pl: 'Panel admina',   en: 'Admin panel' },
+    user_mgmt:      { pl: 'Użytkownicy',   en: 'Users' },
+  };
+
+  /* All module keys in display order */
+  var MODULE_ORDER = ['projects','transcription','diarization','translation','analysis','chat','admin_settings','user_mgmt'];
+
+  /* ---- Data loading ---- */
 
   async function loadRoles() {
     try {
-      const res = await fetch('/api/users/roles');
-      const data = await res.json();
+      var res = await fetch('/api/users/roles');
+      var data = await res.json();
       if (data.status === 'ok') {
         userRoles = data.user_roles || [];
         adminRoles = data.admin_roles || [];
+        roleModules = data.role_modules || {};
+        adminRoleModules = data.admin_role_modules || {};
+        buildRoleMatrix();
       }
     } catch (e) { /* ignore */ }
   }
 
   async function loadUsers() {
     try {
-      const res = await fetch('/api/users');
-      const data = await res.json();
+      var res = await fetch('/api/users');
+      var data = await res.json();
       if (data.status === 'ok') {
         allUsers = data.users || [];
         renderTable();
@@ -29,19 +51,72 @@
     } catch (e) { /* ignore */ }
   }
 
+  /* ---- Role-access matrix table ---- */
+
+  function buildRoleMatrix() {
+    var thead = document.getElementById('roleMatrixHead');
+    var tbody = document.getElementById('roleMatrixBody');
+    if (!thead || !tbody) return;
+
+    /* Header row: Rola | Module1 | Module2 | ... */
+    thead.innerHTML = '<th>Rola <br><span class="en">Role</span></th>';
+    MODULE_ORDER.forEach(function(mk) {
+      var lab = MODULE_LABELS[mk] || { pl: mk, en: mk };
+      thead.innerHTML += '<th>' + esc(lab.pl) + '<br><span class="en">' + esc(lab.en) + '</span></th>';
+    });
+
+    /* Body: one row per user role */
+    tbody.innerHTML = '';
+    userRoles.forEach(function(role) {
+      var mods = roleModules[role] || [];
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + esc(role) + '</td>';
+      MODULE_ORDER.forEach(function(mk) {
+        if (mods.indexOf(mk) !== -1) {
+          tr.innerHTML += '<td class="check">&#10003;</td>';
+        } else {
+          tr.innerHTML += '<td class="dash">—</td>';
+        }
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  /* ---- Module hints for role selects ---- */
+
+  function showModuleHint(selectId, hintId) {
+    var sel = document.getElementById(selectId);
+    var hint = document.getElementById(hintId);
+    if (!sel || !hint) return;
+
+    function update() {
+      var role = sel.value;
+      var mods = roleModules[role] || [];
+      if (mods.length === 0) { hint.innerHTML = ''; return; }
+      var labels = mods.map(function(mk) {
+        var lab = MODULE_LABELS[mk];
+        return lab ? (lab.pl + ' <span class="en">' + lab.en + '</span>') : mk;
+      });
+      hint.innerHTML = 'Dostęp do: <span class="en">Access to:</span> ' + labels.join(', ');
+    }
+
+    sel.addEventListener('change', update);
+    update();
+  }
+
+  /* ---- Users table ---- */
+
   function renderTable() {
-    const tbody = document.getElementById('usersBody');
+    var tbody = document.getElementById('usersBody');
     tbody.innerHTML = '';
 
-    // Separate pending and active users
     var pendingUsers = allUsers.filter(function(u) { return u.pending; });
     var activeUsers = allUsers.filter(function(u) { return !u.pending; });
 
-    // Render pending section if any
     if (pendingUsers.length > 0) {
       var headerTr = document.createElement('tr');
       headerTr.innerHTML = '<td colspan="6" style="background:#fef3c7;color:#92400e;font-weight:600;padding:.6rem .75rem;border-bottom:2px solid #fcd34d;">' +
-        'Oczekujące na zatwierdzenie (' + pendingUsers.length + ')' +
+        'Oczekujące na zatwierdzenie <span class="en">Pending approval</span> (' + pendingUsers.length + ')' +
         '</td>';
       tbody.appendChild(headerTr);
 
@@ -51,8 +126,8 @@
         tr.innerHTML =
           '<td><b>' + esc(u.username) + '</b></td>' +
           '<td>' + esc(u.display_name || '') + '</td>' +
-          '<td><span style="color:#d97706;font-style:italic;">Oczekuje</span></td>' +
-          '<td><span style="color:#d97706;">Pending</span></td>' +
+          '<td><span style="color:#d97706;font-style:italic;">Oczekuje <span class="en">Pending</span></span></td>' +
+          '<td><span style="color:#d97706;">—</span></td>' +
           '<td style="font-size:.8rem;">' + esc(u.created_at ? u.created_at.replace('T',' ').slice(0,19) : '—') + '</td>' +
           '<td class="actions-cell"></td>';
 
@@ -63,7 +138,6 @@
         tbody.appendChild(tr);
       });
 
-      // Separator
       if (activeUsers.length > 0) {
         var sepTr = document.createElement('tr');
         sepTr.innerHTML = '<td colspan="6" style="padding:.3rem;"></td>';
@@ -71,12 +145,11 @@
       }
     }
 
-    // Render active users
     activeUsers.forEach(function(u) {
       var tr = document.createElement('tr');
       var statusBadge = u.banned
-        ? '<span style="color:#e74c3c;font-weight:600;">Zbanowany</span>'
-        : '<span style="color:#27ae60;">Aktywny</span>';
+        ? '<span style="color:#e74c3c;font-weight:600;">Zbanowany <span class="en">Banned</span></span>'
+        : '<span style="color:#27ae60;">Aktywny <span class="en">Active</span></span>';
 
       var roleText = u.role || '';
       if (u.is_superadmin) roleText = 'Super Admin';
@@ -93,15 +166,12 @@
       var acts = tr.querySelector('.actions-cell');
 
       if (!u.is_superadmin) {
-        var editBtn = btn('Edytuj', function() { openEditModal(u); });
-        acts.appendChild(editBtn);
-
+        acts.appendChild(btn('Edytuj', function() { openEditModal(u); }));
         if (u.banned) {
           acts.appendChild(btn('Odbanuj', function() { unbanUser(u.user_id); }));
         } else {
           acts.appendChild(btn('Ban', function() { openBanModal(u.user_id); }, '#e67e22'));
         }
-
         acts.appendChild(btn('Reset hasła', function() { resetPassword(u.user_id); }));
         acts.appendChild(btn('Usuń', function() { openDeleteModal(u); }, '#e74c3c'));
       } else {
@@ -127,7 +197,7 @@
     return d.innerHTML;
   }
 
-  // --- Add/Edit Modal ---
+  /* ---- Add/Edit Modal ---- */
 
   function populateRoleSelect(targetId) {
     var sel = document.getElementById(targetId || 'uRole');
@@ -145,7 +215,13 @@
     adminRoles.forEach(function(r) {
       var label = document.createElement('label');
       label.style.cssText = 'display:block;cursor:pointer;margin:.2rem 0;';
-      label.innerHTML = '<input type="checkbox" value="' + esc(r) + '"/> ' + esc(r);
+      var desc = adminRoleModules[r] || [];
+      var descLabels = desc.map(function(mk) {
+        var lab = MODULE_LABELS[mk];
+        return lab ? lab.pl : mk;
+      }).join(', ');
+      label.innerHTML = '<input type="checkbox" value="' + esc(r) + '"/> ' + esc(r) +
+        (descLabels ? ' <span style="font-size:.76rem;color:var(--muted,#999);">(' + esc(descLabels) + ')</span>' : '');
       checks.appendChild(label);
     });
   }
@@ -157,7 +233,7 @@
 
   document.getElementById('btnAddUser').addEventListener('click', function() {
     editingUserId = null;
-    document.getElementById('userModalTitle').textContent = 'Dodaj użytkownika';
+    document.getElementById('userModalTitle').innerHTML = 'Dodaj użytkownika <span class="en">Add user</span>';
     document.getElementById('uUsername').value = '';
     document.getElementById('uDisplayName').value = '';
     document.getElementById('uPassword').value = '';
@@ -165,13 +241,14 @@
     document.getElementById('uIsAdmin').dispatchEvent(new Event('change'));
     populateRoleSelect('uRole');
     populateAdminChecks('adminRolesChecks');
+    showModuleHint('uRole', 'uRoleModules');
     document.getElementById('userModalError').textContent = '';
     document.getElementById('userModal').style.display = 'flex';
   });
 
   function openEditModal(u) {
     editingUserId = u.user_id;
-    document.getElementById('userModalTitle').textContent = 'Edytuj: ' + u.username;
+    document.getElementById('userModalTitle').innerHTML = 'Edytuj: ' + esc(u.username) + ' <span class="en">Edit</span>';
     document.getElementById('uUsername').value = u.username;
     document.getElementById('uDisplayName').value = u.display_name || '';
     document.getElementById('uPassword').value = '';
@@ -185,6 +262,7 @@
         cb.checked = u.admin_roles.includes(cb.value);
       });
     }
+    showModuleHint('uRole', 'uRoleModules');
     document.getElementById('userModalError').textContent = '';
     document.getElementById('userModal').style.display = 'flex';
   }
@@ -244,7 +322,7 @@
     }
   });
 
-  // --- Approve Modal ---
+  /* ---- Approve Modal ---- */
 
   var approvingUser = null;
 
@@ -255,6 +333,7 @@
     document.getElementById('approveIsAdmin').dispatchEvent(new Event('change'));
     populateRoleSelect('approveRole');
     populateAdminChecks('approveAdminRolesChecks');
+    showModuleHint('approveRole', 'approveRoleModules');
     document.getElementById('approveError').textContent = '';
     document.getElementById('approveModal').style.display = 'flex';
   }
@@ -300,13 +379,13 @@
     }
   });
 
-  // --- Reject Modal ---
+  /* ---- Reject Modal ---- */
 
   var rejectingUser = null;
 
   function openRejectModal(u) {
     rejectingUser = u;
-    document.getElementById('rejectMsg').textContent = 'Odrzucić rejestrację użytkownika "' + u.username + '"? Konto zostanie usunięte.';
+    document.getElementById('rejectMsg').innerHTML = 'Odrzucić rejestrację użytkownika "<b>' + esc(u.username) + '</b>"? Konto zostanie usunięte.<br><span class="en">Reject registration for "' + esc(u.username) + '"? Account will be deleted.</span>';
     document.getElementById('rejectModal').style.display = 'flex';
   }
 
@@ -327,13 +406,13 @@
     loadUsers();
   });
 
-  // --- Delete Modal ---
+  /* ---- Delete Modal ---- */
 
   var deletingUserId = null;
 
   function openDeleteModal(u) {
     deletingUserId = u.user_id;
-    document.getElementById('deleteMsg').textContent = 'Czy na pewno chcesz usunąć użytkownika "' + u.username + '"?';
+    document.getElementById('deleteMsg').innerHTML = 'Czy na pewno chcesz usunąć użytkownika "<b>' + esc(u.username) + '</b>"?<br><span class="en">Are you sure you want to delete user "' + esc(u.username) + '"?</span>';
     document.getElementById('deleteModal').style.display = 'flex';
   }
 
@@ -350,7 +429,7 @@
     loadUsers();
   });
 
-  // --- Ban Modal ---
+  /* ---- Ban Modal ---- */
 
   var banningUserId = null;
 
@@ -388,8 +467,8 @@
   }
 
   async function resetPassword(uid) {
-    var pw = prompt('Nowe hasło (min. 6 znaków):');
-    if (!pw || pw.length < 6) { alert('Hasło musi mieć min. 6 znaków'); return; }
+    var pw = prompt('Nowe hasło (min. 6 znaków) / New password (min. 6 chars):');
+    if (!pw || pw.length < 6) { alert('Hasło musi mieć min. 6 znaków / Password must be at least 6 characters'); return; }
     try {
       var res = await fetch('/api/users/' + uid + '/reset-password', {
         method: 'POST',
@@ -397,11 +476,11 @@
         body: JSON.stringify({ new_password: pw }),
       });
       var data = await res.json();
-      if (res.ok) alert('Hasło zmienione');
+      if (res.ok) alert('Hasło zmienione / Password changed');
       else alert(data.message || 'Error');
     } catch (e) { alert('Connection error'); }
   }
 
-  // --- Init ---
+  /* ---- Init ---- */
   loadRoles().then(function() { loadUsers(); });
 })();

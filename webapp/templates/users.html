@@ -1,66 +1,105 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card" style="padding:1.5rem;">
-  <h2 style="margin-top:0;" data-i18n="users.title">Zarządzanie użytkownikami</h2>
-  <p style="color:var(--muted,#888);font-size:.85rem;" data-i18n="users.subtitle">
+  <h2 style="margin-top:0;">Zarządzanie użytkownikami <span class="en">User management</span></h2>
+  <p style="color:var(--muted,#888);font-size:.85rem;">
     Twórz, edytuj, banuj i usuwaj użytkowników. Przypisuj role i resetuj hasła.
+    <br><span class="en">Create, edit, ban and delete users. Assign roles and reset passwords.</span>
   </p>
 
   <div style="display:flex;justify-content:space-between;align-items:center;margin:1.2rem 0 .8rem;">
-    <button class="btn" id="btnAddUser" data-i18n="users.add">Dodaj użytkownika</button>
+    <button class="btn" id="btnAddUser">Dodaj użytkownika <span class="en">Add user</span></button>
   </div>
 
   <table class="data-table" id="usersTable" style="width:100%;">
     <thead>
       <tr>
-        <th data-i18n="users.col_username">Użytkownik</th>
-        <th data-i18n="users.col_display_name">Nazwa</th>
-        <th data-i18n="users.col_role">Rola</th>
-        <th data-i18n="users.col_status">Status</th>
-        <th data-i18n="users.col_last_login">Ostatnie logowanie</th>
-        <th data-i18n="users.col_actions">Akcje</th>
+        <th>Użytkownik <br><span class="en">User</span></th>
+        <th>Nazwa <br><span class="en">Name</span></th>
+        <th>Rola / Grupa <br><span class="en">Role / Group</span></th>
+        <th>Status</th>
+        <th>Ostatnie logowanie <br><span class="en">Last login</span></th>
+        <th>Akcje <br><span class="en">Actions</span></th>
       </tr>
     </thead>
     <tbody id="usersBody"></tbody>
   </table>
 </div>
 
+<!-- Role-access reference table -->
+<div class="card" style="padding:1.5rem;margin-top:1rem;">
+  <h3 style="margin-top:0;">Uprawnienia ról — dostęp do modułów <br><span class="en">Role permissions — module access</span></h3>
+  <p style="color:var(--muted,#888);font-size:.82rem;margin-bottom:1rem;">
+    Każda rola daje dostęp do określonych modułów. Użytkownik widzi w menu tylko te moduły, do których ma uprawnienia.
+    <br><span class="en">Each role grants access to specific modules. Users only see modules they have permissions for.</span>
+  </p>
+  <div style="overflow-x:auto;">
+    <table class="data-table role-matrix" id="roleMatrix" style="width:100%;font-size:.85rem;">
+      <thead><tr id="roleMatrixHead"></tr></thead>
+      <tbody id="roleMatrixBody"></tbody>
+    </table>
+  </div>
+  <div style="margin-top:.8rem;display:flex;flex-wrap:wrap;gap:.5rem;">
+    <div style="padding:.4rem .75rem;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;font-size:.78rem;color:#1e40af;">
+      <b>Super Admin</b> — pełny dostęp do wszystkich modułów <br><span class="en">Full access to all modules</span>
+    </div>
+    <div style="padding:.4rem .75rem;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:.78rem;color:#92400e;">
+      <b>Architekt Funkcji</b> <span class="en">Function Architect</span> — ustawienia systemowe <span class="en">system settings</span>
+    </div>
+    <div style="padding:.4rem .75rem;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:.78rem;color:#92400e;">
+      <b>Strażnik Dostępu</b> <span class="en">Access Guardian</span> — zarządzanie użytkownikami <span class="en">user management</span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .en { font-size: 70%; color: var(--muted, #999); font-style: italic; }
+  th .en, td .en { font-size: 70%; }
+  .role-matrix th, .role-matrix td { text-align: center; padding: .45rem .5rem; vertical-align: middle; }
+  .role-matrix th:first-child, .role-matrix td:first-child { text-align: left; font-weight: 600; }
+  .role-matrix .check { color: #27ae60; font-weight: 700; font-size: 1.1rem; }
+  .role-matrix .dash { color: #ddd; }
+  .role-matrix thead th { background: var(--card-bg, #f8f9fa); font-size: .78rem; white-space: nowrap; }
+  .role-matrix tbody tr:hover { background: rgba(74,108,247,.04); }
+</style>
+
 <!-- Modal: Add/Edit User -->
 <div id="userModal" class="modal-overlay" style="display:none;">
-  <div class="modal-box" style="max-width:420px;">
-    <h3 id="userModalTitle" data-i18n="users.add">Dodaj użytkownika</h3>
+  <div class="modal-box" style="max-width:440px;">
+    <h3 id="userModalTitle">Dodaj użytkownika <span class="en">Add user</span></h3>
     <div class="field" style="margin-bottom:.8rem;">
-      <label for="uUsername" data-i18n="users.field_username">Nazwa użytkownika</label>
+      <label for="uUsername">Nazwa użytkownika <span class="en">Username</span></label>
       <input type="text" id="uUsername" autocomplete="off"/>
     </div>
     <div class="field" style="margin-bottom:.8rem;">
-      <label for="uDisplayName" data-i18n="users.field_display_name">Wyświetlana nazwa</label>
+      <label for="uDisplayName">Wyświetlana nazwa <span class="en">Display name</span></label>
       <input type="text" id="uDisplayName" autocomplete="off"/>
     </div>
     <div class="field" style="margin-bottom:.8rem;">
-      <label for="uPassword" data-i18n="users.field_password">Hasło (min. 6 znaków)</label>
+      <label for="uPassword">Hasło (min. 6 znaków) <span class="en">Password (min. 6 chars)</span></label>
       <input type="password" id="uPassword" autocomplete="new-password"/>
     </div>
     <div class="field" style="margin-bottom:.8rem;">
       <label style="cursor:pointer;">
-        <input type="checkbox" id="uIsAdmin"/> <span data-i18n="users.field_is_admin">Konto administratora</span>
+        <input type="checkbox" id="uIsAdmin"/> <span>Konto administratora <span class="en">Admin account</span></span>
       </label>
     </div>
     <div id="roleSection">
       <div class="field" style="margin-bottom:.8rem;">
-        <label for="uRole" data-i18n="users.field_role">Rola użytkownika</label>
+        <label for="uRole">Rola / Grupa użytkownika <span class="en">User role / group</span></label>
         <select id="uRole"></select>
+        <div id="uRoleModules" style="margin-top:.35rem;font-size:.76rem;color:var(--muted,#888);line-height:1.4;"></div>
       </div>
     </div>
     <div id="adminRoleSection" style="display:none;">
       <div class="field" style="margin-bottom:.8rem;">
-        <label data-i18n="users.field_admin_roles">Role administratora</label>
+        <label>Role administratora <span class="en">Admin roles</span></label>
         <div id="adminRolesChecks"></div>
       </div>
     </div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1.2rem;">
-      <button class="btn btn-secondary" id="userModalCancel" data-i18n="users.cancel">Anuluj</button>
-      <button class="btn" id="userModalSave" data-i18n="users.save">Zapisz</button>
+      <button class="btn btn-secondary" id="userModalCancel">Anuluj <span class="en">Cancel</span></button>
+      <button class="btn" id="userModalSave">Zapisz <span class="en">Save</span></button>
     </div>
     <div class="error" id="userModalError" style="color:#e74c3c;font-size:.85rem;margin-top:.5rem;min-height:1.2em;"></div>
   </div>
@@ -69,43 +108,44 @@
 <!-- Modal: Confirm Delete -->
 <div id="deleteModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" style="max-width:360px;text-align:center;">
-    <h3 data-i18n="users.confirm_delete">Potwierdzenie usunięcia</h3>
+    <h3>Potwierdzenie usunięcia <span class="en">Confirm deletion</span></h3>
     <p id="deleteMsg"></p>
     <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;">
-      <button class="btn btn-secondary" id="deleteCancel" data-i18n="users.cancel">Anuluj</button>
-      <button class="btn" style="background:#e74c3c;" id="deleteConfirm" data-i18n="users.delete">Usuń</button>
+      <button class="btn btn-secondary" id="deleteCancel">Anuluj <span class="en">Cancel</span></button>
+      <button class="btn" style="background:#e74c3c;" id="deleteConfirm">Usuń <span class="en">Delete</span></button>
     </div>
   </div>
 </div>
 
 <!-- Modal: Approve Pending User -->
 <div id="approveModal" class="modal-overlay" style="display:none;">
-  <div class="modal-box" style="max-width:420px;">
-    <h3 data-i18n="users.approve_title">Zatwierdź użytkownika</h3>
+  <div class="modal-box" style="max-width:440px;">
+    <h3>Zatwierdź użytkownika <span class="en">Approve user</span></h3>
     <p style="margin-bottom:.8rem;">
-      <span data-i18n="users.approve_for">Przypisz rolę dla:</span>
+      Przypisz rolę dla: <span class="en">Assign role for:</span>
       <b id="approveUsername"></b>
     </p>
     <div class="field" style="margin-bottom:.8rem;">
       <label style="cursor:pointer;">
-        <input type="checkbox" id="approveIsAdmin"/> <span data-i18n="users.field_is_admin">Konto administratora</span>
+        <input type="checkbox" id="approveIsAdmin"/> <span>Konto administratora <span class="en">Admin account</span></span>
       </label>
     </div>
     <div id="approveRoleSection">
       <div class="field" style="margin-bottom:.8rem;">
-        <label for="approveRole" data-i18n="users.field_role">Rola użytkownika</label>
+        <label for="approveRole">Rola / Grupa użytkownika <span class="en">User role / group</span></label>
         <select id="approveRole"></select>
+        <div id="approveRoleModules" style="margin-top:.35rem;font-size:.76rem;color:var(--muted,#888);line-height:1.4;"></div>
       </div>
     </div>
     <div id="approveAdminRoleSection" style="display:none;">
       <div class="field" style="margin-bottom:.8rem;">
-        <label data-i18n="users.field_admin_roles">Role administratora</label>
+        <label>Role administratora <span class="en">Admin roles</span></label>
         <div id="approveAdminRolesChecks"></div>
       </div>
     </div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1.2rem;">
-      <button class="btn btn-secondary" id="approveCancel" data-i18n="users.cancel">Anuluj</button>
-      <button class="btn" style="background:#27ae60;" id="approveConfirm" data-i18n="users.approve">Zatwierdź</button>
+      <button class="btn btn-secondary" id="approveCancel">Anuluj <span class="en">Cancel</span></button>
+      <button class="btn" style="background:#27ae60;" id="approveConfirm">Zatwierdź <span class="en">Approve</span></button>
     </div>
     <div class="error" id="approveError" style="color:#e74c3c;font-size:.85rem;margin-top:.5rem;min-height:1.2em;"></div>
   </div>
@@ -114,11 +154,11 @@
 <!-- Modal: Reject Pending User -->
 <div id="rejectModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" style="max-width:360px;text-align:center;">
-    <h3 data-i18n="users.reject_title">Odrzuć rejestrację</h3>
+    <h3>Odrzuć rejestrację <span class="en">Reject registration</span></h3>
     <p id="rejectMsg"></p>
     <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;">
-      <button class="btn btn-secondary" id="rejectCancel" data-i18n="users.cancel">Anuluj</button>
-      <button class="btn" style="background:#e74c3c;" id="rejectConfirm" data-i18n="users.reject">Odrzuć</button>
+      <button class="btn btn-secondary" id="rejectCancel">Anuluj <span class="en">Cancel</span></button>
+      <button class="btn" style="background:#e74c3c;" id="rejectConfirm">Odrzuć <span class="en">Reject</span></button>
     </div>
   </div>
 </div>
@@ -126,18 +166,18 @@
 <!-- Modal: Ban -->
 <div id="banModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" style="max-width:400px;">
-    <h3 data-i18n="users.ban_title">Zbanuj użytkownika</h3>
+    <h3>Zbanuj użytkownika <span class="en">Ban user</span></h3>
     <div class="field" style="margin-bottom:.8rem;">
-      <label for="banReason" data-i18n="users.ban_reason">Powód (opcjonalnie)</label>
+      <label for="banReason">Powód (opcjonalnie) <span class="en">Reason (optional)</span></label>
       <input type="text" id="banReason"/>
     </div>
     <div class="field" style="margin-bottom:.8rem;">
-      <label for="banUntil" data-i18n="users.ban_until">Ban do daty (puste = permanentny)</label>
+      <label for="banUntil">Ban do daty (puste = permanentny) <span class="en">Ban until (empty = permanent)</span></label>
       <input type="datetime-local" id="banUntil"/>
     </div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;">
-      <button class="btn btn-secondary" id="banCancel" data-i18n="users.cancel">Anuluj</button>
-      <button class="btn" style="background:#e74c3c;" id="banConfirm" data-i18n="users.ban">Zbanuj</button>
+      <button class="btn btn-secondary" id="banCancel">Anuluj <span class="en">Cancel</span></button>
+      <button class="btn" style="background:#e74c3c;" id="banConfirm">Zbanuj <span class="en">Ban</span></button>
     </div>
   </div>
 </div>

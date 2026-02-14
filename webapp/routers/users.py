@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from webapp.auth.passwords import hash_password
 from webapp.auth.user_store import UserStore, UserRecord
 from webapp.auth.session_store import SessionStore
-from webapp.auth.permissions import ALL_USER_ROLES, ALL_ADMIN_ROLES, get_user_modules
+from webapp.auth.permissions import ALL_USER_ROLES, ALL_ADMIN_ROLES, ROLE_MODULES, ADMIN_ROLE_MODULES, get_user_modules
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -82,6 +82,8 @@ async def list_roles(request: Request) -> JSONResponse:
         "status": "ok",
         "user_roles": ALL_USER_ROLES,
         "admin_roles": ALL_ADMIN_ROLES,
+        "role_modules": {r: mods for r, mods in ROLE_MODULES.items()},
+        "admin_role_modules": {r: mods for r, mods in ADMIN_ROLE_MODULES.items()},
     })
 
 
