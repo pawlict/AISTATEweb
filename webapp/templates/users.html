@@ -27,7 +27,7 @@
 </div>
 
 <!-- Role-access matrix (compact card below users table) -->
-<div class="role-matrix-card" style="margin-top:1rem;padding:.8rem 1rem;max-width:520px;">
+<div class="role-matrix-card" style="margin-top:1rem;padding:.8rem 1rem;max-width:640px;">
   <h3 style="margin:0 0 .5rem;font-size:.82rem;">Ustawienia r&oacute;l &mdash; dost&#281;p do modu&#322;&oacute;w <span class="en">Role settings &mdash; module access</span></h3>
   <div style="overflow-x:auto;">
     <table class="data-table role-matrix" id="roleMatrix">
@@ -41,15 +41,15 @@
   .en { font-size: 70%; color: var(--muted, #999); font-style: italic; }
   th .en, td .en { font-size: 70%; }
   .role-matrix-card { background: var(--card-bg, #fff); border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,.05); border: 1px solid var(--border, #e0e3e8); }
-  .role-matrix { width: 100%; font-size: .68rem; border-collapse: collapse; table-layout: fixed; }
-  .role-matrix th, .role-matrix td { text-align: center; padding: .15rem .2rem; vertical-align: middle; white-space: nowrap; overflow: hidden; }
-  .role-matrix th:first-child, .role-matrix td:first-child { text-align: left; font-weight: 600; width: 90px; }
-  .role-matrix .check { color: #27ae60; font-weight: 700; font-size: .8rem; }
-  .role-matrix .no-access { color: #e74c3c; font-weight: 700; font-size: .75rem; }
-  .role-matrix .all { color: #27ae60; font-weight: 700; font-size: .75rem; }
-  .role-matrix thead th { background: var(--card-bg, #f8f9fa); font-size: .6rem; white-space: nowrap; }
+  .role-matrix { width: auto; font-size: .72rem; border-collapse: collapse; }
+  .role-matrix th, .role-matrix td { text-align: center; padding: .25rem .4rem; vertical-align: middle; white-space: nowrap; }
+  .role-matrix th:first-child, .role-matrix td:first-child { text-align: left; font-weight: 600; padding-right: .7rem; }
+  .role-matrix .check { color: #27ae60; font-weight: 700; font-size: .9rem; }
+  .role-matrix .no-access { color: #e74c3c; font-weight: 700; font-size: .85rem; }
+  .role-matrix .all { color: #27ae60; font-weight: 700; font-size: .9rem; }
+  .role-matrix thead th { background: var(--card-bg, #f8f9fa); font-size: .64rem; }
   .role-matrix tbody tr:hover { background: rgba(74,108,247,.04); }
-  .role-matrix .section-row td { background: #f0f2f5; font-weight: 700; font-size: .6rem; color: var(--muted,#666); padding: .15rem .2rem; }
+  .role-matrix .section-row td { background: #f0f2f5; font-weight: 700; font-size: .64rem; color: var(--muted,#666); padding: .2rem .4rem; }
 </style>
 
 <!-- Modal: Add/Edit User -->

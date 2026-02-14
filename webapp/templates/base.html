@@ -341,9 +341,11 @@
 <script>
   (async()=>{
     {% if multiuser and user %}
-    /* Sync user's server-side language preference to localStorage before i18n init */
-    var _serverLang = '{{ user.language or "pl" }}';
-    localStorage.setItem('aistate_ui_lang', _serverLang);
+    /* Sync user's server-side language to localStorage only on first visit
+       (login.html already sets it; language switcher maintains it thereafter) */
+    if (!localStorage.getItem('aistate_ui_lang')) {
+      localStorage.setItem('aistate_ui_lang', '{{ user.language or "pl" }}');
+    }
     {% endif %}
     await initI18n();
     await refreshCurrentProjectInfo();
@@ -407,20 +409,23 @@
           menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
         });
       }
-      /* Language switcher — save server-side then reload for full effect */
+      /* Language switcher — save to account, update localStorage, reload */
       document.querySelectorAll('#userLangSwitch .lang-chip').forEach(function(btn) {
-        btn.addEventListener('click', async function(e) {
+        btn.addEventListener('click', function(e) {
           e.stopPropagation();
+          e.preventDefault();
           var lang = btn.dataset.lang;
           localStorage.setItem('aistate_ui_lang', lang);
-          try {
-            await fetch('/api/auth/language', {
-              method: 'POST',
-              headers: {'Content-Type':'application/json'},
-              body: JSON.stringify({language: lang}),
-            });
-          } catch(ex) {}
-          location.reload();
+          /* Update chip UI immediately */
+          document.querySelectorAll('#userLangSwitch .lang-chip').forEach(function(b) { b.classList.toggle('active', b.dataset.lang === lang); });
+          /* Save to user account (fire-and-forget), then reload */
+          fetch('/api/auth/language', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({language: lang}),
+          }).finally(function() {
+            location.reload();
+          });
         });
       });
       var logoutBtn = document.getElementById('btnLogout');
