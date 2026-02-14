@@ -70,7 +70,7 @@ async def set_mode(request: Request) -> JSONResponse:
 
 @router.post("/admin")
 async def create_first_admin(request: Request) -> JSONResponse:
-    """Create the first Super Admin account during setup."""
+    """Create the first Główny Opiekun account during setup."""
     assert _deployment_store and _user_store
 
     if not _deployment_store.is_multiuser():
@@ -106,7 +106,7 @@ async def create_first_admin(request: Request) -> JSONResponse:
     rec = _user_store.create_user(rec)
 
     if _app_log_fn:
-        _app_log_fn(f"Setup: Super Admin '{username}' created")
+        _app_log_fn(f"Setup: Główny Opiekun '{username}' created")
 
     return JSONResponse({"status": "ok", "user_id": rec.user_id}, status_code=201)
 

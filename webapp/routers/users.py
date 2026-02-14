@@ -30,7 +30,7 @@ def init(
 
 
 def _require_access_guard(request: Request) -> Optional[JSONResponse]:
-    """Check that the requester is Strażnik Dostępu or Super Admin."""
+    """Check that the requester is Strażnik Dostępu or Główny Opiekun."""
     user = getattr(request.state, "user", None)
     if user is None:
         return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
@@ -155,7 +155,7 @@ async def update_user(user_id: str, request: Request) -> JSONResponse:
     # Cannot edit superadmin unless you ARE superadmin
     caller = getattr(request.state, "user", None)
     if existing.is_superadmin and (not caller or not caller.is_superadmin):
-        return JSONResponse({"status": "error", "message": "Cannot modify Super Admin"}, status_code=403)
+        return JSONResponse({"status": "error", "message": "Cannot modify Główny Opiekun"}, status_code=403)
 
     try:
         body = await request.json()
@@ -206,7 +206,7 @@ async def delete_user(user_id: str, request: Request) -> JSONResponse:
         return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
 
     if existing.is_superadmin:
-        return JSONResponse({"status": "error", "message": "Cannot delete Super Admin"}, status_code=403)
+        return JSONResponse({"status": "error", "message": "Cannot delete Główny Opiekun"}, status_code=403)
 
     caller = getattr(request.state, "user", None)
     if caller and caller.user_id == user_id:
@@ -232,7 +232,7 @@ async def ban_user(user_id: str, request: Request) -> JSONResponse:
     if existing is None:
         return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
     if existing.is_superadmin:
-        return JSONResponse({"status": "error", "message": "Cannot ban Super Admin"}, status_code=403)
+        return JSONResponse({"status": "error", "message": "Cannot ban Główny Opiekun"}, status_code=403)
 
     caller = getattr(request.state, "user", None)
     if caller and caller.user_id == user_id:

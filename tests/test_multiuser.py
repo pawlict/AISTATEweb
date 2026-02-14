@@ -187,7 +187,7 @@ class TestPermissions:
 
     def test_superadmin_all_modules(self):
         from webapp.auth.permissions import get_user_modules, SUPER_ADMIN_MODULES
-        # Super Admin via is_superadmin flag (real setup flow)
+        # Główny Opiekun via is_superadmin flag (real setup flow)
         modules = get_user_modules(None, True, ["Architekt Funkcji", "Strażnik Dostępu"], is_superadmin=True)
         assert modules == SUPER_ADMIN_MODULES
 

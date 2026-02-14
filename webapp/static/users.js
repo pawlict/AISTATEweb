@@ -1,4 +1,4 @@
-/* users.js — User management panel (Strażnik Dostępu / Super Admin) */
+/* users.js — User management panel (Strażnik Dostępu / Główny Opiekun) */
 (function(){
   'use strict';
 
@@ -29,9 +29,9 @@
     'Dialogista':    'Dialogue Spec.',
     'Strateg':       'Strategist',
     'Mistrz Sesji':  'Session Master',
-    'Super Admin':   'Super Admin',
+    'G\u0142\u00f3wny Opiekun': 'Main Guardian',
     'Architekt Funkcji': 'Function Architect',
-    'Strażnik Dostępu':  'Access Guardian',
+    'Stra\u017cnik Dost\u0119pu':  'Access Guardian',
   };
 
   /* All module keys in display order */
@@ -96,7 +96,7 @@
         if (mods.indexOf(mk) !== -1) {
           tr.innerHTML += '<td class="check">&#10003;</td>';
         } else {
-          tr.innerHTML += '<td class="dash">—</td>';
+          tr.innerHTML += '<td class="no-access">&#8722;</td>';
         }
       });
       tbody.appendChild(tr);
@@ -108,11 +108,11 @@
     adminSectionTr.innerHTML = '<td colspan="' + (MODULE_ORDER.length + 1) + '">Role administracyjne <span class="en">Admin roles</span></td>';
     tbody.appendChild(adminSectionTr);
 
-    /* Super Admin — all modules */
+    /* G\u0142\u00f3wny Opiekun (Super Admin) — all modules */
     var saTr = document.createElement('tr');
-    saTr.innerHTML = '<td>Super Admin<br><span class="en">Super Admin</span></td>';
+    saTr.innerHTML = '<td>G\u0142\u00f3wny Opiekun<br><span class="en">Main Guardian</span></td>';
     MODULE_ORDER.forEach(function() {
-      saTr.innerHTML += '<td class="all">ALL</td>';
+      saTr.innerHTML += '<td class="all">&#10003;</td>';
     });
     tbody.appendChild(saTr);
 
@@ -126,7 +126,7 @@
         if (mods.indexOf(mk) !== -1) {
           tr.innerHTML += '<td class="check">&#10003;</td>';
         } else {
-          tr.innerHTML += '<td class="dash">—</td>';
+          tr.innerHTML += '<td class="no-access">&#8722;</td>';
         }
       });
       tbody.appendChild(tr);
@@ -203,7 +203,7 @@
         : '<span style="color:#27ae60;">Aktywny <span class="en">Active</span></span>';
 
       var roleText = u.role || '';
-      if (u.is_superadmin) roleText = 'Super Admin';
+      if (u.is_superadmin) roleText = 'G\u0142\u00f3wny Opiekun';
       else if (u.is_admin) roleText = (u.admin_roles || []).join(', ');
 
       tr.innerHTML =
