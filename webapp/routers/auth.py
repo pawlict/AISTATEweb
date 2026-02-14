@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from webapp.auth.passwords import hash_password, verify_password
-from webapp.auth.user_store import UserStore
+from webapp.auth.user_store import UserStore, UserRecord
 from webapp.auth.session_store import SessionStore
 from webapp.auth.deployment_store import DeploymentStore
 from webapp.auth.permissions import get_user_modules, ALL_USER_ROLES, ALL_ADMIN_ROLES
@@ -93,6 +93,16 @@ async def login(request: Request) -> JSONResponse:
         if _app_log_fn:
             _app_log_fn(f"Auth: failed login attempt for '{username}' from {ip}")
         return JSONResponse({"status": "error", "message": "Invalid username or password"}, status_code=401)
+
+    # Check pending approval
+    if user.pending:
+        guard_names = _user_store.get_access_guard_names()
+        return JSONResponse({
+            "status": "error",
+            "message": "Account pending approval",
+            "code": "pending",
+            "approvers": guard_names,
+        }, status_code=403)
 
     # Check ban
     if user.banned:
@@ -196,3 +206,66 @@ async def change_password(request: Request) -> JSONResponse:
         _app_log_fn(f"Auth: user '{user.username}' changed their password")
 
     return JSONResponse({"status": "ok"})
+
+
+@router.post("/register")
+async def register(request: Request) -> JSONResponse:
+    """Self-registration: create a new account with pending=True."""
+    assert _user_store and _deployment_store
+
+    if not _deployment_store.is_multiuser():
+        return JSONResponse({"status": "error", "message": "Registration not available"}, status_code=400)
+
+    ip = request.client.host if request.client else "unknown"
+
+    if _is_rate_limited(ip):
+        return JSONResponse({"status": "error", "message": "Too many attempts. Try again later."}, status_code=429)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    username = (body.get("username") or "").strip()
+    display_name = (body.get("display_name") or username).strip()
+    password = body.get("password") or ""
+
+    if not username:
+        _record_attempt(ip)
+        return JSONResponse({"status": "error", "message": "Username required"}, status_code=400)
+    if len(username) < 3:
+        _record_attempt(ip)
+        return JSONResponse({"status": "error", "message": "Username must be at least 3 characters"}, status_code=400)
+    if len(password) < 6:
+        _record_attempt(ip)
+        return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
+
+    # Check if username already exists
+    existing = _user_store.get_by_username(username)
+    if existing is not None:
+        _record_attempt(ip)
+        return JSONResponse({"status": "error", "message": "Username already taken"}, status_code=409)
+
+    guard_names = _user_store.get_access_guard_names()
+
+    try:
+        rec = UserRecord(
+            username=username,
+            display_name=display_name,
+            password_hash=hash_password(password),
+            role=None,
+            pending=True,
+            created_by="self",
+        )
+        rec = _user_store.create_user(rec)
+    except ValueError as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=409)
+
+    if _app_log_fn:
+        _app_log_fn(f"Auth: new self-registration '{username}' from {ip} (pending approval)")
+
+    return JSONResponse({
+        "status": "ok",
+        "message": "Account created, waiting for approval",
+        "approvers": guard_names,
+    }, status_code=201)

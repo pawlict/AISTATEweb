@@ -20,6 +20,10 @@
     .login-btn:hover { opacity: .9; }
     .login-btn:disabled { opacity: .5; cursor: not-allowed; }
     .login-error { color: #e74c3c; font-size: .85rem; margin-top: .75rem; min-height: 1.2em; text-align: center; }
+    .login-pending { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: .75rem; margin-top: .75rem; font-size: .85rem; color: #92400e; text-align: center; display: none; }
+    .login-pending b { display: block; margin-bottom: .3rem; }
+    .login-link { text-align: center; margin-top: 1rem; font-size: .85rem; }
+    .login-link a { color: var(--accent, #4a6cf7); text-decoration: none; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -40,18 +44,28 @@
       </div>
       <button type="submit" class="login-btn" id="loginBtn" data-i18n="auth.login">Zaloguj się</button>
       <div class="login-error" id="loginError"></div>
+      <div class="login-pending" id="loginPending">
+        <b data-i18n="auth.pending_title">Konto oczekuje na zatwierdzenie</b>
+        <span data-i18n="auth.pending_contact_short">Skontaktuj się z:</span>
+        <span id="pendingApprovers"></span>
+      </div>
     </form>
+    <div class="login-link">
+      <span data-i18n="auth.no_account">Nie masz konta?</span> <a href="/register" data-i18n="auth.register_link">Zarejestruj się</a>
+    </div>
   </div>
 <script>
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
   e.preventDefault();
-  const btn = document.getElementById('loginBtn');
-  const errEl = document.getElementById('loginError');
+  var btn = document.getElementById('loginBtn');
+  var errEl = document.getElementById('loginError');
+  var pendingEl = document.getElementById('loginPending');
   btn.disabled = true;
   errEl.textContent = '';
+  pendingEl.style.display = 'none';
 
   try {
-    const res = await fetch('/api/auth/login', {
+    var res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -59,9 +73,14 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
         password: document.getElementById('password').value,
       }),
     });
-    const data = await res.json();
+    var data = await res.json();
     if (res.ok && data.status === 'ok') {
       location.href = '/';
+    } else if (data.code === 'pending') {
+      // Show pending approval info
+      pendingEl.style.display = 'block';
+      var names = (data.approvers || []).join(', ') || '—';
+      document.getElementById('pendingApprovers').textContent = names;
     } else {
       errEl.textContent = data.message || 'Login failed';
     }
