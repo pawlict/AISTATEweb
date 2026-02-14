@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Setup — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css"/>
+  <style>
+    body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
+    .setup-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 520px; }
+    .setup-logo { text-align: center; margin-bottom: 1.5rem; }
+    .setup-logo img { height: 64px; }
+    .setup-logo h1 { font-size: 1.3rem; margin: .5rem 0 0; }
+    .setup-logo .ver { font-size: .75rem; color: var(--muted, #888); }
+    .step { display: none; }
+    .step.active { display: block; }
+    h2 { font-size: 1.1rem; margin: 0 0 1rem; color: var(--text, #1a1a2e); }
+    .mode-options { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+    .mode-card { flex: 1; padding: 1.2rem; border: 2px solid var(--border, #d0d5dd); border-radius: 12px; cursor: pointer; text-align: center; transition: border-color .2s, box-shadow .2s; }
+    .mode-card:hover, .mode-card.selected { border-color: var(--accent, #4a6cf7); box-shadow: 0 0 0 3px rgba(74,108,247,.15); }
+    .mode-card h3 { margin: 0 0 .4rem; font-size: 1rem; }
+    .mode-card p { margin: 0; font-size: .8rem; color: var(--muted, #888); }
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .3rem; }
+    .field input { width: 100%; padding: .55rem .7rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .95rem; box-sizing: border-box; }
+    .field input:focus { border-color: var(--accent, #4a6cf7); outline: none; }
+    .btn { padding: .65rem 1.5rem; border: none; border-radius: 8px; background: var(--accent, #4a6cf7); color: #fff; font-size: .95rem; font-weight: 600; cursor: pointer; }
+    .btn:hover { opacity: .9; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-secondary { background: var(--border, #d0d5dd); color: var(--text, #1a1a2e); }
+    .btn-row { display: flex; gap: .75rem; justify-content: flex-end; margin-top: 1.5rem; }
+    .error { color: #e74c3c; font-size: .85rem; margin-top: .5rem; min-height: 1.2em; }
+    .migrate-list { max-height: 300px; overflow-y: auto; margin: 1rem 0; }
+    .migrate-item { display: flex; align-items: center; gap: .5rem; padding: .4rem 0; border-bottom: 1px solid var(--border, #eee); font-size: .9rem; }
+    .migrate-item input[type=checkbox] { margin: 0; }
+    .success-msg { text-align: center; padding: 2rem 0; }
+    .success-msg h2 { color: #27ae60; }
+  </style>
+</head>
+<body>
+  <div class="setup-card">
+    <div class="setup-logo">
+      <img src="/static/logo.png" alt="Logo"/>
+      <h1>{{ app_name }}</h1>
+      <div class="ver">{{ app_version }}</div>
+    </div>
+
+    <!-- Step 1: Mode Selection -->
+    <div class="step active" id="step1">
+      <h2>Tryb pracy</h2>
+      <p style="font-size:.9rem;margin-bottom:1rem;color:var(--muted,#666);">Wybierz tryb pracy aplikacji. Tej decyzji nie można łatwo cofnąć.</p>
+      <div class="mode-options">
+        <div class="mode-card" data-mode="single" id="modeSingle">
+          <h3>Pojedynczy użytkownik</h3>
+          <p>Bez logowania, pełny dostęp do wszystkich modułów. Idealny do pracy indywidualnej.</p>
+        </div>
+        <div class="mode-card" data-mode="multi" id="modeMulti">
+          <h3>Wielu użytkowników</h3>
+          <p>Logowanie, role, kontrola dostępu do modułów. Wymaga utworzenia administratora.</p>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="step1Next" disabled>Dalej</button>
+      </div>
+      <div class="error" id="step1Error"></div>
+    </div>
+
+    <!-- Step 2: Admin Account (multi only) -->
+    <div class="step" id="step2">
+      <h2>Utwórz Super Admina</h2>
+      <p style="font-size:.85rem;color:var(--muted,#666);margin-bottom:1rem;">
+        Pierwszy administrator ma pełne uprawnienia: Architekt Funkcji + Strażnik Dostępu. Nie może być zbanowany.
+      </p>
+      <div class="field">
+        <label for="adminUsername">Nazwa użytkownika</label>
+        <input type="text" id="adminUsername" autocomplete="off" placeholder="np. admin"/>
+      </div>
+      <div class="field">
+        <label for="adminDisplayName">Wyświetlana nazwa</label>
+        <input type="text" id="adminDisplayName" autocomplete="off" placeholder="np. Jan Kowalski"/>
+      </div>
+      <div class="field">
+        <label for="adminPassword">Hasło (min. 6 znaków)</label>
+        <input type="password" id="adminPassword" autocomplete="new-password"/>
+      </div>
+      <div class="field">
+        <label for="adminPassword2">Powtórz hasło</label>
+        <input type="password" id="adminPassword2" autocomplete="new-password"/>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="step2Back">Wstecz</button>
+        <button class="btn" id="step2Next">Utwórz konto</button>
+      </div>
+      <div class="error" id="step2Error"></div>
+    </div>
+
+    <!-- Step 3: Project Migration (multi only, if projects exist) -->
+    <div class="step" id="step3">
+      <h2>Migracja projektów</h2>
+      <p style="font-size:.85rem;color:var(--muted,#666);margin-bottom:.5rem;">
+        Znaleziono istniejące projekty. Przypisz je do Super Admina lub pomiń (możesz to zrobić później).
+      </p>
+      <div>
+        <label style="font-size:.85rem;cursor:pointer;">
+          <input type="checkbox" id="migrateSelectAll" checked/> Zaznacz wszystkie
+        </label>
+      </div>
+      <div class="migrate-list" id="migrateList"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="step3Skip">Pomiń</button>
+        <button class="btn" id="step3Migrate">Przypisz do Super Admina</button>
+      </div>
+      <div class="error" id="step3Error"></div>
+    </div>
+
+    <!-- Step 4: Done -->
+    <div class="step" id="step4">
+      <div class="success-msg">
+        <h2>Gotowe!</h2>
+        <p style="font-size:.95rem;" id="doneMsg">Konfiguracja zakończona.</p>
+        <div class="btn-row" style="justify-content:center;margin-top:1.5rem;">
+          <button class="btn" id="doneBtn">Przejdź do aplikacji</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  let selectedMode = null;
+  let createdAdminId = null;
+
+  // Step 1: Mode selection
+  document.querySelectorAll('.mode-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      selectedMode = card.dataset.mode;
+      document.getElementById('step1Next').disabled = false;
+    });
+  });
+
+  function showStep(n) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById('step' + n).classList.add('active');
+  }
+
+  document.getElementById('step1Next').addEventListener('click', async () => {
+    const errEl = document.getElementById('step1Error');
+    errEl.textContent = '';
+    try {
+      const res = await fetch('/api/setup/mode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ mode: selectedMode }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
+
+      if (selectedMode === 'single') {
+        document.getElementById('doneMsg').textContent = 'Tryb pojedynczego użytkownika — brak zmian w aplikacji.';
+        showStep(4);
+      } else {
+        showStep(2);
+      }
+    } catch (e) {
+      errEl.textContent = 'Connection error';
+    }
+  });
+
+  // Step 2: Admin creation
+  document.getElementById('step2Back').addEventListener('click', () => showStep(1));
+
+  document.getElementById('step2Next').addEventListener('click', async () => {
+    const errEl = document.getElementById('step2Error');
+    errEl.textContent = '';
+    const username = document.getElementById('adminUsername').value.trim();
+    const display_name = document.getElementById('adminDisplayName').value.trim() || username;
+    const password = document.getElementById('adminPassword').value;
+    const password2 = document.getElementById('adminPassword2').value;
+
+    if (!username) { errEl.textContent = 'Podaj nazwę użytkownika'; return; }
+    if (password.length < 6) { errEl.textContent = 'Hasło musi mieć min. 6 znaków'; return; }
+    if (password !== password2) { errEl.textContent = 'Hasła nie są identyczne'; return; }
+
+    try {
+      const res = await fetch('/api/setup/admin', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ username, display_name, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
+      createdAdminId = data.user_id;
+
+      // Check if there are existing projects
+      const projRes = await fetch('/api/setup/projects');
+      const projData = await projRes.json();
+      if (projData.projects && projData.projects.length > 0) {
+        renderMigrationList(projData.projects);
+        showStep(3);
+      } else {
+        showStep(4);
+      }
+    } catch (e) {
+      errEl.textContent = 'Connection error';
+    }
+  });
+
+  // Step 3: Migration
+  function renderMigrationList(projects) {
+    const list = document.getElementById('migrateList');
+    list.innerHTML = '';
+    projects.forEach(p => {
+      const div = document.createElement('div');
+      div.className = 'migrate-item';
+      div.innerHTML = '<input type="checkbox" checked data-pid="' + p.project_id + '"/> '
+        + '<span>' + (p.name || p.project_id) + '</span>';
+      list.appendChild(div);
+    });
+  }
+
+  document.getElementById('migrateSelectAll').addEventListener('change', function() {
+    document.querySelectorAll('#migrateList input[type=checkbox]').forEach(cb => {
+      cb.checked = this.checked;
+    });
+  });
+
+  document.getElementById('step3Skip').addEventListener('click', () => showStep(4));
+
+  document.getElementById('step3Migrate').addEventListener('click', async () => {
+    const errEl = document.getElementById('step3Error');
+    errEl.textContent = '';
+    const assignments = {};
+    document.querySelectorAll('#migrateList input[type=checkbox]:checked').forEach(cb => {
+      assignments[cb.dataset.pid] = createdAdminId;
+    });
+
+    try {
+      const res = await fetch('/api/setup/migrate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ assignments }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
+      document.getElementById('doneMsg').textContent = 'Zmigranowano ' + data.migrated + ' projektów. Konfiguracja zakończona.';
+      showStep(4);
+    } catch (e) {
+      errEl.textContent = 'Connection error';
+    }
+  });
+
+  // Step 4: Done
+  document.getElementById('doneBtn').addEventListener('click', () => {
+    if (selectedMode === 'multi') {
+      location.href = '/login';
+    } else {
+      location.href = '/';
+    }
+  });
+})();
+</script>
+</body>
+</html>

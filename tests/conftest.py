@@ -17,8 +17,15 @@ sys.path.insert(0, str(ROOT))
 # Override data directory so tests don't touch production data.
 _tmp_data = tempfile.mkdtemp(prefix="aistate_test_data_")
 os.environ["AISTATEWEB_DATA_DIR"] = _tmp_data
-os.environ["AISTATE_CONFIG_DIR"] = tempfile.mkdtemp(prefix="aistate_test_cfg_")
+_tmp_cfg = tempfile.mkdtemp(prefix="aistate_test_cfg_")
+os.environ["AISTATE_CONFIG_DIR"] = _tmp_cfg
 os.environ["AISTATEWEB_ADMIN_LOG_DIR"] = tempfile.mkdtemp(prefix="aistate_test_logs_")
+
+# Pre-create deployment.json in single-user mode so auth middleware does not block tests
+Path(_tmp_cfg, "deployment.json").write_text(
+    json.dumps({"mode": "single", "initialized_at": "2026-01-01T00:00:00", "version": 1}),
+    encoding="utf-8",
+)
 
 
 @pytest.fixture

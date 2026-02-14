@@ -39,7 +39,19 @@
         </div>
       </div>
 
+      {% if multiuser and user %}
+      <div class="user-badge" id="userBadge">
+        <div class="user-badge-role">{{ user.role or (user.admin_roles|join(', ') if user.admin_roles else 'Super Admin') }}</div>
+        <div class="user-badge-name">{{ user.display_name or user.username }}</div>
+        <div class="user-badge-menu" id="userBadgeMenu" style="display:none;">
+          <button class="user-badge-btn" id="btnChangePassword" data-i18n="auth.change_password">Zmień hasło</button>
+          <button class="user-badge-btn user-badge-logout" id="btnLogout" data-i18n="auth.logout">Wyloguj</button>
+        </div>
+      </div>
+      {% endif %}
+
       <nav class="nav">
+        {% if not multiuser or 'projects' in user_modules %}
         <a href="/new-project" data-icon="projects" class="{{ 'active' if active=='new_project' else '' }}" data-i18n-title="nav.new_project">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -54,6 +66,8 @@
           </span>
           <span class="nav-label" data-i18n="nav.new_project">Projekty</span>
         </a>
+        {% endif %}
+        {% if not multiuser or 'transcription' in user_modules %}
         <a href="/transcription" data-icon="transcription" class="{{ 'active' if active=='transcription' else '' }}" data-i18n-title="nav.transcription">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -66,6 +80,8 @@
           </span>
           <span class="nav-label" data-i18n="nav.transcription">Transcription</span>
         </a>
+        {% endif %}
+        {% if not multiuser or 'diarization' in user_modules %}
         <a href="/diarization" data-icon="diarization" class="{{ 'active' if active=='diarization' else '' }}" data-i18n-title="nav.diarization">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -78,6 +94,8 @@
           </span>
           <span class="nav-label" data-i18n="nav.diarization">Diarization</span>
         </a>
+        {% endif %}
+        {% if not multiuser or 'analysis' in user_modules %}
         <a href="/analysis" data-icon="analysis" class="{{ 'active' if active=='analysis' else '' }}" data-i18n-title="nav.analysis">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -90,6 +108,8 @@
           </span>
           <span class="nav-label" data-i18n="nav.analysis">Analiza</span>
         </a>
+        {% endif %}
+        {% if not multiuser or 'chat' in user_modules %}
         <a href="/chat" data-icon="chat" class="{{ 'active' if active=='chat' else '' }}" data-i18n-title="nav.chat">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -102,6 +122,8 @@
           </span>
           <span class="nav-label" data-i18n="nav.chat">Chat LLM</span>
         </a>
+        {% endif %}
+        {% if not multiuser or 'translation' in user_modules %}
         <a href="/translation" data-icon="translation" class="{{ 'active' if active=='translation' else '' }}" data-i18n-title="nav.translation">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -115,6 +137,7 @@
           </span>
           <span class="nav-label" data-i18n="nav.translation">Tłumaczenie</span>
         </a>
+        {% endif %}
         <a href="/info" data-icon="info" class="{{ 'active' if active=='info' else '' }}" data-i18n-title="nav.info">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -126,6 +149,7 @@
           </span>
           <span class="nav-label" data-i18n="nav.info">Info</span>
         </a>
+        {% if not multiuser or 'admin_settings' in user_modules %}
         <a href="/settings" data-icon="settings" class="{{ 'active' if active=='settings' else '' }}" data-i18n-title="nav.settings">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -211,6 +235,20 @@
           </span>
           <span class="nav-label" data-i18n="nav.logs">Logi</span>
         </a>
+        {% endif %}
+        {% if multiuser and 'user_mgmt' in user_modules %}
+        <a href="/users" data-icon="users" class="{{ 'active' if active=='users' else '' }}" data-i18n-title="nav.users">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="9" cy="7" r="3" stroke-width="1.4" fill="none"/>
+              <path d="M3 19c0-3 2.5-5 6-5s6 2 6 5" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+              <circle cx="17" cy="8" r="2.2" stroke-width="1.2" fill="none"/>
+              <path d="M17 12c2.5 0 4.5 1.5 4.5 4" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.users">Użytkownicy</span>
+        </a>
+        {% endif %}
       </nav>
     </div>
   </aside>
@@ -234,6 +272,43 @@
     await refreshCurrentProjectInfo();
     applyI18n();
     initSidebar();
+    {% if multiuser and user %}
+    // User badge toggle
+    (function(){
+      var badge = document.getElementById('userBadge');
+      var menu = document.getElementById('userBadgeMenu');
+      if (badge && menu) {
+        badge.addEventListener('click', function(e) {
+          if (e.target.closest('.user-badge-btn')) return;
+          menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        });
+      }
+      var logoutBtn = document.getElementById('btnLogout');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', async function() {
+          await fetch('/api/auth/logout', {method:'POST'});
+          location.href = '/login';
+        });
+      }
+      var changePwBtn = document.getElementById('btnChangePassword');
+      if (changePwBtn) {
+        changePwBtn.addEventListener('click', function() {
+          var cur = prompt('Aktualne hasło:');
+          if (!cur) return;
+          var nw = prompt('Nowe hasło (min. 6 znaków):');
+          if (!nw || nw.length < 6) { alert('Hasło musi mieć min. 6 znaków'); return; }
+          fetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({current_password: cur, new_password: nw}),
+          }).then(r => r.json()).then(d => {
+            if (d.status === 'ok') alert('Hasło zmienione');
+            else alert(d.message || 'Błąd');
+          }).catch(() => alert('Błąd połączenia'));
+        });
+      }
+    })();
+    {% endif %}
   })();
 </script>
 {% block scripts %}{% endblock %}

@@ -1817,3 +1817,99 @@ textarea{min-height:220px; resize:vertical}
   color:#999;
   margin-top:6px;
 }
+
+/* ===== Multi-user: User badge in sidebar ===== */
+.user-badge{
+  margin:0 .6rem .4rem;
+  padding:.5rem .65rem;
+  border-radius:8px;
+  background:rgba(74,108,247,.06);
+  border:1px solid rgba(74,108,247,.15);
+  cursor:pointer;
+  position:relative;
+  transition:background .2s;
+}
+.user-badge:hover{ background:rgba(74,108,247,.12); }
+.user-badge-role{
+  font-size:.7rem;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+  color:var(--accent,#4a6cf7);
+  line-height:1.2;
+}
+.user-badge-name{
+  font-size:.82rem;
+  color:var(--text,#1a1a2e);
+  margin-top:.15rem;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.user-badge-menu{
+  position:absolute;
+  left:0; right:0; top:100%;
+  margin-top:4px;
+  background:var(--card-bg,#fff);
+  border:1px solid var(--border,#d0d5dd);
+  border-radius:8px;
+  box-shadow:0 4px 12px rgba(0,0,0,.1);
+  z-index:100;
+  overflow:hidden;
+}
+.user-badge-btn{
+  display:block;
+  width:100%;
+  padding:.55rem .75rem;
+  border:none;
+  background:transparent;
+  text-align:left;
+  font-size:.85rem;
+  cursor:pointer;
+  color:var(--text,#1a1a2e);
+}
+.user-badge-btn:hover{ background:rgba(0,0,0,.04); }
+.user-badge-logout{ color:#e74c3c; }
+.user-badge-logout:hover{ background:#fef2f2; }
+
+/* Sidebar collapsed: hide user badge text */
+.sidebar.collapsed .user-badge{ display:none; }
+
+/* ===== Multi-user: modal overlay (shared) ===== */
+.modal-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.35);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
+.modal-box{
+  background:var(--card-bg,#fff);
+  border-radius:12px;
+  padding:1.5rem;
+  box-shadow:0 8px 32px rgba(0,0,0,.15);
+  width:90%;
+  max-width:480px;
+}
+.modal-box h3{ margin-top:0; }
+
+/* ===== Multi-user: data table (users panel) ===== */
+.data-table{
+  border-collapse:collapse;
+  font-size:.85rem;
+}
+.data-table th,.data-table td{
+  padding:.4rem .6rem;
+  border-bottom:1px solid var(--border,#eee);
+  text-align:left;
+}
+.data-table th{
+  font-weight:600;
+  font-size:.78rem;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+  color:var(--muted,#888);
+}
+.actions-cell{ white-space:nowrap; }

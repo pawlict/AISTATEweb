@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Konto zablokowane — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css"/>
+  <style>
+    body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
+    .banned-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 420px; text-align: center; }
+    .banned-card h1 { color: #e74c3c; font-size: 1.3rem; margin: 0 0 1rem; }
+    .banned-card p { color: var(--muted, #666); font-size: .95rem; margin: .5rem 0; }
+    .banned-card .reason { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: .75rem; margin: 1rem 0; color: #991b1b; font-size: .9rem; }
+    .banned-card a { display: inline-block; margin-top: 1.5rem; color: var(--accent, #4a6cf7); text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="banned-card">
+    <h1 data-i18n="auth.account_banned">Konto zablokowane</h1>
+    <p data-i18n="auth.banned_message">Twoje konto zostało zablokowane przez administratora.</p>
+    {% if reason %}
+    <div class="reason">{{ reason }}</div>
+    {% endif %}
+    <p data-i18n="auth.banned_contact">Skontaktuj się z administratorem w celu odblokowania.</p>
+    <a href="/login" data-i18n="auth.back_to_login">Powrót do logowania</a>
+  </div>
+</body>
+</html>

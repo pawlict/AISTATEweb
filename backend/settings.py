@@ -15,3 +15,4 @@ class Settings:
     whisper_model: str = "base"
     theme: str = "Fusion Light (Blue)"
     ui_language: str = "pl"
+    session_timeout_hours: int = 8
