@@ -290,13 +290,15 @@
   .welcome-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:1rem;}
   .welcome-box{background:var(--card-bg,#fff);border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.15);max-width:580px;width:100%;padding:2rem 2.2rem;position:relative;max-height:90vh;overflow-y:auto;}
   .welcome-logo{text-align:center;margin-bottom:.8rem;}
-  .welcome-title{text-align:center;font-size:1.15rem;margin:0 0 1.2rem;color:var(--text,#1a1a2e);line-height:1.3;}
-  .welcome-body{font-size:.88rem;line-height:1.65;color:var(--text,#333);}
+  .welcome-title{text-align:center;font-size:1.3rem;margin:0 0 1.2rem;color:var(--text,#1a1a2e);line-height:1.3;font-family:inherit;}
+  .welcome-body{font-size:1rem;line-height:1.7;color:var(--text,#333);font-family:inherit;}
   .welcome-body p{margin:.7rem 0;}
   .welcome-body .author{color:var(--accent,#4a6cf7);font-weight:600;}
-  .welcome-body .email{color:var(--accent,#4a6cf7);font-weight:500;}
-  .welcome-body .legal{color:var(--muted,#888);font-size:.82rem;font-style:italic;}
+  .welcome-body .email{color:var(--accent,#4a6cf7);font-weight:500;text-decoration:none;}
+  .welcome-body .email:hover{text-decoration:underline;}
+  .welcome-body .legal{color:var(--muted,#888);font-style:italic;}
   .welcome-body .closing{font-weight:600;margin-top:.8rem;color:var(--text,#1a1a2e);}
+  .welcome-body .sign{margin-top:.3rem;color:var(--muted,#888);}
   .welcome-footer{display:flex;align-items:center;justify-content:space-between;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border,#e0e3e8);}
   .welcome-check{display:flex;align-items:center;gap:.4rem;font-size:.82rem;color:var(--muted,#666);cursor:pointer;}
   .welcome-check input{margin:0;}
@@ -325,19 +327,21 @@
       if (lang === 'en') {
         title = 'Welcome to AI S.T.A.T.E.';
         body = '<p><b>AI S.T.A.T.E.</b> (Artificial Intelligence Speech-To-Analysis-Translation Engine) is a web platform that combines transcription, diarization, translation, and content analysis into a single project-based workflow. The tool supports report generation and automates repetitive steps so you can focus on interpreting the data \u2014 AI takes care of the rest.</p>'
-          + '<p>The project is authored by <span class="author">pawlict</span>. If you notice a problem or want to submit a suggestion, write to: <span class="email">pawlict@proton.me</span>.</p>'
+          + '<p>The project is authored by <span class="author">pawlict</span>. If you notice a problem or want to submit a suggestion, write to: <a href="mailto:pawlict@proton.me" class="email">pawlict@proton.me</a>.</p>'
           + '<p>AISTATE is built with practical applications in mind, including OSINT and research work. I\u2019m glad you chose this solution.</p>'
           + '<p class="legal">Remember to comply with the law and protect your data \u2014 AISTATE is meant to help, but it does not replace your thinking or objective judgment.</p>'
-          + '<p class="closing">Happy working!</p>';
+          + '<p class="closing">Happy working!</p>'
+          + '<p class="sign"><em>The Author</em></p>';
         checkLabel = 'Don\u2019t show this again';
         btnLabel = 'Get started';
       } else {
         title = 'Witaj w AI S.T.A.T.E.';
         body = '<p><b>AI S.T.A.T.E.</b> (Artificial Intelligence Speech\u2011To\u2011Analysis\u2011Translation Engine) to platforma webowa, kt\u00f3ra \u0142\u0105czy transkrypcj\u0119, diaryzacj\u0119, t\u0142umaczenia i analiz\u0119 tre\u015bci w jednym, projektowym workflow. Narz\u0119dzie wspiera generowanie raport\u00f3w i automatyzuje powtarzalne kroki, aby\u015b m\u00f3g\u0142 skupi\u0107 si\u0119 na interpretacji danych \u2014 reszt\u0105 zajmie si\u0119 AI.</p>'
-          + '<p>Autorem projektu jest <span class="author">pawlict</span>. Je\u015bli zauwa\u017cysz problem lub chcesz zg\u0142osi\u0107 sugesti\u0119, napisz na: <span class="email">pawlict@proton.me</span>.</p>'
+          + '<p>Autorem projektu jest <span class="author">pawlict</span>. Je\u015bli zauwa\u017cysz problem lub chcesz zg\u0142osi\u0107 sugesti\u0119, napisz na: <a href="mailto:pawlict@proton.me" class="email">pawlict@proton.me</a>.</p>'
           + '<p>AISTATE powstaje z my\u015bl\u0105 o praktycznym zastosowaniu w analizie materia\u0142\u00f3w, w tym OSINT oraz pracy badawczej. Mi\u0142o mi, \u017ce wybra\u0142e\u015b w\u0142a\u015bnie to rozwi\u0105zanie.</p>'
           + '<p class="legal">Pami\u0119taj o zgodno\u015bci z prawem i ochronie danych \u2014 AISTATE ma pomaga\u0107, ale nie zast\u0119puje Twojego my\u015blenia ani obiektywnej oceny.</p>'
-          + '<p class="closing">Owocnej pracy!</p>';
+          + '<p class="closing">Owocnej pracy!</p>'
+          + '<p class="sign"><em>Autor</em></p>';
         checkLabel = 'Nie pokazuj ponownie';
         btnLabel = 'Rozpocznij';
       }
