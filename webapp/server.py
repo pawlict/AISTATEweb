@@ -77,12 +77,14 @@ PROMPTS = PromptManager(PROJECTS_DIR)
 
 # --- Multi-user auth stores ---
 from webapp.auth.message_store import MessageStore
+from webapp.auth.audit_store import AuditStore
 
 _AUTH_CONFIG_DIR = _local_config_dir()
 DEPLOYMENT_STORE = DeploymentStore(_AUTH_CONFIG_DIR)
 USER_STORE = UserStore(_AUTH_CONFIG_DIR)
 SESSION_STORE = SessionStore(_AUTH_CONFIG_DIR)
 MESSAGE_STORE = MessageStore(_AUTH_CONFIG_DIR)
+AUDIT_STORE = AuditStore(_AUTH_CONFIG_DIR)
 
 
 def _get_session_timeout() -> int:
@@ -1671,6 +1673,8 @@ auth_router.init(
     app_log_fn=app_log,
     get_session_timeout=_get_session_timeout,
     message_store=MESSAGE_STORE,
+    audit_store=AUDIT_STORE,
+    get_settings=load_settings,
 )
 app.include_router(auth_router.router)
 
@@ -1678,6 +1682,8 @@ users_router.init(
     user_store=USER_STORE,
     session_store=SESSION_STORE,
     app_log_fn=app_log,
+    audit_store=AUDIT_STORE,
+    get_settings=load_settings,
 )
 app.include_router(users_router.router)
 
@@ -2447,8 +2453,36 @@ def api_save_settings(payload: Dict[str, Any]) -> Any:
         s.whisper_model = str(payload.get("whisper_model") or "large-v3")
     if "ui_language" in payload:
         s.ui_language = str(payload.get("ui_language") or "pl")
+    # Security settings
+    if "account_lockout_threshold" in payload:
+        s.account_lockout_threshold = max(0, int(payload["account_lockout_threshold"]))
+    if "account_lockout_duration" in payload:
+        s.account_lockout_duration = max(1, int(payload["account_lockout_duration"]))
+    if "password_policy" in payload:
+        pp = str(payload["password_policy"])
+        if pp in ("none", "basic", "medium", "strong"):
+            s.password_policy = pp
+    if "password_expiry_days" in payload:
+        s.password_expiry_days = max(0, int(payload["password_expiry_days"]))
     save_settings(s)
     return {"ok": True}
+
+
+@app.get("/api/settings/security")
+def api_get_security_settings(request: Request) -> Any:
+    """Return security policy settings (admin only)."""
+    user = getattr(request.state, "user", None)
+    if user and not user.is_admin and not user.is_superadmin:
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    s = load_settings()
+    return {
+        "status": "ok",
+        "account_lockout_threshold": getattr(s, "account_lockout_threshold", 5),
+        "account_lockout_duration": getattr(s, "account_lockout_duration", 15),
+        "password_policy": getattr(s, "password_policy", "basic"),
+        "password_expiry_days": getattr(s, "password_expiry_days", 0),
+        "session_timeout_hours": getattr(s, "session_timeout_hours", 8),
+    }
 
 
 # ---------- API: ASR engines (Whisper / NeMo / pyannote) ----------

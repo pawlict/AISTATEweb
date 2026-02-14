@@ -16,3 +16,10 @@ class Settings:
     theme: str = "Fusion Light (Blue)"
     ui_language: str = "pl"
     session_timeout_hours: int = 8
+    # Security: account lockout
+    account_lockout_threshold: int = 5      # failed attempts before lock (0 = disabled)
+    account_lockout_duration: int = 15      # minutes of lockout
+    # Security: password policy ("none", "basic", "medium", "strong")
+    password_policy: str = "basic"
+    # Security: password expiration (days, 0 = disabled)
+    password_expiry_days: int = 0

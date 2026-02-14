@@ -31,6 +31,11 @@ class UserRecord:
     last_login: Optional[str] = None
     password_reset_requested: bool = False
     password_reset_requested_at: Optional[str] = None
+    # Account lockout (brute-force protection)
+    failed_login_count: int = 0
+    locked_until: Optional[str] = None       # ISO datetime — auto-unlock after
+    # Password expiration
+    password_changed_at: Optional[str] = None  # ISO datetime of last password change
 
 
 class UserStore:

@@ -7,23 +7,141 @@
     <br><span class="en">Create, edit, ban and delete users. Assign roles and reset passwords.</span>
   </p>
 
-  <div style="display:flex;justify-content:space-between;align-items:center;margin:1.2rem 0 .8rem;">
-    <button class="btn" id="btnAddUser">Dodaj użytkownika <span class="en">Add user</span></button>
+  <!-- Tabs -->
+  <div class="users-tabs" style="display:flex;gap:.3rem;margin:1rem 0 .8rem;border-bottom:2px solid var(--border,#e0e3e8);padding-bottom:0;">
+    <button class="users-tab active" data-panel="usersPanel" style="padding:.45rem .9rem;border:none;border-bottom:2px solid var(--accent,#4a6cf7);border-radius:6px 6px 0 0;background:var(--card-bg,#fff);font-weight:600;font-size:.85rem;cursor:pointer;margin-bottom:-2px;color:var(--accent,#4a6cf7);">
+      Użytkownicy <span class="en">Users</span>
+    </button>
+    <button class="users-tab" data-panel="auditPanel" style="padding:.45rem .9rem;border:none;border-bottom:2px solid transparent;border-radius:6px 6px 0 0;background:transparent;font-weight:500;font-size:.85rem;cursor:pointer;margin-bottom:-2px;color:var(--muted,#888);">
+      Historia logowań <span class="en">Login history</span>
+    </button>
+    <button class="users-tab" data-panel="securityPanel" style="padding:.45rem .9rem;border:none;border-bottom:2px solid transparent;border-radius:6px 6px 0 0;background:transparent;font-weight:500;font-size:.85rem;cursor:pointer;margin-bottom:-2px;color:var(--muted,#888);">
+      Bezpieczeństwo <span class="en">Security</span>
+    </button>
   </div>
 
-  <table class="data-table" id="usersTable" style="width:100%;">
-    <thead>
-      <tr>
-        <th>Użytkownik <br><span class="en">User</span></th>
-        <th>Nazwa <br><span class="en">Name</span></th>
-        <th>Rola / Grupa <br><span class="en">Role / Group</span></th>
-        <th>Status</th>
-        <th>Ostatnie logowanie <br><span class="en">Last login</span></th>
-        <th>Akcje <br><span class="en">Actions</span></th>
-      </tr>
-    </thead>
-    <tbody id="usersBody"></tbody>
-  </table>
+  <!-- Panel: Users -->
+  <div id="usersPanel" class="users-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .8rem;">
+      <button class="btn" id="btnAddUser">Dodaj użytkownika <span class="en">Add user</span></button>
+    </div>
+
+    <table class="data-table" id="usersTable" style="width:100%;">
+      <thead>
+        <tr>
+          <th>Użytkownik <br><span class="en">User</span></th>
+          <th>Nazwa <br><span class="en">Name</span></th>
+          <th>Rola / Grupa <br><span class="en">Role / Group</span></th>
+          <th>Status</th>
+          <th>Ostatnie logowanie <br><span class="en">Last login</span></th>
+          <th>Akcje <br><span class="en">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody id="usersBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Panel: Audit Log -->
+  <div id="auditPanel" class="users-panel" style="display:none;">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0 .8rem;">
+      <select id="auditUserFilter" style="font-size:.82rem;padding:.3rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);">
+        <option value="">Wszyscy użytkownicy <span class="en">All users</span></option>
+      </select>
+      <select id="auditEventFilter" style="font-size:.82rem;padding:.3rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);">
+        <option value="">Wszystkie zdarzenia <span class="en">All events</span></option>
+        <option value="login">Logowanie <span class="en">Login</span></option>
+        <option value="login_failed">Nieudane logowanie <span class="en">Failed login</span></option>
+        <option value="password_changed">Zmiana hasła <span class="en">Password changed</span></option>
+        <option value="password_reset">Reset hasła <span class="en">Password reset</span></option>
+        <option value="account_locked">Blokada konta <span class="en">Account locked</span></option>
+        <option value="account_unlocked">Odblokowanie <span class="en">Account unlocked</span></option>
+        <option value="user_banned">Ban</option>
+        <option value="user_created">Utworzenie konta <span class="en">Created</span></option>
+        <option value="user_deleted">Usunięcie <span class="en">Deleted</span></option>
+        <option value="password_expired_redirect">Hasło wygasło <span class="en">Expired</span></option>
+      </select>
+      <div style="margin-left:auto;display:flex;gap:.3rem;align-items:center;">
+        <button class="btn btn-secondary" id="auditPrev" style="font-size:.75rem;padding:.2rem .5rem;">&larr;</button>
+        <span id="auditInfo" style="font-size:.78rem;color:var(--muted,#888);"></span>
+        <button class="btn btn-secondary" id="auditNext" style="font-size:.75rem;padding:.2rem .5rem;">&rarr;</button>
+      </div>
+    </div>
+    <table class="data-table" style="width:100%;font-size:.82rem;">
+      <thead>
+        <tr>
+          <th>Data / czas <br><span class="en">Date / time</span></th>
+          <th>Użytkownik <br><span class="en">User</span></th>
+          <th>Zdarzenie <br><span class="en">Event</span></th>
+          <th>IP</th>
+          <th>Szczegóły <br><span class="en">Details</span></th>
+        </tr>
+      </thead>
+      <tbody id="auditBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Panel: Security Settings -->
+  <div id="securityPanel" class="users-panel" style="display:none;">
+    <h3 style="margin:.5rem 0 .8rem;font-size:.95rem;">Polityka bezpieczeństwa <span class="en">Security policy</span></h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;">
+
+      <!-- Account Lockout -->
+      <div style="border:1px solid var(--border,#e0e3e8);border-radius:8px;padding:.8rem 1rem;">
+        <h4 style="margin:0 0 .5rem;font-size:.85rem;">Blokada konta <span class="en">Account lockout</span></h4>
+        <div class="field" style="margin-bottom:.5rem;">
+          <label style="font-size:.78rem;">Próg blokady (0 = wyłączone) <span class="en">Lockout threshold (0 = off)</span></label>
+          <input type="number" id="secLockoutThreshold" min="0" max="50" value="5" style="width:80px;" onchange="saveSecuritySetting('account_lockout_threshold', parseInt(this.value))"/>
+        </div>
+        <div class="field" style="margin-bottom:.3rem;">
+          <label style="font-size:.78rem;">Czas blokady (minuty) <span class="en">Lock duration (min)</span></label>
+          <input type="number" id="secLockoutDuration" min="1" max="1440" value="15" style="width:80px;" onchange="saveSecuritySetting('account_lockout_duration', parseInt(this.value))"/>
+        </div>
+      </div>
+
+      <!-- Password Policy -->
+      <div style="border:1px solid var(--border,#e0e3e8);border-radius:8px;padding:.8rem 1rem;">
+        <h4 style="margin:0 0 .5rem;font-size:.85rem;">Polityka haseł <span class="en">Password policy</span></h4>
+        <div class="field" style="margin-bottom:.5rem;">
+          <label style="font-size:.78rem;">Poziom wymagań <span class="en">Strength level</span></label>
+          <select id="secPasswordPolicy" style="font-size:.85rem;" onchange="saveSecuritySetting('password_policy', this.value)">
+            <option value="none">Brak (min 6) <span class="en">None (min 6)</span></option>
+            <option value="basic">Podstawowy (min 8) <span class="en">Basic (min 8)</span></option>
+            <option value="medium">Średni (8 + a-z A-Z 0-9) <span class="en">Medium</span></option>
+            <option value="strong">Silny (12 + specjalne) <span class="en">Strong</span></option>
+          </select>
+        </div>
+        <p style="font-size:.72rem;color:var(--muted,#888);margin:0;">
+          Zawsze blokowane: popularne hasła (top 100)
+          <span class="en">Always blocked: common passwords (top 100)</span>
+        </p>
+      </div>
+
+      <!-- Password Expiry -->
+      <div style="border:1px solid var(--border,#e0e3e8);border-radius:8px;padding:.8rem 1rem;">
+        <h4 style="margin:0 0 .5rem;font-size:.85rem;">Wygasanie haseł <span class="en">Password expiry</span></h4>
+        <div class="field" style="margin-bottom:.5rem;">
+          <label style="font-size:.78rem;">Dni ważności (0 = wyłączone) <span class="en">Validity days (0 = off)</span></label>
+          <input type="number" id="secPasswordExpiry" min="0" max="365" value="0" style="width:80px;" onchange="saveSecuritySetting('password_expiry_days', parseInt(this.value))"/>
+        </div>
+        <p style="font-size:.72rem;color:var(--muted,#888);margin:0;">
+          Po wygaśnięciu użytkownik musi zmienić hasło przy logowaniu.
+          <span class="en">After expiry the user must change password at login.</span>
+        </p>
+      </div>
+
+      <!-- Session Timeout -->
+      <div style="border:1px solid var(--border,#e0e3e8);border-radius:8px;padding:.8rem 1rem;">
+        <h4 style="margin:0 0 .5rem;font-size:.85rem;">Sesja <span class="en">Session</span></h4>
+        <div class="field" style="margin-bottom:.3rem;">
+          <label style="font-size:.78rem;">Timeout sesji (godziny) <span class="en">Session timeout (hours)</span></label>
+          <input type="number" id="secSessionTimeout" min="1" max="720" value="8" style="width:80px;" onchange="saveSecuritySetting('session_timeout_hours', parseInt(this.value))"/>
+        </div>
+      </div>
+
+    </div>
+    <div id="secSaveMsg" style="font-size:.82rem;color:#27ae60;margin-top:.6rem;min-height:1.2em;"></div>
+  </div>
+
 </div>
 
 <!-- Bottom panels: role matrix + call center side by side -->
@@ -104,6 +222,10 @@
 
 <style>
   .en { font-size: 70%; color: var(--muted, #999); font-style: italic; }
+  /* Tab styling */
+  .users-tab { transition: all .2s; }
+  .users-tab:hover { color: var(--accent, #4a6cf7) !important; }
+  .users-tab.active { border-bottom-color: var(--accent, #4a6cf7) !important; color: var(--accent, #4a6cf7) !important; font-weight: 600 !important; background: var(--card-bg, #fff) !important; }
   .role-matrix-card { background: var(--card-bg, #fff); border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,.05); border: 1px solid var(--border, #e0e3e8); }
   /* CSS Grid role matrix */
   .rm-grid { display: grid; font-size: .72rem; gap: 0; border: 1px solid var(--border, #e0e3e8); border-radius: 6px; overflow: hidden; }
