@@ -39,17 +39,6 @@
       <tbody id="roleMatrixBody"></tbody>
     </table>
   </div>
-  <div style="margin-top:.8rem;display:flex;flex-wrap:wrap;gap:.5rem;">
-    <div style="padding:.4rem .75rem;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;font-size:.78rem;color:#1e40af;">
-      <b>Super Admin</b> — pełny dostęp do wszystkich modułów <br><span class="en">Full access to all modules</span>
-    </div>
-    <div style="padding:.4rem .75rem;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:.78rem;color:#92400e;">
-      <b>Architekt Funkcji</b> <span class="en">Function Architect</span> — ustawienia systemowe <span class="en">system settings</span>
-    </div>
-    <div style="padding:.4rem .75rem;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:.78rem;color:#92400e;">
-      <b>Strażnik Dostępu</b> <span class="en">Access Guardian</span> — zarządzanie użytkownikami <span class="en">user management</span>
-    </div>
-  </div>
 </div>
 
 <style>
@@ -59,8 +48,10 @@
   .role-matrix th:first-child, .role-matrix td:first-child { text-align: left; font-weight: 600; }
   .role-matrix .check { color: #27ae60; font-weight: 700; font-size: 1.1rem; }
   .role-matrix .dash { color: #ddd; }
+  .role-matrix .all { color: #1e40af; font-weight: 700; font-size: .9rem; }
   .role-matrix thead th { background: var(--card-bg, #f8f9fa); font-size: .78rem; white-space: nowrap; }
   .role-matrix tbody tr:hover { background: rgba(74,108,247,.04); }
+  .role-matrix .section-row td { background: #f0f2f5; font-weight: 700; font-size: .78rem; color: var(--muted,#666); padding: .3rem .5rem; }
 </style>
 
 <!-- Modal: Add/Edit User -->
@@ -105,6 +96,37 @@
   </div>
 </div>
 
+<!-- Modal: Change Role -->
+<div id="changeRoleModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:420px;">
+    <h3>Zmień rolę <span class="en">Change role</span></h3>
+    <p style="margin-bottom:.8rem;">Użytkownik: <span class="en">User:</span> <b id="crUsername"></b></p>
+    <div class="field" style="margin-bottom:.8rem;">
+      <label style="cursor:pointer;">
+        <input type="checkbox" id="crIsAdmin"/> <span>Konto administratora <span class="en">Admin account</span></span>
+      </label>
+    </div>
+    <div id="crRoleSection">
+      <div class="field" style="margin-bottom:.8rem;">
+        <label for="crRole">Rola / Grupa <span class="en">Role / Group</span></label>
+        <select id="crRole"></select>
+        <div id="crRoleModules" style="margin-top:.35rem;font-size:.76rem;color:var(--muted,#888);line-height:1.4;"></div>
+      </div>
+    </div>
+    <div id="crAdminRoleSection" style="display:none;">
+      <div class="field" style="margin-bottom:.8rem;">
+        <label>Role administratora <span class="en">Admin roles</span></label>
+        <div id="crAdminRolesChecks"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1.2rem;">
+      <button class="btn btn-secondary" id="crCancel">Anuluj <span class="en">Cancel</span></button>
+      <button class="btn" id="crSave">Zapisz <span class="en">Save</span></button>
+    </div>
+    <div class="error" id="crError" style="color:#e74c3c;font-size:.85rem;margin-top:.5rem;min-height:1.2em;"></div>
+  </div>
+</div>
+
 <!-- Modal: Confirm Delete -->
 <div id="deleteModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" style="max-width:360px;text-align:center;">
@@ -114,6 +136,23 @@
       <button class="btn btn-secondary" id="deleteCancel">Anuluj <span class="en">Cancel</span></button>
       <button class="btn" style="background:#e74c3c;" id="deleteConfirm">Usuń <span class="en">Delete</span></button>
     </div>
+  </div>
+</div>
+
+<!-- Modal: Reset Password -->
+<div id="resetPwModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:380px;">
+    <h3>Reset hasła <span class="en">Reset password</span></h3>
+    <p style="margin-bottom:.8rem;">Użytkownik: <span class="en">User:</span> <b id="rpUsername"></b></p>
+    <div class="field" style="margin-bottom:.8rem;">
+      <label for="rpPassword">Nowe hasło (min. 6 znaków) <span class="en">New password (min. 6 chars)</span></label>
+      <input type="password" id="rpPassword" autocomplete="new-password"/>
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;">
+      <button class="btn btn-secondary" id="rpCancel">Anuluj <span class="en">Cancel</span></button>
+      <button class="btn" id="rpConfirm">Zmień hasło <span class="en">Change password</span></button>
+    </div>
+    <div class="error" id="rpError" style="color:#e74c3c;font-size:.85rem;margin-top:.5rem;min-height:1.2em;"></div>
   </div>
 </div>
 
@@ -165,15 +204,24 @@
 
 <!-- Modal: Ban -->
 <div id="banModal" class="modal-overlay" style="display:none;">
-  <div class="modal-box" style="max-width:400px;">
+  <div class="modal-box" style="max-width:420px;">
     <h3>Zbanuj użytkownika <span class="en">Ban user</span></h3>
+    <p style="margin-bottom:.8rem;">Użytkownik: <span class="en">User:</span> <b id="banUsername"></b></p>
     <div class="field" style="margin-bottom:.8rem;">
-      <label for="banReason">Powód (opcjonalnie) <span class="en">Reason (optional)</span></label>
-      <input type="text" id="banReason"/>
+      <label for="banDuration">Czas trwania bana <span class="en">Ban duration</span></label>
+      <select id="banDuration">
+        <option value="1h">1 godzina <span class="en">1 hour</span></option>
+        <option value="6h">6 godzin <span class="en">6 hours</span></option>
+        <option value="24h">24 godziny <span class="en">24 hours</span></option>
+        <option value="3d">3 dni <span class="en">3 days</span></option>
+        <option value="7d">7 dni <span class="en">7 days</span></option>
+        <option value="30d">30 dni <span class="en">30 days</span></option>
+        <option value="perm" selected>Permanentny <span class="en">Permanent</span></option>
+      </select>
     </div>
     <div class="field" style="margin-bottom:.8rem;">
-      <label for="banUntil">Ban do daty (puste = permanentny) <span class="en">Ban until (empty = permanent)</span></label>
-      <input type="datetime-local" id="banUntil"/>
+      <label for="banReason">Powód (opcjonalnie) <span class="en">Reason (optional)</span></label>
+      <input type="text" id="banReason" placeholder="np. naruszenie regulaminu..."/>
     </div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;">
       <button class="btn btn-secondary" id="banCancel">Anuluj <span class="en">Cancel</span></button>
