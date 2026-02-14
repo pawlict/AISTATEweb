@@ -1670,6 +1670,7 @@ auth_router.init(
     deployment_store=DEPLOYMENT_STORE,
     app_log_fn=app_log,
     get_session_timeout=_get_session_timeout,
+    message_store=MESSAGE_STORE,
 )
 app.include_router(auth_router.router)
 

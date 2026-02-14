@@ -71,6 +71,18 @@
       <span>Nie masz konta?</span> <a href="/register">Zarejestruj się</a>
       <div class="en">Don't have an account? <a href="/register" style="color:var(--accent,#4a6cf7);font-size:.595rem;">Register</a></div>
     </div>
+    <div class="login-link" style="margin-top:.5rem;">
+      <a href="#" id="forgotPwLink">Zapomniałeś hasła? Wyślij info do Admina</a>
+      <div class="en"><a href="#" id="forgotPwLinkEn" style="color:var(--accent,#4a6cf7);font-size:.595rem;">Forgot password? Notify Admin</a></div>
+    </div>
+    <div id="forgotPwForm" style="display:none;margin-top:.8rem;padding:.8rem;border:1px solid var(--border,#d0d5dd);border-radius:8px;">
+      <div class="login-field" style="margin-bottom:.6rem;">
+        <label for="forgotUsername">Podaj nazwę użytkownika <span class="en">Enter your username</span></label>
+        <input type="text" id="forgotUsername" autocomplete="username"/>
+      </div>
+      <button type="button" class="login-btn" id="forgotSendBtn" style="font-size:.9rem;">Wyślij prośbę <span class="en">Send request</span></button>
+      <div id="forgotMsg" style="font-size:.85rem;margin-top:.5rem;min-height:1.2em;text-align:center;"></div>
+    </div>
   </div>
 <script>
 (function(){
@@ -113,6 +125,46 @@
     btn.addEventListener('click', function() { applyLang(btn.dataset.lang); });
   });
   applyLang(curLang);
+
+  /* Forgot password toggle + submit */
+  var forgotLinks = [document.getElementById('forgotPwLink'), document.getElementById('forgotPwLinkEn')];
+  var forgotForm = document.getElementById('forgotPwForm');
+  forgotLinks.forEach(function(el) {
+    if (el) el.addEventListener('click', function(e) {
+      e.preventDefault();
+      forgotForm.style.display = forgotForm.style.display === 'none' ? 'block' : 'none';
+    });
+  });
+
+  document.getElementById('forgotSendBtn').addEventListener('click', async function() {
+    var btn = this;
+    var msgEl = document.getElementById('forgotMsg');
+    var uname = document.getElementById('forgotUsername').value.trim();
+    if (!uname) { msgEl.style.color = '#e74c3c'; msgEl.textContent = 'Podaj nazwę użytkownika / Enter username'; return; }
+    btn.disabled = true;
+    msgEl.textContent = '';
+    try {
+      var res = await fetch('/api/auth/request-reset', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ username: uname }),
+      });
+      var data = await res.json();
+      if (res.ok) {
+        msgEl.style.color = '#27ae60';
+        msgEl.textContent = 'Prośba wysłana do administratora / Request sent to admin';
+        document.getElementById('forgotUsername').value = '';
+      } else {
+        msgEl.style.color = '#e74c3c';
+        msgEl.textContent = data.message || 'Error';
+      }
+    } catch (err) {
+      msgEl.style.color = '#e74c3c';
+      msgEl.textContent = 'Connection error';
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   document.getElementById('loginForm').addEventListener('submit', async function(e) {
     e.preventDefault();

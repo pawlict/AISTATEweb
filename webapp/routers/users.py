@@ -374,7 +374,11 @@ async def reset_password(user_id: str, request: Request) -> JSONResponse:
     if len(new_pass) < 6:
         return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
 
-    _user_store.update_user(user_id, {"password_hash": hash_password(new_pass)})
+    _user_store.update_user(user_id, {
+        "password_hash": hash_password(new_pass),
+        "password_reset_requested": False,
+        "password_reset_requested_at": None,
+    })
 
     caller = getattr(request.state, "user", None)
     if _app_log_fn:

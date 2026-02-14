@@ -200,6 +200,9 @@
       var statusBadge = u.banned
         ? '<span style="color:#e74c3c;font-weight:600;">Zbanowany <span class="en">Banned</span></span>'
         : '<span style="color:#27ae60;">Aktywny <span class="en">Active</span></span>';
+      if (u.password_reset_requested) {
+        statusBadge += '<br><span style="color:#e67e22;font-weight:600;font-size:.75rem;">\u26A0 wymagany reset <span class="en">reset required</span></span>';
+      }
 
       var roleText = u.role || '';
       if (u.is_superadmin) roleText = 'G\u0142\u00f3wny Opiekun';

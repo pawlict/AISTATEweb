@@ -13,6 +13,7 @@ from webapp.auth.passwords import hash_password, verify_password
 from webapp.auth.user_store import UserStore, UserRecord
 from webapp.auth.session_store import SessionStore
 from webapp.auth.deployment_store import DeploymentStore
+from webapp.auth.message_store import MessageStore, Message
 from webapp.auth.permissions import get_user_modules, ALL_USER_ROLES, ALL_ADMIN_ROLES
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 _user_store: Optional[UserStore] = None
 _session_store: Optional[SessionStore] = None
 _deployment_store: Optional[DeploymentStore] = None
+_message_store: Optional[MessageStore] = None
 _app_log_fn: Optional[Callable] = None
 _get_session_timeout: Optional[Callable] = None
 
@@ -37,11 +39,13 @@ def init(
     deployment_store: DeploymentStore,
     app_log_fn: Callable,
     get_session_timeout: Callable,
+    message_store: Optional[MessageStore] = None,
 ) -> None:
-    global _user_store, _session_store, _deployment_store, _app_log_fn, _get_session_timeout
+    global _user_store, _session_store, _deployment_store, _message_store, _app_log_fn, _get_session_timeout
     _user_store = user_store
     _session_store = session_store
     _deployment_store = deployment_store
+    _message_store = message_store
     _app_log_fn = app_log_fn
     _get_session_timeout = get_session_timeout
 
@@ -291,3 +295,64 @@ async def register(request: Request) -> JSONResponse:
         "message": "Account created, waiting for approval",
         "approvers": guard_names,
     }, status_code=201)
+
+
+@router.post("/request-reset")
+async def request_password_reset(request: Request) -> JSONResponse:
+    """Public endpoint: user requests a password reset from the login page.
+
+    Sets a flag on the user record and sends a Call Center message to all
+    admin groups so they see the request on their next login.
+    """
+    assert _user_store
+
+    ip = request.client.host if request.client else "unknown"
+    if _is_rate_limited(ip):
+        return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
+    _record_attempt(ip)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    username = (body.get("username") or "").strip()
+    if not username:
+        return JSONResponse({"status": "error", "message": "Username required"}, status_code=400)
+
+    user = _user_store.get_by_username(username)
+    if user is None or user.banned or user.pending:
+        # Don't reveal whether the user exists
+        return JSONResponse({"status": "ok", "message": "Request received"})
+
+    # Already requested and not yet handled — don't create duplicate messages
+    if user.password_reset_requested:
+        return JSONResponse({"status": "ok", "message": "Request received"})
+
+    # Mark the flag on the user record
+    now = datetime.now().isoformat()
+    _user_store.update_user(user.user_id, {
+        "password_reset_requested": True,
+        "password_reset_requested_at": now,
+    })
+
+    # Send Call Center message to admin groups
+    if _message_store:
+        display = user.display_name or user.username
+        msg = Message(
+            author_id="system",
+            author_name="System",
+            subject=f"Prośba o reset hasła — {display}",
+            content=(
+                f'<p>Użytkownik <b>{display}</b> (<code>{user.username}</code>) '
+                f'wysłał prośbę o reset hasła ze strony logowania.</p>'
+                f'<p>Zresetuj hasło w panelu <b>Użytkownicy</b>.</p>'
+            ),
+            target_groups=["Strażnik Dostępu", "Główny Opiekun"],
+        )
+        _message_store.create_message(msg)
+
+    if _app_log_fn:
+        _app_log_fn(f"Auth: password reset requested for '{user.username}' from {ip}")
+
+    return JSONResponse({"status": "ok", "message": "Request received"})

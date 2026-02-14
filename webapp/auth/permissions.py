@@ -93,6 +93,7 @@ PUBLIC_ROUTES: Set[str] = {
     "/banned",
     "/api/auth/login",
     "/api/auth/register",
+    "/api/auth/request-reset",
     "/api/setup/mode",
     "/api/setup/admin",
     "/api/setup/migrate",
