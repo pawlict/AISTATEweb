@@ -1,6 +1,6 @@
 # AISTATE Web — Information
 
-**AISTATE Web** (*Artificial Intelligence Speech‑To‑Analysis‑Intelligence Engine*) is a web app for **transcription**, **speaker diarization**, **translation**.
+**AISTATE Web** (*Artificial Intelligence Speech‑To‑Analysis‑Translation‑Engine*) is a web app for **transcription**, **speaker diarization**, **translation**.
 
 ---
 
