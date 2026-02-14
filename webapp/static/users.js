@@ -21,6 +21,19 @@
     user_mgmt:      { pl: 'Użytkownicy',   en: 'Users' },
   };
 
+  /* Role name → English translation */
+  var ROLE_EN = {
+    'Transkryptor':  'Transcriber',
+    'Lingwista':     'Linguist',
+    'Analityk':      'Analyst',
+    'Dialogista':    'Dialogue Spec.',
+    'Strateg':       'Strategist',
+    'Mistrz Sesji':  'Session Master',
+    'Super Admin':   'Super Admin',
+    'Architekt Funkcji': 'Function Architect',
+    'Strażnik Dostępu':  'Access Guardian',
+  };
+
   /* All module keys in display order */
   var MODULE_ORDER = ['projects','transcription','diarization','translation','analysis','chat','admin_settings','user_mgmt'];
 
@@ -65,12 +78,50 @@
       thead.innerHTML += '<th>' + esc(lab.pl) + '<br><span class="en">' + esc(lab.en) + '</span></th>';
     });
 
-    /* Body: one row per user role */
+    /* Body */
     tbody.innerHTML = '';
+
+    /* Section: User roles */
+    var sectionTr = document.createElement('tr');
+    sectionTr.className = 'section-row';
+    sectionTr.innerHTML = '<td colspan="' + (MODULE_ORDER.length + 1) + '">Role użytkowników <span class="en">User roles</span></td>';
+    tbody.appendChild(sectionTr);
+
     userRoles.forEach(function(role) {
       var mods = roleModules[role] || [];
       var tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + esc(role) + '</td>';
+      var enName = ROLE_EN[role] ? '<br><span class="en">' + esc(ROLE_EN[role]) + '</span>' : '';
+      tr.innerHTML = '<td>' + esc(role) + enName + '</td>';
+      MODULE_ORDER.forEach(function(mk) {
+        if (mods.indexOf(mk) !== -1) {
+          tr.innerHTML += '<td class="check">&#10003;</td>';
+        } else {
+          tr.innerHTML += '<td class="dash">—</td>';
+        }
+      });
+      tbody.appendChild(tr);
+    });
+
+    /* Section: Admin roles */
+    var adminSectionTr = document.createElement('tr');
+    adminSectionTr.className = 'section-row';
+    adminSectionTr.innerHTML = '<td colspan="' + (MODULE_ORDER.length + 1) + '">Role administracyjne <span class="en">Admin roles</span></td>';
+    tbody.appendChild(adminSectionTr);
+
+    /* Super Admin — all modules */
+    var saTr = document.createElement('tr');
+    saTr.innerHTML = '<td>Super Admin<br><span class="en">Super Admin</span></td>';
+    MODULE_ORDER.forEach(function() {
+      saTr.innerHTML += '<td class="all">ALL</td>';
+    });
+    tbody.appendChild(saTr);
+
+    /* Individual admin roles */
+    adminRoles.forEach(function(role) {
+      var mods = adminRoleModules[role] || [];
+      var tr = document.createElement('tr');
+      var enName = ROLE_EN[role] ? '<br><span class="en">' + esc(ROLE_EN[role]) + '</span>' : '';
+      tr.innerHTML = '<td>' + esc(role) + enName + '</td>';
       MODULE_ORDER.forEach(function(mk) {
         if (mods.indexOf(mk) !== -1) {
           tr.innerHTML += '<td class="check">&#10003;</td>';
@@ -166,13 +217,13 @@
       var acts = tr.querySelector('.actions-cell');
 
       if (!u.is_superadmin) {
-        acts.appendChild(btn('Edytuj', function() { openEditModal(u); }));
+        acts.appendChild(btn('Zmień rolę', function() { openChangeRoleModal(u); }));
         if (u.banned) {
-          acts.appendChild(btn('Odbanuj', function() { unbanUser(u.user_id); }));
+          acts.appendChild(btn('Odbanuj', function() { unbanUser(u.user_id); }, '#27ae60'));
         } else {
-          acts.appendChild(btn('Ban', function() { openBanModal(u.user_id); }, '#e67e22'));
+          acts.appendChild(btn('Banuj', function() { openBanModal(u); }, '#e67e22'));
         }
-        acts.appendChild(btn('Reset hasła', function() { resetPassword(u.user_id); }));
+        acts.appendChild(btn('Reset hasła', function() { openResetPwModal(u); }, '#8e44ad'));
         acts.appendChild(btn('Usuń', function() { openDeleteModal(u); }, '#e74c3c'));
       } else {
         acts.textContent = '—';
@@ -186,7 +237,7 @@
     var b = document.createElement('button');
     b.textContent = text;
     b.className = 'btn-sm';
-    b.style.cssText = 'padding:.25rem .5rem;font-size:.75rem;border:none;border-radius:4px;cursor:pointer;margin-right:.3rem;background:' + (bg || 'var(--accent,#4a6cf7)') + ';color:#fff;';
+    b.style.cssText = 'padding:.25rem .5rem;font-size:.75rem;border:none;border-radius:4px;cursor:pointer;margin-right:.3rem;margin-bottom:.2rem;background:' + (bg || 'var(--accent,#4a6cf7)') + ';color:#fff;';
     b.addEventListener('click', onClick);
     return b;
   }
@@ -322,6 +373,71 @@
     }
   });
 
+  /* ---- Change Role Modal ---- */
+
+  var changingRoleUser = null;
+
+  function openChangeRoleModal(u) {
+    changingRoleUser = u;
+    document.getElementById('crUsername').textContent = u.username;
+    document.getElementById('crIsAdmin').checked = u.is_admin;
+    document.getElementById('crIsAdmin').dispatchEvent(new Event('change'));
+    populateRoleSelect('crRole');
+    populateAdminChecks('crAdminRolesChecks');
+    if (u.role) document.getElementById('crRole').value = u.role;
+    if (u.admin_roles) {
+      document.querySelectorAll('#crAdminRolesChecks input').forEach(function(cb) {
+        cb.checked = u.admin_roles.includes(cb.value);
+      });
+    }
+    showModuleHint('crRole', 'crRoleModules');
+    document.getElementById('crError').textContent = '';
+    document.getElementById('changeRoleModal').style.display = 'flex';
+  }
+
+  document.getElementById('crIsAdmin').addEventListener('change', function() {
+    document.getElementById('crRoleSection').style.display = this.checked ? 'none' : '';
+    document.getElementById('crAdminRoleSection').style.display = this.checked ? '' : 'none';
+  });
+
+  document.getElementById('crCancel').addEventListener('click', function() {
+    document.getElementById('changeRoleModal').style.display = 'none';
+  });
+
+  document.getElementById('crSave').addEventListener('click', async function() {
+    if (!changingRoleUser) return;
+    var errEl = document.getElementById('crError');
+    errEl.textContent = '';
+
+    var isAdmin = document.getElementById('crIsAdmin').checked;
+    var payload = { is_admin: isAdmin };
+
+    if (isAdmin) {
+      payload.admin_roles = [];
+      document.querySelectorAll('#crAdminRolesChecks input:checked').forEach(function(cb) {
+        payload.admin_roles.push(cb.value);
+      });
+      payload.role = null;
+    } else {
+      payload.role = document.getElementById('crRole').value;
+      payload.admin_roles = [];
+    }
+
+    try {
+      var res = await fetch('/api/users/' + changingRoleUser.user_id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      var data = await res.json();
+      if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
+      document.getElementById('changeRoleModal').style.display = 'none';
+      loadUsers();
+    } catch (e) {
+      errEl.textContent = 'Connection error';
+    }
+  });
+
   /* ---- Approve Modal ---- */
 
   var approvingUser = null;
@@ -431,12 +547,13 @@
 
   /* ---- Ban Modal ---- */
 
-  var banningUserId = null;
+  var banningUser = null;
 
-  function openBanModal(uid) {
-    banningUserId = uid;
+  function openBanModal(u) {
+    banningUser = u;
+    document.getElementById('banUsername').textContent = u.username;
+    document.getElementById('banDuration').value = 'perm';
     document.getElementById('banReason').value = '';
-    document.getElementById('banUntil').value = '';
     document.getElementById('banModal').style.display = 'flex';
   }
 
@@ -445,11 +562,25 @@
   });
 
   document.getElementById('banConfirm').addEventListener('click', async function() {
-    if (!banningUserId) return;
+    if (!banningUser) return;
     var reason = document.getElementById('banReason').value.trim();
-    var until = document.getElementById('banUntil').value || null;
+    var duration = document.getElementById('banDuration').value;
+    var until = null;
+
+    if (duration !== 'perm') {
+      var now = new Date();
+      var ms = 0;
+      if (duration === '1h')  ms = 1 * 60 * 60 * 1000;
+      if (duration === '6h')  ms = 6 * 60 * 60 * 1000;
+      if (duration === '24h') ms = 24 * 60 * 60 * 1000;
+      if (duration === '3d')  ms = 3 * 24 * 60 * 60 * 1000;
+      if (duration === '7d')  ms = 7 * 24 * 60 * 60 * 1000;
+      if (duration === '30d') ms = 30 * 24 * 60 * 60 * 1000;
+      until = new Date(now.getTime() + ms).toISOString();
+    }
+
     try {
-      await fetch('/api/users/' + banningUserId + '/ban', {
+      await fetch('/api/users/' + banningUser.user_id + '/ban', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ reason: reason, until: until }),
@@ -466,20 +597,47 @@
     loadUsers();
   }
 
-  async function resetPassword(uid) {
-    var pw = prompt('Nowe hasło (min. 6 znaków) / New password (min. 6 chars):');
-    if (!pw || pw.length < 6) { alert('Hasło musi mieć min. 6 znaków / Password must be at least 6 characters'); return; }
+  /* ---- Reset Password Modal ---- */
+
+  var resetPwUser = null;
+
+  function openResetPwModal(u) {
+    resetPwUser = u;
+    document.getElementById('rpUsername').textContent = u.username;
+    document.getElementById('rpPassword').value = '';
+    document.getElementById('rpError').textContent = '';
+    document.getElementById('resetPwModal').style.display = 'flex';
+  }
+
+  document.getElementById('rpCancel').addEventListener('click', function() {
+    document.getElementById('resetPwModal').style.display = 'none';
+  });
+
+  document.getElementById('rpConfirm').addEventListener('click', async function() {
+    if (!resetPwUser) return;
+    var errEl = document.getElementById('rpError');
+    errEl.textContent = '';
+
+    var pw = document.getElementById('rpPassword').value;
+    if (!pw || pw.length < 6) {
+      errEl.textContent = 'Hasło musi mieć min. 6 znaków / Password must be at least 6 characters';
+      return;
+    }
+
     try {
-      var res = await fetch('/api/users/' + uid + '/reset-password', {
+      var res = await fetch('/api/users/' + resetPwUser.user_id + '/reset-password', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ new_password: pw }),
       });
       var data = await res.json();
-      if (res.ok) alert('Hasło zmienione / Password changed');
-      else alert(data.message || 'Error');
-    } catch (e) { alert('Connection error'); }
-  }
+      if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
+      document.getElementById('resetPwModal').style.display = 'none';
+      loadUsers();
+    } catch (e) {
+      errEl.textContent = 'Connection error';
+    }
+  });
 
   /* ---- Init ---- */
   loadRoles().then(function() { loadUsers(); });
