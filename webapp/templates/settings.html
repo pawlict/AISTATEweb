@@ -5,13 +5,6 @@
 
   <div class="grid">
     <div class="subcard">
-      <div class="label" data-i18n="settings.hf_label">Hugging Face Token (pyannote)</div>
-      <input class="input" id="hf_token" type="password" data-i18n-placeholder="settings.hf_placeholder"
-             placeholder="Paste your token (stored locally on the server)" value="{{ settings.hf_token or '' }}"/>
-      <div class="small" data-i18n-html="settings.hf_hint_html">Token jest przechowywany w pliku <code>settings.json</code> w katalogu konfiguracji.</div>
-
-      <div class="hr"></div>
-
       <div class="label" data-i18n="settings.whisper_default_label">Default Whisper model</div>
       <select id="def_whisper">
         {% for m in whisper_models %}
@@ -62,24 +55,6 @@
       if(msg) msg.textContent = (t("settings.save_error") || "Save error") + ": " + (e?.message || e);
       console.warn(e);
     }
-  }
-
-  // Auto-save HF token (paste => immediate, typing => debounced)
-  const hf = document.getElementById("hf_token");
-  let hfTimer = null;
-  if(hf){
-    hf.addEventListener("paste", ()=>{
-      setTimeout(()=> saveSettingsPartial({ hf_token: hf.value }), 0);
-    });
-
-    hf.addEventListener("input", ()=>{
-      clearTimeout(hfTimer);
-      hfTimer = setTimeout(()=> saveSettingsPartial({ hf_token: hf.value }), 800);
-    });
-
-    hf.addEventListener("change", ()=>{
-      saveSettingsPartial({ hf_token: hf.value });
-    });
   }
 
   // Auto-save default Whisper model

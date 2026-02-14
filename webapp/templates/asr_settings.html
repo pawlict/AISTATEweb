@@ -61,6 +61,14 @@
 
       <div class="hr"></div>
 
+      <!-- HF Token (pyannote) -->
+      <div class="label" data-i18n="settings.hf_label">Hugging Face Token (pyannote)</div>
+      <input class="input" id="hf_token" type="password" data-i18n-placeholder="settings.hf_placeholder"
+             placeholder="Paste your token (stored locally on the server)" value="{{ settings.hf_token or '' }}"/>
+      <div class="small" data-i18n-html="settings.hf_hint_html">Token jest przechowywany w pliku <code>settings.json</code> w katalogu konfiguracji.</div>
+
+      <div class="hr"></div>
+
       <!-- MODELS -->
       <div>
         <div class="label" data-i18n="asr.models_title">🎧 Modele / silniki</div>
@@ -245,4 +253,24 @@
 
 {% block scripts %}
 <script src="/static/asr_settings.js?v={{ app_version }}"></script>
+<script>
+  // Auto-save HF token (paste => immediate, typing => debounced)
+  (function(){
+    const hf = document.getElementById("hf_token");
+    if(!hf) return;
+    let hfTimer = null;
+    async function saveHf(){
+      try{
+        await api("/api/settings", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ hf_token: hf.value })
+        });
+      }catch(e){ console.warn("HF token save error:", e); }
+    }
+    hf.addEventListener("paste", ()=> setTimeout(saveHf, 0));
+    hf.addEventListener("input", ()=>{ clearTimeout(hfTimer); hfTimer = setTimeout(saveHf, 800); });
+    hf.addEventListener("change", saveHf);
+  })();
+</script>
 {% endblock %}

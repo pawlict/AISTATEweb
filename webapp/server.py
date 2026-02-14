@@ -2059,7 +2059,8 @@ def page_llm_settings(request: Request) -> Any:
 @app.get("/asr-settings", response_class=HTMLResponse)
 def page_asr_settings(request: Request) -> Any:
     # Admin panel: ASR engines (Whisper / NeMo / pyannote) management
-    return render_page(request, "asr_settings.html", "Ustawienia ASR", "asr_settings")
+    s = load_settings()
+    return render_page(request, "asr_settings.html", "Ustawienia ASR", "asr_settings", settings=s)
 
 
 @app.get("/nllb-settings", response_class=HTMLResponse)
