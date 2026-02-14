@@ -10,17 +10,17 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     "transcription": {
         "pages": ["/transcription"],
         "api_prefixes": ["/api/transcribe", "/api/projects/"],
-        "api_keywords": ["transcript", "sound-detection"],
+        "api_keywords": ["transcript", "sound-detection", "asr/models_state", "asr/installed"],
     },
     "diarization": {
         "pages": ["/diarization"],
         "api_prefixes": ["/api/diarize"],
-        "api_keywords": ["diarized", "speaker_map"],
+        "api_keywords": ["diarized", "speaker_map", "asr/models_state", "asr/installed"],
     },
     "translation": {
         "pages": ["/translation"],
         "api_prefixes": ["/api/translation/"],
-        "api_keywords": [],
+        "api_keywords": ["nllb/models_state"],
     },
     "analysis": {
         "pages": ["/analysis", "/analiza"],
@@ -30,7 +30,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     "chat": {
         "pages": ["/chat"],
         "api_prefixes": ["/api/chat/"],
-        "api_keywords": [],
+        "api_keywords": ["ollama/models"],
     },
     "projects": {
         "pages": ["/new-project", "/save", "/nowy-projekt", "/zapis"],
@@ -117,6 +117,9 @@ COMMON_ROUTES: Set[str] = {
 
 COMMON_PREFIXES: List[str] = [
     "/api/projects/",  # filtered by ownership in the handler
+    "/api/tts/voices",  # read-only: all users can list available TTS voices
+    "/api/tts/engines",  # read-only: TTS engine info
+    "/api/messages/",  # call center messaging system
 ]
 
 
