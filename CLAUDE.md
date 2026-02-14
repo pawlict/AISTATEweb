@@ -1,4 +1,4 @@
-# CLAUDE.md — AISTATEweb
+# AISTATEweb - Structure
 
 ## Project Overview
 
