@@ -119,9 +119,9 @@ COMMON_PREFIXES: List[str] = [
 ]
 
 
-def get_user_modules(role: Optional[str], is_admin: bool, admin_roles: Optional[List[str]]) -> List[str]:
+def get_user_modules(role: Optional[str], is_admin: bool, admin_roles: Optional[List[str]], is_superadmin: bool = False) -> List[str]:
     """Return the full list of modules a user may access."""
-    if is_admin and admin_roles and "Super Admin" in admin_roles:
+    if is_superadmin:
         return SUPER_ADMIN_MODULES[:]
 
     modules: List[str] = []

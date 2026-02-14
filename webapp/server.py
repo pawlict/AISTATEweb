@@ -1805,7 +1805,7 @@ async def _auth_middleware(request: Request, call_next):
     request.state.user = user
 
     # Authorization: check route access
-    user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles)
+    user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles, user.is_superadmin)
 
     # Common routes: /, /info, /api/auth/me, etc — allowed for any logged-in user
     # Module-specific routes: checked against user's modules
@@ -1930,7 +1930,7 @@ def render_page(request: Request, tpl: str, title: str, active: str, current_pro
     # Multi-user context
     multiuser = getattr(request.state, "multiuser", False)
     user = getattr(request.state, "user", None)
-    user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles) if user else []
+    user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles, user.is_superadmin) if user else []
     return TEMPLATES.TemplateResponse(
         tpl,
         {

@@ -158,7 +158,7 @@ async def me(request: Request) -> JSONResponse:
     if user is None:
         return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
 
-    modules = get_user_modules(user.role, user.is_admin, user.admin_roles)
+    modules = get_user_modules(user.role, user.is_admin, user.admin_roles, user.is_superadmin)
     return JSONResponse({
         "status": "ok",
         "user": {

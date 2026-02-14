@@ -58,7 +58,7 @@ def _user_to_dict(u: UserRecord) -> dict:
         "created_at": u.created_at,
         "created_by": u.created_by,
         "last_login": u.last_login,
-        "modules": get_user_modules(u.role, u.is_admin, u.admin_roles),
+        "modules": get_user_modules(u.role, u.is_admin, u.admin_roles, u.is_superadmin),
     }
 
 
