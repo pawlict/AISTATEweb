@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-AISTATEweb (v3.2.3 beta) is a Python/FastAPI web application for audio transcription, speaker diarization, translation, LLM-powered analysis, and text-to-speech. It uses Whisper for ASR, pyannote.audio for diarization, NLLB-200 for translation, Ollama for LLM chat/analysis, and Piper/MMS/Kokoro for TTS. Data is stored as flat JSON files (no database).
+AISTATEweb is a Python/FastAPI web application for audio transcription, speaker diarization, translation, LLM-powered analysis, and text-to-speech. It uses Whisper for ASR, pyannote.audio for diarization, NLLB-200 for translation, Ollama for LLM chat/analysis, and Piper/MMS/Kokoro for TTS. Data is stored as flat JSON files (no database).
 
 ## Quick Reference
 
