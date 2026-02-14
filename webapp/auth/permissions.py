@@ -25,7 +25,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     "analysis": {
         "pages": ["/analysis", "/analiza"],
         "api_prefixes": ["/api/analysis/", "/api/finance/", "/api/documents/"],
-        "api_keywords": [],
+        "api_keywords": ["ollama/status", "ollama/models", "settings/models", "settings/analysis", "models/list"],
     },
     "chat": {
         "pages": ["/chat"],
@@ -120,6 +120,7 @@ COMMON_PREFIXES: List[str] = [
     "/api/tts/voices",  # read-only: all users can list available TTS voices
     "/api/tts/engines",  # read-only: TTS engine info
     "/api/messages",  # call center messaging system (matches /api/messages and /api/messages/*)
+    "/api/tasks/",  # task progress checking — used by all modules (analysis, transcription, etc.)
 ]
 
 

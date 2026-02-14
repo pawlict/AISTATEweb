@@ -386,11 +386,15 @@
     applyBilingualMode();
     initSidebar();
 
-    /* Welcome modal — shows once per browser session; permanently dismissed via checkbox */
+    /* Welcome modal — shows once per browser session; permanently dismissed via checkbox.
+       In multi-user mode keys include user_id so each user sees the modal independently. */
     (function(){
-      if (localStorage.getItem('aistate_welcome_dismissed')) return;
-      if (sessionStorage.getItem('aistate_welcome_shown')) return;
-      sessionStorage.setItem('aistate_welcome_shown', '1');
+      var _uid = '{{ user.user_id if multiuser and user else "" }}';
+      var _dismissKey = _uid ? 'aistate_welcome_dismissed_' + _uid : 'aistate_welcome_dismissed';
+      var _shownKey  = _uid ? 'aistate_welcome_shown_' + _uid  : 'aistate_welcome_shown';
+      if (localStorage.getItem(_dismissKey)) return;
+      if (sessionStorage.getItem(_shownKey)) return;
+      sessionStorage.setItem(_shownKey, '1');
       var lang = localStorage.getItem('aistate_ui_lang') || 'pl';
       var title, body, checkLabel, btnLabel;
       if (lang === 'en') {
@@ -423,7 +427,7 @@
       modal.style.display = 'flex';
       function closeWelcome(){
         if (document.getElementById('welcomeDontShow').checked) {
-          localStorage.setItem('aistate_welcome_dismissed', '1');
+          localStorage.setItem(_dismissKey, '1');
         }
         modal.style.display = 'none';
       }
