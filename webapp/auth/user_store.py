@@ -139,12 +139,4 @@ class UserStore:
 
     def get_access_guard_names(self) -> List[str]:
         """Return distinct role labels of users who can approve accounts."""
-        with self._lock:
-            data = self._read()
-        roles: List[str] = []
-        for d in data.values():
-            if d.get("is_superadmin") and "Super Admin" not in roles:
-                roles.append("Super Admin")
-            elif d.get("is_admin") and "Strażnik Dostępu" in (d.get("admin_roles") or []) and "Strażnik Dostępu" not in roles:
-                roles.append("Strażnik Dostępu")
-        return roles if roles else ["Super Admin"]
+        return ["Architekt Funkcji", "Strażnik Dostępu"]

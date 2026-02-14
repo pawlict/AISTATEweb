@@ -52,7 +52,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     },
     "user_mgmt": {
         "pages": ["/users"],
-        "api_prefixes": ["/api/users/"],
+        "api_prefixes": ["/api/users"],
         "api_keywords": [],
     },
 }
