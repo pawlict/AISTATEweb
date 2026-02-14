@@ -75,7 +75,7 @@ ADMIN_ROLE_MODULES: Dict[str, List[str]] = {
     "Strażnik Dostępu":   ["user_mgmt"],
 }
 
-# Super Admin always has everything
+# Główny Opiekun (Super Admin) always has everything
 SUPER_ADMIN_MODULES: List[str] = list(MODULES.keys())
 
 ALL_USER_ROLES: List[str] = list(ROLE_MODULES.keys())

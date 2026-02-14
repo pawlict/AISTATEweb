@@ -41,7 +41,7 @@
 
       {% if multiuser and user %}
       <div class="user-badge" id="userBadge">
-        <div class="user-badge-role">{{ user.role or (user.admin_roles|join(', ') if user.admin_roles else 'Super Admin') }}</div>
+        <div class="user-badge-role">{{ user.role or (user.admin_roles|join(', ') if user.admin_roles else 'G\u0142\u00f3wny Opiekun') }}</div>
         <div class="user-badge-name">{{ user.display_name or user.username }}</div>
         <div class="user-badge-menu" id="userBadgeMenu" style="display:none;">
           <div class="user-badge-lang" id="userLangSwitch">
@@ -319,9 +319,11 @@
     applyI18n();
     initSidebar();
 
-    /* Welcome modal — first launch */
+    /* Welcome modal — shows once per browser session; permanently dismissed via checkbox */
     (function(){
       if (localStorage.getItem('aistate_welcome_dismissed')) return;
+      if (sessionStorage.getItem('aistate_welcome_shown')) return;
+      sessionStorage.setItem('aistate_welcome_shown', '1');
       var lang = localStorage.getItem('aistate_ui_lang') || 'pl';
       var title, body, checkLabel, btnLabel;
       if (lang === 'en') {
@@ -352,20 +354,14 @@
       var closeBtn = document.getElementById('welcomeClose');
       closeBtn.textContent = btnLabel;
       modal.style.display = 'flex';
-      closeBtn.addEventListener('click', function(){
+      function closeWelcome(){
         if (document.getElementById('welcomeDontShow').checked) {
           localStorage.setItem('aistate_welcome_dismissed', '1');
         }
         modal.style.display = 'none';
-      });
-      modal.addEventListener('click', function(e){
-        if (e.target === modal) {
-          if (document.getElementById('welcomeDontShow').checked) {
-            localStorage.setItem('aistate_welcome_dismissed', '1');
-          }
-          modal.style.display = 'none';
-        }
-      });
+      }
+      closeBtn.addEventListener('click', closeWelcome);
+      modal.addEventListener('click', function(e){ if (e.target === modal) closeWelcome(); });
     })();
 
     {% if multiuser and user %}
