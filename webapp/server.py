@@ -1788,19 +1788,29 @@ async def _auth_middleware(request: Request, call_next):
             from datetime import datetime as _dt
             try:
                 if _dt.now() > _dt.fromisoformat(user.banned_until):
-                    USER_STORE.update_user(user.user_id, {"banned": False, "banned_until": None, "ban_reason": None})
+                    USER_STORE.update_user(user.user_id, {"banned": False, "banned_until": None, "ban_reason": None, "show_ban_expiry": True})
                 else:
                     SESSION_STORE.delete_session(token)
                     if path.startswith("/api/"):
                         return JSONResponse({"status": "error", "message": "Account banned"}, status_code=403)
-                    return RedirectResponse(url="/banned", status_code=302)
+                    from urllib.parse import urlencode as _ue
+                    _bp: dict = {}
+                    if user.ban_reason:
+                        _bp["reason"] = user.ban_reason
+                    if getattr(user, "show_ban_expiry", True) and user.banned_until:
+                        _bp["until"] = user.banned_until
+                    return RedirectResponse(url="/banned" + ("?" + _ue(_bp) if _bp else ""), status_code=302)
             except ValueError:
                 pass
         else:
             SESSION_STORE.delete_session(token)
             if path.startswith("/api/"):
                 return JSONResponse({"status": "error", "message": "Account banned"}, status_code=403)
-            return RedirectResponse(url="/banned", status_code=302)
+            from urllib.parse import urlencode as _ue2
+            _bp2: dict = {}
+            if user.ban_reason:
+                _bp2["reason"] = user.ban_reason
+            return RedirectResponse(url="/banned" + ("?" + _ue2(_bp2) if _bp2 else ""), status_code=302)
 
     request.state.user = user
 
@@ -1900,9 +1910,10 @@ def page_setup(request: Request) -> Any:
 @app.get("/banned", response_class=HTMLResponse)
 def page_banned(request: Request) -> Any:
     reason = request.query_params.get("reason", "")
+    until = request.query_params.get("until", "")
     return TEMPLATES.TemplateResponse("banned.html", {
         "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
-        "reason": reason,
+        "reason": reason, "until": until,
     })
 
 

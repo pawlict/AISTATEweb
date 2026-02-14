@@ -10,19 +10,49 @@
     .banned-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 420px; text-align: center; }
     .banned-card h1 { color: #e74c3c; font-size: 1.3rem; margin: 0 0 1rem; }
     .banned-card p { color: var(--muted, #666); font-size: .95rem; margin: .5rem 0; }
-    .banned-card .reason { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: .75rem; margin: 1rem 0; color: #991b1b; font-size: .9rem; }
+    .banned-card .reason { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: .75rem; margin: 1rem 0; color: #991b1b; font-size: .9rem; text-align: left; }
+    .banned-card .reason-label { font-weight: 600; margin-bottom: .3rem; font-size: .8rem; color: #b91c1c; }
+    .banned-card .ban-until { background: #fefce8; border: 1px solid #fde68a; border-radius: 8px; padding: .6rem .75rem; margin: .8rem 0; color: #92400e; font-size: .85rem; }
+    .banned-card .ban-until-label { font-weight: 600; font-size: .8rem; }
     .banned-card a { display: inline-block; margin-top: 1.5rem; color: var(--accent, #4a6cf7); text-decoration: none; font-weight: 600; }
   </style>
 </head>
 <body>
   <div class="banned-card">
-    <h1 data-i18n="auth.account_banned">Konto zablokowane</h1>
-    <p data-i18n="auth.banned_message">Twoje konto zostało zablokowane przez administratora.</p>
+    <h1>Konto zablokowane <span style="font-size:80%;color:#999;font-style:italic;">Account blocked</span></h1>
+    <p>Twoje konto zostało zablokowane przez administratora.
+      <br><span style="font-size:85%;color:#999;font-style:italic;">Your account has been blocked by the administrator.</span>
+    </p>
     {% if reason %}
-    <div class="reason">{{ reason }}</div>
+    <div class="reason">
+      <div class="reason-label">Powód <span style="font-size:85%;color:#999;font-style:italic;">Reason</span>:</div>
+      {{ reason }}
+    </div>
     {% endif %}
-    <p data-i18n="auth.banned_contact">Skontaktuj się z administratorem w celu odblokowania.</p>
-    <a href="/login" data-i18n="auth.back_to_login">Powrót do logowania</a>
+    {% if until %}
+    <div class="ban-until">
+      <span class="ban-until-label">Blokada do <span style="font-size:85%;color:#999;font-style:italic;">Blocked until</span>:</span>
+      <span id="banUntilDate">{{ until }}</span>
+    </div>
+    {% endif %}
+    <p>Skontaktuj się z administratorem w celu odblokowania.
+      <br><span style="font-size:85%;color:#999;font-style:italic;">Contact the administrator to unblock your account.</span>
+    </p>
+    <a href="/login">Powrót do logowania <span style="font-size:85%;color:#999;font-style:italic;">Back to login</span></a>
   </div>
+  {% if until %}
+  <script>
+    (function(){
+      var el = document.getElementById('banUntilDate');
+      if (!el) return;
+      try {
+        var d = new Date(el.textContent.trim());
+        if (!isNaN(d.getTime())) {
+          el.textContent = d.toLocaleString();
+        }
+      } catch(e){}
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>
