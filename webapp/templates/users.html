@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="padding:1.5rem;">
+  <h2 style="margin-top:0;" data-i18n="users.title">Zarządzanie użytkownikami</h2>
+  <p style="color:var(--muted,#888);font-size:.85rem;" data-i18n="users.subtitle">
+    Twórz, edytuj, banuj i usuwaj użytkowników. Przypisuj role i resetuj hasła.
+  </p>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin:1.2rem 0 .8rem;">
+    <button class="btn" id="btnAddUser" data-i18n="users.add">Dodaj użytkownika</button>
+  </div>
+
+  <table class="data-table" id="usersTable" style="width:100%;">
+    <thead>
+      <tr>
+        <th data-i18n="users.col_username">Użytkownik</th>
+        <th data-i18n="users.col_display_name">Nazwa</th>
+        <th data-i18n="users.col_role">Rola</th>
+        <th data-i18n="users.col_status">Status</th>
+        <th data-i18n="users.col_last_login">Ostatnie logowanie</th>
+        <th data-i18n="users.col_actions">Akcje</th>
+      </tr>
+    </thead>
+    <tbody id="usersBody"></tbody>
+  </table>
+</div>
+
+<!-- Modal: Add/Edit User -->
+<div id="userModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:420px;">
+    <h3 id="userModalTitle" data-i18n="users.add">Dodaj użytkownika</h3>
+    <div class="field" style="margin-bottom:.8rem;">
+      <label for="uUsername" data-i18n="users.field_username">Nazwa użytkownika</label>
+      <input type="text" id="uUsername" autocomplete="off"/>
+    </div>
+    <div class="field" style="margin-bottom:.8rem;">
+      <label for="uDisplayName" data-i18n="users.field_display_name">Wyświetlana nazwa</label>
+      <input type="text" id="uDisplayName" autocomplete="off"/>
+    </div>
+    <div class="field" style="margin-bottom:.8rem;">
+      <label for="uPassword" data-i18n="users.field_password">Hasło (min. 6 znaków)</label>
+      <input type="password" id="uPassword" autocomplete="new-password"/>
+    </div>
+    <div class="field" style="margin-bottom:.8rem;">
+      <label style="cursor:pointer;">
+        <input type="checkbox" id="uIsAdmin"/> <span data-i18n="users.field_is_admin">Konto administratora</span>
+      </label>
+    </div>
+    <div id="roleSection">
+      <div class="field" style="margin-bottom:.8rem;">
+        <label for="uRole" data-i18n="users.field_role">Rola użytkownika</label>
+        <select id="uRole"></select>
+      </div>
+    </div>
+    <div id="adminRoleSection" style="display:none;">
+      <div class="field" style="margin-bottom:.8rem;">
+        <label data-i18n="users.field_admin_roles">Role administratora</label>
+        <div id="adminRolesChecks"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1.2rem;">
+      <button class="btn btn-secondary" id="userModalCancel" data-i18n="users.cancel">Anuluj</button>
+      <button class="btn" id="userModalSave" data-i18n="users.save">Zapisz</button>
+    </div>
+    <div class="error" id="userModalError" style="color:#e74c3c;font-size:.85rem;margin-top:.5rem;min-height:1.2em;"></div>
+  </div>
+</div>
+
+<!-- Modal: Confirm Delete -->
+<div id="deleteModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:360px;text-align:center;">
+    <h3 data-i18n="users.confirm_delete">Potwierdzenie usunięcia</h3>
+    <p id="deleteMsg"></p>
+    <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;">
+      <button class="btn btn-secondary" id="deleteCancel" data-i18n="users.cancel">Anuluj</button>
+      <button class="btn" style="background:#e74c3c;" id="deleteConfirm" data-i18n="users.delete">Usuń</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ban -->
+<div id="banModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:400px;">
+    <h3 data-i18n="users.ban_title">Zbanuj użytkownika</h3>
+    <div class="field" style="margin-bottom:.8rem;">
+      <label for="banReason" data-i18n="users.ban_reason">Powód (opcjonalnie)</label>
+      <input type="text" id="banReason"/>
+    </div>
+    <div class="field" style="margin-bottom:.8rem;">
+      <label for="banUntil" data-i18n="users.ban_until">Ban do daty (puste = permanentny)</label>
+      <input type="datetime-local" id="banUntil"/>
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;">
+      <button class="btn btn-secondary" id="banCancel" data-i18n="users.cancel">Anuluj</button>
+      <button class="btn" style="background:#e74c3c;" id="banConfirm" data-i18n="users.ban">Zbanuj</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/users.js?v={{ app_version }}"></script>
+{% endblock %}

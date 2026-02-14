@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Login — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css"/>
+  <style>
+    body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
+    .login-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 380px; }
+    .login-logo { text-align: center; margin-bottom: 1.5rem; }
+    .login-logo img { height: 64px; }
+    .login-logo h1 { font-size: 1.3rem; margin: .5rem 0 0; color: var(--text, #1a1a2e); }
+    .login-logo .ver { font-size: .75rem; color: var(--muted, #888); }
+    .login-field { margin-bottom: 1rem; }
+    .login-field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .3rem; color: var(--text, #1a1a2e); }
+    .login-field input { width: 100%; padding: .6rem .75rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .95rem; box-sizing: border-box; outline: none; transition: border-color .2s; }
+    .login-field input:focus { border-color: var(--accent, #4a6cf7); }
+    .login-btn { width: 100%; padding: .7rem; border: none; border-radius: 8px; background: var(--accent, #4a6cf7); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+    .login-btn:hover { opacity: .9; }
+    .login-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .login-error { color: #e74c3c; font-size: .85rem; margin-top: .75rem; min-height: 1.2em; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="/static/logo.png" alt="Logo"/>
+      <h1>{{ app_name }}</h1>
+      <div class="ver">{{ app_version }}</div>
+    </div>
+    <form id="loginForm" autocomplete="on">
+      <div class="login-field">
+        <label for="username" data-i18n="auth.username">Nazwa użytkownika</label>
+        <input type="text" id="username" name="username" autocomplete="username" required autofocus/>
+      </div>
+      <div class="login-field">
+        <label for="password" data-i18n="auth.password">Hasło</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required/>
+      </div>
+      <button type="submit" class="login-btn" id="loginBtn" data-i18n="auth.login">Zaloguj się</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const errEl = document.getElementById('loginError');
+  btn.disabled = true;
+  errEl.textContent = '';
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        username: document.getElementById('username').value.trim(),
+        password: document.getElementById('password').value,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'ok') {
+      location.href = '/';
+    } else {
+      errEl.textContent = data.message || 'Login failed';
+    }
+  } catch (err) {
+    errEl.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

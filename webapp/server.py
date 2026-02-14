@@ -25,9 +25,21 @@ from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
 from backend.settings import APP_NAME, APP_VERSION, AUTHOR_EMAIL
-from backend.settings_store import load_settings, save_settings
+from backend.settings_store import load_settings, save_settings, _local_config_dir
 from backend.legacy_adapter import diarize_text_simple
 from backend.prompts.manager import PromptManager
+
+# --- Multi-user auth system ---
+from webapp.auth.deployment_store import DeploymentStore
+from webapp.auth.user_store import UserStore
+from webapp.auth.session_store import SessionStore
+from webapp.auth.permissions import (
+    get_user_modules, is_route_allowed,
+    PUBLIC_ROUTES, PUBLIC_PREFIXES,
+)
+from webapp.routers import auth as auth_router
+from webapp.routers import users as users_router
+from webapp.routers import setup as setup_router
 
 # Analysis: documents + Ollama
 from backend.document_processor import extract_text, DocumentProcessingError, SUPPORTED_EXTS
@@ -61,6 +73,21 @@ DATA_DIR = Path(os.environ.get("AISTATEWEB_DATA_DIR") or os.environ.get("AISTATE
 PROJECTS_DIR = DATA_DIR / "projects"
 PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 PROMPTS = PromptManager(PROJECTS_DIR)
+
+# --- Multi-user auth stores ---
+_AUTH_CONFIG_DIR = _local_config_dir()
+DEPLOYMENT_STORE = DeploymentStore(_AUTH_CONFIG_DIR)
+USER_STORE = UserStore(_AUTH_CONFIG_DIR)
+SESSION_STORE = SessionStore(_AUTH_CONFIG_DIR)
+
+
+def _get_session_timeout() -> int:
+    """Read configurable session timeout (hours) from settings."""
+    try:
+        s = load_settings()
+        return int(getattr(s, "session_timeout_hours", 8) or 8)
+    except Exception:
+        return 8
 
 # ---------------------------
 # Admin file logs (persistent)
@@ -1632,6 +1659,31 @@ def require_existing_file(path: Path, msg: str) -> None:
 app = FastAPI(title=f"{APP_NAME} Web", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 
+# --- Mount auth/setup/users routers ---
+auth_router.init(
+    user_store=USER_STORE,
+    session_store=SESSION_STORE,
+    deployment_store=DEPLOYMENT_STORE,
+    app_log_fn=app_log,
+    get_session_timeout=_get_session_timeout,
+)
+app.include_router(auth_router.router)
+
+users_router.init(
+    user_store=USER_STORE,
+    session_store=SESSION_STORE,
+    app_log_fn=app_log,
+)
+app.include_router(users_router.router)
+
+setup_router.init(
+    user_store=USER_STORE,
+    deployment_store=DEPLOYMENT_STORE,
+    app_log_fn=app_log,
+    projects_dir=PROJECTS_DIR,
+)
+app.include_router(setup_router.router)
+
 # --- Mount routers (refactored modules) ---
 # Chat: inject ollama + log now; GPU_RM + TASKS injected later (after GPU_RM creation)
 chat_router.init(ollama_client=OLLAMA, app_log_fn=app_log, tasks=TASKS)
@@ -1675,6 +1727,94 @@ async def _force_utf8_charset(request: Request, call_next):
     return response
 
 
+# --- Multi-user auth + authorization middleware ---
+@app.middleware("http")
+async def _auth_middleware(request: Request, call_next):
+    """Session check + route authorization for multi-user mode."""
+    path = request.url.path
+    request.state.user = None
+    request.state.multiuser = DEPLOYMENT_STORE.is_multiuser()
+
+    # In single-user mode, skip all auth
+    if not request.state.multiuser:
+        # If not configured at all, redirect to /setup
+        if not DEPLOYMENT_STORE.is_configured() and path not in ("/setup", "/static/app.css", "/static/logo.png") and not path.startswith("/static/") and not path.startswith("/api/setup/"):
+            if path.startswith("/api/"):
+                return JSONResponse({"status": "error", "message": "Setup required"}, status_code=503)
+            return RedirectResponse(url="/setup", status_code=302)
+        return await call_next(request)
+
+    # Multi-user mode — check public routes first
+    if path in PUBLIC_ROUTES:
+        return await call_next(request)
+    for prefix in PUBLIC_PREFIXES:
+        if path.startswith(prefix):
+            return await call_next(request)
+
+    # Setup page is always public
+    if path == "/setup":
+        return await call_next(request)
+
+    # If no users exist yet (setup incomplete), redirect to /setup
+    if not USER_STORE.has_users():
+        if path.startswith("/api/"):
+            return JSONResponse({"status": "error", "message": "Setup required"}, status_code=503)
+        return RedirectResponse(url="/setup", status_code=302)
+
+    # Check session cookie
+    token = request.cookies.get(SessionStore.COOKIE_NAME)
+    if not token:
+        if path.startswith("/api/"):
+            return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
+        return RedirectResponse(url="/login", status_code=302)
+
+    session = SESSION_STORE.get_session(token)
+    if session is None:
+        response = RedirectResponse(url="/login", status_code=302) if not path.startswith("/api/") else JSONResponse({"status": "error", "message": "Session expired"}, status_code=401)
+        response.delete_cookie(key=SessionStore.COOKIE_NAME, path="/")
+        return response
+
+    # Load user
+    user = USER_STORE.get_user(session["user_id"])
+    if user is None:
+        SESSION_STORE.delete_session(token)
+        response = RedirectResponse(url="/login", status_code=302) if not path.startswith("/api/") else JSONResponse({"status": "error", "message": "User not found"}, status_code=401)
+        response.delete_cookie(key=SessionStore.COOKIE_NAME, path="/")
+        return response
+
+    # Check ban
+    if user.banned:
+        if user.banned_until:
+            from datetime import datetime as _dt
+            try:
+                if _dt.now() > _dt.fromisoformat(user.banned_until):
+                    USER_STORE.update_user(user.user_id, {"banned": False, "banned_until": None, "ban_reason": None})
+                else:
+                    SESSION_STORE.delete_session(token)
+                    if path.startswith("/api/"):
+                        return JSONResponse({"status": "error", "message": "Account banned"}, status_code=403)
+                    return RedirectResponse(url="/banned", status_code=302)
+            except ValueError:
+                pass
+        else:
+            SESSION_STORE.delete_session(token)
+            if path.startswith("/api/"):
+                return JSONResponse({"status": "error", "message": "Account banned"}, status_code=403)
+            return RedirectResponse(url="/banned", status_code=302)
+
+    request.state.user = user
+
+    # Authorization: check route access
+    user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles)
+
+    # Common routes: /, /info, /api/auth/me, etc — allowed for any logged-in user
+    # Module-specific routes: checked against user's modules
+    if not is_route_allowed(path, user_modules):
+        if path.startswith("/api/"):
+            return JSONResponse({"status": "error", "message": "Access denied"}, status_code=403)
+        return RedirectResponse(url="/", status_code=302)
+
+    return await call_next(request)
 
 
 # --- Startup: autoscan ASR caches so the UI can label models as installed/uninstalled ---
@@ -1739,8 +1879,40 @@ def home() -> Any:
     return HTMLResponse(html)
 
 
+@app.get("/login", response_class=HTMLResponse)
+def page_login(request: Request) -> Any:
+    return TEMPLATES.TemplateResponse("login.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+    })
+
+
+@app.get("/setup", response_class=HTMLResponse)
+def page_setup(request: Request) -> Any:
+    return TEMPLATES.TemplateResponse("setup.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+    })
+
+
+@app.get("/banned", response_class=HTMLResponse)
+def page_banned(request: Request) -> Any:
+    reason = request.query_params.get("reason", "")
+    return TEMPLATES.TemplateResponse("banned.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "reason": reason,
+    })
+
+
+@app.get("/users", response_class=HTMLResponse)
+def page_users(request: Request) -> Any:
+    return render_page(request, "users.html", "Zarządzanie użytkownikami", "users")
+
+
 def render_page(request: Request, tpl: str, title: str, active: str, current_project: Optional[str] = None, **ctx: Any):
     settings = load_settings()
+    # Multi-user context
+    multiuser = getattr(request.state, "multiuser", False)
+    user = getattr(request.state, "user", None)
+    user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles) if user else []
     return TEMPLATES.TemplateResponse(
         tpl,
         {
@@ -1758,6 +1930,9 @@ def render_page(request: Request, tpl: str, title: str, active: str, current_pro
             "nllb_fast_models": NLLB_FAST_MODELS,
             "nllb_accurate_models": NLLB_ACCURATE_MODELS,
             "current_project": current_project,
+            "multiuser": multiuser,
+            "user": user,
+            "user_modules": user_modules,
             **ctx,
         },
     )
@@ -3678,6 +3853,7 @@ async def api_models_list() -> Any:
 
 @app.post("/api/projects/create")
 async def api_create_project(
+    request: Request,
     name: str = Form(...),
     audio: Optional[UploadFile] = File(None),
 ) -> Any:
@@ -3695,6 +3871,10 @@ async def api_create_project(
     meta["name"] = pname
     meta["created_at"] = meta.get("created_at") or now_iso()
     meta["updated_at"] = now_iso()
+    # Set owner in multi-user mode
+    user = getattr(request.state, "user", None)
+    if user and getattr(request.state, "multiuser", False):
+        meta["owner_id"] = user.user_id
     write_project_meta(pid, meta)
 
     audio_path: Optional[Path] = None
@@ -3719,26 +3899,122 @@ async def api_create_project(
     }
 
 @app.post("/api/projects/new")
-def api_new_project() -> Any:
+def api_new_project(request: Request) -> Any:
     pid = ensure_project(None)
+    # Set owner in multi-user mode
+    user = getattr(request.state, "user", None)
+    if user and getattr(request.state, "multiuser", False):
+        meta = read_project_meta(pid)
+        meta["owner_id"] = user.user_id
+        write_project_meta(pid, meta)
     return {"project_id": pid}
 
 
 @app.get("/api/projects")
-def api_list_projects() -> Any:
+def api_list_projects(request: Request) -> Any:
+    multiuser = getattr(request.state, "multiuser", False)
+    user = getattr(request.state, "user", None)
+
     projects: List[Dict[str, Any]] = []
     for p in PROJECTS_DIR.glob("*"):
         if p.is_dir():
             pid = p.name
             meta = read_project_meta(pid)
-            projects.append({
+
+            # In multi-user mode, filter by ownership/sharing
+            if multiuser and user and not user.is_admin:
+                owner = meta.get("owner_id", "")
+                shares = meta.get("shares") or []
+                shared_user_ids = [s.get("user_id") for s in shares if isinstance(s, dict)]
+                if owner != user.user_id and user.user_id not in shared_user_ids:
+                    continue
+
+            entry = {
                 "project_id": pid,
                 "created_at": meta.get("created_at"),
                 "name": meta.get("name"),
                 "updated_at": meta.get("updated_at"),
-            })
+            }
+            if multiuser:
+                entry["owner_id"] = meta.get("owner_id", "")
+                entry["shares"] = meta.get("shares", [])
+            projects.append(entry)
     projects.sort(key=lambda x: x.get("updated_at") or x.get("created_at") or "", reverse=True)
     return {"projects": projects}
+
+
+# --- Project sharing endpoints ---
+
+@app.post("/api/projects/{project_id}/share")
+async def api_share_project(project_id: str, request: Request) -> Any:
+    """Share a project with another user. Only owner or admin can share."""
+    user = getattr(request.state, "user", None)
+    meta = read_project_meta(project_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    multiuser = getattr(request.state, "multiuser", False)
+    if not multiuser:
+        raise HTTPException(status_code=400, detail="Sharing only available in multi-user mode")
+
+    # Check ownership
+    if user and not user.is_admin and meta.get("owner_id") != user.user_id:
+        raise HTTPException(status_code=403, detail="Only owner or admin can share")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request")
+
+    target_username = (body.get("username") or "").strip()
+    permission = body.get("permission", "read")  # "read" or "edit"
+    if permission not in ("read", "edit"):
+        raise HTTPException(status_code=400, detail="Permission must be 'read' or 'edit'")
+
+    target_user = USER_STORE.get_by_username(target_username)
+    if target_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    shares = meta.get("shares") or []
+    # Remove existing share for this user if any
+    shares = [s for s in shares if s.get("user_id") != target_user.user_id]
+    shares.append({
+        "user_id": target_user.user_id,
+        "username": target_user.username,
+        "permission": permission,
+        "granted_at": now_iso(),
+        "granted_by": user.user_id if user else "system",
+    })
+    meta["shares"] = shares
+    write_project_meta(project_id, meta)
+    return {"status": "ok", "shares": shares}
+
+
+@app.post("/api/projects/{project_id}/unshare")
+async def api_unshare_project(project_id: str, request: Request) -> Any:
+    """Remove sharing for a user."""
+    user = getattr(request.state, "user", None)
+    meta = read_project_meta(project_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    multiuser = getattr(request.state, "multiuser", False)
+    if not multiuser:
+        raise HTTPException(status_code=400, detail="Sharing only available in multi-user mode")
+
+    if user and not user.is_admin and meta.get("owner_id") != user.user_id:
+        raise HTTPException(status_code=403, detail="Only owner or admin can unshare")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request")
+
+    target_user_id = body.get("user_id", "").strip()
+    shares = meta.get("shares") or []
+    meta["shares"] = [s for s in shares if s.get("user_id") != target_user_id]
+    write_project_meta(project_id, meta)
+    return {"status": "ok", "shares": meta["shares"]}
 
 
 @app.get("/api/projects/{project_id}/meta")
