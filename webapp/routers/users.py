@@ -53,6 +53,7 @@ def _user_to_dict(u: UserRecord) -> dict:
         "banned": u.banned,
         "banned_until": u.banned_until,
         "ban_reason": u.ban_reason,
+        "show_ban_expiry": getattr(u, "show_ban_expiry", True),
         "pending": u.pending,
         "pending_role": u.pending_role,
         "created_at": u.created_at,
@@ -245,11 +246,13 @@ async def ban_user(user_id: str, request: Request) -> JSONResponse:
 
     reason = body.get("reason", "")
     until = body.get("until")  # ISO datetime string or None
+    show_ban_expiry = bool(body.get("show_ban_expiry", True))
 
     _user_store.update_user(user_id, {
         "banned": True,
         "banned_until": until,
         "ban_reason": reason,
+        "show_ban_expiry": show_ban_expiry,
     })
 
     # Immediately invalidate all sessions
@@ -272,7 +275,7 @@ async def unban_user(user_id: str, request: Request) -> JSONResponse:
     if existing is None:
         return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
 
-    _user_store.update_user(user_id, {"banned": False, "banned_until": None, "ban_reason": None})
+    _user_store.update_user(user_id, {"banned": False, "banned_until": None, "ban_reason": None, "show_ban_expiry": True})
 
     caller = getattr(request.state, "user", None)
     if _app_log_fn:

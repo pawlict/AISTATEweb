@@ -22,6 +22,7 @@ class UserRecord:
     banned: bool = False
     banned_until: Optional[str] = None  # ISO datetime or None
     ban_reason: Optional[str] = None
+    show_ban_expiry: bool = True        # Whether to show ban expiry date to user
     language: str = "pl"                 # UI language preference (pl, en)
     pending: bool = False               # True = waiting for admin approval
     pending_role: Optional[str] = None  # requested role (shown to admin for approval)

@@ -11,6 +11,8 @@
     html.lang-en .pl-text { display: none !important; }
     html.lang-en br.pl-text { display: none !important; }
     html.lang-en .en { font-size: inherit !important; color: inherit !important; font-style: normal !important; }
+    /* When PL is active (no .lang-en class), hide .en subtitles completely */
+    html:not(.lang-en) .en { display: none !important; }
   </style>
   <script src="/static/icons.js"></script>
 </head>

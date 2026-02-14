@@ -64,72 +64,71 @@
     } catch (e) { /* ignore */ }
   }
 
-  /* ---- Role-access matrix table ---- */
+  /* ---- Role-access matrix (CSS Grid) ---- */
 
   function buildRoleMatrix() {
-    var thead = document.getElementById('roleMatrixHead');
-    var tbody = document.getElementById('roleMatrixBody');
-    if (!thead || !tbody) return;
+    var grid = document.getElementById('roleMatrixGrid');
+    if (!grid) return;
 
-    /* Header row: Rola | Module1 | Module2 | ... */
-    thead.innerHTML = '<th>Rola <br><span class="en">Role</span></th>';
+    var cols = MODULE_ORDER.length + 1; // role name + modules
+    grid.style.gridTemplateColumns = 'minmax(120px, auto) ' + MODULE_ORDER.map(function() { return 'minmax(60px, 1fr)'; }).join(' ');
+    grid.innerHTML = '';
+
+    /* Helper: add a cell */
+    function addCell(html, cls) {
+      var cell = document.createElement('div');
+      cell.className = 'rm-cell ' + (cls || '');
+      cell.innerHTML = html;
+      grid.appendChild(cell);
+      return cell;
+    }
+
+    /* Header row */
+    addCell('Rola <span class="en">Role</span>', 'rm-header rm-role-name');
     MODULE_ORDER.forEach(function(mk) {
       var lab = MODULE_LABELS[mk] || { pl: mk, en: mk };
-      thead.innerHTML += '<th>' + esc(lab.pl) + '<br><span class="en">' + esc(lab.en) + '</span></th>';
+      addCell(esc(lab.pl) + ' <span class="en">' + esc(lab.en) + '</span>', 'rm-header');
     });
 
-    /* Body */
-    tbody.innerHTML = '';
-
     /* Section: User roles */
-    var sectionTr = document.createElement('tr');
-    sectionTr.className = 'section-row';
-    sectionTr.innerHTML = '<td colspan="' + (MODULE_ORDER.length + 1) + '">Role użytkowników <span class="en">User roles</span></td>';
-    tbody.appendChild(sectionTr);
+    var sec1 = addCell('Role użytkowników <span class="en">User roles</span>', 'rm-section');
+    sec1.style.gridColumn = '1 / ' + (cols + 1);
 
     userRoles.forEach(function(role) {
       var mods = roleModules[role] || [];
-      var tr = document.createElement('tr');
-      var enName = ROLE_EN[role] ? '<br><span class="en">' + esc(ROLE_EN[role]) + '</span>' : '';
-      tr.innerHTML = '<td>' + esc(role) + enName + '</td>';
+      var enName = ROLE_EN[role] ? ' <span class="en">' + esc(ROLE_EN[role]) + '</span>' : '';
+      addCell(esc(role) + enName, 'rm-role-name');
       MODULE_ORDER.forEach(function(mk) {
         if (mods.indexOf(mk) !== -1) {
-          tr.innerHTML += '<td class="check">&#10003;</td>';
+          addCell('\u2713', 'rm-check');
         } else {
-          tr.innerHTML += '<td class="no-access">&#8722;</td>';
+          addCell('\u2212', 'rm-no');
         }
       });
-      tbody.appendChild(tr);
     });
 
     /* Section: Admin roles */
-    var adminSectionTr = document.createElement('tr');
-    adminSectionTr.className = 'section-row';
-    adminSectionTr.innerHTML = '<td colspan="' + (MODULE_ORDER.length + 1) + '">Role administracyjne <span class="en">Admin roles</span></td>';
-    tbody.appendChild(adminSectionTr);
+    var sec2 = addCell('Role administracyjne <span class="en">Admin roles</span>', 'rm-section');
+    sec2.style.gridColumn = '1 / ' + (cols + 1);
 
-    /* G\u0142\u00f3wny Opiekun (Super Admin) — all modules */
-    var saTr = document.createElement('tr');
-    saTr.innerHTML = '<td>G\u0142\u00f3wny Opiekun<br><span class="en">Main Guardian</span></td>';
+    /* Główny Opiekun — all modules */
+    addCell('G\u0142\u00f3wny Opiekun <span class="en">Main Guardian</span>', 'rm-role-name');
     MODULE_ORDER.forEach(function() {
-      saTr.innerHTML += '<td class="all">&#10003;</td>';
+      addCell('\u2713', 'rm-check');
     });
-    tbody.appendChild(saTr);
 
     /* Individual admin roles */
     adminRoles.forEach(function(role) {
       var mods = adminRoleModules[role] || [];
-      var tr = document.createElement('tr');
-      var enName = ROLE_EN[role] ? '<br><span class="en">' + esc(ROLE_EN[role]) + '</span>' : '';
-      tr.innerHTML = '<td>' + esc(role) + enName + '</td>';
+      var enName = ROLE_EN[role] ? ' <span class="en">' + esc(ROLE_EN[role]) + '</span>' : '';
+      addCell(esc(role) + enName, 'rm-role-name');
       MODULE_ORDER.forEach(function(mk) {
         if (mods.indexOf(mk) !== -1) {
-          tr.innerHTML += '<td class="check">&#10003;</td>';
+          addCell('\u2713', 'rm-check');
         } else {
-          tr.innerHTML += '<td class="no-access">&#8722;</td>';
+          addCell('\u2212', 'rm-no');
         }
       });
-      tbody.appendChild(tr);
     });
   }
 
@@ -554,6 +553,7 @@
     document.getElementById('banUsername').textContent = u.username;
     document.getElementById('banDuration').value = 'perm';
     document.getElementById('banReason').value = '';
+    document.getElementById('banShowExpiry').checked = true;
     document.getElementById('banModal').style.display = 'flex';
   }
 
@@ -579,11 +579,13 @@
       until = new Date(now.getTime() + ms).toISOString();
     }
 
+    var showExpiry = document.getElementById('banShowExpiry').checked;
+
     try {
       await fetch('/api/users/' + banningUser.user_id + '/ban', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ reason: reason, until: until }),
+        body: JSON.stringify({ reason: reason, until: until, show_ban_expiry: showExpiry }),
       });
     } catch (e) { /* ignore */ }
     document.getElementById('banModal').style.display = 'none';
