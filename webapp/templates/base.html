@@ -254,12 +254,14 @@
   </aside>
 
   <main class="main">
+    {% if active not in ('users', 'settings', 'admin', 'logs', 'info') %}
     <div class="topbar">
       <div class="topbar-left">
         <div class="small"><span data-i18n="top.current_project">Bieżący projekt</span>: <b id="current_project">(…)</b></div>
         <div class="small"><span data-i18n="top.source_file">Plik źródłowy projektu</span>: <b id="current_audio">(…)</b></div>
       </div>
     </div>
+    {% endif %}
 
     {% block content %}{% endblock %}
   </main>
