@@ -112,6 +112,7 @@ COMMON_ROUTES: Set[str] = {
     "/api/auth/logout",
     "/api/auth/me",
     "/api/auth/change-password",
+    "/api/auth/language",
 }
 
 COMMON_PREFIXES: List[str] = [

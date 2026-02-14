@@ -129,7 +129,7 @@ async def login(request: Request) -> JSONResponse:
     if _app_log_fn:
         _app_log_fn(f"Auth: user '{username}' logged in from {ip}")
 
-    response = JSONResponse({"status": "ok", "user_id": user.user_id, "username": user.username})
+    response = JSONResponse({"status": "ok", "user_id": user.user_id, "username": user.username, "language": user.language or "pl"})
     response.set_cookie(
         key=SessionStore.COOKIE_NAME,
         value=token,
@@ -170,6 +170,7 @@ async def me(request: Request) -> JSONResponse:
             "admin_roles": user.admin_roles,
             "is_superadmin": user.is_superadmin,
             "modules": modules,
+            "language": user.language or "pl",
         },
     })
 
@@ -206,6 +207,27 @@ async def change_password(request: Request) -> JSONResponse:
         _app_log_fn(f"Auth: user '{user.username}' changed their password")
 
     return JSONResponse({"status": "ok"})
+
+
+@router.post("/language")
+async def set_language(request: Request) -> JSONResponse:
+    """Set the user's UI language preference (pl or en)."""
+    assert _user_store
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    lang = (body.get("language") or "pl").strip().lower()
+    if lang not in ("pl", "en"):
+        lang = "pl"
+
+    _user_store.update_user(user.user_id, {"language": lang})
+    return JSONResponse({"status": "ok", "language": lang})
 
 
 @router.post("/register")

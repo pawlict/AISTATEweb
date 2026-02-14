@@ -44,6 +44,10 @@
     .success-msg { text-align: center; padding: 2rem 0; }
     .success-msg h2 { color: #27ae60; }
     .success-msg h2 + .en { color: #27ae60; opacity: .7; }
+    .lang-switch { display: flex; justify-content: center; gap: .3rem; margin-bottom: 1rem; }
+    .lang-btn { padding: .25rem .6rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 6px; background: transparent; cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--muted, #888); transition: all .2s; }
+    .lang-btn.active { background: var(--accent, #4a6cf7); color: #fff; border-color: var(--accent, #4a6cf7); }
+    .lang-btn:hover:not(.active) { border-color: var(--accent, #4a6cf7); color: var(--accent, #4a6cf7); }
   </style>
 </head>
 <body>
@@ -52,6 +56,11 @@
       <img src="/static/logo.png" alt="Logo"/>
       <h1>{{ app_name }}</h1>
       <div class="ver">{{ app_version }}</div>
+    </div>
+
+    <div class="lang-switch">
+      <button class="lang-btn active" data-lang="pl" id="langPl">PL</button>
+      <button class="lang-btn" data-lang="en" id="langEn">EN</button>
     </div>
 
     <!-- Step 1: Mode Selection -->
@@ -144,6 +153,22 @@
 
 <script>
 (function(){
+  /* Language toggle */
+  var curLang = localStorage.getItem('aistate_ui_lang') || 'pl';
+  function applyLang(lang) {
+    curLang = lang;
+    localStorage.setItem('aistate_ui_lang', lang);
+    document.querySelectorAll('.lang-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.lang === lang); });
+    document.querySelectorAll('.en').forEach(function(el) {
+      if (lang === 'en') { el.style.fontStyle = 'normal'; el.style.fontWeight = '600'; }
+      else { el.style.fontStyle = ''; el.style.fontWeight = ''; }
+    });
+  }
+  document.querySelectorAll('.lang-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { applyLang(btn.dataset.lang); });
+  });
+  applyLang(curLang);
+
   let selectedMode = null;
   let createdAdminId = null;
 

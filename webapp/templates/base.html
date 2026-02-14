@@ -44,6 +44,10 @@
         <div class="user-badge-role">{{ user.role or (user.admin_roles|join(', ') if user.admin_roles else 'Super Admin') }}</div>
         <div class="user-badge-name">{{ user.display_name or user.username }}</div>
         <div class="user-badge-menu" id="userBadgeMenu" style="display:none;">
+          <div class="user-badge-lang" id="userLangSwitch">
+            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'pl' }}" data-lang="pl">PL</button>
+            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'en' }}" data-lang="en">EN</button>
+          </div>
           <button class="user-badge-btn" id="btnChangePassword" data-i18n="auth.change_password">Zmień hasło</button>
           <button class="user-badge-btn user-badge-logout" id="btnLogout" data-i18n="auth.logout">Wyloguj</button>
         </div>
@@ -270,6 +274,11 @@
 <script src="/static/app.js?v={{ app_version }}"></script>
 <script>
   (async()=>{
+    {% if multiuser and user %}
+    /* Sync user's server-side language preference to localStorage before i18n init */
+    var _serverLang = '{{ user.language or "pl" }}';
+    localStorage.setItem('aistate_ui_lang', _serverLang);
+    {% endif %}
     await initI18n();
     await refreshCurrentProjectInfo();
     applyI18n();
@@ -281,10 +290,29 @@
       var menu = document.getElementById('userBadgeMenu');
       if (badge && menu) {
         badge.addEventListener('click', function(e) {
-          if (e.target.closest('.user-badge-btn')) return;
+          if (e.target.closest('.user-badge-btn') || e.target.closest('.lang-chip')) return;
           menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
         });
       }
+      /* Language switcher */
+      document.querySelectorAll('#userLangSwitch .lang-chip').forEach(function(btn) {
+        btn.addEventListener('click', async function(e) {
+          e.stopPropagation();
+          var lang = btn.dataset.lang;
+          document.querySelectorAll('#userLangSwitch .lang-chip').forEach(function(b) { b.classList.toggle('active', b.dataset.lang === lang); });
+          localStorage.setItem('aistate_ui_lang', lang);
+          try {
+            await fetch('/api/auth/language', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({language: lang}),
+            });
+          } catch(e) {}
+          /* Reload i18n and re-apply */
+          await loadI18n(lang);
+          applyI18n();
+        });
+      });
       var logoutBtn = document.getElementById('btnLogout');
       if (logoutBtn) {
         logoutBtn.addEventListener('click', async function() {
@@ -295,18 +323,18 @@
       var changePwBtn = document.getElementById('btnChangePassword');
       if (changePwBtn) {
         changePwBtn.addEventListener('click', function() {
-          var cur = prompt('Aktualne hasło:');
+          var cur = prompt(t('auth.current_password_prompt') !== 'auth.current_password_prompt' ? t('auth.current_password_prompt') : 'Aktualne hasło:');
           if (!cur) return;
-          var nw = prompt('Nowe hasło (min. 6 znaków):');
-          if (!nw || nw.length < 6) { alert('Hasło musi mieć min. 6 znaków'); return; }
+          var nw = prompt(t('auth.new_password_prompt') !== 'auth.new_password_prompt' ? t('auth.new_password_prompt') : 'Nowe hasło (min. 6 znaków):');
+          if (!nw || nw.length < 6) { alert('Hasło musi mieć min. 6 znaków / Password must be at least 6 characters'); return; }
           fetch('/api/auth/change-password', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify({current_password: cur, new_password: nw}),
           }).then(r => r.json()).then(d => {
-            if (d.status === 'ok') alert('Hasło zmienione');
-            else alert(d.message || 'Błąd');
-          }).catch(() => alert('Błąd połączenia'));
+            if (d.status === 'ok') alert('Hasło zmienione / Password changed');
+            else alert(d.message || 'Error');
+          }).catch(() => alert('Connection error'));
         });
       }
     })();
