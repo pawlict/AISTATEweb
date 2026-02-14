@@ -1959,7 +1959,7 @@ def render_page(request: Request, tpl: str, title: str, active: str, current_pro
             "title": title,
             "active": active,
             "app_name": APP_NAME,
-            "app_fullname": "Artificial Intelligence Speech‑To‑Analysis‑Translation Engine",
+            "app_fullname": "Artificial Intelligence Speech‑To‑Analysis‑Intelligence Engine",
             "app_version": APP_VERSION,
             "whisper_models": WHISPER_MODELS,
             "default_whisper_model": getattr(settings, "whisper_model", "large-v3") or "large-v3",
