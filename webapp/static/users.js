@@ -640,5 +640,9 @@
   });
 
   /* ---- Init ---- */
-  loadRoles().then(function() { loadUsers(); });
+  loadRoles().then(function() {
+    loadUsers().then(function() {
+      if (typeof applyBilingualMode === 'function') applyBilingualMode();
+    });
+  });
 })();
