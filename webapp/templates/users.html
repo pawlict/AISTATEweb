@@ -26,32 +26,53 @@
   </table>
 </div>
 
-<!-- Role-access reference table -->
-<div class="card" style="padding:1.5rem;margin-top:1rem;">
-  <h3 style="margin-top:0;">Uprawnienia ról — dostęp do modułów <br><span class="en">Role permissions — module access</span></h3>
-  <p style="color:var(--muted,#888);font-size:.82rem;margin-bottom:1rem;">
-    Każda rola daje dostęp do określonych modułów. Użytkownik widzi w menu tylko te moduły, do których ma uprawnienia.
-    <br><span class="en">Each role grants access to specific modules. Users only see modules they have permissions for.</span>
-  </p>
-  <div style="overflow-x:auto;">
-    <table class="data-table role-matrix" id="roleMatrix" style="width:100%;font-size:.85rem;">
-      <thead><tr id="roleMatrixHead"></tr></thead>
-      <tbody id="roleMatrixBody"></tbody>
-    </table>
+<!-- Role-access reference panel (compact sidebar) -->
+<div class="role-panel" id="rolePanel">
+  <div class="role-panel-toggle" id="rolePanelToggle">
+    <span class="role-panel-arrow" id="rolePanelArrow">&#9654;</span>
+    <span>Uprawnienia ról <span class="en">Role permissions</span></span>
+  </div>
+  <div class="role-panel-body" id="rolePanelBody" style="display:none;">
+    <div style="overflow-x:auto;">
+      <table class="data-table role-matrix" id="roleMatrix" style="width:100%;font-size:.72rem;">
+        <thead><tr id="roleMatrixHead"></tr></thead>
+        <tbody id="roleMatrixBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
 <style>
   .en { font-size: 70%; color: var(--muted, #999); font-style: italic; }
   th .en, td .en { font-size: 70%; }
-  .role-matrix th, .role-matrix td { text-align: center; padding: .45rem .5rem; vertical-align: middle; }
+  /* Role panel: compact collapsible sidebar */
+  .role-panel {
+    position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+    max-width: 20vw; min-width: 220px; z-index: 80;
+    background: var(--card-bg, #fff); border-radius: 12px 0 0 12px;
+    box-shadow: -2px 0 16px rgba(0,0,0,.08); border: 1px solid var(--border, #e0e3e8); border-right: none;
+    transition: max-width .3s;
+  }
+  .role-panel-toggle {
+    cursor: pointer; padding: .5rem .75rem; font-size: .78rem; font-weight: 600;
+    color: var(--text, #1a1a2e); display: flex; align-items: center; gap: .4rem;
+    user-select: none; border-bottom: 1px solid var(--border, #e0e3e8);
+  }
+  .role-panel-toggle:hover { background: rgba(74,108,247,.04); }
+  .role-panel-arrow { font-size: .65rem; transition: transform .2s; display: inline-block; }
+  .role-panel-arrow.open { transform: rotate(90deg); }
+  .role-panel-body { padding: .5rem; max-height: 60vh; overflow-y: auto; }
+  .role-matrix th, .role-matrix td { text-align: center; padding: .2rem .3rem; vertical-align: middle; white-space: nowrap; }
   .role-matrix th:first-child, .role-matrix td:first-child { text-align: left; font-weight: 600; }
-  .role-matrix .check { color: #27ae60; font-weight: 700; font-size: 1.1rem; }
-  .role-matrix .dash { color: #ddd; }
-  .role-matrix .all { color: #1e40af; font-weight: 700; font-size: .9rem; }
-  .role-matrix thead th { background: var(--card-bg, #f8f9fa); font-size: .78rem; white-space: nowrap; }
+  .role-matrix .check { color: #27ae60; font-weight: 700; font-size: .85rem; }
+  .role-matrix .dash { color: #ddd; font-size: .75rem; }
+  .role-matrix .all { color: #1e40af; font-weight: 700; font-size: .7rem; }
+  .role-matrix thead th { background: var(--card-bg, #f8f9fa); font-size: .65rem; white-space: nowrap; }
   .role-matrix tbody tr:hover { background: rgba(74,108,247,.04); }
-  .role-matrix .section-row td { background: #f0f2f5; font-weight: 700; font-size: .78rem; color: var(--muted,#666); padding: .3rem .5rem; }
+  .role-matrix .section-row td { background: #f0f2f5; font-weight: 700; font-size: .65rem; color: var(--muted,#666); padding: .2rem .3rem; }
+  @media (max-width: 900px) {
+    .role-panel { position: static; transform: none; max-width: 100%; min-width: auto; border-radius: 12px; margin-top: 1rem; border-right: 1px solid var(--border, #e0e3e8); }
+  }
 </style>
 
 <!-- Modal: Add/Edit User -->
@@ -233,4 +254,18 @@
 
 {% block scripts %}
 <script src="/static/users.js?v={{ app_version }}"></script>
+<script>
+(function(){
+  var toggle = document.getElementById('rolePanelToggle');
+  var body = document.getElementById('rolePanelBody');
+  var arrow = document.getElementById('rolePanelArrow');
+  if (toggle && body && arrow) {
+    toggle.addEventListener('click', function() {
+      var open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : 'block';
+      arrow.classList.toggle('open', !open);
+    });
+  }
+})();
+</script>
 {% endblock %}

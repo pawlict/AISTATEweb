@@ -31,6 +31,10 @@
     .login-link { text-align: center; margin-top: 1rem; font-size: .85rem; }
     .login-link a { color: var(--accent, #4a6cf7); text-decoration: none; font-weight: 600; }
     .login-link .en { font-size: .595rem; color: var(--muted, #999); font-style: italic; }
+    .lang-switch { display: flex; justify-content: center; gap: .3rem; margin-bottom: 1rem; }
+    .lang-btn { padding: .25rem .6rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 6px; background: transparent; cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--muted, #888); transition: all .2s; }
+    .lang-btn.active { background: var(--accent, #4a6cf7); color: #fff; border-color: var(--accent, #4a6cf7); }
+    .lang-btn:hover:not(.active) { border-color: var(--accent, #4a6cf7); color: var(--accent, #4a6cf7); }
   </style>
 </head>
 <body>
@@ -39,6 +43,10 @@
       <img src="/static/logo.png" alt="Logo"/>
       <h1>{{ app_name }}</h1>
       <div class="ver">{{ app_version }}</div>
+    </div>
+    <div class="lang-switch" id="langSwitch">
+      <button class="lang-btn active" data-lang="pl" id="langPl">PL</button>
+      <button class="lang-btn" data-lang="en" id="langEn">EN</button>
     </div>
     <form id="loginForm" autocomplete="on">
       <div class="login-field">
@@ -72,6 +80,40 @@
     'Architekt Funkcji': 'Function Architect'
   };
 
+  /* Language toggle */
+  var curLang = localStorage.getItem('aistate_ui_lang') || 'pl';
+  function applyLang(lang) {
+    curLang = lang;
+    localStorage.setItem('aistate_ui_lang', lang);
+    document.querySelectorAll('.lang-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.lang === lang); });
+    /* In PL mode: show PL text, show .en subtitles small.
+       In EN mode: hide PL text, show .en as primary */
+    document.querySelectorAll('.en').forEach(function(el) {
+      if (lang === 'en') {
+        el.style.fontSize = '';
+        el.style.color = '';
+        el.style.fontStyle = 'normal';
+        el.style.fontWeight = '600';
+      } else {
+        el.style.fontSize = '';
+        el.style.color = '';
+        el.style.fontStyle = '';
+        el.style.fontWeight = '';
+      }
+    });
+    /* Toggle PL-only nodes */
+    document.querySelectorAll('[data-pl]').forEach(function(el) {
+      el.style.display = lang === 'en' ? 'none' : '';
+    });
+    document.querySelectorAll('[data-en-only]').forEach(function(el) {
+      el.style.display = lang === 'en' ? '' : 'none';
+    });
+  }
+  document.querySelectorAll('.lang-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { applyLang(btn.dataset.lang); });
+  });
+  applyLang(curLang);
+
   document.getElementById('loginForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     var btn = document.getElementById('loginBtn');
@@ -92,6 +134,8 @@
       });
       var data = await res.json();
       if (res.ok && data.status === 'ok') {
+        /* Sync user's server-side language preference to localStorage */
+        if (data.language) localStorage.setItem('aistate_ui_lang', data.language);
         location.href = '/';
       } else if (data.code === 'pending') {
         pendingEl.style.display = 'block';
