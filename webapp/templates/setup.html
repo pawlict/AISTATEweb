@@ -14,17 +14,25 @@
     .setup-logo .ver { font-size: .75rem; color: var(--muted, #888); }
     .step { display: none; }
     .step.active { display: block; }
-    h2 { font-size: 1.1rem; margin: 0 0 1rem; color: var(--text, #1a1a2e); }
+    h2 { font-size: 1.1rem; margin: 0 0 .1rem; color: var(--text, #1a1a2e); }
+    h2 + .en { font-size: .77rem; color: var(--muted, #999); font-style: italic; margin-bottom: .8rem; }
+    .sub { font-size: .9rem; margin-bottom: .15rem; color: var(--muted, #666); }
+    .sub + .en { font-size: .63rem; color: var(--muted, #aaa); font-style: italic; margin-bottom: 1rem; }
+    .en { color: var(--muted, #999); font-style: italic; }
     .mode-options { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
     .mode-card { flex: 1; padding: 1.2rem; border: 2px solid var(--border, #d0d5dd); border-radius: 12px; cursor: pointer; text-align: center; transition: border-color .2s, box-shadow .2s; }
     .mode-card:hover, .mode-card.selected { border-color: var(--accent, #4a6cf7); box-shadow: 0 0 0 3px rgba(74,108,247,.15); }
-    .mode-card h3 { margin: 0 0 .4rem; font-size: 1rem; }
-    .mode-card p { margin: 0; font-size: .8rem; color: var(--muted, #888); }
+    .mode-card h3 { margin: 0 0 .1rem; font-size: 1rem; }
+    .mode-card h3 + .en { font-size: .7rem; margin-bottom: .3rem; }
+    .mode-card p { margin: 0 0 .1rem; font-size: .8rem; color: var(--muted, #888); }
+    .mode-card p + .en { font-size: .56rem; }
     .field { margin-bottom: 1rem; }
     .field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .3rem; }
+    .field label .en { font-size: .595rem; font-weight: 400; color: var(--muted, #999); margin-left: .3rem; }
     .field input { width: 100%; padding: .55rem .7rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .95rem; box-sizing: border-box; }
     .field input:focus { border-color: var(--accent, #4a6cf7); outline: none; }
     .btn { padding: .65rem 1.5rem; border: none; border-radius: 8px; background: var(--accent, #4a6cf7); color: #fff; font-size: .95rem; font-weight: 600; cursor: pointer; }
+    .btn .en { font-size: .665rem; font-weight: 400; font-style: italic; margin-left: .3rem; }
     .btn:hover { opacity: .9; }
     .btn:disabled { opacity: .5; cursor: not-allowed; }
     .btn-secondary { background: var(--border, #d0d5dd); color: var(--text, #1a1a2e); }
@@ -35,6 +43,7 @@
     .migrate-item input[type=checkbox] { margin: 0; }
     .success-msg { text-align: center; padding: 2rem 0; }
     .success-msg h2 { color: #27ae60; }
+    .success-msg h2 + .en { color: #27ae60; opacity: .7; }
   </style>
 </head>
 <body>
@@ -48,19 +57,25 @@
     <!-- Step 1: Mode Selection -->
     <div class="step active" id="step1">
       <h2>Tryb pracy</h2>
-      <p style="font-size:.9rem;margin-bottom:1rem;color:var(--muted,#666);">Wybierz tryb pracy aplikacji. Tej decyzji nie można łatwo cofnąć.</p>
+      <div class="en">Operating mode</div>
+      <p class="sub">Wybierz tryb pracy aplikacji. Tej decyzji nie można łatwo cofnąć.</p>
+      <div class="en">Choose the application operating mode. This decision cannot be easily reversed.</div>
       <div class="mode-options">
         <div class="mode-card" data-mode="single" id="modeSingle">
           <h3>Pojedynczy użytkownik</h3>
+          <div class="en">Single user</div>
           <p>Bez logowania, pełny dostęp do wszystkich modułów. Idealny do pracy indywidualnej.</p>
+          <div class="en">No login, full access to all modules. Ideal for individual use.</div>
         </div>
         <div class="mode-card" data-mode="multi" id="modeMulti">
           <h3>Wielu użytkowników</h3>
+          <div class="en">Multiple users</div>
           <p>Logowanie, role, kontrola dostępu do modułów. Wymaga utworzenia administratora.</p>
+          <div class="en">Login, roles, module access control. Requires creating an administrator.</div>
         </div>
       </div>
       <div class="btn-row">
-        <button class="btn" id="step1Next" disabled>Dalej</button>
+        <button class="btn" id="step1Next" disabled>Dalej <span class="en">Next</span></button>
       </div>
       <div class="error" id="step1Error"></div>
     </div>
@@ -68,28 +83,28 @@
     <!-- Step 2: Admin Account (multi only) -->
     <div class="step" id="step2">
       <h2>Utwórz Super Admina</h2>
-      <p style="font-size:.85rem;color:var(--muted,#666);margin-bottom:1rem;">
-        Pierwszy administrator ma pełne uprawnienia: Architekt Funkcji + Strażnik Dostępu. Nie może być zbanowany.
-      </p>
+      <div class="en">Create Super Admin</div>
+      <p class="sub">Pierwszy administrator ma pełne uprawnienia: Architekt Funkcji + Strażnik Dostępu. Nie może być zbanowany.</p>
+      <div class="en">The first administrator has full permissions: Function Architect + Access Guardian. Cannot be banned.</div>
       <div class="field">
-        <label for="adminUsername">Nazwa użytkownika</label>
+        <label for="adminUsername">Nazwa użytkownika <span class="en">Username</span></label>
         <input type="text" id="adminUsername" autocomplete="off" placeholder="np. admin"/>
       </div>
       <div class="field">
-        <label for="adminDisplayName">Wyświetlana nazwa</label>
+        <label for="adminDisplayName">Wyświetlana nazwa <span class="en">Display name</span></label>
         <input type="text" id="adminDisplayName" autocomplete="off" placeholder="np. Jan Kowalski"/>
       </div>
       <div class="field">
-        <label for="adminPassword">Hasło (min. 6 znaków)</label>
+        <label for="adminPassword">Hasło (min. 6 znaków) <span class="en">Password (min. 6 chars)</span></label>
         <input type="password" id="adminPassword" autocomplete="new-password"/>
       </div>
       <div class="field">
-        <label for="adminPassword2">Powtórz hasło</label>
+        <label for="adminPassword2">Powtórz hasło <span class="en">Confirm password</span></label>
         <input type="password" id="adminPassword2" autocomplete="new-password"/>
       </div>
       <div class="btn-row">
-        <button class="btn btn-secondary" id="step2Back">Wstecz</button>
-        <button class="btn" id="step2Next">Utwórz konto</button>
+        <button class="btn btn-secondary" id="step2Back">Wstecz <span class="en">Back</span></button>
+        <button class="btn" id="step2Next">Utwórz konto <span class="en">Create account</span></button>
       </div>
       <div class="error" id="step2Error"></div>
     </div>
@@ -97,18 +112,18 @@
     <!-- Step 3: Project Migration (multi only, if projects exist) -->
     <div class="step" id="step3">
       <h2>Migracja projektów</h2>
-      <p style="font-size:.85rem;color:var(--muted,#666);margin-bottom:.5rem;">
-        Znaleziono istniejące projekty. Przypisz je do Super Admina lub pomiń (możesz to zrobić później).
-      </p>
+      <div class="en">Project migration</div>
+      <p class="sub">Znaleziono istniejące projekty. Przypisz je do Super Admina lub pomiń (możesz to zrobić później).</p>
+      <div class="en">Existing projects found. Assign them to Super Admin or skip (you can do this later).</div>
       <div>
         <label style="font-size:.85rem;cursor:pointer;">
-          <input type="checkbox" id="migrateSelectAll" checked/> Zaznacz wszystkie
+          <input type="checkbox" id="migrateSelectAll" checked/> Zaznacz wszystkie <span class="en" style="font-size:.595rem;">Select all</span>
         </label>
       </div>
       <div class="migrate-list" id="migrateList"></div>
       <div class="btn-row">
-        <button class="btn btn-secondary" id="step3Skip">Pomiń</button>
-        <button class="btn" id="step3Migrate">Przypisz do Super Admina</button>
+        <button class="btn btn-secondary" id="step3Skip">Pomiń <span class="en">Skip</span></button>
+        <button class="btn" id="step3Migrate">Przypisz do Super Admina <span class="en">Assign to Super Admin</span></button>
       </div>
       <div class="error" id="step3Error"></div>
     </div>
@@ -117,9 +132,11 @@
     <div class="step" id="step4">
       <div class="success-msg">
         <h2>Gotowe!</h2>
+        <div class="en">Done!</div>
         <p style="font-size:.95rem;" id="doneMsg">Konfiguracja zakończona.</p>
+        <div class="en" id="doneMsgEn">Configuration complete.</div>
         <div class="btn-row" style="justify-content:center;margin-top:1.5rem;">
-          <button class="btn" id="doneBtn">Przejdź do aplikacji</button>
+          <button class="btn" id="doneBtn">Przejdź do aplikacji <span class="en">Go to application</span></button>
         </div>
       </div>
     </div>
@@ -159,6 +176,7 @@
 
       if (selectedMode === 'single') {
         document.getElementById('doneMsg').textContent = 'Tryb pojedynczego użytkownika — brak zmian w aplikacji.';
+        document.getElementById('doneMsgEn').textContent = 'Single user mode — no changes to the application.';
         showStep(4);
       } else {
         showStep(2);
@@ -179,9 +197,9 @@
     const password = document.getElementById('adminPassword').value;
     const password2 = document.getElementById('adminPassword2').value;
 
-    if (!username) { errEl.textContent = 'Podaj nazwę użytkownika'; return; }
-    if (password.length < 6) { errEl.textContent = 'Hasło musi mieć min. 6 znaków'; return; }
-    if (password !== password2) { errEl.textContent = 'Hasła nie są identyczne'; return; }
+    if (!username) { errEl.textContent = 'Podaj nazwę użytkownika / Enter a username'; return; }
+    if (password.length < 6) { errEl.textContent = 'Hasło musi mieć min. 6 znaków / Password must be at least 6 characters'; return; }
+    if (password !== password2) { errEl.textContent = 'Hasła nie są identyczne / Passwords do not match'; return; }
 
     try {
       const res = await fetch('/api/setup/admin', {
@@ -245,6 +263,7 @@
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
       document.getElementById('doneMsg').textContent = 'Zmigranowano ' + data.migrated + ' projektów. Konfiguracja zakończona.';
+      document.getElementById('doneMsgEn').textContent = 'Migrated ' + data.migrated + ' projects. Configuration complete.';
       showStep(4);
     } catch (e) {
       errEl.textContent = 'Connection error';

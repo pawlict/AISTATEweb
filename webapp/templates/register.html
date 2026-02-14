@@ -7,23 +7,29 @@
   <link rel="stylesheet" href="/static/app.css"/>
   <style>
     body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
-    .reg-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 400px; }
+    .reg-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 420px; }
     .reg-logo { text-align: center; margin-bottom: 1.5rem; }
     .reg-logo img { height: 56px; }
     .reg-logo h1 { font-size: 1.2rem; margin: .5rem 0 0; color: var(--text, #1a1a2e); }
     .reg-logo .ver { font-size: .75rem; color: var(--muted, #888); }
-    h2 { font-size: 1.05rem; margin: 0 0 .3rem; color: var(--text, #1a1a2e); }
-    .sub { font-size: .82rem; color: var(--muted, #888); margin: 0 0 1.2rem; }
+    h2 { font-size: 1.05rem; margin: 0 0 .1rem; color: var(--text, #1a1a2e); }
+    h2 + .en { font-size: .735rem; color: var(--muted, #999); font-style: italic; margin-bottom: .2rem; }
+    .sub { font-size: .82rem; color: var(--muted, #888); margin: 0 0 .15rem; }
+    .sub + .en { font-size: .574rem; color: var(--muted, #aaa); font-style: italic; margin: 0 0 1rem; }
+    .en { color: var(--muted, #999); font-style: italic; }
     .field { margin-bottom: .9rem; }
     .field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .3rem; color: var(--text, #1a1a2e); }
+    .field label .en { font-size: .595rem; font-weight: 400; color: var(--muted, #999); margin-left: .3rem; }
     .field input { width: 100%; padding: .6rem .75rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .95rem; box-sizing: border-box; outline: none; transition: border-color .2s; }
     .field input:focus { border-color: var(--accent, #4a6cf7); }
     .reg-btn { width: 100%; padding: .7rem; border: none; border-radius: 8px; background: var(--accent, #4a6cf7); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; transition: opacity .2s; }
     .reg-btn:hover { opacity: .9; }
     .reg-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .reg-btn .en { font-size: .7rem; font-weight: 400; font-style: italic; margin-left: .4rem; }
     .reg-error { color: #e74c3c; font-size: .85rem; margin-top: .75rem; min-height: 1.2em; text-align: center; }
     .reg-link { text-align: center; margin-top: 1rem; font-size: .85rem; }
     .reg-link a { color: var(--accent, #4a6cf7); text-decoration: none; font-weight: 600; }
+    .reg-link .en { font-size: .595rem; color: var(--muted, #999); font-style: italic; }
   </style>
 </head>
 <body>
@@ -33,30 +39,33 @@
       <h1>{{ app_name }}</h1>
       <div class="ver">{{ app_version }}</div>
     </div>
-    <h2 data-i18n="auth.register_title">Utwórz konto</h2>
-    <p class="sub" data-i18n="auth.register_desc">Po rejestracji konto musi zostać zatwierdzone przez administratora.</p>
+    <h2>Utwórz konto</h2>
+    <div class="en">Create an account</div>
+    <p class="sub">Po rejestracji konto musi zostać zatwierdzone przez administratora.</p>
+    <div class="en">After registration, your account must be approved by an administrator.</div>
     <form id="regForm" autocomplete="on">
       <div class="field">
-        <label for="username" data-i18n="auth.username">Nazwa użytkownika</label>
+        <label for="username">Nazwa użytkownika <span class="en">Username</span></label>
         <input type="text" id="username" name="username" autocomplete="username" required autofocus minlength="3"/>
       </div>
       <div class="field">
-        <label for="display_name" data-i18n="auth.display_name">Wyświetlana nazwa (opcjonalna)</label>
+        <label for="display_name">Wyświetlana nazwa (opcjonalna) <span class="en">Display name (optional)</span></label>
         <input type="text" id="display_name" name="display_name" autocomplete="name"/>
       </div>
       <div class="field">
-        <label for="password" data-i18n="auth.password">Hasło (min. 6 znaków)</label>
+        <label for="password">Hasło (min. 6 znaków) <span class="en">Password (min. 6 characters)</span></label>
         <input type="password" id="password" name="password" autocomplete="new-password" required minlength="6"/>
       </div>
       <div class="field">
-        <label for="password2" data-i18n="auth.password_confirm">Powtórz hasło</label>
+        <label for="password2">Powtórz hasło <span class="en">Confirm password</span></label>
         <input type="password" id="password2" autocomplete="new-password" required/>
       </div>
-      <button type="submit" class="reg-btn" id="regBtn" data-i18n="auth.register_submit">Zarejestruj się</button>
+      <button type="submit" class="reg-btn" id="regBtn">Zarejestruj się <span class="en">Register</span></button>
       <div class="reg-error" id="regError"></div>
     </form>
     <div class="reg-link">
-      <span data-i18n="auth.have_account">Masz już konto?</span> <a href="/login" data-i18n="auth.login">Zaloguj się</a>
+      <span>Masz już konto?</span> <a href="/login">Zaloguj się</a>
+      <div class="en">Already have an account? <a href="/login" style="color:var(--accent,#4a6cf7);font-size:.595rem;">Log in</a></div>
     </div>
   </div>
 <script>
@@ -71,7 +80,7 @@ document.getElementById('regForm').addEventListener('submit', async function(e) 
   var password2 = document.getElementById('password2').value;
 
   if (password !== password2) {
-    errEl.textContent = 'Hasła nie są identyczne';
+    errEl.textContent = 'Hasła nie są identyczne / Passwords do not match';
     btn.disabled = false;
     return;
   }
@@ -88,7 +97,6 @@ document.getElementById('regForm').addEventListener('submit', async function(e) 
     });
     var data = await res.json();
     if (res.ok && data.status === 'ok') {
-      // Redirect to pending page with approver info
       var params = '';
       if (data.approvers && data.approvers.length > 0) {
         params = '?approvers=' + encodeURIComponent(data.approvers.join(', '));
