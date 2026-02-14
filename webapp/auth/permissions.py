@@ -119,7 +119,7 @@ COMMON_PREFIXES: List[str] = [
     "/api/projects/",  # filtered by ownership in the handler
     "/api/tts/voices",  # read-only: all users can list available TTS voices
     "/api/tts/engines",  # read-only: TTS engine info
-    "/api/messages/",  # call center messaging system
+    "/api/messages",  # call center messaging system (matches /api/messages and /api/messages/*)
 ]
 
 

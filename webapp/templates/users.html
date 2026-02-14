@@ -53,30 +53,26 @@
     <div class="field" style="margin-bottom:.5rem;">
       <label style="font-size:.78rem;">Treść <span class="en">Content</span></label>
       <div class="cc-toolbar" id="ccToolbar">
-        <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
-        <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
-        <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
-        <button type="button" data-cmd="strikeThrough" title="Strike"><s>S</s></button>
+        <button type="button" data-cmd="bold" title="Pogrubienie / Bold"><b>B</b></button>
+        <button type="button" data-cmd="italic" title="Kursywa / Italic"><i>I</i></button>
+        <button type="button" data-cmd="underline" title="Podkreślenie / Underline"><u>U</u></button>
+        <button type="button" data-cmd="strikeThrough" title="Przekreślenie / Strike"><s>S</s></button>
         <span class="cc-sep"></span>
-        <button type="button" data-cmd="insertUnorderedList" title="Bullet list">&#8226;</button>
-        <button type="button" data-cmd="insertOrderedList" title="Numbered list">1.</button>
+        <button type="button" data-cmd="insertUnorderedList" title="Lista / Bullet list">&#8226;</button>
+        <button type="button" data-cmd="insertOrderedList" title="Numeracja / Numbered">1.</button>
         <span class="cc-sep"></span>
-        <button type="button" data-cmd="justifyLeft" title="Align left">&#8676;</button>
-        <button type="button" data-cmd="justifyCenter" title="Align center">&#8596;</button>
+        <button type="button" data-cmd="justifyLeft" title="Do lewej / Align left">&#8676;</button>
+        <button type="button" data-cmd="justifyCenter" title="Wyśrodkuj / Center">&#8596;</button>
         <span class="cc-sep"></span>
-        <select id="ccFontSize" title="Font size" style="font-size:.72rem;padding:.1rem .2rem;border:1px solid var(--border,#ccc);border-radius:3px;">
-          <option value="2">Mały</option>
-          <option value="3" selected>Normalny</option>
-          <option value="4">Duży</option>
-          <option value="5">Bardzo duży</option>
-        </select>
-        <select id="ccFontColor" title="Color" style="font-size:.72rem;padding:.1rem .2rem;border:1px solid var(--border,#ccc);border-radius:3px;">
-          <option value="">Domyślny</option>
-          <option value="#e74c3c" style="color:#e74c3c;">Czerwony</option>
-          <option value="#27ae60" style="color:#27ae60;">Zielony</option>
-          <option value="#2980b9" style="color:#2980b9;">Niebieski</option>
-          <option value="#e67e22" style="color:#e67e22;">Pomarańczowy</option>
-        </select>
+        <button type="button" class="cc-tb-size" data-size="2" title="Mały tekst / Small">A<sub style="font-size:.5em;">-</sub></button>
+        <button type="button" class="cc-tb-size cc-tb-active" data-size="3" title="Normalny / Normal">A</button>
+        <button type="button" class="cc-tb-size" data-size="4" title="Duży tekst / Large">A<sup style="font-size:.5em;">+</sup></button>
+        <span class="cc-sep"></span>
+        <button type="button" class="cc-tb-color" data-color="" title="Domyślny kolor / Default" style="position:relative;"><span class="cc-color-dot" style="background:#333;"></span></button>
+        <button type="button" class="cc-tb-color" data-color="#e74c3c" title="Czerwony / Red"><span class="cc-color-dot" style="background:#e74c3c;"></span></button>
+        <button type="button" class="cc-tb-color" data-color="#27ae60" title="Zielony / Green"><span class="cc-color-dot" style="background:#27ae60;"></span></button>
+        <button type="button" class="cc-tb-color" data-color="#2980b9" title="Niebieski / Blue"><span class="cc-color-dot" style="background:#2980b9;"></span></button>
+        <button type="button" class="cc-tb-color" data-color="#e67e22" title="Pomarańczowy / Orange"><span class="cc-color-dot" style="background:#e67e22;"></span></button>
       </div>
       <div class="cc-editor" id="ccEditor" contenteditable="true"></div>
     </div>
@@ -117,6 +113,10 @@
   .cc-toolbar { display: flex; align-items: center; gap: 2px; padding: .3rem; border: 1px solid var(--border, #ddd); border-bottom: none; border-radius: 6px 6px 0 0; background: #f8f9fa; flex-wrap: wrap; }
   .cc-toolbar button { background: none; border: 1px solid transparent; border-radius: 3px; padding: .15rem .35rem; cursor: pointer; font-size: .78rem; color: var(--text, #333); line-height: 1; }
   .cc-toolbar button:hover { background: var(--border, #e0e3e8); }
+  .cc-toolbar .cc-tb-active { background: var(--border, #e0e3e8); border-color: var(--muted, #999); }
+  .cc-color-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); vertical-align: middle; }
+  .cc-toolbar .cc-tb-color { padding: .15rem .25rem; }
+  .cc-toolbar .cc-tb-size { font-size: .72rem; min-width: 22px; text-align: center; }
   .cc-sep { width: 1px; height: 16px; background: var(--border, #ddd); margin: 0 2px; }
   .cc-editor { min-height: 120px; max-height: 250px; overflow-y: auto; padding: .5rem; border: 1px solid var(--border, #ddd); border-radius: 0 0 6px 6px; font-size: .85rem; line-height: 1.5; background: #fff; outline: none; }
   .cc-editor:focus { border-color: var(--accent, #4a6cf7); }
@@ -354,6 +354,7 @@
   var toolbar = document.getElementById('ccToolbar');
   var editor = document.getElementById('ccEditor');
   if (toolbar && editor) {
+    /* Standard commands (bold, italic, etc.) */
     toolbar.addEventListener('click', function(e) {
       var btn = e.target.closest('button[data-cmd]');
       if (!btn) return;
@@ -361,24 +362,30 @@
       document.execCommand(btn.dataset.cmd, false, null);
       editor.focus();
     });
-    var fontSize = document.getElementById('ccFontSize');
-    if (fontSize) {
-      fontSize.addEventListener('change', function() {
-        document.execCommand('fontSize', false, this.value);
+    /* Font size buttons */
+    toolbar.querySelectorAll('.cc-tb-size').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toolbar.querySelectorAll('.cc-tb-size').forEach(function(b) { b.classList.remove('cc-tb-active'); });
+        btn.classList.add('cc-tb-active');
+        document.execCommand('fontSize', false, btn.dataset.size);
         editor.focus();
       });
-    }
-    var fontColor = document.getElementById('ccFontColor');
-    if (fontColor) {
-      fontColor.addEventListener('change', function() {
-        if (this.value) {
-          document.execCommand('foreColor', false, this.value);
+    });
+    /* Font color buttons */
+    toolbar.querySelectorAll('.cc-tb-color').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (btn.dataset.color) {
+          document.execCommand('foreColor', false, btn.dataset.color);
         } else {
           document.execCommand('removeFormat', false, null);
         }
         editor.focus();
       });
-    }
+    });
   }
 
   /* Send message */
