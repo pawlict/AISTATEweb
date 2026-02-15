@@ -1553,9 +1553,14 @@
 
   function escHtml(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
+  var _uAi = typeof aiIcon === 'function' ? aiIcon : null;
   var AP_TYPE_ICONS = {
-    transcription: '\uD83C\uDFA4', diarization: '\uD83D\uDC65', analysis: '\uD83D\uDCCA',
-    chat: '\uD83D\uDCAC', translation: '\uD83C\uDF10', finance: '\uD83C\uDFE6'
+    transcription: _uAi ? _uAi('transcription',16) : '\uD83C\uDFA4',
+    diarization:   _uAi ? _uAi('diarization',16) : '\uD83D\uDC65',
+    analysis:      _uAi ? _uAi('brain',16) : '\uD83D\uDCCA',
+    chat:          _uAi ? _uAi('robot',16) : '\uD83D\uDCAC',
+    translation:   _uAi ? _uAi('globe',16) : '\uD83C\uDF10',
+    finance:       _uAi ? _uAi('finance',16) : '\uD83C\uDFE6'
   };
 
   async function loadAdminProjects() {
@@ -1649,7 +1654,7 @@
                       '<div class="ap-sp-path">' + escHtml(sp.dir_path) + '</div>' +
                     '</div>' +
                     '<span class="ap-size-badge">' + formatSize(sp.dir_size) + '</span>' +
-                    '<button class="ap-del-btn ap-del-sp" data-sp-id="' + escHtml(sp.id) + '" data-sp-name="' + escHtml(sp.name) + '" title="Usuń podprojekt / Delete subproject"><span class="ap-del-icon">&#128465;</span></button>' +
+                    '<button class="ap-del-btn ap-del-sp" data-sp-id="' + escHtml(sp.id) + '" data-sp-name="' + escHtml(sp.name) + '" title="Usuń podprojekt / Delete subproject"><span class="ap-del-icon">' + (typeof aiIcon==="function" ? aiIcon("delete",14) : "&#128465;") + '</button>' +
                   '</div>';
               });
               subsHtml += '</div>';
@@ -1660,7 +1665,7 @@
                 '<div class="ap-ws-name">' + escHtml(ws.name) + '</div>' +
                 '<div style="display:flex;align-items:center;gap:.4rem;">' +
                   '<span style="font-size:.7rem;padding:.15rem .5rem;border-radius:4px;background:' + (ws.status === 'active' ? '#27ae60' : '#888') + ';color:#fff;">' + escHtml(ws.status) + '</span>' +
-                  '<button class="ap-del-btn ap-del-ws" data-ws-id="' + escHtml(ws.id) + '" data-ws-name="' + escHtml(ws.name) + '" title="Usuń workspace / Delete workspace"><span class="ap-del-icon">&#128465;</span></button>' +
+                  '<button class="ap-del-btn ap-del-ws" data-ws-id="' + escHtml(ws.id) + '" data-ws-name="' + escHtml(ws.name) + '" title="Usuń workspace / Delete workspace"><span class="ap-del-icon">' + (typeof aiIcon==="function" ? aiIcon("delete",14) : "&#128465;") + '</button>' +
                 '</div>' +
               '</div>' +
               '<div class="ap-ws-meta">' +
@@ -1700,7 +1705,7 @@
                 '<div class="ap-fp-name">' + escHtml(fp.name || fp.project_id) + '</div>' +
                 '<div style="display:flex;align-items:center;gap:.4rem;">' +
                   '<span class="ap-size-badge">' + formatSize(fp.dir_size) + '</span>' +
-                  '<button class="ap-del-btn ap-del-fp" data-fp-id="' + escHtml(fp.project_id) + '" data-fp-name="' + escHtml(fp.name || fp.project_id) + '" title="Usuń projekt / Delete project"><span class="ap-del-icon">&#128465;</span></button>' +
+                  '<button class="ap-del-btn ap-del-fp" data-fp-id="' + escHtml(fp.project_id) + '" data-fp-name="' + escHtml(fp.name || fp.project_id) + '" title="Usuń projekt / Delete project"><span class="ap-del-icon">' + (typeof aiIcon==="function" ? aiIcon("delete",14) : "&#128465;") + '</button>' +
                 '</div>' +
               '</div>' +
               '<div class="ap-fp-meta">' +
@@ -1734,7 +1739,7 @@
               '<div class="ap-fp-name">' + escHtml(fp.name || fp.project_id) + '</div>' +
               '<div style="display:flex;align-items:center;gap:.4rem;">' +
                 '<span class="ap-size-badge">' + formatSize(fp.dir_size) + '</span>' +
-                '<button class="ap-del-btn ap-del-fp" data-fp-id="' + escHtml(fp.project_id) + '" data-fp-name="' + escHtml(fp.name || fp.project_id) + '" title="Usuń projekt / Delete project"><span class="ap-del-icon">&#128465;</span></button>' +
+                '<button class="ap-del-btn ap-del-fp" data-fp-id="' + escHtml(fp.project_id) + '" data-fp-name="' + escHtml(fp.name || fp.project_id) + '" title="Usuń projekt / Delete project"><span class="ap-del-icon">' + (typeof aiIcon==="function" ? aiIcon("delete",14) : "&#128465;") + '</button>' +
               '</div>' +
             '</div>' +
             '<div class="ap-fp-meta">' +
