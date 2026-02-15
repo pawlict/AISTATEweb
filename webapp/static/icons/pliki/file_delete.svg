@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+
+<defs><linearGradient id="fd" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ef4444"/><stop offset="100%" stop-color="#f97316"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#ef4444" stroke-width="1" fill="none" opacity="0.18" stroke-linecap="round"/>
+<path d="M10 14h28" stroke="url(#fd)" stroke-width="2.2" stroke-linecap="round"/>
+<path d="M14 14v22a4 4 0 0 0 4 4h12a4 4 0 0 0 4-4V14" stroke="url(#fd)" stroke-width="2" fill="none"/>
+<line x1="20" y1="20" x2="20" y2="34" stroke="url(#fd)" stroke-width="1.5" stroke-linecap="round" opacity=".5"/>
+<line x1="28" y1="20" x2="28" y2="34" stroke="url(#fd)" stroke-width="1.5" stroke-linecap="round" opacity=".5"/>
+<path d="M18 14V10a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4" stroke="url(#fd)" stroke-width="1.8" fill="none"/>
+
+</svg>

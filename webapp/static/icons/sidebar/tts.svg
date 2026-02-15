@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+
+<defs><linearGradient id="gtts" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7ee8fa"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#7ee8fa" stroke-width="1" fill="none" opacity="0.2" stroke-linecap="round"/>
+<polygon points="20 14 12 20 4 20 4 30 12 30 20 36" stroke="url(#gtts)" stroke-width="2.2" fill="none"/>
+<path d="M26 18a8 8 0 0 1 0 14" stroke="url(#gtts)" stroke-width="2" fill="none" stroke-linecap="round"/>
+<path d="M31 12a14 14 0 0 1 0 26" stroke="url(#gtts)" stroke-width="2" fill="none" stroke-linecap="round"/>
+<path d="M36 7a20 20 0 0 1 0 36" stroke="url(#gtts)" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".4"/>
+
+</svg>
