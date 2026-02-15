@@ -108,6 +108,13 @@ async def login(request: Request) -> JSONResponse:
 
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
+    fingerprint = body.get("fingerprint") or None
+    # Sanitise fingerprint: only keep known safe string keys
+    if isinstance(fingerprint, dict):
+        _fp_keys = {"browser", "os", "screen", "timezone", "language", "platform"}
+        fingerprint = {k: str(v)[:120] for k, v in fingerprint.items() if k in _fp_keys and isinstance(v, str)}
+    else:
+        fingerprint = None
 
     if not username or not password:
         _record_attempt(ip)
@@ -142,7 +149,7 @@ async def login(request: Request) -> JSONResponse:
         if _app_log_fn:
             _app_log_fn(f"Auth: failed login attempt for '{username}' from {ip}")
         if _audit_store:
-            _audit_store.log_event("login_failed", user_id=user.user_id if user else "", username=username, ip=ip)
+            _audit_store.log_event("login_failed", user_id=user.user_id if user else "", username=username, ip=ip, fingerprint=fingerprint)
 
         # --- Increment failed count & possibly lock ---
         if user is not None:
@@ -157,7 +164,7 @@ async def login(request: Request) -> JSONResponse:
                 if _app_log_fn:
                     _app_log_fn(f"Auth: account '{username}' locked for {lockout_min}min after {new_count} failed attempts from {ip}")
                 if _audit_store:
-                    _audit_store.log_event("account_locked", user_id=user.user_id, username=user.username, ip=ip, detail=f"locked for {lockout_min}min after {new_count} failures")
+                    _audit_store.log_event("account_locked", user_id=user.user_id, username=user.username, ip=ip, detail=f"locked for {lockout_min}min after {new_count} failures", fingerprint=fingerprint)
                 # Notify admins via Call Center
                 if _message_store and new_count >= 10:
                     msg = Message(
@@ -218,7 +225,7 @@ async def login(request: Request) -> JSONResponse:
     if _app_log_fn:
         _app_log_fn(f"Auth: user '{username}' logged in from {ip}")
     if _audit_store:
-        _audit_store.log_event("login", user_id=user.user_id, username=user.username, ip=ip)
+        _audit_store.log_event("login", user_id=user.user_id, username=user.username, ip=ip, fingerprint=fingerprint)
 
     # --- Password expiry check ---
     password_expired = False
@@ -246,7 +253,7 @@ async def login(request: Request) -> JSONResponse:
     if password_expired:
         response_data["password_expired"] = True
         if _audit_store:
-            _audit_store.log_event("password_expired_redirect", user_id=user.user_id, username=user.username, ip=ip)
+            _audit_store.log_event("password_expired_redirect", user_id=user.user_id, username=user.username, ip=ip, fingerprint=fingerprint)
 
     response = JSONResponse(response_data)
     response.set_cookie(
