@@ -9,7 +9,7 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from webapp.auth.passwords import hash_password, verify_password, validate_password_strength, get_blacklist, _COMMON_PASSWORDS
+from webapp.auth.passwords import hash_password, verify_password, validate_password_strength, get_blacklist, _COMMON_PASSWORDS, _BUILTIN_FILE, PasswordBlacklist
 from webapp.auth.user_store import UserStore, UserRecord
 from webapp.auth.session_store import SessionStore
 from webapp.auth.deployment_store import DeploymentStore
@@ -578,10 +578,10 @@ async def get_password_blacklist(request: Request) -> JSONResponse:
 
     bl = get_blacklist()
     if bl is None:
-        return JSONResponse({"status": "ok", "builtin": [], "custom": []})
+        return JSONResponse({"status": "ok", "builtin": [], "custom": [], "builtin_file": str(_BUILTIN_FILE)})
 
     data = bl.get_all()
-    return JSONResponse({"status": "ok", **data})
+    return JSONResponse({"status": "ok", **data, "builtin_file": str(_BUILTIN_FILE)})
 
 
 @router.post("/password-blacklist")
@@ -646,3 +646,16 @@ async def remove_from_blacklist(request: Request) -> JSONResponse:
 
     ok = bl.remove(pw)
     return JSONResponse({"status": "ok", "removed": 1 if ok else 0})
+
+
+@router.post("/password-blacklist/reload")
+async def reload_builtin_passwords(request: Request) -> JSONResponse:
+    """Admin endpoint: reload builtin_passwords.txt after manual edit."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
+    if not user.is_admin and not user.is_superadmin:
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+
+    count = PasswordBlacklist.reload_builtin()
+    return JSONResponse({"status": "ok", "builtin_count": count})

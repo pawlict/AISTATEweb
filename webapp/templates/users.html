@@ -199,9 +199,11 @@
         </h4>
       </div>
       <div id="blPanel" style="display:none;margin-top:.6rem;">
-        <p style="font-size:.72rem;color:var(--muted,#888);margin:0 0 .5rem;">
+        <p style="font-size:.72rem;color:var(--muted,#888);margin:0 0 .5rem;line-height:1.5;">
           Hasła z tej listy są zawsze blokowane niezależnie od poziomu polityki.
-          <span class="en">Passwords on this list are always blocked regardless of policy level.</span>
+          <span class="en">Passwords on this list are always blocked regardless of policy level.</span><br/>
+          Hasła wbudowane można edytować w pliku: <code id="blFilePath" style="font-size:.68rem;user-select:all;">...</code>
+          <button class="btn btn-secondary" style="font-size:.66rem;padding:.1rem .4rem;margin-left:.3rem;vertical-align:middle;" onclick="reloadBuiltinPasswords()" title="Przeładuj listę wbudowaną po edycji pliku / Reload built-in list after file edit">&#8635; Przeładuj <span class="en">Reload</span></button>
         </p>
         <!-- Add form -->
         <div style="display:flex;gap:.3rem;margin-bottom:.3rem;">
