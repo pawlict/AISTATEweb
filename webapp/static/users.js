@@ -1454,8 +1454,213 @@
         var panel = document.getElementById(target);
         if (panel) panel.style.display = '';
         if (target === 'securityPanel') { loadSecuritySettings(); initAuditTab(); loadBlacklist(); }
+        if (target === 'projectsPanel') { loadAdminProjects(); }
       });
     });
+  }
+
+  /* ---- Admin Projects Tab ---- */
+
+  var _adminProjectsLoaded = false;
+
+  function formatSize(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  }
+
+  function escHtml(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  var AP_TYPE_ICONS = {
+    transcription: '\uD83C\uDFA4', diarization: '\uD83D\uDC65', analysis: '\uD83D\uDCCA',
+    chat: '\uD83D\uDCAC', translation: '\uD83C\uDF10', finance: '\uD83C\uDFE6'
+  };
+
+  async function loadAdminProjects() {
+    if (_adminProjectsLoaded) return;
+    var loadingEl = document.getElementById('adminProjectsLoading');
+    var listEl = document.getElementById('adminProjectsList');
+    var orphanSection = document.getElementById('orphanProjectsSection');
+    var orphanList = document.getElementById('orphanProjectsList');
+    if (!listEl) return;
+
+    try {
+      var res = await fetch('/api/admin/user-projects');
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.message || 'Error');
+
+      if (loadingEl) loadingEl.style.display = 'none';
+      listEl.innerHTML = '';
+
+      var users = data.users || [];
+      if (!users.length) {
+        listEl.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted,#888);font-size:.85rem;">Brak projektów</div>';
+        _adminProjectsLoaded = true;
+        return;
+      }
+
+      users.forEach(function(entry) {
+        var u = entry.user;
+        var card = document.createElement('div');
+        card.className = 'ap-user-card';
+
+        // Header
+        var header = document.createElement('div');
+        header.className = 'ap-user-header';
+        header.innerHTML =
+          '<div>' +
+            '<div class="ap-user-name">' + escHtml(u.display_name || u.username) + ' <span style="font-weight:400;color:var(--muted,#888);font-size:.78rem;">(' + escHtml(u.username) + ')</span></div>' +
+            '<div class="ap-user-meta">' +
+              '<span>Rola: <b>' + escHtml(u.role || (u.is_superadmin ? 'Główny Opiekun' : 'admin')) + '</b></span>' +
+              '<span>' + entry.workspace_count + ' workspace' + (entry.workspace_count !== 1 ? 'ów' : '') + '</span>' +
+              '<span>' + entry.project_count + ' projekt' + (entry.project_count !== 1 ? 'ów' : '') + ' (plikowych)</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:.6rem;">' +
+            '<span class="ap-size-badge">' + formatSize(entry.total_size) + '</span>' +
+            '<span style="font-size:1rem;transition:transform .2s;" class="ap-arrow">&#9654;</span>' +
+          '</div>';
+
+        header.addEventListener('click', function() {
+          var detail = card.querySelector('.ap-user-detail');
+          var arrow = header.querySelector('.ap-arrow');
+          if (detail.classList.contains('open')) {
+            detail.classList.remove('open');
+            arrow.style.transform = '';
+          } else {
+            detail.classList.add('open');
+            arrow.style.transform = 'rotate(90deg)';
+          }
+        });
+
+        // Detail
+        var detail = document.createElement('div');
+        detail.className = 'ap-user-detail';
+
+        // Workspaces
+        if (entry.workspaces && entry.workspaces.length) {
+          detail.innerHTML += '<div class="ap-section-title">Workspace\'y <span class="en">Workspaces</span></div>';
+          entry.workspaces.forEach(function(ws) {
+            var wsDiv = document.createElement('div');
+            wsDiv.className = 'ap-ws-card';
+            wsDiv.style.borderLeftColor = ws.color || '#4a6cf7';
+
+            var membersHtml = '';
+            if (ws.members && ws.members.length) {
+              membersHtml = '<div class="ap-members">Zespół: ' +
+                ws.members.map(function(m) {
+                  return '<span class="ap-member-chip">' + escHtml(m.username || m.display_name || '?') + ' (' + escHtml(m.role) + ')</span>';
+                }).join('') +
+                '</div>';
+            }
+
+            var subsHtml = '';
+            if (ws.subprojects && ws.subprojects.length) {
+              subsHtml = '<div style="margin-top:.4rem;">';
+              ws.subprojects.forEach(function(sp) {
+                var icon = AP_TYPE_ICONS[sp.subproject_type] || '\uD83D\uDCC4';
+                subsHtml +=
+                  '<div class="ap-sp-item">' +
+                    '<span class="ap-sp-icon">' + icon + '</span>' +
+                    '<div style="flex:1;">' +
+                      '<div class="ap-sp-name">' + escHtml(sp.name) + ' <span style="font-weight:400;color:var(--muted,#888);font-size:.7rem;">(' + escHtml(sp.subproject_type) + ' · ' + escHtml(sp.status || '') + ')</span></div>' +
+                      '<div class="ap-sp-path">' + escHtml(sp.dir_path) + '</div>' +
+                    '</div>' +
+                    '<span class="ap-size-badge">' + formatSize(sp.dir_size) + '</span>' +
+                  '</div>';
+              });
+              subsHtml += '</div>';
+            }
+
+            wsDiv.innerHTML =
+              '<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">' +
+                '<div class="ap-ws-name">' + escHtml(ws.name) + '</div>' +
+                '<span style="font-size:.7rem;padding:.15rem .5rem;border-radius:4px;background:' + (ws.status === 'active' ? '#27ae60' : '#888') + ';color:#fff;">' + escHtml(ws.status) + '</span>' +
+              '</div>' +
+              '<div class="ap-ws-meta">' +
+                'ID: <code style="font-size:.68rem;">' + escHtml(ws.id) + '</code>' +
+                ' &middot; Utworzony: ' + escHtml((ws.created_at || '').replace('T', ' ').slice(0, 16)) +
+                ' &middot; Zaktualizowany: ' + escHtml((ws.updated_at || '').replace('T', ' ').slice(0, 16)) +
+                (ws.description ? ' &middot; ' + escHtml(ws.description) : '') +
+              '</div>' +
+              membersHtml +
+              subsHtml;
+            detail.appendChild(wsDiv);
+          });
+        }
+
+        // File-based projects
+        if (entry.file_projects && entry.file_projects.length) {
+          var fpTitle = document.createElement('div');
+          fpTitle.className = 'ap-section-title';
+          fpTitle.innerHTML = 'Projekty plikowe <span class="en">File-based projects</span>';
+          detail.appendChild(fpTitle);
+
+          entry.file_projects.forEach(function(fp) {
+            var fpDiv = document.createElement('div');
+            fpDiv.className = 'ap-fp-item';
+
+            var sharesHtml = '';
+            if (fp.shares && fp.shares.length) {
+              sharesHtml = '<div class="ap-shares">Udostępniony: ' +
+                fp.shares.map(function(s) {
+                  return '<span class="ap-member-chip">' + escHtml(s.username || s.user_id) + ' (' + escHtml(s.permission || 'read') + ')</span>';
+                }).join('') +
+                '</div>';
+            }
+
+            fpDiv.innerHTML =
+              '<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">' +
+                '<div class="ap-fp-name">' + escHtml(fp.name || fp.project_id) + '</div>' +
+                '<span class="ap-size-badge">' + formatSize(fp.dir_size) + '</span>' +
+              '</div>' +
+              '<div class="ap-fp-meta">' +
+                'ID: <code style="font-size:.68rem;">' + escHtml(fp.project_id) + '</code>' +
+                ' &middot; Audio: ' + (fp.audio_file ? escHtml(fp.audio_file) + ' (' + formatSize(fp.audio_size) + ')' : '<span style="opacity:.5;">brak</span>') +
+                ' &middot; Transkrypcja: ' + (fp.has_transcript ? '<span style="color:#27ae60;">&#10003;</span>' : '<span style="color:#e74c3c;">&#10007;</span>') +
+                ' &middot; Diaryzacja: ' + (fp.has_diarized ? '<span style="color:#27ae60;">&#10003;</span>' : '<span style="color:#e74c3c;">&#10007;</span>') +
+                ' &middot; Utworzony: ' + escHtml((fp.created_at || '').replace('T', ' ').slice(0, 16)) +
+              '</div>' +
+              '<div class="ap-fp-path">' + escHtml(fp.dir_path) + '</div>' +
+              sharesHtml;
+            detail.appendChild(fpDiv);
+          });
+        }
+
+        card.appendChild(header);
+        card.appendChild(detail);
+        listEl.appendChild(card);
+      });
+
+      // Orphan projects
+      var orphans = data.orphan_projects || [];
+      if (orphans.length && orphanSection && orphanList) {
+        orphanSection.style.display = '';
+        orphanList.innerHTML = '';
+        orphans.forEach(function(fp) {
+          var fpDiv = document.createElement('div');
+          fpDiv.className = 'ap-fp-item';
+          fpDiv.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">' +
+              '<div class="ap-fp-name">' + escHtml(fp.name || fp.project_id) + '</div>' +
+              '<span class="ap-size-badge">' + formatSize(fp.dir_size) + '</span>' +
+            '</div>' +
+            '<div class="ap-fp-meta">' +
+              'ID: <code style="font-size:.68rem;">' + escHtml(fp.project_id) + '</code>' +
+              ' &middot; Audio: ' + (fp.audio_file ? escHtml(fp.audio_file) : '<span style="opacity:.5;">brak</span>') +
+            '</div>' +
+            '<div class="ap-fp-path">' + escHtml(fp.dir_path) + '</div>';
+          orphanList.appendChild(fpDiv);
+        });
+      }
+
+      _adminProjectsLoaded = true;
+    } catch(e) {
+      console.error(e);
+      if (loadingEl) loadingEl.textContent = 'Błąd ładowania: ' + (e.message || 'Error');
+    }
   }
 
   /* ---- Init ---- */

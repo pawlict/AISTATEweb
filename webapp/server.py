@@ -4088,6 +4088,166 @@ def api_new_project(request: Request) -> Any:
     return {"project_id": pid}
 
 
+@app.get("/api/admin/user-projects")
+def api_admin_user_projects(request: Request) -> Any:
+    """Return all projects and workspaces grouped by user. Superadmin only."""
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    # Build username lookup
+    all_users = USER_STORE.list_users()
+    uid_map: Dict[str, Dict[str, Any]] = {}
+    for u in all_users:
+        uid_map[u.user_id] = {
+            "user_id": u.user_id,
+            "username": u.username,
+            "display_name": u.display_name or u.username,
+            "role": u.role or "",
+            "is_admin": u.is_admin,
+            "is_superadmin": getattr(u, "is_superadmin", False),
+        }
+
+    # 1) File-based projects from disk
+    file_projects: Dict[str, List[Dict[str, Any]]] = {}  # owner_id -> [project...]
+    orphan_projects: List[Dict[str, Any]] = []
+    for p in PROJECTS_DIR.glob("*"):
+        if not p.is_dir() or p.name.startswith("_"):
+            continue
+        pid = p.name
+        meta = read_project_meta(pid)
+        # Calculate directory size
+        dir_size = 0
+        try:
+            for f in p.rglob("*"):
+                if f.is_file():
+                    dir_size += f.stat().st_size
+        except Exception:
+            pass
+        audio_file = meta.get("audio_file", "")
+        audio_size = 0
+        if audio_file:
+            audio_path = p / audio_file
+            try:
+                audio_size = audio_path.stat().st_size if audio_path.exists() else 0
+            except Exception:
+                pass
+        entry = {
+            "project_id": pid,
+            "name": meta.get("name", ""),
+            "created_at": meta.get("created_at", ""),
+            "updated_at": meta.get("updated_at", ""),
+            "audio_file": audio_file,
+            "audio_size": audio_size,
+            "has_transcript": bool(meta.get("has_transcript")),
+            "has_diarized": bool(meta.get("has_diarized")),
+            "dir_path": str(p),
+            "dir_size": dir_size,
+            "shares": meta.get("shares", []),
+            "owner_id": meta.get("owner_id", ""),
+        }
+        owner = meta.get("owner_id", "")
+        if owner:
+            file_projects.setdefault(owner, []).append(entry)
+        else:
+            orphan_projects.append(entry)
+
+    # 2) Workspaces from database
+    user_workspaces: Dict[str, List[Dict[str, Any]]] = {}  # owner_id -> [ws...]
+    try:
+        from backend.db.engine import get_conn
+        with get_conn() as conn:
+            ws_rows = conn.execute(
+                "SELECT * FROM project_workspaces ORDER BY updated_at DESC"
+            ).fetchall()
+            for r in ws_rows:
+                ws = dict(r)
+                ws_id = ws["id"]
+                owner_id = ws.get("owner_id", "")
+                # Members
+                members = []
+                mem_rows = conn.execute(
+                    "SELECT user_id, role, status FROM project_members WHERE workspace_id = ? AND status='accepted'",
+                    (ws_id,),
+                ).fetchall()
+                for mr in mem_rows:
+                    m = dict(mr)
+                    u_info = uid_map.get(m["user_id"])
+                    m["username"] = u_info["username"] if u_info else m["user_id"][:8]
+                    m["display_name"] = u_info["display_name"] if u_info else ""
+                    members.append(m)
+                # Subprojects
+                subprojects = []
+                sp_rows = conn.execute(
+                    "SELECT * FROM subprojects WHERE workspace_id = ? ORDER BY created_at",
+                    (ws_id,),
+                ).fetchall()
+                for sp in sp_rows:
+                    sp_dict = dict(sp)
+                    # Calculate subproject dir size
+                    data_dir = sp_dict.get("data_dir", "")
+                    sp_dir_size = 0
+                    sp_dir_path = ""
+                    if data_dir:
+                        sp_path = (PROJECTS_DIR.parent / data_dir).resolve()
+                        sp_dir_path = str(sp_path)
+                        try:
+                            for f in sp_path.rglob("*"):
+                                if f.is_file():
+                                    sp_dir_size += f.stat().st_size
+                        except Exception:
+                            pass
+                    sp_dict["dir_path"] = sp_dir_path
+                    sp_dict["dir_size"] = sp_dir_size
+                    subprojects.append(sp_dict)
+                ws_entry = {
+                    "id": ws_id,
+                    "name": ws.get("name", ""),
+                    "description": ws.get("description", ""),
+                    "color": ws.get("color", "#4a6cf7"),
+                    "status": ws.get("status", "active"),
+                    "created_at": ws.get("created_at", ""),
+                    "updated_at": ws.get("updated_at", ""),
+                    "owner_id": owner_id,
+                    "members": members,
+                    "subprojects": subprojects,
+                }
+                user_workspaces.setdefault(owner_id, []).append(ws_entry)
+    except Exception as e:
+        app_log(f"admin user-projects: workspace query failed: {e}")
+
+    # 3) Assemble per-user result
+    all_user_ids = set(file_projects.keys()) | set(user_workspaces.keys())
+    users_result = []
+    for uid in all_user_ids:
+        u_info = uid_map.get(uid, {
+            "user_id": uid, "username": uid[:8] + "...", "display_name": "",
+            "role": "", "is_admin": False, "is_superadmin": False,
+        })
+        fp = file_projects.get(uid, [])
+        ws = user_workspaces.get(uid, [])
+        total_size = sum(p["dir_size"] for p in fp)
+        total_size += sum(
+            sp["dir_size"]
+            for w in ws for sp in w.get("subprojects", [])
+        )
+        users_result.append({
+            "user": u_info,
+            "file_projects": fp,
+            "workspaces": ws,
+            "total_size": total_size,
+            "project_count": len(fp),
+            "workspace_count": len(ws),
+        })
+    users_result.sort(key=lambda x: x["total_size"], reverse=True)
+
+    return {
+        "status": "ok",
+        "users": users_result,
+        "orphan_projects": orphan_projects,
+    }
+
+
 @app.get("/api/projects")
 def api_list_projects(request: Request) -> Any:
     multiuser = getattr(request.state, "multiuser", False)
