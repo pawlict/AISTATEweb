@@ -177,17 +177,33 @@
 
     <!-- Audit Log (Login history) -->
     <h3 style="margin:1.5rem 0 .8rem;font-size:.95rem;" id="auditHeading">Historia logowań</h3>
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:0 0 .8rem;">
-      <div style="position:relative;">
-        <select id="auditUserFilter" style="font-size:.82rem;padding:.3rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);min-width:180px;">
+    <div class="audit-filters" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-start;margin:0 0 .8rem;">
+
+      <!-- User filter group -->
+      <div class="audit-filter-group" style="flex:0 0 auto;min-width:220px;position:relative;">
+        <label class="audit-filter-label" id="auditUserLabel" style="display:block;font-size:.72rem;font-weight:700;color:var(--muted,#666);margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.04em;">Użytkownicy</label>
+        <div id="auditUserActiveFilter" style="display:none;margin-bottom:.35rem;">
+          <span class="audit-badge" style="display:inline-flex;align-items:center;gap:.3rem;background:var(--accent,#4a6cf7);color:#fff;font-size:.76rem;font-weight:600;padding:.2rem .5rem .2rem .6rem;border-radius:12px;">
+            <span id="auditUserBadgeText"></span>
+            <button type="button" id="auditUserClear" style="background:none;border:none;color:#fff;cursor:pointer;font-size:.85rem;line-height:1;padding:0 .1rem;opacity:.8;" title="Usuń filtr">&times;</button>
+          </span>
+        </div>
+        <div style="position:relative;">
+          <input type="text" id="auditUserSearch" autocomplete="off" style="font-size:.82rem;padding:.35rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);width:100%;box-sizing:border-box;"/>
+          <div id="auditUserResults" class="audit-user-results" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Event filter group -->
+      <div class="audit-filter-group" style="flex:0 0 auto;min-width:200px;">
+        <label class="audit-filter-label" id="auditEventLabel" style="display:block;font-size:.72rem;font-weight:700;color:var(--muted,#666);margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.04em;">Zdarzenia</label>
+        <select id="auditEventFilter" style="font-size:.82rem;padding:.35rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);min-width:200px;">
           <option value="">—</option>
         </select>
       </div>
-      <input type="text" id="auditUserSearch" placeholder="" style="font-size:.82rem;padding:.3rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);width:140px;"/>
-      <select id="auditEventFilter" style="font-size:.82rem;padding:.3rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);min-width:180px;">
-        <option value="">—</option>
-      </select>
-      <div style="margin-left:auto;display:flex;gap:.3rem;align-items:center;">
+
+      <!-- Pagination -->
+      <div style="margin-left:auto;display:flex;gap:.3rem;align-items:flex-end;padding-bottom:.15rem;">
         <button class="btn btn-secondary" id="auditPrev" style="font-size:.75rem;padding:.2rem .5rem;">&larr;</button>
         <span id="auditInfo" style="font-size:.78rem;color:var(--muted,#888);"></span>
         <button class="btn btn-secondary" id="auditNext" style="font-size:.75rem;padding:.2rem .5rem;">&rarr;</button>
@@ -211,6 +227,14 @@
 
 <style>
   .en { font-size: 70%; color: var(--muted, #999); font-style: italic; }
+  /* Audit user search autocomplete */
+  .audit-user-results { position:absolute;top:100%;left:0;right:0;background:var(--card-bg,#fff);border:1px solid var(--border,#ddd);border-top:none;border-radius:0 0 6px 6px;max-height:200px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,.1); }
+  .audit-user-item { padding:.4rem .6rem;cursor:pointer;font-size:.82rem;display:flex;align-items:center;gap:.4rem;border-bottom:1px solid var(--border,#f0f0f0); }
+  .audit-user-item:last-child { border-bottom:none; }
+  .audit-user-item:hover, .audit-user-item.focused { background:rgba(74,108,247,.08); }
+  .audit-user-item .au-username { font-weight:600;color:var(--text,#333); }
+  .audit-user-item .au-display { font-size:.76rem;color:var(--muted,#888); }
+  .audit-user-item .au-match { background:rgba(74,108,247,.15);border-radius:2px;padding:0 1px; }
   /* Tab styling */
   .users-tab { transition: all .2s; }
   .users-tab:hover { color: var(--accent, #4a6cf7) !important; }
