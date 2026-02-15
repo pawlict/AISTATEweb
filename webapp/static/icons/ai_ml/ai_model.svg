@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="am" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#c026d3"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#00d4ff" stroke-width="1" fill="none" opacity="0.12" stroke-linecap="round"/><path d="M24 4l18 10v20l-18 10L6 34V14z" stroke="url(#am)" stroke-width="2" fill="none"/><path d="M24 4v40M6 14l18 10 18-10M6 34l18-10 18 10" stroke="url(#am)" stroke-width="0.8" opacity=".15"/><circle cx="24" cy="24" r="4" stroke="url(#am)" stroke-width="1.5" fill="#00d4ff" fill-opacity=".1"/>
+</svg>

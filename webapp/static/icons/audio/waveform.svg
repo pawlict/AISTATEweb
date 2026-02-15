@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+
+<defs><linearGradient id="awf" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#00d4ff" stroke-width="1" fill="none" opacity="0.2" stroke-linecap="round"/>
+<line x1="8" y1="20" x2="8" y2="28" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" opacity=".4"/>
+<line x1="13" y1="17" x2="13" y2="31" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" opacity=".46"/>
+<line x1="18" y1="14" x2="18" y2="34" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" opacity=".52"/>
+<line x1="23" y1="16" x2="23" y2="32" stroke="#a855f7" stroke-width="2.5" stroke-linecap="round" opacity=".58"/>
+<line x1="28" y1="13" x2="28" y2="35" stroke="#a855f7" stroke-width="2.5" stroke-linecap="round" opacity=".64"/>
+<line x1="33" y1="18" x2="33" y2="30" stroke="#a855f7" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
+<line x1="38" y1="21" x2="38" y2="27" stroke="#a855f7" stroke-width="2.5" stroke-linecap="round" opacity=".76"/>
+
+</svg>

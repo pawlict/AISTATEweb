@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="tac" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#7ee8fa"/></linearGradient></defs><line x1="8" y1="12" x2="40" y2="12" stroke="url(#tac)" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="20" x2="36" y2="20" stroke="url(#tac)" stroke-width="2" stroke-linecap="round" opacity=".7"/><line x1="10" y1="28" x2="38" y2="28" stroke="url(#tac)" stroke-width="2" stroke-linecap="round" opacity=".5"/><line x1="14" y1="36" x2="34" y2="36" stroke="url(#tac)" stroke-width="2" stroke-linecap="round" opacity=".35"/>
+</svg>
