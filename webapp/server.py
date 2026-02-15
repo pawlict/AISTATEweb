@@ -4096,6 +4096,23 @@ async def api_create_project(
         "audio_path": str(audio_path.name) if audio_path else "",
     }
 
+@app.post("/api/projects/{project_id}/upload_audio")
+async def api_upload_audio(project_id: str, audio: UploadFile = File(...)) -> Any:
+    """Upload an audio file to an existing project."""
+    meta = read_project_meta(project_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Project not found")
+    audio_path = save_upload(project_id, audio)
+    # Re-read meta since save_upload updates audio_file
+    meta = read_project_meta(project_id)
+    app_log(f"Audio upload: project_id={project_id}, file='{audio_path.name}'")
+    return {
+        "ok": True,
+        "audio_file": meta.get("audio_file", ""),
+        "project_id": project_id,
+    }
+
+
 @app.post("/api/projects/new")
 def api_new_project(request: Request) -> Any:
     pid = ensure_project(None)

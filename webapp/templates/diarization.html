@@ -502,6 +502,11 @@
 
     <div class="analysis-toolbar-right">
 
+      <!-- Add audio file -->
+      <input type="file" id="di_file_input" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.mp4,.aac" style="display:none"/>
+      <button class="btn secondary" id="di_add_file_btn" title="Dodaj plik audio do projektu">📁 <span data-i18n="btn.add_file">Dodaj plik</span></button>
+      <span class="small" id="di_file_name" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.8"></span>
+
       <!-- Diarize -->
       <button class="btn" id="di_btn" data-i18n="btn.diarize">Diarize</button>
 
@@ -2917,10 +2922,60 @@ function diBindSoundDetectionUI(){
   });
 }
 
+// ========== Audio file upload ==========
+document.getElementById('di_add_file_btn').addEventListener('click', function(){
+  document.getElementById('di_file_input').click();
+});
+
+document.getElementById('di_file_input').addEventListener('change', async function(e){
+  var file = e.target.files && e.target.files[0];
+  if(!file) return;
+
+  var pid = AISTATE.projectId;
+  if(!pid){
+    showToast('Brak aktywnego projektu. Utwórz projekt w zakładce Projekty.', 'warning');
+    e.target.value = '';
+    return;
+  }
+
+  var btn = document.getElementById('di_add_file_btn');
+  var origHtml = btn.innerHTML;
+  btn.innerHTML = '⏳ Wgrywam…';
+  btn.disabled = true;
+
+  try {
+    var fd = new FormData();
+    fd.append('audio', file);
+    var res = await api('/api/projects/' + pid + '/upload_audio', {method:'POST', body: fd});
+    AISTATE.audioFile = res.audio_file || file.name;
+    document.getElementById('di_file_name').textContent = AISTATE.audioFile;
+    await updateAudioState();
+
+    // Re-init audio player with the new file
+    DI.audioUrl = diAudioUrl();
+    if(DI.audioUrl && window._diPlayer){
+      window._diPlayer.init();
+      if(window._diPlayer.audio) DI.audio = window._diPlayer.audio;
+    }
+
+    showToast('Plik audio wgrany: ' + AISTATE.audioFile, 'success');
+  } catch(err) {
+    showToast('Błąd wgrywania: ' + ((err && err.message) || err), 'error');
+  } finally {
+    btn.innerHTML = origHtml;
+    btn.disabled = false;
+    e.target.value = '';
+  }
+});
+
 (async function(){
   await updateAudioState();
   await diInitSoundDetection();
   diBindSoundDetectionUI();
+  // Show current audio file name
+  var diFnEl = document.getElementById("di_file_name");
+  if(diFnEl && AISTATE.audioFile) diFnEl.textContent = AISTATE.audioFile;
+
   if(AISTATE.projectId){
     setupDraftAutosave(AISTATE.projectId);
     await restoreOutputs(AISTATE.projectId);
