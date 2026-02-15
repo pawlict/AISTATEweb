@@ -20,14 +20,13 @@ let cfgDirty = false;
 let prioDirty = false;
 let prioSaveTimer = null;
 
-// Icons — use centralized aiIcon library if available, fallback to placeholders
-const _gpuAi = typeof aiIcon === 'function' ? aiIcon : null;
+// Icons — centralized aiIcon library
 const ICON_SVGS = {
-  transcription: _gpuAi ? _gpuAi("transcription", 22) : "🎤",
-  diarization:   _gpuAi ? _gpuAi("diarization", 22) : "👥",
-  analysis:      _gpuAi ? _gpuAi("brain", 22) : "🧠",
-  translation:   _gpuAi ? _gpuAi("globe", 22) : "🌐",
-  chat:          _gpuAi ? _gpuAi("robot", 22) : "💬",
+  transcription: aiIcon("transcription", 22),
+  diarization:   aiIcon("diarization", 22),
+  analysis:      aiIcon("brain", 22),
+  translation:   aiIcon("globe", 22),
+  chat:          aiIcon("robot", 22),
 };
 
 const PRIO_CATS = [
@@ -354,7 +353,7 @@ async function saveConfig(){
       if(spgIn) spgIn.value = resp.config.gpu_slots_per_gpu ?? (spgIn.value||"1");
       if(csIn) csIn.value = resp.config.cpu_slots ?? (csIn.value||"1");
     }
-    if(msg) msg.textContent = "Saved ✅";
+    if(msg) msg.innerHTML = aiIcon('success',12) + " Saved";
   }catch(e){
     if(msg) msg.textContent = "Error: " + String(e.message||e);
   }
@@ -371,7 +370,7 @@ async function savePriorities(){
     });
     prioDirty = false;
     if(resp && resp.priorities) updatePriorityNumbers(resp.priorities);
-    if(msg) msg.textContent = trLabel("admin.gpu.prio.saved","Zapisano ✅","Saved ✅");
+    if(msg) msg.innerHTML = aiIcon('success',12) + ' ' + trLabel("admin.gpu.prio.saved","Zapisano","Saved");
   }catch(e){
     if(msg) msg.textContent = trLabel("admin.gpu.prio.save_error","Błąd zapisu:","Save error:") + " " + String(e.message||e);
   }

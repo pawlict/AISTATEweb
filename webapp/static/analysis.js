@@ -268,8 +268,8 @@
 
     const mkItem = (p, editable)=>{
       const checked = State.selectedTemplates.includes(p.id) ? "checked" : "";
-      const editBtn = editable ? `<button class="btn secondary mini" data-act="edit" data-id="${p.id}">✏️</button>
-      <a class="btn secondary mini" href="/api/prompts/${encodeURIComponent(p.id)}/export" target="_blank" rel="noopener">⬇️</a>` : "";
+      const editBtn = editable ? `<button class="btn secondary mini" data-act="edit" data-id="${p.id}">${aiIcon('edit',12)}</button>
+      <a class="btn secondary mini" href="/api/prompts/${encodeURIComponent(p.id)}/export" target="_blank" rel="noopener">${aiIcon('download',12)}</a>` : "";
       const label = _promptLabel(p);
       return `
         <div class="prompt-item">
@@ -358,8 +358,8 @@
           </label>
           <div class="small muted">${_fmtBytes(d.size||0)}</div>
           <div class="doc-actions">
-            <a class="btn secondary mini" href="/api/documents/${encodeURIComponent(State.projectId)}/download/${encodeURIComponent(d.filename)}" target="_blank" rel="noopener">⬇️</a>
-            <button class="btn danger mini" data-del="${encodeURIComponent(d.filename)}">🗑</button>
+            <a class="btn secondary mini" href="/api/documents/${encodeURIComponent(State.projectId)}/download/${encodeURIComponent(d.filename)}" target="_blank" rel="noopener">${aiIcon('download',12)}</a>
+            <button class="btn danger mini" data-del="${encodeURIComponent(d.filename)}">${aiIcon('delete',12)}</button>
           </div>
         </div>
       `;
@@ -925,7 +925,7 @@ async function _regenQuickIfNeeded(){
       const fmt = String(r.format||"").toUpperCase() || "PLIK";
       const url = r.download_url || "";
       const fn = r.filename || "";
-      return `<a class="btn" href="${url}" target="_blank" rel="noopener">📥 ${fmt}</a><span class="small muted">${fn}</span>`;
+      return `<a class="btn" href="${url}" target="_blank" rel="noopener">${aiIcon('import',14)} ${fmt}</a><span class="small muted">${fn}</span>`;
     }).join(" ");
     slot.innerHTML = `<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">${links}</div>`;
   }
@@ -1203,7 +1203,7 @@ async function _regenQuickIfNeeded(){
     _editingPromptId = null;
     QS("#prompt_dialog_title").textContent = "Nowy prompt";
     QS("#prompt_delete_btn").style.display = "none";
-    _fillPromptForm({name:"", icon:"📄", category:"", description:"", prompt:""});
+    _fillPromptForm({name:"", icon:"document", category:"", description:"", prompt:""});
     _openDialog();
   }
 
@@ -1469,7 +1469,7 @@ if(dSel){
           <span class="fe-type small">${_esc(ent.auto_category || ent.entity_type || "—")}</span>
           <span class="fe-seen small">${ent.times_seen || 0}x</span>
           <span class="fe-amount small">${(ent.total_amount||0).toFixed(0)} PLN</span>
-          <button class="btn mini fe-flag" title="${ent.flagged ? "Odznacz" : "Oznacz jako podejrzany"}">${ent.flagged ? "🚩" : "⚪"}</button>
+          <button class="btn mini fe-flag" title="${ent.flagged ? "Odznacz" : "Oznacz jako podejrzany"}">${ent.flagged ? aiIcon("flag",14) : aiIcon("circle",14)}</button>
         `;
         const btn = row.querySelector(".fe-flag");
         btn.addEventListener("click", ()=> _toggleEntityFlag(ent.name, !ent.flagged, btn));
@@ -1489,7 +1489,7 @@ if(dSel){
         body: JSON.stringify({name: name, flagged: flagged}),
       });
       if(btn){
-        btn.textContent = flagged ? "🚩" : "⚪";
+        btn.innerHTML = flagged ? aiIcon("flag",14) : aiIcon("circle",14);
         btn.title = flagged ? "Odznacz" : "Oznacz jako podejrzany";
         const row = btn.closest(".finance-entity-row");
         if(row) row.classList.toggle("flagged", flagged);

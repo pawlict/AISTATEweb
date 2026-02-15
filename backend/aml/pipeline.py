@@ -250,7 +250,7 @@ def run_aml_pipeline(
     )
     warnings.extend(bal_warnings)
     if bal_valid:
-        _log("Łańcuch sald: OK ✓")
+        _log("Łańcuch sald: OK")
     else:
         _log("Łańcuch sald: ROZBIEŻNOŚCI")
 

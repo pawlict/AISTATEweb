@@ -1582,25 +1582,14 @@
       counterEl.textContent = `${done} / ${total} przetworzonych` + (errs > 0 ? ` (${errs} bledow)` : "");
     }
 
-    const _amlAi = typeof aiIcon === 'function' ? aiIcon : null;
     const _statusIcon = (status) => {
-      if (_amlAi) {
-        switch(status){
-          case "queued": return _amlAi("loading", 14);
-          case "uploading": return _amlAi("export", 14);
-          case "processing": return _amlAi("settings", 14);
-          case "done": return _amlAi("success", 14);
-          case "error": return _amlAi("error", 14);
-          default: return _amlAi("info_circle", 14);
-        }
-      }
       switch(status){
-        case "queued": return "\u23F3";
-        case "uploading": return "\u2B06\uFE0F";
-        case "processing": return "\u2699\uFE0F";
-        case "done": return "\u2705";
-        case "error": return "\u274C";
-        default: return "\u2022";
+        case "queued": return aiIcon("loading", 14);
+        case "uploading": return aiIcon("export", 14);
+        case "processing": return aiIcon("settings", 14);
+        case "done": return aiIcon("success", 14);
+        case "error": return aiIcon("error", 14);
+        default: return aiIcon("info_circle", 14);
       }
     };
     const _statusLabel = (status) => {

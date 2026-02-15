@@ -38,7 +38,7 @@
       </style>
 
       <!-- Task progress (top) -->
-      <div class="label" data-i18n="tts.task_title">🧾 Postęp zadania</div>
+      <div class="label" data-i18n="tts.task_title"><i data-icon="document" data-size="14"></i> Postęp zadania</div>
       <div class="small"><span data-i18n="common.status">Status</span>: <span id="tts_task_status">—</span></div>
       <div class="small"><span data-i18n="common.progress">Postęp</span>: <span id="tts_task_pct">0%</span></div>
       <div class="progress" style="margin-top:10px"><div id="tts_task_bar"></div></div>
@@ -50,7 +50,7 @@
       <div class="hr"></div>
 
       <!-- ================ PIPER TTS ================ -->
-      <div class="label">⚡ Piper TTS</div>
+      <div class="label"><i data-icon="generate" data-size="14"></i> Piper TTS</div>
       <div class="small muted" data-i18n="tts.piper.desc">Najszybszy silnik TTS. Zoptymalizowany pod CPU, ~50 języków. Modele 15-60 MB. Licencja MIT.</div>
 
       <div class="hr"></div>
@@ -83,7 +83,7 @@
 
           <div class="tts-install-row">
             <button class="btn primary mini" type="button" id="tts_piper_install_btn" data-engine="piper">
-              ⬇️ <span data-i18n="tts.btn.install">Instaluj silnik + głos</span>
+              <i data-icon="install" data-size="14"></i> <span data-i18n="tts.btn.install">Instaluj silnik + głos</span>
             </button>
             <span class="small muted" id="tts_piper_inline">—</span>
           </div>
@@ -91,14 +91,14 @@
           <div class="tts-test-row">
             <input type="text" id="tts_piper_test_text" class="input" placeholder="Tekst testowy..." value="Witaj, to jest test lektora.">
             <button class="btn secondary mini" type="button" id="tts_piper_test_btn" data-engine="piper">
-              🔊 <span data-i18n="tts.btn.test">Test</span>
+              <i data-icon="speaker" data-size="14"></i> <span data-i18n="tts.btn.test">Test</span>
             </button>
           </div>
         </div>
 
         <div class="tts-model-right">
           <div class="tts-info-box">
-            <div class="tts-info-title small">ℹ️ <span data-i18n="tts.model_info">Informacje o silniku</span> — Piper</div>
+            <div class="tts-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="tts.model_info">Informacje o silniku</span> — Piper</div>
             <div class="tts-kv small">
               <span class="kv-h" data-i18n="tts.info.languages">Języki</span> <span>~50</span>
               <span class="kv-h" data-i18n="tts.info.quality">Jakość</span> <span data-i18n="tts.quality.good">Dobra (naturalny głos)</span>
@@ -109,7 +109,7 @@
               <span class="kv-h" data-i18n="tts.info.framework">Framework</span> <span>ONNX Runtime (VITS)</span>
             </div>
             <div class="small muted" style="margin-top:8px" data-i18n="tts.piper.recommendation">
-              ✅ Rekomendowany dla większości języków europejskich. Najlepszy stosunek jakość/szybkość.
+              Rekomendowany dla większości języków europejskich. Najlepszy stosunek jakość/szybkość.
             </div>
           </div>
         </div>
@@ -118,7 +118,7 @@
       <div class="hr"></div>
 
       <!-- ================ MMS-TTS ================ -->
-      <div class="label">🌍 MMS-TTS (Meta)</div>
+      <div class="label"><i data-icon="globe" data-size="16"></i> MMS-TTS (Meta)</div>
       <div class="small muted" data-i18n="tts.mms.desc">Meta Massively Multilingual Speech — ponad 1100 języków. Najszersze pokrycie językowe. Automatyczny fallback dla rzadkich języków.</div>
 
       <div class="hr"></div>
@@ -152,7 +152,7 @@
 
           <div class="tts-install-row">
             <button class="btn primary mini" type="button" id="tts_mms_install_btn" data-engine="mms">
-              ⬇️ <span data-i18n="tts.btn.install_voice">Instaluj silnik + głos</span>
+              <i data-icon="install" data-size="14"></i> <span data-i18n="tts.btn.install_voice">Instaluj silnik + głos</span>
             </button>
             <span class="small muted" id="tts_mms_inline">—</span>
           </div>
@@ -160,14 +160,14 @@
           <div class="tts-test-row">
             <input type="text" id="tts_mms_test_text" class="input" placeholder="Tekst testowy..." value="Hello, this is a TTS test.">
             <button class="btn secondary mini" type="button" id="tts_mms_test_btn" data-engine="mms">
-              🔊 <span data-i18n="tts.btn.test">Test</span>
+              <i data-icon="speaker" data-size="14"></i> <span data-i18n="tts.btn.test">Test</span>
             </button>
           </div>
         </div>
 
         <div class="tts-model-right">
           <div class="tts-info-box">
-            <div class="tts-info-title small">ℹ️ <span data-i18n="tts.model_info">Informacje o silniku</span> — MMS-TTS</div>
+            <div class="tts-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="tts.model_info">Informacje o silniku</span> — MMS-TTS</div>
             <div class="tts-kv small">
               <span class="kv-h" data-i18n="tts.info.languages">Języki</span> <span>1100+</span>
               <span class="kv-h" data-i18n="tts.info.quality">Jakość</span> <span data-i18n="tts.quality.ok">OK (syntetyczny, zrozumiały)</span>
@@ -178,7 +178,7 @@
               <span class="kv-h" data-i18n="tts.info.framework">Framework</span> <span>HuggingFace Transformers (VITS)</span>
             </div>
             <div class="tts-warn" data-i18n="tts.mms.license_warn">
-              ⚠️ Licencja CC-BY-NC — tylko do użytku niekomercyjnego.
+              <i data-icon="warning" data-size="14"></i> Licencja CC-BY-NC — tylko do użytku niekomercyjnego.
             </div>
           </div>
         </div>
@@ -187,7 +187,7 @@
       <div class="hr"></div>
 
       <!-- ================ KOKORO ================ -->
-      <div class="label">🎯 Kokoro TTS</div>
+      <div class="label"><i data-icon="success" data-size="14"></i> Kokoro TTS</div>
       <div class="small muted" data-i18n="tts.kokoro.desc">Bardzo szybki, najwyższa jakość głosu. Jeden model 82 MB obsługujący 9 języków. Apache 2.0.</div>
 
       <div class="hr"></div>
@@ -212,7 +212,7 @@
 
           <div class="tts-install-row">
             <button class="btn primary mini" type="button" id="tts_kokoro_install_btn" data-engine="kokoro">
-              ⬇️ <span data-i18n="tts.btn.install">Instaluj silnik + model</span>
+              <i data-icon="install" data-size="14"></i> <span data-i18n="tts.btn.install">Instaluj silnik + model</span>
             </button>
             <span class="small muted" id="tts_kokoro_inline">—</span>
           </div>
@@ -220,14 +220,14 @@
           <div class="tts-test-row">
             <input type="text" id="tts_kokoro_test_text" class="input" placeholder="Test text..." value="Hello, this is a text-to-speech test.">
             <button class="btn secondary mini" type="button" id="tts_kokoro_test_btn" data-engine="kokoro">
-              🔊 <span data-i18n="tts.btn.test">Test</span>
+              <i data-icon="speaker" data-size="14"></i> <span data-i18n="tts.btn.test">Test</span>
             </button>
           </div>
         </div>
 
         <div class="tts-model-right">
           <div class="tts-info-box">
-            <div class="tts-info-title small">ℹ️ <span data-i18n="tts.model_info">Informacje o silniku</span> — Kokoro</div>
+            <div class="tts-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="tts.model_info">Informacje o silniku</span> — Kokoro</div>
             <div class="tts-kv small">
               <span class="kv-h" data-i18n="tts.info.languages">Języki</span> <span>9 (EN, DE, FR, ES, IT, JA, KO, ZH, HI)</span>
               <span class="kv-h" data-i18n="tts.info.quality">Jakość</span> <span data-i18n="tts.quality.very_good">Bardzo dobra (naturalny, ekspresyjny)</span>
@@ -238,7 +238,7 @@
               <span class="kv-h" data-i18n="tts.info.framework">Framework</span> <span>PyTorch (StyleTTS2)</span>
             </div>
             <div class="small muted" style="margin-top:8px" data-i18n="tts.kokoro.recommendation">
-              ✅ Najlepsza jakość głosu. Ograniczony zestaw języków (9), ale te obsługiwane brzmią bardzo naturalnie.
+              Najlepsza jakość głosu. Ograniczony zestaw języków (9), ale te obsługiwane brzmią bardzo naturalnie.
             </div>
           </div>
         </div>

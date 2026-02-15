@@ -5,7 +5,7 @@
 
   <div class="grid">
     <div class="subcard">
-      <div class="label" data-i18n="settings.llm_title">🤖 Modele LLM (Ollama)</div>
+      <div class="label" data-i18n="settings.llm_title"><i data-icon="robot" data-size="14"></i> Modele LLM (Ollama)</div>
 
       <style>
         /* Inline layout only for LLM Settings page */
@@ -53,7 +53,7 @@
         <span class="small" id="llm_status_text" data-i18n="settings.llm_status_checking">Sprawdzanie…</span>
         <span class="small muted" id="llm_status_url"></span>
         <span class="spacer"></span>
-        <button class="btn secondary mini" id="llm_refresh_btn" type="button">🔄 <span data-i18n="settings.llm_refresh">Odśwież listę modeli</span></button>
+        <button class="btn secondary mini" id="llm_refresh_btn" type="button"><i data-icon="refresh" data-size="14"></i> <span data-i18n="settings.llm_refresh">Odśwież listę modeli</span></button>
       </div>
 
       <div class="small muted" id="llm_refresh_msg" style="margin-top:6px;"></div>
@@ -63,19 +63,19 @@
       <!-- QUICK -->
       <div class="llm-row llm-group">
         <div>
-          <div class="label" data-i18n="settings.llm_quick_title">⚡ Szybka analiza</div>
+          <div class="label" data-i18n="settings.llm_quick_title">Szybka analiza</div>
           <div class="small muted" data-i18n="settings.llm_quick_desc">Model do automatycznej analizy w tle (kilka sekund).</div>
           <select id="llm_quick_select" class="input"></select>
 
           <div class="llm-install-row">
-            <button class="btn primary mini" type="button" id="llm_quick_install_btn" style="display:none;">⬇️ <span data-i18n="settings.llm_install">Instaluj</span></button>
+            <button class="btn primary mini" type="button" id="llm_quick_install_btn" style="display:none;"><i data-icon="install" data-size="14"></i> <span data-i18n="settings.llm_install">Instaluj</span></button>
             <span class="small muted" id="llm_quick_warn"></span>
           </div>
         </div>
 
         <div>
           <div class="llm-info-box">
-            <div class="llm-info-title small">ℹ️ <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
+            <div class="llm-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
             <div class="small" id="llm_quick_info_name">—</div>
             <div id="llm_quick_info_body" class="small muted" style="margin-top:6px;"></div>
             <div class="llm-warn llm-inline-warn" id="llm_quick_info_warning" style="display:none"></div>
@@ -88,19 +88,19 @@
       <!-- DEEP -->
       <div class="llm-row llm-group">
         <div>
-          <div class="label" data-i18n="settings.llm_deep_title">🔍 Głęboka analiza</div>
+          <div class="label" data-i18n="settings.llm_deep_title"><i data-icon="search" data-size="14"></i> Głęboka analiza</div>
           <div class="small muted" data-i18n="settings.llm_deep_desc">Model do szczegółowych raportów (dziesiątki sekund / minuty).</div>
           <select id="llm_deep_select" class="input"></select>
 
           <div class="llm-install-row">
-            <button class="btn primary mini" type="button" id="llm_deep_install_btn" style="display:none;">⬇️ <span data-i18n="settings.llm_install">Instaluj</span></button>
+            <button class="btn primary mini" type="button" id="llm_deep_install_btn" style="display:none;"><i data-icon="install" data-size="14"></i> <span data-i18n="settings.llm_install">Instaluj</span></button>
             <span class="small muted" id="llm_deep_warn"></span>
           </div>
         </div>
 
         <div>
           <div class="llm-info-box">
-            <div class="llm-info-title small">ℹ️ <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
+            <div class="llm-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
             <div class="small" id="llm_deep_info_name">—</div>
             <div id="llm_deep_info_body" class="small muted" style="margin-top:6px;"></div>
             <div class="llm-warn llm-inline-warn" id="llm_deep_info_warning" style="display:none"></div>
@@ -113,19 +113,19 @@
       <!-- VISION / OCR -->
       <div class="llm-row llm-group">
         <div>
-          <div class="label" data-i18n="settings.llm_vision_title">🖼️ Vision / OCR (dokumenty, faktury)</div>
+          <div class="label" data-i18n="settings.llm_vision_title"><i data-icon="vision" data-size="14"></i> Vision / OCR (dokumenty, faktury)</div>
           <div class="small muted" data-i18n="settings.llm_vision_desc">Model do OCR dokumentów, faktur, rachunków, bilingów.</div>
           <select id="llm_vision_select" class="input"></select>
 
           <div class="llm-install-row">
-            <button class="btn primary mini" type="button" id="llm_vision_install_btn" style="display:none;">⬇️ <span data-i18n="settings.llm_install">Instaluj</span></button>
+            <button class="btn primary mini" type="button" id="llm_vision_install_btn" style="display:none;"><i data-icon="install" data-size="14"></i> <span data-i18n="settings.llm_install">Instaluj</span></button>
             <span class="small muted" id="llm_vision_warn"></span>
           </div>
         </div>
 
         <div>
           <div class="llm-info-box">
-            <div class="llm-info-title small">ℹ️ <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
+            <div class="llm-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
             <div class="small" id="llm_vision_info_name">—</div>
             <div id="llm_vision_info_body" class="small muted" style="margin-top:6px;"></div>
             <div class="llm-warn llm-inline-warn" id="llm_vision_info_warning" style="display:none"></div>
@@ -138,19 +138,19 @@
       <!-- TRANSLATION -->
       <div class="llm-row llm-group">
         <div>
-          <div class="label" data-i18n="settings.llm_translation_title">🌍 Tłumaczenia (w tym cyrylica)</div>
+          <div class="label" data-i18n="settings.llm_translation_title"><i data-icon="globe" data-size="16"></i> Tłumaczenia (w tym cyrylica)</div>
           <div class="small muted" data-i18n="settings.llm_translation_desc">Model do tłumaczeń PL/RU/UK/EN. Obsługa cyrylicy.</div>
           <select id="llm_translation_select" class="input"></select>
 
           <div class="llm-install-row">
-            <button class="btn primary mini" type="button" id="llm_translation_install_btn" style="display:none;">⬇️ <span data-i18n="settings.llm_install">Instaluj</span></button>
+            <button class="btn primary mini" type="button" id="llm_translation_install_btn" style="display:none;"><i data-icon="install" data-size="14"></i> <span data-i18n="settings.llm_install">Instaluj</span></button>
             <span class="small muted" id="llm_translation_warn"></span>
           </div>
         </div>
 
         <div>
           <div class="llm-info-box">
-            <div class="llm-info-title small">ℹ️ <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
+            <div class="llm-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
             <div class="small" id="llm_translation_info_name">—</div>
             <div id="llm_translation_info_body" class="small muted" style="margin-top:6px;"></div>
             <div class="llm-warn llm-inline-warn" id="llm_translation_info_warning" style="display:none"></div>
@@ -163,19 +163,19 @@
       <!-- FINANCIAL -->
       <div class="llm-row llm-group">
         <div>
-          <div class="label" data-i18n="settings.llm_financial_title">💰 Analiza finansowa</div>
+          <div class="label" data-i18n="settings.llm_financial_title"><i data-icon="finance" data-size="14"></i> Analiza finansowa</div>
           <div class="small muted" data-i18n="settings.llm_financial_desc">Model do analizy rachunków, balance check, detekcji hazardu.</div>
           <select id="llm_financial_select" class="input"></select>
 
           <div class="llm-install-row">
-            <button class="btn primary mini" type="button" id="llm_financial_install_btn" style="display:none;">⬇️ <span data-i18n="settings.llm_install">Instaluj</span></button>
+            <button class="btn primary mini" type="button" id="llm_financial_install_btn" style="display:none;"><i data-icon="install" data-size="14"></i> <span data-i18n="settings.llm_install">Instaluj</span></button>
             <span class="small muted" id="llm_financial_warn"></span>
           </div>
         </div>
 
         <div>
           <div class="llm-info-box">
-            <div class="llm-info-title small">ℹ️ <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
+            <div class="llm-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
             <div class="small" id="llm_financial_info_name">—</div>
             <div id="llm_financial_info_body" class="small muted" style="margin-top:6px;"></div>
             <div class="llm-warn llm-inline-warn" id="llm_financial_info_warning" style="display:none"></div>
@@ -188,19 +188,19 @@
       <!-- SPECIALIZED -->
       <div class="llm-row llm-group">
         <div>
-          <div class="label" data-i18n="settings.llm_specialized_title">🔧 Specjalistyczne (prawne, advanced)</div>
+          <div class="label" data-i18n="settings.llm_specialized_title"><i data-icon="wrench" data-size="14"></i> Specjalistyczne (prawne, advanced)</div>
           <div class="small muted" data-i18n="settings.llm_specialized_desc">Modele prawne (umowy), advanced reasoning.</div>
           <select id="llm_specialized_select" class="input"></select>
 
           <div class="llm-install-row">
-            <button class="btn primary mini" type="button" id="llm_specialized_install_btn" style="display:none;">⬇️ <span data-i18n="settings.llm_install">Instaluj</span></button>
+            <button class="btn primary mini" type="button" id="llm_specialized_install_btn" style="display:none;"><i data-icon="install" data-size="14"></i> <span data-i18n="settings.llm_install">Instaluj</span></button>
             <span class="small muted" id="llm_specialized_warn"></span>
           </div>
         </div>
 
         <div>
           <div class="llm-info-box">
-            <div class="llm-info-title small">ℹ️ <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
+            <div class="llm-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
             <div class="small" id="llm_specialized_info_name">—</div>
             <div id="llm_specialized_info_body" class="small muted" style="margin-top:6px;"></div>
             <div class="llm-warn llm-inline-warn" id="llm_specialized_info_warning" style="display:none"></div>
@@ -213,7 +213,7 @@
       <!-- CUSTOM / USER MODEL -->
       <div class="llm-row llm-group">
         <div style="grid-column: 1 / -1;">
-          <div class="label" data-i18n="settings.llm_custom_title">➕ Dodaj własny model Ollama</div>
+          <div class="label" data-i18n="settings.llm_custom_title"><i data-icon="add" data-size="14"></i> Dodaj własny model Ollama</div>
           <div class="small muted" data-i18n="settings.llm_custom_desc">Wpisz dowolny model zainstalowany lub dostępny w Ollama (np. phi4:latest). Możesz go dodać do wybranej grupy.</div>
 
           <div style="display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap;">
@@ -226,7 +226,7 @@
               <option value="specialized" data-i18n="settings.llm_group_specialized">Specjalistyczne</option>
             </select>
             <input id="llm_custom_model_id" class="input" type="text" placeholder="np. phi4:latest, llama3.2:1b, mymodel:tag" style="flex:1; min-width:260px;">
-            <button class="btn primary mini" type="button" id="llm_custom_add_btn">➕ <span data-i18n="settings.llm_custom_add">Dodaj</span></button>
+            <button class="btn primary mini" type="button" id="llm_custom_add_btn"><i data-icon="add" data-size="14"></i> <span data-i18n="settings.llm_custom_add">Dodaj</span></button>
           </div>
 
           <div class="small muted" id="llm_custom_msg" style="margin-top:6px;"></div>

@@ -126,26 +126,26 @@
     // Piper status
     var ps = qs("tts_piper_status");
     if (TTS_STATUS.piper && TTS_STATUS.piper.installed) {
-      ps.textContent = "✅ piper " + (TTS_STATUS.piper.version || "");
+      ps.innerHTML = aiIcon('success',12) + " piper " + (TTS_STATUS.piper.version || "");
     } else {
-      ps.textContent = "❌ " + _tSafe("tts.not_installed", "Niezainstalowany");
+      ps.innerHTML = aiIcon('error',12) + " " + _tSafe("tts.not_installed", "Niezainstalowany");
     }
 
     // MMS status
     var ms = qs("tts_mms_status");
     if (TTS_STATUS.mms && TTS_STATUS.mms.installed) {
       var tv = TTS_STATUS.mms.transformers ? TTS_STATUS.mms.transformers.version : "";
-      ms.textContent = "✅ transformers " + (tv || "");
+      ms.innerHTML = aiIcon('success',12) + " transformers " + (tv || "");
     } else {
-      ms.textContent = "❌ " + _tSafe("tts.not_installed", "Niezainstalowany");
+      ms.innerHTML = aiIcon('error',12) + " " + _tSafe("tts.not_installed", "Niezainstalowany");
     }
 
     // Kokoro status
     var ks = qs("tts_kokoro_status");
     if (TTS_STATUS.kokoro && TTS_STATUS.kokoro.installed) {
-      ks.textContent = "✅ kokoro " + (TTS_STATUS.kokoro.version || "");
+      ks.innerHTML = aiIcon('success',12) + " kokoro " + (TTS_STATUS.kokoro.version || "");
     } else {
-      ks.textContent = "❌ " + _tSafe("tts.not_installed", "Niezainstalowany");
+      ks.innerHTML = aiIcon('error',12) + " " + _tSafe("tts.not_installed", "Niezainstalowany");
     }
   }
 
@@ -196,11 +196,11 @@
       }
 
       if (installed && voiceDownloaded) {
-        inl.textContent = "✅ " + _tSafe("tts.ready", "Gotowy");
+        inl.innerHTML = aiIcon('success',12) + " " + _tSafe("tts.ready", "Gotowy");
       } else if (installed) {
-        inl.textContent = "⚠️ " + _tSafe("tts.no_voice", "Silnik OK, pobierz głos");
+        inl.innerHTML = aiIcon('warning',12) + " " + _tSafe("tts.no_voice", "Silnik OK, pobierz głos");
       } else {
-        inl.textContent = "❌ " + _tSafe("tts.not_installed", "Niezainstalowany");
+        inl.innerHTML = aiIcon('error',12) + " " + _tSafe("tts.not_installed", "Niezainstalowany");
       }
 
       // Mark individual voice options as installed / not installed

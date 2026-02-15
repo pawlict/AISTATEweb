@@ -28,12 +28,11 @@
   }
 
   // Classification metadata
-  const _rAi = typeof aiIcon === 'function' ? aiIcon : null;
   const CLS_META = {
-    neutral:    {label:"Neutralny",  color:"#60a5fa", icon: _rAi ? _rAi("info_circle",14,"#60a5fa") : "\u25CB", bg:"rgba(96,165,250,.08)", html:true},
-    legitimate: {label:"Poprawny",   color:"#15803d", icon: _rAi ? _rAi("success",14) : "\u2713", bg:"rgba(21,128,61,.08)", html:true},
-    suspicious: {label:"Podejrzany", color:"#dc2626", icon: _rAi ? _rAi("warning",14) : "\u26A0", bg:"rgba(220,38,38,.08)", html:true},
-    monitoring: {label:"Obserwacja", color:"#ea580c", icon: _rAi ? _rAi("vision",14,"#ea580c") : "\uD83D\uDC41", bg:"rgba(234,88,12,.08)", html:true},
+    neutral:    {label:"Neutralny",  color:"#60a5fa", icon: aiIcon("info_circle",14,"#60a5fa"), bg:"rgba(96,165,250,.08)", html:true},
+    legitimate: {label:"Poprawny",   color:"#15803d", icon: aiIcon("success",14), bg:"rgba(21,128,61,.08)", html:true},
+    suspicious: {label:"Podejrzany", color:"#dc2626", icon: aiIcon("warning",14), bg:"rgba(220,38,38,.08)", html:true},
+    monitoring: {label:"Obserwacja", color:"#ea580c", icon: aiIcon("vision",14,"#ea580c"), bg:"rgba(234,88,12,.08)", html:true},
   };
 
   // ============================================================
@@ -365,7 +364,7 @@
 
     grid.innerHTML = blocks.map(b => {
       const editable = b.editable;
-      const typeIcon = b.type === "amount" ? "💰" : b.type === "date" ? "📅" : b.type === "iban" ? "🏦" : "";
+      const typeIcon = b.type === "amount" ? aiIcon('finance',14) : b.type === "date" ? aiIcon('notes',14) : b.type === "iban" ? aiIcon('finance',14) : "";
       return `<div class="rv-hdr-block ${editable ? 'rv-hdr-editable' : ''}" data-field="${_esc(b.field)}">
         <div class="rv-hdr-label">${typeIcon} ${_esc(b.label)}</div>
         <div class="rv-hdr-value" ${editable ? 'contenteditable="true"' : ''} data-field="${_esc(b.field)}" data-original="${_esc(b.value)}">${_esc(b.value || "\u2014")}</div>
@@ -393,9 +392,9 @@
       const warnings = St.header.warnings || [];
       if(warnings.length){
         warningsEl.innerHTML = warnings.map(w => {
-          const isOk = /OK\s*\(.*✓\)/.test(w) || /OK\s*\(.*\u2713\)/.test(w);
+          const isOk = /\bOK\b/.test(w);
           const color = isOk ? "var(--success, #16a34a)" : "var(--danger)";
-          const icon = isOk ? "\u2705" : "\u26A0";
+          const icon = isOk ? aiIcon("success",12) : aiIcon("warning",12);
           return `<div class="small" style="color:${color};margin:2px 0">${icon} ${_esc(w)}</div>`;
         }).join("");
       } else {
@@ -448,9 +447,9 @@
       }
       if(allWarnings.length){
         warningsEl.innerHTML = allWarnings.map(w => {
-          const isOk = /OK\s*\(.*✓\)/.test(w) || /OK\s*\(.*\u2713\)/.test(w);
+          const isOk = /\bOK\b/.test(w);
           const color = isOk ? "var(--success, #16a34a)" : "var(--danger)";
-          const icon = isOk ? "\u2705" : "\u26A0";
+          const icon = isOk ? aiIcon("success",12) : aiIcon("warning",12);
           return `<div class="small" style="color:${color};margin:2px 0">${icon} ${_esc(w)}</div>`;
         }).join("");
       } else {

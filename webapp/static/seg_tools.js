@@ -684,14 +684,14 @@
       if (i < segs.length - 1) {
         actions.innerHTML +=
           '<button class="seg-action-btn" data-seg-action="merge-next" data-seg-idx="' + i + '" title="' + _t("seg.merge") + '">' +
-          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>' +
+          aiIcon("merge", 14) +
           " " + _t("seg.merge") +
           "</button>";
       }
 
       actions.innerHTML +=
         '<button class="seg-action-btn" data-seg-action="split" data-seg-idx="' + i + '" title="' + _t("seg.split") + '">' +
-        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M5 12h14"/></svg>' +
+        aiIcon("split", 14) +
         " " + _t("seg.split") +
         "</button>";
 

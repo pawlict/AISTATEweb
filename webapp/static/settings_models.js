@@ -155,7 +155,7 @@
     lines.push(`</div>`);
 
     if (info.requires_multi_gpu){
-      lines.push(`<div class="llm-mini-rec">⚠️ Multi-GPU required</div>`);
+      lines.push(`<div class="llm-mini-rec">${aiIcon('warning',12)} Multi-GPU required</div>`);
     }
 
     if (cases.length){
@@ -267,7 +267,7 @@
           });
 
           if (input) input.value = "";
-          if (msgEl) msgEl.textContent = tr("settings.llm_custom_added","Dodano ✅");
+          if (msgEl) msgEl.innerHTML = aiIcon('success',12) + ' ' + tr("settings.llm_custom_added","Dodano");
 
           // Refresh selectors so the new model appears, then auto-select it for the chosen group
           await this.refresh(false);
@@ -346,7 +346,7 @@
           const enc = encodeURIComponent(String(mid));
           return `<span style="display:inline-flex; align-items:center; gap:6px; margin-right:10px; margin-top:6px;">
             <code style="font-size:12px;">${safe}</code>
-            <button class="btn mini" type="button" data-action="remove-custom" data-group="${g}" data-model="${enc}">✖</button>
+            <button class="btn mini" type="button" data-action="remove-custom" data-group="${g}" data-model="${enc}">${aiIcon("delete",12)}</button>
           </span>`;
         }).join("");
 
@@ -402,7 +402,7 @@
           }
         }
       }catch(e){
-        notify(`❌ ${e.message}`, "error");
+        notify(e.message, "error");
       }
 
       // Current selection
@@ -428,7 +428,7 @@
 
       this.renderCustomList();
 
-      if (showMsg && msg) msg.textContent = tr("settings.llm_loaded", "Updated ✅");
+      if (showMsg && msg) msg.innerHTML = aiIcon('success',12) + ' ' + tr("settings.llm_loaded", "Updated");
     },
 
     ensureDefaults(){
@@ -472,7 +472,7 @@
           opt.value = it.id;
           const vram = it.vram ? ` · ${it.vram}` : "";
           const speed = it.speed ? ` · ${it.speed}` : "";
-          const warn = it.warning ? " ⚠️" : "";
+          const warn = it.warning ? " (!)" : "";
           const inst = it.installed ? "" : ` (${notInstalled})`;
           opt.textContent = `${it.display_name || it.id}${inst}${vram}${speed}${warn}`;
           if (it.id === chosenId) opt.selected = true;
@@ -508,7 +508,7 @@
           body: JSON.stringify(payload)
         });
       }catch(e){
-        notify(`❌ Save models failed: ${e.message}`, "error");
+        notify(`Save models failed: ${e.message}`, "error");
       }
     },
 
@@ -563,7 +563,7 @@
 
       const btn = $(cfg.installBtn);
       const msgEl = $("llm_refresh_msg");
-      if (btn){ btn.disabled = true; btn.textContent = "⏳ Installing…"; }
+      if (btn){ btn.disabled = true; btn.innerHTML = aiIcon('loading',12) + " Installing\u2026"; }
       if (msgEl) msgEl.textContent = `Installing ${modelId}…`;
 
       try{
@@ -579,8 +579,8 @@
           await new Promise(r => setTimeout(r, 2000));
           const st = await http(`/api/ollama/install/status?model=${encodeURIComponent(modelId)}`);
           if (st?.status === "done"){
-            if (msgEl) msgEl.textContent = `Installed ✅ (${modelId})`;
-            notify(`✅ Installed: ${modelId}`, "success");
+            if (msgEl) msgEl.innerHTML = aiIcon('success',12) + ` Installed (${modelId})`;
+            notify(`Installed: ${modelId}`, "success");
             await this.refresh(false);
             return;
           }
@@ -594,9 +594,9 @@
         throw new Error("install timeout");
       }catch(e){
         if (msgEl) msgEl.textContent = `Install error: ${e.message}`;
-        notify(`❌ Install failed: ${e.message}`, "error");
+        notify(`Install failed: ${e.message}`, "error");
       }finally{
-        if (btn){ btn.textContent = "⬇️ " + tr("settings.llm_install","Install"); btn.disabled = false; }
+        if (btn){ btn.innerHTML = aiIcon('install',12) + ' ' + tr("settings.llm_install","Install"); btn.disabled = false; }
         this.updateInstallUI(group);
       }
     }

@@ -49,7 +49,7 @@
         body: JSON.stringify(payload)
       });
       const msg = document.getElementById("settings_msg");
-      if(msg) msg.textContent = t("settings.autosaved") || t("settings.saved") || "Saved ✅";
+      if(msg) msg.textContent = t("settings.autosaved") || t("settings.saved") || "Saved";
     }catch(e){
       const msg = document.getElementById("settings_msg");
       if(msg) msg.textContent = (t("settings.save_error") || "Save error") + ": " + (e?.message || e);

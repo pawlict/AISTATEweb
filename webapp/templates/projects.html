@@ -19,7 +19,7 @@
     <!-- Pending invitations -->
     <div id="invitationsSection" style="display:none">
       <div class="label" style="font-weight:700;color:var(--accent);margin-bottom:6px">
-        <span>📩</span> <span data-i18n="projects.invitations">Zaproszenia</span> (<span id="invCount">0</span>)
+        <i data-icon="mail" data-size="14"></i> <span data-i18n="projects.invitations">Zaproszenia</span> (<span id="invCount">0</span>)
       </div>
       <div id="invitationsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
     </div>
@@ -100,7 +100,7 @@
   <div class="modal-panel" style="max-width:440px">
     <div class="modal-header">
       <div class="modal-title">Nowy projekt</div>
-      <button class="btn secondary modal-close-x" type="button">✕</button>
+      <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
     </div>
     <div class="modal-body">
       <div class="label">Nazwa</div>
@@ -131,19 +131,19 @@
   <div class="modal-panel" style="max-width:480px">
     <div class="modal-header">
       <div class="modal-title">Nowy podprojekt</div>
-      <button class="btn secondary modal-close-x" type="button">✕</button>
+      <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
     </div>
     <div class="modal-body">
       <div class="label">Nazwa</div>
       <input class="input" id="nsName" type="text" placeholder="np. Przesłuchanie świadka A"/>
       <div class="label" style="margin-top:10px">Typ</div>
       <div id="nsTypes" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
-        <button class="btn secondary sp-type-btn active" data-type="transcription">🎤 Transkrypcja</button>
-        <button class="btn secondary sp-type-btn" data-type="diarization">👥 Diaryzacja</button>
-        <button class="btn secondary sp-type-btn" data-type="analysis">📊 Analiza</button>
-        <button class="btn secondary sp-type-btn" data-type="chat">💬 Chat</button>
-        <button class="btn secondary sp-type-btn" data-type="translation">🌐 Tłumaczenie</button>
-        <button class="btn secondary sp-type-btn" data-type="finance">🏦 Finanse</button>
+        <button class="btn secondary sp-type-btn active" data-type="transcription"><i data-icon="transcription" data-size="16"></i> Transkrypcja</button>
+        <button class="btn secondary sp-type-btn" data-type="diarization"><i data-icon="diarization" data-size="16"></i> Diaryzacja</button>
+        <button class="btn secondary sp-type-btn" data-type="analysis"><i data-icon="finance" data-size="16"></i> Analiza</button>
+        <button class="btn secondary sp-type-btn" data-type="chat"><i data-icon="robot" data-size="16"></i> Chat</button>
+        <button class="btn secondary sp-type-btn" data-type="translation"><i data-icon="globe" data-size="16"></i> Tłumaczenie</button>
+        <button class="btn secondary sp-type-btn" data-type="finance"><i data-icon="finance" data-size="16"></i> Finanse</button>
       </div>
       <div class="label" style="margin-top:10px">Powiąż z (opcjonalnie)</div>
       <select class="input" id="nsLinkTo"><option value="">— brak —</option></select>
@@ -160,7 +160,7 @@
   <div class="modal-panel" style="max-width:420px">
     <div class="modal-header">
       <div class="modal-title">Zaproś do projektu</div>
-      <button class="btn secondary modal-close-x" type="button">✕</button>
+      <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
     </div>
     <div class="modal-body">
       <div class="label">Nazwa użytkownika</div>
@@ -187,7 +187,7 @@
   <div class="modal-panel" style="max-width:480px">
     <div class="modal-header">
       <div class="modal-title" data-i18n="projects.delete.modal.title">Usuń podprojekt</div>
-      <button class="btn secondary modal-close-x" type="button">✕</button>
+      <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
     </div>
     <div class="modal-body">
       <div class="label" data-i18n="projects.delete.modal.choose">Wybierz podprojekt do usunięcia</div>
@@ -216,7 +216,7 @@
   <div class="modal-panel" style="max-width:420px">
     <div class="modal-header">
       <div class="modal-title">Eksportuj podprojekt</div>
-      <button class="btn secondary modal-close-x" type="button">✕</button>
+      <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
     </div>
     <div class="modal-body">
       <div class="label">Wybierz podprojekt</div>
