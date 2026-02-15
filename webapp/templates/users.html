@@ -12,9 +12,6 @@
     <button class="users-tab active" data-panel="usersPanel" style="padding:.45rem .9rem;border:none;border-bottom:2px solid var(--accent,#4a6cf7);border-radius:6px 6px 0 0;background:var(--card-bg,#fff);font-weight:600;font-size:.85rem;cursor:pointer;margin-bottom:-2px;color:var(--accent,#4a6cf7);">
       Użytkownicy <span class="en">Users</span>
     </button>
-    <button class="users-tab" data-panel="auditPanel" style="padding:.45rem .9rem;border:none;border-bottom:2px solid transparent;border-radius:6px 6px 0 0;background:transparent;font-weight:500;font-size:.85rem;cursor:pointer;margin-bottom:-2px;color:var(--muted,#888);">
-      Historia logowań <span class="en">Login history</span>
-    </button>
     <button class="users-tab" data-panel="securityPanel" style="padding:.45rem .9rem;border:none;border-bottom:2px solid transparent;border-radius:6px 6px 0 0;background:transparent;font-weight:500;font-size:.85rem;cursor:pointer;margin-bottom:-2px;color:var(--muted,#888);">
       Bezpieczeństwo <span class="en">Security</span>
     </button>
@@ -117,45 +114,6 @@
     </div>
   </div>
 
-  <!-- Panel: Audit Log -->
-  <div id="auditPanel" class="users-panel" style="display:none;">
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0 .8rem;">
-      <select id="auditUserFilter" style="font-size:.82rem;padding:.3rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);">
-        <option value="">Wszyscy użytkownicy <span class="en">All users</span></option>
-      </select>
-      <select id="auditEventFilter" style="font-size:.82rem;padding:.3rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);">
-        <option value="">Wszystkie zdarzenia <span class="en">All events</span></option>
-        <option value="login">Logowanie <span class="en">Login</span></option>
-        <option value="login_failed">Nieudane logowanie <span class="en">Failed login</span></option>
-        <option value="password_changed">Zmiana hasła <span class="en">Password changed</span></option>
-        <option value="password_reset">Reset hasła <span class="en">Password reset</span></option>
-        <option value="account_locked">Blokada konta <span class="en">Account locked</span></option>
-        <option value="account_unlocked">Odblokowanie <span class="en">Account unlocked</span></option>
-        <option value="user_banned">Ban</option>
-        <option value="user_created">Utworzenie konta <span class="en">Created</span></option>
-        <option value="user_deleted">Usunięcie <span class="en">Deleted</span></option>
-        <option value="password_expired_redirect">Hasło wygasło <span class="en">Expired</span></option>
-      </select>
-      <div style="margin-left:auto;display:flex;gap:.3rem;align-items:center;">
-        <button class="btn btn-secondary" id="auditPrev" style="font-size:.75rem;padding:.2rem .5rem;">&larr;</button>
-        <span id="auditInfo" style="font-size:.78rem;color:var(--muted,#888);"></span>
-        <button class="btn btn-secondary" id="auditNext" style="font-size:.75rem;padding:.2rem .5rem;">&rarr;</button>
-      </div>
-    </div>
-    <table class="data-table" style="width:100%;font-size:.82rem;">
-      <thead>
-        <tr>
-          <th>Data / czas <br><span class="en">Date / time</span></th>
-          <th>Użytkownik <br><span class="en">User</span></th>
-          <th>Zdarzenie <br><span class="en">Event</span></th>
-          <th>IP</th>
-          <th>Szczegóły <br><span class="en">Details</span></th>
-        </tr>
-      </thead>
-      <tbody id="auditBody"></tbody>
-    </table>
-  </div>
-
   <!-- Panel: Security Settings -->
   <div id="securityPanel" class="users-panel" style="display:none;">
     <h3 style="margin:.5rem 0 .8rem;font-size:.95rem;">Polityka bezpieczeństwa <span class="en">Security policy</span></h3>
@@ -216,6 +174,44 @@
 
     </div>
     <div id="secSaveMsg" style="font-size:.82rem;color:#27ae60;margin-top:.6rem;min-height:1.2em;"></div>
+
+    <!-- Audit Log (Login history) -->
+    <h3 style="margin:1.5rem 0 .8rem;font-size:.95rem;">Historia logowań <span class="en">Login history</span></h3>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:0 0 .8rem;">
+      <select id="auditUserFilter" style="font-size:.82rem;padding:.3rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);">
+        <option value="">Wszyscy użytkownicy <span class="en">All users</span></option>
+      </select>
+      <select id="auditEventFilter" style="font-size:.82rem;padding:.3rem .5rem;border-radius:6px;border:1px solid var(--border,#ddd);">
+        <option value="">Wszystkie zdarzenia <span class="en">All events</span></option>
+        <option value="login">Logowanie <span class="en">Login</span></option>
+        <option value="login_failed">Nieudane logowanie <span class="en">Failed login</span></option>
+        <option value="password_changed">Zmiana hasła <span class="en">Password changed</span></option>
+        <option value="password_reset">Reset hasła <span class="en">Password reset</span></option>
+        <option value="account_locked">Blokada konta <span class="en">Account locked</span></option>
+        <option value="account_unlocked">Odblokowanie <span class="en">Account unlocked</span></option>
+        <option value="user_banned">Ban</option>
+        <option value="user_created">Utworzenie konta <span class="en">Created</span></option>
+        <option value="user_deleted">Usunięcie <span class="en">Deleted</span></option>
+        <option value="password_expired_redirect">Hasło wygasło <span class="en">Expired</span></option>
+      </select>
+      <div style="margin-left:auto;display:flex;gap:.3rem;align-items:center;">
+        <button class="btn btn-secondary" id="auditPrev" style="font-size:.75rem;padding:.2rem .5rem;">&larr;</button>
+        <span id="auditInfo" style="font-size:.78rem;color:var(--muted,#888);"></span>
+        <button class="btn btn-secondary" id="auditNext" style="font-size:.75rem;padding:.2rem .5rem;">&rarr;</button>
+      </div>
+    </div>
+    <table class="data-table" style="width:100%;font-size:.82rem;">
+      <thead>
+        <tr>
+          <th>Data / czas <br><span class="en">Date / time</span></th>
+          <th>Użytkownik <br><span class="en">User</span></th>
+          <th>Zdarzenie <br><span class="en">Event</span></th>
+          <th>IP</th>
+          <th>Szczegóły <br><span class="en">Details</span></th>
+        </tr>
+      </thead>
+      <tbody id="auditBody"></tbody>
+    </table>
   </div>
 
 </div>

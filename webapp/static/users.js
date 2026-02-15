@@ -831,8 +831,7 @@
         var target = tab.dataset.panel;
         var panel = document.getElementById(target);
         if (panel) panel.style.display = '';
-        if (target === 'auditPanel') initAuditTab();
-        if (target === 'securityPanel') loadSecuritySettings();
+        if (target === 'securityPanel') { loadSecuritySettings(); initAuditTab(); }
       });
     });
   }
