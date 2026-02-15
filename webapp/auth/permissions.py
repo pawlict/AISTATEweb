@@ -24,7 +24,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     },
     "analysis": {
         "pages": ["/analysis", "/analiza"],
-        "api_prefixes": ["/api/analysis/", "/api/finance/", "/api/documents/"],
+        "api_prefixes": ["/api/analysis/", "/api/finance/", "/api/documents/", "/api/aml/", "/api/memory", "/api/db/"],
         "api_keywords": ["ollama/status", "ollama/models", "settings/models", "settings/analysis", "models/list"],
     },
     "chat": {

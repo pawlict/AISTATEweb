@@ -339,10 +339,15 @@ document.getElementById('nwSubmit').addEventListener('click', async () => {
   const desc = document.getElementById('nwDesc').value.trim();
   const color = document.querySelector('#nwColors .color-chip.active')?.dataset?.color || '#4a6cf7';
   try {
-    await apiFetch(API, {method:'POST', body:JSON.stringify({name, description:desc, color})});
+    const data = await apiFetch(API, {method:'POST', body:JSON.stringify({name, description:desc, color})});
     hideModal('modalNewWorkspace');
-    loadWorkspaces();
     showToast('Projekt utworzony','success');
+    // Open workspace detail directly so user sees the auto-created subproject
+    if(data && data.workspace && data.workspace.id){
+      openWorkspace(data.workspace.id);
+    } else {
+      loadWorkspaces();
+    }
   } catch(e){ showToast(e.message,'error'); }
 });
 
