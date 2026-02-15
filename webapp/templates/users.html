@@ -9,10 +9,10 @@
 
   <!-- Tabs -->
   <div class="users-tabs" style="display:flex;gap:.3rem;margin:1rem 0 .8rem;border-bottom:2px solid var(--border,#e0e3e8);padding-bottom:0;">
-    <button class="users-tab active" data-panel="usersPanel" style="padding:.45rem .9rem;border:none;border-bottom:2px solid var(--accent,#4a6cf7);border-radius:6px 6px 0 0;background:var(--card-bg,#fff);font-weight:600;font-size:.85rem;cursor:pointer;margin-bottom:-2px;color:var(--accent,#4a6cf7);">
+    <button class="users-tab active" data-panel="usersPanel">
       Użytkownicy <span class="en">Users</span>
     </button>
-    <button class="users-tab" data-panel="securityPanel" style="padding:.45rem .9rem;border:none;border-bottom:2px solid transparent;border-radius:6px 6px 0 0;background:transparent;font-weight:500;font-size:.85rem;cursor:pointer;margin-bottom:-2px;color:var(--muted,#888);">
+    <button class="users-tab" data-panel="securityPanel">
       Bezpieczeństwo <span class="en">Security</span>
     </button>
   </div>
@@ -213,20 +213,22 @@
         <button class="btn btn-secondary" id="auditNext" style="font-size:.75rem;padding:.2rem .5rem;">&rarr;</button>
       </div>
     </div>
-    <table class="data-table" style="width:100%;font-size:.82rem;">
-      <thead>
-        <tr>
-          <th>Data / czas</th>
-          <th>UID</th>
-          <th>Użytkownik</th>
-          <th>Zdarzenie</th>
-          <th>IP</th>
-          <th>Szczegóły</th>
-          <th>Urządzenie</th>
-        </tr>
-      </thead>
-      <tbody id="auditBody"></tbody>
-    </table>
+    <div class="audit-table-scroll">
+      <table class="data-table" style="width:100%;font-size:.82rem;">
+        <thead>
+          <tr>
+            <th>Data / czas</th>
+            <th>UID</th>
+            <th>Użytkownik</th>
+            <th>Zdarzenie</th>
+            <th>IP</th>
+            <th>Szczegóły</th>
+            <th>Urządzenie</th>
+          </tr>
+        </thead>
+        <tbody id="auditBody"></tbody>
+      </table>
+    </div>
   </div>
 
 </div>
@@ -241,10 +243,15 @@
   .audit-user-item .au-username { font-weight:600;color:var(--text,#333); }
   .audit-user-item .au-display { font-size:.76rem;color:var(--muted,#888); }
   .audit-user-item .au-match { background:rgba(74,108,247,.15);border-radius:2px;padding:0 1px; }
-  /* Tab styling */
-  .users-tab { transition: all .2s; }
-  .users-tab:hover { color: var(--accent, #4a6cf7) !important; }
-  .users-tab.active { border-bottom-color: var(--accent, #4a6cf7) !important; color: var(--accent, #4a6cf7) !important; font-weight: 600 !important; background: var(--card-bg, #fff) !important; }
+  /* Tab styling — base (inactive) */
+  .users-tab { padding:.45rem .9rem; border:none; border-bottom:2px solid transparent; border-radius:6px 6px 0 0; background:transparent; font-weight:400; font-size:.85rem; cursor:pointer; margin-bottom:-2px; color:var(--muted,#888); transition: all .2s; }
+  .users-tab:hover { color: var(--accent, #4a6cf7); }
+  /* Tab styling — active */
+  .users-tab.active { border-bottom-color: var(--accent, #4a6cf7); color: var(--accent, #4a6cf7); font-weight: 600; background: var(--card-bg, #fff); }
+  /* Audit table scrollable container */
+  .audit-table-scroll { max-height: calc(30 * 2.1em + 2.4em); overflow-y: auto; border: 1px solid var(--border, #eee); border-radius: 6px; }
+  .audit-table-scroll .data-table { border-collapse: collapse; }
+  .audit-table-scroll thead th { position: sticky; top: 0; background: var(--card-bg, #f8f9fa); z-index: 2; }
   .role-matrix-card { background: var(--card-bg, #fff); border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,.05); border: 1px solid var(--border, #e0e3e8); }
   /* CSS Grid role matrix */
   .rm-grid { display: grid; font-size: .72rem; gap: 0; border: 1px solid var(--border, #e0e3e8); border-radius: 6px; overflow: hidden; }
