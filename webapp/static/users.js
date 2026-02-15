@@ -755,12 +755,24 @@
   /* Audit tab init (deferred to first click) */
   var auditTabLoaded = false;
 
-  function _buildAuditDropdowns() {
+  var _auditSelectedUser = null; /* { user_id, username, display_name } or null */
+
+  function _buildAuditLabels() {
     var lang = _lang();
 
     /* Section heading */
     var heading = document.getElementById('auditHeading');
     if (heading) heading.textContent = lang === 'en' ? 'Login history' : 'Historia logowań';
+
+    /* Labels */
+    var ul = document.getElementById('auditUserLabel');
+    if (ul) ul.textContent = lang === 'en' ? 'Users' : 'Użytkownicy';
+    var el = document.getElementById('auditEventLabel');
+    if (el) el.textContent = lang === 'en' ? 'Events' : 'Zdarzenia';
+
+    /* Search placeholder */
+    var si = document.getElementById('auditUserSearch');
+    if (si) si.placeholder = lang === 'en' ? 'Search user...' : 'Szukaj użytkownika...';
 
     /* Audit table headers */
     var auditThead = document.querySelector('#auditBody')?.closest('table')?.querySelector('thead');
@@ -772,30 +784,6 @@
       ths.forEach(function(th, i) { if (headers[i]) th.textContent = headers[i]; });
     }
 
-    /* User filter dropdown */
-    var sel = document.getElementById('auditUserFilter');
-    if (sel) {
-      var curVal = sel.value;
-      sel.innerHTML = '';
-      var allOpt = document.createElement('option');
-      allOpt.value = '';
-      allOpt.textContent = lang === 'en' ? 'Users: All' : 'Użytkownicy: Wszyscy';
-      sel.appendChild(allOpt);
-      allUsers.forEach(function(u) {
-        var opt = document.createElement('option');
-        opt.value = u.user_id;
-        opt.textContent = u.username + (u.display_name ? ' (' + u.display_name + ')' : '');
-        sel.appendChild(opt);
-      });
-      sel.value = curVal || '';
-    }
-
-    /* User search placeholder */
-    var searchInput = document.getElementById('auditUserSearch');
-    if (searchInput) {
-      searchInput.placeholder = lang === 'en' ? 'Search user...' : 'Szukaj użytkownika...';
-    }
-
     /* Event filter dropdown */
     var evtSel = document.getElementById('auditEventFilter');
     if (evtSel) {
@@ -803,7 +791,7 @@
       evtSel.innerHTML = '';
       var evtAll = document.createElement('option');
       evtAll.value = '';
-      evtAll.textContent = lang === 'en' ? 'Events: All' : 'Zdarzenia: Wszystkie';
+      evtAll.textContent = lang === 'en' ? 'All events' : 'Wszystkie zdarzenia';
       evtSel.appendChild(evtAll);
       Object.keys(EVENT_LABELS).forEach(function(key) {
         var opt = document.createElement('option');
@@ -815,35 +803,121 @@
     }
   }
 
+  /* Highlight matching substring in text */
+  function _highlight(text, query) {
+    if (!query) return esc(text);
+    var idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx < 0) return esc(text);
+    return esc(text.slice(0, idx)) + '<span class="au-match">' + esc(text.slice(idx, idx + query.length)) + '</span>' + esc(text.slice(idx + query.length));
+  }
+
+  function _showUserResults(query) {
+    var results = document.getElementById('auditUserResults');
+    if (!results) return;
+    if (!query) { results.style.display = 'none'; results.innerHTML = ''; return; }
+
+    var q = query.toLowerCase();
+    var matches = allUsers.filter(function(u) {
+      return u.username.toLowerCase().indexOf(q) >= 0 ||
+             (u.display_name && u.display_name.toLowerCase().indexOf(q) >= 0);
+    });
+
+    if (matches.length === 0) {
+      var lang = _lang();
+      results.innerHTML = '<div style="padding:.5rem .6rem;font-size:.8rem;color:var(--muted,#999);">' + (lang === 'en' ? 'No matching users' : 'Brak pasujących użytkowników') + '</div>';
+      results.style.display = '';
+      return;
+    }
+
+    results.innerHTML = '';
+    matches.forEach(function(u) {
+      var item = document.createElement('div');
+      item.className = 'audit-user-item';
+      item.dataset.userId = u.user_id;
+      item.dataset.username = u.username;
+      item.dataset.displayName = u.display_name || '';
+      var html = '<span class="au-username">' + _highlight(u.username, query) + '</span>';
+      if (u.display_name) {
+        html += '<span class="au-display">' + _highlight(u.display_name, query) + '</span>';
+      }
+      item.innerHTML = html;
+      item.addEventListener('click', function() {
+        _selectUser(u);
+      });
+      results.appendChild(item);
+    });
+    results.style.display = '';
+  }
+
+  function _selectUser(u) {
+    _auditSelectedUser = u;
+    auditFilterUser = u.user_id;
+    auditOffset = 0;
+
+    /* Show badge */
+    var badge = document.getElementById('auditUserActiveFilter');
+    var badgeText = document.getElementById('auditUserBadgeText');
+    if (badge && badgeText) {
+      badgeText.textContent = u.username + (u.display_name ? ' (' + u.display_name + ')' : '');
+      badge.style.display = '';
+    }
+
+    /* Clear & hide search */
+    var si = document.getElementById('auditUserSearch');
+    if (si) si.value = '';
+    var results = document.getElementById('auditUserResults');
+    if (results) { results.style.display = 'none'; results.innerHTML = ''; }
+
+    loadAuditLog();
+  }
+
+  function _clearUserFilter() {
+    _auditSelectedUser = null;
+    auditFilterUser = '';
+    auditOffset = 0;
+
+    var badge = document.getElementById('auditUserActiveFilter');
+    if (badge) badge.style.display = 'none';
+    var si = document.getElementById('auditUserSearch');
+    if (si) si.value = '';
+
+    loadAuditLog();
+  }
+
   function initAuditTab() {
     if (auditTabLoaded) {
-      /* Rebuild dropdown labels on revisit (language may have changed) */
-      _buildAuditDropdowns();
+      _buildAuditLabels();
       return;
     }
     auditTabLoaded = true;
 
-    _buildAuditDropdowns();
+    _buildAuditLabels();
 
-    /* User filter change */
-    var sel = document.getElementById('auditUserFilter');
-    if (sel) {
-      sel.addEventListener('change', function() { auditFilterUser = sel.value; auditOffset = 0; loadAuditLog(); });
+    /* User search — autocomplete */
+    var searchInput = document.getElementById('auditUserSearch');
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        _showUserResults(searchInput.value.trim());
+      });
+      searchInput.addEventListener('focus', function() {
+        if (searchInput.value.trim()) _showUserResults(searchInput.value.trim());
+      });
+      /* Hide results on click outside */
+      document.addEventListener('click', function(e) {
+        var group = document.querySelector('.audit-filter-group');
+        if (group && !group.contains(e.target)) {
+          var results = document.getElementById('auditUserResults');
+          if (results) { results.style.display = 'none'; }
+        }
+      });
     }
 
-    /* User search — filters dropdown options */
-    var searchInput = document.getElementById('auditUserSearch');
-    if (searchInput && sel) {
-      searchInput.addEventListener('input', function() {
-        var q = searchInput.value.trim().toLowerCase();
-        var opts = sel.querySelectorAll('option');
-        opts.forEach(function(opt) {
-          if (!opt.value) { opt.style.display = ''; return; }
-          opt.style.display = opt.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
-        });
-        /* If current selection is hidden, reset */
-        var cur = sel.options[sel.selectedIndex];
-        if (cur && cur.style.display === 'none') { sel.value = ''; auditFilterUser = ''; auditOffset = 0; loadAuditLog(); }
+    /* Clear user filter button */
+    var clearBtn = document.getElementById('auditUserClear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        _clearUserFilter();
       });
     }
 

@@ -109,10 +109,13 @@ class _AdminFileLogger:
 
     Output example:
       backend/logs/2026-01-17/aistate14-15.log
+      backend/logs/2026-01-17/aistate_user14-15.log  (paired audit log)
     """
 
-    def __init__(self, root_dir: Path) -> None:
+    def __init__(self, root_dir: Path, prefix: str = "aistate", pair: Optional["_AdminFileLogger"] = None) -> None:
         self.root_dir = Path(root_dir)
+        self._prefix = prefix
+        self._pair = pair
         self._lock = threading.Lock()
         self._cur_key: Optional[str] = None
         self._fh: Optional[io.TextIOWrapper] = None
@@ -122,7 +125,19 @@ class _AdminFileLogger:
         h0 = dt.hour
         h1 = (dt + timedelta(hours=1)).hour
         folder = self.root_dir / date_str
-        return folder / f"aistate{h0:02d}-{h1:02d}.log"
+        return folder / f"{self._prefix}{h0:02d}-{h1:02d}.log"
+
+    def _ensure_pair(self, dt: datetime) -> None:
+        """Ensure the paired logger also has a file for this hour."""
+        if not self._pair:
+            return
+        try:
+            pair_path = self._pair._target_path(dt)
+            if not pair_path.exists():
+                pair_path.parent.mkdir(parents=True, exist_ok=True)
+                pair_path.write_text("No events\n", encoding="utf-8")
+        except Exception:
+            pass
 
     def write_line(self, line: str) -> None:
         line = (line or "").rstrip("\n")
@@ -147,6 +162,9 @@ class _AdminFileLogger:
                     self._fh = open(path, "a", encoding="utf-8", errors="replace")
                     self._cur_key = key
 
+                    # Ensure paired log file exists for this hour
+                    self._ensure_pair(dt)
+
                 assert self._fh is not None
                 self._fh.write(line + "\n")
                 self._fh.flush()
@@ -154,8 +172,24 @@ class _AdminFileLogger:
             # Never break app flow because of logging.
             return
 
+    def ensure_file_for_hour(self, dt: Optional[datetime] = None) -> None:
+        """Create the file for the current hour if it doesn't exist (with 'No events' placeholder)."""
+        dt = dt or datetime.now()
+        try:
+            path = self._target_path(dt)
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("No events\n", encoding="utf-8")
+        except Exception:
+            pass
 
-ADMIN_FILE_LOG = _AdminFileLogger(ADMIN_LOG_DIR)
+
+# System log writes to aistateHH-HH.log, audit log writes to aistate_userHH-HH.log.
+# They are "paired" — when one creates a new hourly file, the other is also created.
+AUDIT_FILE_LOG = _AdminFileLogger(ADMIN_LOG_DIR, prefix="aistate_user")
+ADMIN_FILE_LOG = _AdminFileLogger(ADMIN_LOG_DIR, prefix="aistate", pair=AUDIT_FILE_LOG)
+AUDIT_FILE_LOG._pair = ADMIN_FILE_LOG
+AUDIT_STORE._file_logger = AUDIT_FILE_LOG
 
 # Ollama client (local LLM). Used by Analysis endpoints.
 OLLAMA = OllamaClient()

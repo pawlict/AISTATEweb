@@ -17,9 +17,10 @@ class AuditStore:
             password_expired_redirect.
     """
 
-    def __init__(self, config_dir: Path) -> None:
+    def __init__(self, config_dir: Path, file_logger: Any = None) -> None:
         self._path = config_dir / "audit_log.json"
         self._lock = threading.Lock()
+        self._file_logger = file_logger
 
     def _read(self) -> List[Dict[str, Any]]:
         try:
@@ -69,6 +70,24 @@ class AuditStore:
             data = self._read()
             data.append(entry)
             self._write(data)
+        # Also write to file-based log (backend/logs/)
+        if self._file_logger:
+            try:
+                ts = entry["timestamp"]
+                parts = [f"event={event}"]
+                if username:
+                    parts.append(f"user={username}")
+                if user_id:
+                    parts.append(f"uid={user_id}")
+                if ip:
+                    parts.append(f"ip={ip}")
+                if actor_name:
+                    parts.append(f"actor={actor_name}")
+                if detail:
+                    parts.append(f"detail={detail}")
+                self._file_logger.write_line(f"{ts} | {' '.join(parts)}")
+            except Exception:
+                pass
 
     def get_events(
         self,
