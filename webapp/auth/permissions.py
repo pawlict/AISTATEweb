@@ -140,10 +140,17 @@ def get_user_modules(role: Optional[str], is_admin: bool, admin_roles: Optional[
         modules.extend(ROLE_MODULES[role])
 
     # Admin role modules
-    if is_admin and admin_roles:
-        for ar in admin_roles:
-            if ar in ADMIN_ROLE_MODULES:
-                modules.extend(ADMIN_ROLE_MODULES[ar])
+    # If is_admin but admin_roles is empty/None, grant ALL admin modules
+    # (prevents lockout when admin_roles was not set during user creation)
+    if is_admin:
+        if admin_roles:
+            for ar in admin_roles:
+                if ar in ADMIN_ROLE_MODULES:
+                    modules.extend(ADMIN_ROLE_MODULES[ar])
+        else:
+            # Fallback: admin without specific roles gets all admin modules
+            for ar_mods in ADMIN_ROLE_MODULES.values():
+                modules.extend(ar_mods)
 
     # Deduplicate keeping order
     seen: Set[str] = set()
