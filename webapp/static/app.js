@@ -976,9 +976,8 @@ function openManualEditor(textarea, lineIndex){
         detail: { textareaId: ctx.textareaId }
       });
       document.dispatchEvent(event);
-      console.log('✅ Dispatched output-updated event');
     }catch(e){
-      console.warn('Could not dispatch event:', e);
+      // dispatch event failed — non-critical
     }
   };
 

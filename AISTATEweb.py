@@ -12,7 +12,8 @@ def main() -> None:
     except Exception:
         print("Brak uvicorn. Zainstaluj: pip install -r requirements.txt", file=sys.stderr)
         raise
-    uvicorn.run("webapp.server:app", host=host, port=port, reload=True)
+    reload = os.environ.get("AISTATEWEB_DEV", "").lower() in ("1", "true", "yes")
+    uvicorn.run("webapp.server:app", host=host, port=port, reload=reload)
 
 if __name__ == "__main__":
     main()

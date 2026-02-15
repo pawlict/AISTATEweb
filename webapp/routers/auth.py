@@ -260,6 +260,7 @@ async def login(request: Request) -> JSONResponse:
         key=SessionStore.COOKIE_NAME,
         value=token,
         httponly=True,
+        secure=True,
         samesite="lax",
         max_age=timeout * 3600,
         path="/",

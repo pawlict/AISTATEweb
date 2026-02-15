@@ -1392,7 +1392,6 @@
     St.batchCaseId = "";
     St.batchResults = [];
 
-    console.log("[AML Batch] Starting batch:", pdfs.length, "files");
     _renderBatchPanel();
     _showBatchPanel();
     _processBatchNext();
@@ -1419,7 +1418,6 @@
           St.batchCaseId = result.case_id;
         }
         St.batchResults.push(result.statement_id);
-        console.log("[AML Batch] Done:", entry.name, "stmt:", result.statement_id);
       } else {
         entry.status = "error";
         let errMsg = result && result.error ? String(result.error) : "Blad analizy";
@@ -1438,8 +1436,6 @@
   }
 
   async function _batchFinalize(){
-    console.log("[AML Batch] Finalize. Results:", St.batchResults.length, "/", St.batchFiles.length);
-
     _showBatchPanel();
     _renderBatchPanel();
 
@@ -1517,7 +1513,6 @@
               error: null,
             });
           }
-          console.log("[AML Batch] Added", pdfs.length, "more files. Total:", St.batchFiles.length);
           _renderBatchPanel();
           // Continue processing from current index (next unprocessed)
           St.batchIdx = St.batchFiles.length - pdfs.length - 1;
