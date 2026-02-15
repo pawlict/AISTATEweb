@@ -26,6 +26,7 @@
     <table class="data-table" id="usersTable" style="width:100%;">
       <thead>
         <tr>
+          <th>UID</th>
           <th>Użytkownik <br><span class="en">User</span></th>
           <th>Nazwa <br><span class="en">Name</span></th>
           <th>Rola / Grupa <br><span class="en">Role / Group</span></th>
@@ -144,26 +145,6 @@
             <option value="strong">Silny (12 + specjalne) <span class="en">Strong</span></option>
           </select>
         </div>
-
-        <!-- Blacklist toggle -->
-        <div style="margin-top:.6rem;">
-          <button type="button" id="blToggle" class="bl-toggle" onclick="toggleBlacklist()">
-            <span id="blArrow" class="bl-arrow">&#9654;</span>
-            Czarna lista haseł <span class="en">Password blacklist</span>
-            (<span id="blCount">...</span>)
-          </button>
-
-          <div id="blPanel" style="display:none;margin-top:.5rem;">
-            <!-- Add form -->
-            <div style="display:flex;gap:.3rem;margin-bottom:.5rem;">
-              <input type="text" id="blNewPassword" placeholder="Nowe hasło do zablokowania..." style="flex:1;font-size:.8rem;padding:.3rem .5rem;border-radius:5px;border:1px solid var(--border,#ddd);"/>
-              <button class="btn" id="blAddBtn" style="font-size:.76rem;padding:.3rem .6rem;" onclick="addToBlacklist()">+ Dodaj <span class="en">Add</span></button>
-            </div>
-
-            <!-- List container -->
-            <div id="blList" class="bl-list"></div>
-          </div>
-        </div>
       </div>
 
       <!-- Password Expiry -->
@@ -190,6 +171,30 @@
 
     </div>
     <div id="secSaveMsg" style="font-size:.82rem;color:#27ae60;margin-top:.6rem;min-height:1.2em;"></div>
+
+    <!-- Password Blacklist (separate card) -->
+    <div id="blCard" style="border:1px solid var(--border,#e0e3e8);border-radius:8px;padding:.8rem 1rem;margin-top:1rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleBlacklist()">
+        <h4 style="margin:0;font-size:.85rem;">
+          <span id="blArrow" class="bl-arrow">&#9654;</span>
+          Czarna lista haseł <span class="en">Password blacklist</span>
+          <span style="font-weight:400;color:var(--muted,#888);font-size:.78rem;">(<span id="blCount">...</span>)</span>
+        </h4>
+      </div>
+      <div id="blPanel" style="display:none;margin-top:.6rem;">
+        <p style="font-size:.72rem;color:var(--muted,#888);margin:0 0 .5rem;">
+          Hasła z tej listy są zawsze blokowane niezależnie od poziomu polityki.
+          <span class="en">Passwords on this list are always blocked regardless of policy level.</span>
+        </p>
+        <!-- Add form -->
+        <div style="display:flex;gap:.3rem;margin-bottom:.5rem;">
+          <input type="text" id="blNewPassword" placeholder="Nowe hasło do zablokowania..." style="flex:1;font-size:.8rem;padding:.3rem .5rem;border-radius:5px;border:1px solid var(--border,#ddd);"/>
+          <button class="btn" id="blAddBtn" style="font-size:.76rem;padding:.3rem .6rem;" onclick="addToBlacklist()">+ Dodaj <span class="en">Add</span></button>
+        </div>
+        <!-- List container -->
+        <div id="blList" class="bl-list"></div>
+      </div>
+    </div>
 
     <!-- Audit Log (Login history) -->
     <h3 style="margin:1.5rem 0 .3rem;font-size:.95rem;" id="auditHeading">Historia logowań</h3>
@@ -269,10 +274,26 @@
   .audit-table-scroll .data-table { border-collapse: collapse; }
   .audit-table-scroll thead th { position: sticky; top: 0; background: var(--card-bg, #f8f9fa); z-index: 2; }
   /* Password blacklist panel */
-  .bl-toggle { background:none; border:none; cursor:pointer; font-size:.76rem; color:var(--accent,#4a6cf7); padding:0; display:inline-flex; align-items:center; gap:.3rem; }
-  .bl-toggle:hover { text-decoration:underline; }
-  .bl-arrow { font-size:.6rem; transition:transform .2s; display:inline-block; }
+  .bl-arrow { font-size:.6rem; transition:transform .2s; display:inline-block; margin-right:.3rem; }
   .bl-arrow.open { transform:rotate(90deg); }
+
+  /* User table row hover + cursor for dblclick */
+  #usersBody tr[data-uid] { transition: background .15s; cursor: pointer; }
+  #usersBody tr[data-uid]:hover { background: rgba(74,108,247,.06) !important; }
+
+  /* Audit table row hover */
+  #auditBody tr[data-uid] { transition: background .15s; cursor: pointer; }
+  #auditBody tr[data-uid]:hover { background: rgba(74,108,247,.06) !important; }
+
+  /* Context menu */
+  .ctx-menu { position:fixed; z-index:999; min-width:240px; background:var(--card-bg,#fff); border:1px solid var(--border,#ddd); border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,.18); padding:.3rem 0; animation: ctxFadeIn .15s ease-out; }
+  @keyframes ctxFadeIn { from { opacity:0; transform:scale(.95) translateY(-4px); } to { opacity:1; transform:scale(1) translateY(0); } }
+  .ctx-menu-header { padding:.45rem .7rem; font-size:.78rem; font-weight:700; color:var(--text,#333); border-bottom:1px solid var(--border,#eee); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ctx-menu-item { display:flex; align-items:center; gap:.45rem; width:100%; background:none; border:none; padding:.45rem .7rem; font-size:.8rem; color:var(--text,#333); cursor:pointer; text-align:left; transition:background .1s; }
+  .ctx-menu-item:hover { background:rgba(74,108,247,.08); }
+  .ctx-menu-item:first-of-type { border-radius:0; }
+  .ctx-menu-item:last-of-type { border-radius:0 0 10px 10px; }
+  .ctx-icon { font-size:.9rem; width:1.2em; text-align:center; }
   .bl-list { max-height:250px; overflow-y:auto; border:1px solid var(--border,#eee); border-radius:6px; padding:.3rem; }
   .bl-item { display:flex; align-items:center; justify-content:space-between; padding:.2rem .4rem; font-size:.78rem; border-bottom:1px solid var(--border,#f0f0f0); font-family:monospace; }
   .bl-item:last-child { border-bottom:none; }
@@ -328,6 +349,19 @@
   .cc-sent-item .cc-sent-del { background: none; border: none; color: #e74c3c; cursor: pointer; font-size: .72rem; padding: .1rem .3rem; }
   .cc-sent-item .cc-sent-del:hover { text-decoration: underline; }
 </style>
+
+<!-- Context menu for audit log user clicks -->
+<div id="userContextMenu" class="ctx-menu" style="display:none;">
+  <div class="ctx-menu-header" id="ctxMenuHeader"></div>
+  <button class="ctx-menu-item" id="ctxFilterAudit">
+    <span class="ctx-icon">&#128269;</span>
+    Filtruj zdarzenia <span class="en">Filter events</span>
+  </button>
+  <button class="ctx-menu-item" id="ctxGoToUsers">
+    <span class="ctx-icon">&#128100;</span>
+    Przejdź do Użytkowników <span class="en">Go to Users</span>
+  </button>
+</div>
 
 <!-- Modal: Add/Edit User -->
 <div id="userModal" class="modal-overlay" style="display:none;">

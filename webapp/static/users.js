@@ -165,7 +165,7 @@
 
     if (pendingUsers.length > 0) {
       var headerTr = document.createElement('tr');
-      headerTr.innerHTML = '<td colspan="6" style="background:#fef3c7;color:#92400e;font-weight:600;padding:.6rem .75rem;border-bottom:2px solid #fcd34d;">' +
+      headerTr.innerHTML = '<td colspan="7" style="background:#fef3c7;color:#92400e;font-weight:600;padding:.6rem .75rem;border-bottom:2px solid #fcd34d;">' +
         'Oczekujące na zatwierdzenie <span class="en">Pending approval</span> (' + pendingUsers.length + ')' +
         '</td>';
       tbody.appendChild(headerTr);
@@ -173,7 +173,9 @@
       pendingUsers.forEach(function(u) {
         var tr = document.createElement('tr');
         tr.style.background = '#fffbeb';
+        tr.dataset.uid = u.user_id;
         tr.innerHTML =
+          '<td style="font-size:.68rem;font-family:monospace;color:var(--muted,#888);white-space:nowrap;" title="' + esc(u.user_id || '') + '">' + esc(_shortUid(u.user_id)) + '</td>' +
           '<td><b>' + esc(u.username) + '</b></td>' +
           '<td>' + esc(u.display_name || '') + '</td>' +
           '<td><span style="color:#d97706;font-style:italic;">Oczekuje <span class="en">Pending</span></span></td>' +
@@ -185,18 +187,20 @@
         acts.appendChild(btn('Zatwierdź', function() { openApproveModal(u); }, '#27ae60'));
         acts.appendChild(btn('Odrzuć', function() { openRejectModal(u); }, '#e74c3c'));
 
+        _attachUserRowDblClick(tr, u);
         tbody.appendChild(tr);
       });
 
       if (activeUsers.length > 0) {
         var sepTr = document.createElement('tr');
-        sepTr.innerHTML = '<td colspan="6" style="padding:.3rem;"></td>';
+        sepTr.innerHTML = '<td colspan="7" style="padding:.3rem;"></td>';
         tbody.appendChild(sepTr);
       }
     }
 
     activeUsers.forEach(function(u) {
       var tr = document.createElement('tr');
+      tr.dataset.uid = u.user_id;
       var statusBadge = u.banned
         ? '<span style="color:#e74c3c;font-weight:600;">Zbanowany <span class="en">Banned</span></span>'
         : '<span style="color:#27ae60;">Aktywny <span class="en">Active</span></span>';
@@ -215,6 +219,7 @@
       else if (u.is_admin) roleText = (u.admin_roles || []).join(', ');
 
       tr.innerHTML =
+        '<td style="font-size:.68rem;font-family:monospace;color:var(--muted,#888);white-space:nowrap;" title="' + esc(u.user_id || '') + '">' + esc(_shortUid(u.user_id)) + '</td>' +
         '<td><b>' + esc(u.username) + '</b></td>' +
         '<td>' + esc(u.display_name || '') + '</td>' +
         '<td>' + esc(roleText) + '</td>' +
@@ -245,8 +250,44 @@
         acts.textContent = '—';
       }
 
+      _attachUserRowDblClick(tr, u);
       tbody.appendChild(tr);
     });
+  }
+
+  /* Double-click on user row → navigate to Security tab with that user filtered */
+  function _attachUserRowDblClick(tr, u) {
+    tr.addEventListener('dblclick', function(e) {
+      /* Don't trigger on button clicks */
+      if (e.target.closest('.actions-cell') || e.target.closest('button')) return;
+      _navigateToAuditForUser(u);
+    });
+  }
+
+  /* Switch to Security tab and apply filter for the given user */
+  function _navigateToAuditForUser(u) {
+    /* Click the Security tab */
+    var secTab = document.querySelector('.users-tab[data-panel="securityPanel"]');
+    if (secTab) secTab.click();
+    /* Wait for tab to render, then apply the user filter */
+    setTimeout(function() {
+      _selectUser(u);
+    }, 100);
+  }
+
+  /* Switch to Users tab and flash/highlight a specific user row */
+  function _navigateToUsersForUser(uid) {
+    var usersTab = document.querySelector('.users-tab[data-panel="usersPanel"]');
+    if (usersTab) usersTab.click();
+    setTimeout(function() {
+      var row = document.querySelector('#usersBody tr[data-uid="' + uid + '"]');
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.style.background = 'rgba(74,108,247,.18)';
+        row.style.transition = 'background 1.5s';
+        setTimeout(function() { row.style.background = ''; }, 2000);
+      }
+    }, 100);
   }
 
   function btn(text, onClick, bg) {
@@ -749,6 +790,7 @@
 
     auditData.forEach(function(ev) {
       var tr = document.createElement('tr');
+      if (ev.user_id) tr.dataset.uid = ev.user_id;
       var lab = EVENT_LABELS[ev.event] || { pl: ev.event, en: ev.event };
       var color = EVENT_COLORS[ev.event] || 'var(--text, #333)';
       var dt = ev.timestamp ? ev.timestamp.replace('T', ' ').slice(0, 19) : '—';
@@ -762,6 +804,14 @@
         '<td style="font-size:.82rem;">' + esc(ev.ip || '—') + '</td>' +
         '<td style="font-size:.8rem;color:var(--muted,#888);">' + esc(ev.detail || '') + '</td>' +
         '<td style="font-size:.72rem;color:var(--muted,#888);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(fpText) + '">' + esc(fpText || '—') + '</td>';
+
+      /* Click on audit row → show context menu */
+      if (ev.user_id && ev.username) {
+        tr.addEventListener('click', function(e) {
+          _showCtxMenu(e, { user_id: ev.user_id, username: ev.username, display_name: '' });
+        });
+      }
+
       tbody.appendChild(tr);
     });
 
@@ -1125,6 +1175,80 @@
 
   function _escAttr(s) {
     return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;');
+  }
+
+  /* ---- Context Menu (for audit log rows) ---- */
+
+  var _ctxUser = null;
+
+  function _showCtxMenu(e, user) {
+    e.stopPropagation();
+    _ctxUser = user;
+    var menu = document.getElementById('userContextMenu');
+    if (!menu) return;
+
+    /* Header */
+    var hdr = document.getElementById('ctxMenuHeader');
+    if (hdr) {
+      var displayName = user.display_name || '';
+      /* Try to find display_name from allUsers if not provided */
+      if (!displayName) {
+        var found = allUsers.find(function(u) { return u.user_id === user.user_id; });
+        if (found) displayName = found.display_name || '';
+      }
+      hdr.textContent = user.username + (displayName ? ' (' + displayName + ')' : '');
+    }
+
+    /* Position the menu near the click */
+    menu.style.display = '';
+    var mx = e.clientX;
+    var my = e.clientY;
+    /* Adjust if menu goes off-screen */
+    var mw = menu.offsetWidth || 240;
+    var mh = menu.offsetHeight || 120;
+    if (mx + mw > window.innerWidth) mx = window.innerWidth - mw - 8;
+    if (my + mh > window.innerHeight) my = window.innerHeight - mh - 8;
+    menu.style.left = mx + 'px';
+    menu.style.top = my + 'px';
+  }
+
+  function _hideCtxMenu() {
+    var menu = document.getElementById('userContextMenu');
+    if (menu) menu.style.display = 'none';
+    _ctxUser = null;
+  }
+
+  /* Close on any click outside */
+  document.addEventListener('click', function(e) {
+    var menu = document.getElementById('userContextMenu');
+    if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) {
+      _hideCtxMenu();
+    }
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') _hideCtxMenu();
+  });
+
+  /* Context menu actions */
+  var ctxFilter = document.getElementById('ctxFilterAudit');
+  if (ctxFilter) {
+    ctxFilter.addEventListener('click', function() {
+      if (!_ctxUser) return;
+      /* Already on security tab — just apply filter */
+      var u = allUsers.find(function(x) { return x.user_id === _ctxUser.user_id; });
+      _selectUser(u || _ctxUser);
+      _hideCtxMenu();
+    });
+  }
+
+  var ctxGoUsers = document.getElementById('ctxGoToUsers');
+  if (ctxGoUsers) {
+    ctxGoUsers.addEventListener('click', function() {
+      if (!_ctxUser) return;
+      var uid = _ctxUser.user_id;
+      _hideCtxMenu();
+      _navigateToUsersForUser(uid);
+    });
   }
 
   /* ---- Tabs ---- */
