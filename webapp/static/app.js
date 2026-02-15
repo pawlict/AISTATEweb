@@ -404,7 +404,7 @@ function requireProjectId(){
   const pid = AISTATE.projectId || "";
   if(!pid){
     showToast(t("alert.no_active_project"), 'warning');
-    window.location.href = "/new-project";
+    window.location.href = "/projects";
     throw new Error("No active project");
   }
   return pid;
