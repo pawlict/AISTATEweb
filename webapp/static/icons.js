@@ -361,7 +361,9 @@
     "\u2705":       "success",      // ✅
     "\u274C":       "error",        // ❌
     "\u26A0\uFE0F": "warning",     // ⚠️
+    "\u26A0":       "warning",     // ⚠ (without variation selector)
     "\u231B":       "loading",      // ⏳
+    "\u23F3":       "loading",      // ⏳ (variant)
     "\uD83D\uDCDD": "notes",       // 📝
     "\uD83D\uDCCC": "pin",         // 📌
     "\uD83D\uDCE4": "export",      // 📤
@@ -376,6 +378,7 @@
     "\u2795":       "add",          // ➕
     "\u2B07\uFE0F": "install",     // ⬇️
     "\u2139\uFE0F": "info_circle",  // ℹ️
+    "\u2139":       "info_circle",  // ℹ (without variation selector)
     "\uD83D\uDCE6": "package",     // 📦
     "\uD83D\uDCF0": "receipt",     // 🧾 (close match)
     "\uD83E\uDDFE": "receipt",     // 🧾
@@ -387,25 +390,55 @@
     "\u2712\uFE0F": "edit",        // ✏️
     "\u270F\uFE0F": "edit",        // ✏️
     "\uD83D\uDCAC": "robot",       // 💬 (chat welcome)
-    "\u25B6\uFE0F": "play",        // ▶️ (also used as icon in some places)
+    "\u25B6\uFE0F": "play",        // ▶️
     "\u23F8\uFE0F": "pause",       // ⏸️
     "\u23F9\uFE0F": "stop",        // ⏹️
     "\u23EA":       "skip_back_3", // ⏪
     "\u23E9":       "skip_fwd_3",  // ⏩
     "\u25C0\uFE0F": "skip_back_3", // ◀️
-    "\uD83C\uDFAD": "diarization", // 🎭 (theater masks → diarization)
+    "\uD83C\uDFAD": "diarization", // 🎭
     "\u21BB":       "refresh",      // ↻
-    "\uD83D\uDD04": "refresh"      // 🔄
+    "\uD83D\uDD04": "refresh",     // 🔄
+    "\uD83C\uDFE6": "finance",     // 🏦
+    "\uD83D\uDC65": "diarization", // 👥
+    "\uD83D\uDCC8": "finance",     // 📈
+    "\u2699\uFE0F": "settings",    // ⚙️
+    "\u2699":       "settings",    // ⚙
+    "\u2B06\uFE0F": "export",      // ⬆️
+    "\uD83D\uDC41": "vision",      // 👁
+    "\uD83D\uDC41\uFE0F": "vision",// 👁️
+    "\u25CB":       "info_circle",  // ○
+    "\u2713":       "success",      // ✓
+    "\u2714":       "success",      // ✔
+    "\u2718":       "error",        // ✘
+    "\uD83D\uDCCA": "finance",     // 📊
+    "\uD83D\uDCE3": "speaker",     // 📣
+    "\uD83D\uDDE3\uFE0F": "speaker", // 🗣️
+    "\uD83C\uDFB5": "headphones",  // 🎵
+    "\uD83D\uDCFA": "vision",      // 📺
+    "\uD83D\uDCFB": "headphones",  // 📻
+    "\uD83D\uDCF0": "receipt"      // 📰
   };
 
-  function _replaceEmojis() {
+  /* CSS selector for elements to scan for emoji → icon replacement */
+  var ICON_SELECTORS = [
+    "button", ".btn", "h1", "h2", "h3", "h4",
+    ".h1", ".h2", ".h3",
+    "label", "[data-i18n]",
+    ".seg-editor-title", ".chat-welcome-icon",
+    ".tab-btn", ".sidebar-link", ".nav-item",
+    ".ap-del-icon", ".ap-sp-icon",
+    ".ctx-icon",
+    "th", "legend", "summary",
+    "[data-icon-scan]"
+  ].join(", ");
+
+  function _replaceEmojis(root) {
     _ensureDefs();
-    // Walk text nodes in buttons, labels, headings, spans with data-i18n
-    var selectors = "button, .btn, .h1, .h2, .h3, label, [data-i18n], .seg-editor-title, .chat-welcome-icon";
-    var els = document.querySelectorAll(selectors);
+    root = root || document;
+    var els = root.querySelectorAll(ICON_SELECTORS);
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
-      // Skip if already processed
       if (el.getAttribute("data-icons-done")) continue;
 
       var html = el.innerHTML;
@@ -430,16 +463,43 @@
     }
   }
 
-  // Run on DOM ready and expose for dynamic content
+  /* ---- MutationObserver: auto-replace in dynamic content ---- */
+  var _observerTimer = null;
+  function _scheduleReplace() {
+    if (_observerTimer) return;
+    _observerTimer = setTimeout(function() {
+      _observerTimer = null;
+      _replaceEmojis();
+    }, 80);
+  }
+
+  function _startObserver() {
+    if (typeof MutationObserver === "undefined") return;
+    var observer = new MutationObserver(function(mutations) {
+      for (var m = 0; m < mutations.length; m++) {
+        if (mutations[m].addedNodes.length > 0) {
+          _scheduleReplace();
+          return;
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // Run on DOM ready, then start observer for dynamic content
+  function _init() {
+    _replaceEmojis();
+    _startObserver();
+  }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", _replaceEmojis);
+    document.addEventListener("DOMContentLoaded", _init);
   } else {
-    // defer slightly so all scripts load
-    setTimeout(_replaceEmojis, 0);
+    setTimeout(_init, 0);
   }
 
   // expose
   window.aiIcon = aiIcon;
   window.AI_ICONS = icons;
   window.aiReplaceEmojis = _replaceEmojis;
+  window.EMOJI_MAP = EMOJI_MAP;
 })();

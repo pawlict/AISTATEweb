@@ -20,44 +20,14 @@ let cfgDirty = false;
 let prioDirty = false;
 let prioSaveTimer = null;
 
-// SVG icons — matching new Digital Brush sidebar icons
+// Icons — use centralized aiIcon library if available, fallback to placeholders
+const _gpuAi = typeof aiIcon === 'function' ? aiIcon : null;
 const ICON_SVGS = {
-  transcription: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path class="brush" d="M2 12c1-3 2 3 3 0s2 3 3 0 2-3 3 0"/>
-      <path d="M14 9v6M16 8v8M18 10v4" stroke-width="1.8" stroke-linecap="round"/>
-      <path d="M13 12l1.5-.5" opacity=".3" stroke-dasharray="1 1.5"/>
-    </svg>`,
-  diarization: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="7" cy="8" r="2.8" stroke-width="1.4"/>
-      <path d="M3 17c0-2.5 1.8-4 4-4s4 1.5 4 4" stroke-width="1.4" stroke-linecap="round"/>
-      <circle cx="17" cy="8" r="2.8" stroke-width="1.4"/>
-      <path d="M13 17c0-2.5 1.8-4 4-4s4 1.5 4 4" stroke-width="1.4" stroke-linecap="round"/>
-      <path class="brush" d="M10 10.5c.6.4 1.2.4 2 .4s1.4 0 2-.4" stroke-dasharray="1.5 1"/>
-    </svg>`,
-  analysis: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3C8 3 5 5.5 5 9c0 2 .8 3.5 2 4.5L8 19h8l1-5.5c1.2-1 2-2.5 2-4.5 0-3.5-3-6-7-6z" stroke-linejoin="round"/>
-      <path d="M9 19h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 20.5V19z" stroke-width="1.3"/>
-      <path class="brush" d="M12 7v4M10 9h4" stroke-linecap="round" opacity=".6"/>
-      <circle cx="8.5" cy="11" r=".8" fill="currentColor" opacity=".5"/>
-      <circle cx="15.5" cy="11" r=".8" fill="currentColor" opacity=".5"/>
-    </svg>`,
-  translation: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="2" y="5" width="8" height="14" rx="2" stroke-width="1.3"/>
-      <rect x="14" y="5" width="8" height="14" rx="2" stroke-width="1.3"/>
-      <path class="brush" d="M5 9h3M5 11h2" stroke-linecap="round" opacity=".5"/>
-      <path d="M17 9h3M17 11h2" stroke-linecap="round" opacity=".5"/>
-      <path d="M10 10c.8-.3 1.5-.3 2-.3s1.2 0 2 .3" stroke-width="1.5" stroke-linecap="round"/>
-      <path d="M10 14c.8.3 1.5.3 2 .3s1.2 0 2-.3" stroke-width="1.5" stroke-linecap="round"/>
-    </svg>`,
-  chat: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M21 12c0 4.4-4 8-9 8a9.9 9.9 0 0 1-3.4-.6L3 21l1.6-4A7.3 7.3 0 0 1 3 12c0-4.4 4-8 9-8s9 3.6 9 8z" stroke-linejoin="round"/>
-      <path class="brush" d="M8 11h8M8 14h5" stroke-linecap="round" opacity=".5"/>
-    </svg>`,
+  transcription: _gpuAi ? _gpuAi("transcription", 22) : "🎤",
+  diarization:   _gpuAi ? _gpuAi("diarization", 22) : "👥",
+  analysis:      _gpuAi ? _gpuAi("brain", 22) : "🧠",
+  translation:   _gpuAi ? _gpuAi("globe", 22) : "🌐",
+  chat:          _gpuAi ? _gpuAi("robot", 22) : "💬",
 };
 
 const PRIO_CATS = [

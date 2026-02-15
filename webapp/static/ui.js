@@ -7,11 +7,12 @@
   var _toastContainer = null;
   var _toastQueue = [];
 
+  var _ai = typeof aiIcon === 'function' ? aiIcon : null;
   var TOAST_TYPES = {
-    success: { icon: '\u2713', color: '#15803d', bg: 'rgba(21,128,61,.10)', border: 'rgba(21,128,61,.25)' },
-    error:   { icon: '\u2715', color: '#b91c1c', bg: 'rgba(185,28,28,.10)', border: 'rgba(185,28,28,.25)' },
-    warning: { icon: '\u26A0', color: '#d97706', bg: 'rgba(217,119,6,.10)', border: 'rgba(217,119,6,.25)' },
-    info:    { icon: '\u2139', color: '#1f5aa6', bg: 'rgba(31,90,166,.10)', border: 'rgba(31,90,166,.25)' },
+    success: { icon: _ai ? _ai('success', 16) : '\u2713', color: '#15803d', bg: 'rgba(21,128,61,.10)', border: 'rgba(21,128,61,.25)', html: true },
+    error:   { icon: _ai ? _ai('error', 16) : '\u2715', color: '#b91c1c', bg: 'rgba(185,28,28,.10)', border: 'rgba(185,28,28,.25)', html: true },
+    warning: { icon: _ai ? _ai('warning', 16) : '\u26A0', color: '#d97706', bg: 'rgba(217,119,6,.10)', border: 'rgba(217,119,6,.25)', html: true },
+    info:    { icon: _ai ? _ai('info_circle', 16) : '\u2139', color: '#1f5aa6', bg: 'rgba(31,90,166,.10)', border: 'rgba(31,90,166,.25)', html: true },
   };
 
   function _ensureToastContainer() {
@@ -42,7 +43,7 @@
 
     var icon = document.createElement('span');
     icon.className = 'aistate-toast-icon';
-    icon.textContent = cfg.icon;
+    if (cfg.html) { icon.innerHTML = cfg.icon; } else { icon.textContent = cfg.icon; }
     icon.style.color = cfg.color;
 
     var text = document.createElement('span');
@@ -104,10 +105,11 @@
       overlay.setAttribute('role', 'dialog');
       overlay.setAttribute('aria-modal', 'true');
 
+      var _cai = typeof aiIcon === 'function' ? aiIcon : null;
       var typeColors = {
-        danger:  { accent: '#b91c1c', bg: 'rgba(185,28,28,.08)', iconBg: 'rgba(185,28,28,.12)', icon: '\u26A0' },
-        warning: { accent: '#d97706', bg: 'rgba(217,119,6,.08)', iconBg: 'rgba(217,119,6,.12)', icon: '\u26A0' },
-        info:    { accent: '#1f5aa6', bg: 'rgba(31,90,166,.08)',  iconBg: 'rgba(31,90,166,.12)', icon: '\u2139' },
+        danger:  { accent: '#b91c1c', bg: 'rgba(185,28,28,.08)', iconBg: 'rgba(185,28,28,.12)', icon: _cai ? _cai('warning', 28) : '\u26A0' },
+        warning: { accent: '#d97706', bg: 'rgba(217,119,6,.08)', iconBg: 'rgba(217,119,6,.12)', icon: _cai ? _cai('warning', 28) : '\u26A0' },
+        info:    { accent: '#1f5aa6', bg: 'rgba(31,90,166,.08)',  iconBg: 'rgba(31,90,166,.12)', icon: _cai ? _cai('info_circle', 28) : '\u2139' },
       };
       var tc = typeColors[opts.type || 'danger'] || typeColors.danger;
 
@@ -309,7 +311,12 @@
       reqs.forEach(function(r) {
         var line = document.createElement('div');
         line.className = 'aistate-pw-check ' + (r.met ? 'aistate-pw-check-ok' : 'aistate-pw-check-fail');
-        line.textContent = (r.met ? '\u2713 ' : '\u2715 ') + r.text;
+        var _pwAi = typeof aiIcon === 'function' ? aiIcon : null;
+        if (_pwAi) {
+          line.innerHTML = (r.met ? _pwAi('success', 12) : _pwAi('error', 12)) + ' ' + r.text;
+        } else {
+          line.textContent = (r.met ? '\u2713 ' : '\u2715 ') + r.text;
+        }
         checks.appendChild(line);
       });
     }
