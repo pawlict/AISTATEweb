@@ -1782,8 +1782,16 @@ try:
         _mig_lg.getLogger("aistate").warning("Auth JSON→SQLite migration: %s", _mig_err)
     # Migrate file-based projects → workspaces (one-time, idempotent)
     try:
-        from backend.db.engine import get_default_user_id
-        _default_uid = get_default_user_id()
+        # In multiuser mode, prefer a real superadmin over creating a phantom 'admin' user
+        _default_uid = None
+        if DEPLOYMENT_STORE.is_multiuser():
+            for _u in USER_STORE.list_users():
+                if getattr(_u, "is_superadmin", False):
+                    _default_uid = _u.user_id
+                    break
+        if not _default_uid:
+            from backend.db.engine import get_default_user_id
+            _default_uid = get_default_user_id()
         WORKSPACE_STORE.migrate_file_projects(PROJECTS_DIR, _default_uid)
     except Exception as _ws_err:
         import logging as _ws_lg
