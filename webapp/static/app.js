@@ -416,6 +416,19 @@ async function refreshCurrentProjectInfo(){
   const elAud = document.getElementById("current_audio");
   const pid = AISTATE.projectId || "";
 
+  // Show workspace context in topbar if available
+  var wsCtx = document.getElementById("topbarWorkspaceCtx");
+  var wsLink = document.getElementById("topWsLink");
+  var subName = document.getElementById("topSubName");
+  var wsId = localStorage.getItem("aistate_workspace_id") || "";
+  var wsName = localStorage.getItem("aistate_workspace_name") || "";
+  var spName = localStorage.getItem("aistate_subproject_name") || "";
+  if(wsCtx && wsId && wsName){
+    wsCtx.style.display = "";
+    if(wsLink){ wsLink.textContent = wsName; wsLink.href = "/projects/" + wsId; }
+    if(subName) subName.textContent = spName || "";
+  }
+
   if(!pid){
     if(elCur) elCur.textContent = t("projects.none");
     if(elAud) elAud.textContent = t("projects.none");
