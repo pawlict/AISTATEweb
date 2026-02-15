@@ -1949,7 +1949,7 @@ async def _startup_nllb_autoscan() -> None:
 def home(request: Request) -> Any:
     # Multi-user mode: skip Intro animation, go directly to projects
     if getattr(request.state, "multiuser", False):
-        return RedirectResponse(url="/new-project", status_code=302)
+        return RedirectResponse(url="/projects", status_code=302)
 
     # Single-user mode: play Intro (once per browser session) then go to the app.
     # We keep it client-side via sessionStorage so it doesn't require cookies.
@@ -1965,7 +1965,7 @@ def home(request: Request) -> Any:
 <script>
   (function(){
     // Default start page: Projects
-    var NEXT = '/new-project';
+    var NEXT = '/projects';
     try {
       if (sessionStorage.getItem('aistate_intro_seen') === '1') {
         location.replace(NEXT);
@@ -2086,7 +2086,7 @@ def legacy_transkrypcja():
 
 @app.get("/nowy-projekt", include_in_schema=False)
 def legacy_nowy_projekt():
-    return RedirectResponse(url="/new-project")
+    return RedirectResponse(url="/projects")
 
 @app.get("/diaryzacja", include_in_schema=False)
 def legacy_diaryzacja():
