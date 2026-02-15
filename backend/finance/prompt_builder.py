@@ -113,19 +113,19 @@ def _build_info_section(result: ParseResult) -> str:
             diff = abs(computed_closing - info.closing_balance)
             if diff <= 0.02:
                 balance_verified = True
-                lines.append(f"- **Status sald**: ✅ ZWERYFIKOWANE (otw. + Σ transakcji = końc., różnica {diff:.2f})")
+                lines.append(f"- **Status sald**: [OK] ZWERYFIKOWANE (otw. + Σ transakcji = końc., różnica {diff:.2f})")
             else:
-                lines.append(f"- **Status sald**: ⚠️ ROZBIEŻNOŚĆ {diff:,.2f} {info.currency}")
+                lines.append(f"- **Status sald**: [!] ROZBIEŻNOŚĆ {diff:,.2f} {info.currency}")
                 lines.append(f"  - Obliczone końcowe: {computed_closing:,.2f}")
                 lines.append(f"  - Deklarowane końcowe: {info.closing_balance:,.2f}")
                 lines.append(f"  - Możliwe przyczyny: brakujące transakcje, błąd parsowania")
         else:
-            lines.append(f"- **Status sald**: ⚠️ BRAK SALDA KOŃCOWEGO do weryfikacji")
+            lines.append(f"- **Status sald**: [!] BRAK SALDA KOŃCOWEGO do weryfikacji")
             lines.append(f"  - Obliczone końcowe: {computed_closing:,.2f}")
     elif info.opening_balance is None and info.closing_balance is None:
-        lines.append(f"- **Status sald**: ❌ BRAK — nie udało się odczytać sald")
+        lines.append(f"- **Status sald**: [X] BRAK — nie udało się odczytać sald")
     else:
-        lines.append(f"- **Status sald**: ⚠️ CZĘŚCIOWE — brak jednego z sald")
+        lines.append(f"- **Status sald**: [!] CZĘŚCIOWE — brak jednego z sald")
 
     # Cross-validation sums
     if info.declared_credits_sum is not None:
@@ -139,11 +139,11 @@ def _build_info_section(result: ParseResult) -> str:
     lines.append(f"- **Metoda parsowania**: {result.parse_method}")
 
     # Warnings — filter out the OK messages, show only real warnings
-    real_warnings = [w for w in result.warnings if "OK" not in w and "✓" not in w]
+    real_warnings = [w for w in result.warnings if "OK" not in w]
     if real_warnings:
         lines.append(f"\n### Ostrzeżenia parsera\n")
         for w in real_warnings:
-            lines.append(f"- ⚠️ {w}")
+            lines.append(f"- [!] {w}")
 
     return "\n".join(lines)
 
@@ -168,9 +168,9 @@ def _build_transactions_table(classified: List[ClassifiedTransaction]) -> str:
         desc = desc[:60] + "…" if len(desc) > 60 else desc
         cats = ", ".join(ct.subcategories) if ct.subcategories else "—"
         if ct.is_recurring:
-            cats = f"🔄 {cats}" if cats != "—" else "🔄 cykliczna"
+            cats = f"(cykl) {cats}" if cats != "—" else "(cykl) cykliczna"
         if ct.entity_flagged:
-            cats = f"🚩 OZNACZONY {cats}" if cats != "—" else "🚩 OZNACZONY"
+            cats = f"[!] OZNACZONY {cats}" if cats != "—" else "[!] OZNACZONY"
         if ct.entity_notes:
             cats += f" [{ct.entity_notes[:30]}]"
 
@@ -198,12 +198,12 @@ def _build_category_summary(classified: List[ClassifiedTransaction]) -> str:
 
     # Nice category names
     NAMES = {
-        "crypto": "🪙 Kryptowaluty / Giełdy",
-        "gambling": "🎰 Hazard / Bukmacherzy",
-        "loans": "💳 Pożyczki / Kredyty / Windykacja",
-        "transfers": "📋 Przelewy (kategoryzowane)",
-        "risky": "⚠️ Ryzykowne / Podejrzane",
-        "_unclassified": "📦 Nieskategoryzowane",
+        "crypto": "Kryptowaluty / Giełdy",
+        "gambling": "Hazard / Bukmacherzy",
+        "loans": "Pożyczki / Kredyty / Windykacja",
+        "transfers": "Przelewy (kategoryzowane)",
+        "risky": "Ryzykowne / Podejrzane",
+        "_unclassified": "Nieskategoryzowane",
     }
 
     lines = ["## Podsumowanie kategorii\n"]
@@ -258,7 +258,7 @@ def _build_risk_flags(classified: List[ClassifiedTransaction], score: ScoreBreak
 
     if score.gambling_total > 0:
         pct = (score.gambling_total / budget) * 100
-        flags.append(f"🎰 **HAZARD**: {score.gambling_total:,.2f} PLN ({pct:.1f}% budżetu)")
+        flags.append(f"[!] **HAZARD**: {score.gambling_total:,.2f} PLN ({pct:.1f}% budżetu)")
 
     if score.crypto_total > 0:
         pct = (score.crypto_total / budget) * 100
@@ -270,7 +270,7 @@ def _build_risk_flags(classified: List[ClassifiedTransaction], score: ScoreBreak
                 if cp:
                     crypto_names.add(cp.strip()[:30])
         names_str = f" — podmioty: {', '.join(sorted(crypto_names)[:5])}" if crypto_names else ""
-        flags.append(f"🪙 **KRYPTOWALUTY / GIEŁDY**: {score.crypto_total:,.2f} PLN ({pct:.1f}% budżetu){names_str}")
+        flags.append(f"[!] **KRYPTOWALUTY / GIEŁDY**: {score.crypto_total:,.2f} PLN ({pct:.1f}% budżetu){names_str}")
 
     if score.loans_total > 0:
         pct = (score.loans_total / budget) * 100
@@ -280,7 +280,7 @@ def _build_risk_flags(classified: List[ClassifiedTransaction], score: ScoreBreak
             for ct in classified
             if any("debt_collection" in sc for sc in ct.subcategories)
         )
-        msg = f"💳 **POŻYCZKI/RATY**: {score.loans_total:,.2f} PLN ({pct:.1f}% budżetu)"
+        msg = f"[!] **POŻYCZKI/RATY**: {score.loans_total:,.2f} PLN ({pct:.1f}% budżetu)"
         if debt_collection_total > 0:
             msg += f" — w tym WINDYKACJA: {debt_collection_total:,.2f} PLN"
         flags.append(msg)
@@ -302,13 +302,13 @@ def _build_risk_flags(classified: List[ClassifiedTransaction], score: ScoreBreak
             "suspicious_pattern": "podejrzane wzorce",
         }
         details_str = ", ".join(details_pl.get(d, d) for d in sorted(risky_details))
-        flags.append(f"⚠️ **RYZYKOWNE TRANSAKCJE**: {risky_total:,.2f} PLN ({pct:.1f}% budżetu) — {details_str}")
+        flags.append(f"[!] **RYZYKOWNE TRANSAKCJE**: {risky_total:,.2f} PLN ({pct:.1f}% budżetu) — {details_str}")
 
     if score.net_flow < 0:
-        flags.append(f"📉 **DEFICYT**: wydatki przewyższają wpływy o {abs(score.net_flow):,.2f} PLN")
+        flags.append(f"[!] **DEFICYT**: wydatki przewyższają wpływy o {abs(score.net_flow):,.2f} PLN")
 
     if score.recurring_pct > 60:
-        flags.append(f"🔄 **WYSOKIE ZOBOWIĄZANIA CYKLICZNE**: {score.recurring_pct:.1f}% wpływów")
+        flags.append(f"[!] **WYSOKIE ZOBOWIĄZANIA CYKLICZNE**: {score.recurring_pct:.1f}% wpływów")
 
     # Entity memory flags
     flagged_entities = [ct for ct in classified if ct.entity_flagged]
@@ -319,7 +319,7 @@ def _build_risk_flags(classified: List[ClassifiedTransaction], score: ScoreBreak
             names.add(ct.transaction.counterparty or ct.transaction.title)
             total_flagged += abs(ct.transaction.amount)
         names_str = ", ".join(sorted(names)[:10])
-        flags.append(f"🚩 **OZNACZONE PODMIOTY (z pamięci)**: {len(flagged_entities)} transakcji ({total_flagged:,.2f} PLN) — {names_str}")
+        flags.append(f"[!] **OZNACZONE PODMIOTY (z pamięci)**: {len(flagged_entities)} transakcji ({total_flagged:,.2f} PLN) — {names_str}")
 
     # Unclassified URLs — need user review
     all_unclassified: set = set()
@@ -327,14 +327,14 @@ def _build_risk_flags(classified: List[ClassifiedTransaction], score: ScoreBreak
         for url in ct.unclassified_urls:
             all_unclassified.add(url)
     if all_unclassified:
-        flags.append(f"🔗 **NIESKLASYFIKOWANE URL** ({len(all_unclassified)}): wymagają weryfikacji użytkownika")
+        flags.append(f"[!] **NIESKLASYFIKOWANE URL** ({len(all_unclassified)}): wymagają weryfikacji użytkownika")
         for url in sorted(all_unclassified)[:10]:
             flags.append(f"  - {url}")
 
     if not flags:
-        return "## Flagi ryzyka\n\nNie wykryto istotnych flag ryzyka. ✅"
+        return "## Flagi ryzyka\n\nNie wykryto istotnych flag ryzyka."
 
-    lines = ["## ⚠️ Flagi ryzyka\n"]
+    lines = ["## Flagi ryzyka\n"]
     lines.extend(flags)
     return "\n".join(lines)
 
@@ -436,7 +436,7 @@ def _build_behavioral_section(behavioral) -> str:
         for t in behavioral.trends:
             dir_str = DIRECTION_PL.get(t.direction, t.direction)
             vals = " → ".join(f"{v:,.0f}" for v in t.values)
-            severity_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(t.severity, "")
+            severity_icon = {"high": "[!!!]", "medium": "[!!]", "low": "[OK]"}.get(t.severity, "")
             lines.append(f"| {severity_icon} {t.description} | {dir_str} | {t.change_pct:+.1f}% | {vals} |")
 
     return "\n".join(lines)
@@ -463,7 +463,7 @@ def _build_spending_section(spending) -> str:
         lines.append("| Stacja | Miasto | Wizyt | Kwota | Miasto bazowe? |")
         lines.append("|--------|--------|-------|-------|----------------|")
         for fv in spending.fuel_visits:
-            home_str = "✅ TAK" if fv.is_home_city else ("❌ Wyjazd" if fv.city else "?")
+            home_str = "TAK" if fv.is_home_city else ("Wyjazd" if fv.city else "?")
             city_str = fv.city or "nieustalone"
             lines.append(f"| {fv.station} | {city_str} | {fv.count} | {fv.total_amount:,.2f} PLN | {home_str} |")
 
@@ -479,7 +479,7 @@ def _build_spending_section(spending) -> str:
         lines.append("| Odbiorca | Zleceń | Łączna kwota | Śr. kwota | Kategorie |")
         lines.append("|----------|--------|--------------|-----------|-----------|")
         for so in spending.standing_orders:
-            cats_str = ", ".join(so.categories) if so.categories else "❓ niesklasyfikowane"
+            cats_str = ", ".join(so.categories) if so.categories else "? niesklasyfikowane"
             lines.append(f"| {so.recipient[:50]} | {so.count} | {so.total_amount:,.2f} PLN | {so.avg_amount:,.2f} PLN | {cats_str} |")
 
     # --- BLIK classification ---
@@ -494,9 +494,9 @@ def _build_spending_section(spending) -> str:
             lines.append("|------|-----|-------|------------------|")
             for bt in spending.blik_transactions[:20]:
                 type_str = {
-                    "phone_transfer": "📱 Przelew na tel",
-                    "online_purchase": "🛒 Zakup online",
-                    "payment": "💳 Płatność",
+                    "phone_transfer": "Przelew na tel",
+                    "online_purchase": "Zakup online",
+                    "payment": "Płatność",
                 }.get(bt.blik_type, bt.blik_type)
                 desc = bt.counterparty
                 if bt.title and bt.title != bt.counterparty:
@@ -565,7 +565,7 @@ Konkretne zalecenia dotyczące poprawy sytuacji finansowej.
 - **Top sklepy**: Gdzie najczęściej robi zakupy? Jaki % to spożywcze vs odzież vs elektronika?
 - **Tankowanie**: W jakim mieście tankuje najczęściej? Czy tankowanie w innym mieście sugeruje wyjazd/dojazd do pracy? Porównaj z miastem bazowym zakupów.
 - **BLIK**: Ile transakcji to przelewy na telefon (P2P) a ile to zakupy w internecie? Czy przelewy na telefon mogą sugerować nieformalny obrót (np. Vinted, OLX)?
-- **Zlecenia stałe (ST.ZLEC)**: Do kogo są stałe zlecenia? Na jakie kwoty? Czy odbiorca jest sklasyfikowany — jeśli nie (❓), zaproponuj kategorię.
+- **Zlecenia stałe (ST.ZLEC)**: Do kogo są stałe zlecenia? Na jakie kwoty? Czy odbiorca jest sklasyfikowany — jeśli nie (?), zaproponuj kategorię.
 - **Przelewy BLIK na telefon**: Czy widać regularne przelewy do tej samej osoby? Mogą sugerować nieformalny dochód, powtarzalną sprzedaż lub regularne wsparcie finansowe.
 - **Niesklasyfikowane URL**: Jeśli w flagach ryzyka widnieją niesklasyfikowane adresy URL, oceń je — czy sugerują hazard, krypto, zakupy, czy inną kategorię?
 - Oceń ogólny profil konsumencki — oszczędny, umiarkowany, rozrzutny?""")

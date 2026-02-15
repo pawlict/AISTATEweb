@@ -3922,9 +3922,9 @@ async def api_model_info(model_name: str) -> Any:
             "performance": {},
             "use_cases": ["Custom model (added by user) – not in built-in catalog"],
             "recommendation": (
-                "Model dodany ręcznie. Aplikacja nie ma wbudowanych metadanych (VRAM/szybkość/use-cases). \nJeśli chcesz widzieć szczegóły w panelu ℹ️, dopisz go do backend/models_info.py."
+                "Model dodany ręcznie. Aplikacja nie ma wbudowanych metadanych (VRAM/szybkość/use-cases). \nJeśli chcesz widzieć szczegóły w panelu info, dopisz go do backend/models_info.py."
             ),
-            "warning": "⚠️ Custom model – brak metadanych w katalogu",
+            "warning": "Custom model – brak metadanych w katalogu",
             "capabilities": ["custom"],
         })
 
@@ -4008,7 +4008,7 @@ async def api_models_list() -> Any:
 
         warning = str(info.get("warning") or "")
         if not info:
-            warning = warning or "⚠️ Custom model – brak metadanych w katalogu"
+            warning = warning or "Custom model – brak metadanych w katalogu"
 
         return {
             "id": mid,

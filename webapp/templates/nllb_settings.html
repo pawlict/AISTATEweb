@@ -41,7 +41,7 @@
       </style>
 
       <!-- Task progress (top) -->
-      <div class="label" data-i18n="nllb.task_title">🧾 Postęp zadania</div>
+      <div class="label" data-i18n="nllb.task_title"><i data-icon="document" data-size="14"></i> Postęp zadania</div>
       <div class="small"><span data-i18n="common.status">Status</span>: <span id="nllb_task_status">—</span></div>
       <div class="small"><span data-i18n="common.progress">Postęp</span>: <span id="nllb_task_pct">0%</span></div>
       <div class="progress" style="margin-top:10px"><div id="nllb_task_bar"></div></div>
@@ -53,10 +53,10 @@
       <div class="hr"></div>
 
       <!-- Dependencies -->
-      <div class="label" data-i18n="nllb.deps_title">📦 Zależności NLLB (Transformers)</div>
+      <div class="label" data-i18n="nllb.deps_title"><i data-icon="install" data-size="14"></i> Zależności NLLB (Transformers)</div>
       <div class="small" id="nllb_deps_status">—</div>
       <div class="nllb-install-row">
-        <button class="btn primary mini" type="button" id="nllb_deps_install_btn">⬇️ <span data-i18n="nllb.btn.install_deps">Instaluj</span></button>
+        <button class="btn primary mini" type="button" id="nllb_deps_install_btn"><i data-icon="install" data-size="14"></i> <span data-i18n="nllb.btn.install_deps">Instaluj</span></button>
         <span class="small muted" id="nllb_deps_inline">—</span>
       </div>
 
@@ -64,13 +64,13 @@
 
       <!-- MODELS -->
       <div>
-        <div class="label" data-i18n="nllb.models_title">🌍 Modele NLLB (offline)</div>
+        <div class="label" data-i18n="nllb.models_title"><i data-icon="globe" data-size="16"></i> Modele NLLB (offline)</div>
         <div class="small muted" data-i18n="nllb.models_desc">Modele NLLB instalują się do cache HuggingFace. Po instalacji będą oznaczone jako „zainstalowane”.</div>
 
         <div class="hr"></div>
 
         <!-- FAST -->
-        <div class="label" data-i18n="nllb.group.fast">⚡ Tłumaczenie szybkie</div>
+        <div class="label" data-i18n="nllb.group.fast">Tłumaczenie szybkie</div>
         <div class="small muted" data-i18n="nllb.group.fast_desc">Szybsze modele (mniejsze), dobre do pracy „na bieżąco”.</div>
 
         <div class="hr"></div>
@@ -87,14 +87,14 @@
             </select>
 
             <div class="nllb-install-row">
-              <button class="btn primary mini" type="button" id="nllb_fast_install_btn" data-mode="fast">⬇️ <span data-i18n="nllb.btn.install_model">Instaluj</span></button>
+              <button class="btn primary mini" type="button" id="nllb_fast_install_btn" data-mode="fast"><i data-icon="install" data-size="14"></i> <span data-i18n="nllb.btn.install_model">Instaluj</span></button>
               <span class="small muted" id="nllb_fast_inline">—</span>
             </div>
           </div>
 
           <div class="nllb-model-right">
             <div class="nllb-info-box">
-              <div class="nllb-info-title small">ℹ️ <span data-i18n="nllb.model_info">Informacje o modelu</span></div>
+              <div class="nllb-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="nllb.model_info">Informacje o modelu</span></div>
               <div class="small" id="nllb_fast_info_name">—</div>
               <div id="nllb_fast_info_body" class="small muted" style="margin-top:6px;"></div>
               <div class="nllb-warn" id="nllb_fast_info_warning" style="display:none"></div>
@@ -105,7 +105,7 @@
         <div class="hr"></div>
 
         <!-- ACCURATE -->
-        <div class="label" data-i18n="nllb.group.accurate">🎯 Tłumaczenie dokładne</div>
+        <div class="label" data-i18n="nllb.group.accurate"><i data-icon="deep_search" data-size="14"></i> Tłumaczenie dokładne</div>
         <div class="small muted" data-i18n="nllb.group.accurate_desc">Większe modele (lepsza jakość), wolniejsze i bardziej pamięciożerne.</div>
 
         <div class="hr"></div>
@@ -122,14 +122,14 @@
             </select>
 
             <div class="nllb-install-row">
-              <button class="btn primary mini" type="button" id="nllb_accurate_install_btn" data-mode="accurate">⬇️ <span data-i18n="nllb.btn.install_model">Instaluj</span></button>
+              <button class="btn primary mini" type="button" id="nllb_accurate_install_btn" data-mode="accurate"><i data-icon="install" data-size="14"></i> <span data-i18n="nllb.btn.install_model">Instaluj</span></button>
               <span class="small muted" id="nllb_accurate_inline">—</span>
             </div>
           </div>
 
           <div class="nllb-model-right">
             <div class="nllb-info-box">
-              <div class="nllb-info-title small">ℹ️ <span data-i18n="nllb.model_info">Informacje o modelu</span></div>
+              <div class="nllb-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="nllb.model_info">Informacje o modelu</span></div>
               <div class="small" id="nllb_accurate_info_name">—</div>
               <div id="nllb_accurate_info_body" class="small muted" style="margin-top:6px;"></div>
               <div class="nllb-warn" id="nllb_accurate_info_warning" style="display:none"></div>

@@ -34,8 +34,8 @@ function setTaskUI(t){
 }
 
 function _pkgLine(info){
-  if(info && info.installed) return `✅ installed (${info.version || "unknown"})`;
-  return "❌ not installed";
+  if(info && info.installed) return aiIcon('success',12) + ` installed (${info.version || "unknown"})`;
+  return aiIcon('error',12) + " not installed";
 }
 
 async function refreshStatus(){
@@ -48,10 +48,10 @@ async function refreshStatus(){
     const nmDiar = qs("asr_nemo_diar_status");
     const pa = qs("asr_pyannote_status");
 
-    if(ws) ws.textContent = _pkgLine(s.whisper);
-    if(nmAsr) nmAsr.textContent = _pkgLine(s.nemo);
-    if(nmDiar) nmDiar.textContent = _pkgLine(s.nemo);
-    if(pa) pa.textContent = _pkgLine(s.pyannote);
+    if(ws) ws.innerHTML = _pkgLine(s.whisper);
+    if(nmAsr) nmAsr.innerHTML = _pkgLine(s.nemo);
+    if(nmDiar) nmDiar.innerHTML = _pkgLine(s.nemo);
+    if(pa) pa.innerHTML = _pkgLine(s.pyannote);
     return s;
   }catch(e){
     console.warn("ASR status failed", e);
@@ -89,9 +89,9 @@ async function refreshSoundDetectionStatus(){
       const tf = SOUND_DETECTION_STATUS.tensorflow;
       const panns = SOUND_DETECTION_STATUS.panns_inference;
       if((tf && tf.installed) || (panns && panns.installed)){
-        el.textContent = '✅ framework ready';
+        el.innerHTML = aiIcon('success',12) + ' framework ready';
       } else {
-        el.textContent = '❌ frameworks not installed';
+        el.innerHTML = aiIcon('error',12) + ' frameworks not installed';
       }
     }
     return SOUND_DETECTION_STATUS;
@@ -194,12 +194,12 @@ function updateInstallButton(engine){
 
   if(id && pkgOk && cached){
     btn.style.display = 'none';
-    setInline(engine, _tSafe('asr.model_installed_inline', '✅ zainstalowany'));
+    setInline(engine, aiIcon('success',12) + ' ' + _tSafe('asr.model_installed_inline', 'zainstalowany'));
   }else{
     btn.style.display = 'inline-flex';
     // keep existing inline text (vram etc) but if empty, show simple state
     if(id && cached && !pkgOk){
-      setInline(engine, '⚠️ Zainstaluj silnik (pakiet)');
+      setInline(engine, aiIcon('warning',12) + ' Zainstaluj silnik (pakiet)');
     }
   }
 }
@@ -229,7 +229,7 @@ function setInline(engine, txt){
     sound_detection: "asr_sound_detection_inline",
   };
   const el = qs(map[engine]);
-  if(el) el.textContent = txt || "—";
+  if(el) el.innerHTML = txt || "—";
 }
 
 function setCacheCmd(engine, value){
@@ -286,8 +286,8 @@ function pickArr(v){
 
 function offlineCls(v){
   const s = String(v||"").toLowerCase();
-  if(s.includes("✅") || s.includes("yes") || s.includes("tak")) return "offline-yes";
-  if(s.includes("❌") || s.includes("no") || s.includes("nie")) return "offline-no";
+  if(s.includes("yes") || s.includes("tak")) return "offline-yes";
+  if(s.includes("no") || s.includes("nie")) return "offline-no";
   return "offline-yes";
 }
 
@@ -409,14 +409,14 @@ const ASR_MODEL_INFO = {
     _default: {
       functionality: {pl: "ASR NVIDIA NeMo (lokalne modele ASR).", en: "NVIDIA NeMo ASR (local ASR models)."},
       accuracy: {pl: "Zależna od modelu.", en: "Model-dependent."},
-      offline: {pl: "✅ Offline po pobraniu wag.", en: "✅ Offline after weights are downloaded."},
+      offline: {pl: "Offline po pobraniu wag.", en: "Offline after weights are downloaded."},
       ram: "8–16 GB",
       disk: "~0.1–4 GB cache",
       notes: {pl:"Tryb offline dotyczy inferencji; pobranie wymaga internetu.", en:"Offline refers to inference; downloading requires internet."},
     },
 
     "nvidia/stt_multilingual_fastconformer_hybrid_large_pc": {
-      offline: {pl: "✅ Całkowicie offline po pobraniu (~4GB download)", en: "✅ Fully offline after download (~4GB download)"},
+      offline: {pl: "Całkowicie offline po pobraniu (~4GB download)", en: "Fully offline after download (~4GB download)"},
       rich: {
         model: "stt_multilingual_fastconformer_hybrid_large_pc",
         vram: "4-6GB",
@@ -458,12 +458,12 @@ i dobry kompromis prędkość/jakość.`,
 Supports 100+ languages out-of-the-box, modern architecture (2023),
 and a good speed/quality balance.`,
         },
-        offline: {pl: "✅ Całkowicie offline po pobraniu (~4GB download)", en: "✅ Fully offline after download (~4GB download)"},
+        offline: {pl: "Całkowicie offline po pobraniu (~4GB download)", en: "Fully offline after download (~4GB download)"},
       }
     },
 
     "nvidia/stt_en_conformer_transducer_large": {
-      offline: {pl: "✅ Całkowicie offline po pobraniu (~500MB download)", en: "✅ Fully offline after download (~500MB download)"},
+      offline: {pl: "Całkowicie offline po pobraniu (~500MB download)", en: "Fully offline after download (~500MB download)"},
       rich: {
         model: "stt_en_conformer_transducer_large",
         vram: "2-3GB",
@@ -473,7 +473,7 @@ and a good speed/quality balance.`,
         speed: "RTF 0.3 (~3x faster than realtime)",
         analysis_time: {pl: "1min audio = ~20 sekund", en: "1min audio = ~20 seconds"},
         quality: "★★★★★",
-        pl_quality: {pl: "⚠️ N/A (English only)", en: "⚠️ N/A (English only)"},
+        pl_quality: {pl: "N/A (English only)", en: "N/A (English only)"},
         languages: "EN only",
         architecture: "RNN-Transducer (with Language Model)",
         model_size: "~120M parameters",
@@ -505,12 +505,12 @@ ale znacznie dokładniejszy.`,
 improves accuracy on hard words/accents. Slower than CTC
 but significantly more accurate.`,
         },
-        offline: {pl: "✅ Całkowicie offline po pobraniu (~500MB download)", en: "✅ Fully offline after download (~500MB download)"},
+        offline: {pl: "Całkowicie offline po pobraniu (~500MB download)", en: "Fully offline after download (~500MB download)"},
       }
     },
 
     "nvidia/stt_en_conformer_ctc_small": {
-      offline: {pl: "✅ Całkowicie offline po pobraniu (~60MB download)", en: "✅ Fully offline after download (~60MB download)"},
+      offline: {pl: "Całkowicie offline po pobraniu (~60MB download)", en: "Fully offline after download (~60MB download)"},
       rich: {
         model: "stt_en_conformer_ctc_small",
         vram: "1-2GB",
@@ -520,7 +520,7 @@ but significantly more accurate.`,
         speed: "RTF 0.08 (~12x faster than realtime)",
         analysis_time: {pl: "1min audio = ~5 sekund", en: "1min audio = ~5 seconds"},
         quality: "★★★☆☆",
-        pl_quality: {pl: "⚠️ N/A (English only)", en: "⚠️ N/A (English only)"},
+        pl_quality: {pl: "N/A (English only)", en: "N/A (English only)"},
         languages: "EN only",
         architecture: "CTC (no Language Model)",
         model_size: "~14M parameters",
@@ -554,7 +554,7 @@ Błyskawiczny ale niższa dokładność niż Transducer. Świetny do szybkiego
 Blazing fast but less accurate than Transducer. Great for a quick
 "first pass" over the material.`,
         },
-        offline: {pl: "✅ Całkowicie offline po pobraniu (~60MB download)", en: "✅ Fully offline after download (~60MB download)"},
+        offline: {pl: "Całkowicie offline po pobraniu (~60MB download)", en: "Fully offline after download (~60MB download)"},
       }
     },
   },
@@ -565,7 +565,7 @@ Blazing fast but less accurate than Transducer. Great for a quick
     _default: {
       functionality: {pl: "Diaryzacja mówców (speaker diarization) w NeMo.", en: "Speaker diarization in NeMo."},
       accuracy: {pl: "Wysoka (MSDD), zależna od modelu.", en: "High (MSDD), model-dependent."},
-      offline: {pl: "✅ Offline po pobraniu wag.", en: "✅ Offline after weights are downloaded."},
+      offline: {pl: "Offline po pobraniu wag.", en: "Offline after weights are downloaded."},
       ram: "8–16 GB",
       disk: "~0.2–2 GB cache",
       notes: {pl: "Może być używane jako stabilna alternatywa dla pyannote (bez HF tokena).", en: "Can be used as a stable alternative to pyannote (no HF token)."},
@@ -584,7 +584,7 @@ Blazing fast but less accurate than Transducer. Great for a quick
         pl_quality: "★★★★★",
         ru_uk_quality: "★★★★★",
         max_speakers: "10+ (auto-detect)",
-        languages: {pl: "✅ WSZYSTKIE (language-agnostic)", en: "✅ ALL (language-agnostic)"},
+        languages: {pl: "WSZYSTKIE (language-agnostic)", en: "ALL (language-agnostic)"},
         architecture: "MSDD (Multi-Scale Diarization Decoder)",
         model_size: "~1.5GB",
         features_title: {pl: "Funkcje:", en: "Features:"},
@@ -626,7 +626,7 @@ Blazing fast but less accurate than Transducer. Great for a quick
           pl: "MSDD (telephonic): wysoka jakość przy nakładającej się mowie i wielu mówcach; model jest language-agnostic.",
           en: "MSDD (telephonic): high quality for overlapping speech and multiple speakers; language-agnostic.",
         },
-        offline: {pl: "✅ Całkowicie offline (~1.5GB)", en: "✅ Fully offline (~1.5GB)"},
+        offline: {pl: "Całkowicie offline (~1.5GB)", en: "Fully offline (~1.5GB)"},
       }
     },
   },
@@ -636,7 +636,7 @@ Blazing fast but less accurate than Transducer. Great for a quick
     _default: {
       functionality: {pl: "Diaryzacja mówców (speaker diarization).", en: "Speaker diarization."},
       accuracy: {pl: "Zależna od pipeline; 3.1 często daje najwyższą jakość.", en: "Pipeline-dependent; 3.1 often offers the highest quality."},
-      offline: {pl: "❌ Wymaga tokena HF i połączenia z HuggingFace do pobrania/uruchomienia pipeline. Po zbuforowaniu może działać offline, ale token/akceptacja licencji nadal są wymagane.", en: "❌ Requires an HF token and an internet connection to download/run the pipeline from HuggingFace. After caching it may run offline, but token/license acceptance is still required."},
+      offline: {pl: "Wymaga tokena HF i połączenia z HuggingFace do pobrania/uruchomienia pipeline. Po zbuforowaniu może działać offline, ale token/akceptacja licencji nadal są wymagane.", en: "Requires an HF token and an internet connection to download/run the pipeline from HuggingFace. After caching it may run offline, but token/license acceptance is still required."},
       vram: "~4–8 GB",
       min_gpu: "4–6 GB VRAM",
       optimal_gpu: "8–12 GB VRAM",
@@ -653,7 +653,7 @@ Blazing fast but less accurate than Transducer. Great for a quick
     _default: {
       functionality: {pl: "Detekcja dźwięków tła (szczekanie, kaszlenie, muzyka, TV itp.).", en: "Background sound detection (barking, coughing, music, TV, etc.)."},
       accuracy: {pl: "Zależna od modelu.", en: "Model-dependent."},
-      offline: {pl: "✅ Tak (po pobraniu modelu).", en: "✅ Yes (after model download)."},
+      offline: {pl: "Tak (po pobraniu modelu).", en: "Yes (after model download)."},
       vram: "CPU",
       min_gpu: "—",
       optimal_gpu: "—",
@@ -827,10 +827,10 @@ function renderInfo(engine, id){
 
   if(boxWarn){
     boxWarn.style.display = "none";
-    boxWarn.textContent = "";
+    boxWarn.innerHTML = "";
     if(String(engine) === "pyannote" && ASR_STATUS && ASR_STATUS.hf_token_present === false){
       boxWarn.style.display = "block";
-      boxWarn.textContent = "⚠️ pyannote: Brak tokena HuggingFace w Ustawieniach (HF token).";
+      boxWarn.innerHTML = aiIcon('warning',14) + " pyannote: Brak tokena HuggingFace w Ustawieniach (HF token).";
     }
   }
 }
@@ -919,14 +919,14 @@ async function resumeAsrTaskIfAny(){
 async function ensureAndDownload(engine){
   const id = getSelected(engine);
   if(!id){
-    setInline(engine, "⚠️ Wybierz model/pipeline przed instalacją.");
+    setInline(engine, aiIcon('warning',12) + " Wybierz model/pipeline przed instalacją.");
     return;
   }
 
   // Special handling for sound_detection
   if(engine === 'sound_detection'){
     // 1) Install deps for the selected model
-    setInline(engine, "🔄 Instaluję zależności...");
+    setInline(engine, aiIcon('loading',12) + " Instaluję zależności...");
     const t1 = await runTask("/api/sound-detection/install", {model: id});
     if(t1.status === "error"){
       await refreshSoundDetectionModels(true);
@@ -934,7 +934,7 @@ async function ensureAndDownload(engine){
     }
 
     // 2) Download model
-    setInline(engine, "🔄 Pobieram model...");
+    setInline(engine, aiIcon('loading',12) + " Pobieram model...");
     await runTask("/api/sound-detection/predownload", {model: id});
 
     // 3) Refresh
@@ -1004,7 +1004,7 @@ function bindUI(){
       try{
         await ensureAndDownload(eng);
       }catch(e){
-        setInline(eng, `❌ ${String(e.message || e)}`);
+        setInline(eng, aiIcon('error',12) + ' ' + String(e.message || e));
       }
     });
   });

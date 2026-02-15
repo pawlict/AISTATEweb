@@ -574,7 +574,7 @@ def reconcile_balances(
                 f"— użyto tabeli"
             )
         else:
-            notes.append(f"Saldo otw.: {opening:,.2f} (tabela ✓)")
+            notes.append(f"Saldo otw.: {opening:,.2f} (tabela OK)")
     elif hdr_opening is not None:
         opening = hdr_opening
         opening_source = "nagłówek"
@@ -594,7 +594,7 @@ def reconcile_balances(
                 f"— użyto tabeli"
             )
         else:
-            notes.append(f"Saldo końc.: {closing:,.2f} (tabela ✓)")
+            notes.append(f"Saldo końc.: {closing:,.2f} (tabela OK)")
     elif hdr_closing is not None:
         closing = hdr_closing
         closing_source = "nagłówek"
@@ -695,7 +695,7 @@ def validate_balance_chain(
             )
             is_valid = False
         else:
-            warnings.append(f"Suma uznań: OK ({parsed_credits:,.2f} ✓)")
+            warnings.append(f"Suma uznań: OK ({parsed_credits:,.2f})")
 
     if declared_debits_sum is not None:
         debits_diff = abs(parsed_debits - declared_debits_sum)
@@ -707,7 +707,7 @@ def validate_balance_chain(
             )
             is_valid = False
         else:
-            warnings.append(f"Suma obciążeń: OK ({parsed_debits:,.2f} ✓)")
+            warnings.append(f"Suma obciążeń: OK ({parsed_debits:,.2f})")
 
     if declared_credits_count is not None:
         if parsed_credits_count != declared_credits_count:

@@ -315,6 +315,42 @@
            '<path d="M8 7l4-4 4 4" ' + _s("blue-cyan") + " " + _w(1.5) + " " + S + ' fill="none"/>' +
            '<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" ' + _s("sky-purple") + " " + _w(1.4) + " " + S + ' fill="none"/>';
   };
+  icons.merge = function () {
+    return '<path d="M5 12h14M12 5l7 7-7 7" ' + _s("blue-cyan") + " " + _w(1.8) + " " + S + ' fill="none"/>';
+  };
+  icons.split = function () {
+    return '<path d="M12 3v18M5 12h14" ' + _s("blue-cyan") + " " + _w(1.8) + " " + S + ' fill="none"/>';
+  };
+  icons.chevron_right = function () {
+    return '<path d="M9 6l6 6-6 6" ' + _s("blue-cyan") + " " + _w(2) + " " + S + ' fill="none"/>';
+  };
+  icons.chevron_down = function () {
+    return '<path d="M6 9l6 6 6-6" ' + _s("blue-cyan") + " " + _w(2) + " " + S + ' fill="none"/>';
+  };
+  /* ===== ADDITIONAL ===== */
+  icons.flag = function () {
+    return '<path d="M5 4v16M5 4l10 4-10 4" ' + _s("sky-purple") + " " + _w(1.5) + " " + S + ' fill="none"/>';
+  };
+  icons.circle = function () {
+    return '<circle cx="12" cy="12" r="7" ' + _s("blue-cyan") + " " + _w(1.4) + ' fill="none"/>';
+  };
+  icons.calendar = function () {
+    return '<rect x="4" y="5" width="16" height="15" rx="2" ' + _s("blue-cyan") + " " + _w(1.4) + ' fill="none"/>' +
+           '<path d="M8 3v4M16 3v4M4 10h16" ' + _s("blue-cyan") + " " + _w(1.4) + " " + S + ' fill="none"/>';
+  };
+  icons.tag = function () {
+    return '<path d="M12.586 2.586A2 2 0 0011.172 2H4a2 2 0 00-2 2v7.172a2 2 0 00.586 1.414l8 8a2 2 0 002.828 0l7.172-7.172a2 2 0 000-2.828z" ' + _s("sky-purple") + " " + _w(1.4) + ' fill="none"/>' +
+           '<circle cx="7.5" cy="7.5" r="1.5" ' + _f("sky-purple") + "/>";
+  };
+  icons.sound = function () {
+    return '<path d="M11 5L6 9H2v6h4l5 4V5z" ' + _f("blue-cyan") + ' stroke="none"/>' +
+           '<path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" ' + _s("blue-cyan") + " " + _w(1.5) + " " + S + ' fill="none"/>';
+  };
+  icons.mail = function () {
+    return '<rect x="3" y="5" width="18" height="14" rx="2" ' + _s("blue-cyan") + " " + _w(1.4) + ' fill="none"/>' +
+           '<path d="M3 7l9 6 9-6" ' + _s("blue-cyan") + " " + _w(1.4) + " " + S + ' fill="none"/>';
+  };
+
   /* Star rating — pass filled count (0-5) */
   icons.stars = function (filled) {
     filled = filled || 0;
@@ -417,7 +453,21 @@
     "\uD83C\uDFB5": "headphones",  // 🎵
     "\uD83D\uDCFA": "vision",      // 📺
     "\uD83D\uDCFB": "headphones",  // 📻
-    "\uD83D\uDCF0": "receipt"      // 📰
+    "\uD83D\uDCF0": "receipt",     // 📰
+    "\u26AA":       "circle",      // ⚪
+    "\u2728":       "stars",       // ✨
+    "\uD83C\uDFF7\uFE0F": "tag",  // 🏷️
+    "\uD83C\uDFF7": "tag",        // 🏷
+    "\uD83D\uDCC5": "calendar",   // 📅
+    "\uD83D\uDCCD": "pin",        // 📍
+    "\uD83D\uDCDA": "document",   // 📚
+    "\uD83D\uDD34": "error",      // 🔴
+    "\uD83D\uDEA9": "flag",       // 🚩
+    "\uD83D\uDFE2": "success",    // 🟢
+    "\uD83E\uDDE9": "wrench",     // 🧩
+    "\uD83D\uDD09": "sound",      // 🔉
+    "\uD83D\uDD0A": "sound",      // 🔊
+    "\uD83D\uDCE9": "mail"        // 📩
   };
 
   /* CSS selector for elements to scan for emoji → icon replacement */
@@ -433,6 +483,24 @@
     "[data-icon-scan]"
   ].join(", ");
 
+  /* ---- data-icon attribute injection ---- */
+  function _injectDataIcons(root) {
+    _ensureDefs();
+    root = root || document;
+    var els = root.querySelectorAll("[data-icon]:not([data-icon-done])");
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      var name = el.getAttribute("data-icon");
+      var size = parseInt(el.getAttribute("data-size") || "16", 10);
+      var colour = el.getAttribute("data-icon-color") || undefined;
+      if (icons[name]) {
+        el.innerHTML = aiIcon(name, size, colour);
+        el.setAttribute("data-icon-done", "1");
+      }
+    }
+  }
+
+  /* ---- legacy emoji auto-replace (kept for any remaining third-party content) ---- */
   function _replaceEmojis(root) {
     _ensureDefs();
     root = root || document;
@@ -447,7 +515,6 @@
         if (html.indexOf(emoji) !== -1) {
           var iconName = EMOJI_MAP[emoji];
           var size = 16;
-          // Bigger icons for headers
           if (el.classList.contains("h1") || el.tagName === "H1") size = 28;
           else if (el.classList.contains("h2") || el.tagName === "H2") size = 20;
           else if (el.classList.contains("h3") || el.tagName === "H3") size = 18;
@@ -463,13 +530,18 @@
     }
   }
 
+  function _runAll(root) {
+    _injectDataIcons(root);
+    _replaceEmojis(root);
+  }
+
   /* ---- MutationObserver: auto-replace in dynamic content ---- */
   var _observerTimer = null;
   function _scheduleReplace() {
     if (_observerTimer) return;
     _observerTimer = setTimeout(function() {
       _observerTimer = null;
-      _replaceEmojis();
+      _runAll();
     }, 80);
   }
 
@@ -488,7 +560,7 @@
 
   // Run on DOM ready, then start observer for dynamic content
   function _init() {
-    _replaceEmojis();
+    _runAll();
     _startObserver();
   }
   if (document.readyState === "loading") {
@@ -500,6 +572,7 @@
   // expose
   window.aiIcon = aiIcon;
   window.AI_ICONS = icons;
-  window.aiReplaceEmojis = _replaceEmojis;
+  window.aiReplaceEmojis = _runAll;
+  window.aiInjectIcons = _injectDataIcons;
   window.EMOJI_MAP = EMOJI_MAP;
 })();

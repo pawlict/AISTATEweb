@@ -16,14 +16,13 @@ async function apiFetch(url, opts){
   return j;
 }
 
-const _pAi = typeof aiIcon === 'function' ? aiIcon : null;
 const TYPE_ICONS = {
-  transcription: _pAi ? _pAi('transcription', 18) : '🎤',
-  diarization:   _pAi ? _pAi('diarization', 18) : '👥',
-  analysis:      _pAi ? _pAi('brain', 18) : '📊',
-  chat:          _pAi ? _pAi('robot', 18) : '💬',
-  translation:   _pAi ? _pAi('globe', 18) : '🌐',
-  finance:       _pAi ? _pAi('finance', 18) : '🏦',
+  transcription: aiIcon('transcription', 18),
+  diarization:   aiIcon('diarization', 18),
+  analysis:      aiIcon('brain', 18),
+  chat:          aiIcon('robot', 18),
+  translation:   aiIcon('globe', 18),
+  finance:       aiIcon('finance', 18),
 };
 const TYPE_LABELS = {
   transcription: 'Transkrypcja', diarization: 'Diaryzacja', analysis: 'Analiza',
@@ -135,8 +134,8 @@ async function loadInvitations(){
             <div class="small">Rola: <b>${ROLE_LABELS[inv.role]||inv.role}</b>${inv.message ? ' · '+esc(inv.message) : ''} · ${shortDate(inv.created_at)}</div>
           </div>
           <div style="display:flex;gap:6px">
-            <button class="btn" data-accept="${inv.id}" style="padding:4px 14px;font-size:.85rem">${_pAi ? _pAi('success',14) : '✓'} Akceptuj</button>
-            <button class="btn danger" data-reject="${inv.id}" style="padding:4px 14px;font-size:.85rem">${_pAi ? _pAi('close',14) : '✕'} Odrzuć</button>
+            <button class="btn" data-accept="${inv.id}" style="padding:4px 14px;font-size:.85rem">${aiIcon('success',14)} Akceptuj</button>
+            <button class="btn danger" data-reject="${inv.id}" style="padding:4px 14px;font-size:.85rem">${aiIcon('close',14)} Odrzuć</button>
           </div>
         </div>
       `;
@@ -218,7 +217,7 @@ function renderWorkspaceDetail(ws){
   else { spEmpty.style.display = 'none'; }
 
   subs.forEach(sp => {
-    const icon = TYPE_ICONS[sp.subproject_type] || '📄';
+    const icon = TYPE_ICONS[sp.subproject_type] || aiIcon('document', 18);
     const typeLabel = TYPE_LABELS[sp.subproject_type] || sp.subproject_type;
     const links = (sp.links || []).map(l =>
       `<span class="small" style="opacity:.7">► ${esc(l.target_name||l.source_id)}</span>`
@@ -236,7 +235,7 @@ function renderWorkspaceDetail(ws){
         </div>
         <div style="display:flex;gap:4px">
           <button class="btn secondary sp-open" data-id="${sp.id}" data-type="${sp.subproject_type}" data-dir="${esc(sp.data_dir)}" data-audio="${esc(sp.audio_file)}" style="font-size:.78rem;padding:3px 10px">Otwórz</button>
-          <button class="btn danger sp-del" data-id="${sp.id}" style="font-size:.78rem;padding:3px 8px" title="Usuń">${_pAi ? _pAi('delete',14) : '✕'}</button>
+          <button class="btn danger sp-del" data-id="${sp.id}" style="font-size:.78rem;padding:3px 8px" title="Usuń">${aiIcon('delete',14)}</button>
         </div>
       </div>`;
 
@@ -292,7 +291,7 @@ function renderWorkspaceDetail(ws){
     div.innerHTML = `
       <span><b>${esc(name)}</b> <span class="small" style="opacity:.7">${ROLE_LABELS[role]||role}</span></span>
       ${!isOwner && (ws.my_role === 'owner' || ws.my_role === 'manager')
-        ? '<button class="btn danger" style="font-size:.7rem;padding:2px 6px" data-remove="'+m.user_id+'">' + (_pAi ? _pAi('close',12) : '✕') + '</button>'
+        ? '<button class="btn danger" style="font-size:.7rem;padding:2px 6px" data-remove="'+m.user_id+'">' + aiIcon('close',12) + '</button>'
         : ''}
     `;
     const removeBtn = div.querySelector('[data-remove]');

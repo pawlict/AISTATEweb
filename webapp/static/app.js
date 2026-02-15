@@ -488,7 +488,7 @@ async function startTask(prefix, endpoint, formData, onDone){
     pollTask(prefix, task_id, onDone);
   }catch(e){
     const msg = (e && e.message) ? e.message : "Error";
-    setStatus(prefix, "Error ❌: " + msg);
+    setStatus(prefix, "Error: " + msg);
     showToast(msg, 'error');
     throw e;
   }
@@ -502,13 +502,13 @@ async function pollTask(prefix, taskId, onDone){
     setProgress(prefix, j.progress || 0);
     setLogs(prefix, (j.logs || []).join("\n"));
     if(j.status === "done"){
-      setStatus(prefix, "Completed ✅");
+      setStatus(prefix, "Completed");
       done=true;
       AISTATE.setTaskId(prefix, "");
       if(onDone) onDone(j);
     }else if(j.status === "error"){
       const msg = (j.error || "Error");
-      setStatus(prefix, "Error ❌: " + msg);
+      setStatus(prefix, "Error: " + msg);
       done=true;
       AISTATE.setTaskId(prefix, "");
     }else{
@@ -528,13 +528,13 @@ async function resumeTask(prefix, onDone){
     setLogs(prefix, (j.logs || []).join("\n"));
 
     if(j.status === "done"){
-      setStatus(prefix, "Completed ✅");
+      setStatus(prefix, "Completed");
       AISTATE.setTaskId(prefix, "");
       if(onDone) onDone(j);
       return;
     }
     if(j.status === "error"){
-      setStatus(prefix, "Error ❌");
+      setStatus(prefix, "Error");
       AISTATE.setTaskId(prefix, "");
       return;
     }
@@ -895,7 +895,7 @@ function openManualEditor(textarea, lineIndex){
       speakerInput.value = newSpeaker;
       currentSpeaker = newSpeaker;
       
-      console.log(`✅ Changed speaker: ${count} occurrences`);
+      console.log(`Changed speaker: ${count} occurrences`);
       showToast(tFmt("modal.alert.changed_speaker", {count}), 'success');
     };
   }

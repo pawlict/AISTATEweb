@@ -295,29 +295,29 @@
 
   <div class="card analysis-toolbar translation-toolbar" id="translation_toolbar">
     <div class="analysis-toolbar-left">
-      <div class="h1" style="margin:0" data-i18n="translation.page_title">🌍 Tłumaczenie</div>
+      <div class="h1" style="margin:0" data-i18n="translation.page_title"><i data-icon="globe" data-size="20"></i> Tłumaczenie</div>
       <div class="small" id="translation_status_line"></div>
     </div>
 
     <div class="analysis-toolbar-right">
       <!-- Generate first -->
-      <button class="btn" id="generate-btn" data-i18n="translation.btn.generate" onclick="startTranslation()">🚀 Generuj</button>
+      <button class="btn" id="generate-btn" data-i18n="translation.btn.generate" onclick="startTranslation()"><i data-icon="generate" data-size="14"></i> Generuj</button>
 
       <!-- Work mode (moved from sidebar) -->
       <div class="analysis-format" id="translation_mode_box">
         <label class="small" data-i18n="translation.label.mode">Tryb pracy</label>
         <label class="pill mode-pill" data-i18n-title="translation.mode.fast_title" title="Szybki (NLLB)">
-          <input type="radio" name="translation_mode" value="fast"> ⚡
+          <input type="radio" name="translation_mode" value="fast"> <i data-icon="generate" data-size="14"></i>
         </label>
         <label class="pill mode-pill" data-i18n-title="translation.mode.accurate_title" title="Dokładny (NLLB)">
-          <input type="radio" name="translation_mode" value="accurate" checked> 🎨
+          <input type="radio" name="translation_mode" value="accurate" checked> <i data-icon="brain" data-size="14"></i>
         </label>
       </div>
 
       <!-- Model selection -->
       <div class="analysis-models" id="translation_models">
         <div class="analysis-model">
-          <span class="small" title="Model">🤖</span>
+          <span class="small" title="Model"><i data-icon="robot" data-size="14"></i></span>
           <label class="small" for="tr_model_select" data-i18n="translation.label.model">Model</label>
           <select class="input mini-select" id="tr_model_select">
             <option value="" selected data-i18n="translation.model.select_placeholder">Wybierz model…</option>
@@ -340,7 +340,7 @@
         <label class="pill"><input type="checkbox" name="tr_report_fmt" value="txt"> TXT</label>
       </div>
 
-      <button class="btn secondary" id="tr_export_btn" data-i18n="translation.btn.export" onclick="exportSelectedReports()">💾 Eksport</button>
+      <button class="btn secondary" id="tr_export_btn" data-i18n="translation.btn.export" onclick="exportSelectedReports()"><i data-icon="save" data-size="16"></i> Eksport</button>
     </div>
   </div>
 
@@ -422,9 +422,9 @@
       <!-- PRESETS -->
       <div class="section">
         <div class="section-title" data-i18n="translation.presets">Predefiniowane</div>
-        <button class="preset-btn" onclick="applyPreset('business')" data-i18n="translation.preset.business">📄 Dokumenty biznesowe</button>
-        <button class="preset-btn" onclick="applyPreset('transcripts')" data-i18n="translation.preset.transcripts">🎙️ Transkrypcje audio</button>
-        <button class="preset-btn" onclick="applyPreset('scientific')" data-i18n="translation.preset.scientific">🔬 Artykuły naukowe</button>
+        <button class="preset-btn" onclick="applyPreset('business')" data-i18n="translation.preset.business"><i data-icon="document" data-size="14"></i> Dokumenty biznesowe</button>
+        <button class="preset-btn" onclick="applyPreset('transcripts')" data-i18n="translation.preset.transcripts"><i data-icon="transcription" data-size="14"></i> Transkrypcje audio</button>
+        <button class="preset-btn" onclick="applyPreset('scientific')" data-i18n="translation.preset.scientific"><i data-icon="deep_search" data-size="14"></i> Artykuły naukowe</button>
       </div>
 
       <!-- IMPORT -->
@@ -432,7 +432,7 @@
         <div class="section-title" data-i18n="translation.import">Import dokumentu</div>
         <input type="file" id="file-input" accept=".txt,.docx,.pdf,.srt" style="display: none;"/>
         <button class="btn secondary" style="width: 100%;" onclick="document.getElementById('file-input').click()" data-i18n="translation.btn.choose_file">
-          📁 Wybierz plik...
+          <i data-icon="folder" data-size="14"></i> Wybierz plik...
         </button>
         <div style="font-size: 11px; color: #666; margin-top: 8px;" data-i18n="translation.import.supported">
           Obsługiwane: TXT, DOCX, PDF, SRT
@@ -446,14 +446,14 @@
 
       <!-- FILE INFO -->
       <div id="file-info" class="file-info hidden">
-        📄 <strong id="file-name"></strong> (<span id="file-size"></span>)
+        <i data-icon="document" data-size="14"></i> <strong id="file-name"></strong> (<span id="file-size"></span>)
       </div>
 
       <div style="position:relative;">
         <textarea class="textarea-large" id="input-text" data-i18n-placeholder="translation.input.placeholder"
                   placeholder="Wklej tekst do przetłumaczenia..."></textarea>
         <button class="tts-speak-btn" id="tts-input-btn" type="button" title="Odsłuchaj tekst źródłowy" data-i18n-title="translation.tts.listen_source" style="display:none;">
-          🔊
+          <i data-icon="speaker" data-size="16"></i>
         </button>
       </div>
 
@@ -476,12 +476,12 @@
             <textarea class="textarea-large" id="output-text" data-i18n-placeholder="translation.output.placeholder"
                       placeholder="Przetłumaczony tekst pojawi się tutaj..."></textarea>
             <button class="tts-speak-btn" id="tts-output-btn" type="button" title="Odsłuchaj tłumaczenie" data-i18n-title="translation.tts.listen_translation">
-              🔊
+              <i data-icon="speaker" data-size="16"></i>
             </button>
           </div>
           <div style="margin-top: 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <button class="btn secondary" onclick="saveEdits()" data-i18n="translation.btn.save_edits">💾 Zapisz zmiany</button>
-            <button class="btn" style="background: #999; color: white;" onclick="resetOutput()" data-i18n="translation.btn.reset">↻ Reset</button>
+            <button class="btn secondary" onclick="saveEdits()" data-i18n="translation.btn.save_edits"><i data-icon="save" data-size="16"></i> Zapisz zmiany</button>
+            <button class="btn" style="background: #999; color: white;" onclick="resetOutput()" data-i18n="translation.btn.reset"><i data-icon="refresh" data-size="14"></i> Reset</button>
             <span style="flex:1"></span>
             <span class="small" id="tts-engine-box" style="display:none; align-items:center; gap:4px;">
               <label class="small" for="tts-engine-select" data-i18n="translation.tts.engine">Lektor:</label>
@@ -496,7 +496,7 @@
         <!-- SUMMARY -->
         <div id="summary-container" class="hidden">
           <div class="summary-box">
-            <h3 style="margin-top: 0;" data-i18n="translation.summary.title">📝 Podsumowanie</h3>
+            <h3 style="margin-top: 0;" data-i18n="translation.summary.title"><i data-icon="notes" data-size="16"></i> Podsumowanie</h3>
             <div id="summary-text"></div>
           </div>
         </div>

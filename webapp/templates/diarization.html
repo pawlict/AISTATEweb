@@ -496,7 +496,7 @@
 
   <div class="card analysis-toolbar diarization-toolbar" id="di_toolbar">
     <div class="analysis-toolbar-left">
-      <div class="h1" style="margin:0">🎭 <span data-i18n="page.diarization.title">Diarization</span></div>
+      <div class="h1" style="margin:0"><i data-icon="diarization" data-size="20"></i> <span data-i18n="page.diarization.title">Diarization</span></div>
       <div class="small" id="di_toolbar_hint_line"></div>
     </div>
 
@@ -504,7 +504,7 @@
 
       <!-- Add audio file -->
       <input type="file" id="di_file_input" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.mp4,.aac" style="display:none"/>
-      <button class="btn secondary" id="di_add_file_btn" title="Dodaj plik audio do projektu">📁 <span data-i18n="btn.add_file">Dodaj plik</span></button>
+      <button class="btn secondary" id="di_add_file_btn" title="Dodaj plik audio do projektu"><i data-icon="folder" data-size="14"></i> <span data-i18n="btn.add_file">Dodaj plik</span></button>
       <span class="small" id="di_file_name" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.8"></span>
 
       <!-- Diarize -->
@@ -572,7 +572,7 @@
 
       <!-- Sound Detection -->
       <div class="analysis-format" id="di_sound_detection_section" style="margin-top:8px">
-        <label class="pill"><input type="checkbox" id="di_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection">🔊 Detekcja dźwięków</span></label>
+        <label class="pill"><input type="checkbox" id="di_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection"><i data-icon="speaker" data-size="14"></i> Detekcja dźwięków</span></label>
         <select class="input mini-select" id="di_sound_detection_model" style="margin-left:6px;width:auto" disabled>
         </select>
       </div>
@@ -584,10 +584,10 @@
         <label class="pill"><input type="checkbox" name="di_report_fmt" value="doc"> DOC</label>
         <label class="pill"><input type="checkbox" name="di_report_fmt" value="txt"> TXT</label>
         <label class="pill" style="margin-left:6px"><input type="checkbox" id="di_include_notes" value="1"> Notatki</label>
-        <button class="btn secondary" id="di_report_save_btn" style="margin-left:8px">💾 <span data-i18n="analysis.report_save">Zapisz</span></button>
+        <button class="btn secondary" id="di_report_save_btn" style="margin-left:8px"><i data-icon="save" data-size="16"></i> <span data-i18n="analysis.report_save">Zapisz</span></button>
       </div>
 
-      <button class="btn secondary" id="di_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()">🔍 <span data-i18n="btn.search">Szukaj</span></button>
+      <button class="btn secondary" id="di_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()"><i data-icon="search" data-size="14"></i> <span data-i18n="btn.search">Szukaj</span></button>
 
       <a class="btn secondary" id="di_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
 
@@ -617,7 +617,7 @@
 
     <!-- Input data (required for Text diarization) -->
     <div class="subcard" id="di_text_block" style="display:none">
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.input.title">📥 Dane wejściowe</div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.input.title"><i data-icon="import" data-size="16"></i> Dane wejściowe</div>
       <div class="small" data-i18n="diar.input.desc">Wklej tekst (np. transkrypcję). System spróbuje przypisać wypowiedzi do mówców.</div>
       <textarea id="di_text_in" class="bigarea" placeholder="Wklej tekst do diaryzacji..." data-i18n-placeholder="placeholder.paste_text"></textarea>
 
@@ -646,14 +646,14 @@
 
     <!-- Speaker mapping -->
     <div class="subcard">
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.speakers.title">🎤 Nazwy mówców</div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.speakers.title"><i data-icon="transcription" data-size="16"></i> Nazwy mówców</div>
       <div id="speaker_mapping_ui" class="speaker-mapping-container">
         <div class="mapping-empty" data-i18n="diar.speakers.empty">Wykonaj diaryzację aby wykryć mówców.</div>
       </div>
       <textarea id="di_speaker_map" class="bigarea" placeholder='{"SPEAKER_00": "Jan", "SPEAKER_01": "Anna"}' style="display:none"></textarea>
 
       <div class="row" style="margin-top:12px;gap:10px;flex-wrap:wrap">
-        <button class="btn" id="di_apply_map" data-i18n-title="btn.apply_changes_hint" data-i18n="btn.apply_changes">✨ Wprowadź zmiany</button>
+        <button class="btn" id="di_apply_map" data-i18n-title="btn.apply_changes_hint" data-i18n="btn.apply_changes"><i data-icon="refresh" data-size="14"></i> Wprowadź zmiany</button>
       </div>
     </div>
 
@@ -663,7 +663,7 @@
     <div style="display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start">
       <!-- Left: diarization result -->
       <div>
-        <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.result.title">📄 Wynik diaryzacji</div>
+        <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.result.title"><i data-icon="document" data-size="16"></i> Wynik diaryzacji</div>
         <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
         <div id="di_audio_player"></div>
         <div id="di_blocks" class="blocklist" style="display:none"></div>
@@ -671,24 +671,24 @@
         <div id="di_sound_events" class="sound-events-panel" style="display:none"></div>
         <textarea id="di_out" class="bigarea" placeholder="Tutaj pojawi się wynik..." data-i18n-placeholder="placeholder.result_here"></textarea>
         <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
-          ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
+          <i data-icon="success" data-size="14"></i> <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
         </div>
       </div>
 
       <!-- Right: Notes (unchanged) -->
       <div class="notes-panel">
-        <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title">📝 Notatki</div>
+        <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title"><i data-icon="notes" data-size="16"></i> Notatki</div>
 
         <div class="notes-section">
-          <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title">🌍 Notatka globalna</div>
+          <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title"><i data-icon="globe" data-size="16"></i> Notatka globalna</div>
           <textarea id="di_notes_global" placeholder="Notatka do całej diaryzacji (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:vertical"></textarea>
-          <div class="small" style="margin-top:4px;opacity:0.7" data-i18n="notes.autosave">Auto-save ✓</div>
+          <div class="small" style="margin-top:4px;opacity:0.7" data-i18n="notes.autosave">Auto-save <i data-icon="success" data-size="12"></i></div>
         </div>
 
         <div class="hr" style="margin:12px 0"></div>
 
         <div class="notes-section">
-          <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title">📌 Notatki do bloków</div>
+          <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title"><i data-icon="pin" data-size="16"></i> Notatki do bloków</div>
           <div id="di_block_notes_list" class="block-notes-list">
             <div class="small" style="opacity:0.6;text-align:center;padding:20px" data-i18n-html="notes.blocks.empty_html">
               ${t("notes.blocks.empty_html")}
@@ -846,9 +846,9 @@ async function saveNotesToProjectSilent(){
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(DI.notes)
     });
-    console.log('📝 Auto-saved notes to project');
+    console.log('Auto-saved notes to project');
   }catch(e){
-    console.warn('⚠️ Auto-save notes to project failed (keeping local draft):', e);
+    console.warn('Auto-save notes to project failed (keeping local draft):', e);
   }finally{
     notesSaving = false;
   }
@@ -897,7 +897,7 @@ function saveNotesToDraft() {
   try {
     const key = `aistateweb:notes:${AISTATE.projectId}`;
     localStorage.setItem(key, JSON.stringify(DI.notes));
-    console.log('📝 Auto-saved notes to localStorage');
+    console.log('Auto-saved notes to localStorage');
   } catch (e) {
     console.warn('Failed to save notes to localStorage:', e);
   }
@@ -913,7 +913,7 @@ function loadNotesFromDraft() {
       renderGlobalNote();
       renderBlockNotesList();
             refreshAllNoteIcons();
-      console.log('📝 Loaded notes from localStorage');
+      console.log('Loaded notes from localStorage');
     }
   } catch (e) {
     console.warn('Failed to load notes from localStorage:', e);
@@ -937,7 +937,7 @@ function renderBlockNotesList() {
     container.innerHTML = `
       <div class="small" style="opacity:0.6;text-align:center;padding:20px;">
         Brak notatek do bloków.<br>
-        Kliknij 📝 obok bloku aby dodać.
+        Kliknij ${aiIcon('notes',14)} obok bloku aby dodać.
       </div>
     `;
     return;
@@ -955,9 +955,9 @@ function renderBlockNotesList() {
       <div><strong>Blok #${idx}</strong></div>
       <div class="block-note-preview">${escapeHtml(preview)}</div>
       <div class="block-note-actions">
-        <button onclick="scrollToBlock(${idx})">📍 Pokaż</button>
-        <button onclick="editBlockNote(${idx})">✏️ Edytuj</button>
-        <button onclick="deleteBlockNote(${idx})">🗑️ Usuń</button>
+        <button onclick="scrollToBlock(${idx})">${aiIcon('deep_search',14)} Pokaż</button>
+        <button onclick="editBlockNote(${idx})">${aiIcon('edit',14)} Edytuj</button>
+        <button onclick="deleteBlockNote(${idx})">${aiIcon('delete',14)} Usuń</button>
       </div>
     `;
     
@@ -1087,11 +1087,11 @@ function updateBlockNoteIconInSeg(idx) {
   }
   
   if (hasBlockNote(idx)) {
-    icon.textContent = '📝';
+    icon.innerHTML = aiIcon('notes',14);
     icon.classList.add('has-note');
     icon.title = 'Ma notatkę - kliknij aby edytować';
   } else {
-    icon.textContent = '📝';
+    icon.innerHTML = aiIcon('notes',14);
     icon.classList.remove('has-note');
     icon.title = 'Dodaj notatkę';
   }
@@ -1111,7 +1111,7 @@ async function saveNotesToProject() {
       body: JSON.stringify(DI.notes)
     });
     
-    showToast('✅ Notatki zapisane w projekcie');
+    showToast('Notatki zapisane w projekcie');
   } catch (e) {
     showToast('Błąd zapisu notatek: ' + e.message, 'error');
   }
@@ -1131,7 +1131,7 @@ async function loadNotesFromProject() {
       renderGlobalNote();
       renderBlockNotesList();
             refreshAllNoteIcons();
-      console.log('📝 Loaded notes from project');
+      console.log('Loaded notes from project');
     }
   } catch (e) {
     console.log('No notes in project yet');
@@ -1147,7 +1147,7 @@ function exportNotesAsJSON() {
   a.download = `notes_${AISTATE.projectId || 'export'}_${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('📤 Notatki wyeksportowane');
+  showToast('Notatki wyeksportowane');
 }
 
 
@@ -1399,10 +1399,10 @@ function diEditorSeek(delta){
     ed.innerHTML = `
       <div class="seg-editor-head">
         <div>
-          <div class="seg-editor-title">✏️ Edycja bloku #${idx}</div>
+          <div class="seg-editor-title">${aiIcon('edit',14)} Edycja bloku #${idx}</div>
           <div class="seg-editor-meta">${formatTime(seg.start)} → ${formatTime(seg.end)}</div>
         </div>
-        <button class="seg-editor-close" title="Zamknij (Esc)">✕</button>
+        <button class="seg-editor-close" title="Zamknij (Esc)">${aiIcon('close',14)}</button>
       </div>
 
       <div class="seg-editor-grid">
@@ -1426,7 +1426,7 @@ function diEditorSeek(delta){
         <div class="seg-audio-info"></div>
       </div>
 
-      <div class="small" style="margin-top:8px;opacity:0.7">Auto-save ✓ (tekst + mówca zapisują się automatycznie)</div>
+      <div class="small" style="margin-top:8px;opacity:0.7">Auto-save ${aiIcon('success',12)} (tekst + mówca zapisują się automatycznie)</div>
     `;
 
     return ed;
@@ -1693,7 +1693,7 @@ function diRender(){
     // Ikona notatki
     const noteIcon = document.createElement('span');
     noteIcon.className = 'seg-note-icon' + (hasBlockNote(idx) ? ' has-note' : '');
-    noteIcon.textContent = '📝';
+    noteIcon.innerHTML = aiIcon('notes',14);
     noteIcon.title = hasBlockNote(idx) ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę';
     bindNoteIconEvents(noteIcon, idx);
     
@@ -1710,7 +1710,7 @@ function diRender(){
       if(conf >= 80) badge.classList.add("conf-high");
       else if(conf >= 50) badge.classList.add("conf-mid");
       else badge.classList.add("conf-low");
-      badge.textContent = (conf >= 80 ? "✓" : conf >= 50 ? "?" : "⚠") + " " + conf + "%";
+      badge.textContent = (conf >= 80 ? "OK" : conf >= 50 ? "?" : "!") + " " + conf + "%";
       badge.title = `Pewność: ${conf}%` + (seg.no_speech ? ` • Szum: ${seg.no_speech}%` : "");
       timeDiv.appendChild(badge);
     }
@@ -1746,7 +1746,7 @@ function extractSpeakerLabels(text){
   });
   
   const result = Array.from(labels).sort();
-  console.log('🔍 Znalezione etykiety mówców:', result);
+  console.log('Znalezione etykiety mówców:', result);
   return result;
 }
 
@@ -1782,7 +1782,7 @@ function renderSpeakerMappingUI(labels, outputText){
   if(!container) return;
 
   if(!labels || labels.length === 0){
-    container.innerHTML = '<div class="mapping-empty">Wykonaj diaryzację aby wykryć mówców 🎤</div>';
+    container.innerHTML = '<div class="mapping-empty">Wykonaj diaryzację aby wykryć mówców ' + aiIcon('transcription',16) + '</div>';
     container.classList.remove('cols-2', 'cols-3');
     return;
   }
@@ -1837,8 +1837,8 @@ function renderSpeakerMappingUI(labels, outputText){
     container.appendChild(row);
   });
   
-  console.log('✅ Wygenerowano UI dla ' + labels.length + ' mówców');
-  showToast('🔄 Zaktualizowano ' + labels.length + ' mówców');
+  console.log('Wygenerowano UI dla ' + labels.length + ' mówców');
+  showToast('Zaktualizowano ' + labels.length + ' mówców');
 }
 
 // Sync UI inputs to hidden JSON textarea
@@ -1857,7 +1857,7 @@ function syncToJSON(){
     jsonTextarea.value = JSON.stringify(mapping, null, 2);
   }
   
-  console.log('🔄 Zsynchronizowano mapowanie do JSON:', mapping);
+  console.log('Zsynchronizowano mapowanie do JSON:', mapping);
 }
 
 // Sync JSON textarea to UI inputs
@@ -1876,7 +1876,7 @@ function mergeSpeakerMap(labels){
         current = j;
       }
     }catch(e){
-      console.warn('⚠️ Niepoprawny JSON w mapowaniu, tworzę nowy:', e.message);
+      console.warn('Niepoprawny JSON w mapowaniu, tworzę nowy:', e.message);
       current = {};
     }
   }
@@ -1887,15 +1887,15 @@ function mergeSpeakerMap(labels){
     if(!(lab in current)){
       current[lab] = lab;
       changed = true;
-      console.log('➕ Dodano nową etykietę do mapowania:', lab);
+      console.log('Dodano nową etykietę do mapowania:', lab);
     } else {
-      console.log('✓ Zachowano istniejącą nazwę dla:', lab, '→', current[lab]);
+      console.log('Zachowano istniejącą nazwę dla:', lab, '->', current[lab]);
     }
   }
 
   if(changed || !raw){
     ta.value = JSON.stringify(current, null, 2);
-    console.log('✅ Zaktualizowano mapowanie mówców:', current);
+    console.log('Zaktualizowano mapowanie mówców:', current);
   }
   
   const outText = document.getElementById('di_out') ? (document.getElementById('di_out').value || '') : '';
@@ -1963,7 +1963,7 @@ function setupDraftAutosave(projectId){
           const labels = extractSpeakerLabels(text);
           if(labels.length){
             mergeSpeakerMap(labels);
-            console.log('🔄 Auto-refreshed speaker mapping from textarea edit');
+            console.log('Auto-refreshed speaker mapping from textarea edit');
           }
           
           // Odśwież segments i bloki
@@ -1971,7 +1971,7 @@ function setupDraftAutosave(projectId){
           if(segments.length){
             DI.segments = segments;
             diRender();
-            console.log('🔄 Auto-refreshed ' + segments.length + ' blocks from textarea edit');
+            console.log('Auto-refreshed ' + segments.length + ' blocks from textarea edit');
           }
         }
       }, 500);
@@ -2029,7 +2029,7 @@ async function restoreOutputs(projectId){
       }));
       diRender();
       loadedSegments = true;
-      console.log("✅ Loaded diarized segments with confidence");
+      console.log("Loaded diarized segments with confidence");
 
       // Also load text for textarea
       if(out && !out.value.trim()){
@@ -2057,13 +2057,13 @@ async function restoreOutputs(projectId){
     }
 
     if(out && out.value.trim()){
-      console.log('🔄 Odświeżam mapowanie z załadowanego wyniku...');
+      console.log('Odświeżam mapowanie z załadowanego wyniku...');
 
       const segments = parseDiarizedText(out.value);
       if(segments.length){
         DI.segments = segments;
         diRender();
-        console.log('✅ Wyrenderowano ' + segments.length + ' bloków z zapisanego wyniku');
+        console.log('Wyrenderowano ' + segments.length + ' bloków z zapisanego wyniku');
       }
     }
   }
@@ -2092,7 +2092,7 @@ async function autoSaveAll(){
         headers:{ "content-type":"application/json" },
         body: JSON.stringify({ text: text })
       });
-      console.log('✅ Auto-saved diarization to project');
+      console.log('Auto-saved diarization to project');
       
       const keys = draftKeys(pid);
       LS.set(keys.diarized, text);
@@ -2108,18 +2108,18 @@ async function autoSaveAll(){
           headers:{ "content-type":"application/json" },
           body: JSON.stringify({ mapping: mapping })
         });
-        console.log('✅ Auto-saved speaker mapping to project');
+        console.log('Auto-saved speaker mapping to project');
         
         const keys = draftKeys(pid);
         LS.set(keys.speakerMap, raw);
       }catch(e){
-        console.warn('⚠️ Invalid speaker mapping JSON, skipping mapping save');
+        console.warn('Invalid speaker mapping JSON, skipping mapping save');
       }
     }
     
     markSaved();
   }catch(e){
-    console.warn('⚠️ Auto-save failed:', e);
+    console.warn('Auto-save failed:', e);
   }
 }
 
@@ -2140,14 +2140,14 @@ function markSaved(){
 }
 
 function onDoneDiarize(j){
-  console.log('✅ Diaryzacja zakończona, przetwarzam wynik...');
+  console.log('Diaryzacja zakończona, przetwarzam wynik...');
 
   if(j.result){
     const out = j.result.text || "";
     const outEl = document.getElementById("di_out");
     if(outEl && out) {
       outEl.value = out;
-      console.log('📝 Wynik diaryzacji zapisany do pola tekstowego');
+      console.log('Wynik diaryzacji zapisany do pola tekstowego');
     }
 
     // Use structured segments if available (includes confidence), otherwise parse text
@@ -2162,24 +2162,24 @@ function onDoneDiarize(j){
         no_speech: typeof s.no_speech === "number" ? s.no_speech : null
       }));
       diRender();
-      console.log('✅ Wyrenderowano ' + DI.segments.length + ' bloków (z confidence)');
+      console.log('Wyrenderowano ' + DI.segments.length + ' bloków (z confidence)');
     } else if(out){
       const segments = parseDiarizedText(out);
       if(segments.length){
         DI.segments = segments;
         diRender();
-        console.log('✅ Wyrenderowano ' + segments.length + ' bloków');
+        console.log('Wyrenderowano ' + segments.length + ' bloków');
       }
     }
 
-    console.log('🔍 Wykrywam mówców z wyniku...');
+    console.log('Wykrywam mówców z wyniku...');
     const labels = extractSpeakerLabels(out);
 
     if(labels.length) {
-      console.log('✅ Znaleziono ' + labels.length + ' mówców:', labels);
+      console.log('Znaleziono ' + labels.length + ' mówców:', labels);
       mergeSpeakerMap(labels);
     } else {
-      console.warn('⚠️ Nie znaleziono żadnych etykiet mówców');
+      console.warn('Nie znaleziono żadnych etykiet mówców');
     }
 
     if(AISTATE.projectId){
@@ -2236,10 +2236,10 @@ function diRenderSoundEvents(data){
   });
 
   let html = `<div class="sound-events-header">
-    <span data-i18n="label.detected_sounds">🔊 Wykryte dźwięki</span>
+    <span data-i18n="label.detected_sounds">${aiIcon('speaker',14)} Wykryte dźwięki</span>
     <span class="sound-events-model">(${data.model || "?"})</span>
     <button type="button" class="btn mini" onclick="diApplySoundEventsToText()" title="Wstaw znaczniki dźwięków do tekstu">
-      📝 Wstaw do tekstu
+      ${aiIcon('notes',14)} Wstaw do tekstu
     </button>
   </div>`;
   html += '<div class="sound-events-list">';
@@ -2260,16 +2260,17 @@ function diRenderSoundEvents(data){
 }
 
 function diGetSoundIcon(type){
-  const icons = {
-    dog: "🐕", cat: "🐈", bird: "🐦",
-    cough: "🤧", sneeze: "🤧", laughter: "😂", crying: "😢", baby_cry: "👶",
-    speech: "🗣️", music: "🎵", singing: "🎤", tv: "📺", radio: "📻",
-    vehicle: "🚗", engine: "🔧", siren: "🚨", alarm: "🔔", bell: "🔔",
-    phone: "📞", door: "🚪", knock: "👊", footsteps: "👣",
-    wind: "💨", rain: "🌧️", thunder: "⛈️", water: "💧",
-    noise: "📢"
+  // Short text labels for detected sound types (no emoji)
+  const labels = {
+    dog: "[dog]", cat: "[cat]", bird: "[bird]",
+    cough: "[cough]", sneeze: "[sneeze]", laughter: "[laugh]", crying: "[cry]", baby_cry: "[baby]",
+    speech: "[speech]", music: "[music]", singing: "[sing]", tv: "[TV]", radio: "[radio]",
+    vehicle: "[car]", engine: "[engine]", siren: "[siren]", alarm: "[alarm]", bell: "[bell]",
+    phone: "[phone]", door: "[door]", knock: "[knock]", footsteps: "[steps]",
+    wind: "[wind]", rain: "[rain]", thunder: "[thunder]", water: "[water]",
+    noise: "[noise]"
   };
-  return icons[type] || "🔊";
+  return labels[type] || aiIcon("sound", 14);
 }
 
 // Polish translations for sound event labels
@@ -2334,7 +2335,7 @@ function diApplySoundEventsToText(){
 
   DI.segments = diMergeSoundEventsIntoSegments(DI.segments, DI_SOUND_EVENTS, 0.5);
   diRender();
-  console.log("✅ Sound events merged into diarization text");
+  console.log("Sound events merged into diarization text");
 }
 
 function diFilterSoundEvents(type){
@@ -2646,7 +2647,7 @@ async function diSaveReports(){
   const btn = document.getElementById("di_report_save_btn");
   const originalText = btn ? btn.innerHTML : "";
   if(btn){
-    btn.innerHTML = "⏳ " + (t?.("analysis.report_save") || "Zapisuję...");
+    btn.innerHTML = aiIcon('loading', 14) + " " + (t?.("analysis.report_save") || "Zapisuję...");
     btn.disabled = true;
   }
 
@@ -2682,8 +2683,8 @@ async function diSaveReports(){
     }
 
     const message = results.length === 1
-      ? `✅ Raport ${results[0]} wygenerowany`
-      : `✅ Raporty wygenerowane: ${results.join(', ')}`;
+      ? `Raport ${results[0]} wygenerowany`
+      : `Raporty wygenerowane: ${results.join(', ')}`;
 
     showToast(message + ' i zapisane w projekcie', 3000);
 
@@ -2806,7 +2807,7 @@ document.getElementById("di_apply_map").addEventListener("click", function(){
   outEl.value = out;
   
   if(totalReplacements > 0){
-    console.log('✅ Zastosowano mapowanie mówców:', details.join(', '));
+    console.log('Zastosowano mapowanie mówców:', details.join(', '));
     
     const segments = parseDiarizedText(out);
     if(segments.length){
@@ -2818,7 +2819,7 @@ document.getElementById("di_apply_map").addEventListener("click", function(){
     const labels = extractSpeakerLabels(out);
     renderSpeakerMappingUI(labels, out);
     
-    // ✨ Auto-save po zastosowaniu mapowania
+    // Auto-save po zastosowaniu mapowania
     scheduleAutoSave();
     
     showToast("Wprowadzono " + totalReplacements + " zamian: " + details.join(', '), 'success');
@@ -2841,30 +2842,30 @@ if (notesGlobalTextarea) {
 
 
 document.addEventListener('aistate:output-updated', function(e){
-  console.log('🔔 Received output-updated event:', e.detail);
+  console.log('Received output-updated event:', e.detail);
   
   if(e.detail && e.detail.textareaId === 'di_out'){
     const outEl = document.getElementById("di_out");
     if(outEl && outEl.value.trim()){
-      console.log('🔄 Auto-refreshing speaker mapping and blocks from updated output...');
+      console.log('Auto-refreshing speaker mapping and blocks from updated output...');
       
       const segments = parseDiarizedText(outEl.value);
       if(segments.length){
         DI.segments = segments;
         diRender();
-        console.log('✅ Re-rendered ' + segments.length + ' blocks');
+        console.log('Re-rendered ' + segments.length + ' blocks');
       }
       
       const labels = extractSpeakerLabels(outEl.value);
       if(labels.length){
         mergeSpeakerMap(labels);
-        showToast('✅ Wykryto ' + labels.length + ' mówców');
-        console.log('✅ Auto-refresh complete: ' + labels.length + ' speakers found:', labels);
+        showToast('Wykryto ' + labels.length + ' mówców');
+        console.log('Auto-refresh complete: ' + labels.length + ' speakers found:', labels);
       } else {
-        console.warn('⚠️ No speaker labels found in output');
+        console.warn('No speaker labels found in output');
       }
       
-      // ✨ Auto-save po aktualizacji z edytora modalnego
+      // Auto-save po aktualizacji z edytora modalnego
       scheduleAutoSave();
     }
   }
@@ -2944,7 +2945,7 @@ document.getElementById('di_file_input').addEventListener('change', async functi
 
   var btn = document.getElementById('di_add_file_btn');
   var origHtml = btn.innerHTML;
-  btn.innerHTML = '⏳ Wgrywam…';
+  btn.innerHTML = aiIcon('loading', 14) + ' Wgrywam…';
   btn.disabled = true;
 
   try {

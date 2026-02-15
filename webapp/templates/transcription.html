@@ -328,7 +328,7 @@
 
   <div class="card analysis-toolbar transcription-toolbar" id="tr_toolbar">
     <div class="analysis-toolbar-left">
-      <div class="h1" style="margin:0">🎙️ <span data-i18n="page.transcription.title">Transcription</span></div>
+      <div class="h1" style="margin:0"><i data-icon="transcription" data-size="16"></i> <span data-i18n="page.transcription.title">Transcription</span></div>
       <div class="small" id="tr_toolbar_hint_line"></div>
     </div>
 
@@ -336,7 +336,7 @@
 
       <!-- Add audio file -->
       <input type="file" id="tr_file_input" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.mp4,.aac" style="display:none"/>
-      <button class="btn secondary" id="tr_add_file_btn" title="Dodaj plik audio do projektu">📁 <span data-i18n="btn.add_file">Dodaj plik</span></button>
+      <button class="btn secondary" id="tr_add_file_btn" title="Dodaj plik audio do projektu"><i data-icon="folder" data-size="14"></i> <span data-i18n="btn.add_file">Dodaj plik</span></button>
       <span class="small" id="tr_file_name" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.8"></span>
 
       <!-- Transcribe -->
@@ -371,7 +371,7 @@
 
       <!-- Sound Detection -->
       <div class="analysis-format" id="tr_sound_detection_section" style="margin-top:8px">
-        <label class="pill"><input type="checkbox" id="tr_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection">🔊 Detekcja dźwięków</span></label>
+        <label class="pill"><input type="checkbox" id="tr_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection"><i data-icon="speaker" data-size="14"></i> Detekcja dźwięków</span></label>
         <select class="input mini-select" id="tr_sound_detection_model" style="margin-left:6px;width:auto" disabled>
         </select>
       </div>
@@ -383,10 +383,10 @@
         <label class="pill"><input type="checkbox" name="tr_report_fmt" value="doc"> DOC</label>
         <label class="pill"><input type="checkbox" name="tr_report_fmt" value="txt"> TXT</label>
         <label class="pill" style="margin-left:6px"><input type="checkbox" id="tr_include_notes" value="1"> Notatki</label>
-        <button class="btn secondary" id="tr_report_save_btn" style="margin-left:8px">💾 <span data-i18n="analysis.report_save">Zapisz</span></button>
+        <button class="btn secondary" id="tr_report_save_btn" style="margin-left:8px"><i data-icon="save" data-size="16"></i> <span data-i18n="analysis.report_save">Zapisz</span></button>
       </div>
 
-      <button class="btn secondary" id="tr_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()">🔍 <span data-i18n="btn.search">Szukaj</span></button>
+      <button class="btn secondary" id="tr_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()"><i data-icon="search" data-size="14"></i> <span data-i18n="btn.search">Szukaj</span></button>
 
       <!-- Optional: direct transcript download link (kept for compatibility) -->
       <a class="btn secondary" id="tr_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
@@ -415,7 +415,7 @@
   <div style="display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start">
     <!-- Lewa kolumna: Wynik transkrypcji -->
     <div>
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="tr.result.title">📄 Wynik transkrypcji</div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="tr.result.title"><i data-icon="document" data-size="16"></i> Wynik transkrypcji</div>
       <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
       <div id="tr_audio_player"></div>
       <div id="tr_blocks" class="blocklist" style="display:none"></div>
@@ -423,26 +423,26 @@
       <div id="tr_sound_events" class="sound-events-panel" style="display:none"></div>
       <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…" data-i18n-placeholder="placeholder.result_here"></textarea>
       <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
-        ✨ <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
+        <i data-icon="info_circle" data-size="14"></i> <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
       </div>
     </div>
 
     <!-- Prawa kolumna: Notatki (EXACT COPY from diarization) -->
     <div class="notes-panel">
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title">📝 Notatki</div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title"><i data-icon="notes" data-size="16"></i> Notatki</div>
       
       <!-- Notatka globalna -->
       <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title">🌍 Notatka globalna</div>
+        <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title"><i data-icon="globe" data-size="16"></i> Notatka globalna</div>
         <textarea id="tr_notes_global" placeholder="Notatka do całej transkrypcji (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:vertical"></textarea>
-        <div class="small" style="margin-top:4px;opacity:0.7" data-i18n="notes.autosave">Auto-save ✓</div>
+        <div class="small" style="margin-top:4px;opacity:0.7" data-i18n="notes.autosave"><i data-icon="success" data-size="12"></i> Auto-save</div>
       </div>
 
       <div class="hr" style="margin:12px 0"></div>
 
       <!-- Notatki do bloków -->
       <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title">📌 Notatki do bloków</div>
+        <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title"><i data-icon="pin" data-size="16"></i> Notatki do bloków</div>
         <div id="tr_block_notes_list" class="block-notes-list">
           <div class="small" style="opacity:0.6;text-align:center;padding:20px" data-i18n-html="notes.blocks.empty_html">
             ${t("notes.blocks.empty_html")}
@@ -630,10 +630,10 @@ function trBuildEditorEl(idx){
   ed.innerHTML = `
     <div class="seg-editor-head">
       <div>
-        <div class="seg-editor-title">✏️ Edycja bloku #${idx}</div>
+        <div class="seg-editor-title">${aiIcon('edit',14)} Edycja bloku #${idx}</div>
         <div class="seg-editor-meta">${trFormatTime(seg.start)} → ${trFormatTime(seg.end)}</div>
       </div>
-      <button class="seg-editor-close" title="Zamknij (Esc)">✕</button>
+      <button class="seg-editor-close" title="Zamknij (Esc)">${aiIcon('close',14)}</button>
     </div>
 
     <div class="seg-editor-grid">
@@ -657,7 +657,7 @@ function trBuildEditorEl(idx){
       <div class="seg-audio-info"></div>
     </div>
 
-    <div class="small" style="margin-top:8px;opacity:0.7">Auto-save ✓ (tekst + mówca zapisują się automatycznie)</div>
+    <div class="small" style="margin-top:8px;opacity:0.7">${aiIcon('success',12)} Auto-save (tekst + mówca zapisują się automatycznie)</div>
   `;
   return ed;
 }
@@ -1035,7 +1035,7 @@ function trRenderBlockNotesList(){
   if(notes.length === 0){
     list.innerHTML = `<div class="small" style="opacity:0.6;text-align:center;padding:20px">
       Brak notatek do bloków.<br>
-      Kliknij 📝 obok bloku aby dodać.
+      Kliknij ${aiIcon('notes',14)} obok bloku aby dodać.
     </div>`;
     return;
   }
@@ -1048,8 +1048,8 @@ function trRenderBlockNotesList(){
         <div class="block-note-preview">${preview}</div>
         <div class="block-note-actions">
           <button onclick="trScrollToBlock(${idx})">↓ Przejdź</button>
-          <button onclick="trOpenBlockNoteEditor(${idx})">✏️ Edytuj</button>
-          <button onclick="trDeleteBlockNote(${idx})">🗑️ Usuń</button>
+          <button onclick="trOpenBlockNoteEditor(${idx})">${aiIcon('edit',14)} Edytuj</button>
+          <button onclick="trDeleteBlockNote(${idx})">${aiIcon('delete',14)} Usuń</button>
         </div>
       </div>
     `;
@@ -1102,7 +1102,7 @@ async function trLoadNotesFromProject(){
       
       trRenderBlockNotesList();
       trRender(); // Re-render to show note icons
-      console.log("✅ Loaded notes from project");
+      console.log("Loaded notes from project");
     }
   }catch(e){
     console.log("No saved notes in project (OK for new projects)");
@@ -1128,7 +1128,7 @@ async function trSaveNotesToProject(){
     });
     
     if(response.ok){
-      showToast("✅ Notatki zapisane w projekcie", 2000);
+      showToast("Notatki zapisane w projekcie", 2000);
     } else {
       throw new Error("Failed to save notes");
     }
@@ -1199,7 +1199,7 @@ function trRender(){
     // Note icon
     const noteIcon = document.createElement("span");
     noteIcon.className = "seg-note-icon" + (trHasBlockNote(idx) ? " has-note" : "");
-    noteIcon.textContent = "📝";
+    noteIcon.innerHTML = aiIcon('notes',14);
     noteIcon.title = trHasBlockNote(idx) ? "Ma notatkę - kliknij aby edytować" : "Dodaj notatkę";
     trBindNoteIconEvents(noteIcon, idx);
     
@@ -1220,7 +1220,7 @@ function trRender(){
       if(conf >= 80) badge.classList.add("conf-high");
       else if(conf >= 50) badge.classList.add("conf-mid");
       else badge.classList.add("conf-low");
-      badge.textContent = (conf >= 80 ? "✓" : conf >= 50 ? "?" : "⚠") + " " + conf + "%";
+      badge.textContent = (conf >= 80 ? "OK" : conf >= 50 ? "?" : "!") + " " + conf + "%";
       badge.title = `Pewność: ${conf}%` + (seg.no_speech ? ` • Szum: ${seg.no_speech}%` : "");
       timeDiv.appendChild(badge);
     }
@@ -1262,7 +1262,7 @@ function scheduleAutoSave(){
       });
       
       if(response.ok){
-        console.log("✅ Auto-saved transcript");
+        console.log("Auto-saved transcript");
       }
       
       // Save notes
@@ -1315,7 +1315,7 @@ async function trSaveReports(){
   const btn = document.getElementById("tr_report_save_btn");
   const originalText = btn ? btn.innerHTML : "";
   if(btn){
-    btn.innerHTML = "⏳ " + (t?.("analysis.report_save") || "Zapisuję...");
+    btn.innerHTML = aiIcon('loading',12) + " " + (t?.("analysis.report_save") || "Zapisuję...");
     btn.disabled = true;
   }
 
@@ -1351,8 +1351,8 @@ async function trSaveReports(){
     }
 
     const message = results.length === 1
-      ? `✅ Raport ${results[0]} wygenerowany`
-      : `✅ Raporty wygenerowane: ${results.join(", ")}`;
+      ? `Raport ${results[0]} wygenerowany`
+      : `Raporty wygenerowane: ${results.join(", ")}`;
 
     showToast(message + " i zapisane w projekcie", 3000);
 
@@ -1476,10 +1476,10 @@ function trRenderSoundEvents(data){
   });
 
   let html = `<div class="sound-events-header">
-    <span data-i18n="label.detected_sounds">🔊 Wykryte dźwięki</span>
+    <span data-i18n="label.detected_sounds">${aiIcon('speaker',14)} Wykryte dźwięki</span>
     <span class="sound-events-model">(${data.model || "?"})</span>
     <button type="button" class="btn mini" onclick="trApplySoundEventsToText()" title="Wstaw znaczniki dźwięków do tekstu">
-      📝 Wstaw do tekstu
+      ${aiIcon('notes',14)} Wstaw do tekstu
     </button>
   </div>`;
   html += '<div class="sound-events-list">';
@@ -1501,15 +1501,15 @@ function trRenderSoundEvents(data){
 
 function trGetSoundIcon(type){
   const icons = {
-    dog: "🐕", cat: "🐈", bird: "🐦",
-    cough: "🤧", sneeze: "🤧", laughter: "😂", crying: "😢", baby_cry: "👶",
-    speech: "🗣️", music: "🎵", singing: "🎤", tv: "📺", radio: "📻",
-    vehicle: "🚗", engine: "🔧", siren: "🚨", alarm: "🔔", bell: "🔔",
-    phone: "📞", door: "🚪", knock: "👊", footsteps: "👣",
-    wind: "💨", rain: "🌧️", thunder: "⛈️", water: "💧",
-    noise: "📢"
+    dog: aiIcon('speaker',12), cat: aiIcon('speaker',12), bird: aiIcon('speaker',12),
+    cough: aiIcon('speaker',12), sneeze: aiIcon('speaker',12), laughter: aiIcon('speaker',12), crying: aiIcon('speaker',12), baby_cry: aiIcon('speaker',12),
+    speech: aiIcon('speaker',12), music: aiIcon('speaker',12), singing: aiIcon('speaker',12), tv: aiIcon('vision',12), radio: aiIcon('speaker',12),
+    vehicle: aiIcon('info_circle',12), engine: aiIcon('wrench',12), siren: aiIcon('warning',12), alarm: aiIcon('warning',12), bell: aiIcon('warning',12),
+    phone: aiIcon('speaker',12), door: aiIcon('speaker',12), knock: aiIcon('speaker',12), footsteps: aiIcon('speaker',12),
+    wind: aiIcon('speaker',12), rain: aiIcon('speaker',12), thunder: aiIcon('speaker',12), water: aiIcon('speaker',12),
+    noise: aiIcon('speaker',12)
   };
-  return icons[type] || "🔊";
+  return icons[type] || aiIcon('speaker',12);
 }
 
 // Polish translations for sound event labels
@@ -1574,7 +1574,7 @@ function trApplySoundEventsToText(){
 
   TR.segments = trMergeSoundEventsIntoSegments(TR.segments, TR_SOUND_EVENTS, 0.5);
   trRender();
-  console.log("✅ Sound events merged into transcript text");
+  console.log("Sound events merged into transcript text");
 }
 
 function trFilterSoundEvents(type){
@@ -1851,7 +1851,7 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
 
   const btn = document.getElementById('tr_add_file_btn');
   const origHtml = btn.innerHTML;
-  btn.innerHTML = '⏳ Wgrywam…';
+  btn.innerHTML = aiIcon('loading',12) + ' Wgrywam…';
   btn.disabled = true;
 
   try {
@@ -1925,7 +1925,7 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
           }));
           trRender();
           loaded = true;
-          console.log("✅ Loaded transcript segments with confidence");
+          console.log("Loaded transcript segments with confidence");
         }
       }catch(e){ /* segments.json doesn't exist, try text */ }
 

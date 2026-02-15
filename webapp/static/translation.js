@@ -474,7 +474,7 @@ async function _trResumeTaskIfAny(state){
             const btn = _byId('generate-btn');
             if(btn){
                 btn.disabled = true;
-                btn.textContent = tr('translation.btn.translating','⏳ Tłumaczenie...');
+                btn.innerHTML = aiIcon('loading',12) + ' ' + tr('translation.btn.translating','Tłumaczenie...');
             }
             monitorProgress();
         }
@@ -826,7 +826,7 @@ async function startTranslation() {
     document.getElementById('progress-container').classList.remove('hidden');
     document.getElementById('output-container').classList.add('hidden');
     document.getElementById('generate-btn').disabled = true;
-    document.getElementById('generate-btn').textContent = tr('translation.btn.translating','⏳ Tłumaczenie...');
+    document.getElementById('generate-btn').innerHTML = aiIcon('loading',12) + ' ' + tr('translation.btn.translating','Tłumaczenie...');
     
     try {
         // Start translation
@@ -935,7 +935,7 @@ function displayResults(data) {
         const ttsBtn = document.createElement('span');
         ttsBtn.className = 'tts-tab-btn';
         ttsBtn.title = 'Odsłuchaj';
-        ttsBtn.innerHTML = (typeof aiIcon === 'function') ? aiIcon('tts_read', 13) : '🔊';
+        ttsBtn.innerHTML = aiIcon('tts_read', 13);
         ttsBtn.onclick = (e) => { e.stopPropagation(); _ttsSpeak(lang, 'output', ttsBtn); };
         tab.appendChild(ttsBtn);
 
@@ -1002,7 +1002,7 @@ function getLangFlag(lang) {
         'ukrainian': '🇺🇦',
         'chinese': '🇨🇳'
     };
-    return flags[lang] || '🌐';
+    return flags[lang] || '';
 }
 
 function getLangName(lang) {
@@ -1028,7 +1028,7 @@ function getLangName(lang) {
 // Reset UI
 function resetUI() {
     document.getElementById('generate-btn').disabled = false;
-    document.getElementById('generate-btn').textContent = tr('translation.btn.generate','🚀 Generuj');
+    document.getElementById('generate-btn').innerHTML = aiIcon('generate',12) + ' ' + tr('translation.btn.generate','Generuj');
 }
 
 // Export selected reports is implemented below (single definition)
@@ -1043,7 +1043,7 @@ function saveEdits() {
     
     if (lang) {
         currentResults[lang] = document.getElementById('output-text').value;
-        showToast(tr('translation.alert.saved','Zmiany zapisane ✅'), 'success');
+        showToast(tr('translation.alert.saved','Zmiany zapisane'), 'success');
         _trScheduleSave('save_edits');
     }
 }

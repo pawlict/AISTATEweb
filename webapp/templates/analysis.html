@@ -5,26 +5,26 @@
 
   <div class="card analysis-toolbar" id="analysis_toolbar">
     <div class="analysis-toolbar-left">
-      <div class="h1" style="margin:0" data-i18n="analysis.title">🧠 Analiza</div>
+      <div class="h1" style="margin:0" data-i18n="analysis.title"><i data-icon="brain" data-size="18"></i> Analiza</div>
       <div class="small" id="analysis_status_line"></div>
     </div>
 
     <div class="analysis-toolbar-right">
 
       <!-- Generate first (per UX request) -->
-      <button class="btn" id="an_generate_btn">🚀 <span data-i18n="analysis.generate">Generuj</span></button>
+      <button class="btn" id="an_generate_btn"><i data-icon="generate" data-size="14"></i> <span data-i18n="analysis.generate">Generuj</span></button>
 
       <!-- Models -->
       <div class="analysis-models" id="analysis_models">
   <div class="analysis-model">
-    <span class="small" title="Quick model">⚡</span>
+    <span class="small" title="Quick model"><i data-icon="generate" data-size="14"></i></span>
     <label class="small" for="an_model_quick" data-i18n="analysis.model_quick">Quick</label>
     <select class="input mini-select" id="an_model_quick" disabled>
       <option data-i18n="analysis.models_loading">Ładowanie…</option>
     </select>
   </div>
   <div class="analysis-model">
-    <span class="small" title="Deep model">🔍</span>
+    <span class="small" title="Deep model"><i data-icon="search" data-size="14"></i></span>
     <label class="small" for="an_model_deep" data-i18n="analysis.model_deep">Deep</label>
     <select class="input mini-select" id="an_model_deep" disabled>
       <option data-i18n="analysis.models_loading">Ładowanie…</option>
@@ -39,17 +39,17 @@
         <label class="pill"><input type="checkbox" name="an_report_fmt" value="txt"> TXT</label>
       </div>
 
-      <button class="btn secondary" id="an_report_save_btn">💾 <span data-i18n="analysis.report_save">Zapisz</span></button>
+      <button class="btn secondary" id="an_report_save_btn"><i data-icon="save" data-size="16"></i> <span data-i18n="analysis.report_save">Zapisz</span></button>
     </div>
   </div>
 
   <!-- Tab bar -->
   <div class="analysis-tabs" id="analysis_tabs">
     <button class="analysis-tab active" data-tab="llm" id="tab_llm">
-      <span class="analysis-tab-icon">🧠</span> Analiza LLM
+      <span class="analysis-tab-icon"><i data-icon="brain" data-size="14"></i></span> Analiza LLM
     </button>
     <button class="analysis-tab" data-tab="aml" id="tab_aml">
-      <span class="analysis-tab-icon">🔍</span> Analiza AML
+      <span class="analysis-tab-icon"><i data-icon="search" data-size="14"></i></span> Analiza AML
     </button>
   </div>
 
@@ -60,7 +60,7 @@
 
       <section class="card analysis-sidecard">
         <div class="analysis-sidehdr">
-          <div class="h2" data-i18n="analysis.sources">📁 Źródła danych</div>
+          <div class="h2" data-i18n="analysis.sources"><i data-icon="folder" data-size="16"></i> Źródła danych</div>
         </div>
 
         <div class="analysis-sidebody">
@@ -71,7 +71,7 @@
 
           <div class="analysis-docs">
             <div class="analysis-docs-top">
-              <div class="h3" data-i18n="analysis.documents">📎 Dokumenty</div>
+              <div class="h3" data-i18n="analysis.documents"><i data-icon="document" data-size="14"></i> Dokumenty</div>
               <div class="analysis-docs-actions">
                 <button class="btn secondary" id="docs_upload_btn">+ <span data-i18n="analysis.add">Dodaj</span></button>
               </div>
@@ -84,7 +84,7 @@
 
       <section class="card analysis-sidecard">
         <div class="analysis-sidehdr">
-          <div class="h2" data-i18n="analysis.prompts">🎯 Prompty</div>
+          <div class="h2" data-i18n="analysis.prompts"><i data-icon="deep_search" data-size="16"></i> Prompty</div>
           <div class="small" id="an_selected_count">0</div>
         </div>
 
@@ -93,7 +93,7 @@
 
           <div class="analysis-side-actions">
             <button class="btn secondary" id="prompt_new_btn">+ <span data-i18n="analysis.new_prompt">Nowy</span></button>
-            <button class="btn secondary" id="prompt_import_btn">📥 <span data-i18n="analysis.import">Import</span></button>
+            <button class="btn secondary" id="prompt_import_btn"><i data-icon="import" data-size="14"></i> <span data-i18n="analysis.import">Import</span></button>
           </div>
         </div>
       </section>
@@ -105,7 +105,7 @@
       <div class="card quick-analysis" id="quick_box">
         <div class="analysis-sidehdr">
           <div>
-            <div class="h2" data-i18n="analysis.quick">⚡ Szybka analiza</div>
+            <div class="h2" data-i18n="analysis.quick">Szybka analiza</div>
             <div class="small" id="quick_state"></div>
           </div>
           <div style="display:flex; gap:8px; align-items:center">
@@ -124,7 +124,7 @@
       <div class="card custom-prompt" id="custom_prompt_box">
         <div class="analysis-sidehdr">
           <div>
-            <div class="h2" data-i18n="analysis.custom_prompt_title">✍️ Własny prompt</div>
+            <div class="h2" data-i18n="analysis.custom_prompt_title"><i data-icon="edit" data-size="16"></i> Własny prompt</div>
             <div class="small muted" data-i18n="analysis.custom_prompt_desc">Szybkie polecenie dla głębokiej analizy. Jeśli puste – analiza działa jak dotychczas.</div>
           </div>
           <label class="pill" title="Combine with selected prompts">
@@ -139,7 +139,7 @@
 
       <div class="card deep-analysis" id="deep_box">
         <div class="analysis-sidehdr">
-          <div class="h2" data-i18n="analysis.deep">🔍 Głęboka analiza</div>
+          <div class="h2" data-i18n="analysis.deep"><i data-icon="search" data-size="14"></i> Głęboka analiza</div>
           <div class="small" id="deep_state"></div>
         </div>
 
@@ -157,7 +157,7 @@
       <!-- Finance entities panel (visible only after finance analysis) -->
       <div class="card" id="finance_entities_box" style="display:none;">
         <div class="analysis-sidehdr">
-          <div class="h2">🏦 <span data-i18n="finance.entities.title">Podmioty (Intelligence Memory)</span></div>
+          <div class="h2"><i data-icon="finance" data-size="16"></i> <span data-i18n="finance.entities.title">Podmioty (Intelligence Memory)</span></div>
           <button class="btn mini" id="finance_entities_refresh" title="Odśwież">↻</button>
         </div>
         <div class="small" style="margin-bottom:8px;" data-i18n="finance.entities.hint">
@@ -167,8 +167,8 @@
       </div>
 
       <div class="analysis-actions" id="analysis_actions">
-        <button class="btn secondary" id="an_copy_btn">📋 <span data-i18n="analysis.copy">Kopiuj</span></button>
-        <button class="btn secondary" id="an_stop_btn" style="display:none">⛔ <span data-i18n="analysis.stop">Stop</span></button>
+        <button class="btn secondary" id="an_copy_btn"><i data-icon="copy" data-size="14"></i> <span data-i18n="analysis.copy">Kopiuj</span></button>
+        <button class="btn secondary" id="an_stop_btn" style="display:none"><i data-icon="stop" data-size="14"></i> <span data-i18n="analysis.stop">Stop</span></button>
         <span id="an_download_slot"></span>
       </div>
 
@@ -184,7 +184,7 @@
     <!-- Upload zone -->
     <div class="card aml-upload-zone" id="aml_upload_zone">
       <div class="aml-upload-inner" id="aml_drop_area">
-        <div class="aml-upload-icon">📄</div>
+        <div class="aml-upload-icon"><i data-icon="document" data-size="32"></i></div>
         <div class="h2">Analiza AML wyciągu bankowego</div>
         <div class="small muted">Przeciągnij pliki PDF lub kliknij aby wybrać (można wiele na raz)</div>
         <button class="btn" id="aml_upload_btn">Wybierz pliki</button>
@@ -337,11 +337,11 @@
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <!-- Layout buttons -->
             <div style="display:flex;gap:3px;background:var(--bg-secondary,#f1f5f9);border-radius:10px;padding:2px">
-              <button class="btn mini aml-graph-layout-btn" data-layout="cose" title="Układ siłowy (automatyczny)" style="border-radius:8px;padding:4px 8px;font-size:12px;background:var(--primary);color:#fff">⚡ Siłowy</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="circle" title="Układ kołowy" style="border-radius:8px;padding:4px 8px;font-size:12px">⭕ Okrąg</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="grid" title="Układ siatkowy" style="border-radius:8px;padding:4px 8px;font-size:12px">▦ Siatka</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="breadthfirst" title="Układ hierarchiczny (drzewiasty)" style="border-radius:8px;padding:4px 8px;font-size:12px">🌳 Drzewo</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="concentric" title="Układ koncentryczny (ryzyko)" style="border-radius:8px;padding:4px 8px;font-size:12px">◎ Koncentryczny</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="cose" title="Układ siłowy (automatyczny)" style="border-radius:8px;padding:4px 8px;font-size:12px;background:var(--primary);color:#fff">Siłowy</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="circle" title="Układ kołowy" style="border-radius:8px;padding:4px 8px;font-size:12px">Okrąg</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="grid" title="Układ siatkowy" style="border-radius:8px;padding:4px 8px;font-size:12px">Siatka</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="breadthfirst" title="Układ hierarchiczny (drzewiasty)" style="border-radius:8px;padding:4px 8px;font-size:12px">Drzewo</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="concentric" title="Układ koncentryczny (ryzyko)" style="border-radius:8px;padding:4px 8px;font-size:12px">Koncentryczny</button>
             </div>
             <!-- Risk filter -->
             <select class="input" id="aml_graph_risk_filter" style="padding:5px 8px;border-radius:10px;min-width:130px">
@@ -416,7 +416,7 @@
         </div>
         <div>
           <div class="label" data-i18n="analysis.prompt_icon">Ikona</div>
-          <input class="input" id="prompt_icon" placeholder="📋">
+          <input class="input" id="prompt_icon" placeholder="copy">
         </div>
       </div>
       <div class="grid" style="grid-template-columns:1fr 1fr">
@@ -436,9 +436,9 @@
       </div>
 
       <div class="an-dialog-actions">
-        <button class="btn secondary" value="cancel" data-i18n="btn.cancel">✕ Anuluj</button>
-        <button class="btn danger" id="prompt_delete_btn" type="button" style="display:none">🗑 Usuń</button>
-        <button class="btn" id="prompt_save_btn" value="ok">💾 Zapisz</button>
+        <button class="btn secondary" value="cancel" data-i18n="btn.cancel"><i data-icon="close" data-size="16"></i> Anuluj</button>
+        <button class="btn danger" id="prompt_delete_btn" type="button" style="display:none"><i data-icon="delete" data-size="14"></i> Usuń</button>
+        <button class="btn" id="prompt_save_btn" value="ok"><i data-icon="save" data-size="16"></i> Zapisz</button>
       </div>
     </form>
   </dialog>

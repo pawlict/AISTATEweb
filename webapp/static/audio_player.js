@@ -60,27 +60,21 @@
     container.innerHTML = "";
     container.className = "audio-player-bar";
 
-    var _ai = typeof aiIcon === "function" ? aiIcon : null;
     var html = '<div class="ap-controls">';
     // Skip back
     html += '<button class="ap-btn" data-act="skip-back" title="' + _t("player.back5") + '">';
-    html += _ai ? _ai("skip_back_5", 18) : '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 5a7 7 0 1 1-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M5 8V5h3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><text x="12" y="13.5" text-anchor="middle" font-size="6" font-weight="700" fill="currentColor" font-family="system-ui">5</text></svg>';
+    html += aiIcon("skip_back_5", 18);
     html += '</button>';
 
     // Play / Pause
     html += '<button class="ap-btn ap-btn-play" data-act="play-pause" title="' + _t("player.play") + '">';
-    if (_ai) {
-      html += '<span class="ap-icon-play">' + _ai("play", 30) + '</span>';
-      html += '<span class="ap-icon-pause" style="display:none">' + _ai("pause", 30) + '</span>';
-    } else {
-      html += '<svg class="ap-icon-play" viewBox="0 0 24 24" width="22" height="22"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg>';
-      html += '<svg class="ap-icon-pause" viewBox="0 0 24 24" width="22" height="22" style="display:none"><rect x="5" y="3" width="4" height="18" rx="1" fill="currentColor"/><rect x="15" y="3" width="4" height="18" rx="1" fill="currentColor"/></svg>';
-    }
+    html += '<span class="ap-icon-play">' + aiIcon("play", 30) + '</span>';
+    html += '<span class="ap-icon-pause" style="display:none">' + aiIcon("pause", 30) + '</span>';
     html += '</button>';
 
     // Skip forward
     html += '<button class="ap-btn" data-act="skip-fwd" title="' + _t("player.fwd5") + '">';
-    html += _ai ? _ai("skip_fwd_5", 18) : '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 5a7 7 0 1 0 7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M19 8V5h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><text x="12" y="13.5" text-anchor="middle" font-size="6" font-weight="700" fill="currentColor" font-family="system-ui">5</text></svg>';
+    html += aiIcon("skip_fwd_5", 18);
     html += '</button>';
 
     html += '</div>';

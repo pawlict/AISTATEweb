@@ -45,8 +45,8 @@ function setTaskUI(t){
 }
 
 function _pkgLine(info){
-  if(info && info.installed) return `✅ installed (${info.version || "unknown"})`;
-  return "❌ not installed";
+  if(info && info.installed) return aiIcon('success',12) + ` installed (${info.version || "unknown"})`;
+  return aiIcon('error',12) + " not installed";
 }
 
 function depsInstalled(){
@@ -70,17 +70,17 @@ async function refreshStatus(){
     const tc = _pkgLine(s.torch);
     const sm = _pkgLine(s.sacremoses);
 
-    if(deps) deps.textContent = `transformers: ${tf} • sentencepiece: ${sp} • torch: ${tc} • sacremoses: ${sm}`;
+    if(deps) deps.innerHTML = `transformers: ${tf} • sentencepiece: ${sp} • torch: ${tc} • sacremoses: ${sm}`;
 
     const ok = depsInstalled();
-    if(fast) fast.textContent = ok ? _tSafe('nllb.ready', '✅ gotowe') : _tSafe('nllb.needs_deps', '⚠️ zainstaluj zależności');
-    if(acc) acc.textContent = ok ? _tSafe('nllb.ready', '✅ gotowe') : _tSafe('nllb.needs_deps', '⚠️ zainstaluj zależności');
+    if(fast) fast.innerHTML = ok ? aiIcon('success',12) + ' ' + _tSafe('nllb.ready', 'gotowe') : aiIcon('warning',12) + ' ' + _tSafe('nllb.needs_deps', 'zainstaluj zależności');
+    if(acc) acc.innerHTML = ok ? aiIcon('success',12) + ' ' + _tSafe('nllb.ready', 'gotowe') : aiIcon('warning',12) + ' ' + _tSafe('nllb.needs_deps', 'zainstaluj zależności');
 
     // deps button
     const btn = qs("nllb_deps_install_btn");
     if(btn) btn.style.display = ok ? "none" : "inline-flex";
     const inline = qs("nllb_deps_inline");
-    if(inline) inline.textContent = ok ? _tSafe('nllb.deps_installed', '✅ zależności zainstalowane') : _tSafe('nllb.deps_hint', 'Kliknij „Instaluj”, aby doinstalować transformers/sentencepiece');
+    if(inline) inline.innerHTML = ok ? aiIcon('success',12) + ' ' + _tSafe('nllb.deps_installed', 'zależności zainstalowane') : _tSafe('nllb.deps_hint', 'Kliknij „Instaluj", aby doinstalować transformers/sentencepiece');
 
     return s;
   }catch(e){
@@ -152,12 +152,12 @@ function updateInstallButton(mode){
 
   if(cached){
     btn.style.display = 'none';
-    inline.textContent = _tSafe('nllb.model_installed_inline', '✅ zainstalowany');
+    inline.innerHTML = aiIcon('success',12) + ' ' + _tSafe('nllb.model_installed_inline', 'zainstalowany');
     return;
   }
 
   btn.style.display = 'inline-flex';
-  inline.textContent = okDeps ? _tSafe('nllb.model_not_installed_inline', '❌ niezainstalowany') : _tSafe('nllb.needs_deps_inline', '⚠️ zainstaluj zależności');
+  inline.innerHTML = okDeps ? aiIcon('error',12) + ' ' + _tSafe('nllb.model_not_installed_inline', 'niezainstalowany') : aiIcon('warning',12) + ' ' + _tSafe('nllb.needs_deps_inline', 'zainstaluj zależności');
 }
 
 function updateAllInstallButtons(){
@@ -246,7 +246,7 @@ function infoFor(modelId){
   // Fallback for unknown model id
   return {
     name: id || "—",
-    offline: vOr("nllb.value.offline_yes", "✅ Tak"),
+    offline: vOr("nllb.value.offline_yes", "Tak"),
     langs: vOr("nllb.value.langs.generic", "NLLB (wielojęzyczny)"),
     vram: vOr("nllb.value.vram.generic", "CPU OK • GPU: zależnie od rozmiaru"),
     ram: vOr("nllb.value.ram.generic", "16GB+"),
@@ -294,11 +294,11 @@ function renderInfo(mode, modelId){
 
   if(boxWarn){
     boxWarn.style.display = 'none';
-    boxWarn.textContent = '';
+    boxWarn.innerHTML = '';
 
     if(!depsInstalled()){
       boxWarn.style.display = 'block';
-      boxWarn.textContent = _tSafe('nllb.warn_deps','⚠️ Zainstaluj zależności (Transformers + SentencePiece) przed pobieraniem modeli.');
+      boxWarn.innerHTML = aiIcon('warning',14) + ' ' + _tSafe('nllb.warn_deps','Zainstaluj zależności (Transformers + SentencePiece) przed pobieraniem modeli.');
     }
   }
 }
