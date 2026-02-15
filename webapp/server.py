@@ -4285,6 +4285,120 @@ def api_admin_user_projects(request: Request) -> Any:
     }
 
 
+@app.post("/api/admin/delete-workspace/{workspace_id}")
+async def api_admin_delete_workspace(workspace_id: str, request: Request) -> Any:
+    """Delete a workspace and all its subproject data. Superadmin only."""
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    body = await request.json()
+    wipe_method = (body.get("wipe_method") or "none").strip().lower()
+
+    ws = WORKSPACE_STORE.get_workspace(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Delete subproject data directories
+    subs = WORKSPACE_STORE.list_subprojects(workspace_id)
+    deleted_dirs = []
+    for sp in subs:
+        data_dir = sp.get("data_dir", "")
+        if data_dir:
+            sp_path = (PROJECTS_DIR.parent / data_dir).resolve()
+            if sp_path.exists() and sp_path.is_dir() and PROJECTS_DIR.resolve() in sp_path.parents:
+                try:
+                    secure_delete_project_dir(sp_path, wipe_method)
+                    deleted_dirs.append(str(sp_path))
+                except Exception as e:
+                    app_log(f"admin delete-workspace: wipe failed for {sp_path}: {e}")
+
+    # Soft-delete the workspace in DB (cascading cleans members, invitations, activity)
+    WORKSPACE_STORE.delete_workspace(workspace_id)
+
+    if AUDIT_STORE:
+        AUDIT_STORE.log_event(
+            "workspace_deleted_admin",
+            user_id=user.user_id, username=user.username,
+            detail=f"workspace={workspace_id} name={ws.get('name','')} wipe={wipe_method}",
+            actor_id=user.user_id, actor_name=user.username,
+        )
+    app_log(f"Admin '{user.username}' deleted workspace '{ws.get('name','')}' (id={workspace_id}, wipe={wipe_method})")
+
+    return {"status": "ok", "deleted_dirs": deleted_dirs}
+
+
+@app.post("/api/admin/delete-subproject/{subproject_id}")
+async def api_admin_delete_subproject(subproject_id: str, request: Request) -> Any:
+    """Delete a single subproject and its data. Superadmin only."""
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    body = await request.json()
+    wipe_method = (body.get("wipe_method") or "none").strip().lower()
+
+    sp = WORKSPACE_STORE.get_subproject(subproject_id)
+    if sp is None:
+        raise HTTPException(status_code=404, detail="Subproject not found")
+
+    # Delete data directory
+    data_dir = sp.get("data_dir", "")
+    if data_dir:
+        sp_path = (PROJECTS_DIR.parent / data_dir).resolve()
+        if sp_path.exists() and sp_path.is_dir() and PROJECTS_DIR.resolve() in sp_path.parents:
+            try:
+                secure_delete_project_dir(sp_path, wipe_method)
+            except Exception as e:
+                app_log(f"admin delete-subproject: wipe failed for {sp_path}: {e}")
+
+    # Hard-delete from DB
+    WORKSPACE_STORE.delete_subproject(subproject_id)
+
+    if AUDIT_STORE:
+        AUDIT_STORE.log_event(
+            "subproject_deleted_admin",
+            user_id=user.user_id, username=user.username,
+            detail=f"subproject={subproject_id} name={sp.get('name','')} wipe={wipe_method}",
+            actor_id=user.user_id, actor_name=user.username,
+        )
+    app_log(f"Admin '{user.username}' deleted subproject '{sp.get('name','')}' (id={subproject_id}, wipe={wipe_method})")
+
+    return {"status": "ok"}
+
+
+@app.post("/api/admin/delete-file-project/{project_id}")
+async def api_admin_delete_file_project(project_id: str, request: Request) -> Any:
+    """Delete a file-based (orphan/legacy) project. Superadmin only."""
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    body = await request.json()
+    wipe_method = (body.get("wipe_method") or "none").strip().lower()
+
+    pdir = (PROJECTS_DIR / project_id).resolve()
+    root = PROJECTS_DIR.resolve()
+    if root not in pdir.parents or not pdir.exists() or not pdir.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    try:
+        secure_delete_project_dir(pdir, wipe_method)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete error: {e}")
+
+    if AUDIT_STORE:
+        AUDIT_STORE.log_event(
+            "project_deleted_admin",
+            user_id=user.user_id, username=user.username,
+            detail=f"file_project={project_id} wipe={wipe_method}",
+            actor_id=user.user_id, actor_name=user.username,
+        )
+    app_log(f"Admin '{user.username}' deleted file-project '{project_id}' (wipe={wipe_method})")
+
+    return {"status": "ok"}
+
+
 @app.get("/api/projects")
 def api_list_projects(request: Request) -> Any:
     multiuser = getattr(request.state, "multiuser", False)
