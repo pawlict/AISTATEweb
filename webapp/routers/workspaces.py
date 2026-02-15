@@ -1,6 +1,10 @@
 """API router for project workspaces, subprojects, members, invitations.
 
 Prefix: /api/workspaces
+
+NOTE: Static paths (like /invitations/mine) MUST be registered before
+parametric paths (/{workspace_id}) to avoid FastAPI matching "invitations"
+as a workspace_id.
 """
 from __future__ import annotations
 
@@ -39,6 +43,35 @@ def _uname(request: Request) -> str:
 def _is_admin(request: Request) -> bool:
     user = getattr(request.state, "user", None)
     return bool(user and (user.is_admin or user.is_superadmin))
+
+
+# =====================================================================
+# INVITATIONS — must be before /{workspace_id} to avoid route conflict
+# =====================================================================
+
+@router.get("/invitations/mine")
+def my_invitations(request: Request):
+    uid = _uid(request)
+    invitations = _STORE.list_invitations_for_user(uid)
+    return JSONResponse({"status": "ok", "invitations": invitations})
+
+
+@router.post("/invitations/{invitation_id}/accept")
+def accept_invitation(request: Request, invitation_id: str):
+    uid = _uid(request)
+    ok = _STORE.respond_invitation(invitation_id, uid, accept=True)
+    if not ok:
+        return JSONResponse({"status": "error", "message": "Invitation not found or already responded"}, 404)
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/invitations/{invitation_id}/reject")
+def reject_invitation(request: Request, invitation_id: str):
+    uid = _uid(request)
+    ok = _STORE.respond_invitation(invitation_id, uid, accept=False)
+    if not ok:
+        return JSONResponse({"status": "error", "message": "Invitation not found or already responded"}, 404)
+    return JSONResponse({"status": "ok"})
 
 
 # =====================================================================
@@ -279,15 +312,8 @@ def remove_member(request: Request, workspace_id: str, member_user_id: str):
 
 
 # =====================================================================
-# INVITATIONS
+# INVITE (POST under workspace path — no conflict with /{workspace_id})
 # =====================================================================
-
-@router.get("/invitations/mine")
-def my_invitations(request: Request):
-    uid = _uid(request)
-    invitations = _STORE.list_invitations_for_user(uid)
-    return JSONResponse({"status": "ok", "invitations": invitations})
-
 
 @router.post("/{workspace_id}/invite")
 async def invite_user(request: Request, workspace_id: str):
@@ -316,24 +342,6 @@ async def invite_user(request: Request, workspace_id: str):
     _STORE.log_activity(workspace_id, None, uid, _uname(request), "invitation_sent",
                         {"invitee": username, "role": role})
     return JSONResponse({"status": "ok", "invitation": inv})
-
-
-@router.post("/invitations/{invitation_id}/accept")
-def accept_invitation(request: Request, invitation_id: str):
-    uid = _uid(request)
-    ok = _STORE.respond_invitation(invitation_id, uid, accept=True)
-    if not ok:
-        return JSONResponse({"status": "error", "message": "Invitation not found or already responded"}, 404)
-    return JSONResponse({"status": "ok"})
-
-
-@router.post("/invitations/{invitation_id}/reject")
-def reject_invitation(request: Request, invitation_id: str):
-    uid = _uid(request)
-    ok = _STORE.respond_invitation(invitation_id, uid, accept=False)
-    if not ok:
-        return JSONResponse({"status": "error", "message": "Invitation not found or already responded"}, 404)
-    return JSONResponse({"status": "ok"})
 
 
 # =====================================================================
