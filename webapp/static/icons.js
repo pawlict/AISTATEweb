@@ -487,7 +487,7 @@
   function _injectDataIcons(root) {
     _ensureDefs();
     root = root || document;
-    var els = root.querySelectorAll("[data-icon]:not([data-icon-done])");
+    var els = root.querySelectorAll("i[data-icon]:not([data-icon-done])");
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
       var name = el.getAttribute("data-icon");
