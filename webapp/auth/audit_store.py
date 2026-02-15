@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
-import threading
+import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+log = logging.getLogger("aistate.auth.audit")
+
 
 class AuditStore:
-    """Thread-safe JSON-based audit log for authentication events.
+    """SQLite-backed audit log for authentication events.
 
     Events: login, login_failed, logout, password_changed, password_reset,
             account_locked, account_unlocked, user_created, user_banned,
@@ -18,29 +20,13 @@ class AuditStore:
     """
 
     def __init__(self, config_dir: Path, file_logger: Any = None) -> None:
-        self._path = config_dir / "audit_log.json"
-        self._lock = threading.Lock()
+        self._config_dir = config_dir
+        self._json_path = config_dir / "audit_log.json"
         self._file_logger = file_logger
 
-    def _read(self) -> List[Dict[str, Any]]:
-        try:
-            data = json.loads(self._path.read_text(encoding="utf-8"))
-            if isinstance(data, list):
-                return data
-            return []
-        except FileNotFoundError:
-            return []
-        except Exception:
-            return []
-
-    def _write(self, data: List[Dict[str, Any]]) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        # Keep max 5000 entries to prevent unbounded growth
-        if len(data) > 5000:
-            data = data[-5000:]
-        tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(self._path)
+    def _conn(self):
+        from backend.db.engine import get_conn
+        return get_conn()
 
     def log_event(
         self,
@@ -55,28 +41,21 @@ class AuditStore:
         fingerprint: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Append an audit event."""
-        entry: Dict[str, Any] = {
-            "id": str(uuid.uuid4()),
-            "timestamp": datetime.now().isoformat(),
-            "event": event,
-            "user_id": user_id,
-            "username": username,
-            "ip": ip,
-            "detail": detail,
-        }
-        if actor_id:
-            entry["actor_id"] = actor_id
-            entry["actor_name"] = actor_name
-        if fingerprint:
-            entry["fingerprint"] = fingerprint
-        with self._lock:
-            data = self._read()
-            data.append(entry)
-            self._write(data)
+        entry_id = str(uuid.uuid4())
+        ts = datetime.now().isoformat()
+        fp_str = json.dumps(fingerprint, ensure_ascii=False) if fingerprint else ""
+
+        with self._conn() as conn:
+            conn.execute(
+                """INSERT INTO auth_audit_log
+                   (id, timestamp, event, user_id, username, ip, detail, actor_id, actor_name, fingerprint)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (entry_id, ts, event, user_id, username, ip, detail, actor_id, actor_name, fp_str),
+            )
+
         # Also write to file-based log (backend/logs/)
         if self._file_logger:
             try:
-                ts = entry["timestamp"]
                 parts = [f"event={event}"]
                 if username:
                     parts.append(f"user={username}")
@@ -89,8 +68,8 @@ class AuditStore:
                 if detail:
                     parts.append(f"detail={detail}")
                 if fingerprint:
-                    fp_str = " ".join(f"{k}={v}" for k, v in fingerprint.items() if v)
-                    parts.append(f"device=[{fp_str}]")
+                    fp_parts = " ".join(f"{k}={v}" for k, v in fingerprint.items() if v)
+                    parts.append(f"device=[{fp_parts}]")
                 self._file_logger.write_line(f"{ts} | {' '.join(parts)}")
             except Exception:
                 pass
@@ -104,26 +83,123 @@ class AuditStore:
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """Return audit events (newest first), optionally filtered."""
-        with self._lock:
-            data = self._read()
-        # Filter
+        conditions = []
+        params: list = []
+
         if user_id:
-            data = [e for e in data if e.get("user_id") == user_id]
+            conditions.append("user_id = ?")
+            params.append(user_id)
         if event_type:
-            data = [e for e in data if e.get("event") == event_type]
-        # Sort newest first
-        data.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
-        return data[offset : offset + limit]
+            conditions.append("event = ?")
+            params.append(event_type)
+
+        where = ""
+        if conditions:
+            where = "WHERE " + " AND ".join(conditions)
+
+        params.extend([limit, offset])
+
+        with self._conn() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM auth_audit_log {where} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                tuple(params),
+            ).fetchall()
+
+        result = []
+        for row in rows:
+            d = dict(row)
+            # Parse fingerprint back to dict if present
+            fp = d.get("fingerprint", "")
+            if fp:
+                try:
+                    d["fingerprint"] = json.loads(fp)
+                except (json.JSONDecodeError, TypeError):
+                    d["fingerprint"] = {}
+            else:
+                d.pop("fingerprint", None)
+            result.append(d)
+        return result
 
     def count_events(self, *, user_id: str = "", event_type: str = "") -> int:
-        with self._lock:
-            data = self._read()
+        conditions = []
+        params: list = []
+
         if user_id:
-            data = [e for e in data if e.get("user_id") == user_id]
+            conditions.append("user_id = ?")
+            params.append(user_id)
         if event_type:
-            data = [e for e in data if e.get("event") == event_type]
-        return len(data)
+            conditions.append("event = ?")
+            params.append(event_type)
+
+        where = ""
+        if conditions:
+            where = "WHERE " + " AND ".join(conditions)
+
+        with self._conn() as conn:
+            row = conn.execute(
+                f"SELECT COUNT(*) as cnt FROM auth_audit_log {where}",
+                tuple(params),
+            ).fetchone()
+            return row["cnt"] if row else 0
 
     def get_user_events(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Convenience: events for a single user (for their profile view)."""
         return self.get_events(user_id=user_id, limit=limit)
+
+    # ---- JSON → SQLite migration ----
+
+    def migrate_from_json(self) -> int:
+        """Import audit events from legacy audit_log.json if it exists."""
+        if not self._json_path.exists():
+            return 0
+
+        try:
+            data = json.loads(self._json_path.read_text(encoding="utf-8"))
+            if not isinstance(data, list):
+                return 0
+        except Exception:
+            return 0
+
+        if not data:
+            return 0
+
+        migrated = 0
+        with self._conn() as conn:
+            for entry in data:
+                entry_id = entry.get("id", str(uuid.uuid4()))
+
+                # Skip if already exists
+                existing = conn.execute(
+                    "SELECT id FROM auth_audit_log WHERE id = ?", (entry_id,)
+                ).fetchone()
+                if existing:
+                    continue
+
+                fp = entry.get("fingerprint")
+                fp_str = json.dumps(fp, ensure_ascii=False) if fp else ""
+
+                conn.execute(
+                    """INSERT INTO auth_audit_log
+                       (id, timestamp, event, user_id, username, ip, detail, actor_id, actor_name, fingerprint)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        entry_id,
+                        entry.get("timestamp", ""),
+                        entry.get("event", ""),
+                        entry.get("user_id", ""),
+                        entry.get("username", ""),
+                        entry.get("ip", ""),
+                        entry.get("detail", ""),
+                        entry.get("actor_id", ""),
+                        entry.get("actor_name", ""),
+                        fp_str,
+                    ),
+                )
+                migrated += 1
+
+        if migrated > 0:
+            backup = self._json_path.with_suffix(".json.bak")
+            self._json_path.rename(backup)
+            log.info("Migrated %d audit events from JSON; old file renamed to %s", migrated, backup.name)
+
+        return migrated
