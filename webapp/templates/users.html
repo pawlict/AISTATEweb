@@ -204,11 +204,12 @@
           <span class="en">Passwords on this list are always blocked regardless of policy level.</span>
         </p>
         <!-- Add form -->
-        <div style="display:flex;gap:.3rem;margin-bottom:.5rem;">
+        <div style="display:flex;gap:.3rem;margin-bottom:.3rem;">
           <input type="text" id="blNewPassword" placeholder="Nowe hasło do zablokowania..." style="flex:1;font-size:.8rem;padding:.3rem .5rem;border-radius:5px;border:1px solid var(--border,#ddd);"/>
           <button class="btn" id="blAddBtn" style="font-size:.76rem;padding:.3rem .6rem;" onclick="addToBlacklist()">+ Dodaj <span class="en">Add</span></button>
         </div>
-        <!-- List container -->
+        <div id="blFeedback" style="font-size:.74rem;min-height:1.1em;margin-bottom:.3rem;"></div>
+        <!-- List container (resizable like audit table) -->
         <div id="blList" class="bl-list"></div>
       </div>
     </div>
@@ -323,7 +324,7 @@
   .ctx-menu-item:first-of-type { border-radius:0; }
   .ctx-menu-item:last-of-type { border-radius:0 0 10px 10px; }
   .ctx-icon { font-size:.9rem; width:1.2em; text-align:center; }
-  .bl-list { max-height:250px; overflow-y:auto; border:1px solid var(--border,#eee); border-radius:6px; padding:.3rem; }
+  .bl-list { max-height:calc(20 * 1.65em + .6rem); overflow-y:auto; border:1px solid var(--border,#eee); border-radius:6px; padding:.3rem; resize:vertical; min-height:80px; }
   .bl-item { display:flex; align-items:center; justify-content:space-between; padding:.2rem .4rem; font-size:.78rem; border-bottom:1px solid var(--border,#f0f0f0); font-family:monospace; }
   .bl-item:last-child { border-bottom:none; }
   .bl-item:hover { background:rgba(0,0,0,.02); }

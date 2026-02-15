@@ -9,7 +9,7 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from webapp.auth.passwords import hash_password, verify_password, validate_password_strength, get_blacklist
+from webapp.auth.passwords import hash_password, verify_password, validate_password_strength, get_blacklist, _COMMON_PASSWORDS
 from webapp.auth.user_store import UserStore, UserRecord
 from webapp.auth.session_store import SessionStore
 from webapp.auth.deployment_store import DeploymentStore
@@ -611,8 +611,15 @@ async def add_to_blacklist(request: Request) -> JSONResponse:
     if not pw or not isinstance(pw, str) or not pw.strip():
         return JSONResponse({"status": "error", "message": "Password required"}, status_code=400)
 
+    # Duplicate check – distinguish builtin vs custom
+    lower = pw.lower().strip()
+    if lower in _COMMON_PASSWORDS:
+        return JSONResponse({"status": "error", "message": "duplicate_builtin"}, status_code=409)
+
     ok = bl.add(pw)
-    return JSONResponse({"status": "ok", "added": 1 if ok else 0})
+    if not ok:
+        return JSONResponse({"status": "error", "message": "duplicate_custom"}, status_code=409)
+    return JSONResponse({"status": "ok", "added": 1})
 
 
 @router.delete("/password-blacklist")
