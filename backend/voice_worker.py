@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -30,6 +31,10 @@ def main() -> None:
     # Diagnostics: show which interpreter is running the worker
     print(f"WORKER sys.executable: {sys.executable}", file=sys.stderr, flush=True)
     print(f"WORKER sys.path[0]: {sys.path[0] if sys.path else ''}", file=sys.stderr, flush=True)
+
+    if shutil.which("ffmpeg") is None:
+        print("ERROR: ffmpeg not found. Install: sudo apt install -y ffmpeg", file=sys.stderr, flush=True)
+        raise SystemExit(2)
 
     # Heavy deps inside worker process
     from backend.legacy_adapter import diarize_voice_asr_pyannote, diarize_voice_asr_nemo_diar
