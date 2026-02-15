@@ -435,9 +435,161 @@ document.getElementById('btnDeleteWorkspace').addEventListener('click', async ()
   showToast('Projekt usunięty','info');
 });
 
-document.getElementById('btnLegacyView').addEventListener('click', () => {
-  window.location.href = '/new-project';
-});
+// =====================================================================
+// IMPORT PROJECT (.aistate)
+// =====================================================================
+
+(function(){
+  const importBtn = document.getElementById('btnImportProject');
+  const importInput = document.getElementById('importAistateFile');
+  if(!importBtn || !importInput) return;
+
+  importBtn.addEventListener('click', () => importInput.click());
+
+  importInput.addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!f) return;
+
+    const name = (f.name || '').toLowerCase();
+    if(!name.endsWith('.aistate')){
+      showToast('Wybierz plik .aistate', 'error');
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append('file', f);
+
+    try {
+      const r = await fetch('/api/projects/import', {method:'POST', body: fd});
+      const j = await r.json();
+      if(!r.ok) throw new Error(j.message || j.detail || 'Import failed');
+      showToast('Projekt zaimportowany', 'success');
+      // If inside a workspace, reload detail; otherwise reload list
+      if(_currentWs){
+        openWorkspace(_currentWs.id);
+      } else {
+        loadWorkspaces();
+      }
+    } catch(err){
+      console.error(err);
+      showToast(err.message || 'Błąd importu', 'error');
+    }
+  });
+})();
+
+// =====================================================================
+// DELETE SUBPROJECT (with wipe options)
+// =====================================================================
+
+(function(){
+  const btn = document.getElementById('btnDeleteSubproject');
+  const select = document.getElementById('delSubSelect');
+  const wipeSelect = document.getElementById('delSubWipeMethod');
+  const confirmBtn = document.getElementById('delSubConfirm');
+  if(!btn) return;
+
+  btn.addEventListener('click', () => {
+    if(!_currentWs) return;
+    const subs = _currentWs.subprojects || [];
+    select.innerHTML = '';
+    if(!subs.length){
+      showToast('Brak podprojektów do usunięcia', 'warning');
+      return;
+    }
+    subs.forEach(sp => {
+      const opt = document.createElement('option');
+      opt.value = sp.id;
+      opt.dataset.dir = sp.data_dir || '';
+      opt.textContent = (TYPE_ICONS[sp.subproject_type]||'') + ' ' + sp.name;
+      select.appendChild(opt);
+    });
+    showModal('modalDeleteSubproject');
+  });
+
+  if(confirmBtn) confirmBtn.addEventListener('click', async () => {
+    if(!_currentWs || !select.value) return;
+    const spId = select.value;
+    const sp = (_currentWs.subprojects||[]).find(s => s.id === spId);
+    const wipe = wipeSelect ? wipeSelect.value : 'none';
+    const dir = sp && sp.data_dir ? sp.data_dir.replace('projects/','') : '';
+
+    if(!confirm('Na pewno usunąć podprojekt "' + (sp?sp.name:spId) + '"?')) return;
+
+    try {
+      // Delete underlying project data with wipe if data_dir exists
+      if(dir){
+        await fetch('/api/projects/' + encodeURIComponent(dir) + '?wipe_method=' + encodeURIComponent(wipe), {method:'DELETE'});
+      }
+      // Delete subproject record from workspace
+      await apiFetch(API + '/' + _currentWs.id + '/subprojects/' + spId, {method:'DELETE'});
+      hideModal('modalDeleteSubproject');
+      showToast('Podprojekt usunięty', 'success');
+      openWorkspace(_currentWs.id);
+    } catch(err){
+      console.error(err);
+      showToast(err.message || 'Błąd usuwania', 'error');
+    }
+  });
+})();
+
+// =====================================================================
+// EXPORT SUBPROJECT (.aistate)
+// =====================================================================
+
+(function(){
+  const btn = document.getElementById('btnExportSubproject');
+  const select = document.getElementById('expSubSelect');
+  const confirmBtn = document.getElementById('expSubConfirm');
+  if(!btn) return;
+
+  btn.addEventListener('click', () => {
+    if(!_currentWs) return;
+    const subs = _currentWs.subprojects || [];
+    select.innerHTML = '';
+    if(!subs.length){
+      showToast('Brak podprojektów do eksportu', 'warning');
+      return;
+    }
+    subs.forEach(sp => {
+      const opt = document.createElement('option');
+      opt.value = sp.id;
+      opt.dataset.dir = sp.data_dir || '';
+      opt.dataset.name = sp.name || '';
+      opt.textContent = (TYPE_ICONS[sp.subproject_type]||'') + ' ' + sp.name;
+      select.appendChild(opt);
+    });
+    showModal('modalExportSubproject');
+  });
+
+  if(confirmBtn) confirmBtn.addEventListener('click', async () => {
+    if(!select.value) return;
+    const opt = select.options[select.selectedIndex];
+    const dir = (opt.dataset.dir || '').replace('projects/','');
+    const fname = (opt.dataset.name || dir || 'project').replace(/[\\\/:*?"<>|]+/g,'_').trim() || 'project';
+
+    if(!dir){
+      showToast('Podprojekt nie ma katalogu danych', 'warning');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/projects/' + encodeURIComponent(dir) + '/export.aistate');
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname + '.aistate';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      hideModal('modalExportSubproject');
+      showToast('Eksport zakończony', 'success');
+    } catch(err){
+      console.error(err);
+      showToast(err.message || 'Błąd eksportu', 'error');
+    }
+  });
+})();
 
 // =====================================================================
 // URL-BASED NAVIGATION (handle /projects/{id} on page load)
