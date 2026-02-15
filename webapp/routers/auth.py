@@ -9,7 +9,7 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from webapp.auth.passwords import hash_password, verify_password, validate_password_strength
+from webapp.auth.passwords import hash_password, verify_password, validate_password_strength, get_blacklist
 from webapp.auth.user_store import UserStore, UserRecord
 from webapp.auth.session_store import SessionStore
 from webapp.auth.deployment_store import DeploymentStore
@@ -561,3 +561,81 @@ async def get_password_policy(request: Request) -> JSONResponse:
     else:
         rules["min_length"] = 6
     return JSONResponse({"status": "ok", **rules})
+
+
+# ---------------------------------------------------------------------------
+# Password blacklist management (admin-only)
+# ---------------------------------------------------------------------------
+
+@router.get("/password-blacklist")
+async def get_password_blacklist(request: Request) -> JSONResponse:
+    """Admin endpoint: return all blacklisted passwords (built-in + custom)."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
+    if not user.is_admin and not user.is_superadmin:
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+
+    bl = get_blacklist()
+    if bl is None:
+        return JSONResponse({"status": "ok", "builtin": [], "custom": []})
+
+    data = bl.get_all()
+    return JSONResponse({"status": "ok", **data})
+
+
+@router.post("/password-blacklist")
+async def add_to_blacklist(request: Request) -> JSONResponse:
+    """Admin endpoint: add password(s) to custom blacklist."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
+    if not user.is_admin and not user.is_superadmin:
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+
+    bl = get_blacklist()
+    if bl is None:
+        return JSONResponse({"status": "error", "message": "Blacklist not initialised"}, status_code=500)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    passwords = body.get("passwords")
+    if isinstance(passwords, list):
+        added = bl.add_bulk([str(p) for p in passwords if p])
+        return JSONResponse({"status": "ok", "added": added})
+
+    pw = body.get("password", "")
+    if not pw or not isinstance(pw, str) or not pw.strip():
+        return JSONResponse({"status": "error", "message": "Password required"}, status_code=400)
+
+    ok = bl.add(pw)
+    return JSONResponse({"status": "ok", "added": 1 if ok else 0})
+
+
+@router.delete("/password-blacklist")
+async def remove_from_blacklist(request: Request) -> JSONResponse:
+    """Admin endpoint: remove a password from the custom blacklist."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
+    if not user.is_admin and not user.is_superadmin:
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+
+    bl = get_blacklist()
+    if bl is None:
+        return JSONResponse({"status": "error", "message": "Blacklist not initialised"}, status_code=500)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    pw = body.get("password", "")
+    if not pw or not isinstance(pw, str):
+        return JSONResponse({"status": "error", "message": "Password required"}, status_code=400)
+
+    ok = bl.remove(pw)
+    return JSONResponse({"status": "ok", "removed": 1 if ok else 0})

@@ -144,10 +144,26 @@
             <option value="strong">Silny (12 + specjalne) <span class="en">Strong</span></option>
           </select>
         </div>
-        <p style="font-size:.72rem;color:var(--muted,#888);margin:0;">
-          Zawsze blokowane: popularne hasła (top 100)
-          <span class="en">Always blocked: common passwords (top 100)</span>
-        </p>
+
+        <!-- Blacklist toggle -->
+        <div style="margin-top:.6rem;">
+          <button type="button" id="blToggle" class="bl-toggle" onclick="toggleBlacklist()">
+            <span id="blArrow" class="bl-arrow">&#9654;</span>
+            Czarna lista haseł <span class="en">Password blacklist</span>
+            (<span id="blCount">...</span>)
+          </button>
+
+          <div id="blPanel" style="display:none;margin-top:.5rem;">
+            <!-- Add form -->
+            <div style="display:flex;gap:.3rem;margin-bottom:.5rem;">
+              <input type="text" id="blNewPassword" placeholder="Nowe hasło do zablokowania..." style="flex:1;font-size:.8rem;padding:.3rem .5rem;border-radius:5px;border:1px solid var(--border,#ddd);"/>
+              <button class="btn" id="blAddBtn" style="font-size:.76rem;padding:.3rem .6rem;" onclick="addToBlacklist()">+ Dodaj <span class="en">Add</span></button>
+            </div>
+
+            <!-- List container -->
+            <div id="blList" class="bl-list"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Password Expiry -->
@@ -252,6 +268,19 @@
   .audit-table-scroll { max-height: calc(30 * 2.1em + 2.4em); overflow-y: auto; border: 1px solid var(--border, #eee); border-radius: 6px; }
   .audit-table-scroll .data-table { border-collapse: collapse; }
   .audit-table-scroll thead th { position: sticky; top: 0; background: var(--card-bg, #f8f9fa); z-index: 2; }
+  /* Password blacklist panel */
+  .bl-toggle { background:none; border:none; cursor:pointer; font-size:.76rem; color:var(--accent,#4a6cf7); padding:0; display:inline-flex; align-items:center; gap:.3rem; }
+  .bl-toggle:hover { text-decoration:underline; }
+  .bl-arrow { font-size:.6rem; transition:transform .2s; display:inline-block; }
+  .bl-arrow.open { transform:rotate(90deg); }
+  .bl-list { max-height:250px; overflow-y:auto; border:1px solid var(--border,#eee); border-radius:6px; padding:.3rem; }
+  .bl-item { display:flex; align-items:center; justify-content:space-between; padding:.2rem .4rem; font-size:.78rem; border-bottom:1px solid var(--border,#f0f0f0); font-family:monospace; }
+  .bl-item:last-child { border-bottom:none; }
+  .bl-item:hover { background:rgba(0,0,0,.02); }
+  .bl-item .bl-badge { font-size:.6rem; color:var(--muted,#999); background:var(--border,#eee); padding:.05rem .3rem; border-radius:3px; margin-left:.4rem; font-family:sans-serif; }
+  .bl-item .bl-del { background:none; border:none; color:#e74c3c; cursor:pointer; font-size:.78rem; padding:0 .2rem; opacity:.6; }
+  .bl-item .bl-del:hover { opacity:1; }
+  .bl-empty { font-size:.74rem; color:var(--muted,#999); text-align:center; padding:.5rem; }
   .role-matrix-card { background: var(--card-bg, #fff); border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,.05); border: 1px solid var(--border, #e0e3e8); }
   /* CSS Grid role matrix */
   .rm-grid { display: grid; font-size: .72rem; gap: 0; border: 1px solid var(--border, #e0e3e8); border-radius: 6px; overflow: hidden; }
