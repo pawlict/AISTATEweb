@@ -102,12 +102,14 @@ async def list_roles(request: Request) -> JSONResponse:
     err = _require_access_guard(request)
     if err:
         return err
+    caller = getattr(request.state, "user", None)
     return JSONResponse({
         "status": "ok",
         "user_roles": ALL_USER_ROLES,
         "admin_roles": ALL_ADMIN_ROLES,
         "role_modules": {r: mods for r, mods in ROLE_MODULES.items()},
         "admin_role_modules": {r: mods for r, mods in ADMIN_ROLE_MODULES.items()},
+        "caller_is_superadmin": bool(caller and caller.is_superadmin),
     })
 
 
@@ -149,6 +151,13 @@ async def create_user(request: Request) -> JSONResponse:
 
     caller = getattr(request.state, "user", None)
 
+    # Only an existing superadmin can create another superadmin
+    is_superadmin = bool(body.get("is_superadmin", False))
+    if is_superadmin:
+        if not caller or not caller.is_superadmin:
+            return JSONResponse({"status": "error", "message": "Only Główny Opiekun can create another Główny Opiekun"}, status_code=403)
+        is_admin = True  # superadmin implies admin
+
     try:
         rec = UserRecord(
             username=username,
@@ -157,7 +166,7 @@ async def create_user(request: Request) -> JSONResponse:
             role=role if not is_admin else None,
             is_admin=is_admin,
             admin_roles=admin_roles if is_admin else [],
-            is_superadmin=False,
+            is_superadmin=is_superadmin,
             created_by=caller.user_id if caller else "system",
             password_changed_at=datetime.now().isoformat(),
         )
@@ -211,6 +220,19 @@ async def update_user(user_id: str, request: Request) -> JSONResponse:
             if ar not in ALL_ADMIN_ROLES:
                 return JSONResponse({"status": "error", "message": f"Invalid admin role: {ar}"}, status_code=400)
         updates["admin_roles"] = body["admin_roles"]
+    if "is_superadmin" in body:
+        new_sa = bool(body["is_superadmin"])
+        if not caller or not caller.is_superadmin:
+            return JSONResponse({"status": "error", "message": "Only Główny Opiekun can change superadmin status"}, status_code=403)
+        # Prevent demoting the last superadmin
+        if existing.is_superadmin and not new_sa:
+            all_users = _user_store.list_users()
+            sa_count = sum(1 for u in all_users if u.is_superadmin)
+            if sa_count <= 1:
+                return JSONResponse({"status": "error", "message": "Nie można usunąć ostatniego Głównego Opiekuna / Cannot remove the last superadmin"}, status_code=400)
+        updates["is_superadmin"] = new_sa
+        if new_sa:
+            updates["is_admin"] = True
     if "password" in body and body["password"]:
         if len(body["password"]) < 6:
             return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
@@ -242,12 +264,18 @@ async def delete_user(user_id: str, request: Request) -> JSONResponse:
     if existing is None:
         return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
 
-    if existing.is_superadmin:
-        return JSONResponse({"status": "error", "message": "Cannot delete Główny Opiekun"}, status_code=403)
-
     caller = getattr(request.state, "user", None)
     if caller and caller.user_id == user_id:
         return JSONResponse({"status": "error", "message": "Cannot delete yourself"}, status_code=403)
+
+    if existing.is_superadmin:
+        if not caller or not caller.is_superadmin:
+            return JSONResponse({"status": "error", "message": "Cannot delete Główny Opiekun"}, status_code=403)
+        # Prevent deleting the last superadmin
+        all_users = _user_store.list_users()
+        sa_count = sum(1 for u in all_users if u.is_superadmin)
+        if sa_count <= 1:
+            return JSONResponse({"status": "error", "message": "Nie można usunąć ostatniego Głównego Opiekuna / Cannot delete the last superadmin"}, status_code=403)
 
     _session_store.delete_user_sessions(user_id)
     _user_store.delete_user(user_id)
@@ -351,6 +379,13 @@ async def approve_user(user_id: str, request: Request) -> JSONResponse:
     role = body.get("role")
     is_admin = bool(body.get("is_admin", False))
     admin_roles = body.get("admin_roles") or []
+    is_superadmin = bool(body.get("is_superadmin", False))
+
+    if is_superadmin:
+        caller = getattr(request.state, "user", None)
+        if not caller or not caller.is_superadmin:
+            return JSONResponse({"status": "error", "message": "Only Główny Opiekun can grant superadmin"}, status_code=403)
+        is_admin = True
 
     if not is_admin and (not role or role not in ALL_USER_ROLES):
         return JSONResponse({"status": "error", "message": f"Invalid role: {role}"}, status_code=400)
@@ -365,6 +400,7 @@ async def approve_user(user_id: str, request: Request) -> JSONResponse:
         "role": role if not is_admin else None,
         "is_admin": is_admin,
         "admin_roles": admin_roles if is_admin else [],
+        "is_superadmin": is_superadmin,
     }
 
     updated = _user_store.update_user(user_id, updates)
