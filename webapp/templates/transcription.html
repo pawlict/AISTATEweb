@@ -334,6 +334,11 @@
 
     <div class="analysis-toolbar-right">
 
+      <!-- Add audio file -->
+      <input type="file" id="tr_file_input" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.mp4,.aac" style="display:none"/>
+      <button class="btn secondary" id="tr_add_file_btn" title="Dodaj plik audio do projektu">📁 <span data-i18n="btn.add_file">Dodaj plik</span></button>
+      <span class="small" id="tr_file_name" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.8"></span>
+
       <!-- Transcribe -->
       <button class="btn" id="tr_btn" data-i18n="btn.transcribe">Transcribe</button>
 
@@ -1824,6 +1829,57 @@ function trBindSoundDetectionUI(){
   });
 }
 
+// ========== Audio file upload ==========
+document.getElementById('tr_add_file_btn').addEventListener('click', () => {
+  document.getElementById('tr_file_input').click();
+});
+
+document.getElementById('tr_file_input').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+
+  const pid = AISTATE.projectId;
+  if(!pid){
+    showToast('Brak aktywnego projektu. Utwórz projekt w zakładce Projekty.', 'warning');
+    e.target.value = '';
+    return;
+  }
+
+  const btn = document.getElementById('tr_add_file_btn');
+  const origHtml = btn.innerHTML;
+  btn.innerHTML = '⏳ Wgrywam…';
+  btn.disabled = true;
+
+  try {
+    const fd = new FormData();
+    fd.append('audio', file);
+    const res = await api(`/api/projects/${pid}/upload_audio`, {method:'POST', body: fd});
+    AISTATE.audioFile = res.audio_file || file.name;
+    document.getElementById('tr_file_name').textContent = AISTATE.audioFile;
+    await refreshCurrentProjectInfo();
+
+    // Re-init audio player with the new file
+    TR.audioUrl = trAudioUrl();
+    if(TR.audioUrl && window._trPlayer){
+      window._trPlayer.init();
+      if(window._trPlayer.audio) TR.audio = window._trPlayer.audio;
+    }
+
+    // Enable transcribe button
+    const trBtn = document.getElementById('tr_btn');
+    const modelEl = document.getElementById('tr_model');
+    if(trBtn) trBtn.disabled = !(AISTATE.projectId && AISTATE.audioFile && modelEl && modelEl.value);
+
+    showToast('Plik audio wgrany: ' + AISTATE.audioFile, 'success');
+  } catch(err) {
+    showToast('Błąd wgrywania: ' + (err.message || err), 'error');
+  } finally {
+    btn.innerHTML = origHtml;
+    btn.disabled = false;
+    e.target.value = '';
+  }
+});
+
 // Initialize
 (async()=>{
   await refreshCurrentProjectInfo();
@@ -1834,7 +1890,11 @@ function trBindSoundDetectionUI(){
   const btn = document.getElementById("tr_btn");
   const modelEl = document.getElementById("tr_model");
   if(btn) btn.disabled = !(AISTATE.projectId && AISTATE.audioFile && modelEl && modelEl.value);
-  
+
+  // Show current audio file name
+  const fnEl = document.getElementById("tr_file_name");
+  if(fnEl && AISTATE.audioFile) fnEl.textContent = AISTATE.audioFile;
+
   if(AISTATE.projectId){
     await trLoadNotesFromProject();
     await trLoadSoundEvents();

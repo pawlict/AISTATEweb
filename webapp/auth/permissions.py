@@ -14,7 +14,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     },
     "diarization": {
         "pages": ["/diarization"],
-        "api_prefixes": ["/api/diarize"],
+        "api_prefixes": ["/api/diarize", "/api/projects/"],
         "api_keywords": ["diarized", "speaker_map", "asr/models_state", "asr/installed"],
     },
     "translation": {
