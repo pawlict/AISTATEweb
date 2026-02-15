@@ -463,6 +463,10 @@
     <div class="field" style="margin-bottom:.8rem;">
       <label for="uPassword">Hasło (min. 6 znaków) <span class="en">Password (min. 6 chars)</span></label>
       <input type="password" id="uPassword" autocomplete="new-password"/>
+      <div id="uAdminPwHint" style="display:none;margin-top:.3rem;font-size:.72rem;color:#e67e22;line-height:1.4;">
+        ⚠ Konta administratorów wymagają silnego hasła: min. 12 znaków, wielkie i małe litery, cyfra, znak specjalny.
+        <span class="en">Admin accounts require a strong password: min. 12 chars, upper &amp; lowercase, digit, special char.</span>
+      </div>
     </div>
     <div class="field" style="margin-bottom:.8rem;">
       <label style="cursor:pointer;">
@@ -541,6 +545,10 @@
     <div class="field" style="margin-bottom:.8rem;">
       <label for="rpPassword">Nowe hasło (min. 6 znaków) <span class="en">New password (min. 6 chars)</span></label>
       <input type="password" id="rpPassword" autocomplete="new-password"/>
+      <div id="rpAdminPwHint" style="display:none;margin-top:.3rem;font-size:.72rem;color:#e67e22;line-height:1.4;">
+        ⚠ Konta administratorów wymagają silnego hasła: min. 12 znaków, wielkie i małe litery, cyfra, znak specjalny.
+        <span class="en">Admin accounts require a strong password: min. 12 chars, upper &amp; lowercase, digit, special char.</span>
+      </div>
     </div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;">
       <button class="btn btn-secondary" id="rpCancel">Anuluj <span class="en">Cancel</span></button>

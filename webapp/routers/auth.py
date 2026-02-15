@@ -326,8 +326,13 @@ async def change_password(request: Request) -> JSONResponse:
     if len(new_pass) < 6:
         return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
 
-    # Password policy check
-    pw_err = _validate_pw(new_pass)
+    # Password policy: admins always require "strong" (12+ chars, uppercase, lowercase, digit, special)
+    if user.is_admin or user.is_superadmin:
+        pw_err = validate_password_strength(new_pass, "strong")
+        if pw_err:
+            pw_err += " (wymóg dla kont administratorów / admin account requirement)"
+    else:
+        pw_err = _validate_pw(new_pass)
     if pw_err:
         return JSONResponse({"status": "error", "message": pw_err}, status_code=400)
 

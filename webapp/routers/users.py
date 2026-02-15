@@ -132,23 +132,6 @@ async def create_user(request: Request) -> JSONResponse:
     is_admin = bool(body.get("is_admin", False))
     admin_roles = body.get("admin_roles") or []
 
-    if not username:
-        return JSONResponse({"status": "error", "message": "Username required"}, status_code=400)
-    if len(password) < 6:
-        return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
-
-    # Password policy check
-    pw_err = validate_password_strength(password, _pw_policy())
-    if pw_err:
-        return JSONResponse({"status": "error", "message": pw_err}, status_code=400)
-
-    if not is_admin and role not in ALL_USER_ROLES:
-        return JSONResponse({"status": "error", "message": f"Invalid role: {role}"}, status_code=400)
-    if is_admin:
-        for ar in admin_roles:
-            if ar not in ALL_ADMIN_ROLES:
-                return JSONResponse({"status": "error", "message": f"Invalid admin role: {ar}"}, status_code=400)
-
     caller = getattr(request.state, "user", None)
 
     # Only an existing superadmin can create another superadmin
@@ -157,6 +140,27 @@ async def create_user(request: Request) -> JSONResponse:
         if not caller or not caller.is_superadmin:
             return JSONResponse({"status": "error", "message": "Only Główny Opiekun can create another Główny Opiekun"}, status_code=403)
         is_admin = True  # superadmin implies admin
+
+    if not username:
+        return JSONResponse({"status": "error", "message": "Username required"}, status_code=400)
+    if len(password) < 6:
+        return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
+
+    # Password policy: admins always require "strong" (12+ chars, uppercase, lowercase, digit, special)
+    pw_policy = "strong" if is_admin else _pw_policy()
+    pw_err = validate_password_strength(password, pw_policy)
+    if pw_err:
+        msg = pw_err
+        if is_admin:
+            msg += " (wymóg dla kont administratorów / admin account requirement)"
+        return JSONResponse({"status": "error", "message": msg}, status_code=400)
+
+    if not is_admin and role not in ALL_USER_ROLES:
+        return JSONResponse({"status": "error", "message": f"Invalid role: {role}"}, status_code=400)
+    if is_admin:
+        for ar in admin_roles:
+            if ar not in ALL_ADMIN_ROLES:
+                return JSONResponse({"status": "error", "message": f"Invalid admin role: {ar}"}, status_code=400)
 
     try:
         rec = UserRecord(
@@ -236,9 +240,15 @@ async def update_user(user_id: str, request: Request) -> JSONResponse:
     if "password" in body and body["password"]:
         if len(body["password"]) < 6:
             return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
-        pw_err = validate_password_strength(body["password"], _pw_policy())
+        # Admins always require "strong" policy; check after-update admin status
+        will_be_admin = updates.get("is_admin", existing.is_admin) or updates.get("is_superadmin", existing.is_superadmin)
+        pw_policy = "strong" if will_be_admin else _pw_policy()
+        pw_err = validate_password_strength(body["password"], pw_policy)
         if pw_err:
-            return JSONResponse({"status": "error", "message": pw_err}, status_code=400)
+            msg = pw_err
+            if will_be_admin:
+                msg += " (wymóg dla kont administratorów / admin account requirement)"
+            return JSONResponse({"status": "error", "message": msg}, status_code=400)
         updates["password_hash"] = hash_password(body["password"])
         updates["password_changed_at"] = datetime.now().isoformat()
 
@@ -461,10 +471,15 @@ async def reset_password(user_id: str, request: Request) -> JSONResponse:
     if len(new_pass) < 6:
         return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
 
-    # Password policy check
-    pw_err = validate_password_strength(new_pass, _pw_policy())
+    # Password policy: admins always require "strong"
+    target_is_admin = existing.is_admin or existing.is_superadmin
+    pw_policy = "strong" if target_is_admin else _pw_policy()
+    pw_err = validate_password_strength(new_pass, pw_policy)
     if pw_err:
-        return JSONResponse({"status": "error", "message": pw_err}, status_code=400)
+        msg = pw_err
+        if target_is_admin:
+            msg += " (wymóg dla kont administratorów / admin account requirement)"
+        return JSONResponse({"status": "error", "message": msg}, status_code=400)
 
     _user_store.update_user(user_id, {
         "password_hash": hash_password(new_pass),
