@@ -11,7 +11,8 @@
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" id="btnNewWorkspace" type="button">+ Nowy projekt</button>
-        <button class="btn secondary" id="btnLegacyView" type="button" title="Stary widok projektów" style="font-size:.8rem">Legacy</button>
+        <button class="btn secondary" id="btnImportProject" type="button" style="font-size:.85rem" data-i18n="projects.import.btn">Import</button>
+        <input id="importAistateFile" type="file" accept=".aistate" style="display:none"/>
       </div>
     </div>
 
@@ -79,6 +80,15 @@
         <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn secondary" id="btnArchiveWorkspace" type="button" style="font-size:.78rem" data-i18n="projects.archive">Archiwizuj</button>
           <button class="btn danger" id="btnDeleteWorkspace" type="button" style="font-size:.78rem" data-i18n="projects.delete_ws">Usuń</button>
+        </div>
+
+        <!-- Subproject actions: Export / Delete -->
+        <div class="subcard" style="margin-top:12px">
+          <div class="label" style="font-weight:700;margin-bottom:6px">Zarządzanie podprojektami</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn secondary" id="btnExportSubproject" type="button" style="font-size:.78rem">Eksportuj podprojekt</button>
+            <button class="btn danger" id="btnDeleteSubproject" type="button" style="font-size:.78rem">Usuń podprojekt</button>
+          </div>
         </div>
       </div>
     </div>
@@ -168,6 +178,54 @@
     <div class="modal-footer">
       <button class="btn secondary modal-close-x" type="button">Anuluj</button>
       <button class="btn" id="invSubmit" type="button">Wyślij zaproszenie</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Delete Subproject ===== -->
+<div id="modalDeleteSubproject" class="modal-overlay" style="display:none">
+  <div class="modal-panel" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title" data-i18n="projects.delete.modal.title">Usuń podprojekt</div>
+      <button class="btn secondary modal-close-x" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="label" data-i18n="projects.delete.modal.choose">Wybierz podprojekt do usunięcia</div>
+      <select id="delSubSelect" class="input"></select>
+
+      <div class="hr"></div>
+
+      <div class="label" data-i18n="projects.delete.modal.method">Metoda nadpisywania</div>
+      <select id="delSubWipeMethod" class="input">
+        <option value="none" data-i18n="projects.delete.wipe.none">Szybkie (bez nadpisywania)</option>
+        <option value="random1" data-i18n="projects.delete.wipe.random1">Pseudolosowy (1x)</option>
+        <option value="hmg_is5" data-i18n="projects.delete.wipe.hmg">British HMG IS5 (3x)</option>
+        <option value="gutmann" data-i18n="projects.delete.wipe.gutmann">Gutmann (35x)</option>
+      </select>
+      <div class="small" data-i18n="projects.delete.modal.note">Uwaga: na SSD/VM/CoW nadpisywanie może nie gwarantować pełnego „secure erase".</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary modal-close-x" type="button" data-i18n="common.cancel">Anuluj</button>
+      <button class="btn danger" id="delSubConfirm" type="button" data-i18n="projects.delete.modal.confirm">Usuń</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Export Subproject ===== -->
+<div id="modalExportSubproject" class="modal-overlay" style="display:none">
+  <div class="modal-panel" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">Eksportuj podprojekt</div>
+      <button class="btn secondary modal-close-x" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="label">Wybierz podprojekt</div>
+      <select id="expSubSelect" class="input"></select>
+      <div class="small" style="margin-top:8px">Podprojekt zostanie wyeksportowany jako plik <code>.aistate</code>.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary modal-close-x" type="button">Anuluj</button>
+      <button class="btn" id="expSubConfirm" type="button">Eksportuj</button>
     </div>
   </div>
 </div>
