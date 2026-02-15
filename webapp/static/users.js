@@ -1649,6 +1649,7 @@
                       '<div class="ap-sp-path">' + escHtml(sp.dir_path) + '</div>' +
                     '</div>' +
                     '<span class="ap-size-badge">' + formatSize(sp.dir_size) + '</span>' +
+                    '<button class="ap-del-btn ap-del-sp" data-sp-id="' + escHtml(sp.id) + '" data-sp-name="' + escHtml(sp.name) + '" title="Usuń podprojekt / Delete subproject"><span class="ap-del-icon">&#128465;</span></button>' +
                   '</div>';
               });
               subsHtml += '</div>';
@@ -1657,7 +1658,10 @@
             wsDiv.innerHTML =
               '<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">' +
                 '<div class="ap-ws-name">' + escHtml(ws.name) + '</div>' +
-                '<span style="font-size:.7rem;padding:.15rem .5rem;border-radius:4px;background:' + (ws.status === 'active' ? '#27ae60' : '#888') + ';color:#fff;">' + escHtml(ws.status) + '</span>' +
+                '<div style="display:flex;align-items:center;gap:.4rem;">' +
+                  '<span style="font-size:.7rem;padding:.15rem .5rem;border-radius:4px;background:' + (ws.status === 'active' ? '#27ae60' : '#888') + ';color:#fff;">' + escHtml(ws.status) + '</span>' +
+                  '<button class="ap-del-btn ap-del-ws" data-ws-id="' + escHtml(ws.id) + '" data-ws-name="' + escHtml(ws.name) + '" title="Usuń workspace / Delete workspace"><span class="ap-del-icon">&#128465;</span></button>' +
+                '</div>' +
               '</div>' +
               '<div class="ap-ws-meta">' +
                 'ID: <code style="font-size:.68rem;">' + escHtml(ws.id) + '</code>' +
@@ -1694,7 +1698,10 @@
             fpDiv.innerHTML =
               '<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">' +
                 '<div class="ap-fp-name">' + escHtml(fp.name || fp.project_id) + '</div>' +
-                '<span class="ap-size-badge">' + formatSize(fp.dir_size) + '</span>' +
+                '<div style="display:flex;align-items:center;gap:.4rem;">' +
+                  '<span class="ap-size-badge">' + formatSize(fp.dir_size) + '</span>' +
+                  '<button class="ap-del-btn ap-del-fp" data-fp-id="' + escHtml(fp.project_id) + '" data-fp-name="' + escHtml(fp.name || fp.project_id) + '" title="Usuń projekt / Delete project"><span class="ap-del-icon">&#128465;</span></button>' +
+                '</div>' +
               '</div>' +
               '<div class="ap-fp-meta">' +
                 'ID: <code style="font-size:.68rem;">' + escHtml(fp.project_id) + '</code>' +
@@ -1725,7 +1732,10 @@
           fpDiv.innerHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">' +
               '<div class="ap-fp-name">' + escHtml(fp.name || fp.project_id) + '</div>' +
-              '<span class="ap-size-badge">' + formatSize(fp.dir_size) + '</span>' +
+              '<div style="display:flex;align-items:center;gap:.4rem;">' +
+                '<span class="ap-size-badge">' + formatSize(fp.dir_size) + '</span>' +
+                '<button class="ap-del-btn ap-del-fp" data-fp-id="' + escHtml(fp.project_id) + '" data-fp-name="' + escHtml(fp.name || fp.project_id) + '" title="Usuń projekt / Delete project"><span class="ap-del-icon">&#128465;</span></button>' +
+              '</div>' +
             '</div>' +
             '<div class="ap-fp-meta">' +
               'ID: <code style="font-size:.68rem;">' + escHtml(fp.project_id) + '</code>' +
@@ -1736,12 +1746,131 @@
         });
       }
 
+      // Attach delete button handlers via event delegation
+      _attachAdminDeleteHandlers(listEl);
+      if (orphanList) _attachAdminDeleteHandlers(orphanList);
+
       _adminProjectsLoaded = true;
+      if (typeof applyBilingualMode === 'function') applyBilingualMode();
     } catch(e) {
       console.error(e);
       if (loadingEl) loadingEl.textContent = 'Błąd ładowania: ' + (e.message || 'Error');
     }
   }
+
+  function _attachAdminDeleteHandlers(container) {
+    container.addEventListener('click', function(e) {
+      var btn = e.target.closest('.ap-del-btn');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (btn.classList.contains('ap-del-ws')) {
+        openAdminDeleteModal('workspace', btn.dataset.wsId, btn.dataset.wsName);
+      } else if (btn.classList.contains('ap-del-sp')) {
+        openAdminDeleteModal('subproject', btn.dataset.spId, btn.dataset.spName);
+      } else if (btn.classList.contains('ap-del-fp')) {
+        openAdminDeleteModal('file_project', btn.dataset.fpId, btn.dataset.fpName);
+      }
+    });
+  }
+
+  /* ---- Admin Delete Project Modal ---- */
+
+  var _adpPendingAction = null; // { type, id, label }
+
+  function openAdminDeleteModal(type, id, label) {
+    _adpPendingAction = { type: type, id: id, label: label };
+    var msg = document.getElementById('adpMsg');
+    if (msg) {
+      if (type === 'workspace') {
+        msg.innerHTML = 'Usunąć workspace <b>"' + escHtml(label) + '"</b> wraz ze wszystkimi podprojektami i danymi?<br>' +
+          '<span class="en">Delete workspace <b>"' + escHtml(label) + '"</b> with all subprojects and data?</span>';
+      } else if (type === 'subproject') {
+        msg.innerHTML = 'Usunąć podprojekt <b>"' + escHtml(label) + '"</b> i jego dane?<br>' +
+          '<span class="en">Delete subproject <b>"' + escHtml(label) + '"</b> and its data?</span>';
+      } else {
+        msg.innerHTML = 'Usunąć projekt <b>"' + escHtml(label) + '"</b> i wszystkie jego pliki?<br>' +
+          '<span class="en">Delete project <b>"' + escHtml(label) + '"</b> and all its files?</span>';
+      }
+    }
+    var inp = document.getElementById('adpConfirmInput');
+    if (inp) inp.value = '';
+    var btn = document.getElementById('adpConfirm');
+    if (btn) { btn.disabled = true; btn.style.opacity = '.5'; btn.style.cursor = 'not-allowed'; }
+    var errEl = document.getElementById('adpError');
+    if (errEl) errEl.textContent = '';
+    document.getElementById('adpWipeMethod').value = 'none';
+    document.getElementById('adminDeleteProjectModal').style.display = 'flex';
+    if (typeof applyBilingualMode === 'function') applyBilingualMode();
+  }
+
+  (function() {
+    var inp = document.getElementById('adpConfirmInput');
+    var confirmBtn = document.getElementById('adpConfirm');
+    if (inp && confirmBtn) {
+      inp.addEventListener('input', function() {
+        var v = inp.value.trim().toUpperCase();
+        var ok = (v === 'TAK' || v === 'YES');
+        confirmBtn.disabled = !ok;
+        confirmBtn.style.opacity = ok ? '1' : '.5';
+        confirmBtn.style.cursor = ok ? 'pointer' : 'not-allowed';
+      });
+    }
+
+    var cancelBtn = document.getElementById('adpCancel');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function() {
+        document.getElementById('adminDeleteProjectModal').style.display = 'none';
+        _adpPendingAction = null;
+      });
+    }
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', async function() {
+        if (!_adpPendingAction) return;
+        var errEl = document.getElementById('adpError');
+        if (errEl) errEl.textContent = '';
+
+        var wipeMethod = document.getElementById('adpWipeMethod').value;
+        var action = _adpPendingAction;
+        var url = '';
+        if (action.type === 'workspace') {
+          url = '/api/admin/delete-workspace/' + action.id;
+        } else if (action.type === 'subproject') {
+          url = '/api/admin/delete-subproject/' + action.id;
+        } else {
+          url = '/api/admin/delete-file-project/' + action.id;
+        }
+
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = '...';
+        try {
+          var res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wipe_method: wipeMethod }),
+          });
+          var data = await res.json();
+          if (!res.ok) {
+            if (errEl) errEl.textContent = data.detail || data.message || 'Error';
+            return;
+          }
+          document.getElementById('adminDeleteProjectModal').style.display = 'none';
+          _adpPendingAction = null;
+          // Refresh projects list
+          _adminProjectsLoaded = false;
+          loadAdminProjects();
+        } catch (e) {
+          if (errEl) errEl.textContent = 'Connection error';
+        } finally {
+          confirmBtn.disabled = false;
+          confirmBtn.innerHTML = 'Usuń <span class="en">Delete</span>';
+          if (typeof applyBilingualMode === 'function') applyBilingualMode();
+        }
+      });
+    }
+  })();
 
   /* ---- Init ---- */
   initTabs();
