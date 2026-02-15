@@ -79,12 +79,15 @@ PROMPTS = PromptManager(PROJECTS_DIR)
 from webapp.auth.message_store import MessageStore
 from webapp.auth.audit_store import AuditStore
 
+from webapp.auth.passwords import init_blacklist
+
 _AUTH_CONFIG_DIR = _local_config_dir()
 DEPLOYMENT_STORE = DeploymentStore(_AUTH_CONFIG_DIR)
 USER_STORE = UserStore(_AUTH_CONFIG_DIR)
 SESSION_STORE = SessionStore(_AUTH_CONFIG_DIR)
 MESSAGE_STORE = MessageStore(_AUTH_CONFIG_DIR)
 AUDIT_STORE = AuditStore(_AUTH_CONFIG_DIR)
+PASSWORD_BLACKLIST = init_blacklist(_AUTH_CONFIG_DIR)
 
 
 def _get_session_timeout() -> int:

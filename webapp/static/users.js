@@ -1009,6 +1009,124 @@
     } catch (e) { /* ignore */ }
   }
 
+  /* ---- Password Blacklist ---- */
+
+  var _blData = null; // { builtin: [], custom: [] }
+
+  window.toggleBlacklist = function() {
+    var panel = document.getElementById('blPanel');
+    var arrow = document.getElementById('blArrow');
+    if (!panel) return;
+    var visible = panel.style.display !== 'none';
+    panel.style.display = visible ? 'none' : '';
+    if (arrow) arrow.classList.toggle('open', !visible);
+    if (!visible && !_blData) loadBlacklist();
+  };
+
+  async function loadBlacklist() {
+    try {
+      var res = await fetch('/api/auth/password-blacklist');
+      var data = await res.json();
+      if (data.status === 'ok') {
+        _blData = { builtin: data.builtin || [], custom: data.custom || [] };
+        renderBlacklist();
+        updateBlCount();
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function updateBlCount() {
+    var el = document.getElementById('blCount');
+    if (el && _blData) {
+      el.textContent = (_blData.builtin.length + _blData.custom.length);
+    }
+  }
+
+  function renderBlacklist() {
+    var list = document.getElementById('blList');
+    if (!list || !_blData) return;
+    var all = [];
+    _blData.builtin.forEach(function(p) { all.push({ pw: p, builtin: true }); });
+    _blData.custom.forEach(function(p) { all.push({ pw: p, builtin: false }); });
+    all.sort(function(a, b) { return a.pw.localeCompare(b.pw); });
+
+    if (all.length === 0) {
+      list.innerHTML = '<div class="bl-empty">Brak haseł na liście <span class="en">No passwords on the list</span></div>';
+      return;
+    }
+
+    var html = '';
+    all.forEach(function(item) {
+      html += '<div class="bl-item"><span>' + _escBl(item.pw);
+      if (item.builtin) {
+        html += ' <span class="bl-badge">wbudowane</span>';
+      }
+      html += '</span>';
+      if (!item.builtin) {
+        html += '<button class="bl-del" data-pw="' + _escAttr(item.pw) + '" title="Usuń / Remove">&times;</button>';
+      }
+      html += '</div>';
+    });
+    list.innerHTML = html;
+
+    list.querySelectorAll('.bl-del').forEach(function(btn) {
+      btn.addEventListener('click', function() { removeFromBlacklist(btn.dataset.pw); });
+    });
+  }
+
+  window.addToBlacklist = async function() {
+    var inp = document.getElementById('blNewPassword');
+    if (!inp) return;
+    var pw = inp.value.trim();
+    if (!pw) return;
+
+    try {
+      var res = await fetch('/api/auth/password-blacklist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      });
+      var data = await res.json();
+      if (data.status === 'ok') {
+        inp.value = '';
+        _blData = null;
+        loadBlacklist();
+      }
+    } catch (e) { /* ignore */ }
+  };
+
+  var blInp = document.getElementById('blNewPassword');
+  if (blInp) {
+    blInp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); addToBlacklist(); }
+    });
+  }
+
+  async function removeFromBlacklist(pw) {
+    try {
+      var res = await fetch('/api/auth/password-blacklist', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      });
+      var data = await res.json();
+      if (data.status === 'ok') {
+        _blData = null;
+        loadBlacklist();
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function _escBl(s) {
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  function _escAttr(s) {
+    return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;');
+  }
+
   /* ---- Tabs ---- */
 
   function initTabs() {
@@ -1023,7 +1141,7 @@
         var target = tab.dataset.panel;
         var panel = document.getElementById(target);
         if (panel) panel.style.display = '';
-        if (target === 'securityPanel') { loadSecuritySettings(); initAuditTab(); }
+        if (target === 'securityPanel') { loadSecuritySettings(); initAuditTab(); loadBlacklist(); }
       });
     });
   }

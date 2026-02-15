@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import secrets
+import threading
+from pathlib import Path
 
 
 def _pbkdf2_hash(password: str, salt: bytes | None = None, iterations: int = 260_000) -> str:
@@ -63,6 +66,102 @@ _COMMON_PASSWORDS = frozenset([
 import re as _re
 
 
+# ---------------------------------------------------------------------------
+# Custom password blacklist (admin-managed, persisted to JSON)
+# ---------------------------------------------------------------------------
+
+class PasswordBlacklist:
+    """Manages a custom password blacklist stored as a JSON file.
+
+    The built-in ``_COMMON_PASSWORDS`` frozenset is always checked.
+    This class adds an admin-editable layer on top.
+    """
+
+    def __init__(self, config_dir: Path) -> None:
+        self._path = config_dir / "password_blacklist.json"
+        self._lock = threading.Lock()
+        self._custom: set[str] = set()
+        self._load()
+
+    def _load(self) -> None:
+        if self._path.exists():
+            try:
+                data = json.loads(self._path.read_text("utf-8"))
+                if isinstance(data, list):
+                    self._custom = {s.lower().strip() for s in data if isinstance(s, str) and s.strip()}
+            except Exception:
+                self._custom = set()
+
+    def _save(self) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(json.dumps(sorted(self._custom), ensure_ascii=False, indent=2), "utf-8")
+
+    def is_blacklisted(self, password: str) -> bool:
+        lower = password.lower()
+        if lower in _COMMON_PASSWORDS:
+            return True
+        with self._lock:
+            return lower in self._custom
+
+    def get_all(self) -> dict:
+        """Return both built-in and custom lists."""
+        with self._lock:
+            return {
+                "builtin": sorted(_COMMON_PASSWORDS),
+                "custom": sorted(self._custom),
+            }
+
+    def add(self, password: str) -> bool:
+        """Add a password to the custom blacklist. Returns True if added."""
+        lower = password.lower().strip()
+        if not lower:
+            return False
+        with self._lock:
+            if lower in self._custom:
+                return False
+            self._custom.add(lower)
+            self._save()
+            return True
+
+    def remove(self, password: str) -> bool:
+        """Remove a password from the custom blacklist. Returns True if removed."""
+        lower = password.lower().strip()
+        with self._lock:
+            if lower not in self._custom:
+                return False
+            self._custom.discard(lower)
+            self._save()
+            return True
+
+    def add_bulk(self, passwords: list[str]) -> int:
+        """Add multiple passwords. Returns count of newly added."""
+        added = 0
+        with self._lock:
+            for p in passwords:
+                lower = p.lower().strip()
+                if lower and lower not in self._custom:
+                    self._custom.add(lower)
+                    added += 1
+            if added:
+                self._save()
+        return added
+
+
+# Module-level instance (set via init_blacklist())
+_blacklist: PasswordBlacklist | None = None
+
+
+def init_blacklist(config_dir: Path) -> PasswordBlacklist:
+    """Initialise the global blacklist instance. Call once at startup."""
+    global _blacklist
+    _blacklist = PasswordBlacklist(config_dir)
+    return _blacklist
+
+
+def get_blacklist() -> PasswordBlacklist | None:
+    return _blacklist
+
+
 def validate_password_strength(password: str, policy: str) -> str | None:
     """Validate password against the given policy level.
 
@@ -73,9 +172,13 @@ def validate_password_strength(password: str, policy: str) -> str | None:
         medium — min 8 chars + lowercase + uppercase + digit
         strong — min 12 chars + lowercase + uppercase + digit + special char
     """
-    lower = password.lower()
-    if lower in _COMMON_PASSWORDS:
-        return "Password is too common"
+    # Check both built-in and custom blacklist
+    if _blacklist is not None:
+        if _blacklist.is_blacklisted(password):
+            return "Password is too common"
+    else:
+        if password.lower() in _COMMON_PASSWORDS:
+            return "Password is too common"
 
     if policy == "none":
         return None
