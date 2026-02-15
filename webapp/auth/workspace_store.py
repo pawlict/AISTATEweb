@@ -118,6 +118,17 @@ class WorkspaceStore:
             )
             return cursor.rowcount > 0
 
+    def hard_delete_workspace(self, workspace_id: str) -> bool:
+        """Permanently delete workspace, all subprojects, members, invitations, activity."""
+        with _conn() as conn:
+            # Subprojects are CASCADE-deleted via FK, but delete explicitly for clarity
+            conn.execute("DELETE FROM subprojects WHERE workspace_id = ?", (workspace_id,))
+            conn.execute("DELETE FROM project_members WHERE workspace_id = ?", (workspace_id,))
+            conn.execute("DELETE FROM project_invitations WHERE workspace_id = ?", (workspace_id,))
+            conn.execute("DELETE FROM project_activity WHERE workspace_id = ?", (workspace_id,))
+            cursor = conn.execute("DELETE FROM project_workspaces WHERE id = ?", (workspace_id,))
+            return cursor.rowcount > 0
+
     # --- Subprojects ---
 
     def create_subproject(

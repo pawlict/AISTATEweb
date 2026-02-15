@@ -612,37 +612,33 @@
 <!-- Modal: Admin Delete Project/Workspace/Subproject -->
 <div id="adminDeleteProjectModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" style="max-width:460px;">
-    <h3 style="color:#e74c3c;">
-      Usuwanie danych <span class="en">Data deletion</span>
-    </h3>
+    <h3 style="color:#e74c3c;">Usuwanie danych</h3>
     <p id="adpMsg" style="margin-bottom:.6rem;font-size:.85rem;line-height:1.5;"></p>
 
     <div class="field" style="margin-bottom:.8rem;">
-      <label style="font-size:.78rem;">Metoda niszczenia <span class="en">Destruction method</span></label>
+      <label id="adpWipeMethodLabel" style="font-size:.78rem;">Metoda niszczenia</label>
       <select id="adpWipeMethod" style="font-size:.85rem;">
-        <option value="none">Szybkie kasowanie (bez nadpisywania) <span class="en">Quick delete (no overwrite)</span></option>
-        <option value="random1">Pseudolosowy (1x) <span class="en">Random (1x)</span></option>
-        <option value="hmg_is5">British HMG IS5 (3 przebiegi) <span class="en">British HMG IS5 (3 passes)</span></option>
-        <option value="gutmann">Gutmann (35 przebiegów) <span class="en">Gutmann (35 passes)</span></option>
+        <option value="none">Szybkie kasowanie (bez nadpisywania)</option>
+        <option value="random1">Pseudolosowy (1x)</option>
+        <option value="hmg_is5">British HMG IS5 (3 przebiegi)</option>
+        <option value="gutmann">Gutmann (35 przebiegów)</option>
       </select>
-      <div style="margin-top:.35rem;font-size:.72rem;color:var(--muted,#888);line-height:1.4;">
+      <div id="adpSsdNote" style="margin-top:.35rem;font-size:.72rem;color:var(--muted,#888);line-height:1.4;">
         Na dyskach SSD/VM/CoW nadpisywanie może nie gwarantować bezpiecznego usunięcia.
-        <span class="en">On SSD/VM/CoW disks, overwriting may not guarantee secure erase.</span>
       </div>
     </div>
 
     <div class="field" style="margin-bottom:.6rem;">
-      <label style="font-size:.78rem;">
-        Wpisz <b>TAK</b> lub <b>YES</b>, aby potwierdzić
-        <span class="en">Type <b>TAK</b> or <b>YES</b> to confirm</span>
+      <label id="adpConfirmLabel" style="font-size:.78rem;">
+        Wpisz <b>TAK</b>, aby potwierdzić
       </label>
-      <input type="text" id="adpConfirmInput" autocomplete="off" placeholder="TAK / YES" style="font-size:.9rem;text-align:center;letter-spacing:.1em;"/>
+      <input type="text" id="adpConfirmInput" autocomplete="off" placeholder="TAK" style="font-size:.9rem;text-align:center;letter-spacing:.1em;"/>
     </div>
 
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;">
-      <button class="btn btn-secondary" id="adpCancel">Anuluj <span class="en">Cancel</span></button>
+      <button class="btn btn-secondary" id="adpCancel">Anuluj</button>
       <button class="btn" style="background:#e74c3c;opacity:.5;cursor:not-allowed;" id="adpConfirm" disabled>
-        Usuń <span class="en">Delete</span>
+        Usuń
       </button>
     </div>
     <div class="error" id="adpError" style="color:#e74c3c;font-size:.82rem;margin-top:.5rem;min-height:1.2em;"></div>
