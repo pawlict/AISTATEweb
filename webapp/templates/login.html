@@ -167,6 +167,34 @@
     }
   });
 
+  /* Collect browser fingerprint for audit logging */
+  function _collectFingerprint() {
+    var fp = {};
+    try {
+      var ua = navigator.userAgent || '';
+      /* Extract browser name+version */
+      var bMatch = ua.match(/(Chrome|Firefox|Safari|Edge|OPR|Opera)[\/ ]([\d.]+)/);
+      if (bMatch) fp.browser = (bMatch[1] === 'OPR' ? 'Opera' : bMatch[1]) + ' ' + bMatch[2].split('.')[0];
+      else fp.browser = ua.slice(0, 60);
+      /* Extract OS */
+      var osMatch = ua.match(/\((.*?)\)/);
+      if (osMatch) {
+        var p = osMatch[1];
+        if (p.indexOf('Windows') >= 0) fp.os = p.match(/Windows[^;)]+/)?.[0] || 'Windows';
+        else if (p.indexOf('Mac') >= 0) fp.os = 'macOS';
+        else if (p.indexOf('Linux') >= 0) fp.os = 'Linux';
+        else if (p.indexOf('Android') >= 0) fp.os = 'Android';
+        else if (p.indexOf('iPhone') >= 0 || p.indexOf('iPad') >= 0) fp.os = 'iOS';
+        else fp.os = p.slice(0, 30);
+      }
+      fp.screen = screen.width + 'x' + screen.height;
+      fp.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      fp.language = navigator.language || '';
+      fp.platform = navigator.platform || '';
+    } catch(e) { /* ignore */ }
+    return fp;
+  }
+
   document.getElementById('loginForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     var btn = document.getElementById('loginBtn');
@@ -183,6 +211,7 @@
         body: JSON.stringify({
           username: document.getElementById('username').value.trim(),
           password: document.getElementById('password').value,
+          fingerprint: _collectFingerprint(),
         }),
       });
       var data = await res.json();

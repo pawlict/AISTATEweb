@@ -52,6 +52,7 @@ class AuditStore:
         detail: str = "",
         actor_id: str = "",
         actor_name: str = "",
+        fingerprint: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Append an audit event."""
         entry: Dict[str, Any] = {
@@ -66,6 +67,8 @@ class AuditStore:
         if actor_id:
             entry["actor_id"] = actor_id
             entry["actor_name"] = actor_name
+        if fingerprint:
+            entry["fingerprint"] = fingerprint
         with self._lock:
             data = self._read()
             data.append(entry)

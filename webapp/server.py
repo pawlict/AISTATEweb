@@ -159,7 +159,16 @@ class _AdminFileLogger:
 
                     path = self._target_path(dt)
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    self._fh = open(path, "a", encoding="utf-8", errors="replace")
+                    # If file only has "No events" placeholder, overwrite it
+                    mode = "a"
+                    if path.exists():
+                        try:
+                            content = path.read_text(encoding="utf-8").strip()
+                            if content == "No events":
+                                mode = "w"
+                        except Exception:
+                            pass
+                    self._fh = open(path, mode, encoding="utf-8", errors="replace")
                     self._cur_key = key
 
                     # Ensure paired log file exists for this hour

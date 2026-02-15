@@ -724,6 +724,23 @@
     } catch (e) { /* ignore */ }
   }
 
+  function _formatFingerprint(fp) {
+    if (!fp || typeof fp !== 'object') return '';
+    var parts = [];
+    if (fp.browser) parts.push(fp.browser);
+    if (fp.os) parts.push(fp.os);
+    if (fp.screen) parts.push(fp.screen);
+    if (fp.timezone) parts.push(fp.timezone);
+    if (fp.language) parts.push(fp.language);
+    return parts.join(' \u00b7 ');
+  }
+
+  function _shortUid(uid) {
+    if (!uid) return '—';
+    /* Show first 8 chars of UUID */
+    return uid.length > 8 ? uid.slice(0, 8) + '…' : uid;
+  }
+
   function renderAuditLog() {
     var tbody = document.getElementById('auditBody');
     if (!tbody) return;
@@ -736,12 +753,15 @@
       var color = EVENT_COLORS[ev.event] || 'var(--text, #333)';
       var dt = ev.timestamp ? ev.timestamp.replace('T', ' ').slice(0, 19) : '—';
       var actorInfo = ev.actor_name ? (' <span style="color:var(--muted,#999);font-size:.75rem;">(' + esc(ev.actor_name) + ')</span>') : '';
+      var fpText = _formatFingerprint(ev.fingerprint);
       tr.innerHTML =
         '<td style="font-size:.82rem;white-space:nowrap;">' + esc(dt) + '</td>' +
+        '<td style="font-size:.72rem;font-family:monospace;color:var(--muted,#888);white-space:nowrap;" title="' + esc(ev.user_id || '') + '">' + esc(_shortUid(ev.user_id)) + '</td>' +
         '<td><b>' + esc(ev.username || '—') + '</b></td>' +
         '<td><span style="color:' + color + ';font-weight:600;">' + esc(lab[lang] || lab.pl) + '</span>' + actorInfo + '</td>' +
         '<td style="font-size:.82rem;">' + esc(ev.ip || '—') + '</td>' +
-        '<td style="font-size:.8rem;color:var(--muted,#888);">' + esc(ev.detail || '') + '</td>';
+        '<td style="font-size:.8rem;color:var(--muted,#888);">' + esc(ev.detail || '') + '</td>' +
+        '<td style="font-size:.72rem;color:var(--muted,#888);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(fpText) + '">' + esc(fpText || '—') + '</td>';
       tbody.appendChild(tr);
     });
 
@@ -772,15 +792,23 @@
 
     /* Search placeholder */
     var si = document.getElementById('auditUserSearch');
-    if (si) si.placeholder = lang === 'en' ? 'Search user...' : 'Szukaj użytkownika...';
+    if (si) si.placeholder = lang === 'en' ? 'Search by name or UID...' : 'Szukaj po nazwie lub UID...';
+
+    /* Description text */
+    var descEl = document.getElementById('auditDescription');
+    if (descEl) {
+      descEl.innerHTML = lang === 'en'
+        ? 'Search by username or paste a UID (e.g. <code style="font-size:.72rem;">3fa85f64-5717...</code>). Select an event type to filter the list. Click a user in results to see their history.'
+        : 'Wyszukuj po nazwie użytkownika lub wklej UID (np. <code style="font-size:.72rem;">3fa85f64-5717...</code>). Wybierz typ zdarzenia, aby przefiltrować listę. Kliknij użytkownika w wynikach, aby zobaczyć jego historię.';
+    }
 
     /* Audit table headers */
     var auditThead = document.querySelector('#auditBody')?.closest('table')?.querySelector('thead');
     if (auditThead) {
       var ths = auditThead.querySelectorAll('th');
       var headers = lang === 'en'
-        ? ['Date / time', 'User', 'Event', 'IP', 'Details']
-        : ['Data / czas', 'Użytkownik', 'Zdarzenie', 'IP', 'Szczegóły'];
+        ? ['Date / time', 'UID', 'User', 'Event', 'IP', 'Details', 'Device']
+        : ['Data / czas', 'UID', 'Użytkownik', 'Zdarzenie', 'IP', 'Szczegóły', 'Urządzenie'];
       ths.forEach(function(th, i) { if (headers[i]) th.textContent = headers[i]; });
     }
 
@@ -819,7 +847,8 @@
     var q = query.toLowerCase();
     var matches = allUsers.filter(function(u) {
       return u.username.toLowerCase().indexOf(q) >= 0 ||
-             (u.display_name && u.display_name.toLowerCase().indexOf(q) >= 0);
+             (u.display_name && u.display_name.toLowerCase().indexOf(q) >= 0) ||
+             (u.user_id && u.user_id.toLowerCase().indexOf(q) >= 0);
     });
 
     if (matches.length === 0) {
@@ -839,6 +868,13 @@
       var html = '<span class="au-username">' + _highlight(u.username, query) + '</span>';
       if (u.display_name) {
         html += '<span class="au-display">' + _highlight(u.display_name, query) + '</span>';
+      }
+      /* Show UID match hint when searching by UID */
+      var uidMatch = u.user_id && u.user_id.toLowerCase().indexOf(q) >= 0 &&
+                     u.username.toLowerCase().indexOf(q) < 0 &&
+                     !(u.display_name && u.display_name.toLowerCase().indexOf(q) >= 0);
+      if (uidMatch) {
+        html += '<span class="au-display" style="font-family:monospace;font-size:.68rem;">' + _highlight(u.user_id, query) + '</span>';
       }
       item.innerHTML = html;
       item.addEventListener('click', function() {
