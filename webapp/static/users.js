@@ -7,6 +7,7 @@
   var adminRoles = [];
   var roleModules = {};     // role name → [module keys]
   var adminRoleModules = {}; // admin role → [module keys]
+  var callerIsSuperadmin = false;
   var editingUserId = null;
 
   /* Module key → PL/EN labels */
@@ -48,6 +49,7 @@
         adminRoles = data.admin_roles || [];
         roleModules = data.role_modules || {};
         adminRoleModules = data.admin_role_modules || {};
+        callerIsSuperadmin = !!data.caller_is_superadmin;
         buildRoleMatrix();
       }
     } catch (e) { /* ignore */ }
@@ -229,16 +231,18 @@
 
       var acts = tr.querySelector('.actions-cell');
 
-      if (!u.is_superadmin) {
+      if (!u.is_superadmin || callerIsSuperadmin) {
         acts.appendChild(btn('Zmień rolę', function() { openChangeRoleModal(u); }));
-        if (u.banned) {
-          acts.appendChild(btn('Odbanuj', function() { unbanUser(u.user_id); }, '#27ae60'));
-        } else {
-          acts.appendChild(btn('Banuj', function() { openBanModal(u); }, '#e67e22'));
-        }
-        /* Unlock button for locked accounts */
-        if (u.locked_until && new Date(u.locked_until) > new Date()) {
-          acts.appendChild(btn('Odblokuj', function() { unlockUser(u.user_id); }, '#3498db'));
+        if (!u.is_superadmin) {
+          if (u.banned) {
+            acts.appendChild(btn('Odbanuj', function() { unbanUser(u.user_id); }, '#27ae60'));
+          } else {
+            acts.appendChild(btn('Banuj', function() { openBanModal(u); }, '#e67e22'));
+          }
+          /* Unlock button for locked accounts */
+          if (u.locked_until && new Date(u.locked_until) > new Date()) {
+            acts.appendChild(btn('Odblokuj', function() { unlockUser(u.user_id); }, '#3498db'));
+          }
         }
         if (u.password_reset_requested) {
           acts.appendChild(btn('\u26A0 Wymagany reset', function() { openResetPwModal(u); }, '#e74c3c'));
@@ -320,6 +324,24 @@
   function populateAdminChecks(targetId) {
     var checks = document.getElementById(targetId || 'adminRolesChecks');
     checks.innerHTML = '';
+
+    /* Główny Opiekun option — only visible to existing superadmins */
+    if (callerIsSuperadmin) {
+      var saLabel = document.createElement('label');
+      saLabel.style.cssText = 'display:block;cursor:pointer;margin:.2rem 0;padding:.35rem .5rem;border:1.5px solid var(--accent,#4a6cf7);border-radius:6px;background:rgba(74,108,247,.04);';
+      saLabel.innerHTML = '<input type="checkbox" class="sa-check"/> <b>G\u0142\u00f3wny Opiekun</b> <span class="en">Main Guardian</span>' +
+        ' <span style="font-size:.72rem;color:var(--muted,#999);">(pe\u0142ny dost\u0119p <span class="en">full access</span>)</span>';
+      checks.appendChild(saLabel);
+      var saCb = saLabel.querySelector('input');
+      saCb.addEventListener('change', function() {
+        /* When superadmin is checked, disable regular admin role checkboxes */
+        checks.querySelectorAll('input:not(.sa-check)').forEach(function(cb) {
+          cb.disabled = saCb.checked;
+          if (saCb.checked) cb.checked = false;
+        });
+      });
+    }
+
     adminRoles.forEach(function(r) {
       var label = document.createElement('label');
       label.style.cssText = 'display:block;cursor:pointer;margin:.2rem 0;';
@@ -360,13 +382,18 @@
     document.getElementById('uUsername').value = u.username;
     document.getElementById('uDisplayName').value = u.display_name || '';
     document.getElementById('uPassword').value = '';
-    document.getElementById('uIsAdmin').checked = u.is_admin;
+    document.getElementById('uIsAdmin').checked = u.is_admin || u.is_superadmin;
     document.getElementById('uIsAdmin').dispatchEvent(new Event('change'));
     populateRoleSelect('uRole');
     populateAdminChecks('adminRolesChecks');
     if (u.role) document.getElementById('uRole').value = u.role;
+    /* Pre-check superadmin checkbox */
+    if (u.is_superadmin) {
+      var saCb = document.querySelector('#adminRolesChecks .sa-check');
+      if (saCb) { saCb.checked = true; saCb.dispatchEvent(new Event('change')); }
+    }
     if (u.admin_roles) {
-      document.querySelectorAll('#adminRolesChecks input').forEach(function(cb) {
+      document.querySelectorAll('#adminRolesChecks input:not(.sa-check)').forEach(function(cb) {
         cb.checked = u.admin_roles.includes(cb.value);
       });
     }
@@ -398,12 +425,20 @@
     }
 
     if (isAdmin) {
-      payload.admin_roles = [];
-      document.querySelectorAll('#adminRolesChecks input:checked').forEach(function(cb) {
-        payload.admin_roles.push(cb.value);
-      });
+      var saChecked = document.querySelector('#adminRolesChecks .sa-check');
+      if (saChecked && saChecked.checked) {
+        payload.is_superadmin = true;
+        payload.admin_roles = [];
+      } else {
+        payload.is_superadmin = false;
+        payload.admin_roles = [];
+        document.querySelectorAll('#adminRolesChecks input:checked:not(.sa-check)').forEach(function(cb) {
+          payload.admin_roles.push(cb.value);
+        });
+      }
     } else {
       payload.role = document.getElementById('uRole').value;
+      payload.is_superadmin = false;
     }
 
     try {
@@ -437,13 +472,18 @@
   function openChangeRoleModal(u) {
     changingRoleUser = u;
     document.getElementById('crUsername').textContent = u.username;
-    document.getElementById('crIsAdmin').checked = u.is_admin;
+    document.getElementById('crIsAdmin').checked = u.is_admin || u.is_superadmin;
     document.getElementById('crIsAdmin').dispatchEvent(new Event('change'));
     populateRoleSelect('crRole');
     populateAdminChecks('crAdminRolesChecks');
     if (u.role) document.getElementById('crRole').value = u.role;
+    /* Pre-check superadmin checkbox */
+    if (u.is_superadmin) {
+      var saCb = document.querySelector('#crAdminRolesChecks .sa-check');
+      if (saCb) { saCb.checked = true; saCb.dispatchEvent(new Event('change')); }
+    }
     if (u.admin_roles) {
-      document.querySelectorAll('#crAdminRolesChecks input').forEach(function(cb) {
+      document.querySelectorAll('#crAdminRolesChecks input:not(.sa-check)').forEach(function(cb) {
         cb.checked = u.admin_roles.includes(cb.value);
       });
     }
@@ -470,14 +510,22 @@
     var payload = { is_admin: isAdmin };
 
     if (isAdmin) {
-      payload.admin_roles = [];
-      document.querySelectorAll('#crAdminRolesChecks input:checked').forEach(function(cb) {
-        payload.admin_roles.push(cb.value);
-      });
+      var saChecked = document.querySelector('#crAdminRolesChecks .sa-check');
+      if (saChecked && saChecked.checked) {
+        payload.is_superadmin = true;
+        payload.admin_roles = [];
+      } else {
+        payload.is_superadmin = false;
+        payload.admin_roles = [];
+        document.querySelectorAll('#crAdminRolesChecks input:checked:not(.sa-check)').forEach(function(cb) {
+          payload.admin_roles.push(cb.value);
+        });
+      }
       payload.role = null;
     } else {
       payload.role = document.getElementById('crRole').value;
       payload.admin_roles = [];
+      payload.is_superadmin = false;
     }
 
     try {
@@ -529,12 +577,20 @@
     var payload = { is_admin: isAdmin };
 
     if (isAdmin) {
-      payload.admin_roles = [];
-      document.querySelectorAll('#approveAdminRolesChecks input:checked').forEach(function(cb) {
-        payload.admin_roles.push(cb.value);
-      });
+      var saChecked = document.querySelector('#approveAdminRolesChecks .sa-check');
+      if (saChecked && saChecked.checked) {
+        payload.is_superadmin = true;
+        payload.admin_roles = [];
+      } else {
+        payload.is_superadmin = false;
+        payload.admin_roles = [];
+        document.querySelectorAll('#approveAdminRolesChecks input:checked:not(.sa-check)').forEach(function(cb) {
+          payload.admin_roles.push(cb.value);
+        });
+      }
     } else {
       payload.role = document.getElementById('approveRole').value;
+      payload.is_superadmin = false;
     }
 
     try {
