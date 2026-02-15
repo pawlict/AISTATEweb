@@ -464,6 +464,9 @@ function setProgress(prefix, pct){
 }
 function setLogs(prefix, text){
   const lb = el(prefix+"_logs"); if(lb) lb.textContent = text;
+  // Auto-show logs details if there are logs
+  const det = el(prefix+"_logs_details");
+  if(det) det.style.display = (text && text.trim()) ? "" : "none";
 }
 
 // ---------- Task management ----------
