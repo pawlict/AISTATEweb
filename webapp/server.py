@@ -1762,6 +1762,16 @@ app.include_router(aml_router.router)
 try:
     from backend.db.engine import init_db
     init_db()
+    # Migrate legacy JSON auth data → SQLite (runs once, renames old files to .bak)
+    try:
+        DEPLOYMENT_STORE.migrate_from_json()
+        USER_STORE.migrate_from_json()
+        SESSION_STORE.migrate_from_json()
+        AUDIT_STORE.migrate_from_json()
+        MESSAGE_STORE.migrate_from_json()
+    except Exception as _mig_err:
+        import logging as _mig_lg
+        _mig_lg.getLogger("aistate").warning("Auth JSON→SQLite migration: %s", _mig_err)
 except Exception as _db_err:
     import logging as _lg
     _lg.getLogger("aistate").warning("DB init deferred: %s", _db_err)

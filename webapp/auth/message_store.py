@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
-import threading
+import logging
 import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+log = logging.getLogger("aistate.auth.messages")
 
 
 @dataclass
@@ -22,84 +24,113 @@ class Message:
 
 
 class MessageStore:
-    """Thread-safe JSON-based message storage for Call Center."""
+    """SQLite-backed message storage for Call Center (drop-in replacement for JSON version)."""
 
     def __init__(self, config_dir: Path) -> None:
-        self._path = config_dir / "messages.json"
-        self._lock = threading.Lock()
+        self._config_dir = config_dir
+        self._json_path = config_dir / "messages.json"
 
-    def _read(self) -> Dict[str, Any]:
-        try:
-            return json.loads(self._path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return {}
-        except Exception:
-            return {}
+    def _conn(self):
+        from backend.db.engine import get_conn
+        return get_conn()
 
-    def _write(self, data: Dict[str, Any]) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(self._path)
-
-    def _msg_from_dict(self, mid: str, d: Dict[str, Any]) -> Message:
+    def _msg_from_row(self, row: Dict[str, Any], read_by: List[str]) -> Message:
         msg = Message()
-        msg.message_id = mid
-        for k, v in d.items():
-            if hasattr(msg, k):
-                setattr(msg, k, v)
-        msg.message_id = mid
+        msg.message_id = row.get("message_id", "")
+        msg.author_id = row.get("author_id", "")
+        msg.author_name = row.get("author_name", "")
+        msg.subject = row.get("subject", "")
+        msg.content = row.get("content", "")
+        tg = row.get("target_groups", "[]")
+        if isinstance(tg, str):
+            try:
+                msg.target_groups = json.loads(tg)
+            except (json.JSONDecodeError, TypeError):
+                msg.target_groups = []
+        else:
+            msg.target_groups = tg or []
+        msg.created_at = row.get("created_at", "")
+        msg.read_by = read_by
         return msg
+
+    def _get_read_by(self, conn, message_id: str) -> List[str]:
+        rows = conn.execute(
+            "SELECT user_id FROM auth_message_reads WHERE message_id = ?",
+            (message_id,),
+        ).fetchall()
+        return [r["user_id"] for r in rows]
 
     # ---- CRUD ----
 
     def list_messages(self) -> List[Message]:
-        with self._lock:
-            data = self._read()
-        msgs = [self._msg_from_dict(mid, d) for mid, d in data.items()]
-        msgs.sort(key=lambda m: m.created_at, reverse=True)
-        return msgs
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM auth_messages ORDER BY created_at DESC"
+            ).fetchall()
+            msgs = []
+            for row in rows:
+                d = dict(row)
+                read_by = self._get_read_by(conn, d["message_id"])
+                msgs.append(self._msg_from_row(d, read_by))
+            return msgs
 
     def get_message(self, message_id: str) -> Optional[Message]:
-        with self._lock:
-            data = self._read()
-        d = data.get(message_id)
-        if d is None:
-            return None
-        return self._msg_from_dict(message_id, d)
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM auth_messages WHERE message_id = ?",
+                (message_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            d = dict(row)
+            read_by = self._get_read_by(conn, message_id)
+            return self._msg_from_row(d, read_by)
 
     def create_message(self, msg: Message) -> Message:
         if not msg.message_id:
             msg.message_id = str(uuid.uuid4())
         if not msg.created_at:
             msg.created_at = datetime.now().isoformat()
-        with self._lock:
-            data = self._read()
-            d = asdict(msg)
-            mid = d.pop("message_id")
-            data[mid] = d
-            self._write(data)
+
+        with self._conn() as conn:
+            conn.execute(
+                """INSERT INTO auth_messages
+                   (message_id, author_id, author_name, subject, content, target_groups, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    msg.message_id,
+                    msg.author_id,
+                    msg.author_name,
+                    msg.subject,
+                    msg.content,
+                    json.dumps(msg.target_groups, ensure_ascii=False),
+                    msg.created_at,
+                ),
+            )
         return msg
 
     def delete_message(self, message_id: str) -> bool:
-        with self._lock:
-            data = self._read()
-            if message_id not in data:
-                return False
-            del data[message_id]
-            self._write(data)
-        return True
+        with self._conn() as conn:
+            cursor = conn.execute(
+                "DELETE FROM auth_messages WHERE message_id = ?", (message_id,)
+            )
+            return cursor.rowcount > 0
 
     def mark_read(self, message_id: str, user_id: str) -> bool:
-        with self._lock:
-            data = self._read()
-            if message_id not in data:
+        with self._conn() as conn:
+            # Check message exists
+            row = conn.execute(
+                "SELECT message_id FROM auth_messages WHERE message_id = ?",
+                (message_id,),
+            ).fetchone()
+            if row is None:
                 return False
-            read_by = data[message_id].get("read_by", [])
-            if user_id not in read_by:
-                read_by.append(user_id)
-                data[message_id]["read_by"] = read_by
-                self._write(data)
+
+            # Insert read record (ignore if already exists)
+            conn.execute(
+                "INSERT OR IGNORE INTO auth_message_reads (message_id, user_id) VALUES (?, ?)",
+                (message_id, user_id),
+            )
         return True
 
     def get_unread_for_user(self, user_id: str, user_role: Optional[str],
@@ -118,18 +149,85 @@ class MessageStore:
         # Always include "all" target
         groups.add("all")
 
-        with self._lock:
-            data = self._read()
+        with self._conn() as conn:
+            # Get all messages NOT read by this user
+            rows = conn.execute(
+                """SELECT m.* FROM auth_messages m
+                   WHERE m.message_id NOT IN (
+                       SELECT r.message_id FROM auth_message_reads r WHERE r.user_id = ?
+                   )
+                   ORDER BY m.created_at DESC""",
+                (user_id,),
+            ).fetchall()
 
         result: List[Message] = []
-        for mid, d in data.items():
-            target = set(d.get("target_groups", []))
-            read_by = d.get("read_by", [])
-            if user_id in read_by:
-                continue
+        for row in rows:
+            d = dict(row)
+            tg = d.get("target_groups", "[]")
+            try:
+                target = set(json.loads(tg) if isinstance(tg, str) else tg)
+            except (json.JSONDecodeError, TypeError):
+                target = set()
+
             # Check if any of user's groups match message targets
             if target & groups:
-                result.append(self._msg_from_dict(mid, d))
+                result.append(self._msg_from_row(d, []))
 
-        result.sort(key=lambda m: m.created_at, reverse=True)
         return result
+
+    # ---- JSON → SQLite migration ----
+
+    def migrate_from_json(self) -> int:
+        """Import messages from legacy messages.json if it exists."""
+        if not self._json_path.exists():
+            return 0
+
+        try:
+            data = json.loads(self._json_path.read_text(encoding="utf-8"))
+        except Exception:
+            return 0
+
+        if not data:
+            return 0
+
+        migrated = 0
+        with self._conn() as conn:
+            for mid, d in data.items():
+                # Skip if already exists
+                existing = conn.execute(
+                    "SELECT message_id FROM auth_messages WHERE message_id = ?", (mid,)
+                ).fetchone()
+                if existing:
+                    continue
+
+                target_groups = d.get("target_groups", [])
+                conn.execute(
+                    """INSERT INTO auth_messages
+                       (message_id, author_id, author_name, subject, content, target_groups, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        mid,
+                        d.get("author_id", ""),
+                        d.get("author_name", ""),
+                        d.get("subject", ""),
+                        d.get("content", ""),
+                        json.dumps(target_groups, ensure_ascii=False),
+                        d.get("created_at", ""),
+                    ),
+                )
+
+                # Migrate read_by
+                for uid in d.get("read_by", []):
+                    conn.execute(
+                        "INSERT OR IGNORE INTO auth_message_reads (message_id, user_id) VALUES (?, ?)",
+                        (mid, uid),
+                    )
+
+                migrated += 1
+
+        if migrated > 0:
+            backup = self._json_path.with_suffix(".json.bak")
+            self._json_path.rename(backup)
+            log.info("Migrated %d messages from JSON; old file renamed to %s", migrated, backup.name)
+
+        return migrated

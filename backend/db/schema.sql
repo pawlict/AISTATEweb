@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     id          TEXT PRIMARY KEY,
     username    TEXT UNIQUE NOT NULL,
     password_hash TEXT,          -- NULL for single-user mode (no auth)
-    role        TEXT NOT NULL DEFAULT 'admin',  -- admin | operator | viewer
+    role        TEXT DEFAULT '',  -- user role (Transkryptor, Lingwista, etc.) or empty for admin-only users
     display_name TEXT NOT NULL DEFAULT '',
     email       TEXT DEFAULT '',
     is_active   INTEGER NOT NULL DEFAULT 1,
@@ -399,3 +399,79 @@ CREATE TABLE IF NOT EXISTS parse_templates (
 
 CREATE INDEX IF NOT EXISTS idx_pt_bank ON parse_templates(bank_id);
 CREATE INDEX IF NOT EXISTS idx_pt_default ON parse_templates(is_default) WHERE is_default = 1;
+
+-- ============================================================
+-- AUTH: EXTENDED USER FIELDS (multi-user auth system)
+-- ============================================================
+-- The existing 'users' table is extended with auth-specific columns.
+-- ALTER TABLE IF NOT EXISTS is not supported in SQLite, so we add
+-- columns only if they don't exist yet (handled in Python migration code).
+
+-- ============================================================
+-- AUTH: SESSIONS (replaces sessions.json)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    token       TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    expires_at  TEXT NOT NULL,
+    ip          TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_sess_user ON auth_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_sess_expires ON auth_sessions(expires_at);
+
+-- ============================================================
+-- AUTH: AUDIT LOG (replaces audit_log.json — separate from AML audit_log)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS auth_audit_log (
+    id          TEXT PRIMARY KEY,
+    timestamp   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    event       TEXT NOT NULL,
+    user_id     TEXT DEFAULT '',
+    username    TEXT DEFAULT '',
+    ip          TEXT DEFAULT '',
+    detail      TEXT DEFAULT '',
+    actor_id    TEXT DEFAULT '',
+    actor_name  TEXT DEFAULT '',
+    fingerprint TEXT DEFAULT ''   -- JSON string
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_audit_ts ON auth_audit_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_auth_audit_user ON auth_audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_audit_event ON auth_audit_log(event);
+
+-- ============================================================
+-- AUTH: DEPLOYMENT CONFIG (replaces deployment.json)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS deployment_config (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- ============================================================
+-- AUTH: MESSAGES / CALL CENTER (replaces messages.json)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS auth_messages (
+    message_id    TEXT PRIMARY KEY,
+    author_id     TEXT DEFAULT '',
+    author_name   TEXT DEFAULT '',
+    subject       TEXT NOT NULL DEFAULT '',
+    content       TEXT NOT NULL DEFAULT '',
+    target_groups TEXT DEFAULT '[]',  -- JSON array of role names
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS auth_message_reads (
+    message_id  TEXT NOT NULL REFERENCES auth_messages(message_id) ON DELETE CASCADE,
+    user_id     TEXT NOT NULL,
+    read_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    PRIMARY KEY (message_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_msg_created ON auth_messages(created_at);
