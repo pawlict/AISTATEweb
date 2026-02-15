@@ -48,20 +48,23 @@ def generate_token() -> str:
 # Password strength validation
 # ---------------------------------------------------------------------------
 
-# Top common passwords (always rejected regardless of policy)
-_COMMON_PASSWORDS = frozenset([
-    "password", "123456", "12345678", "qwerty", "abc123", "monkey", "1234567",
-    "letmein", "trustno1", "dragon", "baseball", "iloveyou", "master", "sunshine",
-    "ashley", "bailey", "shadow", "123123", "654321", "superman", "qazwsx",
-    "michael", "football", "password1", "password123", "welcome", "jesus",
-    "ninja", "mustang", "password2", "amanda", "login", "admin", "princess",
-    "starwars", "solo", "passw0rd", "hello", "charlie", "donald", "loveme",
-    "zaq1zaq1", "qwerty123", "aa123456", "access", "flower", "696969",
-    "hottie", "biteme", "222222", "ginger", "hunter", "hunter2",
-    "abcdef", "qweasd", "1q2w3e", "1qaz2wsx", "zxcvbnm", "121212",
-    "000000", "11111111", "asdf1234", "secret", "test", "azerty",
-    "haslo", "haslo123", "zaq12wsx", "mojehaslo", "polska", "polska1",
-])
+# Top common passwords — loaded from text file (admin-editable).
+# File path: webapp/auth/builtin_passwords.txt
+_BUILTIN_FILE = Path(__file__).with_name("builtin_passwords.txt")
+
+
+def _load_builtin_passwords() -> frozenset[str]:
+    """Load built-in password list from text file next to this module."""
+    passwords: set[str] = set()
+    if _BUILTIN_FILE.exists():
+        for line in _BUILTIN_FILE.read_text("utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                passwords.add(line.lower())
+    return frozenset(passwords)
+
+
+_COMMON_PASSWORDS: frozenset[str] = _load_builtin_passwords()
 
 import re as _re
 
@@ -110,6 +113,13 @@ class PasswordBlacklist:
                 "builtin": sorted(_COMMON_PASSWORDS),
                 "custom": sorted(self._custom),
             }
+
+    @staticmethod
+    def reload_builtin() -> int:
+        """Re-read builtin_passwords.txt. Returns new count."""
+        global _COMMON_PASSWORDS
+        _COMMON_PASSWORDS = _load_builtin_passwords()
+        return len(_COMMON_PASSWORDS)
 
     def add(self, password: str) -> bool:
         """Add a password to the custom blacklist. Returns True if added."""

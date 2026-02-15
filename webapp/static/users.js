@@ -1081,9 +1081,30 @@
         _blData = { builtin: data.builtin || [], custom: data.custom || [] };
         renderBlacklist();
         updateBlCount();
+        // Show builtin file path
+        var fp = document.getElementById('blFilePath');
+        if (fp && data.builtin_file) {
+          fp.textContent = data.builtin_file;
+        }
       }
     } catch (e) { /* ignore */ }
   }
+
+  window.reloadBuiltinPasswords = async function() {
+    try {
+      var res = await fetch('/api/auth/password-blacklist/reload', { method: 'POST' });
+      var data = await res.json();
+      if (data.status === 'ok') {
+        _blMsg('Przeładowano ' + data.builtin_count + ' haseł wbudowanych / Reloaded ' + data.builtin_count + ' built-in passwords', false);
+        _blData = null;
+        loadBlacklist();
+      } else {
+        _blMsg(data.message || 'Błąd / Error', true);
+      }
+    } catch (e) {
+      _blMsg('Błąd połączenia / Connection error', true);
+    }
+  };
 
   function updateBlCount() {
     var el = document.getElementById('blCount');
