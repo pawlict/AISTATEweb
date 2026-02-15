@@ -1070,7 +1070,7 @@
     var visible = panel.style.display !== 'none';
     panel.style.display = visible ? 'none' : '';
     if (arrow) arrow.classList.toggle('open', !visible);
-    if (!visible && !_blData) loadBlacklist();
+    if (!visible) loadBlacklist();
   };
 
   async function loadBlacklist() {
@@ -1176,6 +1176,138 @@
   function _escAttr(s) {
     return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;');
   }
+
+  /* ---- Messages Inbox ---- */
+
+  var _inboxLoaded = false;
+
+  window.toggleInbox = function() {
+    var panel = document.getElementById('inboxPanel');
+    var arrow = document.getElementById('inboxArrow');
+    if (!panel) return;
+    var visible = panel.style.display !== 'none';
+    panel.style.display = visible ? 'none' : '';
+    if (arrow) arrow.classList.toggle('open', !visible);
+    if (!visible) loadInbox();
+  };
+
+  async function loadInbox() {
+    var list = document.getElementById('inboxList');
+    if (!list) return;
+    try {
+      var res = await fetch('/api/messages');
+      if (!res.ok) {
+        /* Non-superadmin: try unread endpoint */
+        res = await fetch('/api/messages/unread');
+      }
+      var data = await res.json();
+      if (data.status !== 'ok') return;
+      var msgs = data.messages || [];
+      _inboxLoaded = true;
+      _renderInbox(msgs);
+    } catch (e) { /* ignore */ }
+  }
+
+  async function loadInboxBadge() {
+    var badge = document.getElementById('inboxBadge');
+    if (!badge) return;
+    try {
+      var res = await fetch('/api/messages');
+      if (!res.ok) res = await fetch('/api/messages/unread');
+      var data = await res.json();
+      if (data.status !== 'ok') return;
+      var msgs = data.messages || [];
+      if (msgs.length > 0) {
+        badge.textContent = msgs.length;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function _renderInbox(msgs) {
+    var list = document.getElementById('inboxList');
+    if (!list) return;
+    var badge = document.getElementById('inboxBadge');
+
+    if (msgs.length === 0) {
+      list.innerHTML = '<div style="color:var(--muted,#999);font-size:.76rem;padding:.3rem;">Brak wiadomości <span class="en">No messages</span></div>';
+      if (badge) badge.style.display = 'none';
+      return;
+    }
+
+    if (badge) {
+      badge.textContent = msgs.length;
+      badge.style.display = '';
+    }
+
+    list.innerHTML = '';
+    msgs.forEach(function(m) {
+      var item = document.createElement('div');
+      item.className = 'inbox-msg unread';
+      item.dataset.mid = m.message_id;
+      var dt = m.created_at ? m.created_at.replace('T', ' ').slice(0, 16) : '';
+      var groups = (m.target_groups || []).join(', ');
+      var readCount = (m.read_by || []).length;
+      item.innerHTML =
+        '<div class="inbox-msg-head">' +
+          '<span class="inbox-msg-subj">' + esc(m.subject) + '</span>' +
+          '<span class="inbox-msg-meta">' + esc(dt) + '</span>' +
+        '</div>' +
+        '<div class="inbox-msg-body">' + (m.content || '') + '</div>' +
+        '<div class="inbox-msg-meta" style="margin-top:.15rem;">' +
+          '&#8594; ' + esc(groups) +
+          ' &middot; ' + readCount + ' przeczytało <span class="en">read</span>' +
+        '</div>' +
+        '<div class="inbox-msg-actions">' +
+          '<button class="inbox-msg-btn inbox-mark-read" data-mid="' + m.message_id + '">Oznacz przeczytane <span class="en">Mark read</span></button>' +
+          '<button class="inbox-msg-btn inbox-delete" data-mid="' + m.message_id + '" style="color:#e74c3c;">Usuń <span class="en">Delete</span></button>' +
+        '</div>';
+      list.appendChild(item);
+    });
+
+    /* Event handlers */
+    list.querySelectorAll('.inbox-mark-read').forEach(function(btn) {
+      btn.addEventListener('click', async function() {
+        var mid = btn.dataset.mid;
+        try {
+          await fetch('/api/messages/' + mid + '/read', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' });
+          var card = btn.closest('.inbox-msg');
+          if (card) { card.style.opacity = '0'; setTimeout(function() { card.remove(); _updateInboxBadge(); }, 300); }
+        } catch (e) { /* ignore */ }
+      });
+    });
+
+    list.querySelectorAll('.inbox-delete').forEach(function(btn) {
+      btn.addEventListener('click', async function() {
+        var mid = btn.dataset.mid;
+        try {
+          await fetch('/api/messages/' + mid, { method: 'DELETE' });
+          var card = btn.closest('.inbox-msg');
+          if (card) { card.style.opacity = '0'; setTimeout(function() { card.remove(); _updateInboxBadge(); }, 300); }
+        } catch (e) { /* ignore */ }
+      });
+    });
+
+    if (typeof applyBilingualMode === 'function') applyBilingualMode();
+  }
+
+  function _updateInboxBadge() {
+    var badge = document.getElementById('inboxBadge');
+    var list = document.getElementById('inboxList');
+    if (!badge || !list) return;
+    var remaining = list.querySelectorAll('.inbox-msg').length;
+    if (remaining > 0) {
+      badge.textContent = remaining;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  /* Load badge count on page load */
+  loadInboxBadge();
 
   /* ---- Context Menu (for audit log rows) ---- */
 
