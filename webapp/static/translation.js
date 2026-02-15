@@ -788,7 +788,6 @@ function estimateTranslationTime(text) {
     const timePerWord = mode === 'fast' ? 0.01 : 0.05; // seconds
     const estimated = Math.ceil(words * timePerWord);
     
-    console.log(`Estimated time: ${estimated}s for ${words} words in ${mode} mode`);
 }
 
 // Get selected mode

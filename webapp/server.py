@@ -1804,6 +1804,17 @@ except Exception as _db_err:
 # See: _mount_admin_router() below.
 
 
+# --- Security headers middleware ---
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 # --- Ensure UTF-8 across the app (templates + JSON + JS/CSS) ---
 @app.middleware("http")
 async def _force_utf8_charset(request: Request, call_next):
@@ -2354,7 +2365,8 @@ async def api_translation_upload(
         text = await run_in_threadpool(extract_text_from_file, tmp_path)
         return {"ok": True, "text": text, "filename": name, "ext": ext, "size": len(content)}
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        app_log(f"Translation upload error: {e}")
+        return {"ok": False, "error": "Nie udało się przetworzyć pliku."}
     finally:
         try:
             tmp_path.unlink(missing_ok=True)  # type: ignore[arg-type]
@@ -2552,7 +2564,7 @@ async def api_translation_export(
 @app.get("/api/settings")
 def api_get_settings() -> Any:
     s = load_settings()
-    return {"hf_token": getattr(s, "hf_token", ""), "whisper_model": getattr(s, "whisper_model", "large-v3")}
+    return {"hf_token_present": bool(getattr(s, "hf_token", "")), "whisper_model": getattr(s, "whisper_model", "large-v3")}
 
 
 @app.post("/api/settings")
@@ -4398,9 +4410,9 @@ def api_waveform(project_id: str) -> Any:
 
 @app.get("/api/projects/{project_id}/download/{filename}")
 def api_download(project_id: str, filename: str) -> Any:
-    path = project_path(project_id) / filename
+    path = _safe_child_path(project_path(project_id), filename)
     require_existing_file(path, "Plik nie istnieje.")
-    return FileResponse(str(path), filename=filename)
+    return FileResponse(str(path), filename=path.name)
 
 
 @app.post("/api/projects/{project_id}/save_transcript")

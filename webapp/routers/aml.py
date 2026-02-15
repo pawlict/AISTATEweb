@@ -33,6 +33,7 @@ import logging
 import os
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -68,7 +69,8 @@ async def aml_analyze(
     upload_dir = Path(data_dir) / "uploads" / "aml"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    file_path = upload_dir / (file.filename or "statement.pdf")
+    safe_name = Path(file.filename or "statement.pdf").name
+    file_path = upload_dir / f"{uuid.uuid4().hex}_{safe_name}"
     with open(file_path, "wb") as f:
         content = await file.read()
         f.write(content)
@@ -85,7 +87,7 @@ async def aml_analyze(
         return JSONResponse(result)
     except Exception as e:
         log.exception("AML pipeline error")
-        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+        return JSONResponse({"status": "error", "error": "Błąd przetwarzania AML."}, status_code=500)
 
 
 @router.get("/api/aml/report/{statement_id}")
