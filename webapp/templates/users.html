@@ -39,6 +39,82 @@
       </thead>
       <tbody id="usersBody"></tbody>
     </table>
+
+    <!-- Role matrix + Call Center — only visible on Users tab -->
+    <div class="panels-row" style="display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap;align-items:flex-start;">
+
+      <!-- Role-access matrix (CSS Grid layout) -->
+      <div class="role-matrix-card" style="padding:.8rem 1rem;flex:1 1 480px;max-width:780px;">
+        <h3 style="margin:0 0 .5rem;font-size:.82rem;">Ustawienia r&oacute;l &mdash; dost&#281;p do modu&#322;&oacute;w <span class="en">Role settings &mdash; module access</span></h3>
+        <div id="roleMatrixGrid" class="rm-grid"></div>
+      </div>
+
+      <!-- Call Center -->
+      {% if user and user.is_superadmin %}
+      <div class="callcenter-card" style="padding:.8rem 1rem;flex:1 1 340px;max-width:560px;">
+        <h3 style="margin:0 0 .5rem;font-size:.82rem;">Call Center <span class="en">Call Center</span></h3>
+        <p style="color:var(--muted,#888);font-size:.74rem;margin:0 0 .6rem;">
+          Wyślij wiadomość do wybranych grup użytkowników.
+          <span class="en">Send a message to selected user groups.</span>
+        </p>
+
+        <!-- Compose form -->
+        <div class="field" style="margin-bottom:.5rem;">
+          <label for="ccSubject" style="font-size:.78rem;">Temat <span class="en">Subject</span></label>
+          <input type="text" id="ccSubject" style="font-size:.85rem;" placeholder="Temat wiadomości..."/>
+        </div>
+
+        <div class="field" style="margin-bottom:.5rem;">
+          <label style="font-size:.78rem;">Treść <span class="en">Content</span></label>
+          <div class="cc-toolbar-wrap" id="ccToolbar">
+            <div class="cc-toolbar">
+              <button type="button" data-cmd="bold" title="Pogrubienie / Bold"><b>B</b></button>
+              <button type="button" data-cmd="italic" title="Kursywa / Italic"><i>I</i></button>
+              <button type="button" data-cmd="underline" title="Podkreślenie / Underline"><u>U</u></button>
+              <button type="button" data-cmd="strikeThrough" title="Przekreślenie / Strike"><s>S</s></button>
+              <span class="cc-sep"></span>
+              <button type="button" data-cmd="insertUnorderedList" title="Lista / Bullet list">&#8226;</button>
+              <button type="button" data-cmd="insertOrderedList" title="Numeracja / Numbered">1.</button>
+              <span class="cc-sep"></span>
+              <button type="button" data-cmd="justifyLeft" title="Do lewej / Align left">&#8676;</button>
+              <button type="button" data-cmd="justifyCenter" title="Wyśrodkuj / Center">&#8596;</button>
+            </div>
+            <div class="cc-toolbar cc-toolbar-row2">
+              <span class="cc-tb-label">Rozmiar:</span>
+              <button type="button" class="cc-tb-size" data-size="1" title="Bardzo mały / X-Small">A</button>
+              <button type="button" class="cc-tb-size" data-size="2" title="Mały / Small">A</button>
+              <button type="button" class="cc-tb-size cc-tb-active" data-size="3" title="Normalny / Normal">A</button>
+              <button type="button" class="cc-tb-size" data-size="4" title="Duży / Large">A</button>
+              <button type="button" class="cc-tb-size" data-size="5" title="Bardzo duży / X-Large">A</button>
+              <span class="cc-sep"></span>
+              <span class="cc-tb-label">Kolor:</span>
+              <button type="button" class="cc-tb-color cc-tb-active" data-color="" title="Domyślny / Default"><span class="cc-color-dot" style="background:#333;"></span></button>
+              <button type="button" class="cc-tb-color" data-color="#e74c3c" title="Czerwony / Red"><span class="cc-color-dot" style="background:#e74c3c;"></span></button>
+              <button type="button" class="cc-tb-color" data-color="#27ae60" title="Zielony / Green"><span class="cc-color-dot" style="background:#27ae60;"></span></button>
+              <button type="button" class="cc-tb-color" data-color="#2980b9" title="Niebieski / Blue"><span class="cc-color-dot" style="background:#2980b9;"></span></button>
+              <button type="button" class="cc-tb-color" data-color="#e67e22" title="Pomarańczowy / Orange"><span class="cc-color-dot" style="background:#e67e22;"></span></button>
+              <button type="button" class="cc-tb-color" data-color="#8e44ad" title="Fioletowy / Purple"><span class="cc-color-dot" style="background:#8e44ad;"></span></button>
+            </div>
+          </div>
+          <div class="cc-editor" id="ccEditor" contenteditable="true"></div>
+        </div>
+
+        <div class="field" style="margin-bottom:.6rem;">
+          <label style="font-size:.78rem;">Grupy docelowe <span class="en">Target groups</span></label>
+          <div id="ccTargetGroups" class="cc-groups"></div>
+        </div>
+
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;align-items:center;">
+          <div class="error" id="ccError" style="color:#e74c3c;font-size:.78rem;flex:1;"></div>
+          <button class="btn" id="ccSend" style="font-size:.8rem;">Wyślij <span class="en">Send</span></button>
+        </div>
+
+        <!-- Sent messages list -->
+        <div id="ccSentList" style="margin-top:.8rem;"></div>
+      </div>
+      {% endif %}
+
+    </div>
   </div>
 
   <!-- Panel: Audit Log -->
@@ -141,82 +217,6 @@
     </div>
     <div id="secSaveMsg" style="font-size:.82rem;color:#27ae60;margin-top:.6rem;min-height:1.2em;"></div>
   </div>
-
-</div>
-
-<!-- Bottom panels: role matrix + call center side by side -->
-<div class="panels-row" style="display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap;align-items:flex-start;">
-
-  <!-- Role-access matrix (CSS Grid layout) -->
-  <div class="role-matrix-card" style="padding:.8rem 1rem;flex:1 1 480px;max-width:780px;">
-    <h3 style="margin:0 0 .5rem;font-size:.82rem;">Ustawienia r&oacute;l &mdash; dost&#281;p do modu&#322;&oacute;w <span class="en">Role settings &mdash; module access</span></h3>
-    <div id="roleMatrixGrid" class="rm-grid"></div>
-  </div>
-
-  <!-- Call Center -->
-  {% if user and user.is_superadmin %}
-  <div class="callcenter-card" style="padding:.8rem 1rem;flex:1 1 340px;max-width:560px;">
-    <h3 style="margin:0 0 .5rem;font-size:.82rem;">Call Center <span class="en">Call Center</span></h3>
-    <p style="color:var(--muted,#888);font-size:.74rem;margin:0 0 .6rem;">
-      Wyślij wiadomość do wybranych grup użytkowników.
-      <span class="en">Send a message to selected user groups.</span>
-    </p>
-
-    <!-- Compose form -->
-    <div class="field" style="margin-bottom:.5rem;">
-      <label for="ccSubject" style="font-size:.78rem;">Temat <span class="en">Subject</span></label>
-      <input type="text" id="ccSubject" style="font-size:.85rem;" placeholder="Temat wiadomości..."/>
-    </div>
-
-    <div class="field" style="margin-bottom:.5rem;">
-      <label style="font-size:.78rem;">Treść <span class="en">Content</span></label>
-      <div class="cc-toolbar-wrap" id="ccToolbar">
-        <div class="cc-toolbar">
-          <button type="button" data-cmd="bold" title="Pogrubienie / Bold"><b>B</b></button>
-          <button type="button" data-cmd="italic" title="Kursywa / Italic"><i>I</i></button>
-          <button type="button" data-cmd="underline" title="Podkreślenie / Underline"><u>U</u></button>
-          <button type="button" data-cmd="strikeThrough" title="Przekreślenie / Strike"><s>S</s></button>
-          <span class="cc-sep"></span>
-          <button type="button" data-cmd="insertUnorderedList" title="Lista / Bullet list">&#8226;</button>
-          <button type="button" data-cmd="insertOrderedList" title="Numeracja / Numbered">1.</button>
-          <span class="cc-sep"></span>
-          <button type="button" data-cmd="justifyLeft" title="Do lewej / Align left">&#8676;</button>
-          <button type="button" data-cmd="justifyCenter" title="Wyśrodkuj / Center">&#8596;</button>
-        </div>
-        <div class="cc-toolbar cc-toolbar-row2">
-          <span class="cc-tb-label">Rozmiar:</span>
-          <button type="button" class="cc-tb-size" data-size="1" title="Bardzo mały / X-Small">A</button>
-          <button type="button" class="cc-tb-size" data-size="2" title="Mały / Small">A</button>
-          <button type="button" class="cc-tb-size cc-tb-active" data-size="3" title="Normalny / Normal">A</button>
-          <button type="button" class="cc-tb-size" data-size="4" title="Duży / Large">A</button>
-          <button type="button" class="cc-tb-size" data-size="5" title="Bardzo duży / X-Large">A</button>
-          <span class="cc-sep"></span>
-          <span class="cc-tb-label">Kolor:</span>
-          <button type="button" class="cc-tb-color cc-tb-active" data-color="" title="Domyślny / Default"><span class="cc-color-dot" style="background:#333;"></span></button>
-          <button type="button" class="cc-tb-color" data-color="#e74c3c" title="Czerwony / Red"><span class="cc-color-dot" style="background:#e74c3c;"></span></button>
-          <button type="button" class="cc-tb-color" data-color="#27ae60" title="Zielony / Green"><span class="cc-color-dot" style="background:#27ae60;"></span></button>
-          <button type="button" class="cc-tb-color" data-color="#2980b9" title="Niebieski / Blue"><span class="cc-color-dot" style="background:#2980b9;"></span></button>
-          <button type="button" class="cc-tb-color" data-color="#e67e22" title="Pomarańczowy / Orange"><span class="cc-color-dot" style="background:#e67e22;"></span></button>
-          <button type="button" class="cc-tb-color" data-color="#8e44ad" title="Fioletowy / Purple"><span class="cc-color-dot" style="background:#8e44ad;"></span></button>
-        </div>
-      </div>
-      <div class="cc-editor" id="ccEditor" contenteditable="true"></div>
-    </div>
-
-    <div class="field" style="margin-bottom:.6rem;">
-      <label style="font-size:.78rem;">Grupy docelowe <span class="en">Target groups</span></label>
-      <div id="ccTargetGroups" class="cc-groups"></div>
-    </div>
-
-    <div style="display:flex;gap:.5rem;justify-content:flex-end;align-items:center;">
-      <div class="error" id="ccError" style="color:#e74c3c;font-size:.78rem;flex:1;"></div>
-      <button class="btn" id="ccSend" style="font-size:.8rem;">Wyślij <span class="en">Send</span></button>
-    </div>
-
-    <!-- Sent messages list -->
-    <div id="ccSentList" style="margin-top:.8rem;"></div>
-  </div>
-  {% endif %}
 
 </div>
 
