@@ -45,6 +45,55 @@ def _is_admin(request: Request) -> bool:
     return bool(user and (user.is_admin or user.is_superadmin))
 
 
+def _default_subproject_type(request: Request) -> str:
+    """Determine default subproject type based on user's role."""
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "role", None):
+        return "analysis"
+    role = user.role
+    _ROLE_TYPE_MAP = {
+        "Transkryptor": "transcription",
+        "Lingwista": "translation",
+        "Analityk": "analysis",
+        "Dialogista": "chat",
+        "Strateg": "analysis",
+        "Mistrz Sesji": "analysis",
+    }
+    return _ROLE_TYPE_MAP.get(role, "analysis")
+
+
+def _ensure_data_dir(name: str, owner_id: str) -> str:
+    """Create a file-based project directory and return its relative path."""
+    import uuid
+    import json
+    from pathlib import Path
+    from datetime import datetime
+    import os
+
+    _root = Path(__file__).resolve().parents[2]
+    data_root = Path(
+        os.environ.get("AISTATEWEB_DATA_DIR")
+        or os.environ.get("AISTATEWWW_DATA_DIR")
+        or os.environ.get("AISTATE_DATA_DIR")
+        or str(_root / "data_www")
+    ).resolve()
+    projects_dir = data_root / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+
+    pid = uuid.uuid4().hex
+    pdir = projects_dir / pid
+    pdir.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "project_id": pid,
+        "name": name,
+        "created_at": datetime.now().isoformat(),
+        "owner_id": owner_id,
+    }
+    meta_path = pdir / "project.json"
+    meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    return f"projects/{pid}"
+
+
 # =====================================================================
 # INVITATIONS — must be before /{workspace_id} to avoid route conflict
 # =====================================================================
@@ -122,6 +171,22 @@ async def create_workspace(request: Request):
         color=body.get("color", "#4a6cf7"),
         icon=body.get("icon", "folder"),
     )
+
+    # Auto-create a default subproject with the same name
+    sp_type = _default_subproject_type(request)
+    data_dir = _ensure_data_dir(name, uid)
+    sp = _STORE.create_subproject(
+        workspace_id=ws["id"],
+        name=name,
+        subproject_type=sp_type,
+        data_dir=data_dir,
+        created_by=uid,
+        user_name=_uname(request),
+    )
+    # Refresh workspace to include the new subproject
+    ws = _STORE.get_workspace(ws["id"])
+    ws["subprojects"] = _STORE.list_subprojects(ws["id"])
+
     return JSONResponse({"status": "ok", "workspace": ws})
 
 
@@ -189,6 +254,10 @@ async def create_subproject(request: Request, workspace_id: str):
     data_dir = body.get("data_dir", "")
     audio_file = body.get("audio_file", "")
     link_to = body.get("link_to", "")
+
+    # Auto-create file-based project directory if not provided
+    if not data_dir:
+        data_dir = _ensure_data_dir(name, uid)
 
     sp = _STORE.create_subproject(
         workspace_id=workspace_id,
