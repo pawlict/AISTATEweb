@@ -87,6 +87,12 @@ async def list_users(request: Request) -> JSONResponse:
         return err
     assert _user_store
     users = _user_store.list_users()
+    # Hide phantom 'admin' users created by single-user mode (no password, role='admin', not a real admin)
+    multiuser = getattr(request.state, "multiuser", False)
+    if multiuser:
+        users = [u for u in users if not (
+            u.username == "admin" and not u.password_hash and not u.is_admin and not u.is_superadmin
+        )]
     return JSONResponse({"status": "ok", "users": [_user_to_dict(u) for u in users]})
 
 
