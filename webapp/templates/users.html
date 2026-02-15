@@ -461,11 +461,13 @@
       <input type="text" id="uDisplayName" autocomplete="off"/>
     </div>
     <div class="field" style="margin-bottom:.8rem;">
-      <label for="uPassword">Hasło (min. 6 znaków) <span class="en">Password (min. 6 chars)</span></label>
+      <label for="uPassword" id="uPasswordLabel">Hasło (min. 6 znaków) <span class="en">Password (min. 6 chars)</span></label>
       <input type="password" id="uPassword" autocomplete="new-password"/>
-      <div id="uAdminPwHint" style="display:none;margin-top:.3rem;font-size:.72rem;color:#e67e22;line-height:1.4;">
-        ⚠ Konta administratorów wymagają silnego hasła: min. 12 znaków, wielkie i małe litery, cyfra, znak specjalny.
-        <span class="en">Admin accounts require a strong password: min. 12 chars, upper &amp; lowercase, digit, special char.</span>
+      <div id="uAdminPwHint" style="display:none;margin-top:.35rem;font-size:.76rem;color:#e67e22;line-height:1.55;background:rgba(230,126,34,.07);border:1px solid rgba(230,126,34,.25);border-radius:6px;padding:.45rem .6rem;">
+        <b>Wymagania dla kont administratorów:</b><br/>
+        &bull; Min. 12 znaków &bull; Wielka litera (A-Z) &bull; Mała litera (a-z) &bull; Cyfra (0-9) &bull; Znak specjalny (!@#$...)
+        <div class="en" style="margin-top:.2rem;"><b>Admin account password requirements:</b><br/>
+        &bull; Min. 12 chars &bull; Uppercase (A-Z) &bull; Lowercase (a-z) &bull; Digit (0-9) &bull; Special char (!@#$...)</div>
       </div>
     </div>
     <div class="field" style="margin-bottom:.8rem;">

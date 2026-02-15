@@ -324,13 +324,14 @@
   function populateAdminChecks(targetId) {
     var checks = document.getElementById(targetId || 'adminRolesChecks');
     checks.innerHTML = '';
+    checks.style.cssText = 'display:flex;flex-wrap:wrap;gap:.35rem .7rem;align-items:flex-start;';
 
     /* Główny Opiekun option — only visible to existing superadmins */
     if (callerIsSuperadmin) {
       var saLabel = document.createElement('label');
-      saLabel.style.cssText = 'display:block;cursor:pointer;margin:.2rem 0;padding:.35rem .5rem;border:1.5px solid var(--accent,#4a6cf7);border-radius:6px;background:rgba(74,108,247,.04);';
-      saLabel.innerHTML = '<input type="checkbox" class="sa-check"/> <b>G\u0142\u00f3wny Opiekun</b> <span class="en">Main Guardian</span>' +
-        ' <span style="font-size:.72rem;color:var(--muted,#999);">(pe\u0142ny dost\u0119p <span class="en">full access</span>)</span>';
+      saLabel.style.cssText = 'display:inline-flex;align-items:center;gap:.3rem;cursor:pointer;padding:.35rem .5rem;border:1.5px solid var(--accent,#4a6cf7);border-radius:6px;background:rgba(74,108,247,.04);white-space:nowrap;';
+      saLabel.innerHTML = '<input type="checkbox" class="sa-check"/> <b>G\u0142\u00f3wny Opiekun</b>' +
+        ' <span style="font-size:.72rem;color:var(--muted,#999);">(pe\u0142ny dost\u0119p)</span>';
       checks.appendChild(saLabel);
       var saCb = saLabel.querySelector('input');
       saCb.addEventListener('change', function() {
@@ -344,24 +345,27 @@
 
     adminRoles.forEach(function(r) {
       var label = document.createElement('label');
-      label.style.cssText = 'display:block;cursor:pointer;margin:.2rem 0;';
-      var desc = adminRoleModules[r] || [];
-      var descLabels = desc.map(function(mk) {
-        var lab = MODULE_LABELS[mk];
-        return lab ? lab.pl : mk;
-      }).join(', ');
-      label.innerHTML = '<input type="checkbox" value="' + esc(r) + '"/> ' + esc(r) +
-        (descLabels ? ' <span style="font-size:.76rem;color:var(--muted,#999);">(' + esc(descLabels) + ')</span>' : '');
+      label.style.cssText = 'display:inline-flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;';
+      label.innerHTML = '<input type="checkbox" value="' + esc(r) + '"/> ' + esc(r);
       checks.appendChild(label);
     });
   }
 
-  function _updateAdminPwHint(checkboxId, hintId, passwordId) {
+  function _updateAdminPwHint(checkboxId, hintId, passwordId, labelId) {
     var cb = document.getElementById(checkboxId);
     if (!cb) return;
     var hint = document.getElementById(hintId);
     if (hint) {
       hint.style.display = cb.checked ? '' : 'none';
+    }
+    /* Swap password label min chars */
+    if (labelId) {
+      var lbl = document.getElementById(labelId);
+      if (lbl) {
+        lbl.innerHTML = cb.checked
+          ? 'Has\u0142o (min. 12 znak\u00f3w) <span class="en">Password (min. 12 chars)</span>'
+          : 'Has\u0142o (min. 6 znak\u00f3w) <span class="en">Password (min. 6 chars)</span>';
+      }
     }
     /* Update password meter policy if available */
     if (typeof attachPasswordMeter === 'function' && passwordId) {
@@ -372,7 +376,7 @@
   document.getElementById('uIsAdmin').addEventListener('change', function() {
     document.getElementById('roleSection').style.display = this.checked ? 'none' : '';
     document.getElementById('adminRoleSection').style.display = this.checked ? '' : 'none';
-    _updateAdminPwHint('uIsAdmin', 'uAdminPwHint', 'uPassword');
+    _updateAdminPwHint('uIsAdmin', 'uAdminPwHint', 'uPassword', 'uPasswordLabel');
   });
 
   document.getElementById('btnAddUser').addEventListener('click', function() {
