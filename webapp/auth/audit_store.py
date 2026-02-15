@@ -88,6 +88,9 @@ class AuditStore:
                     parts.append(f"actor={actor_name}")
                 if detail:
                     parts.append(f"detail={detail}")
+                if fingerprint:
+                    fp_str = " ".join(f"{k}={v}" for k, v in fingerprint.items() if v)
+                    parts.append(f"device=[{fp_str}]")
                 self._file_logger.write_line(f"{ts} | {' '.join(parts)}")
             except Exception:
                 pass

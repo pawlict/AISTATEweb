@@ -30,9 +30,18 @@ AISTATEweb/
 ├── webapp/                    # FastAPI web application
 │   ├── server.py              # Main app (6600+ lines): routes, TaskManager, GPUResourceManager
 │   ├── routers/               # Extracted API route modules
+│   │   ├── auth.py            # /api/auth/* — login, logout, register, audit, password mgmt
 │   │   ├── chat.py            # POST /api/chat/send, GET /api/chat/follow/{id} (SSE streaming)
 │   │   ├── admin.py           # /api/admin/gpu/* — GPU Resource Manager endpoints
 │   │   └── tasks.py           # /api/tasks/* — background task management
+│   ├── auth/                  # Multi-user authentication module
+│   │   ├── audit_store.py     # JSON-based audit log (login events, fingerprints, max 5000 entries)
+│   │   ├── user_store.py      # User CRUD, UserRecord dataclass (UUID-based user_id)
+│   │   ├── session_store.py   # Session management (cookie: aistate_session)
+│   │   ├── deployment_store.py# Single/multi-user mode configuration
+│   │   ├── message_store.py   # Call Center inter-user messaging
+│   │   ├── passwords.py       # PBKDF2-SHA256 hashing, password policy validation
+│   │   └── permissions.py     # Role-based module access (roles, admin_roles)
 │   ├── templates/             # Jinja2 HTML templates (16 files)
 │   └── static/                # JS, CSS, fonts, images
 │       ├── app.js             # Main frontend logic
@@ -75,6 +84,7 @@ AISTATEweb/
     ├── test_api_integration.py    # FastAPI TestClient integration tests
     ├── test_document_processor.py # Document extraction tests
     ├── test_routers_chat.py       # Chat router tests
+    ├── test_multiuser.py          # Auth: passwords, users, sessions, permissions, roles
     └── test_settings.py           # Settings persistence tests
 ```
 
@@ -102,8 +112,11 @@ Heavy ML tasks run as separate Python subprocesses. Workers communicate results 
 No database. All state is file-based:
 - **Projects:** `data_www/projects/{project_id}/project.json` + associated files (audio, transcript, diarized text, translations)
 - **Settings:** `backend/.aistate/settings.json` (contains HF token — never commit)
+- **Users:** `backend/.aistate/users.json` — user accounts (UUID `user_id`, roles, password hashes)
+- **Sessions:** `backend/.aistate/sessions.json` — active login sessions
+- **Audit log:** `backend/.aistate/audit_log.json` — auth events with browser fingerprints (max 5000 entries)
 - **Model registries:** `data_www/projects/_global/asr_models.json`, `nllb_models.json`
-- **Admin logs:** `backend/logs/YYYY-MM-DD/aistateHH-HH.log`
+- **Admin logs:** `backend/logs/YYYY-MM-DD/aistateHH-HH.log` (system), `aistate_userHH-HH.log` (auth events)
 
 ### Frontend
 
@@ -139,7 +152,7 @@ pytest tests/ -v --tb=short
 - **Dataclasses** for structured data (`Settings`, task metadata, etc.)
 - **Async endpoints** where appropriate; heavy sync work uses `run_in_threadpool` or subprocess workers
 - **No ORM** — direct `Path.read_text()` / `Path.write_text()` with `json.loads()` / `json.dumps()`
-- **No authentication** — single-user/trusted-network deployment model
+- **Multi-user authentication** — optional mode with role-based access, session cookies, rate limiting, account lockout, browser fingerprint logging, and audit trail (see `webapp/auth/`)
 - **UI languages:** Polish (pl) and English (en); UI strings are in `webapp/static/lang/`
 - **No linter or formatter configured** in the repo (no flake8, black, ruff, etc.)
 - **No CI/CD pipeline** configured
@@ -177,9 +190,35 @@ Workers are invoked by `TaskManager` as separate Python processes. They:
 3. Print JSON results to stdout
 4. Report progress via `PROGRESS: N` on stderr
 
+### Authentication & Audit
+
+Multi-user mode (`webapp/auth/`) provides:
+- **Login/Logout/Register** via `webapp/routers/auth.py` (`/api/auth/*`)
+- **Roles:** user roles (Transkryptor, Lingwista, Analityk, Dialogista, Strateg, Mistrz Sesji) + admin roles (Architekt Funkcji, Strażnik Dostępu, Główny Opiekun) + superadmin
+- **Audit log** (`AuditStore`): records events (login, login_failed, logout, password_changed, account_locked, etc.) to both JSON (`audit_log.json`) and flat file logs (`backend/logs/`)
+- **Browser fingerprint** collected at login: `browser`, `os`, `screen`, `timezone`, `language`, `platform` — stored in audit entries and written to file logs as `device=[browser=Chrome 120 os=Windows 10 ...]`
+- **Audit history panel** in admin UI (Users → Security tab): searchable by username or UID, filterable by event type, shows UID column + Device column
+
+Audit entry structure:
+```json
+{
+  "id": "uuid",
+  "timestamp": "ISO datetime",
+  "event": "login|login_failed|...",
+  "user_id": "user UUID",
+  "username": "...",
+  "ip": "...",
+  "detail": "...",
+  "fingerprint": {"browser": "Chrome 120", "os": "Windows 10", "screen": "1920x1080", "timezone": "Europe/Warsaw", "language": "pl-PL", "platform": "Win32"}
+}
+```
+
 ## Sensitive Files (do not commit)
 
 - `backend/.aistate/settings.json` — contains HuggingFace token
+- `backend/.aistate/users.json` — password hashes, user data
+- `backend/.aistate/sessions.json` — active session tokens
+- `backend/.aistate/audit_log.json` — login history with IPs and fingerprints
 - `.env` or any credentials files
 - `data_www/` — user project data
 
