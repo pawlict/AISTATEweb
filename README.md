@@ -287,7 +287,7 @@ Open in browser: http://127.0.0.1:8000
 
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
-## beta 3.5.0 (translation update)
+## beta 3.5.0 (SQLite)
 - JSON -> SQLite migration
  
 ## beta 3.4.0 
