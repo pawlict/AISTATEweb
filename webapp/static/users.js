@@ -356,9 +356,23 @@
     });
   }
 
+  function _updateAdminPwHint(checkboxId, hintId, passwordId) {
+    var cb = document.getElementById(checkboxId);
+    if (!cb) return;
+    var hint = document.getElementById(hintId);
+    if (hint) {
+      hint.style.display = cb.checked ? '' : 'none';
+    }
+    /* Update password meter policy if available */
+    if (typeof attachPasswordMeter === 'function' && passwordId) {
+      attachPasswordMeter(passwordId, cb.checked ? 'strong' : 'basic');
+    }
+  }
+
   document.getElementById('uIsAdmin').addEventListener('change', function() {
     document.getElementById('roleSection').style.display = this.checked ? 'none' : '';
     document.getElementById('adminRoleSection').style.display = this.checked ? '' : 'none';
+    _updateAdminPwHint('uIsAdmin', 'uAdminPwHint', 'uPassword');
   });
 
   document.getElementById('btnAddUser').addEventListener('click', function() {
@@ -722,6 +736,12 @@
     document.getElementById('rpUsername').textContent = u.username;
     document.getElementById('rpPassword').value = '';
     document.getElementById('rpError').textContent = '';
+    /* Show admin password hint if target is admin */
+    var rpHint = document.getElementById('rpAdminPwHint');
+    if (rpHint) rpHint.style.display = (u.is_admin || u.is_superadmin) ? '' : 'none';
+    if (typeof attachPasswordMeter === 'function') {
+      attachPasswordMeter('rpPassword', (u.is_admin || u.is_superadmin) ? 'strong' : 'basic');
+    }
     document.getElementById('resetPwModal').style.display = 'flex';
   }
 
