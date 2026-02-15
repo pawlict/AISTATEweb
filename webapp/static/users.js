@@ -1124,11 +1124,35 @@
     });
   }
 
+  function _blMsg(text, isError) {
+    var el = document.getElementById('blFeedback');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = isError ? '#e74c3c' : '#27ae60';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(function() { el.textContent = ''; }, 3500);
+  }
+
   window.addToBlacklist = async function() {
     var inp = document.getElementById('blNewPassword');
     if (!inp) return;
     var pw = inp.value.trim();
     if (!pw) return;
+
+    // Client-side duplicate check
+    if (_blData) {
+      var lower = pw.toLowerCase();
+      var isDupBuiltin = _blData.builtin.indexOf(lower) !== -1;
+      var isDupCustom = _blData.custom.indexOf(lower) !== -1;
+      if (isDupBuiltin) {
+        _blMsg('To hasło jest już na liście wbudowanej / Already on built-in list', true);
+        return;
+      }
+      if (isDupCustom) {
+        _blMsg('To hasło jest już na liście / Already on the list', true);
+        return;
+      }
+    }
 
     try {
       var res = await fetch('/api/auth/password-blacklist', {
@@ -1139,10 +1163,21 @@
       var data = await res.json();
       if (data.status === 'ok') {
         inp.value = '';
+        _blMsg('Dodano hasło / Password added', false);
         _blData = null;
         loadBlacklist();
+      } else if (res.status === 409) {
+        if (data.message === 'duplicate_builtin') {
+          _blMsg('To hasło jest już na liście wbudowanej / Already on built-in list', true);
+        } else {
+          _blMsg('To hasło jest już na liście / Already on the list', true);
+        }
+      } else {
+        _blMsg(data.message || 'Błąd / Error', true);
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      _blMsg('Błąd połączenia / Connection error', true);
+    }
   };
 
   var blInp = document.getElementById('blNewPassword');
