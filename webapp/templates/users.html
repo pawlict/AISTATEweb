@@ -19,27 +19,9 @@
 
   <!-- Panel: Users -->
   <div id="usersPanel" class="users-panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .8rem;">
-      <button class="btn" id="btnAddUser">Dodaj użytkownika <span class="en">Add user</span></button>
-    </div>
 
-    <table class="data-table" id="usersTable" style="width:100%;">
-      <thead>
-        <tr>
-          <th>UID</th>
-          <th>Użytkownik <br><span class="en">User</span></th>
-          <th>Nazwa <br><span class="en">Name</span></th>
-          <th>Rola / Grupa <br><span class="en">Role / Group</span></th>
-          <th>Status</th>
-          <th>Ostatnie logowanie <br><span class="en">Last login</span></th>
-          <th>Akcje <br><span class="en">Actions</span></th>
-        </tr>
-      </thead>
-      <tbody id="usersBody"></tbody>
-    </table>
-
-    <!-- Role matrix + Call Center — only visible on Users tab -->
-    <div class="panels-row" style="display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap;align-items:flex-start;">
+    <!-- Role matrix + Call Center — at the top -->
+    <div class="panels-row" style="display:flex;gap:1rem;margin:.5rem 0 1rem;flex-wrap:wrap;align-items:flex-start;">
 
       <!-- Role-access matrix (CSS Grid layout) -->
       <div class="role-matrix-card" style="padding:.8rem 1rem;flex:1 1 480px;max-width:780px;">
@@ -106,12 +88,47 @@
           <div class="error" id="ccError" style="color:#e74c3c;font-size:.78rem;flex:1;"></div>
           <button class="btn" id="ccSend" style="font-size:.8rem;">Wyślij <span class="en">Send</span></button>
         </div>
-
-        <!-- Sent messages list -->
-        <div id="ccSentList" style="margin-top:.8rem;"></div>
       </div>
       {% endif %}
 
+    </div>
+
+    <!-- Messages inbox (collapsible) -->
+    <div class="inbox-card" id="inboxCard" style="border:1px solid var(--border,#e0e3e8);border-radius:8px;padding:.6rem 1rem;margin-bottom:1rem;">
+      <div class="inbox-header" onclick="toggleInbox()" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+        <h4 style="margin:0;font-size:.82rem;">
+          <span id="inboxArrow" class="bl-arrow">&#9654;</span>
+          Wiadomości <span class="en">Messages</span>
+          <span id="inboxBadge" class="inbox-badge" style="display:none;"></span>
+        </h4>
+      </div>
+      <div id="inboxPanel" style="display:none;margin-top:.5rem;">
+        <div id="inboxList"></div>
+      </div>
+    </div>
+
+    <!-- Users table header + button -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 .5rem;">
+      <h3 style="margin:0;font-size:.88rem;">Lista użytkowników <span class="en">User list</span></h3>
+      <button class="btn" id="btnAddUser">Dodaj użytkownika <span class="en">Add user</span></button>
+    </div>
+
+    <!-- Users table in resizable container -->
+    <div class="resizable-scroll" id="usersTableWrap">
+      <table class="data-table" id="usersTable" style="width:100%;">
+        <thead>
+          <tr>
+            <th>UID</th>
+            <th>Użytkownik <br><span class="en">User</span></th>
+            <th>Nazwa <br><span class="en">Name</span></th>
+            <th>Rola / Grupa <br><span class="en">Role / Group</span></th>
+            <th>Status</th>
+            <th>Ostatnie logowanie <br><span class="en">Last login</span></th>
+            <th>Akcje <br><span class="en">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody id="usersBody"></tbody>
+      </table>
     </div>
   </div>
 
@@ -234,7 +251,7 @@
         <button class="btn btn-secondary" id="auditNext" style="font-size:.75rem;padding:.2rem .5rem;">&rarr;</button>
       </div>
     </div>
-    <div class="audit-table-scroll">
+    <div class="resizable-scroll" id="auditTableWrap">
       <table class="data-table" style="width:100%;font-size:.82rem;">
         <thead>
           <tr>
@@ -269,13 +286,25 @@
   .users-tab:hover { color: var(--accent, #4a6cf7); }
   /* Tab styling — active */
   .users-tab.active { border-bottom-color: var(--accent, #4a6cf7); color: var(--accent, #4a6cf7); font-weight: 600; background: var(--card-bg, #fff); }
-  /* Audit table scrollable container */
-  .audit-table-scroll { max-height: calc(30 * 2.1em + 2.4em); overflow-y: auto; border: 1px solid var(--border, #eee); border-radius: 6px; }
-  .audit-table-scroll .data-table { border-collapse: collapse; }
-  .audit-table-scroll thead th { position: sticky; top: 0; background: var(--card-bg, #f8f9fa); z-index: 2; }
-  /* Password blacklist panel */
+  /* Resizable scrollable container (users table + audit log) */
+  .resizable-scroll { max-height: calc(20 * 2.4em + 2.6em); overflow-y: auto; border: 1px solid var(--border, #eee); border-radius: 6px; resize: vertical; min-height: 120px; }
+  .resizable-scroll .data-table { border-collapse: collapse; }
+  .resizable-scroll thead th { position: sticky; top: 0; background: var(--card-bg, #f8f9fa); z-index: 2; }
+  /* Arrow toggle */
   .bl-arrow { font-size:.6rem; transition:transform .2s; display:inline-block; margin-right:.3rem; }
   .bl-arrow.open { transform:rotate(90deg); }
+  /* Inbox panel */
+  .inbox-badge { display:inline-block; background:#e74c3c; color:#fff; font-size:.64rem; font-weight:700; padding:.1rem .4rem; border-radius:10px; margin-left:.4rem; min-width:1.2em; text-align:center; animation: inboxPulse 2s infinite; }
+  @keyframes inboxPulse { 0%,100% { opacity:1; } 50% { opacity:.6; } }
+  .inbox-msg { background:var(--card-bg,#f9fafb); border:1px solid var(--border,#eee); border-radius:6px; padding:.5rem .7rem; margin-bottom:.4rem; font-size:.78rem; transition: opacity .3s; }
+  .inbox-msg.unread { border-left: 3px solid var(--accent,#4a6cf7); background: rgba(74,108,247,.03); }
+  .inbox-msg .inbox-msg-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:.2rem; }
+  .inbox-msg .inbox-msg-subj { font-weight:600; font-size:.8rem; }
+  .inbox-msg .inbox-msg-meta { font-size:.68rem; color:var(--muted,#999); }
+  .inbox-msg .inbox-msg-body { font-size:.76rem; line-height:1.4; color:var(--text,#333); }
+  .inbox-msg .inbox-msg-actions { display:flex; gap:.3rem; margin-top:.3rem; justify-content:flex-end; }
+  .inbox-msg .inbox-msg-btn { background:none; border:1px solid var(--border,#ddd); border-radius:4px; font-size:.7rem; padding:.15rem .4rem; cursor:pointer; color:var(--text,#555); }
+  .inbox-msg .inbox-msg-btn:hover { background:rgba(74,108,247,.06); border-color:var(--accent,#4a6cf7); }
 
   /* User table row hover + cursor for dblclick */
   #usersBody tr[data-uid] { transition: background .15s; cursor: pointer; }
@@ -646,65 +675,14 @@
         document.getElementById('ccSubject').value = '';
         editor.innerHTML = '';
         document.querySelectorAll('#ccTargetGroups input:checked').forEach(function(cb) { cb.checked = false; });
-        loadSentMessages();
+        /* Refresh inbox after sending */
+        if (typeof loadInboxBadge === 'function') loadInboxBadge();
+        if (typeof loadInbox === 'function') loadInbox();
       } catch(e) {
         errEl.textContent = 'Connection error';
       }
     });
   }
-
-  /* Load & render sent messages */
-  async function loadSentMessages() {
-    var list = document.getElementById('ccSentList');
-    if (!list) return;
-    try {
-      var res = await fetch('/api/messages');
-      var data = await res.json();
-      if (data.status !== 'ok') return;
-      var msgs = data.messages || [];
-      if (msgs.length === 0) {
-        list.innerHTML = '<div style="color:var(--muted,#999);font-size:.74rem;">Brak wiadomości <span class="en">No messages</span></div>';
-        return;
-      }
-      list.innerHTML = '<div style="font-size:.74rem;font-weight:600;margin-bottom:.3rem;color:var(--muted,#666);">Wysłane wiadomości <span class="en">Sent messages</span> (' + msgs.length + ')</div>';
-      msgs.forEach(function(m) {
-        var item = document.createElement('div');
-        item.className = 'cc-sent-item';
-        var dt = m.created_at ? m.created_at.replace('T',' ').slice(0,16) : '';
-        var readCount = (m.read_by || []).length;
-        item.innerHTML =
-          '<div class="cc-sent-head">' +
-            '<span class="cc-sent-subj">' + escH(m.subject) + '</span>' +
-            '<span>' +
-              '<span class="cc-sent-date">' + escH(dt) + '</span> ' +
-              '<button class="cc-sent-del" data-mid="' + m.message_id + '">&#10005;</button>' +
-            '</span>' +
-          '</div>' +
-          '<div class="cc-sent-groups">&#8594; ' + (m.target_groups || []).join(', ') + '</div>' +
-          '<div class="cc-sent-stats">' + readCount + ' przeczytało <span class="en">read</span></div>';
-        list.appendChild(item);
-      });
-      /* Delete buttons */
-      list.querySelectorAll('.cc-sent-del').forEach(function(btn) {
-        btn.addEventListener('click', async function() {
-          const ok = await showConfirm({title:'Usunięcie wiadomości',message:'Usunąć wiadomość? / Delete message?',confirmText:'Usuń / Delete',type:'danger'});
-          if (!ok) return;
-          await fetch('/api/messages/' + btn.dataset.mid, { method: 'DELETE' });
-          loadSentMessages();
-        });
-      });
-      if (typeof applyBilingualMode === 'function') applyBilingualMode();
-    } catch(e) { /* ignore */ }
-  }
-
-  function escH(s) {
-    var d = document.createElement('div');
-    d.textContent = s || '';
-    return d.innerHTML;
-  }
-
-  /* Init */
-  loadSentMessages();
 })();
 </script>
 {% endif %}
