@@ -1883,8 +1883,25 @@ textarea{min-height:220px; resize:vertical}
 .lang-chip.active{ background:var(--accent,#4a6cf7); color:#fff; border-color:var(--accent,#4a6cf7); }
 .lang-chip:hover:not(.active){ border-color:var(--accent,#4a6cf7); color:var(--accent,#4a6cf7); }
 
-/* Sidebar collapsed: hide user badge text */
-.sidebar.collapsed .user-badge{ display:none; }
+/* Compact logout icon — hidden by default (shown only when collapsed) */
+.user-badge-compact-logout{
+  display:none;
+  background:none; border:none; cursor:pointer;
+  color:#e74c3c; padding:0; margin:0 auto;
+  line-height:0; opacity:.7; transition:opacity .15s;
+}
+.user-badge-compact-logout:hover{ opacity:1; }
+
+/* Sidebar collapsed: user badge becomes a small centered logout icon */
+body.sidebar-collapsed .user-badge{
+  margin:0 auto .4rem; padding:.45rem; text-align:center;
+  background:none; border:none; width:auto;
+}
+body.sidebar-collapsed .user-badge:hover{ background:rgba(231,76,60,.08); }
+body.sidebar-collapsed .user-badge-role{ display:none; }
+body.sidebar-collapsed .user-badge-name{ display:none; }
+body.sidebar-collapsed .user-badge-menu{ display:none !important; }
+body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 
 /* ===== Multi-user: modal overlay (shared) ===== */
 .modal-overlay{

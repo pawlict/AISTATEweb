@@ -59,6 +59,14 @@
       <div class="user-badge" id="userBadge">
         <div class="user-badge-role">{% if user.is_superadmin %}Główny Opiekun{% elif user.role %}{{ user.role }}{% elif user.admin_roles %}{{ user.admin_roles|join(', ') }}{% else %}—{% endif %}</div>
         <div class="user-badge-name">{{ user.display_name or user.username }}</div>
+        <!-- Collapsed-only: logout icon -->
+        <button class="user-badge-compact-logout" id="btnLogoutCompact" type="button" title="Wyloguj / Logout">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
         <div class="user-badge-menu" id="userBadgeMenu" style="display:none;">
           <div class="user-badge-lang" id="userLangSwitch">
             <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'pl' }}" data-lang="pl">PL</button>
@@ -517,6 +525,8 @@
       if (badge && menu) {
         badge.addEventListener('click', function(e) {
           if (e.target.closest('.user-badge-btn') || e.target.closest('.lang-chip')) return;
+          // Don't open menu when sidebar is collapsed
+          if (document.body.classList.contains('sidebar-collapsed')) return;
           menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
         });
       }
@@ -542,6 +552,14 @@
       var logoutBtn = document.getElementById('btnLogout');
       if (logoutBtn) {
         logoutBtn.addEventListener('click', async function() {
+          await fetch('/api/auth/logout', {method:'POST'});
+          location.href = '/login';
+        });
+      }
+      var logoutCompact = document.getElementById('btnLogoutCompact');
+      if (logoutCompact) {
+        logoutCompact.addEventListener('click', async function(e) {
+          e.stopPropagation();
           await fetch('/api/auth/logout', {method:'POST'});
           location.href = '/login';
         });
