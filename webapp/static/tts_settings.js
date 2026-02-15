@@ -265,7 +265,7 @@
     var text = textInput ? textInput.value.trim() : "";
 
     if (!text) {
-      alert(_tSafe("tts.test_no_text", "Wpisz tekst testowy"));
+      showToast(_tSafe("tts.test_no_text", "Wpisz tekst testowy"), 'warning');
       return;
     }
 
@@ -285,7 +285,7 @@
       });
 
       if (!res) {
-        alert(_tSafe("tts.test_error", "Błąd syntezy"));
+        showToast(_tSafe("tts.test_error", "Błąd syntezy"), 'error');
         return;
       }
 

@@ -403,7 +403,7 @@ async function ensureProject(){
 function requireProjectId(){
   const pid = AISTATE.projectId || "";
   if(!pid){
-    alert(t("alert.no_active_project"));
+    showToast(t("alert.no_active_project"), 'warning');
     window.location.href = "/new-project";
     throw new Error("No active project");
   }
@@ -473,7 +473,7 @@ async function startTask(prefix, endpoint, formData, onDone){
   }catch(e){
     const msg = (e && e.message) ? e.message : "Error";
     setStatus(prefix, "Error ❌: " + msg);
-    alert(msg);
+    showToast(msg, 'error');
     throw e;
   }
 }
@@ -852,17 +852,17 @@ function openManualEditor(textarea, lineIndex){
     applySpeakerBtn.onclick = ()=>{
       const newSpeaker = (speakerInput.value || "").trim();
       if(!newSpeaker){
-        alert(t("modal.alert.enter_speaker"));
+        showToast(t("modal.alert.enter_speaker"), 'warning');
         return;
       }
-      
+
       if(!currentSpeaker){
-        alert(t("modal.alert.no_original_speaker"));
+        showToast(t("modal.alert.no_original_speaker"), 'warning');
         return;
       }
-      
+
       if(newSpeaker === currentSpeaker){
-        alert(t("modal.alert.same_speaker"));
+        showToast(t("modal.alert.same_speaker"), 'info');
         return;
       }
       
@@ -880,7 +880,7 @@ function openManualEditor(textarea, lineIndex){
       currentSpeaker = newSpeaker;
       
       console.log(`✅ Changed speaker: ${count} occurrences`);
-      alert(tFmt("modal.alert.changed_speaker", {count}));
+      showToast(tFmt("modal.alert.changed_speaker", {count}), 'success');
     };
   }
 
@@ -984,17 +984,17 @@ function openManualEditor(textarea, lineIndex){
           headers:{ "content-type":"application/json" },
           body: JSON.stringify({ text: outTa.value || "" })
         });
-        alert(t("modal.alert.saved_transcription"));
+        showToast(t("modal.alert.saved_transcription"), 'success');
       }else if(ctx.textareaId === "di_out"){
         await api(`/api/projects/${pid}/save_diarized`, {
           method:"POST",
           headers:{ "content-type":"application/json" },
           body: JSON.stringify({ text: outTa.value || "" })
         });
-        alert(t("modal.alert.saved_diarization"));
+        showToast(t("modal.alert.saved_diarization"), 'success');
       }
     }catch(e){
-      alert(e.message || t("modal.alert.save_error"));
+      showToast(e.message || t("modal.alert.save_error"), 'error');
     }
   };
 }

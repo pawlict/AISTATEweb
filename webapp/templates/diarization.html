@@ -1091,7 +1091,7 @@ function updateBlockNoteIconInSeg(idx) {
 async function saveNotesToProject() {
   const pid = AISTATE.projectId;
   if (!pid) {
-    alert('Brak aktywnego projektu');
+    showToast('Brak aktywnego projektu', 'warning');
     return;
   }
   
@@ -1104,7 +1104,7 @@ async function saveNotesToProject() {
     
     showToast('✅ Notatki zapisane w projekcie');
   } catch (e) {
-    alert('❌ Błąd zapisu notatek: ' + e.message);
+    showToast('Błąd zapisu notatek: ' + e.message, 'error');
   }
 }
 
@@ -2606,7 +2606,7 @@ function diGetSelectedReportFormats(){
 async function diSaveReports(){
   const pid = AISTATE.projectId;
   if(!pid){
-    alert("Brak aktywnego projektu");
+    showToast("Brak aktywnego projektu", 'warning');
     return;
   }
 
@@ -2615,13 +2615,13 @@ async function diSaveReports(){
     : (document.getElementById("di_out")?.value || "");
 
   if(!text.trim()){
-    alert("Brak wyniku diaryzacji do wyeksportowania");
+    showToast("Brak wyniku diaryzacji do wyeksportowania", 'warning');
     return;
   }
 
   const formats = diGetSelectedReportFormats();
   if(formats.length === 0){
-    alert("Wybierz przynajmniej jeden format raportu");
+    showToast("Wybierz przynajmniej jeden format raportu", 'warning');
     return;
   }
 
@@ -2679,7 +2679,7 @@ async function diSaveReports(){
     showToast(message + ' i zapisane w projekcie', 3000);
 
   }catch(e){
-    alert(`❌ Błąd generowania raportu: ${e.message}`);
+    showToast(`Błąd generowania raportu: ${e.message}`, 'error');
     console.error('Report generation error:', e);
 
   }finally{
@@ -2712,7 +2712,7 @@ async function diStartDiarize(){
   if(mode !== "text"){
     await updateAudioState();
     if(!DI_HAS_AUDIO){
-      alert("Brak pliku audio w projekcie. Utwórz projekt w zakładce: Nowy projekt.");
+      showToast("Brak pliku audio w projekcie. Utwórz projekt w zakładce: Nowy projekt.", 'warning');
       window.location.href = "/new-project";
       return;
     }
@@ -2755,7 +2755,7 @@ async function diStartDiarize(){
     await startTask("di", "/api/diarize_voice", fd, onDoneDiarize);
   } else {
     const text = document.getElementById("di_text_in").value || "";
-    if(!text.trim()){ alert("Wklej tekst wejściowy."); return; }
+    if(!text.trim()){ showToast("Wklej tekst wejściowy.", 'warning'); return; }
     fd.append("text", text);
     fd.append("speakers", document.getElementById("di_speakers").value || "2");
     fd.append("method", document.getElementById("di_method").value || "alternate");
@@ -2773,7 +2773,7 @@ document.getElementById("di_apply_map").addEventListener("click", function(){
   let mapping = {};
   const raw = document.getElementById("di_speaker_map").value || "";
   if(raw.trim()){
-    try{ mapping = JSON.parse(raw); }catch(e){ alert("Niepoprawny JSON mapowania."); return; }
+    try{ mapping = JSON.parse(raw); }catch(e){ showToast("Niepoprawny JSON mapowania.", 'error'); return; }
   }
   
   const outEl = document.getElementById("di_out");
@@ -2812,9 +2812,9 @@ document.getElementById("di_apply_map").addEventListener("click", function(){
     // ✨ Auto-save po zastosowaniu mapowania
     scheduleAutoSave();
     
-    alert("✅ Wprowadzono zmiany:\n\n" + details.join('\n') + "\n\nRazem: " + totalReplacements + " zamian");
+    showToast("Wprowadzono " + totalReplacements + " zamian: " + details.join(', '), 'success');
   } else {
-    alert('ℹ️ Nie znaleziono żadnych wystąpień do zamiany. Sprawdź czy etykiety w mapowaniu pasują do tych w wyniku.');
+    showToast('Nie znaleziono żadnych wystąpień do zamiany. Sprawdź czy etykiety w mapowaniu pasują do tych w wyniku.', 'info');
   }
 });
 

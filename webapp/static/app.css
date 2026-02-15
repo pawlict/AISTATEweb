@@ -1924,3 +1924,314 @@ textarea{min-height:220px; resize:vertical}
   color:var(--muted,#888);
 }
 .actions-cell{ white-space:nowrap; }
+
+/* ===================== Toast / Snackbar ===================== */
+
+#aistate-toast-container{
+  position:fixed;
+  top:18px;
+  right:18px;
+  z-index:10001;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  pointer-events:none;
+  max-width:420px;
+  width:calc(100vw - 36px);
+}
+
+.aistate-toast{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:12px 14px;
+  border-radius:12px;
+  background:var(--panel,#fff);
+  border:1px solid var(--border);
+  box-shadow:0 8px 24px rgba(15,23,42,.12);
+  pointer-events:auto;
+  opacity:0;
+  transform:translateX(40px);
+  transition:opacity .25s ease, transform .25s ease;
+}
+.aistate-toast-show{
+  opacity:1;
+  transform:translateX(0);
+}
+.aistate-toast-hide{
+  opacity:0;
+  transform:translateX(40px);
+}
+
+.aistate-toast-icon{
+  font-size:18px;
+  font-weight:900;
+  flex-shrink:0;
+  width:28px;
+  height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:8px;
+}
+.aistate-toast-success .aistate-toast-icon{ background:rgba(21,128,61,.10); }
+.aistate-toast-error .aistate-toast-icon{ background:rgba(185,28,28,.10); }
+.aistate-toast-warning .aistate-toast-icon{ background:rgba(217,119,6,.10); }
+.aistate-toast-info .aistate-toast-icon{ background:rgba(31,90,166,.10); }
+
+.aistate-toast-text{
+  flex:1;
+  font-size:14px;
+  font-weight:500;
+  line-height:1.4;
+  color:var(--text,#0f172a);
+}
+
+.aistate-toast-close{
+  background:none;
+  border:none;
+  font-size:18px;
+  color:var(--muted,#475569);
+  cursor:pointer;
+  padding:0 2px;
+  line-height:1;
+  flex-shrink:0;
+  opacity:.6;
+  transition:opacity .15s;
+}
+.aistate-toast-close:hover{ opacity:1; }
+
+/* ===================== Confirm Modal ===================== */
+
+.aistate-confirm-overlay{
+  position:fixed;
+  inset:0;
+  z-index:10002;
+  background:rgba(15,23,42,.45);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+  opacity:0;
+  transition:opacity .2s ease;
+  backdrop-filter:blur(2px);
+}
+.aistate-confirm-show{ opacity:1; }
+.aistate-confirm-hide{ opacity:0; }
+
+.aistate-confirm-panel{
+  width:min(460px, 96vw);
+  background:var(--panel,#fff);
+  border:1px solid var(--border);
+  border-radius:var(--radius,18px);
+  box-shadow:0 20px 50px rgba(15,23,42,.18);
+  padding:24px;
+  text-align:center;
+  transform:scale(.95);
+  transition:transform .2s ease;
+}
+.aistate-confirm-show .aistate-confirm-panel{ transform:scale(1); }
+
+.aistate-confirm-icon{
+  width:48px;
+  height:48px;
+  border-radius:50%;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  margin-bottom:14px;
+}
+
+.aistate-confirm-title{
+  margin:0 0 8px;
+  font-size:18px;
+  font-weight:800;
+  color:var(--text,#0f172a);
+}
+
+.aistate-confirm-msg{
+  margin:0 0 6px;
+  font-size:14px;
+  color:var(--muted,#475569);
+  line-height:1.5;
+}
+
+.aistate-confirm-detail{
+  margin:0 0 6px;
+  font-size:15px;
+  font-weight:700;
+  color:var(--text,#0f172a);
+}
+
+.aistate-confirm-warning{
+  margin:8px 0 0;
+  font-size:12px;
+  color:var(--danger,#b91c1c);
+  font-weight:600;
+}
+
+.aistate-confirm-actions{
+  display:flex;
+  gap:10px;
+  justify-content:center;
+  margin-top:18px;
+}
+
+.aistate-confirm-btn{
+  padding:10px 22px;
+  border-radius:12px;
+  font-size:14px;
+  font-weight:700;
+  cursor:pointer;
+  border:1px solid var(--border);
+  background:var(--panel,#fff);
+  color:var(--text,#0f172a);
+  transition:background .15s, box-shadow .15s;
+}
+.aistate-confirm-btn:hover{ background:rgba(15,23,42,.06); }
+.aistate-confirm-btn:focus{ outline:2px solid var(--accent,#1f5aa6); outline-offset:2px; }
+
+.aistate-confirm-ok{
+  border:none;
+  color:#fff;
+}
+.aistate-confirm-ok:hover{ opacity:.9; }
+
+/* ===================== Inline Form Validation ===================== */
+
+.aistate-field-hint{
+  font-size:12px;
+  line-height:1.3;
+  min-height:0;
+  margin-top:4px;
+  transition:color .15s;
+}
+.aistate-field-hint-error{
+  color:var(--danger,#b91c1c);
+  font-weight:600;
+}
+
+.aistate-field-invalid{
+  border-color:var(--danger,#b91c1c) !important;
+  box-shadow:0 0 0 2px rgba(185,28,28,.12) !important;
+}
+.aistate-field-valid{
+  border-color:var(--ok,#15803d) !important;
+  box-shadow:0 0 0 2px rgba(21,128,61,.10) !important;
+}
+
+/* Password strength meter */
+.aistate-pw-meter{
+  margin-top:6px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.aistate-pw-bar{
+  height:6px;
+  border-radius:3px;
+  background:rgba(15,23,42,.08);
+  overflow:hidden;
+}
+.aistate-pw-fill{
+  height:100%;
+  border-radius:3px;
+  width:0;
+  transition:width .3s, background .3s;
+}
+.aistate-pw-weak{ background:#ef4444; }
+.aistate-pw-medium{ background:#f59e0b; }
+.aistate-pw-strong{ background:#22c55e; }
+
+.aistate-pw-label{
+  font-size:11px;
+  font-weight:700;
+}
+.aistate-pw-label-weak{ color:#ef4444; }
+.aistate-pw-label-medium{ color:#f59e0b; }
+.aistate-pw-label-strong{ color:#22c55e; }
+
+.aistate-pw-checks{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.aistate-pw-check{
+  font-size:11px;
+  font-weight:500;
+}
+.aistate-pw-check-ok{ color:var(--ok,#15803d); }
+.aistate-pw-check-fail{ color:var(--muted,#475569); }
+
+/* ===================== Breadcrumbs ===================== */
+
+.aistate-breadcrumbs{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:13px;
+  color:var(--muted,#475569);
+  margin-bottom:12px;
+  flex-wrap:wrap;
+}
+
+.aistate-bc-link{
+  color:var(--accent,#1f5aa6);
+  text-decoration:none;
+  font-weight:500;
+}
+.aistate-bc-link:hover{
+  text-decoration:underline;
+}
+
+.aistate-bc-sep{
+  color:var(--muted,#475569);
+  opacity:.5;
+  font-size:15px;
+  user-select:none;
+}
+
+.aistate-bc-current{
+  font-weight:700;
+  color:var(--text,#0f172a);
+}
+
+/* ===================== Button loading spinner ===================== */
+
+.aistate-btn-spinner{
+  display:inline-block;
+  width:14px;
+  height:14px;
+  border:2px solid rgba(15,23,42,.2);
+  border-top-color:currentColor;
+  border-radius:50%;
+  animation:aistateSpin .6s linear infinite;
+  vertical-align:middle;
+}
+@keyframes aistateSpin{ to{transform:rotate(360deg)} }
+
+.aistate-btn-loading{
+  opacity:.75;
+  cursor:wait;
+}
+
+/* ===================== Active sidebar highlight ===================== */
+
+.nav a.active{
+  border-color: rgba(31,90,166,.25);
+  background: rgba(31,90,166,.10);
+  color: var(--text);
+  font-weight:700;
+  position:relative;
+}
+.nav a.active::before{
+  content:'';
+  position:absolute;
+  left:0;
+  top:8px;
+  bottom:8px;
+  width:3px;
+  border-radius:0 3px 3px 0;
+  background:var(--accent,#1f5aa6);
+}

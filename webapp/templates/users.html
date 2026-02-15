@@ -598,7 +598,8 @@
       /* Delete buttons */
       list.querySelectorAll('.cc-sent-del').forEach(function(btn) {
         btn.addEventListener('click', async function() {
-          if (!confirm('Usunąć wiadomość? / Delete message?')) return;
+          const ok = await showConfirm({title:'Usunięcie wiadomości',message:'Usunąć wiadomość? / Delete message?',confirmText:'Usuń / Delete',type:'danger'});
+          if (!ok) return;
           await fetch('/api/messages/' + btn.dataset.mid, { method: 'DELETE' });
           loadSentMessages();
         });

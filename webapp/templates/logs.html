@@ -152,7 +152,8 @@ async function showSelected(){
 document.getElementById("task_refresh").addEventListener("click", async ()=>{ await refreshTasks(); await showSelected(); });
 document.getElementById("task_select").addEventListener("change", showSelected);
 document.getElementById("task_clear").addEventListener("click", async ()=>{
-  if(!confirm(t("logs.alert.clear_confirm"))) return;
+  const ok = await showConfirm({title:t("logs.alert.clear_confirm"),message:t("logs.alert.clear_confirm"),confirmText:'OK',type:'warning'});
+  if(!ok) return;
   await api("/api/tasks/clear", {method:"POST"});
   await refreshTasks(); await showSelected();
 });
@@ -186,7 +187,7 @@ async function _copyToClipboard(text){
 document.getElementById("lg_copy_all").addEventListener("click", async ()=>{
   const ta = document.getElementById("lg_logs");
   await _copyToClipboard(ta.value || "");
-  alert(t("logs.alert.copied"));
+  showToast(t("logs.alert.copied"), 'success');
 });
 
 document.getElementById("lg_copy_sel").addEventListener("click", async ()=>{
@@ -195,7 +196,7 @@ document.getElementById("lg_copy_sel").addEventListener("click", async ()=>{
   const end = ta.selectionEnd || 0;
   const txt = (end>start) ? ta.value.substring(start, end) : (ta.value || "");
   await _copyToClipboard(txt);
-  alert(t("logs.alert.copied"));
+  showToast(t("logs.alert.copied"), 'success');
 });
 
 function _defaultLogFileName(){
@@ -268,7 +269,7 @@ if(dlg && typeof dlg.showModal === "function"){
 }
   try{
     await _saveTextToFile(fname, txt);
-    alert(t("logs.alert.saved"));
+    showToast(t("logs.alert.saved"), 'success');
   }catch(e){
     // User canceled or browser blocked
   }

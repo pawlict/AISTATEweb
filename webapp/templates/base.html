@@ -15,6 +15,7 @@
     html:not(.lang-en) .en { display: none !important; }
   </style>
   <script src="/static/icons.js"></script>
+  <script src="/static/ui.js?v={{ app_version }}"></script>
 </head>
 <body>
 <div class="container">
@@ -270,6 +271,9 @@
         <div class="small"><span data-i18n="top.source_file">Plik źródłowy projektu</span>: <b id="current_audio">(…)</b></div>
       </div>
     </div>
+    {% endif %}
+    {% if breadcrumbs is defined and breadcrumbs %}
+    <nav class="aistate-breadcrumbs" id="aistate-breadcrumbs" data-items='{{ breadcrumbs | tojson }}' aria-label="Breadcrumbs"></nav>
     {% endif %}
 
     {% block content %}{% endblock %}
@@ -548,15 +552,15 @@
           var cur = prompt(t('auth.current_password_prompt') !== 'auth.current_password_prompt' ? t('auth.current_password_prompt') : 'Aktualne hasło:');
           if (!cur) return;
           var nw = prompt(t('auth.new_password_prompt') !== 'auth.new_password_prompt' ? t('auth.new_password_prompt') : 'Nowe hasło (min. 6 znaków):');
-          if (!nw || nw.length < 6) { alert('Hasło musi mieć min. 6 znaków / Password must be at least 6 characters'); return; }
+          if (!nw || nw.length < 6) { showToast('Hasło musi mieć min. 6 znaków / Password must be at least 6 characters', 'warning'); return; }
           fetch('/api/auth/change-password', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify({current_password: cur, new_password: nw}),
           }).then(r => r.json()).then(d => {
-            if (d.status === 'ok') alert('Hasło zmienione / Password changed');
-            else alert(d.message || 'Error');
-          }).catch(() => alert('Connection error'));
+            if (d.status === 'ok') showToast('Hasło zmienione / Password changed', 'success');
+            else showToast(d.message || 'Error', 'error');
+          }).catch(() => showToast('Connection error', 'error'));
         });
       }
     })();

@@ -385,7 +385,8 @@
       if(!del) return;
       const fn = decodeURIComponent(del.getAttribute("data-del")||"");
       if(!fn) return;
-      if(!confirm(`Usunąć dokument: ${fn}?`)) return;
+      const ok = await showConfirm({title:'Usunięcie dokumentu',message:'Czy na pewno chcesz usunąć dokument?',detail:fn,confirmText:'Usuń',type:'danger',warning:'Ta operacja jest nieodwracalna.'});
+      if(!ok) return;
       await api(`/api/documents/${encodeURIComponent(State.projectId)}/${encodeURIComponent(fn)}`, {method:"DELETE"});
       await AnalysisManager.loadDocuments();
     };
@@ -1027,18 +1028,18 @@ async function _regenQuickIfNeeded(){
     // NOTE: kept name for backward UI binding (button "Generuj")
     if(State.generating) return;
     if(!State.projectId){
-      alert("Najpierw wybierz/utwórz projekt.");
+      showToast("Najpierw wybierz/utwórz projekt.", 'warning');
       return;
     }
     if(State.ollamaOnline === false){
-      alert("Ollama jest offline.");
+      showToast("Ollama jest offline.", 'error');
       return;
     }
 
     // Ensure Quick LLM completes first when the Analysis tab just started generating it.
     const quickEnabled = !(State.analysisSettings && State.analysisSettings.quick_enabled === false);
     if(quickEnabled && State.quickTaskId){
-      alert(t("analysis.wait_for_quick") || "Quick LLM jeszcze działa — poczekaj aż się zakończy, potem uruchom Deep.");
+      showToast(t("analysis.wait_for_quick") || "Quick LLM jeszcze działa — poczekaj aż się zakończy, potem uruchom Deep.", 'warning');
       return;
     }
 
@@ -1138,18 +1139,18 @@ async function _regenQuickIfNeeded(){
     try{
       await navigator.clipboard.writeText(State.fullText || "");
     }catch(e){
-      alert("Nie udało się skopiować (sprawdź uprawnienia przeglądarki).");
+      showToast("Nie udało się skopiować (sprawdź uprawnienia przeglądarki).", 'error');
     }
   }
 
   async function _saveManual(){
     if(!State.fullText || !String(State.fullText).trim()){
-      alert(t("analysis.no_content") || "Brak treści do zapisu.");
+      showToast(t("analysis.no_content") || "Brak treści do zapisu.", 'warning');
       return;
     }
     const fmts = _selectedReportFormats();
     if(!fmts.length){
-      alert(t("analysis.select_report_format") || "Zaznacz co najmniej jeden format raportu (HTML/DOC/TXT)." );
+      showToast(t("analysis.select_report_format") || "Zaznacz co najmniej jeden format raportu (HTML/DOC/TXT).", 'warning');
       return;
     }
 
@@ -1167,9 +1168,9 @@ async function _regenQuickIfNeeded(){
     }
     if(savedReports.length){
       _showDownloads(savedReports);
-      alert(t("analysis.saved") || "Zapisano raport(y)." );
+      showToast(t("analysis.saved") || "Zapisano raport(y).", 'success');
     }else{
-      alert(t("analysis.save_failed") || "Nie udało się zapisać raportu." );
+      showToast(t("analysis.save_failed") || "Nie udało się zapisać raportu.", 'error');
     }
   }
 
@@ -1181,7 +1182,7 @@ async function _regenQuickIfNeeded(){
     if(dlg && typeof dlg.showModal==="function"){
       dlg.showModal();
     }else{
-      alert("Twoja przeglądarka nie wspiera <dialog>. Użyj nowszej wersji.");
+      showToast("Twoja przeglądarka nie wspiera <dialog>. Użyj nowszej wersji.", 'error');
     }
   }
 
@@ -1221,7 +1222,7 @@ async function _regenQuickIfNeeded(){
     }catch(e){ /* ignore */ }
 
     if(!data){
-      alert("Nie udało się wczytać promptu do edycji (tylko custom prompty).");
+      showToast("Nie udało się wczytać promptu do edycji (tylko custom prompty).", 'error');
       return;
     }
     _fillPromptForm(data);
@@ -1236,7 +1237,7 @@ async function _regenQuickIfNeeded(){
     const prompt = QS("#prompt_text").value;
 
     if(!name){
-      alert("Nazwa jest wymagana.");
+      showToast("Nazwa jest wymagana.", 'warning');
       return;
     }
 
@@ -1263,7 +1264,8 @@ async function _regenQuickIfNeeded(){
 
   async function _deletePrompt(){
     if(!_editingPromptId) return;
-    if(!confirm(`Usunąć prompt: ${_editingPromptId}?`)) return;
+    const ok = await showConfirm({title:'Usunięcie promptu',message:'Czy na pewno chcesz usunąć ten prompt?',detail:_editingPromptId,confirmText:'Usuń',type:'danger',warning:'Ta operacja jest nieodwracalna.'});
+    if(!ok) return;
     await api(`/api/prompts/${encodeURIComponent(_editingPromptId)}`, {method:"DELETE"});
     // Remove from selection
     State.selectedTemplates = State.selectedTemplates.filter(x=>x!==_editingPromptId);
