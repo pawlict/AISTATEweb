@@ -4195,7 +4195,7 @@ def api_admin_user_projects(request: Request) -> Any:
         from backend.db.engine import get_conn
         with get_conn() as conn:
             ws_rows = conn.execute(
-                "SELECT * FROM project_workspaces ORDER BY updated_at DESC"
+                "SELECT * FROM project_workspaces WHERE status != 'deleted' ORDER BY updated_at DESC"
             ).fetchall()
             for r in ws_rows:
                 ws = dict(r)
@@ -4313,8 +4313,8 @@ async def api_admin_delete_workspace(workspace_id: str, request: Request) -> Any
                 except Exception as e:
                     app_log(f"admin delete-workspace: wipe failed for {sp_path}: {e}")
 
-    # Soft-delete the workspace in DB (cascading cleans members, invitations, activity)
-    WORKSPACE_STORE.delete_workspace(workspace_id)
+    # Hard-delete the workspace + all subprojects/members/invitations/activity from DB
+    WORKSPACE_STORE.hard_delete_workspace(workspace_id)
 
     if AUDIT_STORE:
         AUDIT_STORE.log_event(
@@ -4386,6 +4386,16 @@ async def api_admin_delete_file_project(project_id: str, request: Request) -> An
         secure_delete_project_dir(pdir, wipe_method)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete error: {e}")
+
+    # Clean DB references: subprojects pointing to this data_dir + projects table
+    try:
+        from backend.db.engine import get_conn
+        data_dir_rel = f"projects/{project_id}"
+        with get_conn() as conn:
+            conn.execute("DELETE FROM subprojects WHERE data_dir = ?", (data_dir_rel,))
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    except Exception:
+        pass  # DB tables may not exist for pure file-based projects
 
     if AUDIT_STORE:
         AUDIT_STORE.log_event(

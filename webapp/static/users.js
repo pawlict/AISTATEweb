@@ -1781,28 +1781,65 @@
 
   function openAdminDeleteModal(type, id, label) {
     _adpPendingAction = { type: type, id: id, label: label };
+    var lang = _lang();
+    var isPl = (lang !== 'en');
+    var confirmWord = isPl ? 'TAK' : 'YES';
+
     var msg = document.getElementById('adpMsg');
     if (msg) {
       if (type === 'workspace') {
-        msg.innerHTML = 'Usunąć workspace <b>"' + escHtml(label) + '"</b> wraz ze wszystkimi podprojektami i danymi?<br>' +
-          '<span class="en">Delete workspace <b>"' + escHtml(label) + '"</b> with all subprojects and data?</span>';
+        msg.innerHTML = isPl
+          ? 'Usunąć workspace <b>"' + escHtml(label) + '"</b> wraz ze wszystkimi podprojektami i danymi?'
+          : 'Delete workspace <b>"' + escHtml(label) + '"</b> with all subprojects and data?';
       } else if (type === 'subproject') {
-        msg.innerHTML = 'Usunąć podprojekt <b>"' + escHtml(label) + '"</b> i jego dane?<br>' +
-          '<span class="en">Delete subproject <b>"' + escHtml(label) + '"</b> and its data?</span>';
+        msg.innerHTML = isPl
+          ? 'Usunąć podprojekt <b>"' + escHtml(label) + '"</b> i jego dane?'
+          : 'Delete subproject <b>"' + escHtml(label) + '"</b> and its data?';
       } else {
-        msg.innerHTML = 'Usunąć projekt <b>"' + escHtml(label) + '"</b> i wszystkie jego pliki?<br>' +
-          '<span class="en">Delete project <b>"' + escHtml(label) + '"</b> and all its files?</span>';
+        msg.innerHTML = isPl
+          ? 'Usunąć projekt <b>"' + escHtml(label) + '"</b> i wszystkie jego pliki?'
+          : 'Delete project <b>"' + escHtml(label) + '"</b> and all its files?';
       }
     }
+
+    // Update modal labels for current language
+    var titleEl = document.querySelector('#adminDeleteProjectModal h3');
+    if (titleEl) titleEl.textContent = isPl ? 'Usuwanie danych' : 'Data deletion';
+    var methodLabel = document.getElementById('adpWipeMethodLabel');
+    if (methodLabel) methodLabel.textContent = isPl ? 'Metoda niszczenia' : 'Destruction method';
+    var ssdNote = document.getElementById('adpSsdNote');
+    if (ssdNote) ssdNote.textContent = isPl
+      ? 'Na dyskach SSD/VM/CoW nadpisywanie może nie gwarantować bezpiecznego usunięcia.'
+      : 'On SSD/VM/CoW disks, overwriting may not guarantee secure erase.';
+    var confirmLabel = document.getElementById('adpConfirmLabel');
+    if (confirmLabel) confirmLabel.innerHTML = isPl
+      ? 'Wpisz <b>' + confirmWord + '</b>, aby potwierdzić'
+      : 'Type <b>' + confirmWord + '</b> to confirm';
+    var cancelBtnEl = document.getElementById('adpCancel');
+    if (cancelBtnEl) cancelBtnEl.textContent = isPl ? 'Anuluj' : 'Cancel';
+    var confirmBtnEl = document.getElementById('adpConfirm');
+    if (confirmBtnEl) confirmBtnEl.textContent = isPl ? 'Usuń' : 'Delete';
+
+    // Wipe method option labels
+    var wipeSelect = document.getElementById('adpWipeMethod');
+    if (wipeSelect) {
+      var wipeLabels = isPl
+        ? ['Szybkie kasowanie (bez nadpisywania)', 'Pseudolosowy (1x)', 'British HMG IS5 (3 przebiegi)', 'Gutmann (35 przebiegów)']
+        : ['Quick delete (no overwrite)', 'Random (1x)', 'British HMG IS5 (3 passes)', 'Gutmann (35 passes)'];
+      var opts = wipeSelect.options;
+      for (var i = 0; i < opts.length && i < wipeLabels.length; i++) {
+        opts[i].textContent = wipeLabels[i];
+      }
+    }
+
     var inp = document.getElementById('adpConfirmInput');
-    if (inp) inp.value = '';
+    if (inp) { inp.value = ''; inp.placeholder = confirmWord; }
     var btn = document.getElementById('adpConfirm');
     if (btn) { btn.disabled = true; btn.style.opacity = '.5'; btn.style.cursor = 'not-allowed'; }
     var errEl = document.getElementById('adpError');
     if (errEl) errEl.textContent = '';
     document.getElementById('adpWipeMethod').value = 'none';
     document.getElementById('adminDeleteProjectModal').style.display = 'flex';
-    if (typeof applyBilingualMode === 'function') applyBilingualMode();
   }
 
   (function() {
@@ -1811,7 +1848,9 @@
     if (inp && confirmBtn) {
       inp.addEventListener('input', function() {
         var v = inp.value.trim().toUpperCase();
-        var ok = (v === 'TAK' || v === 'YES');
+        var lang = _lang();
+        var expected = (lang !== 'en') ? 'TAK' : 'YES';
+        var ok = (v === expected);
         confirmBtn.disabled = !ok;
         confirmBtn.style.opacity = ok ? '1' : '.5';
         confirmBtn.style.cursor = ok ? 'pointer' : 'not-allowed';
