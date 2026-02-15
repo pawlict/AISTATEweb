@@ -33,8 +33,8 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
         "api_keywords": ["ollama/models"],
     },
     "projects": {
-        "pages": ["/new-project", "/save", "/nowy-projekt", "/zapis"],
-        "api_prefixes": ["/api/projects"],
+        "pages": ["/projects", "/new-project", "/save", "/nowy-projekt", "/zapis"],
+        "api_prefixes": ["/api/projects", "/api/workspaces"],
         "api_keywords": [],
     },
     "admin_settings": {
@@ -183,9 +183,10 @@ def is_route_allowed(path: str, user_modules: List[str]) -> bool:
         mod = MODULES.get(mod_name)
         if not mod:
             continue
-        # Page match
-        if path in mod["pages"]:
-            return True
+        # Page match (exact or prefix for dynamic sub-paths like /projects/{id})
+        for page in mod["pages"]:
+            if path == page or (page.endswith("/") is False and path.startswith(page + "/")):
+                return True
         # API prefix match
         for prefix in mod["api_prefixes"]:
             if path.startswith(prefix):
