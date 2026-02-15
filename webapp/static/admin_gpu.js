@@ -193,7 +193,6 @@ function buildPriorityList(order, pr){
     row.className = "prio-item";
     row.setAttribute("draggable", "true");
     row.setAttribute("data-cat", cat);
-    row.setAttribute("data-icon", meta.icon || "");
 
     const svg = ICON_SVGS[meta.icon] || ICON_SVGS.analysis;
     const badge = meta.badgeIcon && typeof aiIcon === "function"
@@ -204,11 +203,11 @@ function buildPriorityList(order, pr){
       <div class="prio-left">
         <div class="prio-rank">?</div>
         <div class="prio-handle" title="${esc(trLabel('admin.gpu.prio.drag','Przeciągnij, aby zmienić kolejność','Drag to reorder'))}">⋮⋮</div>
-        <div class="prio-icon" data-tip="${esc(trLabel(meta.titleKey||'', meta.fbPl, meta.fbEn))}" role="img" aria-label="${esc(trLabel(meta.titleKey||'', meta.fbPl, meta.fbEn))}">
+        <div class="prio-icon" role="img" aria-label="${esc(trLabel(meta.titleKey||'', meta.fbPl, meta.fbEn))}">
           ${svg}
           ${badge}
-          <span class="sr-only">${esc(trLabel(meta.titleKey||'', meta.fbPl, meta.fbEn))}</span>
         </div>
+        <div class="prio-label">${esc(trLabel(meta.titleKey||'', meta.fbPl, meta.fbEn))}</div>
       </div>
       <div class="prio-right">
         <div class="prio-num">${(priorities[cat]!=null) ? `prio ${esc(priorities[cat])}` : ""}</div>
