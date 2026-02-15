@@ -689,12 +689,17 @@
   var EVENT_COLORS = {
     'login': '#27ae60',
     'login_failed': '#e74c3c',
+    'logout': '#8e44ad',
     'account_locked': '#e67e22',
     'account_unlocked': '#3498db',
     'user_banned': '#e74c3c',
     'user_deleted': '#e74c3c',
     'password_expired_redirect': '#e67e22',
   };
+
+  function _lang() {
+    return (typeof getUiLang === 'function') ? getUiLang() : (localStorage.getItem('aistate_ui_lang') || 'pl');
+  }
 
   var auditData = [];
   var auditFilterUser = '';
@@ -723,6 +728,7 @@
     var tbody = document.getElementById('auditBody');
     if (!tbody) return;
     tbody.innerHTML = '';
+    var lang = _lang();
 
     auditData.forEach(function(ev) {
       var tr = document.createElement('tr');
@@ -733,7 +739,7 @@
       tr.innerHTML =
         '<td style="font-size:.82rem;white-space:nowrap;">' + esc(dt) + '</td>' +
         '<td><b>' + esc(ev.username || '—') + '</b></td>' +
-        '<td><span style="color:' + color + ';font-weight:600;">' + lab.pl + ' <span class="en">' + lab.en + '</span></span>' + actorInfo + '</td>' +
+        '<td><span style="color:' + color + ';font-weight:600;">' + esc(lab[lang] || lab.pl) + '</span>' + actorInfo + '</td>' +
         '<td style="font-size:.82rem;">' + esc(ev.ip || '—') + '</td>' +
         '<td style="font-size:.8rem;color:var(--muted,#888);">' + esc(ev.detail || '') + '</td>';
       tbody.appendChild(tr);
@@ -749,23 +755,99 @@
   /* Audit tab init (deferred to first click) */
   var auditTabLoaded = false;
 
-  function initAuditTab() {
-    if (auditTabLoaded) return;
-    auditTabLoaded = true;
+  function _buildAuditDropdowns() {
+    var lang = _lang();
+
+    /* Section heading */
+    var heading = document.getElementById('auditHeading');
+    if (heading) heading.textContent = lang === 'en' ? 'Login history' : 'Historia logowań';
+
+    /* Audit table headers */
+    var auditThead = document.querySelector('#auditBody')?.closest('table')?.querySelector('thead');
+    if (auditThead) {
+      var ths = auditThead.querySelectorAll('th');
+      var headers = lang === 'en'
+        ? ['Date / time', 'User', 'Event', 'IP', 'Details']
+        : ['Data / czas', 'Użytkownik', 'Zdarzenie', 'IP', 'Szczegóły'];
+      ths.forEach(function(th, i) { if (headers[i]) th.textContent = headers[i]; });
+    }
 
     /* User filter dropdown */
     var sel = document.getElementById('auditUserFilter');
     if (sel) {
+      var curVal = sel.value;
+      sel.innerHTML = '';
+      var allOpt = document.createElement('option');
+      allOpt.value = '';
+      allOpt.textContent = lang === 'en' ? 'Users: All' : 'Użytkownicy: Wszyscy';
+      sel.appendChild(allOpt);
       allUsers.forEach(function(u) {
         var opt = document.createElement('option');
         opt.value = u.user_id;
-        opt.textContent = u.username;
+        opt.textContent = u.username + (u.display_name ? ' (' + u.display_name + ')' : '');
         sel.appendChild(opt);
       });
+      sel.value = curVal || '';
+    }
+
+    /* User search placeholder */
+    var searchInput = document.getElementById('auditUserSearch');
+    if (searchInput) {
+      searchInput.placeholder = lang === 'en' ? 'Search user...' : 'Szukaj użytkownika...';
+    }
+
+    /* Event filter dropdown */
+    var evtSel = document.getElementById('auditEventFilter');
+    if (evtSel) {
+      var curEvt = evtSel.value;
+      evtSel.innerHTML = '';
+      var evtAll = document.createElement('option');
+      evtAll.value = '';
+      evtAll.textContent = lang === 'en' ? 'Events: All' : 'Zdarzenia: Wszystkie';
+      evtSel.appendChild(evtAll);
+      Object.keys(EVENT_LABELS).forEach(function(key) {
+        var opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = EVENT_LABELS[key][lang] || EVENT_LABELS[key].pl;
+        evtSel.appendChild(opt);
+      });
+      evtSel.value = curEvt || '';
+    }
+  }
+
+  function initAuditTab() {
+    if (auditTabLoaded) {
+      /* Rebuild dropdown labels on revisit (language may have changed) */
+      _buildAuditDropdowns();
+      return;
+    }
+    auditTabLoaded = true;
+
+    _buildAuditDropdowns();
+
+    /* User filter change */
+    var sel = document.getElementById('auditUserFilter');
+    if (sel) {
       sel.addEventListener('change', function() { auditFilterUser = sel.value; auditOffset = 0; loadAuditLog(); });
     }
 
-    /* Event filter */
+    /* User search — filters dropdown options */
+    var searchInput = document.getElementById('auditUserSearch');
+    if (searchInput && sel) {
+      searchInput.addEventListener('input', function() {
+        var q = searchInput.value.trim().toLowerCase();
+        var opts = sel.querySelectorAll('option');
+        opts.forEach(function(opt) {
+          if (!opt.value) { opt.style.display = ''; return; }
+          opt.style.display = opt.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+        });
+        /* If current selection is hidden, reset */
+        var cur = sel.options[sel.selectedIndex];
+        if (cur && cur.style.display === 'none') { sel.value = ''; auditFilterUser = ''; auditOffset = 0; loadAuditLog(); }
+      });
+    }
+
+    /* Event filter change */
     var evtSel = document.getElementById('auditEventFilter');
     if (evtSel) {
       evtSel.addEventListener('change', function() { auditFilterEvent = evtSel.value; auditOffset = 0; loadAuditLog(); });

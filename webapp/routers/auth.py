@@ -263,9 +263,13 @@ async def login(request: Request) -> JSONResponse:
 @router.post("/logout")
 async def logout(request: Request) -> JSONResponse:
     assert _session_store
+    user = getattr(request.state, "user", None)
     token = request.cookies.get(SessionStore.COOKIE_NAME)
     if token:
         _session_store.delete_session(token)
+    if _audit_store and user:
+        ip = (request.headers.get("x-forwarded-for", "") or request.client.host if request.client else "")
+        _audit_store.log_event("logout", user_id=user.user_id, username=user.username, ip=ip)
     response = JSONResponse({"status": "ok"})
     response.delete_cookie(key=SessionStore.COOKIE_NAME, path="/")
     return response
