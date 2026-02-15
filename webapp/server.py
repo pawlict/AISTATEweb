@@ -60,6 +60,7 @@ from webapp.routers import admin as admin_router
 from webapp.routers import tasks as tasks_router
 from webapp.routers import aml as aml_router
 from webapp.routers import messages as messages_router
+from webapp.routers import workspaces as workspaces_router
 
 try:
     from markdown import markdown as md_to_html  # type: ignore
@@ -88,6 +89,9 @@ SESSION_STORE = SessionStore(_AUTH_CONFIG_DIR)
 MESSAGE_STORE = MessageStore(_AUTH_CONFIG_DIR)
 AUDIT_STORE = AuditStore(_AUTH_CONFIG_DIR)
 PASSWORD_BLACKLIST = init_blacklist(_AUTH_CONFIG_DIR)
+
+from webapp.auth.workspace_store import WorkspaceStore
+WORKSPACE_STORE = WorkspaceStore()
 
 
 def _get_session_timeout() -> int:
@@ -1758,6 +1762,10 @@ app.include_router(tasks_router.router)
 # AML/DB router (SQL-backed project management + AML analysis)
 app.include_router(aml_router.router)
 
+# Workspaces router (project workspaces, subprojects, collaboration)
+workspaces_router.init(workspace_store=WORKSPACE_STORE, user_store=USER_STORE)
+app.include_router(workspaces_router.router)
+
 # Initialize SQLite database on startup
 try:
     from backend.db.engine import init_db
@@ -1772,6 +1780,14 @@ try:
     except Exception as _mig_err:
         import logging as _mig_lg
         _mig_lg.getLogger("aistate").warning("Auth JSON→SQLite migration: %s", _mig_err)
+    # Migrate file-based projects → workspaces (one-time, idempotent)
+    try:
+        from backend.db.engine import get_default_user_id
+        _default_uid = get_default_user_id()
+        WORKSPACE_STORE.migrate_file_projects(PROJECTS_DIR, _default_uid)
+    except Exception as _ws_err:
+        import logging as _ws_lg
+        _ws_lg.getLogger("aistate").warning("Workspace migration: %s", _ws_err)
 except Exception as _db_err:
     import logging as _lg
     _lg.getLogger("aistate").warning("DB init deferred: %s", _db_err)
@@ -2010,10 +2026,11 @@ def page_users(request: Request) -> Any:
 
 
 _BREADCRUMBS = {
-    "new_project":    [{"label": "Projekty", "href": "/new-project"}],
-    "transcription":  [{"label": "Projekty", "href": "/new-project"}, {"label": "Transkrypcja"}],
-    "diarization":    [{"label": "Projekty", "href": "/new-project"}, {"label": "Diaryzacja"}],
-    "analysis":       [{"label": "Projekty", "href": "/new-project"}, {"label": "Analiza"}],
+    "projects":       [{"label": "Projekty", "href": "/projects"}],
+    "new_project":    [{"label": "Projekty", "href": "/projects"}, {"label": "Nowy (legacy)"}],
+    "transcription":  [{"label": "Projekty", "href": "/projects"}, {"label": "Transkrypcja"}],
+    "diarization":    [{"label": "Projekty", "href": "/projects"}, {"label": "Diaryzacja"}],
+    "analysis":       [{"label": "Projekty", "href": "/projects"}, {"label": "Analiza"}],
     "chat":           [{"label": "Chat LLM"}],
     "translation":    [{"label": "Tłumaczenie"}],
     "settings":       [{"label": "Ustawienia"}],
@@ -2100,6 +2117,16 @@ def page_transcribe(request: Request) -> Any:
 @app.get("/new-project", response_class=HTMLResponse)
 def page_new_project(request: Request) -> Any:
     return render_page(request, "new_project.html", "Nowy projekt", "new_project")
+
+
+@app.get("/projects", response_class=HTMLResponse)
+def page_projects(request: Request) -> Any:
+    return render_page(request, "projects.html", "Projekty", "projects")
+
+
+@app.get("/projects/{workspace_id}", response_class=HTMLResponse)
+def page_workspace(request: Request, workspace_id: str) -> Any:
+    return render_page(request, "projects.html", "Projekt", "projects")
 
 
 @app.get("/diarization", response_class=HTMLResponse)

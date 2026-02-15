@@ -80,7 +80,7 @@
 
       <nav class="nav">
         {% if not multiuser or 'projects' in user_modules %}
-        <a href="/new-project" data-icon="projects" class="{{ 'active' if active=='new_project' else '' }}" data-i18n-title="nav.new_project">
+        <a href="/projects" data-icon="projects" class="{{ 'active' if active in ('new_project', 'projects') else '' }}" data-i18n-title="nav.new_project">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="3" y="5" width="18" height="14" rx="3" stroke="currentColor" stroke-width="1.5" fill="none"/>
@@ -272,9 +272,14 @@
   </aside>
 
   <main class="main">
-    {% if active not in ('users', 'settings', 'admin', 'logs', 'info') %}
+    {% if active not in ('users', 'settings', 'admin', 'logs', 'info', 'projects') %}
     <div class="topbar">
       <div class="topbar-left">
+        <div class="small" id="topbarWorkspaceCtx" style="display:none">
+          <a href="/projects" style="color:var(--accent);text-decoration:none" id="topWsLink">—</a>
+          <span style="opacity:.5"> › </span>
+          <b id="topSubName">—</b>
+        </div>
         <div class="small"><span data-i18n="top.current_project">Bieżący projekt</span>: <b id="current_project">(…)</b></div>
         <div class="small"><span data-i18n="top.source_file">Plik źródłowy projektu</span>: <b id="current_audio">(…)</b></div>
       </div>

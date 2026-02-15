@@ -475,3 +475,119 @@ CREATE TABLE IF NOT EXISTS auth_message_reads (
 );
 
 CREATE INDEX IF NOT EXISTS idx_auth_msg_created ON auth_messages(created_at);
+
+-- ============================================================
+-- PROJECT WORKSPACES (replaces flat project list)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS project_workspaces (
+    id          TEXT PRIMARY KEY,
+    owner_id    TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    color       TEXT DEFAULT '#4a6cf7',
+    icon        TEXT DEFAULT 'folder',
+    status      TEXT NOT NULL DEFAULT 'active',  -- active | archived | deleted
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pw_owner ON project_workspaces(owner_id);
+CREATE INDEX IF NOT EXISTS idx_pw_status ON project_workspaces(status);
+
+-- ============================================================
+-- SUBPROJECTS (children of workspaces)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS subprojects (
+    id              TEXT PRIMARY KEY,
+    workspace_id    TEXT NOT NULL REFERENCES project_workspaces(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    subproject_type TEXT NOT NULL DEFAULT 'analysis',
+                    -- transcription | diarization | analysis | translation | chat | finance
+    status          TEXT NOT NULL DEFAULT 'open',  -- open | in_progress | done | archived
+    data_dir        TEXT DEFAULT '',   -- relative path to files on disk (projects/<legacy_id>)
+    audio_file      TEXT DEFAULT '',
+    metadata        TEXT DEFAULT '{}', -- JSON: type-specific data (legacy project.json fields)
+    position        INTEGER DEFAULT 0, -- sort order within workspace
+    created_by      TEXT DEFAULT '',
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sp_workspace ON subprojects(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_sp_type ON subprojects(subproject_type);
+CREATE INDEX IF NOT EXISTS idx_sp_status ON subprojects(status);
+
+-- ============================================================
+-- SUBPROJECT LINKS (connections between subprojects)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS subproject_links (
+    id          TEXT PRIMARY KEY,
+    source_id   TEXT NOT NULL REFERENCES subprojects(id) ON DELETE CASCADE,
+    target_id   TEXT NOT NULL REFERENCES subprojects(id) ON DELETE CASCADE,
+    link_type   TEXT DEFAULT 'related',  -- related | depends_on | feeds_into
+    note        TEXT DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE(source_id, target_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sl_source ON subproject_links(source_id);
+CREATE INDEX IF NOT EXISTS idx_sl_target ON subproject_links(target_id);
+
+-- ============================================================
+-- PROJECT MEMBERS (workspace collaboration)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS project_members (
+    workspace_id TEXT NOT NULL REFERENCES project_workspaces(id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL,
+    role         TEXT NOT NULL DEFAULT 'viewer', -- owner | manager | editor | commenter | viewer
+    invited_by   TEXT DEFAULT '',
+    invited_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    accepted_at  TEXT,
+    status       TEXT NOT NULL DEFAULT 'accepted', -- accepted | removed
+    PRIMARY KEY (workspace_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pm_user ON project_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_pm_workspace ON project_members(workspace_id);
+
+-- ============================================================
+-- PROJECT INVITATIONS (pending invites)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS project_invitations (
+    id              TEXT PRIMARY KEY,
+    workspace_id    TEXT NOT NULL REFERENCES project_workspaces(id) ON DELETE CASCADE,
+    inviter_id      TEXT NOT NULL,
+    invitee_id      TEXT NOT NULL,
+    role            TEXT NOT NULL DEFAULT 'viewer',
+    message         TEXT DEFAULT '',
+    status          TEXT NOT NULL DEFAULT 'pending', -- pending | accepted | rejected | cancelled
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    responded_at    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_pi_invitee ON project_invitations(invitee_id);
+CREATE INDEX IF NOT EXISTS idx_pi_workspace ON project_invitations(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_pi_status ON project_invitations(status);
+
+-- ============================================================
+-- PROJECT ACTIVITY LOG
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS project_activity (
+    id              TEXT PRIMARY KEY,
+    workspace_id    TEXT NOT NULL REFERENCES project_workspaces(id) ON DELETE CASCADE,
+    subproject_id   TEXT REFERENCES subprojects(id) ON DELETE SET NULL,
+    user_id         TEXT DEFAULT '',
+    user_name       TEXT DEFAULT '',
+    action          TEXT NOT NULL, -- created | updated | opened | archived | member_added | member_removed | subproject_created | subproject_deleted | linked
+    detail          TEXT DEFAULT '{}', -- JSON
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pa_workspace ON project_activity(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_pa_created ON project_activity(created_at);

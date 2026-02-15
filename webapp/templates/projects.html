@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" id="projectsApp">
+
+  <!-- ===== WORKSPACE LIST VIEW ===== -->
+  <div id="viewWorkspaceList">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <div>
+        <div class="label" style="font-weight:900;color:var(--text);font-size:18px" data-i18n="projects.title">Twoje projekty</div>
+        <div class="small" data-i18n="projects.subtitle">Workspace'y i podprojekty</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="btnNewWorkspace" type="button">+ Nowy projekt</button>
+        <button class="btn secondary" id="btnLegacyView" type="button" title="Stary widok projektów" style="font-size:.8rem">Legacy</button>
+      </div>
+    </div>
+
+    <!-- Pending invitations -->
+    <div id="invitationsSection" style="display:none">
+      <div class="label" style="font-weight:700;color:var(--accent);margin-bottom:6px">
+        <span>📩</span> <span data-i18n="projects.invitations">Zaproszenia</span> (<span id="invCount">0</span>)
+      </div>
+      <div id="invitationsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+    </div>
+
+    <!-- Active workspaces -->
+    <div id="activeSection">
+      <div class="label" style="font-weight:700;margin-bottom:6px" data-i18n="projects.active">Aktywne</div>
+      <div id="workspaceList" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div id="workspaceEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6" data-i18n="projects.no_projects">Brak projektów. Utwórz nowy!</div>
+    </div>
+
+    <!-- Archived -->
+    <div id="archivedSection" style="display:none;margin-top:16px">
+      <div class="hr"></div>
+      <details>
+        <summary class="label" style="cursor:pointer;font-weight:700;margin-bottom:6px" data-i18n="projects.archived">Zarchiwizowane</summary>
+        <div id="archivedList" style="display:flex;flex-direction:column;gap:8px;margin-top:8px"></div>
+      </details>
+    </div>
+  </div>
+
+  <!-- ===== WORKSPACE DETAIL VIEW ===== -->
+  <div id="viewWorkspaceDetail" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn secondary" id="btnBackToList" type="button" style="padding:4px 12px">◀ Projekty</button>
+      <div>
+        <div class="label" style="font-weight:900;color:var(--text);font-size:18px" id="wsDetailName">—</div>
+        <div class="small" id="wsDetailDesc"></div>
+      </div>
+      <div style="flex:1"></div>
+      <div class="small" id="wsDetailRole" style="font-weight:700;padding:3px 10px;border-radius:8px;background:var(--accent);color:#fff"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start" id="wsDetailGrid">
+      <!-- LEFT: Subprojects -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="label" style="font-weight:700" data-i18n="projects.subprojects">Podprojekty</div>
+          <button class="btn" id="btnNewSubproject" type="button" style="font-size:.85rem;padding:4px 14px">+ Nowy</button>
+        </div>
+        <div id="subprojectList" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="subprojectEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6" data-i18n="projects.no_subprojects">Brak podprojektów.</div>
+      </div>
+
+      <!-- RIGHT: Team + Activity -->
+      <div>
+        <div class="subcard" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div class="label" style="font-weight:700" data-i18n="projects.team">Zespół</div>
+            <button class="btn secondary" id="btnInviteUser" type="button" style="font-size:.78rem;padding:3px 10px">+ Zaproś</button>
+          </div>
+          <div id="membersList" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+        <div class="subcard">
+          <div class="label" style="font-weight:700;margin-bottom:6px" data-i18n="projects.activity">Aktywność</div>
+          <div id="activityList" style="max-height:260px;overflow-y:auto;font-size:.82rem"></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn secondary" id="btnArchiveWorkspace" type="button" style="font-size:.78rem" data-i18n="projects.archive">Archiwizuj</button>
+          <button class="btn danger" id="btnDeleteWorkspace" type="button" style="font-size:.78rem" data-i18n="projects.delete_ws">Usuń</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: New Workspace ===== -->
+<div id="modalNewWorkspace" class="modal-overlay" style="display:none">
+  <div class="modal-panel" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">Nowy projekt</div>
+      <button class="btn secondary modal-close-x" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="label">Nazwa</div>
+      <input class="input" id="nwName" type="text" placeholder="np. Śledztwo KRS-2026"/>
+      <div class="label" style="margin-top:10px">Opis (opcjonalnie)</div>
+      <textarea class="input" id="nwDesc" rows="2" placeholder="Krótki opis projektu..."></textarea>
+      <div class="label" style="margin-top:10px">Kolor</div>
+      <div id="nwColors" style="display:flex;gap:6px;flex-wrap:wrap">
+        <span class="color-chip active" data-color="#4a6cf7" style="background:#4a6cf7"></span>
+        <span class="color-chip" data-color="#27ae60" style="background:#27ae60"></span>
+        <span class="color-chip" data-color="#e74c3c" style="background:#e74c3c"></span>
+        <span class="color-chip" data-color="#f39c12" style="background:#f39c12"></span>
+        <span class="color-chip" data-color="#8e44ad" style="background:#8e44ad"></span>
+        <span class="color-chip" data-color="#1abc9c" style="background:#1abc9c"></span>
+        <span class="color-chip" data-color="#e67e22" style="background:#e67e22"></span>
+        <span class="color-chip" data-color="#2c3e50" style="background:#2c3e50"></span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary modal-close-x" type="button">Anuluj</button>
+      <button class="btn" id="nwSubmit" type="button">Utwórz</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: New Subproject ===== -->
+<div id="modalNewSubproject" class="modal-overlay" style="display:none">
+  <div class="modal-panel" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title">Nowy podprojekt</div>
+      <button class="btn secondary modal-close-x" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="label">Nazwa</div>
+      <input class="input" id="nsName" type="text" placeholder="np. Przesłuchanie świadka A"/>
+      <div class="label" style="margin-top:10px">Typ</div>
+      <div id="nsTypes" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+        <button class="btn secondary sp-type-btn active" data-type="transcription">🎤 Transkrypcja</button>
+        <button class="btn secondary sp-type-btn" data-type="diarization">👥 Diaryzacja</button>
+        <button class="btn secondary sp-type-btn" data-type="analysis">📊 Analiza</button>
+        <button class="btn secondary sp-type-btn" data-type="chat">💬 Chat</button>
+        <button class="btn secondary sp-type-btn" data-type="translation">🌐 Tłumaczenie</button>
+        <button class="btn secondary sp-type-btn" data-type="finance">🏦 Finanse</button>
+      </div>
+      <div class="label" style="margin-top:10px">Powiąż z (opcjonalnie)</div>
+      <select class="input" id="nsLinkTo"><option value="">— brak —</option></select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary modal-close-x" type="button">Anuluj</button>
+      <button class="btn" id="nsSubmit" type="button">Utwórz</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Invite User ===== -->
+<div id="modalInviteUser" class="modal-overlay" style="display:none">
+  <div class="modal-panel" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">Zaproś do projektu</div>
+      <button class="btn secondary modal-close-x" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="label">Nazwa użytkownika</div>
+      <input class="input" id="invUsername" type="text" placeholder="Wpisz nazwę użytkownika..."/>
+      <div class="label" style="margin-top:10px">Rola</div>
+      <div style="display:flex;flex-direction:column;gap:4px" id="invRoles">
+        <label class="small" style="cursor:pointer"><input type="radio" name="invRole" value="viewer" checked> <b>Viewer</b> — tylko podgląd</label>
+        <label class="small" style="cursor:pointer"><input type="radio" name="invRole" value="commenter"> <b>Commenter</b> — podgląd + notatki</label>
+        <label class="small" style="cursor:pointer"><input type="radio" name="invRole" value="editor"> <b>Editor</b> — edycja treści</label>
+        <label class="small" style="cursor:pointer"><input type="radio" name="invRole" value="manager"> <b>Manager</b> — edycja + zarządzanie</label>
+      </div>
+      <div class="label" style="margin-top:10px">Wiadomość (opcjonalnie)</div>
+      <textarea class="input" id="invMessage" rows="2" placeholder="Proszę o review..."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary modal-close-x" type="button">Anuluj</button>
+      <button class="btn" id="invSubmit" type="button">Wyślij zaproszenie</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/projects.js?v={{ app_version }}"></script>
+{% endblock %}
