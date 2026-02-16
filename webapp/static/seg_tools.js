@@ -689,7 +689,7 @@
         mergeBtn.setAttribute("data-seg-action", "merge-next");
         mergeBtn.setAttribute("data-seg-idx", String(i));
         mergeBtn.title = _t("seg.merge");
-        mergeBtn.innerHTML = '<img src="/static/icons/diaryzacja/segment_merge.svg" width="16" height="16" alt="' + _t("seg.merge") + '">';
+        mergeBtn.innerHTML = '<img src="/static/icons/diaryzacja/segment_merge.svg" width="19" height="19" alt="' + _t("seg.merge") + '">';
         timeDiv.insertBefore(mergeBtn, confBadge);
       }
 
@@ -698,7 +698,7 @@
       splitBtn.setAttribute("data-seg-action", "split");
       splitBtn.setAttribute("data-seg-idx", String(i));
       splitBtn.title = _t("seg.split");
-      splitBtn.innerHTML = '<img src="/static/icons/diaryzacja/segment_split.svg" width="16" height="16" alt="' + _t("seg.split") + '">';
+      splitBtn.innerHTML = '<img src="/static/icons/diaryzacja/segment_split.svg" width="19" height="19" alt="' + _t("seg.split") + '">';
       timeDiv.insertBefore(splitBtn, confBadge);
     }
   }
