@@ -524,6 +524,8 @@ textarea{min-height:220px; resize:vertical}
 
 .analysis-toolbar-left{display:flex; flex-direction:column; gap:4px}
 .analysis-toolbar-right{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.toolbar-section{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.toolbar-sep{width:1px; height:28px; background:#d0d5dd; opacity:.45; align-self:center; flex-shrink:0}
 .analysis-models{display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap}
 .analysis-model{display:flex; flex-direction:column; gap:2px}
 .analysis-model label{white-space:nowrap; font-size:11px; color:#666}

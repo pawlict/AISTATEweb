@@ -503,92 +503,105 @@
 
     <div class="analysis-toolbar-right">
 
-      <!-- Add audio file -->
-      <input type="file" id="di_file_input" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.mp4,.aac" style="display:none"/>
-      <button class="btn secondary" id="di_add_file_btn" title="Dodaj plik audio do projektu"><i data-icon="folder" data-size="14"></i> <span data-i18n="btn.add_file">Dodaj plik</span></button>
-      <span class="small" id="di_file_name" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.8"></span>
-
-      <!-- Diarize -->
-      <button class="btn" id="di_btn" data-i18n="btn.diarize">Diarize</button>
-
-      <!-- Models / controls -->
-      <div class="analysis-models">
-
-        <div class="analysis-model">
-          <label class="small" for="di_mode" data-i18n="label.diarization_engine">Silnik diaryzacji</label>
-          <select class="input mini-select" id="di_mode" style="min-width:160px;max-width:220px">
-            <option value="pyannote" data-i18n="diar.engine.pyannote">Pyannote (Whisper)</option>
-            <option value="nemo_diar" data-i18n="diar.engine.nemo_diar">NeMo Diarization</option>
-            <option value="text" data-i18n="diar.engine.text">Text diarization</option>
-          </select>
-        </div>
-
-        <div class="analysis-model" id="di_diar_model_block">
-          <label class="small" for="di_diar_model" data-i18n="label.diarization_model">Model diaryzacji</label>
-          <select class="input mini-select" id="di_diar_model" style="min-width:200px;max-width:280px"></select>
-        </div>
-
-        <div class="analysis-model" id="di_lang_block">
-          <label class="small" for="di_lang" data-i18n="label.language">Język</label>
-          <select class="input mini-select" id="di_lang" style="min-width:110px;max-width:160px">
-            <option value="auto">auto</option>
-            <option value="pl">pl</option>
-            <option value="en">en</option>
-            <option value="de">de</option>
-            <option value="fr">fr</option>
-            <option value="es">es</option>
-            <option value="uk">uk</option>
-            <option value="ru">ru</option>
-          </select>
-        </div>
-
-        <!-- ASR engine is fixed (Whisper) for pyannote; keep hidden for compatibility -->
-        <div class="analysis-model" id="di_asr_block" style="display:none">
-          <label class="small" for="di_asr_engine" data-i18n="label.asr_engine">Silnik ASR</label>
-          <select class="input mini-select" id="di_asr_engine" disabled>
-            <option value="whisper">Whisper</option>
-          </select>
-        </div>
-
-        <div class="analysis-model" id="di_model_block">
-          <label class="small" for="di_model" data-i18n="label.asr_model">Model ASR</label>
-          <select class="input mini-select" id="di_model" style="min-width:200px;max-width:280px">
-            {% for model in whisper_models %}
-            <option value="{{ model }}">{{ model }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <!-- Legacy/hidden (kept for compatibility) -->
-        <div class="analysis-model" id="di_nemo_block" style="display:none">
-          <label class="small" for="di_nemo_model">Model NeMo</label>
-          <select class="input mini-select" id="di_nemo_model">
-            {% for model in nemo_models %}
-            <option value="{{ model }}">{{ model }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
+      <!-- Sekcja 1: Plik -->
+      <div class="toolbar-section">
+        <input type="file" id="di_file_input" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.mp4,.aac" style="display:none"/>
+        <button class="btn pill-icon" id="di_add_file_btn" title="Dodaj plik audio do projektu"><img src="/static/icons/pliki/file_add_audio.svg" alt="Dodaj plik" draggable="false"></button>
+        <span class="small" id="di_file_name" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.8"></span>
       </div>
 
-      <!-- Sound Detection -->
-      <div class="analysis-format" id="di_sound_detection_section" style="margin-top:8px">
-        <label class="pill"><input type="checkbox" id="di_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection"><i data-icon="speaker" data-size="14"></i> Detekcja dźwięków</span></label>
-        <select class="input mini-select" id="di_sound_detection_model" style="margin-left:6px;width:auto" disabled>
-        </select>
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 2: Diaryzuj + Szukaj -->
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="di_btn" title="Diaryzuj"><img src="/static/icons/ai_ml/generate_ai.svg" alt="Diaryzuj" draggable="false"></button>
+        <button class="btn pill-icon" id="di_search_btn" title="Szukaj" data-i18n-title="btn.search" onclick="if(typeof segTools!=='undefined')segTools.openSearch()"><img src="/static/icons/akcje/search.svg" alt="Szukaj" draggable="false"></button>
       </div>
 
-      <!-- Report formats (multi-select, icon pills) -->
-      <div class="analysis-format" id="di_report_formats">
-        <label class="small" data-i18n="analysis.report">Raport</label>
-        <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="di_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
-        <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="di_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
-        <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="di_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
-        <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes" style="margin-left:6px"><input type="checkbox" id="di_include_notes" value="1"><img src="/static/icons/dokumenty/markdown.svg" alt="Notatki" draggable="false"></label>
-        <button class="btn pill-icon" id="di_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save" style="margin-left:8px"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 3: Modele / silniki -->
+      <div class="toolbar-section">
+        <div class="analysis-models">
+
+          <div class="analysis-model">
+            <label class="small" for="di_mode" data-i18n="label.diarization_engine">Silnik diaryzacji</label>
+            <select class="input mini-select" id="di_mode" style="min-width:160px;max-width:220px">
+              <option value="pyannote" data-i18n="diar.engine.pyannote">Pyannote (Whisper)</option>
+              <option value="nemo_diar" data-i18n="diar.engine.nemo_diar">NeMo Diarization</option>
+              <option value="text" data-i18n="diar.engine.text">Text diarization</option>
+            </select>
+          </div>
+
+          <div class="analysis-model" id="di_diar_model_block">
+            <label class="small" for="di_diar_model" data-i18n="label.diarization_model">Model diaryzacji</label>
+            <select class="input mini-select" id="di_diar_model" style="min-width:200px;max-width:280px"></select>
+          </div>
+
+          <div class="analysis-model" id="di_lang_block">
+            <label class="small" for="di_lang" data-i18n="label.language">Język</label>
+            <select class="input mini-select" id="di_lang" style="min-width:110px;max-width:160px">
+              <option value="auto">auto</option>
+              <option value="pl">pl</option>
+              <option value="en">en</option>
+              <option value="de">de</option>
+              <option value="fr">fr</option>
+              <option value="es">es</option>
+              <option value="uk">uk</option>
+              <option value="ru">ru</option>
+            </select>
+          </div>
+
+          <!-- ASR engine is fixed (Whisper) for pyannote; keep hidden for compatibility -->
+          <div class="analysis-model" id="di_asr_block" style="display:none">
+            <label class="small" for="di_asr_engine" data-i18n="label.asr_engine">Silnik ASR</label>
+            <select class="input mini-select" id="di_asr_engine" disabled>
+              <option value="whisper">Whisper</option>
+            </select>
+          </div>
+
+          <div class="analysis-model" id="di_model_block">
+            <label class="small" for="di_model" data-i18n="label.asr_model">Model ASR</label>
+            <select class="input mini-select" id="di_model" style="min-width:200px;max-width:280px">
+              {% for model in whisper_models %}
+              <option value="{{ model }}">{{ model }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Legacy/hidden (kept for compatibility) -->
+          <div class="analysis-model" id="di_nemo_block" style="display:none">
+            <label class="small" for="di_nemo_model">Model NeMo</label>
+            <select class="input mini-select" id="di_nemo_model">
+              {% for model in nemo_models %}
+              <option value="{{ model }}">{{ model }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+        </div>
+
+        <!-- Sound Detection -->
+        <div class="analysis-format" id="di_sound_detection_section" style="margin-top:8px">
+          <label class="pill"><input type="checkbox" id="di_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection"><i data-icon="speaker" data-size="14"></i> Detekcja dźwięków</span></label>
+          <select class="input mini-select" id="di_sound_detection_model" style="margin-left:6px;width:auto" disabled>
+          </select>
+        </div>
       </div>
 
-      <button class="btn pill-icon" id="di_search_btn" title="Szukaj" data-i18n-title="btn.search" onclick="if(typeof segTools!=='undefined')segTools.openSearch()"><img src="/static/icons/akcje/search.svg" alt="Szukaj" draggable="false"></button>
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 4: Raport -->
+      <div class="toolbar-section">
+        <div class="analysis-format" id="di_report_formats">
+          <label class="small" data-i18n="analysis.report">Raport</label>
+          <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="di_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+          <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="di_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
+          <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="di_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+          <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes" style="margin-left:6px"><input type="checkbox" id="di_include_notes" value="1"><img src="/static/icons/dokumenty/markdown.svg" alt="Notatki" draggable="false"></label>
+          <button class="btn pill-icon" id="di_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save" style="margin-left:8px"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+        </div>
+      </div>
 
       <a class="btn secondary" id="di_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
 
