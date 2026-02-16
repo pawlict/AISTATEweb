@@ -130,6 +130,31 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
   padding-right:6px;
   flex:1;
   min-height:0;
+  /* Firefox scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,212,255,.25) transparent;
+}
+/* Webkit scrollbar — thin (3px) by default, thick (8px) on sidebar hover */
+.nav::-webkit-scrollbar{
+  width:3px;
+}
+.nav:hover::-webkit-scrollbar{
+  width:8px;
+}
+.nav::-webkit-scrollbar-track{
+  background:transparent;
+  border-radius:8px;
+}
+.nav::-webkit-scrollbar-thumb{
+  border-radius:8px;
+  background: linear-gradient(180deg,
+    rgba(0,212,255,.3) 0%,
+    rgba(59,130,246,.25) 50%,
+    rgba(192,132,252,.2) 100%);
+}
+.nav:hover::-webkit-scrollbar-thumb{
+  background: linear-gradient(180deg,
+    #00d4ff 0%, #3b82f6 50%, #c084fc 100%);
 }
 
 .nav-icon{
