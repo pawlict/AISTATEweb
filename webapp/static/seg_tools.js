@@ -684,15 +684,13 @@
       if (i < segs.length - 1) {
         actions.innerHTML +=
           '<button class="seg-action-btn" data-seg-action="merge-next" data-seg-idx="' + i + '" title="' + _t("seg.merge") + '">' +
-          aiIcon("merge", 14) +
-          " " + _t("seg.merge") +
+          '<img src="/static/icons/diaryzacja/segment_merge.svg" width="16" height="16" alt="' + _t("seg.merge") + '">' +
           "</button>";
       }
 
       actions.innerHTML +=
         '<button class="seg-action-btn" data-seg-action="split" data-seg-idx="' + i + '" title="' + _t("seg.split") + '">' +
-        aiIcon("split", 14) +
-        " " + _t("seg.split") +
+        '<img src="/static/icons/diaryzacja/segment_split.svg" width="16" height="16" alt="' + _t("seg.split") + '">' +
         "</button>";
 
       segEl.appendChild(actions);
