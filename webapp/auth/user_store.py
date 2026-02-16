@@ -38,6 +38,10 @@ class UserRecord:
     locked_until: Optional[str] = None       # ISO datetime — auto-unlock after
     # Password expiration
     password_changed_at: Optional[str] = None  # ISO datetime of last password change
+    # Recovery phrase
+    recovery_phrase_hash: Optional[str] = None   # PBKDF2 hash of 12-word recovery phrase
+    recovery_phrase_hint: Optional[str] = None   # SHA256 hint (16 hex chars) for fast lookup
+    recovery_phrase_pending: Optional[str] = None  # Temporary plaintext of new phrase (shown once at login, then cleared)
 
 
 # Columns that exist in the original schema.sql 'users' table
@@ -65,6 +69,9 @@ _AUTH_COLUMNS = [
     ("failed_login_count", "INTEGER NOT NULL DEFAULT 0"),
     ("locked_until", "TEXT"),
     ("password_changed_at", "TEXT"),
+    ("recovery_phrase_hash", "TEXT"),
+    ("recovery_phrase_hint", "TEXT"),
+    ("recovery_phrase_pending", "TEXT"),
 ]
 
 
@@ -137,6 +144,9 @@ class UserStore:
         rec.failed_login_count = int(row.get("failed_login_count", 0) or 0)
         rec.locked_until = row.get("locked_until")
         rec.password_changed_at = row.get("password_changed_at")
+        rec.recovery_phrase_hash = row.get("recovery_phrase_hash")
+        rec.recovery_phrase_hint = row.get("recovery_phrase_hint")
+        rec.recovery_phrase_pending = row.get("recovery_phrase_pending")
         return rec
 
     # ---- CRUD ----
@@ -192,8 +202,9 @@ class UserStore:
                     language, pending, pending_role,
                     created_at, created_by, last_login,
                     password_reset_requested, password_reset_requested_at,
-                    failed_login_count, locked_until, password_changed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    failed_login_count, locked_until, password_changed_at,
+                    recovery_phrase_hash, recovery_phrase_hint, recovery_phrase_pending
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     rec.user_id,
                     rec.username,
@@ -218,6 +229,9 @@ class UserStore:
                     rec.failed_login_count,
                     rec.locked_until,
                     rec.password_changed_at,
+                    rec.recovery_phrase_hash,
+                    rec.recovery_phrase_hint,
+                    rec.recovery_phrase_pending,
                 ),
             )
         return rec
@@ -270,6 +284,18 @@ class UserStore:
             self._ensure_schema(conn)
             cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
             return cursor.rowcount > 0
+
+    def get_by_phrase_hint(self, hint: str) -> Optional[UserRecord]:
+        """Find a user by recovery phrase hint (SHA256 prefix)."""
+        with self._conn() as conn:
+            self._ensure_schema(conn)
+            row = conn.execute(
+                "SELECT * FROM users WHERE recovery_phrase_hint = ?",
+                (hint,),
+            ).fetchone()
+            if row is None:
+                return None
+            return self._record_from_row(dict(row))
 
     def user_count(self) -> int:
         with self._conn() as conn:

@@ -77,6 +77,27 @@
       <div class="en">Already have an account? <a href="/login" style="color:var(--accent,#4a6cf7);font-size:.595rem;">Log in</a></div>
     </div>
   </div>
+
+  <!-- Overlay: Recovery Phrase (shown once after registration) -->
+  <div id="phraseOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg,#fff);border-radius:16px;padding:2rem;max-width:520px;width:95%;box-shadow:0 8px 40px rgba(0,0,0,.2);text-align:center;">
+      <h2 style="margin:0 0 .5rem;font-size:1.1rem;color:var(--text,#1a1a2e);">Fraza odzyskiwania konta <span class="en" style="display:block;font-size:.8rem;">Account Recovery Phrase</span></h2>
+      <p style="font-size:.82rem;color:#e74c3c;line-height:1.5;margin:.5rem 0;font-weight:600;">
+        Zapisz te 12 słów w bezpiecznym miejscu!
+        <span class="en" style="display:block;margin-top:.2rem;">Write down these 12 words and keep them safe!</span>
+      </p>
+      <p style="font-size:.78rem;color:#e67e22;line-height:1.4;margin:.3rem 0;">
+        Zapomnienie frazy może skutkować brakiem możliwości odzyskania konta.
+        <span class="en" style="display:block;margin-top:.2rem;">Losing this phrase may result in inability to recover your account.</span>
+      </p>
+      <div id="phraseWords" style="background:#f8f9fa;border:2px dashed var(--border,#d0d5dd);border-radius:10px;padding:1rem;margin:1rem 0;font-family:monospace;font-size:1.1rem;font-weight:600;letter-spacing:.03em;word-spacing:.3em;line-height:1.8;user-select:all;color:var(--text,#1a1a2e);"></div>
+      <label style="display:flex;align-items:center;justify-content:center;gap:.4rem;font-size:.82rem;margin:.8rem 0;cursor:pointer;">
+        <input type="checkbox" id="phraseConfirmCheck"/>
+        <span>Potwierdzam, że zapisałem frazę <span class="en">I confirm that I have saved the phrase</span></span>
+      </label>
+      <button class="reg-btn" id="phraseCloseBtn" disabled style="max-width:240px;margin:0 auto;">Kontynuuj <span class="en">Continue</span></button>
+    </div>
+  </div>
 <script>
 (function(){
   var curLang = localStorage.getItem('aistate_ui_lang') || 'pl';
@@ -127,7 +148,12 @@ document.getElementById('regForm').addEventListener('submit', async function(e) 
       if (data.approvers && data.approvers.length > 0) {
         params = '?approvers=' + encodeURIComponent(data.approvers.join(', '));
       }
-      location.href = '/pending' + params;
+      /* Show recovery phrase before redirecting */
+      if (data.recovery_phrase) {
+        showPhraseOverlay(data.recovery_phrase, '/pending' + params);
+      } else {
+        location.href = '/pending' + params;
+      }
     } else {
       errEl.textContent = data.message || 'Registration failed';
     }
@@ -151,6 +177,56 @@ if (typeof attachValidation === 'function') {
 if (typeof attachPasswordMeter === 'function') {
   attachPasswordMeter('password', 'medium');
 }
+
+/* Show recovery phrase overlay */
+function showPhraseOverlay(phrase, redirectUrl) {
+  var overlay = document.getElementById('phraseOverlay');
+  var wordsEl = document.getElementById('phraseWords');
+  var confirmCb = document.getElementById('phraseConfirmCheck');
+  var closeBtn = document.getElementById('phraseCloseBtn');
+
+  wordsEl.textContent = phrase;
+  overlay.style.display = 'flex';
+
+  confirmCb.checked = false;
+  closeBtn.disabled = true;
+  confirmCb.addEventListener('change', function() {
+    closeBtn.disabled = !confirmCb.checked;
+  });
+  closeBtn.addEventListener('click', function() {
+    overlay.style.display = 'none';
+    if (redirectUrl) location.href = redirectUrl;
+  });
+}
+
+/* Real-time username uniqueness check */
+(function() {
+  var usernameInput = document.getElementById('username');
+  if (!usernameInput) return;
+  var timer = null;
+  var indicator = document.createElement('div');
+  indicator.style.cssText = 'font-size:.72rem;margin-top:.2rem;min-height:1em;';
+  usernameInput.parentNode.appendChild(indicator);
+
+  usernameInput.addEventListener('input', function() {
+    clearTimeout(timer);
+    var val = usernameInput.value.trim();
+    if (val.length < 3) { indicator.textContent = ''; return; }
+    timer = setTimeout(async function() {
+      try {
+        var res = await fetch('/api/auth/check-username?username=' + encodeURIComponent(val));
+        var data = await res.json();
+        if (data.available) {
+          indicator.style.color = '#27ae60';
+          indicator.textContent = curLang === 'en' ? 'Username available' : 'Nazwa dostępna';
+        } else {
+          indicator.style.color = '#e74c3c';
+          indicator.textContent = curLang === 'en' ? 'Username already taken' : 'Nazwa jest już zajęta';
+        }
+      } catch(e) { indicator.textContent = ''; }
+    }, 400);
+  });
+})();
 </script>
 </body>
 </html>

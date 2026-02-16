@@ -645,6 +645,30 @@
   </div>
 </div>
 
+<!-- Modal: Recovery Phrase Display (after user creation or phrase reset) -->
+<div id="phraseModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:520px;text-align:center;">
+    <h3 style="color:var(--text,#1a1a2e);">Fraza odzyskiwania konta <span class="en">Account Recovery Phrase</span></h3>
+    <p style="font-size:.82rem;color:#e74c3c;line-height:1.5;margin:.5rem 0;font-weight:600;">
+      Zapisz te 12 słów i przekaż użytkownikowi!
+      <span class="en" style="display:block;margin-top:.2rem;">Write down these 12 words and give them to the user!</span>
+    </p>
+    <p style="font-size:.78rem;color:#e67e22;line-height:1.4;margin:.3rem 0;">
+      Ta fraza nie będzie wyświetlona ponownie. Zapomnienie frazy może skutkować brakiem możliwości odzyskania konta.
+      <span class="en" style="display:block;margin-top:.2rem;">This phrase will not be shown again. Losing it may prevent account recovery.</span>
+    </p>
+    <div style="font-size:.78rem;color:var(--muted,#888);margin:.3rem 0;">
+      Użytkownik: <span class="en">User:</span> <b id="phraseUsername"></b>
+    </div>
+    <div id="phraseWords" style="background:#f8f9fa;border:2px dashed var(--border,#d0d5dd);border-radius:10px;padding:1rem;margin:1rem 0;font-family:monospace;font-size:1.1rem;font-weight:600;letter-spacing:.03em;word-spacing:.3em;line-height:1.8;user-select:all;color:var(--text,#1a1a2e);"></div>
+    <label style="display:flex;align-items:center;justify-content:center;gap:.4rem;font-size:.82rem;margin:.8rem 0;cursor:pointer;">
+      <input type="checkbox" id="phraseConfirmCheck"/>
+      <span>Potwierdzam, że zapisałem frazę <span class="en">I confirm that I have saved the phrase</span></span>
+    </label>
+    <button class="btn" id="phraseCloseBtn" disabled>OK</button>
+  </div>
+</div>
+
 <!-- Modal: Ban -->
 <div id="banModal" class="modal-overlay" style="display:none;">
   <div class="modal-box" style="max-width:420px;">

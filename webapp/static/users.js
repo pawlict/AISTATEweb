@@ -249,6 +249,7 @@
         } else {
           acts.appendChild(btn('Reset has\u0142a', function() { openResetPwModal(u); }, '#8e44ad'));
         }
+        acts.appendChild(btn('Reset frazy', function() { resetRecoveryPhrase(u); }, '#2980b9'));
         acts.appendChild(btn('Usuń', function() { openDeleteModal(u); }, '#e74c3c'));
       } else {
         acts.textContent = '—';
@@ -424,64 +425,7 @@
     document.getElementById('userModal').style.display = 'none';
   });
 
-  document.getElementById('userModalSave').addEventListener('click', async function() {
-    var errEl = document.getElementById('userModalError');
-    errEl.textContent = '';
-
-    var isAdmin = document.getElementById('uIsAdmin').checked;
-    var payload = {
-      username: document.getElementById('uUsername').value.trim(),
-      display_name: document.getElementById('uDisplayName').value.trim(),
-      is_admin: isAdmin,
-    };
-
-    var pw = document.getElementById('uPassword').value;
-    if (editingUserId) {
-      if (pw) payload.password = pw;
-    } else {
-      payload.password = pw;
-    }
-
-    if (isAdmin) {
-      var saChecked = document.querySelector('#adminRolesChecks .sa-check');
-      if (saChecked && saChecked.checked) {
-        payload.is_superadmin = true;
-        payload.admin_roles = [];
-      } else {
-        payload.is_superadmin = false;
-        payload.admin_roles = [];
-        document.querySelectorAll('#adminRolesChecks input:checked:not(.sa-check)').forEach(function(cb) {
-          payload.admin_roles.push(cb.value);
-        });
-      }
-    } else {
-      payload.role = document.getElementById('uRole').value;
-      payload.is_superadmin = false;
-    }
-
-    try {
-      var res;
-      if (editingUserId) {
-        res = await fetch('/api/users/' + editingUserId, {
-          method: 'PUT',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload),
-        });
-      } else {
-        res = await fetch('/api/users', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload),
-        });
-      }
-      var data = await res.json();
-      if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
-      document.getElementById('userModal').style.display = 'none';
-      loadUsers();
-    } catch (e) {
-      errEl.textContent = 'Connection error';
-    }
-  });
+  /* Original save handler removed — replaced in Recovery Phrase section below */
 
   /* ---- Change Role Modal ---- */
 
@@ -805,6 +749,9 @@
     'user_approved':     { pl: 'Zatwierdzenie', en: 'Approved' },
     'user_rejected':     { pl: 'Odrzucenie', en: 'Rejected' },
     'password_expired_redirect': { pl: 'Hasło wygasło', en: 'Password expired' },
+    'recovery_phrase_failed': { pl: 'Nieudana fraza odzyskiwania', en: 'Failed recovery phrase' },
+    'password_recovered_by_phrase': { pl: 'Odzyskano hasło frazą', en: 'Password recovered by phrase' },
+    'recovery_phrase_reset': { pl: 'Reset frazy odzyskiwania', en: 'Recovery phrase reset' },
   };
 
   var EVENT_COLORS = {
@@ -1913,6 +1860,156 @@
         }
       });
     }
+  })();
+
+  /* ---- Recovery Phrase Modal ---- */
+
+  function showPhraseModal(username, phrase) {
+    var usernameEl = document.getElementById('phraseUsername');
+    var wordsEl = document.getElementById('phraseWords');
+    var confirmCb = document.getElementById('phraseConfirmCheck');
+    var closeBtn = document.getElementById('phraseCloseBtn');
+    if (!usernameEl || !wordsEl || !confirmCb || !closeBtn) return;
+
+    usernameEl.textContent = username;
+    wordsEl.textContent = phrase;
+    confirmCb.checked = false;
+    closeBtn.disabled = true;
+
+    confirmCb.onchange = function() {
+      closeBtn.disabled = !confirmCb.checked;
+    };
+    closeBtn.onclick = function() {
+      document.getElementById('phraseModal').style.display = 'none';
+    };
+    document.getElementById('phraseModal').style.display = 'flex';
+  }
+
+  /* Save handler (with recovery phrase display after creation) */
+  document.getElementById('userModalSave').addEventListener('click', async function() {
+    var errEl = document.getElementById('userModalError');
+    errEl.textContent = '';
+
+    var isAdmin = document.getElementById('uIsAdmin').checked;
+    var payload = {
+      username: document.getElementById('uUsername').value.trim(),
+      display_name: document.getElementById('uDisplayName').value.trim(),
+      is_admin: isAdmin,
+    };
+
+    var pw = document.getElementById('uPassword').value;
+    if (editingUserId) {
+      if (pw) payload.password = pw;
+    } else {
+      payload.password = pw;
+    }
+
+    if (isAdmin) {
+      var saChecked = document.querySelector('#adminRolesChecks .sa-check');
+      if (saChecked && saChecked.checked) {
+        payload.is_superadmin = true;
+        payload.admin_roles = [];
+      } else {
+        payload.is_superadmin = false;
+        payload.admin_roles = [];
+        document.querySelectorAll('#adminRolesChecks input:checked:not(.sa-check)').forEach(function(cb) {
+          payload.admin_roles.push(cb.value);
+        });
+      }
+    } else {
+      payload.role = document.getElementById('uRole').value;
+      payload.is_superadmin = false;
+    }
+
+    try {
+      var res;
+      if (editingUserId) {
+        res = await fetch('/api/users/' + editingUserId, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch('/api/users', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+      }
+      var data = await res.json();
+      if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
+      document.getElementById('userModal').style.display = 'none';
+
+      /* Show recovery phrase after user creation (not edit) */
+      if (!editingUserId && data.user && data.user.recovery_phrase) {
+        showPhraseModal(data.user.username || payload.username, data.user.recovery_phrase);
+      }
+
+      loadUsers();
+    } catch (e) {
+      errEl.textContent = 'Connection error';
+    }
+  });
+
+  /* Reset recovery phrase (admin action) */
+  async function resetRecoveryPhrase(u) {
+    var lang = _lang();
+    var confirmMsg = lang === 'en'
+      ? 'Reset recovery phrase for "' + u.username + '"? The new phrase will be shown to the user at their next login (60 seconds window).'
+      : 'Zresetować frazę odzyskiwania dla "' + u.username + '"? Nowa fraza zostanie wyświetlona użytkownikowi przy następnym logowaniu (przez 60 sekund).';
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      var res = await fetch('/api/users/' + u.user_id + '/reset-phrase', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: '{}',
+      });
+      var data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        var successMsg = lang === 'en'
+          ? 'Recovery phrase has been reset. The user will see the new phrase at next login.'
+          : 'Fraza odzyskiwania została zresetowana. Użytkownik zobaczy nową frazę przy następnym logowaniu.';
+        alert(successMsg);
+        loadUsers();
+      } else {
+        alert(data.message || 'Error');
+      }
+    } catch (e) {
+      alert('Connection error');
+    }
+  }
+
+  /* ---- Username uniqueness check (in add user modal) ---- */
+  (function() {
+    var uInput = document.getElementById('uUsername');
+    if (!uInput) return;
+    var timer = null;
+    var indicator = document.createElement('div');
+    indicator.style.cssText = 'font-size:.72rem;margin-top:.2rem;min-height:1em;';
+    uInput.parentNode.appendChild(indicator);
+
+    uInput.addEventListener('input', function() {
+      clearTimeout(timer);
+      indicator.textContent = '';
+      if (editingUserId) return; /* Skip check when editing */
+      var val = uInput.value.trim();
+      if (val.length < 2) return;
+      timer = setTimeout(async function() {
+        try {
+          var res = await fetch('/api/auth/check-username?username=' + encodeURIComponent(val));
+          var data = await res.json();
+          var lang = _lang();
+          if (data.available) {
+            indicator.style.color = '#27ae60';
+            indicator.textContent = lang === 'en' ? 'Username available' : 'Nazwa dostępna';
+          } else {
+            indicator.style.color = '#e74c3c';
+            indicator.textContent = lang === 'en' ? 'Username already taken' : 'Nazwa jest już zajęta';
+          }
+        } catch(e) { indicator.textContent = ''; }
+      }, 400);
+    });
   })();
 
   /* ---- Init ---- */
