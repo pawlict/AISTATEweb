@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="dn" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#eab308"/><stop offset="100%" stop-color="#f97316"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#eab308" stroke-width="1" fill="none" opacity="0.15" stroke-linecap="round"/>
+<path d="M8 6h32a2 2 0 0 1 2 2v24l-10 10H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" stroke="url(#dn)" stroke-width="2" fill="#eab308" fill-opacity=".04"/>
+<path d="M32 32v10l10-10H32z" stroke="url(#dn)" stroke-width="1.5" fill="#eab308" fill-opacity=".08"/>
+<line x1="14" y1="16" x2="34" y2="16" stroke="url(#dn)" stroke-width="1.5" stroke-linecap="round" opacity=".35"/>
+<line x1="14" y1="22" x2="30" y2="22" stroke="url(#dn)" stroke-width="1.5" stroke-linecap="round" opacity=".3"/>
+<line x1="14" y1="28" x2="26" y2="28" stroke="url(#dn)" stroke-width="1.5" stroke-linecap="round" opacity=".25"/>
+<line x1="14" y1="34" x2="22" y2="34" stroke="url(#dn)" stroke-width="1.5" stroke-linecap="round" opacity=".2"/>
+
+</svg>
