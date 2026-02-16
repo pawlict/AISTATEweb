@@ -14,25 +14,18 @@
     .setup-logo .ver { font-size: .75rem; color: var(--muted, #888); }
     .step { display: none; }
     .step.active { display: block; }
-    h2 { font-size: 1.1rem; margin: 0 0 .1rem; color: var(--text, #1a1a2e); }
-    h2 + .en { font-size: .77rem; color: var(--muted, #999); font-style: italic; margin-bottom: .8rem; }
-    .sub { font-size: .9rem; margin-bottom: .15rem; color: var(--muted, #666); }
-    .sub + .en { font-size: .63rem; color: var(--muted, #aaa); font-style: italic; margin-bottom: 1rem; }
-    .en { color: var(--muted, #999); font-style: italic; }
+    h2 { font-size: 1.1rem; margin: 0 0 .3rem; color: var(--text, #1a1a2e); }
+    .sub { font-size: .9rem; margin-bottom: 1rem; color: var(--muted, #666); }
     .mode-options { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
     .mode-card { flex: 1; padding: 1.2rem; border: 2px solid var(--border, #d0d5dd); border-radius: 12px; cursor: pointer; text-align: center; transition: border-color .2s, box-shadow .2s; }
     .mode-card:hover, .mode-card.selected { border-color: var(--accent, #4a6cf7); box-shadow: 0 0 0 3px rgba(74,108,247,.15); }
-    .mode-card h3 { margin: 0 0 .1rem; font-size: 1rem; }
-    .mode-card h3 + .en { font-size: .7rem; margin-bottom: .3rem; }
-    .mode-card p { margin: 0 0 .1rem; font-size: .8rem; color: var(--muted, #888); }
-    .mode-card p + .en { font-size: .56rem; }
+    .mode-card h3 { margin: 0 0 .3rem; font-size: 1rem; }
+    .mode-card p { margin: 0; font-size: .8rem; color: var(--muted, #888); }
     .field { margin-bottom: 1rem; }
     .field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .3rem; }
-    .field label .en { font-size: .595rem; font-weight: 400; color: var(--muted, #999); margin-left: .3rem; }
     .field input { width: 100%; padding: .55rem .7rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .95rem; box-sizing: border-box; }
     .field input:focus { border-color: var(--accent, #4a6cf7); outline: none; }
     .btn { padding: .65rem 1.5rem; border: none; border-radius: 8px; background: var(--accent, #4a6cf7); color: #fff; font-size: .95rem; font-weight: 600; cursor: pointer; }
-    .btn .en { font-size: .665rem; font-weight: 400; font-style: italic; margin-left: .3rem; }
     .btn:hover { opacity: .9; }
     .btn:disabled { opacity: .5; cursor: not-allowed; }
     .btn-secondary { background: var(--border, #d0d5dd); color: var(--text, #1a1a2e); }
@@ -43,11 +36,12 @@
     .migrate-item input[type=checkbox] { margin: 0; }
     .success-msg { text-align: center; padding: 2rem 0; }
     .success-msg h2 { color: #27ae60; }
-    .success-msg h2 + .en { color: #27ae60; opacity: .7; }
     .lang-switch { display: flex; justify-content: center; gap: .3rem; margin-bottom: 1rem; }
     .lang-btn { padding: .25rem .6rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 6px; background: transparent; cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--muted, #888); transition: all .2s; }
     .lang-btn.active { background: var(--accent, #4a6cf7); color: #fff; border-color: var(--accent, #4a6cf7); }
     .lang-btn:hover:not(.active) { border-color: var(--accent, #4a6cf7); color: var(--accent, #4a6cf7); }
+    html:not(.lang-en) .en { display: none !important; }
+    html.lang-en .pl { display: none !important; }
   </style>
 </head>
 <body>
@@ -65,74 +59,64 @@
 
     <!-- Step 1: Mode Selection -->
     <div class="step active" id="step1">
-      <h2>Tryb pracy</h2>
-      <div class="en">Operating mode</div>
-      <p class="sub">Wybierz tryb pracy aplikacji. Tej decyzji nie można łatwo cofnąć.</p>
-      <div class="en">Choose the application operating mode. This decision cannot be easily reversed.</div>
+      <h2><span class="pl">Tryb pracy</span><span class="en">Operating mode</span></h2>
+      <p class="sub"><span class="pl">Wybierz tryb pracy aplikacji. Tej decyzji nie można łatwo cofnąć.</span><span class="en">Choose the application operating mode. This decision cannot be easily reversed.</span></p>
       <div class="mode-options">
         <div class="mode-card" data-mode="single" id="modeSingle">
-          <h3>Pojedynczy użytkownik</h3>
-          <div class="en">Single user</div>
-          <p>Bez logowania, pełny dostęp do wszystkich modułów. Idealny do pracy indywidualnej.</p>
-          <div class="en">No login, full access to all modules. Ideal for individual use.</div>
+          <h3><span class="pl">Pojedynczy użytkownik</span><span class="en">Single user</span></h3>
+          <p><span class="pl">Bez logowania, pełny dostęp do wszystkich modułów. Idealny do pracy indywidualnej.</span><span class="en">No login, full access to all modules. Ideal for individual use.</span></p>
         </div>
         <div class="mode-card" data-mode="multi" id="modeMulti">
-          <h3>Wielu użytkowników</h3>
-          <div class="en">Multiple users</div>
-          <p>Logowanie, role, kontrola dostępu do modułów. Wymaga utworzenia administratora.</p>
-          <div class="en">Login, roles, module access control. Requires creating an administrator.</div>
+          <h3><span class="pl">Wielu użytkowników</span><span class="en">Multiple users</span></h3>
+          <p><span class="pl">Logowanie, role, kontrola dostępu do modułów. Wymaga utworzenia administratora.</span><span class="en">Login, roles, module access control. Requires creating an administrator.</span></p>
         </div>
       </div>
       <div class="btn-row">
-        <button class="btn" id="step1Next" disabled>Dalej <span class="en">Next</span></button>
+        <button class="btn" id="step1Next" disabled><span class="pl">Dalej</span><span class="en">Next</span></button>
       </div>
       <div class="error" id="step1Error"></div>
     </div>
 
     <!-- Step 2: Admin Account (multi only) -->
     <div class="step" id="step2">
-      <h2>Utw&oacute;rz G&lstrok;&oacute;wnego Opiekuna</h2>
-      <div class="en">Create Main Guardian</div>
-      <p class="sub">Pierwszy administrator ma pełne uprawnienia: Architekt Funkcji + Strażnik Dostępu. Nie może być zbanowany.</p>
-      <div class="en">The first administrator has full permissions: Function Architect + Access Guardian. Cannot be banned.</div>
+      <h2><span class="pl">Utwórz Głównego Opiekuna</span><span class="en">Create Main Guardian</span></h2>
+      <p class="sub"><span class="pl">Pierwszy administrator ma pełne uprawnienia: Architekt Funkcji + Strażnik Dostępu. Nie może być zbanowany.</span><span class="en">The first administrator has full permissions: Function Architect + Access Guardian. Cannot be banned.</span></p>
       <div class="field">
-        <label for="adminUsername">Nazwa użytkownika <span class="en">Username</span></label>
-        <input type="text" id="adminUsername" autocomplete="off" placeholder="np. admin"/>
+        <label for="adminUsername"><span class="pl">Nazwa użytkownika</span><span class="en">Username</span></label>
+        <input type="text" id="adminUsername" autocomplete="off" data-ph-pl="np. admin" data-ph-en="e.g. admin" placeholder="np. admin"/>
       </div>
       <div class="field">
-        <label for="adminDisplayName">Wyświetlana nazwa <span class="en">Display name</span></label>
-        <input type="text" id="adminDisplayName" autocomplete="off" placeholder="np. Jan Kowalski"/>
+        <label for="adminDisplayName"><span class="pl">Wyświetlana nazwa</span><span class="en">Display name</span></label>
+        <input type="text" id="adminDisplayName" autocomplete="off" data-ph-pl="np. Jan Kowalski" data-ph-en="e.g. John Smith" placeholder="np. Jan Kowalski"/>
       </div>
       <div class="field">
-        <label for="adminPassword">Hasło (min. 6 znaków) <span class="en">Password (min. 6 chars)</span></label>
+        <label for="adminPassword"><span class="pl">Hasło (min. 6 znaków)</span><span class="en">Password (min. 6 chars)</span></label>
         <input type="password" id="adminPassword" autocomplete="new-password"/>
       </div>
       <div class="field">
-        <label for="adminPassword2">Powtórz hasło <span class="en">Confirm password</span></label>
+        <label for="adminPassword2"><span class="pl">Powtórz hasło</span><span class="en">Confirm password</span></label>
         <input type="password" id="adminPassword2" autocomplete="new-password"/>
       </div>
       <div class="btn-row">
-        <button class="btn btn-secondary" id="step2Back">Wstecz <span class="en">Back</span></button>
-        <button class="btn" id="step2Next">Utwórz konto <span class="en">Create account</span></button>
+        <button class="btn btn-secondary" id="step2Back"><span class="pl">Wstecz</span><span class="en">Back</span></button>
+        <button class="btn" id="step2Next"><span class="pl">Utwórz konto</span><span class="en">Create account</span></button>
       </div>
       <div class="error" id="step2Error"></div>
     </div>
 
     <!-- Step 3: Project Migration (multi only, if projects exist) -->
     <div class="step" id="step3">
-      <h2>Migracja projektów</h2>
-      <div class="en">Project migration</div>
-      <p class="sub">Znaleziono istniej&#261;ce projekty. Przypisz je do G&#322;&#243;wnego Opiekuna lub pomi&#324; (mo&#380;esz to zrobi&#263; p&oacute;&#378;niej).</p>
-      <div class="en">Existing projects found. Assign them to Main Guardian or skip (you can do this later).</div>
+      <h2><span class="pl">Migracja projektów</span><span class="en">Project migration</span></h2>
+      <p class="sub"><span class="pl">Znaleziono istniejące projekty. Przypisz je do Głównego Opiekuna lub pomiń (możesz to zrobić później).</span><span class="en">Existing projects found. Assign them to Main Guardian or skip (you can do this later).</span></p>
       <div>
         <label style="font-size:.85rem;cursor:pointer;">
-          <input type="checkbox" id="migrateSelectAll" checked/> Zaznacz wszystkie <span class="en" style="font-size:.595rem;">Select all</span>
+          <input type="checkbox" id="migrateSelectAll" checked/> <span class="pl">Zaznacz wszystkie</span><span class="en">Select all</span>
         </label>
       </div>
       <div class="migrate-list" id="migrateList"></div>
       <div class="btn-row">
-        <button class="btn btn-secondary" id="step3Skip">Pomiń <span class="en">Skip</span></button>
-        <button class="btn" id="step3Migrate">Przypisz do G&#322;&#243;wnego Opiekuna <span class="en">Assign to Main Guardian</span></button>
+        <button class="btn btn-secondary" id="step3Skip"><span class="pl">Pomiń</span><span class="en">Skip</span></button>
+        <button class="btn" id="step3Migrate"><span class="pl">Przypisz do Głównego Opiekuna</span><span class="en">Assign to Main Guardian</span></button>
       </div>
       <div class="error" id="step3Error"></div>
     </div>
@@ -140,12 +124,10 @@
     <!-- Step 4: Done -->
     <div class="step" id="step4">
       <div class="success-msg">
-        <h2>Gotowe!</h2>
-        <div class="en">Done!</div>
-        <p style="font-size:.95rem;" id="doneMsg">Konfiguracja zakończona.</p>
-        <div class="en" id="doneMsgEn">Configuration complete.</div>
+        <h2><span class="pl">Gotowe!</span><span class="en">Done!</span></h2>
+        <p style="font-size:.95rem;" id="doneMsg"><span class="pl">Konfiguracja zakończona.</span><span class="en">Configuration complete.</span></p>
         <div class="btn-row" style="justify-content:center;margin-top:1.5rem;">
-          <button class="btn" id="doneBtn">Przejdź do aplikacji <span class="en">Go to application</span></button>
+          <button class="btn" id="doneBtn"><span class="pl">Przejdź do aplikacji</span><span class="en">Go to application</span></button>
         </div>
       </div>
     </div>
@@ -155,13 +137,16 @@
 (function(){
   /* Language toggle */
   var curLang = localStorage.getItem('aistate_ui_lang') || 'pl';
+
+  function txt(pl, en) { return curLang === 'en' ? en : pl; }
+
   function applyLang(lang) {
     curLang = lang;
     localStorage.setItem('aistate_ui_lang', lang);
     document.querySelectorAll('.lang-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.lang === lang); });
-    document.querySelectorAll('.en').forEach(function(el) {
-      if (lang === 'en') { el.style.fontStyle = 'normal'; el.style.fontWeight = '600'; }
-      else { el.style.fontStyle = ''; el.style.fontWeight = ''; }
+    document.documentElement.classList.toggle('lang-en', lang === 'en');
+    document.querySelectorAll('[data-ph-pl]').forEach(function(el) {
+      el.placeholder = lang === 'en' ? el.dataset.phEn : el.dataset.phPl;
     });
   }
   document.querySelectorAll('.lang-btn').forEach(function(btn) {
@@ -200,14 +185,15 @@
       if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
 
       if (selectedMode === 'single') {
-        document.getElementById('doneMsg').textContent = 'Tryb pojedynczego użytkownika — brak zmian w aplikacji.';
-        document.getElementById('doneMsgEn').textContent = 'Single user mode — no changes to the application.';
+        document.getElementById('doneMsg').innerHTML =
+          '<span class="pl">Tryb pojedynczego użytkownika \u2014 brak zmian w aplikacji.</span>' +
+          '<span class="en">Single user mode \u2014 no changes to the application.</span>';
         showStep(4);
       } else {
         showStep(2);
       }
     } catch (e) {
-      errEl.textContent = 'Connection error';
+      errEl.textContent = txt('Błąd połączenia', 'Connection error');
     }
   });
 
@@ -222,9 +208,9 @@
     const password = document.getElementById('adminPassword').value;
     const password2 = document.getElementById('adminPassword2').value;
 
-    if (!username) { errEl.textContent = 'Podaj nazwę użytkownika / Enter a username'; return; }
-    if (password.length < 6) { errEl.textContent = 'Hasło musi mieć min. 6 znaków / Password must be at least 6 characters'; return; }
-    if (password !== password2) { errEl.textContent = 'Hasła nie są identyczne / Passwords do not match'; return; }
+    if (!username) { errEl.textContent = txt('Podaj nazwę użytkownika', 'Enter a username'); return; }
+    if (password.length < 6) { errEl.textContent = txt('Hasło musi mieć min. 6 znaków', 'Password must be at least 6 characters'); return; }
+    if (password !== password2) { errEl.textContent = txt('Hasła nie są identyczne', 'Passwords do not match'); return; }
 
     try {
       const res = await fetch('/api/setup/admin', {
@@ -246,7 +232,7 @@
         showStep(4);
       }
     } catch (e) {
-      errEl.textContent = 'Connection error';
+      errEl.textContent = txt('Błąd połączenia', 'Connection error');
     }
   });
 
@@ -287,11 +273,12 @@
       });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
-      document.getElementById('doneMsg').textContent = 'Zmigranowano ' + data.migrated + ' projektów. Konfiguracja zakończona.';
-      document.getElementById('doneMsgEn').textContent = 'Migrated ' + data.migrated + ' projects. Configuration complete.';
+      document.getElementById('doneMsg').innerHTML =
+        '<span class="pl">Zmigranowano ' + data.migrated + ' projektów. Konfiguracja zakończona.</span>' +
+        '<span class="en">Migrated ' + data.migrated + ' projects. Configuration complete.</span>';
       showStep(4);
     } catch (e) {
-      errEl.textContent = 'Connection error';
+      errEl.textContent = txt('Błąd połączenia', 'Connection error');
     }
   });
 
