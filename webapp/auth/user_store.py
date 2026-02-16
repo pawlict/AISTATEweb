@@ -71,10 +71,14 @@ _AUTH_COLUMNS = [
 def _ensure_auth_columns(conn) -> None:
     """Add auth-specific columns to users table if they don't exist yet."""
     existing = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    added = False
     for col_name, col_def in _AUTH_COLUMNS:
         if col_name not in existing:
             conn.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}")
             log.info("Added column users.%s", col_name)
+            added = True
+    if added:
+        conn.commit()
 
 
 class UserStore:

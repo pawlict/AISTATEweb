@@ -19,7 +19,25 @@ CREATE TABLE IF NOT EXISTS users (
     is_active   INTEGER NOT NULL DEFAULT 1,
     settings    TEXT DEFAULT '{}',  -- JSON: per-user preferences
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    -- Auth-specific columns (multi-user auth system)
+    is_admin    INTEGER NOT NULL DEFAULT 0,
+    admin_roles TEXT DEFAULT '[]',
+    is_superadmin INTEGER NOT NULL DEFAULT 0,
+    banned      INTEGER NOT NULL DEFAULT 0,
+    banned_until TEXT,
+    ban_reason  TEXT,
+    show_ban_expiry INTEGER NOT NULL DEFAULT 1,
+    language    TEXT DEFAULT 'pl',
+    pending     INTEGER NOT NULL DEFAULT 0,
+    pending_role TEXT,
+    created_by  TEXT DEFAULT '',
+    last_login  TEXT,
+    password_reset_requested INTEGER NOT NULL DEFAULT 0,
+    password_reset_requested_at TEXT,
+    failed_login_count INTEGER NOT NULL DEFAULT 0,
+    locked_until TEXT,
+    password_changed_at TEXT
 );
 
 -- ============================================================
@@ -403,9 +421,9 @@ CREATE INDEX IF NOT EXISTS idx_pt_default ON parse_templates(is_default) WHERE i
 -- ============================================================
 -- AUTH: EXTENDED USER FIELDS (multi-user auth system)
 -- ============================================================
--- The existing 'users' table is extended with auth-specific columns.
--- ALTER TABLE IF NOT EXISTS is not supported in SQLite, so we add
--- columns only if they don't exist yet (handled in Python migration code).
+-- Auth-specific columns are now included in the CREATE TABLE users
+-- statement above. For databases created with an older schema,
+-- _ensure_auth_columns() in user_store.py adds them via ALTER TABLE.
 
 -- ============================================================
 -- AUTH: SESSIONS (replaces sessions.json)
