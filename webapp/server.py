@@ -1789,10 +1789,11 @@ try:
                 if getattr(_u, "is_superadmin", False):
                     _default_uid = _u.user_id
                     break
-        if not _default_uid:
+        if not _default_uid and DEPLOYMENT_STORE.is_configured():
             from backend.db.engine import get_default_user_id
             _default_uid = get_default_user_id()
-        WORKSPACE_STORE.migrate_file_projects(PROJECTS_DIR, _default_uid)
+        if _default_uid:
+            WORKSPACE_STORE.migrate_file_projects(PROJECTS_DIR, _default_uid)
     except Exception as _ws_err:
         import logging as _ws_lg
         _ws_lg.getLogger("aistate").warning("Workspace migration: %s", _ws_err)
