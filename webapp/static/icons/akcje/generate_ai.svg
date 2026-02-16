@@ -21,6 +21,6 @@
 <rect x="36" y="29" width="8" height="2.5" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
 <!-- inner die -->
 <rect x="16" y="16" width="16" height="16" rx="2.5" stroke="url(#gai)" stroke-width="0.8" opacity=".25" fill="url(#gai)" fill-opacity=".05"/>
-<!-- lightning bolt ⚡ -->
+<!-- lightning bolt -->
 <polygon points="26,14 18,26 23,26 20,35 30,22 25,22 28,14" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".2" stroke-linejoin="round"/>
 </svg>
