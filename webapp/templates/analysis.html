@@ -11,35 +11,45 @@
 
     <div class="analysis-toolbar-right">
 
-      <!-- Generate first (per UX request) -->
-      <button class="btn" id="an_generate_btn"><i data-icon="generate" data-size="14"></i> <span data-i18n="analysis.generate">Generuj</span></button>
-
-      <!-- Models -->
-      <div class="analysis-models" id="analysis_models">
-  <div class="analysis-model">
-    <span class="small" title="Quick model"><i data-icon="generate" data-size="14"></i></span>
-    <label class="small" for="an_model_quick" data-i18n="analysis.model_quick">Quick</label>
-    <select class="input mini-select" id="an_model_quick" disabled>
-      <option data-i18n="analysis.models_loading">Ładowanie…</option>
-    </select>
-  </div>
-  <div class="analysis-model">
-    <span class="small" title="Deep model"><i data-icon="search" data-size="14"></i></span>
-    <label class="small" for="an_model_deep" data-i18n="analysis.model_deep">Deep</label>
-    <select class="input mini-select" id="an_model_deep" disabled>
-      <option data-i18n="analysis.models_loading">Ładowanie…</option>
-    </select>
-  </div>
-</div>
-      <!-- Report formats (multi-select, icon pills) -->
-      <div class="analysis-format" id="analysis_report_formats">
-        <label class="small" data-i18n="analysis.report">Raport</label>
-        <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="an_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
-        <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="an_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
-        <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="an_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+      <!-- Sekcja 1: Generuj -->
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="an_generate_btn"><img src="/static/icons/ai_ml/generate_ai.svg" alt="Generuj" draggable="false"></button>
       </div>
 
-      <button class="btn pill-icon" id="an_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 2: Modele -->
+      <div class="toolbar-section">
+        <div class="analysis-models" id="analysis_models">
+          <div class="analysis-model">
+            <span class="small" title="Quick model"><i data-icon="generate" data-size="14"></i></span>
+            <label class="small" for="an_model_quick" data-i18n="analysis.model_quick">Quick</label>
+            <select class="input mini-select" id="an_model_quick" disabled>
+              <option data-i18n="analysis.models_loading">Ładowanie…</option>
+            </select>
+          </div>
+          <div class="analysis-model">
+            <span class="small" title="Deep model"><i data-icon="search" data-size="14"></i></span>
+            <label class="small" for="an_model_deep" data-i18n="analysis.model_deep">Deep</label>
+            <select class="input mini-select" id="an_model_deep" disabled>
+              <option data-i18n="analysis.models_loading">Ładowanie…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 3: Raport -->
+      <div class="toolbar-section">
+        <div class="analysis-format" id="analysis_report_formats">
+          <label class="small" data-i18n="analysis.report">Raport</label>
+          <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="an_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+          <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="an_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
+          <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="an_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+        </div>
+        <button class="btn pill-icon" id="an_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+      </div>
     </div>
   </div>
 
