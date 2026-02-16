@@ -383,10 +383,10 @@
         <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="tr_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
         <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="tr_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
         <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes" style="margin-left:6px"><input type="checkbox" id="tr_include_notes" value="1"><img src="/static/icons/dokumenty/markdown.svg" alt="Notatki" draggable="false"></label>
-        <button class="btn secondary" id="tr_report_save_btn" style="margin-left:8px"><i data-icon="save" data-size="16"></i> <span data-i18n="analysis.report_save">Zapisz</span></button>
+        <button class="btn pill-icon" id="tr_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save" style="margin-left:8px"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
       </div>
 
-      <button class="btn secondary" id="tr_search_btn" onclick="if(typeof segTools!=='undefined')segTools.openSearch()"><i data-icon="search" data-size="14"></i> <span data-i18n="btn.search">Szukaj</span></button>
+      <button class="btn pill-icon" id="tr_search_btn" title="Szukaj" data-i18n-title="btn.search" onclick="if(typeof segTools!=='undefined')segTools.openSearch()"><img src="/static/icons/akcje/search.svg" alt="Szukaj" draggable="false"></button>
 
       <!-- Optional: direct transcript download link (kept for compatibility) -->
       <a class="btn secondary" id="tr_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>

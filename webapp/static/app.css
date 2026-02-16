@@ -570,6 +570,21 @@ textarea{min-height:220px; resize:vertical}
   border-color: rgba(0,212,255,.25);
   background: rgba(0,212,255,.06);
 }
+/* Action icon buttons (save, search) — always visible, hover brightens */
+button.pill-icon{
+  padding:4px; border:1px solid transparent; background:transparent;
+  border-radius:10px; cursor:pointer;
+}
+button.pill-icon img{
+  opacity:.55;
+}
+button.pill-icon:hover img{
+  opacity:1;
+}
+button.pill-icon:hover{
+  border-color: rgba(0,212,255,.25);
+  background: rgba(0,212,255,.06);
+}
 
 .analysis-container{
   display:grid;
