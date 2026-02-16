@@ -103,7 +103,7 @@
     </div>
   </div>
 
-  <!-- Overlay: Pending Recovery Phrase (shown for 60s after login) -->
+  <!-- Overlay: Pending Recovery Phrase (shown for 3 min after login) -->
   <div id="phraseOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9999;display:none;align-items:center;justify-content:center;">
     <div style="background:var(--card-bg,#fff);border-radius:16px;padding:2rem;max-width:520px;width:95%;box-shadow:0 8px 40px rgba(0,0,0,.2);text-align:center;">
       <h2 style="margin:0 0 .5rem;font-size:1.1rem;color:var(--text,#1a1a2e);">Nowa fraza odzyskiwania <span class="en" style="display:block;font-size:.8rem;">New Recovery Phrase</span></h2>
@@ -118,6 +118,26 @@
         <span>Potwierdzam, że zapisałem frazę <span class="en">I confirm that I have saved the phrase</span></span>
       </label>
       <button class="login-btn" id="phraseCloseBtn" disabled style="max-width:200px;margin:0 auto;">OK</button>
+    </div>
+  </div>
+
+  <!-- Overlay: Password Change (shown after first login or password expiry) -->
+  <div id="changePwOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg,#fff);border-radius:16px;padding:2rem;max-width:420px;width:95%;box-shadow:0 8px 40px rgba(0,0,0,.2);">
+      <h2 style="margin:0 0 .5rem;font-size:1.1rem;color:var(--text,#1a1a2e);text-align:center;">
+        Zmiana hasła <span class="en" style="display:block;font-size:.8rem;">Change Password</span>
+      </h2>
+      <p id="changePwReason" style="font-size:.82rem;color:#e67e22;line-height:1.5;margin:.5rem 0;text-align:center;"></p>
+      <div class="login-field" style="margin-bottom:.8rem;">
+        <label for="changePwNew">Nowe hasło <span class="en">New password</span></label>
+        <input type="password" id="changePwNew" autocomplete="new-password"/>
+      </div>
+      <div class="login-field" style="margin-bottom:.8rem;">
+        <label for="changePwConfirm">Potwierdź nowe hasło <span class="en">Confirm new password</span></label>
+        <input type="password" id="changePwConfirm" autocomplete="new-password"/>
+      </div>
+      <div id="changePwError" style="color:#e74c3c;font-size:.82rem;min-height:1.2em;text-align:center;margin-bottom:.5rem;"></div>
+      <button class="login-btn" id="changePwBtn" style="max-width:250px;margin:0 auto;display:block;">Zmień hasło <span class="en">Change password</span></button>
     </div>
   </div>
 <script>
@@ -298,8 +318,8 @@
     }
   });
 
-  /* Show pending recovery phrase overlay */
-  function showPhraseOverlay(phrase) {
+  /* Show pending recovery phrase overlay (3 minutes = 180s) */
+  function showPhraseOverlay(phrase, onClose) {
     var overlay = document.getElementById('phraseOverlay');
     var wordsEl = document.getElementById('phraseWords');
     var timerEl = document.getElementById('phraseTimer');
@@ -309,11 +329,16 @@
     wordsEl.textContent = phrase;
     overlay.style.display = 'flex';
 
-    var remaining = 60;
+    var remaining = 180; /* 3 minutes */
+    function formatTime(s) {
+      var m = Math.floor(s / 60);
+      var sec = s % 60;
+      return m + ':' + (sec < 10 ? '0' : '') + sec;
+    }
     function updateTimer() {
       timerEl.textContent = (curLang === 'en'
-        ? 'This message will disappear in ' + remaining + 's'
-        : 'Ta wiadomość zniknie za ' + remaining + 's');
+        ? 'This message will disappear in ' + formatTime(remaining)
+        : 'Ta wiadomość zniknie za ' + formatTime(remaining));
     }
     updateTimer();
 
@@ -323,20 +348,80 @@
       if (remaining <= 0) {
         clearInterval(interval);
         overlay.style.display = 'none';
-        location.href = '/';
+        if (typeof onClose === 'function') onClose();
+        else location.href = '/';
       }
     }, 1000);
 
     confirmCb.checked = false;
     closeBtn.disabled = true;
-    confirmCb.addEventListener('change', function() {
+    confirmCb.onchange = function() {
       closeBtn.disabled = !confirmCb.checked;
-    });
-    closeBtn.addEventListener('click', function() {
+    };
+    closeBtn.onclick = function() {
       clearInterval(interval);
       overlay.style.display = 'none';
-      location.href = '/';
-    });
+      if (typeof onClose === 'function') onClose();
+      else location.href = '/';
+    };
+  }
+
+  /* Show password change overlay */
+  function showChangePwOverlay(currentPassword, reason) {
+    var overlay = document.getElementById('changePwOverlay');
+    var reasonEl = document.getElementById('changePwReason');
+    var newPwEl = document.getElementById('changePwNew');
+    var confirmPwEl = document.getElementById('changePwConfirm');
+    var errEl = document.getElementById('changePwError');
+    var btn = document.getElementById('changePwBtn');
+
+    reasonEl.textContent = reason || '';
+    newPwEl.value = '';
+    confirmPwEl.value = '';
+    errEl.textContent = '';
+    overlay.style.display = 'flex';
+
+    btn.onclick = async function() {
+      errEl.textContent = '';
+      var newPw = newPwEl.value;
+      var confirmPw = confirmPwEl.value;
+
+      if (!newPw || newPw.length < 6) {
+        errEl.textContent = curLang === 'en' ? 'Password must be at least 6 characters' : 'Hasło musi mieć min. 6 znaków';
+        return;
+      }
+      if (newPw !== confirmPw) {
+        errEl.textContent = curLang === 'en' ? 'Passwords do not match' : 'Hasła nie są identyczne';
+        return;
+      }
+      if (newPw === currentPassword) {
+        errEl.textContent = curLang === 'en' ? 'New password must be different from the current one' : 'Nowe hasło musi się różnić od obecnego';
+        return;
+      }
+
+      btn.disabled = true;
+      try {
+        var res = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ current_password: currentPassword, new_password: newPw }),
+        });
+        var data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          overlay.style.display = 'none';
+          if (typeof showToast === 'function') {
+            showToast(curLang === 'en' ? 'Password changed!' : 'Hasło zmienione!', 'success');
+          }
+          location.href = '/';
+        } else {
+          errEl.textContent = data.message || 'Error';
+        }
+      } catch (e) {
+        errEl.textContent = curLang === 'en' ? 'Connection error' : 'Błąd połączenia';
+      } finally {
+        btn.disabled = false;
+      }
+    };
   }
 
   document.getElementById('loginForm').addEventListener('submit', async function(e) {
@@ -348,13 +433,15 @@
     errEl.textContent = '';
     pendingEl.style.display = 'none';
 
+    var enteredPassword = document.getElementById('password').value;
+
     try {
       var res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           username: document.getElementById('username').value.trim(),
-          password: document.getElementById('password').value,
+          password: enteredPassword,
           fingerprint: _collectFingerprint(),
         }),
       });
@@ -363,41 +450,32 @@
         /* Sync user's server-side language preference to localStorage */
         if (data.language) localStorage.setItem('aistate_ui_lang', data.language);
 
+        var needsPwChange = data.must_change_password || data.password_expired;
+        var pwChangeReason = data.must_change_password
+          ? (curLang === 'en' ? 'You must change your password on first login.' : 'Musisz zmienić hasło przy pierwszym logowaniu.')
+          : (curLang === 'en' ? 'Your password has expired. Please change it now.' : 'Twoje hasło wygasło. Zmień je teraz.');
+
         /* Show pending recovery phrase if present */
         if (data.recovery_phrase_pending) {
-          showPhraseOverlay(data.recovery_phrase_pending);
+          showPhraseOverlay(data.recovery_phrase_pending, function() {
+            /* After phrase overlay closes, check if password change is needed */
+            if (needsPwChange) {
+              showChangePwOverlay(enteredPassword, pwChangeReason);
+            } else {
+              location.href = '/';
+            }
+          });
           btn.disabled = false;
           return;
         }
 
-        /* Password expiry check — force password change before continuing */
-        if (data.password_expired) {
-          var expMsg = curLang === 'en'
-            ? 'Your password has expired. Please change it now.'
-            : 'Twoje hasło wygasło. Zmień je teraz.';
-          showToast(expMsg, 'warning');
-          var newPw = prompt(curLang === 'en' ? 'New password:' : 'Nowe hasło:');
-          if (newPw && newPw.length >= 6) {
-            var curPw = document.getElementById('password').value;
-            fetch('/api/auth/change-password', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({current_password: curPw, new_password: newPw}),
-            }).then(function(r){ return r.json(); }).then(function(d) {
-              if (d.status === 'ok') {
-                showToast(curLang === 'en' ? 'Password changed!' : 'Hasło zmienione!', 'success');
-              } else {
-                showToast(d.message || 'Error', 'error');
-              }
-              location.href = '/';
-            }).catch(function() { location.href = '/'; });
-            btn.disabled = false;
-            return;
-          }
-          location.href = '/';
+        /* Password change required (expiry or first login) */
+        if (needsPwChange) {
+          showChangePwOverlay(enteredPassword, pwChangeReason);
           btn.disabled = false;
           return;
         }
+
         location.href = '/';
       } else if (data.code === 'locked') {
         errEl.textContent = data.message || 'Account locked';
