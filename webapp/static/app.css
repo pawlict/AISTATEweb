@@ -134,7 +134,7 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
   scrollbar-width: thin;
   scrollbar-color: rgba(0,212,255,.25) transparent;
 }
-/* Webkit scrollbar — fixed gutter, thumb visually thin→thick via border trick */
+/* Webkit scrollbar — fixed gutter, thumb thin↔thick via transparent-border trick */
 .nav::-webkit-scrollbar{
   width:10px;
 }
@@ -143,19 +143,18 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
 }
 .nav::-webkit-scrollbar-thumb{
   border-radius:10px;
-  border:4px solid transparent;          /* thick border → thin visible thumb (~2px) */
-  background-clip: padding-box;
-  background: linear-gradient(180deg,
+  border:4px solid transparent;
+  background-image: linear-gradient(180deg,
     rgba(0,212,255,.35) 0%,
     rgba(59,130,246,.3) 50%,
-    rgba(192,132,252,.25) 100%)
-    padding-box;
+    rgba(192,132,252,.25) 100%);
+  background-origin: padding-box;
+  background-clip: padding-box;
 }
 .nav:hover::-webkit-scrollbar-thumb{
-  border:2px solid transparent;          /* thin border → thick visible thumb (~6px) */
-  background: linear-gradient(180deg,
-    #00d4ff 0%, #3b82f6 50%, #c084fc 100%)
-    padding-box;
+  border-width:2px;
+  background-image: linear-gradient(180deg,
+    #00d4ff 0%, #3b82f6 50%, #c084fc 100%);
 }
 
 .nav-icon{
