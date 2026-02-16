@@ -90,7 +90,7 @@
         <input type="text" id="adminDisplayName" autocomplete="off" data-ph-pl="np. Jan Kowalski" data-ph-en="e.g. John Smith" placeholder="np. Jan Kowalski"/>
       </div>
       <div class="field">
-        <label for="adminPassword"><span class="pl">Hasło (min. 6 znaków)</span><span class="en">Password (min. 6 chars)</span></label>
+        <label for="adminPassword"><span class="pl">Hasło (min. 12 znaków)</span><span class="en">Password (min. 12 chars)</span></label>
         <input type="password" id="adminPassword" autocomplete="new-password"/>
       </div>
       <div class="field">
@@ -209,7 +209,7 @@
     const password2 = document.getElementById('adminPassword2').value;
 
     if (!username) { errEl.textContent = txt('Podaj nazwę użytkownika', 'Enter a username'); return; }
-    if (password.length < 6) { errEl.textContent = txt('Hasło musi mieć min. 6 znaków', 'Password must be at least 6 characters'); return; }
+    if (password.length < 12) { errEl.textContent = txt('Hasło musi mieć min. 12 znaków', 'Password must be at least 12 characters'); return; }
     if (password !== password2) { errEl.textContent = txt('Hasła nie są identyczne', 'Passwords do not match'); return; }
 
     try {
