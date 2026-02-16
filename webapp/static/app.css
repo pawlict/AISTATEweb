@@ -544,6 +544,33 @@ textarea{min-height:220px; resize:vertical}
 
 .pill input{accent-color: var(--accent)}
 
+/* Icon-only pills (report format icons) */
+.pill-icon{
+  padding:4px;
+  border:1px solid transparent;
+  background:transparent;
+  border-radius:10px;
+  transition: border-color .2s, background .2s;
+}
+.pill-icon input[type="checkbox"]{
+  position:absolute; width:0; height:0; opacity:0; pointer-events:none;
+}
+.pill-icon img{
+  width:28px; height:28px; display:block;
+  opacity:.3;
+  transition: opacity .2s ease;
+}
+.pill-icon:hover img{
+  opacity:.55;
+}
+.pill-icon:has(input:checked) img{
+  opacity:1;
+}
+.pill-icon:has(input:checked){
+  border-color: rgba(0,212,255,.25);
+  background: rgba(0,212,255,.06);
+}
+
 .analysis-container{
   display:grid;
   grid-template-columns: 330px 1fr;
