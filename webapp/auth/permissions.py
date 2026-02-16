@@ -94,6 +94,8 @@ PUBLIC_ROUTES: Set[str] = {
     "/api/auth/login",
     "/api/auth/register",
     "/api/auth/request-reset",
+    "/api/auth/recover-by-phrase",
+    "/api/auth/check-username",
     "/api/auth/password-policy",
     "/api/setup/mode",
     "/api/setup/admin",

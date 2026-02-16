@@ -11,6 +11,7 @@ from webapp.auth.user_store import UserStore, UserRecord
 from webapp.auth.session_store import SessionStore
 from webapp.auth.audit_store import AuditStore
 from webapp.auth.permissions import ALL_USER_ROLES, ALL_ADMIN_ROLES, ROLE_MODULES, ADMIN_ROLE_MODULES, get_user_modules
+from webapp.auth.recovery_phrase import generate_and_hash
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -77,6 +78,7 @@ def _user_to_dict(u: UserRecord) -> dict:
         "failed_login_count": getattr(u, "failed_login_count", 0),
         "locked_until": getattr(u, "locked_until", None),
         "password_changed_at": getattr(u, "password_changed_at", None),
+        "has_recovery_phrase": bool(getattr(u, "recovery_phrase_hash", None)),
     }
 
 
@@ -162,6 +164,9 @@ async def create_user(request: Request) -> JSONResponse:
             if ar not in ALL_ADMIN_ROLES:
                 return JSONResponse({"status": "error", "message": f"Invalid admin role: {ar}"}, status_code=400)
 
+    # Generate recovery phrase
+    phrase, phrase_hash, phrase_hint = generate_and_hash()
+
     try:
         rec = UserRecord(
             username=username,
@@ -173,6 +178,8 @@ async def create_user(request: Request) -> JSONResponse:
             is_superadmin=is_superadmin,
             created_by=caller.user_id if caller else "system",
             password_changed_at=datetime.now().isoformat(),
+            recovery_phrase_hash=phrase_hash,
+            recovery_phrase_hint=phrase_hint,
         )
         rec = _user_store.create_user(rec)
     except ValueError as e:
@@ -184,7 +191,9 @@ async def create_user(request: Request) -> JSONResponse:
         _audit_store.log_event("user_created", user_id=rec.user_id, username=username,
                                actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
 
-    return JSONResponse({"status": "ok", "user": _user_to_dict(rec)}, status_code=201)
+    result = _user_to_dict(rec)
+    result["recovery_phrase"] = phrase
+    return JSONResponse({"status": "ok", "user": result}, status_code=201)
 
 
 @router.put("/{user_id}")
@@ -518,6 +527,41 @@ async def unlock_user(user_id: str, request: Request) -> JSONResponse:
     if _audit_store:
         _audit_store.log_event("account_unlocked", user_id=user_id, username=existing.username,
                                detail="manual unlock by admin",
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/{user_id}/reset-phrase")
+async def reset_recovery_phrase(user_id: str, request: Request) -> JSONResponse:
+    """Admin endpoint: reset a user's recovery phrase.
+
+    Generates a new 12-word phrase. The plaintext is stored temporarily
+    in recovery_phrase_pending and shown to the user once at next login (60s window).
+    """
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    # Generate new phrase
+    phrase, phrase_hash, phrase_hint = generate_and_hash()
+
+    _user_store.update_user(user_id, {
+        "recovery_phrase_hash": phrase_hash,
+        "recovery_phrase_hint": phrase_hint,
+        "recovery_phrase_pending": phrase,
+    })
+
+    caller = getattr(request.state, "user", None)
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' reset recovery phrase for '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("recovery_phrase_reset", user_id=user_id, username=existing.username,
                                actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
 
     return JSONResponse({"status": "ok"})

@@ -84,6 +84,41 @@
       <button type="button" class="login-btn" id="forgotSendBtn" style="font-size:.9rem;">Wyślij prośbę <span class="en">Send request</span></button>
       <div id="forgotMsg" style="font-size:.85rem;margin-top:.5rem;min-height:1.2em;text-align:center;"></div>
     </div>
+    <!-- Recovery by seed phrase -->
+    <div class="login-link" style="margin-top:.5rem;">
+      <a href="#" id="recoverPhraseLink">Odzyskaj konto frazą odzyskiwania <span class="en">Recover account with recovery phrase</span></a>
+    </div>
+    <div id="recoverPhraseForm" style="display:none;margin-top:.8rem;padding:.8rem;border:1px solid var(--border,#d0d5dd);border-radius:8px;">
+      <div class="login-field" style="margin-bottom:.6rem;">
+        <label for="recoverPhrase">Wpisz 12 słów frazy odzyskiwania <span class="en">Enter 12 recovery phrase words</span></label>
+        <textarea id="recoverPhrase" rows="3" style="width:100%;padding:.5rem .75rem;border:1.5px solid var(--border,#d0d5dd);border-radius:8px;font-size:.9rem;box-sizing:border-box;resize:vertical;font-family:monospace;" placeholder="word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12"></textarea>
+        <div id="recoverWordCount" style="font-size:.72rem;color:var(--muted,#888);margin-top:.2rem;">0 / 12</div>
+      </div>
+      <div class="login-field" style="margin-bottom:.6rem;">
+        <label for="recoverNewPw">Nowe hasło <span class="en">New password</span></label>
+        <input type="password" id="recoverNewPw" autocomplete="new-password"/>
+      </div>
+      <button type="button" class="login-btn" id="recoverPhraseBtn" style="font-size:.9rem;">Odzyskaj konto <span class="en">Recover account</span></button>
+      <div id="recoverMsg" style="font-size:.85rem;margin-top:.5rem;min-height:1.2em;text-align:center;"></div>
+    </div>
+  </div>
+
+  <!-- Overlay: Pending Recovery Phrase (shown for 60s after login) -->
+  <div id="phraseOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9999;display:none;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg,#fff);border-radius:16px;padding:2rem;max-width:520px;width:95%;box-shadow:0 8px 40px rgba(0,0,0,.2);text-align:center;">
+      <h2 style="margin:0 0 .5rem;font-size:1.1rem;color:var(--text,#1a1a2e);">Nowa fraza odzyskiwania <span class="en" style="display:block;font-size:.8rem;">New Recovery Phrase</span></h2>
+      <p style="font-size:.82rem;color:#e67e22;line-height:1.5;margin:.5rem 0;">
+        Zapisz te słowa w bezpiecznym miejscu. Nie będą wyświetlone ponownie!
+        <span class="en" style="display:block;margin-top:.2rem;">Write these words down and keep them safe. They will not be shown again!</span>
+      </p>
+      <div id="phraseWords" style="background:#f8f9fa;border:2px dashed var(--border,#d0d5dd);border-radius:10px;padding:1rem;margin:1rem 0;font-family:monospace;font-size:1.1rem;font-weight:600;letter-spacing:.03em;word-spacing:.3em;line-height:1.8;user-select:all;color:var(--text,#1a1a2e);"></div>
+      <div id="phraseTimer" style="font-size:.82rem;color:#e74c3c;font-weight:600;margin:.5rem 0;"></div>
+      <label style="display:flex;align-items:center;justify-content:center;gap:.4rem;font-size:.82rem;margin:.8rem 0;cursor:pointer;">
+        <input type="checkbox" id="phraseConfirmCheck"/>
+        <span>Potwierdzam, że zapisałem frazę <span class="en">I confirm that I have saved the phrase</span></span>
+      </label>
+      <button class="login-btn" id="phraseCloseBtn" disabled style="max-width:200px;margin:0 auto;">OK</button>
+    </div>
   </div>
 <script>
 (function(){
@@ -195,6 +230,115 @@
     return fp;
   }
 
+  /* Recovery phrase form toggle */
+  var recoverLink = document.getElementById('recoverPhraseLink');
+  var recoverForm = document.getElementById('recoverPhraseForm');
+  if (recoverLink) {
+    recoverLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      recoverForm.style.display = recoverForm.style.display === 'none' ? 'block' : 'none';
+    });
+  }
+
+  /* Word counter for recovery phrase */
+  var recoverTextarea = document.getElementById('recoverPhrase');
+  var wordCountEl = document.getElementById('recoverWordCount');
+  if (recoverTextarea && wordCountEl) {
+    recoverTextarea.addEventListener('input', function() {
+      var words = recoverTextarea.value.trim().split(/\s+/).filter(function(w) { return w.length > 0; });
+      wordCountEl.textContent = words.length + ' / 12';
+      wordCountEl.style.color = words.length === 12 ? '#27ae60' : 'var(--muted,#888)';
+    });
+  }
+
+  /* Recovery phrase submit */
+  document.getElementById('recoverPhraseBtn').addEventListener('click', async function() {
+    var btn = this;
+    var msgEl = document.getElementById('recoverMsg');
+    var phrase = document.getElementById('recoverPhrase').value.trim();
+    var newPw = document.getElementById('recoverNewPw').value;
+    var words = phrase.split(/\s+/).filter(function(w) { return w.length > 0; });
+
+    if (words.length !== 12) {
+      msgEl.style.color = '#e74c3c';
+      msgEl.textContent = curLang === 'en' ? 'Recovery phrase must be exactly 12 words' : 'Fraza musi zawierać dokładnie 12 słów';
+      return;
+    }
+    if (!newPw || newPw.length < 6) {
+      msgEl.style.color = '#e74c3c';
+      msgEl.textContent = curLang === 'en' ? 'Password must be at least 6 characters' : 'Hasło musi mieć min. 6 znaków';
+      return;
+    }
+
+    btn.disabled = true;
+    msgEl.textContent = '';
+    try {
+      var res = await fetch('/api/auth/recover-by-phrase', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ phrase: words.join(' '), new_password: newPw }),
+      });
+      var data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        msgEl.style.color = '#27ae60';
+        msgEl.innerHTML = (curLang === 'en'
+          ? 'Password reset successfully! You can now log in as <b>' + (data.username || '') + '</b>.'
+          : 'Hasło zostało zresetowane! Możesz się zalogować jako <b>' + (data.username || '') + '</b>.');
+        document.getElementById('recoverPhrase').value = '';
+        document.getElementById('recoverNewPw').value = '';
+      } else {
+        msgEl.style.color = '#e74c3c';
+        msgEl.textContent = data.message || 'Error';
+      }
+    } catch (err) {
+      msgEl.style.color = '#e74c3c';
+      msgEl.textContent = 'Connection error';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /* Show pending recovery phrase overlay */
+  function showPhraseOverlay(phrase) {
+    var overlay = document.getElementById('phraseOverlay');
+    var wordsEl = document.getElementById('phraseWords');
+    var timerEl = document.getElementById('phraseTimer');
+    var confirmCb = document.getElementById('phraseConfirmCheck');
+    var closeBtn = document.getElementById('phraseCloseBtn');
+
+    wordsEl.textContent = phrase;
+    overlay.style.display = 'flex';
+
+    var remaining = 60;
+    function updateTimer() {
+      timerEl.textContent = (curLang === 'en'
+        ? 'This message will disappear in ' + remaining + 's'
+        : 'Ta wiadomość zniknie za ' + remaining + 's');
+    }
+    updateTimer();
+
+    var interval = setInterval(function() {
+      remaining--;
+      updateTimer();
+      if (remaining <= 0) {
+        clearInterval(interval);
+        overlay.style.display = 'none';
+        location.href = '/';
+      }
+    }, 1000);
+
+    confirmCb.checked = false;
+    closeBtn.disabled = true;
+    confirmCb.addEventListener('change', function() {
+      closeBtn.disabled = !confirmCb.checked;
+    });
+    closeBtn.addEventListener('click', function() {
+      clearInterval(interval);
+      overlay.style.display = 'none';
+      location.href = '/';
+    });
+  }
+
   document.getElementById('loginForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     var btn = document.getElementById('loginBtn');
@@ -218,6 +362,14 @@
       if (res.ok && data.status === 'ok') {
         /* Sync user's server-side language preference to localStorage */
         if (data.language) localStorage.setItem('aistate_ui_lang', data.language);
+
+        /* Show pending recovery phrase if present */
+        if (data.recovery_phrase_pending) {
+          showPhraseOverlay(data.recovery_phrase_pending);
+          btn.disabled = false;
+          return;
+        }
+
         /* Password expiry check — force password change before continuing */
         if (data.password_expired) {
           var expMsg = curLang === 'en'

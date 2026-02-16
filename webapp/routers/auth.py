@@ -16,6 +16,7 @@ from webapp.auth.deployment_store import DeploymentStore
 from webapp.auth.message_store import MessageStore, Message
 from webapp.auth.audit_store import AuditStore
 from webapp.auth.permissions import get_user_modules, ALL_USER_ROLES, ALL_ADMIN_ROLES
+from webapp.auth.recovery_phrase import generate_and_hash, compute_hint, verify_phrase
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -255,6 +256,13 @@ async def login(request: Request) -> JSONResponse:
         if _audit_store:
             _audit_store.log_event("password_expired_redirect", user_id=user.user_id, username=user.username, ip=ip, fingerprint=fingerprint)
 
+    # --- Recovery phrase pending display ---
+    pending_phrase = getattr(user, "recovery_phrase_pending", None)
+    if pending_phrase:
+        response_data["recovery_phrase_pending"] = pending_phrase
+        # Clear the pending phrase so it's shown only once
+        _user_store.update_user(user.user_id, {"recovery_phrase_pending": None})
+
     response = JSONResponse(response_data)
     response.set_cookie(
         key=SessionStore.COOKIE_NAME,
@@ -422,6 +430,9 @@ async def register(request: Request) -> JSONResponse:
 
     guard_names = _user_store.get_access_guard_names()
 
+    # Generate recovery phrase
+    phrase, phrase_hash, phrase_hint = generate_and_hash()
+
     try:
         rec = UserRecord(
             username=username,
@@ -431,6 +442,8 @@ async def register(request: Request) -> JSONResponse:
             pending=True,
             created_by="self",
             password_changed_at=datetime.now().isoformat(),
+            recovery_phrase_hash=phrase_hash,
+            recovery_phrase_hint=phrase_hint,
         )
         rec = _user_store.create_user(rec)
     except ValueError as e:
@@ -443,6 +456,7 @@ async def register(request: Request) -> JSONResponse:
         "status": "ok",
         "message": "Account created, waiting for approval",
         "approvers": guard_names,
+        "recovery_phrase": phrase,
     }, status_code=201)
 
 
@@ -505,6 +519,122 @@ async def request_password_reset(request: Request) -> JSONResponse:
         _app_log_fn(f"Auth: password reset requested for '{user.username}' from {ip}")
 
     return JSONResponse({"status": "ok", "message": "Request received"})
+
+
+# ---------------------------------------------------------------------------
+# Recovery via seed phrase (no username required)
+# ---------------------------------------------------------------------------
+
+@router.post("/recover-by-phrase")
+async def recover_by_phrase(request: Request) -> JSONResponse:
+    """Public endpoint: recover account by entering the 12-word recovery phrase.
+
+    The phrase hint (SHA256 prefix) is used for fast user lookup,
+    then PBKDF2 verification confirms the match.
+    On success, allows setting a new password.
+    """
+    assert _user_store
+
+    ip = request.client.host if request.client else "unknown"
+    if _is_rate_limited(ip):
+        return JSONResponse({"status": "error", "message": "Too many requests"}, status_code=429)
+    _record_attempt(ip)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    phrase = (body.get("phrase") or "").strip()
+    new_password = (body.get("new_password") or "").strip()
+
+    if not phrase:
+        return JSONResponse({"status": "error", "message": "Recovery phrase required"}, status_code=400)
+
+    # Count words
+    words = phrase.lower().split()
+    if len(words) != 12:
+        return JSONResponse({"status": "error", "message": "Recovery phrase must be exactly 12 words"}, status_code=400)
+
+    if not new_password:
+        return JSONResponse({"status": "error", "message": "New password required"}, status_code=400)
+
+    if len(new_password) < 6:
+        return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
+
+    # Compute hint for fast lookup
+    hint = compute_hint(phrase)
+    user = _user_store.get_by_phrase_hint(hint)
+
+    if user is None:
+        if _app_log_fn:
+            _app_log_fn(f"Auth: failed recovery phrase attempt from {ip} (no user found for hint)")
+        if _audit_store:
+            _audit_store.log_event("recovery_phrase_failed", ip=ip, detail="no user found for hint")
+        return JSONResponse({"status": "error", "message": "Invalid recovery phrase"}, status_code=401)
+
+    # Verify full phrase with PBKDF2
+    if not user.recovery_phrase_hash or not verify_phrase(phrase, user.recovery_phrase_hash):
+        if _app_log_fn:
+            _app_log_fn(f"Auth: failed recovery phrase verification for '{user.username}' from {ip}")
+        if _audit_store:
+            _audit_store.log_event("recovery_phrase_failed", user_id=user.user_id, username=user.username, ip=ip, detail="PBKDF2 verification failed")
+        return JSONResponse({"status": "error", "message": "Invalid recovery phrase"}, status_code=401)
+
+    # Check user status
+    if user.banned:
+        return JSONResponse({"status": "error", "message": "Account is banned"}, status_code=403)
+
+    # Password policy check
+    is_admin_user = user.is_admin or user.is_superadmin
+    pw_policy = "strong" if is_admin_user else (getattr(_settings(), "password_policy", "basic"))
+    pw_err = validate_password_strength(new_password, pw_policy)
+    if pw_err:
+        msg = pw_err
+        if is_admin_user:
+            msg += " (wymóg dla kont administratorów / admin account requirement)"
+        return JSONResponse({"status": "error", "message": msg}, status_code=400)
+
+    # Success — set new password
+    _user_store.update_user(user.user_id, {
+        "password_hash": hash_password(new_password),
+        "password_changed_at": datetime.now().isoformat(),
+        "password_reset_requested": False,
+        "password_reset_requested_at": None,
+        "failed_login_count": 0,
+        "locked_until": None,
+    })
+
+    if _app_log_fn:
+        _app_log_fn(f"Auth: password recovered via phrase for '{user.username}' from {ip}")
+    if _audit_store:
+        _audit_store.log_event("password_recovered_by_phrase", user_id=user.user_id, username=user.username, ip=ip)
+
+    return JSONResponse({
+        "status": "ok",
+        "message": "Password has been reset successfully",
+        "username": user.username,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Username availability check
+# ---------------------------------------------------------------------------
+
+@router.get("/check-username")
+async def check_username(request: Request) -> JSONResponse:
+    """Public endpoint: check if a username is already taken."""
+    assert _user_store
+
+    username = (request.query_params.get("username") or "").strip()
+    if not username or len(username) < 3:
+        return JSONResponse({"status": "ok", "available": False, "reason": "too_short"})
+
+    existing = _user_store.get_by_username(username)
+    return JSONResponse({
+        "status": "ok",
+        "available": existing is None,
+    })
 
 
 # ---------------------------------------------------------------------------
