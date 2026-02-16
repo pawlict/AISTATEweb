@@ -90,8 +90,8 @@ async def create_first_admin(request: Request) -> JSONResponse:
 
     if not username:
         return JSONResponse({"status": "error", "message": "Username required"}, status_code=400)
-    if len(password) < 6:
-        return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
+    if len(password) < 12:
+        return JSONResponse({"status": "error", "message": "Password must be at least 12 characters"}, status_code=400)
 
     rec = UserRecord(
         username=username,
