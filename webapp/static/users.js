@@ -250,7 +250,9 @@
           acts.appendChild(btn('Reset has\u0142a', function() { openResetPwModal(u); }, '#8e44ad'));
         }
         acts.appendChild(btn('Reset frazy', function() { resetRecoveryPhrase(u); }, '#2980b9'));
-        acts.appendChild(btn('Usuń', function() { openDeleteModal(u); }, '#e74c3c'));
+        if (!u.is_superadmin) {
+          acts.appendChild(btn('Usuń', function() { openDeleteModal(u); }, '#e74c3c'));
+        }
       } else {
         acts.textContent = '—';
       }
