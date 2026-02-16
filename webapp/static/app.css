@@ -88,9 +88,7 @@ a{color:inherit; text-decoration:none}
 .sidebar-toggle:active{transform: translateY(1px)}
 
 .sidebar-toggle svg{width:22px; height:22px; display:block}
-.sidebar-toggle svg path,
-.sidebar-toggle svg rect{stroke: currentColor; fill:none; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.1}
-.sidebar-toggle svg .brush{stroke-width:3.2; opacity:.20}
+/* SVG icons use their own gradients — no blanket stroke/fill overrides */
 .sidebar-toggle .ico-expand{display:none}
 body.sidebar-collapsed .sidebar-toggle .ico-collapse{display:none}
 body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
