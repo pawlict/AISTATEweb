@@ -177,9 +177,10 @@ async def create_user(request: Request) -> JSONResponse:
             admin_roles=admin_roles if is_admin else [],
             is_superadmin=is_superadmin,
             created_by=caller.user_id if caller else "system",
-            password_changed_at=datetime.now().isoformat(),
+            # password_changed_at intentionally NOT set — forces password change on first login
             recovery_phrase_hash=phrase_hash,
             recovery_phrase_hint=phrase_hint,
+            recovery_phrase_pending=phrase,  # shown to user at first login, not to admin
         )
         rec = _user_store.create_user(rec)
     except ValueError as e:
@@ -192,7 +193,7 @@ async def create_user(request: Request) -> JSONResponse:
                                actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
 
     result = _user_to_dict(rec)
-    result["recovery_phrase"] = phrase
+    # Recovery phrase is NOT returned to the admin — it will be shown to the user at first login
     return JSONResponse({"status": "ok", "user": result}, status_code=201)
 
 

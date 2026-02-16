@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -102,6 +103,7 @@ async def create_first_admin(request: Request) -> JSONResponse:
         admin_roles=["Architekt Funkcji", "Strażnik Dostępu"],
         is_superadmin=True,
         created_by="system",
+        password_changed_at=datetime.now().isoformat(),
     )
     rec = _user_store.create_user(rec)
 

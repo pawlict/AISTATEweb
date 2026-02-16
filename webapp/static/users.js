@@ -1942,9 +1942,13 @@
       if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
       document.getElementById('userModal').style.display = 'none';
 
-      /* Show recovery phrase after user creation (not edit) */
-      if (!editingUserId && data.user && data.user.recovery_phrase) {
-        showPhraseModal(data.user.username || payload.username, data.user.recovery_phrase);
+      /* Inform admin that phrase will be shown to user at first login */
+      if (!editingUserId && data.user) {
+        var lang = _lang();
+        var msg = lang === 'en'
+          ? 'User "' + (data.user.username || payload.username) + '" has been created. The recovery phrase and password change prompt will be shown to the user at their first login.'
+          : 'Użytkownik "' + (data.user.username || payload.username) + '" został utworzony. Fraza odzyskiwania i monit o zmianę hasła zostaną wyświetlone użytkownikowi przy pierwszym logowaniu.';
+        alert(msg);
       }
 
       loadUsers();
@@ -1957,8 +1961,8 @@
   async function resetRecoveryPhrase(u) {
     var lang = _lang();
     var confirmMsg = lang === 'en'
-      ? 'Reset recovery phrase for "' + u.username + '"? The new phrase will be shown to the user at their next login (60 seconds window).'
-      : 'Zresetować frazę odzyskiwania dla "' + u.username + '"? Nowa fraza zostanie wyświetlona użytkownikowi przy następnym logowaniu (przez 60 sekund).';
+      ? 'Reset recovery phrase for "' + u.username + '"? The new phrase will be shown to the user at their next login (3 minutes window).'
+      : 'Zresetować frazę odzyskiwania dla "' + u.username + '"? Nowa fraza zostanie wyświetlona użytkownikowi przy następnym logowaniu (przez 3 minuty).';
     if (!confirm(confirmMsg)) return;
 
     try {

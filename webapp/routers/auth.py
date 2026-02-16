@@ -228,22 +228,23 @@ async def login(request: Request) -> JSONResponse:
     if _audit_store:
         _audit_store.log_event("login", user_id=user.user_id, username=user.username, ip=ip, fingerprint=fingerprint)
 
-    # --- Password expiry check ---
+    # --- Password expiry / first-login check ---
     password_expired = False
+    must_change_password = False
     settings = _settings()
     expiry_days = getattr(settings, "password_expiry_days", 0)
-    if expiry_days > 0:
-        changed_at = getattr(user, "password_changed_at", None)
-        if changed_at:
-            try:
-                changed_dt = datetime.fromisoformat(changed_at)
-                if datetime.now() > changed_dt + timedelta(days=expiry_days):
-                    password_expired = True
-            except ValueError:
-                pass
-        else:
-            # No password_changed_at recorded — treat as expired to force first change
-            password_expired = True
+    changed_at = getattr(user, "password_changed_at", None)
+
+    # Force password change on first login (no password_changed_at recorded)
+    if not changed_at:
+        must_change_password = True
+    elif expiry_days > 0:
+        try:
+            changed_dt = datetime.fromisoformat(changed_at)
+            if datetime.now() > changed_dt + timedelta(days=expiry_days):
+                password_expired = True
+        except ValueError:
+            pass
 
     response_data: dict = {
         "status": "ok",
@@ -251,7 +252,12 @@ async def login(request: Request) -> JSONResponse:
         "username": user.username,
         "language": user.language or "pl",
     }
-    if password_expired:
+    if must_change_password:
+        response_data["must_change_password"] = True
+        if _audit_store:
+            _audit_store.log_event("password_expired_redirect", user_id=user.user_id, username=user.username, ip=ip,
+                                   detail="first login — password change required", fingerprint=fingerprint)
+    elif password_expired:
         response_data["password_expired"] = True
         if _audit_store:
             _audit_store.log_event("password_expired_redirect", user_id=user.user_id, username=user.username, ip=ip, fingerprint=fingerprint)
