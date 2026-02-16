@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
-<defs><linearGradient id="gai" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#a855f7" stroke-width="1" fill="none" opacity="0.12" stroke-linecap="round"/>
-<path d="M24 6l3 9h9l-7 5 3 9-8-6-8 6 3-9-7-5h9z" stroke="url(#gai)" stroke-width="2" fill="#a855f7" fill-opacity=".08"/>
-<circle cx="24" cy="20" r="2.5" fill="url(#gai)" opacity=".5"/>
-<path d="M14 36h20" stroke="url(#gai)" stroke-width="1.5" opacity=".3"/>
-<path d="M18 40h12" stroke="url(#gai)" stroke-width="1.5" opacity=".2"/>
-</svg>
