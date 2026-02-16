@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="gai" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#c026d3"/></linearGradient></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#00d4ff" stroke-width="1" fill="none" opacity=".15"/>
+<!-- chip body -->
+<rect x="12" y="12" width="24" height="24" rx="4" stroke="url(#gai)" stroke-width="2.2" fill="none"/>
+<!-- legs top (rectangles) -->
+<rect x="16" y="4" width="2.5" height="8" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<rect x="22.5" y="4" width="2.5" height="8" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<rect x="29" y="4" width="2.5" height="8" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<!-- legs bottom -->
+<rect x="16" y="36" width="2.5" height="8" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<rect x="22.5" y="36" width="2.5" height="8" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<rect x="29" y="36" width="2.5" height="8" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<!-- legs left -->
+<rect x="4" y="16" width="8" height="2.5" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<rect x="4" y="22.5" width="8" height="2.5" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<rect x="4" y="29" width="8" height="2.5" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<!-- legs right -->
+<rect x="36" y="16" width="8" height="2.5" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<rect x="36" y="22.5" width="8" height="2.5" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<rect x="36" y="29" width="8" height="2.5" rx="0.8" stroke="url(#gai)" stroke-width="1" fill="url(#gai)" fill-opacity=".15"/>
+<!-- inner die -->
+<rect x="16" y="16" width="16" height="16" rx="2.5" stroke="url(#gai)" stroke-width="0.8" opacity=".25" fill="url(#gai)" fill-opacity=".05"/>
+<!-- lightning bolt ⚡ -->
+<polygon points="26,14 18,26 23,26 20,35 30,22 25,22 28,14" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".2" stroke-linejoin="round"/>
+</svg>
