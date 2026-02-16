@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="dw" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#3b82f6" stroke-width="1" fill="none" opacity="0.15" stroke-linecap="round"/>
+<path d="M12 6h16l10 10v22a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4z" stroke="url(#dw)" stroke-width="2" fill="none"/>
+<path d="M28 6v10h10" stroke="url(#dw)" stroke-width="1.5" fill="none" opacity=".4"/>
+<text x="24" y="32" text-anchor="middle" font-size="9" fill="#3b82f6" font-weight="800" opacity=".45">DOC</text>
+
+</svg>
