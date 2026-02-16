@@ -146,72 +146,22 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
   border:none;
 }
 .nav-icon svg{width:24px; height:24px; display:block}
-.nav-icon svg path, .nav-icon svg rect, .nav-icon svg circle, .nav-icon svg line, .nav-icon svg polyline, .nav-icon svg polygon{stroke: currentColor; fill:none; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.5}
-.nav-icon svg .brush{stroke-width:2.4; opacity:.28}
+/* SVG icons use their own gradients and colors — no blanket stroke/fill overrides */
 
-/* Colorful, logo-aligned icons */
+/* Gradient icons: subtle effects */
 .nav a[data-icon] .nav-icon{
   box-shadow: none;
 }
 .nav a[data-icon] .nav-icon svg{filter: drop-shadow(0 1px 0 rgba(255,255,255,.10));}
-
-/* Projects */
-.nav a[data-icon="projects"] .nav-icon{ color: var(--brand-blue) }
-.nav a[data-icon="projects"] .nav-icon svg .brush{stroke: var(--brand-cyan); opacity:.45}
-
-/* Transcription */
-.nav a[data-icon="transcription"] .nav-icon{ color: var(--brand-purple) }
-.nav a[data-icon="transcription"] .nav-icon svg .brush{stroke: var(--brand-sky); opacity:.42}
-
-/* Diarization */
-.nav a[data-icon="diarization"] .nav-icon{ color: var(--brand-blue) }
-.nav a[data-icon="diarization"] .nav-icon svg .brush{stroke: var(--brand-cyan); opacity:.50}
-
-/* Analysis */
-.nav a[data-icon="analysis"] .nav-icon{ color: var(--brand-sky) }
-.nav a[data-icon="analysis"] .nav-icon svg .brush{stroke: var(--brand-purple); opacity:.35}
-
-/* Chat */
-.nav a[data-icon="chat"] .nav-icon{ color: var(--brand-purple) }
-.nav a[data-icon="chat"] .nav-icon svg .brush{stroke: var(--brand-ice); opacity:.45}
-
-/* Translation */
-.nav a[data-icon="translation"] .nav-icon{ color: var(--brand-purple) }
-.nav a[data-icon="translation"] .nav-icon svg .brush{stroke: var(--brand-cyan); opacity:.45}
-
-/* Info */
-.nav a[data-icon="info"] .nav-icon{ color: var(--brand-blue) }
-.nav a[data-icon="info"] .nav-icon svg .brush{stroke: var(--brand-ice); opacity:.55}
-
-/* Settings */
-.nav a[data-icon="settings"] .nav-icon{ color: var(--brand-navy) }
-.nav a[data-icon="settings"] .nav-icon svg .brush{stroke: var(--brand-purple); opacity:.38}
-
-/* GPU */
-.nav a[data-icon="gpu"] .nav-icon{ color: var(--brand-blue) }
-.nav a[data-icon="gpu"] .nav-icon svg .brush{stroke: var(--brand-sky); opacity:.40}
-
-/* LLM */
-.nav a[data-icon="llm"] .nav-icon{ color: var(--brand-purple) }
-.nav a[data-icon="llm"] .nav-icon svg .brush{stroke: var(--brand-ice); opacity:.55}
-
-/* ASR */
-.nav a[data-icon="asr"] .nav-icon{ color: var(--brand-blue) }
-.nav a[data-icon="asr"] .nav-icon svg .brush{stroke: var(--brand-sky); opacity:.42}
-
-/* NLLB */
-.nav a[data-icon="nllb"] .nav-icon{ color: var(--brand-sky) }
-.nav a[data-icon="nllb"] .nav-icon svg .brush{stroke: var(--brand-cyan); opacity:.45}
-
-/* Logs */
-.nav a[data-icon="logs"] .nav-icon{ color: var(--brand-blue) }
-.nav a[data-icon="logs"] .nav-icon svg .brush{stroke: var(--brand-sky); opacity:.35}
+.nav a:hover[data-icon] .nav-icon svg{filter: drop-shadow(0 1px 2px rgba(0,0,0,.15)); transform: scale(1.05);}
+.nav a[data-icon] .nav-icon svg{transition: filter .2s, transform .2s;}
 
 /* Active state: subtle glow */
 .nav a.active[data-icon] .nav-icon{
   box-shadow: 0 0 0 4px rgba(16,150,244,.10), 0 14px 26px rgba(15,23,42,.10);
   border:none;
 }
+.nav a.active[data-icon] .nav-icon svg{filter: drop-shadow(0 2px 4px rgba(16,150,244,.25)); transform: scale(1.08);}
 
 .nav-label{display:inline}
 

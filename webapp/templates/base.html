@@ -82,14 +82,11 @@
         {% if not multiuser or 'projects' in user_modules %}
         <a href="/projects" data-icon="projects" class="{{ 'active' if active in ('new_project', 'projects') else '' }}" data-i18n-title="nav.new_project">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="14" rx="3" stroke="currentColor" stroke-width="1.5" fill="none"/>
-              <path class="brush" d="M3 9h18"/>
-              <circle cx="6" cy="7" r=".8" fill="currentColor" opacity=".5"/>
-              <circle cx="8.5" cy="7" r=".8" fill="currentColor" opacity=".4"/>
-              <path d="M8 13l3-2.5 2.5 1.8L17 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-              <circle cx="17.5" cy="5" r="2.2" fill="currentColor" opacity=".8"/>
-              <path d="M17.5 4.2v1.6M16.7 5h1.6" stroke="var(--card-bg,#fff)" stroke-width="1.1" stroke-linecap="round"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gp" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs>
+              <path d="M6 10h12l4 4h18a3 3 0 0 1 3 3v20a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V13a3 3 0 0 1 3-3z" stroke="url(#gp)" stroke-width="2.2" fill="none"/>
+              <line x1="14" y1="24" x2="34" y2="24" stroke="url(#gp)" stroke-width="1.2" opacity=".3"/>
+              <line x1="14" y1="29" x2="28" y2="29" stroke="url(#gp)" stroke-width="1.2" opacity=".25"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.new_project">Projekty</span>
@@ -98,12 +95,16 @@
         {% if not multiuser or 'transcription' in user_modules %}
         <a href="/transcription" data-icon="transcription" class="{{ 'active' if active=='transcription' else '' }}" data-i18n-title="nav.transcription">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="9" y="2" width="6" height="10" rx="3" stroke-width="1.4" fill="none"/>
-              <path d="M5 11a7 7 0 0 0 14 0" stroke-width="1.4" fill="none"/>
-              <path d="M12 18v3" stroke-width="1.3" stroke-linecap="round"/>
-              <path class="brush" d="M9 21h6" stroke-linecap="round"/>
-              <path d="M10 6.5h4M10 9h4" stroke-width=".9" stroke-linecap="round" opacity=".35"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gt" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
+              <rect x="19" y="6" width="10" height="18" rx="5" stroke="url(#gt)" stroke-width="2.2" fill="none"/>
+              <path d="M13 22v2a11 11 0 0 0 22 0v-2" stroke="url(#gt)" stroke-width="2" fill="none"/>
+              <line x1="24" y1="35" x2="24" y2="40" stroke="url(#gt)" stroke-width="2"/>
+              <line x1="18" y1="40" x2="30" y2="40" stroke="url(#gt)" stroke-width="2"/>
+              <line x1="7" y1="16" x2="7" y2="22" stroke="#00d4ff" stroke-width="1.5" opacity=".35"/>
+              <line x1="10" y1="13" x2="10" y2="25" stroke="#00d4ff" stroke-width="1.5" opacity=".25"/>
+              <line x1="38" y1="14" x2="38" y2="24" stroke="#a855f7" stroke-width="1.5" opacity=".25"/>
+              <line x1="41" y1="17" x2="41" y2="21" stroke="#a855f7" stroke-width="1.5" opacity=".35"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.transcription">Transcription</span>
@@ -112,12 +113,13 @@
         {% if not multiuser or 'diarization' in user_modules %}
         <a href="/diarization" data-icon="diarization" class="{{ 'active' if active=='diarization' else '' }}" data-i18n-title="nav.diarization">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="7" cy="8" r="2.8" stroke-width="1.4"/>
-              <path d="M3 17c0-2.5 1.8-4 4-4s4 1.5 4 4" stroke-width="1.4" stroke-linecap="round"/>
-              <circle cx="17" cy="8" r="2.8" stroke-width="1.4"/>
-              <path d="M13 17c0-2.5 1.8-4 4-4s4 1.5 4 4" stroke-width="1.4" stroke-linecap="round"/>
-              <path class="brush" d="M10 10.5c.6.4 1.2.4 2 .4s1.4 0 2-.4" stroke-dasharray="1.5 1"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gd" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7ee8fa"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+              <circle cx="16" cy="14" r="6" stroke="url(#gd)" stroke-width="2" fill="none"/>
+              <circle cx="34" cy="14" r="6" stroke="url(#gd)" stroke-width="2" fill="none"/>
+              <path d="M6 38v-2a10 10 0 0 1 10-10h0" stroke="url(#gd)" stroke-width="2" fill="none"/>
+              <path d="M26 26h2a10 10 0 0 1 10 10v2" stroke="url(#gd)" stroke-width="2" fill="none"/>
+              <path d="M22 18 Q25 14 28 18" stroke="#00d4ff" stroke-width="1.2" fill="none" opacity=".3"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.diarization">Diarization</span>
@@ -126,12 +128,12 @@
         {% if not multiuser or 'analysis' in user_modules %}
         <a href="/analysis" data-icon="analysis" class="{{ 'active' if active=='analysis' else '' }}" data-i18n-title="nav.analysis">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 2C8.5 2 5.5 4.5 5.5 8.5c0 2.2.9 3.8 2.2 5L8.5 18h7l.8-4.5c1.3-1.2 2.2-2.8 2.2-5C18.5 4.5 15.5 2 12 2z" stroke-linejoin="round"/>
-              <path d="M12 2v16" stroke-width="1" opacity=".3"/>
-              <path class="brush" d="M8 7c1-1.5 2-1.5 4-1.5M16 7c-1-1.5-2-1.5-4-1.5" stroke-linecap="round"/>
-              <path d="M7.5 10c1.5.8 2.5 1.5 4.5 1.5M16.5 10c-1.5.8-2.5 1.5-4.5 1.5" stroke-width="1.1" stroke-linecap="round" opacity=".45"/>
-              <path d="M9 18h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 19.5V18z" stroke-width="1.3"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="ga" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#ec4899"/></linearGradient></defs>
+              <rect x="6" y="6" width="36" height="34" rx="4" stroke="url(#ga)" stroke-width="2" fill="none"/>
+              <polyline points="12 32 18 22 24 26 30 14 36 18" stroke="url(#ga)" stroke-width="2.5" fill="none"/>
+              <circle cx="12" cy="32" r="2" fill="#a855f7" opacity=".5"/>
+              <circle cx="30" cy="14" r="2" fill="#ec4899" opacity=".6"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.analysis">Analiza</span>
@@ -140,12 +142,12 @@
         {% if not multiuser or 'chat' in user_modules %}
         <a href="/chat" data-icon="chat" class="{{ 'active' if active=='chat' else '' }}" data-i18n-title="nav.chat">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-3l-3.5 3.5L10 16H7a3 3 0 0 1-3-3V6z"/>
-              <circle cx="9" cy="9.5" r="1.2" stroke-width="1.2"/>
-              <circle cx="15" cy="9.5" r="1.2" stroke-width="1.2"/>
-              <path class="brush" d="M9 9.5h6" stroke-dasharray="1.5 1" opacity=".5"/>
-              <path d="M10.5 12c.5.4 1.2.6 1.5.6s1-.2 1.5-.6" stroke-linecap="round"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gc" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7ee8fa"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
+              <path d="M40 28a4 4 0 0 1-4 4H16l-8 8V10a4 4 0 0 1 4-4h24a4 4 0 0 1 4 4z" stroke="url(#gc)" stroke-width="2.2" fill="none"/>
+              <circle cx="16" cy="19" r="2" fill="#7ee8fa" opacity=".5"/>
+              <circle cx="24" cy="19" r="2" fill="#00d4ff" opacity=".5"/>
+              <circle cx="32" cy="19" r="2" fill="#3b82f6" opacity=".5"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.chat">Chat LLM</span>
@@ -154,13 +156,15 @@
         {% if not multiuser or 'translation' in user_modules %}
         <a href="/translation" data-icon="translation" class="{{ 'active' if active=='translation' else '' }}" data-i18n-title="nav.translation">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="2" y="5" width="8" height="14" rx="2" stroke-width="1.3"/>
-              <rect x="14" y="5" width="8" height="14" rx="2" stroke-width="1.3"/>
-              <path class="brush" d="M5 9h3M5 11h2" stroke-linecap="round" opacity=".5"/>
-              <path d="M17 9h3M17 11h2" stroke-linecap="round" opacity=".5"/>
-              <path d="M10 10c.8-.3 1.5-.3 2-.3s1.2 0 2 .3" stroke-width="1.5" stroke-linecap="round"/>
-              <path d="M10 14c.8.3 1.5.3 2 .3s1.2 0 2-.3" stroke-width="1.5" stroke-linecap="round"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gtr" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#10b981"/></linearGradient></defs>
+              <circle cx="24" cy="22" r="14" stroke="url(#gtr)" stroke-width="2" fill="none"/>
+              <ellipse cx="24" cy="22" rx="7" ry="14" stroke="url(#gtr)" stroke-width="1.3" fill="none" opacity=".5"/>
+              <line x1="10" y1="22" x2="38" y2="22" stroke="url(#gtr)" stroke-width="1.2" opacity=".4"/>
+              <path d="M8 38L16 38" stroke="#00d4ff" stroke-width="1.8" opacity=".5"/>
+              <path d="M14 36L16 38L14 40" stroke="#00d4ff" stroke-width="1.5" fill="none" opacity=".5"/>
+              <path d="M40 38L32 38" stroke="#10b981" stroke-width="1.8" opacity=".5"/>
+              <path d="M34 36L32 38L34 40" stroke="#10b981" stroke-width="1.5" fill="none" opacity=".5"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.translation">Tłumaczenie</span>
@@ -168,11 +172,12 @@
         {% endif %}
         <a href="/info" data-icon="info" class="{{ 'active' if active=='info' else '' }}" data-i18n-title="nav.info">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 2l8 5v10l-8 5-8-5V7l8-5z" stroke-linejoin="round"/>
-              <path class="brush" d="M12 2v20M4 7l8 5 8-5M4 17l8-5 8 5" opacity=".2"/>
-              <circle cx="12" cy="9" r="1" fill="currentColor"/>
-              <path d="M12 11.5v4" stroke-width="1.5" stroke-linecap="round"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gi" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7ee8fa"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+              <polygon points="24 4 42 14 42 34 24 44 6 34 6 14" stroke="url(#gi)" stroke-width="2.2" fill="none"/>
+              <path d="M6 24L16 24L19 16L22 32L25 18L28 28L30 24L42 24" stroke="#00d4ff" stroke-width="1.5" fill="none" opacity=".3"/>
+              <circle cx="24" cy="16" r="2.2" fill="#00d4ff" opacity=".7"/>
+              <line x1="24" y1="21" x2="24" y2="34" stroke="url(#gi)" stroke-width="3"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.info">Info</span>
@@ -181,74 +186,97 @@
         <div class="nav-section" data-i18n="nav.admin_panel">Panel Administracyjny</div>
         <a href="/admin" data-icon="gpu" class="{{ 'active' if active=='admin' else '' }}" data-i18n-title="nav.admin">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="6" y="6" width="12" height="12" rx="2" stroke-width="1.5"/>
-              <rect class="brush" x="9" y="9" width="6" height="6" rx="1" opacity=".25"/>
-              <path d="M9 4v2M12 4v2M15 4v2M9 18v2M12 18v2M15 18v2M4 9h2M4 12h2M4 15h2M18 9h2M18 12h2M18 15h2" stroke-width="1.3" stroke-linecap="round"/>
-              <path d="M10.5 12h3M12 10.5v3" stroke-width="1" stroke-linecap="round" opacity=".6"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#c026d3"/></linearGradient></defs>
+              <rect x="5" y="5" width="38" height="26" rx="3" stroke="url(#gad)" stroke-width="2.2" fill="none"/>
+              <rect x="10" y="14" width="4" height="12" rx="1" stroke="#00d4ff" stroke-width="1" fill="#00d4ff" fill-opacity=".15"/>
+              <rect x="16" y="10" width="4" height="16" rx="1" stroke="#00d4ff" stroke-width="1" fill="#00d4ff" fill-opacity=".2"/>
+              <rect x="22" y="12" width="4" height="14" rx="1" stroke="#c026d3" stroke-width="1" fill="#c026d3" fill-opacity=".15"/>
+              <rect x="28" y="8" width="4" height="18" rx="1" stroke="#c026d3" stroke-width="1" fill="#c026d3" fill-opacity=".2"/>
+              <rect x="34" y="15" width="4" height="11" rx="1" stroke="#a855f7" stroke-width="1" fill="#a855f7" fill-opacity=".12"/>
+              <line x1="24" y1="31" x2="24" y2="37" stroke="url(#gad)" stroke-width="2"/>
+              <line x1="16" y1="37" x2="32" y2="37" stroke="url(#gad)" stroke-width="2"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.admin">Ustawienia GPU</span>
         </a>
         <a href="/llm-settings" data-icon="llm" class="{{ 'active' if active=='llm_settings' else '' }}" data-i18n-title="nav.llm_settings">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 19v-2a4 4 0 0 1 8 0v2" stroke-width="1.4" stroke-linecap="round"/>
-              <circle cx="12" cy="9" r="4.5" stroke-width="1.5"/>
-              <path class="brush" d="M10 8c.3-.5.8-.8 1.2-.8.5 0 .8.2 1.2.5.4.3.8.5 1.2.5" stroke-linecap="round"/>
-              <circle cx="10" cy="9.8" r=".5" fill="currentColor"/>
-              <circle cx="14" cy="9.8" r=".5" fill="currentColor"/>
-              <path d="M6 6l-1.5-1.5M18 6l1.5-1.5M5 12H3.5M20.5 12H19" stroke-width="1" stroke-linecap="round" opacity=".35"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gllm" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+              <rect x="8" y="8" width="32" height="32" rx="6" stroke="url(#gllm)" stroke-width="2.2" fill="none"/>
+              <circle cx="18" cy="18" r="3" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".12"/>
+              <circle cx="30" cy="18" r="3" stroke="#a855f7" stroke-width="1.5" fill="#a855f7" fill-opacity=".12"/>
+              <circle cx="18" cy="30" r="3" stroke="#a855f7" stroke-width="1.5" fill="#a855f7" fill-opacity=".12"/>
+              <circle cx="30" cy="30" r="3" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".12"/>
+              <circle cx="24" cy="24" r="2.5" stroke="url(#gllm)" stroke-width="1.5" fill="none"/>
+              <line x1="20.5" y1="19.5" x2="22" y2="22" stroke="#00d4ff" stroke-width="1" opacity=".4"/>
+              <line x1="27.5" y1="19.5" x2="26" y2="22" stroke="#a855f7" stroke-width="1" opacity=".4"/>
+              <line x1="20.5" y1="28.5" x2="22" y2="26" stroke="#a855f7" stroke-width="1" opacity=".4"/>
+              <line x1="27.5" y1="28.5" x2="26" y2="26" stroke="#00d4ff" stroke-width="1" opacity=".4"/>
+              <line x1="4" y1="16" x2="8" y2="16" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+              <line x1="4" y1="24" x2="8" y2="24" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+              <line x1="4" y1="32" x2="8" y2="32" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+              <line x1="40" y1="16" x2="44" y2="16" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+              <line x1="40" y1="24" x2="44" y2="24" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+              <line x1="40" y1="32" x2="44" y2="32" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.llm_settings">Ustawienia LLM</span>
         </a>
         <a href="/asr-settings" data-icon="asr" class="{{ 'active' if active=='asr_settings' else '' }}" data-i18n-title="nav.asr_settings">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path class="brush" d="M3 12c0-2 1-3 1-5M6 12c0-2.5 1-4 1-6.5M3 12c0 2 1 3 1 5M6 12c0 2.5 1 4 1 6.5" stroke-linecap="round"/>
-              <rect x="10" y="5" width="11" height="14" rx="2.5" stroke-width="1.3"/>
-              <circle cx="13" cy="9" r="1" fill="currentColor" opacity=".5"/>
-              <circle cx="17" cy="9" r="1" fill="currentColor" opacity=".5"/>
-              <circle cx="13" cy="13" r="1" fill="currentColor" opacity=".5"/>
-              <circle cx="17" cy="13" r="1" fill="currentColor" opacity=".5"/>
-              <path d="M13 9l4 4M17 9l-4 4" stroke-width=".8" opacity=".3"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gasr" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
+              <path d="M8 30V22a16 16 0 0 1 32 0v8" stroke="url(#gasr)" stroke-width="2.2" fill="none"/>
+              <rect x="4" y="28" width="8" height="12" rx="3" stroke="url(#gasr)" stroke-width="2" fill="none"/>
+              <rect x="36" y="28" width="8" height="12" rx="3" stroke="url(#gasr)" stroke-width="2" fill="none"/>
+              <line x1="18" y1="24" x2="18" y2="30" stroke="#00d4ff" stroke-width="1.5" opacity=".35"/>
+              <line x1="21" y1="22" x2="21" y2="32" stroke="#00d4ff" stroke-width="1.5" opacity=".3"/>
+              <line x1="24" y1="20" x2="24" y2="34" stroke="#3b82f6" stroke-width="1.5" opacity=".35"/>
+              <line x1="27" y1="22" x2="27" y2="32" stroke="#3b82f6" stroke-width="1.5" opacity=".3"/>
+              <line x1="30" y1="24" x2="30" y2="30" stroke="#3b82f6" stroke-width="1.5" opacity=".35"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.asr_settings">Ustawienia ASR</span>
         </a>
         <a href="/nllb-settings" data-icon="nllb" class="{{ 'active' if active=='nllb_settings' else '' }}" data-i18n-title="nav.nllb_settings">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round" opacity=".25"/>
-              <path class="brush" d="M5 7h4M9 12h6M15 17h4" stroke-width="2.5" stroke-linecap="round"/>
-              <path d="M15 7l2-2M17 5l2 2" stroke-width="1.2" stroke-linecap="round"/>
-              <circle cx="7" cy="17" r="1.5" stroke-width="1.2"/>
-              <path d="M7 16v2M6 17h2" stroke-width=".8" stroke-linecap="round"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gnllb" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="50%" stop-color="#a855f7"/><stop offset="100%" stop-color="#ec4899"/></linearGradient></defs>
+              <circle cx="24" cy="22" r="15" stroke="url(#gnllb)" stroke-width="2.2" fill="none"/>
+              <ellipse cx="24" cy="22" rx="7.5" ry="15" stroke="url(#gnllb)" stroke-width="1.2" fill="none" opacity=".4"/>
+              <line x1="9" y1="22" x2="39" y2="22" stroke="url(#gnllb)" stroke-width="1" opacity=".35"/>
+              <path d="M11 14h26" stroke="url(#gnllb)" stroke-width="0.8" opacity=".2"/>
+              <path d="M11 30h26" stroke="url(#gnllb)" stroke-width="0.8" opacity=".2"/>
+              <text x="24" y="24.5" text-anchor="middle" font-size="8" fill="#00d4ff" font-weight="900" opacity=".35">AI</text>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.nllb_settings">Ustawienia NLLB</span>
         </a>
         <a href="/tts-settings" data-icon="tts" class="{{ 'active' if active=='tts_settings' else '' }}" data-i18n-title="nav.tts_settings">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path class="brush" d="M11 5L6 9H2v6h4l5 4V5z" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" stroke-width="1.4" stroke-linecap="round" opacity=".7"/>
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" stroke-width="1.4" stroke-linecap="round" opacity=".4"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gtts" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7ee8fa"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs>
+              <polygon points="20 14 12 20 4 20 4 30 12 30 20 36" stroke="url(#gtts)" stroke-width="2.2" fill="none"/>
+              <path d="M26 18a8 8 0 0 1 0 14" stroke="url(#gtts)" stroke-width="2" fill="none"/>
+              <path d="M31 12a14 14 0 0 1 0 26" stroke="url(#gtts)" stroke-width="2" fill="none"/>
+              <path d="M36 7a20 20 0 0 1 0 36" stroke="url(#gtts)" stroke-width="1.5" fill="none" opacity=".4"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.tts_settings">Ustawienia TTS</span>
         </a>
         <a href="/logs" data-icon="logs" class="{{ 'active' if active=='logs' else '' }}" data-i18n-title="nav.logs">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3" y="4" width="18" height="16" rx="3" stroke-width="1.4"/>
-              <path d="M3 8h18" stroke-width="1" opacity=".25"/>
-              <circle cx="5.5" cy="6" r=".6" fill="currentColor" opacity=".5"/>
-              <circle cx="7.5" cy="6" r=".6" fill="currentColor" opacity=".4"/>
-              <circle cx="9.5" cy="6" r=".6" fill="currentColor" opacity=".3"/>
-              <path class="brush" d="M7 12l2.5 2-2.5 2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M12 16h5" stroke-width="1.5" stroke-linecap="round"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="glg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+              <rect x="4" y="6" width="40" height="34" rx="4" stroke="url(#glg)" stroke-width="2" fill="none"/>
+              <line x1="4" y1="14" x2="44" y2="14" stroke="url(#glg)" stroke-width="1" opacity=".25"/>
+              <circle cx="9" cy="10" r="1.5" fill="#ef4444" opacity=".5"/>
+              <circle cx="14" cy="10" r="1.5" fill="#eab308" opacity=".5"/>
+              <circle cx="19" cy="10" r="1.5" fill="#10b981" opacity=".5"/>
+              <path d="M12 22l5 4-5 4" stroke="#10b981" stroke-width="2" fill="none"/>
+              <line x1="22" y1="30" x2="36" y2="30" stroke="#00d4ff" stroke-width="2"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.logs">Logi</span>
@@ -257,11 +285,11 @@
         {% if multiuser and 'user_mgmt' in user_modules %}
         <a href="/users" data-icon="users" class="{{ 'active' if active=='users' else '' }}" data-i18n-title="nav.users">
           <span class="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="9" cy="7" r="3" stroke-width="1.4" fill="none"/>
-              <path d="M3 19c0-3 2.5-5 6-5s6 2 6 5" stroke-width="1.4" stroke-linecap="round" fill="none"/>
-              <circle cx="17" cy="8" r="2.2" stroke-width="1.2" fill="none"/>
-              <path d="M17 12c2.5 0 4.5 1.5 4.5 4" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gu" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+              <circle cx="24" cy="14" r="7" stroke="url(#gu)" stroke-width="2.2" fill="none"/>
+              <path d="M10 40v-2a14 14 0 0 1 28 0v2" stroke="url(#gu)" stroke-width="2.2" fill="none"/>
+              <path d="M36 8L36 14Q36 18 40 20Q44 18 44 14L44 8L40 6z" stroke="#00d4ff" stroke-width="1.2" fill="none" opacity=".3"/>
             </svg>
           </span>
           <span class="nav-label" data-i18n="nav.users">Użytkownicy</span>
