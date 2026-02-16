@@ -268,6 +268,7 @@
     cursor: pointer;
     opacity: 0.6;
     transition: opacity 0.2s;
+    vertical-align: middle;
   }
 
   .seg-note-icon:hover {
@@ -1035,7 +1036,7 @@ function trRenderBlockNotesList(){
   if(notes.length === 0){
     list.innerHTML = `<div class="small" style="opacity:0.6;text-align:center;padding:20px">
       Brak notatek do bloków.<br>
-      Kliknij ${aiIcon('notes',14)} obok bloku aby dodać.
+      Kliknij <img src="/static/icons/dokumenty/markdown.svg" width="16" height="16" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
     </div>`;
     return;
   }
@@ -1199,7 +1200,7 @@ function trRender(){
     // Note icon
     const noteIcon = document.createElement("span");
     noteIcon.className = "seg-note-icon" + (trHasBlockNote(idx) ? " has-note" : "");
-    noteIcon.innerHTML = aiIcon('notes',14);
+    noteIcon.innerHTML = '<img src="/static/icons/dokumenty/markdown.svg" width="16" height="16" alt="Notatka">';
     noteIcon.title = trHasBlockNote(idx) ? "Ma notatkę - kliknij aby edytować" : "Dodaj notatkę";
     trBindNoteIconEvents(noteIcon, idx);
     

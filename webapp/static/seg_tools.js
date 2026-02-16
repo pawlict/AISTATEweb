@@ -676,24 +676,30 @@
 
     for (var i = 0; i < segs.length; i++) {
       var segEl = blocksEl.querySelector('.seg[data-idx="' + i + '"]');
-      if (!segEl || segEl.querySelector(".seg-actions")) continue;
+      if (!segEl || segEl.querySelector("[data-seg-action]")) continue;
 
-      var actions = document.createElement("div");
-      actions.className = "seg-actions";
+      var timeDiv = segEl.querySelector(".seg-time");
+      if (!timeDiv) continue;
+
+      var confBadge = timeDiv.querySelector(".seg-confidence");
 
       if (i < segs.length - 1) {
-        actions.innerHTML +=
-          '<button class="seg-action-btn" data-seg-action="merge-next" data-seg-idx="' + i + '" title="' + _t("seg.merge") + '">' +
-          '<img src="/static/icons/diaryzacja/segment_merge.svg" width="16" height="16" alt="' + _t("seg.merge") + '">' +
-          "</button>";
+        var mergeBtn = document.createElement("button");
+        mergeBtn.className = "seg-header-action";
+        mergeBtn.setAttribute("data-seg-action", "merge-next");
+        mergeBtn.setAttribute("data-seg-idx", String(i));
+        mergeBtn.title = _t("seg.merge");
+        mergeBtn.innerHTML = '<img src="/static/icons/diaryzacja/segment_merge.svg" width="16" height="16" alt="' + _t("seg.merge") + '">';
+        timeDiv.insertBefore(mergeBtn, confBadge);
       }
 
-      actions.innerHTML +=
-        '<button class="seg-action-btn" data-seg-action="split" data-seg-idx="' + i + '" title="' + _t("seg.split") + '">' +
-        '<img src="/static/icons/diaryzacja/segment_split.svg" width="16" height="16" alt="' + _t("seg.split") + '">' +
-        "</button>";
-
-      segEl.appendChild(actions);
+      var splitBtn = document.createElement("button");
+      splitBtn.className = "seg-header-action";
+      splitBtn.setAttribute("data-seg-action", "split");
+      splitBtn.setAttribute("data-seg-idx", String(i));
+      splitBtn.title = _t("seg.split");
+      splitBtn.innerHTML = '<img src="/static/icons/diaryzacja/segment_split.svg" width="16" height="16" alt="' + _t("seg.split") + '">';
+      timeDiv.insertBefore(splitBtn, confBadge);
     }
   }
 
