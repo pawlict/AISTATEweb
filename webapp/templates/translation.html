@@ -67,6 +67,10 @@
 }
 .tab .tts-tab-btn:hover { opacity: 1; background: rgba(16,150,244,0.15); }
 
+/* Toolbar: align controls from the left, not right-justified */
+.translation-toolbar{justify-content:flex-start !important}
+.translation-toolbar .analysis-toolbar-left{margin-right:18px}
+
 .section {
   margin-bottom: 25px;
 }
@@ -305,31 +309,33 @@
       <!-- Sekcja 2: Modele / silniki -->
       <div class="toolbar-section">
         <!-- Work mode -->
-        <div class="analysis-format" id="translation_mode_box">
-          <label class="small" data-i18n="translation.label.mode">Tryb pracy</label>
-          <label class="pill pill-icon" data-i18n-title="translation.mode.fast_title" title="Szybki (NLLB)">
-            <input type="radio" name="translation_mode" value="fast"><img src="/static/icons/ai_ml/analysis_quick.svg" alt="Quick" draggable="false">
-          </label>
-          <label class="pill pill-icon" data-i18n-title="translation.mode.accurate_title" title="Dokładny (NLLB)">
-            <input type="radio" name="translation_mode" value="accurate" checked><img src="/static/icons/ai_ml/analysis_deep.svg" alt="Deep" draggable="false">
-          </label>
-        </div>
-
-        <!-- Model selection -->
-        <div class="analysis-models" id="translation_models">
-          <div class="analysis-model">
-            <label class="small" for="tr_model_select" data-i18n="translation.label.model">Model</label>
-            <select class="input mini-select" id="tr_model_select">
-              <option value="" selected data-i18n="translation.model.select_placeholder">Wybierz model…</option>
-            </select>
+        <div class="toolbar-group" id="translation_mode_box">
+          <label class="toolbar-group-label" data-i18n="translation.label.mode"><img src="/static/icons/audio/speed.svg" alt="" draggable="false"> Tryb pracy</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" data-i18n-title="translation.mode.fast_title" title="Szybki (NLLB)">
+              <input type="radio" name="translation_mode" value="fast"><img src="/static/icons/ai_ml/analysis_quick.svg" alt="Quick" draggable="false">
+            </label>
+            <label class="pill pill-icon" data-i18n-title="translation.mode.accurate_title" title="Dokładny (NLLB)">
+              <input type="radio" name="translation_mode" value="accurate" checked><img src="/static/icons/ai_ml/analysis_deep.svg" alt="Deep" draggable="false">
+            </label>
           </div>
         </div>
 
+        <!-- Model selection -->
+        <div class="toolbar-group" id="translation_models">
+          <label class="toolbar-group-label" for="tr_model_select" data-i18n="translation.label.model"><img src="/static/icons/ai_ml/ai_model.svg" alt="" draggable="false"> Model</label>
+          <select class="input mini-select" id="tr_model_select">
+            <option value="" selected data-i18n="translation.model.select_placeholder">Wybierz model…</option>
+          </select>
+        </div>
+
         <!-- TTS engine selector (only installed engines) -->
-        <div class="analysis-format" id="tts-engine-box" style="display:none;">
-          <label class="small" for="tts-engine-select" data-i18n="translation.tts.engine">Lektor</label>
-          <select class="input mini-select" id="tts-engine-select" style="min-width:100px;"></select>
-          <span class="small" id="tts-engine-warn" style="color:#d97706;display:none;"></span>
+        <div class="toolbar-group" id="tts-engine-box" style="display:none;">
+          <label class="toolbar-group-label" for="tts-engine-select" data-i18n="translation.tts.engine"><img src="/static/icons/audio/volume_up.svg" alt="" draggable="false"> Lektor</label>
+          <div class="toolbar-group-controls">
+            <select class="input mini-select" id="tts-engine-select" style="min-width:100px;"></select>
+            <span class="small" id="tts-engine-warn" style="color:#d97706;display:none;"></span>
+          </div>
         </div>
       </div>
 
@@ -337,13 +343,15 @@
 
       <!-- Sekcja 3: Raport -->
       <div class="toolbar-section">
-        <div class="analysis-format" id="translation_report_formats">
-          <label class="small" data-i18n="translation.label.report">Raport</label>
-          <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="tr_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
-          <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="tr_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
-          <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="tr_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+        <div class="toolbar-group" id="translation_report_formats">
+          <label class="toolbar-group-label" data-i18n="translation.label.report"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="tr_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="tr_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="tr_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+            <button class="btn pill-icon" id="tr_export_btn" title="Eksportuj raport" data-i18n-title="translation.btn.export" onclick="exportSelectedReports()"><img src="/static/icons/pliki/file_save.svg" alt="Eksport" draggable="false"></button>
+          </div>
         </div>
-        <button class="btn pill-icon" id="tr_export_btn" title="Eksportuj raport" data-i18n-title="translation.btn.export" onclick="exportSelectedReports()"><img src="/static/icons/pliki/file_save.svg" alt="Eksport" draggable="false"></button>
       </div>
     </div>
   </div>
