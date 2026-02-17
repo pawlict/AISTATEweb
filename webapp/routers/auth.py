@@ -270,11 +270,19 @@ async def login(request: Request) -> JSONResponse:
         _user_store.update_user(user.user_id, {"recovery_phrase_pending": None})
 
     response = JSONResponse(response_data)
+
+    # Auto-detect HTTPS: set Secure flag only when the connection is
+    # actually encrypted.  On Proxmox / VM deployments the app is often
+    # accessed via plain HTTP — hard-coding secure=True would cause the
+    # browser to silently reject the cookie, breaking all auth.
+    _forwarded_proto = (request.headers.get("x-forwarded-proto") or "").lower()
+    _is_secure = request.url.scheme == "https" or _forwarded_proto == "https"
+
     response.set_cookie(
         key=SessionStore.COOKIE_NAME,
         value=token,
         httponly=True,
-        secure=True,
+        secure=_is_secure,
         samesite="lax",
         max_age=timeout * 3600,
         path="/",

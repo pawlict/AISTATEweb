@@ -1923,6 +1923,41 @@ async def _auth_middleware(request: Request, call_next):
 
     request.state.user = user
 
+    # ---- Must-change-password enforcement ----
+    # If the user has never changed their password (first login) or the
+    # password has expired, only allow the change-password flow and
+    # essential routes.  This closes a security gap where refreshing the
+    # page after login could bypass the client-side overlay.
+    _pw_changed = getattr(user, "password_changed_at", None)
+    _force_pw_change = not _pw_changed  # first login: password_changed_at is NULL
+    if _pw_changed and not _force_pw_change:
+        try:
+            from datetime import datetime as _dt2, timedelta as _td2
+            _s = load_settings()
+            _expiry_days = getattr(_s, "password_expiry_days", 0)
+            if _expiry_days and _expiry_days > 0:
+                _pw_dt = _dt2.fromisoformat(_pw_changed)
+                if _dt2.now() > _pw_dt + _td2(days=_expiry_days):
+                    _force_pw_change = True
+        except (ValueError, TypeError, AttributeError):
+            pass
+
+    if _force_pw_change:
+        _pw_allowed_exact = {
+            "/api/auth/change-password",
+            "/api/auth/me",
+            "/api/auth/logout",
+            "/api/auth/password-policy",
+            "/change-password",
+        }
+        if path not in _pw_allowed_exact and not path.startswith("/static/"):
+            if path.startswith("/api/"):
+                return JSONResponse(
+                    {"status": "error", "message": "Password change required", "code": "must_change_password"},
+                    status_code=403,
+                )
+            return RedirectResponse(url="/change-password", status_code=302)
+
     # Authorization: check route access
     user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles, user.is_superadmin)
 
@@ -2005,6 +2040,14 @@ def home(request: Request) -> Any:
 @app.get("/login", response_class=HTMLResponse)
 def page_login(request: Request) -> Any:
     return TEMPLATES.TemplateResponse("login.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+    })
+
+
+@app.get("/change-password", response_class=HTMLResponse)
+def page_change_password(request: Request) -> Any:
+    """Standalone page for forced password change (first login / expired)."""
+    return TEMPLATES.TemplateResponse("change_password.html", {
         "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
     })
 
