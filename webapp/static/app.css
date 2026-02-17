@@ -522,7 +522,7 @@ textarea{min-height:220px; resize:vertical}
   backdrop-filter: blur(8px);
 }
 
-.analysis-toolbar-left{display:flex; flex-direction:column; gap:4px}
+.analysis-toolbar-left{display:flex; flex-direction:column; gap:4px; min-width:140px; margin-right:18px}
 .analysis-toolbar-right{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
 .toolbar-section{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
 .toolbar-sep{width:1px; height:28px; background:#d0d5dd; opacity:.45; align-self:center; flex-shrink:0}
@@ -1383,7 +1383,7 @@ button.pill-icon:hover{
   display:flex; align-items:center; justify-content:space-between;
   flex-wrap:wrap; gap:10px;
 }
-.chat-toolbar-left{display:flex; align-items:center; gap:12px}
+.chat-toolbar-left{display:flex; flex-direction:column; gap:4px; min-width:140px; margin-right:18px}
 .chat-toolbar-right{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
 
 .chat-container{

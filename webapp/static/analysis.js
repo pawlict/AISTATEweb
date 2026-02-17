@@ -665,9 +665,7 @@ function _renderDeepMeta(){
 
     State.ollamaOnline = true;
     const v = st.version ? ` v${st.version}` : "";
-    const quick = State.modelSettings && State.modelSettings.quick ? ` | Quick: ${State.modelSettings.quick}` : "";
-    const deep = State.modelSettings && State.modelSettings.deep ? ` | Deep: ${State.modelSettings.deep}` : "";
-    _status(`Ollama: online${v}${quick}${deep}`, true);
+    _status(`Ollama: online${v}`, true);
   }
 
 async function _loadInstalledModelChoices(){
