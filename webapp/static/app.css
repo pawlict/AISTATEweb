@@ -158,9 +158,9 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
 }
 
 .nav-icon{
-  width:52px;
-  height:52px;
-  border-radius:14px;
+  width:34px;
+  height:34px;
+  border-radius:12px;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -168,7 +168,7 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
   background: none;
   border:none;
 }
-.nav-icon svg{width:48px; height:48px; display:block}
+.nav-icon svg{width:24px; height:24px; display:block}
 /* SVG icons use their own gradients and colors — no blanket stroke/fill overrides */
 
 /* Gradient icons: subtle effects */
@@ -225,8 +225,8 @@ body.sidebar-collapsed .brand-top{display:none}
 body.sidebar-collapsed .logo-lg{display:none}
 body.sidebar-collapsed .nav a{justify-content:center; padding:12px 10px}
 body.sidebar-collapsed .nav-label{display:none}
-body.sidebar-collapsed .nav-icon{margin-right:0; width:44px; height:44px}
-body.sidebar-collapsed .nav-icon svg{width:40px; height:40px}
+body.sidebar-collapsed .nav-icon{margin-right:0; width:30px; height:30px}
+body.sidebar-collapsed .nav-icon svg{width:22px; height:22px}
 body.sidebar-collapsed .nav-section{display:none}
 
 .main{flex:1; padding:22px 26px}
