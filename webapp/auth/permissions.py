@@ -113,6 +113,7 @@ PUBLIC_PREFIXES: List[str] = [
 COMMON_ROUTES: Set[str] = {
     "/",
     "/info",
+    "/change-password",
     "/api/auth/logout",
     "/api/auth/me",
     "/api/auth/change-password",
