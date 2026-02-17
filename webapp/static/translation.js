@@ -619,13 +619,6 @@ function setupModeSelector() {
     if (!radios || radios.length === 0) return;
 
     const sync = () => {
-        radios.forEach(radio => {
-            const label = radio.closest('label');
-            if (!label) return;
-            if (radio.checked) label.classList.add('selected');
-            else label.classList.remove('selected');
-        });
-
         // Mode affects which NLLB models are available
         populateModelSelect();
     };
