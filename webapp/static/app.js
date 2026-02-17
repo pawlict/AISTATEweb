@@ -26,7 +26,7 @@ function _langUrl(file){
 }
 
 async function _fetchJson(url){
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-cache" });
   if(!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
   return await res.json();
 }
