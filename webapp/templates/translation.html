@@ -67,12 +67,6 @@
 }
 .tab .tts-tab-btn:hover { opacity: 1; background: rgba(16,150,244,0.15); }
 
-/* Use global app.css button styles on this page (same as Analysis) */
-/* Compact radio pills for mode selection in the toolbar */
-.mode-pill{display:flex; align-items:center; gap:6px}
-.mode-pill input{margin:0}
-.pill.selected{border-color: var(--accent); background: rgba(31,90,166,.14)}
-
 .section {
   margin-bottom: 25px;
 }
@@ -313,18 +307,17 @@
         <!-- Work mode -->
         <div class="analysis-format" id="translation_mode_box">
           <label class="small" data-i18n="translation.label.mode">Tryb pracy</label>
-          <label class="pill mode-pill" data-i18n-title="translation.mode.fast_title" title="Szybki (NLLB)">
-            <input type="radio" name="translation_mode" value="fast"> <i data-icon="generate" data-size="14"></i>
+          <label class="pill pill-icon" data-i18n-title="translation.mode.fast_title" title="Szybki (NLLB)">
+            <input type="radio" name="translation_mode" value="fast"><img src="/static/icons/ai_ml/analysis_quick.svg" alt="Quick" draggable="false">
           </label>
-          <label class="pill mode-pill" data-i18n-title="translation.mode.accurate_title" title="Dokładny (NLLB)">
-            <input type="radio" name="translation_mode" value="accurate" checked> <i data-icon="brain" data-size="14"></i>
+          <label class="pill pill-icon" data-i18n-title="translation.mode.accurate_title" title="Dokładny (NLLB)">
+            <input type="radio" name="translation_mode" value="accurate" checked><img src="/static/icons/ai_ml/analysis_deep.svg" alt="Deep" draggable="false">
           </label>
         </div>
 
         <!-- Model selection -->
         <div class="analysis-models" id="translation_models">
           <div class="analysis-model">
-            <span class="small" title="Model" data-i18n-title="translation.model_title"><i data-icon="robot" data-size="14"></i></span>
             <label class="small" for="tr_model_select" data-i18n="translation.label.model">Model</label>
             <select class="input mini-select" id="tr_model_select">
               <option value="" selected data-i18n="translation.model.select_placeholder">Wybierz model…</option>
