@@ -398,19 +398,22 @@
     display: inline-block;
     margin-left: 8px;
     cursor: pointer;
-    opacity: 0.6;
-    transition: opacity 0.2s;
+    opacity: 0.3;
+    transition: opacity 0.2s, filter 0.2s;
     vertical-align: middle;
   }
 
   .seg-note-icon:hover {
-    opacity: 1;
+    opacity: 0.7;
   }
 
   .seg-note-icon.has-note {
     opacity: 1;
-    color: #2196F3;
-    font-weight: bold;
+    filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(1350%) hue-rotate(196deg) brightness(100%) contrast(95%);
+  }
+
+  .seg-note-icon.has-note:hover {
+    filter: brightness(0) saturate(100%) invert(30%) sepia(93%) saturate(1800%) hue-rotate(196deg) brightness(95%) contrast(100%);
   }
   /* Notatka tooltip (dymek) */
   .note-tooltip{
