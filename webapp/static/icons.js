@@ -281,6 +281,27 @@
            '<ellipse cx="12" cy="12" rx="4" ry="9" ' + _s("sky-cyan") + " " + _w(1) + ' fill="none" opacity=".5"/>' +
            '<path d="M3 12h18M4 8h16M4 16h16" ' + _s("sky-cyan") + " " + _w(.8) + ' fill="none" opacity=".3"/>';
   };
+  icons.analysis = function () {
+    return '<rect x="3" y="3" width="18" height="17" rx="2" ' + _s("sky-purple") + " " + _w(1.4) + ' fill="none"/>' +
+           '<polyline points="6 16 9 11 12 13 15 7 18 9" ' + _s("sky-purple") + " " + _w(1.8) + " " + S + ' fill="none"/>' +
+           '<circle cx="6" cy="16" r="1" ' + _f("sky-purple") + ' opacity=".5"/>' +
+           '<circle cx="15" cy="7" r="1" ' + _f("sky-purple") + ' opacity=".6"/>';
+  };
+  icons.chat = function () {
+    return '<path d="M20 14a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" ' + _s("sky-cyan") + " " + _w(1.4) + ' ' + S + ' fill="none"/>' +
+           '<circle cx="8" cy="10" r="1" ' + _f("sky-cyan") + ' opacity=".5"/>' +
+           '<circle cx="12" cy="10" r="1" ' + _f("sky-cyan") + ' opacity=".5"/>' +
+           '<circle cx="16" cy="10" r="1" ' + _f("sky-cyan") + ' opacity=".5"/>';
+  };
+  icons.translation = function () {
+    return '<circle cx="12" cy="11" r="7" ' + _s("sky-cyan") + " " + _w(1.4) + ' fill="none"/>' +
+           '<ellipse cx="12" cy="11" rx="3.5" ry="7" ' + _s("sky-cyan") + " " + _w(1) + ' fill="none" opacity=".5"/>' +
+           '<line x1="5" y1="11" x2="19" y2="11" ' + _s("sky-cyan") + " " + _w(.8) + ' fill="none" opacity=".4"/>' +
+           '<path d="M4 19h4" ' + _sc("#1096f4") + " " + _w(1.5) + ' opacity=".5"/>' +
+           '<path d="M7 17.5l1 1.5-1 1.5" ' + _sc("#1096f4") + " " + _w(1.2) + " " + S + ' fill="none" opacity=".5"/>' +
+           '<path d="M20 19h-4" ' + _sc("#10b981") + " " + _w(1.5) + ' opacity=".5"/>' +
+           '<path d="M17 17.5l-1 1.5 1 1.5" ' + _sc("#10b981") + " " + _w(1.2) + " " + S + ' fill="none" opacity=".5"/>';
+  };
   icons.check = function () {
     return '<path d="M5 12l5 5L19 7" stroke="#15803d" ' + _w(2.2) + " " + S + ' fill="none"/>';
   };
