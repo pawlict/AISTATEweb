@@ -264,17 +264,20 @@
            '<path d="M8 5V3M16 5V3M12 17v3M10 20h4" ' + _s("purple-ice") + " " + _w(1.2) + " " + S + ' fill="none"/>';
   };
   icons.diarization = function () {
-    return '<circle cx="7" cy="8" r="2.8" ' + _s("blue-cyan") + " " + _w(1.4) + ' fill="none"/>' +
-           '<path d="M3 17c0-2.5 1.8-4 4-4s4 1.5 4 4" ' + _s("blue-cyan") + " " + _w(1.4) + " " + S + ' fill="none"/>' +
-           '<circle cx="17" cy="8" r="2.8" ' + _s("sky-purple") + " " + _w(1.4) + ' fill="none"/>' +
-           '<path d="M13 17c0-2.5 1.8-4 4-4s4 1.5 4 4" ' + _s("sky-purple") + " " + _w(1.4) + " " + S + ' fill="none"/>' +
-           '<path d="M10 10.5c.6.4 1.2.4 2 .4s1.4 0 2-.4" ' + _s("cyan-ice") + " " + _w(1.2) + " " + S + ' fill="none" stroke-dasharray="1.5 1"/>';
+    return '<circle cx="8" cy="7" r="3" ' + _s("sky-cyan") + " " + _w(1.4) + ' fill="none"/>' +
+           '<path d="M3 19v-1a5 5 0 0 1 5-5h0" ' + _s("sky-cyan") + " " + _w(1.4) + " " + S + ' fill="none"/>' +
+           '<circle cx="16" cy="7" r="3" ' + _s("sky-cyan") + " " + _w(1.4) + ' fill="none"/>' +
+           '<path d="M13 13h0a5 5 0 0 1 5 5v1" ' + _s("sky-cyan") + " " + _w(1.4) + " " + S + ' fill="none"/>' +
+           '<path d="M10.5 9.5Q12 8 13.5 9.5" ' + _sc("#70c9f6") + " " + _w(1) + " " + S + ' fill="none" opacity=".3"/>';
   };
   icons.transcription = function () {
-    return '<rect x="9" y="2" width="6" height="10" rx="3" ' + _s("blue-cyan") + " " + _w(1.4) + ' fill="none"/>' +
-           '<path d="M5 11a7 7 0 0 0 14 0" ' + _s("sky-purple") + " " + _w(1.4) + ' fill="none"/>' +
-           '<path d="M12 18v3M9 21h6" ' + _s("sky-purple") + " " + _w(1.3) + " " + S + ' fill="none"/>' +
-           '<path d="M10 6.5h4M10 9h4" ' + _s("blue-cyan") + " " + _w(.9) + " " + S + ' fill="none" opacity=".4"/>';
+    return '<rect x="9" y="2" width="6" height="10" rx="3" ' + _s("sky-cyan") + " " + _w(1.4) + ' fill="none"/>' +
+           '<path d="M5 11a7 7 0 0 0 14 0" ' + _s("sky-cyan") + " " + _w(1.4) + ' fill="none"/>' +
+           '<path d="M12 18v3M9 21h6" ' + _s("sky-cyan") + " " + _w(1.3) + " " + S + ' fill="none"/>' +
+           '<line x1="3" y1="8" x2="3" y2="12" ' + _sc("#1096f4") + " " + _w(1) + ' opacity=".35"/>' +
+           '<line x1="5" y1="6.5" x2="5" y2="13.5" ' + _sc("#1096f4") + " " + _w(1) + ' opacity=".25"/>' +
+           '<line x1="19" y1="7" x2="19" y2="13" ' + _sc("#8426a4") + " " + _w(1) + ' opacity=".25"/>' +
+           '<line x1="21" y1="8.5" x2="21" y2="11.5" ' + _sc("#8426a4") + " " + _w(1) + ' opacity=".35"/>';
   };
   icons.globe = function () {
     return '<circle cx="12" cy="12" r="9" ' + _s("sky-cyan") + " " + _w(1.4) + ' fill="none"/>' +

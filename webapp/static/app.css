@@ -514,7 +514,7 @@ textarea{min-height:220px; resize:vertical}
 .analysis-toolbar{
   display:flex;
   align-items:center;
-  justify-content:space-between;
+  justify-content:flex-start;
   gap:14px;
   position:sticky;
   top:0;
@@ -1380,7 +1380,7 @@ button.pill-icon:hover{
 .chat-page{display:flex; flex-direction:column; gap:14px; height:calc(100vh - 80px); padding:14px}
 
 .chat-toolbar{
-  display:flex; align-items:center; justify-content:space-between;
+  display:flex; align-items:center; justify-content:flex-start;
   flex-wrap:wrap; gap:10px;
 }
 .chat-toolbar-left{display:flex; flex-direction:column; gap:4px; min-width:140px; margin-right:18px}
