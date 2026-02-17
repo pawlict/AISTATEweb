@@ -303,7 +303,7 @@
 
       <!-- Sekcja 1: Generuj -->
       <div class="toolbar-section">
-        <button class="btn pill-icon" id="generate-btn" data-i18n="translation.btn.generate" onclick="startTranslation()"><img src="/static/icons/akcje/generate_ai.svg" alt="Generuj" draggable="false"></button>
+        <button class="btn pill-icon" id="generate-btn" title="Tłumacz" data-i18n-title="translation.generate_tooltip" onclick="startTranslation()"><img src="/static/icons/akcje/generate_ai.svg" alt="Tłumacz" draggable="false"></button>
       </div>
 
       <div class="toolbar-sep"></div>
@@ -324,7 +324,7 @@
         <!-- Model selection -->
         <div class="analysis-models" id="translation_models">
           <div class="analysis-model">
-            <span class="small" title="Model"><i data-icon="robot" data-size="14"></i></span>
+            <span class="small" title="Model" data-i18n-title="translation.model_title"><i data-icon="robot" data-size="14"></i></span>
             <label class="small" for="tr_model_select" data-i18n="translation.label.model">Model</label>
             <select class="input mini-select" id="tr_model_select">
               <option value="" selected data-i18n="translation.model.select_placeholder">Wybierz model…</option>
