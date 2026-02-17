@@ -392,13 +392,15 @@
 
       <!-- Sekcja 4: Raport -->
       <div class="toolbar-section">
-        <div class="analysis-format" id="tr_report_formats">
-          <label class="small" data-i18n="analysis.report">Raport</label>
-          <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="tr_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
-          <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="tr_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
-          <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="tr_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
-          <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes" style="margin-left:6px"><input type="checkbox" id="tr_include_notes" value="1"><img src="/static/icons/dokumenty/markdown.svg" alt="Notatki" draggable="false"></label>
-          <button class="btn pill-icon" id="tr_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save" style="margin-left:8px"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+        <div class="toolbar-group" id="tr_report_formats">
+          <label class="toolbar-group-label" data-i18n="analysis.report"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="tr_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="tr_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="tr_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes"><input type="checkbox" id="tr_include_notes" value="1"><img src="/static/icons/dokumenty/markdown.svg" alt="Notatki" draggable="false"></label>
+            <button class="btn pill-icon" id="tr_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+          </div>
         </div>
       </div>
 
