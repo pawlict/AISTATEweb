@@ -6,6 +6,7 @@ const API = '/api/workspaces';
 let _currentWs = null;  // workspace detail being viewed
 let _activeCount = 0;
 let _archivedCount = 0;
+const _selectedWsIds = new Set();
 
 // --- Toolbar view toggle ---
 const _toolbarListEls = ['toolbarListActions'];
@@ -83,6 +84,31 @@ document.querySelectorAll('.sp-type-btn').forEach(btn => {
   });
 });
 
+// --- Bulk-delete selection helpers ---
+function _updateBulkDeleteBtn(){
+  const btn = document.getElementById('btnBulkDelete');
+  if(!btn) return;
+  if(_selectedWsIds.size > 0){
+    btn.style.display = '';
+    btn.classList.add('active');
+    btn.title = 'Usuń zaznaczone projekty (' + _selectedWsIds.size + ')';
+  } else {
+    btn.classList.remove('active');
+    btn.style.display = 'none';
+  }
+}
+
+function _toggleWsSelection(wsId, checkbox, card){
+  if(checkbox.checked){
+    _selectedWsIds.add(wsId);
+    card.classList.add('selected');
+  } else {
+    _selectedWsIds.delete(wsId);
+    card.classList.remove('selected');
+  }
+  _updateBulkDeleteBtn();
+}
+
 // =====================================================================
 // WORKSPACE LIST
 // =====================================================================
@@ -102,6 +128,8 @@ function renderWorkspaceList(workspaces){
   const list = document.getElementById('workspaceList');
   const empty = document.getElementById('workspaceEmpty');
   list.innerHTML = '';
+  _selectedWsIds.clear();
+  _updateBulkDeleteBtn();
   _activeCount = workspaces.length;
   _updateStatusLine(_activeCount + ' aktywnych' + (_archivedCount ? ', ' + _archivedCount + ' w archiwum' : ''));
   if(!workspaces.length){ empty.style.display = 'block'; return; }
@@ -116,8 +144,19 @@ function renderWorkspaceList(workspaces){
       <span class="ws-card-chevron">&#9654;</span>
       <div class="ws-card-name">${esc(ws.name)}</div>
       <div class="ws-card-info small">${ws.subproject_count||0} podpr. · ${ws.member_count||1} czł. · ${shortDate(ws.updated_at)} ${role}</div>
+      <input type="checkbox" class="ws-card-check" data-ws-id="${ws.id}" title="Zaznacz do usunięcia">
     `;
-    card.addEventListener('click', () => openWorkspace(ws.id));
+    // Click card → open workspace (but not when clicking checkbox)
+    card.addEventListener('click', (e) => {
+      if(e.target.classList.contains('ws-card-check')) return;
+      openWorkspace(ws.id);
+    });
+    // Checkbox toggle
+    const cb = card.querySelector('.ws-card-check');
+    cb.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _toggleWsSelection(ws.id, cb, card);
+    });
     list.appendChild(card);
   });
 }
@@ -487,6 +526,51 @@ document.getElementById('btnDeleteWorkspace').addEventListener('click', async ()
     loadWorkspaces();
     showToast('Projekt usunięty','info');
   } catch(e){ showToast(e.message || 'Błąd usuwania','error'); }
+});
+
+// =====================================================================
+// BULK DELETE WORKSPACES
+// =====================================================================
+
+document.getElementById('btnBulkDelete').addEventListener('click', () => {
+  if(_selectedWsIds.size === 0) return;
+  const info = document.getElementById('bulkDeleteInfo');
+  if(info) info.innerHTML = 'Wybrano <b>' + _selectedWsIds.size + '</b> projekt' +
+    (_selectedWsIds.size === 1 ? '' : (_selectedWsIds.size < 5 ? 'y' : 'ów')) +
+    ' do usunięcia wraz ze wszystkimi podprojektami i danymi.';
+  showModal('modalBulkDeleteWorkspace');
+});
+
+document.getElementById('bulkDeleteConfirm').addEventListener('click', async () => {
+  if(_selectedWsIds.size === 0) return;
+  const wipe = document.getElementById('bulkDeleteWipeMethod').value || 'none';
+  const ids = Array.from(_selectedWsIds);
+  const btn = document.getElementById('bulkDeleteConfirm');
+  btn.disabled = true;
+  btn.textContent = 'Usuwanie...';
+  try {
+    const data = await apiFetch(API + '/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ workspace_ids: ids, wipe_method: wipe })
+    });
+    hideModal('modalBulkDeleteWorkspace');
+    const delCount = (data.deleted || []).length;
+    const errCount = (data.errors || []).length;
+    if(errCount > 0){
+      showToast('Usunięto ' + delCount + ', błędy: ' + errCount, 'warning');
+    } else {
+      showToast('Usunięto ' + delCount + ' projekt' + (delCount === 1 ? '' : (delCount < 5 ? 'y' : 'ów')), 'success');
+    }
+    _selectedWsIds.clear();
+    _updateBulkDeleteBtn();
+    loadWorkspaces();
+  } catch(e){
+    console.error('Bulk delete error:', e);
+    showToast(e.message || 'Błąd usuwania', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Usuń projekty';
+  }
 });
 
 // =====================================================================
