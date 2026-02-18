@@ -23,13 +23,13 @@ async function apiFetch(url, opts){
 }
 
 const TYPE_ICONS = {
-  transcription: aiIcon('transcription', 18),
-  diarization:   aiIcon('diarization', 18),
-  analysis:      aiIcon('brain', 18),
-  chat:          aiIcon('robot', 18),
-  translation:   aiIcon('globe', 18),
-  finance:       aiIcon('finance', 18),
-  general:       aiIcon('document', 18),
+  transcription: '<img src="/static/icons/sidebar/transcription.svg" alt="" draggable="false" style="width:18px;height:18px;vertical-align:middle">',
+  diarization:   '<img src="/static/icons/sidebar/diarization.svg" alt="" draggable="false" style="width:18px;height:18px;vertical-align:middle">',
+  analysis:      '<img src="/static/icons/sidebar/analysis.svg" alt="" draggable="false" style="width:18px;height:18px;vertical-align:middle">',
+  chat:          '<img src="/static/icons/sidebar/chat.svg" alt="" draggable="false" style="width:18px;height:18px;vertical-align:middle">',
+  translation:   '<img src="/static/icons/sidebar/translation.svg" alt="" draggable="false" style="width:18px;height:18px;vertical-align:middle">',
+  finance:       '<img src="/static/icons/sidebar/finance.svg" alt="" draggable="false" style="width:18px;height:18px;vertical-align:middle">',
+  general:       '<img src="/static/icons/sidebar/projects.svg" alt="" draggable="false" style="width:18px;height:18px;vertical-align:middle">',
 };
 const TYPE_LABELS = {
   transcription: 'Transkrypcja', diarization: 'Diaryzacja', analysis: 'Analiza',
