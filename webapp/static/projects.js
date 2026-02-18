@@ -40,7 +40,7 @@ const TYPE_ROUTES = {
   chat: '/chat', translation: '/translation', finance: '/analysis', general: '/projects'
 };
 const ROLE_LABELS = {
-  owner: 'Owner', manager: 'Manager', editor: 'Editor', commenter: 'Commenter', viewer: 'Viewer'
+  owner: 'Owner', manager: 'Manager', editor: 'Editor', viewer: 'Viewer'
 };
 
 // --- Modal helpers ---
@@ -266,6 +266,17 @@ document.getElementById('npSubmit').addEventListener('click', async () => {
 document.getElementById('btnInviteUser').addEventListener('click', () => {
   document.getElementById('invUsername').value = '';
   document.getElementById('invMessage').value = '';
+  // Populate project selector
+  const sel = document.getElementById('invProject');
+  sel.innerHTML = '<option value="">— wszystkie projekty —</option>';
+  if(_ws && _ws.subprojects){
+    _ws.subprojects.forEach(sp => {
+      const opt = document.createElement('option');
+      opt.value = sp.id;
+      opt.textContent = sp.name;
+      sel.appendChild(opt);
+    });
+  }
   showModal('modalInviteUser');
   document.getElementById('invUsername').focus();
 });
@@ -275,7 +286,12 @@ document.getElementById('invSubmit').addEventListener('click', async () => {
   const username = document.getElementById('invUsername').value.trim();
   if(!username){ showToast('Podaj nazwę użytkownika','warning'); return; }
   const role = document.querySelector('input[name="invRole"]:checked')?.value || 'viewer';
-  const message = document.getElementById('invMessage').value.trim();
+  const projSel = document.getElementById('invProject');
+  const projName = projSel.options[projSel.selectedIndex]?.textContent || '';
+  let message = document.getElementById('invMessage').value.trim();
+  if(projSel.value && projName){
+    message = (message ? message + '\n' : '') + 'Projekt: ' + projName;
+  }
   try {
     await apiFetch(API+'/'+_ws.id+'/invite', {
       method:'POST', body:JSON.stringify({username, role, message})

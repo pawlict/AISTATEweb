@@ -116,12 +116,13 @@
       <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
     </div>
     <div class="modal-body">
-      <div class="label">Nazwa użytkownika</div>
+      <div class="label">Projekt</div>
+      <select class="input" id="invProject"><option value="">— wszystkie projekty —</option></select>
+      <div class="label" style="margin-top:10px">Nazwa użytkownika</div>
       <input class="input" id="invUsername" type="text" placeholder="Wpisz nazwę użytkownika..."/>
       <div class="label" style="margin-top:10px">Rola</div>
       <div style="display:flex;flex-direction:column;gap:4px" id="invRoles">
         <label class="small" style="cursor:pointer"><input type="radio" name="invRole" value="viewer" checked> <b>Viewer</b> — tylko podgląd</label>
-        <label class="small" style="cursor:pointer"><input type="radio" name="invRole" value="commenter"> <b>Commenter</b> — podgląd + notatki</label>
         <label class="small" style="cursor:pointer"><input type="radio" name="invRole" value="editor"> <b>Editor</b> — edycja treści</label>
         <label class="small" style="cursor:pointer"><input type="radio" name="invRole" value="manager"> <b>Manager</b> — edycja + zarządzanie</label>
       </div>
