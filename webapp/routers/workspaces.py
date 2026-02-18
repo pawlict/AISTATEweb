@@ -172,20 +172,8 @@ async def create_workspace(request: Request):
         icon=body.get("icon", "folder"),
     )
 
-    # Auto-create a default subproject with the same name
-    sp_type = _default_subproject_type(request)
-    data_dir = _ensure_data_dir(name, uid)
-    sp = _STORE.create_subproject(
-        workspace_id=ws["id"],
-        name=name,
-        subproject_type=sp_type,
-        data_dir=data_dir,
-        created_by=uid,
-        user_name=_uname(request),
-    )
-    # Refresh workspace to include the new subproject
-    ws = _STORE.get_workspace(ws["id"])
-    ws["subprojects"] = _STORE.list_subprojects(ws["id"])
+    # Return workspace — user picks subproject type via the UI modal
+    ws["subprojects"] = []
 
     return JSONResponse({"status": "ok", "workspace": ws})
 

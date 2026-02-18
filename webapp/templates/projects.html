@@ -11,9 +11,21 @@
 .ws-card-name{font-weight:700;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .ws-card-info{opacity:.6;white-space:nowrap;margin-left:auto;flex-shrink:0}
 
-.sp-type-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 6px !important;min-width:0}
+.sp-type-btn{
+  display:flex;align-items:center;justify-content:center;
+  padding:10px !important;min-width:0;width:46px;height:46px;
+  border:2px solid transparent;border-radius:10px;
+  transition:border-color .15s,background .15s,box-shadow .15s;
+  opacity:.55;
+}
+.sp-type-btn:hover{opacity:.85;background:rgba(0,212,255,.06)}
+.sp-type-btn.active{
+  opacity:1;
+  border-color:rgba(0,212,255,.4);
+  background:rgba(0,212,255,.08);
+  box-shadow:0 0 8px rgba(0,212,255,.15);
+}
 .sp-type-btn img{width:28px;height:28px}
-.sp-type-btn .sp-type-label{font-size:.7rem;line-height:1.1;text-align:center}
 </style>
 
 <div class="analysis-page projects-page">
@@ -170,13 +182,13 @@
       <div class="label">Nazwa</div>
       <input class="input" id="nsName" type="text" placeholder="np. Przesłuchanie świadka A"/>
       <div class="label" style="margin-top:10px">Typ</div>
-      <div id="nsTypes" style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">
-        <button class="btn secondary sp-type-btn active" data-type="transcription" title="Transkrypcja"><img src="/static/icons/sidebar/transcription.svg" draggable="false"><span class="sp-type-label">Transkrypcja</span></button>
-        <button class="btn secondary sp-type-btn" data-type="diarization" title="Diaryzacja"><img src="/static/icons/sidebar/diarization.svg" draggable="false"><span class="sp-type-label">Diaryzacja</span></button>
-        <button class="btn secondary sp-type-btn" data-type="analysis" title="Analiza"><img src="/static/icons/sidebar/analysis.svg" draggable="false"><span class="sp-type-label">Analiza</span></button>
-        <button class="btn secondary sp-type-btn" data-type="chat" title="Chat"><img src="/static/icons/sidebar/chat.svg" draggable="false"><span class="sp-type-label">Chat</span></button>
-        <button class="btn secondary sp-type-btn" data-type="translation" title="Tłumaczenie"><img src="/static/icons/sidebar/translation.svg" draggable="false"><span class="sp-type-label">Tłumaczenie</span></button>
-        <button class="btn secondary sp-type-btn" data-type="general" title="Ogólny"><img src="/static/icons/projekty/subproject_new.svg" draggable="false"><span class="sp-type-label">Ogólny</span></button>
+      <div id="nsTypes" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn secondary sp-type-btn active" data-type="transcription" title="Transkrypcja"><img src="/static/icons/sidebar/transcription.svg" draggable="false"></button>
+        <button class="btn secondary sp-type-btn" data-type="diarization" title="Diaryzacja"><img src="/static/icons/sidebar/diarization.svg" draggable="false"></button>
+        <button class="btn secondary sp-type-btn" data-type="analysis" title="Analiza"><img src="/static/icons/sidebar/analysis.svg" draggable="false"></button>
+        <button class="btn secondary sp-type-btn" data-type="chat" title="Chat"><img src="/static/icons/sidebar/chat.svg" draggable="false"></button>
+        <button class="btn secondary sp-type-btn" data-type="translation" title="Tłumaczenie"><img src="/static/icons/sidebar/translation.svg" draggable="false"></button>
+        <button class="btn secondary sp-type-btn" data-type="general" title="Ogólny"><img src="/static/icons/projekty/subproject_new.svg" draggable="false"></button>
       </div>
       <div class="label" style="margin-top:10px">Powiąż z (opcjonalnie)</div>
       <select class="input" id="nsLinkTo"><option value="">— brak —</option></select>

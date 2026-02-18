@@ -172,7 +172,9 @@ async function loadInvitations(){
       });
       list.appendChild(card);
     });
-  } catch(e){ console.error(e); }
+  } catch(e){
+    console.error('Load invitations error:', e);
+  }
 }
 
 async function loadArchivedWorkspaces(){
@@ -197,8 +199,11 @@ async function loadArchivedWorkspaces(){
         </div>`;
       card.querySelector('.btn-restore').addEventListener('click', async(e) => {
         e.stopPropagation();
-        await apiFetch(API+'/'+w.id, {method:'PATCH', body:JSON.stringify({status:'active'})});
-        loadWorkspaces();
+        try {
+          await apiFetch(API+'/'+w.id, {method:'PATCH', body:JSON.stringify({status:'active'})});
+          showToast('Projekt przywrócony','success');
+          loadWorkspaces();
+        } catch(err){ showToast(err.message || 'Błąd przywracania','error'); }
       });
       list.appendChild(card);
     });
@@ -321,8 +326,11 @@ function renderWorkspaceDetail(ws){
     if(removeBtn){
       removeBtn.addEventListener('click', async () => {
         if(!confirm('Usunąć '+name+' z projektu?')) return;
-        await apiFetch(API+'/'+ws.id+'/members/'+m.user_id, {method:'DELETE'});
-        openWorkspace(ws.id);
+        try {
+          await apiFetch(API+'/'+ws.id+'/members/'+m.user_id, {method:'DELETE'});
+          showToast('Użytkownik usunięty','info');
+          openWorkspace(ws.id);
+        } catch(err){ showToast(err.message || 'Błąd','error'); }
       });
     }
     mList.appendChild(div);
@@ -367,22 +375,19 @@ document.getElementById('nwSubmit').addEventListener('click', async () => {
   const color = document.querySelector('#nwColors .color-chip.active')?.dataset?.color || '#4a6cf7';
   try {
     const data = await apiFetch(API, {method:'POST', body:JSON.stringify({name, description:desc, color})});
+    hideModal('modalNewWorkspace');
+    showToast('Projekt utworzony','success');
     if(data && data.workspace && data.workspace.id){
-      hideModal('modalNewWorkspace');
-      showToast('Projekt utworzony','success');
       await openWorkspace(data.workspace.id);
-      // Auto-open new subproject modal with workspace name pre-filled
-      const subs = (_currentWs && _currentWs.subprojects) || [];
-      if(subs.length === 0){
-        document.getElementById('nsName').value = name;
-        showModal('modalNewSubproject');
-        document.getElementById('nsName').focus();
-      }
-    } else {
-      hideModal('modalNewWorkspace');
-      showToast('Projekt utworzony','success');
-      loadWorkspaces();
     }
+    // Always open subproject modal so user can pick type for first subproject
+    document.getElementById('nsName').value = name;
+    // Reset type selection to first button
+    document.querySelectorAll('.sp-type-btn').forEach(b => b.classList.remove('active'));
+    const firstTypeBtn = document.querySelector('.sp-type-btn');
+    if(firstTypeBtn) firstTypeBtn.classList.add('active');
+    showModal('modalNewSubproject');
+    document.getElementById('nsName').focus();
   } catch(e){
     console.error('Create workspace error:', e);
     showToast(e.message || 'Błąd tworzenia projektu','error');
@@ -402,7 +407,7 @@ document.getElementById('btnNewSubproject').addEventListener('click', () => {
 });
 
 document.getElementById('nsSubmit').addEventListener('click', async () => {
-  if(!_currentWs) return;
+  if(!_currentWs){ showToast('Najpierw otwórz projekt','warning'); return; }
   const name = document.getElementById('nsName').value.trim();
   if(!name){ showToast('Podaj nazwę','warning'); return; }
   const type = document.querySelector('.sp-type-btn.active')?.dataset?.type || 'analysis';
@@ -412,9 +417,12 @@ document.getElementById('nsSubmit').addEventListener('click', async () => {
       method:'POST', body:JSON.stringify({name, type, link_to:linkTo})
     });
     hideModal('modalNewSubproject');
-    openWorkspace(_currentWs.id);
     showToast('Podprojekt utworzony','success');
-  } catch(e){ showToast(e.message,'error'); }
+    await openWorkspace(_currentWs.id);
+  } catch(e){
+    console.error('Create subproject error:', e);
+    showToast(e.message || 'Błąd tworzenia podprojektu','error');
+  }
 });
 
 // =====================================================================
@@ -458,23 +466,27 @@ document.getElementById('btnBackToList').addEventListener('click', () => {
 document.getElementById('btnArchiveWorkspace').addEventListener('click', async () => {
   if(!_currentWs) return;
   if(!confirm('Archiwizować projekt "'+_currentWs.name+'"?')) return;
-  await apiFetch(API+'/'+_currentWs.id, {method:'PATCH', body:JSON.stringify({status:'archived'})});
-  _setView('list');
-  _currentWs = null;
-  history.pushState({}, '', '/projects');
-  loadWorkspaces();
-  showToast('Projekt zarchiwizowany','success');
+  try {
+    await apiFetch(API+'/'+_currentWs.id, {method:'PATCH', body:JSON.stringify({status:'archived'})});
+    _setView('list');
+    _currentWs = null;
+    history.pushState({}, '', '/projects');
+    loadWorkspaces();
+    showToast('Projekt zarchiwizowany','success');
+  } catch(e){ showToast(e.message || 'Błąd archiwizacji','error'); }
 });
 
 document.getElementById('btnDeleteWorkspace').addEventListener('click', async () => {
   if(!_currentWs) return;
   if(!confirm('USUNĄĆ projekt "'+_currentWs.name+'"? Ta operacja jest nieodwracalna!')) return;
-  await apiFetch(API+'/'+_currentWs.id, {method:'DELETE'});
-  _setView('list');
-  _currentWs = null;
-  history.pushState({}, '', '/projects');
-  loadWorkspaces();
-  showToast('Projekt usunięty','info');
+  try {
+    await apiFetch(API+'/'+_currentWs.id, {method:'DELETE'});
+    _setView('list');
+    _currentWs = null;
+    history.pushState({}, '', '/projects');
+    loadWorkspaces();
+    showToast('Projekt usunięty','info');
+  } catch(e){ showToast(e.message || 'Błąd usuwania','error'); }
 });
 
 // =====================================================================
