@@ -235,8 +235,9 @@ document.getElementById('npSubmit').addEventListener('click', async () => {
 
     // Auto-redirect to the matching page for typed projects
     const route = TYPE_ROUTES[type];
-    if(route && route !== '/projects' && data.subproject){
-      const sp = data.subproject;
+    console.log('[projects] Created project:', {type, route, hasSubproject: !!data.subproject, data});
+    if(route && route !== '/projects'){
+      const sp = data.subproject || {};
       const dir = sp.data_dir || '';
       const projectId = dir.replace('projects/', '');
       if(projectId){
@@ -244,8 +245,9 @@ document.getElementById('npSubmit').addEventListener('click', async () => {
         AISTATE.audioFile = sp.audio_file || '';
         localStorage.setItem('aistate_workspace_id', _ws.id);
         localStorage.setItem('aistate_workspace_name', _ws.name);
-        localStorage.setItem('aistate_subproject_name', sp.name);
+        localStorage.setItem('aistate_subproject_name', sp.name || name);
       }
+      console.log('[projects] Redirecting to:', route, 'projectId:', projectId);
       window.location.href = route;
       return;
     }
