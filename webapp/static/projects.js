@@ -15,7 +15,7 @@ function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 function shortDate(iso){ return iso ? iso.replace('T',' ').slice(0,16) : '—'; }
 
 async function apiFetch(url, opts){
-  const r = await fetch(url, {headers:{'Content-Type':'application/json'}, ...opts});
+  const r = await fetch(url, {headers:{'Content-Type':'application/json'}, cache:'no-store', ...opts});
   let j;
   try { j = await r.json(); } catch(_){ throw new Error(`HTTP ${r.status} — nieprawidłowa odpowiedź serwera`); }
   if(!r.ok || j.status === 'error') throw new Error(j.message || j.detail || `HTTP ${r.status}`);
