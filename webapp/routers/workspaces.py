@@ -303,11 +303,22 @@ async def update_workspace(request: Request, workspace_id: str):
 
 
 @router.delete("/{workspace_id}")
-def delete_workspace(request: Request, workspace_id: str):
+def delete_workspace(request: Request, workspace_id: str, wipe_method: str = "none"):
     uid = _uid(request)
     role = _STORE.get_user_role(workspace_id, uid)
     if role != "owner" and not _is_admin(request):
         return JSONResponse({"status": "error", "message": "Only owner can delete"}, 403)
+    # Delete all subproject data directories before removing workspace from DB
+    subs = _STORE.list_subprojects(workspace_id)
+    for sp in subs:
+        data_dir = sp.get("data_dir", "")
+        if data_dir:
+            dir_id = data_dir.replace("projects/", "")
+            if dir_id:
+                try:
+                    _delete_project_data(dir_id, wipe_method)
+                except Exception:
+                    pass  # best-effort
     _STORE.delete_workspace(workspace_id)
     return JSONResponse({"status": "ok"})
 
@@ -388,10 +399,21 @@ async def update_subproject(request: Request, workspace_id: str, subproject_id: 
 
 
 @router.delete("/{workspace_id}/subprojects/{subproject_id}")
-def delete_subproject(request: Request, workspace_id: str, subproject_id: str):
+def delete_subproject(request: Request, workspace_id: str, subproject_id: str,
+                      wipe_method: str = "none"):
     uid = _uid(request)
     if not _STORE.can_user_edit(workspace_id, uid) and not _is_admin(request):
         return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    # Get subproject data_dir BEFORE deleting from DB so we can clean up files
+    sp = _STORE.get_subproject(subproject_id)
+    data_dir = sp.get("data_dir", "") if sp else ""
+    if data_dir:
+        dir_id = data_dir.replace("projects/", "")
+        if dir_id:
+            try:
+                _delete_project_data(dir_id, wipe_method)
+            except Exception:
+                pass  # best-effort
     _STORE.delete_subproject(subproject_id)
     _STORE.log_activity(workspace_id, None, uid, _uname(request), "subproject_deleted")
     return JSONResponse({"status": "ok"})

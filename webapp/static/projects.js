@@ -187,17 +187,6 @@ function renderProjects(ws){
     mList.appendChild(div);
   });
 
-  // Activity
-  const aList = document.getElementById('activityList');
-  const activity = ws.activity || [];
-  aList.innerHTML = '';
-  if(!activity.length){ aList.innerHTML = '<div class="small" style="opacity:.5">Brak aktywności</div>'; }
-  activity.forEach(a => {
-    const div = document.createElement('div');
-    div.style.cssText = 'padding:3px 0;border-bottom:1px solid var(--border,#eee)';
-    div.innerHTML = `<b>${esc(a.user_name||a.user_id?.slice(0,8)||'?')}</b> — ${esc(a.action)} <span style="opacity:.5;float:right">${shortDate(a.created_at)}</span>`;
-    aList.appendChild(div);
-  });
 
   // Show/hide management buttons based on role
   const canManage = ws.my_role === 'owner' || ws.my_role === 'manager';
@@ -366,10 +355,7 @@ document.getElementById('invSubmit').addEventListener('click', async () => {
     if(!confirm('Na pewno usunąć projekt "' + (sp?sp.name:spId) + '"?')) return;
 
     try {
-      if(dir){
-        await fetch('/api/projects/' + encodeURIComponent(dir) + '?wipe_method=' + encodeURIComponent(wipe), {method:'DELETE'});
-      }
-      await apiFetch(API + '/' + _ws.id + '/subprojects/' + spId, {method:'DELETE'});
+      await apiFetch(API + '/' + _ws.id + '/subprojects/' + spId + '?wipe_method=' + encodeURIComponent(wipe), {method:'DELETE'});
       hideModal('modalDeleteProject');
       showToast('Projekt usunięty', 'success');
       await loadProjects();
