@@ -328,7 +328,9 @@ function renderWorkspaceDetail(ws){
       if(!confirm('Usunąć podprojekt "' + sp.name + '"?')) return;
       try {
         await apiFetch(API + '/' + ws.id + '/subprojects/' + sp.id, {method:'DELETE'});
-        openWorkspace(ws.id);
+        showToast('Podprojekt usunięty','info');
+        await openWorkspace(ws.id);
+        loadWorkspaces();
       } catch(err) { showToast(err.message, 'error'); }
     });
 
@@ -416,22 +418,24 @@ document.getElementById('nwSubmit').addEventListener('click', async () => {
     const data = await apiFetch(API, {method:'POST', body:JSON.stringify({name, description:desc, color})});
     hideModal('modalNewWorkspace');
     showToast('Projekt utworzony','success');
-    // Set _currentWs directly so nsSubmit can use it (don't openWorkspace yet — it would switch view)
+    // Set _currentWs directly so nsSubmit can use it
     if(data && data.workspace){
       _currentWs = data.workspace;
       _currentWs.subprojects = _currentWs.subprojects || [];
       _currentWs.members = _currentWs.members || [];
       _currentWs.activity = _currentWs.activity || [];
     }
-    // Refresh the workspace list in the background
-    loadWorkspaces();
-    // Open subproject modal with project name pre-filled
-    document.getElementById('nsName').value = name;
-    document.querySelectorAll('.sp-type-btn').forEach(b => b.classList.remove('active'));
-    const firstTypeBtn = document.querySelector('.sp-type-btn');
-    if(firstTypeBtn) firstTypeBtn.classList.add('active');
-    showModal('modalNewSubproject');
-    document.getElementById('nsName').focus();
+    // Refresh the workspace list
+    await loadWorkspaces();
+    // Open subproject modal after a brief delay to let DOM settle
+    setTimeout(() => {
+      document.getElementById('nsName').value = name;
+      document.querySelectorAll('.sp-type-btn').forEach(b => b.classList.remove('active'));
+      const firstTypeBtn = document.querySelector('.sp-type-btn');
+      if(firstTypeBtn) firstTypeBtn.classList.add('active');
+      showModal('modalNewSubproject');
+      document.getElementById('nsName').focus();
+    }, 200);
   } catch(e){
     console.error('Create workspace error:', e);
     showToast(e.message || 'Błąd tworzenia projektu','error');
@@ -671,7 +675,8 @@ document.getElementById('bulkDeleteConfirm').addEventListener('click', async () 
       await apiFetch(API + '/' + _currentWs.id + '/subprojects/' + spId, {method:'DELETE'});
       hideModal('modalDeleteSubproject');
       showToast('Podprojekt usunięty', 'success');
-      openWorkspace(_currentWs.id);
+      await openWorkspace(_currentWs.id);
+      loadWorkspaces();
     } catch(err){
       console.error(err);
       showToast(err.message || 'Błąd usuwania', 'error');
