@@ -66,12 +66,16 @@ document.querySelectorAll('.sp-type-btn').forEach(btn => {
 // =====================================================================
 
 async function loadProjects(){
+  console.log('[DEBUG-LOAD] loadProjects() called');
   try {
     const data = await apiFetch(API + '/default');
+    console.log('[DEBUG-LOAD] workspace:', data.workspace?.name, 'subprojects count:', (data.workspace?.subprojects||[]).length);
+    console.log('[DEBUG-LOAD] subprojects:', (data.workspace?.subprojects||[]).map(s => s.name));
     _ws = data.workspace;
     renderProjects(_ws);
+    console.log('[DEBUG-LOAD] renderProjects() done');
   } catch(e){
-    console.error('Load projects error:', e);
+    console.error('[DEBUG-LOAD] ERROR:', e);
     _updateStatusLine('Błąd ładowania');
   }
 }
@@ -229,25 +233,41 @@ document.getElementById('npName').addEventListener('keydown', (e) => {
 });
 
 document.getElementById('npSubmit').addEventListener('click', async () => {
-  if(!_ws){ showToast('Brak danych','warning'); return; }
+  console.log('[DEBUG-CREATE] === npSubmit CLICKED ===');
+  console.log('[DEBUG-CREATE] _ws:', _ws ? {id:_ws.id, name:_ws.name} : null);
+
+  if(!_ws){ showToast('Brak danych','warning'); console.log('[DEBUG-CREATE] ABORT: _ws is null'); return; }
   const name = document.getElementById('npName').value.trim();
-  if(!name){ showToast('Podaj nazwę','warning'); return; }
-  const type = document.querySelector('.sp-type-btn.active')?.dataset?.type || 'analysis';
+  console.log('[DEBUG-CREATE] name:', JSON.stringify(name));
+  if(!name){ showToast('Podaj nazwę','warning'); console.log('[DEBUG-CREATE] ABORT: empty name'); return; }
+
+  const activeBtn = document.querySelector('.sp-type-btn.active');
+  const type = activeBtn?.dataset?.type || 'analysis';
   const linkTo = document.getElementById('npLinkTo').value;
+  console.log('[DEBUG-CREATE] type:', type, 'linkTo:', linkTo, 'activeBtn:', activeBtn?.outerHTML?.slice(0,80));
+
   try {
-    const data = await apiFetch(API+'/'+_ws.id+'/subprojects', {
-      method:'POST', body:JSON.stringify({name, type, link_to:linkTo})
+    const url = API+'/'+_ws.id+'/subprojects';
+    const body = {name, type, link_to:linkTo};
+    console.log('[DEBUG-CREATE] POST', url, body);
+
+    const data = await apiFetch(url, {
+      method:'POST', body:JSON.stringify(body)
     });
+    console.log('[DEBUG-CREATE] API response:', JSON.stringify(data).slice(0,500));
+
     hideModal('modalNewProject');
     showToast('Projekt utworzony','success');
 
     // Auto-redirect to the matching page for typed projects
     const route = TYPE_ROUTES[type];
-    console.log('[projects] Created project:', {type, route, hasSubproject: !!data.subproject, data});
+    console.log('[DEBUG-CREATE] route:', route, 'TYPE_ROUTES:', JSON.stringify(TYPE_ROUTES));
+
     if(route && route !== '/projects'){
       const sp = data.subproject || {};
       const dir = sp.data_dir || '';
       const projectId = dir.replace('projects/', '');
+      console.log('[DEBUG-CREATE] REDIRECT path: sp.data_dir=', dir, 'projectId=', projectId);
       if(projectId){
         AISTATE.projectId = projectId;
         AISTATE.audioFile = sp.audio_file || '';
@@ -255,14 +275,17 @@ document.getElementById('npSubmit').addEventListener('click', async () => {
         localStorage.setItem('aistate_workspace_name', _ws.name);
         localStorage.setItem('aistate_subproject_name', sp.name || name);
       }
-      console.log('[projects] Redirecting to:', route, 'projectId:', projectId);
+      console.log('[DEBUG-CREATE] window.location.href =', route);
       window.location.href = route;
       return;
     }
+
     // For "general" type — stay on projects page
+    console.log('[DEBUG-CREATE] REFRESH: calling loadProjects()');
     await loadProjects();
+    console.log('[DEBUG-CREATE] REFRESH: loadProjects() done');
   } catch(e){
-    console.error('Create project error:', e);
+    console.error('[DEBUG-CREATE] ERROR:', e);
     showToast(e.message || 'Błąd tworzenia projektu','error');
   }
 });
