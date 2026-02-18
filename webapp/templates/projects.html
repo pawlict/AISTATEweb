@@ -1,5 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+.ws-card{
+  display:flex; align-items:center; gap:10px; padding:8px 14px;
+  border-radius:8px; border:1px solid var(--border,#e0e0e0);
+  transition:background .15s, box-shadow .15s;
+}
+.ws-card:hover{background:var(--hover-bg,#f5f7fa);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.ws-card-chevron{color:var(--accent,#4a6cf7);font-size:10px;opacity:.5;flex-shrink:0}
+.ws-card-name{font-weight:700;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ws-card-info{opacity:.6;white-space:nowrap;margin-left:auto;flex-shrink:0}
+
+.sp-type-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 6px !important;min-width:0}
+.sp-type-btn img{width:28px;height:28px}
+.sp-type-btn .sp-type-label{font-size:.7rem;line-height:1.1;text-align:center}
+</style>
 
 <div class="analysis-page projects-page">
 
@@ -37,7 +52,7 @@
         <button class="btn pill-icon" id="btnExportSubproject" title="Eksportuj podprojekt"><img src="/static/icons/pliki/file_export.svg" alt="Eksportuj" draggable="false"></button>
         <button class="btn pill-icon" id="btnArchiveWorkspace" title="Archiwizuj projekt"><img src="/static/icons/projekty/project_archive.svg" alt="Archiwizuj" draggable="false"></button>
         <button class="btn pill-icon" id="btnDeleteSubproject" title="Usuń podprojekt"><img src="/static/icons/akcje/remove.svg" alt="Usuń podprojekt" draggable="false"></button>
-        <button class="btn pill-icon" id="btnDeleteWorkspace" title="Usuń projekt" style="filter:hue-rotate(320deg) saturate(2)"><img src="/static/icons/akcje/close.svg" alt="Usuń" draggable="false"></button>
+        <button class="btn pill-icon" id="btnDeleteWorkspace" title="Usuń projekt"><img src="/static/icons/pliki/file_delete.svg" alt="Usuń" draggable="false"></button>
       </div>
 
     </div>
@@ -155,13 +170,13 @@
       <div class="label">Nazwa</div>
       <input class="input" id="nsName" type="text" placeholder="np. Przesłuchanie świadka A"/>
       <div class="label" style="margin-top:10px">Typ</div>
-      <div id="nsTypes" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
-        <button class="btn secondary sp-type-btn active" data-type="transcription"><i data-icon="transcription" data-size="16"></i> Transkrypcja</button>
-        <button class="btn secondary sp-type-btn" data-type="diarization"><i data-icon="diarization" data-size="16"></i> Diaryzacja</button>
-        <button class="btn secondary sp-type-btn" data-type="analysis"><i data-icon="finance" data-size="16"></i> Analiza</button>
-        <button class="btn secondary sp-type-btn" data-type="chat"><i data-icon="robot" data-size="16"></i> Chat</button>
-        <button class="btn secondary sp-type-btn" data-type="translation"><i data-icon="globe" data-size="16"></i> Tłumaczenie</button>
-        <button class="btn secondary sp-type-btn" data-type="finance"><i data-icon="finance" data-size="16"></i> Finanse</button>
+      <div id="nsTypes" style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">
+        <button class="btn secondary sp-type-btn active" data-type="transcription" title="Transkrypcja"><img src="/static/icons/sidebar/transcription.svg" draggable="false"><span class="sp-type-label">Transkrypcja</span></button>
+        <button class="btn secondary sp-type-btn" data-type="diarization" title="Diaryzacja"><img src="/static/icons/sidebar/diarization.svg" draggable="false"><span class="sp-type-label">Diaryzacja</span></button>
+        <button class="btn secondary sp-type-btn" data-type="analysis" title="Analiza"><img src="/static/icons/sidebar/analysis.svg" draggable="false"><span class="sp-type-label">Analiza</span></button>
+        <button class="btn secondary sp-type-btn" data-type="chat" title="Chat"><img src="/static/icons/sidebar/chat.svg" draggable="false"><span class="sp-type-label">Chat</span></button>
+        <button class="btn secondary sp-type-btn" data-type="translation" title="Tłumaczenie"><img src="/static/icons/sidebar/translation.svg" draggable="false"><span class="sp-type-label">Tłumaczenie</span></button>
+        <button class="btn secondary sp-type-btn" data-type="general" title="Ogólny"><img src="/static/icons/projekty/subproject_new.svg" draggable="false"><span class="sp-type-label">Ogólny</span></button>
       </div>
       <div class="label" style="margin-top:10px">Powiąż z (opcjonalnie)</div>
       <select class="input" id="nsLinkTo"><option value="">— brak —</option></select>
