@@ -1482,10 +1482,52 @@
         var target = tab.dataset.panel;
         var panel = document.getElementById(target);
         if (panel) panel.style.display = '';
-        if (target === 'securityPanel') { loadSecuritySettings(); initAuditTab(); loadBlacklist(); }
+        if (target === 'securityPanel') { loadSecuritySettings(); initAuditTab(); loadBlacklist(); loadProjectActivity(); }
         if (target === 'projectsPanel') { loadAdminProjects(); }
       });
     });
+  }
+
+  /* ---- Project Activity (in Security panel) ---- */
+
+  var _projectActivityLoaded = false;
+
+  async function loadProjectActivity() {
+    if (_projectActivityLoaded) return;
+    var tbody = document.getElementById('projectActivityBody');
+    if (!tbody) return;
+    try {
+      var res = await fetch('/api/workspaces/default');
+      var data = await res.json();
+      var ws = data.workspace || data;
+      var wsId = ws.id;
+      if (!wsId) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;opacity:.5">Brak workspace</td></tr>'; return; }
+      var res2 = await fetch('/api/workspaces/' + wsId + '/activity?limit=100');
+      var data2 = await res2.json();
+      var activity = data2.activity || [];
+      if (!activity.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;opacity:.5">Brak aktywności</td></tr>';
+        _projectActivityLoaded = true;
+        return;
+      }
+      tbody.innerHTML = '';
+      activity.forEach(function(a) {
+        var tr = document.createElement('tr');
+        var dt = (a.created_at || '').replace('T', ' ').slice(0, 19);
+        var user = escHtml(a.user_name || (a.user_id ? a.user_id.slice(0, 8) : '?'));
+        var action = escHtml(a.action || '');
+        var detail = '';
+        if (a.detail) {
+          try { detail = typeof a.detail === 'string' ? a.detail : JSON.stringify(a.detail); } catch(e) { detail = ''; }
+        }
+        tr.innerHTML = '<td>' + escHtml(dt) + '</td><td><b>' + user + '</b></td><td>' + action + '</td><td style="font-size:.76rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(detail) + '</td>';
+        tbody.appendChild(tr);
+      });
+      _projectActivityLoaded = true;
+    } catch(e) {
+      console.error('Project activity load error:', e);
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#e74c3c">' + escHtml(e.message || 'Error') + '</td></tr>';
+    }
   }
 
   /* ---- Admin Projects Tab ---- */
