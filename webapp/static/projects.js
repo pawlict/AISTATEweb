@@ -42,14 +42,15 @@ const TYPE_ICONS = {
   chat:          aiIcon('robot', 18),
   translation:   aiIcon('globe', 18),
   finance:       aiIcon('finance', 18),
+  general:       aiIcon('document', 18),
 };
 const TYPE_LABELS = {
   transcription: 'Transkrypcja', diarization: 'Diaryzacja', analysis: 'Analiza',
-  chat: 'Chat', translation: 'Tłumaczenie', finance: 'Finanse'
+  chat: 'Chat', translation: 'Tłumaczenie', finance: 'Finanse', general: 'Ogólny'
 };
 const TYPE_ROUTES = {
   transcription: '/transcription', diarization: '/diarization', analysis: '/analysis',
-  chat: '/chat', translation: '/translation', finance: '/analysis'
+  chat: '/chat', translation: '/translation', finance: '/analysis', general: '/projects'
 };
 const ROLE_LABELS = {
   owner: 'Owner', manager: 'Manager', editor: 'Editor', commenter: 'Commenter', viewer: 'Viewer'
@@ -106,28 +107,14 @@ function renderWorkspaceList(workspaces){
   empty.style.display = 'none';
 
   workspaces.forEach(ws => {
-    const members = (ws.members || []).slice(0,4);
-    const avatars = members.map(m =>
-      `<span title="${esc(m.name || m.display_name || m.username || '?')} (${m.role})" style="display:inline-block;width:24px;height:24px;border-radius:50%;background:${esc(ws.color||'#4a6cf7')};color:#fff;text-align:center;line-height:24px;font-size:.65rem;font-weight:700;margin-right:-4px;border:2px solid var(--card-bg,#fff)">${esc((m.name||m.display_name||m.username||'?')[0].toUpperCase())}</span>`
-    ).join('');
-
-    const role = ws.my_role ? `<span style="font-size:.72rem;padding:2px 8px;border-radius:6px;background:${ws.my_role==='owner'?'var(--accent)':'#888'};color:#fff;font-weight:600">${ROLE_LABELS[ws.my_role]||ws.my_role}</span>` : '';
+    const role = ws.my_role ? `<span style="font-size:.68rem;padding:1px 6px;border-radius:4px;background:${ws.my_role==='owner'?'var(--accent)':'#888'};color:#fff;font-weight:600">${ROLE_LABELS[ws.my_role]||ws.my_role}</span>` : '';
     const card = document.createElement('div');
-    card.className = 'subcard';
-    card.style.cssText = 'cursor:pointer;border-left:4px solid '+esc(ws.color||'#4a6cf7')+';transition:transform .15s';
+    card.className = 'ws-card';
+    card.style.cssText = 'cursor:pointer;border-left:3px solid '+esc(ws.color||'#4a6cf7');
     card.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-        <div>
-          <div style="font-weight:700;font-size:1rem;color:var(--text)">${esc(ws.name)}</div>
-          <div class="small" style="margin-top:2px">${ws.subproject_count||0} podprojektów · Zaktualizowano: ${shortDate(ws.updated_at)}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          ${role}
-          <span class="small">${ws.member_count||1} czł.</span>
-        </div>
-      </div>
-      <div style="margin-top:6px;display:flex;align-items:center;gap:2px">${avatars}</div>
-      ${ws.description ? '<div class="small" style="margin-top:4px;opacity:.7">'+esc(ws.description)+'</div>' : ''}
+      <span class="ws-card-chevron">&#9654;</span>
+      <div class="ws-card-name">${esc(ws.name)}</div>
+      <div class="ws-card-info small">${ws.subproject_count||0} podpr. · ${ws.member_count||1} czł. · ${shortDate(ws.updated_at)} ${role}</div>
     `;
     card.addEventListener('click', () => openWorkspace(ws.id));
     list.appendChild(card);
@@ -371,13 +358,22 @@ document.getElementById('nwSubmit').addEventListener('click', async () => {
     const data = await apiFetch(API, {method:'POST', body:JSON.stringify({name, description:desc, color})});
     hideModal('modalNewWorkspace');
     showToast('Projekt utworzony','success');
-    // Open workspace detail directly so user sees the auto-created subproject
     if(data && data.workspace && data.workspace.id){
-      openWorkspace(data.workspace.id);
+      await openWorkspace(data.workspace.id);
+      // Auto-open new subproject modal with workspace name pre-filled
+      const subs = (_currentWs && _currentWs.subprojects) || [];
+      if(subs.length === 0){
+        document.getElementById('nsName').value = name;
+        showModal('modalNewSubproject');
+        document.getElementById('nsName').focus();
+      }
     } else {
       loadWorkspaces();
     }
-  } catch(e){ showToast(e.message,'error'); }
+  } catch(e){
+    console.error('Create workspace error:', e);
+    showToast(e.message || 'Błąd tworzenia projektu','error');
+  }
 });
 
 // =====================================================================
@@ -385,7 +381,9 @@ document.getElementById('nwSubmit').addEventListener('click', async () => {
 // =====================================================================
 
 document.getElementById('btnNewSubproject').addEventListener('click', () => {
-  document.getElementById('nsName').value = '';
+  const subs = (_currentWs && _currentWs.subprojects) || [];
+  // Pre-fill name with workspace name if no subprojects yet
+  document.getElementById('nsName').value = (subs.length === 0 && _currentWs) ? _currentWs.name : '';
   showModal('modalNewSubproject');
   document.getElementById('nsName').focus();
 });
