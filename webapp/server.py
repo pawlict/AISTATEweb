@@ -2114,7 +2114,7 @@ def render_page(request: Request, tpl: str, title: str, active: str, current_pro
     user = getattr(request.state, "user", None)
     user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles, user.is_superadmin) if user else []
     breadcrumbs = _BREADCRUMBS.get(active, [])
-    return TEMPLATES.TemplateResponse(
+    resp = TEMPLATES.TemplateResponse(
         tpl,
         {
             "request": request,
@@ -2139,6 +2139,11 @@ def render_page(request: Request, tpl: str, title: str, active: str, current_pro
             **ctx,
         },
     )
+    # Prevent browser from caching HTML pages (ensures fresh static_ts on each load)
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 
