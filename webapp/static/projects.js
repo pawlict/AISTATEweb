@@ -416,12 +416,17 @@ document.getElementById('nwSubmit').addEventListener('click', async () => {
     const data = await apiFetch(API, {method:'POST', body:JSON.stringify({name, description:desc, color})});
     hideModal('modalNewWorkspace');
     showToast('Projekt utworzony','success');
-    if(data && data.workspace && data.workspace.id){
-      await openWorkspace(data.workspace.id);
+    // Set _currentWs directly so nsSubmit can use it (don't openWorkspace yet — it would switch view)
+    if(data && data.workspace){
+      _currentWs = data.workspace;
+      _currentWs.subprojects = _currentWs.subprojects || [];
+      _currentWs.members = _currentWs.members || [];
+      _currentWs.activity = _currentWs.activity || [];
     }
-    // Always open subproject modal so user can pick type for first subproject
+    // Refresh the workspace list in the background
+    loadWorkspaces();
+    // Open subproject modal with project name pre-filled
     document.getElementById('nsName').value = name;
-    // Reset type selection to first button
     document.querySelectorAll('.sp-type-btn').forEach(b => b.classList.remove('active'));
     const firstTypeBtn = document.querySelector('.sp-type-btn');
     if(firstTypeBtn) firstTypeBtn.classList.add('active');
@@ -457,7 +462,10 @@ document.getElementById('nsSubmit').addEventListener('click', async () => {
     });
     hideModal('modalNewSubproject');
     showToast('Podprojekt utworzony','success');
+    // Switch to detail view and refresh
     await openWorkspace(_currentWs.id);
+    // Also refresh workspace list in background
+    loadWorkspaces();
   } catch(e){
     console.error('Create subproject error:', e);
     showToast(e.message || 'Błąd tworzenia podprojektu','error');
