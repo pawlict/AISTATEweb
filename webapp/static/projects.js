@@ -230,8 +230,19 @@ document.getElementById('npName').addEventListener('keydown', (e) => {
 
 document.getElementById('npSubmit').addEventListener('click', async () => {
   if(!_ws){ showToast('Brak danych','warning'); return; }
-  const name = document.getElementById('npName').value.trim();
+  let name = document.getElementById('npName').value.trim();
   if(!name){ showToast('Podaj nazwę','warning'); return; }
+  // Auto-append date+time if name already exists
+  const existing = (_ws.subprojects || []).map(s => s.name.toLowerCase());
+  if(existing.includes(name.toLowerCase())){
+    const now = new Date();
+    const ts = now.getFullYear() + '-'
+      + String(now.getMonth()+1).padStart(2,'0') + '-'
+      + String(now.getDate()).padStart(2,'0') + ' '
+      + String(now.getHours()).padStart(2,'0') + ':'
+      + String(now.getMinutes()).padStart(2,'0');
+    name = name + ' ' + ts;
+  }
   const type = document.querySelector('.sp-type-btn.active')?.dataset?.type || 'analysis';
   const linkTo = document.getElementById('npLinkTo').value;
   try {
