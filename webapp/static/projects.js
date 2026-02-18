@@ -4,6 +4,25 @@
 
 const API = '/api/workspaces';
 let _currentWs = null;  // workspace detail being viewed
+let _activeCount = 0;
+let _archivedCount = 0;
+
+// --- Toolbar view toggle ---
+const _toolbarListEls = ['toolbarListActions'];
+const _toolbarDetailEls = ['toolbarDetailActions','toolbarDetailSep1','toolbarDetailActions2','toolbarDetailSep2','toolbarDetailActions3'];
+
+function _setView(mode){
+  const isList = mode === 'list';
+  document.getElementById('viewWorkspaceList').style.display = isList ? 'block' : 'none';
+  document.getElementById('viewWorkspaceDetail').style.display = isList ? 'none' : 'block';
+  _toolbarListEls.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = isList ? '' : 'none'; });
+  _toolbarDetailEls.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = isList ? 'none' : ''; });
+}
+
+function _updateStatusLine(text){
+  const el = document.getElementById('projects_status_line');
+  if(el) el.textContent = text;
+}
 
 // --- Helpers ---
 function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -81,6 +100,8 @@ function renderWorkspaceList(workspaces){
   const list = document.getElementById('workspaceList');
   const empty = document.getElementById('workspaceEmpty');
   list.innerHTML = '';
+  _activeCount = workspaces.length;
+  _updateStatusLine(_activeCount + ' aktywnych' + (_archivedCount ? ', ' + _archivedCount + ' w archiwum' : ''));
   if(!workspaces.length){ empty.style.display = 'block'; return; }
   empty.style.display = 'none';
 
@@ -160,6 +181,8 @@ async function loadArchivedWorkspaces(){
   try {
     const data = await apiFetch(API + '?status=archived');
     const ws = data.workspaces || [];
+    _archivedCount = ws.length;
+    _updateStatusLine(_activeCount + ' aktywnych' + (_archivedCount ? ', ' + _archivedCount + ' w archiwum' : ''));
     const section = document.getElementById('archivedSection');
     const list = document.getElementById('archivedList');
     if(!ws.length){ section.style.display = 'none'; return; }
@@ -193,8 +216,7 @@ async function openWorkspace(wsId){
     const data = await apiFetch(API + '/' + wsId);
     _currentWs = data.workspace;
     renderWorkspaceDetail(_currentWs);
-    document.getElementById('viewWorkspaceList').style.display = 'none';
-    document.getElementById('viewWorkspaceDetail').style.display = 'block';
+    _setView('detail');
     // Update URL without reload
     history.pushState({wsId}, '', '/projects/' + wsId);
   } catch(e){
@@ -207,6 +229,9 @@ function renderWorkspaceDetail(ws){
   document.getElementById('wsDetailName').textContent = ws.name;
   document.getElementById('wsDetailDesc').textContent = ws.description || '';
   document.getElementById('wsDetailRole').textContent = ROLE_LABELS[ws.my_role] || ws.my_role || '';
+  const spCount = (ws.subprojects || []).length;
+  const mCount = (ws.members || []).length;
+  _updateStatusLine(ws.name + ' · ' + spCount + ' podpr. · ' + mCount + ' czł.');
 
   // Subprojects
   const spList = document.getElementById('subprojectList');
@@ -413,8 +438,7 @@ document.getElementById('invSubmit').addEventListener('click', async () => {
 // =====================================================================
 
 document.getElementById('btnBackToList').addEventListener('click', () => {
-  document.getElementById('viewWorkspaceDetail').style.display = 'none';
-  document.getElementById('viewWorkspaceList').style.display = 'block';
+  _setView('list');
   _currentWs = null;
   history.pushState({}, '', '/projects');
   loadWorkspaces();
@@ -424,8 +448,7 @@ document.getElementById('btnArchiveWorkspace').addEventListener('click', async (
   if(!_currentWs) return;
   if(!confirm('Archiwizować projekt "'+_currentWs.name+'"?')) return;
   await apiFetch(API+'/'+_currentWs.id, {method:'PATCH', body:JSON.stringify({status:'archived'})});
-  document.getElementById('viewWorkspaceDetail').style.display = 'none';
-  document.getElementById('viewWorkspaceList').style.display = 'block';
+  _setView('list');
   _currentWs = null;
   history.pushState({}, '', '/projects');
   loadWorkspaces();
@@ -436,8 +459,7 @@ document.getElementById('btnDeleteWorkspace').addEventListener('click', async ()
   if(!_currentWs) return;
   if(!confirm('USUNĄĆ projekt "'+_currentWs.name+'"? Ta operacja jest nieodwracalna!')) return;
   await apiFetch(API+'/'+_currentWs.id, {method:'DELETE'});
-  document.getElementById('viewWorkspaceDetail').style.display = 'none';
-  document.getElementById('viewWorkspaceList').style.display = 'block';
+  _setView('list');
   _currentWs = null;
   history.pushState({}, '', '/projects');
   loadWorkspaces();
@@ -618,8 +640,7 @@ document.getElementById('btnDeleteWorkspace').addEventListener('click', async ()
     if(e.state && e.state.wsId){
       openWorkspace(e.state.wsId);
     } else {
-      document.getElementById('viewWorkspaceDetail').style.display = 'none';
-      document.getElementById('viewWorkspaceList').style.display = 'block';
+      _setView('list');
       _currentWs = null;
       loadWorkspaces();
     }

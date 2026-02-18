@@ -1,93 +1,111 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card" id="projectsApp">
 
-  <!-- ===== WORKSPACE LIST VIEW ===== -->
-  <div id="viewWorkspaceList">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-      <div>
-        <div class="label" style="font-weight:900;color:var(--text);font-size:18px" data-i18n="projects.title">Twoje projekty</div>
-        <div class="small" data-i18n="projects.subtitle">Workspace'y i podprojekty</div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" id="btnNewWorkspace" type="button">+ Nowy projekt</button>
-        <button class="btn secondary" id="btnImportProject" type="button" style="font-size:.85rem" data-i18n="projects.import.btn">Import</button>
+<div class="analysis-page projects-page">
+
+  <!-- ===== TOOLBAR ===== -->
+  <div class="card analysis-toolbar projects-toolbar" id="projects_toolbar">
+    <div class="analysis-toolbar-left">
+      <div class="h1" style="margin:0"><i data-icon="projects" data-size="40"></i> <span data-i18n="projects.title">Projekty</span></div>
+      <div class="small" id="projects_status_line"></div>
+    </div>
+
+    <div class="analysis-toolbar-right">
+
+      <!-- List-view actions -->
+      <div class="toolbar-section" id="toolbarListActions">
+        <button class="btn pill-icon" id="btnNewWorkspace" title="Nowy projekt" data-i18n-title="projects.new_ws"><img src="/static/icons/projekty/project_new.svg" alt="Nowy" draggable="false"></button>
+        <button class="btn pill-icon" id="btnImportProject" title="Import" data-i18n-title="projects.import.btn"><img src="/static/icons/pliki/file_import.svg" alt="Import" draggable="false"></button>
         <input id="importAistateFile" type="file" accept=".aistate" style="display:none"/>
       </div>
-    </div>
 
-    <!-- Pending invitations -->
-    <div id="invitationsSection" style="display:none">
-      <div class="label" style="font-weight:700;color:var(--accent);margin-bottom:6px">
-        <i data-icon="mail" data-size="14"></i> <span data-i18n="projects.invitations">Zaproszenia</span> (<span id="invCount">0</span>)
+      <!-- Detail-view actions (hidden by default) -->
+      <div class="toolbar-section" id="toolbarDetailActions" style="display:none">
+        <button class="btn pill-icon" id="btnBackToList" title="Powrót do listy"><img src="/static/icons/akcje/back.svg" alt="Powrót" draggable="false"></button>
       </div>
-      <div id="invitationsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
-    </div>
 
-    <!-- Active workspaces -->
-    <div id="activeSection">
-      <div class="label" style="font-weight:700;margin-bottom:6px" data-i18n="projects.active">Aktywne</div>
-      <div id="workspaceList" style="display:flex;flex-direction:column;gap:8px"></div>
-      <div id="workspaceEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6" data-i18n="projects.no_projects">Brak projektów. Utwórz nowy!</div>
-    </div>
+      <div class="toolbar-sep" id="toolbarDetailSep1" style="display:none"></div>
 
-    <!-- Archived -->
-    <div id="archivedSection" style="display:none;margin-top:16px">
-      <div class="hr"></div>
-      <details>
-        <summary class="label" style="cursor:pointer;font-weight:700;margin-bottom:6px" data-i18n="projects.archived">Zarchiwizowane</summary>
-        <div id="archivedList" style="display:flex;flex-direction:column;gap:8px;margin-top:8px"></div>
-      </details>
+      <div class="toolbar-section" id="toolbarDetailActions2" style="display:none">
+        <button class="btn pill-icon" id="btnNewSubproject" title="Nowy podprojekt"><img src="/static/icons/projekty/project_subproject.svg" alt="Podprojekt" draggable="false"></button>
+        <button class="btn pill-icon" id="btnInviteUser" title="Zaproś użytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="Zaproś" draggable="false"></button>
+      </div>
+
+      <div class="toolbar-sep" id="toolbarDetailSep2" style="display:none"></div>
+
+      <div class="toolbar-section" id="toolbarDetailActions3" style="display:none">
+        <button class="btn pill-icon" id="btnExportSubproject" title="Eksportuj podprojekt"><img src="/static/icons/pliki/file_export.svg" alt="Eksportuj" draggable="false"></button>
+        <button class="btn pill-icon" id="btnArchiveWorkspace" title="Archiwizuj projekt"><img src="/static/icons/projekty/project_archive.svg" alt="Archiwizuj" draggable="false"></button>
+        <button class="btn pill-icon" id="btnDeleteSubproject" title="Usuń podprojekt"><img src="/static/icons/akcje/remove.svg" alt="Usuń podprojekt" draggable="false"></button>
+        <button class="btn pill-icon" id="btnDeleteWorkspace" title="Usuń projekt" style="filter:hue-rotate(320deg) saturate(2)"><img src="/static/icons/akcje/close.svg" alt="Usuń" draggable="false"></button>
+      </div>
+
     </div>
   </div>
 
-  <!-- ===== WORKSPACE DETAIL VIEW ===== -->
-  <div id="viewWorkspaceDetail" style="display:none">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn secondary" id="btnBackToList" type="button" style="padding:4px 12px">◀ Projekty</button>
-      <div>
-        <div class="label" style="font-weight:900;color:var(--text);font-size:18px" id="wsDetailName">—</div>
-        <div class="small" id="wsDetailDesc"></div>
+  <!-- ===== CONTENT ===== -->
+  <div class="card" id="projectsApp">
+
+    <!-- ===== WORKSPACE LIST VIEW ===== -->
+    <div id="viewWorkspaceList">
+
+      <!-- Pending invitations -->
+      <div id="invitationsSection" style="display:none">
+        <div class="label" style="font-weight:700;color:var(--accent);margin-bottom:6px">
+          <i data-icon="mail" data-size="14"></i> <span data-i18n="projects.invitations">Zaproszenia</span> (<span id="invCount">0</span>)
+        </div>
+        <div id="invitationsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
       </div>
-      <div style="flex:1"></div>
-      <div class="small" id="wsDetailRole" style="font-weight:700;padding:3px 10px;border-radius:8px;background:var(--accent);color:#fff"></div>
+
+      <!-- Active workspaces -->
+      <div id="activeSection">
+        <div class="label" style="font-weight:700;margin-bottom:6px" data-i18n="projects.active">Aktywne</div>
+        <div id="workspaceList" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="workspaceEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6" data-i18n="projects.no_projects">Brak projektów. Utwórz nowy!</div>
+      </div>
+
+      <!-- Archived -->
+      <div id="archivedSection" style="display:none;margin-top:16px">
+        <div class="hr"></div>
+        <details>
+          <summary class="label" style="cursor:pointer;font-weight:700;margin-bottom:6px" data-i18n="projects.archived">Zarchiwizowane</summary>
+          <div id="archivedList" style="display:flex;flex-direction:column;gap:8px;margin-top:8px"></div>
+        </details>
+      </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start" id="wsDetailGrid">
-      <!-- LEFT: Subprojects -->
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <div class="label" style="font-weight:700" data-i18n="projects.subprojects">Podprojekty</div>
-          <button class="btn" id="btnNewSubproject" type="button" style="font-size:.85rem;padding:4px 14px">+ Nowy</button>
+    <!-- ===== WORKSPACE DETAIL VIEW ===== -->
+    <div id="viewWorkspaceDetail" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <div>
+          <div class="label" style="font-weight:900;color:var(--text);font-size:18px" id="wsDetailName">—</div>
+          <div class="small" id="wsDetailDesc"></div>
         </div>
-        <div id="subprojectList" style="display:flex;flex-direction:column;gap:8px"></div>
-        <div id="subprojectEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6" data-i18n="projects.no_subprojects">Brak podprojektów.</div>
+        <div style="flex:1"></div>
+        <div class="small" id="wsDetailRole" style="font-weight:700;padding:3px 10px;border-radius:8px;background:var(--accent);color:#fff"></div>
       </div>
 
-      <!-- RIGHT: Team + Activity -->
-      <div>
-        <div class="subcard" style="margin-bottom:12px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <div class="label" style="font-weight:700" data-i18n="projects.team">Zespół</div>
-            <button class="btn secondary" id="btnInviteUser" type="button" style="font-size:.78rem;padding:3px 10px">+ Zaproś</button>
+      <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start" id="wsDetailGrid">
+        <!-- LEFT: Subprojects -->
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div class="label" style="font-weight:700" data-i18n="projects.subprojects">Podprojekty</div>
           </div>
-          <div id="membersList" style="display:flex;flex-direction:column;gap:4px"></div>
-        </div>
-        <div class="subcard">
-          <div class="label" style="font-weight:700;margin-bottom:6px" data-i18n="projects.activity">Aktywność</div>
-          <div id="activityList" style="max-height:260px;overflow-y:auto;font-size:.82rem"></div>
-        </div>
-        <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn secondary" id="btnArchiveWorkspace" type="button" style="font-size:.78rem" data-i18n="projects.archive">Archiwizuj</button>
-          <button class="btn danger" id="btnDeleteWorkspace" type="button" style="font-size:.78rem" data-i18n="projects.delete_ws">Usuń</button>
+          <div id="subprojectList" style="display:flex;flex-direction:column;gap:8px"></div>
+          <div id="subprojectEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6" data-i18n="projects.no_subprojects">Brak podprojektów.</div>
         </div>
 
-        <!-- Subproject actions: Export / Delete -->
-        <div class="subcard" style="margin-top:12px">
-          <div class="label" style="font-weight:700;margin-bottom:6px">Zarządzanie podprojektami</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn secondary" id="btnExportSubproject" type="button" style="font-size:.78rem">Eksportuj podprojekt</button>
-            <button class="btn danger" id="btnDeleteSubproject" type="button" style="font-size:.78rem">Usuń podprojekt</button>
+        <!-- RIGHT: Team + Activity -->
+        <div>
+          <div class="subcard" style="margin-bottom:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div class="label" style="font-weight:700" data-i18n="projects.team">Zespół</div>
+            </div>
+            <div id="membersList" style="display:flex;flex-direction:column;gap:4px"></div>
+          </div>
+          <div class="subcard">
+            <div class="label" style="font-weight:700;margin-bottom:6px" data-i18n="projects.activity">Aktywność</div>
+            <div id="activityList" style="max-height:260px;overflow-y:auto;font-size:.82rem"></div>
           </div>
         </div>
       </div>
@@ -228,8 +246,6 @@
       <button class="btn" id="expSubConfirm" type="button">Eksportuj</button>
     </div>
   </div>
-</div>
-
 </div>
 
 {% endblock %}
