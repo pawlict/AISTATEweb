@@ -126,15 +126,10 @@ function renderProjects(ws){
       window.location.href = route;
     });
 
-    // Inline delete
-    card.querySelector('.sp-del').addEventListener('click', async(e) => {
+    // Inline delete → open modal with this project pre-selected
+    card.querySelector('.sp-del').addEventListener('click', (e) => {
       e.stopPropagation();
-      if(!confirm('Usunąć projekt "' + sp.name + '"?')) return;
-      try {
-        await apiFetch(API + '/' + ws.id + '/subprojects/' + sp.id, {method:'DELETE'});
-        showToast('Projekt usunięty','info');
-        await loadProjects();
-      } catch(err) { showToast(err.message, 'error'); }
+      _openDeleteModalForProject(ws, sp.id);
     });
 
     // Click card → also open
@@ -320,6 +315,28 @@ document.getElementById('invSubmit').addEventListener('click', async () => {
 // DELETE PROJECT (with wipe options)
 // =====================================================================
 
+/** Open the delete modal with a specific project pre-selected. */
+function _openDeleteModalForProject(ws, preSelectId) {
+  if(!ws) return;
+  const subs = ws.subprojects || [];
+  const select = document.getElementById('delProjSelect');
+  if(!select) return;
+  select.innerHTML = '';
+  if(!subs.length){
+    showToast('Brak projektów do usunięcia', 'warning');
+    return;
+  }
+  subs.forEach(sp => {
+    const opt = document.createElement('option');
+    opt.value = sp.id;
+    opt.dataset.dir = sp.data_dir || '';
+    opt.textContent = sp.name;
+    select.appendChild(opt);
+  });
+  if(preSelectId) select.value = preSelectId;
+  showModal('modalDeleteProject');
+}
+
 (function(){
   const btn = document.getElementById('btnDeleteProject');
   const select = document.getElementById('delProjSelect');
@@ -328,21 +345,7 @@ document.getElementById('invSubmit').addEventListener('click', async () => {
   if(!btn) return;
 
   btn.addEventListener('click', () => {
-    if(!_ws) return;
-    const subs = _ws.subprojects || [];
-    select.innerHTML = '';
-    if(!subs.length){
-      showToast('Brak projektów do usunięcia', 'warning');
-      return;
-    }
-    subs.forEach(sp => {
-      const opt = document.createElement('option');
-      opt.value = sp.id;
-      opt.dataset.dir = sp.data_dir || '';
-      opt.textContent = (TYPE_ICONS[sp.subproject_type]||'') + ' ' + sp.name;
-      select.appendChild(opt);
-    });
-    showModal('modalDeleteProject');
+    _openDeleteModalForProject(_ws, null);
   });
 
   if(confirmBtn) confirmBtn.addEventListener('click', async () => {
@@ -350,7 +353,6 @@ document.getElementById('invSubmit').addEventListener('click', async () => {
     const spId = select.value;
     const sp = (_ws.subprojects||[]).find(s => s.id === spId);
     const wipe = wipeSelect ? wipeSelect.value : 'none';
-    const dir = sp && sp.data_dir ? sp.data_dir.replace('projects/','') : '';
 
     if(!confirm('Na pewno usunąć projekt "' + (sp?sp.name:spId) + '"?')) return;
 
