@@ -30,8 +30,9 @@ function shortDate(iso){ return iso ? iso.replace('T',' ').slice(0,16) : '—'; 
 
 async function apiFetch(url, opts){
   const r = await fetch(url, {headers:{'Content-Type':'application/json'}, ...opts});
-  const j = await r.json();
-  if(j.status !== 'ok' && r.status >= 400) throw new Error(j.message || `HTTP ${r.status}`);
+  let j;
+  try { j = await r.json(); } catch(_){ throw new Error(`HTTP ${r.status} — nieprawidłowa odpowiedź serwera`); }
+  if(!r.ok || j.status === 'error') throw new Error(j.message || j.detail || `HTTP ${r.status}`);
   return j;
 }
 
@@ -149,15 +150,25 @@ async function loadInvitations(){
       `;
       card.querySelector('[data-accept]').addEventListener('click', async(e)=>{
         e.stopPropagation();
-        await apiFetch(API+'/invitations/'+inv.id+'/accept', {method:'POST'});
-        showToast('Zaproszenie zaakceptowane','success');
-        loadWorkspaces();
+        try {
+          await apiFetch(API+'/invitations/'+inv.id+'/accept', {method:'POST'});
+          showToast('Zaproszenie zaakceptowane','success');
+          loadWorkspaces();
+        } catch(err){
+          console.error('Accept invitation error:', err);
+          showToast(err.message || 'Błąd akceptacji zaproszenia','error');
+        }
       });
       card.querySelector('[data-reject]').addEventListener('click', async(e)=>{
         e.stopPropagation();
-        await apiFetch(API+'/invitations/'+inv.id+'/reject', {method:'POST'});
-        showToast('Zaproszenie odrzucone','info');
-        loadWorkspaces();
+        try {
+          await apiFetch(API+'/invitations/'+inv.id+'/reject', {method:'POST'});
+          showToast('Zaproszenie odrzucone','info');
+          loadWorkspaces();
+        } catch(err){
+          console.error('Reject invitation error:', err);
+          showToast(err.message || 'Błąd odrzucenia zaproszenia','error');
+        }
       });
       list.appendChild(card);
     });
@@ -356,9 +367,9 @@ document.getElementById('nwSubmit').addEventListener('click', async () => {
   const color = document.querySelector('#nwColors .color-chip.active')?.dataset?.color || '#4a6cf7';
   try {
     const data = await apiFetch(API, {method:'POST', body:JSON.stringify({name, description:desc, color})});
-    hideModal('modalNewWorkspace');
-    showToast('Projekt utworzony','success');
     if(data && data.workspace && data.workspace.id){
+      hideModal('modalNewWorkspace');
+      showToast('Projekt utworzony','success');
       await openWorkspace(data.workspace.id);
       // Auto-open new subproject modal with workspace name pre-filled
       const subs = (_currentWs && _currentWs.subprojects) || [];
@@ -368,6 +379,8 @@ document.getElementById('nwSubmit').addEventListener('click', async () => {
         document.getElementById('nsName').focus();
       }
     } else {
+      hideModal('modalNewWorkspace');
+      showToast('Projekt utworzony','success');
       loadWorkspaces();
     }
   } catch(e){
