@@ -105,6 +105,84 @@ def my_invitations(request: Request):
     return JSONResponse({"status": "ok", "invitations": invitations})
 
 
+@router.post("/bulk-delete")
+async def bulk_delete_workspaces(request: Request):
+    """Delete multiple workspaces with all their subprojects and data directories."""
+    body = await request.json()
+    workspace_ids = body.get("workspace_ids", [])
+    wipe_method = (body.get("wipe_method") or "none").strip().lower()
+
+    if not workspace_ids or not isinstance(workspace_ids, list):
+        return JSONResponse({"status": "error", "message": "workspace_ids required"}, 400)
+
+    uid = _uid(request)
+    is_admin = _is_admin(request)
+    deleted = []
+    errors = []
+
+    for ws_id in workspace_ids:
+        # Verify ownership
+        role = _STORE.get_user_role(ws_id, uid)
+        if role != "owner" and not is_admin:
+            errors.append({"id": ws_id, "message": "Only owner can delete"})
+            continue
+
+        ws = _STORE.get_workspace(ws_id)
+        if ws is None:
+            errors.append({"id": ws_id, "message": "Not found"})
+            continue
+
+        # Delete all subproject data directories with wipe
+        subs = _STORE.list_subprojects(ws_id)
+        for sp in subs:
+            data_dir = sp.get("data_dir", "")
+            if data_dir:
+                dir_id = data_dir.replace("projects/", "")
+                if dir_id:
+                    try:
+                        _delete_project_data(dir_id, wipe_method)
+                    except Exception:
+                        pass  # best-effort
+
+        # Hard-delete workspace + all DB records
+        _STORE.hard_delete_workspace(ws_id)
+        deleted.append(ws_id)
+
+    return JSONResponse({
+        "status": "ok",
+        "deleted": deleted,
+        "errors": errors,
+    })
+
+
+def _delete_project_data(project_id: str, wipe_method: str = "none"):
+    """Delete a project data directory with optional secure wipe."""
+    import os
+    from pathlib import Path
+
+    _root = Path(__file__).resolve().parents[2]
+    data_root = Path(
+        os.environ.get("AISTATEWEB_DATA_DIR")
+        or os.environ.get("AISTATEWWW_DATA_DIR")
+        or os.environ.get("AISTATE_DATA_DIR")
+        or str(_root / "data_www")
+    ).resolve()
+    projects_dir = data_root / "projects"
+    pdir = (projects_dir / project_id).resolve()
+
+    if not pdir.exists() or not pdir.is_dir():
+        return
+    if projects_dir.resolve() not in pdir.parents:
+        return
+
+    try:
+        from webapp.server import secure_delete_project_dir
+        secure_delete_project_dir(pdir, wipe_method)
+    except ImportError:
+        import shutil
+        shutil.rmtree(pdir, ignore_errors=True)
+
+
 @router.post("/invitations/{invitation_id}/accept")
 def accept_invitation(request: Request, invitation_id: str):
     uid = _uid(request)
