@@ -446,7 +446,7 @@ async def update_member(request: Request, workspace_id: str, member_user_id: str
         return JSONResponse({"status": "error", "message": "Access denied"}, 403)
     body = await request.json()
     new_role = body.get("role", "")
-    if new_role not in ("manager", "editor", "commenter", "viewer"):
+    if new_role not in ("manager", "editor", "viewer"):
         return JSONResponse({"status": "error", "message": "Invalid role"}, 400)
     _STORE.update_member_role(workspace_id, member_user_id, new_role)
     _STORE.log_activity(workspace_id, None, uid, _uname(request), "member_updated",
@@ -481,7 +481,7 @@ async def invite_user(request: Request, workspace_id: str):
 
     if not username:
         return JSONResponse({"status": "error", "message": "Username required"}, 400)
-    if role not in ("manager", "editor", "commenter", "viewer"):
+    if role not in ("manager", "editor", "viewer"):
         return JSONResponse({"status": "error", "message": "Invalid role"}, 400)
 
     target_user = _USER_STORE.get_by_username(username)
