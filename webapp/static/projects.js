@@ -1,24 +1,9 @@
-/* projects.js — Workspace dashboard frontend logic */
+/* projects.js — Flat project dashboard (no workspace layer) */
 (function(){
 "use strict";
 
 const API = '/api/workspaces';
-let _currentWs = null;  // workspace detail being viewed
-let _activeCount = 0;
-let _archivedCount = 0;
-const _selectedWsIds = new Set();
-
-// --- Toolbar view toggle ---
-const _toolbarListEls = ['toolbarListActions'];
-const _toolbarDetailEls = ['toolbarDetailActions','toolbarDetailSep1','toolbarDetailActions2','toolbarDetailSep2','toolbarDetailActions3'];
-
-function _setView(mode){
-  const isList = mode === 'list';
-  document.getElementById('viewWorkspaceList').style.display = isList ? 'block' : 'none';
-  document.getElementById('viewWorkspaceDetail').style.display = isList ? 'none' : 'block';
-  _toolbarListEls.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = isList ? '' : 'none'; });
-  _toolbarDetailEls.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = isList ? 'none' : ''; });
-}
+let _ws = null;  // the single default workspace (used internally)
 
 function _updateStatusLine(text){
   const el = document.getElementById('projects_status_line');
@@ -68,14 +53,6 @@ document.querySelectorAll('.modal-close-x').forEach(b => {
   b.addEventListener('click', () => { b.closest('.modal-overlay').style.display = 'none'; });
 });
 
-// --- Color chips ---
-document.querySelectorAll('#nwColors .color-chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    document.querySelectorAll('#nwColors .color-chip').forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-  });
-});
-
 // --- Type buttons ---
 document.querySelectorAll('.sp-type-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -84,206 +61,33 @@ document.querySelectorAll('.sp-type-btn').forEach(btn => {
   });
 });
 
-// --- Bulk-delete selection helpers ---
-function _updateBulkDeleteBtn(){
-  const btn = document.getElementById('btnBulkDelete');
-  if(!btn) return;
-  if(_selectedWsIds.size > 0){
-    btn.style.display = '';
-    btn.classList.add('active');
-    btn.title = 'Usuń zaznaczone projekty (' + _selectedWsIds.size + ')';
-  } else {
-    btn.classList.remove('active');
-    btn.style.display = 'none';
-  }
-}
-
-function _toggleWsSelection(wsId, checkbox, card){
-  if(checkbox.checked){
-    _selectedWsIds.add(wsId);
-    card.classList.add('selected');
-  } else {
-    _selectedWsIds.delete(wsId);
-    card.classList.remove('selected');
-  }
-  _updateBulkDeleteBtn();
-}
-
 // =====================================================================
-// WORKSPACE LIST
+// LOAD & RENDER PROJECTS
 // =====================================================================
 
-async function loadWorkspaces(){
+async function loadProjects(){
   try {
-    const data = await apiFetch(API);
-    renderWorkspaceList(data.workspaces || []);
-  } catch(e) {
-    console.error(e);
-  }
-  loadInvitations();
-  loadArchivedWorkspaces();
-}
-
-function renderWorkspaceList(workspaces){
-  const list = document.getElementById('workspaceList');
-  const empty = document.getElementById('workspaceEmpty');
-  list.innerHTML = '';
-  _selectedWsIds.clear();
-  _updateBulkDeleteBtn();
-  _activeCount = workspaces.length;
-  _updateStatusLine(_activeCount + ' aktywnych' + (_archivedCount ? ', ' + _archivedCount + ' w archiwum' : ''));
-  if(!workspaces.length){ empty.style.display = 'block'; return; }
-  empty.style.display = 'none';
-
-  workspaces.forEach(ws => {
-    const role = ws.my_role ? `<span style="font-size:.68rem;padding:1px 6px;border-radius:4px;background:${ws.my_role==='owner'?'var(--accent)':'#888'};color:#fff;font-weight:600">${ROLE_LABELS[ws.my_role]||ws.my_role}</span>` : '';
-    const card = document.createElement('div');
-    card.className = 'ws-card';
-    card.style.cssText = 'cursor:pointer;border-left:3px solid '+esc(ws.color||'#4a6cf7');
-    card.innerHTML = `
-      <span class="ws-card-chevron">&#9654;</span>
-      <div class="ws-card-name">${esc(ws.name)}</div>
-      <div class="ws-card-info small">${ws.subproject_count||0} podpr. · ${ws.member_count||1} czł. · ${shortDate(ws.updated_at)} ${role}</div>
-      <input type="checkbox" class="ws-card-check" data-ws-id="${ws.id}" title="Zaznacz do usunięcia">
-    `;
-    // Click card → open workspace (but not when clicking checkbox)
-    card.addEventListener('click', (e) => {
-      if(e.target.classList.contains('ws-card-check')) return;
-      openWorkspace(ws.id);
-    });
-    // Checkbox toggle
-    const cb = card.querySelector('.ws-card-check');
-    cb.addEventListener('click', (e) => {
-      e.stopPropagation();
-      _toggleWsSelection(ws.id, cb, card);
-    });
-    list.appendChild(card);
-  });
-}
-
-async function loadInvitations(){
-  try {
-    const data = await apiFetch(API + '/invitations/mine');
-    const invs = data.invitations || [];
-    const section = document.getElementById('invitationsSection');
-    const list = document.getElementById('invitationsList');
-    document.getElementById('invCount').textContent = invs.length;
-    if(!invs.length){ section.style.display = 'none'; return; }
-    section.style.display = 'block';
-    list.innerHTML = '';
-    invs.forEach(inv => {
-      const card = document.createElement('div');
-      card.className = 'subcard';
-      card.style.borderLeft = '4px solid ' + esc(inv.workspace_color || '#4a6cf7');
-      card.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-          <div>
-            <div style="font-weight:700">"${esc(inv.workspace_name)}" od ${esc(inv.inviter_name)}</div>
-            <div class="small">Rola: <b>${ROLE_LABELS[inv.role]||inv.role}</b>${inv.message ? ' · '+esc(inv.message) : ''} · ${shortDate(inv.created_at)}</div>
-          </div>
-          <div style="display:flex;gap:6px">
-            <button class="btn" data-accept="${inv.id}" style="padding:4px 14px;font-size:.85rem">${aiIcon('success',14)} Akceptuj</button>
-            <button class="btn danger" data-reject="${inv.id}" style="padding:4px 14px;font-size:.85rem">${aiIcon('close',14)} Odrzuć</button>
-          </div>
-        </div>
-      `;
-      card.querySelector('[data-accept]').addEventListener('click', async(e)=>{
-        e.stopPropagation();
-        try {
-          await apiFetch(API+'/invitations/'+inv.id+'/accept', {method:'POST'});
-          showToast('Zaproszenie zaakceptowane','success');
-          loadWorkspaces();
-        } catch(err){
-          console.error('Accept invitation error:', err);
-          showToast(err.message || 'Błąd akceptacji zaproszenia','error');
-        }
-      });
-      card.querySelector('[data-reject]').addEventListener('click', async(e)=>{
-        e.stopPropagation();
-        try {
-          await apiFetch(API+'/invitations/'+inv.id+'/reject', {method:'POST'});
-          showToast('Zaproszenie odrzucone','info');
-          loadWorkspaces();
-        } catch(err){
-          console.error('Reject invitation error:', err);
-          showToast(err.message || 'Błąd odrzucenia zaproszenia','error');
-        }
-      });
-      list.appendChild(card);
-    });
+    const data = await apiFetch(API + '/default');
+    _ws = data.workspace;
+    renderProjects(_ws);
   } catch(e){
-    console.error('Load invitations error:', e);
+    console.error('Load projects error:', e);
+    _updateStatusLine('Błąd ładowania');
   }
 }
 
-async function loadArchivedWorkspaces(){
-  try {
-    const data = await apiFetch(API + '?status=archived');
-    const ws = data.workspaces || [];
-    _archivedCount = ws.length;
-    _updateStatusLine(_activeCount + ' aktywnych' + (_archivedCount ? ', ' + _archivedCount + ' w archiwum' : ''));
-    const section = document.getElementById('archivedSection');
-    const list = document.getElementById('archivedList');
-    if(!ws.length){ section.style.display = 'none'; return; }
-    section.style.display = 'block';
-    list.innerHTML = '';
-    ws.forEach(w => {
-      const card = document.createElement('div');
-      card.className = 'subcard';
-      card.style.opacity = '.6';
-      card.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <span style="font-weight:600">${esc(w.name)}</span>
-          <button class="btn secondary btn-restore" style="font-size:.78rem;padding:3px 10px" data-id="${w.id}">Przywróć</button>
-        </div>`;
-      card.querySelector('.btn-restore').addEventListener('click', async(e) => {
-        e.stopPropagation();
-        try {
-          await apiFetch(API+'/'+w.id, {method:'PATCH', body:JSON.stringify({status:'active'})});
-          showToast('Projekt przywrócony','success');
-          loadWorkspaces();
-        } catch(err){ showToast(err.message || 'Błąd przywracania','error'); }
-      });
-      list.appendChild(card);
-    });
-  } catch(e){ console.error(e); }
-}
+function renderProjects(ws){
+  const projects = ws.subprojects || [];
+  const pList = document.getElementById('projectList');
+  const pEmpty = document.getElementById('projectEmpty');
+  pList.innerHTML = '';
 
-// =====================================================================
-// WORKSPACE DETAIL
-// =====================================================================
+  _updateStatusLine(projects.length + ' projekt' + (projects.length === 1 ? '' : (projects.length < 5 ? 'y' : 'ów')));
 
-async function openWorkspace(wsId){
-  try {
-    const data = await apiFetch(API + '/' + wsId);
-    _currentWs = data.workspace;
-    renderWorkspaceDetail(_currentWs);
-    _setView('detail');
-    // Update URL without reload
-    history.pushState({wsId}, '', '/projects/' + wsId);
-  } catch(e){
-    console.error(e);
-    showToast(e.message || 'Błąd', 'error');
-  }
-}
+  if(!projects.length){ pEmpty.style.display = 'block'; }
+  else { pEmpty.style.display = 'none'; }
 
-function renderWorkspaceDetail(ws){
-  document.getElementById('wsDetailName').textContent = ws.name;
-  document.getElementById('wsDetailDesc').textContent = ws.description || '';
-  document.getElementById('wsDetailRole').textContent = ROLE_LABELS[ws.my_role] || ws.my_role || '';
-  const spCount = (ws.subprojects || []).length;
-  const mCount = (ws.members || []).length;
-  _updateStatusLine(ws.name + ' · ' + spCount + ' podpr. · ' + mCount + ' czł.');
-
-  // Subprojects
-  const spList = document.getElementById('subprojectList');
-  const spEmpty = document.getElementById('subprojectEmpty');
-  const subs = ws.subprojects || [];
-  spList.innerHTML = '';
-  if(!subs.length){ spEmpty.style.display = 'block'; }
-  else { spEmpty.style.display = 'none'; }
-
-  subs.forEach(sp => {
+  projects.forEach(sp => {
     const icon = TYPE_ICONS[sp.subproject_type] || aiIcon('document', 18);
     const typeLabel = TYPE_LABELS[sp.subproject_type] || sp.subproject_type;
     const links = (sp.links || []).map(l =>
@@ -301,12 +105,12 @@ function renderWorkspaceDetail(ws){
           ${links ? '<div style="margin-top:2px">'+links+'</div>' : ''}
         </div>
         <div style="display:flex;gap:4px">
-          <button class="btn secondary sp-open" data-id="${sp.id}" data-type="${sp.subproject_type}" data-dir="${esc(sp.data_dir)}" data-audio="${esc(sp.audio_file)}" style="font-size:.78rem;padding:3px 10px">Otwórz</button>
-          <button class="btn danger sp-del" data-id="${sp.id}" style="font-size:.78rem;padding:3px 8px" title="Usuń">${aiIcon('delete',14)}</button>
+          <button class="btn secondary sp-open" style="font-size:.78rem;padding:3px 10px">Otwórz</button>
+          <button class="btn danger sp-del" style="font-size:.78rem;padding:3px 8px" title="Usuń">${aiIcon('delete',14)}</button>
         </div>
       </div>`;
 
-    // Open subproject → navigate to the right page with projectId set
+    // Open project → navigate to the right page
     card.querySelector('.sp-open').addEventListener('click', (e) => {
       e.stopPropagation();
       const dir = sp.data_dir || '';
@@ -314,7 +118,6 @@ function renderWorkspaceDetail(ws){
       if(projectId) {
         AISTATE.projectId = projectId;
         AISTATE.audioFile = sp.audio_file || '';
-        // Store workspace context
         localStorage.setItem('aistate_workspace_id', ws.id);
         localStorage.setItem('aistate_workspace_name', ws.name);
         localStorage.setItem('aistate_subproject_name', sp.name);
@@ -323,29 +126,36 @@ function renderWorkspaceDetail(ws){
       window.location.href = route;
     });
 
+    // Inline delete
     card.querySelector('.sp-del').addEventListener('click', async(e) => {
       e.stopPropagation();
-      if(!confirm('Usunąć podprojekt "' + sp.name + '"?')) return;
+      if(!confirm('Usunąć projekt "' + sp.name + '"?')) return;
       try {
         await apiFetch(API + '/' + ws.id + '/subprojects/' + sp.id, {method:'DELETE'});
-        showToast('Podprojekt usunięty','info');
-        await openWorkspace(ws.id);
-        loadWorkspaces();
+        showToast('Projekt usunięty','info');
+        await loadProjects();
       } catch(err) { showToast(err.message, 'error'); }
     });
 
-    spList.appendChild(card);
+    // Click card → also open
+    card.addEventListener('click', () => {
+      card.querySelector('.sp-open').click();
+    });
+
+    pList.appendChild(card);
   });
 
-  // Populate link-to dropdown in new subproject modal
-  const linkSelect = document.getElementById('nsLinkTo');
-  linkSelect.innerHTML = '<option value="">— brak —</option>';
-  subs.forEach(sp => {
-    const opt = document.createElement('option');
-    opt.value = sp.id;
-    opt.textContent = sp.name;
-    linkSelect.appendChild(opt);
-  });
+  // Populate link-to dropdown in new project modal
+  const linkSelect = document.getElementById('npLinkTo');
+  if(linkSelect){
+    linkSelect.innerHTML = '<option value="">— brak —</option>';
+    projects.forEach(sp => {
+      const opt = document.createElement('option');
+      opt.value = sp.id;
+      opt.textContent = sp.name;
+      linkSelect.appendChild(opt);
+    });
+  }
 
   // Members
   const mList = document.getElementById('membersList');
@@ -370,7 +180,7 @@ function renderWorkspaceDetail(ws){
         try {
           await apiFetch(API+'/'+ws.id+'/members/'+m.user_id, {method:'DELETE'});
           showToast('Użytkownik usunięty','info');
-          openWorkspace(ws.id);
+          loadProjects();
         } catch(err){ showToast(err.message || 'Błąd','error'); }
       });
     }
@@ -391,88 +201,41 @@ function renderWorkspaceDetail(ws){
 
   // Show/hide management buttons based on role
   const canManage = ws.my_role === 'owner' || ws.my_role === 'manager';
-  document.getElementById('btnInviteUser').style.display = canManage ? '' : 'none';
-  document.getElementById('btnArchiveWorkspace').style.display = canManage ? '' : 'none';
-  document.getElementById('btnDeleteWorkspace').style.display = ws.my_role === 'owner' ? '' : 'none';
-  document.getElementById('btnNewSubproject').style.display =
-    (ws.my_role === 'owner' || ws.my_role === 'manager' || ws.my_role === 'editor') ? '' : 'none';
+  const btnInvite = document.getElementById('btnInviteUser');
+  const btnNew = document.getElementById('btnNewProject');
+  if(btnInvite) btnInvite.style.display = canManage ? '' : 'none';
+  if(btnNew) btnNew.style.display = (ws.my_role === 'owner' || ws.my_role === 'manager' || ws.my_role === 'editor') ? '' : 'none';
 }
 
 // =====================================================================
-// CREATE WORKSPACE
+// CREATE PROJECT
 // =====================================================================
 
-document.getElementById('btnNewWorkspace').addEventListener('click', () => {
-  document.getElementById('nwName').value = '';
-  document.getElementById('nwDesc').value = '';
-  showModal('modalNewWorkspace');
-  document.getElementById('nwName').focus();
+document.getElementById('btnNewProject').addEventListener('click', () => {
+  document.getElementById('npName').value = '';
+  document.querySelectorAll('.sp-type-btn').forEach(b => b.classList.remove('active'));
+  const firstTypeBtn = document.querySelector('.sp-type-btn');
+  if(firstTypeBtn) firstTypeBtn.classList.add('active');
+  showModal('modalNewProject');
+  document.getElementById('npName').focus();
 });
 
-document.getElementById('nwSubmit').addEventListener('click', async () => {
-  const name = document.getElementById('nwName').value.trim();
-  if(!name){ showToast('Podaj nazwę','warning'); return; }
-  const desc = document.getElementById('nwDesc').value.trim();
-  const color = document.querySelector('#nwColors .color-chip.active')?.dataset?.color || '#4a6cf7';
-  try {
-    const data = await apiFetch(API, {method:'POST', body:JSON.stringify({name, description:desc, color})});
-    hideModal('modalNewWorkspace');
-    showToast('Projekt utworzony','success');
-    // Set _currentWs directly so nsSubmit can use it
-    if(data && data.workspace){
-      _currentWs = data.workspace;
-      _currentWs.subprojects = _currentWs.subprojects || [];
-      _currentWs.members = _currentWs.members || [];
-      _currentWs.activity = _currentWs.activity || [];
-    }
-    // Refresh the workspace list
-    await loadWorkspaces();
-    // Open subproject modal after a brief delay to let DOM settle
-    setTimeout(() => {
-      document.getElementById('nsName').value = name;
-      document.querySelectorAll('.sp-type-btn').forEach(b => b.classList.remove('active'));
-      const firstTypeBtn = document.querySelector('.sp-type-btn');
-      if(firstTypeBtn) firstTypeBtn.classList.add('active');
-      showModal('modalNewSubproject');
-      document.getElementById('nsName').focus();
-    }, 200);
-  } catch(e){
-    console.error('Create workspace error:', e);
-    showToast(e.message || 'Błąd tworzenia projektu','error');
-  }
-});
-
-// =====================================================================
-// CREATE SUBPROJECT
-// =====================================================================
-
-document.getElementById('btnNewSubproject').addEventListener('click', () => {
-  const subs = (_currentWs && _currentWs.subprojects) || [];
-  // Pre-fill name with workspace name if no subprojects yet
-  document.getElementById('nsName').value = (subs.length === 0 && _currentWs) ? _currentWs.name : '';
-  showModal('modalNewSubproject');
-  document.getElementById('nsName').focus();
-});
-
-document.getElementById('nsSubmit').addEventListener('click', async () => {
-  if(!_currentWs){ showToast('Najpierw otwórz projekt','warning'); return; }
-  const name = document.getElementById('nsName').value.trim();
+document.getElementById('npSubmit').addEventListener('click', async () => {
+  if(!_ws){ showToast('Brak danych','warning'); return; }
+  const name = document.getElementById('npName').value.trim();
   if(!name){ showToast('Podaj nazwę','warning'); return; }
   const type = document.querySelector('.sp-type-btn.active')?.dataset?.type || 'analysis';
-  const linkTo = document.getElementById('nsLinkTo').value;
+  const linkTo = document.getElementById('npLinkTo').value;
   try {
-    await apiFetch(API+'/'+_currentWs.id+'/subprojects', {
+    await apiFetch(API+'/'+_ws.id+'/subprojects', {
       method:'POST', body:JSON.stringify({name, type, link_to:linkTo})
     });
-    hideModal('modalNewSubproject');
-    showToast('Podprojekt utworzony','success');
-    // Switch to detail view and refresh
-    await openWorkspace(_currentWs.id);
-    // Also refresh workspace list in background
-    loadWorkspaces();
+    hideModal('modalNewProject');
+    showToast('Projekt utworzony','success');
+    await loadProjects();
   } catch(e){
-    console.error('Create subproject error:', e);
-    showToast(e.message || 'Błąd tworzenia podprojektu','error');
+    console.error('Create project error:', e);
+    showToast(e.message || 'Błąd tworzenia projektu','error');
   }
 });
 
@@ -488,102 +251,131 @@ document.getElementById('btnInviteUser').addEventListener('click', () => {
 });
 
 document.getElementById('invSubmit').addEventListener('click', async () => {
-  if(!_currentWs) return;
+  if(!_ws) return;
   const username = document.getElementById('invUsername').value.trim();
   if(!username){ showToast('Podaj nazwę użytkownika','warning'); return; }
   const role = document.querySelector('input[name="invRole"]:checked')?.value || 'viewer';
   const message = document.getElementById('invMessage').value.trim();
   try {
-    await apiFetch(API+'/'+_currentWs.id+'/invite', {
+    await apiFetch(API+'/'+_ws.id+'/invite', {
       method:'POST', body:JSON.stringify({username, role, message})
     });
     hideModal('modalInviteUser');
     showToast('Zaproszenie wysłane','success');
-    openWorkspace(_currentWs.id);
+    loadProjects();
   } catch(e){ showToast(e.message,'error'); }
 });
 
 // =====================================================================
-// WORKSPACE ACTIONS
+// DELETE PROJECT (with wipe options)
 // =====================================================================
 
-document.getElementById('btnBackToList').addEventListener('click', () => {
-  _setView('list');
-  _currentWs = null;
-  history.pushState({}, '', '/projects');
-  loadWorkspaces();
-});
+(function(){
+  const btn = document.getElementById('btnDeleteProject');
+  const select = document.getElementById('delProjSelect');
+  const wipeSelect = document.getElementById('delProjWipeMethod');
+  const confirmBtn = document.getElementById('delProjConfirm');
+  if(!btn) return;
 
-document.getElementById('btnArchiveWorkspace').addEventListener('click', async () => {
-  if(!_currentWs) return;
-  if(!confirm('Archiwizować projekt "'+_currentWs.name+'"?')) return;
-  try {
-    await apiFetch(API+'/'+_currentWs.id, {method:'PATCH', body:JSON.stringify({status:'archived'})});
-    _setView('list');
-    _currentWs = null;
-    history.pushState({}, '', '/projects');
-    loadWorkspaces();
-    showToast('Projekt zarchiwizowany','success');
-  } catch(e){ showToast(e.message || 'Błąd archiwizacji','error'); }
-});
-
-document.getElementById('btnDeleteWorkspace').addEventListener('click', async () => {
-  if(!_currentWs) return;
-  if(!confirm('USUNĄĆ projekt "'+_currentWs.name+'"? Ta operacja jest nieodwracalna!')) return;
-  try {
-    await apiFetch(API+'/'+_currentWs.id, {method:'DELETE'});
-    _setView('list');
-    _currentWs = null;
-    history.pushState({}, '', '/projects');
-    loadWorkspaces();
-    showToast('Projekt usunięty','info');
-  } catch(e){ showToast(e.message || 'Błąd usuwania','error'); }
-});
-
-// =====================================================================
-// BULK DELETE WORKSPACES
-// =====================================================================
-
-document.getElementById('btnBulkDelete').addEventListener('click', () => {
-  if(_selectedWsIds.size === 0) return;
-  const info = document.getElementById('bulkDeleteInfo');
-  if(info) info.innerHTML = 'Wybrano <b>' + _selectedWsIds.size + '</b> projekt' +
-    (_selectedWsIds.size === 1 ? '' : (_selectedWsIds.size < 5 ? 'y' : 'ów')) +
-    ' do usunięcia wraz ze wszystkimi podprojektami i danymi.';
-  showModal('modalBulkDeleteWorkspace');
-});
-
-document.getElementById('bulkDeleteConfirm').addEventListener('click', async () => {
-  if(_selectedWsIds.size === 0) return;
-  const wipe = document.getElementById('bulkDeleteWipeMethod').value || 'none';
-  const ids = Array.from(_selectedWsIds);
-  const btn = document.getElementById('bulkDeleteConfirm');
-  btn.disabled = true;
-  btn.textContent = 'Usuwanie...';
-  try {
-    const data = await apiFetch(API + '/bulk-delete', {
-      method: 'POST',
-      body: JSON.stringify({ workspace_ids: ids, wipe_method: wipe })
-    });
-    hideModal('modalBulkDeleteWorkspace');
-    const delCount = (data.deleted || []).length;
-    const errCount = (data.errors || []).length;
-    if(errCount > 0){
-      showToast('Usunięto ' + delCount + ', błędy: ' + errCount, 'warning');
-    } else {
-      showToast('Usunięto ' + delCount + ' projekt' + (delCount === 1 ? '' : (delCount < 5 ? 'y' : 'ów')), 'success');
+  btn.addEventListener('click', () => {
+    if(!_ws) return;
+    const subs = _ws.subprojects || [];
+    select.innerHTML = '';
+    if(!subs.length){
+      showToast('Brak projektów do usunięcia', 'warning');
+      return;
     }
-    _selectedWsIds.clear();
-    _updateBulkDeleteBtn();
-    loadWorkspaces();
-  } catch(e){
-    console.error('Bulk delete error:', e);
-    showToast(e.message || 'Błąd usuwania', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Usuń projekty';
-  }
-});
+    subs.forEach(sp => {
+      const opt = document.createElement('option');
+      opt.value = sp.id;
+      opt.dataset.dir = sp.data_dir || '';
+      opt.textContent = (TYPE_ICONS[sp.subproject_type]||'') + ' ' + sp.name;
+      select.appendChild(opt);
+    });
+    showModal('modalDeleteProject');
+  });
+
+  if(confirmBtn) confirmBtn.addEventListener('click', async () => {
+    if(!_ws || !select.value) return;
+    const spId = select.value;
+    const sp = (_ws.subprojects||[]).find(s => s.id === spId);
+    const wipe = wipeSelect ? wipeSelect.value : 'none';
+    const dir = sp && sp.data_dir ? sp.data_dir.replace('projects/','') : '';
+
+    if(!confirm('Na pewno usunąć projekt "' + (sp?sp.name:spId) + '"?')) return;
+
+    try {
+      if(dir){
+        await fetch('/api/projects/' + encodeURIComponent(dir) + '?wipe_method=' + encodeURIComponent(wipe), {method:'DELETE'});
+      }
+      await apiFetch(API + '/' + _ws.id + '/subprojects/' + spId, {method:'DELETE'});
+      hideModal('modalDeleteProject');
+      showToast('Projekt usunięty', 'success');
+      await loadProjects();
+    } catch(err){
+      console.error(err);
+      showToast(err.message || 'Błąd usuwania', 'error');
+    }
+  });
+})();
+
+// =====================================================================
+// EXPORT PROJECT (.aistate)
+// =====================================================================
+
+(function(){
+  const btn = document.getElementById('btnExportProject');
+  const select = document.getElementById('expProjSelect');
+  const confirmBtn = document.getElementById('expProjConfirm');
+  if(!btn) return;
+
+  btn.addEventListener('click', () => {
+    if(!_ws) return;
+    const subs = _ws.subprojects || [];
+    select.innerHTML = '';
+    if(!subs.length){
+      showToast('Brak projektów do eksportu', 'warning');
+      return;
+    }
+    subs.forEach(sp => {
+      const opt = document.createElement('option');
+      opt.value = sp.id;
+      opt.dataset.dir = sp.data_dir || '';
+      opt.dataset.name = sp.name || '';
+      opt.textContent = (TYPE_ICONS[sp.subproject_type]||'') + ' ' + sp.name;
+      select.appendChild(opt);
+    });
+    showModal('modalExportProject');
+  });
+
+  if(confirmBtn) confirmBtn.addEventListener('click', async () => {
+    if(!select.value) return;
+    const opt = select.options[select.selectedIndex];
+    const dir = (opt.dataset.dir || '').replace('projects/','');
+    const fname = (opt.dataset.name || dir || 'project').replace(/[\\\/:*?"<>|]+/g,'_').trim() || 'project';
+
+    if(!dir){
+      showToast('Projekt nie ma katalogu danych', 'warning');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/projects/' + encodeURIComponent(dir) + '/export.aistate');
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname + '.aistate';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      hideModal('modalExportProject');
+      showToast('Eksport zakończony', 'success');
+    } catch(err){
+      console.error(err);
+      showToast(err.message || 'Błąd eksportu', 'error');
+    }
+  });
+})();
 
 // =====================================================================
 // IMPORT PROJECT (.aistate)
@@ -615,12 +407,7 @@ document.getElementById('bulkDeleteConfirm').addEventListener('click', async () 
       const j = await r.json();
       if(!r.ok) throw new Error(j.message || j.detail || 'Import failed');
       showToast('Projekt zaimportowany', 'success');
-      // If inside a workspace, reload detail; otherwise reload list
-      if(_currentWs){
-        openWorkspace(_currentWs.id);
-      } else {
-        loadWorkspaces();
-      }
+      await loadProjects();
     } catch(err){
       console.error(err);
       showToast(err.message || 'Błąd importu', 'error');
@@ -629,142 +416,9 @@ document.getElementById('bulkDeleteConfirm').addEventListener('click', async () 
 })();
 
 // =====================================================================
-// DELETE SUBPROJECT (with wipe options)
+// INIT
 // =====================================================================
 
-(function(){
-  const btn = document.getElementById('btnDeleteSubproject');
-  const select = document.getElementById('delSubSelect');
-  const wipeSelect = document.getElementById('delSubWipeMethod');
-  const confirmBtn = document.getElementById('delSubConfirm');
-  if(!btn) return;
-
-  btn.addEventListener('click', () => {
-    if(!_currentWs) return;
-    const subs = _currentWs.subprojects || [];
-    select.innerHTML = '';
-    if(!subs.length){
-      showToast('Brak podprojektów do usunięcia', 'warning');
-      return;
-    }
-    subs.forEach(sp => {
-      const opt = document.createElement('option');
-      opt.value = sp.id;
-      opt.dataset.dir = sp.data_dir || '';
-      opt.textContent = (TYPE_ICONS[sp.subproject_type]||'') + ' ' + sp.name;
-      select.appendChild(opt);
-    });
-    showModal('modalDeleteSubproject');
-  });
-
-  if(confirmBtn) confirmBtn.addEventListener('click', async () => {
-    if(!_currentWs || !select.value) return;
-    const spId = select.value;
-    const sp = (_currentWs.subprojects||[]).find(s => s.id === spId);
-    const wipe = wipeSelect ? wipeSelect.value : 'none';
-    const dir = sp && sp.data_dir ? sp.data_dir.replace('projects/','') : '';
-
-    if(!confirm('Na pewno usunąć podprojekt "' + (sp?sp.name:spId) + '"?')) return;
-
-    try {
-      // Delete underlying project data with wipe if data_dir exists
-      if(dir){
-        await fetch('/api/projects/' + encodeURIComponent(dir) + '?wipe_method=' + encodeURIComponent(wipe), {method:'DELETE'});
-      }
-      // Delete subproject record from workspace
-      await apiFetch(API + '/' + _currentWs.id + '/subprojects/' + spId, {method:'DELETE'});
-      hideModal('modalDeleteSubproject');
-      showToast('Podprojekt usunięty', 'success');
-      await openWorkspace(_currentWs.id);
-      loadWorkspaces();
-    } catch(err){
-      console.error(err);
-      showToast(err.message || 'Błąd usuwania', 'error');
-    }
-  });
-})();
-
-// =====================================================================
-// EXPORT SUBPROJECT (.aistate)
-// =====================================================================
-
-(function(){
-  const btn = document.getElementById('btnExportSubproject');
-  const select = document.getElementById('expSubSelect');
-  const confirmBtn = document.getElementById('expSubConfirm');
-  if(!btn) return;
-
-  btn.addEventListener('click', () => {
-    if(!_currentWs) return;
-    const subs = _currentWs.subprojects || [];
-    select.innerHTML = '';
-    if(!subs.length){
-      showToast('Brak podprojektów do eksportu', 'warning');
-      return;
-    }
-    subs.forEach(sp => {
-      const opt = document.createElement('option');
-      opt.value = sp.id;
-      opt.dataset.dir = sp.data_dir || '';
-      opt.dataset.name = sp.name || '';
-      opt.textContent = (TYPE_ICONS[sp.subproject_type]||'') + ' ' + sp.name;
-      select.appendChild(opt);
-    });
-    showModal('modalExportSubproject');
-  });
-
-  if(confirmBtn) confirmBtn.addEventListener('click', async () => {
-    if(!select.value) return;
-    const opt = select.options[select.selectedIndex];
-    const dir = (opt.dataset.dir || '').replace('projects/','');
-    const fname = (opt.dataset.name || dir || 'project').replace(/[\\\/:*?"<>|]+/g,'_').trim() || 'project';
-
-    if(!dir){
-      showToast('Podprojekt nie ma katalogu danych', 'warning');
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/projects/' + encodeURIComponent(dir) + '/export.aistate');
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = fname + '.aistate';
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      hideModal('modalExportSubproject');
-      showToast('Eksport zakończony', 'success');
-    } catch(err){
-      console.error(err);
-      showToast(err.message || 'Błąd eksportu', 'error');
-    }
-  });
-})();
-
-// =====================================================================
-// URL-BASED NAVIGATION (handle /projects/{id} on page load)
-// =====================================================================
-
-(function init(){
-  const path = window.location.pathname;
-  const match = path.match(/^\/projects\/([a-f0-9]+)$/);
-  if(match){
-    openWorkspace(match[1]);
-  } else {
-    loadWorkspaces();
-  }
-
-  // Handle browser back/forward
-  window.addEventListener('popstate', (e) => {
-    if(e.state && e.state.wsId){
-      openWorkspace(e.state.wsId);
-    } else {
-      _setView('list');
-      _currentWs = null;
-      loadWorkspaces();
-    }
-  });
-})();
+loadProjects();
 
 })();
