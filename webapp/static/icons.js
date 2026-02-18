@@ -34,7 +34,8 @@
     var d = document.createElement("div");
     d.id = DEFS_ID;
     d.innerHTML = DEFS_SVG;
-    document.body.insertBefore(d, document.body.firstChild);
+    var target = document.body || document.documentElement;
+    target.insertBefore(d, target.firstChild);
     _defsInjected = true;
   }
 
