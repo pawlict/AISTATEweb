@@ -26,4 +26,5 @@
 <line x1="34" y1="4" x2="42" y2="16" stroke="url(#spn)" stroke-width="2.5"/>
 <path d="M42 16l1.5 3-3 .5z" stroke="url(#spn)" stroke-width="1.2" fill="#a855f7" fill-opacity=".2"/>
 <rect x="33" y="3" width="2.5" height="5" rx="1" transform="rotate(-30 34 5)" stroke="url(#spn)" stroke-width="1" fill="url(#spn)" fill-opacity=".1"/>
+
 </svg>

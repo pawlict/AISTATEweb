@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="pdu" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#7ee8fa"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#00d4ff" stroke-width="1" fill="none" opacity="0.15" stroke-linecap="round"/>
+<path d="M4 12h10l4 4h22a3 3 0 0 1 3 3v18a3 3 0 0 1-3 3H4a3 3 0 0 1-3-3V15a3 3 0 0 1 3-3z" stroke="url(#pdu)" stroke-width="2" fill="none"/>
+<rect x="30" y="26" width="12" height="14" rx="2" stroke="#00d4ff" stroke-width="1.8" fill="#0a0a12" fill-opacity=".9"/>
+<rect x="34" y="22" width="12" height="14" rx="2" stroke="#00d4ff" stroke-width="1.3" fill="none" opacity=".35"/>
+
+</svg>
