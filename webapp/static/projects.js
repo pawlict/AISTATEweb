@@ -227,11 +227,29 @@ document.getElementById('npSubmit').addEventListener('click', async () => {
   const type = document.querySelector('.sp-type-btn.active')?.dataset?.type || 'analysis';
   const linkTo = document.getElementById('npLinkTo').value;
   try {
-    await apiFetch(API+'/'+_ws.id+'/subprojects', {
+    const data = await apiFetch(API+'/'+_ws.id+'/subprojects', {
       method:'POST', body:JSON.stringify({name, type, link_to:linkTo})
     });
     hideModal('modalNewProject');
     showToast('Projekt utworzony','success');
+
+    // Auto-redirect to the matching page for typed projects
+    const route = TYPE_ROUTES[type];
+    if(route && route !== '/projects' && data.subproject){
+      const sp = data.subproject;
+      const dir = sp.data_dir || '';
+      const projectId = dir.replace('projects/', '');
+      if(projectId){
+        AISTATE.projectId = projectId;
+        AISTATE.audioFile = sp.audio_file || '';
+        localStorage.setItem('aistate_workspace_id', _ws.id);
+        localStorage.setItem('aistate_workspace_name', _ws.name);
+        localStorage.setItem('aistate_subproject_name', sp.name);
+      }
+      window.location.href = route;
+      return;
+    }
+    // For "general" type — stay on projects page
     await loadProjects();
   } catch(e){
     console.error('Create project error:', e);
