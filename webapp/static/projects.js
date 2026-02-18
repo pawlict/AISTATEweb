@@ -220,6 +220,14 @@ document.getElementById('btnNewProject').addEventListener('click', () => {
   document.getElementById('npName').focus();
 });
 
+// Enter key in project name input triggers submit
+document.getElementById('npName').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    document.getElementById('npSubmit').click();
+  }
+});
+
 document.getElementById('npSubmit').addEventListener('click', async () => {
   if(!_ws){ showToast('Brak danych','warning'); return; }
   const name = document.getElementById('npName').value.trim();
@@ -279,6 +287,14 @@ document.getElementById('btnInviteUser').addEventListener('click', () => {
   }
   showModal('modalInviteUser');
   document.getElementById('invUsername').focus();
+});
+
+// Enter key in invite username input triggers submit
+document.getElementById('invUsername').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    document.getElementById('invSubmit').click();
+  }
 });
 
 document.getElementById('invSubmit').addEventListener('click', async () => {
