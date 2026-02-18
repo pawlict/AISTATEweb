@@ -256,6 +256,25 @@ async def create_workspace(request: Request):
     return JSONResponse({"status": "ok", "workspace": ws})
 
 
+# NOTE: /default MUST be before /{workspace_id} to avoid route conflict
+@router.get("/default")
+def get_default_workspace(request: Request):
+    """Return user's default workspace (auto-create if none exists)."""
+    uid = _uid(request)
+    workspaces = _STORE.list_workspaces(uid, status="active")
+    if not workspaces:
+        ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
+    else:
+        ws = _STORE.get_workspace(workspaces[0]["id"])
+    if ws is None:
+        return JSONResponse({"status": "error", "message": "Workspace error"}, 500)
+    ws["my_role"] = _STORE.get_user_role(ws["id"], uid) or "owner"
+    ws["members"] = _STORE.list_members(ws["id"])
+    ws["subprojects"] = _STORE.list_subprojects(ws["id"])
+    ws["activity"] = _STORE.get_activity(ws["id"], limit=20)
+    return JSONResponse({"status": "ok", "workspace": ws})
+
+
 @router.get("/{workspace_id}")
 def get_workspace(request: Request, workspace_id: str):
     uid = _uid(request)

@@ -1,16 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-.ws-card{
-  display:flex; align-items:center; gap:10px; padding:8px 14px;
-  border-radius:8px; border:1px solid var(--border,#e0e0e0);
-  transition:background .15s, box-shadow .15s;
-}
-.ws-card:hover{background:var(--hover-bg,#f5f7fa);box-shadow:0 2px 8px rgba(0,0,0,.06)}
-.ws-card-chevron{color:var(--accent,#4a6cf7);font-size:10px;opacity:.5;flex-shrink:0}
-.ws-card-name{font-weight:700;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.ws-card-info{opacity:.6;white-space:nowrap;margin-left:auto;flex-shrink:0}
-
 .sp-type-btn{
   display:flex;align-items:center;justify-content:center;
   padding:10px !important;min-width:0;width:46px;height:46px;
@@ -26,16 +16,6 @@
   box-shadow:0 0 8px rgba(0,212,255,.15);
 }
 .sp-type-btn img{width:28px;height:28px}
-
-.ws-card-check{
-  flex-shrink:0;width:18px;height:18px;cursor:pointer;accent-color:var(--accent,#4a6cf7);
-}
-.ws-card.selected{
-  background:rgba(74,108,247,.06);
-  border-color:var(--accent,#4a6cf7);
-}
-#btnBulkDelete{opacity:.6;pointer-events:none;transition:opacity .2s}
-#btnBulkDelete.active{opacity:1;pointer-events:auto}
 </style>
 
 <div class="analysis-page projects-page">
@@ -49,33 +29,18 @@
 
     <div class="analysis-toolbar-right">
 
-      <!-- List-view actions -->
-      <div class="toolbar-section" id="toolbarListActions">
-        <button class="btn pill-icon" id="btnNewWorkspace" title="Nowy projekt" data-i18n-title="projects.new_ws"><img src="/static/icons/projekty/project_new.svg" alt="Nowy" draggable="false"></button>
+      <div class="toolbar-section" id="toolbarActions1">
+        <button class="btn pill-icon" id="btnNewProject" title="Nowy projekt"><img src="/static/icons/projekty/project_subproject.svg" alt="Nowy projekt" draggable="false"></button>
         <button class="btn pill-icon" id="btnImportProject" title="Import" data-i18n-title="projects.import.btn"><img src="/static/icons/pliki/file_import.svg" alt="Import" draggable="false"></button>
-        <button class="btn pill-icon danger" id="btnBulkDelete" title="Usuń zaznaczone projekty" style="display:none"><img src="/static/icons/pliki/file_delete.svg" alt="Usuń" draggable="false"></button>
+        <button class="btn pill-icon" id="btnInviteUser" title="Zaproś użytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="Zaproś" draggable="false"></button>
         <input id="importAistateFile" type="file" accept=".aistate" style="display:none"/>
       </div>
 
-      <!-- Detail-view actions (hidden by default) -->
-      <div class="toolbar-section" id="toolbarDetailActions" style="display:none">
-        <button class="btn pill-icon" id="btnBackToList" title="Powrót do listy"><img src="/static/icons/akcje/back.svg" alt="Powrót" draggable="false"></button>
-      </div>
+      <div class="toolbar-sep"></div>
 
-      <div class="toolbar-sep" id="toolbarDetailSep1" style="display:none"></div>
-
-      <div class="toolbar-section" id="toolbarDetailActions2" style="display:none">
-        <button class="btn pill-icon" id="btnNewSubproject" title="Nowy podprojekt"><img src="/static/icons/projekty/project_subproject.svg" alt="Podprojekt" draggable="false"></button>
-        <button class="btn pill-icon" id="btnInviteUser" title="Zaproś użytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="Zaproś" draggable="false"></button>
-      </div>
-
-      <div class="toolbar-sep" id="toolbarDetailSep2" style="display:none"></div>
-
-      <div class="toolbar-section" id="toolbarDetailActions3" style="display:none">
-        <button class="btn pill-icon" id="btnExportSubproject" title="Eksportuj podprojekt"><img src="/static/icons/pliki/file_export.svg" alt="Eksportuj" draggable="false"></button>
-        <button class="btn pill-icon" id="btnArchiveWorkspace" title="Archiwizuj projekt"><img src="/static/icons/projekty/project_archive.svg" alt="Archiwizuj" draggable="false"></button>
-        <button class="btn pill-icon" id="btnDeleteSubproject" title="Usuń podprojekt"><img src="/static/icons/akcje/remove.svg" alt="Usuń podprojekt" draggable="false"></button>
-        <button class="btn pill-icon" id="btnDeleteWorkspace" title="Usuń projekt"><img src="/static/icons/pliki/file_delete.svg" alt="Usuń" draggable="false"></button>
+      <div class="toolbar-section" id="toolbarActions2">
+        <button class="btn pill-icon" id="btnExportProject" title="Eksportuj projekt"><img src="/static/icons/pliki/file_export.svg" alt="Eksportuj" draggable="false"></button>
+        <button class="btn pill-icon" id="btnDeleteProject" title="Usuń projekt"><img src="/static/icons/akcje/remove.svg" alt="Usuń" draggable="false"></button>
       </div>
 
     </div>
@@ -84,116 +49,46 @@
   <!-- ===== CONTENT ===== -->
   <div class="card" id="projectsApp">
 
-    <!-- ===== WORKSPACE LIST VIEW ===== -->
-    <div id="viewWorkspaceList">
-
-      <!-- Pending invitations -->
-      <div id="invitationsSection" style="display:none">
-        <div class="label" style="font-weight:700;color:var(--accent);margin-bottom:6px">
-          <i data-icon="mail" data-size="14"></i> <span data-i18n="projects.invitations">Zaproszenia</span> (<span id="invCount">0</span>)
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start" id="projectsGrid">
+      <!-- LEFT: Projects -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="label" style="font-weight:700" data-i18n="projects.subprojects">Projekty</div>
         </div>
-        <div id="invitationsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+        <div id="projectList" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="projectEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6">Brak projektów. Utwórz nowy!</div>
       </div>
 
-      <!-- Active workspaces -->
-      <div id="activeSection">
-        <div class="label" style="font-weight:700;margin-bottom:6px" data-i18n="projects.active">Aktywne</div>
-        <div id="workspaceList" style="display:flex;flex-direction:column;gap:8px"></div>
-        <div id="workspaceEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6" data-i18n="projects.no_projects">Brak projektów. Utwórz nowy!</div>
-      </div>
-
-      <!-- Archived -->
-      <div id="archivedSection" style="display:none;margin-top:16px">
-        <div class="hr"></div>
-        <details>
-          <summary class="label" style="cursor:pointer;font-weight:700;margin-bottom:6px" data-i18n="projects.archived">Zarchiwizowane</summary>
-          <div id="archivedList" style="display:flex;flex-direction:column;gap:8px;margin-top:8px"></div>
-        </details>
+      <!-- RIGHT: Team + Activity -->
+      <div>
+        <div class="subcard" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div class="label" style="font-weight:700" data-i18n="projects.team">Zespół</div>
+          </div>
+          <div id="membersList" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+        <div class="subcard">
+          <div class="label" style="font-weight:700;margin-bottom:6px" data-i18n="projects.activity">Aktywność</div>
+          <div id="activityList" style="max-height:260px;overflow-y:auto;font-size:.82rem"></div>
+        </div>
       </div>
     </div>
 
-    <!-- ===== WORKSPACE DETAIL VIEW ===== -->
-    <div id="viewWorkspaceDetail" style="display:none">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-        <div>
-          <div class="label" style="font-weight:900;color:var(--text);font-size:18px" id="wsDetailName">—</div>
-          <div class="small" id="wsDetailDesc"></div>
-        </div>
-        <div style="flex:1"></div>
-        <div class="small" id="wsDetailRole" style="font-weight:700;padding:3px 10px;border-radius:8px;background:var(--accent);color:#fff"></div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start" id="wsDetailGrid">
-        <!-- LEFT: Subprojects -->
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div class="label" style="font-weight:700" data-i18n="projects.subprojects">Podprojekty</div>
-          </div>
-          <div id="subprojectList" style="display:flex;flex-direction:column;gap:8px"></div>
-          <div id="subprojectEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6" data-i18n="projects.no_subprojects">Brak podprojektów.</div>
-        </div>
-
-        <!-- RIGHT: Team + Activity -->
-        <div>
-          <div class="subcard" style="margin-bottom:12px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <div class="label" style="font-weight:700" data-i18n="projects.team">Zespół</div>
-            </div>
-            <div id="membersList" style="display:flex;flex-direction:column;gap:4px"></div>
-          </div>
-          <div class="subcard">
-            <div class="label" style="font-weight:700;margin-bottom:6px" data-i18n="projects.activity">Aktywność</div>
-            <div id="activityList" style="max-height:260px;overflow-y:auto;font-size:.82rem"></div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 
-<!-- ===== MODAL: New Workspace ===== -->
-<div id="modalNewWorkspace" class="modal-overlay" style="display:none">
-  <div class="modal-panel" style="max-width:440px">
+<!-- ===== MODAL: New Project ===== -->
+<div id="modalNewProject" class="modal-overlay" style="display:none">
+  <div class="modal-panel" style="max-width:480px">
     <div class="modal-header">
       <div class="modal-title">Nowy projekt</div>
       <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
     </div>
     <div class="modal-body">
       <div class="label">Nazwa</div>
-      <input class="input" id="nwName" type="text" placeholder="np. Śledztwo KRS-2026"/>
-      <div class="label" style="margin-top:10px">Opis (opcjonalnie)</div>
-      <textarea class="input" id="nwDesc" rows="2" placeholder="Krótki opis projektu..."></textarea>
-      <div class="label" style="margin-top:10px">Kolor</div>
-      <div id="nwColors" style="display:flex;gap:6px;flex-wrap:wrap">
-        <span class="color-chip active" data-color="#4a6cf7" style="background:#4a6cf7"></span>
-        <span class="color-chip" data-color="#27ae60" style="background:#27ae60"></span>
-        <span class="color-chip" data-color="#e74c3c" style="background:#e74c3c"></span>
-        <span class="color-chip" data-color="#f39c12" style="background:#f39c12"></span>
-        <span class="color-chip" data-color="#8e44ad" style="background:#8e44ad"></span>
-        <span class="color-chip" data-color="#1abc9c" style="background:#1abc9c"></span>
-        <span class="color-chip" data-color="#e67e22" style="background:#e67e22"></span>
-        <span class="color-chip" data-color="#2c3e50" style="background:#2c3e50"></span>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn secondary modal-close-x" type="button">Anuluj</button>
-      <button class="btn" id="nwSubmit" type="button">Utwórz</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== MODAL: New Subproject ===== -->
-<div id="modalNewSubproject" class="modal-overlay" style="display:none">
-  <div class="modal-panel" style="max-width:480px">
-    <div class="modal-header">
-      <div class="modal-title">Nowy podprojekt</div>
-      <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
-    </div>
-    <div class="modal-body">
-      <div class="label">Nazwa</div>
-      <input class="input" id="nsName" type="text" placeholder="np. Przesłuchanie świadka A"/>
+      <input class="input" id="npName" type="text" placeholder="np. Przesłuchanie świadka A"/>
       <div class="label" style="margin-top:10px">Typ</div>
-      <div id="nsTypes" style="display:flex;gap:8px;flex-wrap:wrap">
+      <div id="npTypes" style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn secondary sp-type-btn active" data-type="transcription" title="Transkrypcja"><img src="/static/icons/sidebar/transcription.svg" draggable="false"></button>
         <button class="btn secondary sp-type-btn" data-type="diarization" title="Diaryzacja"><img src="/static/icons/sidebar/diarization.svg" draggable="false"></button>
         <button class="btn secondary sp-type-btn" data-type="analysis" title="Analiza"><img src="/static/icons/sidebar/analysis.svg" draggable="false"></button>
@@ -202,11 +97,11 @@
         <button class="btn secondary sp-type-btn" data-type="general" title="Ogólny"><img src="/static/icons/projekty/subproject_new.svg" draggable="false"></button>
       </div>
       <div class="label" style="margin-top:10px">Powiąż z (opcjonalnie)</div>
-      <select class="input" id="nsLinkTo"><option value="">— brak —</option></select>
+      <select class="input" id="npLinkTo"><option value="">— brak —</option></select>
     </div>
     <div class="modal-footer">
       <button class="btn secondary modal-close-x" type="button">Anuluj</button>
-      <button class="btn" id="nsSubmit" type="button">Utwórz</button>
+      <button class="btn" id="npSubmit" type="button">Utwórz</button>
     </div>
   </div>
 </div>
@@ -238,79 +133,50 @@
   </div>
 </div>
 
-<!-- ===== MODAL: Delete Subproject ===== -->
-<div id="modalDeleteSubproject" class="modal-overlay" style="display:none">
+<!-- ===== MODAL: Delete Project ===== -->
+<div id="modalDeleteProject" class="modal-overlay" style="display:none">
   <div class="modal-panel" style="max-width:480px">
     <div class="modal-header">
-      <div class="modal-title" data-i18n="projects.delete.modal.title">Usuń podprojekt</div>
+      <div class="modal-title">Usuń projekt</div>
       <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
     </div>
     <div class="modal-body">
-      <div class="label" data-i18n="projects.delete.modal.choose">Wybierz podprojekt do usunięcia</div>
-      <select id="delSubSelect" class="input"></select>
-
-      <div class="hr"></div>
-
-      <div class="label" data-i18n="projects.delete.modal.method">Metoda nadpisywania</div>
-      <select id="delSubWipeMethod" class="input">
-        <option value="none" data-i18n="projects.delete.wipe.none">Szybkie (bez nadpisywania)</option>
-        <option value="random1" data-i18n="projects.delete.wipe.random1">Pseudolosowy (1x)</option>
-        <option value="hmg_is5" data-i18n="projects.delete.wipe.hmg">British HMG IS5 (3x)</option>
-        <option value="gutmann" data-i18n="projects.delete.wipe.gutmann">Gutmann (35x)</option>
-      </select>
-      <div class="small" data-i18n="projects.delete.modal.note">Uwaga: na SSD/VM/CoW nadpisywanie może nie gwarantować pełnego „secure erase".</div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn secondary modal-close-x" type="button" data-i18n="common.cancel">Anuluj</button>
-      <button class="btn danger" id="delSubConfirm" type="button" data-i18n="projects.delete.modal.confirm">Usuń</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== MODAL: Export Subproject ===== -->
-<div id="modalExportSubproject" class="modal-overlay" style="display:none">
-  <div class="modal-panel" style="max-width:420px">
-    <div class="modal-header">
-      <div class="modal-title">Eksportuj podprojekt</div>
-      <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
-    </div>
-    <div class="modal-body">
-      <div class="label">Wybierz podprojekt</div>
-      <select id="expSubSelect" class="input"></select>
-      <div class="small" style="margin-top:8px">Podprojekt zostanie wyeksportowany jako plik <code>.aistate</code>.</div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn secondary modal-close-x" type="button">Anuluj</button>
-      <button class="btn" id="expSubConfirm" type="button">Eksportuj</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== MODAL: Bulk Delete Workspaces ===== -->
-<div id="modalBulkDeleteWorkspace" class="modal-overlay" style="display:none">
-  <div class="modal-panel" style="max-width:480px">
-    <div class="modal-header">
-      <div class="modal-title">Usuń projekty</div>
-      <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
-    </div>
-    <div class="modal-body">
-      <div class="label" style="color:var(--danger,#e74c3c);font-weight:700">Uwaga: ta operacja jest nieodwracalna!</div>
-      <div class="small" id="bulkDeleteInfo" style="margin:8px 0">Wybrano <b>0</b> projektów do usunięcia wraz ze wszystkimi podprojektami i danymi.</div>
+      <div class="label">Wybierz projekt do usunięcia</div>
+      <select id="delProjSelect" class="input"></select>
 
       <div class="hr"></div>
 
       <div class="label">Metoda nadpisywania</div>
-      <select id="bulkDeleteWipeMethod" class="input">
+      <select id="delProjWipeMethod" class="input">
         <option value="none">Szybkie (bez nadpisywania)</option>
         <option value="random1">Pseudolosowy (1x)</option>
         <option value="hmg_is5">British HMG IS5 (3x)</option>
         <option value="gutmann">Gutmann (35x)</option>
       </select>
-      <div class="small" style="margin-top:6px;opacity:.7">Na SSD/VM/CoW nadpisywanie może nie gwarantować pełnego „secure erase".</div>
+      <div class="small">Uwaga: na SSD/VM/CoW nadpisywanie może nie gwarantować pełnego „secure erase".</div>
     </div>
     <div class="modal-footer">
       <button class="btn secondary modal-close-x" type="button">Anuluj</button>
-      <button class="btn danger" id="bulkDeleteConfirm" type="button">Usuń projekty</button>
+      <button class="btn danger" id="delProjConfirm" type="button">Usuń</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Export Project ===== -->
+<div id="modalExportProject" class="modal-overlay" style="display:none">
+  <div class="modal-panel" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">Eksportuj projekt</div>
+      <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="label">Wybierz projekt</div>
+      <select id="expProjSelect" class="input"></select>
+      <div class="small" style="margin-top:8px">Projekt zostanie wyeksportowany jako plik <code>.aistate</code>.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary modal-close-x" type="button">Anuluj</button>
+      <button class="btn" id="expProjConfirm" type="button">Eksportuj</button>
     </div>
   </div>
 </div>
