@@ -615,14 +615,6 @@
 
   <div class="card" id="di_content">
 
-    <div class="small" id="di_diar_model_hint" data-i18n-html="hint.diar_models_from_asr_settings_html">
-      Modele diaryzacji są ładowane z zainstalowanych silników w Panelu administracyjnym → Ustawienia ASR.
-    </div>
-
-    <div class="small" id="di_pyannote_hint" style="display:none" data-i18n-html="hint.pyannote_requires_token">
-      Pyannote może wymagać tokenu HuggingFace. Zainstaluj modele w Ustawieniach ASR.
-    </div>
-
     <div class="an-progress" id="di_progress">
       <div class="small">Status: <b id="di_status">—</b> <span id="di_pct">0%</span></div>
       <div class="progress"><div id="di_bar"></div></div>
@@ -2409,12 +2401,9 @@ function toggleMode(){
   const whisperModelBlock = document.getElementById("di_model_block");
   const nemoModelBlock = document.getElementById("di_nemo_block");
   const diarModelBlock = document.getElementById("di_diar_model_block");
-  const pyHint = document.getElementById("di_pyannote_hint");
-
   // Text mode -> show input, hide audio-only options
   if(textBlock) textBlock.style.display = isText ? "block" : "none";
   if(diarModelBlock) diarModelBlock.style.display = isAudio ? "block" : "none";
-  if(pyHint) pyHint.style.display = isPyannote ? "block" : "none";
 
   // ASR engine is fixed (Whisper) in pyannote mode and is not shown in UI.
   if(asrBlock) asrBlock.style.display = "none";

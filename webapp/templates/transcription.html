@@ -413,7 +413,6 @@
   <div class="card" id="tr_content">
 
     <div class="small" id="tr_asr_no_models" style="display:none" data-i18n-html="hint.asr_no_models_html">Brak zainstalowanych modeli ASR. Zainstaluj je w Panelu administracyjnym → Ustawienia ASR.</div>
-    <div class="small" id="tr_whisper_hint" data-i18n-html="hint.whisper_auto">W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).</div>
     <div class="small" id="tr_nemo_hint" style="display:none" data-i18n="hint.nemo_lang_note">W NeMo pole języka może być ignorowane (zależy od modelu).</div>
 
     <div class="an-progress" id="tr_progress">
@@ -1628,7 +1627,6 @@ async function trInitAsrSelectors(){
   const modelEl = document.getElementById("tr_model");
   const noModelsEl = document.getElementById("tr_asr_no_models");
   const btn = document.getElementById("tr_btn");
-  const whisperHint = document.getElementById("tr_whisper_hint");
   const nemoHint = document.getElementById("tr_nemo_hint");
   if(!engEl || !modelEl) return;
 
@@ -1652,7 +1650,6 @@ async function trInitAsrSelectors(){
   const installedNemo = (TR_ASR_PRESETS.nemo||[]).filter(m=>isInstalled("nemo", m));
 
   function setHint(engine){
-    if(whisperHint) whisperHint.style.display = (engine === "whisper") ? "block" : "none";
     if(nemoHint) nemoHint.style.display = (engine === "nemo") ? "block" : "none";
   }
 
