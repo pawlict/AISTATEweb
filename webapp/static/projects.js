@@ -119,7 +119,7 @@ function renderProjects(ws){
       <div class="sp-card-row">
         <div class="sp-card-info">
           <div>${icon} ${esc(sp.name)}</div>
-          <div class="small" style="font-size:.7rem">${esc(typeLabel)} · ${shortDate(sp.created_at)}</div>
+          <div class="small" style="font-size:.7rem;white-space:nowrap">${esc(typeLabel)} · ${shortDate(sp.created_at)}</div>
         </div>
         <div class="sp-card-sep"></div>
         <div class="sp-card-team">
