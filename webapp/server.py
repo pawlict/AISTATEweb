@@ -6127,6 +6127,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
       text (str): text to proofread
       lang (str): "pl" or "en"
       notes (str, optional): additional user instructions
+      model (str, optional): explicit model override from frontend selector
+      mode (str, optional): "correct" (default) or "expand" (rewrite/expand text)
     Returns:
       corrected (str): corrected text (clean, no markup)
       diff_html (str): HTML with <span class="pr-del"> and <span class="pr-ins"> markup
@@ -6135,11 +6137,15 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
     text = str(payload.get("text") or "").strip()
     lang = str(payload.get("lang") or "pl").strip().lower()
     notes = str(payload.get("notes") or "").strip()
+    explicit_model = str(payload.get("model") or "").strip()
+    mode = str(payload.get("mode") or "correct").strip().lower()
 
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
     if lang not in ("pl", "en"):
         lang = "pl"
+    if mode not in ("correct", "expand"):
+        mode = "correct"
 
     # Determine model
     st = await OLLAMA.status()
@@ -6147,26 +6153,51 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
     if st.status == "online":
         installed = st.models or []
 
-    override = _get_model_settings().get("proofreading") or ""
+    # Frontend explicit model takes precedence, then global settings, then priority list
+    override = explicit_model or _get_model_settings().get("proofreading") or ""
     model = _pick_proofread_model(lang, installed, override)
 
     app_log(f"Proofreading: lang={lang}, model={model}, text_len={len(text)}")
 
-    # Build prompt
-    if lang == "pl":
-        system_msg = (
-            "Jesteś profesjonalnym korektorem tekstu polskiego. "
-            "Popraw ortografię, gramatykę, interpunkcję i wygładź styl. "
-            "NIE zmieniaj znaczenia ani kontekstu tekstu. "
-            "Odpowiedz WYŁĄCZNIE poprawionym tekstem — bez komentarzy, bez wyjaśnień."
-        )
+    # Build prompt based on mode
+    if mode == "expand":
+        # Expand / rewrite mode — user wants richer, longer text
+        if lang == "pl":
+            system_msg = (
+                "Jesteś profesjonalnym redaktorem tekstu polskiego. "
+                "Twoim zadaniem jest ROZWINIĘCIE i WZBOGACENIE podanego tekstu. "
+                "Rozbuduj zdania, dodaj szczegóły, synonimy, lepsze sformułowania. "
+                "Zachowaj sens i kontekst oryginału, ale tekst powinien być znacznie bogatszy, "
+                "bardziej opisowy i profesjonalny. "
+                "Popraw też ewentualne błędy ortograficzne i gramatyczne. "
+                "Odpowiedz WYŁĄCZNIE rozszerzonym tekstem — bez komentarzy, bez wyjaśnień."
+            )
+        else:
+            system_msg = (
+                "You are a professional English editor. "
+                "Your task is to EXPAND and ENRICH the given text. "
+                "Elaborate on sentences, add details, synonyms, better phrasing. "
+                "Preserve the meaning and context of the original, but the text should be significantly richer, "
+                "more descriptive and professional. "
+                "Also fix any spelling and grammar errors. "
+                "Reply ONLY with the expanded text — no comments, no explanations."
+            )
     else:
-        system_msg = (
-            "You are a professional English proofreader. "
-            "Fix spelling, grammar, punctuation and smooth out the style. "
-            "Do NOT change the meaning or context of the text. "
-            "Reply ONLY with the corrected text — no comments, no explanations."
-        )
+        # Standard correction mode
+        if lang == "pl":
+            system_msg = (
+                "Jesteś profesjonalnym korektorem tekstu polskiego. "
+                "Popraw ortografię, gramatykę, interpunkcję i wygładź styl. "
+                "NIE zmieniaj znaczenia ani kontekstu tekstu. "
+                "Odpowiedz WYŁĄCZNIE poprawionym tekstem — bez komentarzy, bez wyjaśnień."
+            )
+        else:
+            system_msg = (
+                "You are a professional English proofreader. "
+                "Fix spelling, grammar, punctuation and smooth out the style. "
+                "Do NOT change the meaning or context of the text. "
+                "Reply ONLY with the corrected text — no comments, no explanations."
+            )
 
     if notes:
         system_msg += f"\n\nDodatkowe uwagi użytkownika: {notes}"

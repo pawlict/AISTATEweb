@@ -282,6 +282,48 @@
   font-size: 13px;
 }
 
+/* Proofreading diff styles */
+.proofread-result {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  line-height: 1.8;
+  font-size: 14px;
+  min-height: 60px;
+}
+.proofread-result .pr-del {
+  background: rgba(220,38,38,.12);
+  color: #991b1b;
+  text-decoration: line-through;
+  padding: 1px 3px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.proofread-result .pr-del:hover { opacity: .6; }
+.proofread-result .pr-del.pr-accepted { display: none; }
+.proofread-result .pr-ins {
+  background: rgba(22,163,74,.12);
+  color: #166534;
+  font-weight: 600;
+  padding: 1px 3px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.proofread-result .pr-ins:hover { opacity: .7; }
+.proofread-result .pr-ins.pr-rejected { display: none; }
+.proofread-result .pr-user-edit {
+  background: rgba(37,99,235,.10);
+  color: #1e40af;
+  font-weight: 600;
+  padding: 1px 3px;
+  border-radius: 3px;
+  border-bottom: 2px solid rgba(37,99,235,.3);
+}
+.proofread-result [contenteditable] { outline: none; }
+
 .hidden {
   display: none;
 }
@@ -316,6 +358,28 @@
             <label class="pill pill-icon" title="Korekta tekstu angielskiego" data-i18n-title="translation.proofread_en">
               <input type="radio" name="proofread_lang" value="en">
               <img src="/static/icons/edycja_tekstu/proofread_en.svg" alt="EN" draggable="false">
+            </label>
+          </div>
+        </div>
+
+        <!-- Proofreading model & mode (visible only in proofreading mode) -->
+        <div class="toolbar-group" id="proofread_model_group" style="display:none;">
+          <label class="toolbar-group-label"><img src="/static/icons/ai_ml/ai_model.svg" alt="" draggable="false"> Model korekty</label>
+          <select class="input mini-select" id="proofread_model_select" style="min-width:140px;">
+            <option value="">Ładowanie…</option>
+          </select>
+        </div>
+
+        <div class="toolbar-group" id="proofread_mode_group" style="display:none;">
+          <label class="toolbar-group-label"><img src="/static/icons/audio/speed.svg" alt="" draggable="false"> Tryb</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="Korekta — popraw błędy, zachowaj treść">
+              <input type="radio" name="proofread_mode" value="correct" checked>
+              <img src="/static/icons/edycja_tekstu/proofread_pl.svg" alt="Korekta" draggable="false">
+            </label>
+            <label class="pill pill-icon" title="Rozszerzenie — wzbogać i rozbuduj tekst">
+              <input type="radio" name="proofread_mode" value="expand">
+              <img src="/static/icons/ai_ml/analysis_deep.svg" alt="Rozszerzenie" draggable="false">
             </label>
           </div>
         </div>
