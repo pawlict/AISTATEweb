@@ -1399,6 +1399,42 @@ function _ttsPlayUrl(url, btn) {
 // ============================================================================
 
 var _proofreadState = { lang: null, corrected: '', diffHtml: '', running: false };
+var _proofreadModelsLoaded = false;
+
+/** Load proofreading models from /api/models/list → proofreading category */
+async function _proofreadLoadModels() {
+    if (_proofreadModelsLoaded) return;
+    var sel = _byId('proofread_model_select');
+    if (!sel) return;
+    try {
+        var resp = await fetch('/api/models/list');
+        var data = await resp.json();
+        var models = (data && Array.isArray(data.proofreading)) ? data.proofreading : [];
+        var installed = models.filter(function(m) { return m && m.installed; });
+        sel.innerHTML = '';
+        if (installed.length === 0) {
+            var opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'Brak zainstalowanych modeli korekty';
+            sel.appendChild(opt);
+            sel.disabled = true;
+        } else {
+            installed.forEach(function(m) {
+                var opt = document.createElement('option');
+                opt.value = m.id;
+                var label = m.display_name || m.id;
+                if (m.vram) label += ' \u2022 ' + m.vram;
+                opt.textContent = label;
+                if (m.default) opt.selected = true;
+                sel.appendChild(opt);
+            });
+            sel.disabled = false;
+        }
+        _proofreadModelsLoaded = true;
+    } catch(e) {
+        sel.innerHTML = '<option value="">Błąd ładowania modeli</option>';
+    }
+}
 
 function _proofreadToggle(lang) {
     var radios = document.querySelectorAll('input[name="proofread_lang"]');
@@ -1438,12 +1474,18 @@ function _proofreadToggle(lang) {
  *  change Generate button to run proofreading.
  *  Show floating mode badge in top-right corner. */
 function _proofreadSyncUI(proofActive) {
-    // --- Toolbar sections: hide translation-specific groups when proofing ---
-    var translationToolbarIds = ['translation_mode_box', 'translation_models'];
-    translationToolbarIds.forEach(function(id) {
+    // --- Toolbar: hide translation groups, show proofreading groups ---
+    ['translation_mode_box', 'translation_models'].forEach(function(id) {
         var el = _byId(id);
         if (el) el.style.display = proofActive ? 'none' : '';
     });
+    ['proofread_model_group', 'proofread_mode_group'].forEach(function(id) {
+        var el = _byId(id);
+        if (el) el.style.display = proofActive ? '' : 'none';
+    });
+
+    // Load models on first activation
+    if (proofActive) _proofreadLoadModels();
 
     // --- Sidebar: dim / disable language & option sections ---
     var sidebar = document.querySelector('.translation-sidebar');
@@ -1536,6 +1578,9 @@ async function proofreadRun() {
     }
 
     var notes = String((_byId('proofread_notes') || {}).value || '').trim();
+    var selectedModel = (_byId('proofread_model_select') || {}).value || '';
+    var modeRadio = document.querySelector('input[name="proofread_mode"]:checked');
+    var proofMode = modeRadio ? modeRadio.value : 'correct';
     var resultWrap = _byId('proofread_result_wrap');
     var resultEl = _byId('proofread_result');
     var progressEl = _byId('proofread_progress');
@@ -1560,6 +1605,8 @@ async function proofreadRun() {
                 text: text,
                 lang: _proofreadState.lang,
                 notes: notes || '',
+                model: selectedModel || '',
+                mode: proofMode || 'correct',
             }),
         });
 
@@ -1569,7 +1616,10 @@ async function proofreadRun() {
         if (resp.ok && data && data.status === 'ok') {
             _proofreadState.corrected = data.corrected || '';
             _proofreadState.diffHtml = data.diff_html || '';
-            if (resultEl) resultEl.innerHTML = _proofreadState.diffHtml || '<div class="small muted">Brak zmian.</div>';
+            if (resultEl) {
+                resultEl.innerHTML = _proofreadState.diffHtml || '<div class="small muted">Brak zmian.</div>';
+                _proofreadMakeDiffInteractive(resultEl);
+            }
             if (acceptBtn) acceptBtn.style.display = '';
             if (copyBtn) copyBtn.style.display = '';
         } else {
@@ -1592,17 +1642,93 @@ async function proofreadRun() {
     }
 }
 
-function proofreadAccept() {
-    var resultEl = _byId('proofread_result');
-    if (!resultEl || !_proofreadState.corrected) return;
-    // Show clean corrected text (no diff markup)
-    resultEl.textContent = _proofreadState.corrected;
-    var acceptBtn = _byId('proofread_accept_btn');
-    if (acceptBtn) acceptBtn.style.display = 'none';
+/** Make diff spans interactive:
+ *  - Click pr-del (red strikethrough) → hide it (accept deletion)
+ *  - Click pr-ins (green) → hide it (reject insertion) OR double-click to edit
+ *  - Whole result is contenteditable — user edits get blue styling
+ *  - Click between words to type custom text (appears in blue) */
+function _proofreadMakeDiffInteractive(container) {
+    if (!container) return;
+
+    // Make the result area editable
+    container.setAttribute('contenteditable', 'true');
+    container.setAttribute('spellcheck', 'false');
+
+    // Click on pr-del → accept deletion (hide the deleted word)
+    // Click on pr-ins → reject insertion (hide it, show original)
+    container.addEventListener('click', function(e) {
+        var span = e.target.closest('.pr-del, .pr-ins');
+        if (!span) return;
+
+        if (span.classList.contains('pr-del')) {
+            // Accept this deletion — hide the red text
+            span.classList.add('pr-accepted');
+            e.preventDefault();
+        } else if (span.classList.contains('pr-ins')) {
+            // Reject this insertion — hide the green text
+            span.classList.add('pr-rejected');
+            // If there's a paired pr-del before it, un-hide it
+            var prev = span.previousElementSibling;
+            if (prev && prev.classList.contains('pr-del') && prev.classList.contains('pr-accepted')) {
+                prev.classList.remove('pr-accepted');
+            }
+            e.preventDefault();
+        }
+    });
+
+    // Track user edits — wrap new text in blue spans
+    container.addEventListener('input', function() {
+        // Mark that user has made custom edits
+        _proofreadState._userEdited = true;
+    });
 }
 
+/** Extract final text from the interactive diff result.
+ *  Hidden (accepted/rejected) spans are excluded. */
+function _proofreadExtractText(container) {
+    if (!container) return '';
+    var result = [];
+    var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+        acceptNode: function(node) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                // Skip hidden spans
+                if (node.classList && (node.classList.contains('pr-accepted') || node.classList.contains('pr-rejected'))) {
+                    return NodeFilter.FILTER_REJECT; // skip entire subtree
+                }
+                return NodeFilter.FILTER_SKIP; // process children
+            }
+            return NodeFilter.FILTER_ACCEPT;
+        }
+    });
+    var node;
+    while (node = walker.nextNode()) {
+        result.push(node.textContent);
+    }
+    return result.join('').replace(/\s+/g, ' ').trim();
+}
+
+/** Accept all — remove diff markup, leave only visible text */
+function proofreadAccept() {
+    var resultEl = _byId('proofread_result');
+    if (!resultEl) return;
+    var text = _proofreadExtractText(resultEl);
+    if (!text) {
+        text = _proofreadState.corrected || '';
+    }
+    // Replace diff with clean text
+    resultEl.removeAttribute('contenteditable');
+    resultEl.textContent = text;
+    _proofreadState.corrected = text;
+    var acceptBtn = _byId('proofread_accept_btn');
+    if (acceptBtn) acceptBtn.style.display = 'none';
+    showToast('Zatwierdzono poprawki.', 'success');
+}
+
+/** Copy current visible text from diff (respecting accept/reject state) */
 async function proofreadCopy() {
-    var text = _proofreadState.corrected || '';
+    var resultEl = _byId('proofread_result');
+    var text = resultEl ? _proofreadExtractText(resultEl) : '';
+    if (!text) text = _proofreadState.corrected || '';
     if (!text) {
         showToast('Brak tekstu do skopiowania.', 'warning');
         return;
