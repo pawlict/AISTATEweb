@@ -19,7 +19,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     },
     "translation": {
         "pages": ["/translation"],
-        "api_prefixes": ["/api/translation/"],
+        "api_prefixes": ["/api/translation/", "/api/proofreading/"],
         "api_keywords": ["nllb/models_state"],
     },
     "analysis": {
