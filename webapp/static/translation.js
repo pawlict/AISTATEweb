@@ -1406,17 +1406,62 @@ function _proofreadToggle(lang) {
     var badge = _byId('proofread_lang_badge');
 
     if (_proofreadState.lang === lang) {
-        // Deselect — click same toggle again
+        // Deselect — click same toggle again → back to "translation only" mode
         _proofreadState.lang = null;
-        radios.forEach(function(r) { r.checked = false; });
+        radios.forEach(function(r) {
+            r.checked = false;
+            var lbl = r.closest('label');
+            if (lbl) lbl.classList.remove('active');
+        });
         if (box) box.style.display = 'none';
+        _proofreadSyncUI(false);
         return;
     }
 
+    // Select new language → enter proofreading mode
     _proofreadState.lang = lang;
-    radios.forEach(function(r) { r.checked = (r.value === lang); });
+    radios.forEach(function(r) {
+        r.checked = (r.value === lang);
+        var lbl = r.closest('label');
+        if (lbl) {
+            if (r.value === lang) lbl.classList.add('active');
+            else lbl.classList.remove('active');
+        }
+    });
     if (box) box.style.display = '';
     if (badge) badge.textContent = lang === 'pl' ? '(PL)' : '(EN)';
+    _proofreadSyncUI(true);
+}
+
+/** Switch UI between proofreading mode and translation mode.
+ *  In proofreading mode: hide language selectors, NLLB models, translation sidebar sections;
+ *  change Generate button to run proofreading. */
+function _proofreadSyncUI(proofActive) {
+    // --- Toolbar sections: hide translation-specific groups when proofing ---
+    var translationToolbarIds = ['translation_mode_box', 'translation_models'];
+    translationToolbarIds.forEach(function(id) {
+        var el = _byId(id);
+        if (el) el.style.display = proofActive ? 'none' : '';
+    });
+
+    // --- Sidebar: dim / disable language & option sections ---
+    var sidebar = document.querySelector('.translation-sidebar');
+    if (sidebar) {
+        sidebar.style.opacity = proofActive ? '0.35' : '';
+        sidebar.style.pointerEvents = proofActive ? 'none' : '';
+    }
+
+    // --- Generate button: switch action ---
+    var genBtn = _byId('generate-btn');
+    if (genBtn) {
+        if (proofActive) {
+            genBtn.setAttribute('onclick', 'proofreadRun()');
+            genBtn.title = 'Koryguj tekst';
+        } else {
+            genBtn.setAttribute('onclick', 'startTranslation()');
+            genBtn.title = 'Tłumacz';
+        }
+    }
 }
 
 async function proofreadRun() {
@@ -1507,20 +1552,17 @@ async function proofreadCopy() {
 }
 
 // Bind proofreading radio toggles (mutually exclusive, deselectable)
+// Radio buttons natively can't be unchecked — we use mousedown + preventDefault
+// to take full control over the checked state.
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('input[name="proofread_lang"]').forEach(function(radio) {
+        // Prevent native radio behaviour so we can toggle off
+        radio.addEventListener('click', function(e) { e.preventDefault(); });
         var label = radio.closest('label');
         if (label) {
-            label.addEventListener('click', function() {
-                var wasLang = _proofreadState.lang;
-                setTimeout(function() {
-                    if (wasLang === radio.value) {
-                        // was already selected -> deselect
-                        _proofreadToggle(radio.value);
-                    } else {
-                        _proofreadToggle(radio.value);
-                    }
-                }, 0);
+            label.addEventListener('mousedown', function(e) {
+                e.preventDefault();           // stop native radio check + focus
+                _proofreadToggle(radio.value); // our own toggle logic
             });
         }
     });
