@@ -148,7 +148,9 @@ class OllamaClient:
         except Exception as e:
             raise OllamaError(f"Cannot list Ollama models: {e}")
 
-        if model in models:
+        # Ollama normalizes model names to lowercase; compare case-insensitively
+        models_lower = {m.lower() for m in models}
+        if model.lower() in models_lower:
             return {"status": "present", "model": model}
 
         # Pull missing model (may take time).
