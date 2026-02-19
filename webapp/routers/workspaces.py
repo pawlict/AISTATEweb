@@ -8,8 +8,11 @@ as a workspace_id.
 """
 from __future__ import annotations
 
+import logging
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+
+log = logging.getLogger("aistate.workspaces")
 
 router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
 
@@ -308,6 +311,10 @@ def delete_workspace(request: Request, workspace_id: str, wipe_method: str = "no
     role = _STORE.get_user_role(workspace_id, uid)
     if role != "owner" and not _is_admin(request):
         return JSONResponse({"status": "error", "message": "Only owner can delete"}, 403)
+
+    ws = _STORE.get_workspace(workspace_id)
+    ws_name = ws.get("name", "") if ws else ""
+
     # Delete all subproject data directories before removing workspace from DB
     subs = _STORE.list_subprojects(workspace_id)
     for sp in subs:
@@ -319,7 +326,13 @@ def delete_workspace(request: Request, workspace_id: str, wipe_method: str = "no
                     _delete_project_data(dir_id, wipe_method)
                 except Exception:
                     pass  # best-effort
-    _STORE.delete_workspace(workspace_id)
+
+    # Hard-delete workspace + all subprojects/members/invitations/activity from DB
+    # so it disappears from admin view as well (not just soft-delete)
+    _STORE.hard_delete_workspace(workspace_id)
+
+    log.info("User '%s' deleted workspace '%s' (id=%s, wipe=%s, subprojects=%d)",
+             _uname(request), ws_name, workspace_id, wipe_method, len(subs))
     return JSONResponse({"status": "ok"})
 
 
@@ -406,6 +419,7 @@ def delete_subproject(request: Request, workspace_id: str, subproject_id: str,
         return JSONResponse({"status": "error", "message": "Access denied"}, 403)
     # Get subproject data_dir BEFORE deleting from DB so we can clean up files
     sp = _STORE.get_subproject(subproject_id)
+    sp_name = sp.get("name", "") if sp else ""
     data_dir = sp.get("data_dir", "") if sp else ""
     if data_dir:
         dir_id = data_dir.replace("projects/", "")
@@ -415,7 +429,10 @@ def delete_subproject(request: Request, workspace_id: str, subproject_id: str,
             except Exception:
                 pass  # best-effort
     _STORE.delete_subproject(subproject_id)
-    _STORE.log_activity(workspace_id, None, uid, _uname(request), "subproject_deleted")
+    _STORE.log_activity(workspace_id, None, uid, _uname(request), "subproject_deleted",
+                        {"name": sp_name, "wipe_method": wipe_method})
+    log.info("User '%s' deleted subproject '%s' (id=%s, workspace=%s, wipe=%s)",
+             _uname(request), sp_name, subproject_id, workspace_id, wipe_method)
     return JSONResponse({"status": "ok"})
 
 
