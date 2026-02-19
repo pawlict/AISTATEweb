@@ -38,26 +38,7 @@
 
       <div class="toolbar-sep"></div>
 
-      <!-- Sekcja 3: Korekta tekstu -->
-      <div class="toolbar-section">
-        <div class="toolbar-group" id="proofreading_group">
-          <label class="toolbar-group-label"><img src="/static/icons/edycja_tekstu/proofread_pl.svg" alt="" draggable="false"> Korekta</label>
-          <div class="toolbar-group-controls">
-            <label class="pill pill-icon" title="Korekta tekstu polskiego" data-i18n-title="analysis.proofread_pl">
-              <input type="radio" name="proofread_lang" value="pl">
-              <img src="/static/icons/edycja_tekstu/proofread_pl.svg" alt="PL" draggable="false">
-            </label>
-            <label class="pill pill-icon" title="Korekta tekstu angielskiego" data-i18n-title="analysis.proofread_en">
-              <input type="radio" name="proofread_lang" value="en">
-              <img src="/static/icons/edycja_tekstu/proofread_en.svg" alt="EN" draggable="false">
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div class="toolbar-sep"></div>
-
-      <!-- Sekcja 4: Raport -->
+      <!-- Sekcja 3: Raport -->
       <div class="toolbar-section">
         <div class="toolbar-group" id="analysis_report_formats">
           <label class="toolbar-group-label" data-i18n="analysis.report"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
@@ -163,41 +144,6 @@
         </div>
         <div class="custom-prompt-body" style="margin-top:10px">
           <textarea class="input" id="custom_prompt_text" style="min-height:120px" data-i18n-placeholder="analysis.custom_prompt_placeholder" placeholder="Np. Zrób formalny protokół spotkania z decyzjami i zadaniami…"></textarea>
-        </div>
-      </div>
-
-      <!-- Proofreading panel (shown when PL or EN toggle is active) -->
-      <div class="card" id="proofread_box" style="display:none">
-        <div class="analysis-sidehdr">
-          <div>
-            <div class="h2"><i data-icon="edit" data-size="16"></i> Korekta tekstu <span id="proofread_lang_badge" class="small" style="opacity:.6"></span></div>
-            <div class="small muted">Wklej tekst do korekty i kliknij „Generuj". Możesz dodać własne uwagi.</div>
-          </div>
-        </div>
-        <div style="margin-top:10px">
-          <textarea class="input" id="proofread_input" style="min-height:140px" placeholder="Wklej tekst do korekty…"></textarea>
-        </div>
-        <div style="margin-top:8px">
-          <div class="small muted" style="margin-bottom:4px">Masz jeszcze jakieś uwagi do korekty? (opcjonalnie)</div>
-          <textarea class="input" id="proofread_notes" style="min-height:60px" placeholder="Np. Zachowaj ton formalny, nie zmieniaj nazw własnych…"></textarea>
-        </div>
-        <div id="proofread_result_wrap" style="display:none; margin-top:12px">
-          <div class="small" style="margin-bottom:4px; font-weight:600">Wynik korekty:</div>
-          <div id="proofread_progress" style="display:none">
-            <div class="an-progress">
-              <div class="small"><span>Postęp</span>: <span id="proofread_prog_pct">0%</span></div>
-              <div class="progress"><div id="proofread_prog_bar" style="width:0%"></div></div>
-            </div>
-          </div>
-          <div id="proofread_result" class="proofread-result"></div>
-          <div style="margin-top:8px; display:flex; gap:8px">
-            <button class="btn secondary" id="proofread_accept_btn" style="display:none" title="Akceptuj poprawki — wyczyść oznaczenia zmian">
-              <img src="/static/icons/akcje/check.svg" alt="" style="width:16px;height:16px;vertical-align:middle" draggable="false"> Akceptuj
-            </button>
-            <button class="btn secondary" id="proofread_copy_btn" style="display:none">
-              <i data-icon="copy" data-size="14"></i> Kopiuj
-            </button>
-          </div>
         </div>
       </div>
 
@@ -525,7 +471,7 @@
     const sidebarToggle = document.getElementById('analysis_sidebar_toggle');
 
     const allContents = [llmContent, amlContent];
-    const llmToolbar = ['analysis_models','analysis_report_formats','an_generate_btn','an_report_save_btn','proofreading_group'];
+    const llmToolbar = ['analysis_models','analysis_report_formats','an_generate_btn','an_report_save_btn'];
 
     tabs.forEach(tab => {
       tab.addEventListener('click', async () => {
