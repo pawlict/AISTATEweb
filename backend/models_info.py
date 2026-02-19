@@ -62,6 +62,13 @@ MODELS_GROUPS: Dict[str, List[str]] = {
         "command-r:35b",
         "deepseek-r1:70b",
     ],
+    # === PROOFREADING / LANGUAGE CORRECTION (4) ===
+    "proofreading": [
+        "qwen3:8b",
+        "qwen3:14b",
+        "SpeakLeash/bielik-11b-v2.3-instruct",
+        "PRIHLOP/PLLuM",
+    ],
 }
 
 
@@ -73,6 +80,7 @@ DEFAULT_MODELS: Dict[str, str] = {
     "translation": "qwen2.5:14b",
     "financial": "qwen2.5:32b",
     "specialized": "command-r:35b",
+    "proofreading": "qwen3:8b",
 }
 
 
@@ -742,6 +750,127 @@ MODELS_INFO: Dict[str, Dict[str, Any]] = {
         "defaults": {"specialized": False},
         "requires_multi_gpu": True,
         "capabilities": ["advanced_reasoning", "multi_step", "research", "hypothesis", "synthesis"],
+    },
+
+    # ==========================================================
+    # PROOFREADING / LANGUAGE CORRECTION (4)
+    # ==========================================================
+    "qwen3:8b": {
+        "display_name": "Qwen 3 8B",
+        "category": "proofreading",
+        "hardware": {
+            "vram": "6GB",
+            "min_gpu": "RTX 2060 6GB",
+            "optimal_gpu": "RTX 3070 8GB",
+            "ram": "16GB",
+        },
+        "performance": {
+            "speed_tokens_sec": 55,
+            "analysis_time": {
+                "proofreading": "3-6 sekund (1000 słów)",
+                "quick": "4-6 sekund",
+            },
+            "quality_stars": 4,
+            "polish_quality_stars": 3,
+        },
+        "use_cases": [
+            "Korekta gramatyczna tekstów angielskich",
+            "Szybka korekta stylistyczna (listy, maile, raporty)",
+            "Poprawki interpunkcji i ortografii EN",
+            "Korekta tekstów technicznych (IT, biznes)",
+            "Batch processing wielu dokumentów (szybkość priorytet)",
+        ],
+        "recommendation": "Dobry i szybki model do korekty angielskiego. Dla polskiego jakość przeciętna — jeśli korygujesz polski, wybierz Bielika lub PLLuM.",
+        "defaults": {"proofreading": True},
+        "capabilities": ["proofreading", "grammar", "spelling", "punctuation", "fast"],
+    },
+    "qwen3:14b": {
+        "display_name": "Qwen 3 14B",
+        "category": "proofreading",
+        "hardware": {
+            "vram": "10GB",
+            "min_gpu": "RTX 3060 12GB",
+            "optimal_gpu": "RTX 4060 Ti 16GB",
+            "ram": "16GB",
+        },
+        "performance": {
+            "speed_tokens_sec": 30,
+            "analysis_time": {
+                "proofreading": "5-10 sekund (1000 słów)",
+                "deep": "40-70 sekund",
+            },
+            "quality_stars": 5,
+            "polish_quality_stars": 4,
+        },
+        "use_cases": [
+            "Korekta stylistyczna z propozycjami alternatyw",
+            "Poprawa spójności tekstu (tone, rejestr)",
+            "Korekta wielojęzyczna (EN, DE, FR + polski)",
+            "Analiza i poprawa struktury zdań",
+            "Korekta dokumentów formalnych (umowy, pisma)",
+        ],
+        "recommendation": "Lepsza jakość korekty niż 8B, zwłaszcza dla stylistyki i spójności. Dobry kompromis jakość/szybkość. Dla polskiego rozważ Bielika.",
+        "defaults": {"proofreading": False},
+        "capabilities": ["proofreading", "style", "tone", "multilingual", "formal"],
+    },
+    "SpeakLeash/bielik-11b-v2.3-instruct": {
+        "display_name": "Bielik 11B v2.3 (Polski)",
+        "category": "proofreading",
+        "hardware": {
+            "vram": "8GB",
+            "min_gpu": "RTX 3060 12GB",
+            "optimal_gpu": "RTX 4070 12GB",
+            "ram": "16GB",
+        },
+        "performance": {
+            "speed_tokens_sec": 25,
+            "analysis_time": {
+                "proofreading": "6-12 sekund (1000 słów)",
+            },
+            "quality_stars": 5,
+            "polish_quality_stars": 5,
+        },
+        "use_cases": [
+            "NAJLEPSZY do korekty polskiego (natywny model PL)",
+            "Korekta fleksji i deklinacji (przypadki, końcówki)",
+            "Poprawa szyku zdań i stylistyki polskiej",
+            "Korekta ortografii polskiej (ó/u, rz/ż, ch/h)",
+            "Korekta tekstów urzędowych i formalnych PL",
+            "Tokenizer zoptymalizowany pod polską morfologię",
+        ],
+        "recommendation": "TOP model do korekty polskiego. Tokenizer zoptymalizowany pod polską fleksję — rozumie morfologię lepiej niż modele ogólne. Bije modele 2-6x większe w benchmarkach PL.",
+        "defaults": {"proofreading": False},
+        "capabilities": ["polish_native", "proofreading", "grammar_pl", "spelling_pl", "formal_pl"],
+    },
+    "PRIHLOP/PLLuM": {
+        "display_name": "PLLuM (Polski LLM)",
+        "category": "proofreading",
+        "hardware": {
+            "vram": "8GB",
+            "min_gpu": "RTX 3060 12GB",
+            "optimal_gpu": "RTX 4070 12GB",
+            "ram": "16GB",
+        },
+        "performance": {
+            "speed_tokens_sec": 22,
+            "analysis_time": {
+                "proofreading": "7-14 sekund (1000 słów)",
+            },
+            "quality_stars": 5,
+            "polish_quality_stars": 5,
+        },
+        "use_cases": [
+            "Korekta polskiego (150B tokenów polskich w treningu)",
+            "Specjalista od tekstów administracji publicznej",
+            "Korekta języka urzędowego (pisma, decyzje, postanowienia)",
+            "Poprawa stylistyki tekstów prawnych PL",
+            "Korekta języków słowiańskich/bałtyckich",
+            "40K polskich instrukcji ręcznie tworzonych",
+        ],
+        "recommendation": "Polski model trenowany na 150B tokenów PL z 40K ręcznych instrukcji. Najlepszy dla tekstów administracyjno-urzędowych. Modele -nc- tylko do celów niekomercyjnych.",
+        "warning": "Modele z licencją CC-BY-NC-4.0 — tylko do celów niekomercyjnych. Sprawdź licencję przed wdrożeniem produkcyjnym.",
+        "defaults": {"proofreading": False},
+        "capabilities": ["polish_native", "proofreading", "administrative", "legal_pl", "slavic"],
     },
 
     # ==========================================================

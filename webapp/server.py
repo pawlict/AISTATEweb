@@ -3910,7 +3910,7 @@ async def api_get_model_settings() -> Any:
     """Return saved global model selection.
 
     Returns keys for all supported groups:
-      quick, deep, vision, translation, financial, specialized
+      quick, deep, vision, translation, financial, specialized, proofreading
     """
     models = _get_model_settings()
     # Keep a predictable place for defaults while preserving top-level keys.
@@ -3922,7 +3922,7 @@ async def api_save_model_settings(payload: Dict[str, Any] = Body(...)) -> Any:
     """Persist global model selection.
 
     Request can contain any subset of groups, e.g.:
-      {"quick":"...","deep":"..."}
+      {"quick":"...","deep":"...","proofreading":"..."}
       {"vision":"..."}
       {"quick":"...","deep":"...","translation":"...",...}
     """
@@ -3955,7 +3955,7 @@ async def api_save_model_settings(payload: Dict[str, Any] = Body(...)) -> Any:
     return {"status": "saved", "models": resolved, **resolved, "defaults": DEFAULT_MODELS}
 
 
-@app.get("/api/models/info/{model_name}")
+@app.get("/api/models/info/{model_name:path}")
 async def api_model_info(model_name: str) -> Any:
     """Return info for a specific model (catalog or custom)."""
     name = str(model_name or "").strip()

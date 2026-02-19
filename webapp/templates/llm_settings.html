@@ -210,6 +210,31 @@
 
       <div class="hr"></div>
 
+      <!-- PROOFREADING / LANGUAGE CORRECTION -->
+      <div class="llm-row llm-group">
+        <div>
+          <div class="label" data-i18n="settings.llm_proofreading_title"><i data-icon="edit" data-size="14"></i> Korekta językowa</div>
+          <div class="small muted" data-i18n="settings.llm_proofreading_desc">Modele do korekty gramatycznej, stylistycznej i ortograficznej (PL/EN).</div>
+          <select id="llm_proofreading_select" class="input"></select>
+
+          <div class="llm-install-row">
+            <button class="btn primary mini" type="button" id="llm_proofreading_install_btn" style="display:none;"><i data-icon="install" data-size="14"></i> <span data-i18n="settings.llm_install">Instaluj</span></button>
+            <span class="small muted" id="llm_proofreading_warn"></span>
+          </div>
+        </div>
+
+        <div>
+          <div class="llm-info-box">
+            <div class="llm-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="settings.llm_info_inline">Informacje o modelu</span></div>
+            <div class="small" id="llm_proofreading_info_name">—</div>
+            <div id="llm_proofreading_info_body" class="small muted" style="margin-top:6px;"></div>
+            <div class="llm-warn llm-inline-warn" id="llm_proofreading_info_warning" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
       <!-- CUSTOM / USER MODEL -->
       <div class="llm-row llm-group">
         <div style="grid-column: 1 / -1;">
@@ -224,6 +249,7 @@
               <option value="translation" data-i18n="settings.llm_group_translation">Tłumaczenia</option>
               <option value="financial" data-i18n="settings.llm_group_financial">Finanse</option>
               <option value="specialized" data-i18n="settings.llm_group_specialized">Specjalistyczne</option>
+              <option value="proofreading" data-i18n="settings.llm_group_proofreading">Korekta językowa</option>
             </select>
             <input id="llm_custom_model_id" class="input" type="text" placeholder="np. phi4:latest, llama3.2:1b, mymodel:tag" style="flex:1; min-width:260px;">
             <button class="btn primary mini" type="button" id="llm_custom_add_btn"><i data-icon="add" data-size="14"></i> <span data-i18n="settings.llm_custom_add">Dodaj</span></button>

@@ -2,7 +2,7 @@
  *
  * Renders model selectors in Settings tab and persists global selection.
  * Supports groups:
- *   quick, deep, vision, translation, financial, specialized
+ *   quick, deep, vision, translation, financial, specialized, proofreading
  */
 
 (function(){
@@ -40,7 +40,7 @@
     console[(kind === "error") ? "error" : "log"](msg);
   }
 
-  const GROUPS = ["quick","deep","vision","translation","financial","specialized"];
+  const GROUPS = ["quick","deep","vision","translation","financial","specialized","proofreading"];
   const UI = {
     quick: {
       select: "llm_quick_select",
@@ -90,6 +90,14 @@
       infoBody: "llm_specialized_info_body",
       infoWarning: "llm_specialized_info_warning",
     },
+    proofreading: {
+      select: "llm_proofreading_select",
+      installBtn: "llm_proofreading_install_btn",
+      warn: "llm_proofreading_warn",
+      infoName: "llm_proofreading_info_name",
+      infoBody: "llm_proofreading_info_body",
+      infoWarning: "llm_proofreading_info_warning",
+    },
   };
 
   function analysisTimeSummary(perf, group){
@@ -108,6 +116,7 @@
       translation: ["translation","cyrillic","premium"],
       financial: ["financial","balance","balance_check","anomaly","extraction","scoring"],
       specialized: ["legal","contract","reasoning","complex"],
+      proofreading: ["proofreading","grammar","spelling","correction"],
     };
     const order = keysPref[group] || Object.keys(at);
     const parts = [];
@@ -155,7 +164,8 @@
     lines.push(`</div>`);
 
     if (info.requires_multi_gpu){
-      lines.push(`<div class="llm-mini-rec">${aiIcon('warning',12)} Multi-GPU required</div>`);
+      const wico = (typeof aiIcon === "function") ? aiIcon('warning',12) : "";
+      lines.push(`<div class="llm-mini-rec">${wico} Multi-GPU required</div>`);
     }
 
     if (cases.length){
@@ -201,6 +211,7 @@
       translation: [],
       financial: [],
       specialized: [],
+      proofreading: [],
     },
     custom: {
       quick: [],
@@ -209,6 +220,7 @@
       translation: [],
       financial: [],
       specialized: [],
+      proofreading: [],
     },
     installed: new Map(),
     selected: {
@@ -218,6 +230,7 @@
       translation: null,
       financial: null,
       specialized: null,
+      proofreading: null,
     },
     defaults: {},
     _saveTimer: null,
@@ -267,7 +280,7 @@
           });
 
           if (input) input.value = "";
-          if (msgEl) msgEl.innerHTML = aiIcon('success',12) + ' ' + tr("settings.llm_custom_added","Dodano");
+          if (msgEl) msgEl.innerHTML = ((typeof aiIcon==="function")?aiIcon('success',12):"") + ' ' + tr("settings.llm_custom_added","Dodano");
 
           // Refresh selectors so the new model appears, then auto-select it for the chosen group
           await this.refresh(false);
@@ -346,7 +359,7 @@
           const enc = encodeURIComponent(String(mid));
           return `<span style="display:inline-flex; align-items:center; gap:6px; margin-right:10px; margin-top:6px;">
             <code style="font-size:12px;">${safe}</code>
-            <button class="btn mini" type="button" data-action="remove-custom" data-group="${g}" data-model="${enc}">${aiIcon("delete",12)}</button>
+            <button class="btn mini" type="button" data-action="remove-custom" data-group="${g}" data-model="${enc}">${(typeof aiIcon==="function")?aiIcon("delete",12):""}</button>
           </span>`;
         }).join("");
 
@@ -428,7 +441,7 @@
 
       this.renderCustomList();
 
-      if (showMsg && msg) msg.innerHTML = aiIcon('success',12) + ' ' + tr("settings.llm_loaded", "Updated");
+      if (showMsg && msg) msg.innerHTML = ((typeof aiIcon==="function")?aiIcon('success',12):"") + ' ' + tr("settings.llm_loaded", "Updated");
     },
 
     ensureDefaults(){
@@ -540,11 +553,13 @@
     async updateInfo(group){
       const modelId = this.selected[group];
       if (!modelId){
-        setInfo(group, null);
+        try{ setInfo(group, null); }catch(e){ console.warn("setInfo error:", e); }
         return;
       }
       // quick loading
-      setInfo(group, { id: modelId, display_name: modelId, performance: { analysis_time: { [group]: "Loading…" } }, hardware: {}, use_cases: [] });
+      try{
+        setInfo(group, { id: modelId, display_name: modelId, performance: { analysis_time: { [group]: "Loading…" } }, hardware: {}, use_cases: [] });
+      }catch(e){ console.warn("setInfo loading error:", e); }
 
       let info = null;
       try{
@@ -553,7 +568,7 @@
         try{ info = await http(`/api/models/info/${encodeURIComponent(modelId)}`); }catch{ info = null; }
       }
       if (info) info.id = modelId;
-      setInfo(group, info);
+      try{ setInfo(group, info); }catch(e){ console.warn("setInfo render error:", group, e); }
     },
 
     async install(group){
@@ -563,7 +578,7 @@
 
       const btn = $(cfg.installBtn);
       const msgEl = $("llm_refresh_msg");
-      if (btn){ btn.disabled = true; btn.innerHTML = aiIcon('loading',12) + " Installing\u2026"; }
+      if (btn){ btn.disabled = true; btn.innerHTML = ((typeof aiIcon==="function")?aiIcon('loading',12):"") + " Installing\u2026"; }
       if (msgEl) msgEl.textContent = `Installing ${modelId}…`;
 
       try{
@@ -579,7 +594,7 @@
           await new Promise(r => setTimeout(r, 2000));
           const st = await http(`/api/ollama/install/status?model=${encodeURIComponent(modelId)}`);
           if (st?.status === "done"){
-            if (msgEl) msgEl.innerHTML = aiIcon('success',12) + ` Installed (${modelId})`;
+            if (msgEl) msgEl.innerHTML = ((typeof aiIcon==="function")?aiIcon('success',12):"") + ` Installed (${modelId})`;
             notify(`Installed: ${modelId}`, "success");
             await this.refresh(false);
             return;
@@ -596,7 +611,7 @@
         if (msgEl) msgEl.textContent = `Install error: ${e.message}`;
         notify(`Install failed: ${e.message}`, "error");
       }finally{
-        if (btn){ btn.innerHTML = aiIcon('install',12) + ' ' + tr("settings.llm_install","Install"); btn.disabled = false; }
+        if (btn){ btn.innerHTML = ((typeof aiIcon==="function")?aiIcon('install',12):"") + ' ' + tr("settings.llm_install","Install"); btn.disabled = false; }
         this.updateInstallUI(group);
       }
     }
