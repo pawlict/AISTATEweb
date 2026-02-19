@@ -491,15 +491,12 @@
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
           <strong><i data-icon="edit" data-size="16"></i> Korekta tekstu <span id="proofread_lang_badge" class="small" style="opacity:.6"></span></strong>
         </div>
-        <div class="small muted" style="margin-bottom:8px;">Wklej tekst do korekty i kliknij „Generuj" (lub użyj tekstu z pola powyżej). Możesz dodać własne uwagi.</div>
-        <textarea class="textarea-large" id="proofread_input" style="min-height:120px;" placeholder="Wklej tekst do korekty…"></textarea>
-        <div style="margin-top:8px;">
-          <div class="small muted" style="margin-bottom:4px;">Masz jeszcze jakieś uwagi do korekty? (opcjonalnie)</div>
+        <div style="margin-bottom:8px;">
+          <div class="small muted" style="margin-bottom:4px;">Uwagi do korekty (opcjonalnie)</div>
           <textarea class="input" id="proofread_notes" style="min-height:50px; width:100%;" placeholder="Np. Zachowaj ton formalny, nie zmieniaj nazw własnych…"></textarea>
         </div>
-        <div style="margin-top:8px;">
-          <button class="btn" id="proofread_run_btn" onclick="proofreadRun()"><img src="/static/icons/akcje/generate_ai.svg" alt="" style="width:14px;height:14px;vertical-align:middle" draggable="false"> Koryguj</button>
-        </div>
+        <div class="small muted" style="margin-bottom:4px;">Wklej tekst do korekty i naciśnij przycisk Generuj na pasku narzędzi.</div>
+        <textarea class="textarea-large" id="proofread_input" style="min-height:120px;" placeholder="Wklej tekst do korekty…"></textarea>
         <div id="proofread_result_wrap" style="display:none; margin-top:12px;">
           <div class="small" style="margin-bottom:4px; font-weight:600;">Wynik korekty:</div>
           <div id="proofread_progress" style="display:none;">
