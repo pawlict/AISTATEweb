@@ -1414,10 +1414,11 @@ function _proofreadToggle(lang) {
             if (lbl) lbl.classList.remove('active');
         });
         if (box) box.style.display = 'none';
+        _proofreadSyncUI(false);
         return;
     }
 
-    // Select new language
+    // Select new language → enter proofreading mode
     _proofreadState.lang = lang;
     radios.forEach(function(r) {
         r.checked = (r.value === lang);
@@ -1429,6 +1430,38 @@ function _proofreadToggle(lang) {
     });
     if (box) box.style.display = '';
     if (badge) badge.textContent = lang === 'pl' ? '(PL)' : '(EN)';
+    _proofreadSyncUI(true);
+}
+
+/** Switch UI between proofreading mode and translation mode.
+ *  In proofreading mode: hide language selectors, NLLB models, translation sidebar sections;
+ *  change Generate button to run proofreading. */
+function _proofreadSyncUI(proofActive) {
+    // --- Toolbar sections: hide translation-specific groups when proofing ---
+    var translationToolbarIds = ['translation_mode_box', 'translation_models'];
+    translationToolbarIds.forEach(function(id) {
+        var el = _byId(id);
+        if (el) el.style.display = proofActive ? 'none' : '';
+    });
+
+    // --- Sidebar: dim / disable language & option sections ---
+    var sidebar = document.querySelector('.translation-sidebar');
+    if (sidebar) {
+        sidebar.style.opacity = proofActive ? '0.35' : '';
+        sidebar.style.pointerEvents = proofActive ? 'none' : '';
+    }
+
+    // --- Generate button: switch action ---
+    var genBtn = _byId('generate-btn');
+    if (genBtn) {
+        if (proofActive) {
+            genBtn.setAttribute('onclick', 'proofreadRun()');
+            genBtn.title = 'Koryguj tekst';
+        } else {
+            genBtn.setAttribute('onclick', 'startTranslation()');
+            genBtn.title = 'Tłumacz';
+        }
+    }
 }
 
 async function proofreadRun() {
