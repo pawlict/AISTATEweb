@@ -721,9 +721,13 @@ async function handleFile(file) {
     const fileName = document.getElementById('file-name');
     const fileSize = document.getElementById('file-size');
     
-    fileName.textContent = file.name;
-    fileSize.textContent = formatFileSize(file.size);
-    fileInfo.classList.remove('hidden');
+    if (fileName) fileName.textContent = file.name;
+    if (fileSize) fileSize.textContent = formatFileSize(file.size);
+    if (fileInfo) fileInfo.classList.remove('hidden');
+
+    // Show file name in toolbar label
+    var toolbarLabel = _byId('tr_file_label');
+    if (toolbarLabel) toolbarLabel.textContent = file.name;
     
     // Upload and extract text
     try {
