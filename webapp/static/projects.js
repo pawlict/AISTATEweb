@@ -94,25 +94,23 @@ function renderProjects(ws){
       `<span class="small" style="opacity:.7">► ${esc(l.target_name||l.source_id)}</span>`
     ).join(' ');
 
-    // Build team section — owner first, then others
+    // Build team section — owner first, then up to 2 others
     const members = ws.members || [];
     const owner = members.find(m => m.role === 'owner');
     const others = members.filter(m => m.role !== 'owner');
     let teamHtml = '';
     if(owner){
       const ownerName = owner.display_name || owner.username || owner.name || '?';
-      teamHtml += `<div style="font-size:.78rem;white-space:nowrap"><img src="/static/icons/uzytkownicy/user_role.svg" alt="" draggable="false" style="width:14px;height:14px;vertical-align:middle;opacity:.7;margin-right:2px"><b>${esc(ownerName)}</b></div>`;
+      teamHtml += `<div style="font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><img src="/static/icons/uzytkownicy/user_role.svg" alt="" draggable="false" style="width:12px;height:12px;vertical-align:middle;opacity:.7;margin-right:1px"><b>${esc(ownerName)}</b></div>`;
     }
     if(others.length){
-      const chips = others.map(m => {
-        const n = m.display_name || m.username || m.name || '?';
-        const r = ROLE_LABELS[m.role] || m.role;
-        return `<span style="font-size:.7rem;opacity:.65" title="${esc(r)}">${esc(n)}</span>`;
-      }).join('<span style="opacity:.3;font-size:.65rem"> · </span>');
-      teamHtml += `<div style="display:flex;align-items:center;gap:0;flex-wrap:wrap">${chips}</div>`;
+      const shown = others.slice(0, 2);
+      const extra = others.length - shown.length;
+      const names = shown.map(m => esc(m.display_name || m.username || m.name || '?')).join(', ');
+      teamHtml += `<div style="font-size:.65rem;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${others.map(m=>esc(m.display_name||m.username||'?')+' ('+esc(ROLE_LABELS[m.role]||m.role)+')').join(', ')}">${names}${extra ? ' +' + extra : ''}</div>`;
     }
     if(!members.length){
-      teamHtml = '<div style="font-size:.75rem;opacity:.4">—</div>';
+      teamHtml = '<div style="font-size:.7rem;opacity:.35">—</div>';
     }
 
     const card = document.createElement('div');
@@ -120,9 +118,8 @@ function renderProjects(ws){
     card.innerHTML = `
       <div class="sp-card-row">
         <div class="sp-card-info">
-          <div style="font-weight:700">${icon} ${esc(sp.name)}</div>
-          <div class="small">${esc(typeLabel)} · ${esc(sp.status)} · ${shortDate(sp.created_at)}</div>
-          ${links ? '<div style="margin-top:2px">'+links+'</div>' : ''}
+          <div>${icon} ${esc(sp.name)}</div>
+          <div class="small" style="font-size:.7rem">${esc(typeLabel)} · ${shortDate(sp.created_at)}</div>
         </div>
         <div class="sp-card-sep"></div>
         <div class="sp-card-team">
@@ -130,8 +127,8 @@ function renderProjects(ws){
         </div>
         <div class="sp-card-sep"></div>
         <div class="sp-card-actions">
-          <button class="btn secondary sp-open" style="font-size:.78rem;padding:3px 10px">Otwórz</button>
-          <button class="btn danger sp-del" style="font-size:.78rem;padding:3px 8px" title="Usuń">${aiIcon('delete',14)}</button>
+          <button class="btn secondary sp-open" style="font-size:.72rem;padding:2px 8px">Otwórz</button>
+          <button class="btn danger sp-del" style="font-size:.72rem;padding:2px 6px" title="Usuń">${aiIcon('delete',13)}</button>
         </div>
       </div>`;
 
