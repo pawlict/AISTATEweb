@@ -38,14 +38,6 @@
     return `\n\n## Dodatkowa analiza (${ts}, model=${String(model||"").trim() || "?"})\n\n`;
   }
 
-  // Proofreading state (used by toggle/run/accept logic)
-  const ProofreadState = {
-    lang: null,        // "pl" | "en" | null
-    corrected: "",     // clean corrected text
-    diffHtml: "",      // HTML with diff markup
-    running: false,
-  };
-
   const State = {
     projectId: "",
     prompts: {system:[], user:[]},
@@ -1316,14 +1308,7 @@ async function _regenQuickIfNeeded(){
   }
 
   async function _bind(){
-    QS("#an_generate_btn").onclick = () => {
-      // When proofreading mode is active, run proofreading instead of deep analysis
-      if(ProofreadState.lang){
-        _proofreadRun();
-        return;
-      }
-      _startStream();
-    };
+    QS("#an_generate_btn").onclick = _startStream;
     QS("#an_stop_btn").onclick = _stopStream;
     QS("#an_copy_btn").onclick = _copy;
     const saveBtn = QS("#an_save_btn");
@@ -1410,33 +1395,6 @@ if(dSel){
   };
 }
 
-    // --- Proofreading radio toggles (mutually exclusive, deselectable) ---
-    QSA('input[name="proofread_lang"]').forEach(radio => {
-      const label = radio.closest("label");
-      if(label){
-        label.addEventListener("click", (ev) => {
-          // Radio buttons can't natively deselect — handle it manually
-          const wasChecked = radio.checked;
-          const wasLang = ProofreadState.lang;
-          // Let default click propagate, then check if we need to undo
-          setTimeout(() => {
-            if(wasLang === radio.value && wasChecked){
-              // was already selected -> deselect
-              _proofreadToggle(radio.value);
-            } else {
-              _proofreadToggle(radio.value);
-            }
-          }, 0);
-        });
-      }
-    });
-
-    // Accept and Copy proofreading buttons
-    const prAccept = QS("#proofread_accept_btn");
-    if(prAccept) prAccept.onclick = _proofreadAccept;
-    const prCopy = QS("#proofread_copy_btn");
-    if(prCopy) prCopy.onclick = _proofreadCopy;
-
     _bindUiStateListeners();
   }
 
@@ -1472,107 +1430,6 @@ if(dSel){
       await _editPrompt(promptId);
     }
   };
-
-  // --- Proofreading (korekta tekstu) ---
-
-  function _proofreadToggle(lang){
-    const radios = QSA('input[name="proofread_lang"]');
-    const box = QS("#proofread_box");
-    const badge = QS("#proofread_lang_badge");
-
-    if(ProofreadState.lang === lang){
-      // Deselect — click same one again
-      ProofreadState.lang = null;
-      radios.forEach(r => { r.checked = false; });
-      if(box) box.style.display = "none";
-      return;
-    }
-
-    ProofreadState.lang = lang;
-    radios.forEach(r => { r.checked = (r.value === lang); });
-    if(box) box.style.display = "";
-    if(badge) badge.textContent = lang === "pl" ? "(PL)" : "(EN)";
-  }
-
-  async function _proofreadRun(){
-    if(ProofreadState.running) return;
-    if(!ProofreadState.lang){
-      showToast("Wybierz język korekty (PL lub EN).", 'warning');
-      return;
-    }
-    const text = String(QS("#proofread_input")?.value || "").trim();
-    if(!text){
-      showToast("Wklej tekst do korekty.", 'warning');
-      return;
-    }
-
-    const notes = String(QS("#proofread_notes")?.value || "").trim();
-    const resultWrap = QS("#proofread_result_wrap");
-    const resultEl = QS("#proofread_result");
-    const progressEl = QS("#proofread_progress");
-    const acceptBtn = QS("#proofread_accept_btn");
-    const copyBtn = QS("#proofread_copy_btn");
-
-    if(resultWrap) resultWrap.style.display = "";
-    if(progressEl) progressEl.style.display = "";
-    if(resultEl) resultEl.innerHTML = '<div class="small muted">Trwa korekta…</div>';
-    if(acceptBtn) acceptBtn.style.display = "none";
-    if(copyBtn) copyBtn.style.display = "none";
-
-    ProofreadState.running = true;
-    ProofreadState.corrected = "";
-    ProofreadState.diffHtml = "";
-
-    try{
-      const resp = await api("/api/proofreading/run", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-          text: text,
-          lang: ProofreadState.lang,
-          notes: notes || "",
-        }),
-      });
-
-      if(resp && resp.status === "ok"){
-        ProofreadState.corrected = resp.corrected || "";
-        ProofreadState.diffHtml = resp.diff_html || "";
-        if(resultEl) resultEl.innerHTML = ProofreadState.diffHtml || '<div class="small muted">Brak zmian.</div>';
-        if(acceptBtn) acceptBtn.style.display = "";
-        if(copyBtn) copyBtn.style.display = "";
-      } else {
-        if(resultEl) resultEl.innerHTML = '<div class="small" style="color:var(--danger)">Błąd korekty.</div>';
-      }
-    }catch(e){
-      if(resultEl) resultEl.innerHTML = `<div class="small" style="color:var(--danger)">Błąd: ${_esc(String(e?.message || e))}</div>`;
-    }finally{
-      ProofreadState.running = false;
-      if(progressEl) progressEl.style.display = "none";
-    }
-  }
-
-  function _proofreadAccept(){
-    const resultEl = QS("#proofread_result");
-    if(!resultEl || !ProofreadState.corrected) return;
-    // Show clean corrected text (no diff markup)
-    resultEl.textContent = ProofreadState.corrected;
-    const acceptBtn = QS("#proofread_accept_btn");
-    if(acceptBtn) acceptBtn.style.display = "none";
-  }
-
-  async function _proofreadCopy(){
-    const text = ProofreadState.corrected || "";
-    if(!text){
-      showToast("Brak tekstu do skopiowania.", 'warning');
-      return;
-    }
-    try{
-      await navigator.clipboard.writeText(text);
-      showToast("Skopiowano poprawiony tekst.", 'success');
-    }catch{
-      showToast("Nie udało się skopiować.", 'error');
-    }
-  }
 
   // --- Finance Entity Memory UI ---
 

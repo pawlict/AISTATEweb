@@ -304,7 +304,26 @@
 
       <div class="toolbar-sep"></div>
 
-      <!-- Sekcja 2: Modele / silniki -->
+      <!-- Sekcja 2: Korekta tekstu (PL / EN) -->
+      <div class="toolbar-section">
+        <div class="toolbar-group" id="proofreading_group">
+          <label class="toolbar-group-label"><img src="/static/icons/edycja_tekstu/proofread_pl.svg" alt="" draggable="false"> Korekta</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="Korekta tekstu polskiego" data-i18n-title="translation.proofread_pl">
+              <input type="radio" name="proofread_lang" value="pl">
+              <img src="/static/icons/edycja_tekstu/proofread_pl.svg" alt="PL" draggable="false">
+            </label>
+            <label class="pill pill-icon" title="Korekta tekstu angielskiego" data-i18n-title="translation.proofread_en">
+              <input type="radio" name="proofread_lang" value="en">
+              <img src="/static/icons/edycja_tekstu/proofread_en.svg" alt="EN" draggable="false">
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 3: Modele / silniki -->
       <div class="toolbar-section">
         <!-- Work mode -->
         <div class="toolbar-group" id="translation_mode_box">
@@ -465,6 +484,41 @@
         <button class="tts-speak-btn" id="tts-input-btn" type="button" title="Odsłuchaj tekst źródłowy" data-i18n-title="translation.tts.listen_source" style="display:none;">
           <i data-icon="speaker" data-size="16"></i>
         </button>
+      </div>
+
+      <!-- PROOFREADING PANEL (shown when PL or EN toggle is active) -->
+      <div id="proofread_box" style="display:none; margin-bottom:15px; padding:15px; background:#f9f9f9; border:1px solid #e0e0e0; border-radius:8px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <strong><i data-icon="edit" data-size="16"></i> Korekta tekstu <span id="proofread_lang_badge" class="small" style="opacity:.6"></span></strong>
+        </div>
+        <div class="small muted" style="margin-bottom:8px;">Wklej tekst do korekty i kliknij „Generuj" (lub użyj tekstu z pola powyżej). Możesz dodać własne uwagi.</div>
+        <textarea class="textarea-large" id="proofread_input" style="min-height:120px;" placeholder="Wklej tekst do korekty…"></textarea>
+        <div style="margin-top:8px;">
+          <div class="small muted" style="margin-bottom:4px;">Masz jeszcze jakieś uwagi do korekty? (opcjonalnie)</div>
+          <textarea class="input" id="proofread_notes" style="min-height:50px; width:100%;" placeholder="Np. Zachowaj ton formalny, nie zmieniaj nazw własnych…"></textarea>
+        </div>
+        <div style="margin-top:8px;">
+          <button class="btn" id="proofread_run_btn" onclick="proofreadRun()"><img src="/static/icons/akcje/generate_ai.svg" alt="" style="width:14px;height:14px;vertical-align:middle" draggable="false"> Koryguj</button>
+        </div>
+        <div id="proofread_result_wrap" style="display:none; margin-top:12px;">
+          <div class="small" style="margin-bottom:4px; font-weight:600;">Wynik korekty:</div>
+          <div id="proofread_progress" style="display:none;">
+            <div class="progress-bar" style="margin-bottom:8px;">
+              <div class="progress-fill" id="proofread_prog_bar" style="width:0%;">
+                <span id="proofread_prog_pct">0%</span>
+              </div>
+            </div>
+          </div>
+          <div id="proofread_result" class="proofread-result"></div>
+          <div style="margin-top:8px; display:flex; gap:8px;">
+            <button class="btn secondary" id="proofread_accept_btn" style="display:none;" title="Akceptuj poprawki — wyczyść oznaczenia zmian" onclick="proofreadAccept()">
+              <img src="/static/icons/akcje/check.svg" alt="" style="width:16px;height:16px;vertical-align:middle" draggable="false"> Akceptuj
+            </button>
+            <button class="btn secondary" id="proofread_copy_btn" style="display:none;" onclick="proofreadCopy()">
+              <i data-icon="copy" data-size="14"></i> Kopiuj
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- PROGRESS BAR -->

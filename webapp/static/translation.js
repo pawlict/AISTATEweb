@@ -1394,6 +1394,139 @@ function _ttsPlayUrl(url, btn) {
     });
 }
 
+// ============================================================================
+// Proofreading (korekta tekstu PL / EN)
+// ============================================================================
+
+var _proofreadState = { lang: null, corrected: '', diffHtml: '', running: false };
+
+function _proofreadToggle(lang) {
+    var radios = document.querySelectorAll('input[name="proofread_lang"]');
+    var box = _byId('proofread_box');
+    var badge = _byId('proofread_lang_badge');
+
+    if (_proofreadState.lang === lang) {
+        // Deselect — click same toggle again
+        _proofreadState.lang = null;
+        radios.forEach(function(r) { r.checked = false; });
+        if (box) box.style.display = 'none';
+        return;
+    }
+
+    _proofreadState.lang = lang;
+    radios.forEach(function(r) { r.checked = (r.value === lang); });
+    if (box) box.style.display = '';
+    if (badge) badge.textContent = lang === 'pl' ? '(PL)' : '(EN)';
+}
+
+async function proofreadRun() {
+    if (_proofreadState.running) return;
+    if (!_proofreadState.lang) {
+        showToast('Wybierz język korekty (PL lub EN).', 'warning');
+        return;
+    }
+
+    // Use proofreading input; if empty, try using the main translation input
+    var text = String((_byId('proofread_input') || {}).value || '').trim();
+    if (!text) {
+        text = String((_byId('input-text') || {}).value || '').trim();
+    }
+    if (!text) {
+        showToast('Wklej tekst do korekty.', 'warning');
+        return;
+    }
+
+    var notes = String((_byId('proofread_notes') || {}).value || '').trim();
+    var resultWrap = _byId('proofread_result_wrap');
+    var resultEl = _byId('proofread_result');
+    var progressEl = _byId('proofread_progress');
+    var acceptBtn = _byId('proofread_accept_btn');
+    var copyBtn = _byId('proofread_copy_btn');
+
+    if (resultWrap) resultWrap.style.display = '';
+    if (progressEl) progressEl.style.display = '';
+    if (resultEl) resultEl.innerHTML = '<div class="small muted">Trwa korekta…</div>';
+    if (acceptBtn) acceptBtn.style.display = 'none';
+    if (copyBtn) copyBtn.style.display = 'none';
+
+    _proofreadState.running = true;
+    _proofreadState.corrected = '';
+    _proofreadState.diffHtml = '';
+
+    try {
+        var resp = await fetch('/api/proofreading/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text: text,
+                lang: _proofreadState.lang,
+                notes: notes || '',
+            }),
+        });
+        var data = await resp.json();
+
+        if (resp.ok && data && data.status === 'ok') {
+            _proofreadState.corrected = data.corrected || '';
+            _proofreadState.diffHtml = data.diff_html || '';
+            if (resultEl) resultEl.innerHTML = _proofreadState.diffHtml || '<div class="small muted">Brak zmian.</div>';
+            if (acceptBtn) acceptBtn.style.display = '';
+            if (copyBtn) copyBtn.style.display = '';
+        } else {
+            var msg = (data && (data.detail || data.error)) || 'Błąd korekty';
+            if (resultEl) resultEl.innerHTML = '<div class="small" style="color:#b91c1c;">Błąd: ' + msg + '</div>';
+        }
+    } catch(e) {
+        if (resultEl) resultEl.innerHTML = '<div class="small" style="color:#b91c1c;">Błąd: ' + String(e.message || e) + '</div>';
+    } finally {
+        _proofreadState.running = false;
+        if (progressEl) progressEl.style.display = 'none';
+    }
+}
+
+function proofreadAccept() {
+    var resultEl = _byId('proofread_result');
+    if (!resultEl || !_proofreadState.corrected) return;
+    // Show clean corrected text (no diff markup)
+    resultEl.textContent = _proofreadState.corrected;
+    var acceptBtn = _byId('proofread_accept_btn');
+    if (acceptBtn) acceptBtn.style.display = 'none';
+}
+
+async function proofreadCopy() {
+    var text = _proofreadState.corrected || '';
+    if (!text) {
+        showToast('Brak tekstu do skopiowania.', 'warning');
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('Skopiowano poprawiony tekst.', 'success');
+    } catch(e) {
+        showToast('Nie udało się skopiować.', 'error');
+    }
+}
+
+// Bind proofreading radio toggles (mutually exclusive, deselectable)
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('input[name="proofread_lang"]').forEach(function(radio) {
+        var label = radio.closest('label');
+        if (label) {
+            label.addEventListener('click', function() {
+                var wasLang = _proofreadState.lang;
+                setTimeout(function() {
+                    if (wasLang === radio.value) {
+                        // was already selected -> deselect
+                        _proofreadToggle(radio.value);
+                    } else {
+                        _proofreadToggle(radio.value);
+                    }
+                }, 0);
+            });
+        }
+    });
+});
+
+
 // Init TTS on page load
 document.addEventListener('DOMContentLoaded', () => {
     _ttsInit();
