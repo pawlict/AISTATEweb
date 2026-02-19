@@ -47,6 +47,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
             "/api/settings", "/api/asr/", "/api/nllb/",
             "/api/tts/", "/api/admin/", "/api/ollama/",
             "/api/sound-detection/",
+            "/api/models/",
         ],
         "api_keywords": [],
     },
