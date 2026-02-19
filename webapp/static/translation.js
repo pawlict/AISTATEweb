@@ -1403,13 +1403,12 @@ function _ttsPlayUrl(url, btn) {
 // ============================================================================
 
 var _proofreadState = { lang: null, corrected: '', diffHtml: '', running: false };
-var _proofreadModelsLoaded = false;
-
-/** Load proofreading models from /api/models/list → proofreading category */
+/** Load proofreading models from /api/models/list → proofreading category.
+ *  Always fetches fresh data (models may be installed/uninstalled between toggles). */
 async function _proofreadLoadModels() {
-    if (_proofreadModelsLoaded) return;
     var sel = _byId('proofread_model_select');
     if (!sel) return;
+    var prevVal = sel.value || '';
     try {
         var resp = await fetch('/api/models/list');
         var data = await resp.json();
@@ -1423,18 +1422,20 @@ async function _proofreadLoadModels() {
             sel.appendChild(opt);
             sel.disabled = true;
         } else {
+            var hasDefault = false;
             installed.forEach(function(m) {
                 var opt = document.createElement('option');
                 opt.value = m.id;
                 var label = m.display_name || m.id;
                 if (m.vram) label += ' \u2022 ' + m.vram;
                 opt.textContent = label;
-                if (m.default) opt.selected = true;
+                // Preserve previous selection or use default
+                if (prevVal && m.id === prevVal) { opt.selected = true; hasDefault = true; }
+                else if (!prevVal && m.default) { opt.selected = true; hasDefault = true; }
                 sel.appendChild(opt);
             });
             sel.disabled = false;
         }
-        _proofreadModelsLoaded = true;
     } catch(e) {
         sel.innerHTML = '<option value="">Błąd ładowania modeli</option>';
     }
