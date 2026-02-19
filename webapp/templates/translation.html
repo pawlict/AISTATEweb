@@ -339,6 +339,15 @@
 
     <div class="analysis-toolbar-right">
 
+      <!-- Sekcja 0: Import pliku -->
+      <div class="toolbar-section">
+        <input type="file" id="file-input" accept=".txt,.docx,.pdf,.srt" style="display:none"/>
+        <button class="btn pill-icon" id="tr_import_btn" title="Importuj dokument (TXT, DOCX, PDF, SRT)" data-i18n-title="translation.btn.import_file" onclick="document.getElementById('file-input').click()"><img src="/static/icons/pliki/file_import.svg" alt="Import" draggable="false"></button>
+        <span class="small" id="tr_file_label" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.8"></span>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
       <!-- Sekcja 1: Generuj -->
       <div class="toolbar-section">
         <button class="btn pill-icon" id="generate-btn" title="Tłumacz" data-i18n-title="translation.generate_tooltip" onclick="startTranslation()"><img src="/static/icons/akcje/generate_ai.svg" alt="Tłumacz" draggable="false"></button>
@@ -518,18 +527,6 @@
         <button class="preset-btn" onclick="applyPreset('business')" data-i18n="translation.preset.business"><i data-icon="document" data-size="14"></i> Dokumenty biznesowe</button>
         <button class="preset-btn" onclick="applyPreset('transcripts')" data-i18n="translation.preset.transcripts"><i data-icon="transcription" data-size="14"></i> Transkrypcje audio</button>
         <button class="preset-btn" onclick="applyPreset('scientific')" data-i18n="translation.preset.scientific"><i data-icon="deep_search" data-size="14"></i> Artykuły naukowe</button>
-      </div>
-
-      <!-- IMPORT -->
-      <div class="section">
-        <div class="section-title" data-i18n="translation.import">Import dokumentu</div>
-        <input type="file" id="file-input" accept=".txt,.docx,.pdf,.srt" style="display: none;"/>
-        <button class="btn secondary" style="width: 100%;" onclick="document.getElementById('file-input').click()" data-i18n="translation.btn.choose_file">
-          <i data-icon="folder" data-size="14"></i> Wybierz plik...
-        </button>
-        <div style="font-size: 11px; color: #666; margin-top: 8px;" data-i18n="translation.import.supported">
-          Obsługiwane: TXT, DOCX, PDF, SRT
-        </div>
       </div>
 
     </div>
