@@ -4045,6 +4045,10 @@ async def api_models_list() -> Any:
     if st.status == "online":
         installed = st.models or []
 
+    # Ollama normalizes model names to lowercase; our catalog uses mixed case.
+    # Build a case-insensitive lookup set for reliable matching.
+    installed_lower = {m.lower() for m in installed}
+
     custom = _read_custom_models()
 
     def _entry(mid: str, category: str) -> Dict[str, Any]:
@@ -4063,7 +4067,7 @@ async def api_models_list() -> Any:
         return {
             "id": mid,
             "display_name": str(info.get("display_name") or mid),
-            "installed": mid in installed,
+            "installed": mid.lower() in installed_lower,
             "default": bool((info.get("defaults") or {}).get(category)) if info else False,
             "vram": str(((info.get("hardware") or {}).get("vram")) or ""),
             "speed": str(at or ""),
@@ -6087,7 +6091,7 @@ _PROOFREAD_PRIORITY_PL = [
     "SpeakLeash/bielik-11b-v2.3-instruct:Q6_K",
     "SpeakLeash/bielik-11b-v2.3-instruct:Q5_K_M",
     "SpeakLeash/bielik-11b-v2.3-instruct:Q4_K_M",
-    "PRIHLOP/PLLuM",
+    "PRIHLOP/PLLuM",                                # Polski LLM — natywny model PL
     "qwen3:14b",
     "qwen3:8b",
 ]
@@ -6108,12 +6112,14 @@ def _pick_proofread_model(lang: str, installed: List[str], override: str = "") -
 
     If user override is set and installed, use it.
     Otherwise walk the priority list for the requested language.
+    Comparison is case-insensitive (Ollama lowercases model names).
     """
-    if override and override in installed:
+    installed_lower = {m.lower() for m in installed}
+    if override and override.lower() in installed_lower:
         return override
     priority = _PROOFREAD_PRIORITY_PL if lang == "pl" else _PROOFREAD_PRIORITY_EN
     for mid in priority:
-        if mid in installed:
+        if mid.lower() in installed_lower:
             return mid
     # absolute fallback
     return DEFAULT_MODELS.get("proofreading", "qwen3:8b")
