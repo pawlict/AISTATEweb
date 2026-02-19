@@ -16,6 +16,26 @@
   box-shadow:0 0 8px rgba(0,212,255,.15);
 }
 .sp-type-btn img{width:28px;height:28px}
+
+/* Project card — 3-section layout */
+.sp-card{cursor:pointer;transition:transform .15s}
+.sp-card-row{
+  display:flex;align-items:center;gap:12px;
+}
+.sp-card-info{flex:1;min-width:0}
+.sp-card-team{
+  flex:0 0 auto;min-width:100px;max-width:220px;
+  display:flex;flex-direction:column;gap:1px;
+  padding:0 4px;
+}
+.sp-card-actions{
+  flex:0 0 auto;
+  display:flex;gap:4px;align-items:center;
+}
+.sp-card-sep{
+  width:1px;height:28px;background:#d0d5dd;opacity:.45;
+  align-self:center;flex-shrink:0;
+}
 </style>
 
 <div class="analysis-page projects-page">
@@ -51,25 +71,12 @@
   <!-- ===== CONTENT ===== -->
   <div class="card" id="projectsApp">
 
-    <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start" id="projectsGrid">
-      <!-- LEFT: Projects -->
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <div class="label" style="font-weight:700" data-i18n="projects.subprojects">Projekty</div>
-        </div>
-        <div id="projectList" style="display:flex;flex-direction:column;gap:8px"></div>
-        <div id="projectEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6">Brak projektów. Utwórz nowy!</div>
+    <div id="projectsGrid">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="label" style="font-weight:700" data-i18n="projects.subprojects">Projekty</div>
       </div>
-
-      <!-- RIGHT: Team + Activity -->
-      <div>
-        <div class="subcard" style="margin-bottom:12px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <div class="label" style="font-weight:700" data-i18n="projects.team">Zespół</div>
-          </div>
-          <div id="membersList" style="display:flex;flex-direction:column;gap:4px"></div>
-        </div>
-      </div>
+      <div id="projectList" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div id="projectEmpty" class="small" style="display:none;padding:20px;text-align:center;opacity:.6">Brak projektów. Utwórz nowy!</div>
     </div>
 
   </div>

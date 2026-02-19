@@ -94,17 +94,42 @@ function renderProjects(ws){
       `<span class="small" style="opacity:.7">► ${esc(l.target_name||l.source_id)}</span>`
     ).join(' ');
 
+    // Build team section — owner first, then others
+    const members = ws.members || [];
+    const owner = members.find(m => m.role === 'owner');
+    const others = members.filter(m => m.role !== 'owner');
+    let teamHtml = '';
+    if(owner){
+      const ownerName = owner.display_name || owner.username || owner.name || '?';
+      teamHtml += `<div style="font-size:.78rem;white-space:nowrap"><img src="/static/icons/uzytkownicy/user_role.svg" alt="" draggable="false" style="width:14px;height:14px;vertical-align:middle;opacity:.7;margin-right:2px"><b>${esc(ownerName)}</b></div>`;
+    }
+    if(others.length){
+      const chips = others.map(m => {
+        const n = m.display_name || m.username || m.name || '?';
+        const r = ROLE_LABELS[m.role] || m.role;
+        return `<span style="font-size:.7rem;opacity:.65" title="${esc(r)}">${esc(n)}</span>`;
+      }).join('<span style="opacity:.3;font-size:.65rem"> · </span>');
+      teamHtml += `<div style="display:flex;align-items:center;gap:0;flex-wrap:wrap">${chips}</div>`;
+    }
+    if(!members.length){
+      teamHtml = '<div style="font-size:.75rem;opacity:.4">—</div>';
+    }
+
     const card = document.createElement('div');
-    card.className = 'subcard';
-    card.style.cssText = 'cursor:pointer;transition:transform .15s';
+    card.className = 'subcard sp-card';
     card.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <div>
+      <div class="sp-card-row">
+        <div class="sp-card-info">
           <div style="font-weight:700">${icon} ${esc(sp.name)}</div>
           <div class="small">${esc(typeLabel)} · ${esc(sp.status)} · ${shortDate(sp.created_at)}</div>
           ${links ? '<div style="margin-top:2px">'+links+'</div>' : ''}
         </div>
-        <div style="display:flex;gap:4px">
+        <div class="sp-card-sep"></div>
+        <div class="sp-card-team">
+          ${teamHtml}
+        </div>
+        <div class="sp-card-sep"></div>
+        <div class="sp-card-actions">
           <button class="btn secondary sp-open" style="font-size:.78rem;padding:3px 10px">Otwórz</button>
           <button class="btn danger sp-del" style="font-size:.78rem;padding:3px 8px" title="Usuń">${aiIcon('delete',14)}</button>
         </div>
@@ -151,37 +176,6 @@ function renderProjects(ws){
       linkSelect.appendChild(opt);
     });
   }
-
-  // Members
-  const mList = document.getElementById('membersList');
-  const members = ws.members || [];
-  mList.innerHTML = '';
-  members.forEach(m => {
-    const name = m.display_name || m.username || '?';
-    const role = m.role;
-    const isOwner = role === 'owner';
-    const div = document.createElement('div');
-    div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:.85rem';
-    div.innerHTML = `
-      <span><b>${esc(name)}</b> <span class="small" style="opacity:.7">${ROLE_LABELS[role]||role}</span></span>
-      ${!isOwner && (ws.my_role === 'owner' || ws.my_role === 'manager')
-        ? '<button class="btn danger" style="font-size:.7rem;padding:2px 6px" data-remove="'+m.user_id+'">' + aiIcon('close',12) + '</button>'
-        : ''}
-    `;
-    const removeBtn = div.querySelector('[data-remove]');
-    if(removeBtn){
-      removeBtn.addEventListener('click', async () => {
-        if(!confirm('Usunąć '+name+' z projektu?')) return;
-        try {
-          await apiFetch(API+'/'+ws.id+'/members/'+m.user_id, {method:'DELETE'});
-          showToast('Użytkownik usunięty','info');
-          loadProjects();
-        } catch(err){ showToast(err.message || 'Błąd','error'); }
-      });
-    }
-    mList.appendChild(div);
-  });
-
 
   // Show/hide management buttons based on role
   const canManage = ws.my_role === 'owner' || ws.my_role === 'manager';
