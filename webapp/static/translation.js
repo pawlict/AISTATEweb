@@ -1435,7 +1435,8 @@ function _proofreadToggle(lang) {
 
 /** Switch UI between proofreading mode and translation mode.
  *  In proofreading mode: hide language selectors, NLLB models, translation sidebar sections;
- *  change Generate button to run proofreading. */
+ *  change Generate button to run proofreading.
+ *  Show floating mode badge in top-right corner. */
 function _proofreadSyncUI(proofActive) {
     // --- Toolbar sections: hide translation-specific groups when proofing ---
     var translationToolbarIds = ['translation_mode_box', 'translation_models'];
@@ -1451,6 +1452,13 @@ function _proofreadSyncUI(proofActive) {
         sidebar.style.pointerEvents = proofActive ? 'none' : '';
     }
 
+    // --- Main input textarea: hide in proofreading (user types in proofread_input) ---
+    var inputWrap = _byId('input-text');
+    if (inputWrap) {
+        var wrap = inputWrap.closest('div[style*="position"]') || inputWrap.parentElement;
+        if (wrap) wrap.style.display = proofActive ? 'none' : '';
+    }
+
     // --- Generate button: switch action ---
     var genBtn = _byId('generate-btn');
     if (genBtn) {
@@ -1461,6 +1469,52 @@ function _proofreadSyncUI(proofActive) {
             genBtn.setAttribute('onclick', 'startTranslation()');
             genBtn.title = 'Tłumacz';
         }
+    }
+
+    // --- Floating mode badge (top-right) ---
+    _proofreadUpdateModeBadge(proofActive);
+}
+
+/** Create/update the floating mode indicator badge in the top-right corner */
+function _proofreadUpdateModeBadge(proofActive) {
+    var badge = _byId('translation_mode_badge');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'translation_mode_badge';
+        badge.style.cssText = 'position:fixed; top:18px; right:18px; z-index:9999; '
+            + 'padding:8px 16px; border-radius:10px; font-size:13px; font-weight:600; '
+            + 'box-shadow:0 4px 16px rgba(0,0,0,.12); pointer-events:none; '
+            + 'transition: opacity .3s ease, transform .3s ease; opacity:0; transform:translateX(30px);';
+        document.body.appendChild(badge);
+        // Trigger entrance animation on next frame
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                badge.style.opacity = '1';
+                badge.style.transform = 'translateX(0)';
+            });
+        });
+    } else {
+        badge.style.opacity = '1';
+        badge.style.transform = 'translateX(0)';
+    }
+
+    if (proofActive) {
+        badge.style.background = 'rgba(217,119,6,.12)';
+        badge.style.border = '1px solid rgba(217,119,6,.3)';
+        badge.style.color = '#92400e';
+        badge.textContent = 'Program w trybie korekty';
+    } else {
+        badge.style.background = 'rgba(16,150,244,.10)';
+        badge.style.border = '1px solid rgba(16,150,244,.25)';
+        badge.style.color = '#1e5aa6';
+        badge.textContent = 'Program w trybie tłumaczeń';
+        // Auto-hide after 3s when going back to translation mode
+        setTimeout(function() {
+            if (!_proofreadState.lang && badge) {
+                badge.style.opacity = '0';
+                badge.style.transform = 'translateX(30px)';
+            }
+        }, 3000);
     }
 }
 
@@ -1552,17 +1606,23 @@ async function proofreadCopy() {
 }
 
 // Bind proofreading radio toggles (mutually exclusive, deselectable)
-// Radio buttons natively can't be unchecked — we use mousedown + preventDefault
-// to take full control over the checked state.
+// Native radio buttons inside <label> auto-check on click and can't be unchecked.
+// We intercept click on the LABEL, call preventDefault() to block native behavior,
+// then run our own toggle logic which controls radio.checked manually.
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('input[name="proofread_lang"]').forEach(function(radio) {
-        // Prevent native radio behaviour so we can toggle off
-        radio.addEventListener('click', function(e) { e.preventDefault(); });
         var label = radio.closest('label');
+
+        // Block ALL native radio change paths
+        radio.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); });
+        radio.addEventListener('mousedown', function(e) { e.preventDefault(); });
+
         if (label) {
-            label.addEventListener('mousedown', function(e) {
-                e.preventDefault();           // stop native radio check + focus
-                _proofreadToggle(radio.value); // our own toggle logic
+            // The label click is what the user actually triggers
+            label.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                _proofreadToggle(radio.value);
             });
         }
     });
