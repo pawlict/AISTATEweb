@@ -128,6 +128,7 @@ function renderProjects(ws){
         <div class="sp-card-sep"></div>
         <div class="sp-card-actions">
           <button class="btn secondary sp-open" style="font-size:.72rem;padding:2px 8px">Otwórz</button>
+          <button class="btn secondary sp-invite" style="font-size:.72rem;padding:2px 6px" title="Zaproś użytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="" draggable="false" style="width:13px;height:13px;vertical-align:middle"></button>
           <button class="btn danger sp-del" style="font-size:.72rem;padding:2px 6px" title="Usuń">${aiIcon('delete',13)}</button>
         </div>
       </div>`;
@@ -146,6 +147,12 @@ function renderProjects(ws){
       }
       const route = TYPE_ROUTES[sp.subproject_type] || '/analysis';
       window.location.href = route;
+    });
+
+    // Inline invite → open invite modal with this project pre-selected
+    card.querySelector('.sp-invite').addEventListener('click', (e) => {
+      e.stopPropagation();
+      _openInviteModal(sp.id);
     });
 
     // Inline delete → open modal with this project pre-selected
@@ -255,7 +262,8 @@ document.getElementById('npSubmit').addEventListener('click', async () => {
 // INVITE USER
 // =====================================================================
 
-document.getElementById('btnInviteUser').addEventListener('click', () => {
+/** Open invite modal, optionally pre-selecting a project. */
+function _openInviteModal(preSelectProjectId) {
   document.getElementById('invUsername').value = '';
   document.getElementById('invMessage').value = '';
   // Populate project selector
@@ -269,8 +277,13 @@ document.getElementById('btnInviteUser').addEventListener('click', () => {
       sel.appendChild(opt);
     });
   }
+  if(preSelectProjectId) sel.value = preSelectProjectId;
   showModal('modalInviteUser');
   document.getElementById('invUsername').focus();
+}
+
+document.getElementById('btnInviteUser').addEventListener('click', () => {
+  _openInviteModal(null);
 });
 
 // Enter key in invite username input triggers submit
