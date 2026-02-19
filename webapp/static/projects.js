@@ -127,9 +127,9 @@ function renderProjects(ws){
         </div>
         <div class="sp-card-sep"></div>
         <div class="sp-card-actions">
-          <button class="btn secondary sp-open" style="font-size:.72rem;padding:2px 8px">Otwórz</button>
-          <button class="btn secondary sp-invite" style="font-size:.72rem;padding:2px 6px" title="Zaproś użytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="" draggable="false" style="width:13px;height:13px;vertical-align:middle"></button>
-          <button class="btn danger sp-del" style="font-size:.72rem;padding:2px 6px" title="Usuń">${aiIcon('delete',13)}</button>
+          <button class="btn pill-icon sp-open" title="Otwórz"><img src="/static/icons/projekty/project_open.svg" alt="Otwórz" draggable="false"></button>
+          <button class="btn pill-icon sp-invite" title="Zaproś użytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="Zaproś" draggable="false"></button>
+          <button class="btn pill-icon sp-del" title="Usuń"><img src="/static/icons/akcje/remove.svg" alt="Usuń" draggable="false"></button>
         </div>
       </div>`;
 
