@@ -676,6 +676,31 @@ button.pill-icon:hover{
   padding: 14px;
 }
 
+/* Proofreading diff result */
+.proofread-result{
+  width:100%;
+  min-height:100px;
+  max-height:50vh;
+  overflow:auto;
+  white-space:pre-wrap;
+  word-break:break-word;
+  background:rgba(15,23,42,.04);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:14px;
+  line-height:1.7;
+  font-size:14px;
+}
+.proofread-result .pr-del{
+  text-decoration:line-through;
+  color:#ef4444;
+  opacity:.7;
+}
+.proofread-result .pr-ins{
+  color:#10b981;
+  font-weight:600;
+}
+
 /* Finance entities panel */
 .finance-entities-list{max-height:300px;overflow-y:auto;}
 .finance-entity-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--border);font-size:13px;}
