@@ -1562,7 +1562,9 @@ async function proofreadRun() {
                 notes: notes || '',
             }),
         });
-        var data = await resp.json();
+
+        var data;
+        try { data = await resp.json(); } catch(_) { data = null; }
 
         if (resp.ok && data && data.status === 'ok') {
             _proofreadState.corrected = data.corrected || '';
@@ -1571,11 +1573,19 @@ async function proofreadRun() {
             if (acceptBtn) acceptBtn.style.display = '';
             if (copyBtn) copyBtn.style.display = '';
         } else {
-            var msg = (data && (data.detail || data.error)) || 'Błąd korekty';
-            if (resultEl) resultEl.innerHTML = '<div class="small" style="color:#b91c1c;">Błąd: ' + msg + '</div>';
+            // Extract the most specific error message from the backend
+            var msg = '';
+            if (data) msg = data.detail || data.error || data.message || '';
+            if (!msg) msg = 'HTTP ' + resp.status + ' — serwer nie zwrócił szczegółów błędu';
+            if (resp.status === 503) msg = 'Ollama niedostępna. Upewnij się że usługa Ollama jest uruchomiona. (' + msg + ')';
+            if (resp.status === 500) msg = 'Błąd serwera: ' + msg;
+            if (resultEl) resultEl.innerHTML = '<div class="small" style="color:#b91c1c;">' + msg + '</div>';
+            showToast(msg, 'error');
         }
     } catch(e) {
-        if (resultEl) resultEl.innerHTML = '<div class="small" style="color:#b91c1c;">Błąd: ' + String(e.message || e) + '</div>';
+        var errMsg = 'Nie udało się połączyć z serwerem: ' + String(e.message || e);
+        if (resultEl) resultEl.innerHTML = '<div class="small" style="color:#b91c1c;">' + errMsg + '</div>';
+        showToast(errMsg, 'error');
     } finally {
         _proofreadState.running = false;
         if (progressEl) progressEl.style.display = 'none';
