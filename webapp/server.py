@@ -6077,6 +6077,157 @@ def _quick_analysis_task_runner(project_id: str, log_cb=None, progress_cb=None) 
         raise
 
 
+# ---------------------------------------------------------------------------
+# Proofreading (language correction) endpoint
+# ---------------------------------------------------------------------------
+
+# Priority lists — first installed model wins.
+_PROOFREAD_PRIORITY_PL = [
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q8_0",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q6_K",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q5_K_M",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q4_K_M",
+    "PRIHLOP/PLLuM",
+    "qwen3:14b",
+    "qwen3:8b",
+]
+
+_PROOFREAD_PRIORITY_EN = [
+    "qwen3:14b",
+    "qwen3:8b",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q8_0",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q6_K",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q5_K_M",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q4_K_M",
+    "PRIHLOP/PLLuM",
+]
+
+
+def _pick_proofread_model(lang: str, installed: List[str], override: str = "") -> str:
+    """Select best available proofreading model.
+
+    If user override is set and installed, use it.
+    Otherwise walk the priority list for the requested language.
+    """
+    if override and override in installed:
+        return override
+    priority = _PROOFREAD_PRIORITY_PL if lang == "pl" else _PROOFREAD_PRIORITY_EN
+    for mid in priority:
+        if mid in installed:
+            return mid
+    # absolute fallback
+    return DEFAULT_MODELS.get("proofreading", "qwen3:8b")
+
+
+@app.post("/api/proofreading/run")
+async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Run proofreading on user-provided text.
+
+    Request body:
+      text (str): text to proofread
+      lang (str): "pl" or "en"
+      notes (str, optional): additional user instructions
+    Returns:
+      corrected (str): corrected text (clean, no markup)
+      diff_html (str): HTML with <span class="pr-del"> and <span class="pr-ins"> markup
+      model (str): model used
+    """
+    text = str(payload.get("text") or "").strip()
+    lang = str(payload.get("lang") or "pl").strip().lower()
+    notes = str(payload.get("notes") or "").strip()
+
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    if lang not in ("pl", "en"):
+        lang = "pl"
+
+    # Determine model
+    st = await OLLAMA.status()
+    installed: List[str] = []
+    if st.status == "online":
+        installed = st.models or []
+
+    override = _get_model_settings().get("proofreading") or ""
+    model = _pick_proofread_model(lang, installed, override)
+
+    app_log(f"Proofreading: lang={lang}, model={model}, text_len={len(text)}")
+
+    # Build prompt
+    if lang == "pl":
+        system_msg = (
+            "Jesteś profesjonalnym korektorem tekstu polskiego. "
+            "Popraw ortografię, gramatykę, interpunkcję i wygładź styl. "
+            "NIE zmieniaj znaczenia ani kontekstu tekstu. "
+            "Odpowiedz WYŁĄCZNIE poprawionym tekstem — bez komentarzy, bez wyjaśnień."
+        )
+    else:
+        system_msg = (
+            "You are a professional English proofreader. "
+            "Fix spelling, grammar, punctuation and smooth out the style. "
+            "Do NOT change the meaning or context of the text. "
+            "Reply ONLY with the corrected text — no comments, no explanations."
+        )
+
+    if notes:
+        system_msg += f"\n\nDodatkowe uwagi użytkownika: {notes}"
+
+    messages = [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": text},
+    ]
+
+    try:
+        resp = await OLLAMA.chat(model=model, messages=messages, options={"temperature": 0.3})
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Ollama error: {e}")
+
+    corrected = str((resp.get("message") or {}).get("content") or "").strip()
+    if not corrected:
+        raise HTTPException(status_code=500, detail="Model returned empty response")
+
+    # Build visual diff
+    diff_html = _build_proofread_diff(text, corrected)
+
+    return {
+        "status": "ok",
+        "corrected": corrected,
+        "diff_html": diff_html,
+        "model": model,
+        "lang": lang,
+    }
+
+
+def _build_proofread_diff(original: str, corrected: str) -> str:
+    """Build an HTML diff between original and corrected text.
+
+    Uses difflib.SequenceMatcher on words to produce:
+    - <span class="pr-del">removed words</span>
+    - <span class="pr-ins">added words</span>
+    - unchanged words as-is
+    """
+    import difflib
+    import html as html_mod
+
+    orig_words = original.split()
+    corr_words = corrected.split()
+
+    sm = difflib.SequenceMatcher(None, orig_words, corr_words)
+    parts: List[str] = []
+
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            parts.append(html_mod.escape(" ".join(orig_words[i1:i2])))
+        elif tag == "delete":
+            parts.append(f'<span class="pr-del">{html_mod.escape(" ".join(orig_words[i1:i2]))}</span>')
+        elif tag == "insert":
+            parts.append(f'<span class="pr-ins">{html_mod.escape(" ".join(corr_words[j1:j2]))}</span>')
+        elif tag == "replace":
+            parts.append(f'<span class="pr-del">{html_mod.escape(" ".join(orig_words[i1:i2]))}</span>')
+            parts.append(f'<span class="pr-ins">{html_mod.escape(" ".join(corr_words[j1:j2]))}</span>')
+
+    return " ".join(parts)
+
+
 @app.get("/api/analysis/quick/{project_id}")
 async def api_analysis_get_quick(project_id: str) -> Any:
     """Return cached quick summary if present."""
