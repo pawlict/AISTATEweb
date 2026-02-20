@@ -9,21 +9,16 @@
       <div class="h1" style="margin:0"><i data-icon="info_circle" data-size="40"></i> <span data-i18n="info.title">Info</span></div>
       <div class="small">{{ app_name }} {{ app_version }}</div>
     </div>
+
+    <div class="analysis-toolbar-right">
+      <div class="toolbar-section">
+        <button class="btn pill-icon info-toolbar-btn active" data-info-tab="about" id="info_tab_about" title="Informacje" data-i18n-title="info.tab_about"><img src="/static/icons/status/info_alert.svg" alt="Info" draggable="false"></button>
+        <button class="btn pill-icon info-toolbar-btn" data-info-tab="manual" id="info_tab_manual" title="Instrukcja obsługi" data-i18n-title="info.tab_manual"><img src="/static/icons/inne/manual.svg" alt="Manual" draggable="false"></button>
+      </div>
+    </div>
   </div>
 
-  <!-- Tab bar -->
-  <div class="analysis-tabs info-tabs">
-    <button class="analysis-tab active" data-info-tab="about" id="info_tab_about">
-      <span class="analysis-tab-icon"><img src="/static/icons/status/info_alert.svg" width="16" height="16" alt="" draggable="false"></span>
-      <span data-i18n="info.tab_about">Informacje</span>
-    </button>
-    <button class="analysis-tab" data-info-tab="manual" id="info_tab_manual">
-      <span class="analysis-tab-icon"><img src="/static/icons/inne/help.svg" width="16" height="16" alt="" draggable="false"></span>
-      <span data-i18n="info.tab_manual">Instrukcja obsługi</span>
-    </button>
-  </div>
-
-  <!-- Tab: About (Info) -->
+  <!-- Content: About (Info) -->
   <div class="info-tab-content" id="info_content_about">
     <div class="card">
       <div class="info-hero">
@@ -39,7 +34,7 @@
     </div>
   </div>
 
-  <!-- Tab: Manual -->
+  <!-- Content: Manual -->
   <div class="info-tab-content" id="info_content_manual" style="display:none">
     <div class="card">
       <div style="line-height:1.75">{{ manual_content|safe }}</div>
@@ -49,32 +44,33 @@
 </div>
 
 <script>
-  // If app stores UI language in localStorage (pl/en), align Info page without requiring a reload flow
+  // Sync Info page language with UI language from localStorage
   (function(){
     try{
       const url = new URL(window.location.href);
-      if (url.searchParams.get("lang")) return;
       const ls = (localStorage.getItem("ui_language") || localStorage.getItem("lang") || "").toLowerCase();
-      if (ls.startsWith("en") || ls.startsWith("pl")){
-        url.searchParams.set("lang", ls.startsWith("en") ? "en" : "pl");
-        window.location.replace(url.toString());
-      }
+      const wanted = ls.startsWith("en") ? "en" : ls.startsWith("pl") ? "pl" : "";
+      if (!wanted) return;
+      const current = (url.searchParams.get("lang") || "").toLowerCase();
+      if (current === wanted) return;
+      url.searchParams.set("lang", wanted);
+      window.location.replace(url.toString());
     }catch(e){}
   })();
 
-  // Tab switching
+  // Toolbar icon switching
   (function(){
-    const tabs = document.querySelectorAll('[data-info-tab]');
+    const btns = document.querySelectorAll('.info-toolbar-btn[data-info-tab]');
     const contents = {
       about:  document.getElementById('info_content_about'),
       manual: document.getElementById('info_content_manual')
     };
 
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        tabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        const which = tab.getAttribute('data-info-tab');
+    btns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        btns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const which = btn.getAttribute('data-info-tab');
         Object.entries(contents).forEach(([key, el]) => {
           if (el) el.style.display = (key === which) ? '' : 'none';
         });

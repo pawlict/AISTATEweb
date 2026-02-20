@@ -787,6 +787,7 @@ button.pill-icon:hover{
 /* ===================== Info Page ===================== */
 .info-page{display:flex; flex-direction:column; gap:14px; padding-bottom:20px}
 .info-toolbar{min-height:auto}
+.info-toolbar-btn.active{background:rgba(31,90,166,.18); border-color:rgba(31,90,166,.35); box-shadow:0 0 0 2px rgba(31,90,166,.12)}
 .info-hero{text-align:center; padding:24px 0 12px}
 .info-hero-title{font-size:22px; font-weight:800; color:var(--text)}
 .info-hero-version{font-size:14px; color:var(--muted); margin:4px 0 12px}
