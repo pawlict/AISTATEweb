@@ -282,18 +282,40 @@
   font-size: 13px;
 }
 
-/* Proofreading diff styles */
+/* Proofreading diff styles — Word-like typography */
 .proofread-result {
-  padding: 12px;
+  padding: 28px 32px;
   background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  line-height: 1.8;
-  font-size: 14px;
-  min-height: 60px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  font-family: 'Cambria', 'Georgia', 'Times New Roman', serif;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: #1a1a1a;
+  min-height: 120px;
+  max-height: 70vh;
+  overflow-y: auto;
 }
+.proofread-result p {
+  margin: 0 0 12px 0;
+  text-align: justify;
+  text-indent: 0;
+}
+.proofread-result p:last-child { margin-bottom: 0; }
+.proofread-result h1, .proofread-result h2, .proofread-result h3 {
+  font-family: 'Calibri', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  color: #1e3a5f;
+  margin: 18px 0 8px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e8e8e8;
+}
+.proofread-result h1 { font-size: 20px; }
+.proofread-result h2 { font-size: 17px; }
+.proofread-result h3 { font-size: 15px; border-bottom: none; }
+/* Diff markers */
 .proofread-result .pr-del {
-  background: rgba(220,38,38,.12);
+  background: rgba(220,38,38,.10);
   color: #991b1b;
   text-decoration: line-through;
   padding: 1px 3px;
@@ -301,10 +323,10 @@
   cursor: pointer;
   transition: opacity .15s;
 }
-.proofread-result .pr-del:hover { opacity: .6; }
+.proofread-result .pr-del:hover { opacity: .5; }
 .proofread-result .pr-del.pr-accepted { display: none; }
 .proofread-result .pr-ins {
-  background: rgba(22,163,74,.12);
+  background: rgba(22,163,74,.10);
   color: #166534;
   font-weight: 600;
   padding: 1px 3px;
@@ -312,15 +334,15 @@
   cursor: pointer;
   transition: opacity .15s;
 }
-.proofread-result .pr-ins:hover { opacity: .7; }
+.proofread-result .pr-ins:hover { opacity: .6; }
 .proofread-result .pr-ins.pr-rejected { display: none; }
 .proofread-result .pr-user-edit {
-  background: rgba(37,99,235,.10);
+  background: rgba(37,99,235,.08);
   color: #1e40af;
   font-weight: 600;
   padding: 1px 3px;
   border-radius: 3px;
-  border-bottom: 2px solid rgba(37,99,235,.3);
+  border-bottom: 2px solid rgba(37,99,235,.25);
 }
 .proofread-result [contenteditable] { outline: none; }
 
