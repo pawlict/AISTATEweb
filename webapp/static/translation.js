@@ -1689,25 +1689,41 @@ function _proofreadMakeDiffInteractive(container) {
 }
 
 /** Extract final text from the interactive diff result.
- *  Hidden (accepted/rejected) spans are excluded. */
+ *  Hidden (accepted/rejected) spans are excluded.
+ *  Paragraphs (<p>) are separated by double-newlines. */
 function _proofreadExtractText(container) {
     if (!container) return '';
+    // Process paragraph by paragraph to preserve structure
+    var paragraphs = container.querySelectorAll('p');
+    if (paragraphs.length > 0) {
+        var parts = [];
+        paragraphs.forEach(function(p) {
+            var text = _extractVisibleText(p);
+            if (text) parts.push(text);
+        });
+        return parts.join('\n\n');
+    }
+    // Fallback: no <p> tags (old-style flat diff)
+    return _extractVisibleText(container);
+}
+
+/** Extract visible text from a node, skipping accepted/rejected spans */
+function _extractVisibleText(node) {
     var result = [];
-    var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
-        acceptNode: function(node) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                // Skip hidden spans
-                if (node.classList && (node.classList.contains('pr-accepted') || node.classList.contains('pr-rejected'))) {
-                    return NodeFilter.FILTER_REJECT; // skip entire subtree
+    var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+        acceptNode: function(n) {
+            if (n.nodeType === Node.ELEMENT_NODE) {
+                if (n.classList && (n.classList.contains('pr-accepted') || n.classList.contains('pr-rejected'))) {
+                    return NodeFilter.FILTER_REJECT;
                 }
-                return NodeFilter.FILTER_SKIP; // process children
+                return NodeFilter.FILTER_SKIP;
             }
             return NodeFilter.FILTER_ACCEPT;
         }
     });
-    var node;
-    while (node = walker.nextNode()) {
-        result.push(node.textContent);
+    var n;
+    while (n = walker.nextNode()) {
+        result.push(n.textContent);
     }
     return result.join('').replace(/\s+/g, ' ').trim();
 }

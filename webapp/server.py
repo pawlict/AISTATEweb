@@ -6176,6 +6176,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Zachowaj sens i kontekst oryginału, ale tekst powinien być znacznie bogatszy, "
                 "bardziej opisowy i profesjonalny. "
                 "Popraw też ewentualne błędy ortograficzne i gramatyczne. "
+                "FORMATOWANIE: Dziel tekst na akapity (oddzielone pustą linią). "
+                "Jeśli tekst jest długi lub porusza wiele tematów, dodaj nagłówki rozdziałów. "
                 "Odpowiedz WYŁĄCZNIE rozszerzonym tekstem — bez komentarzy, bez wyjaśnień."
             )
         else:
@@ -6186,6 +6188,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Preserve the meaning and context of the original, but the text should be significantly richer, "
                 "more descriptive and professional. "
                 "Also fix any spelling and grammar errors. "
+                "FORMATTING: Divide text into paragraphs (separated by blank lines). "
+                "If the text is long or covers multiple topics, add section headings. "
                 "Reply ONLY with the expanded text — no comments, no explanations."
             )
     else:
@@ -6237,32 +6241,72 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
 def _build_proofread_diff(original: str, corrected: str) -> str:
     """Build an HTML diff between original and corrected text.
 
-    Uses difflib.SequenceMatcher on words to produce:
-    - <span class="pr-del">removed words</span>
-    - <span class="pr-ins">added words</span>
-    - unchanged words as-is
+    Preserves paragraph structure: splits on double-newlines first,
+    then diffs word-by-word within each paragraph pair.
+    Output uses <p> tags for paragraph separation.
     """
     import difflib
     import html as html_mod
+    import re
 
-    orig_words = original.split()
-    corr_words = corrected.split()
+    def _split_paragraphs(text: str) -> List[str]:
+        """Split text into paragraphs on double-newlines (or 2+ blank lines)."""
+        paras = re.split(r'\n\s*\n', text.strip())
+        return [p.strip() for p in paras if p.strip()]
 
-    sm = difflib.SequenceMatcher(None, orig_words, corr_words)
-    parts: List[str] = []
+    def _diff_words(orig_text: str, corr_text: str) -> str:
+        """Word-level diff within a single paragraph."""
+        ow = orig_text.split()
+        cw = corr_text.split()
+        if not ow and not cw:
+            return ""
+        sm = difflib.SequenceMatcher(None, ow, cw)
+        parts: List[str] = []
+        for tag, i1, i2, j1, j2 in sm.get_opcodes():
+            if tag == "equal":
+                parts.append(html_mod.escape(" ".join(ow[i1:i2])))
+            elif tag == "delete":
+                parts.append(f'<span class="pr-del">{html_mod.escape(" ".join(ow[i1:i2]))}</span>')
+            elif tag == "insert":
+                parts.append(f'<span class="pr-ins">{html_mod.escape(" ".join(cw[j1:j2]))}</span>')
+            elif tag == "replace":
+                parts.append(f'<span class="pr-del">{html_mod.escape(" ".join(ow[i1:i2]))}</span>')
+                parts.append(f'<span class="pr-ins">{html_mod.escape(" ".join(cw[j1:j2]))}</span>')
+        return " ".join(parts)
+
+    orig_paras = _split_paragraphs(original)
+    corr_paras = _split_paragraphs(corrected)
+
+    # Match paragraphs using SequenceMatcher on paragraph level
+    sm = difflib.SequenceMatcher(None, orig_paras, corr_paras)
+    html_parts: List[str] = []
 
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
         if tag == "equal":
-            parts.append(html_mod.escape(" ".join(orig_words[i1:i2])))
+            for p in orig_paras[i1:i2]:
+                html_parts.append(f"<p>{html_mod.escape(p)}</p>")
         elif tag == "delete":
-            parts.append(f'<span class="pr-del">{html_mod.escape(" ".join(orig_words[i1:i2]))}</span>')
+            for p in orig_paras[i1:i2]:
+                html_parts.append(f'<p><span class="pr-del">{html_mod.escape(p)}</span></p>')
         elif tag == "insert":
-            parts.append(f'<span class="pr-ins">{html_mod.escape(" ".join(corr_words[j1:j2]))}</span>')
+            for p in corr_paras[j1:j2]:
+                html_parts.append(f'<p><span class="pr-ins">{html_mod.escape(p)}</span></p>')
         elif tag == "replace":
-            parts.append(f'<span class="pr-del">{html_mod.escape(" ".join(orig_words[i1:i2]))}</span>')
-            parts.append(f'<span class="pr-ins">{html_mod.escape(" ".join(corr_words[j1:j2]))}</span>')
+            # Pair up paragraphs for word-level diff where possible
+            oparas = orig_paras[i1:i2]
+            cparas = corr_paras[j1:j2]
+            max_len = max(len(oparas), len(cparas))
+            for idx in range(max_len):
+                op = oparas[idx] if idx < len(oparas) else ""
+                cp = cparas[idx] if idx < len(cparas) else ""
+                if op and cp:
+                    html_parts.append(f"<p>{_diff_words(op, cp)}</p>")
+                elif op:
+                    html_parts.append(f'<p><span class="pr-del">{html_mod.escape(op)}</span></p>')
+                else:
+                    html_parts.append(f'<p><span class="pr-ins">{html_mod.escape(cp)}</span></p>')
 
-    return " ".join(parts)
+    return "\n".join(html_parts)
 
 
 @app.get("/api/analysis/quick/{project_id}")
