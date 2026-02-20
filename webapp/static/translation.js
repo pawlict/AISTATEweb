@@ -1469,14 +1469,16 @@ var _PR_RULES_PL = {
     light: [
         'Popraw bledy ortograficzne i literowki.',
         'Popraw interpunkcje: polskie cudzyslowy \u201E\u201D, myslnik dlugi, wielokropek \u2026.',
-        'Nie zmieniaj stylu ani slownictwa autora.'
+        'Nie zmieniaj stylu ani slownictwa autora.',
+        'Zachowaj oryginalna strukture tekstu \u2014 nie dziel go na rozdzialy ani nie dodawaj nagłówków, chyba że już istnieją w tekście.'
     ],
     standard: [
         'Popraw ortografie, interpunkcje i gramatyke.',
         'Usun powtorzenia wyrazow w bliskim sasiedztwie \u2014 stosuj synonimy nie zmieniajac sensu.',
         'Usun pleonazmy (np. \u201Ecofnac sie do tylu\u201D, \u201Ekontynuowac dalej\u201D).',
         'Zapewnij spojnosc czasu w narracji.',
-        'Stosuj poprawna polska interpunkcje: cudzyslowy \u201E\u201D, myslnik dlugi \u2014, wielokropek \u2026.'
+        'Stosuj poprawna polska interpunkcje: cudzyslowy \u201E\u201D, myslnik dlugi \u2014, wielokropek \u2026.',
+        'Zachowaj oryginalna strukture tekstu. Jeśli tekst zawiera nagłówki rozdziałów — zachowaj je krótkie i zwięzłe. Nie dodawaj nowych rozdziałów.'
     ],
     professional: [
         'Popraw ortografie, interpunkcje i gramatyke.',
@@ -1486,7 +1488,8 @@ var _PR_RULES_PL = {
         'Skracaj rozwlekle zdania \u2014 preferuj zwiezle, klarowne sformulowania.',
         'Zachowaj formalny, profesjonalny ton.',
         'Zapewnij spojnosc czasu w narracji.',
-        'Stosuj poprawna polska interpunkcje.'
+        'Stosuj poprawna polska interpunkcje.',
+        'Zachowaj oryginalna strukture tekstu. Jeśli tekst zawiera nagłówki rozdziałów — zachowaj je krótkie i zwięzłe. Nie twórz nowych rozdziałów ani nie dziel tekstu na sekcje, których nie było w oryginale.'
     ],
     academic: [
         'Popraw ortografie, interpunkcje i gramatyke.',
@@ -1495,7 +1498,8 @@ var _PR_RULES_PL = {
         'Zachowaj strone bierna tam gdzie jest uzasadniona (styl naukowy, prawniczy).',
         'Zachowaj formalny ton i precyzje terminologiczna.',
         'Zapewnij spojnosc czasu w narracji.',
-        'Stosuj poprawna polska interpunkcje.'
+        'Stosuj poprawna polska interpunkcje.',
+        'Zachowaj oryginalna strukture tekstu. Jeśli tekst zawiera nagłówki rozdziałów — zachowaj je krótkie i zwięzłe. Nie twórz nowych rozdziałów ani nie dziel tekstu na sekcje, których nie było w oryginale.'
     ]
 };
 
@@ -1504,14 +1508,16 @@ var _PR_RULES_EN = {
     light: [
         'Fix spelling and typos.',
         'Fix punctuation (commas, apostrophes, quotation marks).',
-        'Do not change the author\'s style or vocabulary.'
+        'Do not change the author\'s style or vocabulary.',
+        'Preserve the original text structure \u2014 do not split it into chapters or add headings unless they already exist.'
     ],
     standard: [
         'Fix spelling, punctuation and grammar.',
         'Avoid word repetition in close proximity \u2014 use synonyms without changing the meaning.',
         'Simplify wordy phrases (e.g. "in order to" \u2192 "to", "at this point in time" \u2192 "now").',
         'Ensure tense consistency throughout the text.',
-        'Use the Oxford comma in lists.'
+        'Use the Oxford comma in lists.',
+        'Preserve the original text structure. If the text has section headings \u2014 keep them short and concise. Do not add new sections.'
     ],
     professional: [
         'Fix spelling, punctuation and grammar.',
@@ -1521,7 +1527,8 @@ var _PR_RULES_EN = {
         'Shorten verbose sentences \u2014 prefer concise, clear phrasing.',
         'Maintain a formal, professional tone.',
         'Ensure tense consistency.',
-        'Use the Oxford comma. Vary sentence length for better rhythm.'
+        'Use the Oxford comma. Vary sentence length for better rhythm.',
+        'Preserve the original text structure. If the text has section headings \u2014 keep them short and concise. Do not create new chapters or sections that were not in the original.'
     ],
     academic: [
         'Fix spelling, punctuation and grammar.',
@@ -1529,7 +1536,8 @@ var _PR_RULES_EN = {
         'Keep passive voice where appropriate (academic, legal, scientific writing).',
         'Maintain a formal tone and terminological precision.',
         'Ensure tense consistency.',
-        'Use the Oxford comma in lists.'
+        'Use the Oxford comma in lists.',
+        'Preserve the original text structure. If the text has section headings \u2014 keep them short and concise. Do not create new chapters or sections that were not in the original.'
     ]
 };
 
@@ -1733,6 +1741,9 @@ function _proofreadSyncUI(proofActive) {
             genBtn.title = 'Tłumacz';
         }
     }
+
+    // --- "Zapisz do oryginału" button: only in translation mode ---
+    _trSyncSaveToOriginalBtn();
 
     // --- Floating mode badge (top-right) ---
     _proofreadUpdateModeBadge(proofActive);
@@ -2025,9 +2036,12 @@ document.addEventListener('DOMContentLoaded', function() {
 // Save to Original (PPTX/DOCX) — inject translated text back into uploaded file
 // ============================================================================
 
-/** Show or hide the "Zapisz do oryginalu" buttons based on upload state */
+/** Show or hide the "Zapisz do oryginalu" button.
+ *  Visible ONLY in translation mode (not proofreading) and ONLY when a PPTX/DOCX was uploaded. */
 function _trSyncSaveToOriginalBtn() {
-    var show = !!_uploadId;
+    var proofActive = !!(_proofreadState && _proofreadState.lang);
+    // Show only in translation mode when an original file is kept
+    var show = !proofActive && !!_uploadId;
     var extLabel = (_uploadExt || '').replace('.', '').toUpperCase();
 
     // Translation output button
@@ -2036,11 +2050,9 @@ function _trSyncSaveToOriginalBtn() {
     var lbl = _byId('save_to_original_label');
     if (lbl && extLabel) lbl.textContent = extLabel;
 
-    // Proofreading result button
+    // Proofreading result button — always hidden (not relevant in proofreading mode)
     var btn2 = _byId('proofread_save_original_btn');
-    if (btn2) btn2.style.display = show ? '' : 'none';
-    var lbl2 = _byId('proofread_save_original_label');
-    if (lbl2 && extLabel) lbl2.textContent = extLabel;
+    if (btn2) btn2.style.display = 'none';
 }
 
 /** Export translated text back into the original uploaded file */

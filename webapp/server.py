@@ -6457,7 +6457,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Zachowaj sens i kontekst oryginału, ale tekst powinien być znacznie bogatszy, "
                 "bardziej opisowy i profesjonalny. "
                 "Popraw też ewentualne błędy ortograficzne i gramatyczne. "
-                "Jeśli tekst jest długi lub porusza wiele tematów, dodaj nagłówki rozdziałów (## nagłówek). "
+                "Zachowaj oryginalną strukturę tekstu — nie dziel go na rozdziały ani nie dodawaj nagłówków, "
+                "chyba że już istnieją w tekście źródłowym. Jeśli istnieją, zachowaj je krótkie i zwięzłe. "
                 "Odpowiedz WYŁĄCZNIE rozszerzonym tekstem — bez komentarzy, bez wyjaśnień."
                 + _PL_TYPO_RULES
             )
@@ -6469,7 +6470,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Preserve the meaning and context of the original, but the text should be significantly richer, "
                 "more descriptive and professional. "
                 "Also fix any spelling and grammar errors. "
-                "If the text is long or covers multiple topics, add section headings (## heading). "
+                "Preserve the original text structure — do not split it into chapters or add headings "
+                "unless they already exist in the source text. If they exist, keep them short and concise. "
                 "Reply ONLY with the expanded text — no comments, no explanations."
                 + _EN_TYPO_RULES
             )
@@ -6480,6 +6482,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Jesteś profesjonalnym korektorem tekstu polskiego. "
                 "Popraw ortografię, gramatykę, interpunkcję i wygładź styl. "
                 "NIE zmieniaj znaczenia ani kontekstu tekstu. "
+                "Zachowaj oryginalną strukturę tekstu — nie dziel go na rozdziały ani nie dodawaj nagłówków, "
+                "chyba że już istnieją w tekście źródłowym. Jeśli istnieją, zachowaj je krótkie i zwięzłe. "
                 "Odpowiedz WYŁĄCZNIE poprawionym tekstem — bez komentarzy, bez wyjaśnień."
                 + _PL_TYPO_RULES
             )
@@ -6488,6 +6492,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "You are a professional English proofreader. "
                 "Fix spelling, grammar, punctuation and smooth out the style. "
                 "Do NOT change the meaning or context of the text. "
+                "Preserve the original text structure — do not split it into chapters or add headings "
+                "unless they already exist in the source text. If they exist, keep them short and concise. "
                 "Reply ONLY with the corrected text — no comments, no explanations."
                 + _EN_TYPO_RULES
             )
