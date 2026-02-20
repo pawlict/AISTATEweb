@@ -1741,18 +1741,29 @@ function _extractVisibleText(node) {
     return result.join('').replace(/\s+/g, ' ').trim();
 }
 
-/** Accept all — remove diff markup, leave only visible text */
+/** Accept all — remove diff markup, rebuild clean <p> paragraphs */
 function proofreadAccept() {
     var resultEl = _byId('proofread_result');
     if (!resultEl) return;
-    var text = _proofreadExtractText(resultEl);
-    if (!text) {
-        text = _proofreadState.corrected || '';
+
+    // Extract text paragraph-by-paragraph preserving structure
+    var paragraphs = resultEl.querySelectorAll('p');
+    var cleanParts = [];
+    if (paragraphs.length > 0) {
+        paragraphs.forEach(function(p) {
+            var t = _extractVisibleText(p);
+            if (t) cleanParts.push(t);
+        });
+    } else {
+        var t = _extractVisibleText(resultEl);
+        if (t) cleanParts.push(t);
     }
-    // Replace diff with clean text
+
+    // Rebuild the element with clean <p> tags (no diff spans)
     resultEl.removeAttribute('contenteditable');
-    resultEl.textContent = text;
-    _proofreadState.corrected = text;
+    resultEl.innerHTML = cleanParts.map(function(p) { return '<p>' + p.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>'; }).join('\n');
+
+    _proofreadState.corrected = cleanParts.join('\n\n');
     var acceptBtn = _byId('proofread_accept_btn');
     if (acceptBtn) acceptBtn.style.display = 'none';
     showToast('Zatwierdzono poprawki.', 'success');
