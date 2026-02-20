@@ -2,15 +2,28 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title>Podgląd ikon stylu korekty</title>
+<title>Podgląd ikon stylu korekty — AISTATEweb</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #f8fafc; padding: 40px; color: #1e293b;
+    background: #f4f7fb; padding: 40px; color: #0f172a;
   }
-  h2 { margin-bottom: 24px; font-size: 20px; }
-  h3 { margin: 32px 0 12px; font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; }
+  h2 { margin-bottom: 8px; font-size: 20px; }
+  .subtitle { font-size: 13px; color: #64748b; margin-bottom: 32px; }
+  h3 { margin: 36px 0 14px; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; }
+
+  /* ---- Brand colors from logo ---- */
+  :root {
+    --pr-light:        #70c9f6;  /* cyan */
+    --pr-light-bg:     rgba(112,201,246,.10);
+    --pr-standard:     #1096f4;  /* sky blue */
+    --pr-standard-bg:  rgba(16,150,244,.10);
+    --pr-professional: #2946b7;  /* brand blue */
+    --pr-professional-bg: rgba(41,70,183,.10);
+    --pr-academic:     #8426a4;  /* purple */
+    --pr-academic-bg:  rgba(132,38,164,.10);
+  }
 
   /* ---- Toolbar simulation ---- */
   .toolbar-sim {
@@ -20,7 +33,7 @@
     max-width: 700px;
   }
   .toolbar-sim .sep {
-    width: 1px; height: 24px; background: #e2e8f0; margin: 0 4px;
+    width: 1px; height: 28px; background: #e2e8f0; margin: 0 6px;
   }
   .toolbar-sim .fake-btn {
     padding: 6px 12px; border-radius: 8px; background: #f1f5f9;
@@ -30,167 +43,208 @@
   /* ---- Style icon button ---- */
   .pr-icon-btn {
     position: relative;
-    width: 36px; height: 36px;
+    width: 38px; height: 38px;
     display: flex; align-items: center; justify-content: center;
     border: 2px solid transparent; border-radius: 10px;
     background: transparent; cursor: pointer;
     transition: all .2s ease;
-    color: #94a3b8;
   }
-  .pr-icon-btn svg { width: 20px; height: 20px; transition: all .3s ease; }
+  .pr-icon-btn svg { width: 22px; height: 22px; transition: all .3s ease; }
 
-  .pr-icon-btn:hover {
-    background: rgba(15,23,42,.04);
-    border-color: #cbd5e1;
-    color: #475569;
-  }
-  .pr-icon-btn.active {
-    background: rgba(22,163,74,.08);
-    border-color: #16a34a;
-    color: #16a34a;
-  }
+  /* Per-style hover colors */
+  .pr-icon-btn[data-style="light"]:hover        { background: var(--pr-light-bg);        border-color: var(--pr-light); }
+  .pr-icon-btn[data-style="standard"]:hover      { background: var(--pr-standard-bg);     border-color: var(--pr-standard); }
+  .pr-icon-btn[data-style="professional"]:hover   { background: var(--pr-professional-bg); border-color: var(--pr-professional); }
+  .pr-icon-btn[data-style="academic"]:hover       { background: var(--pr-academic-bg);     border-color: var(--pr-academic); }
+
+  /* Active state per style */
+  .pr-icon-btn[data-style="light"].active        { background: var(--pr-light-bg);        border-color: var(--pr-light); }
+  .pr-icon-btn[data-style="standard"].active      { background: var(--pr-standard-bg);     border-color: var(--pr-standard); }
+  .pr-icon-btn[data-style="professional"].active   { background: var(--pr-professional-bg); border-color: var(--pr-professional); }
+  .pr-icon-btn[data-style="academic"].active       { background: var(--pr-academic-bg);     border-color: var(--pr-academic); }
 
   /* ---- Hover animations per style ---- */
 
   /* LIGHT (feather): gentle floating sway */
-  .pr-icon-btn[data-style="light"]:hover svg {
+  .pr-icon-btn[data-style="light"]:hover svg,
+  .icon-card[data-style="light"]:hover svg {
     animation: feather-sway .8s ease-in-out infinite alternate;
   }
   @keyframes feather-sway {
-    0%   { transform: rotate(-4deg) translateY(0); }
-    50%  { transform: rotate(2deg) translateY(-2px); }
-    100% { transform: rotate(-4deg) translateY(0); }
+    0%   { transform: rotate(-5deg) translateY(0); }
+    50%  { transform: rotate(3deg) translateY(-2px); }
+    100% { transform: rotate(-5deg) translateY(0); }
   }
 
   /* STANDARD (pen): writing wiggle */
-  .pr-icon-btn[data-style="standard"]:hover svg {
+  .pr-icon-btn[data-style="standard"]:hover svg,
+  .icon-card[data-style="standard"]:hover svg {
     animation: pen-write .5s ease-in-out infinite alternate;
   }
   @keyframes pen-write {
     0%   { transform: translateX(0) rotate(0); }
-    25%  { transform: translateX(1.5px) rotate(2deg); }
-    75%  { transform: translateX(-1.5px) rotate(-2deg); }
+    33%  { transform: translateX(2px) rotate(3deg); }
+    66%  { transform: translateX(-2px) rotate(-3deg); }
     100% { transform: translateX(0) rotate(0); }
   }
 
-  /* PROFESSIONAL (briefcase): dignified subtle pulse + tilt */
-  .pr-icon-btn[data-style="professional"]:hover svg {
+  /* PROFESSIONAL (briefcase): dignified lift + tilt */
+  .pr-icon-btn[data-style="professional"]:hover svg,
+  .icon-card[data-style="professional"]:hover svg {
     animation: brief-lift .6s ease-in-out infinite alternate;
   }
   @keyframes brief-lift {
     0%   { transform: scale(1) rotate(0); }
-    100% { transform: scale(1.08) rotate(-2deg); }
+    100% { transform: scale(1.1) rotate(-3deg); }
   }
 
-  /* ACADEMIC (graduation cap): tassel swing */
-  .pr-icon-btn[data-style="academic"]:hover svg {
+  /* ACADEMIC (graduation cap): tassel bounce */
+  .pr-icon-btn[data-style="academic"]:hover svg,
+  .icon-card[data-style="academic"]:hover svg {
     animation: cap-bounce .7s ease-in-out infinite alternate;
   }
   @keyframes cap-bounce {
     0%   { transform: translateY(0) rotate(0); }
-    50%  { transform: translateY(-3px) rotate(3deg); }
+    50%  { transform: translateY(-3px) rotate(4deg); }
     100% { transform: translateY(0) rotate(0); }
   }
 
   /* ---- Tooltip ---- */
   .pr-icon-btn .pr-tooltip {
-    position: absolute; bottom: calc(100% + 10px); left: 50%;
+    position: absolute; bottom: calc(100% + 12px); left: 50%;
     transform: translateX(-50%) translateY(4px);
-    background: #1e293b; color: #f8fafc; font-size: 11.5px;
-    padding: 8px 12px; border-radius: 8px; white-space: nowrap;
+    background: #0f172a; color: #f1f5f9; font-size: 11.5px;
+    padding: 10px 14px; border-radius: 10px;
     pointer-events: none; opacity: 0; transition: all .2s ease;
-    box-shadow: 0 4px 12px rgba(0,0,0,.15); line-height: 1.5;
-    max-width: 260px; white-space: normal; text-align: center;
+    box-shadow: 0 4px 16px rgba(0,0,0,.2); line-height: 1.5;
+    max-width: 280px; white-space: normal; text-align: center;
+    z-index: 100;
   }
   .pr-icon-btn .pr-tooltip::after {
     content: ''; position: absolute; top: 100%; left: 50%;
     transform: translateX(-50%);
-    border: 6px solid transparent; border-top-color: #1e293b;
+    border: 6px solid transparent; border-top-color: #0f172a;
   }
   .pr-icon-btn:hover .pr-tooltip {
     opacity: 1; transform: translateX(-50%) translateY(0);
   }
+  /* Color accent line on tooltip per style */
+  .pr-icon-btn[data-style="light"] .pr-tooltip        { border-top: 2px solid var(--pr-light); }
+  .pr-icon-btn[data-style="standard"] .pr-tooltip      { border-top: 2px solid var(--pr-standard); }
+  .pr-icon-btn[data-style="professional"] .pr-tooltip   { border-top: 2px solid var(--pr-professional); }
+  .pr-icon-btn[data-style="academic"] .pr-tooltip       { border-top: 2px solid var(--pr-academic); }
 
-  /* ---- Big preview ---- */
+  /* ---- Big preview cards ---- */
   .icon-grid {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
-    max-width: 700px; margin-top: 16px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;
+    max-width: 720px; margin-top: 16px;
   }
   .icon-card {
     display: flex; flex-direction: column; align-items: center;
-    padding: 24px 16px; background: #fff; border: 1px solid #e2e8f0;
-    border-radius: 12px; text-align: center;
+    padding: 28px 16px 20px; background: #fff; border: 2px solid #e2e8f0;
+    border-radius: 14px; text-align: center;
+    transition: all .25s ease; cursor: pointer;
   }
-  .icon-card svg { width: 48px; height: 48px; color: #475569; margin-bottom: 12px; }
-  .icon-card .name { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
-  .icon-card .desc { font-size: 11.5px; color: #64748b; line-height: 1.4; }
+  .icon-card svg { width: 52px; height: 52px; margin-bottom: 14px; transition: all .3s ease; }
+  .icon-card .name { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+  .icon-card .desc { font-size: 11.5px; color: #64748b; line-height: 1.45; }
 
-  .icon-card:hover svg { color: #16a34a; }
-  .icon-card[data-style="light"]:hover svg      { animation: feather-sway .8s ease-in-out infinite alternate; }
-  .icon-card[data-style="standard"]:hover svg    { animation: pen-write .5s ease-in-out infinite alternate; }
-  .icon-card[data-style="professional"]:hover svg { animation: brief-lift .6s ease-in-out infinite alternate; }
-  .icon-card[data-style="academic"]:hover svg     { animation: cap-bounce .7s ease-in-out infinite alternate; }
+  /* Per-style card hover */
+  .icon-card[data-style="light"]:hover        { border-color: var(--pr-light);        background: var(--pr-light-bg); }
+  .icon-card[data-style="standard"]:hover      { border-color: var(--pr-standard);     background: var(--pr-standard-bg); }
+  .icon-card[data-style="professional"]:hover   { border-color: var(--pr-professional); background: var(--pr-professional-bg); }
+  .icon-card[data-style="academic"]:hover       { border-color: var(--pr-academic);     background: var(--pr-academic-bg); }
+
+  .icon-card[data-style="light"] .name        { color: var(--pr-light); }
+  .icon-card[data-style="standard"] .name      { color: var(--pr-standard); }
+  .icon-card[data-style="professional"] .name   { color: var(--pr-professional); }
+  .icon-card[data-style="academic"] .name       { color: var(--pr-academic); }
+
+  /* ---- Color palette strip ---- */
+  .palette {
+    display: flex; gap: 12px; margin-top: 16px; max-width: 720px;
+  }
+  .palette-swatch {
+    flex: 1; height: 40px; border-radius: 10px; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,.3);
+  }
 </style>
 </head>
 <body>
 
-<h2>Ikony stylu korekty — podgląd</h2>
+<h2>Ikony stylu korekty — kolory AISTATEweb</h2>
+<div class="subtitle">Paleta z logo: cyan → sky blue → brand blue → purple</div>
+
+<!-- Color palette reference -->
+<div class="palette">
+  <div class="palette-swatch" style="background: linear-gradient(135deg, #a5e1fb, #70c9f6);">Light #70c9f6</div>
+  <div class="palette-swatch" style="background: linear-gradient(135deg, #70c9f6, #1096f4);">Standard #1096f4</div>
+  <div class="palette-swatch" style="background: linear-gradient(135deg, #1096f4, #2946b7);">Professional #2946b7</div>
+  <div class="palette-swatch" style="background: linear-gradient(135deg, #2946b7, #8426a4);">Academic #8426a4</div>
+</div>
 
 <!-- Large preview cards -->
-<h3>Karty podglądu (najedź myszą, aby zobaczyć animację)</h3>
+<h3>Karty podglądu (najedź myszą → animacja + kolor)</h3>
 <div class="icon-grid">
   <div class="icon-card" data-style="light">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/>
-      <line x1="16" y1="8" x2="2" y2="22"/>
-      <line x1="17.5" y1="15" x2="9" y2="15"/>
+    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <defs><linearGradient id="clg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a5e1fb"/><stop offset="100%" stop-color="#70c9f6"/></linearGradient></defs>
+      <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" stroke="#70c9f6" stroke-width="1.5" fill="url(#clg)" fill-opacity=".2"/>
+      <line x1="16" y1="8" x2="2" y2="22" stroke="#70c9f6" stroke-width="1.5"/>
+      <line x1="17.5" y1="15" x2="9" y2="15" stroke="#70c9f6" stroke-width="1.2" opacity=".5"/>
     </svg>
     <div class="name">Lekka</div>
-    <div class="desc">Ortografia i interpunkcja. Minimalne ingerencje w styl.</div>
+    <div class="desc">Ortografia i interpunkcja.<br>Minimalne ingerencje w styl.</div>
   </div>
 
   <div class="icon-card" data-style="standard">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <defs><linearGradient id="csg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#70c9f6"/><stop offset="100%" stop-color="#1096f4"/></linearGradient></defs>
+      <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="#1096f4" stroke-width="1.5" fill="url(#csg)" fill-opacity=".18"/>
     </svg>
     <div class="name">Standardowa</div>
-    <div class="desc">Powtórzenia, pleonazmy, spójność czasu. Zrównoważona korekta.</div>
+    <div class="desc">Powtórzenia, pleonazmy,<br>spójność czasu.</div>
   </div>
 
   <div class="icon-card" data-style="professional">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-      <line x1="12" y1="12" x2="12" y2="16"/>
-      <line x1="10" y1="14" x2="14" y2="14"/>
+    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <defs><linearGradient id="cpg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1096f4"/><stop offset="100%" stop-color="#2946b7"/></linearGradient></defs>
+      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" stroke="#2946b7" stroke-width="1.5" fill="url(#cpg)" fill-opacity=".14"/>
+      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" stroke="#2946b7" stroke-width="1.5"/>
+      <line x1="12" y1="12" x2="12" y2="16" stroke="#2946b7" stroke-width="1.5"/>
+      <line x1="10" y1="14" x2="14" y2="14" stroke="#2946b7" stroke-width="1.5"/>
     </svg>
     <div class="name">Profesjonalna</div>
-    <div class="desc">Strona czynna, zwięzłość, ton formalny. Pełna korekta stylowa.</div>
+    <div class="desc">Strona czynna, zwięzłość,<br>formalny ton.</div>
   </div>
 
   <div class="icon-card" data-style="academic">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M22 10L12 5 2 10l10 5 10-5z"/>
-      <path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/>
-      <line x1="22" y1="10" x2="22" y2="16"/>
+    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <defs><linearGradient id="cag" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2946b7"/><stop offset="100%" stop-color="#8426a4"/></linearGradient></defs>
+      <path d="M22 10L12 5 2 10l10 5 10-5z" stroke="#8426a4" stroke-width="1.5" fill="url(#cag)" fill-opacity=".15"/>
+      <path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5" stroke="#8426a4" stroke-width="1.5"/>
+      <line x1="22" y1="10" x2="22" y2="16" stroke="#8426a4" stroke-width="1.5"/>
     </svg>
     <div class="name">Akademicka</div>
-    <div class="desc">Strona bierna OK, precyzja terminologiczna, styl naukowy.</div>
+    <div class="desc">Strona bierna OK, precyzja,<br>styl naukowy.</div>
   </div>
 </div>
 
 <!-- Toolbar simulation -->
-<h3>Jak będą wyglądać na toolbarze (najedź myszą → animacja + tooltip)</h3>
+<h3>Na toolbarze (najedź → animacja + tooltip z kolorowym akcentem)</h3>
 <div class="toolbar-sim">
-  <div class="fake-btn">⟵ Toolbar...</div>
+  <div class="fake-btn">Toolbar...</div>
   <div class="fake-btn">Koryguj tekst</div>
   <div class="sep"></div>
 
   <button class="pr-icon-btn" data-style="light" onclick="selectStyle(this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/>
-      <line x1="16" y1="8" x2="2" y2="22"/>
-      <line x1="17.5" y1="15" x2="9" y2="15"/>
+    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <defs><linearGradient id="tlg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a5e1fb"/><stop offset="100%" stop-color="#70c9f6"/></linearGradient></defs>
+      <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" stroke="#70c9f6" stroke-width="1.5" fill="url(#tlg)" fill-opacity=".2"/>
+      <line x1="16" y1="8" x2="2" y2="22" stroke="#70c9f6" stroke-width="1.5"/>
+      <line x1="17.5" y1="15" x2="9" y2="15" stroke="#70c9f6" stroke-width="1.2" opacity=".5"/>
     </svg>
     <div class="pr-tooltip">
       <strong>Lekka korekta</strong><br>
@@ -200,35 +254,38 @@
   </button>
 
   <button class="pr-icon-btn active" data-style="standard" onclick="selectStyle(this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <defs><linearGradient id="tsg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#70c9f6"/><stop offset="100%" stop-color="#1096f4"/></linearGradient></defs>
+      <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="#1096f4" stroke-width="1.5" fill="url(#tsg)" fill-opacity=".18"/>
     </svg>
     <div class="pr-tooltip">
       <strong>Standardowa korekta</strong><br>
       Powtórzenia, pleonazmy, spójność czasu.<br>
-      Zrównoważona korekta dla większości tekstów.
+      Zrównoważona korekta.
     </div>
   </button>
 
   <button class="pr-icon-btn" data-style="professional" onclick="selectStyle(this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-      <line x1="12" y1="12" x2="12" y2="16"/>
-      <line x1="10" y1="14" x2="14" y2="14"/>
+    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <defs><linearGradient id="tpg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1096f4"/><stop offset="100%" stop-color="#2946b7"/></linearGradient></defs>
+      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" stroke="#2946b7" stroke-width="1.5" fill="url(#tpg)" fill-opacity=".14"/>
+      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" stroke="#2946b7" stroke-width="1.5"/>
+      <line x1="12" y1="12" x2="12" y2="16" stroke="#2946b7" stroke-width="1.5"/>
+      <line x1="10" y1="14" x2="14" y2="14" stroke="#2946b7" stroke-width="1.5"/>
     </svg>
     <div class="pr-tooltip">
       <strong>Profesjonalna korekta</strong><br>
       Strona czynna, zwięzłość, formalny ton.<br>
-      Pełna korekta stylistyczna i językowa.
+      Pełna korekta stylistyczna.
     </div>
   </button>
 
   <button class="pr-icon-btn" data-style="academic" onclick="selectStyle(this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M22 10L12 5 2 10l10 5 10-5z"/>
-      <path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/>
-      <line x1="22" y1="10" x2="22" y2="16"/>
+    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <defs><linearGradient id="tag" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2946b7"/><stop offset="100%" stop-color="#8426a4"/></linearGradient></defs>
+      <path d="M22 10L12 5 2 10l10 5 10-5z" stroke="#8426a4" stroke-width="1.5" fill="url(#tag)" fill-opacity=".15"/>
+      <path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5" stroke="#8426a4" stroke-width="1.5"/>
+      <line x1="22" y1="10" x2="22" y2="16" stroke="#8426a4" stroke-width="1.5"/>
     </svg>
     <div class="pr-tooltip">
       <strong>Akademicka korekta</strong><br>
