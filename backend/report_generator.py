@@ -220,10 +220,45 @@ def save_docx_from_markdown(md_text: str, out_path: Path, title: str, meta: Dict
             for c_i in range(cols):
                 tbl.cell(r_i, c_i).text = row[c_i] if c_i < len(row) else ""
 
-    def add_paragraph(text: str) -> None:
+    _MD_INLINE_RE = re.compile(
+        r'(\*\*\*(.+?)\*\*\*'        # ***bold italic***
+        r'|\*\*(.+?)\*\*'             # **bold**
+        r'|\*(.+?)\*'                 # *italic*
+        r'|`(.+?)`'                   # `code`
+        r')',
+    )
+
+    def _add_md_runs(para, text: str) -> None:
+        """Add runs to *para* honouring inline markdown (bold, italic, code)."""
+        last = 0
+        for m in _MD_INLINE_RE.finditer(text):
+            # plain text before this match
+            if m.start() > last:
+                para.add_run(text[last:m.start()])
+            if m.group(2):          # ***bold+italic***
+                r = para.add_run(m.group(2))
+                r.bold = True
+                r.italic = True
+            elif m.group(3):        # **bold**
+                r = para.add_run(m.group(3))
+                r.bold = True
+            elif m.group(4):        # *italic*
+                r = para.add_run(m.group(4))
+                r.italic = True
+            elif m.group(5):        # `code`
+                r = para.add_run(m.group(5))
+                r.font.name = "Consolas"
+                r.font.size = Pt(10)
+            last = m.end()
+        # trailing text
+        if last < len(text):
+            para.add_run(text[last:])
+
+    def add_paragraph(text: str, style: Optional[str] = None) -> None:
         if not text.strip():
             return
-        doc.add_paragraph(text.strip())
+        p = doc.add_paragraph(style=style) if style else doc.add_paragraph()
+        _add_md_runs(p, text.strip())
 
     # Merge wrapped lines into paragraphs (simple heuristic)
     para_buf: List[str] = []
@@ -283,12 +318,12 @@ def save_docx_from_markdown(md_text: str, out_path: Path, title: str, meta: Dict
         if s.strip().startswith(("- ", "* ", "• ")):
             flush_para()
             list_text = s.strip()[2:].strip() if s.strip().startswith(("- ", "* ")) else s.strip()[2:].strip()
-            doc.add_paragraph(list_text, style="List Bullet")
+            add_paragraph(list_text, style="List Bullet")
             list_mode = "ul"
             continue
         if m_ol:
             flush_para()
-            doc.add_paragraph(m_ol.group(2).strip(), style="List Number")
+            add_paragraph(m_ol.group(2).strip(), style="List Number")
             list_mode = "ol"
             continue
 
