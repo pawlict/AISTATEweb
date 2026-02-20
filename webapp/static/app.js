@@ -400,11 +400,14 @@ async function ensureProject(){
 }
 
 // ---------- Require active project ----------
-function requireProjectId(){
+function requireProjectId(moduleType){
   const pid = AISTATE.projectId || "";
   if(!pid){
     showToast(t("alert.no_active_project"), 'warning');
-    window.location.href = "/projects";
+    const params = new URLSearchParams();
+    if(moduleType) params.set("type", moduleType);
+    params.set("return", window.location.pathname);
+    window.location.href = "/new-project?" + params.toString();
     throw new Error("No active project");
   }
   return pid;
@@ -452,7 +455,8 @@ async function startTask(prefix, endpoint, formData, onDone){
     setLogs(prefix, "");
 
     // New UX: project must exist (created in "New project" page).
-    const project_id = requireProjectId();
+    const _moduleMap = {tr:"transcription", di:"diarization", an:"analysis"};
+    const project_id = requireProjectId(_moduleMap[prefix] || prefix);
     formData.set("project_id", project_id);
 
     const j = await api(endpoint, {method:"POST", body: formData});

@@ -122,6 +122,9 @@
   async function _onSend() {
     if (_streaming) return;
 
+    // Require active project before chatting
+    try { requireProjectId("chat"); } catch(e) { return; }
+
     const input = $id("chat_input");
     const text = (input ? input.value : "").trim();
     if (!text) return;

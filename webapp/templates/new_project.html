@@ -130,13 +130,38 @@
 
 {% block scripts %}
 <script>
+const _npParams = new URLSearchParams(window.location.search);
+const _npType = _npParams.get("type") || "";
+const _npReturn = _npParams.get("return") || "";
+
+const _moduleLabels = {
+  transcription: "Transkrypcja",
+  diarization: "Diaryzacja",
+  analysis: "Analiza",
+  translation: "Tłumaczenie",
+  chat: "Chat"
+};
+
 function suggestName(){
   const d = new Date();
   const pad = (n)=>String(n).padStart(2,'0');
-  return `Projekt_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+  const ts = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+  const label = _moduleLabels[_npType] || "Projekt";
+  return `${label}_${ts}`;
 }
 
 document.getElementById("np_name").value = suggestName();
+
+// Show info banner when redirected from a module
+if(_npType && _moduleLabels[_npType]){
+  const banner = document.createElement("div");
+  banner.className = "small";
+  banner.style.cssText = "background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px";
+  banner.innerHTML = '<i data-icon="info_circle" data-size="18"></i> <span>' + t("np.redirect_hint") + ' <b>' + (_moduleLabels[_npType]) + '</b></span>';
+  const nameInput = document.getElementById("np_name");
+  nameInput.parentNode.insertBefore(banner, nameInput.previousElementSibling);
+  if(typeof _injectDataIcons === "function") _injectDataIcons(banner);
+}
 
 document.getElementById("np_create").addEventListener("click", async ()=>{
   const name = (document.getElementById("np_name").value || "").trim();
@@ -155,8 +180,12 @@ document.getElementById("np_create").addEventListener("click", async ()=>{
     document.getElementById("np_status").textContent = tFmt("np.status.done", {id: j.project_id.slice(0,8)});
     await refreshProjects('project_select');
     await refreshCurrentProjectInfo();
-    const hasAudio = !!(j.audio_file || AISTATE.audioFile || "");
-    window.location.href = hasAudio ? "/transcription" : "/analysis";
+    if(_npReturn){
+      window.location.href = _npReturn;
+    } else {
+      const hasAudio = !!(j.audio_file || AISTATE.audioFile || "");
+      window.location.href = hasAudio ? "/transcription" : "/analysis";
+    }
   }catch(e){
     document.getElementById("np_status").textContent = t("np.status.error");
     showToast(e.message || t("np.alert.create_error"), 'error');
@@ -216,8 +245,12 @@ document.getElementById('op_open').addEventListener('click', async ()=>{
   AISTATE.projectId = pid;
   AISTATE.audioFile = '';
   await refreshCurrentProjectInfo();
-  const hasAudio = !!(AISTATE.audioFile || "");
-  window.location.href = hasAudio ? '/transcription' : '/analysis';
+  if(_npReturn){
+    window.location.href = _npReturn;
+  } else {
+    const hasAudio = !!(AISTATE.audioFile || "");
+    window.location.href = hasAudio ? '/transcription' : '/analysis';
+  }
 });
 
 // ---------- Export / Import / Delete (Projects) ----------

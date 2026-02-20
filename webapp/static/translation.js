@@ -805,8 +805,11 @@ function getSelectedMode() {
 
 // Start translation
 async function startTranslation() {
+    // Require active project before translating
+    try { requireProjectId("translation"); } catch(e) { return; }
+
     const text = document.getElementById('input-text').value.trim();
-    
+
     if (!text) {
         showToast(tr('translation.alert.enter_text','Proszę wprowadzić tekst do przetłumaczenia!'), 'warning');
         return;
@@ -1800,6 +1803,8 @@ function _proofreadUpdateModeBadge(proofActive) {
 
 async function proofreadRun() {
     if (_proofreadState.running) return;
+    // Require active project before proofreading
+    try { requireProjectId("translation"); } catch(e) { return; }
     if (!_proofreadState.lang) {
         showToast('Wybierz język korekty (PL lub EN).', 'warning');
         return;
