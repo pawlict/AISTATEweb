@@ -433,6 +433,7 @@ async function refreshCurrentProjectInfo(){
     if(elCur) elCur.textContent = t("projects.none");
     if(elAud) elAud.textContent = t("projects.none");
     AISTATE.audioFile = "";
+    _setToolbarProjectLines(t("projects.none"));
     return;
   }
 
@@ -445,10 +446,21 @@ async function refreshCurrentProjectInfo(){
     if(elAud) elAud.textContent = audio ? audio : t("projects.no_file");
 
     AISTATE.audioFile = audio || "";
+
+    // Populate "Projekt: ..." in module toolbars
+    _setToolbarProjectLines(name);
   }catch(e){
     if(elCur) elCur.textContent = pid.slice(0,8);
     if(elAud) elAud.textContent = t("projects.no_data");
     AISTATE.audioFile = "";
+    _setToolbarProjectLines(pid.slice(0,8));
+  }
+}
+
+function _setToolbarProjectLines(projectName){
+  var lines = document.querySelectorAll(".toolbar-project-line");
+  for(var i=0; i<lines.length; i++){
+    lines[i].textContent = "Projekt: " + projectName;
   }
 }
 
