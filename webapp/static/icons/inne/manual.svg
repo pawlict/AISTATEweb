@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="mn" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#00d4ff" stroke-width="1" fill="none" opacity=".15"/>
+<!-- open book -->
+<path d="M24 8v32" stroke="url(#mn)" stroke-width="1.5" opacity=".3"/>
+<!-- left page -->
+<path d="M24 8C20 6 14 5 6 6v30c8-1 14 0 18 2" stroke="url(#mn)" stroke-width="2.2" fill="none"/>
+<!-- right page -->
+<path d="M24 8c4-2 10-3 18-2v30c-8-1-14 0-18 2" stroke="url(#mn)" stroke-width="2.2" fill="none"/>
+<!-- text lines left page -->
+<line x1="10" y1="14" x2="20" y2="14" stroke="url(#mn)" stroke-width="1.2" opacity=".3"/>
+<line x1="10" y1="19" x2="18" y2="19" stroke="url(#mn)" stroke-width="1.2" opacity=".25"/>
+<line x1="10" y1="24" x2="20" y2="24" stroke="url(#mn)" stroke-width="1.2" opacity=".2"/>
+<line x1="10" y1="29" x2="16" y2="29" stroke="url(#mn)" stroke-width="1.2" opacity=".15"/>
+<!-- diagram/icon on right page (gear = how-to) -->
+<circle cx="34" cy="18" r="5" stroke="#a855f7" stroke-width="1.5" fill="none" opacity=".4"/>
+<circle cx="34" cy="18" r="2" stroke="#a855f7" stroke-width="1" fill="none" opacity=".3"/>
+<line x1="34" y1="12" x2="34" y2="13" stroke="#a855f7" stroke-width="1.2" opacity=".35"/>
+<line x1="34" y1="23" x2="34" y2="24" stroke="#a855f7" stroke-width="1.2" opacity=".35"/>
+<line x1="28" y1="18" x2="29" y2="18" stroke="#a855f7" stroke-width="1.2" opacity=".35"/>
+<line x1="39" y1="18" x2="40" y2="18" stroke="#a855f7" stroke-width="1.2" opacity=".35"/>
+<!-- text lines right page below diagram -->
+<line x1="28" y1="27" x2="38" y2="27" stroke="url(#mn)" stroke-width="1.2" opacity=".25"/>
+<line x1="28" y1="32" x2="36" y2="32" stroke="url(#mn)" stroke-width="1.2" opacity=".2"/>
+<!-- bookmark -->
+<path d="M20 6v8l-2-2-2 2V6" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".1"/>
+</svg>
