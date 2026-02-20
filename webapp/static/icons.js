@@ -388,6 +388,46 @@
     return out;
   };
 
+  /* ===== PROOFREADING ===== */
+  // Magnifying glass with "PL" text
+  icons.proofread_pl = function () {
+    return '<circle cx="10.5" cy="10.5" r="6.5" ' + _s("sky-cyan") + " " + _w(1.8) + ' fill="none"/>' +
+           '<path d="M15.5 15.5l5 5" ' + _s("sky-cyan") + " " + _w(2.5) + " " + S + ' fill="none"/>' +
+           '<text x="10.5" y="13" text-anchor="middle" font-size="6.5" font-weight="700" ' + _fc("#1096f4") + ' font-family="system-ui,sans-serif">PL</text>';
+  };
+  // Magnifying glass with "EN" text
+  icons.proofread_en = function () {
+    return '<circle cx="10.5" cy="10.5" r="6.5" ' + _s("blue-purple") + " " + _w(1.8) + ' fill="none"/>' +
+           '<path d="M15.5 15.5l5 5" ' + _s("blue-purple") + " " + _w(2.5) + " " + S + ' fill="none"/>' +
+           '<text x="10.5" y="13" text-anchor="middle" font-size="6.5" font-weight="700" ' + _fc("#2946b7") + ' font-family="system-ui,sans-serif">EN</text>';
+  };
+  // Light proofreading — pencil + dashed baseline (cyan)
+  icons.pr_light = function () {
+    return '<path d="M19 3l2 2-9 9-3 1 1-3 9-9z" ' + _s("cyan-ice") + " " + _w(1.4) + " " + S + ' ' + _f("cyan-ice") + ' fill-opacity=".12"/>' +
+           '<path d="M4 20h16" ' + _sc("#70c9f6") + " " + _w(1.4) + " " + S + ' fill="none" stroke-dasharray="2 2"/>';
+  };
+  // Standard proofreading — document + checkmark (sky-blue)
+  icons.pr_standard = function () {
+    return '<rect x="4" y="2" width="12" height="16" rx="2" ' + _s("sky-cyan") + " " + _w(1.4) + ' ' + _f("sky-cyan") + ' fill-opacity=".08"/>' +
+           '<path d="M8 7h4M8 10h6" ' + _sc("#1096f4") + " " + _w(1.2) + " " + S + ' fill="none" opacity=".45"/>' +
+           '<circle cx="17" cy="17" r="5.5" fill="#fff" ' + _sc("#1096f4") + " " + _w(1.4) + '/>' +
+           '<path d="M14.5 17l1.8 1.8 3.2-3.6" ' + _sc("#1096f4") + " " + _w(1.5) + " " + S + ' fill="none"/>';
+  };
+  // Professional proofreading — balance scales (blue-indigo)
+  icons.pr_professional = function () {
+    return '<line x1="12" y1="3" x2="12" y2="19" ' + _sc("#2946b7") + " " + _w(1.4) + " " + S + '/>' +
+           '<line x1="4" y1="7" x2="20" y2="7" ' + _sc("#2946b7") + " " + _w(1.4) + " " + S + '/>' +
+           '<path d="M4 7l2 7a3 3 0 0 0 6 0l-2-7" ' + _sc("#2946b7") + " " + _w(1.3) + " " + S + ' ' + _f("blue-purple") + ' fill-opacity=".1"/>' +
+           '<path d="M14 7l2 7a3 3 0 0 0 6 0l-2-7" ' + _sc("#2946b7") + " " + _w(1.3) + " " + S + ' ' + _f("blue-purple") + ' fill-opacity=".1"/>' +
+           '<line x1="8" y1="19" x2="16" y2="19" ' + _sc("#2946b7") + " " + _w(1.4) + " " + S + '/>';
+  };
+  // Academic proofreading — open book (purple)
+  icons.pr_academic = function () {
+    return '<path d="M2 4c2-1 4.5-1 6.5 0L12 6l3.5-2c2-1 4.5-1 6.5 0v14c-2-1-4.5-1-6.5 0L12 20l-3.5-2c-2-1-4.5-1-6.5 0V4z" ' + _s("blue-purple") + " " + _w(1.4) + " " + S + ' ' + _f("blue-purple") + ' fill-opacity=".08"/>' +
+           '<line x1="12" y1="6" x2="12" y2="20" ' + _sc("#8426a4") + " " + _w(1.2) + ' opacity=".35"/>' +
+           '<path d="M6 8h3M6 11h2M15 8h3M15 11h2" ' + _sc("#8426a4") + " " + _w(1) + " " + S + ' fill="none" opacity=".4"/>';
+  };
+
   /* ---- main API ---- */
   function aiIcon(name, size, colour) {
     _ensureDefs();

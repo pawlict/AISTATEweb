@@ -346,27 +346,29 @@
 }
 .proofread-result [contenteditable] { outline: none; }
 
-/* Proofreading style icons (toolbar) */
+/* Proofreading style icons — pill-icon compatible */
 .pr-style-icon {
-  position: relative; width: 32px; height: 32px;
+  position: relative;
+  padding: 4px; border: 1px solid transparent; background: transparent;
+  border-radius: 10px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  border: 1.5px solid transparent; border-radius: 8px;
-  background: transparent; cursor: pointer;
-  transition: all .2s ease; padding: 0;
+  transition: border-color .2s, background .2s;
 }
-.pr-style-icon svg { width: 22px; height: 22px; transition: all .3s ease; }
+.pr-style-icon svg { width: 28px; height: 28px; display: block; opacity: .35; transition: all .25s ease; }
 
-/* Per-style hover */
-.pr-style-icon[data-style="light"]:hover        { background: rgba(112,201,246,.12); border-color: #70c9f6; }
-.pr-style-icon[data-style="standard"]:hover      { background: rgba(16,150,244,.12);  border-color: #1096f4; }
-.pr-style-icon[data-style="professional"]:hover   { background: rgba(41,70,183,.12);   border-color: #2946b7; }
-.pr-style-icon[data-style="academic"]:hover       { background: rgba(132,38,164,.12);  border-color: #8426a4; }
+/* Hover — colorize */
+.pr-style-icon:hover svg { opacity: .65; }
+.pr-style-icon:hover {
+  border-color: rgba(0,212,255,.25);
+  background: rgba(0,212,255,.06);
+}
 
-/* Active state */
-.pr-style-icon[data-style="light"].active        { background: rgba(112,201,246,.16); border-color: #70c9f6; }
-.pr-style-icon[data-style="standard"].active      { background: rgba(16,150,244,.16);  border-color: #1096f4; }
-.pr-style-icon[data-style="professional"].active   { background: rgba(41,70,183,.16);   border-color: #2946b7; }
-.pr-style-icon[data-style="academic"].active       { background: rgba(132,38,164,.16);  border-color: #8426a4; }
+/* Active — full color, brand-tinted border */
+.pr-style-icon.active svg { opacity: 1; }
+.pr-style-icon[data-style="light"].active        { border-color: rgba(112,201,246,.4); background: rgba(112,201,246,.08); }
+.pr-style-icon[data-style="standard"].active      { border-color: rgba(16,150,244,.4);  background: rgba(16,150,244,.08); }
+.pr-style-icon[data-style="professional"].active   { border-color: rgba(41,70,183,.4);   background: rgba(41,70,183,.08); }
+.pr-style-icon[data-style="academic"].active       { border-color: rgba(132,38,164,.4);  background: rgba(132,38,164,.08); }
 
 /* Hover animations */
 .pr-style-icon[data-style="light"]:hover svg {
@@ -422,10 +424,10 @@
 .pr-style-icon[data-style="professional"] .pr-tip   { border-top: 2px solid #2946b7; }
 .pr-style-icon[data-style="academic"] .pr-tip       { border-top: 2px solid #8426a4; }
 
-/* Animated magnifying glass for PL / EN */
+/* Magnifying glass PL / EN — always colorful */
 .pill-icon-mag { position: relative; }
-.pill-icon-mag svg { width: 28px; height: 28px; display: block; opacity: .3; transition: opacity .2s ease; }
-.pill-icon-mag:hover svg { opacity: .55; }
+.pill-icon-mag svg { width: 28px; height: 28px; display: block; opacity: .55; transition: all .2s ease; }
+.pill-icon-mag:hover svg { opacity: .8; }
 .pill-icon-mag:has(input:checked) svg { opacity: 1; }
 .pill-icon-mag:has(input:checked) {
   border-color: rgba(0,212,255,.25);
@@ -489,7 +491,7 @@
           </div>
         </div>
 
-        <!-- Proofreading model & mode (visible only in proofreading mode) -->
+        <!-- Proofreading model (visible only in proofreading mode) -->
         <div class="toolbar-group" id="proofread_model_group" style="display:none;">
           <label class="toolbar-group-label">Model korekty</label>
           <select class="input mini-select" id="proofread_model_select" style="min-width:140px;">
@@ -510,13 +512,16 @@
             </label>
           </div>
         </div>
+      </div>
 
-        <!-- Styl korekty (icons, auto-shown in proofreading mode) -->
-        <div class="toolbar-group" id="proofread_style_toolbar" style="display:none;">
+      <!-- Separator + Styl korekty (own section, auto-shown in proofreading mode) -->
+      <div class="toolbar-sep" id="proofread_style_sep" style="display:none;"></div>
+      <div class="toolbar-section" id="proofread_style_toolbar" style="display:none;">
+        <div class="toolbar-group">
           <label class="toolbar-group-label" id="pr_style_label">Styl korekty</label>
           <div class="toolbar-group-controls" style="gap:2px;">
 
-            <!-- Light: broom/eraser — gentle cleanup -->
+            <!-- Light: pencil + dashed line — gentle cleanup -->
             <button class="pr-style-icon" data-style="light" type="button" onclick="_prSelectStyle('light')">
               <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <defs><linearGradient id="prl1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a5e1fb"/><stop offset="100%" stop-color="#70c9f6"/></linearGradient></defs>
