@@ -375,6 +375,7 @@
   "np.status.creating": "Tworzę…",
   "np.status.done": "Gotowe ({id})",
   "np.status.error": "Błąd",
+  "np.redirect_hint": "Aby kontynuować, utwórz lub wybierz projekt dla modułu:",
   "page.diarization.title": "Diaryzacja",
   "page.logs.title": "Logi",
   "page.new_project.subtitle": "Utwórz nowy projekt (plik audio opcjonalny)",

@@ -374,6 +374,7 @@
   "np.status.creating": "Creating…",
   "np.status.done": "Done ({id})",
   "np.status.error": "Error",
+  "np.redirect_hint": "To continue, create or select a project for module:",
   "page.diarization.title": "Diarization",
   "page.logs.title": "Logs",
   "page.new_project.subtitle": "Create a new project (audio file optional)",
