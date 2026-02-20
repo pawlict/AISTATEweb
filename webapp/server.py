@@ -2088,32 +2088,12 @@ def page_users(request: Request) -> Any:
     return render_page(request, "users.html", "Zarządzanie użytkownikami", "users")
 
 
-_BREADCRUMBS = {
-    "projects":       [{"label": "Projekty", "href": "/projects"}],
-    "new_project":    [{"label": "Projekty", "href": "/projects"}, {"label": "Nowy (legacy)"}],
-    "transcription":  [{"label": "Projekty", "href": "/projects"}, {"label": "Transkrypcja"}],
-    "diarization":    [{"label": "Projekty", "href": "/projects"}, {"label": "Diaryzacja"}],
-    "analysis":       [{"label": "Projekty", "href": "/projects"}, {"label": "Analiza"}],
-    "chat":           [{"label": "Chat LLM"}],
-    "translation":    [{"label": "Tłumaczenie"}],
-    "settings":       [{"label": "Ustawienia"}],
-    "admin":          [{"label": "Admin", "href": "/admin"}, {"label": "GPU"}],
-    "llm_settings":   [{"label": "Admin", "href": "/admin"}, {"label": "LLM"}],
-    "asr_settings":   [{"label": "Admin", "href": "/admin"}, {"label": "ASR"}],
-    "nllb_settings":  [{"label": "Admin", "href": "/admin"}, {"label": "NLLB"}],
-    "tts_settings":   [{"label": "Admin", "href": "/admin"}, {"label": "TTS"}],
-    "logs":           [{"label": "Admin", "href": "/admin"}, {"label": "Logi"}],
-    "users":          [{"label": "Admin", "href": "/admin"}, {"label": "Użytkownicy"}],
-    "info":           [{"label": "Info"}],
-}
-
 def render_page(request: Request, tpl: str, title: str, active: str, current_project: Optional[str] = None, **ctx: Any):
     settings = load_settings()
     # Multi-user context
     multiuser = getattr(request.state, "multiuser", False)
     user = getattr(request.state, "user", None)
     user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles, user.is_superadmin) if user else []
-    breadcrumbs = _BREADCRUMBS.get(active, [])
     resp = TEMPLATES.TemplateResponse(
         tpl,
         {
@@ -2135,7 +2115,6 @@ def render_page(request: Request, tpl: str, title: str, active: str, current_pro
             "multiuser": multiuser,
             "user": user,
             "user_modules": user_modules,
-            "breadcrumbs": breadcrumbs,
             **ctx,
         },
     )

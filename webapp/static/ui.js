@@ -338,47 +338,6 @@
     return valid;
   }
 
-  // ===================== BREADCRUMBS =====================
-
-  /**
-   * Initialize breadcrumbs from a configuration.
-   * Reads data-breadcrumbs attribute from <main> or uses page-specific setup.
-   */
-  function initBreadcrumbs() {
-    var bc = document.getElementById('aistate-breadcrumbs');
-    if (!bc) return;
-
-    var items = [];
-    try {
-      var raw = bc.getAttribute('data-items');
-      if (raw) items = JSON.parse(raw);
-    } catch(e) {}
-
-    if (items.length === 0) return;
-
-    bc.innerHTML = '';
-    items.forEach(function(item, idx) {
-      if (idx > 0) {
-        var sep = document.createElement('span');
-        sep.className = 'aistate-bc-sep';
-        sep.textContent = '\u203A';
-        bc.appendChild(sep);
-      }
-      if (item.href && idx < items.length - 1) {
-        var a = document.createElement('a');
-        a.href = item.href;
-        a.className = 'aistate-bc-link';
-        a.textContent = item.label;
-        bc.appendChild(a);
-      } else {
-        var span = document.createElement('span');
-        span.className = 'aistate-bc-current';
-        span.textContent = item.label;
-        bc.appendChild(span);
-      }
-    });
-  }
-
   // ===================== BUTTON LOADING STATE =====================
 
   /**
@@ -419,7 +378,6 @@
   // ===================== INIT =====================
 
   document.addEventListener('DOMContentLoaded', function() {
-    initBreadcrumbs();
   });
 
   // ===================== EXPORTS =====================
@@ -430,6 +388,6 @@
   window.attachPasswordMeter = attachPasswordMeter;
   window.validateForm = validateForm;
   window.withButtonLoading = withButtonLoading;
-  window.initBreadcrumbs = initBreadcrumbs;
+
 
 })();
