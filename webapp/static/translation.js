@@ -480,7 +480,6 @@ async function _trResumeTaskIfAny(state){
             const btn = _byId('generate-btn');
             if(btn){
                 btn.disabled = true;
-                btn.innerHTML = aiIcon('loading',12) + ' ' + tr('translation.btn.translating','Tłumaczenie...');
             }
             monitorProgress();
         }
@@ -837,7 +836,6 @@ async function startTranslation() {
     document.getElementById('progress-container').classList.remove('hidden');
     document.getElementById('output-container').classList.add('hidden');
     document.getElementById('generate-btn').disabled = true;
-    document.getElementById('generate-btn').innerHTML = aiIcon('loading',12) + ' ' + tr('translation.btn.translating','Tłumaczenie...');
     
     try {
         // Start translation
@@ -1042,7 +1040,6 @@ function getLangName(lang) {
 // Reset UI
 function resetUI() {
     document.getElementById('generate-btn').disabled = false;
-    document.getElementById('generate-btn').innerHTML = aiIcon('generate',12) + ' ' + tr('translation.btn.generate','Generuj');
 }
 
 // Export selected reports is implemented below (single definition)
