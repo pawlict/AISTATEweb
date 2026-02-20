@@ -1060,11 +1060,16 @@ async function resetOutput() {
 // Export functions
 async function exportAs(format) {
     let text = document.getElementById('output-text').value;
+    let htmlContent = '';
 
     // In proofreading mode the result lives in #proofread_result, not in #output-text
-    if (!text && _proofreadState && _proofreadState.lang) {
+    if (_proofreadState && _proofreadState.lang) {
         var prEl = _byId('proofread_result');
-        if (prEl) text = _proofreadExtractText(prEl);
+        if (prEl) {
+            if (!text) text = _proofreadExtractText(prEl);
+            // Grab the rendered HTML for rich exports (HTML/DOCX)
+            htmlContent = prEl.innerHTML || '';
+        }
         if (!text) text = _proofreadState.corrected || '';
     }
 
@@ -1072,12 +1077,13 @@ async function exportAs(format) {
         showToast(tr('translation.alert.no_text_to_export','Brak tekstu do eksportu!'), 'warning');
         return;
     }
-    
+
     try {
         const formData = new FormData();
         formData.append('text', text);
         formData.append('format', format);
         formData.append('filename', 'translation');
+        if (htmlContent) formData.append('html', htmlContent);
         
         const response = await fetch('/api/translation/export', {
             method: 'POST',
