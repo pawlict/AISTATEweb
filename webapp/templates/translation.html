@@ -499,29 +499,14 @@
           </select>
         </div>
 
-        <div class="toolbar-group" id="proofread_mode_group" style="display:none;">
-          <label class="toolbar-group-label">Tryb</label>
-          <div class="toolbar-group-controls">
-            <label class="pill pill-icon" title="Korekta — popraw błędy, zachowaj treść">
-              <input type="radio" name="proofread_mode" value="correct" checked>
-              <img src="/static/icons/edycja_tekstu/proofread_pl.svg" alt="Korekta" draggable="false">
-            </label>
-            <label class="pill pill-icon" title="Rozszerzenie — wzbogać i rozbuduj tekst">
-              <input type="radio" name="proofread_mode" value="expand">
-              <img src="/static/icons/ai_ml/analysis_deep.svg" alt="Rozszerzenie" draggable="false">
-            </label>
-          </div>
-        </div>
       </div>
 
-      <!-- Separator + Styl korekty (own section, auto-shown in proofreading mode) -->
+      <!-- Styl korekty — oddzielna sekcja (auto-shown in proofreading mode) -->
       <div class="toolbar-sep" id="proofread_style_sep" style="display:none;"></div>
       <div class="toolbar-section" id="proofread_style_toolbar" style="display:none;">
         <div class="toolbar-group">
           <label class="toolbar-group-label" id="pr_style_label">Styl korekty</label>
           <div class="toolbar-group-controls" style="gap:2px;">
-
-            <!-- Light: pencil + dashed line — gentle cleanup -->
             <button class="pr-style-icon" data-style="light" type="button" onclick="_prSelectStyle('light')">
               <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <defs><linearGradient id="prl1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a5e1fb"/><stop offset="100%" stop-color="#70c9f6"/></linearGradient></defs>
@@ -530,8 +515,6 @@
               </svg>
               <div class="pr-tip" id="pr_tip_light"></div>
             </button>
-
-            <!-- Standard: document + checkmark — balanced review -->
             <button class="pr-style-icon active" data-style="standard" type="button" onclick="_prSelectStyle('standard')">
               <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <defs><linearGradient id="prl2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#70c9f6"/><stop offset="100%" stop-color="#1096f4"/></linearGradient></defs>
@@ -542,8 +525,6 @@
               </svg>
               <div class="pr-tip" id="pr_tip_standard"></div>
             </button>
-
-            <!-- Professional: scales/balance — precise, weighed -->
             <button class="pr-style-icon" data-style="professional" type="button" onclick="_prSelectStyle('professional')">
               <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <defs><linearGradient id="prl3" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1096f4"/><stop offset="100%" stop-color="#2946b7"/></linearGradient></defs>
@@ -555,8 +536,6 @@
               </svg>
               <div class="pr-tip" id="pr_tip_professional"></div>
             </button>
-
-            <!-- Academic: open book — scholarly -->
             <button class="pr-style-icon" data-style="academic" type="button" onclick="_prSelectStyle('academic')">
               <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <defs><linearGradient id="prl4" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2946b7"/><stop offset="100%" stop-color="#8426a4"/></linearGradient></defs>
@@ -566,7 +545,6 @@
               </svg>
               <div class="pr-tip" id="pr_tip_academic"></div>
             </button>
-
           </div>
         </div>
       </div>
