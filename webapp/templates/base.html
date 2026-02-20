@@ -311,19 +311,7 @@
   </aside>
 
   <main class="main">
-    {% if active not in ('users', 'settings', 'admin', 'logs', 'info', 'projects') %}
-    <div class="topbar">
-      <div class="topbar-left">
-        <div class="small" id="topbarWorkspaceCtx" style="display:none">
-          <a href="/projects" style="color:var(--accent);text-decoration:none" id="topWsLink">—</a>
-          <span style="opacity:.5"> › </span>
-          <b id="topSubName">—</b>
-        </div>
-        <div class="small"><span data-i18n="top.current_project">Bieżący projekt</span>: <b id="current_project">(…)</b></div>
-        <div class="small"><span data-i18n="top.source_file">Plik źródłowy projektu</span>: <b id="current_audio">(…)</b></div>
-      </div>
-    </div>
-    {% endif %}
+    <!-- Project info is now shown in each module toolbar ("Projekt: ...") -->
     {% if breadcrumbs is defined and breadcrumbs %}
     <nav class="aistate-breadcrumbs" id="aistate-breadcrumbs" data-items='{{ breadcrumbs | tojson }}' aria-label="Breadcrumbs"></nav>
     {% endif %}

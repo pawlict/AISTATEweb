@@ -412,26 +412,9 @@ function requireProjectId(){
 
 // ---------- Refresh current project info in UI ----------
 async function refreshCurrentProjectInfo(){
-  const elCur = document.getElementById("current_project");
-  const elAud = document.getElementById("current_audio");
   const pid = AISTATE.projectId || "";
 
-  // Show workspace context in topbar if available
-  var wsCtx = document.getElementById("topbarWorkspaceCtx");
-  var wsLink = document.getElementById("topWsLink");
-  var subName = document.getElementById("topSubName");
-  var wsId = localStorage.getItem("aistate_workspace_id") || "";
-  var wsName = localStorage.getItem("aistate_workspace_name") || "";
-  var spName = localStorage.getItem("aistate_subproject_name") || "";
-  if(wsCtx && wsId && wsName){
-    wsCtx.style.display = "";
-    if(wsLink){ wsLink.textContent = wsName; wsLink.href = "/projects/" + wsId; }
-    if(subName) subName.textContent = spName || "";
-  }
-
   if(!pid){
-    if(elCur) elCur.textContent = t("projects.none");
-    if(elAud) elAud.textContent = t("projects.none");
     AISTATE.audioFile = "";
     _setToolbarProjectLines(t("projects.none"));
     return;
@@ -440,18 +423,9 @@ async function refreshCurrentProjectInfo(){
   try{
     const meta = await api(`/api/projects/${pid}/meta`);
     const name = meta.name || t("projects.unnamed");
-    const audio = meta.audio_file || "";
-
-    if(elCur) elCur.textContent = `${name} (${pid.slice(0,8)})`;
-    if(elAud) elAud.textContent = audio ? audio : t("projects.no_file");
-
-    AISTATE.audioFile = audio || "";
-
-    // Populate "Projekt: ..." in module toolbars
+    AISTATE.audioFile = meta.audio_file || "";
     _setToolbarProjectLines(name);
   }catch(e){
-    if(elCur) elCur.textContent = pid.slice(0,8);
-    if(elAud) elAud.textContent = t("projects.no_data");
     AISTATE.audioFile = "";
     _setToolbarProjectLines(pid.slice(0,8));
   }
