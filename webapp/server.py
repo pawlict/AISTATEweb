@@ -2571,8 +2571,13 @@ async def api_translation_export(
     text: str = Form(...),
     format: str = Form("txt"),
     filename: str = Form("translation"),
+    html: str = Form(""),
 ) -> Any:
-    """Export translated text as TXT/HTML/DOCX (returned as a downloadable file)."""
+    """Export translated text as TXT/HTML/DOCX (returned as a downloadable file).
+
+    When *html* is provided (e.g. from the proofreading diff view) the HTML/DOCX
+    exports preserve the original formatting.  Plain text export always uses *text*.
+    """
     fmt = str(format or "txt").lower().strip()
     if fmt == "doc":
         fmt = "docx"
@@ -2580,6 +2585,9 @@ async def api_translation_export(
 
     from html import escape as _html_escape
     import io as _io
+    import re as _re
+
+    rich_html = (html or "").strip()
 
     if fmt == "txt":
         data = (text or "").encode("utf-8")
@@ -2590,26 +2598,35 @@ async def api_translation_export(
         )
 
     if fmt == "html":
-        import re as _re
-        raw = text or ""
-        # Split on double-newlines → paragraphs; single newlines → <br>
-        paragraphs = _re.split(r'\n{2,}', raw)
-        body_parts = []
-        for p in paragraphs:
-            p = p.strip()
-            if not p:
-                continue
-            escaped = _html_escape(p).replace('\n', '<br>\n')
-            body_parts.append(f'<p>{escaped}</p>')
-        body_html = '\n'.join(body_parts) if body_parts else f'<p>{_html_escape(raw)}</p>'
-        html = (
+        if rich_html:
+            # Clean diff markup: strip pr-del (deleted text) spans, unwrap pr-ins spans
+            clean = _re.sub(r'<span\s+class="pr-del"[^>]*>.*?</span>', '', rich_html, flags=_re.S)
+            clean = _re.sub(r'<span\s+class="pr-ins"[^>]*>(.*?)</span>', r'\1', clean, flags=_re.S)
+            clean = _re.sub(r'<span\s+class="pr-(?:accepted|rejected)"[^>]*>.*?</span>', '', clean, flags=_re.S)
+            body_html = clean
+        else:
+            raw = text or ""
+            paragraphs = _re.split(r'\n{2,}', raw)
+            body_parts = []
+            for p in paragraphs:
+                p = p.strip()
+                if not p:
+                    continue
+                escaped = _html_escape(p).replace('\n', '<br>\n')
+                body_parts.append(f'<p>{escaped}</p>')
+            body_html = '\n'.join(body_parts) if body_parts else f'<p>{_html_escape(raw)}</p>'
+
+        out_html = (
             '<!doctype html><html><head><meta charset="utf-8">'
-            '<style>body{font-family:Segoe UI,Arial,sans-serif;line-height:1.7;max-width:800px;margin:40px auto;padding:0 20px;color:#1e293b}'
-            'p{margin:0 0 1em}</style></head><body>\n'
+            '<style>'
+            'body{font-family:"Cambria","Georgia","Times New Roman",serif;font-size:14.5px;'
+            'line-height:1.7;max-width:800px;margin:40px auto;padding:0 24px;color:#1a1a1a}'
+            'p{margin:0 0 12px;text-align:justify}'
+            '</style></head><body>\n'
             + body_html
             + '\n</body></html>'
         )
-        data = html.encode("utf-8")
+        data = out_html.encode("utf-8")
         return StreamingResponse(
             _io.BytesIO(data),
             media_type="text/html; charset=utf-8",
@@ -2619,24 +2636,44 @@ async def api_translation_export(
     if fmt == "docx":
         try:
             from docx import Document  # type: ignore
+            from docx.shared import Pt  # type: ignore
         except Exception:
             raise HTTPException(status_code=500, detail="python-docx nie jest zainstalowany")
-        import re as _re
 
         doc = Document()
-        raw = text or ""
-        # Treat double-newlines as paragraph breaks; single newlines as soft breaks
-        paragraphs = _re.split(r'\n{2,}', raw)
-        for p in paragraphs:
-            p = p.strip()
-            if not p:
-                continue
-            para = doc.add_paragraph()
-            lines = p.split('\n')
-            for i, ln in enumerate(lines):
-                if i > 0:
-                    para.add_run().add_break()
-                para.add_run(ln)
+        style = doc.styles['Normal']
+        style.font.name = 'Cambria'
+        style.font.size = Pt(11)
+
+        if rich_html:
+            # Strip diff markup, extract clean text paragraphs from HTML
+            clean = _re.sub(r'<span\s+class="pr-del"[^>]*>.*?</span>', '', rich_html, flags=_re.S)
+            clean = _re.sub(r'<span\s+class="pr-ins"[^>]*>(.*?)</span>', r'\1', clean, flags=_re.S)
+            clean = _re.sub(r'<span\s+class="pr-(?:accepted|rejected)"[^>]*>.*?</span>', '', clean, flags=_re.S)
+            # Extract text from <p> tags
+            p_texts = _re.findall(r'<p[^>]*>(.*?)</p>', clean, flags=_re.S)
+            if not p_texts:
+                p_texts = [clean]
+            for pt in p_texts:
+                # Strip remaining HTML tags
+                plain = _re.sub(r'<[^>]+>', ' ', pt)
+                plain = _re.sub(r' {2,}', ' ', plain).strip()
+                if plain:
+                    doc.add_paragraph(plain)
+        else:
+            raw = text or ""
+            paragraphs = _re.split(r'\n{2,}', raw)
+            for p in paragraphs:
+                p = p.strip()
+                if not p:
+                    continue
+                para = doc.add_paragraph()
+                lines = p.split('\n')
+                for i, ln in enumerate(lines):
+                    if i > 0:
+                        para.add_run().add_break()
+                    para.add_run(ln)
+
         buf = _io.BytesIO()
         doc.save(buf)
         buf.seek(0)
