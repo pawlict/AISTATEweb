@@ -1390,10 +1390,11 @@ button.pill-icon:hover{
 .llm-warn{
   margin-top:12px;
   background:rgba(239,68,68,.10);
-  border:1px solid rgba(239,68,68,.22);
+  border:1px solid rgba(239,68,68,.30);
   border-radius:12px;
   padding:12px;
-  color:#fecaca;
+  color:#991b1b;
+  font-weight:600;
   line-height:1.45;
 }
 
