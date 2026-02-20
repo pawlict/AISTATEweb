@@ -212,6 +212,8 @@
   "hint.speaker_mapping_optional_html": "Optional: replace <code>SPK1</code>/<code>SPK2</code> labels with your own names (e.g., John/Anna).",
   "hint.whisper_auto": "In Whisper: <code>auto</code> = auto-detection (if supported by the model).",
   "info.source_prefix": "Content comes from file",
+  "info.tab_about": "About",
+  "info.tab_manual": "User Manual",
   "info.title": "Info",
   "label.asr_engine": "ASR engine",
   "label.asr_model": "ASR model",

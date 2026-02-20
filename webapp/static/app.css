@@ -784,6 +784,27 @@ button.pill-icon:hover{
   gap: 14px;
 }
 
+/* ===================== Info Page ===================== */
+.info-page{display:flex; flex-direction:column; gap:14px; padding-bottom:20px}
+.info-toolbar{min-height:auto}
+.info-hero{text-align:center; padding:24px 0 12px}
+.info-hero-title{font-size:22px; font-weight:800; color:var(--text)}
+.info-hero-version{font-size:14px; color:var(--muted); margin:4px 0 12px}
+.info-hero-logo{display:block; margin:0 auto}
+.info-source{font-size:12px; color:var(--muted); margin-bottom:4px}
+.info-tab-content{display:flex; flex-direction:column; gap:14px}
+.info-tab-content h1{font-size:22px; margin:0 0 12px}
+.info-tab-content h2{font-size:18px; margin:18px 0 8px; padding-bottom:6px; border-bottom:1px solid var(--border)}
+.info-tab-content h3{font-size:15px; margin:14px 0 6px}
+.info-tab-content ul,.info-tab-content ol{padding-left:22px; margin:6px 0}
+.info-tab-content li{margin:4px 0}
+.info-tab-content table{width:100%; border-collapse:collapse; margin:10px 0; font-size:13px}
+.info-tab-content th,.info-tab-content td{padding:8px 12px; border:1px solid var(--border); text-align:left}
+.info-tab-content th{background:rgba(15,23,42,.04); font-weight:700}
+.info-tab-content hr{border:none; height:1px; background:var(--border); margin:16px 0}
+.info-tab-content code{background:rgba(15,23,42,.06); padding:2px 6px; border-radius:4px; font-size:12px}
+.info-tab-content blockquote{border-left:3px solid var(--accent); padding:8px 14px; margin:10px 0; background:rgba(31,90,166,.04); border-radius:0 8px 8px 0}
+
 /* ===================== AML Module ===================== */
 
 /* Upload zone */

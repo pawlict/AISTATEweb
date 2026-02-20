@@ -16,6 +16,14 @@
 
 ---
 
+## 🆕 Nowości w 3.5.1 beta
+
+- **Korekta tekstu** — porównanie oryginału z poprawionym tekstem (diff), wybór modelu (Bielik, PLLuM, Qwen3), tryb rozwinięty.
+- **Nowy widok projektów** — karty w siatce, info o zespole, zaproszenia z poziomu karty.
+- Drobne poprawki UI i stabilności.
+
+---
+
 ## 🆕 Nowości w 3.2 beta
 
 - **Moduł tłumaczeń (NLLB)** – obsługa lokalnych tłumaczeń wielojęzycznych (w tym PL/EN/ZH i inne).
