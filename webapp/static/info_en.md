@@ -15,7 +15,15 @@
 
 ---
 
-## 🆕 What’s new in 3.2 beta
+## 🆕 What's new in 3.5.1 beta
+
+- **Text proofreading** — side-by-side diff of original vs. corrected text, model picker (Bielik, PLLuM, Qwen3), expanded mode.
+- **Redesigned project view** — card grid layout, team info, per-card invitations.
+- Minor UI and stability fixes.
+
+---
+
+## 🆕 What's new in 3.2 beta
 
 - **Translation module (NLLB)** – local multilingual translation (incl. PL/EN/ZH and more).
 - **NLLB settings** – model selection, runtime options, model cache visibility.
