@@ -2566,6 +2566,25 @@ def api_translation_progress(task_id: str) -> Any:
     return {"status": "processing", "progress": int(t.progress or 0)}
 
 
+_NBSP = "\u00a0"  # non-breaking space
+
+
+def _typographic_cleanup(text: str) -> str:
+    """Apply Polish typography rules: prevent orphaned single-letter conjunctions.
+
+    Replaces space after single-letter Polish words (i, w, z, a, o, u, e, I, W, Z, A, O, U, E)
+    with a non-breaking space so they don't end up alone at the end of a line.
+    """
+    import re as _re
+    return _re.sub(r'(?<=\s)([iwzaoueIWZAOUE]) (?=\S)', r'\1' + _NBSP, text)
+
+
+def _typographic_cleanup_html(html_text: str) -> str:
+    """Same as _typographic_cleanup but uses &nbsp; for HTML output."""
+    import re as _re
+    return _re.sub(r'(?<=\s)([iwzaoueIWZAOUE]) (?=\S)', r'\1' + '&nbsp;', html_text)
+
+
 @app.post("/api/translation/export")
 async def api_translation_export(
     text: str = Form(...),
@@ -2577,6 +2596,8 @@ async def api_translation_export(
 
     Text is treated as markdown and rendered with proper formatting
     (headings, bold, lists, tables, etc.) for HTML and DOCX exports.
+    Applies Polish typographic rules (justify, paragraph indent,
+    orphan prevention).
     """
     import io as _io
     import re as _re
@@ -2590,9 +2611,9 @@ async def api_translation_export(
 
     raw = (text or "").strip()
 
-    # ---- TXT: plain text as-is ----
+    # ---- TXT: plain text with typographic cleanup ----
     if fmt == "txt":
-        data = raw.encode("utf-8")
+        data = _typographic_cleanup(raw).encode("utf-8")
         return StreamingResponse(
             _io.BytesIO(data),
             media_type="text/plain; charset=utf-8",
@@ -2601,13 +2622,56 @@ async def api_translation_export(
 
     # ---- HTML: markdown → styled HTML document ----
     if fmt == "html":
-        from backend.report_generator import _md_to_html, _html_wrap
+        from backend.report_generator import _md_to_html
 
-        body_html = _md_to_html(raw)
-        meta = {"generated_at": "", "project_id": "", "model": "", "template_ids": []}
-        out_html = _html_wrap(body_html, title=name, meta=meta)
-        # Strip the meta block when it's empty (translation export doesn't need it)
-        out_html = _re.sub(r'<div class="meta">.*?</div>', '', out_html, flags=_re.S)
+        body_html = _typographic_cleanup_html(_md_to_html(raw))
+        out_html = f"""<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{name}</title>
+  <style>
+    body {{
+      font-family: 'Cambria', 'Georgia', 'Times New Roman', serif;
+      font-size: 14.5px;
+      line-height: 1.8;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 28px;
+      color: #1a1a1a;
+    }}
+    p {{
+      margin: 0 0 12px;
+      text-align: justify;
+      text-indent: 1.5em;
+      hyphens: auto;
+      -webkit-hyphens: auto;
+    }}
+    /* First paragraph after heading — no indent */
+    h1 + p, h2 + p, h3 + p, h4 + p {{ text-indent: 0; }}
+    h1, h2, h3, h4 {{
+      font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+      color: #1e3a5f;
+      margin: 24px 0 10px;
+    }}
+    ul, ol {{ margin: 8px 0 12px 1.5em; }}
+    li {{ margin-bottom: 4px; text-align: justify; }}
+    blockquote {{
+      border-left: 3px solid #cbd5e1;
+      margin: 12px 0;
+      padding: 6px 14px;
+      color: #475569;
+    }}
+    strong {{ font-weight: 700; }}
+    em {{ font-style: italic; }}
+    code {{ font-family: 'Consolas', monospace; font-size: 13px; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }}
+  </style>
+</head>
+<body>
+{body_html}
+</body>
+</html>"""
         data = out_html.encode("utf-8")
         return StreamingResponse(
             _io.BytesIO(data),
@@ -2619,11 +2683,12 @@ async def api_translation_export(
     if fmt == "docx":
         from backend.report_generator import save_docx_from_markdown
 
+        cleaned = _typographic_cleanup(raw)
         with _tmpmod.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
             tmp_path = _Path(tmp.name)
         try:
             meta = {"generated_at": "", "project_id": "", "model": "", "template_ids": []}
-            save_docx_from_markdown(raw, tmp_path, title=name, meta=meta)
+            save_docx_from_markdown(cleaned, tmp_path, title=name, meta=meta)
             docx_bytes = tmp_path.read_bytes()
         finally:
             try:
@@ -6195,6 +6260,24 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
     app_log(f"Proofreading: lang={lang}, model={model}, text_len={len(text)}")
 
     # Build prompt based on mode
+    _PL_TYPO_RULES = (
+        "\nZASADY TYPOGRAFII POLSKIEJ (stosuj zawsze): "
+        "- Dziel tekst na logiczne akapity (oddzielone pustą linią). "
+        "- Nie zostawiaj samotnych spójników (i, w, z, a, o, u, e) na końcu wiersza — "
+        "po takim jednoliterowym wyrazie NIE stawiaj spacji, lecz wstaw znak niełamliwej spacji "
+        "(innymi słowy: spójnik powinien być zawsze połączony z następnym wyrazem). "
+        "- Stosuj poprawna polska interpunkcje: cudzyslow dolny i gorny, myslnik dlugim (em dash), "
+        "wielokropek (trzy kropki, nie wiecej). "
+        "- Zachowuj formatowanie markdown (nagłówki ##, **bold**, *italic*, listy -, 1.) jeśli wystepuje w tekście źródłowym."
+    )
+
+    _EN_TYPO_RULES = (
+        "\nTYPOGRAPHY RULES (always apply): "
+        "- Divide text into logical paragraphs (separated by blank lines). "
+        "- Use proper punctuation: em dash — , curly quotes if possible. "
+        "- Preserve markdown formatting (## headings, **bold**, *italic*, lists -, 1.) if present in the source text."
+    )
+
     if mode == "expand":
         # Expand / rewrite mode — user wants richer, longer text
         if lang == "pl":
@@ -6205,9 +6288,9 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Zachowaj sens i kontekst oryginału, ale tekst powinien być znacznie bogatszy, "
                 "bardziej opisowy i profesjonalny. "
                 "Popraw też ewentualne błędy ortograficzne i gramatyczne. "
-                "FORMATOWANIE: Dziel tekst na akapity (oddzielone pustą linią). "
-                "Jeśli tekst jest długi lub porusza wiele tematów, dodaj nagłówki rozdziałów. "
+                "Jeśli tekst jest długi lub porusza wiele tematów, dodaj nagłówki rozdziałów (## nagłówek). "
                 "Odpowiedz WYŁĄCZNIE rozszerzonym tekstem — bez komentarzy, bez wyjaśnień."
+                + _PL_TYPO_RULES
             )
         else:
             system_msg = (
@@ -6217,9 +6300,9 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Preserve the meaning and context of the original, but the text should be significantly richer, "
                 "more descriptive and professional. "
                 "Also fix any spelling and grammar errors. "
-                "FORMATTING: Divide text into paragraphs (separated by blank lines). "
-                "If the text is long or covers multiple topics, add section headings. "
+                "If the text is long or covers multiple topics, add section headings (## heading). "
                 "Reply ONLY with the expanded text — no comments, no explanations."
+                + _EN_TYPO_RULES
             )
     else:
         # Standard correction mode
@@ -6229,6 +6312,7 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Popraw ortografię, gramatykę, interpunkcję i wygładź styl. "
                 "NIE zmieniaj znaczenia ani kontekstu tekstu. "
                 "Odpowiedz WYŁĄCZNIE poprawionym tekstem — bez komentarzy, bez wyjaśnień."
+                + _PL_TYPO_RULES
             )
         else:
             system_msg = (
@@ -6236,6 +6320,7 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Fix spelling, grammar, punctuation and smooth out the style. "
                 "Do NOT change the meaning or context of the text. "
                 "Reply ONLY with the corrected text — no comments, no explanations."
+                + _EN_TYPO_RULES
             )
 
     if notes:

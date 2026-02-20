@@ -1079,23 +1079,27 @@ async function exportAs(format) {
     }
 
     try {
+        // Choose filename based on mode
+        var isProofread = _proofreadState && _proofreadState.lang;
+        var baseName = isProofread ? 'korekta' : 'tlumaczenie';
+
         const formData = new FormData();
         formData.append('text', text);
         formData.append('format', format);
-        formData.append('filename', 'translation');
+        formData.append('filename', baseName);
         if (htmlContent) formData.append('html', htmlContent);
-        
+
         const response = await fetch('/api/translation/export', {
             method: 'POST',
             body: formData
         });
-        
+
         if (response.ok) {
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `translation.${format}`;
+            a.download = `${baseName}.${format}`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
