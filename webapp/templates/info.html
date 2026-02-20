@@ -44,16 +44,17 @@
 </div>
 
 <script>
-  // If app stores UI language in localStorage (pl/en), align Info page without requiring a reload flow
+  // Sync Info page language with UI language from localStorage
   (function(){
     try{
       const url = new URL(window.location.href);
-      if (url.searchParams.get("lang")) return;
       const ls = (localStorage.getItem("ui_language") || localStorage.getItem("lang") || "").toLowerCase();
-      if (ls.startsWith("en") || ls.startsWith("pl")){
-        url.searchParams.set("lang", ls.startsWith("en") ? "en" : "pl");
-        window.location.replace(url.toString());
-      }
+      const wanted = ls.startsWith("en") ? "en" : ls.startsWith("pl") ? "pl" : "";
+      if (!wanted) return;
+      const current = (url.searchParams.get("lang") || "").toLowerCase();
+      if (current === wanted) return;
+      url.searchParams.set("lang", wanted);
+      window.location.replace(url.toString());
     }catch(e){}
   })();
 
