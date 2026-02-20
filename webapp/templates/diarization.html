@@ -1923,7 +1923,7 @@ let DI_HAS_AUDIO = false;
 
 async function updateAudioState(){
   await refreshCurrentProjectInfo();
-  DI_HAS_AUDIO = Boolean(AISTATE.projectId && AISTATE.audioFile);
+  DI_HAS_AUDIO = Boolean(AISTATE.audioFile);
   const btn = document.getElementById("di_btn");
   if(btn){
     const modeEl = document.getElementById("di_mode");
@@ -2723,14 +2723,16 @@ toggleMode();
 diInitInstalled(0);
 
 async function diStartDiarize(){
+  // Require active project before diarizing
+  try { requireProjectId("diarization"); } catch(e) { return; }
+
   const mode = document.getElementById("di_mode").value;
   const fd = new FormData();
 
   if(mode !== "text"){
     await updateAudioState();
     if(!DI_HAS_AUDIO){
-      showToast("Brak pliku audio w projekcie. Utwórz projekt w zakładce: Nowy projekt.", 'warning');
-      window.location.href = "/new-project";
+      showToast("Brak pliku audio w projekcie. Wgraj plik audio.", 'warning');
       return;
     }
 

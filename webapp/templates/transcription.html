@@ -1676,7 +1676,7 @@ async function trInitAsrSelectors(){
 
     if(btn){
       // Will be refined after model selection is built
-      btn.disabled = !(AISTATE.projectId && AISTATE.audioFile && any);
+      btn.disabled = !(AISTATE.audioFile && any);
     }
 
     return any;
@@ -1742,16 +1742,16 @@ async function trInitAsrSelectors(){
     try{ localStorage.setItem("aistate_tr_engine", eng); }catch(e){}
     buildModelOptions(eng);
     setHint(eng);
-    if(btn) btn.disabled = !(AISTATE.projectId && AISTATE.audioFile && (modelEl.value||""));
+    if(btn) btn.disabled = !(AISTATE.audioFile && (modelEl.value||""));
   });
 
   modelEl.addEventListener("change", ()=>{
     const eng = engEl.value || "whisper";
     try{ localStorage.setItem(`aistate_tr_model_${eng}`, modelEl.value || ""); }catch(e){}
-    if(btn) btn.disabled = !(AISTATE.projectId && AISTATE.audioFile && (modelEl.value||""));
+    if(btn) btn.disabled = !(AISTATE.audioFile && (modelEl.value||""));
   });
 
-  if(btn) btn.disabled = !(AISTATE.projectId && AISTATE.audioFile && (modelEl.value||""));
+  if(btn) btn.disabled = !(AISTATE.audioFile && (modelEl.value||""));
 }
 
 // Event listeners
@@ -1905,7 +1905,7 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
 
   const btn = document.getElementById("tr_btn");
   const modelEl = document.getElementById("tr_model");
-  if(btn) btn.disabled = !(AISTATE.projectId && AISTATE.audioFile && modelEl && modelEl.value);
+  if(btn) btn.disabled = !(AISTATE.audioFile && modelEl && modelEl.value);
 
   // Show current audio file name
   const fnEl = document.getElementById("tr_file_name");
