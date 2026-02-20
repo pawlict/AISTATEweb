@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
-<defs><linearGradient id="pp" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e05d2f"/><stop offset="100%" stop-color="#f59e0b"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#e05d2f" stroke-width="1" fill="none" opacity="0.15" stroke-linecap="round"/>
-<path d="M12 6h16l10 10v22a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4z" stroke="url(#pp)" stroke-width="2" fill="none"/>
-<path d="M28 6v10h10" stroke="url(#pp)" stroke-width="1.5" fill="none" opacity=".4"/>
-<text x="24" y="31" text-anchor="middle" font-size="7" fill="#e05d2f" font-weight="800" opacity=".5">PPTX</text>
-<line x1="16" y1="36" x2="32" y2="36" stroke="url(#pp)" stroke-width="1" stroke-linecap="round" opacity=".2"/>
+<defs><linearGradient id="dpp" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f97316"/><stop offset="100%" stop-color="#ef4444"/></linearGradient></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#f97316" stroke-width="1" fill="none" opacity=".15"/>
+<path d="M12 6h16l10 10v22a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4z" stroke="url(#dpp)" stroke-width="2" fill="none"/>
+<path d="M28 6v10h10" stroke="url(#dpp)" stroke-width="1.5" fill="none" opacity=".4"/>
+<text x="24" y="32" text-anchor="middle" font-size="8" fill="#f97316" font-weight="800" opacity=".5">PPTX</text>
 </svg>
