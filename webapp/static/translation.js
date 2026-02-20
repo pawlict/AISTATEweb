@@ -1059,8 +1059,15 @@ async function resetOutput() {
 
 // Export functions
 async function exportAs(format) {
-    const text = document.getElementById('output-text').value;
-    
+    let text = document.getElementById('output-text').value;
+
+    // In proofreading mode the result lives in #proofread_result, not in #output-text
+    if (!text && _proofreadState && _proofreadState.lang) {
+        var prEl = _byId('proofread_result');
+        if (prEl) text = _proofreadExtractText(prEl);
+        if (!text) text = _proofreadState.corrected || '';
+    }
+
     if (!text) {
         showToast(tr('translation.alert.no_text_to_export','Brak tekstu do eksportu!'), 'warning');
         return;
