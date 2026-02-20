@@ -560,6 +560,7 @@ window.api = api;
 window.applyI18n = applyI18n;
 window.refreshProjects = refreshProjects;
 window.refreshCurrentProjectInfo = refreshCurrentProjectInfo;
+window.requireProjectId = requireProjectId;
 window.startTask = startTask;
 window.resumeTask = resumeTask;
 window.setProjectFromSelect = setProjectFromSelect;
