@@ -1658,6 +1658,12 @@ function _proofreadSyncUI(proofActive) {
         if (wrap) wrap.style.display = proofActive ? 'none' : '';
     }
 
+    // --- Translation output panels: hide in proofreading mode ---
+    ['output-container', 'progress-container', 'summary-container'].forEach(function(id) {
+        var el = _byId(id);
+        if (el && proofActive) el.classList.add('hidden');
+    });
+
     // --- Generate button: switch action ---
     var genBtn = _byId('generate-btn');
     if (genBtn) {
@@ -1861,13 +1867,18 @@ function _proofreadExtractText(container) {
     return _extractVisibleText(container);
 }
 
-/** Extract visible text from a node, skipping accepted/rejected spans */
+/** Extract visible text from a node, skipping deleted/rejected spans */
 function _extractVisibleText(node) {
     var result = [];
     var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
         acceptNode: function(n) {
             if (n.nodeType === Node.ELEMENT_NODE) {
-                if (n.classList && (n.classList.contains('pr-accepted') || n.classList.contains('pr-rejected'))) {
+                // Always skip deleted text (red strikethrough) — it's being removed
+                if (n.classList && n.classList.contains('pr-del')) {
+                    return NodeFilter.FILTER_REJECT;
+                }
+                // Skip manually rejected insertions
+                if (n.classList && n.classList.contains('pr-rejected')) {
                     return NodeFilter.FILTER_REJECT;
                 }
                 return NodeFilter.FILTER_SKIP;

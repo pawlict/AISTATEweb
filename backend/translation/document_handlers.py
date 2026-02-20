@@ -23,6 +23,14 @@ except ImportError:
     PDF_AVAILABLE = False
     logger.warning("pdfplumber not available - PDF support disabled")
 
+try:
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    PPTX_AVAILABLE = True
+except ImportError:
+    PPTX_AVAILABLE = False
+    logger.warning("python-pptx not available - PPTX support disabled")
+
 
 class DocumentHandler:
     """Base class for document handlers"""
@@ -263,6 +271,115 @@ class SRTHandler(DocumentHandler):
             raise
 
 
+class PPTXHandler(DocumentHandler):
+    """Microsoft PowerPoint handler — extracts text from all slides."""
+
+    def extract_text(self, file_path: Path) -> str:
+        """Extract text from PPTX file, slide by slide."""
+        if not PPTX_AVAILABLE:
+            raise RuntimeError("python-pptx not available")
+
+        try:
+            prs = Presentation(file_path)
+            parts: list[str] = []
+
+            for idx, slide in enumerate(prs.slides, 1):
+                slide_texts: list[str] = []
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        for para in shape.text_frame.paragraphs:
+                            txt = para.text.strip()
+                            if txt:
+                                slide_texts.append(txt)
+                    # Also extract text from tables
+                    if shape.has_table:
+                        for row in shape.table.rows:
+                            for cell in row.cells:
+                                txt = cell.text.strip()
+                                if txt:
+                                    slide_texts.append(txt)
+                if slide_texts:
+                    parts.append(f"--- Slajd {idx} ---\n" + "\n".join(slide_texts))
+
+            text = "\n\n".join(parts)
+            logger.info(
+                f"Extracted {len(text)} chars from PPTX "
+                f"({len(prs.slides)} slides, {file_path.name})"
+            )
+            return text
+
+        except Exception as e:
+            logger.error(f"Failed to extract text from PPTX: {e}")
+            raise
+
+    def save_translated(
+        self,
+        original_path: Path,
+        translated_text: str,
+        output_path: Path,
+        translator=None,
+        source_lang: str = None,
+        target_lang: str = None,
+        **kwargs,
+    ):
+        """
+        Save translated PPTX — clones the original presentation and replaces
+        text in every shape while preserving slide layout, images, formatting.
+        """
+        if not PPTX_AVAILABLE:
+            raise RuntimeError("python-pptx not available")
+
+        try:
+            prs = Presentation(original_path)
+
+            if translator and source_lang and target_lang:
+                # Translate shape-by-shape preserving formatting
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if shape.has_text_frame:
+                            for para in shape.text_frame.paragraphs:
+                                full = para.text.strip()
+                                if not full:
+                                    continue
+                                translated = translator.translate_text(
+                                    full, source_lang, target_lang
+                                )
+                                # Overwrite first run, clear the rest
+                                if para.runs:
+                                    para.runs[0].text = translated
+                                    for run in para.runs[1:]:
+                                        run.text = ""
+                        if shape.has_table:
+                            for row in shape.table.rows:
+                                for cell in row.cells:
+                                    txt = cell.text.strip()
+                                    if txt:
+                                        translated = translator.translate_text(
+                                            txt, source_lang, target_lang
+                                        )
+                                        cell.text = translated
+                prs.save(output_path)
+            else:
+                # Fallback: save plain text as DOCX
+                if DOCX_AVAILABLE:
+                    from docx import Document as DocxDoc
+
+                    doc = DocxDoc()
+                    for para_text in translated_text.split("\n\n"):
+                        if para_text.strip():
+                            doc.add_paragraph(para_text)
+                    doc.save(output_path.with_suffix(".docx"))
+                else:
+                    with open(output_path.with_suffix(".txt"), "w", encoding="utf-8") as f:
+                        f.write(translated_text)
+
+            logger.info(f"Saved PPTX translation to {output_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to save PPTX translation: {e}")
+            raise
+
+
 # Factory function
 def get_handler(file_extension: str) -> Optional[DocumentHandler]:
     """
@@ -279,11 +396,12 @@ def get_handler(file_extension: str) -> Optional[DocumentHandler]:
         '.docx': DOCXHandler,
         '.pdf': PDFHandler,
         '.srt': SRTHandler,
+        '.pptx': PPTXHandler,
     }
-    
+
     ext = file_extension.lower()
     handler_class = handlers.get(ext)
-    
+
     if handler_class:
         # Check if dependencies are available
         if ext == '.docx' and not DOCX_AVAILABLE:
@@ -291,6 +409,9 @@ def get_handler(file_extension: str) -> Optional[DocumentHandler]:
             return None
         if ext == '.pdf' and not PDF_AVAILABLE:
             logger.error("PDF handler requested but pdfplumber not available")
+            return None
+        if ext == '.pptx' and not PPTX_AVAILABLE:
+            logger.error("PPTX handler requested but python-pptx not available")
             return None
         
         return handler_class()
