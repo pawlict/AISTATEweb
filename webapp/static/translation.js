@@ -1422,122 +1422,137 @@ function _ttsPlayUrl(url, btn) {
 var _proofreadState = { lang: null, corrected: '', diffHtml: '', running: false };
 
 // ---------------------------------------------------------------------------
-// Proofreading style presets + rule checkboxes
+// Proofreading style presets (icon-based, no checkboxes)
 // ---------------------------------------------------------------------------
-var _PR_PRESETS = {
-    light:        { repetitions:false, active_voice:false, pleonasms:false, shorten:false, formal:false, informal:false, punctuation_pl:true, tense_consistency:false, passive_ok:false, wordy:false, nominalizations:false, oxford_comma:false, sentence_variety:false },
-    standard:     { repetitions:true,  active_voice:false, pleonasms:true,  shorten:false, formal:false, informal:false, punctuation_pl:true, tense_consistency:true,  passive_ok:false, wordy:true,  nominalizations:false, oxford_comma:false, sentence_variety:false },
-    professional: { repetitions:true,  active_voice:true,  pleonasms:true,  shorten:true,  formal:true,  informal:false, punctuation_pl:true, tense_consistency:true,  passive_ok:false, wordy:true,  nominalizations:true,  oxford_comma:true,  sentence_variety:true  },
-    academic:     { repetitions:true,  active_voice:false, pleonasms:true,  shorten:false, formal:true,  informal:false, punctuation_pl:true, tense_consistency:true,  passive_ok:true,  wordy:false, nominalizations:false, oxford_comma:true,  sentence_variety:false },
+var _prCurrentPreset = 'standard';
+
+// --- PL preset prompt rules ---
+var _PR_RULES_PL = {
+    light: [
+        'Popraw bledy ortograficzne i literowki.',
+        'Popraw interpunkcje: polskie cudzyslowy \u201E\u201D, myslnik dlugi, wielokropek \u2026.',
+        'Nie zmieniaj stylu ani slownictwa autora.'
+    ],
+    standard: [
+        'Popraw ortografie, interpunkcje i gramatyke.',
+        'Usun powtorzenia wyrazow w bliskim sasiedztwie \u2014 stosuj synonimy nie zmieniajac sensu.',
+        'Usun pleonazmy (np. \u201Ecofnac sie do tylu\u201D, \u201Ekontynuowac dalej\u201D).',
+        'Zapewnij spojnosc czasu w narracji.',
+        'Stosuj poprawna polska interpunkcje: cudzyslowy \u201E\u201D, myslnik dlugi \u2014, wielokropek \u2026.'
+    ],
+    professional: [
+        'Popraw ortografie, interpunkcje i gramatyke.',
+        'Usun powtorzenia wyrazow \u2014 stosuj synonimy.',
+        'Usun pleonazmy i zbedne powtorzenia znaczeniowe.',
+        'Preferuj strone czynna zamiast biernej.',
+        'Skracaj rozwlekle zdania \u2014 preferuj zwiezle, klarowne sformulowania.',
+        'Zachowaj formalny, profesjonalny ton.',
+        'Zapewnij spojnosc czasu w narracji.',
+        'Stosuj poprawna polska interpunkcje.'
+    ],
+    academic: [
+        'Popraw ortografie, interpunkcje i gramatyke.',
+        'Usun powtorzenia wyrazow \u2014 stosuj synonimy.',
+        'Usun pleonazmy.',
+        'Zachowaj strone bierna tam gdzie jest uzasadniona (styl naukowy, prawniczy).',
+        'Zachowaj formalny ton i precyzje terminologiczna.',
+        'Zapewnij spojnosc czasu w narracji.',
+        'Stosuj poprawna polska interpunkcje.'
+    ]
 };
 
-// Mutual exclusions: checking one disables the other
-var _PR_EXCLUSIONS = [
-    ['formal', 'informal'],
-    ['active_voice', 'passive_ok'],
-];
+// --- EN preset prompt rules ---
+var _PR_RULES_EN = {
+    light: [
+        'Fix spelling and typos.',
+        'Fix punctuation (commas, apostrophes, quotation marks).',
+        'Do not change the author\'s style or vocabulary.'
+    ],
+    standard: [
+        'Fix spelling, punctuation and grammar.',
+        'Avoid word repetition in close proximity \u2014 use synonyms without changing the meaning.',
+        'Simplify wordy phrases (e.g. "in order to" \u2192 "to", "at this point in time" \u2192 "now").',
+        'Ensure tense consistency throughout the text.',
+        'Use the Oxford comma in lists.'
+    ],
+    professional: [
+        'Fix spelling, punctuation and grammar.',
+        'Avoid word repetition \u2014 use synonyms.',
+        'Simplify wordy phrases and reduce nominalizations (e.g. "make a decision" \u2192 "decide").',
+        'Prefer active voice over passive.',
+        'Shorten verbose sentences \u2014 prefer concise, clear phrasing.',
+        'Maintain a formal, professional tone.',
+        'Ensure tense consistency.',
+        'Use the Oxford comma. Vary sentence length for better rhythm.'
+    ],
+    academic: [
+        'Fix spelling, punctuation and grammar.',
+        'Avoid word repetition \u2014 use synonyms.',
+        'Keep passive voice where appropriate (academic, legal, scientific writing).',
+        'Maintain a formal tone and terminological precision.',
+        'Ensure tense consistency.',
+        'Use the Oxford comma in lists.'
+    ]
+};
 
-function _prApplyPreset(presetName) {
-    var preset = _PR_PRESETS[presetName];
-    if (!preset) return;
-    document.querySelectorAll('[data-pr-rule]').forEach(function(cb) {
-        var rule = cb.getAttribute('data-pr-rule');
-        if (rule in preset) cb.checked = !!preset[rule];
+// --- Tooltip texts per language ---
+var _PR_TIPS = {
+    pl: {
+        light:        '<strong>Lekka korekta</strong><br>Ortografia i interpunkcja.<br>Minimalne ingerencje w styl.',
+        standard:     '<strong>Standardowa korekta</strong><br>Powtorzenia, pleonazmy, spojnosc czasu.<br>Zrownowazona korekta.',
+        professional: '<strong>Profesjonalna korekta</strong><br>Strona czynna, zwiezlosc, ton formalny.<br>Pelna korekta stylowa.',
+        academic:     '<strong>Akademicka korekta</strong><br>Strona bierna dozwolona, precyzja terminow.<br>Styl naukowy / prawniczy.'
+    },
+    en: {
+        light:        '<strong>Light proofreading</strong><br>Spelling &amp; punctuation only.<br>No style changes.',
+        standard:     '<strong>Standard proofreading</strong><br>Repetition, wordy phrases, tense consistency.<br>Balanced correction.',
+        professional: '<strong>Professional proofreading</strong><br>Active voice, conciseness, formal tone.<br>Full style correction.',
+        academic:     '<strong>Academic proofreading</strong><br>Passive voice OK, terminological precision.<br>Scholarly / legal style.'
+    }
+};
+
+/** Select a style preset icon */
+function _prSelectStyle(style) {
+    _prCurrentPreset = style;
+    document.querySelectorAll('.pr-style-icon').forEach(function(btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-style') === style);
     });
-    _prEnforceExclusions();
 }
 
-function _prEnforceExclusions() {
-    _PR_EXCLUSIONS.forEach(function(pair) {
-        var a = document.querySelector('[data-pr-rule="' + pair[0] + '"]');
-        var b = document.querySelector('[data-pr-rule="' + pair[1] + '"]');
-        if (!a || !b) return;
-        var aLabel = a.closest('label');
-        var bLabel = b.closest('label');
-        // If A is checked, disable B (and vice versa)
-        if (a.checked) {
-            b.checked = false;
-            if (bLabel) bLabel.classList.add('pr-disabled');
-        } else {
-            if (bLabel) bLabel.classList.remove('pr-disabled');
-        }
-        if (b.checked) {
-            a.checked = false;
-            if (aLabel) aLabel.classList.add('pr-disabled');
-        } else {
-            if (aLabel) aLabel.classList.remove('pr-disabled');
-        }
-    });
-}
-
-/** Show PL or EN rules panel depending on current language */
+/** Update tooltips and label text for current language */
 function _prSyncRulesLang(lang) {
-    var plPanel = _byId('pr_rules_pl');
-    var enPanel = _byId('pr_rules_en');
-    if (plPanel) plPanel.style.display = (lang === 'pl') ? '' : 'none';
-    if (enPanel) enPanel.style.display = (lang === 'en') ? '' : 'none';
+    var tips = _PR_TIPS[lang] || _PR_TIPS.pl;
+    ['light', 'standard', 'professional', 'academic'].forEach(function(s) {
+        var el = _byId('pr_tip_' + s);
+        if (el) el.innerHTML = tips[s];
+    });
+    // Update section label
+    var lbl = _byId('pr_style_label');
+    if (lbl) lbl.textContent = (lang === 'en') ? 'Proofreading style' : 'Styl korekty';
+    var notesLbl = _byId('pr_notes_label');
+    if (notesLbl) notesLbl.textContent = (lang === 'en')
+        ? 'Proofreading notes (optional)'
+        : 'Uwagi do korekty (opcjonalnie)';
+    var notesEl = _byId('proofread_notes');
+    if (notesEl) notesEl.placeholder = (lang === 'en')
+        ? 'E.g. Keep brand names unchanged, use British spelling\u2026'
+        : 'Np. Zachowaj ton formalny, nie zmieniaj nazw w\u0142asnych\u2026';
 }
 
-/** Collect checked rules as prompt instructions */
+/** Collect preset rules as prompt instructions */
 function _prCollectRulePrompt(lang) {
-    var rules = [];
-    var panel = _byId(lang === 'en' ? 'pr_rules_en' : 'pr_rules_pl');
-    if (!panel) return '';
-    panel.querySelectorAll('[data-pr-rule]:checked').forEach(function(cb) {
-        rules.push(cb.getAttribute('data-pr-rule'));
-    });
-    if (rules.length === 0) return '';
-
-    var _PL = {
-        repetitions:      'Unikaj powtorzen tych samych wyrazow w bliskim sasiedztwie - stosuj synonimy, ale nie zmieniaj sensu.',
-        active_voice:     'Preferuj strone czynna zamiast biernej, o ile styl tekstu na to pozwala.',
-        pleonasms:        'Usuwaj pleonazmy i zbedne powtorzenia znaczeniowe (np. "cofnac sie do tylu", "kontynuowac dalej").',
-        shorten:          'Skracaj rozwlekle zdania - preferuj zwiezle, klarowne sformulowania.',
-        formal:           'Zachowaj formalny, profesjonalny ton wypowiedzi.',
-        informal:         'Zachowaj nieformalny, potoczny ton wypowiedzi.',
-        punctuation_pl:   'Stosuj poprawna polska interpunkcje: polskie cudzyslowy, myslnik dlugi, wielokropek.',
-        tense_consistency:'Zapewnij spojnosc czasu w narracji - nie mieszaj czasu przeszlego z terazniejszym.',
-        passive_ok:       'Zachowaj strone bierna tam gdzie jest uzasadniona (styl naukowy, prawniczy).',
-    };
-    var _EN = {
-        repetitions:       'Avoid using the same word in close proximity - use synonyms without changing the meaning.',
-        active_voice:      'Prefer active voice over passive where it does not change the meaning.',
-        wordy:             'Simplify wordy phrases (e.g. "in order to" -> "to", "at this point in time" -> "now").',
-        shorten:           'Shorten verbose sentences - prefer concise, clear phrasing.',
-        nominalizations:   'Reduce nominalizations (e.g. "make a decision" -> "decide").',
-        formal:            'Maintain a formal, professional tone.',
-        informal:          'Maintain an informal, conversational tone.',
-        oxford_comma:      'Use the Oxford comma consistently in lists.',
-        tense_consistency: 'Ensure tense consistency throughout the text.',
-        sentence_variety:  'Vary sentence length for better rhythm and flow.',
-        passive_ok:        'Keep passive voice where appropriate (academic, legal texts).',
-    };
-    var dict = (lang === 'en') ? _EN : _PL;
-    var parts = [];
-    rules.forEach(function(r) { if (dict[r]) parts.push('- ' + dict[r]); });
-    if (parts.length === 0) return '';
+    var dict = (lang === 'en') ? _PR_RULES_EN : _PR_RULES_PL;
+    var rules = dict[_prCurrentPreset] || dict.standard;
+    if (!rules || rules.length === 0) return '';
     var header = (lang === 'en')
-        ? '\n\nADDITIONAL STYLE RULES (apply these):\n'
-        : '\n\nDODATKOWE REGULY STYLU (stosuj je):\n';
-    return header + parts.join('\n');
+        ? '\n\nPROOFREADING STYLE RULES (apply these):\n'
+        : '\n\nREGULY STYLU KOREKTY (stosuj je):\n';
+    return header + rules.map(function(r) { return '- ' + r; }).join('\n');
 }
 
-// Bind preset radios and checkbox exclusion logic
+// Initialize tooltips on load
 document.addEventListener('DOMContentLoaded', function() {
-    // Preset radios
-    document.querySelectorAll('input[name="pr_preset"]').forEach(function(r) {
-        r.addEventListener('change', function() {
-            _prApplyPreset(r.value);
-        });
-    });
-    // Checkbox exclusion enforcement
-    document.querySelectorAll('[data-pr-rule]').forEach(function(cb) {
-        cb.addEventListener('change', function() {
-            _prEnforceExclusions();
-        });
-    });
-    // Apply default preset
-    _prApplyPreset('standard');
+    _prSyncRulesLang('pl');
 });
 /** Load proofreading models from /api/models/list → proofreading category.
  *  Always fetches fresh data (models may be installed/uninstalled between toggles). */

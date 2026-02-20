@@ -346,39 +346,88 @@
 }
 .proofread-result [contenteditable] { outline: none; }
 
-/* Proofreading style panel */
-.pr-preset-label {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 5px 12px; border: 1px solid #d0d0d0; border-radius: 20px;
-  font-size: 12.5px; cursor: pointer; transition: all .15s;
-  user-select: none; background: #fff;
+/* Proofreading style icons */
+.pr-style-row {
+  display: flex; align-items: center; gap: 4px;
 }
-.pr-preset-label:hover { border-color: #94a3b8; }
-.pr-preset-label:has(input:checked) {
-  background: rgba(22,163,74,.08); border-color: #16a34a; color: #15803d; font-weight: 600;
+.pr-style-icon {
+  position: relative; width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid transparent; border-radius: 10px;
+  background: transparent; cursor: pointer;
+  transition: all .2s ease; padding: 0;
 }
-.pr-preset-label input { display: none; }
+.pr-style-icon svg { width: 22px; height: 22px; transition: all .3s ease; }
 
-.pr-rules-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  padding: 8px 0;
+/* Per-style hover */
+.pr-style-icon[data-style="light"]:hover        { background: rgba(112,201,246,.10); border-color: #70c9f6; }
+.pr-style-icon[data-style="standard"]:hover      { background: rgba(16,150,244,.10);  border-color: #1096f4; }
+.pr-style-icon[data-style="professional"]:hover   { background: rgba(41,70,183,.10);   border-color: #2946b7; }
+.pr-style-icon[data-style="academic"]:hover       { background: rgba(132,38,164,.10);  border-color: #8426a4; }
+
+/* Active state */
+.pr-style-icon[data-style="light"].active        { background: rgba(112,201,246,.14); border-color: #70c9f6; }
+.pr-style-icon[data-style="standard"].active      { background: rgba(16,150,244,.14);  border-color: #1096f4; }
+.pr-style-icon[data-style="professional"].active   { background: rgba(41,70,183,.14);   border-color: #2946b7; }
+.pr-style-icon[data-style="academic"].active       { background: rgba(132,38,164,.14);  border-color: #8426a4; }
+
+/* Hover animations */
+.pr-style-icon[data-style="light"]:hover svg {
+  animation: pr-feather .8s ease-in-out infinite alternate;
 }
-@media (max-width: 700px) { .pr-rules-grid { grid-template-columns: 1fr; } }
-.pr-rules-group {
-  padding: 8px 10px; background: rgba(15,23,42,.02);
-  border: 1px solid rgba(15,23,42,.06); border-radius: 8px;
+@keyframes pr-feather {
+  0%   { transform: rotate(-5deg) translateY(0); }
+  50%  { transform: rotate(3deg) translateY(-2px); }
+  100% { transform: rotate(-5deg) translateY(0); }
 }
-.pr-rules-group-title {
-  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .5px; color: #64748b; margin-bottom: 6px;
+.pr-style-icon[data-style="standard"]:hover svg {
+  animation: pr-pen .5s ease-in-out infinite alternate;
 }
-.pr-rules-group label {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12.5px; padding: 3px 0; cursor: pointer;
+@keyframes pr-pen {
+  0%   { transform: translateX(0) rotate(0); }
+  33%  { transform: translateX(2px) rotate(3deg); }
+  66%  { transform: translateX(-2px) rotate(-3deg); }
+  100% { transform: translateX(0) rotate(0); }
 }
-.pr-rules-group label.pr-disabled {
-  opacity: .35; pointer-events: none;
+.pr-style-icon[data-style="professional"]:hover svg {
+  animation: pr-brief .6s ease-in-out infinite alternate;
 }
+@keyframes pr-brief {
+  0%   { transform: scale(1) rotate(0); }
+  100% { transform: scale(1.1) rotate(-3deg); }
+}
+.pr-style-icon[data-style="academic"]:hover svg {
+  animation: pr-cap .7s ease-in-out infinite alternate;
+}
+@keyframes pr-cap {
+  0%   { transform: translateY(0) rotate(0); }
+  50%  { transform: translateY(-3px) rotate(4deg); }
+  100% { transform: translateY(0) rotate(0); }
+}
+
+/* Tooltip */
+.pr-style-icon .pr-tip {
+  position: absolute; bottom: calc(100% + 10px); left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #0f172a; color: #f1f5f9; font-size: 11.5px;
+  padding: 9px 13px; border-radius: 9px;
+  pointer-events: none; opacity: 0; transition: all .2s ease;
+  box-shadow: 0 4px 14px rgba(0,0,0,.18); line-height: 1.5;
+  max-width: 260px; white-space: normal; text-align: center;
+  z-index: 100;
+}
+.pr-style-icon .pr-tip::after {
+  content: ''; position: absolute; top: 100%; left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: #0f172a;
+}
+.pr-style-icon:hover .pr-tip {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+.pr-style-icon[data-style="light"] .pr-tip        { border-top: 2px solid #70c9f6; }
+.pr-style-icon[data-style="standard"] .pr-tip      { border-top: 2px solid #1096f4; }
+.pr-style-icon[data-style="professional"] .pr-tip   { border-top: 2px solid #2946b7; }
+.pr-style-icon[data-style="academic"] .pr-tip       { border-top: 2px solid #8426a4; }
 
 .hidden {
   display: none;
@@ -608,71 +657,61 @@
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
           <strong><i data-icon="edit" data-size="16"></i> Korekta tekstu <span id="proofread_lang_badge" class="small" style="opacity:.6"></span></strong>
         </div>
-        <!-- Correction style panel -->
+        <!-- Correction style icons -->
         <div id="proofread_style_panel" style="margin-bottom:10px;">
-          <div class="small" style="margin-bottom:6px; font-weight:600; display:flex; align-items:center; gap:6px;">
-            <img src="/static/icons/sidebar/settings.svg" alt="" style="width:14px;height:14px;opacity:.5" draggable="false">
-            <span data-i18n="proofread.style_title">Styl korekty</span>
+          <div class="small" style="margin-bottom:6px; font-weight:600; color:#64748b;">
+            <span id="pr_style_label">Styl korekty</span>
           </div>
+          <div class="pr-style-row">
 
-          <!-- Preset radios -->
-          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
-            <label class="pr-preset-label"><input type="radio" name="pr_preset" value="light"> <span data-i18n="proofread.preset_light">Lekka</span></label>
-            <label class="pr-preset-label"><input type="radio" name="pr_preset" value="standard" checked> <span data-i18n="proofread.preset_standard">Standardowa</span></label>
-            <label class="pr-preset-label"><input type="radio" name="pr_preset" value="professional"> <span data-i18n="proofread.preset_professional">Profesjonalna</span></label>
-            <label class="pr-preset-label"><input type="radio" name="pr_preset" value="academic"> <span data-i18n="proofread.preset_academic">Akademicka</span></label>
+            <!-- Light / Lekka -->
+            <button class="pr-style-icon" data-style="light" type="button" onclick="_prSelectStyle('light')">
+              <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <defs><linearGradient id="prl1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a5e1fb"/><stop offset="100%" stop-color="#70c9f6"/></linearGradient></defs>
+                <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" stroke="#70c9f6" stroke-width="1.5" fill="url(#prl1)" fill-opacity=".2"/>
+                <line x1="16" y1="8" x2="2" y2="22" stroke="#70c9f6" stroke-width="1.5"/>
+                <line x1="17.5" y1="15" x2="9" y2="15" stroke="#70c9f6" stroke-width="1.2" opacity=".5"/>
+              </svg>
+              <div class="pr-tip" id="pr_tip_light"></div>
+            </button>
+
+            <!-- Standard / Standardowa -->
+            <button class="pr-style-icon active" data-style="standard" type="button" onclick="_prSelectStyle('standard')">
+              <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <defs><linearGradient id="prl2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#70c9f6"/><stop offset="100%" stop-color="#1096f4"/></linearGradient></defs>
+                <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="#1096f4" stroke-width="1.5" fill="url(#prl2)" fill-opacity=".18"/>
+              </svg>
+              <div class="pr-tip" id="pr_tip_standard"></div>
+            </button>
+
+            <!-- Professional / Profesjonalna -->
+            <button class="pr-style-icon" data-style="professional" type="button" onclick="_prSelectStyle('professional')">
+              <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <defs><linearGradient id="prl3" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1096f4"/><stop offset="100%" stop-color="#2946b7"/></linearGradient></defs>
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" stroke="#2946b7" stroke-width="1.5" fill="url(#prl3)" fill-opacity=".14"/>
+                <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" stroke="#2946b7" stroke-width="1.5"/>
+                <line x1="12" y1="12" x2="12" y2="16" stroke="#2946b7" stroke-width="1.5"/>
+                <line x1="10" y1="14" x2="14" y2="14" stroke="#2946b7" stroke-width="1.5"/>
+              </svg>
+              <div class="pr-tip" id="pr_tip_professional"></div>
+            </button>
+
+            <!-- Academic / Akademicka -->
+            <button class="pr-style-icon" data-style="academic" type="button" onclick="_prSelectStyle('academic')">
+              <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <defs><linearGradient id="prl4" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2946b7"/><stop offset="100%" stop-color="#8426a4"/></linearGradient></defs>
+                <path d="M22 10L12 5 2 10l10 5 10-5z" stroke="#8426a4" stroke-width="1.5" fill="url(#prl4)" fill-opacity=".15"/>
+                <path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5" stroke="#8426a4" stroke-width="1.5"/>
+                <line x1="22" y1="10" x2="22" y2="16" stroke="#8426a4" stroke-width="1.5"/>
+              </svg>
+              <div class="pr-tip" id="pr_tip_academic"></div>
+            </button>
+
           </div>
-
-          <!-- Expandable fine-tune checkboxes -->
-          <details id="pr_style_details">
-            <summary class="small muted" style="cursor:pointer; user-select:none; margin-bottom:6px;">
-              <span data-i18n="proofread.fine_tune">Dostosuj opcje</span> &#9662;
-            </summary>
-
-            <!-- PL rules -->
-            <div id="pr_rules_pl" class="pr-rules-grid">
-              <div class="pr-rules-group">
-                <div class="pr-rules-group-title" data-i18n="proofread.group_style">Styl</div>
-                <label><input type="checkbox" data-pr-rule="repetitions"> <span data-i18n="proofread.rule_repetitions">Unikaj powtórzeń wyrazów</span></label>
-                <label><input type="checkbox" data-pr-rule="active_voice"> <span data-i18n="proofread.rule_active_voice">Preferuj stronę czynną</span></label>
-                <label><input type="checkbox" data-pr-rule="pleonasms"> <span data-i18n="proofread.rule_pleonasms">Usuwaj pleonazmy</span></label>
-                <label><input type="checkbox" data-pr-rule="shorten"> <span data-i18n="proofread.rule_shorten">Skracaj rozwlekłe zdania</span></label>
-                <label><input type="checkbox" data-pr-rule="formal"> <span data-i18n="proofread.rule_formal">Ton formalny</span></label>
-                <label><input type="checkbox" data-pr-rule="informal"> <span data-i18n="proofread.rule_informal">Ton nieformalny</span></label>
-              </div>
-              <div class="pr-rules-group">
-                <div class="pr-rules-group-title" data-i18n="proofread.group_grammar">Gramatyka i&nbsp;interpunkcja</div>
-                <label><input type="checkbox" data-pr-rule="punctuation_pl"> <span data-i18n="proofread.rule_punctuation_pl">Polska interpunkcja (cudzysłowy, myślniki)</span></label>
-                <label><input type="checkbox" data-pr-rule="tense_consistency"> <span data-i18n="proofread.rule_tense">Spójność czasu w narracji</span></label>
-                <label><input type="checkbox" data-pr-rule="passive_ok"> <span data-i18n="proofread.rule_passive_ok">Zachowaj stronę bierną (teksty naukowe)</span></label>
-              </div>
-            </div>
-
-            <!-- EN rules -->
-            <div id="pr_rules_en" class="pr-rules-grid" style="display:none;">
-              <div class="pr-rules-group">
-                <div class="pr-rules-group-title">Style</div>
-                <label><input type="checkbox" data-pr-rule="repetitions"> Avoid word repetition</label>
-                <label><input type="checkbox" data-pr-rule="active_voice"> Prefer active voice</label>
-                <label><input type="checkbox" data-pr-rule="wordy"> Simplify wordy phrases</label>
-                <label><input type="checkbox" data-pr-rule="shorten"> Shorten verbose sentences</label>
-                <label><input type="checkbox" data-pr-rule="nominalizations"> Reduce nominalizations</label>
-                <label><input type="checkbox" data-pr-rule="formal"> Formal tone</label>
-                <label><input type="checkbox" data-pr-rule="informal"> Informal tone</label>
-              </div>
-              <div class="pr-rules-group">
-                <div class="pr-rules-group-title">Grammar &amp; punctuation</div>
-                <label><input type="checkbox" data-pr-rule="oxford_comma"> Oxford comma in lists</label>
-                <label><input type="checkbox" data-pr-rule="tense_consistency"> Tense consistency</label>
-                <label><input type="checkbox" data-pr-rule="sentence_variety"> Sentence length variety</label>
-                <label><input type="checkbox" data-pr-rule="passive_ok"> Keep passive voice (academic/legal)</label>
-              </div>
-            </div>
-          </details>
         </div>
 
         <div style="margin-bottom:8px;">
-          <div class="small muted" style="margin-bottom:4px;">Uwagi do korekty (opcjonalnie)</div>
+          <div class="small muted" style="margin-bottom:4px;" id="pr_notes_label">Uwagi do korekty (opcjonalnie)</div>
           <textarea class="input" id="proofread_notes" style="min-height:50px; width:100%;" placeholder="Np. Zachowaj ton formalny, nie zmieniaj nazw własnych…"></textarea>
         </div>
         <div class="small muted" style="margin-bottom:4px;">Wklej tekst do korekty i naciśnij przycisk Generuj na pasku narzędzi.</div>
