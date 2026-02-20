@@ -1636,7 +1636,7 @@ function _proofreadSyncUI(proofActive) {
         var el = _byId(id);
         if (el) el.style.display = proofActive ? 'none' : '';
     });
-    ['proofread_model_group', 'proofread_mode_group', 'proofread_style_toolbar'].forEach(function(id) {
+    ['proofread_model_group', 'proofread_mode_group', 'proofread_style_sep', 'proofread_style_toolbar'].forEach(function(id) {
         var el = _byId(id);
         if (el) el.style.display = proofActive ? '' : 'none';
     });
