@@ -1077,10 +1077,13 @@ async function exportAs(format) {
     let text = '';
     let htmlContent = '';
 
-    // In proofreading mode — take text from proofread_result, not output-text
-    if (_proofreadState && _proofreadState.lang) {
+    // Determine active mode: proofreading is active only if lang is set AND there's actual content
+    var proofActive = _proofreadState && _proofreadState.lang;
+
+    if (proofActive) {
+        // In proofreading mode — take text from proofread_result
         var prEl = _byId('proofread_result');
-        if (prEl) {
+        if (prEl && prEl.innerHTML.trim()) {
             text = _proofreadExtractText(prEl);
             // Grab the rendered HTML for rich exports (HTML/DOCX)
             htmlContent = prEl.innerHTML || '';
@@ -1088,8 +1091,16 @@ async function exportAs(format) {
         if (!text) text = _proofreadState.corrected || '';
     }
 
-    // Fallback to translation output
+    // Translation output (when NOT in proofread mode, or as fallback)
     if (!text) {
+        // Sync current textarea edits back first
+        try {
+            var activeLang = _trGetActiveOutputLang();
+            var outEl = _byId('output-text');
+            if (activeLang && outEl && currentResults) {
+                currentResults[String(activeLang)] = String(outEl.value || '');
+            }
+        } catch(_e) {}
         text = (document.getElementById('output-text') || {}).value || '';
     }
 
@@ -1100,8 +1111,7 @@ async function exportAs(format) {
 
     try {
         // Choose filename based on mode
-        var isProofread = _proofreadState && _proofreadState.lang;
-        var baseName = isProofread ? 'korekta' : 'tlumaczenie';
+        var baseName = proofActive ? 'korekta' : 'tlumaczenie';
 
         const formData = new FormData();
         formData.append('text', text);
@@ -1628,12 +1638,19 @@ function _proofreadToggle(lang) {
     if (_proofreadState.lang === lang) {
         // Deselect — click same toggle again → back to "translation only" mode
         _proofreadState.lang = null;
+        _proofreadState.corrected = '';
+        _proofreadState.diffHtml = '';
         radios.forEach(function(r) {
             r.checked = false;
             var lbl = r.closest('label');
             if (lbl) lbl.classList.remove('active');
         });
         if (box) box.style.display = 'none';
+        // Clear proofread result display
+        var prResult = _byId('proofread_result');
+        if (prResult) prResult.innerHTML = '';
+        var prResultWrap = _byId('proofread_result_wrap');
+        if (prResultWrap) prResultWrap.style.display = 'none';
         _proofreadSyncUI(false);
         return;
     }
@@ -1686,10 +1703,23 @@ function _proofreadSyncUI(proofActive) {
         if (wrap) wrap.style.display = proofActive ? 'none' : '';
     }
 
-    // --- Translation output panels: hide in proofreading mode ---
+    // --- Translation output panels: hide in proofreading, restore when leaving ---
     ['output-container', 'progress-container', 'summary-container'].forEach(function(id) {
         var el = _byId(id);
-        if (el && proofActive) el.classList.add('hidden');
+        if (!el) return;
+        if (proofActive) {
+            el.classList.add('hidden');
+        } else {
+            // Restore output-container only if there are actual results
+            if (id === 'output-container' && currentResults && Object.keys(currentResults).length > 0) {
+                el.classList.remove('hidden');
+            }
+            // summary-container: restore if it had content
+            if (id === 'summary-container') {
+                var sumEl = _byId('summary-text');
+                if (sumEl && sumEl.textContent.trim()) el.classList.remove('hidden');
+            }
+        }
     });
 
     // --- Generate button: switch action ---
