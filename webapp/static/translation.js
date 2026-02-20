@@ -2036,23 +2036,13 @@ document.addEventListener('DOMContentLoaded', function() {
 // Save to Original (PPTX/DOCX) — inject translated text back into uploaded file
 // ============================================================================
 
-/** Show or hide the "Zapisz do oryginalu" button.
+/** Show or hide the "Zapisz do oryginalu" toolbar button (in Report section).
  *  Visible ONLY in translation mode (not proofreading) and ONLY when a PPTX/DOCX was uploaded. */
 function _trSyncSaveToOriginalBtn() {
     var proofActive = !!(_proofreadState && _proofreadState.lang);
-    // Show only in translation mode when an original file is kept
     var show = !proofActive && !!_uploadId;
-    var extLabel = (_uploadExt || '').replace('.', '').toUpperCase();
-
-    // Translation output button
     var btn = _byId('save_to_original_btn');
     if (btn) btn.style.display = show ? '' : 'none';
-    var lbl = _byId('save_to_original_label');
-    if (lbl && extLabel) lbl.textContent = extLabel;
-
-    // Proofreading result button — always hidden (not relevant in proofreading mode)
-    var btn2 = _byId('proofread_save_original_btn');
-    if (btn2) btn2.style.display = 'none';
 }
 
 /** Export translated text back into the original uploaded file */

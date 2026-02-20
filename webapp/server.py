@@ -2782,11 +2782,15 @@ async def api_translation_export(
 
     # ---- TXT: plain text with typographic cleanup ----
     if fmt == "txt":
-        data = _typographic_cleanup(raw).encode("utf-8")
+        try:
+            cleaned = _typographic_cleanup(raw)
+        except Exception:
+            cleaned = raw
+        data = cleaned.encode("utf-8")
         return StreamingResponse(
             _io.BytesIO(data),
             media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename=\"{name}.txt\""},
+            headers={"Content-Disposition": f'attachment; filename="{name}.txt"'},
         )
 
     # ---- HTML: markdown → styled HTML document ----
