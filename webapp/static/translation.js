@@ -346,6 +346,8 @@ function _trApplyDraftState(state){
     document.querySelectorAll('input[name="tr_report_fmt"]').forEach(el => {
         el.checked = rf.includes(String(el.value));
     });
+    // Sync PPTX pill visibility (hides & unchecks if no PPTX uploaded)
+    _trSyncSaveToOriginalBtn();
 
     // Model selection (must happen after mode is applied)
     const sel = _byId('tr_model_select');
@@ -1168,7 +1170,11 @@ async function exportSelectedReports() {
 
     for (const v of selected) {
         // eslint-disable-next-line no-await-in-loop
-        await exportAs(mapFmt(v));
+        if (v === 'pptx') {
+            await exportToOriginal();
+        } else {
+            await exportAs(mapFmt(v));
+        }
     }
 }
 
@@ -2036,13 +2042,19 @@ document.addEventListener('DOMContentLoaded', function() {
 // Save to Original (PPTX/DOCX) — inject translated text back into uploaded file
 // ============================================================================
 
-/** Show or hide the "Zapisz do oryginalu" toolbar button (in Report section).
- *  Visible ONLY in translation mode (not proofreading) and ONLY when a PPTX/DOCX was uploaded. */
+/** Show or hide the PPTX pill checkbox (in Report section).
+ *  Visible ONLY in translation mode (not proofreading) and ONLY when a PPTX was uploaded. */
 function _trSyncSaveToOriginalBtn() {
     var proofActive = !!(_proofreadState && _proofreadState.lang);
-    var show = !proofActive && !!_uploadId;
-    var btn = _byId('save_to_original_btn');
-    if (btn) btn.style.display = show ? '' : 'none';
+    var isPptx = !!_uploadExt && _uploadExt.replace('.', '').toLowerCase() === 'pptx';
+    var show = !proofActive && !!_uploadId && isPptx;
+    var pill = _byId('save_to_original_pill');
+    if (pill) pill.style.display = show ? '' : 'none';
+    // Uncheck when hidden so it doesn't interfere with export
+    if (!show && pill) {
+        var cb = pill.querySelector('input[type="checkbox"]');
+        if (cb) cb.checked = false;
+    }
 }
 
 /** Export translated text back into the original uploaded file */
@@ -2089,8 +2101,8 @@ async function exportToOriginal() {
         return;
     }
 
-    var btn = _byId('save_to_original_btn');
-    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+    var pill = _byId('save_to_original_pill');
+    if (pill) { pill.style.opacity = '0.5'; pill.style.pointerEvents = 'none'; }
 
     try {
         var formData = new FormData();
@@ -2126,7 +2138,7 @@ async function exportToOriginal() {
         console.error('Export to original error:', e);
         showToast('Błąd: ' + (e.message || e), 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+        if (pill) { pill.style.opacity = ''; pill.style.pointerEvents = ''; }
     }
 }
 
