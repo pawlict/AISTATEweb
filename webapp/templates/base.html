@@ -311,11 +311,6 @@
   </aside>
 
   <main class="main">
-    <!-- Project info is now shown in each module toolbar ("Projekt: ...") -->
-    {% if breadcrumbs is defined and breadcrumbs %}
-    <nav class="aistate-breadcrumbs" id="aistate-breadcrumbs" data-items='{{ breadcrumbs | tojson }}' aria-label="Breadcrumbs"></nav>
-    {% endif %}
-
     {% block content %}{% endblock %}
   </main>
 </div>

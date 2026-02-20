@@ -416,25 +416,14 @@ async function refreshCurrentProjectInfo(){
 
   if(!pid){
     AISTATE.audioFile = "";
-    _setToolbarProjectLines(t("projects.none"));
     return;
   }
 
   try{
     const meta = await api(`/api/projects/${pid}/meta`);
-    const name = meta.name || t("projects.unnamed");
     AISTATE.audioFile = meta.audio_file || "";
-    _setToolbarProjectLines(name);
   }catch(e){
     AISTATE.audioFile = "";
-    _setToolbarProjectLines(pid.slice(0,8));
-  }
-}
-
-function _setToolbarProjectLines(projectName){
-  var lines = document.querySelectorAll(".toolbar-project-line");
-  for(var i=0; i<lines.length; i++){
-    lines[i].textContent = "Projekt: " + projectName;
   }
 }
 

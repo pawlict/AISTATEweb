@@ -2212,39 +2212,6 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .aistate-pw-check-ok{ color:var(--ok,#15803d); }
 .aistate-pw-check-fail{ color:var(--muted,#475569); }
 
-/* ===================== Breadcrumbs ===================== */
-
-.aistate-breadcrumbs{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  font-size:13px;
-  color:var(--muted,#475569);
-  margin-bottom:12px;
-  flex-wrap:wrap;
-}
-
-.aistate-bc-link{
-  color:var(--accent,#1f5aa6);
-  text-decoration:none;
-  font-weight:500;
-}
-.aistate-bc-link:hover{
-  text-decoration:underline;
-}
-
-.aistate-bc-sep{
-  color:var(--muted,#475569);
-  opacity:.5;
-  font-size:15px;
-  user-select:none;
-}
-
-.aistate-bc-current{
-  font-weight:700;
-  color:var(--text,#0f172a);
-}
-
 /* ===================== Button loading spinner ===================== */
 
 .aistate-btn-spinner{
