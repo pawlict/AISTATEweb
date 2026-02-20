@@ -2590,8 +2590,25 @@ async def api_translation_export(
         )
 
     if fmt == "html":
-        body = _html_escape(text or "")
-        html = f"<!doctype html><html><head><meta charset='utf-8'></head><body><pre>{body}</pre></body></html>"
+        import re as _re
+        raw = text or ""
+        # Split on double-newlines → paragraphs; single newlines → <br>
+        paragraphs = _re.split(r'\n{2,}', raw)
+        body_parts = []
+        for p in paragraphs:
+            p = p.strip()
+            if not p:
+                continue
+            escaped = _html_escape(p).replace('\n', '<br>\n')
+            body_parts.append(f'<p>{escaped}</p>')
+        body_html = '\n'.join(body_parts) if body_parts else f'<p>{_html_escape(raw)}</p>'
+        html = (
+            '<!doctype html><html><head><meta charset="utf-8">'
+            '<style>body{font-family:Segoe UI,Arial,sans-serif;line-height:1.7;max-width:800px;margin:40px auto;padding:0 20px;color:#1e293b}'
+            'p{margin:0 0 1em}</style></head><body>\n'
+            + body_html
+            + '\n</body></html>'
+        )
         data = html.encode("utf-8")
         return StreamingResponse(
             _io.BytesIO(data),
@@ -2604,10 +2621,22 @@ async def api_translation_export(
             from docx import Document  # type: ignore
         except Exception:
             raise HTTPException(status_code=500, detail="python-docx nie jest zainstalowany")
+        import re as _re
 
         doc = Document()
-        for line in (text or "").splitlines() or [text or ""]:
-            doc.add_paragraph(line)
+        raw = text or ""
+        # Treat double-newlines as paragraph breaks; single newlines as soft breaks
+        paragraphs = _re.split(r'\n{2,}', raw)
+        for p in paragraphs:
+            p = p.strip()
+            if not p:
+                continue
+            para = doc.add_paragraph()
+            lines = p.split('\n')
+            for i, ln in enumerate(lines):
+                if i > 0:
+                    para.add_run().add_break()
+                para.add_run(ln)
         buf = _io.BytesIO()
         doc.save(buf)
         buf.seek(0)
