@@ -6457,7 +6457,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Zachowaj sens i kontekst oryginału, ale tekst powinien być znacznie bogatszy, "
                 "bardziej opisowy i profesjonalny. "
                 "Popraw też ewentualne błędy ortograficzne i gramatyczne. "
-                "Jeśli tekst jest długi lub porusza wiele tematów, dodaj nagłówki rozdziałów (## nagłówek). "
+                "Jeśli tekst zawiera rozdziały lub je tworzysz — tytuły rozdziałów muszą być krótkie (2–5 słów), "
+                "spójne stylistycznie między sobą, a treść rozdziału zawsze poniżej tytułu. "
                 "Odpowiedz WYŁĄCZNIE rozszerzonym tekstem — bez komentarzy, bez wyjaśnień."
                 + _PL_TYPO_RULES
             )
@@ -6469,7 +6470,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Preserve the meaning and context of the original, but the text should be significantly richer, "
                 "more descriptive and professional. "
                 "Also fix any spelling and grammar errors. "
-                "If the text is long or covers multiple topics, add section headings (## heading). "
+                "If the text has chapters/sections or you create them — chapter titles must be short (2–5 words), "
+                "stylistically consistent with each other, and the chapter body must always follow below the title. "
                 "Reply ONLY with the expanded text — no comments, no explanations."
                 + _EN_TYPO_RULES
             )
@@ -6480,6 +6482,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "Jesteś profesjonalnym korektorem tekstu polskiego. "
                 "Popraw ortografię, gramatykę, interpunkcję i wygładź styl. "
                 "NIE zmieniaj znaczenia ani kontekstu tekstu. "
+                "Jeśli tekst zawiera rozdziały lub je tworzysz — tytuły rozdziałów muszą być krótkie (2–5 słów), "
+                "spójne stylistycznie między sobą, a treść rozdziału zawsze poniżej tytułu. "
                 "Odpowiedz WYŁĄCZNIE poprawionym tekstem — bez komentarzy, bez wyjaśnień."
                 + _PL_TYPO_RULES
             )
@@ -6488,6 +6492,8 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
                 "You are a professional English proofreader. "
                 "Fix spelling, grammar, punctuation and smooth out the style. "
                 "Do NOT change the meaning or context of the text. "
+                "If the text has chapters/sections or you create them — chapter titles must be short (2–5 words), "
+                "stylistically consistent with each other, and the chapter body must always follow below the title. "
                 "Reply ONLY with the corrected text — no comments, no explanations."
                 + _EN_TYPO_RULES
             )
