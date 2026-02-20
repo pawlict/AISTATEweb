@@ -2285,27 +2285,37 @@ def page_info(request: Request) -> Any:
         lang = "pl"
 
     static_root = ROOT / "webapp" / "static"
-    md_path = static_root / ("info_en.md" if lang.startswith("en") else "info_pl.md")
+    is_en = lang.startswith("en")
 
-    # safety fallback if file missing
+    # --- Info tab ---
+    md_path = static_root / ("info_en.md" if is_en else "info_pl.md")
     if not md_path.exists():
         md_path = static_root / "info_pl.md"
 
     source = str(md_path.relative_to(ROOT))
     text = md_path.read_text(encoding="utf-8", errors="ignore")
-
-    # optional placeholders
-    text = (text
-        .replace("{APP_NAME}", APP_NAME)
-        .replace("{APP_VERSION}", APP_VERSION)
-    )
+    text = text.replace("{APP_NAME}", APP_NAME).replace("{APP_VERSION}", APP_VERSION)
 
     if md_to_html:
         html = md_to_html(text, extensions=["fenced_code", "tables"])
     else:
         html = "<pre>" + text.replace("&", "&amp;").replace("<", "&lt;") + "</pre>"
 
-    return render_page(request, "info.html", "Info", "info", content=html, source=source)
+    # --- Manual tab ---
+    manual_path = static_root / ("info_manual_en.md" if is_en else "info_manual_pl.md")
+    if not manual_path.exists():
+        manual_path = static_root / "info_manual_pl.md"
+
+    manual_html = ""
+    if manual_path.exists():
+        manual_text = manual_path.read_text(encoding="utf-8", errors="ignore")
+        manual_text = manual_text.replace("{APP_NAME}", APP_NAME).replace("{APP_VERSION}", APP_VERSION)
+        if md_to_html:
+            manual_html = md_to_html(manual_text, extensions=["fenced_code", "tables"])
+        else:
+            manual_html = "<pre>" + manual_text.replace("&", "&amp;").replace("<", "&lt;") + "</pre>"
+
+    return render_page(request, "info.html", "Info", "info", content=html, source=source, manual_content=manual_html)
 
 
 # ---------- API: translation (NLLB) ----------

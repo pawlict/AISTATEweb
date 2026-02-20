@@ -1,16 +1,51 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
-  <div class="info-hero">
-    <div class="info-hero-title">{{ app_name }} — {{ app_fullname }}</div>
-    <div class="info-hero-version">{{ app_version }}</div>
-    <img class="info-hero-logo" src="/static/logo.png" alt="AISTATE Logo" style="max-height:288px;" />
+
+<div class="info-page">
+
+  <!-- Toolbar -->
+  <div class="card analysis-toolbar info-toolbar">
+    <div class="analysis-toolbar-left">
+      <div class="h1" style="margin:0"><i data-icon="info_circle" data-size="40"></i> <span data-i18n="info.title">Info</span></div>
+      <div class="small">{{ app_name }} {{ app_version }}</div>
+    </div>
   </div>
 
-  <div class="info-source"><span data-i18n="info.source_prefix">Treść pochodzi z pliku</span> <code>{{ source }}</code>.</div>
-  <div class="hr"></div>
+  <!-- Tab bar -->
+  <div class="analysis-tabs info-tabs">
+    <button class="analysis-tab active" data-info-tab="about" id="info_tab_about">
+      <span class="analysis-tab-icon"><img src="/static/icons/status/info_alert.svg" width="16" height="16" alt="" draggable="false"></span>
+      <span data-i18n="info.tab_about">Informacje</span>
+    </button>
+    <button class="analysis-tab" data-info-tab="manual" id="info_tab_manual">
+      <span class="analysis-tab-icon"><img src="/static/icons/inne/help.svg" width="16" height="16" alt="" draggable="false"></span>
+      <span data-i18n="info.tab_manual">Instrukcja obsługi</span>
+    </button>
+  </div>
 
-  <div style="line-height:1.65">{{ content|safe }}</div>
+  <!-- Tab: About (Info) -->
+  <div class="info-tab-content" id="info_content_about">
+    <div class="card">
+      <div class="info-hero">
+        <div class="info-hero-title">{{ app_name }} — {{ app_fullname }}</div>
+        <div class="info-hero-version">{{ app_version }}</div>
+        <img class="info-hero-logo" src="/static/logo.png" alt="AISTATE Logo" style="max-height:288px;" />
+      </div>
+
+      <div class="info-source"><span data-i18n="info.source_prefix">Treść pochodzi z pliku</span> <code>{{ source }}</code>.</div>
+      <div class="hr"></div>
+
+      <div style="line-height:1.65">{{ content|safe }}</div>
+    </div>
+  </div>
+
+  <!-- Tab: Manual -->
+  <div class="info-tab-content" id="info_content_manual" style="display:none">
+    <div class="card">
+      <div style="line-height:1.75">{{ manual_content|safe }}</div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -25,6 +60,26 @@
         window.location.replace(url.toString());
       }
     }catch(e){}
+  })();
+
+  // Tab switching
+  (function(){
+    const tabs = document.querySelectorAll('[data-info-tab]');
+    const contents = {
+      about:  document.getElementById('info_content_about'),
+      manual: document.getElementById('info_content_manual')
+    };
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const which = tab.getAttribute('data-info-tab');
+        Object.entries(contents).forEach(([key, el]) => {
+          if (el) el.style.display = (key === which) ? '' : 'none';
+        });
+      });
+    });
   })();
 </script>
 {% endblock %}

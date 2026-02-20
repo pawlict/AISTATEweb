@@ -212,6 +212,8 @@
   "hint.speaker_mapping_optional_html": "Opcjonalnie: podmień etykiety <code>SPK1</code>/<code>SPK2</code> na własne nazwy (np. Jan/Anna).",
   "hint.whisper_auto": "W Whisper: <code>auto</code> = autodetekcja (jeśli model to wspiera).",
   "info.source_prefix": "Treść pochodzi z pliku",
+  "info.tab_about": "Informacje",
+  "info.tab_manual": "Instrukcja obsługi",
   "info.title": "Info",
   "label.asr_engine": "Silnik ASR",
   "label.asr_model": "Model ASR",
