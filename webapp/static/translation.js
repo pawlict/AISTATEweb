@@ -1059,18 +1059,23 @@ async function resetOutput() {
 
 // Export functions
 async function exportAs(format) {
-    let text = document.getElementById('output-text').value;
+    let text = '';
     let htmlContent = '';
 
-    // In proofreading mode the result lives in #proofread_result, not in #output-text
+    // In proofreading mode — take text from proofread_result, not output-text
     if (_proofreadState && _proofreadState.lang) {
         var prEl = _byId('proofread_result');
         if (prEl) {
-            if (!text) text = _proofreadExtractText(prEl);
+            text = _proofreadExtractText(prEl);
             // Grab the rendered HTML for rich exports (HTML/DOCX)
             htmlContent = prEl.innerHTML || '';
         }
         if (!text) text = _proofreadState.corrected || '';
+    }
+
+    // Fallback to translation output
+    if (!text) {
+        text = (document.getElementById('output-text') || {}).value || '';
     }
 
     if (!text) {
@@ -1105,9 +1110,17 @@ async function exportAs(format) {
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
         } else {
-            throw new Error('Export failed');
+            // Try to extract error details from backend
+            let detail = '';
+            try {
+                const errData = await response.json();
+                detail = errData.detail || errData.error || '';
+            } catch(_) {
+                detail = 'HTTP ' + response.status;
+            }
+            throw new Error(detail || 'Export failed');
         }
-        
+
     } catch (error) {
         console.error('Export error:', error);
         showToast(trFmt('translation.alert.export_error',{msg: error.message},'Błąd podczas eksportu: {msg}'), 'error');
