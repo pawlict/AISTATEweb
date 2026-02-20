@@ -1079,23 +1079,27 @@ async function exportAs(format) {
     }
 
     try {
+        // Choose filename based on mode
+        var isProofread = _proofreadState && _proofreadState.lang;
+        var baseName = isProofread ? 'korekta' : 'tlumaczenie';
+
         const formData = new FormData();
         formData.append('text', text);
         formData.append('format', format);
-        formData.append('filename', 'translation');
+        formData.append('filename', baseName);
         if (htmlContent) formData.append('html', htmlContent);
-        
+
         const response = await fetch('/api/translation/export', {
             method: 'POST',
             body: formData
         });
-        
+
         if (response.ok) {
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `translation.${format}`;
+            a.download = `${baseName}.${format}`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -1416,6 +1420,125 @@ function _ttsPlayUrl(url, btn) {
 // ============================================================================
 
 var _proofreadState = { lang: null, corrected: '', diffHtml: '', running: false };
+
+// ---------------------------------------------------------------------------
+// Proofreading style presets + rule checkboxes
+// ---------------------------------------------------------------------------
+var _PR_PRESETS = {
+    light:        { repetitions:false, active_voice:false, pleonasms:false, shorten:false, formal:false, informal:false, punctuation_pl:true, tense_consistency:false, passive_ok:false, wordy:false, nominalizations:false, oxford_comma:false, sentence_variety:false },
+    standard:     { repetitions:true,  active_voice:false, pleonasms:true,  shorten:false, formal:false, informal:false, punctuation_pl:true, tense_consistency:true,  passive_ok:false, wordy:true,  nominalizations:false, oxford_comma:false, sentence_variety:false },
+    professional: { repetitions:true,  active_voice:true,  pleonasms:true,  shorten:true,  formal:true,  informal:false, punctuation_pl:true, tense_consistency:true,  passive_ok:false, wordy:true,  nominalizations:true,  oxford_comma:true,  sentence_variety:true  },
+    academic:     { repetitions:true,  active_voice:false, pleonasms:true,  shorten:false, formal:true,  informal:false, punctuation_pl:true, tense_consistency:true,  passive_ok:true,  wordy:false, nominalizations:false, oxford_comma:true,  sentence_variety:false },
+};
+
+// Mutual exclusions: checking one disables the other
+var _PR_EXCLUSIONS = [
+    ['formal', 'informal'],
+    ['active_voice', 'passive_ok'],
+];
+
+function _prApplyPreset(presetName) {
+    var preset = _PR_PRESETS[presetName];
+    if (!preset) return;
+    document.querySelectorAll('[data-pr-rule]').forEach(function(cb) {
+        var rule = cb.getAttribute('data-pr-rule');
+        if (rule in preset) cb.checked = !!preset[rule];
+    });
+    _prEnforceExclusions();
+}
+
+function _prEnforceExclusions() {
+    _PR_EXCLUSIONS.forEach(function(pair) {
+        var a = document.querySelector('[data-pr-rule="' + pair[0] + '"]');
+        var b = document.querySelector('[data-pr-rule="' + pair[1] + '"]');
+        if (!a || !b) return;
+        var aLabel = a.closest('label');
+        var bLabel = b.closest('label');
+        // If A is checked, disable B (and vice versa)
+        if (a.checked) {
+            b.checked = false;
+            if (bLabel) bLabel.classList.add('pr-disabled');
+        } else {
+            if (bLabel) bLabel.classList.remove('pr-disabled');
+        }
+        if (b.checked) {
+            a.checked = false;
+            if (aLabel) aLabel.classList.add('pr-disabled');
+        } else {
+            if (aLabel) aLabel.classList.remove('pr-disabled');
+        }
+    });
+}
+
+/** Show PL or EN rules panel depending on current language */
+function _prSyncRulesLang(lang) {
+    var plPanel = _byId('pr_rules_pl');
+    var enPanel = _byId('pr_rules_en');
+    if (plPanel) plPanel.style.display = (lang === 'pl') ? '' : 'none';
+    if (enPanel) enPanel.style.display = (lang === 'en') ? '' : 'none';
+}
+
+/** Collect checked rules as prompt instructions */
+function _prCollectRulePrompt(lang) {
+    var rules = [];
+    var panel = _byId(lang === 'en' ? 'pr_rules_en' : 'pr_rules_pl');
+    if (!panel) return '';
+    panel.querySelectorAll('[data-pr-rule]:checked').forEach(function(cb) {
+        rules.push(cb.getAttribute('data-pr-rule'));
+    });
+    if (rules.length === 0) return '';
+
+    var _PL = {
+        repetitions:      'Unikaj powtorzen tych samych wyrazow w bliskim sasiedztwie - stosuj synonimy, ale nie zmieniaj sensu.',
+        active_voice:     'Preferuj strone czynna zamiast biernej, o ile styl tekstu na to pozwala.',
+        pleonasms:        'Usuwaj pleonazmy i zbedne powtorzenia znaczeniowe (np. "cofnac sie do tylu", "kontynuowac dalej").',
+        shorten:          'Skracaj rozwlekle zdania - preferuj zwiezle, klarowne sformulowania.',
+        formal:           'Zachowaj formalny, profesjonalny ton wypowiedzi.',
+        informal:         'Zachowaj nieformalny, potoczny ton wypowiedzi.',
+        punctuation_pl:   'Stosuj poprawna polska interpunkcje: polskie cudzyslowy, myslnik dlugi, wielokropek.',
+        tense_consistency:'Zapewnij spojnosc czasu w narracji - nie mieszaj czasu przeszlego z terazniejszym.',
+        passive_ok:       'Zachowaj strone bierna tam gdzie jest uzasadniona (styl naukowy, prawniczy).',
+    };
+    var _EN = {
+        repetitions:       'Avoid using the same word in close proximity - use synonyms without changing the meaning.',
+        active_voice:      'Prefer active voice over passive where it does not change the meaning.',
+        wordy:             'Simplify wordy phrases (e.g. "in order to" -> "to", "at this point in time" -> "now").',
+        shorten:           'Shorten verbose sentences - prefer concise, clear phrasing.',
+        nominalizations:   'Reduce nominalizations (e.g. "make a decision" -> "decide").',
+        formal:            'Maintain a formal, professional tone.',
+        informal:          'Maintain an informal, conversational tone.',
+        oxford_comma:      'Use the Oxford comma consistently in lists.',
+        tense_consistency: 'Ensure tense consistency throughout the text.',
+        sentence_variety:  'Vary sentence length for better rhythm and flow.',
+        passive_ok:        'Keep passive voice where appropriate (academic, legal texts).',
+    };
+    var dict = (lang === 'en') ? _EN : _PL;
+    var parts = [];
+    rules.forEach(function(r) { if (dict[r]) parts.push('- ' + dict[r]); });
+    if (parts.length === 0) return '';
+    var header = (lang === 'en')
+        ? '\n\nADDITIONAL STYLE RULES (apply these):\n'
+        : '\n\nDODATKOWE REGULY STYLU (stosuj je):\n';
+    return header + parts.join('\n');
+}
+
+// Bind preset radios and checkbox exclusion logic
+document.addEventListener('DOMContentLoaded', function() {
+    // Preset radios
+    document.querySelectorAll('input[name="pr_preset"]').forEach(function(r) {
+        r.addEventListener('change', function() {
+            _prApplyPreset(r.value);
+        });
+    });
+    // Checkbox exclusion enforcement
+    document.querySelectorAll('[data-pr-rule]').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            _prEnforceExclusions();
+        });
+    });
+    // Apply default preset
+    _prApplyPreset('standard');
+});
 /** Load proofreading models from /api/models/list → proofreading category.
  *  Always fetches fresh data (models may be installed/uninstalled between toggles). */
 async function _proofreadLoadModels() {
@@ -1484,6 +1607,7 @@ function _proofreadToggle(lang) {
     });
     if (box) box.style.display = '';
     if (badge) badge.textContent = lang === 'pl' ? '(PL)' : '(EN)';
+    _prSyncRulesLang(lang);
     _proofreadSyncUI(true);
 }
 
@@ -1595,7 +1719,9 @@ async function proofreadRun() {
         return;
     }
 
-    var notes = String((_byId('proofread_notes') || {}).value || '').trim();
+    var userNotes = String((_byId('proofread_notes') || {}).value || '').trim();
+    var styleRules = _prCollectRulePrompt(_proofreadState.lang);
+    var notes = (styleRules + (userNotes ? '\n\n' + userNotes : '')).trim();
     var selectedModel = (_byId('proofread_model_select') || {}).value || '';
     var modeRadio = document.querySelector('input[name="proofread_mode"]:checked');
     var proofMode = modeRadio ? modeRadio.value : 'correct';

@@ -166,16 +166,20 @@ def _parse_md_table(block_lines: List[str]) -> Optional[List[List[str]]]:
 def save_docx_from_markdown(md_text: str, out_path: Path, title: str, meta: Dict[str, Any]) -> None:
     try:
         from docx import Document  # type: ignore
-        from docx.shared import Pt  # type: ignore
+        from docx.shared import Pt, Cm  # type: ignore
+        from docx.enum.text import WD_ALIGN_PARAGRAPH  # type: ignore
     except Exception as e:  # pragma: no cover
         raise ReportSaveError(f"python-docx not available: {e}")
 
     doc = Document()
 
-    # Base style
+    # Base style — justified text with paragraph indent
     style = doc.styles["Normal"]
     style.font.name = "Calibri"
     style.font.size = Pt(11)
+    style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    style.paragraph_format.first_line_indent = Cm(1.0)
+    style.paragraph_format.space_after = Pt(6)
 
     doc.add_heading(title, level=1)
 
