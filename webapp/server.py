@@ -2448,8 +2448,10 @@ async def api_translation_export_to_original(
 ) -> Any:
     """Inject translated text back into the original PPTX/DOCX, return the file.
 
-    The translated text is expected to have "--- Slajd N ---" markers for PPTX.
-    Text blocks between markers are mapped back to shapes in slide order.
+    For PPTX: counts text blocks per slide from the original file, strips any
+    marker lines from the translated text, then maps flat translated lines
+    back to slides by position counts — so it works even if the LLM
+    translated or removed the "--- Slajd N ---" markers.
     """
     import io as _io
     import re as _re
@@ -2475,35 +2477,57 @@ async def api_translation_export_to_original(
 
             prs = Presentation(str(original_path))
 
-            # Parse translated text: split by slide markers
-            slide_blocks: list = []
-            current_lines: list = []
-            for line in text.split("\n"):
-                if _re.match(r"^---\s*Slajd\s+\d+\s*---$", line.strip(), _re.IGNORECASE):
-                    if current_lines:
-                        slide_blocks.append(current_lines)
-                    current_lines = []
-                else:
-                    stripped = line.strip()
-                    if stripped:
-                        current_lines.append(stripped)
-            if current_lines:
-                slide_blocks.append(current_lines)
+            # --- Step 1: count text blocks per slide from the original ---
+            # Each "text block" = non-empty paragraph in text_frame or non-empty table cell
+            slide_block_counts: list[int] = []
+            for slide in prs.slides:
+                count = 0
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        for para in shape.text_frame.paragraphs:
+                            if para.text.strip():
+                                count += 1
+                    if shape.has_table:
+                        for row in shape.table.rows:
+                            for cell in row.cells:
+                                if cell.text.strip():
+                                    count += 1
+                slide_block_counts.append(count)
 
-            # Map translated blocks back to slides
+            # --- Step 2: strip marker lines from translated text ---
+            # Accept both Polish "Slajd" and English "Slide" markers, any format
+            _marker_re = _re.compile(
+                r"^-{2,}\s*(?:Slajd|Slide|slajd|slide)\s*\d+\s*-{2,}$",
+                _re.IGNORECASE,
+            )
+            flat_lines: list[str] = []
+            for line in text.split("\n"):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if _marker_re.match(stripped):
+                    continue  # skip marker
+                flat_lines.append(stripped)
+
+            # --- Step 3: map flat translated lines → slides by count ---
+            line_ptr = 0
             for slide_idx, slide in enumerate(prs.slides):
-                if slide_idx >= len(slide_blocks):
+                if slide_idx >= len(slide_block_counts):
                     break
-                translated_lines = slide_blocks[slide_idx]
-                line_ptr = 0
+                expected = slide_block_counts[slide_idx]
+                # Grab the next `expected` lines from flat_lines
+                slide_lines = flat_lines[line_ptr : line_ptr + expected]
+                line_ptr += expected
+
+                sp = 0  # pointer within slide_lines
                 for shape in slide.shapes:
                     if shape.has_text_frame:
                         for para in shape.text_frame.paragraphs:
                             if not para.text.strip():
                                 continue
-                            if line_ptr < len(translated_lines):
-                                new_text = translated_lines[line_ptr]
-                                line_ptr += 1
+                            if sp < len(slide_lines):
+                                new_text = slide_lines[sp]
+                                sp += 1
                                 if para.runs:
                                     para.runs[0].text = new_text
                                     for run in para.runs[1:]:
@@ -2513,9 +2537,23 @@ async def api_translation_export_to_original(
                             for cell in row.cells:
                                 if not cell.text.strip():
                                     continue
-                                if line_ptr < len(translated_lines):
-                                    cell.text = translated_lines[line_ptr]
-                                    line_ptr += 1
+                                if sp < len(slide_lines):
+                                    new_text = slide_lines[sp]
+                                    sp += 1
+                                    # Preserve first paragraph formatting
+                                    if cell.text_frame and cell.text_frame.paragraphs:
+                                        p0 = cell.text_frame.paragraphs[0]
+                                        if p0.runs:
+                                            p0.runs[0].text = new_text
+                                            for run in p0.runs[1:]:
+                                                run.text = ""
+                                        else:
+                                            p0.text = new_text
+                                        # Clear extra paragraphs
+                                        for xp in cell.text_frame.paragraphs[1:]:
+                                            xp.text = ""
+                                    else:
+                                        cell.text = new_text
 
             buf = _io.BytesIO()
             prs.save(buf)

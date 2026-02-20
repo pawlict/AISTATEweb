@@ -2028,7 +2028,29 @@ async function exportToOriginal() {
         if (!text) text = _proofreadState.corrected || '';
     }
     if (!text) {
-        text = (_byId('output-text') || {}).value || '';
+        // Sync current textarea edits back to currentResults before reading
+        try {
+            var activeLang = _trGetActiveOutputLang();
+            var outEl = _byId('output-text');
+            if (activeLang && outEl && currentResults) {
+                currentResults[String(activeLang)] = String(outEl.value || '');
+            }
+        } catch(_e) {}
+        // Concatenate ALL language results (in case multi-lang translation)
+        var allTexts = [];
+        if (currentResults && typeof currentResults === 'object') {
+            var keys = Object.keys(currentResults);
+            if (keys.length > 1) {
+                // Multi-language — but for save-to-original use only the active tab
+                // (the user picks which language goes back into the PPTX)
+                text = (_byId('output-text') || {}).value || '';
+            } else if (keys.length === 1) {
+                text = String(currentResults[keys[0]] || '');
+            }
+        }
+        if (!text) {
+            text = (_byId('output-text') || {}).value || '';
+        }
     }
     if (!text) {
         showToast('Brak przetłumaczonego tekstu.', 'warning');
