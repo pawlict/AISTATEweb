@@ -1470,7 +1470,7 @@ var _PR_RULES_PL = {
         'Popraw bledy ortograficzne i literowki.',
         'Popraw interpunkcje: polskie cudzyslowy \u201E\u201D, myslnik dlugi, wielokropek \u2026.',
         'Nie zmieniaj stylu ani slownictwa autora.',
-        'Zachowaj oryginalna strukture tekstu \u2014 nie dziel go na rozdzialy ani nie dodawaj nagłówków, chyba że już istnieją w tekście.'
+        'Nie dodawaj rozdziałów ani nagłówków \u2014 zachowaj oryginalną strukturę tekstu bez zmian.'
     ],
     standard: [
         'Popraw ortografie, interpunkcje i gramatyke.',
@@ -1478,7 +1478,7 @@ var _PR_RULES_PL = {
         'Usun pleonazmy (np. \u201Ecofnac sie do tylu\u201D, \u201Ekontynuowac dalej\u201D).',
         'Zapewnij spojnosc czasu w narracji.',
         'Stosuj poprawna polska interpunkcje: cudzyslowy \u201E\u201D, myslnik dlugi \u2014, wielokropek \u2026.',
-        'Zachowaj oryginalna strukture tekstu. Jeśli tekst zawiera nagłówki rozdziałów — zachowaj je krótkie i zwięzłe. Nie dodawaj nowych rozdziałów.'
+        'Jeśli tekst zawiera rozdziały lub je tworzysz: tytuły rozdziałów muszą być krótkie (2\u20135 słów), spójne stylistycznie między sobą, a treść rozdziału zawsze poniżej tytułu.'
     ],
     professional: [
         'Popraw ortografie, interpunkcje i gramatyke.',
@@ -1489,7 +1489,7 @@ var _PR_RULES_PL = {
         'Zachowaj formalny, profesjonalny ton.',
         'Zapewnij spojnosc czasu w narracji.',
         'Stosuj poprawna polska interpunkcje.',
-        'Zachowaj oryginalna strukture tekstu. Jeśli tekst zawiera nagłówki rozdziałów — zachowaj je krótkie i zwięzłe. Nie twórz nowych rozdziałów ani nie dziel tekstu na sekcje, których nie było w oryginale.'
+        'Jeśli tekst zawiera rozdziały lub je tworzysz: tytuły rozdziałów muszą być krótkie (2\u20135 słów), spójne stylistycznie między sobą, a treść rozdziału zawsze poniżej tytułu.'
     ],
     academic: [
         'Popraw ortografie, interpunkcje i gramatyke.',
@@ -1499,7 +1499,7 @@ var _PR_RULES_PL = {
         'Zachowaj formalny ton i precyzje terminologiczna.',
         'Zapewnij spojnosc czasu w narracji.',
         'Stosuj poprawna polska interpunkcje.',
-        'Zachowaj oryginalna strukture tekstu. Jeśli tekst zawiera nagłówki rozdziałów — zachowaj je krótkie i zwięzłe. Nie twórz nowych rozdziałów ani nie dziel tekstu na sekcje, których nie było w oryginale.'
+        'Jeśli tekst zawiera rozdziały lub je tworzysz: tytuły rozdziałów muszą być krótkie (2\u20135 słów), spójne stylistycznie między sobą, a treść rozdziału zawsze poniżej tytułu.'
     ]
 };
 
@@ -1509,7 +1509,7 @@ var _PR_RULES_EN = {
         'Fix spelling and typos.',
         'Fix punctuation (commas, apostrophes, quotation marks).',
         'Do not change the author\'s style or vocabulary.',
-        'Preserve the original text structure \u2014 do not split it into chapters or add headings unless they already exist.'
+        'Do not add chapters or headings \u2014 preserve the original text structure as-is.'
     ],
     standard: [
         'Fix spelling, punctuation and grammar.',
@@ -1517,7 +1517,7 @@ var _PR_RULES_EN = {
         'Simplify wordy phrases (e.g. "in order to" \u2192 "to", "at this point in time" \u2192 "now").',
         'Ensure tense consistency throughout the text.',
         'Use the Oxford comma in lists.',
-        'Preserve the original text structure. If the text has section headings \u2014 keep them short and concise. Do not add new sections.'
+        'If the text has chapters/sections or you create them: chapter titles must be short (2\u20135 words), stylistically consistent with each other, and the chapter body must always follow below the title.'
     ],
     professional: [
         'Fix spelling, punctuation and grammar.',
@@ -1528,7 +1528,7 @@ var _PR_RULES_EN = {
         'Maintain a formal, professional tone.',
         'Ensure tense consistency.',
         'Use the Oxford comma. Vary sentence length for better rhythm.',
-        'Preserve the original text structure. If the text has section headings \u2014 keep them short and concise. Do not create new chapters or sections that were not in the original.'
+        'If the text has chapters/sections or you create them: chapter titles must be short (2\u20135 words), stylistically consistent with each other, and the chapter body must always follow below the title.'
     ],
     academic: [
         'Fix spelling, punctuation and grammar.',
@@ -1537,7 +1537,7 @@ var _PR_RULES_EN = {
         'Maintain a formal tone and terminological precision.',
         'Ensure tense consistency.',
         'Use the Oxford comma in lists.',
-        'Preserve the original text structure. If the text has section headings \u2014 keep them short and concise. Do not create new chapters or sections that were not in the original.'
+        'If the text has chapters/sections or you create them: chapter titles must be short (2\u20135 words), stylistically consistent with each other, and the chapter body must always follow below the title.'
     ]
 };
 
