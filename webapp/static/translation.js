@@ -5,6 +5,10 @@ let currentResults = {};
 let currentLanguages = [];
 let trProgressInterval = null;
 
+// Upload state — kept for "save to original" feature (PPTX/DOCX)
+let _uploadId = null;
+let _uploadExt = null;
+
 // Draft persistence
 let TR_RESTORING = false;
 let TR_SAVE_TIMER = null;
@@ -750,6 +754,11 @@ async function handleFile(file) {
             return;
         }
         
+        // Track upload_id for "save to original" feature
+        _uploadId = data.upload_id || null;
+        _uploadExt = data.ext || null;
+        _trSyncSaveToOriginalBtn();
+
         // Display extracted text
         document.getElementById('input-text').value = data.text;
         estimateTranslationTime(data.text);
@@ -954,6 +963,9 @@ function displayResults(data) {
     // Reset button
     resetUI();
 
+    // Show "save to original" button if applicable
+    _trSyncSaveToOriginalBtn();
+
     // Persist results
     _trScheduleSave('results');
 }
@@ -1053,6 +1065,9 @@ async function resetOutput() {
         document.getElementById('summary-container').classList.add('hidden');
         currentResults = {};
         currentTaskId = null;
+        _uploadId = null;
+        _uploadExt = null;
+        _trSyncSaveToOriginalBtn();
         _trScheduleSave('reset_output');
     }
 }
@@ -1800,6 +1815,7 @@ async function proofreadRun() {
             }
             if (acceptBtn) acceptBtn.style.display = '';
             if (copyBtn) copyBtn.style.display = '';
+            _trSyncSaveToOriginalBtn();
         } else {
             // Extract the most specific error message from the backend
             var msg = '';
@@ -1974,6 +1990,91 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+
+// ============================================================================
+// Save to Original (PPTX/DOCX) — inject translated text back into uploaded file
+// ============================================================================
+
+/** Show or hide the "Zapisz do oryginalu" buttons based on upload state */
+function _trSyncSaveToOriginalBtn() {
+    var show = !!_uploadId;
+    var extLabel = (_uploadExt || '').replace('.', '').toUpperCase();
+
+    // Translation output button
+    var btn = _byId('save_to_original_btn');
+    if (btn) btn.style.display = show ? '' : 'none';
+    var lbl = _byId('save_to_original_label');
+    if (lbl && extLabel) lbl.textContent = extLabel;
+
+    // Proofreading result button
+    var btn2 = _byId('proofread_save_original_btn');
+    if (btn2) btn2.style.display = show ? '' : 'none';
+    var lbl2 = _byId('proofread_save_original_label');
+    if (lbl2 && extLabel) lbl2.textContent = extLabel;
+}
+
+/** Export translated text back into the original uploaded file */
+async function exportToOriginal() {
+    if (!_uploadId) {
+        showToast('Brak oryginału — wgraj ponownie plik.', 'warning');
+        return;
+    }
+
+    // Gather translated text — prefer proofread result, then output textarea
+    var text = '';
+    if (_proofreadState && _proofreadState.lang) {
+        var prEl = _byId('proofread_result');
+        if (prEl) text = _proofreadExtractText(prEl);
+        if (!text) text = _proofreadState.corrected || '';
+    }
+    if (!text) {
+        text = (_byId('output-text') || {}).value || '';
+    }
+    if (!text) {
+        showToast('Brak przetłumaczonego tekstu.', 'warning');
+        return;
+    }
+
+    var btn = _byId('save_to_original_btn');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+
+    try {
+        var formData = new FormData();
+        formData.append('upload_id', _uploadId);
+        formData.append('translated_text', text);
+
+        var resp = await fetch('/api/translation/export-to-original', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (resp.ok) {
+            var blob = await resp.blob();
+            var url = window.URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            // Extract filename from Content-Disposition or use default
+            var cd = resp.headers.get('Content-Disposition') || '';
+            var m = cd.match(/filename="?([^"]+)"?/);
+            a.download = m ? m[1] : ('translated.' + (_uploadExt || '.pptx').replace('.', ''));
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            showToast('Zapisano do oryginału.', 'success');
+        } else {
+            var errData = {};
+            try { errData = await resp.json(); } catch(_) {}
+            var detail = errData.detail || errData.error || ('HTTP ' + resp.status);
+            showToast('Błąd: ' + detail, 'error');
+        }
+    } catch(e) {
+        console.error('Export to original error:', e);
+        showToast('Błąd: ' + (e.message || e), 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+    }
+}
 
 // Init TTS on page load
 document.addEventListener('DOMContentLoaded', () => {

@@ -2414,24 +2414,155 @@ async def api_translation_upload(
     # Save to temp
     name = str(file.filename or "upload")
     ext = (Path(name).suffix or "").lower()
-    tmp_path = (TRANSLATION_UPLOAD_DIR / f"{uuid.uuid4().hex}{ext}").resolve()
+    upload_id = uuid.uuid4().hex
+    tmp_path = (TRANSLATION_UPLOAD_DIR / f"{upload_id}{ext}").resolve()
+    keep_original = ext in (".pptx", ".docx")
     try:
         content = await file.read()
         tmp_path.write_bytes(content)
 
-        # Extract using translation handlers (supports TXT/DOCX/PDF/SRT)
+        # Extract using translation handlers (supports TXT/DOCX/PDF/SRT/PPTX)
         from backend.translation.document_handlers import extract_text_from_file  # type: ignore
 
         text = await run_in_threadpool(extract_text_from_file, tmp_path)
-        return {"ok": True, "text": text, "filename": name, "ext": ext, "size": len(content)}
+        resp: dict = {"ok": True, "text": text, "filename": name, "ext": ext, "size": len(content)}
+        if keep_original:
+            resp["upload_id"] = upload_id
+        return resp
     except Exception as e:
         app_log(f"Translation upload error: {e}")
+        keep_original = False  # cleanup on error
         return {"ok": False, "error": "Nie udało się przetworzyć pliku."}
     finally:
-        try:
-            tmp_path.unlink(missing_ok=True)  # type: ignore[arg-type]
-        except Exception:
-            pass
+        if not keep_original:
+            try:
+                tmp_path.unlink(missing_ok=True)  # type: ignore[arg-type]
+            except Exception:
+                pass
+
+
+@app.post("/api/translation/export-to-original")
+async def api_translation_export_to_original(
+    upload_id: str = Form(...),
+    translated_text: str = Form(...),
+) -> Any:
+    """Inject translated text back into the original PPTX/DOCX, return the file.
+
+    The translated text is expected to have "--- Slajd N ---" markers for PPTX.
+    Text blocks between markers are mapped back to shapes in slide order.
+    """
+    import io as _io
+    import re as _re
+
+    uid = str(upload_id or "").strip()
+    if not _re.fullmatch(r"[a-f0-9]{32}", uid):
+        raise HTTPException(status_code=400, detail="Invalid upload_id")
+
+    # Find the kept original file
+    candidates = list(TRANSLATION_UPLOAD_DIR.glob(f"{uid}.*"))
+    if not candidates:
+        raise HTTPException(status_code=404, detail="Oryginalny plik nie został znaleziony (wygasł lub usunięty).")
+    original_path = candidates[0]
+    ext = original_path.suffix.lower()
+
+    text = str(translated_text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Brak przetłumaczonego tekstu.")
+
+    try:
+        if ext == ".pptx":
+            from pptx import Presentation  # type: ignore
+
+            prs = Presentation(str(original_path))
+
+            # Parse translated text: split by slide markers
+            slide_blocks: list = []
+            current_lines: list = []
+            for line in text.split("\n"):
+                if _re.match(r"^---\s*Slajd\s+\d+\s*---$", line.strip(), _re.IGNORECASE):
+                    if current_lines:
+                        slide_blocks.append(current_lines)
+                    current_lines = []
+                else:
+                    stripped = line.strip()
+                    if stripped:
+                        current_lines.append(stripped)
+            if current_lines:
+                slide_blocks.append(current_lines)
+
+            # Map translated blocks back to slides
+            for slide_idx, slide in enumerate(prs.slides):
+                if slide_idx >= len(slide_blocks):
+                    break
+                translated_lines = slide_blocks[slide_idx]
+                line_ptr = 0
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        for para in shape.text_frame.paragraphs:
+                            if not para.text.strip():
+                                continue
+                            if line_ptr < len(translated_lines):
+                                new_text = translated_lines[line_ptr]
+                                line_ptr += 1
+                                if para.runs:
+                                    para.runs[0].text = new_text
+                                    for run in para.runs[1:]:
+                                        run.text = ""
+                    if shape.has_table:
+                        for row in shape.table.rows:
+                            for cell in row.cells:
+                                if not cell.text.strip():
+                                    continue
+                                if line_ptr < len(translated_lines):
+                                    cell.text = translated_lines[line_ptr]
+                                    line_ptr += 1
+
+            buf = _io.BytesIO()
+            prs.save(buf)
+            buf.seek(0)
+            dl_name = original_path.stem.split("_", 1)[-1] if "_" in original_path.stem else "prezentacja"
+            return StreamingResponse(
+                buf,
+                media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                headers={"Content-Disposition": f'attachment; filename="translated_{dl_name}.pptx"'},
+            )
+
+        elif ext == ".docx":
+            from docx import Document  # type: ignore
+
+            doc = Document(str(original_path))
+            translated_paras = [p for p in text.split("\n") if p.strip()]
+            ptr = 0
+            for para in doc.paragraphs:
+                if not para.text.strip():
+                    continue
+                if ptr < len(translated_paras):
+                    new_text = translated_paras[ptr]
+                    ptr += 1
+                    if para.runs:
+                        para.runs[0].text = new_text
+                        for run in para.runs[1:]:
+                            run.text = ""
+                    else:
+                        para.text = new_text
+
+            buf = _io.BytesIO()
+            doc.save(buf)
+            buf.seek(0)
+            return StreamingResponse(
+                buf,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                headers={"Content-Disposition": 'attachment; filename="translated.docx"'},
+            )
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Format {ext} nie obsługuje zapisu do oryginału.")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"Export-to-original error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd podczas zapisu do oryginału: {e}")
 
 
 @app.post("/api/translation/translate")
