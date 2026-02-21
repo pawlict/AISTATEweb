@@ -559,40 +559,198 @@ function _injectProjectBanner(){
   if(!modulePaths.some(p => path.startsWith(p))) return;
 
   const pid = AISTATE.projectId || "";
-  const banner = document.createElement("div");
-  banner.id = "_project_banner";
-  banner.style.cssText = "padding:8px 16px;display:flex;align-items:center;gap:10px;font-size:13px;border-radius:8px;margin:0 16px 8px 16px;";
 
   if(pid){
-    // Project active — show green info bar
-    banner.style.background = "var(--bg-card, #f0fdf4)";
-    banner.style.border = "1px solid var(--border, #bbf7d0)";
-    banner.style.color = "var(--text, #166534)";
+    // Project active — show subtle compact chip in top-right area
+    const banner = document.createElement("div");
+    banner.id = "_project_banner";
+    banner.style.cssText = "padding:4px 12px;display:flex;align-items:center;gap:8px;font-size:12px;border-radius:6px;margin:0 16px 4px 16px;background:var(--bg-card,#f8fafc);border:1px solid var(--border,#e2e8f0);color:var(--text,#64748b);";
     const shortId = pid.length > 12 ? pid.slice(0, 8) + "…" : pid;
     banner.innerHTML = `
-      <span style="font-weight:600">Projekt:</span>
-      <span id="_proj_banner_name" style="opacity:0.8">${shortId}</span>
-      <a href="/projects" style="margin-left:auto;font-size:12px;color:inherit;text-decoration:underline;opacity:0.7">Zmień projekt</a>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span id="_proj_banner_name" style="opacity:0.7">${shortId}</span>
+      <a href="/projects" style="margin-left:auto;font-size:11px;color:inherit;text-decoration:underline;opacity:0.5" data-i18n="banner.change_project">${t("banner.change_project") || "Zmień projekt"}</a>
     `;
     // Async: fetch name
     api(`/api/projects/${pid}/meta`).then(m => {
       const nameEl = document.getElementById("_proj_banner_name");
-      if(nameEl && m.name) nameEl.textContent = m.name + " (" + shortId + ")";
+      if(nameEl && m.name) nameEl.textContent = m.name;
     }).catch(() => {});
+
+    const target = document.querySelector(".content") || document.querySelector(".card");
+    if(target && target.parentNode){
+      target.parentNode.insertBefore(banner, target);
+    }
   }else{
-    // No project — show warning bar
-    banner.style.background = "#fef3c7";
-    banner.style.border = "1px solid #fbbf24";
-    banner.style.color = "#92400e";
-    banner.innerHTML = `
-      <span style="font-weight:600">${t("alert.no_project_selected") || "Wybierz lub utwórz projekt przed rozpoczęciem pracy."}</span>
-      <a href="/projects${_buildProjectReturnParams()}" class="btn" style="margin-left:auto;padding:4px 14px;font-size:12px;">
-        ${t("np.btn_create") || "Utwórz projekt"}
-      </a>
-    `;
+    // No project — show modal dialog asking to create one
+    _showCreateProjectDialog();
+  }
+}
+
+/** Detect module type from current URL path */
+function _detectModuleType(){
+  const path = location.pathname;
+  const typeMap = {"/diarization":"diarization", "/transcription":"transcription", "/analysis":"analysis", "/analiza":"analysis", "/translation":"translation", "/chat":"chat"};
+  for(const [p, typ] of Object.entries(typeMap)){
+    if(path.startsWith(p)) return typ;
+  }
+  return "analysis";
+}
+
+/** Module type → user-friendly label */
+function _moduleLabel(type){
+  const map = {
+    transcription: t("banner.type_transcription") || "Transkrypcja",
+    diarization: t("banner.type_diarization") || "Diaryzacja",
+    analysis: t("banner.type_analysis") || "Analiza",
+    chat: t("banner.type_chat") || "Chat",
+    translation: t("banner.type_translation") || "Tłumaczenie"
+  };
+  return map[type] || type;
+}
+
+/** Show project creation dialog (modal overlay) */
+function _showCreateProjectDialog(){
+  const moduleType = _detectModuleType();
+  const moduleLabel = _moduleLabel(moduleType);
+
+  // Build modal overlay
+  const overlay = document.createElement("div");
+  overlay.id = "_project_create_overlay";
+  overlay.className = "modal-overlay";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:18px;";
+
+  const panel = document.createElement("div");
+  panel.style.cssText = "background:var(--card-bg,#fff);border-radius:12px;padding:0;box-shadow:0 8px 32px rgba(0,0,0,.18);width:90%;max-width:440px;overflow:hidden;";
+
+  // Header
+  const header = document.createElement("div");
+  header.style.cssText = "padding:20px 24px 12px;border-bottom:1px solid var(--border,#e2e8f0);";
+  header.innerHTML = `
+    <div style="font-size:16px;font-weight:700;color:var(--text,#1e293b);">
+      ${t("banner.dialog_title") || "Utwórz nowy projekt"}
+    </div>
+    <div style="font-size:13px;color:var(--text-muted,#64748b);margin-top:4px;">
+      ${(t("banner.dialog_subtitle") || "Przed rozpoczęciem pracy w module <b>{module}</b> musisz utworzyć projekt.").replace("{module}", moduleLabel)}
+    </div>
+  `;
+
+  // Body
+  const body = document.createElement("div");
+  body.style.cssText = "padding:16px 24px;";
+  body.innerHTML = `
+    <label style="font-size:12px;font-weight:600;color:var(--text,#475569);display:block;margin-bottom:4px;">
+      ${t("banner.project_name") || "Nazwa projektu"}
+    </label>
+    <input id="_pcd_name" class="input" type="text"
+      placeholder="${(t("banner.project_name_placeholder") || "np. {module} {date}").replace("{module}", moduleLabel).replace("{date}", new Date().toLocaleDateString("pl"))}"
+      style="width:100%;box-sizing:border-box;padding:8px 12px;font-size:14px;border:1px solid var(--border,#cbd5e1);border-radius:8px;"/>
+    <div style="font-size:11px;color:var(--text-muted,#94a3b8);margin-top:4px;">
+      ${t("banner.project_name_hint") || "Zostaw puste, aby wygenerować nazwę automatycznie."}
+    </div>
+  `;
+
+  // Footer
+  const footer = document.createElement("div");
+  footer.style.cssText = "padding:12px 24px 20px;display:flex;gap:8px;justify-content:flex-end;";
+  footer.innerHTML = `
+    <a href="/projects" class="btn secondary" style="padding:8px 16px;font-size:13px;text-decoration:none;">
+      ${t("banner.go_to_projects") || "Lista projektów"}
+    </a>
+    <button id="_pcd_submit" class="btn" type="button" style="padding:8px 20px;font-size:13px;font-weight:600;">
+      ${t("banner.create_and_start") || "Utwórz i rozpocznij"}
+    </button>
+  `;
+
+  panel.appendChild(header);
+  panel.appendChild(body);
+  panel.appendChild(footer);
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+
+  // Focus name input
+  const nameInput = document.getElementById("_pcd_name");
+  if(nameInput) setTimeout(() => nameInput.focus(), 100);
+
+  // Enter key triggers submit
+  if(nameInput){
+    nameInput.addEventListener("keydown", (e) => {
+      if(e.key === "Enter"){ e.preventDefault(); document.getElementById("_pcd_submit")?.click(); }
+    });
   }
 
-  // Insert at top of .content or first .card
+  // Submit handler
+  const submitBtn = document.getElementById("_pcd_submit");
+  if(submitBtn){
+    submitBtn.addEventListener("click", async () => {
+      submitBtn.disabled = true;
+      submitBtn.textContent = t("banner.creating") || "Tworzenie…";
+
+      try{
+        let projectName = (nameInput ? nameInput.value.trim() : "");
+        if(!projectName){
+          const ts = new Date().toLocaleString("pl", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
+          projectName = moduleLabel + " " + ts;
+        }
+
+        const res = await fetch("/api/projects/auto-create", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({type: moduleType, name: projectName})
+        });
+        if(!res.ok){
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "HTTP " + res.status);
+        }
+        const data = await res.json();
+
+        // Set project in AISTATE
+        AISTATE.projectId = data.project_id;
+        if(data.workspace_id) localStorage.setItem("aistate_workspace_id", data.workspace_id);
+        if(data.name) localStorage.setItem("aistate_subproject_name", data.name);
+
+        showToast((t("banner.project_created") || "Projekt utworzony: {name}").replace("{name}", data.name || projectName), "success", 3000);
+
+        // Remove overlay and reload to apply project context
+        overlay.remove();
+        location.reload();
+      }catch(e){
+        console.error("Project create error:", e);
+        showToast((t("alert.project_create_failed") || "Nie udało się utworzyć projektu") + ": " + e.message, "error", 5000);
+        submitBtn.disabled = false;
+        submitBtn.textContent = t("banner.create_and_start") || "Utwórz i rozpocznij";
+      }
+    });
+  }
+
+  // Click outside panel closes and goes to projects
+  overlay.addEventListener("click", (e) => {
+    if(e.target === overlay){
+      overlay.remove();
+      // Show a subtle warning banner instead
+      _showNoBanner();
+    }
+  });
+}
+
+/** Fallback: thin warning bar shown if user dismisses the create dialog */
+function _showNoBanner(){
+  const existing = document.getElementById("_project_banner");
+  if(existing) existing.remove();
+
+  const banner = document.createElement("div");
+  banner.id = "_project_banner";
+  banner.style.cssText = "padding:6px 14px;display:flex;align-items:center;gap:8px;font-size:12px;border-radius:6px;margin:0 16px 4px 16px;background:#fef3c7;border:1px solid #fbbf24;color:#92400e;cursor:pointer;";
+  banner.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span style="font-weight:500">${t("alert.no_project_selected") || "Wybierz lub utwórz projekt przed rozpoczęciem pracy."}</span>
+    <span style="margin-left:auto;font-size:11px;text-decoration:underline;opacity:0.7">${t("banner.create_project") || "Utwórz projekt"}</span>
+  `;
+  banner.addEventListener("click", () => {
+    banner.remove();
+    _showCreateProjectDialog();
+  });
+
   const target = document.querySelector(".content") || document.querySelector(".card");
   if(target && target.parentNode){
     target.parentNode.insertBefore(banner, target);
