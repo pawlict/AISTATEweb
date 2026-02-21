@@ -130,6 +130,7 @@ COMMON_PREFIXES: List[str] = [
     "/api/tts/engines",  # read-only: TTS engine info
     "/api/messages",  # call center messaging system (matches /api/messages and /api/messages/*)
     "/api/tasks/",  # task progress checking — used by all modules (analysis, transcription, etc.)
+    "/api/debug/",  # diagnostic endpoints (temporary)
 ]
 
 

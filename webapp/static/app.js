@@ -392,28 +392,148 @@ async function api(url, opts={}){
 
 // ---------- Require active project (auto-create if missing) ----------
 async function requireProjectId(moduleType){
+  _dbgLog("requireProjectId", `called with moduleType="${moduleType}", current projectId="${AISTATE.projectId}"`);
   const pid = AISTATE.projectId || "";
-  if(pid) return pid;
+  if(pid){
+    _dbgLog("requireProjectId", `already have projectId="${pid}", returning early`);
+    return pid;
+  }
 
   // Auto-create a project in the background
+  _dbgLog("requireProjectId", `no projectId, calling /api/projects/auto-create with type="${moduleType || "analysis"}"`);
   try{
+    const payload = {type: moduleType || "analysis"};
+    _dbgLog("requireProjectId", `POST body: ${JSON.stringify(payload)}`);
     const j = await api("/api/projects/auto-create", {
       method: "POST",
       headers: {"content-type": "application/json"},
-      body: JSON.stringify({type: moduleType || "analysis"})
+      body: JSON.stringify(payload)
     });
+    _dbgLog("requireProjectId", `response: ${JSON.stringify(j)}`);
     const newPid = j.project_id;
     AISTATE.projectId = newPid;
     AISTATE.audioFile = "";
     if(j.workspace_id) localStorage.setItem("aistate_workspace_id", j.workspace_id);
     if(j.name) localStorage.setItem("aistate_subproject_name", j.name);
     showToast(t("alert.project_auto_created") || ("Projekt utworzony: " + (j.name || newPid.slice(0,8))), 'success');
+    _dbgLog("requireProjectId", `SUCCESS: newPid="${newPid}"`);
     return newPid;
   }catch(e){
+    _dbgLog("requireProjectId", `ERROR: ${e.message}\n${e.stack}`);
     showToast(t("alert.project_create_failed") || "Nie udało się utworzyć projektu: " + (e.message || ""), 'error');
     throw new Error("Auto-create project failed");
   }
 }
+
+// ---------- Debug panel ----------
+const _DBG_LOG = [];
+function _dbgLog(fn, msg){
+  const ts = new Date().toLocaleTimeString();
+  const entry = `[${ts}] ${fn}: ${msg}`;
+  _DBG_LOG.push(entry);
+  if(_DBG_LOG.length > 200) _DBG_LOG.shift();
+  console.log("%c[AISTATE-DBG]", "color:#0af;font-weight:bold", entry);
+  // Update panel if open
+  const el = document.getElementById("_dbg_panel_log");
+  if(el) el.textContent = _DBG_LOG.join("\n");
+}
+
+function showDebugPanel(){
+  let panel = document.getElementById("_dbg_panel");
+  if(panel){ panel.style.display = panel.style.display === "none" ? "block" : "none"; return; }
+
+  panel = document.createElement("div");
+  panel.id = "_dbg_panel";
+  panel.style.cssText = "position:fixed;bottom:0;right:0;width:600px;max-height:60vh;background:#1a1a2e;color:#0f0;font-family:monospace;font-size:12px;z-index:99999;border:2px solid #0af;border-radius:8px 0 0 0;display:flex;flex-direction:column;";
+  panel.innerHTML = `
+    <div style="padding:6px 12px;background:#0af;color:#000;font-weight:bold;display:flex;justify-content:space-between;align-items:center;cursor:move;">
+      <span>AISTATE Debug Panel</span>
+      <div>
+        <button onclick="document.getElementById('_dbg_panel_log').textContent='';window._DBG_LOG_REF.length=0;" style="margin-right:8px;cursor:pointer;background:#333;color:#fff;border:1px solid #666;padding:2px 8px;border-radius:3px;">Clear</button>
+        <button onclick="_dbgRunDiag()" style="margin-right:8px;cursor:pointer;background:#060;color:#0f0;border:1px solid #0f0;padding:2px 8px;border-radius:3px;">Run Diagnostics</button>
+        <button onclick="document.getElementById('_dbg_panel').style.display='none'" style="cursor:pointer;background:#600;color:#f66;border:1px solid #f66;padding:2px 8px;border-radius:3px;">X</button>
+      </div>
+    </div>
+    <div id="_dbg_panel_info" style="padding:8px 12px;border-bottom:1px solid #333;font-size:11px;color:#aaa;"></div>
+    <pre id="_dbg_panel_log" style="flex:1;overflow:auto;padding:8px 12px;margin:0;white-space:pre-wrap;word-break:break-all;max-height:45vh;"></pre>
+  `;
+  document.body.appendChild(panel);
+
+  window._DBG_LOG_REF = _DBG_LOG;
+
+  // Show current state info
+  _dbgUpdateInfo();
+  document.getElementById("_dbg_panel_log").textContent = _DBG_LOG.join("\n");
+}
+
+function _dbgUpdateInfo(){
+  const info = document.getElementById("_dbg_panel_info");
+  if(!info) return;
+  const lines = [
+    `projectId: "${AISTATE.projectId || "(empty)"}"`,
+    `audioFile: "${AISTATE.audioFile || "(empty)"}"`,
+    `localStorage keys: ${Object.keys(localStorage).filter(k=>k.startsWith("aistate")).join(", ") || "(none)"}`,
+    `URL: ${location.pathname}`,
+  ];
+  info.innerHTML = lines.map(l => `<div>${l}</div>`).join("");
+}
+
+async function _dbgRunDiag(){
+  _dbgLog("DIAG", "=== Running full diagnostics ===");
+  _dbgUpdateInfo();
+
+  // 1. Check current state
+  _dbgLog("DIAG", `AISTATE.projectId = "${AISTATE.projectId}"`);
+  _dbgLog("DIAG", `AISTATE.audioFile = "${AISTATE.audioFile}"`);
+  _dbgLog("DIAG", `localStorage aistate_project_id = "${localStorage.getItem("aistate_project_id")}"`);
+
+  // 2. Test backend connectivity
+  try{
+    const r = await fetch("/api/projects/auto-create", {method:"OPTIONS"});
+    _dbgLog("DIAG", `OPTIONS /api/projects/auto-create → ${r.status} ${r.statusText}`);
+  }catch(e){
+    _dbgLog("DIAG", `OPTIONS /api/projects/auto-create FAILED: ${e.message}`);
+  }
+
+  // 3. Test debug endpoint
+  try{
+    const r = await fetch("/api/debug/auto-create-check");
+    const j = await r.json();
+    _dbgLog("DIAG", `GET /api/debug/auto-create-check → ${JSON.stringify(j, null, 2)}`);
+  }catch(e){
+    _dbgLog("DIAG", `GET /api/debug/auto-create-check FAILED: ${e.message}`);
+  }
+
+  // 4. Try an actual auto-create
+  _dbgLog("DIAG", "Attempting POST /api/projects/auto-create with type=debug_test...");
+  try{
+    const r = await fetch("/api/projects/auto-create", {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({type: "debug_test"})
+    });
+    _dbgLog("DIAG", `POST status: ${r.status} ${r.statusText}`);
+    const ct = r.headers.get("content-type") || "";
+    _dbgLog("DIAG", `Content-Type: ${ct}`);
+    const text = await r.text();
+    _dbgLog("DIAG", `Response body: ${text.substring(0, 2000)}`);
+  }catch(e){
+    _dbgLog("DIAG", `POST FAILED: ${e.message}\n${e.stack}`);
+  }
+
+  // 5. Check if requireProjectId is the patched version
+  _dbgLog("DIAG", `requireProjectId source contains _dbgLog: ${String(requireProjectId).includes("_dbgLog")}`);
+  _dbgLog("DIAG", `window.requireProjectId === requireProjectId: ${window.requireProjectId === requireProjectId}`);
+
+  // 6. Check startTask
+  _dbgLog("DIAG", `startTask source contains requireProjectId: ${String(startTask).includes("requireProjectId")}`);
+
+  _dbgLog("DIAG", "=== Diagnostics complete ===");
+  _dbgUpdateInfo();
+}
+
+window.showDebugPanel = showDebugPanel;
+window._dbgRunDiag = _dbgRunDiag;
 
 // ---------- Refresh current project info in UI ----------
 async function refreshCurrentProjectInfo(){
@@ -451,6 +571,7 @@ function setLogs(prefix, text){
 
 // ---------- Task management ----------
 async function startTask(prefix, endpoint, formData, onDone){
+  _dbgLog("startTask", `called: prefix="${prefix}", endpoint="${endpoint}"`);
   try{
     setStatus(prefix, "Starting…");
     setProgress(prefix, 0);
@@ -458,10 +579,14 @@ async function startTask(prefix, endpoint, formData, onDone){
 
     // Auto-create project if none exists
     const _moduleMap = {tr:"transcription", di:"diarization", an:"analysis"};
+    _dbgLog("startTask", `resolving projectId via requireProjectId("${_moduleMap[prefix] || prefix}")`);
     const project_id = await requireProjectId(_moduleMap[prefix] || prefix);
+    _dbgLog("startTask", `got project_id="${project_id}", setting in formData`);
     formData.set("project_id", project_id);
 
+    _dbgLog("startTask", `POSTing to ${endpoint}...`);
     const j = await api(endpoint, {method:"POST", body: formData});
+    _dbgLog("startTask", `response: ${JSON.stringify(j)}`);
     const task_id = j.task_id;
     try{ AISTATE.lastTaskId = task_id; }catch(e){}
     AISTATE.setTaskId(prefix, task_id);
@@ -469,6 +594,7 @@ async function startTask(prefix, endpoint, formData, onDone){
     pollTask(prefix, task_id, onDone);
   }catch(e){
     const msg = (e && e.message) ? e.message : "Error";
+    _dbgLog("startTask", `ERROR: ${msg}\n${e.stack || ""}`);
     setStatus(prefix, "Error: " + msg);
     showToast(msg, 'error');
     throw e;
