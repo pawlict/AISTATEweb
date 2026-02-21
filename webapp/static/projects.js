@@ -362,6 +362,15 @@ function _openDeleteModalForProject(ws, preSelectId) {
 
     try {
       await apiFetch(API + '/' + _ws.id + '/subprojects/' + spId + '?wipe_method=' + encodeURIComponent(wipe), {method:'DELETE'});
+      // Clear active project if the deleted one was selected
+      const dir = sp ? (sp.data_dir || '') : '';
+      const activePid = localStorage.getItem('aistate_project_id') || '';
+      if(activePid && (activePid === spId || dir.includes(activePid))){
+        localStorage.removeItem('aistate_project_id');
+        localStorage.removeItem('aistate_audio_file');
+        localStorage.removeItem('aistate_subproject_name');
+        if(typeof AISTATE !== 'undefined'){ AISTATE.projectId = ''; AISTATE.audioFile = ''; }
+      }
       hideModal('modalDeleteProject');
       showToast(t('projects.toast.deleted'), 'success');
       await loadProjects();
