@@ -167,7 +167,7 @@
       <div class="card" id="finance_entities_box" style="display:none;">
         <div class="analysis-sidehdr">
           <div class="h2"><i data-icon="finance" data-size="16"></i> <span data-i18n="finance.entities.title">Podmioty (Intelligence Memory)</span></div>
-          <button class="btn mini" id="finance_entities_refresh" title="Odśwież">↻</button>
+          <button class="btn mini" id="finance_entities_refresh" title="Odśwież" data-i18n-title="btn.refresh">↻</button>
         </div>
         <div class="small" style="margin-bottom:8px;" data-i18n="finance.entities.hint">
           Oznacz podmioty jako podejrzane — zostaną zapamiętane w przyszłych analizach.
@@ -346,11 +346,11 @@
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <!-- Layout buttons -->
             <div style="display:flex;gap:3px;background:var(--bg-secondary,#f1f5f9);border-radius:10px;padding:2px">
-              <button class="btn mini aml-graph-layout-btn" data-layout="cose" title="Układ siłowy (automatyczny)" style="border-radius:8px;padding:4px 8px;font-size:12px;background:var(--primary);color:#fff">Siłowy</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="circle" title="Układ kołowy" style="border-radius:8px;padding:4px 8px;font-size:12px">Okrąg</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="grid" title="Układ siatkowy" style="border-radius:8px;padding:4px 8px;font-size:12px">Siatka</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="breadthfirst" title="Układ hierarchiczny (drzewiasty)" style="border-radius:8px;padding:4px 8px;font-size:12px">Drzewo</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="concentric" title="Układ koncentryczny (ryzyko)" style="border-radius:8px;padding:4px 8px;font-size:12px">Koncentryczny</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="cose" title="Układ siłowy (automatyczny)" data-i18n-title="aml.layout.force" style="border-radius:8px;padding:4px 8px;font-size:12px;background:var(--primary);color:#fff">Siłowy</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="circle" title="Układ kołowy" data-i18n-title="aml.layout.circle" style="border-radius:8px;padding:4px 8px;font-size:12px">Okrąg</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="grid" title="Układ siatkowy" data-i18n-title="aml.layout.grid" style="border-radius:8px;padding:4px 8px;font-size:12px">Siatka</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="breadthfirst" title="Układ hierarchiczny (drzewiasty)" data-i18n-title="aml.layout.tree" style="border-radius:8px;padding:4px 8px;font-size:12px">Drzewo</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="concentric" title="Układ koncentryczny (ryzyko)" data-i18n-title="aml.layout.concentric" style="border-radius:8px;padding:4px 8px;font-size:12px">Koncentryczny</button>
             </div>
             <!-- Risk filter -->
             <select class="input" id="aml_graph_risk_filter" style="padding:5px 8px;border-radius:10px;min-width:130px">

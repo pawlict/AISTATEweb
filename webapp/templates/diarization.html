@@ -508,7 +508,7 @@
       <!-- Sekcja 1: Plik -->
       <div class="toolbar-section">
         <input type="file" id="di_file_input" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.mp4,.aac" style="display:none"/>
-        <button class="btn pill-icon" id="di_add_file_btn" title="Dodaj plik audio do projektu"><img src="/static/icons/pliki/file_add_audio.svg" alt="Dodaj plik" draggable="false"></button>
+        <button class="btn pill-icon" id="di_add_file_btn" title="Dodaj plik audio do projektu" data-i18n-title="btn.add_audio_file"><img src="/static/icons/pliki/file_add_audio.svg" alt="Dodaj plik" draggable="false"></button>
         <span class="small" id="di_file_name" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.8"></span>
       </div>
 
@@ -516,7 +516,7 @@
 
       <!-- Sekcja 2: Diaryzuj + Szukaj -->
       <div class="toolbar-section">
-        <button class="btn pill-icon" id="di_btn" title="Diaryzuj"><img src="/static/icons/akcje/generate_ai.svg" alt="Diaryzuj" draggable="false"></button>
+        <button class="btn pill-icon" id="di_btn" title="Diaryzuj" data-i18n-title="btn.diarize"><img src="/static/icons/akcje/generate_ai.svg" alt="Diaryzuj" draggable="false"></button>
         <button class="btn pill-icon" id="di_search_btn" title="Szukaj" data-i18n-title="btn.search" onclick="if(typeof segTools!=='undefined')segTools.openSearch()"><img src="/static/icons/akcje/search.svg" alt="Szukaj" draggable="false"></button>
       </div>
 
@@ -2248,7 +2248,7 @@ function diRenderSoundEvents(data){
   let html = `<div class="sound-events-header">
     <span data-i18n="label.detected_sounds">${aiIcon('speaker',14)} Wykryte dźwięki</span>
     <span class="sound-events-model">(${data.model || "?"})</span>
-    <button type="button" class="btn mini" onclick="diApplySoundEventsToText()" title="Wstaw znaczniki dźwięków do tekstu">
+    <button type="button" class="btn mini" onclick="diApplySoundEventsToText()" title="Wstaw znaczniki dźwięków do tekstu" data-i18n-title="btn.insert_sound_markers">
       ${aiIcon('notes',14)} Wstaw do tekstu
     </button>
   </div>`;

@@ -211,9 +211,9 @@ document.getElementById('npName').addEventListener('keydown', (e) => {
 });
 
 document.getElementById('npSubmit').addEventListener('click', async () => {
-  if(!_ws){ showToast('Brak danych','warning'); return; }
+  if(!_ws){ showToast(t('projects.toast.no_data'),'warning'); return; }
   let name = document.getElementById('npName').value.trim();
-  if(!name){ showToast('Podaj nazwę','warning'); return; }
+  if(!name){ showToast(t('projects.toast.enter_name'),'warning'); return; }
   // Auto-append date+time if name already exists
   const existing = (_ws.subprojects || []).map(s => s.name.toLowerCase());
   if(existing.includes(name.toLowerCase())){
@@ -232,7 +232,7 @@ document.getElementById('npSubmit').addEventListener('click', async () => {
       method:'POST', body:JSON.stringify({name, type, link_to:linkTo})
     });
     hideModal('modalNewProject');
-    showToast('Projekt utworzony','success');
+    showToast(t('projects.toast.created'),'success');
 
     // Auto-redirect to the matching page for typed projects
     const route = TYPE_ROUTES[type];
@@ -254,7 +254,7 @@ document.getElementById('npSubmit').addEventListener('click', async () => {
     await loadProjects();
   } catch(e){
     console.error('Create project error:', e);
-    showToast(e.message || 'Błąd tworzenia projektu','error');
+    showToast(e.message || t('projects.toast.create_error'),'error');
   }
 });
 
@@ -268,7 +268,7 @@ function _openInviteModal(preSelectProjectId) {
   document.getElementById('invMessage').value = '';
   // Populate project selector
   const sel = document.getElementById('invProject');
-  sel.innerHTML = '<option value="">— wszystkie projekty —</option>';
+  sel.innerHTML = '<option value="">' + t('projects.invite.all_projects') + '</option>';
   if(_ws && _ws.subprojects){
     _ws.subprojects.forEach(sp => {
       const opt = document.createElement('option');
@@ -297,7 +297,7 @@ document.getElementById('invUsername').addEventListener('keydown', (e) => {
 document.getElementById('invSubmit').addEventListener('click', async () => {
   if(!_ws) return;
   const username = document.getElementById('invUsername').value.trim();
-  if(!username){ showToast('Podaj nazwę użytkownika','warning'); return; }
+  if(!username){ showToast(t('projects.toast.invite_name'),'warning'); return; }
   const role = document.querySelector('input[name="invRole"]:checked')?.value || 'viewer';
   const projSel = document.getElementById('invProject');
   const projName = projSel.options[projSel.selectedIndex]?.textContent || '';
@@ -310,7 +310,7 @@ document.getElementById('invSubmit').addEventListener('click', async () => {
       method:'POST', body:JSON.stringify({username, role, message})
     });
     hideModal('modalInviteUser');
-    showToast('Zaproszenie wysłane','success');
+    showToast(t('projects.toast.invite_sent'),'success');
     loadProjects();
   } catch(e){ showToast(e.message,'error'); }
 });
@@ -327,7 +327,7 @@ function _openDeleteModalForProject(ws, preSelectId) {
   if(!select) return;
   select.innerHTML = '';
   if(!subs.length){
-    showToast('Brak projektów do usunięcia', 'warning');
+    showToast(t('projects.toast.no_projects_delete'), 'warning');
     return;
   }
   subs.forEach(sp => {
@@ -358,16 +358,16 @@ function _openDeleteModalForProject(ws, preSelectId) {
     const sp = (_ws.subprojects||[]).find(s => s.id === spId);
     const wipe = wipeSelect ? wipeSelect.value : 'none';
 
-    if(!confirm('Na pewno usunąć projekt "' + (sp?sp.name:spId) + '"?')) return;
+    if(!confirm(t('projects.confirm_delete').replace('{name}', sp?sp.name:spId))) return;
 
     try {
       await apiFetch(API + '/' + _ws.id + '/subprojects/' + spId + '?wipe_method=' + encodeURIComponent(wipe), {method:'DELETE'});
       hideModal('modalDeleteProject');
-      showToast('Projekt usunięty', 'success');
+      showToast(t('projects.toast.deleted'), 'success');
       await loadProjects();
     } catch(err){
       console.error(err);
-      showToast(err.message || 'Błąd usuwania', 'error');
+      showToast(err.message || t('projects.toast.delete_error'), 'error');
     }
   });
 })();
@@ -387,7 +387,7 @@ function _openDeleteModalForProject(ws, preSelectId) {
     const subs = _ws.subprojects || [];
     select.innerHTML = '';
     if(!subs.length){
-      showToast('Brak projektów do eksportu', 'warning');
+      showToast(t('projects.toast.no_projects_export'), 'warning');
       return;
     }
     subs.forEach(sp => {
@@ -408,7 +408,7 @@ function _openDeleteModalForProject(ws, preSelectId) {
     const fname = (opt.dataset.name || dir || 'project').replace(/[\\\/:*?"<>|]+/g,'_').trim() || 'project';
 
     if(!dir){
-      showToast('Projekt nie ma katalogu danych', 'warning');
+      showToast(t('projects.toast.export_no_data'), 'warning');
       return;
     }
 
@@ -422,10 +422,10 @@ function _openDeleteModalForProject(ws, preSelectId) {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
       hideModal('modalExportProject');
-      showToast('Eksport zakończony', 'success');
+      showToast(t('projects.toast.exported'), 'success');
     } catch(err){
       console.error(err);
-      showToast(err.message || 'Błąd eksportu', 'error');
+      showToast(err.message || t('projects.toast.export_error'), 'error');
     }
   });
 })();
@@ -448,7 +448,7 @@ function _openDeleteModalForProject(ws, preSelectId) {
 
     const name = (f.name || '').toLowerCase();
     if(!name.endsWith('.aistate')){
-      showToast('Wybierz plik .aistate', 'error');
+      showToast(t('projects.toast.import_bad_file'), 'error');
       return;
     }
 
@@ -459,11 +459,11 @@ function _openDeleteModalForProject(ws, preSelectId) {
       const r = await fetch('/api/projects/import', {method:'POST', body: fd});
       const j = await r.json();
       if(!r.ok) throw new Error(j.message || j.detail || 'Import failed');
-      showToast('Projekt zaimportowany', 'success');
+      showToast(t('projects.toast.imported'), 'success');
       await loadProjects();
     } catch(err){
       console.error(err);
-      showToast(err.message || 'Błąd importu', 'error');
+      showToast(err.message || t('projects.toast.import_error'), 'error');
     }
   });
 })();
