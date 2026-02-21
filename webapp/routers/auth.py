@@ -251,6 +251,7 @@ async def login(request: Request) -> JSONResponse:
         "user_id": user.user_id,
         "username": user.username,
         "language": user.language or "pl",
+        "theme": user.theme or "light",
     }
     if must_change_password:
         response_data["must_change_password"] = True
@@ -324,6 +325,7 @@ async def me(request: Request) -> JSONResponse:
             "is_superadmin": user.is_superadmin,
             "modules": modules,
             "language": user.language or "pl",
+            "theme": user.theme or "light",
         },
     })
 
@@ -396,6 +398,27 @@ async def set_language(request: Request) -> JSONResponse:
 
     _user_store.update_user(user.user_id, {"language": lang})
     return JSONResponse({"status": "ok", "language": lang})
+
+
+@router.post("/theme")
+async def set_theme(request: Request) -> JSONResponse:
+    """Set the user's UI theme preference (light or dark)."""
+    assert _user_store
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    theme = (body.get("theme") or "light").strip().lower()
+    if theme not in ("light", "dark"):
+        theme = "light"
+
+    _user_store.update_user(user.user_id, {"theme": theme})
+    return JSONResponse({"status": "ok", "theme": theme})
 
 
 @router.post("/register")

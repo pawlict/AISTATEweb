@@ -175,18 +175,42 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
 .nav a[data-icon] .nav-icon{
   box-shadow: none;
 }
-.nav a[data-icon] .nav-icon svg{filter: drop-shadow(0 1px 0 rgba(255,255,255,.10));}
-.nav a:hover[data-icon] .nav-icon svg{filter: drop-shadow(0 1px 2px rgba(0,0,0,.15)); transform: scale(1.05);}
-.nav a[data-icon] .nav-icon svg{transition: filter .2s, transform .2s;}
+/* Darken SVG icons for better visibility */
+.nav a[data-icon] .nav-icon svg{
+  filter: brightness(.65) saturate(1.3) drop-shadow(0 1px 0 rgba(255,255,255,.10));
+  transition: filter .2s, transform .2s;
+}
+.nav a:hover[data-icon] .nav-icon svg{
+  filter: brightness(.55) saturate(1.4) drop-shadow(0 1px 2px rgba(0,0,0,.15));
+  transform: scale(1.05);
+}
 
-/* Active state: subtle glow */
+/* Active state: darker icons + subtle glow */
 .nav a.active[data-icon] .nav-icon{
-  box-shadow: 0 0 0 4px rgba(16,150,244,.10), 0 14px 26px rgba(15,23,42,.10);
+  box-shadow: 0 0 0 4px rgba(16,150,244,.12), 0 14px 26px rgba(15,23,42,.10);
   border:none;
 }
-.nav a.active[data-icon] .nav-icon svg{filter: drop-shadow(0 2px 4px rgba(16,150,244,.25)); transform: scale(1.08);}
+.nav a.active[data-icon] .nav-icon svg{
+  filter: brightness(.50) saturate(1.5) drop-shadow(0 2px 4px rgba(16,150,244,.30));
+  transform: scale(1.08);
+}
 
 .nav-label{display:inline}
+
+.nav-project{
+  display:block;
+  font-size:10px;
+  font-weight:400;
+  color:var(--muted,#888);
+  opacity:.7;
+  line-height:1.2;
+  margin-top:1px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:130px;
+}
+.nav a.active .nav-project{opacity:.85; color:var(--text,#333);}
 
 .nav .nav-section{
   margin-top:12px;
@@ -204,6 +228,12 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
   color:var(--muted);
   background: transparent;
   display:flex; align-items:center;
+}
+.nav-label-wrap{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  flex:1;
 }
 .nav a:hover{
   border-color: var(--border);
@@ -225,6 +255,8 @@ body.sidebar-collapsed .brand-top{display:none}
 body.sidebar-collapsed .logo-lg{display:none}
 body.sidebar-collapsed .nav a{justify-content:center; padding:12px 10px}
 body.sidebar-collapsed .nav-label{display:none}
+body.sidebar-collapsed .nav-project{display:none}
+body.sidebar-collapsed .nav-label-wrap{display:none}
 body.sidebar-collapsed .nav-icon{margin-right:0; width:30px; height:30px}
 body.sidebar-collapsed .nav-icon svg{width:22px; height:22px}
 body.sidebar-collapsed .nav-section{display:none}
@@ -1914,6 +1946,24 @@ button.pill-icon:hover{
 .lang-chip.active{ background:var(--accent,#4a6cf7); color:#fff; border-color:var(--accent,#4a6cf7); }
 .lang-chip:hover:not(.active){ border-color:var(--accent,#4a6cf7); color:var(--accent,#4a6cf7); }
 
+/* Theme chip (same style as lang-chip) */
+.theme-chip{
+  padding:.2rem .5rem; border:1.5px solid var(--border,#d0d5dd); border-radius:5px;
+  background:transparent; cursor:pointer; font-size:.72rem; font-weight:700;
+  color:var(--muted,#888); transition:all .15s;
+  display:inline-flex; align-items:center; justify-content:center;
+  width:28px; height:24px;
+}
+.theme-chip svg{ width:14px; height:14px; }
+.theme-chip.active{ background:var(--accent,#4a6cf7); color:#fff; border-color:var(--accent,#4a6cf7); }
+.theme-chip.active svg{ stroke:#fff; }
+.theme-chip:hover:not(.active){ border-color:var(--accent,#4a6cf7); color:var(--accent,#4a6cf7); }
+.theme-chip:hover:not(.active) svg{ stroke:var(--accent,#4a6cf7); }
+
+.user-badge-theme{
+  display:flex; justify-content:center; gap:.3rem; margin-top:.35rem;
+}
+
 /* Compact logout icon — hidden by default (shown only when collapsed) */
 .user-badge-compact-logout{
   display:none;
@@ -2249,4 +2299,169 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
   width:3px;
   border-radius:0 3px 3px 0;
   background:var(--accent,#1f5aa6);
+}
+
+/* ===================== DARK THEME ===================== */
+
+[data-theme="dark"]{
+  color-scheme: dark;
+
+  --bg:#0f1219;
+  --panel:#181c25;
+  --panel2:#1e2230;
+
+  --text:#e2e8f0;
+  --muted:#94a3b8;
+
+  --accent:#4a9eed;
+
+  --brand-navy:#1a2060;
+  --brand-blue:#4b6fd4;
+  --brand-sky:#3aabf7;
+  --brand-cyan:#5ab8e8;
+  --brand-purple:#a44ec8;
+  --brand-ice:#2a2e50;
+
+  --border:rgba(226,232,240,.12);
+  --danger:#ef4444;
+  --ok:#22c55e;
+
+  --shadow: 0 10px 28px rgba(0,0,0,.35);
+}
+
+/* Body background */
+[data-theme="dark"] body{
+  background:
+    radial-gradient(1200px 700px at 20% 0%, rgba(74,158,237,.06), transparent 60%),
+    radial-gradient(900px 600px at 80% 10%, rgba(34,197,94,.04), transparent 60%),
+    var(--bg);
+}
+
+/* Sidebar */
+[data-theme="dark"] .sidebar{
+  background: linear-gradient(180deg, rgba(24,28,37,.97), rgba(15,18,25,.97));
+  border-right-color: var(--border);
+}
+
+/* Cards */
+[data-theme="dark"] .card{
+  background: var(--panel);
+}
+[data-theme="dark"] .subcard{
+  background: var(--panel2);
+}
+
+/* Inputs, selects, textareas */
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea{
+  background: var(--panel2) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+/* Buttons — keep primary accent colors, fix secondary */
+[data-theme="dark"] .btn-sm,
+[data-theme="dark"] button{
+  color: var(--text);
+}
+
+/* Nav links */
+[data-theme="dark"] .nav a{
+  color: var(--muted);
+}
+[data-theme="dark"] .nav a:hover{
+  background: rgba(74,158,237,.08);
+  border-color: var(--border);
+  color: var(--text);
+}
+[data-theme="dark"] .nav a.active{
+  background: rgba(74,158,237,.12);
+  border-color: rgba(74,158,237,.25);
+  color: var(--text);
+}
+
+/* Tables */
+[data-theme="dark"] table th{
+  background: var(--panel2);
+  color: var(--muted);
+}
+[data-theme="dark"] table td{
+  border-color: var(--border);
+}
+[data-theme="dark"] table tr:hover td{
+  background: rgba(74,158,237,.05);
+}
+
+/* Modal / overlay panels */
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] [class*="overlay"] > div,
+[data-theme="dark"] [class*="dialog"] > div{
+  background: var(--panel);
+  color: var(--text);
+}
+
+/* User badge dropdown */
+[data-theme="dark"] .user-badge-menu{
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+}
+[data-theme="dark"] .user-badge-btn{
+  color: var(--text) !important;
+}
+[data-theme="dark"] .user-badge-btn:hover{
+  background: rgba(74,158,237,.10) !important;
+}
+
+/* Generic white backgrounds → dark */
+[data-theme="dark"] .prompt-item,
+[data-theme="dark"] .doc-item{
+  background: var(--panel2);
+}
+
+/* Scroll / code areas */
+[data-theme="dark"] pre,
+[data-theme="dark"] code{
+  background: var(--panel2);
+  color: var(--text);
+}
+
+/* Toast */
+[data-theme="dark"] .toast{
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* Tab chips */
+[data-theme="dark"] .lang-chip,
+[data-theme="dark"] .theme-chip{
+  background: var(--panel2);
+  color: var(--muted);
+  border-color: var(--border);
+}
+[data-theme="dark"] .lang-chip.active,
+[data-theme="dark"] .theme-chip.active{
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* SVG icons — slightly brighter in dark mode */
+[data-theme="dark"] .nav a[data-icon] .nav-icon svg{
+  filter: brightness(.85) saturate(1.2) drop-shadow(0 1px 0 rgba(0,0,0,.3));
+}
+[data-theme="dark"] .nav a:hover[data-icon] .nav-icon svg{
+  filter: brightness(.95) saturate(1.3) drop-shadow(0 1px 2px rgba(0,0,0,.3));
+}
+[data-theme="dark"] .nav a.active[data-icon] .nav-icon svg{
+  filter: brightness(1) saturate(1.4) drop-shadow(0 2px 4px rgba(74,158,237,.35));
+}
+
+/* Project name under nav labels */
+[data-theme="dark"] .nav-project{
+  color: var(--muted);
+}
+[data-theme="dark"] .nav a.active .nav-project{
+  color: var(--text);
 }
