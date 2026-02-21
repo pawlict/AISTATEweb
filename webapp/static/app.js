@@ -693,7 +693,8 @@ function _showCreateProjectDialog(){
             const wsRes = await fetch("/api/workspaces/default");
             if(wsRes.ok){
               const wsData = await wsRes.json();
-              wsId = wsData.id || "";
+              const ws = wsData.workspace || wsData;
+              wsId = ws.id || "";
               if(wsId) localStorage.setItem("aistate_workspace_id", wsId);
               console.log("[ProjectDialog] Default workspace:", wsId);
             }
