@@ -390,15 +390,6 @@ async function api(url, opts={}){
   return (dataJson !== null) ? dataJson : dataText;
 }
 
-// ---------- Legacy: ensure project exists ----------
-async function ensureProject(){
-  // Legacy helper: create project if missing. Prefer requireProjectId() in new UX.
-  if(AISTATE.projectId) return AISTATE.projectId;
-  const j = await api("/api/projects/new", {method:"POST"});
-  AISTATE.projectId = j.project_id;
-  return j.project_id;
-}
-
 // ---------- Require active project ----------
 function requireProjectId(moduleType){
   const pid = AISTATE.projectId || "";

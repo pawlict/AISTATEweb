@@ -1622,8 +1622,22 @@ class GPUResourceManager:
                 time.sleep(1.0)
 
 
+import re as _re
+
+_PROJECT_ID_RE = _re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
+
+
+def _validate_project_id(project_id: str) -> str:
+    """Validate project_id to prevent path traversal and illegal characters."""
+    pid = str(project_id or "").strip()
+    if not pid or not _PROJECT_ID_RE.match(pid):
+        raise HTTPException(status_code=400, detail="Nieprawidłowy identyfikator projektu.")
+    return pid
+
+
 def project_path(project_id: str) -> Path:
-    p = PROJECTS_DIR / project_id
+    pid = _validate_project_id(project_id)
+    p = PROJECTS_DIR / pid
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -1650,6 +1664,7 @@ def write_project_meta(project_id: str, meta: Dict[str, Any]) -> None:
 
 
 def ensure_project(project_id: Optional[str]) -> str:
+    """Legacy: create project if missing. Used only by /api/projects/create and /api/projects/new."""
     if project_id:
         project_path(project_id)
         meta = read_project_meta(project_id)
@@ -1660,6 +1675,19 @@ def ensure_project(project_id: Optional[str]) -> str:
     project_path(new_id)
     write_project_meta(new_id, {"project_id": new_id, "created_at": now_iso(), "name": "projekt"})
     return new_id
+
+
+def require_existing_project(project_id: str) -> str:
+    """Validate that project_id is non-empty and the project directory exists.
+    Raises HTTPException 400/404 otherwise. Never auto-creates."""
+    pid = (project_id or "").strip()
+    if not pid:
+        raise HTTPException(status_code=400, detail="Brak project_id. Utwórz projekt przed rozpoczęciem pracy.")
+    pid = _validate_project_id(pid)
+    meta = read_project_meta(pid)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Projekt nie istnieje. Utwórz projekt w zakładce Projekty.")
+    return pid
 
 
 # ---------- Translation draft persistence (per-project) ----------
@@ -5917,7 +5945,7 @@ async def _extract_and_cache_document(doc_path: Path) -> Dict[str, Any]:
 @app.post("/api/documents/upload")
 async def api_documents_upload(project_id: str = Form(""), file: UploadFile = File(...)) -> Any:
     """Upload a document to a project and cache extracted text."""
-    project_id = ensure_project(project_id or None)
+    project_id = require_existing_project(project_id)
     ddir = _documents_dir(project_id)
 
     original_name = safe_filename(file.filename or "document")
@@ -7891,7 +7919,7 @@ async def api_transcribe(
     sound_detection_enabled: int = Form(0),
     sound_detection_model: str = Form(""),
 ) -> Any:
-    project_id = ensure_project(project_id or None)
+    project_id = require_existing_project(project_id)
     if audio is not None:
         audio_path = save_upload(project_id, audio)
     else:
@@ -7944,7 +7972,7 @@ async def api_diarize_voice(
 
     NOTE: Engines/models must be installed in ASR Settings.
     """
-    project_id = ensure_project(project_id or None)
+    project_id = require_existing_project(project_id)
     if audio is not None:
         audio_path = save_upload(project_id, audio)
     else:
@@ -8038,7 +8066,7 @@ async def api_diarize_text(
     method: str = Form("alternate"),
     mapping_json: str = Form(""),
 ) -> Any:
-    project_id = ensure_project(project_id or None)
+    project_id = require_existing_project(project_id)
     mapping: Dict[str, str] = {}
     if mapping_json.strip():
         try:

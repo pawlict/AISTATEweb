@@ -943,7 +943,7 @@ function displayResults(data) {
         // TTS speak button inside tab
         const ttsBtn = document.createElement('span');
         ttsBtn.className = 'tts-tab-btn';
-        ttsBtn.title = 'Odsłuchaj';
+        ttsBtn.title = tr('translation.tts.listen_translation','Odsłuchaj');
         ttsBtn.innerHTML = aiIcon('tts_read', 13);
         ttsBtn.onclick = (e) => { e.stopPropagation(); _ttsSpeak(lang, 'output', ttsBtn); };
         tab.appendChild(ttsBtn);
@@ -1356,7 +1356,7 @@ async function _ttsSpeak(lang, source, triggerBtn) {
 
     const pick = _ttsPickVoice(lang);
     if (!pick) {
-        showToast('TTS: brak zainstalowanego silnika dla języka "' + lang + '". Zainstaluj silnik w Ustawieniach TTS.', 'warning');
+        showToast(trFmt('translation.tts.no_engine',{lang},'TTS: brak zainstalowanego silnika dla języka „{lang}". Zainstaluj silnik w Ustawieniach TTS.'), 'warning');
         return;
     }
 
@@ -1621,7 +1621,7 @@ async function _proofreadLoadModels() {
         if (installed.length === 0) {
             var opt = document.createElement('option');
             opt.value = '';
-            opt.textContent = 'Brak zainstalowanych modeli korekty';
+            opt.textContent = tr('translation.proofread.no_models','Brak zainstalowanych modeli korekty');
             sel.appendChild(opt);
             sel.disabled = true;
         } else {
@@ -1640,7 +1640,7 @@ async function _proofreadLoadModels() {
             sel.disabled = false;
         }
     } catch(e) {
-        sel.innerHTML = '<option value="">Błąd ładowania modeli</option>';
+        sel.innerHTML = '<option value="">' + tr('translation.proofread.models_error','Błąd ładowania modeli') + '</option>';
     }
 }
 
@@ -1741,10 +1741,10 @@ function _proofreadSyncUI(proofActive) {
     if (genBtn) {
         if (proofActive) {
             genBtn.setAttribute('onclick', 'proofreadRun()');
-            genBtn.title = 'Koryguj tekst';
+            genBtn.title = tr('translation.btn.proofread_title','Koryguj tekst');
         } else {
             genBtn.setAttribute('onclick', 'startTranslation()');
-            genBtn.title = 'Tłumacz';
+            genBtn.title = tr('translation.btn.translate_title','Tłumacz');
         }
     }
 
@@ -1782,12 +1782,12 @@ function _proofreadUpdateModeBadge(proofActive) {
         badge.style.background = 'rgba(217,119,6,.12)';
         badge.style.border = '1px solid rgba(217,119,6,.3)';
         badge.style.color = '#92400e';
-        badge.textContent = 'Program w trybie korekty';
+        badge.textContent = tr('translation.mode_badge.proofreading','Program w trybie korekty');
     } else {
         badge.style.background = 'rgba(16,150,244,.10)';
         badge.style.border = '1px solid rgba(16,150,244,.25)';
         badge.style.color = '#1e5aa6';
-        badge.textContent = 'Program w trybie tłumaczeń';
+        badge.textContent = tr('translation.mode_badge.translation','Program w trybie tłumaczeń');
         // Auto-hide after 3s when going back to translation mode
         setTimeout(function() {
             if (!_proofreadState.lang && badge) {
@@ -1803,7 +1803,7 @@ async function proofreadRun() {
     // Require active project before proofreading
     try { requireProjectId("translation"); } catch(e) { return; }
     if (!_proofreadState.lang) {
-        showToast('Wybierz język korekty (PL lub EN).', 'warning');
+        showToast(tr('translation.proofread.choose_lang','Wybierz język korekty (PL lub EN).'), 'warning');
         return;
     }
 
@@ -1813,7 +1813,7 @@ async function proofreadRun() {
         text = String((_byId('input-text') || {}).value || '').trim();
     }
     if (!text) {
-        showToast('Wklej tekst do korekty.', 'warning');
+        showToast(tr('translation.proofread.paste_text','Wklej tekst do korekty.'), 'warning');
         return;
     }
 
@@ -1831,7 +1831,7 @@ async function proofreadRun() {
 
     if (resultWrap) resultWrap.style.display = '';
     if (progressEl) progressEl.style.display = '';
-    if (resultEl) resultEl.innerHTML = '<div class="small muted">Trwa korekta…</div>';
+    if (resultEl) resultEl.innerHTML = '<div class="small muted">' + tr('translation.proofread.running_hint','Trwa korekta…') + '</div>';
     if (acceptBtn) acceptBtn.style.display = 'none';
     if (copyBtn) copyBtn.style.display = 'none';
 
@@ -1859,7 +1859,7 @@ async function proofreadRun() {
             _proofreadState.corrected = data.corrected || '';
             _proofreadState.diffHtml = data.diff_html || '';
             if (resultEl) {
-                resultEl.innerHTML = _proofreadState.diffHtml || '<div class="small muted">Brak zmian.</div>';
+                resultEl.innerHTML = _proofreadState.diffHtml || '<div class="small muted">' + tr('translation.proofread.no_changes','Brak zmian.') + '</div>';
                 _proofreadMakeDiffInteractive(resultEl);
             }
             if (acceptBtn) acceptBtn.style.display = '';
@@ -1869,14 +1869,14 @@ async function proofreadRun() {
             // Extract the most specific error message from the backend
             var msg = '';
             if (data) msg = data.detail || data.error || data.message || '';
-            if (!msg) msg = 'HTTP ' + resp.status + ' — serwer nie zwrócił szczegółów błędu';
-            if (resp.status === 503) msg = 'Ollama niedostępna. Upewnij się że usługa Ollama jest uruchomiona. (' + msg + ')';
-            if (resp.status === 500) msg = 'Błąd serwera: ' + msg;
+            if (!msg) msg = trFmt('translation.proofread.http_error',{code:resp.status},'HTTP ' + resp.status + ' — serwer nie zwrócił szczegółów błędu');
+            if (resp.status === 503) msg = trFmt('translation.proofread.ollama_unavailable',{msg},'Ollama niedostępna. Upewnij się że usługa Ollama jest uruchomiona. (' + msg + ')');
+            if (resp.status === 500) msg = trFmt('translation.proofread.server_error',{msg},'Błąd serwera: ' + msg);
             if (resultEl) resultEl.innerHTML = '<div class="small" style="color:#b91c1c;">' + msg + '</div>';
             showToast(msg, 'error');
         }
     } catch(e) {
-        var errMsg = 'Nie udało się połączyć z serwerem: ' + String(e.message || e);
+        var errMsg = trFmt('translation.proofread.connection_error',{msg:String(e.message || e)},'Nie udało się połączyć z serwerem: ' + String(e.message || e));
         if (resultEl) resultEl.innerHTML = '<div class="small" style="color:#b91c1c;">' + errMsg + '</div>';
         showToast(errMsg, 'error');
     } finally {
@@ -1996,7 +1996,7 @@ function proofreadAccept() {
     _proofreadState.corrected = cleanParts.join('\n\n');
     var acceptBtn = _byId('proofread_accept_btn');
     if (acceptBtn) acceptBtn.style.display = 'none';
-    showToast('Zatwierdzono poprawki.', 'success');
+    showToast(tr('translation.proofread.accepted','Zatwierdzono poprawki.'), 'success');
 }
 
 /** Copy current visible text from diff (respecting accept/reject state) */
@@ -2005,14 +2005,14 @@ async function proofreadCopy() {
     var text = resultEl ? _proofreadExtractText(resultEl) : '';
     if (!text) text = _proofreadState.corrected || '';
     if (!text) {
-        showToast('Brak tekstu do skopiowania.', 'warning');
+        showToast(tr('translation.proofread.no_text','Brak tekstu do skopiowania.'), 'warning');
         return;
     }
     try {
         await navigator.clipboard.writeText(text);
-        showToast('Skopiowano poprawiony tekst.', 'success');
+        showToast(tr('translation.proofread.copied','Skopiowano poprawiony tekst.'), 'success');
     } catch(e) {
-        showToast('Nie udało się skopiować.', 'error');
+        showToast(tr('translation.proofread.copy_error','Nie udało się skopiować.'), 'error');
     }
 }
 
@@ -2062,7 +2062,7 @@ function _trSyncSaveToOriginalBtn() {
 /** Export translated text back into the original uploaded file */
 async function exportToOriginal() {
     if (!_uploadId) {
-        showToast('Brak oryginału — wgraj ponownie plik.', 'warning');
+        showToast(tr('translation.save_to_original.no_original','Brak oryginału — wgraj ponownie plik.'), 'warning');
         return;
     }
 
@@ -2099,7 +2099,7 @@ async function exportToOriginal() {
         }
     }
     if (!text) {
-        showToast('Brak przetłumaczonego tekstu.', 'warning');
+        showToast(tr('translation.save_to_original.no_text','Brak przetłumaczonego tekstu.'), 'warning');
         return;
     }
 
@@ -2129,16 +2129,16 @@ async function exportToOriginal() {
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-            showToast('Zapisano do oryginału.', 'success');
+            showToast(tr('translation.save_to_original.done','Zapisano do oryginału.'), 'success');
         } else {
             var errData = {};
             try { errData = await resp.json(); } catch(_) {}
             var detail = errData.detail || errData.error || ('HTTP ' + resp.status);
-            showToast('Błąd: ' + detail, 'error');
+            showToast(tr('translation.alert.error_prefix','Błąd') + ': ' + detail, 'error');
         }
     } catch(e) {
         console.error('Export to original error:', e);
-        showToast('Błąd: ' + (e.message || e), 'error');
+        showToast(tr('translation.alert.error_prefix','Błąd') + ': ' + (e.message || e), 'error');
     } finally {
         if (pill) { pill.style.opacity = ''; pill.style.pointerEvents = ''; }
     }
