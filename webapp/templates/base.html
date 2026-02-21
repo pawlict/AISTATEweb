@@ -577,10 +577,14 @@
           });
         });
       });
+      function _clearProjectState() {
+        ['aistate_project_id','aistate_audio_file','aistate_workspace_id','aistate_subproject_name','aistate_last_task_id'].forEach(function(k){ localStorage.removeItem(k); });
+      }
       var logoutBtn = document.getElementById('btnLogout');
       if (logoutBtn) {
         logoutBtn.addEventListener('click', async function() {
           await fetch('/api/auth/logout', {method:'POST'});
+          _clearProjectState();
           location.href = '/login';
         });
       }
@@ -589,6 +593,7 @@
         logoutCompact.addEventListener('click', async function(e) {
           e.stopPropagation();
           await fetch('/api/auth/logout', {method:'POST'});
+          _clearProjectState();
           location.href = '/login';
         });
       }
