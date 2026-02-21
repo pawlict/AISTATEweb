@@ -725,7 +725,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/users.js?v={{ app_version }}"></script>
+<script src="/static/users.js?v={{ app_version }}&_={{ static_ts }}"></script>
 {% if user and user.is_superadmin %}
 <script>
 /* Call Center — rich text messaging for Główny Opiekun */

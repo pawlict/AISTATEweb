@@ -456,9 +456,9 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/analysis.js?v={{ app_version }}"></script>
-<script src="/static/aml.js?v={{ app_version }}"></script>
-<script src="/static/review.js?v={{ app_version }}"></script>
+<script src="/static/analysis.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/aml.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/review.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script>
 (async()=>{
   try{

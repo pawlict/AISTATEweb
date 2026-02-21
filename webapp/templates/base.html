@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light">
   <title>{{ title }} — {{ app_name }}</title>
-  <link rel="stylesheet" href="/static/app.css"/>
+  <link rel="stylesheet" href="/static/app.css?v={{ app_version }}&_={{ static_ts }}"/>
   <style>
     /* Bilingual mode: when EN is active, hide .pl-text wrappers and show .en at full size */
     html.lang-en .pl-text { display: none !important; }
@@ -14,8 +14,8 @@
     /* When PL is active (no .lang-en class), hide .en subtitles completely */
     html:not(.lang-en) .en { display: none !important; }
   </style>
-  <script src="/static/icons.js"></script>
-  <script src="/static/ui.js?v={{ app_version }}"></script>
+  <script src="/static/icons.js?v={{ app_version }}&_={{ static_ts }}"></script>
+  <script src="/static/ui.js?v={{ app_version }}&_={{ static_ts }}"></script>
 </head>
 <body>
 <div class="container">
@@ -381,7 +381,7 @@
   </div>
 </div>
 
-<script src="/static/app.js?v={{ app_version }}"></script>
+<script src="/static/app.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script>
   /* Bilingual mode: wrap Polish text nodes next to .en spans in <span class="pl-text"> so CSS can toggle them */
   function applyBilingualMode(){
