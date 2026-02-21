@@ -390,39 +390,38 @@ async function api(url, opts={}){
   return (dataJson !== null) ? dataJson : dataText;
 }
 
-// ---------- Require active project (auto-create if missing) ----------
+// ---------- Require active project (enforce selection, no auto-create) ----------
 async function requireProjectId(moduleType){
   _dbgLog("requireProjectId", `called with moduleType="${moduleType}", current projectId="${AISTATE.projectId}"`);
   const pid = AISTATE.projectId || "";
+
   if(pid){
-    _dbgLog("requireProjectId", `already have projectId="${pid}", returning early`);
-    return pid;
+    // Validate project still exists on backend
+    try{
+      await api(`/api/projects/${pid}/meta`);
+      _dbgLog("requireProjectId", `project "${pid}" validated OK`);
+      return pid;
+    }catch(e){
+      _dbgLog("requireProjectId", `project "${pid}" NOT FOUND on backend (${e.message}), clearing`);
+      AISTATE.projectId = "";
+      AISTATE.audioFile = "";
+      // Fall through to redirect
+    }
   }
 
-  // Auto-create a project in the background
-  _dbgLog("requireProjectId", `no projectId, calling /api/projects/auto-create with type="${moduleType || "analysis"}"`);
-  try{
-    const payload = {type: moduleType || "analysis"};
-    _dbgLog("requireProjectId", `POST body: ${JSON.stringify(payload)}`);
-    const j = await api("/api/projects/auto-create", {
-      method: "POST",
-      headers: {"content-type": "application/json"},
-      body: JSON.stringify(payload)
-    });
-    _dbgLog("requireProjectId", `response: ${JSON.stringify(j)}`);
-    const newPid = j.project_id;
-    AISTATE.projectId = newPid;
-    AISTATE.audioFile = "";
-    if(j.workspace_id) localStorage.setItem("aistate_workspace_id", j.workspace_id);
-    if(j.name) localStorage.setItem("aistate_subproject_name", j.name);
-    showToast(t("alert.project_auto_created") || ("Projekt utworzony: " + (j.name || newPid.slice(0,8))), 'success');
-    _dbgLog("requireProjectId", `SUCCESS: newPid="${newPid}"`);
-    return newPid;
-  }catch(e){
-    _dbgLog("requireProjectId", `ERROR: ${e.message}\n${e.stack}`);
-    showToast(t("alert.project_create_failed") || "Nie udało się utworzyć projektu: " + (e.message || ""), 'error');
-    throw new Error("Auto-create project failed");
-  }
+  // No project selected — redirect to project creation page
+  _dbgLog("requireProjectId", `no valid project, redirecting to /projects`);
+  const returnPath = location.pathname;
+  const params = new URLSearchParams();
+  if(moduleType) params.set("type", moduleType);
+  if(returnPath && returnPath !== "/projects") params.set("return", returnPath);
+
+  showToast(t("alert.no_project_selected") || "Wybierz lub utwórz projekt przed rozpoczęciem pracy.", 'warning', 4000);
+
+  // Small delay so toast is visible before redirect
+  await new Promise(r => setTimeout(r, 600));
+  window.location.href = "/projects" + (params.toString() ? "?" + params.toString() : "");
+  throw new Error("No project selected — redirecting to project creation");
 }
 
 // ---------- Debug panel ----------
@@ -550,6 +549,74 @@ async function refreshCurrentProjectInfo(){
   }catch(e){
     AISTATE.audioFile = "";
   }
+}
+
+// ---------- Project status banner (auto-injected on module pages) ----------
+function _injectProjectBanner(){
+  // Only show on module pages (not projects page itself)
+  const modulePaths = ["/diarization", "/transcription", "/analysis", "/analiza", "/translation", "/chat"];
+  const path = location.pathname;
+  if(!modulePaths.some(p => path.startsWith(p))) return;
+
+  const pid = AISTATE.projectId || "";
+  const banner = document.createElement("div");
+  banner.id = "_project_banner";
+  banner.style.cssText = "padding:8px 16px;display:flex;align-items:center;gap:10px;font-size:13px;border-radius:8px;margin:0 16px 8px 16px;";
+
+  if(pid){
+    // Project active — show green info bar
+    banner.style.background = "var(--bg-card, #f0fdf4)";
+    banner.style.border = "1px solid var(--border, #bbf7d0)";
+    banner.style.color = "var(--text, #166534)";
+    const shortId = pid.length > 12 ? pid.slice(0, 8) + "…" : pid;
+    banner.innerHTML = `
+      <span style="font-weight:600">Projekt:</span>
+      <span id="_proj_banner_name" style="opacity:0.8">${shortId}</span>
+      <a href="/projects" style="margin-left:auto;font-size:12px;color:inherit;text-decoration:underline;opacity:0.7">Zmień projekt</a>
+    `;
+    // Async: fetch name
+    api(`/api/projects/${pid}/meta`).then(m => {
+      const nameEl = document.getElementById("_proj_banner_name");
+      if(nameEl && m.name) nameEl.textContent = m.name + " (" + shortId + ")";
+    }).catch(() => {});
+  }else{
+    // No project — show warning bar
+    banner.style.background = "#fef3c7";
+    banner.style.border = "1px solid #fbbf24";
+    banner.style.color = "#92400e";
+    banner.innerHTML = `
+      <span style="font-weight:600">${t("alert.no_project_selected") || "Wybierz lub utwórz projekt przed rozpoczęciem pracy."}</span>
+      <a href="/projects${_buildProjectReturnParams()}" class="btn" style="margin-left:auto;padding:4px 14px;font-size:12px;">
+        ${t("np.btn_create") || "Utwórz projekt"}
+      </a>
+    `;
+  }
+
+  // Insert at top of .content or first .card
+  const target = document.querySelector(".content") || document.querySelector(".card");
+  if(target && target.parentNode){
+    target.parentNode.insertBefore(banner, target);
+  }
+}
+
+function _buildProjectReturnParams(){
+  const params = new URLSearchParams();
+  const path = location.pathname;
+  const typeMap = {"/diarization":"diarization", "/transcription":"transcription", "/analysis":"analysis", "/analiza":"analysis", "/translation":"translation", "/chat":"chat"};
+  for(const [p, t] of Object.entries(typeMap)){
+    if(path.startsWith(p)){ params.set("type", t); break; }
+  }
+  if(path !== "/projects") params.set("return", path);
+  const s = params.toString();
+  return s ? "?" + s : "";
+}
+
+// Run on DOMContentLoaded
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded", _injectProjectBanner);
+}else{
+  // DOM already ready (script loaded defer/async)
+  setTimeout(_injectProjectBanner, 0);
 }
 
 // ---------- DOM helpers ----------

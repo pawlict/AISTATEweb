@@ -26,6 +26,7 @@
   "admin.gpu.subtitle": "Monitor GPU usage, manage concurrency limits and job queue. (Auth will be added later.)",
   "admin.gpu.title": "GPU Settings • GPU Resource Manager",
   "alert.no_active_project": "First create or open a project in: Projects (section \"New project\" or \"Open project\").",
+  "alert.no_project_selected": "Select or create a project before starting work.",
   "alert.project_auto_created": "Project created automatically",
   "alert.project_create_failed": "Failed to create project",
   "analysis.add": "Add",
