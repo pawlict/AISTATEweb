@@ -449,6 +449,8 @@
       if (res.ok && data.status === 'ok') {
         /* Sync user's server-side language preference to localStorage */
         if (data.language) localStorage.setItem('aistate_ui_lang', data.language);
+        /* Sync user's server-side theme preference to localStorage */
+        if (data.theme) localStorage.setItem('aistate_ui_theme', data.theme);
 
         var needsPwChange = data.must_change_password || data.password_expired;
         var pwChangeReason = data.must_change_password
