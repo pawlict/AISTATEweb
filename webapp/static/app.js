@@ -390,7 +390,7 @@ async function api(url, opts={}){
   return (dataJson !== null) ? dataJson : dataText;
 }
 
-// ---------- Require active project (enforce selection, no auto-create) ----------
+// ---------- Require active project (show dialog if missing, no redirect) ----------
 async function requireProjectId(moduleType){
   _dbgLog("requireProjectId", `called with moduleType="${moduleType}", current projectId="${AISTATE.projectId}"`);
   const pid = AISTATE.projectId || "";
@@ -405,23 +405,15 @@ async function requireProjectId(moduleType){
       _dbgLog("requireProjectId", `project "${pid}" NOT FOUND on backend (${e.message}), clearing`);
       AISTATE.projectId = "";
       AISTATE.audioFile = "";
-      // Fall through to redirect
+      // Fall through to show dialog
     }
   }
 
-  // No project selected — redirect to project creation page
-  _dbgLog("requireProjectId", `no valid project, redirecting to /projects`);
-  const returnPath = location.pathname;
-  const params = new URLSearchParams();
-  if(moduleType) params.set("type", moduleType);
-  if(returnPath && returnPath !== "/projects") params.set("return", returnPath);
-
-  showToast(t("alert.no_project_selected") || "Wybierz lub utwórz projekt przed rozpoczęciem pracy.", 'warning', 4000);
-
-  // Small delay so toast is visible before redirect
-  await new Promise(r => setTimeout(r, 600));
-  window.location.href = "/projects" + (params.toString() ? "?" + params.toString() : "");
-  throw new Error("No project selected — redirecting to project creation");
+  // No project — show creation dialog and wait for result
+  _dbgLog("requireProjectId", `no valid project, showing create dialog`);
+  const newPid = await _showCreateProjectDialog();
+  _dbgLog("requireProjectId", `dialog resolved with project_id="${newPid}"`);
+  return newPid;
 }
 
 // ---------- Debug panel ----------
@@ -570,8 +562,10 @@ function _injectProjectBanner(){
     return;
   }
 
-  // No project — show modal dialog asking to create one
-  _showCreateProjectDialog();
+  // No project — show modal dialog (fire-and-forget, don't block page load)
+  _showCreateProjectDialog().catch(() => {
+    // User dismissed the dialog — warning banner is already shown by _showNoBanner
+  });
 }
 
 /** Detect module type from current URL path */
@@ -596,156 +590,173 @@ function _moduleLabel(type){
   return map[type] || type;
 }
 
-/** Show project creation dialog (modal overlay) */
+/**
+ * Show project creation dialog (modal overlay).
+ * Returns a Promise that resolves with the new project_id,
+ * or rejects if the user dismisses the dialog.
+ * Does NOT reload the page — caller can continue working.
+ */
 function _showCreateProjectDialog(){
   const moduleType = _detectModuleType();
   const moduleLabel = _moduleLabel(moduleType);
 
-  // Build modal overlay
-  const overlay = document.createElement("div");
-  overlay.id = "_project_create_overlay";
-  overlay.className = "modal-overlay";
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:18px;";
+  // Remove previous dialog if still in DOM
+  const prev = document.getElementById("_project_create_overlay");
+  if(prev) prev.remove();
 
-  const panel = document.createElement("div");
-  panel.style.cssText = "background:var(--card-bg,#fff);border-radius:12px;padding:0;box-shadow:0 8px 32px rgba(0,0,0,.18);width:90%;max-width:440px;overflow:hidden;";
+  return new Promise((resolve, reject) => {
+    // Build modal overlay
+    const overlay = document.createElement("div");
+    overlay.id = "_project_create_overlay";
+    overlay.className = "modal-overlay";
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:18px;";
 
-  // Header
-  const header = document.createElement("div");
-  header.style.cssText = "padding:20px 24px 12px;border-bottom:1px solid var(--border,#e2e8f0);";
-  header.innerHTML = `
-    <div style="font-size:16px;font-weight:700;color:var(--text,#1e293b);">
-      ${t("banner.dialog_title") || "Utwórz nowy projekt"}
-    </div>
-    <div style="font-size:13px;color:var(--text-muted,#64748b);margin-top:4px;">
-      ${(t("banner.dialog_subtitle") || "Przed rozpoczęciem pracy w module <b>{module}</b> musisz utworzyć projekt.").replace("{module}", moduleLabel)}
-    </div>
-  `;
+    const panel = document.createElement("div");
+    panel.style.cssText = "background:var(--card-bg,#fff);border-radius:12px;padding:0;box-shadow:0 8px 32px rgba(0,0,0,.18);width:90%;max-width:440px;overflow:hidden;";
 
-  // Body
-  const body = document.createElement("div");
-  body.style.cssText = "padding:16px 24px;";
-  body.innerHTML = `
-    <label style="font-size:12px;font-weight:600;color:var(--text,#475569);display:block;margin-bottom:4px;">
-      ${t("banner.project_name") || "Nazwa projektu"}
-    </label>
-    <input id="_pcd_name" class="input" type="text"
-      placeholder="${(t("banner.project_name_placeholder") || "np. {module} {date}").replace("{module}", moduleLabel).replace("{date}", new Date().toLocaleDateString("pl"))}"
-      style="width:100%;box-sizing:border-box;padding:8px 12px;font-size:14px;border:1px solid var(--border,#cbd5e1);border-radius:8px;"/>
-    <div style="font-size:11px;color:var(--text-muted,#94a3b8);margin-top:4px;">
-      ${t("banner.project_name_hint") || "Zostaw puste, aby wygenerować nazwę automatycznie."}
-    </div>
-  `;
+    // Header
+    const header = document.createElement("div");
+    header.style.cssText = "padding:20px 24px 12px;border-bottom:1px solid var(--border,#e2e8f0);";
+    header.innerHTML = `
+      <div style="font-size:16px;font-weight:700;color:var(--text,#1e293b);">
+        ${t("banner.dialog_title") || "Utwórz nowy projekt"}
+      </div>
+      <div style="font-size:13px;color:var(--text-muted,#64748b);margin-top:4px;">
+        ${t("banner.dialog_subtitle") || "Utwórz projekt, aby rozpocząć pracę. Projekt będzie dostępny we wszystkich modułach."}
+      </div>
+    `;
 
-  // Footer
-  const footer = document.createElement("div");
-  footer.style.cssText = "padding:12px 24px 20px;display:flex;gap:8px;justify-content:flex-end;";
-  footer.innerHTML = `
-    <a href="/projects" class="btn secondary" style="padding:8px 16px;font-size:13px;text-decoration:none;">
-      ${t("banner.go_to_projects") || "Lista projektów"}
-    </a>
-    <button id="_pcd_submit" class="btn" type="button" style="padding:8px 20px;font-size:13px;font-weight:600;">
-      ${t("banner.create_and_start") || "Utwórz i rozpocznij"}
-    </button>
-  `;
+    // Body
+    const body = document.createElement("div");
+    body.style.cssText = "padding:16px 24px;";
+    body.innerHTML = `
+      <label style="font-size:12px;font-weight:600;color:var(--text,#475569);display:block;margin-bottom:4px;">
+        ${t("banner.project_name") || "Nazwa projektu"}
+      </label>
+      <input id="_pcd_name" class="input" type="text"
+        placeholder="${(t("banner.project_name_placeholder") || "np. {module} {date}").replace("{module}", moduleLabel).replace("{date}", new Date().toLocaleDateString("pl"))}"
+        style="width:100%;box-sizing:border-box;padding:8px 12px;font-size:14px;border:1px solid var(--border,#cbd5e1);border-radius:8px;"/>
+      <div style="font-size:11px;color:var(--text-muted,#94a3b8);margin-top:4px;">
+        ${t("banner.project_name_hint") || "Zostaw puste, aby wygenerować nazwę automatycznie."}
+      </div>
+    `;
 
-  panel.appendChild(header);
-  panel.appendChild(body);
-  panel.appendChild(footer);
-  overlay.appendChild(panel);
-  document.body.appendChild(overlay);
+    // Footer
+    const footer = document.createElement("div");
+    footer.style.cssText = "padding:12px 24px 20px;display:flex;gap:8px;justify-content:flex-end;";
+    footer.innerHTML = `
+      <a href="/projects" class="btn secondary" style="padding:8px 16px;font-size:13px;text-decoration:none;">
+        ${t("banner.go_to_projects") || "Lista projektów"}
+      </a>
+      <button id="_pcd_submit" class="btn" type="button" style="padding:8px 20px;font-size:13px;font-weight:600;">
+        ${t("banner.create_and_start") || "Utwórz i rozpocznij"}
+      </button>
+    `;
 
-  // Focus name input
-  const nameInput = document.getElementById("_pcd_name");
-  if(nameInput) setTimeout(() => nameInput.focus(), 100);
+    panel.appendChild(header);
+    panel.appendChild(body);
+    panel.appendChild(footer);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
 
-  // Enter key triggers submit
-  if(nameInput){
-    nameInput.addEventListener("keydown", (e) => {
-      if(e.key === "Enter"){ e.preventDefault(); document.getElementById("_pcd_submit")?.click(); }
-    });
-  }
+    // Focus name input
+    const nameInput = document.getElementById("_pcd_name");
+    if(nameInput) setTimeout(() => nameInput.focus(), 100);
 
-  // Submit handler
-  const submitBtn = document.getElementById("_pcd_submit");
-  if(submitBtn){
-    submitBtn.addEventListener("click", async () => {
-      submitBtn.disabled = true;
-      submitBtn.textContent = t("banner.creating");
+    // Enter key triggers submit
+    if(nameInput){
+      nameInput.addEventListener("keydown", (e) => {
+        if(e.key === "Enter"){ e.preventDefault(); document.getElementById("_pcd_submit")?.click(); }
+      });
+    }
 
-      try{
-        let projectName = (nameInput ? nameInput.value.trim() : "");
-        if(!projectName){
-          const ts = new Date().toLocaleString("pl", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
-          projectName = moduleLabel + " " + ts;
-        }
+    // Submit handler
+    const submitBtn = document.getElementById("_pcd_submit");
+    if(submitBtn){
+      submitBtn.addEventListener("click", async () => {
+        submitBtn.disabled = true;
+        submitBtn.textContent = t("banner.creating");
 
-        console.log("[ProjectDialog] Creating project:", {type: moduleType, name: projectName});
-
-        // Step 1: Ensure we have a workspace ID
-        let wsId = localStorage.getItem("aistate_workspace_id") || "";
-        if(!wsId){
-          console.log("[ProjectDialog] No workspace ID, fetching default...");
-          const wsRes = await fetch("/api/workspaces/default");
-          if(wsRes.ok){
-            const wsData = await wsRes.json();
-            wsId = wsData.id || "";
-            if(wsId) localStorage.setItem("aistate_workspace_id", wsId);
-            console.log("[ProjectDialog] Default workspace:", wsId);
+        try{
+          let projectName = (nameInput ? nameInput.value.trim() : "");
+          if(!projectName){
+            const ts = new Date().toLocaleString("pl", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
+            projectName = moduleLabel + " " + ts;
           }
+
+          console.log("[ProjectDialog] Creating project:", {type: "general", name: projectName});
+
+          // Step 1: Ensure we have a workspace ID
+          let wsId = localStorage.getItem("aistate_workspace_id") || "";
+          if(!wsId){
+            console.log("[ProjectDialog] No workspace ID, fetching default...");
+            const wsRes = await fetch("/api/workspaces/default");
+            if(wsRes.ok){
+              const wsData = await wsRes.json();
+              wsId = wsData.id || "";
+              if(wsId) localStorage.setItem("aistate_workspace_id", wsId);
+              console.log("[ProjectDialog] Default workspace:", wsId);
+            }
+          }
+
+          if(!wsId){
+            throw new Error("Brak workspace — przejdź na stronę Projekty i utwórz pierwszy projekt.");
+          }
+
+          // Step 2: Create subproject with type "general" (shared across all modules)
+          console.log("[ProjectDialog] POST /api/workspaces/" + wsId + "/subprojects", {name: projectName, type: "general"});
+          const spRes = await fetch("/api/workspaces/" + wsId + "/subprojects", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({name: projectName, type: "general"})
+          });
+          if(!spRes.ok){
+            const errData = await spRes.json().catch(() => ({}));
+            throw new Error(errData.message || errData.detail || "HTTP " + spRes.status);
+          }
+          const spData = await spRes.json();
+          console.log("[ProjectDialog] Created:", spData);
+
+          const sp = spData.subproject || {};
+          const dir = sp.data_dir || "";
+          const projectId = dir.replace("projects/", "");
+          if(!projectId){
+            throw new Error("Server did not return project data directory");
+          }
+
+          // Step 3: Set project in AISTATE (no reload!)
+          AISTATE.projectId = projectId;
+          AISTATE.audioFile = sp.audio_file || "";
+          localStorage.setItem("aistate_workspace_id", wsId);
+          localStorage.setItem("aistate_subproject_name", sp.name || projectName);
+
+          showToast(tFmt("banner.project_created", {name: sp.name || projectName}), "success", 3000);
+
+          // Remove overlay — do NOT reload
+          overlay.remove();
+          // Remove fallback warning banner if present
+          const bannerEl = document.getElementById("_project_banner");
+          if(bannerEl) bannerEl.remove();
+
+          _dbgLog("_showCreateProjectDialog", `project created: ${projectId}, resolving promise`);
+          resolve(projectId);
+        }catch(e){
+          console.error("[ProjectDialog] Error:", e);
+          showToast(t("alert.project_create_failed") + ": " + e.message, "error", 5000);
+          submitBtn.disabled = false;
+          submitBtn.textContent = t("banner.create_and_start");
         }
+      });
+    }
 
-        if(!wsId){
-          throw new Error("Brak workspace — przejdź na stronę Projekty i utwórz pierwszy projekt.");
-        }
-
-        // Step 2: Create subproject via workspace endpoint (same as Projects page)
-        console.log("[ProjectDialog] POST /api/workspaces/" + wsId + "/subprojects", {name: projectName, type: moduleType});
-        const spRes = await fetch("/api/workspaces/" + wsId + "/subprojects", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({name: projectName, type: moduleType})
-        });
-        if(!spRes.ok){
-          const errData = await spRes.json().catch(() => ({}));
-          throw new Error(errData.message || errData.detail || "HTTP " + spRes.status);
-        }
-        const spData = await spRes.json();
-        console.log("[ProjectDialog] Created:", spData);
-
-        const sp = spData.subproject || {};
-        const dir = sp.data_dir || "";
-        const projectId = dir.replace("projects/", "");
-        if(!projectId){
-          throw new Error("Server did not return project data directory");
-        }
-
-        // Step 3: Set project in AISTATE
-        AISTATE.projectId = projectId;
-        AISTATE.audioFile = sp.audio_file || "";
-        localStorage.setItem("aistate_workspace_id", wsId);
-        localStorage.setItem("aistate_subproject_name", sp.name || projectName);
-
-        showToast(tFmt("banner.project_created", {name: sp.name || projectName}), "success", 3000);
-
-        // Remove overlay and reload to apply project context
+    // Click outside panel closes — show warning bar, reject promise
+    overlay.addEventListener("click", (e) => {
+      if(e.target === overlay){
         overlay.remove();
-        location.reload();
-      }catch(e){
-        console.error("[ProjectDialog] Error:", e);
-        showToast(t("alert.project_create_failed") + ": " + e.message, "error", 5000);
-        submitBtn.disabled = false;
-        submitBtn.textContent = t("banner.create_and_start");
+        _showNoBanner();
+        reject(new Error("User dismissed project creation dialog"));
       }
     });
-  }
-
-  // Click outside panel closes — show warning bar
-  overlay.addEventListener("click", (e) => {
-    if(e.target === overlay){
-      overlay.remove();
-      _showNoBanner();
-    }
   });
 }
 
@@ -764,7 +775,7 @@ function _showNoBanner(){
   `;
   banner.addEventListener("click", () => {
     banner.remove();
-    _showCreateProjectDialog();
+    _showCreateProjectDialog().catch(() => {});
   });
 
   const target = document.querySelector(".content") || document.querySelector(".card");
