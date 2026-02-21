@@ -561,30 +561,17 @@ function _injectProjectBanner(){
   const pid = AISTATE.projectId || "";
 
   if(pid){
-    // Project active — show subtle compact chip in top-right area
-    const banner = document.createElement("div");
-    banner.id = "_project_banner";
-    banner.style.cssText = "padding:4px 12px;display:flex;align-items:center;gap:8px;font-size:12px;border-radius:6px;margin:0 16px 4px 16px;background:var(--bg-card,#f8fafc);border:1px solid var(--border,#e2e8f0);color:var(--text,#64748b);";
-    const shortId = pid.length > 12 ? pid.slice(0, 8) + "…" : pid;
-    banner.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      <span id="_proj_banner_name" style="opacity:0.7">${shortId}</span>
-      <a href="/projects" style="margin-left:auto;font-size:11px;color:inherit;text-decoration:underline;opacity:0.5" data-i18n="banner.change_project">${t("banner.change_project") || "Zmień projekt"}</a>
-    `;
-    // Async: fetch name
-    api(`/api/projects/${pid}/meta`).then(m => {
-      const nameEl = document.getElementById("_proj_banner_name");
-      if(nameEl && m.name) nameEl.textContent = m.name;
-    }).catch(() => {});
-
-    const target = document.querySelector(".content") || document.querySelector(".card");
-    if(target && target.parentNode){
-      target.parentNode.insertBefore(banner, target);
-    }
-  }else{
-    // No project — show modal dialog asking to create one
-    _showCreateProjectDialog();
+    // Project active — no banner, just silently validate in background
+    api(`/api/projects/${pid}/meta`).catch(() => {
+      // Project doesn't exist on backend anymore — clear it
+      AISTATE.projectId = "";
+      AISTATE.audioFile = "";
+    });
+    return;
   }
+
+  // No project — show modal dialog asking to create one
+  _showCreateProjectDialog();
 }
 
 /** Detect module type from current URL path */
@@ -693,16 +680,67 @@ function _showCreateProjectDialog(){
           projectName = moduleLabel + " " + ts;
         }
 
-        const res = await fetch("/api/projects/auto-create", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({type: moduleType, name: projectName})
-        });
-        if(!res.ok){
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || "HTTP " + res.status);
+        console.log("[ProjectDialog] Creating project:", {type: moduleType, name: projectName});
+
+        // Try primary: auto-create endpoint
+        let data = null;
+        try{
+          const res = await fetch("/api/projects/auto-create", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({type: moduleType, name: projectName})
+          });
+          console.log("[ProjectDialog] auto-create response status:", res.status);
+          if(!res.ok){
+            const errBody = await res.text();
+            console.error("[ProjectDialog] auto-create error body:", errBody);
+            throw new Error(errBody || "HTTP " + res.status);
+          }
+          data = await res.json();
+          console.log("[ProjectDialog] auto-create success:", data);
+        }catch(autoErr){
+          console.warn("[ProjectDialog] auto-create failed, trying workspace subproject endpoint:", autoErr.message);
+
+          // Fallback: create via workspace subproject endpoint (same as projects page uses)
+          const wsId = localStorage.getItem("aistate_workspace_id") || "";
+          if(!wsId){
+            // Get default workspace first
+            console.log("[ProjectDialog] No workspace ID, fetching default...");
+            const wsRes = await fetch("/api/workspaces/default");
+            if(wsRes.ok){
+              const wsData = await wsRes.json();
+              if(wsData.id) localStorage.setItem("aistate_workspace_id", wsData.id);
+              console.log("[ProjectDialog] Got default workspace:", wsData.id);
+            }
+          }
+          const finalWsId = localStorage.getItem("aistate_workspace_id");
+          if(finalWsId){
+            console.log("[ProjectDialog] Creating subproject in workspace:", finalWsId);
+            const spRes = await fetch("/api/workspaces/" + finalWsId + "/subprojects", {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({name: projectName, type: moduleType})
+            });
+            console.log("[ProjectDialog] subproject response status:", spRes.status);
+            if(!spRes.ok){
+              const spErrBody = await spRes.text();
+              console.error("[ProjectDialog] subproject error body:", spErrBody);
+              throw new Error(spErrBody || "HTTP " + spRes.status);
+            }
+            const spData = await spRes.json();
+            console.log("[ProjectDialog] subproject success:", spData);
+            const sp = spData.subproject || {};
+            const dir = sp.data_dir || "";
+            const pid = dir.replace("projects/", "");
+            data = {project_id: pid, name: sp.name || projectName, workspace_id: finalWsId};
+          }else{
+            throw new Error("No workspace available");
+          }
         }
-        const data = await res.json();
+
+        if(!data || !data.project_id){
+          throw new Error("No project_id in response");
+        }
 
         // Set project in AISTATE
         AISTATE.projectId = data.project_id;
@@ -715,7 +753,7 @@ function _showCreateProjectDialog(){
         overlay.remove();
         location.reload();
       }catch(e){
-        console.error("Project create error:", e);
+        console.error("[ProjectDialog] Project create error:", e);
         showToast((t("alert.project_create_failed") || "Nie udało się utworzyć projektu") + ": " + e.message, "error", 5000);
         submitBtn.disabled = false;
         submitBtn.textContent = t("banner.create_and_start") || "Utwórz i rozpocznij";
