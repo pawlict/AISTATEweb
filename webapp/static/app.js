@@ -404,6 +404,51 @@ function requireProjectId(moduleType){
   return pid;
 }
 
+// ---------- Ensure project exists (auto-create if needed) ----------
+async function ensureProjectId(moduleType){
+  const existing = AISTATE.projectId || "";
+  if(existing) return existing;
+
+  // 1. Get (or create) user's default workspace
+  const wsResp = await api("/api/workspaces/default");
+  const ws = wsResp.workspace;
+  if(!ws || !ws.id) throw new Error("Workspace error");
+
+  // 2. Build auto-name: "<Module> YYYY-MM-DD"
+  const today = new Date().toISOString().slice(0, 10);
+  const moduleName = t("autoproject.name." + (moduleType || "general")) || moduleType || "Project";
+  const name = moduleName + " " + today;
+
+  // 3. Create subproject via API
+  const spResp = await api("/api/workspaces/" + ws.id + "/subprojects", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ name: name, type: moduleType || "general" })
+  });
+  const sp = spResp.subproject;
+  if(!sp || !sp.data_dir) throw new Error("Subproject creation failed");
+
+  const projectId = sp.data_dir.replace("projects/", "");
+
+  // 4. Store in AISTATE + localStorage
+  AISTATE.projectId = projectId;
+  AISTATE.audioFile = "";
+  localStorage.setItem("aistate_workspace_id", ws.id);
+  localStorage.setItem("aistate_workspace_name", ws.name);
+  localStorage.setItem("aistate_subproject_name", name);
+
+  // 5. Notify user
+  const msg = (t("autoproject.created") || "Project created: {name}").replace("{name}", name);
+  showToast(msg, "success", 5000);
+
+  // 6. Update top-bar project info if present
+  try{ refreshCurrentProjectInfo(); }catch(_e){}
+  const topName = document.getElementById("top_project_name");
+  if(topName) topName.textContent = name;
+
+  return projectId;
+}
+
 // ---------- Refresh current project info in UI ----------
 async function refreshCurrentProjectInfo(){
   const pid = AISTATE.projectId || "";
@@ -445,9 +490,9 @@ async function startTask(prefix, endpoint, formData, onDone){
     setProgress(prefix, 0);
     setLogs(prefix, "");
 
-    // New UX: project must exist (created in "New project" page).
+    // Auto-create project if none exists
     const _moduleMap = {tr:"transcription", di:"diarization", an:"analysis"};
-    const project_id = requireProjectId(_moduleMap[prefix] || prefix);
+    const project_id = await ensureProjectId(_moduleMap[prefix] || prefix);
     formData.set("project_id", project_id);
 
     const j = await api(endpoint, {method:"POST", body: formData});
@@ -552,6 +597,7 @@ window.applyI18n = applyI18n;
 window.refreshProjects = refreshProjects;
 window.refreshCurrentProjectInfo = refreshCurrentProjectInfo;
 window.requireProjectId = requireProjectId;
+window.ensureProjectId = ensureProjectId;
 window.startTask = startTask;
 window.resumeTask = resumeTask;
 window.setProjectFromSelect = setProjectFromSelect;
@@ -961,7 +1007,8 @@ function openManualEditor(textarea, lineIndex){
     if(!ctx) return;
     const outTa = document.getElementById(ctx.textareaId);
     if(!outTa) return;
-    const pid = requireProjectId();
+    let pid;
+    try { pid = await ensureProjectId(); } catch(e) { return; }
 
     try{
       if(ctx.textareaId === "tr_out"){

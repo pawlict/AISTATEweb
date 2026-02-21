@@ -1851,10 +1851,13 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
   const file = e.target.files && e.target.files[0];
   if(!file) return;
 
-  const pid = AISTATE.projectId;
-  if(!pid){
+  // Auto-create project if none exists
+  let pid;
+  try {
+    pid = await ensureProjectId("transcription");
+  } catch(ex) {
     e.target.value = '';
-    try { requireProjectId("transcription"); } catch(ex) { return; }
+    return;
   }
 
   const btn = document.getElementById('tr_add_file_btn');
@@ -1880,9 +1883,9 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
     const modelEl = document.getElementById('tr_model');
     if(trBtn) trBtn.disabled = !(AISTATE.projectId && AISTATE.audioFile && modelEl && modelEl.value);
 
-    showToast('Plik audio wgrany: ' + AISTATE.audioFile, 'success');
+    showToast((t("autoproject.toast.audio_uploaded") || "Audio file uploaded: {name}").replace("{name}", AISTATE.audioFile), 'success');
   } catch(err) {
-    showToast('Błąd wgrywania: ' + (err.message || err), 'error');
+    showToast((t("autoproject.toast.upload_error") || "Upload error: {msg}").replace("{msg}", err.message || err), 'error');
   } finally {
     btn.disabled = false;
     e.target.value = '';

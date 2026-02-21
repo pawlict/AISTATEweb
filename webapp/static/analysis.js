@@ -846,7 +846,9 @@ async function _regenQuickIfNeeded(){
 
   async function _uploadDocs(files){
     if(!files || !files.length) return;
-    if(!State.projectId) return;
+    if(!State.projectId){
+      try { await ensureProjectId("analysis"); State.projectId = AISTATE.projectId; } catch(e) { return; }
+    }
     for(const f of files){
       const fd = new FormData();
       fd.append("project_id", State.projectId);
@@ -1026,7 +1028,7 @@ async function _regenQuickIfNeeded(){
     // NOTE: kept name for backward UI binding (button "Generuj")
     if(State.generating) return;
     if(!State.projectId){
-      try { requireProjectId("analysis"); } catch(e) { return; }
+      try { await ensureProjectId("analysis"); State.projectId = AISTATE.projectId; } catch(e) { return; }
     }
     if(State.ollamaOnline === false){
       showToast("Ollama jest offline.", 'error');

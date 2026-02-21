@@ -2720,8 +2720,8 @@ toggleMode();
 diInitInstalled(0);
 
 async function diStartDiarize(){
-  // Require active project before diarizing
-  try { requireProjectId("diarization"); } catch(e) { return; }
+  // Auto-create project if none exists
+  try { await ensureProjectId("diarization"); } catch(e) { return; }
 
   const mode = document.getElementById("di_mode").value;
   const fd = new FormData();
@@ -2729,7 +2729,7 @@ async function diStartDiarize(){
   if(mode !== "text"){
     await updateAudioState();
     if(!DI_HAS_AUDIO){
-      showToast("Brak pliku audio w projekcie. Wgraj plik audio.", 'warning');
+      showToast(t("di.alert.no_audio"), 'warning');
       return;
     }
 
@@ -2942,10 +2942,13 @@ document.getElementById('di_file_input').addEventListener('change', async functi
   var file = e.target.files && e.target.files[0];
   if(!file) return;
 
-  var pid = AISTATE.projectId;
-  if(!pid){
+  // Auto-create project if none exists
+  var pid;
+  try {
+    pid = await ensureProjectId("diarization");
+  } catch(ex) {
     e.target.value = '';
-    try { requireProjectId("diarization"); } catch(ex) { return; }
+    return;
   }
 
   var btn = document.getElementById('di_add_file_btn');
@@ -2966,9 +2969,9 @@ document.getElementById('di_file_input').addEventListener('change', async functi
       if(window._diPlayer.audio) DI.audio = window._diPlayer.audio;
     }
 
-    showToast('Plik audio wgrany: ' + AISTATE.audioFile, 'success');
+    showToast((t("autoproject.toast.audio_uploaded") || "Audio file uploaded: {name}").replace("{name}", AISTATE.audioFile), 'success');
   } catch(err) {
-    showToast('Błąd wgrywania: ' + ((err && err.message) || err), 'error');
+    showToast((t("autoproject.toast.upload_error") || "Upload error: {msg}").replace("{msg}", (err && err.message) || err), 'error');
   } finally {
     btn.disabled = false;
     e.target.value = '';
