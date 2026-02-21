@@ -1026,7 +1026,7 @@ async function _regenQuickIfNeeded(){
     // NOTE: kept name for backward UI binding (button "Generuj")
     if(State.generating) return;
     if(!State.projectId){
-      try { requireProjectId("analysis"); } catch(e) { return; }
+      try { State.projectId = await requireProjectId("analysis"); } catch(e) { return; }
     }
     if(State.ollamaOnline === false){
       showToast("Ollama jest offline.", 'error');

@@ -4453,6 +4453,87 @@ def api_new_project(request: Request) -> Any:
     return {"project_id": pid}
 
 
+# ---------- Auto-create project (background, no manual step) ----------
+
+_MODULE_NAME_MAP = {
+    "transcription": "Transkrypcja",
+    "diarization": "Diaryzacja",
+    "analysis": "Analiza",
+    "chat": "Chat",
+    "translation": "Tłumaczenie",
+}
+
+
+@app.post("/api/projects/auto-create")
+async def api_auto_create_project(request: Request) -> Any:
+    """Auto-create a file-based project AND a workspace subproject.
+
+    Called transparently by the frontend when the user starts an action
+    (diarization, transcription, analysis, chat, translation) without
+    having an active project.  The project is created in the background
+    with a name based on the module type and current date/time.
+    """
+    body: Dict[str, Any] = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    module_type = str(body.get("type", "")).strip() or "analysis"
+    label = _MODULE_NAME_MAP.get(module_type, module_type.capitalize())
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    project_name = f"{label} {ts}"
+
+    # 1) Create file-based project directory
+    pid = ensure_project(None)
+    meta = read_project_meta(pid)
+    meta["name"] = project_name
+    meta["created_at"] = meta.get("created_at") or now_iso()
+    meta["updated_at"] = now_iso()
+
+    # Set owner in multi-user mode
+    user = getattr(request.state, "user", None)
+    uid = ""
+    if user and getattr(request.state, "multiuser", False):
+        uid = user.user_id
+        meta["owner_id"] = uid
+    if not uid:
+        from backend.db.engine import get_default_user_id
+        uid = get_default_user_id()
+        meta["owner_id"] = uid
+
+    write_project_meta(pid, meta)
+
+    # 2) Get or create user's default workspace
+    workspaces = WORKSPACE_STORE.list_workspaces(uid, status="active")
+    if workspaces:
+        ws = workspaces[0]
+    else:
+        ws = WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+
+    # 3) Create subproject pointing to the file-based project
+    uname = ""
+    if user:
+        uname = getattr(user, "display_name", "") or getattr(user, "username", "")
+
+    WORKSPACE_STORE.create_subproject(
+        workspace_id=ws["id"],
+        name=project_name,
+        subproject_type=module_type,
+        data_dir=f"projects/{pid}",
+        created_by=uid,
+        user_name=uname,
+    )
+
+    app_log(f"Auto-create project: pid={pid}, name='{project_name}', type={module_type}, user={uid}")
+
+    return {
+        "project_id": pid,
+        "name": project_name,
+        "workspace_id": ws["id"],
+    }
+
+
 @app.get("/api/admin/user-projects")
 def api_admin_user_projects(request: Request) -> Any:
     """Return all projects and workspaces grouped by user. Superadmin only."""

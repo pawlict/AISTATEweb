@@ -390,18 +390,29 @@ async function api(url, opts={}){
   return (dataJson !== null) ? dataJson : dataText;
 }
 
-// ---------- Require active project ----------
-function requireProjectId(moduleType){
+// ---------- Require active project (auto-create if missing) ----------
+async function requireProjectId(moduleType){
   const pid = AISTATE.projectId || "";
-  if(!pid){
-    showToast(t("alert.no_active_project"), 'warning');
-    const params = new URLSearchParams();
-    if(moduleType) params.set("type", moduleType);
-    params.set("return", window.location.pathname);
-    window.location.href = "/new-project?" + params.toString();
-    throw new Error("No active project");
+  if(pid) return pid;
+
+  // Auto-create a project in the background
+  try{
+    const j = await api("/api/projects/auto-create", {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({type: moduleType || "analysis"})
+    });
+    const newPid = j.project_id;
+    AISTATE.projectId = newPid;
+    AISTATE.audioFile = "";
+    if(j.workspace_id) localStorage.setItem("aistate_workspace_id", j.workspace_id);
+    if(j.name) localStorage.setItem("aistate_subproject_name", j.name);
+    showToast(t("alert.project_auto_created") || ("Projekt utworzony: " + (j.name || newPid.slice(0,8))), 'success');
+    return newPid;
+  }catch(e){
+    showToast(t("alert.project_create_failed") || "Nie udało się utworzyć projektu: " + (e.message || ""), 'error');
+    throw new Error("Auto-create project failed");
   }
-  return pid;
 }
 
 // ---------- Refresh current project info in UI ----------
@@ -445,9 +456,9 @@ async function startTask(prefix, endpoint, formData, onDone){
     setProgress(prefix, 0);
     setLogs(prefix, "");
 
-    // New UX: project must exist (created in "New project" page).
+    // Auto-create project if none exists
     const _moduleMap = {tr:"transcription", di:"diarization", an:"analysis"};
-    const project_id = requireProjectId(_moduleMap[prefix] || prefix);
+    const project_id = await requireProjectId(_moduleMap[prefix] || prefix);
     formData.set("project_id", project_id);
 
     const j = await api(endpoint, {method:"POST", body: formData});
@@ -961,7 +972,7 @@ function openManualEditor(textarea, lineIndex){
     if(!ctx) return;
     const outTa = document.getElementById(ctx.textareaId);
     if(!outTa) return;
-    const pid = requireProjectId();
+    const pid = await requireProjectId();
 
     try{
       if(ctx.textareaId === "tr_out"){

@@ -1851,10 +1851,10 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
   const file = e.target.files && e.target.files[0];
   if(!file) return;
 
-  const pid = AISTATE.projectId;
+  let pid = AISTATE.projectId;
   if(!pid){
     e.target.value = '';
-    try { requireProjectId("transcription"); } catch(ex) { return; }
+    try { pid = await requireProjectId("transcription"); } catch(ex) { return; }
   }
 
   const btn = document.getElementById('tr_add_file_btn');
