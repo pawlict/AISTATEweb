@@ -544,7 +544,7 @@ async function refreshCurrentProjectInfo(){
 }
 
 // ---------- Project status banner (auto-injected on module pages) ----------
-function _injectProjectBanner(){
+async function _injectProjectBanner(){
   // Only show on module pages (not projects page itself)
   const modulePaths = ["/diarization", "/transcription", "/analysis", "/analiza", "/translation", "/chat"];
   const path = location.pathname;
@@ -553,13 +553,16 @@ function _injectProjectBanner(){
   const pid = AISTATE.projectId || "";
 
   if(pid){
-    // Project active — no banner, just silently validate in background
-    api(`/api/projects/${pid}/meta`).catch(() => {
-      // Project doesn't exist on backend anymore — clear it
+    // Project active — validate it still exists on backend
+    try {
+      await api(`/api/projects/${pid}/meta`);
+      // Project valid — no dialog needed
+      return;
+    } catch(e) {
+      // Project doesn't exist on backend anymore — clear it and show dialog
       AISTATE.projectId = "";
       AISTATE.audioFile = "";
-    });
-    return;
+    }
   }
 
   // No project — show modal dialog (fire-and-forget, don't block page load)
@@ -686,18 +689,17 @@ function _showCreateProjectDialog(){
 
           console.log("[ProjectDialog] Creating project:", {type: "general", name: projectName});
 
-          // Step 1: Ensure we have a workspace ID
-          let wsId = localStorage.getItem("aistate_workspace_id") || "";
-          if(!wsId){
-            console.log("[ProjectDialog] No workspace ID, fetching default...");
-            const wsRes = await fetch("/api/workspaces/default");
-            if(wsRes.ok){
-              const wsData = await wsRes.json();
-              const ws = wsData.workspace || wsData;
-              wsId = ws.id || "";
-              if(wsId) localStorage.setItem("aistate_workspace_id", wsId);
-              console.log("[ProjectDialog] Default workspace:", wsId);
-            }
+          // Step 1: Always fetch default workspace fresh (don't use cached ID — it may
+          // belong to a workspace where this user has no edit rights).
+          console.log("[ProjectDialog] Fetching default workspace...");
+          let wsId = "";
+          const wsRes = await fetch("/api/workspaces/default");
+          if(wsRes.ok){
+            const wsData = await wsRes.json();
+            const ws = wsData.workspace || wsData;
+            wsId = ws.id || "";
+            if(wsId) localStorage.setItem("aistate_workspace_id", wsId);
+            console.log("[ProjectDialog] Default workspace:", wsId, "role:", ws.my_role || "?");
           }
 
           if(!wsId){
@@ -706,11 +708,34 @@ function _showCreateProjectDialog(){
 
           // Step 2: Create subproject with type "general" (shared across all modules)
           console.log("[ProjectDialog] POST /api/workspaces/" + wsId + "/subprojects", {name: projectName, type: "general"});
-          const spRes = await fetch("/api/workspaces/" + wsId + "/subprojects", {
+          let spRes = await fetch("/api/workspaces/" + wsId + "/subprojects", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({name: projectName, type: "general"})
           });
+
+          // If 403 (no edit rights on this workspace), create user's own workspace
+          if(spRes.status === 403){
+            console.log("[ProjectDialog] 403 on default workspace, creating own workspace...");
+            const ownWsRes = await fetch("/api/workspaces", {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({name: "Moje projekty"})
+            });
+            if(ownWsRes.ok){
+              const ownWsData = await ownWsRes.json();
+              const ownWs = ownWsData.workspace || ownWsData;
+              wsId = ownWs.id || "";
+              if(wsId) localStorage.setItem("aistate_workspace_id", wsId);
+              console.log("[ProjectDialog] Created own workspace:", wsId);
+              spRes = await fetch("/api/workspaces/" + wsId + "/subprojects", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({name: projectName, type: "general"})
+              });
+            }
+          }
+
           if(!spRes.ok){
             const errData = await spRes.json().catch(() => ({}));
             throw new Error(errData.message || errData.detail || "HTTP " + spRes.status);
@@ -931,36 +956,27 @@ async function setProjectFromSelect(selectId){
   location.reload();
 }
 
-// ---------- Sidebar: show current project name under nav labels ----------
-const _MODULE_ICONS = ["transcription","diarization","analysis","chat","translation"];
-
+// ---------- Toolbar: show current project name in topbar (next to module title) ----------
 function _updateNavProjectLabels(){
   const name = localStorage.getItem("aistate_subproject_name") || "";
-  _MODULE_ICONS.forEach(function(icon){
-    var link = document.querySelector('.nav a[data-icon="' + icon + '"]');
-    if(!link) return;
-    var label = link.querySelector(".nav-label");
-    if(!label) return;
 
-    // Ensure wrapper exists around label (create once)
-    var wrap = link.querySelector(".nav-label-wrap");
-    if(!wrap){
-      wrap = document.createElement("span");
-      wrap.className = "nav-label-wrap";
-      label.before(wrap);
-      wrap.appendChild(label);
-    }
+  // Remove old sidebar project labels if any (cleanup from previous version)
+  document.querySelectorAll(".nav-project").forEach(function(el){ el.remove(); });
 
-    // Remove old project span
-    var old = wrap.querySelector(".nav-project");
-    if(old) old.remove();
+  // Insert/update project name badge in the toolbar (topbar)
+  var toolbar = document.querySelector(".analysis-toolbar-left");
+  if(!toolbar) return;
 
-    if(!name) return;
-    var span = document.createElement("span");
-    span.className = "nav-project";
-    span.textContent = name;
-    wrap.appendChild(span);
-  });
+  var existing = toolbar.querySelector(".toolbar-project-name");
+  if(existing) existing.remove();
+
+  if(!name) return;
+
+  var badge = document.createElement("span");
+  badge.className = "toolbar-project-name";
+  badge.textContent = name;
+  badge.title = name;
+  toolbar.appendChild(badge);
 }
 window._updateNavProjectLabels = _updateNavProjectLabels;
 

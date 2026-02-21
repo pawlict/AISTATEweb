@@ -478,9 +478,82 @@ function _openDeleteModalForProject(ws, preSelectId) {
 })();
 
 // =====================================================================
+// PENDING INVITATIONS
+// =====================================================================
+
+async function loadInvitations(){
+  try {
+    const data = await apiFetch(API + '/invitations/mine');
+    const invitations = data.invitations || [];
+    const card = document.getElementById('invitationsCard');
+    const list = document.getElementById('invitationList');
+    const countBadge = document.getElementById('invitationCount');
+    if(!card || !list) return;
+
+    if(!invitations.length){
+      card.style.display = 'none';
+      return;
+    }
+
+    card.style.display = '';
+    countBadge.textContent = invitations.length;
+    list.innerHTML = '';
+
+    invitations.forEach(inv => {
+      const wsName = inv.workspace_name || '?';
+      const inviterName = inv.inviter_name || '?';
+      const role = ROLE_LABELS[inv.role] || inv.role || 'viewer';
+      const date = shortDate(inv.created_at);
+      const msg = inv.message ? esc(inv.message) : '';
+
+      const row = document.createElement('div');
+      row.className = 'subcard';
+      row.style.cssText = 'padding:10px 14px;';
+      row.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div style="min-width:0;flex:1">
+            <div style="font-weight:700;font-size:.85rem">${esc(wsName)}</div>
+            <div class="small" style="font-size:.72rem;opacity:.7">
+              ${t('projects.invitations.from') || 'Od'}: <b>${esc(inviterName)}</b> · ${t('projects.invitations.role') || 'Rola'}: <b>${esc(role)}</b> · ${date}
+            </div>
+            ${msg ? '<div class="small" style="font-size:.72rem;margin-top:2px;opacity:.6;font-style:italic">' + msg + '</div>' : ''}
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button class="btn inv-accept" style="padding:5px 14px;font-size:.78rem" data-id="${inv.id}">${t('projects.invitations.accept') || 'Akceptuj'}</button>
+            <button class="btn secondary inv-reject" style="padding:5px 14px;font-size:.78rem" data-id="${inv.id}">${t('projects.invitations.reject') || 'Odrzuć'}</button>
+          </div>
+        </div>`;
+
+      row.querySelector('.inv-accept').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          await apiFetch(API + '/invitations/' + inv.id + '/accept', {method:'POST'});
+          showToast(t('projects.invitations.accepted') || 'Zaproszenie zaakceptowane', 'success');
+          await Promise.all([loadInvitations(), loadProjects()]);
+        } catch(err){ showToast(err.message, 'error'); }
+      });
+
+      row.querySelector('.inv-reject').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          await apiFetch(API + '/invitations/' + inv.id + '/reject', {method:'POST'});
+          showToast(t('projects.invitations.rejected') || 'Zaproszenie odrzucone', 'info');
+          await loadInvitations();
+        } catch(err){ showToast(err.message, 'error'); }
+      });
+
+      list.appendChild(row);
+    });
+  } catch(e){
+    console.error('Load invitations error:', e);
+  }
+}
+
+// =====================================================================
 // INIT
 // =====================================================================
 
 loadProjects();
+loadInvitations();
 
 })();
