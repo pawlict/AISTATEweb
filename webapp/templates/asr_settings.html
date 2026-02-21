@@ -252,7 +252,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/asr_settings.js?v={{ app_version }}"></script>
+<script src="/static/asr_settings.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script>
   // Auto-save HF token (paste => immediate, typing => debounced)
   (function(){

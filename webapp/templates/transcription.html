@@ -479,8 +479,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/audio_player.js"></script>
-<script src="/static/seg_tools.js"></script>
+<script src="/static/audio_player.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/seg_tools.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script>
 "use strict";
 

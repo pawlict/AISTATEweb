@@ -2069,6 +2069,7 @@ def home(request: Request) -> Any:
 def page_login(request: Request) -> Any:
     return TEMPLATES.TemplateResponse("login.html", {
         "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
     })
 
 
@@ -2077,6 +2078,7 @@ def page_change_password(request: Request) -> Any:
     """Standalone page for forced password change (first login / expired)."""
     return TEMPLATES.TemplateResponse("change_password.html", {
         "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
     })
 
 
@@ -2084,6 +2086,7 @@ def page_change_password(request: Request) -> Any:
 def page_setup(request: Request) -> Any:
     return TEMPLATES.TemplateResponse("setup.html", {
         "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
     })
 
 
@@ -2093,6 +2096,7 @@ def page_banned(request: Request) -> Any:
     until = request.query_params.get("until", "")
     return TEMPLATES.TemplateResponse("banned.html", {
         "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
         "reason": reason, "until": until,
     })
 
@@ -2101,6 +2105,7 @@ def page_banned(request: Request) -> Any:
 def page_register(request: Request) -> Any:
     return TEMPLATES.TemplateResponse("register.html", {
         "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
     })
 
 
@@ -2108,6 +2113,7 @@ def page_register(request: Request) -> Any:
 def page_pending(request: Request) -> Any:
     return TEMPLATES.TemplateResponse("pending.html", {
         "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
     })
 
 
