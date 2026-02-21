@@ -932,9 +932,13 @@ async function setProjectFromSelect(selectId){
 }
 
 // ---------- Sidebar: show current project name under nav labels ----------
+const _MODULE_ICONS = ["transcription","diarization","analysis","chat","translation"];
+
 function _updateNavProjectLabels(){
   const name = localStorage.getItem("aistate_subproject_name") || "";
-  document.querySelectorAll(".nav a[data-icon]").forEach(function(link){
+  _MODULE_ICONS.forEach(function(icon){
+    var link = document.querySelector('.nav a[data-icon="' + icon + '"]');
+    if(!link) return;
     var label = link.querySelector(".nav-label");
     if(!label) return;
 
