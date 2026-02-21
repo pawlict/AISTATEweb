@@ -651,7 +651,7 @@
   "translation.save_to_original.no_original": "Brak oryginału — wgraj ponownie plik.",
   "translation.save_to_original.no_text": "Brak przetłumaczonego tekstu.",
   "translation.btn.import_file": "Importuj dokument (TXT, DOCX, PDF, SRT, PPTX)",
-  "translation.tts.no_engine": "TTS: brak zainstalowanego silnika dla języka „{lang}". Zainstaluj silnik w Ustawieniach TTS.",
+  "translation.tts.no_engine": "TTS: brak zainstalowanego silnika dla j\u0119zyka \u201E{lang}\u201D. Zainstaluj silnik w Ustawieniach TTS.",
   "translation.preset.business": "Dokumenty biznesowe",
   "translation.preset.scientific": "Artykuły naukowe",
   "translation.preset.transcripts": "Transkrypcje audio",

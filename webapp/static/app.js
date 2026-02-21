@@ -671,7 +671,7 @@ function _showCreateProjectDialog(){
   if(submitBtn){
     submitBtn.addEventListener("click", async () => {
       submitBtn.disabled = true;
-      submitBtn.textContent = t("banner.creating") || "Tworzenie…";
+      submitBtn.textContent = t("banner.creating");
 
       try{
         let projectName = (nameInput ? nameInput.value.trim() : "");
@@ -682,90 +682,68 @@ function _showCreateProjectDialog(){
 
         console.log("[ProjectDialog] Creating project:", {type: moduleType, name: projectName});
 
-        // Try primary: auto-create endpoint
-        let data = null;
-        try{
-          const res = await fetch("/api/projects/auto-create", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({type: moduleType, name: projectName})
-          });
-          console.log("[ProjectDialog] auto-create response status:", res.status);
-          if(!res.ok){
-            const errBody = await res.text();
-            console.error("[ProjectDialog] auto-create error body:", errBody);
-            throw new Error(errBody || "HTTP " + res.status);
-          }
-          data = await res.json();
-          console.log("[ProjectDialog] auto-create success:", data);
-        }catch(autoErr){
-          console.warn("[ProjectDialog] auto-create failed, trying workspace subproject endpoint:", autoErr.message);
-
-          // Fallback: create via workspace subproject endpoint (same as projects page uses)
-          const wsId = localStorage.getItem("aistate_workspace_id") || "";
-          if(!wsId){
-            // Get default workspace first
-            console.log("[ProjectDialog] No workspace ID, fetching default...");
-            const wsRes = await fetch("/api/workspaces/default");
-            if(wsRes.ok){
-              const wsData = await wsRes.json();
-              if(wsData.id) localStorage.setItem("aistate_workspace_id", wsData.id);
-              console.log("[ProjectDialog] Got default workspace:", wsData.id);
-            }
-          }
-          const finalWsId = localStorage.getItem("aistate_workspace_id");
-          if(finalWsId){
-            console.log("[ProjectDialog] Creating subproject in workspace:", finalWsId);
-            const spRes = await fetch("/api/workspaces/" + finalWsId + "/subprojects", {
-              method: "POST",
-              headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({name: projectName, type: moduleType})
-            });
-            console.log("[ProjectDialog] subproject response status:", spRes.status);
-            if(!spRes.ok){
-              const spErrBody = await spRes.text();
-              console.error("[ProjectDialog] subproject error body:", spErrBody);
-              throw new Error(spErrBody || "HTTP " + spRes.status);
-            }
-            const spData = await spRes.json();
-            console.log("[ProjectDialog] subproject success:", spData);
-            const sp = spData.subproject || {};
-            const dir = sp.data_dir || "";
-            const pid = dir.replace("projects/", "");
-            data = {project_id: pid, name: sp.name || projectName, workspace_id: finalWsId};
-          }else{
-            throw new Error("No workspace available");
+        // Step 1: Ensure we have a workspace ID
+        let wsId = localStorage.getItem("aistate_workspace_id") || "";
+        if(!wsId){
+          console.log("[ProjectDialog] No workspace ID, fetching default...");
+          const wsRes = await fetch("/api/workspaces/default");
+          if(wsRes.ok){
+            const wsData = await wsRes.json();
+            wsId = wsData.id || "";
+            if(wsId) localStorage.setItem("aistate_workspace_id", wsId);
+            console.log("[ProjectDialog] Default workspace:", wsId);
           }
         }
 
-        if(!data || !data.project_id){
-          throw new Error("No project_id in response");
+        if(!wsId){
+          throw new Error("Brak workspace — przejdź na stronę Projekty i utwórz pierwszy projekt.");
         }
 
-        // Set project in AISTATE
-        AISTATE.projectId = data.project_id;
-        if(data.workspace_id) localStorage.setItem("aistate_workspace_id", data.workspace_id);
-        if(data.name) localStorage.setItem("aistate_subproject_name", data.name);
+        // Step 2: Create subproject via workspace endpoint (same as Projects page)
+        console.log("[ProjectDialog] POST /api/workspaces/" + wsId + "/subprojects", {name: projectName, type: moduleType});
+        const spRes = await fetch("/api/workspaces/" + wsId + "/subprojects", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({name: projectName, type: moduleType})
+        });
+        if(!spRes.ok){
+          const errData = await spRes.json().catch(() => ({}));
+          throw new Error(errData.message || errData.detail || "HTTP " + spRes.status);
+        }
+        const spData = await spRes.json();
+        console.log("[ProjectDialog] Created:", spData);
 
-        showToast((t("banner.project_created") || "Projekt utworzony: {name}").replace("{name}", data.name || projectName), "success", 3000);
+        const sp = spData.subproject || {};
+        const dir = sp.data_dir || "";
+        const projectId = dir.replace("projects/", "");
+        if(!projectId){
+          throw new Error("Server did not return project data directory");
+        }
+
+        // Step 3: Set project in AISTATE
+        AISTATE.projectId = projectId;
+        AISTATE.audioFile = sp.audio_file || "";
+        localStorage.setItem("aistate_workspace_id", wsId);
+        localStorage.setItem("aistate_subproject_name", sp.name || projectName);
+
+        showToast(tFmt("banner.project_created", {name: sp.name || projectName}), "success", 3000);
 
         // Remove overlay and reload to apply project context
         overlay.remove();
         location.reload();
       }catch(e){
-        console.error("[ProjectDialog] Project create error:", e);
-        showToast((t("alert.project_create_failed") || "Nie udało się utworzyć projektu") + ": " + e.message, "error", 5000);
+        console.error("[ProjectDialog] Error:", e);
+        showToast(t("alert.project_create_failed") + ": " + e.message, "error", 5000);
         submitBtn.disabled = false;
-        submitBtn.textContent = t("banner.create_and_start") || "Utwórz i rozpocznij";
+        submitBtn.textContent = t("banner.create_and_start");
       }
     });
   }
 
-  // Click outside panel closes and goes to projects
+  // Click outside panel closes — show warning bar
   overlay.addEventListener("click", (e) => {
     if(e.target === overlay){
       overlay.remove();
-      // Show a subtle warning banner instead
       _showNoBanner();
     }
   });
@@ -807,13 +785,8 @@ function _buildProjectReturnParams(){
   return s ? "?" + s : "";
 }
 
-// Run on DOMContentLoaded
-if(document.readyState === "loading"){
-  document.addEventListener("DOMContentLoaded", _injectProjectBanner);
-}else{
-  // DOM already ready (script loaded defer/async)
-  setTimeout(_injectProjectBanner, 0);
-}
+// NOTE: _injectProjectBanner() is called from base.html AFTER initI18n()
+// so that translations are available when the dialog is rendered.
 
 // ---------- DOM helpers ----------
 function el(id){ return document.getElementById(id); }
