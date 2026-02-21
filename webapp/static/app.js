@@ -732,6 +732,7 @@ function _showCreateProjectDialog(){
           localStorage.setItem("aistate_subproject_name", sp.name || projectName);
 
           showToast(tFmt("banner.project_created", {name: sp.name || projectName}), "success", 3000);
+          _updateNavProjectLabels();
 
           // Remove overlay — do NOT reload
           overlay.remove();
@@ -929,6 +930,35 @@ async function setProjectFromSelect(selectId){
   AISTATE.audioFile = "";
   location.reload();
 }
+
+// ---------- Sidebar: show current project name under nav labels ----------
+function _updateNavProjectLabels(){
+  const name = localStorage.getItem("aistate_subproject_name") || "";
+  document.querySelectorAll(".nav a[data-icon]").forEach(function(link){
+    var label = link.querySelector(".nav-label");
+    if(!label) return;
+
+    // Ensure wrapper exists around label (create once)
+    var wrap = link.querySelector(".nav-label-wrap");
+    if(!wrap){
+      wrap = document.createElement("span");
+      wrap.className = "nav-label-wrap";
+      label.before(wrap);
+      wrap.appendChild(label);
+    }
+
+    // Remove old project span
+    var old = wrap.querySelector(".nav-project");
+    if(old) old.remove();
+
+    if(!name) return;
+    var span = document.createElement("span");
+    span.className = "nav-project";
+    span.textContent = name;
+    wrap.appendChild(span);
+  });
+}
+window._updateNavProjectLabels = _updateNavProjectLabels;
 
 // ---------- Export global helpers ----------
 window.AISTATE = AISTATE;
