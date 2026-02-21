@@ -4473,65 +4473,162 @@ async def api_auto_create_project(request: Request) -> Any:
     having an active project.  The project is created in the background
     with a name based on the module type and current date/time.
     """
-    body: Dict[str, Any] = {}
+    import traceback as _tb
+    app_log("[auto-create] endpoint HIT")
     try:
-        body = await request.json()
-    except Exception:
-        pass
+        body: Dict[str, Any] = {}
+        try:
+            body = await request.json()
+        except Exception as e:
+            app_log(f"[auto-create] body parse error (ok if no body): {e}")
 
-    module_type = str(body.get("type", "")).strip() or "analysis"
-    label = _MODULE_NAME_MAP.get(module_type, module_type.capitalize())
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-    project_name = f"{label} {ts}"
+        module_type = str(body.get("type", "")).strip() or "analysis"
+        label = _MODULE_NAME_MAP.get(module_type, module_type.capitalize())
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+        project_name = f"{label} {ts}"
+        app_log(f"[auto-create] module_type={module_type}, project_name='{project_name}'")
 
-    # 1) Create file-based project directory
-    pid = ensure_project(None)
-    meta = read_project_meta(pid)
-    meta["name"] = project_name
-    meta["created_at"] = meta.get("created_at") or now_iso()
-    meta["updated_at"] = now_iso()
+        # 1) Create file-based project directory
+        app_log("[auto-create] step 1: ensure_project(None)")
+        pid = ensure_project(None)
+        app_log(f"[auto-create] step 1 done: pid={pid}")
 
-    # Set owner in multi-user mode
+        meta = read_project_meta(pid)
+        meta["name"] = project_name
+        meta["created_at"] = meta.get("created_at") or now_iso()
+        meta["updated_at"] = now_iso()
+
+        # Set owner
+        user = getattr(request.state, "user", None)
+        uid = ""
+        if user and getattr(request.state, "multiuser", False):
+            uid = user.user_id
+            meta["owner_id"] = uid
+            app_log(f"[auto-create] multiuser owner: uid={uid}")
+        if not uid:
+            from backend.db.engine import get_default_user_id
+            uid = get_default_user_id()
+            meta["owner_id"] = uid
+            app_log(f"[auto-create] default owner: uid={uid}")
+
+        write_project_meta(pid, meta)
+        app_log(f"[auto-create] step 1 complete: meta written for pid={pid}")
+
+        # 2) Get or create user's default workspace
+        app_log(f"[auto-create] step 2: list_workspaces for uid={uid}")
+        workspaces = WORKSPACE_STORE.list_workspaces(uid, status="active")
+        app_log(f"[auto-create] step 2: found {len(workspaces)} workspaces")
+        if workspaces:
+            ws = workspaces[0]
+        else:
+            app_log("[auto-create] step 2: creating new workspace")
+            ws = WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+        app_log(f"[auto-create] step 2 done: ws_id={ws['id']}")
+
+        # 3) Create subproject pointing to the file-based project
+        uname = ""
+        if user:
+            uname = getattr(user, "display_name", "") or getattr(user, "username", "")
+
+        app_log(f"[auto-create] step 3: create_subproject in ws={ws['id']}")
+        WORKSPACE_STORE.create_subproject(
+            workspace_id=ws["id"],
+            name=project_name,
+            subproject_type=module_type,
+            data_dir=f"projects/{pid}",
+            created_by=uid,
+            user_name=uname,
+        )
+        app_log(f"[auto-create] step 3 done")
+
+        result = {
+            "project_id": pid,
+            "name": project_name,
+            "workspace_id": ws["id"],
+        }
+        app_log(f"[auto-create] SUCCESS: {result}")
+        return result
+
+    except Exception as e:
+        app_log(f"[auto-create] EXCEPTION: {type(e).__name__}: {e}\n{_tb.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Auto-create failed: {type(e).__name__}: {e}")
+
+
+@app.get("/api/debug/auto-create-check")
+async def api_debug_auto_create_check(request: Request) -> Any:
+    """Diagnostic endpoint: check if auto-create infrastructure works."""
+    from datetime import datetime as _dt
+    checks: Dict[str, Any] = {}
+
+    # 1. Check PROJECTS_DIR exists and is writable
+    checks["projects_dir"] = str(PROJECTS_DIR)
+    checks["projects_dir_exists"] = PROJECTS_DIR.exists()
+    checks["projects_dir_writable"] = os.access(str(PROJECTS_DIR), os.W_OK)
+
+    # 2. Check WORKSPACE_STORE
+    checks["workspace_store_type"] = type(WORKSPACE_STORE).__name__
+    checks["workspace_store_id"] = id(WORKSPACE_STORE)
+
+    # 3. Check user/auth state
     user = getattr(request.state, "user", None)
-    uid = ""
-    if user and getattr(request.state, "multiuser", False):
-        uid = user.user_id
-        meta["owner_id"] = uid
-    if not uid:
+    checks["has_user"] = user is not None
+    checks["multiuser"] = getattr(request.state, "multiuser", False)
+    if user:
+        checks["user_id"] = getattr(user, "user_id", "?")
+        checks["username"] = getattr(user, "username", "?")
+    else:
+        try:
+            from backend.db.engine import get_default_user_id
+            checks["default_user_id"] = get_default_user_id()
+        except Exception as e:
+            checks["default_user_id_error"] = str(e)
+
+    # 4. Check ensure_project function
+    try:
+        test_pid = ensure_project(None)
+        checks["ensure_project_works"] = True
+        checks["test_pid"] = test_pid
+        meta = read_project_meta(test_pid)
+        checks["test_meta"] = meta
+        # Clean up: delete test project
+        import shutil as _shu
+        test_dir = PROJECTS_DIR / test_pid
+        if test_dir.exists():
+            _shu.rmtree(test_dir, ignore_errors=True)
+            checks["test_cleanup"] = "ok"
+    except Exception as e:
+        checks["ensure_project_works"] = False
+        checks["ensure_project_error"] = f"{type(e).__name__}: {e}"
+
+    # 5. Check workspace store
+    try:
         from backend.db.engine import get_default_user_id
         uid = get_default_user_id()
-        meta["owner_id"] = uid
+        ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
+        checks["workspaces_count"] = len(ws_list)
+        if ws_list:
+            checks["first_workspace"] = {"id": ws_list[0]["id"], "name": ws_list[0].get("name", "")}
+    except Exception as e:
+        checks["workspace_list_error"] = f"{type(e).__name__}: {e}"
 
-    write_project_meta(pid, meta)
+    # 6. Check _MODULE_NAME_MAP
+    checks["module_name_map"] = _MODULE_NAME_MAP
 
-    # 2) Get or create user's default workspace
-    workspaces = WORKSPACE_STORE.list_workspaces(uid, status="active")
-    if workspaces:
-        ws = workspaces[0]
-    else:
-        ws = WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+    # 7. Check datetime
+    checks["server_time"] = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 3) Create subproject pointing to the file-based project
-    uname = ""
-    if user:
-        uname = getattr(user, "display_name", "") or getattr(user, "username", "")
+    # 8. List existing projects
+    try:
+        existing = []
+        for p in sorted(PROJECTS_DIR.glob("*"))[:10]:
+            if p.is_dir() and not p.name.startswith("_"):
+                m = read_project_meta(p.name)
+                existing.append({"id": p.name, "name": (m or {}).get("name", "?"), "owner": (m or {}).get("owner_id", "")})
+        checks["existing_projects_sample"] = existing
+    except Exception as e:
+        checks["existing_projects_error"] = str(e)
 
-    WORKSPACE_STORE.create_subproject(
-        workspace_id=ws["id"],
-        name=project_name,
-        subproject_type=module_type,
-        data_dir=f"projects/{pid}",
-        created_by=uid,
-        user_name=uname,
-    )
-
-    app_log(f"Auto-create project: pid={pid}, name='{project_name}', type={module_type}, user={uid}")
-
-    return {
-        "project_id": pid,
-        "name": project_name,
-        "workspace_id": ws["id"],
-    }
+    return JSONResponse({"status": "ok", "checks": checks})
 
 
 @app.get("/api/admin/user-projects")
