@@ -4483,9 +4483,13 @@ async def api_auto_create_project(request: Request) -> Any:
             app_log(f"[auto-create] body parse error (ok if no body): {e}")
 
         module_type = str(body.get("type", "")).strip() or "analysis"
-        label = _MODULE_NAME_MAP.get(module_type, module_type.capitalize())
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-        project_name = f"{label} {ts}"
+        custom_name = str(body.get("name", "")).strip()
+        if custom_name:
+            project_name = custom_name
+        else:
+            label = _MODULE_NAME_MAP.get(module_type, module_type.capitalize())
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+            project_name = f"{label} {ts}"
         app_log(f"[auto-create] module_type={module_type}, project_name='{project_name}'")
 
         # 1) Create file-based project directory
