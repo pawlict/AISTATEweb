@@ -2652,9 +2652,7 @@ async function diSaveReports(){
   }catch(e){}
 
   const btn = document.getElementById("di_report_save_btn");
-  const originalText = btn ? btn.innerHTML : "";
   if(btn){
-    btn.innerHTML = aiIcon('loading', 14) + " " + (t?.("analysis.report_save") || "Zapisuję...");
     btn.disabled = true;
   }
 
@@ -2701,7 +2699,6 @@ async function diSaveReports(){
 
   }finally{
     if(btn){
-      btn.innerHTML = originalText;
       btn.disabled = false;
     }
   }
@@ -2952,8 +2949,6 @@ document.getElementById('di_file_input').addEventListener('change', async functi
   }
 
   var btn = document.getElementById('di_add_file_btn');
-  var origHtml = btn.innerHTML;
-  btn.innerHTML = aiIcon('loading', 14) + ' Wgrywam…';
   btn.disabled = true;
 
   try {
@@ -2975,7 +2970,6 @@ document.getElementById('di_file_input').addEventListener('change', async functi
   } catch(err) {
     showToast('Błąd wgrywania: ' + ((err && err.message) || err), 'error');
   } finally {
-    btn.innerHTML = origHtml;
     btn.disabled = false;
     e.target.value = '';
   }
