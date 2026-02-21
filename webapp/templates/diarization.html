@@ -2947,9 +2947,8 @@ document.getElementById('di_file_input').addEventListener('change', async functi
 
   var pid = AISTATE.projectId;
   if(!pid){
-    showToast('Brak aktywnego projektu. Utwórz projekt w zakładce Projekty.', 'warning');
     e.target.value = '';
-    return;
+    try { requireProjectId("diarization"); } catch(ex) { return; }
   }
 
   var btn = document.getElementById('di_add_file_btn');

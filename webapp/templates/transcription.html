@@ -1856,9 +1856,8 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
 
   const pid = AISTATE.projectId;
   if(!pid){
-    showToast('Brak aktywnego projektu. Utwórz projekt w zakładce Projekty.', 'warning');
     e.target.value = '';
-    return;
+    try { requireProjectId("transcription"); } catch(ex) { return; }
   }
 
   const btn = document.getElementById('tr_add_file_btn');
