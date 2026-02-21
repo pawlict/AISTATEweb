@@ -33,7 +33,7 @@
   "banner.create_and_start": "Create and start",
   "banner.create_project": "Create project",
   "banner.creating": "Creating…",
-  "banner.dialog_subtitle": "Before starting work in the <b>{module}</b> module, you need to create a project.",
+  "banner.dialog_subtitle": "Create a project to start working. The project will be available across all modules (transcription, diarization, chat, analysis, translation).",
   "banner.dialog_title": "Create a new project",
   "banner.go_to_projects": "Project list",
   "banner.project_created": "Project created: {name}",

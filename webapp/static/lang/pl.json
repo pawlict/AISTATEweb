@@ -33,7 +33,7 @@
   "banner.create_and_start": "Utwórz i rozpocznij",
   "banner.create_project": "Utwórz projekt",
   "banner.creating": "Tworzenie…",
-  "banner.dialog_subtitle": "Przed rozpoczęciem pracy w module <b>{module}</b> musisz utworzyć projekt.",
+  "banner.dialog_subtitle": "Utwórz projekt, aby rozpocząć pracę. Projekt będzie dostępny we wszystkich modułach (transkrypcja, diaryzacja, chat, analiza, tłumaczenie).",
   "banner.dialog_title": "Utwórz nowy projekt",
   "banner.go_to_projects": "Lista projektów",
   "banner.project_created": "Projekt utworzony: {name}",
