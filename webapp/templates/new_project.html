@@ -289,7 +289,7 @@ document.getElementById('op_open').addEventListener('click', async ()=>{
   }
 
   async function exportAistate(){
-    const pid = requireProjectId();
+    const pid = await requireProjectId();
     // Try to use project name from meta for filename
     let fname = pid;
     try{

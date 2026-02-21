@@ -805,7 +805,7 @@ function getSelectedMode() {
 // Start translation
 async function startTranslation() {
     // Require active project before translating
-    try { requireProjectId("translation"); } catch(e) { return; }
+    try { await requireProjectId("translation"); } catch(e) { return; }
 
     const text = document.getElementById('input-text').value.trim();
 
@@ -1801,7 +1801,7 @@ function _proofreadUpdateModeBadge(proofActive) {
 async function proofreadRun() {
     if (_proofreadState.running) return;
     // Require active project before proofreading
-    try { requireProjectId("translation"); } catch(e) { return; }
+    try { await requireProjectId("translation"); } catch(e) { return; }
     if (!_proofreadState.lang) {
         showToast(tr('translation.proofread.choose_lang','Wybierz język korekty (PL lub EN).'), 'warning');
         return;

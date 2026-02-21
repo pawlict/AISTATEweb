@@ -26,6 +26,8 @@
   "admin.gpu.subtitle": "Monitoruj GPU, limity współbieżności i kolejkę zadań. (Autoryzacja później.)",
   "admin.gpu.title": "Ustawienia GPU • Menedżer GPU",
   "alert.no_active_project": "Najpierw utwórz lub otwórz projekt w zakładce: Projekty (sekcja \"Nowy projekt\" lub \"Otwórz projekt\").",
+  "alert.project_auto_created": "Projekt utworzony automatycznie",
+  "alert.project_create_failed": "Nie udało się utworzyć projektu",
   "analysis.add": "Dodaj",
   "analysis.copy": "Kopiuj",
   "analysis.custom_prompt_desc": "Szybkie polecenie dla głębokiej analizy. Jeśli puste – analiza działa jak dotychczas.",

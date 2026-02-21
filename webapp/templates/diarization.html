@@ -2721,7 +2721,7 @@ diInitInstalled(0);
 
 async function diStartDiarize(){
   // Require active project before diarizing
-  try { requireProjectId("diarization"); } catch(e) { return; }
+  try { await requireProjectId("diarization"); } catch(e) { return; }
 
   const mode = document.getElementById("di_mode").value;
   const fd = new FormData();
@@ -2945,7 +2945,7 @@ document.getElementById('di_file_input').addEventListener('change', async functi
   var pid = AISTATE.projectId;
   if(!pid){
     e.target.value = '';
-    try { requireProjectId("diarization"); } catch(ex) { return; }
+    try { pid = await requireProjectId("diarization"); } catch(ex) { return; }
   }
 
   var btn = document.getElementById('di_add_file_btn');
