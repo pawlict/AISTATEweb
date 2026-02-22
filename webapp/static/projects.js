@@ -504,7 +504,7 @@ function _openDeleteModalForProject(ws, preSelectId) {
       opt.value = sp.id;
       opt.dataset.dir = sp.data_dir || '';
       opt.dataset.name = sp.name || '';
-      opt.textContent = (TYPE_LABELS[sp.subproject_type] || sp.subproject_type || '') + ' — ' + sp.name;
+      opt.textContent = sp.name;
       select.appendChild(opt);
     });
     showModal('modalExportProject');
