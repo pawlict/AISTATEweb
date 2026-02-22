@@ -174,7 +174,7 @@
 
       pendingUsers.forEach(function(u) {
         var tr = document.createElement('tr');
-        tr.style.background = '#fffbeb';
+        tr.style.background = 'rgba(234,179,8,.08)';
         tr.dataset.uid = u.user_id;
         tr.innerHTML =
           '<td style="font-size:.68rem;font-family:monospace;color:var(--muted,#888);white-space:nowrap;" title="' + esc(u.user_id || '') + '">' + esc(_shortUid(u.user_id)) + '</td>' +
