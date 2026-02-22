@@ -1690,6 +1690,32 @@ def require_existing_project(project_id: str) -> str:
     return pid
 
 
+def _check_project_access(request: Request, project_id: str) -> None:
+    """Raise 403 if the current user doesn't own/share this project (multiuser only).
+
+    In single-user mode this is a no-op.  For admin users who are NOT the
+    owner, access is still denied — admins should use workspace-level APIs
+    when they need to manage other users' data.
+    """
+    multiuser = getattr(request.state, "multiuser", False)
+    if not multiuser:
+        return
+    user = getattr(request.state, "user", None)
+    if not user:
+        return
+    meta = read_project_meta(project_id)
+    if not meta:
+        return  # project doesn't exist — caller will handle 404
+    owner = meta.get("owner_id", "")
+    if owner == user.user_id:
+        return
+    shares = meta.get("shares") or []
+    shared_ids = [s.get("user_id") for s in shares if isinstance(s, dict)]
+    if user.user_id in shared_ids:
+        return
+    raise HTTPException(status_code=403, detail="Brak dostępu do tego projektu.")
+
+
 # ---------- Translation draft persistence (per-project) ----------
 
 def translation_draft_path(project_id: str) -> Path:
@@ -4407,8 +4433,14 @@ async def api_create_project(
     meta["updated_at"] = now_iso()
     # Set owner in multi-user mode
     user = getattr(request.state, "user", None)
+    uid = ""
     if user and getattr(request.state, "multiuser", False):
-        meta["owner_id"] = user.user_id
+        uid = user.user_id
+        meta["owner_id"] = uid
+    if not uid:
+        from backend.db.engine import get_default_user_id
+        uid = get_default_user_id()
+        meta["owner_id"] = uid
     write_project_meta(pid, meta)
 
     audio_path: Optional[Path] = None
@@ -4424,6 +4456,21 @@ async def api_create_project(
     meta = read_project_meta(pid)
     meta["updated_at"] = now_iso()
     write_project_meta(pid, meta)
+
+    # Create workspace subproject so legacy-created project shows in project list
+    try:
+        ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
+        owned_ws = [w for w in ws_list if w.get("owner_id") == uid]
+        ws = owned_ws[0] if owned_ws else WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+        WORKSPACE_STORE.create_subproject(
+            workspace_id=ws["id"],
+            name=pname,
+            subproject_type="analysis",
+            data_dir=f"projects/{pid}",
+            created_by=uid,
+        )
+    except Exception:
+        pass  # best-effort
 
     return {
         "project_id": pid,
@@ -4454,10 +4501,31 @@ def api_new_project(request: Request) -> Any:
     pid = ensure_project(None)
     # Set owner in multi-user mode
     user = getattr(request.state, "user", None)
+    uid = ""
     if user and getattr(request.state, "multiuser", False):
-        meta = read_project_meta(pid)
-        meta["owner_id"] = user.user_id
-        write_project_meta(pid, meta)
+        uid = user.user_id
+    if not uid:
+        from backend.db.engine import get_default_user_id
+        uid = get_default_user_id()
+    meta = read_project_meta(pid)
+    meta["owner_id"] = uid
+    write_project_meta(pid, meta)
+
+    # Create workspace subproject so project appears in user's project list
+    try:
+        ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
+        owned_ws = [w for w in ws_list if w.get("owner_id") == uid]
+        ws = owned_ws[0] if owned_ws else WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+        WORKSPACE_STORE.create_subproject(
+            workspace_id=ws["id"],
+            name=meta.get("name", "projekt"),
+            subproject_type="analysis",
+            data_dir=f"projects/{pid}",
+            created_by=uid,
+        )
+    except Exception:
+        pass
+
     return {"project_id": pid}
 
 
@@ -4526,14 +4594,15 @@ async def api_auto_create_project(request: Request) -> Any:
         write_project_meta(pid, meta)
         app_log(f"[auto-create] step 1 complete: meta written for pid={pid}")
 
-        # 2) Get or create user's default workspace
+        # 2) Get or create user's OWN workspace (never use a shared one)
         app_log(f"[auto-create] step 2: list_workspaces for uid={uid}")
         workspaces = WORKSPACE_STORE.list_workspaces(uid, status="active")
         app_log(f"[auto-create] step 2: found {len(workspaces)} workspaces")
-        if workspaces:
-            ws = workspaces[0]
+        owned = [w for w in workspaces if w.get("owner_id") == uid]
+        if owned:
+            ws = owned[0]
         else:
-            app_log("[auto-create] step 2: creating new workspace")
+            app_log("[auto-create] step 2: creating new workspace (no owned ws found)")
             ws = WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
         app_log(f"[auto-create] step 2 done: ws_id={ws['id']}")
 
@@ -4939,7 +5008,8 @@ def api_list_projects(request: Request) -> Any:
             meta = read_project_meta(pid)
 
             # In multi-user mode, filter by ownership/sharing
-            if multiuser and user and not user.is_admin:
+            # (admins are filtered too — they should only see their own projects)
+            if multiuser and user:
                 owner = meta.get("owner_id", "")
                 shares = meta.get("shares") or []
                 shared_user_ids = [s.get("user_id") for s in shares if isinstance(s, dict)]
@@ -5035,9 +5105,10 @@ async def api_unshare_project(project_id: str, request: Request) -> Any:
 
 
 @app.get("/api/projects/{project_id}/meta")
-def api_project_meta(project_id: str) -> Any:
-    # Ensure the project exists and return its current metadata
+def api_project_meta(request: Request, project_id: str) -> Any:
+    # Ensure the project exists and check access rights
     project_path(project_id)
+    _check_project_access(request, project_id)
     meta = read_project_meta(project_id)
     # Return only JSON-serializable basic fields
     return {
@@ -5667,7 +5738,7 @@ def _collect_transcription_report_data(project_id: str, export_formats: List[str
     return data
 
 @app.post("/api/projects/import")
-async def api_import_project(file: UploadFile = File(...)) -> Any:
+async def api_import_project(request: Request, file: UploadFile = File(...)) -> Any:
     fname = (file.filename or "").lower()
     if not fname.endswith(".aistate"):
         raise HTTPException(status_code=400, detail="Plik musi mieć rozszerzenie .aistate")
@@ -5711,12 +5782,39 @@ async def api_import_project(file: UploadFile = File(...)) -> Any:
 
         shutil.copytree(extracted_root, dest)
 
-        # Normalize project.json
+        # Normalize project.json and set owner to current user
+        user = getattr(request.state, "user", None)
+        multiuser = getattr(request.state, "multiuser", False)
+        uid = user.user_id if (user and multiuser) else ""
+        if not uid:
+            from backend.db.engine import get_default_user_id
+            uid = get_default_user_id()
+
         meta = read_project_meta(final_id)
         meta["project_id"] = final_id
+        meta["owner_id"] = uid
         meta["created_at"] = meta.get("created_at") or now_iso()
         meta["updated_at"] = now_iso()
         write_project_meta(final_id, meta)
+
+        # Create workspace subproject so the project appears in user's project list
+        try:
+            ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
+            owned = [w for w in ws_list if w.get("owner_id") == uid]
+            if owned:
+                ws = owned[0]
+            else:
+                ws = WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+            project_name = meta.get("name") or final_id[:8]
+            WORKSPACE_STORE.create_subproject(
+                workspace_id=ws["id"],
+                name=project_name,
+                subproject_type="analysis",
+                data_dir=f"projects/{final_id}",
+                created_by=uid,
+            )
+        except Exception:
+            pass  # best-effort — file project was already created
 
         return {"ok": True, "project_id": final_id}
 
