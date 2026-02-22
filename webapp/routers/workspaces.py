@@ -118,7 +118,7 @@ def debug_my_isolation(request: Request):
         ).fetchall()
         owned = [dict(r) for r in owned_rows]
 
-        # 2. All memberships for this user
+        # 2. All memberships for this user (raw DB state)
         member_rows = conn.execute(
             "SELECT m.workspace_id, m.role, m.status, w.name, w.owner_id "
             "FROM project_members m "
@@ -126,37 +126,66 @@ def debug_my_isolation(request: Request):
             "WHERE m.user_id = ?",
             (uid,),
         ).fetchall()
-        memberships = [dict(r) for r in member_rows]
+        memberships = []
+        for r in member_rows:
+            d = dict(r)
+            # Flag ghost memberships (no accepted invitation and not owner)
+            if d["owner_id"] != uid:
+                inv = conn.execute(
+                    "SELECT id FROM project_invitations "
+                    "WHERE workspace_id = ? AND invitee_id = ? AND status = 'accepted'",
+                    (d["workspace_id"], uid),
+                ).fetchone()
+                d["has_accepted_invitation"] = inv is not None
+                d["is_ghost"] = inv is None
+            else:
+                d["has_accepted_invitation"] = False
+                d["is_ghost"] = False
+            memberships.append(d)
 
-        # 3. All subprojects in workspaces this user can see
-        visible_ws_ids = list(set(
-            [r["id"] for r in owned_rows]
-            + [r["workspace_id"] for r in member_rows if r["status"] == "accepted"]
-        ))
-        subprojects = []
-        for ws_id in visible_ws_ids:
-            sp_rows = conn.execute(
-                "SELECT id, name, workspace_id, data_dir, created_by FROM subprojects WHERE workspace_id = ?",
-                (ws_id,),
-            ).fetchall()
-            for r in sp_rows:
-                subprojects.append(dict(r))
+        # 3. Workspaces returned by list_workspaces (the actual API result)
+        api_workspaces = _STORE.list_workspaces(uid, "active")
+        api_ws_summary = [
+            {"id": w["id"], "name": w.get("name"), "owner_id": w.get("owner_id"),
+             "my_role": w.get("my_role"), "subproject_count": w.get("subproject_count", 0)}
+            for w in api_workspaces
+        ]
 
-        # 4. Any memberships from OTHER users in THIS user's workspaces
-        others_in_mine = []
+        # 4. Subprojects visible through the API
+        visible_subprojects = []
+        for ws in api_workspaces:
+            sps = _STORE.list_subprojects(ws["id"])
+            for sp in sps:
+                visible_subprojects.append({
+                    "id": sp["id"], "name": sp.get("name"),
+                    "workspace_id": ws["id"], "workspace_name": ws.get("name"),
+                    "data_dir": sp.get("data_dir"), "created_by": sp.get("created_by"),
+                })
+
+        # 5. Ghost members in THIS user's workspaces (other users who shouldn't be there)
+        ghosts_in_mine = []
         for ws in owned:
             other_rows = conn.execute(
-                "SELECT user_id, role, status FROM project_members "
-                "WHERE workspace_id = ? AND user_id != ?",
+                "SELECT m.user_id, m.role, m.status, u.username "
+                "FROM project_members m "
+                "LEFT JOIN users u ON u.id = m.user_id "
+                "WHERE m.workspace_id = ? AND m.user_id != ?",
                 (ws["id"], uid),
             ).fetchall()
             for r in other_rows:
                 d = dict(r)
+                inv = conn.execute(
+                    "SELECT id, status FROM project_invitations "
+                    "WHERE workspace_id = ? AND invitee_id = ?",
+                    (ws["id"], d["user_id"]),
+                ).fetchone()
                 d["workspace_id"] = ws["id"]
                 d["workspace_name"] = ws["name"]
-                others_in_mine.append(d)
+                d["invitation"] = dict(inv) if inv else None
+                d["is_ghost"] = inv is None or inv["status"] != "accepted"
+                ghosts_in_mine.append(d)
 
-        # 5. Invitations involving this user
+        # 6. Invitations involving this user
         inv_sent = conn.execute(
             "SELECT id, workspace_id, invitee_id, role, status FROM project_invitations WHERE inviter_id = ?",
             (uid,),
@@ -166,16 +195,22 @@ def debug_my_isolation(request: Request):
             (uid,),
         ).fetchall()
 
+        # 7. Total DB counts
+        total_members = conn.execute("SELECT COUNT(*) as c FROM project_members").fetchone()["c"]
+        total_invitations = conn.execute("SELECT COUNT(*) as c FROM project_invitations").fetchone()["c"]
+
     return JSONResponse({
         "user_id": uid,
         "username": uname,
         "is_admin": is_admin,
         "owned_workspaces": owned,
-        "memberships": memberships,
-        "visible_subprojects": subprojects,
-        "other_users_in_my_workspaces": others_in_mine,
+        "raw_memberships": memberships,
+        "api_workspaces": api_ws_summary,
+        "visible_subprojects": visible_subprojects,
+        "ghosts_in_my_workspaces": ghosts_in_mine,
         "invitations_sent": [dict(r) for r in inv_sent],
         "invitations_received": [dict(r) for r in inv_received],
+        "db_totals": {"members": total_members, "invitations": total_invitations},
     })
 
 
@@ -361,19 +396,21 @@ def get_default_workspace(request: Request):
     uid = _uid(request)
     workspaces = _STORE.list_workspaces(uid, status="active")
 
-    # Prefer workspace OWNED by this user (not just shared/invited)
+    # Only use workspaces OWNED by this user for the default
     owned = [w for w in workspaces if w.get("owner_id") == uid]
     if owned:
         ws = _STORE.get_workspace(owned[0]["id"])
-    elif not workspaces:
-        # No workspaces at all → create one
-        ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
     else:
-        # User has shared workspaces but no own workspace → create own
+        # No owned workspace → create one (regardless of shared workspaces)
         ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
     if ws is None:
         return JSONResponse({"status": "error", "message": "Workspace error"}, 500)
-    ws["my_role"] = _STORE.get_user_role(ws["id"], uid) or "owner"
+    # Safety: verify the workspace really belongs to this user
+    if ws.get("owner_id") != uid:
+        log.warning("Default workspace owner mismatch: ws=%s owner=%s user=%s — creating new",
+                     ws["id"][:8], ws.get("owner_id", "?")[:8], uid[:8])
+        ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
+    ws["my_role"] = "owner"
     ws["members"] = _STORE.list_members(ws["id"])
     ws["subprojects"] = _STORE.list_subprojects(ws["id"])
     ws["activity"] = _STORE.get_activity(ws["id"], limit=20)
