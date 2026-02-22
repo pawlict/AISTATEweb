@@ -447,6 +447,8 @@
       });
       var data = await res.json();
       if (res.ok && data.status === 'ok') {
+        /* Clear project state from previous user session to prevent stale data */
+        ['aistate_project_id','aistate_audio_file','aistate_workspace_id','aistate_subproject_name','aistate_last_task_id'].forEach(function(k){ localStorage.removeItem(k); });
         /* Sync user's server-side language preference to localStorage */
         if (data.language) localStorage.setItem('aistate_ui_lang', data.language);
         /* Sync user's server-side theme preference to localStorage */
