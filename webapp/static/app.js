@@ -615,7 +615,7 @@ function _showCreateProjectDialog(){
     overlay.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:18px;";
 
     const panel = document.createElement("div");
-    panel.style.cssText = "background:var(--card-bg,#fff);border-radius:12px;padding:0;box-shadow:0 8px 32px rgba(0,0,0,.18);width:90%;max-width:440px;overflow:hidden;";
+    panel.style.cssText = "background:var(--panel,#fff);border-radius:12px;padding:0;box-shadow:0 8px 32px rgba(0,0,0,.18);width:90%;max-width:440px;overflow:hidden;color:var(--text,#1e293b);";
 
     // Header
     const header = document.createElement("div");
@@ -1017,7 +1017,7 @@ function ensureModal(){
 
   // Build modal HTML in parts to avoid editor parsing issues
   var html = '';
-  html += '<div style="max-width:1200px;margin:0 auto;background:#fff;border-radius:14px;padding:14px 14px 16px 14px;box-shadow:0 12px 36px rgba(0,0,0,.22);">';
+  html += '<div style="max-width:1200px;margin:0 auto;background:var(--panel,#fff);border-radius:14px;padding:14px 14px 16px 14px;box-shadow:0 12px 36px rgba(0,0,0,.22);color:var(--text,#1e293b);">';
   html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">';
   html += '<div style="flex:1;min-width:200px;">';
   html += '<div style="font-weight:800;font-size:18px;line-height:1;" data-i18n="modal.edit_block.title">Edit Block</div>';
@@ -1038,12 +1038,12 @@ function ensureModal(){
   html += '<button id="aistate_play" class="btn" type="button" title="Play" data-i18n="modal.play">' + _ic("play",16) + ' Play</button>';
   html += '<button id="aistate_pause" class="btn secondary" type="button" title="Pause" data-i18n="modal.pause">' + _ic("pause",16) + ' Pause</button>';
   html += '<button id="aistate_stop" class="btn secondary" type="button" title="Stop" data-i18n="modal.stop">' + _ic("stop",16) + ' Stop</button>';
-  html += '<span style="width:1px;height:22px;background:#ddd;margin:0 4px;"></span>';
+  html += '<span style="width:1px;height:22px;background:var(--border,#ddd);margin:0 4px;"></span>';
   html += '<button id="aistate_back3" class="btn secondary" type="button">' + _ic("skip_back_3",16) + ' -3s</button>';
   html += '<button id="aistate_back1" class="btn secondary" type="button">' + _ic("skip_back_3",16) + ' -1s</button>';
   html += '<button id="aistate_fwd1" class="btn secondary" type="button">' + _ic("skip_fwd_3",16) + ' +1s</button>';
   html += '<button id="aistate_fwd3" class="btn secondary" type="button">' + _ic("skip_fwd_3",16) + ' +3s</button>';
-  html += '<span style="width:1px;height:22px;background:#ddd;margin:0 4px;"></span>';
+  html += '<span style="width:1px;height:22px;background:var(--border,#ddd);margin:0 4px;"></span>';
   html += '<div style="display:flex;align-items:center;gap:8px;">';
   html += '<span style="font-size:12px;opacity:.8;" data-i18n="modal.speed">' + _ic("speed",14) + ' Speed:</span>';
   html += '<select id="aistate_rate" class="input" style="min-width:82px;">';

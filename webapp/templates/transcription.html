@@ -39,11 +39,12 @@
   /* Inline editor INSIDE the clicked block (PPM) */
   .seg-editor {
     margin-top: 10px;
-    background: rgba(255,255,255,0.92);
-    border: 1px solid #e0e0e0;
+    background: var(--panel, rgba(255,255,255,0.92));
+    border: 1px solid var(--border, #e0e0e0);
     border-radius: 12px;
     padding: 10px;
     backdrop-filter: blur(6px);
+    color: var(--text, inherit);
   }
   
   .seg-editor .seg-editor-head {
@@ -67,17 +68,18 @@
   }
   
   .seg-editor .seg-editor-close {
-    border: 1px solid #ddd;
-    background: #fff;
+    border: 1px solid var(--border, #ddd);
+    background: var(--panel, #fff);
     border-radius: 10px;
     padding: 4px 10px;
     cursor: pointer;
     line-height: 1;
+    color: var(--text, inherit);
   }
-  
+
   .seg-editor .seg-editor-close:hover {
     border-color:#ff9800;
-    background:#fff7ec;
+    background:rgba(255,152,0,.1);
   }
   
   .seg-editor .seg-editor-grid {
@@ -97,22 +99,24 @@
     width: 100%;
     min-height: 86px;
     padding: 10px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border, #ddd);
     border-radius: 10px;
     font-size: 13px;
     resize: vertical;
-    background:#fff;
+    background: var(--panel2, #fff);
+    color: var(--text, inherit);
   }
-  
+
   .seg-editor .seg-speaker-input {
     width: 100%;
     padding: 10px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border, #ddd);
     border-radius: 10px;
     font-size: 13px;
-    background:#fff;
+    background: var(--panel2, #fff);
+    color: var(--text, inherit);
   }
-  
+
   .seg-editor .seg-audio-row {
     display:flex;
     flex-wrap: wrap;
@@ -120,32 +124,34 @@
     align-items: center;
     margin-top: 10px;
   }
-  
+
   .seg-editor .seg-audio-btn {
-    border: 1px solid #ddd;
-    background: #fff;
+    border: 1px solid var(--border, #ddd);
+    background: var(--panel, #fff);
     border-radius: 12px;
     padding: 6px 10px;
     cursor: pointer;
     user-select: none;
     font-size: 13px;
+    color: var(--text, inherit);
   }
-  
+
   .seg-editor .seg-audio-btn:hover {
-    border-color:#2196F3;
-    background:#f0f7ff;
+    border-color: var(--accent, #2196F3);
+    background: rgba(33,150,243,.08);
   }
-  
+
   .seg-editor .seg-audio-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
   }
-  
+
   .seg-editor .seg-speed {
     padding: 6px 8px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border, #ddd);
     border-radius: 12px;
-    background: #fff;
+    background: var(--panel2, #fff);
+    color: var(--text, inherit);
   }
   
   .seg-editor .seg-audio-info {
@@ -206,36 +212,37 @@
   .block-notes-list {
     max-height: 320px;
     overflow-y: auto;
-    background: white;
-    border: 1px solid #e0e0e0;
+    background: var(--panel, white);
+    border: 1px solid var(--border, #e0e0e0);
     border-radius: 8px;
     padding: 8px;
   }
 
   .block-note-item {
-    background: #fff;
-    border: 1px solid #ddd;
+    background: var(--panel2, #fff);
+    border: 1px solid var(--border, #ddd);
     border-radius: 6px;
     padding: 8px 10px;
     margin-bottom: 6px;
     cursor: pointer;
     transition: all 0.2s;
     font-size: 12px;
+    color: var(--text, inherit);
   }
 
   .block-note-item:hover {
-    border-color: #2196F3;
+    border-color: var(--accent, #2196F3);
     box-shadow: 0 2px 6px rgba(33, 150, 243, 0.15);
     transform: translateX(2px);
   }
 
   .block-note-item strong {
-    color: #2196F3;
+    color: var(--accent, #2196F3);
     font-weight: 700;
   }
 
   .block-note-preview {
-    color: #555;
+    color: var(--muted, #555);
     margin-top: 4px;
     white-space: nowrap;
     overflow: hidden;
@@ -251,15 +258,16 @@
   .block-note-actions button {
     font-size: 11px;
     padding: 3px 8px;
-    border: 1px solid #ddd;
-    background: white;
+    border: 1px solid var(--border, #ddd);
+    background: var(--panel, white);
     border-radius: 4px;
     cursor: pointer;
+    color: var(--text, inherit);
   }
 
   .block-note-actions button:hover {
-    border-color: #2196F3;
-    background: #f0f7ff;
+    border-color: var(--accent, #2196F3);
+    background: rgba(33,150,243,.08);
   }
 
   .seg-note-icon {
