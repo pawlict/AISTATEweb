@@ -213,10 +213,9 @@ def list_workspaces(request: Request, status: str = "active", include: str = "",
                     scope: str = ""):
     uid = _uid(request)
     want_subs = "subprojects" in include
-    # scope=mine → only workspaces user owns or is member of (never admin-all)
     # scope=admin → admin override: all workspaces (for admin panel only)
-    # default (empty) → admin override for backwards compat with admin panel
-    use_admin_view = _is_admin(request) and scope != "mine"
+    # any other value (empty, "mine", etc.) → user's own + member workspaces
+    use_admin_view = _is_admin(request) and scope == "admin"
     if use_admin_view:
         from backend.db.engine import get_conn
         with get_conn() as conn:
