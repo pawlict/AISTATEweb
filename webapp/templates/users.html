@@ -388,14 +388,14 @@
   .rm-grid .rm-cell:last-child { border-right: none; }
   .rm-grid .rm-header { background: var(--card-bg, #f8f9fa); font-weight: 700; font-size: .64rem; color: var(--text, #333); }
   .rm-grid .rm-role-name { justify-content: flex-start; font-weight: 600; font-size: .72rem; }
-  .rm-grid .rm-section { font-weight: 700; font-size: .64rem; color: var(--muted, #666); background: #f0f2f5; justify-content: flex-start; }
+  .rm-grid .rm-section { font-weight: 700; font-size: .64rem; color: var(--muted, #666); background: var(--panel2, #f0f2f5); justify-content: flex-start; }
   .rm-grid .rm-check { color: #27ae60; font-weight: 700; font-size: .9rem; }
   .rm-grid .rm-no { color: #e74c3c; font-weight: 700; font-size: .85rem; }
   .rm-grid .rm-row:hover .rm-cell { background: rgba(74,108,247,.04); }
 
   /* Call Center panel */
   .callcenter-card { background: var(--card-bg, #fff); border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,.05); border: 1px solid var(--border, #e0e3e8); }
-  .cc-toolbar-wrap { border: 1px solid var(--border, #ddd); border-bottom: none; border-radius: 6px 6px 0 0; background: #f8f9fa; overflow: hidden; }
+  .cc-toolbar-wrap { border: 1px solid var(--border, #ddd); border-bottom: none; border-radius: 6px 6px 0 0; background: var(--panel2, #f8f9fa); overflow: hidden; }
   .cc-toolbar { display: flex; align-items: center; gap: 2px; padding: .3rem .4rem; }
   .cc-toolbar-row2 { border-top: 1px solid var(--border, #eee); padding-top: .25rem; }
   .cc-toolbar button { background: none; border: 1px solid transparent; border-radius: 3px; padding: .15rem .35rem; cursor: pointer; font-size: .78rem; color: var(--text, #333); line-height: 1; }
@@ -416,10 +416,10 @@
   .cc-editor:focus { border-color: var(--accent, #4a6cf7); }
   .cc-editor ul, .cc-editor ol { margin: .3rem 0 .3rem 1.2rem; }
   .cc-groups { display: flex; flex-wrap: wrap; gap: .3rem; }
-  .cc-groups label { font-size: .74rem; display: flex; align-items: center; gap: .2rem; padding: .15rem .4rem; border: 1px solid var(--border, #ddd); border-radius: 4px; cursor: pointer; background: #fafafa; }
-  .cc-groups label:hover { background: #f0f2f5; }
+  .cc-groups label { font-size: .74rem; display: flex; align-items: center; gap: .2rem; padding: .15rem .4rem; border: 1px solid var(--border, #ddd); border-radius: 4px; cursor: pointer; background: var(--panel2, #fafafa); color: var(--text, inherit); }
+  .cc-groups label:hover { background: rgba(128,128,128,.1); }
   .cc-groups input { margin: 0; }
-  .cc-sent-item { background: #f8f9fa; border: 1px solid var(--border, #eee); border-radius: 6px; padding: .5rem .6rem; margin-bottom: .4rem; font-size: .76rem; }
+  .cc-sent-item { background: var(--panel2, #f8f9fa); border: 1px solid var(--border, #eee); border-radius: 6px; padding: .5rem .6rem; margin-bottom: .4rem; font-size: .76rem; color: var(--text, inherit); }
   .cc-sent-item .cc-sent-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .25rem; }
   .cc-sent-item .cc-sent-subj { font-weight: 600; }
   .cc-sent-item .cc-sent-date { color: var(--muted, #999); font-size: .68rem; }
@@ -680,7 +680,7 @@
     <div style="font-size:.78rem;color:var(--muted,#888);margin:.3rem 0;">
       Użytkownik: <span class="en">User:</span> <b id="phraseUsername"></b>
     </div>
-    <div id="phraseWords" style="background:#f8f9fa;border:2px dashed var(--border,#d0d5dd);border-radius:10px;padding:1rem;margin:1rem 0;font-family:monospace;font-size:1.1rem;font-weight:600;letter-spacing:.03em;word-spacing:.3em;line-height:1.8;user-select:all;color:var(--text,#1a1a2e);"></div>
+    <div id="phraseWords" style="background:var(--panel2,#f8f9fa);border:2px dashed var(--border,#d0d5dd);border-radius:10px;padding:1rem;margin:1rem 0;font-family:monospace;font-size:1.1rem;font-weight:600;letter-spacing:.03em;word-spacing:.3em;line-height:1.8;user-select:all;color:var(--text,#1a1a2e);"></div>
     <label style="display:flex;align-items:center;justify-content:center;gap:.4rem;font-size:.82rem;margin:.8rem 0;cursor:pointer;">
       <input type="checkbox" id="phraseConfirmCheck"/>
       <span>Potwierdzam, że zapisałem frazę <span class="en">I confirm that I have saved the phrase</span></span>
