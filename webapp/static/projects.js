@@ -67,106 +67,146 @@ document.querySelectorAll('.sp-type-btn').forEach(btn => {
 
 async function loadProjects(){
   try {
+    // 1. Load user's OWN workspace (always owner → full permissions)
     const data = await apiFetch(API + '/default');
     _ws = data.workspace;
-    renderProjects(_ws);
+
+    // 2. Load ALL workspaces (own + shared) to find shared ones
+    let sharedWorkspaces = [];
+    try {
+      const allData = await apiFetch(API + '?include=subprojects');
+      const all = allData.workspaces || [];
+      sharedWorkspaces = all.filter(w => w.id !== _ws.id && w.my_role && w.my_role !== 'owner');
+    } catch(_){}
+
+    renderProjects(_ws, sharedWorkspaces);
   } catch(e){
     console.error('Load projects error:', e);
     _updateStatusLine('Błąd ładowania');
   }
 }
 
-function renderProjects(ws){
+function _renderProjectCard(sp, ws, canEdit){
+  const icon = TYPE_ICONS[sp.subproject_type] || aiIcon('document', 18);
+  const typeLabel = TYPE_LABELS[sp.subproject_type] || sp.subproject_type;
+
+  // Build team section — owner first, then up to 2 others
+  const members = ws.members || [];
+  const owner = members.find(m => m.role === 'owner');
+  const others = members.filter(m => m.role !== 'owner');
+  let teamHtml = '';
+  if(owner){
+    const ownerName = owner.display_name || owner.username || owner.name || '?';
+    teamHtml += `<div style="font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><img src="/static/icons/uzytkownicy/user_role.svg" alt="" draggable="false" style="width:12px;height:12px;vertical-align:middle;opacity:.7;margin-right:1px"><b>${esc(ownerName)}</b></div>`;
+  }
+  if(others.length){
+    const shown = others.slice(0, 2);
+    const extra = others.length - shown.length;
+    const names = shown.map(m => esc(m.display_name || m.username || m.name || '?')).join(', ');
+    teamHtml += `<div style="font-size:.65rem;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${others.map(m=>esc(m.display_name||m.username||'?')+' ('+esc(ROLE_LABELS[m.role]||m.role)+')').join(', ')}">${names}${extra ? ' +' + extra : ''}</div>`;
+  }
+  if(!members.length){
+    teamHtml = '<div style="font-size:.7rem;opacity:.35">—</div>';
+  }
+
+  const card = document.createElement('div');
+  card.className = 'subcard sp-card';
+  card.innerHTML = `
+    <div class="sp-card-row">
+      <div class="sp-card-info">
+        <div>${icon} ${esc(sp.name)}</div>
+        <div class="small" style="font-size:.7rem;white-space:nowrap">${esc(typeLabel)} · ${shortDate(sp.created_at)}</div>
+      </div>
+      <div class="sp-card-sep"></div>
+      <div class="sp-card-team">
+        ${teamHtml}
+      </div>
+      <div class="sp-card-sep"></div>
+      <div class="sp-card-actions">
+        <button class="btn pill-icon sp-open" title="Otwórz"><img src="/static/icons/projekty/project_open.svg" alt="Otwórz" draggable="false"></button>
+        ${canEdit ? '<button class="btn pill-icon sp-invite" title="Zaproś użytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="Zaproś" draggable="false"></button>' : ''}
+        ${canEdit ? '<button class="btn pill-icon sp-del" title="Usuń"><img src="/static/icons/akcje/remove.svg" alt="Usuń" draggable="false"></button>' : ''}
+      </div>
+    </div>`;
+
+  // Open project
+  card.querySelector('.sp-open').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dir = sp.data_dir || '';
+    const projectId = dir.replace('projects/', '');
+    if(projectId) {
+      AISTATE.projectId = projectId;
+      AISTATE.audioFile = sp.audio_file || '';
+      localStorage.setItem('aistate_workspace_id', ws.id);
+      localStorage.setItem('aistate_workspace_name', ws.name);
+      localStorage.setItem('aistate_subproject_name', sp.name);
+    }
+    const route = TYPE_ROUTES[sp.subproject_type] || '/analysis';
+    window.location.href = route;
+  });
+
+  // Inline invite
+  const invBtn = card.querySelector('.sp-invite');
+  if(invBtn) invBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _openInviteModal(sp.id);
+  });
+
+  // Inline delete
+  const delBtn = card.querySelector('.sp-del');
+  if(delBtn) delBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _openDeleteModalForProject(ws, sp.id);
+  });
+
+  // Click card → also open
+  card.addEventListener('click', () => { card.querySelector('.sp-open').click(); });
+
+  return card;
+}
+
+function renderProjects(ws, sharedWorkspaces){
+  sharedWorkspaces = sharedWorkspaces || [];
   const projects = ws.subprojects || [];
   const pList = document.getElementById('projectList');
   const pEmpty = document.getElementById('projectEmpty');
   pList.innerHTML = '';
 
-  _updateStatusLine(projects.length + ' projekt' + (projects.length === 1 ? '' : (projects.length < 5 ? 'y' : 'ów')));
+  // Count all projects (own + shared)
+  let sharedCount = 0;
+  sharedWorkspaces.forEach(sw => { sharedCount += (sw.subproject_count || 0); });
+  const totalCount = projects.length + sharedCount;
 
-  if(!projects.length){ pEmpty.style.display = 'block'; }
+  _updateStatusLine(totalCount + ' projekt' + (totalCount === 1 ? '' : (totalCount < 5 ? 'y' : 'ów')));
+
+  if(!projects.length && !sharedWorkspaces.length){ pEmpty.style.display = 'block'; }
   else { pEmpty.style.display = 'none'; }
 
+  // Render own projects
   projects.forEach(sp => {
-    const icon = TYPE_ICONS[sp.subproject_type] || aiIcon('document', 18);
-    const typeLabel = TYPE_LABELS[sp.subproject_type] || sp.subproject_type;
-    const links = (sp.links || []).map(l =>
-      `<span class="small" style="opacity:.7">► ${esc(l.target_name||l.source_id)}</span>`
-    ).join(' ');
+    pList.appendChild(_renderProjectCard(sp, ws, true));
+  });
 
-    // Build team section — owner first, then up to 2 others
-    const members = ws.members || [];
-    const owner = members.find(m => m.role === 'owner');
-    const others = members.filter(m => m.role !== 'owner');
-    let teamHtml = '';
-    if(owner){
-      const ownerName = owner.display_name || owner.username || owner.name || '?';
-      teamHtml += `<div style="font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><img src="/static/icons/uzytkownicy/user_role.svg" alt="" draggable="false" style="width:12px;height:12px;vertical-align:middle;opacity:.7;margin-right:1px"><b>${esc(ownerName)}</b></div>`;
-    }
-    if(others.length){
-      const shown = others.slice(0, 2);
-      const extra = others.length - shown.length;
-      const names = shown.map(m => esc(m.display_name || m.username || m.name || '?')).join(', ');
-      teamHtml += `<div style="font-size:.65rem;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${others.map(m=>esc(m.display_name||m.username||'?')+' ('+esc(ROLE_LABELS[m.role]||m.role)+')').join(', ')}">${names}${extra ? ' +' + extra : ''}</div>`;
-    }
-    if(!members.length){
-      teamHtml = '<div style="font-size:.7rem;opacity:.35">—</div>';
-    }
+  // Render shared workspace projects (from workspaces user was invited to)
+  sharedWorkspaces.forEach(sw => {
+    const subs = sw.subprojects || [];
+    if(!subs.length) return;
 
-    const card = document.createElement('div');
-    card.className = 'subcard sp-card';
-    card.innerHTML = `
-      <div class="sp-card-row">
-        <div class="sp-card-info">
-          <div>${icon} ${esc(sp.name)}</div>
-          <div class="small" style="font-size:.7rem;white-space:nowrap">${esc(typeLabel)} · ${shortDate(sp.created_at)}</div>
-        </div>
-        <div class="sp-card-sep"></div>
-        <div class="sp-card-team">
-          ${teamHtml}
-        </div>
-        <div class="sp-card-sep"></div>
-        <div class="sp-card-actions">
-          <button class="btn pill-icon sp-open" title="Otwórz"><img src="/static/icons/projekty/project_open.svg" alt="Otwórz" draggable="false"></button>
-          <button class="btn pill-icon sp-invite" title="Zaproś użytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="Zaproś" draggable="false"></button>
-          <button class="btn pill-icon sp-del" title="Usuń"><img src="/static/icons/akcje/remove.svg" alt="Usuń" draggable="false"></button>
-        </div>
-      </div>`;
+    const canEdit = sw.my_role === 'owner' || sw.my_role === 'manager' || sw.my_role === 'editor';
+    const ownerMember = (sw.members || []).find(m => m.role === 'owner');
+    const ownerName = ownerMember ? (ownerMember.display_name || ownerMember.username || '?') : '?';
 
-    // Open project → navigate to the right page
-    card.querySelector('.sp-open').addEventListener('click', (e) => {
-      e.stopPropagation();
-      const dir = sp.data_dir || '';
-      const projectId = dir.replace('projects/', '');
-      if(projectId) {
-        AISTATE.projectId = projectId;
-        AISTATE.audioFile = sp.audio_file || '';
-        localStorage.setItem('aistate_workspace_id', ws.id);
-        localStorage.setItem('aistate_workspace_name', ws.name);
-        localStorage.setItem('aistate_subproject_name', sp.name);
-      }
-      const route = TYPE_ROUTES[sp.subproject_type] || '/analysis';
-      window.location.href = route;
+    // Section header for shared workspace
+    const header = document.createElement('div');
+    header.style.cssText = 'grid-column:1/-1;margin-top:12px;padding:6px 0;font-size:.78rem;font-weight:600;color:var(--muted,#64748b);display:flex;align-items:center;gap:6px';
+    header.innerHTML = '<img src="/static/icons/uzytkownicy/user_invite.svg" alt="" draggable="false" style="width:14px;height:14px;opacity:.6">'
+      + esc(ownerName) + ' — ' + esc(sw.name || 'Projekty')
+      + ' <span style="font-weight:400;opacity:.7">(' + esc(ROLE_LABELS[sw.my_role] || sw.my_role) + ')</span>';
+    pList.appendChild(header);
+
+    subs.forEach(sp => {
+      pList.appendChild(_renderProjectCard(sp, sw, canEdit));
     });
-
-    // Inline invite → open invite modal with this project pre-selected
-    card.querySelector('.sp-invite').addEventListener('click', (e) => {
-      e.stopPropagation();
-      _openInviteModal(sp.id);
-    });
-
-    // Inline delete → open modal with this project pre-selected
-    card.querySelector('.sp-del').addEventListener('click', (e) => {
-      e.stopPropagation();
-      _openDeleteModalForProject(ws, sp.id);
-    });
-
-    // Click card → also open
-    card.addEventListener('click', () => {
-      card.querySelector('.sp-open').click();
-    });
-
-    pList.appendChild(card);
   });
 
   // Populate link-to dropdown in new project modal
@@ -181,12 +221,11 @@ function renderProjects(ws){
     });
   }
 
-  // Show/hide management buttons based on role
-  const canManage = ws.my_role === 'owner' || ws.my_role === 'manager';
+  // Toolbar buttons: always visible for own workspace (user is always owner)
   const btnInvite = document.getElementById('btnInviteUser');
   const btnNew = document.getElementById('btnNewProject');
-  if(btnInvite) btnInvite.style.display = canManage ? '' : 'none';
-  if(btnNew) btnNew.style.display = (ws.my_role === 'owner' || ws.my_role === 'manager' || ws.my_role === 'editor') ? '' : 'none';
+  if(btnInvite) btnInvite.style.display = '';
+  if(btnNew) btnNew.style.display = '';
 }
 
 // =====================================================================
