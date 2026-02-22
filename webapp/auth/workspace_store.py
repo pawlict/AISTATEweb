@@ -489,16 +489,21 @@ class WorkspaceStore:
             log.info("Migrated %d file-based projects to workspaces", migrated)
         return migrated
 
-    # --- One-time cleanup of migration-created cross-memberships ---
+    # --- Aggressive cleanup of workspace memberships ---
 
     def cleanup_migration_memberships(self) -> int:
-        """Remove non-owner workspace members that were added by the migration
-        (i.e. they have no corresponding invitation record).  Real invitations
-        always create a row in project_invitations first, but the legacy
-        migration used add_member() directly.  This runs once."""
+        """Aggressively clean up workspace membership data.
+
+        Runs on every server start.  Fixes three categories of issues:
+        1) Non-owner members without invitation records (ghost memberships
+           from old migration code that used add_member() directly).
+        2) 'owner' role members who don't match workspace.owner_id
+           (impossible state — but fix it if data is corrupt).
+        3) Duplicate owner entries (keep only the real owner).
+        """
         removed = 0
         with _conn() as conn:
-            # Find members who are NOT owners AND have no invitation record
+            # 1) Remove non-owner members without invitation records
             rows = conn.execute(
                 """SELECT m.workspace_id, m.user_id
                    FROM project_members m
@@ -514,8 +519,41 @@ class WorkspaceStore:
                     (r["workspace_id"], r["user_id"]),
                 )
                 removed += 1
+
+            # 2) Fix 'owner' role members that don't match workspace.owner_id
+            bad_owners = conn.execute(
+                """SELECT m.workspace_id, m.user_id
+                   FROM project_members m
+                   JOIN project_workspaces w ON w.id = m.workspace_id
+                   WHERE m.role = 'owner'
+                     AND m.user_id != w.owner_id""",
+            ).fetchall()
+            for r in bad_owners:
+                conn.execute(
+                    "DELETE FROM project_members WHERE workspace_id = ? AND user_id = ? AND role = 'owner'",
+                    (r["workspace_id"], r["user_id"]),
+                )
+                removed += 1
+
+            # 3) Ensure each workspace has its real owner in project_members
+            missing_owners = conn.execute(
+                """SELECT w.id as workspace_id, w.owner_id
+                   FROM project_workspaces w
+                   LEFT JOIN project_members m
+                     ON m.workspace_id = w.id AND m.user_id = w.owner_id AND m.role = 'owner'
+                   WHERE m.user_id IS NULL""",
+            ).fetchall()
+            now = _now()
+            for r in missing_owners:
+                conn.execute(
+                    """INSERT OR IGNORE INTO project_members
+                       (workspace_id, user_id, role, invited_by, invited_at, accepted_at, status)
+                       VALUES (?, ?, 'owner', ?, ?, ?, 'accepted')""",
+                    (r["workspace_id"], r["owner_id"], r["owner_id"], now, now),
+                )
+
         if removed > 0:
-            log.info("Cleaned up %d migration-created cross-memberships", removed)
+            log.info("Cleaned up %d invalid workspace memberships", removed)
         return removed
 
     # --- Internal helpers ---
