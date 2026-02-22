@@ -5013,6 +5013,214 @@ async def api_admin_delete_file_project(project_id: str, request: Request) -> An
     return {"status": "ok"}
 
 
+# =====================================================================
+# ISOLATION DIAGNOSTIC & REPAIR TOOL
+# =====================================================================
+
+@app.get("/api/admin/isolation-check")
+def api_admin_isolation_check(request: Request) -> Any:
+    """Show COMPLETE database state for diagnosing project leaks.
+
+    Access: superadmin only.
+    Open in browser: /api/admin/isolation-check
+    """
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    from backend.db.engine import get_conn
+
+    result: Dict[str, Any] = {"current_user": user.user_id, "username": user.username}
+
+    with get_conn() as conn:
+        # 1. All users
+        users = conn.execute("SELECT id, username, display_name, is_admin, is_superadmin FROM users").fetchall()
+        result["users"] = [dict(u) for u in users]
+
+        # 2. All workspaces
+        workspaces = conn.execute("SELECT * FROM project_workspaces ORDER BY created_at").fetchall()
+        result["workspaces"] = [dict(w) for w in workspaces]
+
+        # 3. All memberships (the likely leak source)
+        members = conn.execute(
+            """SELECT m.*, w.name as ws_name, w.owner_id as ws_owner_id, u.username
+               FROM project_members m
+               JOIN project_workspaces w ON w.id = m.workspace_id
+               LEFT JOIN users u ON u.id = m.user_id
+               ORDER BY m.workspace_id, m.role"""
+        ).fetchall()
+        result["memberships"] = [dict(m) for m in members]
+
+        # 4. All invitations
+        invitations = conn.execute(
+            """SELECT i.*, w.name as ws_name
+               FROM project_invitations i
+               JOIN project_workspaces w ON w.id = i.workspace_id
+               ORDER BY i.created_at"""
+        ).fetchall()
+        result["invitations"] = [dict(i) for i in invitations]
+
+        # 5. All subprojects
+        subprojects = conn.execute(
+            """SELECT s.*, w.name as ws_name, w.owner_id as ws_owner_id
+               FROM subprojects s
+               JOIN project_workspaces w ON w.id = s.workspace_id
+               ORDER BY s.workspace_id, s.created_at"""
+        ).fetchall()
+        result["subprojects"] = [dict(s) for s in subprojects]
+
+        # 6. Identify GHOST memberships (the actual problem)
+        ghosts = conn.execute(
+            """SELECT m.workspace_id, m.user_id, m.role, m.status,
+                      w.name as ws_name, w.owner_id as ws_real_owner,
+                      u.username as member_username, uo.username as owner_username
+               FROM project_members m
+               JOIN project_workspaces w ON w.id = m.workspace_id
+               LEFT JOIN users u ON u.id = m.user_id
+               LEFT JOIN users uo ON uo.id = w.owner_id
+               LEFT JOIN project_invitations i
+                 ON i.workspace_id = m.workspace_id
+                 AND i.invitee_id = m.user_id
+                 AND i.status = 'accepted'
+               WHERE m.user_id != w.owner_id
+                 AND i.id IS NULL"""
+        ).fetchall()
+        result["ghost_memberships"] = [dict(g) for g in ghosts]
+
+        # 7. File-based projects without correct owner_id
+        bad_files = []
+        if PROJECTS_DIR.exists():
+            for pdir in sorted(PROJECTS_DIR.iterdir()):
+                if not pdir.is_dir() or pdir.name.startswith("_"):
+                    continue
+                meta_file = pdir / "project.json"
+                if meta_file.exists():
+                    try:
+                        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                        owner_id = meta.get("owner_id", "")
+                        if not owner_id:
+                            bad_files.append({
+                                "project_id": pdir.name,
+                                "name": meta.get("name", "?"),
+                                "owner_id": owner_id,
+                                "issue": "MISSING owner_id"
+                            })
+                    except Exception:
+                        pass
+        result["file_projects_without_owner"] = bad_files
+
+        # 8. Summary
+        result["summary"] = {
+            "total_users": len(users),
+            "total_workspaces": len(workspaces),
+            "total_memberships": len(members),
+            "total_invitations": len(invitations),
+            "total_subprojects": len(subprojects),
+            "ghost_memberships_count": len(ghosts),
+            "file_projects_without_owner": len(bad_files),
+        }
+
+    return result
+
+
+@app.post("/api/admin/fix-isolation")
+async def api_admin_fix_isolation(request: Request) -> Any:
+    """NUCLEAR FIX: Remove ALL ghost memberships and reset workspace state.
+
+    Access: superadmin only.
+    This will:
+    1. Delete ALL project_members rows where user != workspace owner
+       AND no accepted invitation exists
+    2. Delete the migration sentinel to allow fresh re-migration
+    3. Fix any file-based projects with missing owner_id
+    4. Ensure each user has exactly one owned workspace
+    """
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    from backend.db.engine import get_conn
+
+    actions = []
+
+    with get_conn() as conn:
+        # 1. Delete ALL ghost memberships
+        ghosts = conn.execute(
+            """SELECT m.workspace_id, m.user_id, m.role
+               FROM project_members m
+               JOIN project_workspaces w ON w.id = m.workspace_id
+               LEFT JOIN project_invitations i
+                 ON i.workspace_id = m.workspace_id
+                 AND i.invitee_id = m.user_id
+                 AND i.status = 'accepted'
+               WHERE m.user_id != w.owner_id
+                 AND i.id IS NULL"""
+        ).fetchall()
+        for g in ghosts:
+            conn.execute(
+                "DELETE FROM project_members WHERE workspace_id = ? AND user_id = ?",
+                (g["workspace_id"], g["user_id"]),
+            )
+            actions.append(f"Removed ghost: user={g['user_id'][:8]} from ws={g['workspace_id'][:8]} (role={g['role']})")
+
+        # 2. Delete bad 'owner' entries
+        bad_owners = conn.execute(
+            """SELECT m.workspace_id, m.user_id
+               FROM project_members m
+               JOIN project_workspaces w ON w.id = m.workspace_id
+               WHERE m.role = 'owner' AND m.user_id != w.owner_id"""
+        ).fetchall()
+        for b in bad_owners:
+            conn.execute(
+                "DELETE FROM project_members WHERE workspace_id = ? AND user_id = ? AND role = 'owner'",
+                (b["workspace_id"], b["user_id"]),
+            )
+            actions.append(f"Removed bad owner: user={b['user_id'][:8]} from ws={b['workspace_id'][:8]}")
+
+        # 3. Ensure each workspace has its real owner in members
+        missing = conn.execute(
+            """SELECT w.id, w.owner_id FROM project_workspaces w
+               LEFT JOIN project_members m
+                 ON m.workspace_id = w.id AND m.user_id = w.owner_id AND m.role = 'owner'
+               WHERE m.user_id IS NULL"""
+        ).fetchall()
+        from datetime import datetime
+        now = datetime.now().isoformat()
+        for m in missing:
+            conn.execute(
+                """INSERT OR IGNORE INTO project_members
+                   (workspace_id, user_id, role, invited_by, invited_at, accepted_at, status)
+                   VALUES (?, ?, 'owner', ?, ?, ?, 'accepted')""",
+                (m["id"], m["owner_id"], m["owner_id"], now, now),
+            )
+            actions.append(f"Re-inserted owner: user={m['owner_id'][:8]} into ws={m['id'][:8]}")
+
+    # 4. Fix file-based projects with missing owner_id
+    if PROJECTS_DIR.exists():
+        for pdir in sorted(PROJECTS_DIR.iterdir()):
+            if not pdir.is_dir() or pdir.name.startswith("_"):
+                continue
+            meta_file = pdir / "project.json"
+            if meta_file.exists():
+                try:
+                    meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                    if not meta.get("owner_id"):
+                        meta["owner_id"] = user.user_id
+                        meta_file.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+                        actions.append(f"Set owner_id on project {pdir.name[:8]} → {user.user_id[:8]}")
+                except Exception:
+                    pass
+
+    # 5. Delete migration sentinel to allow re-migration
+    sentinel = PROJECTS_DIR / "_workspace_migration_done"
+    if sentinel.exists():
+        sentinel.unlink()
+        actions.append("Deleted migration sentinel — will re-migrate on next restart")
+
+    app_log(f"Admin '{user.username}' ran fix-isolation: {len(actions)} actions")
+    return {"status": "ok", "actions": actions, "total": len(actions)}
+
+
 @app.get("/api/projects")
 def api_list_projects(request: Request) -> Any:
     multiuser = getattr(request.state, "multiuser", False)
