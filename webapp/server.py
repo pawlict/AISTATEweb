@@ -1848,8 +1848,25 @@ try:
             _default_uid = get_default_user_id()
         if _default_uid:
             WORKSPACE_STORE.migrate_file_projects(PROJECTS_DIR, _default_uid)
-        # One-time cleanup: remove cross-memberships created by old migration
-        WORKSPACE_STORE.cleanup_migration_memberships()
+        # Cleanup: remove invalid memberships (ghost members, bad owners, etc.)
+        _cleaned = WORKSPACE_STORE.cleanup_migration_memberships()
+        if _cleaned:
+            import logging as _cl_lg
+            _cl_lg.getLogger("aistate").warning(
+                "=== WORKSPACE CLEANUP: Removed %d invalid memberships ===", _cleaned)
+        # Log current membership state for debugging
+        try:
+            from backend.db.engine import get_conn as _gc
+            with _gc() as _cc:
+                _total_members = _cc.execute("SELECT COUNT(*) as c FROM project_members").fetchone()["c"]
+                _total_ws = _cc.execute("SELECT COUNT(*) as c FROM project_workspaces WHERE status='active'").fetchone()["c"]
+                _total_sp = _cc.execute("SELECT COUNT(*) as c FROM subprojects").fetchone()["c"]
+                import logging as _st_lg
+                _st_lg.getLogger("aistate").info(
+                    "Workspace state: %d active workspaces, %d subprojects, %d memberships",
+                    _total_ws, _total_sp, _total_members)
+        except Exception:
+            pass
     except Exception as _ws_err:
         import logging as _ws_lg
         _ws_lg.getLogger("aistate").warning("Workspace migration: %s", _ws_err)
