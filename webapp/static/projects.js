@@ -109,8 +109,9 @@ function _renderProjectCard(sp, ws, canEdit){
     teamHtml = '<div style="font-size:.7rem;opacity:.35">—</div>';
   }
 
+  const solo = others.length === 0;
   const card = document.createElement('div');
-  card.className = 'subcard sp-card';
+  card.className = 'subcard sp-card' + (solo ? ' sp-solo' : '');
   card.innerHTML = `
     <div class="sp-card-row">
       <div class="sp-card-info">
