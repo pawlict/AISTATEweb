@@ -209,8 +209,9 @@ def reject_invitation(request: Request, invitation_id: str):
 # =====================================================================
 
 @router.get("")
-def list_workspaces(request: Request, status: str = "active"):
+def list_workspaces(request: Request, status: str = "active", include: str = ""):
     uid = _uid(request)
+    want_subs = "subprojects" in include
     # Admins/superadmins see all workspaces
     if _is_admin(request):
         from backend.db.engine import get_conn
@@ -232,9 +233,14 @@ def list_workspaces(request: Request, status: str = "active"):
                 ).fetchone()["cnt"]
                 ws["my_role"] = _STORE.get_user_role(ws["id"], uid) or "admin"
                 ws["members"] = _STORE.list_members(ws["id"])
+                if want_subs:
+                    ws["subprojects"] = _STORE.list_subprojects(ws["id"])
                 workspaces.append(ws)
         return JSONResponse({"status": "ok", "workspaces": workspaces})
     workspaces = _STORE.list_workspaces(uid, status)
+    if want_subs:
+        for ws in workspaces:
+            ws["subprojects"] = _STORE.list_subprojects(ws["id"])
     return JSONResponse({"status": "ok", "workspaces": workspaces})
 
 
@@ -262,13 +268,20 @@ async def create_workspace(request: Request):
 # NOTE: /default MUST be before /{workspace_id} to avoid route conflict
 @router.get("/default")
 def get_default_workspace(request: Request):
-    """Return user's default workspace (auto-create if none exists)."""
+    """Return user's default (owned) workspace. Auto-create if none owned."""
     uid = _uid(request)
     workspaces = _STORE.list_workspaces(uid, status="active")
-    if not workspaces:
+
+    # Prefer workspace OWNED by this user (not just shared/invited)
+    owned = [w for w in workspaces if w.get("owner_id") == uid]
+    if owned:
+        ws = _STORE.get_workspace(owned[0]["id"])
+    elif not workspaces:
+        # No workspaces at all → create one
         ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
     else:
-        ws = _STORE.get_workspace(workspaces[0]["id"])
+        # User has shared workspaces but no own workspace → create own
+        ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
     if ws is None:
         return JSONResponse({"status": "error", "message": "Workspace error"}, 500)
     ws["my_role"] = _STORE.get_user_role(ws["id"], uid) or "owner"
