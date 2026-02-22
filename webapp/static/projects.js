@@ -90,10 +90,15 @@ function _renderProjectCard(sp, ws, canEdit){
   const icon = TYPE_ICONS[sp.subproject_type] || aiIcon('document', 18);
   const typeLabel = TYPE_LABELS[sp.subproject_type] || sp.subproject_type;
 
-  // Build team section — owner first, then up to 2 others
+  // Build team section — owner first, then workspace members + shared members
   const members = ws.members || [];
+  const sharedMembers = sp.shared_members || [];
   const owner = members.find(m => m.role === 'owner');
-  const others = members.filter(m => m.role !== 'owner');
+  // Merge workspace members + shared members (deduplicate by user_id)
+  const seen = new Set();
+  const others = [];
+  members.filter(m => m.role !== 'owner').forEach(m => { if(!seen.has(m.user_id)){ seen.add(m.user_id); others.push(m); }});
+  sharedMembers.forEach(m => { if(!seen.has(m.user_id)){ seen.add(m.user_id); others.push(m); }});
   let teamHtml = '';
   if(owner){
     const ownerName = owner.display_name || owner.username || owner.name || '?';
@@ -105,7 +110,7 @@ function _renderProjectCard(sp, ws, canEdit){
     const names = shown.map(m => esc(m.display_name || m.username || m.name || '?')).join(', ');
     teamHtml += `<div style="font-size:.65rem;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${others.map(m=>esc(m.display_name||m.username||'?')+' ('+esc(ROLE_LABELS[m.role]||m.role)+')').join(', ')}">${names}${extra ? ' +' + extra : ''}</div>`;
   }
-  if(!members.length){
+  if(!members.length && !others.length){
     teamHtml = '<div style="font-size:.7rem;opacity:.35">—</div>';
   }
 
@@ -126,6 +131,7 @@ function _renderProjectCard(sp, ws, canEdit){
       <div class="sp-card-actions">
         <button class="btn pill-icon sp-open" title="Otwórz"><img src="/static/icons/projekty/project_open.svg" alt="Otwórz" draggable="false"></button>
         ${canEdit ? '<button class="btn pill-icon sp-invite" title="Zaproś użytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="Zaproś" draggable="false"></button>' : ''}
+        ${canEdit && others.length ? '<button class="btn pill-icon sp-members" title="Zarządzaj członkami"><img src="/static/icons/uzytkownicy/user_role.svg" alt="Członkowie" draggable="false"></button>' : ''}
         ${canEdit ? '<button class="btn pill-icon sp-del" title="Usuń"><img src="/static/icons/akcje/remove.svg" alt="Usuń" draggable="false"></button>' : ''}
       </div>
     </div>`;
@@ -151,6 +157,13 @@ function _renderProjectCard(sp, ws, canEdit){
   if(invBtn) invBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     _openInviteModal(sp.id);
+  });
+
+  // Inline manage members (per-project)
+  const membersBtn = card.querySelector('.sp-members');
+  if(membersBtn) membersBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _openMembersForProject(sp, others);
   });
 
   // Inline delete
@@ -357,10 +370,65 @@ document.getElementById('invSubmit').addEventListener('click', async () => {
 });
 
 // =====================================================================
-// MANAGE MEMBERS
+// MANAGE MEMBERS (per-project)
+// =====================================================================
+
+/** Open the members modal filtered for a specific project's shared members. */
+function _openMembersForProject(sp, others){
+  const list = document.getElementById('memberList');
+  const empty = document.getElementById('memberEmpty');
+  list.innerHTML = '';
+  empty.style.display = 'none';
+
+  document.querySelector('#modalManageMembers .modal-title').textContent = 'Członkowie — ' + (sp.name || '?');
+  showModal('modalManageMembers');
+
+  if(!others.length){ empty.style.display = ''; return; }
+
+  others.forEach(m => {
+    const name = m.display_name || m.username || m.name || '?';
+    const role = ROLE_LABELS[m.role] || m.role || '?';
+
+    const row = document.createElement('div');
+    row.className = 'subcard';
+    row.style.cssText = 'padding:8px 12px;';
+    row.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:700;font-size:.82rem">${esc(name)}</div>
+          <div class="small" style="font-size:.7rem;opacity:.6">${esc(role)}</div>
+        </div>
+        <button class="btn pill-icon" title="Usuń członka" style="flex-shrink:0" data-uid="${m.user_id}"><img src="/static/icons/akcje/remove.svg" alt="Usuń" draggable="false"></button>
+      </div>`;
+
+    row.querySelector('.btn.pill-icon').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const userId = e.currentTarget.dataset.uid;
+      if(!confirm('Usunąć użytkownika ' + name + '?')) return;
+      // Find the sharing workspace that contains this user
+      try {
+        const data = await apiFetch(API + '/members/all');
+        const match = (data.members || []).find(mm => mm.user_id === userId && (mm.project_names || []).some(pn => pn === sp.name));
+        if(match){
+          await apiFetch(API + '/' + match.workspace_id + '/members/' + userId, {method:'DELETE'});
+        }
+        showToast('Użytkownik usunięty', 'success');
+        row.remove();
+        if(!list.children.length) empty.style.display = '';
+        loadProjects();
+      } catch(err){ showToast(err.message, 'error'); }
+    });
+
+    list.appendChild(row);
+  });
+}
+
+// =====================================================================
+// MANAGE MEMBERS (all workspaces)
 // =====================================================================
 
 document.getElementById('btnManageMembers').addEventListener('click', async () => {
+  document.querySelector('#modalManageMembers .modal-title').textContent = 'Członkowie';
   const list = document.getElementById('memberList');
   const empty = document.getElementById('memberEmpty');
   list.innerHTML = '<div class="small" style="padding:8px;opacity:.5">Ładowanie...</div>';
@@ -622,9 +690,9 @@ async function loadInvitations(){
             </div>
             ${msg ? '<div class="small" style="font-size:.72rem;margin-top:2px;opacity:.6;font-style:italic">' + msg + '</div>' : ''}
           </div>
-          <div style="display:flex;gap:6px;flex-shrink:0">
-            <button class="btn inv-accept" style="padding:5px 14px;font-size:.78rem" data-id="${inv.id}">${t('projects.invitations.accept') || 'Akceptuj'}</button>
-            <button class="btn secondary inv-reject" style="padding:5px 14px;font-size:.78rem" data-id="${inv.id}">${t('projects.invitations.reject') || 'Odrzuć'}</button>
+          <div style="display:flex;gap:4px;flex-shrink:0">
+            <button class="btn pill-icon inv-accept" title="Zaakceptuj zaproszenie" data-id="${inv.id}"><img src="/static/icons/akcje/accept.svg" alt="Akceptuj" draggable="false"></button>
+            <button class="btn pill-icon inv-reject" title="Odrzuć zaproszenie" data-id="${inv.id}"><img src="/static/icons/akcje/remove.svg" alt="Odrzuć" draggable="false"></button>
           </div>
         </div>`;
 

@@ -201,6 +201,20 @@ class WorkspaceStore:
                 sp = dict(r)
                 sp["metadata"] = json.loads(sp.get("metadata") or "{}")
                 sp["links"] = self._get_links(conn, sp["id"])
+                # Find members who have access via shared copies of this project
+                data_dir = sp.get("data_dir") or ""
+                shared_members = []
+                if data_dir:
+                    sm_rows = conn.execute(
+                        """SELECT DISTINCT m.user_id, m.role, u.display_name, u.username
+                           FROM subprojects s
+                           JOIN project_members m ON m.workspace_id = s.workspace_id AND m.status = 'accepted'
+                           LEFT JOIN users u ON u.id = m.user_id
+                           WHERE s.data_dir = ? AND s.workspace_id != ? AND m.role != 'owner'""",
+                        (data_dir, workspace_id),
+                    ).fetchall()
+                    shared_members = [dict(sm) for sm in sm_rows]
+                sp["shared_members"] = shared_members
                 result.append(sp)
             return result
 
@@ -234,6 +248,15 @@ class WorkspaceStore:
                 conn.execute("UPDATE project_workspaces SET updated_at = ? WHERE id = ?", (_now(), row["workspace_id"]))
             cursor = conn.execute("DELETE FROM subprojects WHERE id = ?", (subproject_id,))
             return cursor.rowcount > 0
+
+    def find_subprojects_by_data_dir(self, data_dir: str, exclude_id: str = "") -> List[Dict[str, Any]]:
+        """Find all subprojects pointing to the same data_dir (shared copies)."""
+        with _conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM subprojects WHERE data_dir = ? AND id != ?",
+                (data_dir, exclude_id),
+            ).fetchall()
+            return [dict(r) for r in rows]
 
     # --- Links ---
 

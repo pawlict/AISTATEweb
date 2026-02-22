@@ -575,6 +575,23 @@ def delete_subproject(request: Request, workspace_id: str, subproject_id: str,
     sp = _STORE.get_subproject(subproject_id)
     sp_name = sp.get("name", "") if sp else ""
     data_dir = sp.get("data_dir", "") if sp else ""
+
+    # ── Clean up shared copies ───────────────────────────────────────
+    # When a project was shared, a copy subproject exists in a dedicated
+    # sharing workspace with the same data_dir.  Delete those copies and
+    # soft-delete the sharing workspace if it becomes empty.
+    if data_dir:
+        shared_copies = _STORE.find_subprojects_by_data_dir(data_dir, exclude_id=subproject_id)
+        for copy in shared_copies:
+            copy_ws = copy.get("workspace_id", "")
+            _STORE.delete_subproject(copy["id"])
+            # If the sharing workspace is now empty, soft-delete it
+            remaining = _STORE.list_subprojects(copy_ws)
+            if not remaining:
+                _STORE.delete_workspace(copy_ws)
+                log.info("Cleaned up empty sharing workspace %s", copy_ws[:8])
+
+    # Delete the project data files
     if data_dir:
         dir_id = data_dir.replace("projects/", "")
         if dir_id:
