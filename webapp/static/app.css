@@ -2581,6 +2581,9 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
   background: rgba(0,212,255,.10);
   border-color: rgba(0,212,255,.3);
 }
+[data-theme="dark"] .sp-card:hover{
+  background: rgba(74,158,237,.08);
+}
 
 /* Analysis page */
 [data-theme="dark"] .quick-analysis{
