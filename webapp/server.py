@@ -1822,6 +1822,8 @@ try:
             _default_uid = get_default_user_id()
         if _default_uid:
             WORKSPACE_STORE.migrate_file_projects(PROJECTS_DIR, _default_uid)
+        # One-time cleanup: remove cross-memberships created by old migration
+        WORKSPACE_STORE.cleanup_migration_memberships()
     except Exception as _ws_err:
         import logging as _ws_lg
         _ws_lg.getLogger("aistate").warning("Workspace migration: %s", _ws_err)

@@ -209,11 +209,15 @@ def reject_invitation(request: Request, invitation_id: str):
 # =====================================================================
 
 @router.get("")
-def list_workspaces(request: Request, status: str = "active", include: str = ""):
+def list_workspaces(request: Request, status: str = "active", include: str = "",
+                    scope: str = ""):
     uid = _uid(request)
     want_subs = "subprojects" in include
-    # Admins/superadmins see all workspaces
-    if _is_admin(request):
+    # scope=mine → only workspaces user owns or is member of (never admin-all)
+    # scope=admin → admin override: all workspaces (for admin panel only)
+    # default (empty) → admin override for backwards compat with admin panel
+    use_admin_view = _is_admin(request) and scope != "mine"
+    if use_admin_view:
         from backend.db.engine import get_conn
         with get_conn() as conn:
             rows = conn.execute(

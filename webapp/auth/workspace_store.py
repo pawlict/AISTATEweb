@@ -405,8 +405,17 @@ class WorkspaceStore:
     # --- Migration: file-based projects → workspaces ---
 
     def migrate_file_projects(self, projects_dir: Path, owner_id: str) -> int:
-        """Scan data_www/projects/ and create workspaces for any legacy projects not yet migrated."""
+        """Scan data_www/projects/ and create workspaces for any legacy projects
+        not yet migrated.  Runs once — after the first successful migration we
+        write a sentinel file so subsequent server restarts skip the scan.
+        This prevents re-creating workspaces for projects that were deliberately
+        deleted by users."""
         if not projects_dir.exists():
+            return 0
+
+        # Sentinel: if migration already ran, skip entirely
+        sentinel = projects_dir / "_workspace_migration_done"
+        if sentinel.exists():
             return 0
 
         migrated = 0
@@ -444,8 +453,13 @@ class WorkspaceStore:
 
             audio = meta.get("audio_file", "")
 
-            # Create workspace (one workspace per legacy project)
-            ws = self.create_workspace(proj_owner, project_name)
+            # Find or create the owner's default workspace (NOT one-per-project)
+            owner_workspaces = self.list_workspaces(proj_owner, "active")
+            owned = [w for w in owner_workspaces if w.get("owner_id") == proj_owner]
+            if owned:
+                ws = owned[0]
+            else:
+                ws = self.create_workspace(proj_owner, "Moje projekty")
             if not ws:
                 continue
 
@@ -460,19 +474,49 @@ class WorkspaceStore:
                 created_by=proj_owner,
             )
 
-            # Migrate shares → members
-            for share in meta.get("shares", []):
-                share_uid = share.get("user_id", "")
-                perm = share.get("permission", "viewer")
-                role_map = {"read": "viewer", "edit": "editor"}
-                if share_uid:
-                    self.add_member(ws["id"], share_uid, role_map.get(perm, "viewer"), proj_owner)
-
             migrated += 1
+
+        # Write sentinel so migration does not re-run on restart
+        try:
+            sentinel.write_text(
+                f"Migration completed. {migrated} projects migrated.\n",
+                encoding="utf-8",
+            )
+        except OSError:
+            pass  # read-only FS — tolerate
 
         if migrated > 0:
             log.info("Migrated %d file-based projects to workspaces", migrated)
         return migrated
+
+    # --- One-time cleanup of migration-created cross-memberships ---
+
+    def cleanup_migration_memberships(self) -> int:
+        """Remove non-owner workspace members that were added by the migration
+        (i.e. they have no corresponding invitation record).  Real invitations
+        always create a row in project_invitations first, but the legacy
+        migration used add_member() directly.  This runs once."""
+        removed = 0
+        with _conn() as conn:
+            # Find members who are NOT owners AND have no invitation record
+            rows = conn.execute(
+                """SELECT m.workspace_id, m.user_id
+                   FROM project_members m
+                   LEFT JOIN project_invitations i
+                     ON  i.workspace_id = m.workspace_id
+                     AND i.invitee_id   = m.user_id
+                   WHERE m.role != 'owner'
+                     AND i.id IS NULL""",
+            ).fetchall()
+            for r in rows:
+                conn.execute(
+                    "DELETE FROM project_members WHERE workspace_id = ? AND user_id = ? AND role != 'owner'",
+                    (r["workspace_id"], r["user_id"]),
+                )
+                removed += 1
+        if removed > 0:
+            log.info("Cleaned up %d migration-created cross-memberships", removed)
+        return removed
 
     # --- Internal helpers ---
 
