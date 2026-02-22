@@ -290,7 +290,15 @@ class WorkspaceStore:
                 "DELETE FROM project_members WHERE workspace_id = ? AND user_id = ? AND role != 'owner'",
                 (workspace_id, user_id),
             )
-            return cursor.rowcount > 0
+            if cursor.rowcount > 0:
+                # Also revoke the invitation so list_workspaces no longer shows it
+                conn.execute(
+                    "UPDATE project_invitations SET status = 'revoked', responded_at = ? "
+                    "WHERE workspace_id = ? AND invitee_id = ? AND status = 'accepted'",
+                    (_now(), workspace_id, user_id),
+                )
+                return True
+            return False
 
     def update_member_role(self, workspace_id: str, user_id: str, new_role: str) -> bool:
         if new_role == "owner":
@@ -383,6 +391,13 @@ class WorkspaceStore:
                 inviter = conn.execute("SELECT display_name, username FROM users WHERE id = ?",
                                        (d["inviter_id"],)).fetchone()
                 d["inviter_name"] = (dict(inviter).get("display_name") or dict(inviter).get("username", "?")) if inviter else "?"
+                # Extract display name: prefer project name from message, fallback to workspace name
+                d["display_name"] = d.get("workspace_name") or "?"
+                msg = d.get("message") or ""
+                for line in msg.splitlines():
+                    if line.startswith("Projekt: "):
+                        d["display_name"] = line[len("Projekt: "):]
+                        break
                 result.append(d)
             return result
 

@@ -62,6 +62,7 @@
         <input id="importAistateFile" type="file" accept=".aistate" style="display:none"/>
         <button class="btn pill-icon" id="btnExportProject" title="Eksportuj projekt"><img src="/static/icons/pliki/file_export.svg" alt="Eksportuj" draggable="false"></button>
         <button class="btn pill-icon" id="btnInviteUser" title="Zaproś użytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="Zaproś" draggable="false"></button>
+        <button class="btn pill-icon" id="btnManageMembers" title="Zarządzaj członkami"><img src="/static/icons/uzytkownicy/user_role.svg" alt="Członkowie" draggable="false"></button>
       </div>
 
       <div class="toolbar-sep"></div>
@@ -199,6 +200,23 @@
     <div class="modal-footer">
       <button class="btn secondary modal-close-x" type="button">Anuluj</button>
       <button class="btn" id="expProjConfirm" type="button">Eksportuj</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Manage Members ===== -->
+<div id="modalManageMembers" class="modal-overlay" style="display:none">
+  <div class="modal-panel" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title">Członkowie</div>
+      <button class="btn secondary modal-close-x" type="button"><i data-icon="close" data-size="16"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="memberList" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div id="memberEmpty" class="small" style="display:none;padding:12px;text-align:center;opacity:.5">Brak zaproszonych użytkowników</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary modal-close-x" type="button">Zamknij</button>
     </div>
   </div>
 </div>

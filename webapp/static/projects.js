@@ -339,19 +339,80 @@ document.getElementById('invSubmit').addEventListener('click', async () => {
   if(!username){ showToast(t('projects.toast.invite_name'),'warning'); return; }
   const role = document.querySelector('input[name="invRole"]:checked')?.value || 'viewer';
   const projSel = document.getElementById('invProject');
+  const subproject_id = projSel.value || '';
   const projName = projSel.options[projSel.selectedIndex]?.textContent || '';
   let message = document.getElementById('invMessage').value.trim();
-  if(projSel.value && projName){
+  if(subproject_id && projName){
     message = (message ? message + '\n' : '') + 'Projekt: ' + projName;
   }
   try {
     await apiFetch(API+'/'+_ws.id+'/invite', {
-      method:'POST', body:JSON.stringify({username, role, message})
+      method:'POST', body:JSON.stringify({username, role, message, subproject_id})
     });
     hideModal('modalInviteUser');
     showToast(t('projects.toast.invite_sent'),'success');
     loadProjects();
   } catch(e){ showToast(e.message,'error'); }
+});
+
+// =====================================================================
+// MANAGE MEMBERS
+// =====================================================================
+
+document.getElementById('btnManageMembers').addEventListener('click', async () => {
+  const list = document.getElementById('memberList');
+  const empty = document.getElementById('memberEmpty');
+  list.innerHTML = '<div class="small" style="padding:8px;opacity:.5">Ładowanie...</div>';
+  empty.style.display = 'none';
+  showModal('modalManageMembers');
+
+  try {
+    const data = await apiFetch(API + '/members/all');
+    const members = data.members || [];
+    list.innerHTML = '';
+    if(!members.length){
+      empty.style.display = '';
+      return;
+    }
+    members.forEach(m => {
+      const name = m.display_name || m.username || m.name || '?';
+      const role = ROLE_LABELS[m.role] || m.role || '?';
+      const projects = (m.project_names || []).join(', ') || '—';
+      const wsName = m.workspace_name || '?';
+
+      const row = document.createElement('div');
+      row.className = 'subcard';
+      row.style.cssText = 'padding:8px 12px;';
+      row.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="min-width:0;flex:1">
+            <div style="font-weight:700;font-size:.82rem">${esc(name)}</div>
+            <div class="small" style="font-size:.7rem;opacity:.6">
+              ${esc(role)} · ${esc(projects)}
+            </div>
+          </div>
+          <button class="btn danger" style="padding:4px 12px;font-size:.72rem;flex-shrink:0" data-ws="${m.workspace_id}" data-uid="${m.user_id}">Usuń</button>
+        </div>`;
+
+      row.querySelector('.btn.danger').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const wsId = e.currentTarget.dataset.ws;
+        const userId = e.currentTarget.dataset.uid;
+        if(!confirm('Usunąć użytkownika ' + name + ' z projektu?')) return;
+        try {
+          await apiFetch(API + '/' + wsId + '/members/' + userId, {method:'DELETE'});
+          showToast('Użytkownik usunięty', 'success');
+          row.remove();
+          if(!list.children.length) empty.style.display = '';
+          loadProjects();
+        } catch(err){ showToast(err.message, 'error'); }
+      });
+
+      list.appendChild(row);
+    });
+  } catch(e){
+    list.innerHTML = '<div class="small" style="color:red">Błąd: ' + esc(e.message) + '</div>';
+  }
 });
 
 // =====================================================================
@@ -539,11 +600,14 @@ async function loadInvitations(){
     list.innerHTML = '';
 
     invitations.forEach(inv => {
-      const wsName = inv.workspace_name || '?';
+      const displayName = inv.display_name || inv.workspace_name || '?';
       const inviterName = inv.inviter_name || '?';
       const role = ROLE_LABELS[inv.role] || inv.role || 'viewer';
       const date = shortDate(inv.created_at);
-      const msg = inv.message ? esc(inv.message) : '';
+      // Filter out "Projekt: ..." line from displayed message (already shown in title)
+      const rawMsg = inv.message || '';
+      const filteredMsg = rawMsg.split('\n').filter(l => !l.startsWith('Projekt: ')).join('\n').trim();
+      const msg = filteredMsg ? esc(filteredMsg) : '';
 
       const row = document.createElement('div');
       row.className = 'subcard';
@@ -551,7 +615,7 @@ async function loadInvitations(){
       row.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
           <div style="min-width:0;flex:1">
-            <div style="font-weight:700;font-size:.85rem">${esc(wsName)}</div>
+            <div style="font-weight:700;font-size:.85rem">${esc(displayName)}</div>
             <div class="small" style="font-size:.72rem;opacity:.7">
               ${t('projects.invitations.from') || 'Od'}: <b>${esc(inviterName)}</b> · ${t('projects.invitations.role') || 'Rola'}: <b>${esc(role)}</b> · ${date}
             </div>

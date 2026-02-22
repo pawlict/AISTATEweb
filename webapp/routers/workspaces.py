@@ -623,6 +623,27 @@ def unlink_subproject(request: Request, workspace_id: str, subproject_id: str, t
 # MEMBERS
 # =====================================================================
 
+@router.get("/members/all")
+def list_all_members(request: Request):
+    """List all invited members across all OWNED workspaces (for management UI)."""
+    uid = _uid(request)
+    workspaces = _STORE.list_workspaces(uid, status="active")
+    owned = [w for w in workspaces if w.get("owner_id") == uid]
+    result = []
+    for ws in owned:
+        members = _STORE.list_members(ws["id"])
+        for m in members:
+            if m.get("role") == "owner":
+                continue  # skip the owner themselves
+            m["workspace_id"] = ws["id"]
+            m["workspace_name"] = ws.get("name", "?")
+            # Find which subprojects are in this workspace
+            subs = _STORE.list_subprojects(ws["id"])
+            m["project_names"] = [s.get("name", "?") for s in subs]
+            result.append(m)
+    return JSONResponse({"status": "ok", "members": result})
+
+
 @router.get("/{workspace_id}/members")
 def list_members(request: Request, workspace_id: str):
     uid = _uid(request)
@@ -671,6 +692,7 @@ async def invite_user(request: Request, workspace_id: str):
     username = (body.get("username") or "").strip()
     role = body.get("role", "viewer")
     message = body.get("message", "")
+    subproject_id = (body.get("subproject_id") or "").strip()
 
     if not username:
         return JSONResponse({"status": "error", "message": "Username required"}, 400)
@@ -681,13 +703,39 @@ async def invite_user(request: Request, workspace_id: str):
     if target_user is None:
         return JSONResponse({"status": "error", "message": f"User '{username}' not found"}, 404)
 
+    # ── Project-level isolation ──────────────────────────────────────
+    # When a SPECIFIC project is selected, create a dedicated workspace
+    # so the invited user sees ONLY that project, not all projects in
+    # the owner's workspace.
+    invite_ws_id = workspace_id
+    if subproject_id:
+        sp = _STORE.get_subproject(subproject_id)
+        if sp and sp.get("workspace_id") == workspace_id:
+            share_ws = _STORE.create_workspace(
+                owner_id=uid,
+                name=sp["name"],
+            )
+            _STORE.create_subproject(
+                workspace_id=share_ws["id"],
+                name=sp["name"],
+                subproject_type=sp.get("subproject_type", "analysis"),
+                data_dir=sp.get("data_dir", ""),
+                audio_file=sp.get("audio_file", ""),
+                metadata=sp.get("metadata") if isinstance(sp.get("metadata"), dict) else None,
+                created_by=uid,
+                user_name=_uname(request),
+            )
+            invite_ws_id = share_ws["id"]
+            log.info("Project-level share: created ws %s for subproject %s",
+                     share_ws["id"][:8], subproject_id[:8])
+
     try:
-        inv = _STORE.create_invitation(workspace_id, uid, target_user.user_id, role, message)
+        inv = _STORE.create_invitation(invite_ws_id, uid, target_user.user_id, role, message)
     except ValueError as e:
         return JSONResponse({"status": "error", "message": str(e)}, 409)
 
-    _STORE.log_activity(workspace_id, None, uid, _uname(request), "invitation_sent",
-                        {"invitee": username, "role": role})
+    _STORE.log_activity(workspace_id, subproject_id or None, uid, _uname(request),
+                        "invitation_sent", {"invitee": username, "role": role})
     return JSONResponse({"status": "ok", "invitation": inv})
 
 
