@@ -593,10 +593,10 @@ class TestMigration:
         count = _store().migrate_file_projects(projects_dir, "u1")
         assert count == 1
 
-        # Verify workspace created
+        # Verify workspace created (single "Moje projekty" workspace, not per-project)
         wss = _store().list_workspaces("u1")
         assert len(wss) == 1
-        assert wss[0]["name"] == "Legacy Project"
+        assert wss[0]["name"] == "Moje projekty"
 
         # Verify subproject created
         subs = _store().list_subprojects(wss[0]["id"])
@@ -605,12 +605,10 @@ class TestMigration:
         assert subs[0]["subproject_type"] == "transcription"
         assert subs[0]["audio_file"] == "audio.wav"
 
-        # Verify members migrated
+        # Owner is the only member (shared users require explicit invitation)
         members = _store().list_members(wss[0]["id"])
         user_ids = {m["user_id"] for m in members}
         assert "u1" in user_ids
-        assert "u2" in user_ids
-        assert "u3" in user_ids
 
     def test_migrate_idempotent(self, tmp_path):
         _init_test_db(tmp_path)

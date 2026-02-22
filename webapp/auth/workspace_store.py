@@ -75,13 +75,21 @@ class WorkspaceStore:
             return ws
 
     def list_workspaces(self, user_id: str, status: str = "active") -> List[Dict[str, Any]]:
-        """List workspaces the user owns or is a member of."""
+        """List workspaces the user owns or was properly invited to.
+
+        Uses project_invitations (not project_members) as the source of truth
+        for shared access.  This prevents ghost membership rows (from old
+        migration code) from leaking other users' workspaces.
+        """
         with _conn() as conn:
             rows = conn.execute(
                 """SELECT DISTINCT w.* FROM project_workspaces w
-                   LEFT JOIN project_members m ON m.workspace_id = w.id
                    WHERE w.status = ?
-                     AND (w.owner_id = ? OR (m.user_id = ? AND m.status = 'accepted'))
+                     AND (w.owner_id = ?
+                          OR w.id IN (
+                              SELECT workspace_id FROM project_invitations
+                              WHERE invitee_id = ? AND status = 'accepted'
+                          ))
                    ORDER BY w.updated_at DESC""",
                 (status, user_id, user_id),
             ).fetchall()
@@ -260,6 +268,14 @@ class WorkspaceStore:
                    invited_by: str = "") -> bool:
         now = _now()
         with _conn() as conn:
+            # Create a corresponding invitation record so can_user_access and
+            # list_workspaces (which rely on project_invitations) work correctly.
+            conn.execute(
+                """INSERT OR IGNORE INTO project_invitations
+                   (id, workspace_id, inviter_id, invitee_id, role, message, status, created_at, responded_at)
+                   VALUES (?, ?, ?, ?, ?, '', 'accepted', ?, ?)""",
+                (_id(), workspace_id, invited_by or user_id, user_id, role, now, now),
+            )
             conn.execute(
                 """INSERT OR REPLACE INTO project_members
                    (workspace_id, user_id, role, invited_by, invited_at, accepted_at, status)
@@ -291,14 +307,31 @@ class WorkspaceStore:
             return self._get_user_role(conn, workspace_id, user_id)
 
     def can_user_access(self, workspace_id: str, user_id: str) -> bool:
-        role = self.get_user_role(workspace_id, user_id)
-        return role is not None
+        """Check if user can access a workspace (owner or properly invited)."""
+        with _conn() as conn:
+            # Owner always has access
+            row = conn.execute(
+                "SELECT owner_id FROM project_workspaces WHERE id = ?",
+                (workspace_id,),
+            ).fetchone()
+            if row and row["owner_id"] == user_id:
+                return True
+            # Non-owner: require accepted invitation (not just membership row)
+            inv = conn.execute(
+                "SELECT id FROM project_invitations WHERE workspace_id = ? AND invitee_id = ? AND status = 'accepted'",
+                (workspace_id, user_id),
+            ).fetchone()
+            return inv is not None
 
     def can_user_edit(self, workspace_id: str, user_id: str) -> bool:
+        if not self.can_user_access(workspace_id, user_id):
+            return False
         role = self.get_user_role(workspace_id, user_id)
         return role in ("owner", "manager", "editor")
 
     def can_user_manage(self, workspace_id: str, user_id: str) -> bool:
+        if not self.can_user_access(workspace_id, user_id):
+            return False
         role = self.get_user_role(workspace_id, user_id)
         return role in ("owner", "manager")
 
@@ -492,35 +525,44 @@ class WorkspaceStore:
     # --- Aggressive cleanup of workspace memberships ---
 
     def cleanup_migration_memberships(self) -> int:
-        """Aggressively clean up workspace membership data.
+        """Nuclear cleanup of workspace membership data.
 
-        Runs on every server start.  Fixes three categories of issues:
-        1) Non-owner members without invitation records (ghost memberships
-           from old migration code that used add_member() directly).
-        2) 'owner' role members who don't match workspace.owner_id
-           (impossible state — but fix it if data is corrupt).
-        3) Duplicate owner entries (keep only the real owner).
+        Runs on every server start.  Removes ALL membership rows that cannot
+        be justified by either (a) being the workspace owner or (b) having
+        an accepted invitation.  This is the single source of truth:
+
+        1) Remove ANY non-owner member who does NOT have an accepted
+           invitation — regardless of role, status, or anything else.
+        2) Remove 'owner'-role members that don't match workspace.owner_id.
+        3) Ensure the real workspace owner always has a membership row.
         """
         removed = 0
         with _conn() as conn:
-            # 1) Remove non-owner members without invitation records
-            rows = conn.execute(
-                """SELECT m.workspace_id, m.user_id
+            # 1) NUCLEAR: remove ALL members who are NOT the workspace owner
+            #    AND do NOT have an accepted invitation.
+            ghost_rows = conn.execute(
+                """SELECT m.workspace_id, m.user_id, m.role
                    FROM project_members m
+                   JOIN project_workspaces w ON w.id = m.workspace_id
                    LEFT JOIN project_invitations i
                      ON  i.workspace_id = m.workspace_id
                      AND i.invitee_id   = m.user_id
-                   WHERE m.role != 'owner'
+                     AND i.status       = 'accepted'
+                   WHERE m.user_id != w.owner_id
                      AND i.id IS NULL""",
             ).fetchall()
-            for r in rows:
+            for r in ghost_rows:
                 conn.execute(
-                    "DELETE FROM project_members WHERE workspace_id = ? AND user_id = ? AND role != 'owner'",
+                    "DELETE FROM project_members WHERE workspace_id = ? AND user_id = ?",
                     (r["workspace_id"], r["user_id"]),
+                )
+                log.warning(
+                    "Removed ghost membership: workspace=%s user=%s role=%s (no accepted invitation)",
+                    r["workspace_id"][:8], r["user_id"][:8], r["role"],
                 )
                 removed += 1
 
-            # 2) Fix 'owner' role members that don't match workspace.owner_id
+            # 2) Remove 'owner' role members that don't match workspace.owner_id
             bad_owners = conn.execute(
                 """SELECT m.workspace_id, m.user_id
                    FROM project_members m
@@ -532,6 +574,10 @@ class WorkspaceStore:
                 conn.execute(
                     "DELETE FROM project_members WHERE workspace_id = ? AND user_id = ? AND role = 'owner'",
                     (r["workspace_id"], r["user_id"]),
+                )
+                log.warning(
+                    "Removed bad owner: workspace=%s user=%s (not the real owner)",
+                    r["workspace_id"][:8], r["user_id"][:8],
                 )
                 removed += 1
 
