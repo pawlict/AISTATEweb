@@ -1,6 +1,6 @@
-# AISTATEweb (3.5.1 beta)
+# AISTATEweb (3.5.2 beta)
 
-![Version](https://img.shields.io/badge/Version-3.5.1%20beta-orange)
+![Version](https://img.shields.io/badge/Version-3.5.2%20beta-orange)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Web-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -287,6 +287,9 @@ Open in browser: http://127.0.0.1:8000
 
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
+## beta 3.5.1/2 
+- Fixed project saving/assignment.
+
 ## beta 3.5.0 (SQLite)
 - JSON -> SQLite migration
  
