@@ -74,7 +74,7 @@ async function loadProjects(){
     // 2. Load ALL workspaces (own + shared) to find shared ones
     let sharedWorkspaces = [];
     try {
-      const allData = await apiFetch(API + '?include=subprojects');
+      const allData = await apiFetch(API + '?include=subprojects&scope=mine');
       const all = allData.workspaces || [];
       sharedWorkspaces = all.filter(w => w.id !== _ws.id && w.my_role && w.my_role !== 'owner');
     } catch(_){}
