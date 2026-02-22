@@ -98,6 +98,88 @@ def _ensure_data_dir(name: str, owner_id: str) -> str:
 
 
 # =====================================================================
+# DIAGNOSTICS — debug why projects leak between users
+# =====================================================================
+
+@router.get("/debug/my-isolation")
+def debug_my_isolation(request: Request):
+    """Show exactly what this user sees and why.  Hit this from both user
+    accounts and compare to find the leak."""
+    uid = _uid(request)
+    uname = _uname(request)
+    is_admin = _is_admin(request)
+
+    from backend.db.engine import get_conn
+    with get_conn() as conn:
+        # 1. All workspaces this user OWNS
+        owned_rows = conn.execute(
+            "SELECT id, name, owner_id, status FROM project_workspaces WHERE owner_id = ?",
+            (uid,),
+        ).fetchall()
+        owned = [dict(r) for r in owned_rows]
+
+        # 2. All memberships for this user
+        member_rows = conn.execute(
+            "SELECT m.workspace_id, m.role, m.status, w.name, w.owner_id "
+            "FROM project_members m "
+            "JOIN project_workspaces w ON w.id = m.workspace_id "
+            "WHERE m.user_id = ?",
+            (uid,),
+        ).fetchall()
+        memberships = [dict(r) for r in member_rows]
+
+        # 3. All subprojects in workspaces this user can see
+        visible_ws_ids = list(set(
+            [r["id"] for r in owned_rows]
+            + [r["workspace_id"] for r in member_rows if r["status"] == "accepted"]
+        ))
+        subprojects = []
+        for ws_id in visible_ws_ids:
+            sp_rows = conn.execute(
+                "SELECT id, name, workspace_id, data_dir, created_by FROM subprojects WHERE workspace_id = ?",
+                (ws_id,),
+            ).fetchall()
+            for r in sp_rows:
+                subprojects.append(dict(r))
+
+        # 4. Any memberships from OTHER users in THIS user's workspaces
+        others_in_mine = []
+        for ws in owned:
+            other_rows = conn.execute(
+                "SELECT user_id, role, status FROM project_members "
+                "WHERE workspace_id = ? AND user_id != ?",
+                (ws["id"], uid),
+            ).fetchall()
+            for r in other_rows:
+                d = dict(r)
+                d["workspace_id"] = ws["id"]
+                d["workspace_name"] = ws["name"]
+                others_in_mine.append(d)
+
+        # 5. Invitations involving this user
+        inv_sent = conn.execute(
+            "SELECT id, workspace_id, invitee_id, role, status FROM project_invitations WHERE inviter_id = ?",
+            (uid,),
+        ).fetchall()
+        inv_received = conn.execute(
+            "SELECT id, workspace_id, inviter_id, role, status FROM project_invitations WHERE invitee_id = ?",
+            (uid,),
+        ).fetchall()
+
+    return JSONResponse({
+        "user_id": uid,
+        "username": uname,
+        "is_admin": is_admin,
+        "owned_workspaces": owned,
+        "memberships": memberships,
+        "visible_subprojects": subprojects,
+        "other_users_in_my_workspaces": others_in_mine,
+        "invitations_sent": [dict(r) for r in inv_sent],
+        "invitations_received": [dict(r) for r in inv_received],
+    })
+
+
+# =====================================================================
 # INVITATIONS — must be before /{workspace_id} to avoid route conflict
 # =====================================================================
 
@@ -239,12 +321,16 @@ def list_workspaces(request: Request, status: str = "active", include: str = "",
                 if want_subs:
                     ws["subprojects"] = _STORE.list_subprojects(ws["id"])
                 workspaces.append(ws)
-        return JSONResponse({"status": "ok", "workspaces": workspaces})
+        resp = JSONResponse({"status": "ok", "workspaces": workspaces})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
     workspaces = _STORE.list_workspaces(uid, status)
     if want_subs:
         for ws in workspaces:
             ws["subprojects"] = _STORE.list_subprojects(ws["id"])
-    return JSONResponse({"status": "ok", "workspaces": workspaces})
+    resp = JSONResponse({"status": "ok", "workspaces": workspaces})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.post("")
@@ -291,7 +377,9 @@ def get_default_workspace(request: Request):
     ws["members"] = _STORE.list_members(ws["id"])
     ws["subprojects"] = _STORE.list_subprojects(ws["id"])
     ws["activity"] = _STORE.get_activity(ws["id"], limit=20)
-    return JSONResponse({"status": "ok", "workspace": ws})
+    resp = JSONResponse({"status": "ok", "workspace": ws})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.get("/{workspace_id}")
