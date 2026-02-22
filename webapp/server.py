@@ -4474,11 +4474,13 @@ async def api_create_project(
     meta["updated_at"] = now_iso()
     write_project_meta(pid, meta)
 
-    # Create workspace subproject so legacy-created project shows in project list
+    # Create workspace subproject in a PRIVATE workspace (not shared with anyone)
     try:
         ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
         owned_ws = [w for w in ws_list if w.get("owner_id") == uid]
-        ws = owned_ws[0] if owned_ws else WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+        private_ws = [w for w in owned_ws if w.get("member_count", 99) <= 1]
+        ws = (private_ws[0] if private_ws
+              else WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty"))
         WORKSPACE_STORE.create_subproject(
             workspace_id=ws["id"],
             name=pname,
@@ -4528,11 +4530,13 @@ def api_new_project(request: Request) -> Any:
     meta["owner_id"] = uid
     write_project_meta(pid, meta)
 
-    # Create workspace subproject so project appears in user's project list
+    # Create workspace subproject in a PRIVATE workspace (not shared with anyone)
     try:
         ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
         owned_ws = [w for w in ws_list if w.get("owner_id") == uid]
-        ws = owned_ws[0] if owned_ws else WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+        private_ws = [w for w in owned_ws if w.get("member_count", 99) <= 1]
+        ws = (private_ws[0] if private_ws
+              else WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty"))
         WORKSPACE_STORE.create_subproject(
             workspace_id=ws["id"],
             name=meta.get("name", "projekt"),
@@ -4611,15 +4615,20 @@ async def api_auto_create_project(request: Request) -> Any:
         write_project_meta(pid, meta)
         app_log(f"[auto-create] step 1 complete: meta written for pid={pid}")
 
-        # 2) Get or create user's OWN workspace (never use a shared one)
+        # 2) Get or create user's OWN PRIVATE workspace (never use a shared one)
         app_log(f"[auto-create] step 2: list_workspaces for uid={uid}")
         workspaces = WORKSPACE_STORE.list_workspaces(uid, status="active")
         app_log(f"[auto-create] step 2: found {len(workspaces)} workspaces")
         owned = [w for w in workspaces if w.get("owner_id") == uid]
-        if owned:
-            ws = owned[0]
+        # Prefer a PRIVATE workspace (member_count <= 1 = only owner)
+        private = [w for w in owned if w.get("member_count", 99) <= 1]
+        if private:
+            ws = private[0]
+        elif owned:
+            app_log("[auto-create] step 2: all owned ws are shared — creating private ws")
+            ws = WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
         else:
-            app_log("[auto-create] step 2: creating new workspace (no owned ws found)")
+            app_log("[auto-create] step 2: no owned ws found — creating new ws")
             ws = WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
         app_log(f"[auto-create] step 2 done: ws_id={ws['id']}")
 
@@ -6022,14 +6031,13 @@ async def api_import_project(request: Request, file: UploadFile = File(...)) -> 
         meta["updated_at"] = now_iso()
         write_project_meta(final_id, meta)
 
-        # Create workspace subproject so the project appears in user's project list
+        # Create workspace subproject in a PRIVATE workspace (not shared)
         try:
             ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
             owned = [w for w in ws_list if w.get("owner_id") == uid]
-            if owned:
-                ws = owned[0]
-            else:
-                ws = WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+            private = [w for w in owned if w.get("member_count", 99) <= 1]
+            ws = (private[0] if private
+                  else WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty"))
             project_name = meta.get("name") or final_id[:8]
             WORKSPACE_STORE.create_subproject(
                 workspace_id=ws["id"],

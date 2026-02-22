@@ -392,16 +392,29 @@ async def create_workspace(request: Request):
 # NOTE: /default MUST be before /{workspace_id} to avoid route conflict
 @router.get("/default")
 def get_default_workspace(request: Request):
-    """Return user's default (owned) workspace. Auto-create if none owned."""
+    """Return user's default (owned, PRIVATE) workspace for creating new projects.
+
+    Prefers a workspace that has NO other members (only owner).  This prevents
+    new projects from automatically appearing for users who were invited to
+    a different workspace.  If no private workspace exists, creates one.
+    """
     uid = _uid(request)
     workspaces = _STORE.list_workspaces(uid, status="active")
 
-    # Only use workspaces OWNED by this user for the default
+    # Only use workspaces OWNED by this user
     owned = [w for w in workspaces if w.get("owner_id") == uid]
-    if owned:
-        ws = _STORE.get_workspace(owned[0]["id"])
+
+    # Prefer a PRIVATE workspace (member_count == 1 means only the owner)
+    private = [w for w in owned if w.get("member_count", 99) <= 1]
+
+    if private:
+        ws = _STORE.get_workspace(private[0]["id"])
+    elif owned:
+        # All owned workspaces are shared → create a new private one
+        log.info("User %s has no private workspace — creating one", uid[:8])
+        ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
     else:
-        # No owned workspace → create one (regardless of shared workspaces)
+        # No owned workspace at all → create one
         ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
     if ws is None:
         return JSONResponse({"status": "error", "message": "Workspace error"}, 500)
