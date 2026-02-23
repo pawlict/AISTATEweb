@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title>PDF Inspector — ING Statement</title>
+<title>PDF Inspector — Bank Statement (Anonymized)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -13,29 +13,78 @@ h1{font-size:1.4rem;margin-bottom:12px;color:#00d4ff}
 .drop input{display:none}
 #status{margin:8px 0;font-size:.85rem;color:#aaa}
 #output{background:#111;border:1px solid #333;border-radius:8px;padding:12px;font-family:'Courier New',monospace;font-size:.72rem;white-space:pre-wrap;max-height:70vh;overflow:auto;line-height:1.4}
-button{background:#00d4ff;color:#000;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:700;margin-top:8px}
+
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;align-items:center}
+button{background:#00d4ff;color:#000;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:700}
 button:hover{background:#00b8d9}
-.section{color:#00d4ff;font-weight:bold;margin:8px 0 4px}
+button.secondary{background:#444;color:#e0e0e0}
+button.secondary:hover{background:#555}
+button:disabled{opacity:.4;cursor:not-allowed}
+
+label{font-size:.85rem;display:flex;align-items:center;gap:4px;cursor:pointer}
+label input[type=checkbox]{accent-color:#00d4ff}
+
+.chunk-nav{display:flex;align-items:center;gap:8px;margin:8px 0}
+.chunk-nav span{font-size:.85rem;color:#aaa}
+.badge{background:#ff6b35;color:#fff;padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:700}
+
+.anon-legend{background:#1e1e3a;border:1px solid #333;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:.8rem;line-height:1.5}
+.anon-legend b{color:#00d4ff}
 </style>
 </head>
 <body>
-<h1>PDF Inspector — wrzuć wyciąg ING</h1>
+<h1>PDF Inspector — wyciąg bankowy (z anonimizacją)</h1>
+
 <div class="drop" id="drop">
   <p>Kliknij lub przeciągnij PDF tutaj</p>
   <input type="file" id="file" accept=".pdf">
 </div>
+
+<div class="controls" id="controls" style="display:none">
+  <label><input type="checkbox" id="chkAnon" checked> Anonimizuj dane</label>
+  <label><input type="checkbox" id="chkCoords"> Pokaż współrzędne (debug)</label>
+  <label><input type="checkbox" id="chkCompact" checked> Tryb kompaktowy</label>
+</div>
+
 <div id="status"></div>
-<button onclick="copyResult()" style="display:none" id="copyBtn">Kopiuj wynik do schowka</button>
+
+<div class="anon-legend" id="legend" style="display:none">
+  <b>Legenda anonimizacji:</b><br>
+  IBAN/konta → <code>XX••••1234</code> · Imiona i nazwiska → <code>J*** K***</code> · Nr kart → <code>••••5678</code> · PESEL → <code>•••••••••••</code> · Adresy → <code>[ADRES]</code> · E-mail → <code>u***@***.pl</code> · Telefon → <code>+48•••••••••</code>
+</div>
+
+<div class="chunk-nav" id="chunkNav" style="display:none">
+  <button class="secondary" id="prevChunk" onclick="showChunk(-1)">← Poprzedni</button>
+  <span id="chunkInfo"></span>
+  <button class="secondary" id="nextChunk" onclick="showChunk(1)">Następny →</button>
+  <button onclick="copyCurrentChunk()">Kopiuj ten fragment</button>
+  <button class="secondary" onclick="copyAllResult()">Kopiuj całość</button>
+</div>
+
+<button onclick="copyAllResult()" style="display:none" id="copyBtn">Kopiuj wynik do schowka</button>
+
 <pre id="output"></pre>
 
 <script>
 const drop = document.getElementById('drop');
 const fileInput = document.getElementById('file');
-const status = document.getElementById('status');
+const statusEl = document.getElementById('status');
 const output = document.getElementById('output');
 const copyBtn = document.getElementById('copyBtn');
+const controlsEl = document.getElementById('controls');
+const legendEl = document.getElementById('legend');
+const chunkNav = document.getElementById('chunkNav');
+const chunkInfo = document.getElementById('chunkInfo');
+const chkAnon = document.getElementById('chkAnon');
+const chkCoords = document.getElementById('chkCoords');
+const chkCompact = document.getElementById('chkCompact');
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let rawPages = []; // store parsed page data for re-rendering
+let chunks = [];
+let currentChunk = 0;
+const CHUNK_SIZE = 12000; // characters per chunk — safe for most LLM paste limits
 
 drop.addEventListener('click', () => fileInput.click());
 drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
@@ -43,31 +92,105 @@ drop.addEventListener('dragleave', () => drop.classList.remove('over'));
 drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); handleFile(e.dataTransfer.files[0]); });
 fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
 
+chkAnon.addEventListener('change', rerender);
+chkCoords.addEventListener('change', rerender);
+chkCompact.addEventListener('change', rerender);
+
+// ─── Anonymization patterns ───
+
+function anonymize(text) {
+  if (!chkAnon.checked) return text;
+  let t = text;
+
+  // IBAN (PL and international)
+  t = t.replace(/\b([A-Z]{2})\s?\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}\b/g,
+    (m) => { const d = m.replace(/\s/g,''); return d.slice(0,2) + '••••••••••••••••••••••' + d.slice(-4); });
+
+  // Polish account numbers (26 digits, possibly with spaces)
+  t = t.replace(/\b(\d{2})[\s]?(\d{4})[\s]?(\d{4})[\s]?(\d{4})[\s]?(\d{4})[\s]?(\d{4})[\s]?(\d{4})\b/g,
+    (m) => { const d = m.replace(/\s/g,''); return d.slice(0,2) + '••••••••••••••••••••' + d.slice(-4); });
+
+  // Card numbers (16 digits)
+  t = t.replace(/\b(\d{4})[\s-]?(\d{4})[\s-]?(\d{4})[\s-]?(\d{4})\b/g,
+    (m) => { const d = m.replace(/[\s-]/g,''); return '••••••••••••' + d.slice(-4); });
+
+  // PESEL (11 digits standalone)
+  t = t.replace(/\b\d{11}\b/g, '•••••••••••');
+
+  // Email
+  t = t.replace(/\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\.([a-zA-Z]{2,})\b/g,
+    (m, user, domain, tld) => user[0] + '***@***.' + tld);
+
+  // Phone (Polish format)
+  t = t.replace(/(\+48[\s-]?)(\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d)/g,
+    '+48•••••••••');
+  t = t.replace(/\b(\d{3})[\s-](\d{3})[\s-](\d{3})\b/g, '•••-•••-•••');
+
+  // Polish street addresses: ul./al./os. + name + number
+  t = t.replace(/\b(ul\.|al\.|os\.|pl\.)\s*[A-ZŁŚŻŹĆŃÓ][a-ząęółśżźćń]+(\s+[A-ZŁŚŻŹĆŃÓ][a-ząęółśżźćń]+)?\s+\d+[a-zA-Z]?(\/\d+[a-zA-Z]?)?\b/gi,
+    '[ADRES]');
+
+  // Postal codes
+  t = t.replace(/\b\d{2}-\d{3}\s+[A-ZŁŚŻŹĆŃÓ][a-ząęółśżźćń]+\b/g, '[ADRES]');
+
+  // Names — Polish name patterns (two capitalized words 3+ chars)
+  // Only match typical name contexts: after known keywords or standalone two-word names
+  t = t.replace(/\b([A-ZŁŚŻŹĆŃÓ][a-ząęółśżźćń]{2,})\s+([A-ZŁŚŻŹĆŃÓ][a-ząęółśżźćń]{2,})\b/g,
+    (match, first, last) => {
+      // Skip common Polish words that aren't names
+      const skipWords = new Set([
+        'Numer','Konto','Saldo','Kwota','Waluta','Operacja','Strona','Raport','Wyciąg',
+        'Data','Opis','Tytuł','Nadawca','Odbiorca','Adres','Rachunek','Zlecenie',
+        'Przelew','Wpłata','Wypłata','Prowizja','Opłata','Zakup','Zwrot','Transakcja',
+        'Bankomat','Terminal','Internet','Mobilny','Wewnętrzny','Zewnętrzny',
+        'Realizacja','Zlecenia','Stałego','Własny','Obcy','Krajowy','Zagraniczny',
+        'Bank','Polski','Polska','Spółka','Firma','Urząd','Miasto','Gmina',
+        'Podatek','Składka','Ubezpieczenie','Dochodowy','Społeczne',
+        'Biuro','Centrum','Punkt','Sklep','Hurtownia','Detaliczny',
+        'Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec',
+        'Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień',
+        'Poniedziałek','Wtorek','Środa','Czwartek','Piątek','Sobota','Niedziela',
+        'Nowy','Stary','Wielki','Mały','Duży','Dobry','Ostatni','Pierwszy',
+        'Przed','Między','Przez','Według','Razem','Suma','Końcowe',
+        'Otwarcia','Zamknięcia','Początkowe','Końcowe','Dostępne','Zablokowane',
+        'Imię','Nazwisko','Faktura','Płatność','Termin','Okres','Rozliczenie',
+        'Orange','Polska','Fundusz','Emerytalny','Inwestycyjny','Powszechny',
+        'Zakład','Ubezpieczeń','Społecznych','Towarzystwo','Ubezpieczeniowe',
+        'Kredyt','Lokata','Oszczędności','Depozyt','Odsetki','Kapitał',
+        'Spółdzielnia','Mieszkaniowa','Wspólnota','Zarząd','Budynków',
+        'Energia','Wodociągi','Ciepłownictwo','Gazownictwo','Telekomunikacja',
+        'Informatyka','Logistyka','Transport','Budownictwo','Produkcja',
+        'Super','Extra','Premium','Standard','Basic','Plus','Gold','Silver'
+      ]);
+      if (skipWords.has(first) || skipWords.has(last)) return match;
+      return first[0] + '***' + ' ' + last[0] + '***';
+    });
+
+  return t;
+}
+
+function anonymizeLine(lineText) {
+  return anonymize(lineText);
+}
+
+// ─── PDF parsing ───
+
 async function handleFile(file) {
   if (!file) return;
-  status.textContent = 'Ładowanie PDF: ' + file.name + ' (' + (file.size/1024).toFixed(0) + ' KB)...';
+  statusEl.textContent = 'Ładowanie PDF: ' + file.name + ' (' + (file.size/1024).toFixed(0) + ' KB)...';
   output.textContent = '';
+  rawPages = [];
+  controlsEl.style.display = 'flex';
 
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data: buf}).promise;
   const totalPages = pdf.numPages;
-
-  let result = '=== PDF: ' + file.name + ' ===\n';
-  result += '=== Stron: ' + totalPages + ' ===\n\n';
 
   for (let p = 1; p <= totalPages; p++) {
     const page = await pdf.getPage(p);
     const textContent = await page.getTextContent();
     const viewport = page.getViewport({scale: 1});
 
-    result += '══════════════════════════════════════════\n';
-    result += '  STRONA ' + p + '/' + totalPages + '  (wymiary: ' + viewport.width.toFixed(0) + 'x' + viewport.height.toFixed(0) + ')\n';
-    result += '══════════════════════════════════════════\n\n';
-
-    // --- Raw items with coordinates ---
-    result += '--- ELEMENTY TEKSTOWE (x, y, szerokość, tekst) ---\n';
-
-    // Sort by Y (top to bottom), then X (left to right)
     const items = textContent.items.map(item => ({
       text: item.str,
       x: Math.round(item.transform[4]),
@@ -79,13 +202,10 @@ async function handleFile(file) {
 
     items.sort((a, b) => a.y - b.y || a.x - b.x);
 
-    // Group into lines (items within 3px of same Y)
     const lines = [];
     let currentLine = null;
-
     for (const item of items) {
       if (!item.text.trim() && item.text !== ' ') continue;
-
       if (!currentLine || Math.abs(item.y - currentLine.y) > 3) {
         currentLine = { y: item.y, items: [] };
         lines.push(currentLine);
@@ -93,48 +213,146 @@ async function handleFile(file) {
       currentLine.items.push(item);
     }
 
-    // Output each line with column positions
-    for (const line of lines) {
-      line.items.sort((a, b) => a.x - b.x);
+    rawPages.push({
+      pageNum: p,
+      totalPages,
+      width: viewport.width.toFixed(0),
+      height: viewport.height.toFixed(0),
+      lines
+    });
 
-      // Raw coordinates view
-      const parts = line.items.map(it =>
-        '[x=' + it.x + ',w=' + it.w + '] "' + it.text + '"'
-      );
-      result += 'Y=' + line.y + ': ' + parts.join('  ') + '\n';
+    statusEl.textContent = 'Przetwarzanie... strona ' + p + '/' + totalPages;
+  }
+
+  rerender();
+  statusEl.textContent = 'Gotowe! ' + totalPages + ' stron.';
+}
+
+// ─── Render output from parsed data ───
+
+function rerender() {
+  if (!rawPages.length) return;
+
+  const showCoords = chkCoords.checked;
+  const compact = chkCompact.checked;
+  const doAnon = chkAnon.checked;
+
+  legendEl.style.display = doAnon ? '' : 'none';
+
+  let result = '';
+
+  if (!compact) {
+    result += '=== Stron: ' + rawPages[rawPages.length-1].totalPages + ' ===\n\n';
+  }
+
+  for (const page of rawPages) {
+    if (!compact) {
+      result += '══════════════════════════════════════════\n';
+      result += '  STRONA ' + page.pageNum + '/' + page.totalPages + '\n';
+      result += '══════════════════════════════════════════\n\n';
+    } else {
+      result += '--- s.' + page.pageNum + ' ---\n';
     }
 
-    result += '\n--- WIDOK TABELARYCZNY (rekonstrukcja linii) ---\n';
+    if (showCoords) {
+      for (const line of page.lines) {
+        line.items.sort((a, b) => a.x - b.x);
+        const parts = line.items.map(it =>
+          '[x=' + it.x + ',w=' + it.w + '] "' + anonymize(it.text) + '"'
+        );
+        result += 'Y=' + line.y + ': ' + parts.join('  ') + '\n';
+      }
+      result += '\n';
+    }
 
-    // Reconstruct as visual lines
-    for (const line of lines) {
+    // Reconstructed lines (always shown)
+    let prevY = -1;
+    for (const line of page.lines) {
       line.items.sort((a, b) => a.x - b.x);
       let lineText = '';
       let lastEnd = 0;
       for (const item of line.items) {
-        // Insert spaces based on gap between items
         const gap = item.x - lastEnd;
         if (gap > 20) lineText += '  |  ';
         else if (gap > 5) lineText += ' ';
         lineText += item.text;
         lastEnd = item.x + item.w;
       }
+
+      lineText = anonymizeLine(lineText);
+
+      // In compact mode skip empty-looking lines
+      if (compact && !lineText.trim()) continue;
+
+      // Collapse repeated blank gaps in compact
+      if (compact) {
+        lineText = lineText.replace(/\s{4,}/g, '  |  ');
+      }
+
       result += lineText + '\n';
     }
 
-    result += '\n';
-    status.textContent = 'Przetwarzanie... strona ' + p + '/' + totalPages;
+    if (!compact) result += '\n';
   }
 
-  output.textContent = result;
-  copyBtn.style.display = '';
-  status.textContent = 'Gotowe! ' + totalPages + ' stron. Skopiuj wynik i wklej do czatu.';
+  // Build chunks
+  buildChunks(result);
 }
 
-function copyResult() {
-  navigator.clipboard.writeText(output.textContent).then(() => {
-    copyBtn.textContent = 'Skopiowano!';
-    setTimeout(() => copyBtn.textContent = 'Kopiuj wynik do schowka', 2000);
+function buildChunks(fullText) {
+  chunks = [];
+  const lines = fullText.split('\n');
+  let chunk = '';
+
+  for (const line of lines) {
+    if (chunk.length + line.length + 1 > CHUNK_SIZE && chunk.length > 0) {
+      chunks.push(chunk);
+      chunk = '';
+    }
+    chunk += (chunk ? '\n' : '') + line;
+  }
+  if (chunk) chunks.push(chunk);
+
+  currentChunk = 0;
+
+  if (chunks.length > 1) {
+    chunkNav.style.display = 'flex';
+    copyBtn.style.display = 'none';
+    showCurrentChunk();
+  } else {
+    chunkNav.style.display = 'none';
+    copyBtn.style.display = '';
+    output.textContent = fullText;
+  }
+}
+
+function showCurrentChunk() {
+  output.textContent = chunks[currentChunk];
+  chunkInfo.innerHTML = 'Fragment <b>' + (currentChunk + 1) + '</b> / <b>' + chunks.length + '</b>' +
+    ' <span class="badge">' + (chunks[currentChunk].length/1000).toFixed(1) + 'k znaków</span>';
+  document.getElementById('prevChunk').disabled = currentChunk === 0;
+  document.getElementById('nextChunk').disabled = currentChunk === chunks.length - 1;
+}
+
+function showChunk(dir) {
+  currentChunk = Math.max(0, Math.min(chunks.length - 1, currentChunk + dir));
+  showCurrentChunk();
+}
+
+function copyCurrentChunk() {
+  const header = '[Fragment ' + (currentChunk + 1) + '/' + chunks.length + ']\n';
+  navigator.clipboard.writeText(header + chunks[currentChunk]).then(() => {
+    statusEl.textContent = 'Skopiowano fragment ' + (currentChunk + 1) + '/' + chunks.length + '!';
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+  });
+}
+
+function copyAllResult() {
+  const fullText = chunks.join('\n');
+  navigator.clipboard.writeText(fullText).then(() => {
+    const btn = copyBtn.style.display !== 'none' ? copyBtn : null;
+    statusEl.textContent = 'Skopiowano całość! (' + (fullText.length/1000).toFixed(1) + 'k znaków)';
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
   });
 }
 </script>
