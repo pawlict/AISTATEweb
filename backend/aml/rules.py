@@ -190,6 +190,30 @@ def classify_transaction(
                 "matched": f"{cat}:{sub}",
             })
 
+    # --- Merchant database (everyday categories + location) ---
+    if not result.category:
+        try:
+            from .merchants import classify_merchant_detailed
+            merch = classify_merchant_detailed(
+                tx.counterparty_clean, tx.title_clean, tx.raw_text,
+            )
+            if merch:
+                result.category = result.category or merch["category"]
+                result.subcategory = result.subcategory or merch["subcategory"]
+                result.explains.append({
+                    "rule": f"merchant_db:{merch['category']}",
+                    "pattern": merch["display_name"],
+                    "matched": merch["category"],
+                })
+                if merch.get("location"):
+                    result.explains.append({
+                        "rule": "merchant_location",
+                        "pattern": "",
+                        "matched": merch["location"],
+                    })
+        except Exception:
+            pass  # merchant DB is optional enhancement
+
     # --- Counterparty memory influence ---
     if counterparty_label == "whitelist":
         result.is_whitelisted = True
