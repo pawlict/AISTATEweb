@@ -368,17 +368,21 @@
   }
 
   // ============================================================
-  // CHARTS (Chart.js) — with zoom, scroll & gap detection
+  // CHARTS (Chart.js) — zoom, scroll, drag-zoom, range slider
   // ============================================================
 
-  // Zoom state for balance_timeline
+  // Zoom / interaction state for balance_timeline
   const _chartZoom = {
-    level: 1,          // 1 = fit-to-width, >1 = zoomed in
+    level: 1,           // 1 = fit-to-width, >1 = zoomed in
     minLevel: 1,
-    maxLevel: 10,
-    pxPerPoint: 0,     // base px per data point (computed)
-    activeKey: null,    // currently rendered chart key
-    wheelBound: false,  // whether Ctrl+wheel listener is attached
+    maxLevel: 20,
+    pxPerPoint: 0,      // base px per data point (computed)
+    activeKey: null,     // currently rendered chart key
+    bound: false,        // whether listeners are attached
+    // Drag-zoom state (LPP hold + horizontal drag)
+    dragging: false,
+    dragStartX: 0,
+    dragStartLevel: 1,
   };
 
   function _ensureChartJs(cb){
@@ -400,7 +404,7 @@
     document.head.appendChild(script);
   }
 
-  /** Build a Chart.js annotation-like box plugin for drawing gap zones. */
+  /** Build a Chart.js plugin for drawing gap zones. */
   function _gapBoxPlugin(gaps, labels){
     if(!gaps || !gaps.length) return null;
     return {
@@ -419,18 +423,15 @@
           const idx = gap.after_index;
           if(idx < 0 || idx >= labels.length - 1) continue;
 
-          // Pixel positions: right edge of idx, left edge of idx+1
           const x1 = xScale.getPixelForValue(idx);
           const x2 = xScale.getPixelForValue(idx + 1);
           const gapX = x1;
           const gapW = x2 - x1;
           if(gapW < 2) continue;
 
-          // Hashed background
           ctx.fillStyle = "rgba(217,119,6,0.08)";
           ctx.fillRect(gapX, top, gapW, bottom - top);
 
-          // Dashed borders
           ctx.strokeStyle = "rgba(217,119,6,0.35)";
           ctx.lineWidth = 1;
           ctx.setLineDash([4, 3]);
@@ -442,7 +443,6 @@
           ctx.stroke();
           ctx.setLineDash([]);
 
-          // Label at top
           const label = gap.from_date + " \u2014 " + gap.to_date;
           ctx.font = "10px sans-serif";
           ctx.fillStyle = "rgba(217,119,6,0.7)";
@@ -454,7 +454,7 @@
     };
   }
 
-  /** Apply zoom level to balance_timeline chart container width. */
+  /** Apply zoom level to chart container width + update range slider. */
   function _applyTimelineZoom(){
     const container = QS("#aml_chart_container");
     const scrollWrap = QS("#aml_chart_scroll_wrap");
@@ -469,56 +469,109 @@
     if(pointCount <= 1 || _chartZoom.level <= 1){
       container.style.width = "";
       container.style.minWidth = "100%";
+      _updateRangeSlider();
       return;
     }
 
-    // Base: fit all points in visible width
     _chartZoom.pxPerPoint = wrapWidth / pointCount;
     const targetWidth = Math.max(wrapWidth, pointCount * _chartZoom.pxPerPoint * _chartZoom.level);
     container.style.width = Math.round(targetWidth) + "px";
     container.style.minWidth = Math.round(targetWidth) + "px";
 
-    // Resize chart if it exists
     if(St.chartInstance){
       St.chartInstance.resize();
     }
+    _updateRangeSlider();
   }
 
-  /** Bind Alt+wheel zoom on the scroll wrapper (once). */
-  function _bindChartZoomWheel(){
-    if(_chartZoom.wheelBound) return;
+  /** Show/hide + sync the range slider beneath the chart. */
+  function _updateRangeSlider(){
+    const rangeWrap = QS("#aml_chart_range_wrap");
+    const rangeInput = QS("#aml_chart_range");
     const scrollWrap = QS("#aml_chart_scroll_wrap");
-    if(!scrollWrap) return;
-    _chartZoom.wheelBound = true;
+    if(!rangeWrap || !rangeInput || !scrollWrap) return;
 
-    scrollWrap.addEventListener("wheel", (e)=>{
-      // Only zoom when left Alt is held (not AltGr which sets both ctrlKey+altKey)
-      if(!e.altKey || e.ctrlKey) return;
-      // Only for timeline-like scrollable charts
+    const isTimeline = (_chartZoom.activeKey === "balance_timeline" || _chartZoom.activeKey === "monthly_trend");
+    const overflows = scrollWrap.scrollWidth > scrollWrap.clientWidth + 2;
+
+    if(!isTimeline || !overflows){
+      rangeWrap.style.display = "none";
+      return;
+    }
+
+    rangeWrap.style.display = "";
+    const maxScroll = scrollWrap.scrollWidth - scrollWrap.clientWidth;
+    rangeInput.max = maxScroll;
+    rangeInput.value = scrollWrap.scrollLeft;
+  }
+
+  /** Bind all chart interaction listeners (once). */
+  function _bindChartInteractions(){
+    if(_chartZoom.bound) return;
+    const scrollWrap = QS("#aml_chart_scroll_wrap");
+    const rangeInput = QS("#aml_chart_range");
+    if(!scrollWrap) return;
+    _chartZoom.bound = true;
+
+    // --- Range slider <-> scroll sync ---
+    if(rangeInput){
+      rangeInput.addEventListener("input", ()=>{
+        scrollWrap.scrollLeft = Number(rangeInput.value);
+      });
+      scrollWrap.addEventListener("scroll", ()=>{
+        const maxScroll = scrollWrap.scrollWidth - scrollWrap.clientWidth;
+        if(maxScroll > 0){
+          rangeInput.max = maxScroll;
+          rangeInput.value = scrollWrap.scrollLeft;
+        }
+      });
+    }
+
+    // --- LPP drag-zoom (like audio editor) ---
+    // mousedown on the chart canvas area starts a drag-zoom
+    scrollWrap.addEventListener("mousedown", (e)=>{
+      // Only left button, and only for timeline charts
+      if(e.button !== 0) return;
       if(_chartZoom.activeKey !== "balance_timeline" && _chartZoom.activeKey !== "monthly_trend") return;
 
+      _chartZoom.dragging = true;
+      _chartZoom.dragStartX = e.clientX;
+      _chartZoom.dragStartLevel = _chartZoom.level;
+      scrollWrap.style.cursor = "ew-resize";
       e.preventDefault();
-      e.stopPropagation();
+    });
 
-      const oldLevel = _chartZoom.level;
-      const delta = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-      _chartZoom.level = Math.max(_chartZoom.minLevel, Math.min(_chartZoom.maxLevel, _chartZoom.level * delta));
+    document.addEventListener("mousemove", (e)=>{
+      if(!_chartZoom.dragging) return;
+      e.preventDefault();
 
-      if(Math.abs(_chartZoom.level - oldLevel) < 0.001) return;
+      const dx = e.clientX - _chartZoom.dragStartX;
+      // Sensitivity: 200px of mouse movement = 2x zoom change
+      const factor = Math.pow(2, dx / 200);
+      const newLevel = Math.max(_chartZoom.minLevel, Math.min(_chartZoom.maxLevel, _chartZoom.dragStartLevel * factor));
 
-      // Preserve scroll position around mouse cursor
+      if(Math.abs(newLevel - _chartZoom.level) < 0.01) return;
+      _chartZoom.level = newLevel;
+
+      // Keep scroll centered around where drag started
       const rect = scrollWrap.getBoundingClientRect();
-      const mouseXRatio = (e.clientX - rect.left + scrollWrap.scrollLeft) /
+      const centerRatio = (_chartZoom.dragStartX - rect.left + scrollWrap.scrollLeft) /
                           (scrollWrap.scrollWidth || 1);
 
       _applyTimelineZoom();
 
-      // Restore scroll to keep mouse pointer at same data position
       requestAnimationFrame(()=>{
-        const newScrollX = mouseXRatio * scrollWrap.scrollWidth - (e.clientX - rect.left);
+        const newScrollX = centerRatio * scrollWrap.scrollWidth - (_chartZoom.dragStartX - rect.left);
         scrollWrap.scrollLeft = Math.max(0, newScrollX);
       });
-    }, {passive: false});
+    });
+
+    document.addEventListener("mouseup", ()=>{
+      if(_chartZoom.dragging){
+        _chartZoom.dragging = false;
+        scrollWrap.style.cursor = "";
+      }
+    });
   }
 
   /** Render gap legend below the chart. */
@@ -538,23 +591,99 @@
     legend.innerHTML = html;
   }
 
+  /** Build a rich tooltip config for balance_timeline with tx details. */
+  function _balanceTooltipConfig(txMeta, chartData){
+    const multiMeta = chartData && chartData._multiMeta;
+    const isMulti = multiMeta && multiMeta.length > 1;
+    return {
+      tooltip: {
+        enabled: true,
+        mode: "index",
+        intersect: false,
+        callbacks: {
+          title(items){
+            if(!items.length) return "";
+            return items[0].label || "";
+          },
+          label(ctx){
+            const dsIdx = ctx.datasetIndex;
+            const ptIdx = ctx.dataIndex;
+            const dsLabel = ctx.dataset.label || "";
+            const val = ctx.parsed.y;
+            if(val == null) return null; // skip null points
+
+            let line = dsLabel + ": " + val.toLocaleString("pl-PL",{minimumFractionDigits:2}) + " PLN";
+
+            // Find transaction metadata for this dataset+point
+            const meta = isMulti ? (multiMeta[dsIdx] && multiMeta[dsIdx][ptIdx])
+                                 : (txMeta && txMeta[ptIdx]);
+            if(meta){
+              const dir = meta.direction === "DEBIT" ? "\u2193" : "\u2191";
+              const sign = meta.direction === "DEBIT" ? "-" : "+";
+              line += `  ${dir}${sign}${meta.amount.toLocaleString("pl-PL",{minimumFractionDigits:2})}`;
+            }
+            return line;
+          },
+          afterLabel(ctx){
+            const dsIdx = ctx.datasetIndex;
+            const ptIdx = ctx.dataIndex;
+            const meta = isMulti ? (multiMeta[dsIdx] && multiMeta[dsIdx][ptIdx])
+                                 : (txMeta && txMeta[ptIdx]);
+            if(!meta) return "";
+            const lines = [];
+            if(meta.title) lines.push("  " + meta.title);
+            if(meta.counterparty) lines.push("  " + meta.counterparty);
+            if(meta.category) lines.push("  Kat: " + meta.category);
+            return lines;
+          },
+        },
+        bodyFont: { size: 12 },
+        titleFont: { size: 13, weight: "bold" },
+        padding: 10,
+        displayColors: isMulti,
+        backgroundColor: "rgba(30,41,59,0.92)",
+        maxWidth: 420,
+      },
+    };
+  }
+
+  /** Adaptive x-axis tick display based on zoom level and point density. */
+  function _adaptiveXTicks(pointCount){
+    // At low zoom (many points compressed) show fewer dates
+    // At high zoom (spread out) show more detail
+    const pxPerPt = _chartZoom.level * (QS("#aml_chart_scroll_wrap")?.clientWidth || 800) / Math.max(pointCount, 1);
+    let maxTicksLimit;
+    if(pxPerPt < 3)       maxTicksLimit = 8;    // very compressed
+    else if(pxPerPt < 8)  maxTicksLimit = 15;
+    else if(pxPerPt < 20) maxTicksLimit = 25;
+    else                   maxTicksLimit = 50;   // expanded — show more
+    return {
+      x: {
+        ticks: {
+          maxTicksLimit: maxTicksLimit,
+          maxRotation: 45,
+          minRotation: 0,
+          font: { size: pxPerPt < 5 ? 9 : 11 },
+        },
+      },
+    };
+  }
+
   function _renderChart(chartKey){
     const data = St.chartsData[chartKey];
     const container = QS("#aml_chart_container");
     const scrollWrap = QS("#aml_chart_scroll_wrap");
-    const hint = QS("#aml_chart_hint");
     const gapLegend = QS("#aml_chart_gap_legend");
+    const rangeWrap = QS("#aml_chart_range_wrap");
 
     if(!data){
       if(container) container.innerHTML = '<div class="small muted" style="padding:20px">Brak danych wykresu</div>';
       if(gapLegend) gapLegend.style.display = "none";
+      if(rangeWrap) rangeWrap.style.display = "none";
       return;
     }
 
     const isTimeline = (chartKey === "balance_timeline" || chartKey === "monthly_trend");
-
-    // Show/hide zoom hint
-    if(hint) hint.style.display = isTimeline ? "" : "none";
 
     // Reset zoom for non-timeline charts
     if(!isTimeline){
@@ -564,9 +693,9 @@
         container.style.width = "";
         container.style.minWidth = "100%";
       }
+      if(rangeWrap) rangeWrap.style.display = "none";
     } else {
       _chartZoom.activeKey = chartKey;
-      // Keep zoom if switching between timeline types, reset otherwise
       if(_chartZoom.level < 1) _chartZoom.level = 1;
     }
 
@@ -587,6 +716,7 @@
       const gaps = data.gaps || [];
       const labels = data.labels || [];
       const datasets = data.datasets || [];
+      const txMeta = data.tx_meta || null;
 
       // Show gaps legend for balance_timeline
       if(chartKey === "balance_timeline"){
@@ -615,9 +745,20 @@
       if(data.options && data.options.indexAxis){
         chartConfig.options.indexAxis = data.options.indexAxis;
       }
-      if(data.type === "line"){
+
+      // Balance timeline — rich tooltips, adaptive ticks, bigger hit radius
+      if(chartKey === "balance_timeline"){
+        chartConfig.options.elements = {
+          point: { radius: 2, hoverRadius: 6, hitRadius: 10 },
+        };
+        Object.assign(chartConfig.options.plugins, _balanceTooltipConfig(txMeta, data));
+        chartConfig.options.scales = _adaptiveXTicks(labels.length);
+        // Interaction mode for hover crosshair
+        chartConfig.options.interaction = { mode: "index", intersect: false };
+      } else if(data.type === "line"){
         chartConfig.options.elements = { point: { radius: 1 } };
       }
+
       // Dual y-axis for channel distribution
       if(datasets.some(ds => ds.yAxisID === "y1")){
         chartConfig.options.scales = {
@@ -634,10 +775,16 @@
 
       St.chartInstance = new Chart(canvas, chartConfig);
 
-      // Apply zoom (sets container width, triggers resize)
+      // Apply zoom & bind interactions (sets container width, triggers resize)
       if(isTimeline){
+        // Auto-zoom if many points (>60 = ~2 months of daily tx)
+        const pointCount = labels.length;
+        if(pointCount > 60 && _chartZoom.level <= 1){
+          // Start slightly zoomed so the slider is useful
+          _chartZoom.level = Math.min(3, pointCount / 40);
+        }
         _applyTimelineZoom();
-        _bindChartZoomWheel();
+        _bindChartInteractions();
       }
     });
   }
@@ -1541,6 +1688,11 @@
       await _loadDetail(St.batchResults[0]);
     }
 
+    // Multi-account: merge balance timelines from all statements
+    if(St.batchResults.length > 1){
+      await _mergeMultiAccountCharts(St.batchResults);
+    }
+
     _renderResults();
     _showResults();
     _hide("aml_batch_panel");
@@ -1552,6 +1704,105 @@
       } else {
         await ReviewManager.loadForStatement(St.batchResults[0]);
       }
+    }
+  }
+
+  /** Fetch chart data for all statements and merge balance_timeline datasets. */
+  async function _mergeMultiAccountCharts(stmtIds){
+    const palette = ["#1f5aa6","#b91c1c","#15803d","#7c3aed","#d97706","#0891b2","#be185d","#65a30d"];
+    const bgPalette = [
+      "rgba(31,90,166,0.1)","rgba(185,28,28,0.1)","rgba(21,128,61,0.1)",
+      "rgba(124,58,237,0.1)","rgba(217,119,6,0.1)","rgba(8,145,178,0.1)",
+      "rgba(190,24,93,0.1)","rgba(101,163,13,0.1)",
+    ];
+
+    try {
+      // Fetch detail for all statements in parallel
+      const allDetails = await Promise.all(
+        stmtIds.map(sid => _safeApi("/api/aml/detail/" + encodeURIComponent(sid)))
+      );
+
+      // Collect per-account timeline data
+      const allTimelines = [];
+      const allTxMeta = [];
+      let allLabelsSet = new Set();
+
+      for(let i = 0; i < allDetails.length; i++){
+        const d = allDetails[i];
+        if(!d) continue;
+        const charts = d.charts || {};
+        const bt = charts.balance_timeline;
+        if(!bt || !bt.labels) continue;
+
+        const acctNum = (d.statement && d.statement.account_number) || "";
+        const shortAcct = acctNum.length > 8 ? "..." + acctNum.slice(-4) : (acctNum || "Rachunek " + (i + 1));
+
+        for(const lbl of bt.labels) allLabelsSet.add(lbl);
+
+        allTimelines.push({
+          labels: bt.labels,
+          data: bt.datasets[0].data,
+          accountLabel: shortAcct,
+          index: i,
+          txMeta: bt.tx_meta || null,
+        });
+      }
+
+      if(allTimelines.length < 2) return; // Only one account — no merge needed
+
+      // Unified sorted label axis (all dates from all accounts)
+      const allLabels = Array.from(allLabelsSet).sort();
+
+      // Build a dataset per account, filling nulls where no data
+      const mergedDatasets = [];
+      const mergedTxMeta = []; // per-dataset array of arrays
+
+      for(const tl of allTimelines){
+        // Map original labels to a lookup
+        const labelMap = {};
+        for(let j = 0; j < tl.labels.length; j++){
+          labelMap[tl.labels[j]] = j;
+        }
+
+        const alignedData = [];
+        const alignedMeta = [];
+        for(const lbl of allLabels){
+          if(lbl in labelMap){
+            const origIdx = labelMap[lbl];
+            alignedData.push(tl.data[origIdx]);
+            alignedMeta.push(tl.txMeta ? tl.txMeta[origIdx] : null);
+          } else {
+            alignedData.push(null);
+            alignedMeta.push(null);
+          }
+        }
+
+        const ci = tl.index % palette.length;
+        mergedDatasets.push({
+          label: tl.accountLabel,
+          data: alignedData,
+          borderColor: palette[ci],
+          backgroundColor: bgPalette[ci],
+          fill: false,
+          tension: 0.2,
+          pointRadius: 1,
+          spanGaps: true,
+        });
+        mergedTxMeta.push(alignedMeta);
+      }
+
+      // Replace the chartsData balance_timeline with merged version
+      if(!St.chartsData) St.chartsData = {};
+      St.chartsData.balance_timeline = {
+        type: "line",
+        labels: allLabels,
+        datasets: mergedDatasets,
+        gaps: [],
+        tx_meta: mergedTxMeta[0], // primary account for tooltip
+        _multiMeta: mergedTxMeta, // all accounts for rich tooltip
+      };
+    } catch(e){
+      console.warn("Multi-account chart merge failed:", e);
     }
   }
 

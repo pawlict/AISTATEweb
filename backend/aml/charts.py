@@ -80,13 +80,19 @@ def balance_timeline(
     transactions: List[NormalizedTransaction],
     opening_balance: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Running balance over time (line chart data)."""
+    """Running balance over time (line chart data).
+
+    Includes per-point metadata (title, amount, direction, counterparty)
+    so the frontend can show rich tooltips on hover.
+    """
     sorted_tx = sorted(transactions, key=lambda t: (t.booking_date or "", t.id))
 
     balance = opening_balance if opening_balance is not None else 0
-    labels = []
-    data = []
-    colors = []
+    labels: List[str] = []
+    data: List[float] = []
+    colors: List[str] = []
+    # Per-point transaction metadata for tooltips
+    tx_meta: List[Dict[str, Any]] = []
 
     for tx in sorted_tx:
         amt = float(tx.amount)
@@ -98,6 +104,13 @@ def balance_timeline(
         labels.append(tx.booking_date or "")
         data.append(round(balance, 2))
         colors.append("#b91c1c" if balance < 0 else "#1f5aa6")
+        tx_meta.append({
+            "title": (tx.title or "")[:80],
+            "amount": round(amt, 2),
+            "direction": tx.direction,
+            "counterparty": (getattr(tx, "counterparty_raw", None) or "")[:60],
+            "category": tx.category or "",
+        })
 
     # Detect gaps (missing statement periods)
     gaps = _detect_date_gaps(labels)
@@ -115,6 +128,7 @@ def balance_timeline(
             "pointRadius": 1,
         }],
         "gaps": gaps,
+        "tx_meta": tx_meta,
     }
 
 

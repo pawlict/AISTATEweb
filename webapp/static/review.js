@@ -36,6 +36,131 @@
   };
 
   // ============================================================
+  // CATEGORY LABELS & AUTO-CLASSIFICATION MAP
+  // ============================================================
+
+  // Human-readable category/subcategory labels (PL & EN)
+  const CAT_LABELS = {
+    // Everyday
+    "grocery":          {pl:"Spożywcze",        en:"Grocery"},
+    "drugstore":        {pl:"Drogeria",          en:"Drugstore"},
+    "fuel":             {pl:"Paliwo",            en:"Fuel"},
+    "hardware":         {pl:"Budowlane",         en:"Hardware/DIY"},
+    "gastronomy":       {pl:"Gastronomia",       en:"Gastronomy"},
+    "clothing":         {pl:"Odzież",            en:"Clothing"},
+    "health":           {pl:"Zdrowie",            en:"Health"},
+    "transport":        {pl:"Transport",          en:"Transport"},
+    "education":        {pl:"Edukacja",           en:"Education"},
+    "electronics":      {pl:"Elektronika",        en:"Electronics"},
+    "home_garden":      {pl:"Dom i ogród",       en:"Home & Garden"},
+    "pets":             {pl:"Zwierzęta",          en:"Pets"},
+    "children":         {pl:"Dzieci",             en:"Children"},
+    "p2p_transfer":     {pl:"Przelew P2P",        en:"P2P Transfer"},
+    // Risk
+    "digital_store":    {pl:"Sklep cyfrowy",      en:"Digital Store"},
+    "payment_operator": {pl:"Operator płatności", en:"Payment Operator"},
+    "crypto":           {pl:"Kryptowaluta",       en:"Cryptocurrency"},
+    "gambling":         {pl:"Hazard",             en:"Gambling"},
+    "loans":            {pl:"Pożyczki",           en:"Loans"},
+    // Transfers
+    "salary":           {pl:"Wynagrodzenie",      en:"Salary"},
+    "benefits":         {pl:"Świadczenia",        en:"Benefits"},
+    "rent":             {pl:"Czynsz/Najem",       en:"Rent"},
+    "utilities":        {pl:"Rachunki",           en:"Utilities"},
+    "telecom":          {pl:"Telekomunikacja",    en:"Telecom"},
+    "insurance":        {pl:"Ubezpieczenie",      en:"Insurance"},
+    // Risky
+    "foreign_transfer": {pl:"Przelew zagraniczny",en:"Foreign Transfer"},
+    "pawnshop":         {pl:"Lombard",            en:"Pawnshop"},
+    "p2p_lending":      {pl:"Pożyczki P2P",       en:"P2P Lending"},
+    "suspicious_pattern":{pl:"Podejrzane usługi", en:"Suspicious Services"},
+    "mixer_suspected":  {pl:"Mikser krypto",      en:"Crypto Mixer"},
+    // Enrich-based
+    "bakery":           {pl:"Piekarnia",          en:"Bakery"},
+    "pharmacy":         {pl:"Apteka",             en:"Pharmacy"},
+    "diy":              {pl:"Dom/ogród",          en:"DIY"},
+    "online_shop":      {pl:"Zakupy online",      en:"Online Shop"},
+    "food_service":     {pl:"Gastronomia",        en:"Food Service"},
+    "medical":          {pl:"Medyczne",           en:"Medical"},
+    "loan_payment":     {pl:"Rata/kredyt",        en:"Loan Payment"},
+    "utility":          {pl:"Rachunki",           en:"Utilities"},
+    "rent_housing":     {pl:"Mieszkanie",         en:"Housing"},
+    "delivery":         {pl:"Kurier/przesyłki",   en:"Delivery"},
+    "own_transfer":     {pl:"Przelew własny",     en:"Own Transfer"},
+    "fee":              {pl:"Prowizja/opłata",    en:"Fee"},
+    "cash":             {pl:"Gotówka",            en:"Cash"},
+    "car_wash":         {pl:"Myjnia",             en:"Car Wash"},
+    "auto_service":     {pl:"Serwis auto",        en:"Auto Service"},
+    // Catch-all
+    "everyday":         {pl:"Codzienne",          en:"Everyday"},
+    "risky":            {pl:"Ryzykowne",          en:"Risky"},
+    "transfers":        {pl:"Przelewy",           en:"Transfers"},
+    "unclassified":     {pl:"Nieskategoryzowane", en:"Unclassified"},
+  };
+
+  // Map category → auto classification (neutral | legitimate | suspicious | monitoring)
+  const CAT_AUTO_CLS = {
+    // Everyday → legitimate (green)
+    grocery:"legitimate", drugstore:"legitimate", hardware:"legitimate",
+    gastronomy:"legitimate", clothing:"legitimate", health:"legitimate",
+    transport:"legitimate", education:"legitimate", electronics:"legitimate",
+    home_garden:"legitimate", pets:"legitimate", children:"legitimate",
+    bakery:"legitimate", pharmacy:"legitimate", diy:"legitimate",
+    food_service:"legitimate", medical:"legitimate",
+    delivery:"legitimate", car_wash:"legitimate", auto_service:"legitimate",
+    // Fuel → neutral
+    fuel:"neutral",
+    // Income / transfers → legitimate
+    salary:"legitimate", benefits:"legitimate", rent:"legitimate",
+    utilities:"legitimate", utility:"legitimate", telecom:"legitimate",
+    insurance:"legitimate", rent_housing:"legitimate", own_transfer:"legitimate",
+    // Suspicious (red)
+    crypto:"suspicious", gambling:"suspicious",
+    digital_store:"suspicious", mixer_suspected:"suspicious",
+    // Monitoring (orange)
+    p2p_transfer:"monitoring", payment_operator:"monitoring",
+    foreign_transfer:"monitoring", pawnshop:"monitoring",
+    p2p_lending:"monitoring", suspicious_pattern:"monitoring",
+    loans:"monitoring", loan_payment:"monitoring",
+    // Neutral
+    fee:"neutral", cash:"neutral", online_shop:"neutral",
+  };
+
+  // Get best display label for a category + subcategory
+  function _catLabel(category, subcategory){
+    const lang = (localStorage.getItem("aistate_ui_lang") || "pl");
+    // Try subcategory first (e.g. "everyday:grocery" → "grocery")
+    if(subcategory){
+      const parts = subcategory.split(":");
+      const sub = parts[parts.length - 1]; // last part
+      if(CAT_LABELS[sub]) return CAT_LABELS[sub][lang] || CAT_LABELS[sub].pl;
+    }
+    // Fall back to category
+    if(CAT_LABELS[category]) return CAT_LABELS[category][lang] || CAT_LABELS[category].pl;
+    return category || "";
+  }
+
+  // Get auto-classification for a category/subcategory
+  function _catAutoCls(category, subcategory){
+    if(subcategory){
+      const parts = subcategory.split(":");
+      const sub = parts[parts.length - 1];
+      if(CAT_AUTO_CLS[sub]) return CAT_AUTO_CLS[sub];
+    }
+    if(CAT_AUTO_CLS[category]) return CAT_AUTO_CLS[category];
+    // Parent category fallback
+    if(category === "everyday") return "legitimate";
+    if(category === "risky") return "monitoring";
+    if(category === "transfers") return "legitimate";
+    return null; // no auto-classification
+  }
+
+  // All selectable categories for dropdown (sorted by PL label)
+  const CAT_OPTIONS = Object.entries(CAT_LABELS)
+    .filter(([k]) => !["everyday","risky","transfers","unclassified"].includes(k))
+    .sort((a,b) => a[1].pl.localeCompare(b[1].pl, "pl"));
+
+  // ============================================================
   // INCOME KEYWORD AUTO-CLASSIFICATION
   // ============================================================
 
@@ -636,21 +761,48 @@
     }
 
     const colCount = 9;
+    const lang = (localStorage.getItem("aistate_ui_lang") || "pl");
+
+    // Build category <option> list once
+    let catOptsHtml = '<option value="">—</option>';
+    for(const [k, lab] of CAT_OPTIONS){
+      catOptsHtml += `<option value="${k}">${_esc(lab[lang] || lab.pl)}</option>`;
+    }
 
     let html = `<table class="rv-tx-table">
       <thead><tr>
-        <th class="rv-col-date">Data</th>
-        <th class="rv-col-date">Data wal.</th>
-        <th class="rv-col-type">Typ</th>
-        <th class="rv-col-cp">Kontrahent</th>
-        <th class="rv-col-title">Tytul</th>
-        <th class="rv-col-amt">Kwota</th>
-        <th class="rv-col-ch">Kanal</th>
-        <th class="rv-col-cat">Kategoria</th>
+        <th class="rv-col-date rv-resizable">Data</th>
+        <th class="rv-col-date rv-resizable">Data wal.</th>
+        <th class="rv-col-type rv-resizable">Typ</th>
+        <th class="rv-col-cp rv-resizable">Kontrahent</th>
+        <th class="rv-col-title rv-resizable">Tytul</th>
+        <th class="rv-col-amt rv-resizable">Kwota</th>
+        <th class="rv-col-ch rv-resizable">Kanal</th>
+        <th class="rv-col-cat rv-resizable">Kategoria</th>
         <th class="rv-col-class">Klasyfikacja</th>
       </tr></thead><tbody>`;
 
     let lastStmtId = null;
+
+    // Auto-classification pass: set initial classification from category
+    // only for transactions that haven't been manually classified yet
+    for(const tx of transactions){
+      if(!St.classifications[tx.id] || St.classifications[tx.id] === "neutral"){
+        const autoCls = _catAutoCls(tx.category, tx.subcategory);
+        if(autoCls && autoCls !== "neutral"){
+          St.classifications[tx.id] = autoCls;
+          // Fire async save (don't await to keep rendering fast)
+          const stmtId = St.txStatementMap[tx.id] || St.statementId;
+          if(stmtId){
+            _safeApi("/api/aml/review/" + encodeURIComponent(stmtId) + "/classify", {
+              method:"POST",
+              headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({tx_id: tx.id, classification: autoCls}),
+            });
+          }
+        }
+      }
+    }
 
     for(const tx of transactions){
       // Period separator row in batch mode
@@ -675,6 +827,17 @@
                        cls === "legitimate" ? "rv-row-legitimate" :
                        isAnomaly ? "rv-row-anomaly" : "";
 
+      // Category display: human-readable label + dropdown
+      const catDisplay = _catLabel(tx.category, tx.subcategory);
+      // Determine selected value for dropdown (prefer subcategory's leaf part)
+      let catSelVal = "";
+      if(tx.subcategory){
+        const parts = tx.subcategory.split(":");
+        catSelVal = parts[parts.length - 1];
+      } else if(tx.category && tx.category !== "everyday" && tx.category !== "risky" && tx.category !== "transfers"){
+        catSelVal = tx.category;
+      }
+
       html += `<tr class="${rowClass}" data-txid="${_esc(tx.id)}">
         <td class="rv-col-date">${_esc(tx.booking_date || "")}</td>
         <td class="rv-col-date">${_esc(tx.tx_date || "")}</td>
@@ -683,7 +846,12 @@
         <td class="rv-col-title" title="${_esc(tx.title || "")}">${_esc((tx.title || "").slice(0,45))}</td>
         <td class="rv-col-amt ${amtClass}">${isDebit ? "-" : "+"}${absAmt.toLocaleString("pl-PL",{minimumFractionDigits:2, maximumFractionDigits:2})}</td>
         <td class="rv-col-ch">${_esc(tx.channel || "")}</td>
-        <td class="rv-col-cat">${_esc(tx.category || "")}${tags.length ? ' <span class="rv-risk-tag">' + tags.map(t=>_esc(t)).join(", ") + '</span>' : ''}</td>
+        <td class="rv-col-cat">
+          <select class="rv-cat-sel" data-txid="${_esc(tx.id)}" title="${_esc(catDisplay)}">
+            ${catOptsHtml.replace('value="'+catSelVal+'"', 'value="'+catSelVal+'" selected')}
+          </select>
+          ${tags.length ? '<span class="rv-risk-tag">' + tags.map(t=>_esc(t)).join(", ") + '</span>' : ''}
+        </td>
         <td class="rv-col-class">
           <div class="rv-cls-btns" data-txid="${_esc(tx.id)}">
             ${Object.entries(CLS_META).map(([k, m]) => {
@@ -705,6 +873,69 @@
         const txId = btn.closest(".rv-cls-btns").getAttribute("data-txid");
         const cls = btn.getAttribute("data-cls");
         await _classifyTx(txId, cls);
+      });
+    });
+
+    // Bind category dropdowns
+    QSA(".rv-cat-sel", wrap).forEach(sel => {
+      sel.addEventListener("change", async (e) => {
+        const txId = sel.getAttribute("data-txid");
+        const newCat = sel.value;
+        if(!txId) return;
+        const stmtId = St.txStatementMap[txId] || St.statementId;
+        // Update local tx data
+        const tx = St.transactions.find(t => t.id === txId);
+        if(tx){
+          tx.category = newCat;
+          tx.subcategory = newCat;
+        }
+        // Save to backend
+        if(stmtId){
+          await _safeApi("/api/aml/review/" + encodeURIComponent(stmtId) + "/set-category", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({tx_id: txId, category: newCat, subcategory: newCat}),
+          });
+        }
+        // Auto-classify based on new category
+        const autoCls = _catAutoCls(newCat, newCat);
+        if(autoCls){
+          await _classifyTx(txId, autoCls);
+        }
+      });
+    });
+
+    // Enable column resizing via drag on <th> borders
+    _initColumnResize(wrap);
+  }
+
+  // Column resize: drag right border of <th> to resize
+  function _initColumnResize(tableWrap){
+    const ths = QSA("th.rv-resizable", tableWrap);
+    ths.forEach(th => {
+      const handle = document.createElement("div");
+      handle.className = "rv-col-resize-handle";
+      th.style.position = "relative";
+      th.appendChild(handle);
+
+      let startX, startW;
+      handle.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        startX = e.pageX;
+        startW = th.offsetWidth;
+        const onMove = (ev) => {
+          const diff = ev.pageX - startX;
+          const newW = Math.max(40, startW + diff);
+          th.style.width = newW + "px";
+          th.style.minWidth = newW + "px";
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
       });
     });
   }
