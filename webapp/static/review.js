@@ -635,7 +635,7 @@
       return;
     }
 
-    const colCount = 10;
+    const colCount = 9;
 
     let html = `<table class="rv-tx-table">
       <thead><tr>
@@ -645,7 +645,6 @@
         <th class="rv-col-cp">Kontrahent</th>
         <th class="rv-col-title">Tytul</th>
         <th class="rv-col-amt">Kwota</th>
-        <th class="rv-col-bal">Saldo po</th>
         <th class="rv-col-ch">Kanal</th>
         <th class="rv-col-cat">Kategoria</th>
         <th class="rv-col-class">Klasyfikacja</th>
@@ -683,7 +682,6 @@
         <td class="rv-col-cp" title="${_esc(tx.counterparty_raw || "")}">${_esc((tx.counterparty_raw || "").slice(0,35))}</td>
         <td class="rv-col-title" title="${_esc(tx.title || "")}">${_esc((tx.title || "").slice(0,45))}</td>
         <td class="rv-col-amt ${amtClass}">${isDebit ? "-" : "+"}${absAmt.toLocaleString("pl-PL",{minimumFractionDigits:2, maximumFractionDigits:2})}</td>
-        <td class="rv-col-bal">${tx.balance_after != null ? _fmtAmount(tx.balance_after, "") : ""}</td>
         <td class="rv-col-ch">${_esc(tx.channel || "")}</td>
         <td class="rv-col-cat">${_esc(tx.category || "")}${tags.length ? ' <span class="rv-risk-tag">' + tags.map(t=>_esc(t)).join(", ") + '</span>' : ''}</td>
         <td class="rv-col-class">

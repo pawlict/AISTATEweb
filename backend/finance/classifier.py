@@ -156,8 +156,38 @@ CATEGORY_RULES: Dict[str, Dict[str, List[str]]] = {
             r"\bskrill\b", r"\bneteller\b",
             r"\bpaysera\b", r"\bpaypal\b.*przelew",
         ],
+        "digital_store": [
+            r"google\s*play", r"google\s*\*", r"play\s*store",
+            r"apple\.com", r"itunes", r"app\s*store",
+            r"steampowered", r"epic\s*games?",
+            r"playstation\s*(store|network|plus)", r"\bpsn\b",
+            r"xbox.*(store|game\s*pass|live)",
+            r"nintendo\s*(eshop|switch|store)",
+            r"\broblox\b", r"\bsupercell\b", r"\btencent\b",
+        ],
+        "payment_operator": [
+            r"zen\.com", r"\bzen\b(?=.*(pay|card|kart|p[łl]at))",
+            r"\bpayu\b", r"przelewy\s*24", r"\btpay\b",
+            r"\bdotpay\b", r"\bpaysafecard\b",
+            r"\bimoje\b", r"blue\s*media",
+        ],
     },
 }
+
+# --- Everyday merchant categories (no risk, classification only) ---
+# Imported from global merchant database
+try:
+    from ..aml.merchants import MERCHANT_PATTERNS as _MERCHANT_PATTERNS
+    CATEGORY_RULES["everyday"] = {
+        k: v for k, v in _MERCHANT_PATTERNS.items()
+        if k in (
+            "grocery", "drugstore", "fuel", "hardware", "gastronomy",
+            "clothing", "health", "transport", "electronics",
+            "home_garden", "pets", "children", "education",
+        )
+    }
+except ImportError:
+    pass  # merchant DB not available
 
 # --- URL extraction and domain classification ---
 
