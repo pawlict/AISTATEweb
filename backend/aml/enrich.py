@@ -88,7 +88,7 @@ _CATEGORY_PATTERNS: List[Tuple[str, str, List[str]]] = [
         r"ccc\b", r"pepco", r"reserved", r"h&m", r"zara",
         r"sinsay", r"house\b", r"cropp",
     ]),
-    ("diy", "Dom/ogrod", [
+    ("home_garden", "Dom i ogrod", [
         r"leroy\s*merlin", r"castorama", r"obi\b", r"bricomarche",
         r"ikea", r"action\b",
     ]),
@@ -100,7 +100,7 @@ _CATEGORY_PATTERNS: List[Tuple[str, str, List[str]]] = [
         r"allegro", r"amazon", r"aliexpress", r"alipay",
         r"temu", r"shein",
     ]),
-    ("food_service", "Gastronomia", [
+    ("gastronomy", "Gastronomia", [
         r"chilli\s*bar", r"mcdonald", r"kfc\b", r"pizza",
         r"uber\s*eat", r"pyszne", r"stolowka", r"z\s*pieca\s*rodem",
     ]),
@@ -123,11 +123,11 @@ _CATEGORY_PATTERNS: List[Tuple[str, str, List[str]]] = [
         r"warta", r"pzu\b", r"ergo\s*hestia", r"allianz",
         r"eagent", r"ubezpiecz",
     ]),
-    ("utility", "Rachunki", [
+    ("utilities", "Rachunki", [
         r"pgnig", r"pge\b", r"enea", r"tauron",
         r"wod.*kan", r"mpo\b", r"gospodar.*odpad",
     ]),
-    ("rent_housing", "Mieszkanie", [
+    ("rent", "Czynsz/Mieszkanie", [
         r"czynsz", r"mieszk", r"solid\s*group",
     ]),
     ("telecom", "Telekomunikacja", [

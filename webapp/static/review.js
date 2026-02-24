@@ -42,17 +42,17 @@
   // Human-readable category/subcategory labels (PL & EN)
   const CAT_LABELS = {
     // Everyday
-    "grocery":          {pl:"Spożywcze",        en:"Grocery"},
-    "drugstore":        {pl:"Drogeria",          en:"Drugstore"},
-    "fuel":             {pl:"Paliwo",            en:"Fuel"},
-    "hardware":         {pl:"Budowlane",         en:"Hardware/DIY"},
-    "gastronomy":       {pl:"Gastronomia",       en:"Gastronomy"},
-    "clothing":         {pl:"Odzież",            en:"Clothing"},
+    "grocery":          {pl:"Spożywcze",         en:"Grocery"},
+    "drugstore":        {pl:"Drogeria",           en:"Drugstore"},
+    "fuel":             {pl:"Paliwo",             en:"Fuel"},
+    "hardware":         {pl:"Budowlane",          en:"Hardware/DIY"},
+    "gastronomy":       {pl:"Gastronomia",        en:"Gastronomy"},
+    "clothing":         {pl:"Odzież",             en:"Clothing"},
     "health":           {pl:"Zdrowie",            en:"Health"},
     "transport":        {pl:"Transport",          en:"Transport"},
     "education":        {pl:"Edukacja",           en:"Education"},
     "electronics":      {pl:"Elektronika",        en:"Electronics"},
-    "home_garden":      {pl:"Dom i ogród",       en:"Home & Garden"},
+    "home_garden":      {pl:"Dom i ogród",        en:"Home & Garden"},
     "pets":             {pl:"Zwierzęta",          en:"Pets"},
     "children":         {pl:"Dzieci",             en:"Children"},
     "p2p_transfer":     {pl:"Przelew P2P",        en:"P2P Transfer"},
@@ -62,10 +62,10 @@
     "crypto":           {pl:"Kryptowaluta",       en:"Cryptocurrency"},
     "gambling":         {pl:"Hazard",             en:"Gambling"},
     "loans":            {pl:"Pożyczki",           en:"Loans"},
-    // Transfers
+    // Transfers & bills
     "salary":           {pl:"Wynagrodzenie",      en:"Salary"},
     "benefits":         {pl:"Świadczenia",        en:"Benefits"},
-    "rent":             {pl:"Czynsz/Najem",       en:"Rent"},
+    "rent":             {pl:"Czynsz/Mieszkanie",  en:"Rent/Housing"},
     "utilities":        {pl:"Rachunki",           en:"Utilities"},
     "telecom":          {pl:"Telekomunikacja",    en:"Telecom"},
     "insurance":        {pl:"Ubezpieczenie",      en:"Insurance"},
@@ -75,16 +75,12 @@
     "p2p_lending":      {pl:"Pożyczki P2P",       en:"P2P Lending"},
     "suspicious_pattern":{pl:"Podejrzane usługi", en:"Suspicious Services"},
     "mixer_suspected":  {pl:"Mikser krypto",      en:"Crypto Mixer"},
-    // Enrich-based
+    // Other
     "bakery":           {pl:"Piekarnia",          en:"Bakery"},
     "pharmacy":         {pl:"Apteka",             en:"Pharmacy"},
-    "diy":              {pl:"Dom/ogród",          en:"DIY"},
     "online_shop":      {pl:"Zakupy online",      en:"Online Shop"},
-    "food_service":     {pl:"Gastronomia",        en:"Food Service"},
     "medical":          {pl:"Medyczne",           en:"Medical"},
     "loan_payment":     {pl:"Rata/kredyt",        en:"Loan Payment"},
-    "utility":          {pl:"Rachunki",           en:"Utilities"},
-    "rent_housing":     {pl:"Mieszkanie",         en:"Housing"},
     "delivery":         {pl:"Kurier/przesyłki",   en:"Delivery"},
     "own_transfer":     {pl:"Przelew własny",     en:"Own Transfer"},
     "fee":              {pl:"Prowizja/opłata",    en:"Fee"},
@@ -105,15 +101,15 @@
     gastronomy:"legitimate", clothing:"legitimate", health:"legitimate",
     transport:"legitimate", education:"legitimate", electronics:"legitimate",
     home_garden:"legitimate", pets:"legitimate", children:"legitimate",
-    bakery:"legitimate", pharmacy:"legitimate", diy:"legitimate",
-    food_service:"legitimate", medical:"legitimate",
+    bakery:"legitimate", pharmacy:"legitimate",
+    medical:"legitimate",
     delivery:"legitimate", car_wash:"legitimate", auto_service:"legitimate",
     // Fuel → neutral
     fuel:"neutral",
     // Income / transfers → legitimate
     salary:"legitimate", benefits:"legitimate", rent:"legitimate",
-    utilities:"legitimate", utility:"legitimate", telecom:"legitimate",
-    insurance:"legitimate", rent_housing:"legitimate", own_transfer:"legitimate",
+    utilities:"legitimate", telecom:"legitimate",
+    insurance:"legitimate", own_transfer:"legitimate",
     // Suspicious (red)
     crypto:"suspicious", gambling:"suspicious",
     digital_store:"suspicious", mixer_suspected:"suspicious",
@@ -771,7 +767,7 @@
 
     let html = `<table class="rv-tx-table">
       <thead><tr>
-        <th class="rv-col-date rv-resizable">Data</th>
+        <th class="rv-col-date rv-col-frozen-l rv-resizable">Data</th>
         <th class="rv-col-date rv-resizable">Data wal.</th>
         <th class="rv-col-type rv-resizable">Typ</th>
         <th class="rv-col-cp rv-resizable">Kontrahent</th>
@@ -779,7 +775,7 @@
         <th class="rv-col-amt rv-resizable">Kwota</th>
         <th class="rv-col-ch rv-resizable">Kanal</th>
         <th class="rv-col-cat rv-resizable">Kategoria</th>
-        <th class="rv-col-class">Klasyfikacja</th>
+        <th class="rv-col-class rv-col-frozen-r">Klasyfikacja</th>
       </tr></thead><tbody>`;
 
     let lastStmtId = null;
@@ -839,7 +835,7 @@
       }
 
       html += `<tr class="${rowClass}" data-txid="${_esc(tx.id)}">
-        <td class="rv-col-date">${_esc(tx.booking_date || "")}</td>
+        <td class="rv-col-date rv-col-frozen-l">${_esc(tx.booking_date || "")}</td>
         <td class="rv-col-date">${_esc(tx.tx_date || "")}</td>
         <td class="rv-col-type">${_esc(tx.bank_category || "")}</td>
         <td class="rv-col-cp" title="${_esc(tx.counterparty_raw || "")}">${_esc((tx.counterparty_raw || "").slice(0,35))}</td>
@@ -852,7 +848,7 @@
           </select>
           ${tags.length ? '<span class="rv-risk-tag">' + tags.map(t=>_esc(t)).join(", ") + '</span>' : ''}
         </td>
-        <td class="rv-col-class">
+        <td class="rv-col-class rv-col-frozen-r">
           <div class="rv-cls-btns" data-txid="${_esc(tx.id)}">
             ${Object.entries(CLS_META).map(([k, m]) => {
               const active = cls === k ? "rv-cls-active" : "";
