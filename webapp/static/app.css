@@ -1287,12 +1287,14 @@ button.pill-icon:hover{
 
 /* Review transaction table — horizontally scrollable */
 #rv_table_wrap{
-  overflow-x: auto;
+  overflow: auto;
   -webkit-overflow-scrolling: touch;
+  max-height: 500px;
 }
 .rv-tx-table{
   min-width: 900px;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12px;
 }
 .rv-tx-table th{
@@ -1307,7 +1309,7 @@ button.pill-icon:hover{
   position: sticky;
   top: 0;
   background: #fff;
-  z-index: 2;
+  z-index: 3;
   white-space: nowrap;
   user-select: none;
 }
@@ -1316,8 +1318,46 @@ button.pill-icon:hover{
   border-bottom: 1px solid rgba(15,23,42,.05);
   white-space: nowrap;
   font-size: 12px;
+  background: inherit;
 }
-.rv-tx-table tr:hover{background: rgba(15,23,42,.03)}
+.rv-tx-table tr:hover td{background: rgba(15,23,42,.03)}
+
+/* Frozen first column (Data) — sticky left */
+.rv-tx-table th.rv-col-frozen-l,
+.rv-tx-table td.rv-col-frozen-l{
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+}
+.rv-tx-table th.rv-col-frozen-l{
+  z-index: 4;  /* corner cell: sticky top + left */
+}
+
+/* Frozen last column (Klasyfikacja) — sticky right */
+.rv-tx-table th.rv-col-frozen-r,
+.rv-tx-table td.rv-col-frozen-r{
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: #fff;
+  border-left: 1px solid var(--border, #e2e8f0);
+}
+.rv-tx-table th.rv-col-frozen-r{
+  z-index: 4;  /* corner cell: sticky top + right */
+}
+/* Inherit row color for frozen cells */
+.rv-tx-table tr.rv-row-suspicious td.rv-col-frozen-l,
+.rv-tx-table tr.rv-row-suspicious td.rv-col-frozen-r{background: #fef2f2}
+.rv-tx-table tr.rv-row-monitoring td.rv-col-frozen-l,
+.rv-tx-table tr.rv-row-monitoring td.rv-col-frozen-r{background: #fffbeb}
+.rv-tx-table tr.rv-row-legitimate td.rv-col-frozen-l,
+.rv-tx-table tr.rv-row-legitimate td.rv-col-frozen-r{background: #f0fdf4}
+.rv-tx-table tr.rv-row-anomaly td.rv-col-frozen-l,
+.rv-tx-table tr.rv-row-anomaly td.rv-col-frozen-r{background: #eff6ff}
+.rv-tx-table tr:hover td.rv-col-frozen-l,
+.rv-tx-table tr:hover td.rv-col-frozen-r{background: #f8fafc}
+
 .rv-col-date{font-variant-numeric: tabular-nums; min-width: 78px}
 .rv-col-type{font-weight: 600; color: var(--muted); min-width: 55px}
 .rv-col-cp{min-width: 140px; max-width: 280px; overflow: hidden; text-overflow: ellipsis}
