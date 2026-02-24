@@ -1095,6 +1095,45 @@ button.pill-icon:hover{
   position: relative;
 }
 
+/* Range slider (scroll navigation) below chart */
+.aml-chart-range-wrap{
+  padding: 4px 12px 6px;
+  display: flex;
+  align-items: center;
+}
+.aml-chart-range{
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border, #cbd5e1);
+  outline: none;
+  cursor: pointer;
+}
+.aml-chart-range::-webkit-slider-thumb{
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary, #1f5aa6);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  cursor: grab;
+}
+.aml-chart-range::-moz-range-thumb{
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary, #1f5aa6);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  cursor: grab;
+}
+.aml-chart-range:active::-webkit-slider-thumb{ cursor: grabbing; }
+.aml-chart-range:active::-moz-range-thumb{ cursor: grabbing; }
+
 /* Gap legend below chart */
 .aml-chart-gap-legend{
   padding: 6px 0 2px;
