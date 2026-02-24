@@ -1484,6 +1484,7 @@
         if (panel) panel.style.display = '';
         if (target === 'securityPanel') { loadSecuritySettings(); initAuditTab(); loadBlacklist(); loadProjectActivity(); }
         if (target === 'projectsPanel') { loadAdminProjects(); }
+        if (target === 'systemPanel' && typeof _initSystemPanel === 'function') { _initSystemPanel(); }
       });
     });
   }

@@ -19,6 +19,9 @@
     <button class="users-tab" data-panel="projectsPanel">
       Projekty <span class="en">Projects</span>
     </button>
+    <button class="users-tab" data-panel="systemPanel">
+      System <span class="en">System</span>
+    </button>
     {% endif %}
   </div>
 
@@ -317,6 +320,104 @@
       <div id="orphanProjectsList"></div>
     </div>
   </div>
+
+  <!-- Panel: System (superadmin) -->
+  <div id="systemPanel" class="users-panel" style="display:none;">
+
+    <!-- System Status -->
+    <div class="sys-status-grid" id="sysStatusGrid">
+      <div class="sys-stat"><span class="sys-stat-label">Wersja <span class="en">Version</span></span><span class="sys-stat-val" id="sysVersion">—</span></div>
+      <div class="sys-stat"><span class="sys-stat-label">Baza <span class="en">Database</span></span><span class="sys-stat-val" id="sysDbSize">—</span></div>
+      <div class="sys-stat"><span class="sys-stat-label">Dysk wolny <span class="en">Disk free</span></span><span class="sys-stat-val" id="sysDiskFree">—</span></div>
+      <div class="sys-stat"><span class="sys-stat-label">Ollama</span><span class="sys-stat-val" id="sysOllama">—</span></div>
+      <div class="sys-stat"><span class="sys-stat-label">Transakcji <span class="en">Transactions</span></span><span class="sys-stat-val" id="sysTxCount">—</span></div>
+      <div class="sys-stat"><span class="sys-stat-label">Ostatni backup <span class="en">Last backup</span></span><span class="sys-stat-val" id="sysLastBackup">—</span></div>
+    </div>
+
+    <!-- Backup actions -->
+    <div style="margin:1.2rem 0 .8rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;">
+      <button class="btn" id="btnBackupDb" style="font-size:.82rem;">
+        <span style="margin-right:.3rem;">&#128190;</span> Backup bazy <span class="en">Backup DB</span>
+      </button>
+      <button class="btn" id="btnBackupFull" style="font-size:.82rem;">
+        <span style="margin-right:.3rem;">&#128230;</span> Backup pelny <span class="en">Full backup</span>
+      </button>
+      <span id="backupSpinner" style="display:none;font-size:.8rem;color:var(--muted,#888);">
+        &#9203; Trwa tworzenie kopii...
+        <span class="en">Creating backup...</span>
+      </span>
+      <span id="backupResult" style="font-size:.8rem;"></span>
+    </div>
+
+    <!-- Backup list -->
+    <h4 style="margin:.8rem 0 .5rem;font-size:.85rem;">
+      Kopie zapasowe <span class="en">Backups</span>
+    </h4>
+    <div class="resizable-scroll" style="max-height:280px;">
+      <table class="data-table" style="width:100%;font-size:.78rem;">
+        <thead>
+          <tr>
+            <th>Typ <span class="en">Type</span></th>
+            <th>Nazwa <span class="en">Name</span></th>
+            <th>Data <span class="en">Date</span></th>
+            <th>Rozmiar <span class="en">Size</span></th>
+            <th>Akcje <span class="en">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody id="backupListBody">
+          <tr><td colspan="5" style="text-align:center;opacity:.5;">Ladowanie...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="hr" style="margin:1.2rem 0;"></div>
+
+    <!-- Auto-backup settings -->
+    <h4 style="margin:.8rem 0 .5rem;font-size:.85rem;">
+      Automatyczny backup <span class="en">Auto-backup</span>
+    </h4>
+    <div style="display:flex;flex-direction:column;gap:.6rem;max-width:480px;">
+      <label style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;cursor:pointer;">
+        <input type="checkbox" id="bkAutoEnabled"> Wlacz automatyczny backup
+        <span class="en">Enable auto-backup</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;cursor:pointer;">
+        <input type="checkbox" id="bkOnStartup"> Backup bazy przy starcie serwera
+        <span class="en">DB backup on server start</span>
+      </label>
+      <div style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;">
+        <span>Backup bazy co <span class="en">DB backup every</span></span>
+        <select id="bkDbHours" style="padding:3px 6px;border-radius:6px;font-size:.82rem;">
+          <option value="1">1h</option>
+          <option value="3">3h</option>
+          <option value="6" selected>6h</option>
+          <option value="12">12h</option>
+          <option value="24">24h</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;">
+        <span>Pelny backup codziennie o <span class="en">Full backup daily at</span></span>
+        <input type="time" id="bkFullTime" value="01:00" style="padding:3px 6px;border-radius:6px;font-size:.82rem;">
+      </div>
+      <div style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;">
+        <span>Zachowaj ostatnich <span class="en">Keep last</span></span>
+        <select id="bkKeepCount" style="padding:3px 6px;border-radius:6px;font-size:.82rem;">
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="30" selected>30</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+        <span>kopii <span class="en">backups</span></span>
+      </div>
+      <div style="margin-top:.3rem;">
+        <button class="btn" id="btnSaveBackupSettings" style="font-size:.82rem;">
+          Zapisz ustawienia <span class="en">Save settings</span>
+        </button>
+        <span id="bkSettingsSaved" style="font-size:.78rem;color:#27ae60;display:none;">Zapisano!</span>
+      </div>
+    </div>
+  </div>
   {% endif %}
 
 </div>
@@ -355,6 +456,21 @@
   .inbox-msg .inbox-msg-actions { display:flex; gap:.3rem; margin-top:.3rem; justify-content:flex-end; }
   .inbox-msg .inbox-msg-btn { background:none; border:1px solid var(--border,#ddd); border-radius:4px; font-size:.7rem; padding:.15rem .4rem; cursor:pointer; color:var(--text,#555); }
   .inbox-msg .inbox-msg-btn:hover { background:rgba(74,108,247,.06); border-color:var(--accent,#4a6cf7); }
+
+  /* System status grid */
+  .sys-status-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:.5rem; margin:.8rem 0; }
+  .sys-stat { background:var(--panel2,#f8f9fa); border:1px solid var(--border,#e0e3e8); border-radius:8px; padding:.5rem .7rem; display:flex; flex-direction:column; gap:.15rem; }
+  .sys-stat-label { font-size:.7rem; color:var(--muted,#888); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+  .sys-stat-val { font-size:.88rem; font-weight:700; color:var(--text,#333); }
+  .sys-stat-ok { color:#27ae60; }
+  .sys-stat-warn { color:#e67e22; }
+  .sys-stat-err { color:#e74c3c; }
+
+  /* Backup restore btn */
+  .bk-restore-btn { background:none; border:1px solid var(--border,#ddd); border-radius:5px; font-size:.72rem; padding:.15rem .4rem; cursor:pointer; color:var(--text,#555); }
+  .bk-restore-btn:hover { background:rgba(74,108,247,.06); border-color:var(--accent,#4a6cf7); }
+  .bk-type-full { color:#27ae60; font-weight:600; }
+  .bk-type-db { color:var(--accent,#4a6cf7); }
 
   /* User table row hover + cursor for dblclick */
   #usersBody tr[data-uid] { transition: background .15s; cursor: pointer; }
@@ -831,6 +947,184 @@
         errEl.textContent = 'Connection error';
       }
     });
+  }
+})();
+</script>
+
+<script>
+/* System / Backup panel */
+(function(){
+  'use strict';
+  var _inited = false;
+
+  window._initSystemPanel = function(){
+    if(_inited) return;
+    _inited = true;
+    _loadHealth();
+    _loadBackupList();
+    _loadBackupSettings();
+    _bindButtons();
+  };
+
+  function _fmt(n, u){ return n != null ? n.toLocaleString('pl-PL') + (u ? ' ' + u : '') : '\u2014'; }
+
+  async function _loadHealth(){
+    try {
+      var r = await fetch('/api/health');
+      var d = await r.json();
+      _txt('sysVersion', d.version || '\u2014');
+      _txt('sysDbSize', d.db_size_mb != null ? d.db_size_mb + ' MB' : '\u2014');
+      _txt('sysDiskFree', d.disk_free_mb != null ? _fmt(d.disk_free_mb, 'MB') : '\u2014');
+
+      var olEl = document.getElementById('sysOllama');
+      if(olEl){
+        olEl.textContent = d.ollama === 'ok' ? '\u25CF online' : '\u25CB ' + (d.ollama || 'offline');
+        olEl.className = 'sys-stat-val ' + (d.ollama === 'ok' ? 'sys-stat-ok' : 'sys-stat-err');
+      }
+      _txt('sysTxCount', _fmt(d.transactions));
+      var bkEl = document.getElementById('sysLastBackup');
+      if(bkEl){
+        if(d.last_backup){
+          var dt = d.last_backup.replace('T',' ').replace('Z','');
+          bkEl.textContent = dt.substring(0, 16);
+        } else {
+          bkEl.textContent = 'brak';
+          bkEl.className = 'sys-stat-val sys-stat-warn';
+        }
+      }
+    } catch(e){ /* ignore */ }
+  }
+
+  async function _loadBackupList(){
+    var tbody = document.getElementById('backupListBody');
+    if(!tbody) return;
+    try {
+      var r = await fetch('/api/admin/backup/list');
+      var d = await r.json();
+      var list = d.backups || [];
+      if(!list.length){
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;opacity:.5;">Brak kopii zapasowych</td></tr>';
+        return;
+      }
+      var html = '';
+      for(var i = 0; i < list.length; i++){
+        var b = list[i];
+        var typeClass = b.type === 'full' ? 'bk-type-full' : 'bk-type-db';
+        var typeLabel = b.type === 'full' ? '\u25CF pelny' : '\u25CB baza';
+        var dt = (b.created || '').replace('T',' ').replace('Z','').substring(0,16);
+        html += '<tr>'
+          + '<td class="' + typeClass + '">' + typeLabel + '</td>'
+          + '<td style="font-family:monospace;font-size:.72rem;">' + _esc(b.name) + '</td>'
+          + '<td>' + dt + '</td>'
+          + '<td>' + (b.size_mb != null ? b.size_mb + ' MB' : '\u2014') + '</td>'
+          + '<td><button class="bk-restore-btn" data-path="' + _esc(b.path) + '">Przywroc</button></td>'
+          + '</tr>';
+      }
+      tbody.innerHTML = html;
+      /* Bind restore buttons */
+      tbody.querySelectorAll('.bk-restore-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var path = btn.dataset.path;
+          if(!confirm('Przywrocic z kopii ' + btn.closest('tr').querySelector('td:nth-child(2)').textContent + '?\n\nAktualna baza zostanie zabezpieczona automatycznie.')) return;
+          _doRestore(path);
+        });
+      });
+    } catch(e){
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#e74c3c;">Blad ladowania</td></tr>';
+    }
+  }
+
+  async function _loadBackupSettings(){
+    try {
+      var r = await fetch('/api/admin/backup/settings');
+      var s = await r.json();
+      document.getElementById('bkAutoEnabled').checked = !!s.auto_enabled;
+      document.getElementById('bkOnStartup').checked = !!s.backup_on_startup;
+      document.getElementById('bkDbHours').value = String(s.auto_db_hours || 6);
+      document.getElementById('bkFullTime').value = s.auto_full_time || '01:00';
+      document.getElementById('bkKeepCount').value = String(s.keep_count || 30);
+    } catch(e){ /* defaults are fine */ }
+  }
+
+  function _bindButtons(){
+    var btnDb = document.getElementById('btnBackupDb');
+    var btnFull = document.getElementById('btnBackupFull');
+    var spinner = document.getElementById('backupSpinner');
+    var result = document.getElementById('backupResult');
+    var btnSave = document.getElementById('btnSaveBackupSettings');
+
+    if(btnDb) btnDb.addEventListener('click', function(){ _doBackup('/api/admin/backup/db', spinner, result); });
+    if(btnFull) btnFull.addEventListener('click', function(){ _doBackup('/api/admin/backup/full', spinner, result); });
+
+    if(btnSave) btnSave.addEventListener('click', async function(){
+      var settings = {
+        auto_enabled: document.getElementById('bkAutoEnabled').checked,
+        backup_on_startup: document.getElementById('bkOnStartup').checked,
+        auto_db_hours: parseInt(document.getElementById('bkDbHours').value) || 6,
+        auto_full_time: document.getElementById('bkFullTime').value || '01:00',
+        keep_count: parseInt(document.getElementById('bkKeepCount').value) || 30,
+      };
+      try {
+        await fetch('/api/admin/backup/settings', {
+          method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(settings)
+        });
+        var saved = document.getElementById('bkSettingsSaved');
+        if(saved){ saved.style.display=''; setTimeout(function(){ saved.style.display='none'; }, 2000); }
+      } catch(e){ alert('Blad zapisu ustawien'); }
+    });
+  }
+
+  async function _doBackup(url, spinner, result){
+    spinner.style.display = '';
+    result.textContent = '';
+    try {
+      var r = await fetch(url, {method:'POST'});
+      var d = await r.json();
+      spinner.style.display = 'none';
+      if(d.status === 'ok'){
+        result.style.color = '#27ae60';
+        result.textContent = '\u2713 Backup utworzony';
+        _loadBackupList();
+        _loadHealth();
+      } else {
+        result.style.color = '#e74c3c';
+        result.textContent = '\u2717 ' + (d.error || 'Blad');
+      }
+      setTimeout(function(){ result.textContent = ''; }, 5000);
+    } catch(e){
+      spinner.style.display = 'none';
+      result.style.color = '#e74c3c';
+      result.textContent = '\u2717 Blad polaczenia';
+    }
+  }
+
+  async function _doRestore(path){
+    try {
+      var r = await fetch('/api/admin/backup/restore', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:path})
+      });
+      var d = await r.json();
+      if(d.status === 'ok'){
+        alert('Przywrocono pomyslnie!\nOdswierz strone aby zaladowac nowe dane.');
+        _loadBackupList();
+        _loadHealth();
+      } else {
+        alert('Blad przywracania: ' + (d.error || 'Nieznany blad'));
+      }
+    } catch(e){
+      alert('Blad polaczenia');
+    }
+  }
+
+  function _txt(id, val){
+    var el = document.getElementById(id);
+    if(el) el.textContent = val;
+  }
+
+  function _esc(s){
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
   }
 })();
 </script>

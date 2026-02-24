@@ -1059,3 +1059,177 @@ async def system_migrate():
     from backend.db.migrate import migrate_json_projects
     result = await run_in_threadpool(migrate_json_projects)
     return JSONResponse(result)
+
+
+# ============================================================
+# HEALTH CHECK
+# ============================================================
+
+@router.get("/api/health")
+async def health_check():
+    """System health check — no auth required (for monitoring)."""
+    import time as _time
+    from backend.db.engine import get_db_path, fetch_one
+    from backend.settings import APP_VERSION
+
+    status = "ok"
+    checks: dict = {}
+
+    # DB check
+    try:
+        db_path = get_db_path()
+        row = fetch_one("SELECT COUNT(*) as cnt FROM users")
+        checks["db"] = "ok"
+        checks["db_size_mb"] = round(db_path.stat().st_size / (1024 * 1024), 2) if db_path.exists() else 0
+    except Exception as e:
+        checks["db"] = f"error: {e}"
+        status = "degraded"
+
+    # Disk free
+    try:
+        st = os.statvfs(str(get_db_path().parent))
+        checks["disk_free_mb"] = round((st.f_bavail * st.f_frsize) / (1024 * 1024), 1)
+    except Exception:
+        checks["disk_free_mb"] = -1
+
+    # Ollama
+    try:
+        import httpx
+        ollama_host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+        r = httpx.get(f"{ollama_host}/api/tags", timeout=3)
+        checks["ollama"] = "ok" if r.status_code == 200 else f"http {r.status_code}"
+    except Exception:
+        checks["ollama"] = "offline"
+
+    # Last backup
+    try:
+        from backend.db.backup import list_backups
+        backups = list_backups()
+        checks["last_backup"] = backups[0]["created"] if backups else None
+    except Exception:
+        checks["last_backup"] = None
+
+    # Tx & user counts
+    try:
+        tx_row = fetch_one("SELECT COUNT(*) as cnt FROM transactions")
+        u_row = fetch_one("SELECT COUNT(*) as cnt FROM users")
+        checks["transactions"] = tx_row["cnt"] if tx_row else 0
+        checks["users"] = u_row["cnt"] if u_row else 0
+    except Exception:
+        pass
+
+    checks["version"] = APP_VERSION
+    checks["status"] = status
+    return JSONResponse(checks)
+
+
+# ============================================================
+# BACKUP API (admin only — via /api/admin/backup/*)
+# ============================================================
+
+@router.get("/api/admin/backup/list")
+async def backup_list():
+    """List available backups."""
+    from backend.db.backup import list_backups
+    return JSONResponse({"backups": list_backups()})
+
+
+@router.post("/api/admin/backup/db")
+async def backup_db_now():
+    """Trigger an immediate database backup."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.db.backup import backup_database
+    try:
+        path = await run_in_threadpool(backup_database)
+        return JSONResponse({"status": "ok", "path": path.name, "size": path.stat().st_size})
+    except Exception as e:
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+
+@router.post("/api/admin/backup/full")
+async def backup_full_now():
+    """Trigger an immediate full backup (DB + files + config)."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.db.backup import full_backup
+    try:
+        manifest = await run_in_threadpool(full_backup)
+        return JSONResponse({"status": "ok", "manifest": manifest})
+    except Exception as e:
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+
+@router.post("/api/admin/backup/restore")
+async def backup_restore(request: Request):
+    """Restore from a specific backup."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.db.backup import restore_database, full_restore
+    data = await request.json()
+    backup_path = Path(data.get("path", ""))
+    if not backup_path.exists():
+        return JSONResponse({"status": "error", "error": "Backup not found"}, status_code=404)
+    try:
+        if backup_path.is_dir():
+            result = await run_in_threadpool(full_restore, backup_path)
+        else:
+            await run_in_threadpool(restore_database, backup_path)
+            result = {"restored": ["database"], "errors": []}
+        return JSONResponse({"status": "ok", **result})
+    except Exception as e:
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+
+@router.post("/api/admin/backup/rotate")
+async def backup_rotate(request: Request):
+    """Delete old backups, keeping the most recent N."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.db.backup import rotate_backups
+    data = await request.json()
+    keep = int(data.get("keep", 30))
+    deleted = await run_in_threadpool(rotate_backups, keep)
+    return JSONResponse({"status": "ok", "deleted": deleted})
+
+
+@router.get("/api/admin/backup/settings")
+async def backup_settings_get():
+    """Get auto-backup settings from system_config."""
+    from backend.db.engine import get_system_config
+    import json as _json
+    raw = get_system_config("backup_settings", "{}")
+    try:
+        settings = _json.loads(raw)
+    except Exception:
+        settings = {}
+    defaults = {
+        "auto_db_hours": 6,
+        "auto_full_time": "01:00",
+        "auto_enabled": False,
+        "backup_on_startup": False,
+        "keep_count": 30,
+    }
+    for k, v in defaults.items():
+        settings.setdefault(k, v)
+    return JSONResponse(settings)
+
+
+@router.post("/api/admin/backup/settings")
+async def backup_settings_save(request: Request):
+    """Save auto-backup settings to system_config."""
+    from backend.db.engine import set_system_config
+    data = await request.json()
+    import json as _json
+    set_system_config("backup_settings", _json.dumps(data))
+    # Notify scheduler to reload
+    _reload_backup_scheduler(data)
+    return JSONResponse({"status": "ok"})
+
+
+# Scheduler reference (set from server.py startup)
+_backup_scheduler_reload = None
+
+def set_backup_scheduler_reload(fn):
+    global _backup_scheduler_reload
+    _backup_scheduler_reload = fn
+
+def _reload_backup_scheduler(settings):
+    if _backup_scheduler_reload:
+        _backup_scheduler_reload(settings)
