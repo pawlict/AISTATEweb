@@ -2073,6 +2073,93 @@ async def _startup_nllb_autoscan() -> None:
 
     threading.Thread(target=_run, daemon=True).start()
 
+
+# --- Startup: auto-backup scheduler ---
+@app.on_event("startup")
+async def _startup_backup_scheduler() -> None:
+    """Start the auto-backup background scheduler."""
+    import json as _json
+    from datetime import datetime as _dt
+
+    _stop_event = threading.Event()
+
+    def _get_settings() -> dict:
+        try:
+            from backend.db.engine import get_system_config
+            raw = get_system_config("backup_settings", "{}")
+            return _json.loads(raw)
+        except Exception:
+            return {}
+
+    def _run_scheduler() -> None:
+        settings = _get_settings()
+
+        # Startup backup
+        if settings.get("backup_on_startup"):
+            try:
+                from backend.db.backup import backup_database
+                backup_database()
+                app_log("Startup DB backup completed")
+            except Exception as e:
+                app_log(f"Startup backup failed: {e}")
+
+        last_db_backup = time.time()
+        last_full_date = ""
+
+        while not _stop_event.is_set():
+            _stop_event.wait(60)  # check every minute
+            if _stop_event.is_set():
+                break
+
+            settings = _get_settings()
+            if not settings.get("auto_enabled"):
+                continue
+
+            now = time.time()
+            now_dt = _dt.utcnow()
+
+            # Periodic DB backup
+            db_hours = int(settings.get("auto_db_hours", 6))
+            if db_hours > 0 and (now - last_db_backup) >= db_hours * 3600:
+                try:
+                    from backend.db.backup import backup_database, rotate_backups
+                    backup_database()
+                    keep = int(settings.get("keep_count", 30))
+                    rotate_backups(keep)
+                    last_db_backup = now
+                    app_log(f"Auto DB backup completed (every {db_hours}h)")
+                except Exception as e:
+                    app_log(f"Auto DB backup failed: {e}")
+
+            # Daily full backup at specified time
+            full_time = settings.get("auto_full_time", "01:00")
+            today_str = now_dt.strftime("%Y-%m-%d")
+            current_time = now_dt.strftime("%H:%M")
+            if current_time == full_time and today_str != last_full_date:
+                try:
+                    from backend.db.backup import full_backup, rotate_backups
+                    full_backup()
+                    keep = int(settings.get("keep_count", 30))
+                    rotate_backups(keep)
+                    last_full_date = today_str
+                    app_log(f"Auto full backup completed (daily at {full_time})")
+                except Exception as e:
+                    app_log(f"Auto full backup failed: {e}")
+
+    def _reload(new_settings: dict) -> None:
+        """Called from API when settings change — just updates the flag."""
+        pass  # Scheduler re-reads settings every minute
+
+    # Register reload callback for API
+    try:
+        from webapp.routers.aml import set_backup_scheduler_reload
+        set_backup_scheduler_reload(_reload)
+    except Exception:
+        pass
+
+    threading.Thread(target=_run_scheduler, daemon=True, name="backup-scheduler").start()
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> Any:
     # Multi-user mode: skip Intro animation, go directly to projects
