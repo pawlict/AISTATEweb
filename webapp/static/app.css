@@ -1298,16 +1298,16 @@ button.pill-icon:hover{
 .rv-tx-table th{
   text-align: left;
   padding: 7px 6px;
-  font-weight: 800;
-  font-size: 10px;
+  font-weight: 700;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .03em;
   color: var(--muted);
   border-bottom: 2px solid var(--border);
   position: sticky;
   top: 0;
-  background: var(--panel);
-  z-index: 1;
+  background: #fff;
+  z-index: 2;
   white-space: nowrap;
   user-select: none;
 }
@@ -1315,23 +1315,24 @@ button.pill-icon:hover{
   padding: 5px 6px;
   border-bottom: 1px solid rgba(15,23,42,.05);
   white-space: nowrap;
+  font-size: 12px;
 }
 .rv-tx-table tr:hover{background: rgba(15,23,42,.03)}
-.rv-col-date{font-family: monospace; font-size: 11px; min-width: 78px}
-.rv-col-type{font-size: 10px; font-weight: 700; color: var(--muted); min-width: 55px}
+.rv-col-date{font-variant-numeric: tabular-nums; min-width: 78px}
+.rv-col-type{font-weight: 600; color: var(--muted); min-width: 55px}
 .rv-col-cp{min-width: 140px; max-width: 280px; overflow: hidden; text-overflow: ellipsis}
 .rv-col-title{min-width: 160px; max-width: 340px; overflow: hidden; text-overflow: ellipsis; color: var(--muted)}
-.rv-col-amt{font-weight: 600; text-align: right; min-width: 90px; font-family: monospace; font-size: 12px}
-.rv-col-ch{font-size: 10px; font-weight: 700; min-width: 50px}
-.rv-col-cat{font-size: 10px; color: var(--muted); min-width: 80px}
+.rv-col-amt{font-weight: 600; text-align: right; min-width: 90px; font-variant-numeric: tabular-nums}
+.rv-col-ch{font-weight: 600; min-width: 50px}
+.rv-col-cat{color: var(--muted); min-width: 80px}
 .rv-col-class{min-width: 120px}
 .rv-debit{color: #b91c1c}
 .rv-credit{color: #15803d}
 
 /* Category dropdown in table */
 .rv-cat-sel{
-  font-size: 10px;
-  padding: 1px 3px;
+  font-size: 11px;
+  padding: 2px 4px;
   border: 1px solid var(--border, #e2e8f0);
   border-radius: 4px;
   background: var(--panel, #fff);

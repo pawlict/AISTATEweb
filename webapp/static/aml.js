@@ -268,6 +268,10 @@
     // Charts
     const charts = detail.charts || result.charts || {};
     St.chartsData = charts;
+    // Restore merged multi-statement balance timeline (built by _mergeMultiAccountCharts before _renderResults)
+    if(St._mergedBalanceTimeline){
+      St.chartsData.balance_timeline = St._mergedBalanceTimeline;
+    }
     _renderChart("balance_timeline");
 
     // ML anomalies
@@ -1477,6 +1481,7 @@
         St.statementId = null;
         St.caseId = null;
         St.chartsData = {};
+        St._mergedBalanceTimeline = null;
         if(St.chartInstance){ St.chartInstance.destroy(); St.chartInstance = null; }
         if(St.cyInstance){ St.cyInstance.destroy(); St.cyInstance = null; }
         _chartZoom.level = 1;
@@ -1711,13 +1716,17 @@
     }
   }
 
-  /** Fetch chart data for all statements and merge balance_timeline datasets. */
+  /**
+   * Fetch chart data for all statements and merge into a single multi-period
+   * balance timeline.  Each statement/month is a separate colored dataset so
+   * the user can see the full timeline with distinct periods.
+   */
   async function _mergeMultiAccountCharts(stmtIds){
     const palette = ["#1f5aa6","#b91c1c","#15803d","#7c3aed","#d97706","#0891b2","#be185d","#65a30d"];
     const bgPalette = [
-      "rgba(31,90,166,0.1)","rgba(185,28,28,0.1)","rgba(21,128,61,0.1)",
-      "rgba(124,58,237,0.1)","rgba(217,119,6,0.1)","rgba(8,145,178,0.1)",
-      "rgba(190,24,93,0.1)","rgba(101,163,13,0.1)",
+      "rgba(31,90,166,0.08)","rgba(185,28,28,0.08)","rgba(21,128,61,0.08)",
+      "rgba(124,58,237,0.08)","rgba(217,119,6,0.08)","rgba(8,145,178,0.08)",
+      "rgba(190,24,93,0.08)","rgba(101,163,13,0.08)",
     ];
 
     try {
@@ -1726,9 +1735,8 @@
         stmtIds.map(sid => _safeApi("/api/aml/detail/" + encodeURIComponent(sid)))
       );
 
-      // Collect per-account timeline data
+      // Collect per-statement timeline data
       const allTimelines = [];
-      const allTxMeta = [];
       let allLabelsSet = new Set();
 
       for(let i = 0; i < allDetails.length; i++){
@@ -1736,33 +1744,48 @@
         if(!d) continue;
         const charts = d.charts || {};
         const bt = charts.balance_timeline;
-        if(!bt || !bt.labels) continue;
+        if(!bt || !bt.labels || !bt.labels.length) continue;
 
-        const acctNum = (d.statement && d.statement.account_number) || "";
-        const shortAcct = acctNum.length > 8 ? "..." + acctNum.slice(-4) : (acctNum || "Rachunek " + (i + 1));
+        const stmt = d.statement || {};
+        const acctNum = stmt.account_number || "";
+        const period = stmt.period || "";
+        // Build descriptive label: period or first-last date
+        let label = period;
+        if(!label){
+          const firstDate = bt.labels[0] || "";
+          const lastDate = bt.labels[bt.labels.length - 1] || "";
+          label = firstDate === lastDate ? firstDate : firstDate + " \u2014 " + lastDate;
+        }
+        const shortAcct = acctNum.length > 8 ? "..." + acctNum.slice(-4) : "";
+        if(shortAcct) label += " (" + shortAcct + ")";
 
         for(const lbl of bt.labels) allLabelsSet.add(lbl);
 
         allTimelines.push({
           labels: bt.labels,
           data: bt.datasets[0].data,
-          accountLabel: shortAcct,
+          label: label,
           index: i,
           txMeta: bt.tx_meta || null,
+          firstDate: bt.labels[0] || "",
         });
       }
 
-      if(allTimelines.length < 2) return; // Only one account — no merge needed
+      if(allTimelines.length < 2) return; // Only one statement — no merge needed
 
-      // Unified sorted label axis (all dates from all accounts)
+      // Sort timelines chronologically by their first date
+      allTimelines.sort((a, b) => a.firstDate.localeCompare(b.firstDate));
+
+      // Unified sorted label axis (all dates)
       const allLabels = Array.from(allLabelsSet).sort();
 
-      // Build a dataset per account, filling nulls where no data
+      // Build a dataset per statement, filling nulls where no data
+      // Each dataset only has values in its own date range (no spanGaps)
       const mergedDatasets = [];
-      const mergedTxMeta = []; // per-dataset array of arrays
+      const mergedTxMeta = [];
 
-      for(const tl of allTimelines){
-        // Map original labels to a lookup
+      for(let ti = 0; ti < allTimelines.length; ti++){
+        const tl = allTimelines[ti];
         const labelMap = {};
         for(let j = 0; j < tl.labels.length; j++){
           labelMap[tl.labels[j]] = j;
@@ -1770,43 +1793,60 @@
 
         const alignedData = [];
         const alignedMeta = [];
+        // Find the boundary: add one overlapping point with next statement so lines connect
+        const lastOwnDate = tl.labels[tl.labels.length - 1] || "";
+        const nextTl = allTimelines[ti + 1];
+        const nextFirstDate = nextTl ? nextTl.labels[0] : null;
+
         for(const lbl of allLabels){
           if(lbl in labelMap){
-            const origIdx = labelMap[lbl];
-            alignedData.push(tl.data[origIdx]);
-            alignedMeta.push(tl.txMeta ? tl.txMeta[origIdx] : null);
+            alignedData.push(tl.data[labelMap[lbl]]);
+            alignedMeta.push(tl.txMeta ? tl.txMeta[labelMap[lbl]] : null);
           } else {
             alignedData.push(null);
             alignedMeta.push(null);
           }
         }
 
-        const ci = tl.index % palette.length;
+        // Connect to next period: duplicate the last balance at the first date of next period
+        if(nextFirstDate && tl.data.length > 0){
+          const nextIdx = allLabels.indexOf(nextFirstDate);
+          if(nextIdx >= 0 && alignedData[nextIdx] === null){
+            alignedData[nextIdx] = tl.data[tl.data.length - 1]; // bridge value
+            alignedMeta[nextIdx] = null; // no tx metadata for bridge
+          }
+        }
+
+        const ci = ti % palette.length;
         mergedDatasets.push({
-          label: tl.accountLabel,
+          label: tl.label,
           data: alignedData,
           borderColor: palette[ci],
           backgroundColor: bgPalette[ci],
-          fill: false,
+          fill: true,
           tension: 0.2,
           pointRadius: 1,
           spanGaps: true,
+          borderWidth: 2,
         });
         mergedTxMeta.push(alignedMeta);
       }
 
-      // Replace the chartsData balance_timeline with merged version
+      // Store merged result (will be restored in _renderResults via _merged flag)
       if(!St.chartsData) St.chartsData = {};
-      St.chartsData.balance_timeline = {
+      const merged = {
         type: "line",
         labels: allLabels,
         datasets: mergedDatasets,
         gaps: [],
-        tx_meta: mergedTxMeta[0], // primary account for tooltip
-        _multiMeta: mergedTxMeta, // all accounts for rich tooltip
+        tx_meta: mergedTxMeta[0],
+        _multiMeta: mergedTxMeta,
       };
+      St.chartsData.balance_timeline = merged;
+      // Store in separate state so _renderResults can restore after overwriting chartsData
+      St._mergedBalanceTimeline = merged;
     } catch(e){
-      console.warn("Multi-account chart merge failed:", e);
+      console.warn("Multi-statement chart merge failed:", e);
     }
   }
 
