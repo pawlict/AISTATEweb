@@ -1208,15 +1208,19 @@ button.pill-icon:hover{
   display: inline-block;
 }
 
-/* Review transaction table */
+/* Review transaction table — horizontally scrollable */
+#rv_table_wrap{
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .rv-tx-table{
-  width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
   font-size: 12px;
 }
 .rv-tx-table th{
   text-align: left;
-  padding: 7px 5px;
+  padding: 7px 6px;
   font-weight: 800;
   font-size: 10px;
   text-transform: uppercase;
@@ -1228,23 +1232,21 @@ button.pill-icon:hover{
   background: var(--panel);
   z-index: 1;
   white-space: nowrap;
+  user-select: none;
 }
 .rv-tx-table td{
-  padding: 5px;
+  padding: 5px 6px;
   border-bottom: 1px solid rgba(15,23,42,.05);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .rv-tx-table tr:hover{background: rgba(15,23,42,.03)}
-.rv-col-date{font-family: monospace; font-size: 11px; min-width: 74px}
-.rv-col-type{font-size: 10px; font-weight: 700; color: var(--muted); max-width: 70px}
-.rv-col-cp{max-width: 160px}
-.rv-col-title{max-width: 180px; color: var(--muted)}
+.rv-col-date{font-family: monospace; font-size: 11px; min-width: 78px}
+.rv-col-type{font-size: 10px; font-weight: 700; color: var(--muted); min-width: 55px}
+.rv-col-cp{min-width: 140px; max-width: 280px; overflow: hidden; text-overflow: ellipsis}
+.rv-col-title{min-width: 160px; max-width: 340px; overflow: hidden; text-overflow: ellipsis; color: var(--muted)}
 .rv-col-amt{font-weight: 600; text-align: right; min-width: 90px; font-family: monospace; font-size: 12px}
-.rv-col-bal{font-size: 11px; text-align: right; color: var(--muted); font-family: monospace; min-width: 80px}
-.rv-col-ch{font-size: 10px; font-weight: 700}
-.rv-col-cat{font-size: 10px; color: var(--muted)}
+.rv-col-ch{font-size: 10px; font-weight: 700; min-width: 50px}
+.rv-col-cat{font-size: 10px; color: var(--muted); min-width: 80px}
 .rv-col-class{min-width: 120px}
 .rv-debit{color: #b91c1c}
 .rv-credit{color: #15803d}
@@ -1289,8 +1291,12 @@ button.pill-icon:hover{
 }
 .rv-cls-active{
   border-color: var(--cls-color) !important;
-  background: var(--cls-color) !important;
-  color: white !important;
+  background: color-mix(in srgb, var(--cls-color) 18%, transparent) !important;
+  color: var(--cls-color) !important;
+}
+.rv-cls-active svg{
+  filter: none !important;
+  opacity: 1 !important;
 }
 
 /* Field rules */
