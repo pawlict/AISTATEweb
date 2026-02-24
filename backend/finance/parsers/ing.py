@@ -116,6 +116,14 @@ class INGParser(BankParser):
     # Public API
     # ------------------------------------------------------------
 
+    def parse_tables(self, tables, full_text, header_words=None) -> ParseResult:
+        """Not used — ING uses coordinate-based PDF parsing via parse_pdf()."""
+        return ParseResult(bank=self.BANK_NAME)
+
+    def parse_text(self, text: str) -> ParseResult:
+        """Not used — ING uses coordinate-based PDF parsing via parse_pdf()."""
+        return ParseResult(bank=self.BANK_NAME)
+
     def parse_pdf(self, pdf_path: Path) -> ParseResult:
         """
         Parse statement:
@@ -144,12 +152,12 @@ class INGParser(BankParser):
                     pass
 
         return ParseResult(
-            bank_id=self.BANK_ID,
-            bank_name=self.BANK_NAME,
+            bank=self.BANK_NAME,
             info=info,
             transactions=transactions,
             warnings=warnings,
             page_count=page_count,
+            parse_method="pymupdf_coord_ing",
         )
 
     # ------------------------------------------------------------
@@ -168,7 +176,7 @@ class INGParser(BankParser):
         return lines, doc.page_count
 
     def _parse_meta(self, lines: List[str]) -> StatementInfo:
-        info = StatementInfo(bank_name=self.BANK_NAME, currency="PLN")
+        info = StatementInfo(bank=self.BANK_NAME, currency="PLN")
 
         # statement number + period
         for ln in lines[:250]:
@@ -213,37 +221,33 @@ class INGParser(BankParser):
         # these are present on the first page header
         iban = _after("Nr rachunku IBAN:")
         if iban:
-            try:
-                info.account_iban = iban.replace(" ", "")
-            except Exception:
-                pass
+            info.account_number = iban.replace(" ", "")
 
         nrb = _after("Nr rachunku/NRB:")
         if nrb:
-            try:
-                info.account_nrb = nrb.replace(" ", "")
-            except Exception:
-                pass
+            if not info.account_number:
+                info.account_number = nrb.replace(" ", "")
 
-        bic = _after("Nr BIC (SWIFT):")
-        if bic:
-            try:
-                info.account_bic = bic.strip()
-            except Exception:
-                pass
+        # account holder — "Dane posiadacza" block
+        for i, ln in enumerate(lines[:400]):
+            if ln == "Dane posiadacza":
+                # Next non-label line is the holder name
+                for j in range(i + 1, min(i + 10, len(lines))):
+                    candidate = lines[j].strip()
+                    if candidate in ("Dane rachunku", ""):
+                        continue
+                    if candidate.startswith("Kod kraju:"):
+                        break
+                    if candidate.endswith(":"):
+                        break
+                    info.account_holder = candidate
+                    break
+                break
 
         # account name + currency
         for i, ln in enumerate(lines[:400]):
-            if ln.startswith("Nazwa rachunku:") and i + 1 < len(lines):
-                try:
-                    info.account_name = lines[i + 1].strip()
-                except Exception:
-                    pass
             if ln.startswith("Waluta rachunku:") and i + 1 < len(lines):
-                try:
-                    info.currency = lines[i + 1].strip()
-                except Exception:
-                    pass
+                info.currency = lines[i + 1].strip()
 
         # balances (if StatementInfo defines fields; otherwise ignored)
         # match patterns like: "Saldo początkowe ... 5 808,76 PLN"
