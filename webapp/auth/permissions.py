@@ -53,7 +53,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     },
     "user_mgmt": {
         "pages": ["/users"],
-        "api_prefixes": ["/api/users", "/api/auth/audit", "/api/auth/password-blacklist"],
+        "api_prefixes": ["/api/users", "/api/auth/audit", "/api/auth/password-blacklist", "/api/health"],
         "api_keywords": ["settings/security"],
     },
 }
