@@ -1068,57 +1068,48 @@ async def system_migrate():
 @router.get("/api/health")
 async def health_check():
     """System health check — no auth required (for monitoring)."""
-    import time as _time
     from backend.db.engine import get_db_path, fetch_one
     from backend.settings import APP_VERSION
 
     status = "ok"
     checks: dict = {}
 
+    # Version
+    checks["version"] = APP_VERSION
+
     # DB check
     try:
         db_path = get_db_path()
-        row = fetch_one("SELECT COUNT(*) as cnt FROM users")
+        fetch_one("SELECT 1")
         checks["db"] = "ok"
         checks["db_size_mb"] = round(db_path.stat().st_size / (1024 * 1024), 2) if db_path.exists() else 0
     except Exception as e:
         checks["db"] = f"error: {e}"
+        checks["db_size_mb"] = None
         status = "degraded"
 
-    # Disk free
+    # Disk: free + total
     try:
-        st = os.statvfs(str(get_db_path().parent))
-        checks["disk_free_mb"] = round((st.f_bavail * st.f_frsize) / (1024 * 1024), 1)
+        db_path = get_db_path()
+        st = os.statvfs(str(db_path.parent))
+        free_bytes = st.f_bavail * st.f_frsize
+        total_bytes = st.f_blocks * st.f_frsize
+        checks["disk_free_gb"] = round(free_bytes / (1024 ** 3), 1)
+        checks["disk_total_gb"] = round(total_bytes / (1024 ** 3), 1)
     except Exception:
-        checks["disk_free_mb"] = -1
-
-    # Ollama
-    try:
-        import httpx
-        ollama_host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-        r = httpx.get(f"{ollama_host}/api/tags", timeout=3)
-        checks["ollama"] = "ok" if r.status_code == 200 else f"http {r.status_code}"
-    except Exception:
-        checks["ollama"] = "offline"
+        checks["disk_free_gb"] = None
+        checks["disk_total_gb"] = None
 
     # Last backup
     try:
         from backend.db.backup import list_backups
         backups = list_backups()
         checks["last_backup"] = backups[0]["created"] if backups else None
+        checks["last_backup_name"] = backups[0]["name"] if backups else None
+        checks["last_backup_type"] = backups[0].get("type") if backups else None
     except Exception:
         checks["last_backup"] = None
 
-    # Tx & user counts
-    try:
-        tx_row = fetch_one("SELECT COUNT(*) as cnt FROM transactions")
-        u_row = fetch_one("SELECT COUNT(*) as cnt FROM users")
-        checks["transactions"] = tx_row["cnt"] if tx_row else 0
-        checks["users"] = u_row["cnt"] if u_row else 0
-    except Exception:
-        pass
-
-    checks["version"] = APP_VERSION
     checks["status"] = status
     return JSONResponse(checks)
 
