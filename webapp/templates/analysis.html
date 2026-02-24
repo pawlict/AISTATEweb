@@ -308,6 +308,11 @@
             <div class="h2">Wykresy</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
+            <div id="aml_chart_zoom_bar" class="aml-chart-zoom-bar" style="display:none">
+              <button type="button" class="aml-chart-zoom-btn" id="aml_chart_zoom_out" title="Oddal">−</button>
+              <button type="button" class="aml-chart-zoom-btn" id="aml_chart_zoom_reset" title="Resetuj zoom">1:1</button>
+              <button type="button" class="aml-chart-zoom-btn" id="aml_chart_zoom_in" title="Przybliż">+</button>
+            </div>
             <select class="input" id="aml_chart_select" style="padding:5px 8px;border-radius:10px;min-width:180px">
               <option value="balance_timeline">Saldo w czasie</option>
               <option value="category_distribution">Kategorie</option>
@@ -319,7 +324,7 @@
           </div>
         </div>
         <div id="aml_chart_scroll_wrap" class="aml-chart-scroll-wrap">
-          <div id="aml_chart_container" style="height:380px;position:relative;min-width:100%">
+          <div id="aml_chart_container" style="height:380px;position:relative">
             <canvas id="aml_chart_canvas"></canvas>
           </div>
         </div>

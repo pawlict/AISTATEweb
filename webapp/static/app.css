@@ -239,7 +239,7 @@ body.sidebar-collapsed .nav-icon{margin-right:0; width:30px; height:30px}
 body.sidebar-collapsed .nav-icon svg{width:22px; height:22px}
 body.sidebar-collapsed .nav-section{display:none}
 
-.main{flex:1; padding:22px 26px}
+.main{flex:1; padding:22px 26px; min-width:0; overflow-x:hidden}
 
 .card{
   border:1px solid var(--border);
@@ -622,7 +622,7 @@ button.pill-icon:hover{
 .analysis-sidebar.collapsed .analysis-sidecard{display:none}
 .analysis-sidebar.collapsed + .analysis-main{grid-column: 1 / span 2}
 
-.analysis-main{display:flex; flex-direction:column; gap:14px; overflow-y:auto; overflow-x:hidden}
+.analysis-main{display:flex; flex-direction:column; gap:14px; overflow-y:auto; overflow-x:hidden; min-width:0}
 
 .analysis-sidebar-toggle{
   position: fixed;
@@ -1063,15 +1063,18 @@ button.pill-icon:hover{
 /* Charts card — prevent flex item from expanding beyond parent */
 #aml_charts_card{
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
+  contain: layout inline-size;
 }
 
-/* Chart scrollable wrapper */
+/* Chart scrollable wrapper — ONLY this element scrolls horizontally */
 .aml-chart-scroll-wrap{
   overflow-x: auto;
   overflow-y: hidden;
   margin-top: 10px;
   position: relative;
+  width: 100%;
   max-width: 100%;
   scrollbar-width: thin;
   scrollbar-color: var(--border, #cbd5e1) transparent;
@@ -1093,6 +1096,41 @@ button.pill-icon:hover{
 /* Chart container */
 #aml_chart_container{
   position: relative;
+  min-width: 100%;
+}
+
+/* Zoom buttons bar */
+.aml-chart-zoom-bar{
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  background: var(--bg-card, #f1f5f9);
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 8px;
+  padding: 2px;
+}
+.aml-chart-zoom-btn{
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text, #1e293b);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s;
+  line-height: 1;
+}
+.aml-chart-zoom-btn:hover:not(:disabled){
+  background: var(--border, #cbd5e1);
+}
+.aml-chart-zoom-btn:disabled{
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* Range slider (scroll navigation) below chart */

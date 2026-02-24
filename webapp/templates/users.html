@@ -327,10 +327,8 @@
     <!-- System Status -->
     <div class="sys-status-grid" id="sysStatusGrid">
       <div class="sys-stat"><span class="sys-stat-label">Wersja <span class="en">Version</span></span><span class="sys-stat-val" id="sysVersion">—</span></div>
-      <div class="sys-stat"><span class="sys-stat-label">Baza <span class="en">Database</span></span><span class="sys-stat-val" id="sysDbSize">—</span></div>
-      <div class="sys-stat"><span class="sys-stat-label">Dysk wolny <span class="en">Disk free</span></span><span class="sys-stat-val" id="sysDiskFree">—</span></div>
-      <div class="sys-stat"><span class="sys-stat-label">Ollama</span><span class="sys-stat-val" id="sysOllama">—</span></div>
-      <div class="sys-stat"><span class="sys-stat-label">Transakcji <span class="en">Transactions</span></span><span class="sys-stat-val" id="sysTxCount">—</span></div>
+      <div class="sys-stat"><span class="sys-stat-label">Baza danych <span class="en">Database</span></span><span class="sys-stat-val" id="sysDbSize">—</span></div>
+      <div class="sys-stat"><span class="sys-stat-label">Dysk <span class="en">Disk</span></span><span class="sys-stat-val" id="sysDiskFree">—</span></div>
       <div class="sys-stat"><span class="sys-stat-label">Ostatni backup <span class="en">Last backup</span></span><span class="sys-stat-val" id="sysLastBackup">—</span></div>
     </div>
 
@@ -458,7 +456,7 @@
   .inbox-msg .inbox-msg-btn:hover { background:rgba(74,108,247,.06); border-color:var(--accent,#4a6cf7); }
 
   /* System status grid */
-  .sys-status-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:.5rem; margin:.8rem 0; }
+  .sys-status-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:.5rem; margin:.8rem 0; }
   .sys-stat { background:var(--panel2,#f8f9fa); border:1px solid var(--border,#e0e3e8); border-radius:8px; padding:.5rem .7rem; display:flex; flex-direction:column; gap:.15rem; }
   .sys-stat-label { font-size:.7rem; color:var(--muted,#888); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
   .sys-stat-val { font-size:.88rem; font-weight:700; color:var(--text,#333); }
@@ -971,28 +969,52 @@
   async function _loadHealth(){
     try {
       var r = await fetch('/api/health');
+      if(!r.ok) throw new Error('HTTP ' + r.status);
       var d = await r.json();
-      _txt('sysVersion', d.version || '\u2014');
-      _txt('sysDbSize', d.db_size_mb != null ? d.db_size_mb + ' MB' : '\u2014');
-      _txt('sysDiskFree', d.disk_free_mb != null ? _fmt(d.disk_free_mb, 'MB') : '\u2014');
 
-      var olEl = document.getElementById('sysOllama');
-      if(olEl){
-        olEl.textContent = d.ollama === 'ok' ? '\u25CF online' : '\u25CB ' + (d.ollama || 'offline');
-        olEl.className = 'sys-stat-val ' + (d.ollama === 'ok' ? 'sys-stat-ok' : 'sys-stat-err');
+      /* Version */
+      _txt('sysVersion', d.version || '\u2014');
+
+      /* Database size */
+      if(d.db_size_mb != null){
+        var dbText = d.db_size_mb >= 1024
+          ? (d.db_size_mb / 1024).toFixed(1) + ' GB'
+          : d.db_size_mb + ' MB';
+        var dbEl = document.getElementById('sysDbSize');
+        if(dbEl){
+          dbEl.textContent = dbText;
+          dbEl.className = 'sys-stat-val ' + (d.db === 'ok' ? 'sys-stat-ok' : 'sys-stat-err');
+        }
       }
-      _txt('sysTxCount', _fmt(d.transactions));
+
+      /* Disk: free / total */
+      var diskEl = document.getElementById('sysDiskFree');
+      if(diskEl){
+        if(d.disk_free_gb != null && d.disk_total_gb != null){
+          var pct = Math.round((d.disk_free_gb / d.disk_total_gb) * 100);
+          diskEl.textContent = d.disk_free_gb + ' GB wolne / ' + d.disk_total_gb + ' GB (' + pct + '%)';
+          diskEl.className = 'sys-stat-val ' + (pct < 10 ? 'sys-stat-err' : pct < 25 ? 'sys-stat-warn' : 'sys-stat-ok');
+        } else {
+          diskEl.textContent = '\u2014';
+        }
+      }
+
+      /* Last backup */
       var bkEl = document.getElementById('sysLastBackup');
       if(bkEl){
         if(d.last_backup){
-          var dt = d.last_backup.replace('T',' ').replace('Z','');
-          bkEl.textContent = dt.substring(0, 16);
+          var dt = d.last_backup.replace('T',' ').replace('Z','').substring(0, 16);
+          var typeLabel = d.last_backup_type === 'full' ? ' (pelny)' : d.last_backup_type === 'database' ? ' (baza)' : '';
+          bkEl.textContent = dt + typeLabel;
+          bkEl.className = 'sys-stat-val sys-stat-ok';
         } else {
           bkEl.textContent = 'brak';
           bkEl.className = 'sys-stat-val sys-stat-warn';
         }
       }
-    } catch(e){ /* ignore */ }
+    } catch(e){
+      console.warn('Health check failed:', e);
+    }
   }
 
   async function _loadBackupList(){

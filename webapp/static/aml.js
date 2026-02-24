@@ -368,21 +368,17 @@
   }
 
   // ============================================================
-  // CHARTS (Chart.js) — zoom, scroll, drag-zoom, range slider
+  // CHARTS (Chart.js) — zoom, scroll, range slider
   // ============================================================
 
   // Zoom / interaction state for balance_timeline
   const _chartZoom = {
     level: 1,           // 1 = fit-to-width, >1 = zoomed in
     minLevel: 1,
-    maxLevel: 20,
+    maxLevel: 10,
     pxPerPoint: 0,      // base px per data point (computed)
     activeKey: null,     // currently rendered chart key
     bound: false,        // whether listeners are attached
-    // Drag-zoom state (LPP hold + horizontal drag)
-    dragging: false,
-    dragStartX: 0,
-    dragStartLevel: 1,
   };
 
   function _ensureChartJs(cb){
@@ -470,6 +466,7 @@
       container.style.width = "";
       container.style.minWidth = "100%";
       _updateRangeSlider();
+      _updateZoomBtns();
       return;
     }
 
@@ -482,6 +479,41 @@
       St.chartInstance.resize();
     }
     _updateRangeSlider();
+    _updateZoomBtns();
+  }
+
+  /** Update zoom button states (+/- disable when at limits). */
+  function _updateZoomBtns(){
+    const btnIn = QS("#aml_chart_zoom_in");
+    const btnOut = QS("#aml_chart_zoom_out");
+    const btnReset = QS("#aml_chart_zoom_reset");
+    if(!btnIn || !btnOut) return;
+    btnIn.disabled = (_chartZoom.level >= _chartZoom.maxLevel);
+    btnOut.disabled = (_chartZoom.level <= _chartZoom.minLevel);
+    if(btnReset) btnReset.disabled = (_chartZoom.level <= 1);
+  }
+
+  /** Zoom in/out by a step factor, keeping scroll centered. */
+  function _chartZoomStep(factor){
+    const scrollWrap = QS("#aml_chart_scroll_wrap");
+    if(!scrollWrap) return;
+
+    const oldLevel = _chartZoom.level;
+    const newLevel = Math.max(_chartZoom.minLevel, Math.min(_chartZoom.maxLevel, oldLevel * factor));
+    if(Math.abs(newLevel - oldLevel) < 0.01) return;
+
+    // Keep center of visible area centered after zoom
+    const wrapW = scrollWrap.clientWidth;
+    const centerX = scrollWrap.scrollLeft + wrapW / 2;
+    const centerRatio = centerX / (scrollWrap.scrollWidth || 1);
+
+    _chartZoom.level = newLevel;
+    _applyTimelineZoom();
+
+    requestAnimationFrame(()=>{
+      const newCenterX = centerRatio * scrollWrap.scrollWidth;
+      scrollWrap.scrollLeft = Math.max(0, newCenterX - wrapW / 2);
+    });
   }
 
   /** Show/hide + sync the range slider beneath the chart. */
@@ -527,50 +559,17 @@
       });
     }
 
-    // --- LPP drag-zoom (like audio editor) ---
-    // mousedown on the chart canvas area starts a drag-zoom
-    scrollWrap.addEventListener("mousedown", (e)=>{
-      // Only left button, and only for timeline charts
-      if(e.button !== 0) return;
-      if(_chartZoom.activeKey !== "balance_timeline" && _chartZoom.activeKey !== "monthly_trend") return;
-
-      _chartZoom.dragging = true;
-      _chartZoom.dragStartX = e.clientX;
-      _chartZoom.dragStartLevel = _chartZoom.level;
-      scrollWrap.style.cursor = "ew-resize";
-      e.preventDefault();
-    });
-
-    document.addEventListener("mousemove", (e)=>{
-      if(!_chartZoom.dragging) return;
-      e.preventDefault();
-
-      const dx = e.clientX - _chartZoom.dragStartX;
-      // Sensitivity: 200px of mouse movement = 2x zoom change
-      const factor = Math.pow(2, dx / 200);
-      const newLevel = Math.max(_chartZoom.minLevel, Math.min(_chartZoom.maxLevel, _chartZoom.dragStartLevel * factor));
-
-      if(Math.abs(newLevel - _chartZoom.level) < 0.01) return;
-      _chartZoom.level = newLevel;
-
-      // Keep scroll centered around where drag started
-      const rect = scrollWrap.getBoundingClientRect();
-      const centerRatio = (_chartZoom.dragStartX - rect.left + scrollWrap.scrollLeft) /
-                          (scrollWrap.scrollWidth || 1);
-
+    // --- Zoom buttons ---
+    const btnIn = QS("#aml_chart_zoom_in");
+    const btnOut = QS("#aml_chart_zoom_out");
+    const btnReset = QS("#aml_chart_zoom_reset");
+    if(btnIn) btnIn.addEventListener("click", ()=> _chartZoomStep(1.5));
+    if(btnOut) btnOut.addEventListener("click", ()=> _chartZoomStep(1/1.5));
+    if(btnReset) btnReset.addEventListener("click", ()=>{
+      _chartZoom.level = 1;
       _applyTimelineZoom();
-
-      requestAnimationFrame(()=>{
-        const newScrollX = centerRatio * scrollWrap.scrollWidth - (_chartZoom.dragStartX - rect.left);
-        scrollWrap.scrollLeft = Math.max(0, newScrollX);
-      });
-    });
-
-    document.addEventListener("mouseup", ()=>{
-      if(_chartZoom.dragging){
-        _chartZoom.dragging = false;
-        scrollWrap.style.cursor = "";
-      }
+      const sw = QS("#aml_chart_scroll_wrap");
+      if(sw) sw.scrollLeft = 0;
     });
   }
 
@@ -685,7 +684,7 @@
 
     const isTimeline = (chartKey === "balance_timeline" || chartKey === "monthly_trend");
 
-    // Reset zoom for non-timeline charts
+    // Reset zoom when switching chart type
     if(!isTimeline){
       _chartZoom.level = 1;
       _chartZoom.activeKey = null;
@@ -695,6 +694,10 @@
       }
       if(rangeWrap) rangeWrap.style.display = "none";
     } else {
+      // Reset zoom to 1 when switching to a different timeline chart
+      if(_chartZoom.activeKey !== chartKey){
+        _chartZoom.level = 1;
+      }
       _chartZoom.activeKey = chartKey;
       if(_chartZoom.level < 1) _chartZoom.level = 1;
     }
@@ -753,8 +756,8 @@
         };
         Object.assign(chartConfig.options.plugins, _balanceTooltipConfig(txMeta, data));
         chartConfig.options.scales = _adaptiveXTicks(labels.length);
-        // Interaction mode for hover crosshair
-        chartConfig.options.interaction = { mode: "index", intersect: false };
+        // Interaction mode: nearest on x-axis for stable tooltip
+        chartConfig.options.interaction = { mode: "index", intersect: false, axis: "x" };
       } else if(data.type === "line"){
         chartConfig.options.elements = { point: { radius: 1 } };
       }
@@ -777,14 +780,15 @@
 
       // Apply zoom & bind interactions (sets container width, triggers resize)
       if(isTimeline){
-        // Auto-zoom if many points (>60 = ~2 months of daily tx)
-        const pointCount = labels.length;
-        if(pointCount > 60 && _chartZoom.level <= 1){
-          // Start slightly zoomed so the slider is useful
-          _chartZoom.level = Math.min(3, pointCount / 40);
-        }
+        // Start at zoom 1 (fit-to-container) — user can zoom via +/- buttons
         _applyTimelineZoom();
         _bindChartInteractions();
+        // Show zoom controls only for timeline charts with enough data
+        const zoomBar = QS("#aml_chart_zoom_bar");
+        if(zoomBar) zoomBar.style.display = labels.length > 30 ? "" : "none";
+      } else {
+        const zoomBar = QS("#aml_chart_zoom_bar");
+        if(zoomBar) zoomBar.style.display = "none";
       }
     });
   }
