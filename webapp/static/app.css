@@ -1251,6 +1251,40 @@ button.pill-icon:hover{
 .rv-debit{color: #b91c1c}
 .rv-credit{color: #15803d}
 
+/* Category dropdown in table */
+.rv-cat-sel{
+  font-size: 10px;
+  padding: 1px 3px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 4px;
+  background: var(--panel, #fff);
+  color: var(--text, #1e293b);
+  cursor: pointer;
+  max-width: 130px;
+  appearance: auto;
+}
+.rv-cat-sel:focus{
+  outline: 2px solid var(--primary, #3b82f6);
+  outline-offset: -1px;
+}
+
+/* Column resize handle */
+.rv-col-resize-handle{
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 2;
+}
+.rv-col-resize-handle:hover,
+.rv-col-resize-handle:active{
+  background: var(--primary, #3b82f6);
+  opacity: .35;
+}
+
 .rv-risk-tag{
   display: inline-block;
   padding: 0 4px;

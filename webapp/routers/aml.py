@@ -720,6 +720,26 @@ async def aml_classify_batch(statement_id: str, request: Request):
     return JSONResponse({"status": "ok", **result})
 
 
+@router.post("/api/aml/review/{statement_id}/set-category")
+async def aml_set_category(statement_id: str, request: Request):
+    """Update category for a single transaction."""
+    from backend.aml.review import set_transaction_category
+    data = await request.json()
+    result = set_transaction_category(
+        tx_id=data.get("tx_id", ""),
+        category=data.get("category", ""),
+        subcategory=data.get("subcategory", ""),
+    )
+    return JSONResponse({"status": "ok", **result})
+
+
+@router.get("/api/aml/categories")
+async def aml_get_categories():
+    """Return all available merchant categories with PL/EN labels."""
+    from backend.aml.merchants import get_all_categories
+    return JSONResponse(get_all_categories())
+
+
 @router.get("/api/aml/review/{statement_id}/stats")
 async def aml_classification_stats(statement_id: str):
     """Get classification stats for a statement."""

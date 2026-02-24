@@ -67,6 +67,24 @@ def classify_transaction(
     }
 
 
+def set_transaction_category(
+    tx_id: str,
+    category: str,
+    subcategory: str = "",
+) -> Dict[str, Any]:
+    """Update the category of a single transaction."""
+    ensure_initialized()
+
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE transactions SET category = ?, subcategory = ? WHERE id = ?",
+            (category, subcategory or category, tx_id),
+        )
+        conn.commit()
+
+    return {"tx_id": tx_id, "category": category, "subcategory": subcategory}
+
+
 def classify_batch(
     items: List[Dict[str, str]],
     statement_id: str,
