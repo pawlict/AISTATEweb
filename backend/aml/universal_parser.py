@@ -112,6 +112,7 @@ class _Statement:
     meta: Dict[str, Any]
     transactions: List[Dict[str, Any]]
     source_file: str
+    parse_method: str = "pymupdf_lines"
 
 
 class _BankParser:
@@ -504,9 +505,89 @@ class _INGStatementParser(_BankParser):
             })
         return txs
 
+    def _parse_transactions_coord(self, pdf_path: str) -> List[Dict[str, Any]]:
+        """Parse ING transactions using coordinate-based column detection.
+
+        Uses the INGParser's coordinate-aware extraction (get_text("dict"))
+        which correctly separates counterparty, title, details, and amount
+        columns.  Falls back gracefully if import or parsing fails.
+
+        The plain get_text("text") approach flattens columns and scrambles
+        the order for ING statements — this method solves that problem.
+        """
+        try:
+            from ..finance.parsers.ing import INGParser
+            ing = INGParser()
+            raw_txs, warnings = ing._parse_transactions_from_pdf(Path(pdf_path))
+
+            if not raw_txs:
+                return []
+
+            result: List[Dict[str, Any]] = []
+            for rt in raw_txs:
+                # Convert dates from DD.MM.YYYY → YYYY-MM-DD
+                posting = _parse_date_iso(rt.date) if rt.date and "." in rt.date else rt.date
+                trans = None
+                if rt.date_valuation:
+                    trans = _parse_date_iso(rt.date_valuation) if "." in rt.date_valuation else rt.date_valuation
+
+                amount = rt.amount
+                currency = rt.currency or "PLN"
+                counterparty_name = rt.counterparty or ""
+                title = rt.title or ""
+                channel = rt.bank_category or ""
+
+                # Get extra details if available (INGParser attaches these)
+                details = getattr(rt, "details", {}) or {}
+                refs = getattr(rt, "refs", []) or []
+                txn_ref = refs[0] if refs else None
+                cp_role = getattr(rt, "counterparty_role", None)
+
+                tx_dict: Dict[str, Any] = {
+                    "posting_date": posting,
+                    "transaction_date": trans or posting,
+                    "amount": float(amount) if amount is not None else None,
+                    "currency": currency,
+                    "direction": "credit" if (amount is not None and amount > 0) else "debit",
+                    "channel": channel,
+                    "transaction_ref": txn_ref,
+                    "refs_raw_lines": refs,
+                    "counterparty_account": None,
+                    "ing_internal_counterparty_id": None,
+                    "contractor_ids_other": [],
+                    "body_raw_lines": [rt.raw_text] if rt.raw_text else [],
+                    "counterparty_role": cp_role,
+                    "counterparty_name_address_lines": [counterparty_name] if counterparty_name else [],
+                    "counterparty_name_address": counterparty_name,
+                    "title_raw_lines": [title] if title else [],
+                    "title": title,
+                    "details": details,
+                }
+                result.append(tx_dict)
+
+            if result:
+                log.info("ING coordinate parser: %d transactions extracted", len(result))
+            return result
+
+        except ImportError:
+            log.debug("INGParser not available for coordinate parsing")
+            return []
+        except Exception as e:
+            log.warning("Coordinate-based ING parsing failed: %s", e)
+            return []
+
     def parse(self, lines: List[str], source_file: str) -> _Statement:
         meta = self._parse_meta(lines)
-        txs = self._parse_transactions(lines)
+
+        # Try coordinate-based parsing first (much more reliable for columnar ING PDFs).
+        # Falls back to text-based sequential parsing if coordinate approach fails.
+        parse_method = "pymupdf_lines"
+        txs = self._parse_transactions_coord(source_file)
+        if txs:
+            parse_method = "pymupdf_coord_ing"
+        else:
+            log.info("ING: coordinate parser returned 0 txs, falling back to text-based parsing")
+            txs = self._parse_transactions(lines)
 
         # Reconciliation check
         try:
@@ -531,7 +612,7 @@ class _INGStatementParser(_BankParser):
         except Exception:
             meta["reconciliation_ok"] = None
 
-        return _Statement(meta=meta, transactions=txs, source_file=source_file)
+        return _Statement(meta=meta, transactions=txs, source_file=source_file, parse_method=parse_method)
 
 
 _register(_INGStatementParser())
@@ -596,10 +677,12 @@ def parse_bank_statement(pdf_path: Path) -> ParseResult:
         blocked_amount=meta.get("blocked_amount"),
     )
 
+    parse_method = getattr(stmt, "parse_method", "pymupdf_lines")
+
     return ParseResult(
         bank=parser.name,
         info=info,
         transactions=raw_transactions,
         page_count=page_count,
-        parse_method="pymupdf_lines",
+        parse_method=parse_method,
     )
