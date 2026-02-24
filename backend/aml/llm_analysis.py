@@ -7,9 +7,50 @@ to Ollama for a written expert analysis in Polish.
 from __future__ import annotations
 
 import logging
+from collections import Counter, defaultdict
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 log = logging.getLogger("aistate.aml.llm_analysis")
+
+
+# Human-readable category labels (PL) used in prompts
+_CAT_LABELS_PL: Dict[str, str] = {
+    "grocery": "Spożywcze",
+    "drugstore": "Drogeria",
+    "fuel": "Paliwo",
+    "hardware": "Budowlane",
+    "gastronomy": "Gastronomia",
+    "clothing": "Odzież",
+    "health": "Zdrowie/Apteka",
+    "transport": "Transport",
+    "education": "Edukacja",
+    "electronics": "Elektronika",
+    "home_garden": "Dom i ogród",
+    "pets": "Zwierzęta",
+    "children": "Dzieci",
+    "digital_store": "Sklep cyfrowy",
+    "payment_operator": "Operator płatności",
+    "p2p_transfer": "Przelew P2P",
+    "everyday": "Codzienne",
+    # Risk categories
+    "gambling": "Gry hazardowe",
+    "crypto": "Kryptowaluty",
+    "crypto_exchange": "Giełda krypto",
+    "stock_exchange": "Giełda",
+    "risky": "Ryzykowne",
+    "foreign": "Zagraniczne",
+    "cash": "Gotówka",
+    "own_transfer": "Przelew własny",
+}
+
+
+def _cat_label(raw: str) -> str:
+    """Resolve raw category/subcategory to a human-readable PL label."""
+    if not raw:
+        return "Brak kategorii"
+    # Try subcategory part (e.g. "everyday:grocery" → "grocery")
+    leaf = raw.split(":")[-1] if ":" in raw else raw
+    return _CAT_LABELS_PL.get(leaf, _CAT_LABELS_PL.get(raw, raw))
 
 
 def build_aml_prompt(
@@ -115,10 +156,19 @@ WAZNE:
         parts.append(_build_channel_breakdown(transactions))
         parts.append(_build_top_counterparties(transactions))
 
+    # --- NEW: Temporal patterns ---
+    parts.append(_build_temporal_patterns(transactions))
+
+    # --- NEW: P2P transfers ---
+    parts.append(_build_p2p_transfers(transactions))
+
+    # --- NEW: Counterparty profiles from memory ---
+    parts.append(_build_counterparty_profiles(transactions))
+
     # --- Flagged transactions ---
     parts.append(_build_flagged_transactions(transactions))
 
-    # --- Full transaction list (compact) ---
+    # --- Full transaction list (compact, with titles) ---
     parts.append(_build_transaction_table(transactions))
 
     # --- Task ---
@@ -247,7 +297,8 @@ def _build_categories_from_enriched(enriched) -> str:
              "| Kategoria | Liczba | Kwota |",
              "|-----------|--------|-------|"]
     for cat, info in enriched.category_summary.items():
-        lines.append(f"| {info['label']} | {info['count']} | {info['total']:,.2f} PLN |")
+        label = _cat_label(cat) if _cat_label(cat) != cat else info.get("label", cat)
+        lines.append(f"| {label} | {info['count']} | {info['total']:,.2f} PLN |")
     return "\n".join(lines)
 
 
@@ -277,21 +328,26 @@ def _build_top_counterparties_from_enriched(enriched) -> str:
 # ============================================================
 
 def _build_transaction_table(transactions: list, limit: int = 50) -> str:
-    """Compact table of all transactions for LLM context."""
+    """Compact table of all transactions for LLM context — includes title and location."""
     if not transactions:
         return ""
 
     lines = [f"## LISTA TRANSAKCJI ({len(transactions)} szt, pokazano max {limit})\n",
-             "| # | Data | Kwota | Kanal | Kategoria | Kontrahent |",
-             "|---|------|-------|-------|-----------|------------|"]
+             "| # | Data | Kwota | Kanal | Kategoria | Kontrahent | Tytul | Lokalizacja |",
+             "|---|------|-------|-------|-----------|------------|-------|-------------|"]
 
     for i, tx in enumerate(transactions[:limit]):
         date = _get(tx, "date") or _get(tx, "booking_date") or "?"
         amt = float(_get(tx, "amount") or 0)
         ch = _get(tx, "channel") or ""
-        cat = _get(tx, "category_label") or _get(tx, "category") or ""
+        raw_cat = _get(tx, "subcategory") or _get(tx, "category") or ""
+        cat = _cat_label(raw_cat)
         cp = _get(tx, "counterparty") or _get(tx, "counterparty_raw") or "?"
-        lines.append(f"| {i+1} | {date} | {amt:+,.2f} | {ch[:12]} | {cat[:15]} | {cp[:40]} |")
+        title = (_get(tx, "title") or "")[:50]
+        location = _detect_location(tx) or ""
+        lines.append(
+            f"| {i+1} | {date} | {amt:+,.2f} | {ch[:12]} | {cat[:18]} | {cp[:35]} | {title} | {location} |"
+        )
 
     if len(transactions) > limit:
         lines.append(f"\n*...i jeszcze {len(transactions) - limit} transakcji niepokazanych.*")
@@ -329,14 +385,14 @@ def _build_transaction_summary(transactions: list) -> str:
 
 
 def _build_category_breakdown(transactions: list) -> str:
-    from collections import defaultdict
     cats: Dict[str, float] = defaultdict(float)
     cat_counts: Dict[str, int] = defaultdict(int)
     for tx in transactions:
-        cat = _get(tx, "category") or "brak_kategorii"
+        raw = _get(tx, "subcategory") or _get(tx, "category") or "brak_kategorii"
+        label = _cat_label(raw)
         amt = float(abs(_get(tx, "amount") or 0))
-        cats[cat] += amt
-        cat_counts[cat] += 1
+        cats[label] += amt
+        cat_counts[label] += 1
     sorted_cats = sorted(cats.items(), key=lambda x: -x[1])[:12]
     lines = ["## KATEGORIE TRANSAKCJI\n",
              "| Kategoria | Kwota | Liczba |",
@@ -347,7 +403,6 @@ def _build_category_breakdown(transactions: list) -> str:
 
 
 def _build_channel_breakdown(transactions: list) -> str:
-    from collections import Counter, defaultdict
     ch_counts: Counter = Counter()
     ch_amounts: Dict[str, float] = defaultdict(float)
     for tx in transactions:
@@ -364,7 +419,6 @@ def _build_channel_breakdown(transactions: list) -> str:
 
 
 def _build_top_counterparties(transactions: list, limit: int = 15) -> str:
-    from collections import defaultdict
     cp_totals: Dict[str, float] = defaultdict(float)
     cp_counts: Dict[str, int] = defaultdict(int)
     for tx in transactions:
@@ -396,18 +450,258 @@ def _build_flagged_transactions(transactions: list, limit: int = 20) -> str:
     if not flagged:
         return ""
     lines = [f"## TRANSAKCJE Z FLAGAMI RYZYKA ({len(flagged)})\n",
-             "| Data | Kontrahent | Kwota | Kanal | Tagi |",
-             "|------|-----------|-------|-------|------|"]
+             "| Data | Kontrahent | Tytul | Kwota | Kanal | Kategoria | Tagi |",
+             "|------|-----------|-------|-------|-------|-----------|------|"]
     for tx in flagged[:limit]:
         date = _get(tx, "date") or _get(tx, "booking_date") or "?"
-        cp = (_get(tx, "counterparty_raw") or _get(tx, "counterparty") or "?")[:35]
+        cp = (_get(tx, "counterparty_raw") or _get(tx, "counterparty") or "?")[:30]
+        title = (_get(tx, "title") or "")[:35]
         amt = float(abs(_get(tx, "amount") or 0))
         direction = _get(tx, "direction") or ""
         ch = _get(tx, "channel") or ""
+        raw_cat = _get(tx, "subcategory") or _get(tx, "category") or ""
+        cat = _cat_label(raw_cat)
         tags = _get(tx, "risk_tags") or []
         tags_str = ", ".join(tags) if isinstance(tags, list) else str(tags)
         sign = "-" if direction == "DEBIT" else "+"
-        lines.append(f"| {date} | {cp} | {sign}{amt:,.2f} | {ch} | {tags_str} |")
+        lines.append(f"| {date} | {cp} | {title} | {sign}{amt:,.2f} | {ch} | {cat[:15]} | {tags_str} |")
+    return "\n".join(lines)
+
+
+# ============================================================
+# Location detection helper
+# ============================================================
+
+def _detect_location(tx) -> Optional[str]:
+    """Try to extract location from a transaction using merchant DB."""
+    try:
+        from .merchants import detect_merchant_location
+        cp = _get(tx, "counterparty_raw") or _get(tx, "counterparty") or ""
+        title = _get(tx, "title") or ""
+        return detect_merchant_location(cp, title)
+    except Exception:
+        return None
+
+
+# ============================================================
+# Temporal patterns section
+# ============================================================
+
+def _build_temporal_patterns(transactions: list) -> str:
+    """Analyze day-of-week and time-of-month spending patterns."""
+    if not transactions:
+        return ""
+
+    from datetime import datetime
+
+    # Day-of-week
+    _DOW_PL = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
+    dow_amounts: Dict[int, float] = defaultdict(float)
+    dow_counts: Dict[int, int] = defaultdict(int)
+
+    # Time-of-month (1-10, 11-20, 21-31)
+    period_amounts: Dict[str, float] = defaultdict(float)
+    period_counts: Dict[str, int] = defaultdict(int)
+
+    parsed = 0
+    for tx in transactions:
+        date_str = _get(tx, "booking_date") or _get(tx, "date") or ""
+        if not date_str:
+            continue
+        try:
+            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00") if "T" in date_str else date_str)
+        except (ValueError, TypeError):
+            try:
+                dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
+            except (ValueError, TypeError):
+                continue
+
+        amt = float(abs(_get(tx, "amount") or 0))
+        dow = dt.weekday()
+        dow_amounts[dow] += amt
+        dow_counts[dow] += 1
+
+        day = dt.day
+        if day <= 10:
+            period = "1-10"
+        elif day <= 20:
+            period = "11-20"
+        else:
+            period = "21-31"
+        period_amounts[period] += amt
+        period_counts[period] += 1
+        parsed += 1
+
+    if parsed < 5:
+        return ""
+
+    lines = ["## WZORCE CZASOWE\n"]
+
+    # Day of week table
+    lines.append("### Aktywność wg dnia tygodnia\n")
+    lines.append("| Dzień | Transakcje | Kwota | Śr. kwota |")
+    lines.append("|-------|-----------|-------|-----------|")
+    for dow in range(7):
+        cnt = dow_counts.get(dow, 0)
+        total = dow_amounts.get(dow, 0)
+        avg = total / cnt if cnt > 0 else 0
+        marker = " ⬆" if cnt > 0 and cnt == max(dow_counts.values()) else ""
+        lines.append(f"| {_DOW_PL[dow]} | {cnt}{marker} | {total:,.2f} PLN | {avg:,.2f} PLN |")
+
+    # Time of month
+    lines.append("\n### Aktywność wg okresu miesiąca\n")
+    lines.append("| Okres | Transakcje | Kwota |")
+    lines.append("|-------|-----------|-------|")
+    for period in ["1-10", "11-20", "21-31"]:
+        cnt = period_counts.get(period, 0)
+        total = period_amounts.get(period, 0)
+        lines.append(f"| Dni {period} | {cnt} | {total:,.2f} PLN |")
+
+    # Highlight weekend vs weekday
+    weekday_cnt = sum(dow_counts.get(d, 0) for d in range(5))
+    weekend_cnt = sum(dow_counts.get(d, 0) for d in (5, 6))
+    weekday_amt = sum(dow_amounts.get(d, 0) for d in range(5))
+    weekend_amt = sum(dow_amounts.get(d, 0) for d in (5, 6))
+    if weekday_cnt > 0 and weekend_cnt > 0:
+        lines.append(f"\n- Dni robocze: {weekday_cnt} tx ({weekday_amt:,.2f} PLN)")
+        lines.append(f"- Weekend: {weekend_cnt} tx ({weekend_amt:,.2f} PLN)")
+        if weekend_cnt > 0:
+            ratio = weekend_amt / weekday_amt if weekday_amt > 0 else 0
+            if ratio > 0.5:
+                lines.append("- ⚠ Znaczna aktywność weekendowa")
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# P2P Transfers section
+# ============================================================
+
+def _build_p2p_transfers(transactions: list) -> str:
+    """Dedicated P2P transfer listing — BLIK P2P, transfers to phone numbers, etc."""
+    if not transactions:
+        return ""
+
+    import re as _re
+
+    p2p_patterns = [
+        _re.compile(r"blik\s*p2p", _re.I),
+        _re.compile(r"p\.blik", _re.I),
+        _re.compile(r"przelew\s*na\s*telefon", _re.I),
+        _re.compile(r"blik.*(?:na\s*telefon|p2p|prywat)", _re.I),
+        _re.compile(r"transfer.*(?:na\s*numer|na\s*tel)", _re.I),
+        _re.compile(r"przelew\s*p2p", _re.I),
+    ]
+
+    p2p_list = []
+    for tx in transactions:
+        cat = (_get(tx, "subcategory") or _get(tx, "category") or "").lower()
+        title = (_get(tx, "title") or "").lower()
+        cp = (_get(tx, "counterparty_raw") or _get(tx, "counterparty") or "").lower()
+        ch = (_get(tx, "channel") or "").lower()
+        search_text = f"{title} {cp} {ch} {cat}"
+
+        is_p2p = "p2p" in cat or "p2p_transfer" in cat
+        if not is_p2p:
+            for pat in p2p_patterns:
+                if pat.search(search_text):
+                    is_p2p = True
+                    break
+
+        if is_p2p:
+            p2p_list.append(tx)
+
+    if not p2p_list:
+        return ""
+
+    total_out = sum(float(abs(_get(tx, "amount") or 0)) for tx in p2p_list if (_get(tx, "direction") or "") == "DEBIT")
+    total_in = sum(float(abs(_get(tx, "amount") or 0)) for tx in p2p_list if (_get(tx, "direction") or "") == "CREDIT")
+
+    lines = [f"## PRZELEWY P2P ({len(p2p_list)} szt)\n"]
+    lines.append(f"- Wysłane: {total_out:,.2f} PLN")
+    lines.append(f"- Otrzymane: {total_in:,.2f} PLN")
+    lines.append(f"- Bilans P2P: {total_in - total_out:+,.2f} PLN\n")
+
+    # Counterparty breakdown
+    cp_summary: Dict[str, Dict[str, Any]] = {}
+    for tx in p2p_list:
+        cp = (_get(tx, "counterparty_raw") or _get(tx, "counterparty") or "Nieznany")[:50]
+        if cp not in cp_summary:
+            cp_summary[cp] = {"count": 0, "total": 0.0, "directions": []}
+        cp_summary[cp]["count"] += 1
+        amt = float(_get(tx, "amount") or 0)
+        cp_summary[cp]["total"] += amt
+        direction = _get(tx, "direction") or ""
+        cp_summary[cp]["directions"].append(direction)
+
+    lines.append("| Odbiorca/Nadawca | Transakcje | Kwota netto | Kierunek |")
+    lines.append("|-----------------|-----------|-------------|----------|")
+    sorted_cps = sorted(cp_summary.items(), key=lambda x: -abs(x[1]["total"]))[:15]
+    for cp, info in sorted_cps:
+        dirs = info["directions"]
+        if all(d == "DEBIT" for d in dirs):
+            direction = "→ wychodzące"
+        elif all(d == "CREDIT" for d in dirs):
+            direction = "← przychodzące"
+        else:
+            direction = "↔ obustronne"
+        lines.append(f"| {cp[:40]} | {info['count']} | {info['total']:+,.2f} PLN | {direction} |")
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# Counterparty memory profiles section
+# ============================================================
+
+def _build_counterparty_profiles(transactions: list) -> str:
+    """Include counterparty memory profiles (whitelist/blacklist/notes)."""
+    try:
+        from .memory import search_counterparties
+    except ImportError:
+        return ""
+
+    # Get non-neutral counterparties
+    profiles = []
+    for label in ("whitelist", "blacklist"):
+        try:
+            cps = search_counterparties(label=label, limit=100)
+            for cp in cps:
+                profiles.append(cp)
+        except Exception:
+            pass
+
+    if not profiles:
+        return ""
+
+    # Also collect counterparties with notes
+    try:
+        noted = search_counterparties(limit=200)
+        for cp in noted:
+            note = cp.get("note", "")
+            if note and cp.get("label", "") == "neutral" and cp not in profiles:
+                profiles.append(cp)
+    except Exception:
+        pass
+
+    if not profiles:
+        return ""
+
+    lines = [f"## PROFILE KONTRAHENTÓW Z PAMIĘCI ({len(profiles)})\n"]
+    lines.append("| Kontrahent | Status | Notatka | Widziany | Kwota łączna |")
+    lines.append("|------------|--------|---------|----------|--------------|")
+
+    label_pl = {"whitelist": "✅ Zaufany", "blacklist": "🚫 Czarna lista", "neutral": "📝 Z notatką"}
+
+    for cp in profiles[:25]:
+        name = (cp.get("canonical_name") or "?")[:35]
+        label = cp.get("label", "neutral")
+        status = label_pl.get(label, label)
+        note = (cp.get("note") or "")[:40]
+        times = cp.get("times_seen", 0)
+        total = float(cp.get("total_amount", 0))
+        lines.append(f"| {name} | {status} | {note} | {times}x | {total:,.2f} PLN |")
+
     return "\n".join(lines)
 
 
@@ -437,17 +731,20 @@ Na podstawie powyzszych danych napisz profesjonalny raport AML zawierajacy:
 ### 4. Analiza ryzyka AML
 - Strukturyzowanie (smurfing) — czy widac rozbijanie duzych kwot na mniejsze?
 - Transakcje zagraniczne — kontrahenci, kwoty, cel
-- Przelewy P2P i na telefon — regularne transfery do osob prywatnych
+- Przelewy P2P i na telefon — uzyj sekcji PRZELEWY P2P: regularne transfery, kwoty, odbiorcy
 - Przelewy wlasne — miedzy kontami wlasciciela, ewentualne lokaty
 - Duze jednorazowe transakcje vs wzorzec codziennych wydatkow
+- Kontrahenci z czarnej/bialej listy — uzyj sekcji PROFILE KONTRAHENTOW
 
 ### 5. Podejrzane transakcje
-Wskaz konkretne transakcje (z datami i kwotami) ktore budza watpliwosci i dlaczego.
+Wskaz konkretne transakcje (z datami, kwotami i TYTULAMI) ktore budza watpliwosci i dlaczego.
+Uzyj tytulu transakcji jako dodatkowego kontekstu.
 
 ### 6. Wzorce behawioralne
+- Uzyj sekcji WZORCE CZASOWE — porownaj dni tygodnia, pory miesiaca
 - Czy zachowania finansowe sa przewidywalne i stabilne?
 - Czy widac impulsy lub anomalie?
-- Porownaj dni tygodnia, pory miesiaca
+- Lokalizacje — czy transakcje sa skoncentrowane geograficznie czy rozproszone?
 
 ### 7. Rekomendacje
 Konkretne zalecenia — co nalezy dalej zweryfikowac i jakie dzialania podjac."""
