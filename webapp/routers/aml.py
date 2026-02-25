@@ -832,15 +832,18 @@ async def aml_account_for_statement(statement_id: str):
     if not profile:
         return JSONResponse({"profile": None})
 
-    # Add anonymized display fields
+    # Add display fields (anonymized only if user toggled is_anonymized)
+    is_anon = bool(profile.get("is_anonymized"))
     profile["display_iban"] = anonymize_iban(
         profile.get("account_number", ""),
         profile.get("account_type", "private"),
+        is_anonymized=is_anon,
     )
     profile["display_holder"] = anonymize_holder(
         profile.get("display_name", ""),
         profile.get("account_type", "private"),
         profile.get("owner_label", ""),
+        is_anonymized=is_anon,
     )
     return JSONResponse({"profile": profile})
 

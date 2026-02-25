@@ -51,9 +51,11 @@ def get_or_create_profile(
 
     # Create new profile
     profile_id = new_id()
-    is_anonymized = 1 if account_type == "private" else 0
+    # Default: no anonymization — AML analysts need real data.
+    # User can enable anonymization manually via the UI toggle.
+    is_anonymized = 0
 
-    # Generate anonymous label
+    # Generate anonymous label (kept for optional use)
     owner_label = _generate_anon_label(account_type)
 
     with get_conn() as conn:
@@ -64,7 +66,7 @@ def get_or_create_profile(
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (profile_id, account_number, acc_hash, account_type,
              bank_id, bank_name, owner_label,
-             account_holder if account_type == "business" else owner_label,
+             account_holder or owner_label,
              is_anonymized),
         )
 
@@ -78,7 +80,7 @@ def get_or_create_profile(
         "bank_id": bank_id,
         "bank_name": bank_name,
         "owner_label": owner_label,
-        "display_name": account_holder if account_type == "business" else owner_label,
+        "display_name": account_holder or owner_label,
         "is_anonymized": is_anonymized,
     }
 
@@ -142,13 +144,13 @@ def list_profiles() -> List[Dict[str, Any]]:
     return result
 
 
-def anonymize_iban(iban: str, account_type: str = "private") -> str:
-    """Anonymize IBAN based on account type.
+def anonymize_iban(iban: str, account_type: str = "private", is_anonymized: bool = False) -> str:
+    """Anonymize IBAN if anonymization is enabled.
 
-    Private: "PL** **** **** **** **** **** 1234"
-    Business: full IBAN shown
+    Anonymized: "PL** **** **** **** **** **** 1234"
+    Otherwise: full IBAN shown
     """
-    if account_type == "business":
+    if not is_anonymized:
         return iban
 
     normalized = re.sub(r"[\s\-]", "", iban)
@@ -160,13 +162,13 @@ def anonymize_iban(iban: str, account_type: str = "private") -> str:
     return f"{prefix}** **** **** **** **** **** {last4}"
 
 
-def anonymize_holder(holder: str, account_type: str = "private", owner_label: str = "") -> str:
-    """Anonymize account holder name.
+def anonymize_holder(holder: str, account_type: str = "private", owner_label: str = "", is_anonymized: bool = False) -> str:
+    """Anonymize account holder name if anonymization is enabled.
 
-    Private: use owner_label (e.g. "Klient #3")
-    Business: show company name
+    Anonymized: use owner_label (e.g. "Klient #3")
+    Otherwise: show real name
     """
-    if account_type == "business":
+    if not is_anonymized:
         return holder
     return owner_label or "Klient"
 
