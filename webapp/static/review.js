@@ -886,18 +886,43 @@
           tx.category = newCat;
           tx.subcategory = newCat;
         }
-        // Save to backend
+        // Save to backend (with all statement_ids for bulk propagation)
+        let affectedIds = [];
         if(stmtId){
-          await _safeApi("/api/aml/review/" + encodeURIComponent(stmtId) + "/set-category", {
+          const resp = await _safeApi("/api/aml/review/" + encodeURIComponent(stmtId) + "/set-category", {
             method:"POST",
             headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({tx_id: txId, category: newCat, subcategory: newCat}),
+            body: JSON.stringify({
+              tx_id: txId,
+              category: newCat,
+              subcategory: newCat,
+              statement_ids: St.statementIds || [stmtId],
+            }),
           });
+          if(resp && resp.affected_tx_ids) affectedIds = resp.affected_tx_ids;
         }
         // Auto-classify based on new category
         const autoCls = _catAutoCls(newCat, newCat);
         if(autoCls){
           await _classifyTx(txId, autoCls);
+        }
+        // Propagate to sibling transactions in the UI
+        if(affectedIds.length){
+          for(const sibId of affectedIds){
+            // Update local tx data
+            const sibTx = St.transactions.find(t => t.id === sibId);
+            if(sibTx){
+              sibTx.category = newCat;
+              sibTx.subcategory = newCat;
+            }
+            // Update dropdown in DOM
+            const sibSel = QS(`.rv-cat-sel[data-txid="${sibId}"]`);
+            if(sibSel) sibSel.value = newCat;
+            // Auto-classify sibling
+            if(autoCls){
+              await _classifyTx(sibId, autoCls);
+            }
+          }
         }
       });
     });

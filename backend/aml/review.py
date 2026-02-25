@@ -71,18 +71,86 @@ def set_transaction_category(
     tx_id: str,
     category: str,
     subcategory: str = "",
+    statement_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Update the category of a single transaction."""
+    """Update the category of a transaction and propagate to same counterparty.
+
+    1. Updates the target transaction's category.
+    2. Saves category to global counterparty memory (auto_category).
+    3. Finds all other transactions with the same counterparty_id
+       within the given statement_ids and updates them too.
+
+    Returns dict with tx_id, category, subcategory, and affected_tx_ids list.
+    """
     ensure_initialized()
+    sub = subcategory or category
+    affected_ids: List[str] = []
 
     with get_conn() as conn:
+        # 1. Update the target transaction
         conn.execute(
             "UPDATE transactions SET category = ?, subcategory = ? WHERE id = ?",
-            (category, subcategory or category, tx_id),
+            (category, sub, tx_id),
         )
+
+        # 2. Get counterparty_id for this transaction
+        row = conn.execute(
+            "SELECT counterparty_id, counterparty_raw FROM transactions WHERE id = ?",
+            (tx_id,),
+        ).fetchone()
+
+        cp_id = row["counterparty_id"] if row else None
+        cp_raw = row["counterparty_raw"] if row else None
+
+        # 3. Update global counterparty memory (auto_category)
+        if cp_id:
+            conn.execute(
+                """UPDATE counterparties SET auto_category = ?,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                   WHERE id = ?""",
+                (category, cp_id),
+            )
+            log.info("Propagated category '%s' to counterparty %s", category, cp_id)
+
+        # 4. Bulk-update all other transactions with the same counterparty
+        #    within the analysed statements
+        if cp_id and statement_ids:
+            placeholders = ",".join("?" for _ in statement_ids)
+            cur = conn.execute(
+                f"""UPDATE transactions
+                    SET category = ?, subcategory = ?
+                    WHERE counterparty_id = ?
+                      AND id != ?
+                      AND statement_id IN ({placeholders})
+                    RETURNING id""",
+                [category, sub, cp_id, tx_id] + list(statement_ids),
+            )
+            affected_ids = [r["id"] for r in cur.fetchall()]
+        elif cp_raw and statement_ids:
+            # Fallback: match by counterparty_raw if no counterparty_id
+            placeholders = ",".join("?" for _ in statement_ids)
+            cur = conn.execute(
+                f"""UPDATE transactions
+                    SET category = ?, subcategory = ?
+                    WHERE counterparty_raw = ?
+                      AND id != ?
+                      AND statement_id IN ({placeholders})
+                    RETURNING id""",
+                [category, sub, cp_raw, tx_id] + list(statement_ids),
+            )
+            affected_ids = [r["id"] for r in cur.fetchall()]
+
         conn.commit()
 
-    return {"tx_id": tx_id, "category": category, "subcategory": subcategory}
+    if affected_ids:
+        log.info("Bulk-updated category '%s' for %d sibling transactions", category, len(affected_ids))
+
+    return {
+        "tx_id": tx_id,
+        "category": category,
+        "subcategory": sub,
+        "affected_tx_ids": affected_ids,
+    }
 
 
 def classify_batch(
