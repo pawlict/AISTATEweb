@@ -321,8 +321,11 @@ class PDFHandler(DocumentHandler):
         doc = pymupdf.open(str(original_path))
 
         # --- 1. Parse translated text into pages via markers ---------------
+        # Accept a broad pattern: "--- <word> N ---"  so that even if the
+        # marker keyword was partially mangled (e.g. translated to another
+        # language) we still pick it up as long as the number survives.
         marker_re = _re.compile(
-            r"^-{2,}\s*(?:Strona|Page)\s*(\d+)\s*-{2,}\s*$",
+            r"^-{2,}\s*\S+\s+(\d+)\s*-{2,}$",
             _re.IGNORECASE | _re.MULTILINE,
         )
         pages_text: dict[int, str] = {}
