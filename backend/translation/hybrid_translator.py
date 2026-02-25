@@ -137,6 +137,21 @@ class HybridTranslator:
     
         raise ValueError(f"Cannot resolve NLLB language id for {lang_code!r} using tokenizer {tok.__class__.__name__}")
     
+    # Regex matching structural markers inserted during text extraction.
+    # Covers PDF ("--- Strona N ---"), PPTX ("--- Slajd N ---") and their
+    # English equivalents.  These must NOT be sent through the NLLB model.
+    _MARKER_RE = None  # compiled lazily
+
+    @classmethod
+    def _get_marker_re(cls):
+        if cls._MARKER_RE is None:
+            import re
+            cls._MARKER_RE = re.compile(
+                r'^-{2,}\s*(?:Strona|Page|Slajd|Slide)\s+\d+\s*-{2,}$',
+                re.IGNORECASE,
+            )
+        return cls._MARKER_RE
+
     def translate_nllb(
         self,
         text: str,
@@ -149,28 +164,40 @@ class HybridTranslator:
     ) -> str:
         """
         Fast translation using NLLB
-        
+
         Args:
             text: Text to translate
             source_lang: Source language (polish, english, etc.)
             target_lang: Target language
             max_length: Max sequence length
-            
+
         Returns:
             Translated text
         """
         if not text.strip():
             return text
-        
+
         src_code = self.LANG_CODES_NLLB.get(source_lang)
         tgt_code = self.LANG_CODES_NLLB.get(target_lang)
-        
+
         if not src_code or not tgt_code:
             raise ValueError(f"Unsupported language pair: {source_lang} -> {target_lang}")
-        
+
+        # ----- Protect structural markers (page / slide separators) -----
+        # Replace marker lines with unique placeholders so the NLLB model
+        # doesn't translate or mangle them.
+        marker_re = self._get_marker_re()
+        marker_map: Dict[str, str] = {}   # placeholder → original marker line
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            if marker_re.match(line.strip()):
+                ph = f"[[MRK{len(marker_map)}]]"
+                marker_map[ph] = line
+                lines[i] = ph
+        protected_text = '\n'.join(lines) if marker_map else text
+
         # Optional glossary protection (term dictionary)
         gloss = glossary if isinstance(glossary, dict) else None
-        protected_text = text
         placeholders: Dict[str, str] = {}
         if use_glossary and gloss:
             protected_text, placeholders = self._protect_terms(protected_text, gloss, target_lang)
@@ -185,8 +212,9 @@ class HybridTranslator:
         if cache_key in self.translation_memory:
             logger.debug("Using cached translation")
             out_cached = self.translation_memory[cache_key]
+            out_cached = self._restore_markers(out_cached, marker_map)
             return self._restore_terms(out_cached, placeholders) if placeholders else out_cached
-        
+
         try:
             if preserve_formatting:
                 result = self._translate_preserve_formatting(
@@ -194,14 +222,27 @@ class HybridTranslator:
                 )
             else:
                 result = self._translate_plain(protected_text, src_code, tgt_code, max_length=max_length)
-            
+
             # Cache result
             self.translation_memory[cache_key] = result
+
+            # Restore structural markers
+            result = self._restore_markers(result, marker_map)
+
             return self._restore_terms(result, placeholders) if placeholders else result
-            
+
         except Exception as e:
             logger.error(f"NLLB translation failed: {e}")
             raise
+
+    @staticmethod
+    def _restore_markers(text: str, marker_map: Dict[str, str]) -> str:
+        """Replace marker placeholders back with original marker lines."""
+        if not marker_map:
+            return text
+        for ph, original in marker_map.items():
+            text = text.replace(ph, original)
+        return text
     
     def _translate_chunk_nllb(
         self,
@@ -282,6 +323,11 @@ class HybridTranslator:
             out_lines: List[str] = []
             for line in lines:
                 if line.strip() == '':
+                    out_lines.append(line)
+                    continue
+
+                # Skip marker placeholders — they must pass through untouched
+                if re.fullmatch(r'\[\[MRK\d+\]\]\s*', line.rstrip('\n')):
                     out_lines.append(line)
                     continue
 

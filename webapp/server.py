@@ -2640,9 +2640,9 @@ async def api_translation_export_to_original(
                 slide_block_counts.append(count)
 
             # --- Step 2: strip marker lines from translated text ---
-            # Accept both Polish "Slajd" and English "Slide" markers, any format
+            # Broad pattern: "--- <word> N ---" covers any language variant
             _marker_re = _re.compile(
-                r"^-{2,}\s*(?:Slajd|Slide|slajd|slide)\s*\d+\s*-{2,}$",
+                r"^-{2,}\s*\S+\s*\d+\s*-{2,}$",
                 _re.IGNORECASE,
             )
             flat_lines: list[str] = []
@@ -2712,30 +2712,91 @@ async def api_translation_export_to_original(
 
         elif ext == ".docx":
             from docx import Document  # type: ignore
+            from docx.oxml.ns import qn as _qn  # type: ignore
+            from docx.table import Table as _DocxTable  # type: ignore
+            from docx.text.paragraph import Paragraph as _DocxParagraph  # type: ignore
 
             doc = Document(str(original_path))
             translated_paras = [p for p in text.split("\n") if p.strip()]
             ptr = 0
-            for para in doc.paragraphs:
+
+            def _replace_para(para):
+                nonlocal ptr
                 if not para.text.strip():
-                    continue
-                if ptr < len(translated_paras):
-                    new_text = translated_paras[ptr]
-                    ptr += 1
-                    if para.runs:
-                        para.runs[0].text = new_text
-                        for run in para.runs[1:]:
-                            run.text = ""
-                    else:
-                        para.text = new_text
+                    return
+                if ptr >= len(translated_paras):
+                    return
+                new_text = translated_paras[ptr]
+                ptr += 1
+                if para.runs:
+                    para.runs[0].text = new_text
+                    for run in para.runs[1:]:
+                        run.text = ""
+                else:
+                    para.text = new_text
+
+            def _replace_table(table):
+                nonlocal ptr
+                for row in table.rows:
+                    for cell in row.cells:
+                        if not cell.text.strip():
+                            continue
+                        if ptr >= len(translated_paras):
+                            return
+                        new_text = translated_paras[ptr]
+                        ptr += 1
+                        if cell.text_frame and cell.text_frame.paragraphs:
+                            p0 = cell.text_frame.paragraphs[0]
+                            if p0.runs:
+                                p0.runs[0].text = new_text
+                                for run in p0.runs[1:]:
+                                    run.text = ""
+                            else:
+                                p0.text = new_text
+                            for xp in cell.text_frame.paragraphs[1:]:
+                                xp.text = ""
+                        elif cell.paragraphs:
+                            p0 = cell.paragraphs[0]
+                            if p0.runs:
+                                p0.runs[0].text = new_text
+                                for run in p0.runs[1:]:
+                                    run.text = ""
+                            else:
+                                p0.text = new_text
+                            for xp in cell.paragraphs[1:]:
+                                for r in xp.runs:
+                                    r.text = ""
+
+            # --- Walk document in SAME order as extraction ---
+            # 1) Headers
+            for section in doc.sections:
+                for hdr in (section.header, section.first_page_header):
+                    if hdr and not hdr.is_linked_to_previous:
+                        for p in hdr.paragraphs:
+                            _replace_para(p)
+
+            # 2) Body: paragraphs + tables in document order
+            for child in doc.element.body:
+                if child.tag == _qn("w:p"):
+                    _replace_para(_DocxParagraph(child, doc))
+                elif child.tag == _qn("w:tbl"):
+                    _replace_table(_DocxTable(child, doc))
+
+            # 3) Footers
+            for section in doc.sections:
+                for ftr in (section.footer, section.first_page_footer):
+                    if ftr and not ftr.is_linked_to_previous:
+                        for p in ftr.paragraphs:
+                            _replace_para(p)
 
             buf = _io.BytesIO()
             doc.save(buf)
             buf.seek(0)
+            dl_name = original_path.stem.split("_", 1)[-1] if "_" in original_path.stem else "dokument"
             return StreamingResponse(
                 buf,
                 media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                headers={"Content-Disposition": 'attachment; filename="translated.docx"'},
+                headers={"Content-Disposition": f'attachment; filename="translated_{dl_name}.docx"'},
             )
 
         elif ext == ".pdf":
