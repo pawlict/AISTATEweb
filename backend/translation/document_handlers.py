@@ -89,16 +89,78 @@ class TXTHandler(DocumentHandler):
 
 class DOCXHandler(DocumentHandler):
     """Microsoft Word document handler"""
-    
+
+    # ------------------------------------------------------------------
+    # Helpers to iterate ALL document content in reading order
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _iter_block_items(doc):
+        """Yield paragraphs and tables from *doc.element.body* in document order.
+
+        python-docx's ``doc.paragraphs`` only returns top-level paragraphs
+        and completely ignores tables.  This helper walks the underlying XML
+        so we get every block element (paragraph **and** table) in the order
+        it appears in the document.
+        """
+        from docx.oxml.ns import qn  # type: ignore
+        from docx.table import Table  # type: ignore
+        from docx.text.paragraph import Paragraph  # type: ignore
+
+        for child in doc.element.body:
+            if child.tag == qn("w:p"):
+                yield Paragraph(child, doc)
+            elif child.tag == qn("w:tbl"):
+                yield Table(child, doc)
+
+    @staticmethod
+    def _extract_table_text(table) -> list[str]:
+        """Return a flat list of non-empty cell texts from a table."""
+        texts: list[str] = []
+        for row in table.rows:
+            for cell in row.cells:
+                ct = cell.text.strip()
+                if ct:
+                    texts.append(ct)
+        return texts
+
     def extract_text(self, file_path: Path) -> str:
-        """Extract text from DOCX file"""
+        """Extract text from DOCX: body paragraphs + tables + headers/footers."""
         if not DOCX_AVAILABLE:
             raise RuntimeError("python-docx not available")
-        
+
         try:
             doc = Document(file_path)
-            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-            text = '\n\n'.join(paragraphs)
+            parts: list[str] = []
+
+            # --- Headers (all sections) ---
+            for section in doc.sections:
+                for hdr in (section.header, section.first_page_header):
+                    if hdr and not hdr.is_linked_to_previous:
+                        for p in hdr.paragraphs:
+                            if p.text.strip():
+                                parts.append(p.text.strip())
+
+            # --- Body: paragraphs + tables in document order ---
+            from docx.table import Table as DocxTable  # type: ignore
+
+            for block in self._iter_block_items(doc):
+                if isinstance(block, DocxTable):
+                    parts.extend(self._extract_table_text(block))
+                else:
+                    # Paragraph
+                    if block.text.strip():
+                        parts.append(block.text.strip())
+
+            # --- Footers (all sections) ---
+            for section in doc.sections:
+                for ftr in (section.footer, section.first_page_footer):
+                    if ftr and not ftr.is_linked_to_previous:
+                        for p in ftr.paragraphs:
+                            if p.text.strip():
+                                parts.append(p.text.strip())
+
+            text = "\n\n".join(parts)
             logger.info(f"Extracted {len(text)} characters from {file_path.name}")
             return text
         except Exception as e:
@@ -197,16 +259,59 @@ class PDFHandler(DocumentHandler):
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _normalize_color(color) -> tuple:
+        """Convert PyMuPDF color (int or tuple) → (r, g, b) floats."""
+        if isinstance(color, (list, tuple)):
+            return tuple(color[:3])
+        if isinstance(color, int):
+            r = ((color >> 16) & 0xFF) / 255.0
+            g = ((color >> 8) & 0xFF) / 255.0
+            b = (color & 0xFF) / 255.0
+            return (r, g, b)
+        return (0, 0, 0)
+
+    @staticmethod
+    def _dominant_font(dict_block: dict) -> dict:
+        """Return {'size': float, 'color': tuple} for the most common font in a dict block."""
+        sizes: list[float] = []
+        colors: list = []
+        for ln in dict_block.get("lines", []):
+            for sp in ln.get("spans", []):
+                if sp["text"].strip():
+                    sizes.append(sp["size"])
+                    colors.append(sp.get("color", 0))
+        if not sizes:
+            return {"size": 11, "color": (0, 0, 0)}
+        dominant = max(set(sizes), key=sizes.count)
+        idx = sizes.index(dominant)
+        return {
+            "size": dominant,
+            "color": PDFHandler._normalize_color(colors[idx]),
+        }
+
+    @staticmethod
+    def _fit_fontsize(rect, text: str, start_size: float, min_size: float = 5.0) -> float:
+        """Estimate largest font size that makes *text* fit inside *rect*."""
+        w, h = rect.width, rect.height
+        if w <= 0 or h <= 0:
+            return min_size
+        for fs in (start_size, start_size * 0.85, start_size * 0.7,
+                   start_size * 0.55, start_size * 0.4, min_size):
+            fs = max(fs, min_size)
+            cpl = w / (fs * 0.52) if fs > 0 else 1          # chars per line (approx)
+            cpl = max(cpl, 1)
+            est_lines = sum(max(1, len(line) / cpl) for line in text.split("\n"))
+            if est_lines * fs * 1.2 <= h:
+                return fs
+        return min_size
+
+    @staticmethod
     def inject_translated_text(original_path: Path, translated_text: str) -> bytes:
         """Replace text in original PDF with *translated_text* and return PDF bytes.
 
-        Algorithm (per page):
-        1. Extract text blocks with positions from the original via PyMuPDF.
-        2. Redact (white-out) original text areas.
-        3. Insert translated text into the same rectangles, auto-shrinking
-           the font size when the translation is longer than the original.
-
-        Returns raw PDF bytes ready to stream.
+        Works at **text-block** level (not individual spans) so that each
+        paragraph gets a full-width rectangle with proper word-wrapping.
+        Uses ``--- Strona N ---`` markers to split text across pages.
         """
         if not PYMUPDF_AVAILABLE:
             raise RuntimeError("PyMuPDF (fitz) not available — cannot write PDF")
@@ -215,89 +320,97 @@ class PDFHandler(DocumentHandler):
 
         doc = pymupdf.open(str(original_path))
 
-        # --- 1. Collect text-block counts per page from original ----------
-        page_block_counts: list[int] = []
-        for page in doc:
-            blocks = page.get_text("dict", flags=pymupdf.TEXT_PRESERVE_WHITESPACE)["blocks"]
-            count = 0
-            for b in blocks:
-                if b["type"] != 0:  # skip image blocks
-                    continue
-                for line in b["lines"]:
-                    for span in line["spans"]:
-                        if span["text"].strip():
-                            count += 1
-            page_block_counts.append(count)
-
-        # --- 2. Strip page markers from translated text -------------------
-        _marker_re = _re.compile(
-            r"^-{2,}\s*(?:Strona|Page|strona|page)\s*\d+\s*-{2,}$",
-            _re.IGNORECASE,
+        # --- 1. Parse translated text into pages via markers ---------------
+        marker_re = _re.compile(
+            r"^-{2,}\s*(?:Strona|Page)\s*(\d+)\s*-{2,}\s*$",
+            _re.IGNORECASE | _re.MULTILINE,
         )
-        flat_lines: list[str] = []
-        for line in translated_text.split("\n"):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if _marker_re.match(stripped):
-                continue
-            flat_lines.append(stripped)
+        pages_text: dict[int, str] = {}
+        parts = marker_re.split(translated_text)
+        # parts = [preamble, "1", text_page1, "2", text_page2, …]
+        idx = 1
+        while idx + 1 < len(parts):
+            page_num = int(parts[idx]) - 1          # 0-indexed
+            pages_text[page_num] = parts[idx + 1].strip()
+            idx += 2
 
-        # --- 3. Map translated lines → pages by block count ---------------
-        line_ptr = 0
+        # --- 2. Process each page ------------------------------------------
         for page_idx, page in enumerate(doc):
-            if page_idx >= len(page_block_counts):
-                break
-            expected = page_block_counts[page_idx]
-            page_lines = flat_lines[line_ptr: line_ptr + expected]
-            line_ptr += expected
+            if page_idx not in pages_text:
+                continue
+            page_translated = pages_text[page_idx]
+            if not page_translated:
+                continue
 
-            # Collect original spans with their rects
-            blocks = page.get_text("dict", flags=pymupdf.TEXT_PRESERVE_WHITESPACE)["blocks"]
-            original_spans: list[dict] = []
-            for b in blocks:
-                if b["type"] != 0:
+            # 2a. Collect original text blocks (block-level bounding rects)
+            raw_blocks = page.get_text("blocks")
+            orig_blocks: list[dict] = []
+            for item in raw_blocks:
+                x0, y0, x1, y1, text = item[0], item[1], item[2], item[3], item[4]
+                btype = item[6] if len(item) > 6 else 0
+                if btype != 0 or not str(text).strip():
                     continue
-                for line in b["lines"]:
-                    for span in line["spans"]:
-                        if span["text"].strip():
-                            original_spans.append(span)
+                orig_blocks.append({
+                    "rect": pymupdf.Rect(x0, y0, x1, y1),
+                    "text": str(text).strip(),
+                })
+            if not orig_blocks:
+                continue
 
-            # Redact original text areas
-            for span in original_spans:
-                rect = pymupdf.Rect(span["bbox"])
-                page.add_redact_annot(rect, fill=(1, 1, 1))  # white fill
+            # 2b. Get dominant font info per block from dict representation
+            dict_blocks = [
+                b for b in page.get_text("dict", flags=pymupdf.TEXT_PRESERVE_WHITESPACE).get("blocks", [])
+                if b.get("type", -1) == 0
+            ]
+            block_fonts: list[dict] = []
+            for i, ob in enumerate(orig_blocks):
+                # Match dict_block by index (same order) or fall back
+                if i < len(dict_blocks):
+                    block_fonts.append(PDFHandler._dominant_font(dict_blocks[i]))
+                else:
+                    block_fonts.append({"size": 11, "color": (0, 0, 0)})
+
+            # 2c. Distribute translated text across blocks
+            #     Try double-newline split first (natural paragraph breaks)
+            paras = [p.strip() for p in _re.split(r"\n\s*\n", page_translated) if p.strip()]
+
+            if len(paras) == len(orig_blocks):
+                chunks = paras
+            else:
+                # Proportional line distribution by original char count
+                all_lines = [ln for ln in page_translated.split("\n") if ln.strip()]
+                total_chars = sum(len(ob["text"]) for ob in orig_blocks) or 1
+                chunks: list[str] = []
+                lptr = 0
+                for i, ob in enumerate(orig_blocks):
+                    if i == len(orig_blocks) - 1:
+                        chunks.append("\n".join(all_lines[lptr:]))
+                    else:
+                        prop = len(ob["text"]) / total_chars
+                        n = max(1, round(prop * len(all_lines)))
+                        chunks.append("\n".join(all_lines[lptr:lptr + n]))
+                        lptr += n
+
+            # 2d. Redact all original text blocks (white-out)
+            for ob in orig_blocks:
+                page.add_redact_annot(ob["rect"], fill=(1, 1, 1))
             page.apply_redactions()
 
-            # Insert translated text
-            sp = 0
-            for span in original_spans:
-                if sp >= len(page_lines):
-                    break
-                new_text = page_lines[sp]
-                sp += 1
+            # 2e. Insert translated text into block rectangles
+            for i, ob in enumerate(orig_blocks):
+                chunk = chunks[i].strip() if i < len(chunks) else ""
+                if not chunk:
+                    continue
 
-                rect = pymupdf.Rect(span["bbox"])
-                fontsize = span.get("size", 11)
-                color = span.get("color", 0)
-                # Normalize color: int → (r, g, b) tuple
-                if isinstance(color, int):
-                    r = ((color >> 16) & 0xFF) / 255.0
-                    g = ((color >> 8) & 0xFF) / 255.0
-                    b = (color & 0xFF) / 255.0
-                    color = (r, g, b)
-
-                # Auto-shrink font if translated text is longer
-                orig_len = len(span["text"].strip())
-                if orig_len > 0 and len(new_text) > orig_len:
-                    ratio = orig_len / len(new_text)
-                    fontsize = max(fontsize * ratio, 5)
+                rect = ob["rect"]
+                fi = block_fonts[i] if i < len(block_fonts) else {"size": 11, "color": (0, 0, 0)}
+                fontsize = PDFHandler._fit_fontsize(rect, chunk, fi["size"])
 
                 page.insert_textbox(
                     rect,
-                    new_text,
+                    chunk,
                     fontsize=fontsize,
-                    color=color,
+                    color=fi["color"],
                     align=pymupdf.TEXT_ALIGN_LEFT,
                 )
 
