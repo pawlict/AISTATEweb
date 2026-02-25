@@ -7111,78 +7111,69 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
 
     app_log(f"Proofreading: lang={lang}, model={model}, text_len={len(text)}")
 
-    # Build prompt based on mode
-    _PL_TYPO_RULES = (
-        "\nZASADY TYPOGRAFII POLSKIEJ (stosuj zawsze): "
-        "- Dziel tekst na logiczne akapity (oddzielone pustą linią). "
-        "- Nie zostawiaj samotnych spójników (i, w, z, a, o, u, e) na końcu wiersza — "
-        "po takim jednoliterowym wyrazie NIE stawiaj spacji, lecz wstaw znak niełamliwej spacji "
-        "(innymi słowy: spójnik powinien być zawsze połączony z następnym wyrazem). "
-        "- Stosuj poprawna polska interpunkcje: cudzyslow dolny i gorny, myslnik dlugim (em dash), "
-        "wielokropek (trzy kropki, nie wiecej). "
-        "- Zachowuj formatowanie markdown (nagłówki ##, **bold**, *italic*, listy -, 1.) jeśli wystepuje w tekście źródłowym."
-    )
-
-    _EN_TYPO_RULES = (
-        "\nTYPOGRAPHY RULES (always apply): "
-        "- Divide text into logical paragraphs (separated by blank lines). "
-        "- Use proper punctuation: em dash — , curly quotes if possible. "
-        "- Preserve markdown formatting (## headings, **bold**, *italic*, lists -, 1.) if present in the source text."
-    )
-
+    # Build prompt based on mode.
+    # ----------------------------------------------------------------
+    # Architecture: single cohesive system message with structured sections.
+    # The style-specific rules arrive from the frontend in `notes` and
+    # are integrated as the "Styl korekty:" / "Proofreading style:" section.
+    # ----------------------------------------------------------------
     if mode == "expand":
-        # Expand / rewrite mode — user wants richer, longer text
         if lang == "pl":
             system_msg = (
-                "Jesteś profesjonalnym redaktorem tekstu polskiego. "
-                "Twoim zadaniem jest ROZWINIĘCIE i WZBOGACENIE podanego tekstu. "
-                "Rozbuduj zdania, dodaj szczegóły, synonimy, lepsze sformułowania. "
-                "Zachowaj sens i kontekst oryginału, ale tekst powinien być znacznie bogatszy, "
-                "bardziej opisowy i profesjonalny. "
-                "Popraw też ewentualne błędy ortograficzne i gramatyczne. "
-                "Jeśli tekst zawiera rozdziały lub je tworzysz — tytuły rozdziałów muszą być krótkie (2–5 słów), "
-                "spójne stylistycznie między sobą, a treść rozdziału zawsze poniżej tytułu. "
-                "Odpowiedz WYŁĄCZNIE rozszerzonym tekstem — bez komentarzy, bez wyjaśnień."
-                + _PL_TYPO_RULES
+                "Jesteś profesjonalnym redaktorem tekstu polskiego.\n\n"
+                "Twoje zadanie:\n"
+                "- rozwiń i wzbogać podany tekst\n"
+                "- rozbuduj zdania, dodaj szczegóły, synonimy, lepsze sformułowania\n"
+                "- zachowaj sens i kontekst oryginału\n"
+                "- popraw ewentualne błędy ortograficzne i gramatyczne\n"
+                "- zwracaj TYLKO rozszerzony tekst, bez komentarzy i wyjaśnień\n\n"
+                "Formatowanie:\n"
+                "- dziel tekst na logiczne akapity oddzielone pustą linią\n"
+                "- nie zostawiaj samotnych spójników (i, w, z, a, o) na końcu wiersza\n"
+                "- zachowuj markdown (##, **bold**, *italic*, listy) jeśli występuje"
             )
         else:
             system_msg = (
-                "You are a professional English editor. "
-                "Your task is to EXPAND and ENRICH the given text. "
-                "Elaborate on sentences, add details, synonyms, better phrasing. "
-                "Preserve the meaning and context of the original, but the text should be significantly richer, "
-                "more descriptive and professional. "
-                "Also fix any spelling and grammar errors. "
-                "If the text has chapters/sections or you create them — chapter titles must be short (2–5 words), "
-                "stylistically consistent with each other, and the chapter body must always follow below the title. "
-                "Reply ONLY with the expanded text — no comments, no explanations."
-                + _EN_TYPO_RULES
+                "You are a professional English editor.\n\n"
+                "Your task:\n"
+                "- expand and enrich the given text\n"
+                "- elaborate on sentences, add details, synonyms, better phrasing\n"
+                "- preserve the meaning and context of the original\n"
+                "- fix any spelling and grammar errors\n"
+                "- return ONLY the expanded text, no comments or explanations\n\n"
+                "Formatting:\n"
+                "- divide text into logical paragraphs separated by blank lines\n"
+                "- preserve markdown (##, **bold**, *italic*, lists) if present"
             )
     else:
-        # Standard correction mode
+        # Correction mode — the style-specific rules in `notes` define
+        # how aggressively to correct (light vs professional etc.)
         if lang == "pl":
             system_msg = (
-                "Jesteś profesjonalnym korektorem tekstu polskiego. "
-                "Popraw ortografię, gramatykę, interpunkcję i wygładź styl. "
-                "NIE zmieniaj znaczenia ani kontekstu tekstu. "
-                "Jeśli tekst zawiera rozdziały lub je tworzysz — tytuły rozdziałów muszą być krótkie (2–5 słów), "
-                "spójne stylistycznie między sobą, a treść rozdziału zawsze poniżej tytułu. "
-                "Odpowiedz WYŁĄCZNIE poprawionym tekstem — bez komentarzy, bez wyjaśnień."
-                + _PL_TYPO_RULES
+                "Jesteś korektorem języka polskiego na poziomie profesjonalnego redaktora.\n\n"
+                "Twoje zadanie:\n"
+                "- popraw ortografię, gramatykę, interpunkcję i składnię\n"
+                "- zachowuj oryginalne znaczenie tekstu\n"
+                "- zwracaj TYLKO poprawiony tekst, bez komentarzy i wyjaśnień\n\n"
+                "Formatowanie:\n"
+                "- dziel tekst na logiczne akapity oddzielone pustą linią\n"
+                "- nie zostawiaj samotnych spójników (i, w, z, a, o) na końcu wiersza\n"
+                "- zachowuj markdown (##, **bold**, *italic*, listy) jeśli występuje"
             )
         else:
             system_msg = (
-                "You are a professional English proofreader. "
-                "Fix spelling, grammar, punctuation and smooth out the style. "
-                "Do NOT change the meaning or context of the text. "
-                "If the text has chapters/sections or you create them — chapter titles must be short (2–5 words), "
-                "stylistically consistent with each other, and the chapter body must always follow below the title. "
-                "Reply ONLY with the corrected text — no comments, no explanations."
-                + _EN_TYPO_RULES
+                "You are an English proofreader at a professional editor level.\n\n"
+                "Your task:\n"
+                "- fix spelling, grammar, punctuation, and syntax\n"
+                "- preserve the original meaning of the text\n"
+                "- return ONLY the corrected text, no comments or explanations\n\n"
+                "Formatting:\n"
+                "- divide text into logical paragraphs separated by blank lines\n"
+                "- preserve markdown (##, **bold**, *italic*, lists) if present"
             )
 
     if notes:
-        system_msg += f"\n\nDodatkowe uwagi użytkownika: {notes}"
+        system_msg += "\n\n" + notes
 
     messages = [
         {"role": "system", "content": system_msg},
