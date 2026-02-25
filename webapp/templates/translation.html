@@ -354,6 +354,11 @@
 }
 .proofread-result .pr-ins:hover { opacity: .6; }
 .proofread-result .pr-ins.pr-rejected { display: none; }
+/* Accepted insertion — reverts to normal text appearance */
+.proofread-result .pr-ins-accepted {
+  background: none; color: inherit; font-weight: inherit;
+  padding: 0; border-radius: 0; cursor: text;
+}
 .proofread-result .pr-user-edit {
   background: rgba(37,99,235,.08);
   color: #1e40af;

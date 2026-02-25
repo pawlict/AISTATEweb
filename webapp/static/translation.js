@@ -1471,79 +1471,92 @@ var _proofreadState = { lang: null, corrected: '', diffHtml: '', running: false 
 var _prCurrentPreset = 'standard';
 
 // --- PL preset prompt rules ---
+// Each preset is a COMPLETE, self-contained instruction set (no references
+// to other presets).  Proper Polish diacritics are used throughout so
+// the model sees correct spelling in the very instructions that ask for it.
 var _PR_RULES_PL = {
     light: [
-        'Popraw bledy ortograficzne i literowki.',
-        'Popraw interpunkcje: polskie cudzyslowy \u201E\u201D, myslnik dlugi, wielokropek \u2026.',
-        'Nie zmieniaj stylu ani slownictwa autora.',
-        'Nie dodawaj rozdziałów ani nagłówków \u2014 zachowaj oryginalną strukturę tekstu bez zmian.'
+        'STYL: Lekka korekta \u2014 minimalna ingerencja.',
+        'Popraw wyłącznie błędy ortograficzne, literówki i interpunkcję.',
+        'Stosuj polską interpunkcję: cudzysłów dolny „ i górny \u201D, myślnik długi \u2014, wielokropek \u2026.',
+        'NIE zmieniaj stylu, słownictwa ani struktury zdań autora.',
+        'NIE dodawaj rozdziałów, nagłówków ani nowych akapitów \u2014 zachowaj oryginalną strukturę tekstu.'
     ],
     standard: [
-        'Popraw ortografie, interpunkcje i gramatyke.',
-        'Usun powtorzenia wyrazow w bliskim sasiedztwie \u2014 stosuj synonimy nie zmieniajac sensu.',
-        'Usun pleonazmy (np. \u201Ecofnac sie do tylu\u201D, \u201Ekontynuowac dalej\u201D).',
-        'Zapewnij spojnosc czasu w narracji.',
-        'Stosuj poprawna polska interpunkcje: cudzyslowy \u201E\u201D, myslnik dlugi \u2014, wielokropek \u2026.',
-        'Jeśli tekst zawiera rozdziały lub je tworzysz: tytuły rozdziałów muszą być krótkie (2\u20135 słów), spójne stylistycznie między sobą, a treść rozdziału zawsze poniżej tytułu.'
+        'STYL: Standardowa korekta \u2014 zrównoważona poprawa treści.',
+        'Popraw ortografię, gramatykę i interpunkcję.',
+        'Usuń powtórzenia wyrazów w bliskim sąsiedztwie \u2014 zastąp je synonimami bez zmiany sensu.',
+        'Usuń pleonazmy (np. „cofnąć się do tyłu" \u2192 „cofnąć się", „kontynuować dalej" \u2192 „kontynuować").',
+        'Zapewnij spójność czasu gramatycznego w całym tekście.',
+        'Stosuj polską interpunkcję: cudzysłów „\u201D, myślnik \u2014, wielokropek \u2026.',
+        'Jeśli tekst zawiera rozdziały/sekcje: tytuły muszą być krótkie (2\u20135 słów) i spójne stylistycznie.'
     ],
     professional: [
-        'Popraw ortografie, interpunkcje i gramatyke.',
-        'Usun powtorzenia wyrazow \u2014 stosuj synonimy.',
-        'Usun pleonazmy i zbedne powtorzenia znaczeniowe.',
-        'Preferuj strone czynna zamiast biernej.',
-        'Skracaj rozwlekle zdania \u2014 preferuj zwiezle, klarowne sformulowania.',
-        'Zachowaj formalny, profesjonalny ton.',
-        'Zapewnij spojnosc czasu w narracji.',
-        'Stosuj poprawna polska interpunkcje.',
-        'Jeśli tekst zawiera rozdziały lub je tworzysz: tytuły rozdziałów muszą być krótkie (2\u20135 słów), spójne stylistycznie między sobą, a treść rozdziału zawsze poniżej tytułu.'
+        'STYL: Profesjonalna korekta \u2014 zwięzłość, ton formalny, pełna poprawa stylistyczna.',
+        'Popraw ortografię, gramatykę i interpunkcję.',
+        'Usuń powtórzenia wyrazów \u2014 zastąp synonimami.',
+        'Usuń pleonazmy i zbędne powtórzenia znaczeniowe.',
+        'Preferuj stronę czynną zamiast biernej (np. „decyzja została podjęta" \u2192 „podjęto decyzję").',
+        'Skracaj rozwlekłe zdania \u2014 pisz zwięźle i klarownie.',
+        'Zachowaj formalny, profesjonalny ton wypowiedzi.',
+        'Zapewnij spójność czasu gramatycznego.',
+        'Stosuj polską interpunkcję: cudzysłów „\u201D, myślnik \u2014, wielokropek \u2026.',
+        'Różnicuj długość zdań dla lepszego rytmu tekstu.',
+        'Jeśli tekst zawiera rozdziały/sekcje: tytuły muszą być krótkie (2\u20135 słów) i spójne stylistycznie.'
     ],
     academic: [
-        'Popraw ortografie, interpunkcje i gramatyke.',
-        'Usun powtorzenia wyrazow \u2014 stosuj synonimy.',
-        'Usun pleonazmy.',
-        'Zachowaj strone bierna tam gdzie jest uzasadniona (styl naukowy, prawniczy).',
-        'Zachowaj formalny ton i precyzje terminologiczna.',
-        'Zapewnij spojnosc czasu w narracji.',
-        'Stosuj poprawna polska interpunkcje.',
-        'Jeśli tekst zawiera rozdziały lub je tworzysz: tytuły rozdziałów muszą być krótkie (2\u20135 słów), spójne stylistycznie między sobą, a treść rozdziału zawsze poniżej tytułu.'
+        'STYL: Akademicka korekta \u2014 precyzja terminologiczna, styl naukowy/prawniczy.',
+        'Popraw ortografię, gramatykę i interpunkcję.',
+        'Usuń powtórzenia wyrazów \u2014 zastąp synonimami.',
+        'Usuń pleonazmy.',
+        'Strona bierna jest DOZWOLONA tam, gdzie jest uzasadniona stylem naukowym lub prawniczym.',
+        'Zachowaj formalny ton i precyzję terminologiczną \u2014 nie upraszczaj terminów specjalistycznych.',
+        'Zapewnij spójność czasu gramatycznego.',
+        'Stosuj polską interpunkcję: cudzysłów „\u201D, myślnik \u2014, wielokropek \u2026.',
+        'Jeśli tekst zawiera rozdziały/sekcje: tytuły muszą być krótkie (2\u20135 słów) i spójne stylistycznie.'
     ]
 };
 
 // --- EN preset prompt rules ---
 var _PR_RULES_EN = {
     light: [
-        'Fix spelling and typos.',
-        'Fix punctuation (commas, apostrophes, quotation marks).',
-        'Do not change the author\'s style or vocabulary.',
-        'Do not add chapters or headings \u2014 preserve the original text structure as-is.'
+        'STYLE: Light proofreading \u2014 minimal intervention.',
+        'Fix only spelling errors, typos, and punctuation.',
+        'Use proper punctuation: em dash \u2014, curly quotes where possible.',
+        'Do NOT change the author\u2019s style, vocabulary, or sentence structure.',
+        'Do NOT add chapters, headings, or new paragraphs \u2014 preserve the original text structure.'
     ],
     standard: [
-        'Fix spelling, punctuation and grammar.',
-        'Avoid word repetition in close proximity \u2014 use synonyms without changing the meaning.',
-        'Simplify wordy phrases (e.g. "in order to" \u2192 "to", "at this point in time" \u2192 "now").',
+        'STYLE: Standard proofreading \u2014 balanced correction.',
+        'Fix spelling, grammar, and punctuation.',
+        'Replace repeated words in close proximity with synonyms without changing meaning.',
+        'Simplify wordy phrases (e.g. \u201Cin order to\u201D \u2192 \u201Cto\u201D, \u201Cat this point in time\u201D \u2192 \u201Cnow\u201D).',
         'Ensure tense consistency throughout the text.',
         'Use the Oxford comma in lists.',
-        'If the text has chapters/sections or you create them: chapter titles must be short (2\u20135 words), stylistically consistent with each other, and the chapter body must always follow below the title.'
+        'If the text has chapters/sections: titles must be short (2\u20135 words) and stylistically consistent.'
     ],
     professional: [
-        'Fix spelling, punctuation and grammar.',
-        'Avoid word repetition \u2014 use synonyms.',
-        'Simplify wordy phrases and reduce nominalizations (e.g. "make a decision" \u2192 "decide").',
-        'Prefer active voice over passive.',
+        'STYLE: Professional proofreading \u2014 conciseness, formal tone, full style correction.',
+        'Fix spelling, grammar, and punctuation.',
+        'Replace repeated words with synonyms.',
+        'Simplify wordy phrases and reduce nominalizations (e.g. \u201Cmake a decision\u201D \u2192 \u201Cdecide\u201D).',
+        'Prefer active voice over passive (e.g. \u201Cthe report was written\u201D \u2192 \u201Cwe wrote the report\u201D).',
         'Shorten verbose sentences \u2014 prefer concise, clear phrasing.',
         'Maintain a formal, professional tone.',
         'Ensure tense consistency.',
-        'Use the Oxford comma. Vary sentence length for better rhythm.',
-        'If the text has chapters/sections or you create them: chapter titles must be short (2\u20135 words), stylistically consistent with each other, and the chapter body must always follow below the title.'
+        'Vary sentence length for better rhythm.',
+        'Use the Oxford comma.',
+        'If the text has chapters/sections: titles must be short (2\u20135 words) and stylistically consistent.'
     ],
     academic: [
-        'Fix spelling, punctuation and grammar.',
-        'Avoid word repetition \u2014 use synonyms.',
-        'Keep passive voice where appropriate (academic, legal, scientific writing).',
-        'Maintain a formal tone and terminological precision.',
+        'STYLE: Academic proofreading \u2014 terminological precision, scholarly/legal register.',
+        'Fix spelling, grammar, and punctuation.',
+        'Replace repeated words with synonyms.',
+        'Passive voice IS ALLOWED where appropriate for academic, legal, or scientific writing.',
+        'Maintain a formal tone and terminological precision \u2014 do not simplify specialist terms.',
         'Ensure tense consistency.',
         'Use the Oxford comma in lists.',
-        'If the text has chapters/sections or you create them: chapter titles must be short (2\u20135 words), stylistically consistent with each other, and the chapter body must always follow below the title.'
+        'If the text has chapters/sections: titles must be short (2\u20135 words) and stylistically consistent.'
     ]
 };
 
@@ -1820,7 +1833,10 @@ async function proofreadRun() {
 
     var userNotes = String((_byId('proofread_notes') || {}).value || '').trim();
     var styleRules = _prCollectRulePrompt(_proofreadState.lang);
-    var notes = (styleRules + (userNotes ? '\n\n' + userNotes : '')).trim();
+    var userNotesHeader = (_proofreadState.lang === 'en')
+        ? '\n\nADDITIONAL USER INSTRUCTIONS:\n'
+        : '\n\nDODATKOWE INSTRUKCJE UŻYTKOWNIKA:\n';
+    var notes = (styleRules + (userNotes ? userNotesHeader + userNotes : '')).trim();
     var selectedModel = (_byId('proofread_model_select') || {}).value || '';
     var modeRadio = document.querySelector('input[name="proofread_mode"]:checked');
     var proofMode = modeRadio ? modeRadio.value : 'correct';
@@ -1918,8 +1934,8 @@ function _prFmtBarSync() {
 }
 
 /** Make diff spans interactive:
- *  - Click pr-del (red strikethrough) → hide it (accept deletion)
- *  - Click pr-ins (green) → hide it (reject insertion) OR double-click to edit
+ *  - Click pr-del (red strikethrough) → accept deletion: remove the red text
+ *  - Click pr-ins (green) → accept insertion: keep green text, remove paired red
  *  - Whole result is contenteditable — user edits get blue styling
  *  - Click between words to type custom text (appears in blue) */
 function _proofreadMakeDiffInteractive(container) {
@@ -1929,24 +1945,31 @@ function _proofreadMakeDiffInteractive(container) {
     container.setAttribute('contenteditable', 'true');
     container.setAttribute('spellcheck', 'false');
 
-    // Click on pr-del → accept deletion (hide the deleted word)
-    // Click on pr-ins → reject insertion (hide it, show original)
+    // Click handler for diff spans
     container.addEventListener('click', function(e) {
         var span = e.target.closest('.pr-del, .pr-ins');
         if (!span) return;
 
         if (span.classList.contains('pr-del')) {
-            // Accept this deletion — hide the red text
+            // Accept deletion — hide the old (red) text
             span.classList.add('pr-accepted');
+            // Also "solidify" the paired green insertion if it follows
+            var next = span.nextElementSibling;
+            if (next && next.classList.contains('pr-ins') && !next.classList.contains('pr-rejected')) {
+                // Convert green to normal text (accepted)
+                next.classList.remove('pr-ins');
+                next.classList.add('pr-ins-accepted');
+            }
             e.preventDefault();
         } else if (span.classList.contains('pr-ins')) {
-            // Reject this insertion — hide the green text
-            span.classList.add('pr-rejected');
-            // If there's a paired pr-del before it, un-hide it
+            // Accept insertion — keep the green text, remove paired red before it
             var prev = span.previousElementSibling;
-            if (prev && prev.classList.contains('pr-del') && prev.classList.contains('pr-accepted')) {
-                prev.classList.remove('pr-accepted');
+            if (prev && prev.classList.contains('pr-del') && !prev.classList.contains('pr-accepted')) {
+                prev.classList.add('pr-accepted');
             }
+            // Convert green to normal accepted text
+            span.classList.remove('pr-ins');
+            span.classList.add('pr-ins-accepted');
             e.preventDefault();
         }
     });
