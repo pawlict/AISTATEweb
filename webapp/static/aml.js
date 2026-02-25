@@ -268,9 +268,11 @@
     // Charts
     const charts = detail.charts || result.charts || {};
     St.chartsData = charts;
-    // Restore merged multi-statement balance timeline (built by _mergeMultiAccountCharts before _renderResults)
-    if(St._mergedBalanceTimeline){
-      St.chartsData.balance_timeline = St._mergedBalanceTimeline;
+    // Restore merged multi-statement charts (built by _mergeMultiAccountCharts before _renderResults)
+    if(St._mergedCharts){
+      for(const key in St._mergedCharts){
+        St.chartsData[key] = St._mergedCharts[key];
+      }
     }
     _renderChart("balance_timeline");
 
@@ -1390,12 +1392,20 @@
         if(!sid) return;
         _showProgress("Ladowanie analizy...");
         const detail = await _loadDetail(sid);
+
+        // Multi-statement case: merge charts from all sibling statements
+        const siblings = (detail && detail.sibling_statement_ids) || [];
+        if(siblings.length > 1){
+          await _mergeMultiAccountCharts(siblings);
+        } else {
+          St._mergedCharts = null;
+        }
+
         _renderResults();
         _showResults();
 
         // Load Review & Classification (batch-aware via sibling statements)
         if(window.ReviewManager){
-          const siblings = (detail && detail.sibling_statement_ids) || [];
           if(siblings.length > 1){
             await ReviewManager.loadForBatch(siblings);
           } else {
@@ -1481,7 +1491,7 @@
         St.statementId = null;
         St.caseId = null;
         St.chartsData = {};
-        St._mergedBalanceTimeline = null;
+        St._mergedCharts = null;
         if(St.chartInstance){ St.chartInstance.destroy(); St.chartInstance = null; }
         if(St.cyInstance){ St.cyInstance.destroy(); St.cyInstance = null; }
         _chartZoom.level = 1;
@@ -1717,9 +1727,9 @@
   }
 
   /**
-   * Fetch chart data for all statements and merge into a single multi-period
-   * balance timeline.  Each statement/month is a separate colored dataset so
-   * the user can see the full timeline with distinct periods.
+   * Fetch chart data for all statements and merge ALL chart types into
+   * combined multi-statement datasets.  Stores results in St._mergedCharts
+   * so _renderResults can restore them after overwriting St.chartsData.
    */
   async function _mergeMultiAccountCharts(stmtIds){
     const palette = ["#1f5aa6","#b91c1c","#15803d","#7c3aed","#d97706","#0891b2","#be185d","#65a30d"];
@@ -1735,21 +1745,24 @@
         stmtIds.map(sid => _safeApi("/api/aml/detail/" + encodeURIComponent(sid)))
       );
 
-      // Collect per-statement timeline data
+      const validDetails = allDetails.filter(d => d && d.charts);
+      if(validDetails.length < 2){
+        St._mergedCharts = null;
+        return;
+      }
+
+      // ---- 1. BALANCE TIMELINE (multi-dataset line chart) ----
       const allTimelines = [];
       let allLabelsSet = new Set();
 
-      for(let i = 0; i < allDetails.length; i++){
-        const d = allDetails[i];
-        if(!d) continue;
-        const charts = d.charts || {};
-        const bt = charts.balance_timeline;
+      for(let i = 0; i < validDetails.length; i++){
+        const d = validDetails[i];
+        const bt = (d.charts || {}).balance_timeline;
         if(!bt || !bt.labels || !bt.labels.length) continue;
 
         const stmt = d.statement || {};
         const acctNum = stmt.account_number || "";
         const period = stmt.period || "";
-        // Build descriptive label: period or first-last date
         let label = period;
         if(!label){
           const firstDate = bt.labels[0] || "";
@@ -1765,86 +1778,192 @@
           labels: bt.labels,
           data: bt.datasets[0].data,
           label: label,
-          index: i,
           txMeta: bt.tx_meta || null,
           firstDate: bt.labels[0] || "",
         });
       }
 
-      if(allTimelines.length < 2) return; // Only one statement — no merge needed
+      let mergedTimeline = null;
+      if(allTimelines.length >= 2){
+        allTimelines.sort((a, b) => a.firstDate.localeCompare(b.firstDate));
+        const allLabels = Array.from(allLabelsSet).sort();
+        const mergedDatasets = [];
+        const mergedTxMeta = [];
 
-      // Sort timelines chronologically by their first date
-      allTimelines.sort((a, b) => a.firstDate.localeCompare(b.firstDate));
+        for(let ti = 0; ti < allTimelines.length; ti++){
+          const tl = allTimelines[ti];
+          const labelMap = {};
+          for(let j = 0; j < tl.labels.length; j++) labelMap[tl.labels[j]] = j;
 
-      // Unified sorted label axis (all dates)
-      const allLabels = Array.from(allLabelsSet).sort();
+          const alignedData = [];
+          const alignedMeta = [];
+          const nextTl = allTimelines[ti + 1];
+          const nextFirstDate = nextTl ? nextTl.labels[0] : null;
 
-      // Build a dataset per statement, filling nulls where no data
-      // Each dataset only has values in its own date range (no spanGaps)
-      const mergedDatasets = [];
-      const mergedTxMeta = [];
-
-      for(let ti = 0; ti < allTimelines.length; ti++){
-        const tl = allTimelines[ti];
-        const labelMap = {};
-        for(let j = 0; j < tl.labels.length; j++){
-          labelMap[tl.labels[j]] = j;
-        }
-
-        const alignedData = [];
-        const alignedMeta = [];
-        // Find the boundary: add one overlapping point with next statement so lines connect
-        const lastOwnDate = tl.labels[tl.labels.length - 1] || "";
-        const nextTl = allTimelines[ti + 1];
-        const nextFirstDate = nextTl ? nextTl.labels[0] : null;
-
-        for(const lbl of allLabels){
-          if(lbl in labelMap){
-            alignedData.push(tl.data[labelMap[lbl]]);
-            alignedMeta.push(tl.txMeta ? tl.txMeta[labelMap[lbl]] : null);
-          } else {
-            alignedData.push(null);
-            alignedMeta.push(null);
+          for(const lbl of allLabels){
+            if(lbl in labelMap){
+              alignedData.push(tl.data[labelMap[lbl]]);
+              alignedMeta.push(tl.txMeta ? tl.txMeta[labelMap[lbl]] : null);
+            } else {
+              alignedData.push(null);
+              alignedMeta.push(null);
+            }
           }
-        }
 
-        // Connect to next period: duplicate the last balance at the first date of next period
-        if(nextFirstDate && tl.data.length > 0){
-          const nextIdx = allLabels.indexOf(nextFirstDate);
-          if(nextIdx >= 0 && alignedData[nextIdx] === null){
-            alignedData[nextIdx] = tl.data[tl.data.length - 1]; // bridge value
-            alignedMeta[nextIdx] = null; // no tx metadata for bridge
+          if(nextFirstDate && tl.data.length > 0){
+            const nextIdx = allLabels.indexOf(nextFirstDate);
+            if(nextIdx >= 0 && alignedData[nextIdx] === null){
+              alignedData[nextIdx] = tl.data[tl.data.length - 1];
+              alignedMeta[nextIdx] = null;
+            }
           }
+
+          const ci = ti % palette.length;
+          mergedDatasets.push({
+            label: tl.label,
+            data: alignedData,
+            borderColor: palette[ci],
+            backgroundColor: bgPalette[ci],
+            fill: true, tension: 0.2, pointRadius: 1, spanGaps: true, borderWidth: 2,
+          });
+          mergedTxMeta.push(alignedMeta);
         }
 
-        const ci = ti % palette.length;
-        mergedDatasets.push({
-          label: tl.label,
-          data: alignedData,
-          borderColor: palette[ci],
-          backgroundColor: bgPalette[ci],
-          fill: true,
-          tension: 0.2,
-          pointRadius: 1,
-          spanGaps: true,
-          borderWidth: 2,
-        });
-        mergedTxMeta.push(alignedMeta);
+        mergedTimeline = {
+          type: "line",
+          labels: allLabels,
+          datasets: mergedDatasets,
+          gaps: [],
+          tx_meta: mergedTxMeta[0],
+          _multiMeta: mergedTxMeta,
+        };
       }
 
-      // Store merged result (will be restored in _renderResults via _merged flag)
+      // ---- 2. CATEGORY DISTRIBUTION (aggregate amounts per category) ----
+      const catTotals = {};
+      for(const d of validDetails){
+        const cd = (d.charts || {}).category_distribution;
+        if(!cd || !cd.labels) continue;
+        for(let i = 0; i < cd.labels.length; i++){
+          const cat = cd.labels[i];
+          const val = (cd.datasets[0] || {}).data ? cd.datasets[0].data[i] : 0;
+          catTotals[cat] = (catTotals[cat] || 0) + (val || 0);
+        }
+      }
+      let mergedCategory = null;
+      const catEntries = Object.entries(catTotals).sort((a,b) => b[1] - a[1]);
+      if(catEntries.length > 0){
+        const catPalette = ["#1f5aa6","#d97706","#b91c1c","#15803d","#7c3aed",
+                            "#0891b2","#be185d","#65a30d","#c2410c","#4338ca","#6b7280"];
+        mergedCategory = {
+          type: "doughnut",
+          labels: catEntries.map(e => e[0]),
+          datasets: [{ data: catEntries.map(e => Math.round(e[1]*100)/100), backgroundColor: catPalette.slice(0, catEntries.length) }],
+        };
+      }
+
+      // ---- 3. CHANNEL DISTRIBUTION (aggregate counts + amounts) ----
+      const chCounts = {}, chAmounts = {};
+      for(const d of validDetails){
+        const ch = (d.charts || {}).channel_distribution;
+        if(!ch || !ch.labels) continue;
+        for(let i = 0; i < ch.labels.length; i++){
+          const lbl = ch.labels[i];
+          const ds0 = ch.datasets[0] || {};
+          const ds1 = ch.datasets[1] || {};
+          chCounts[lbl] = (chCounts[lbl] || 0) + ((ds0.data || [])[i] || 0);
+          chAmounts[lbl] = (chAmounts[lbl] || 0) + ((ds1.data || [])[i] || 0);
+        }
+      }
+      let mergedChannel = null;
+      const chLabels = Object.keys(chCounts).sort();
+      if(chLabels.length > 0){
+        mergedChannel = {
+          type: "bar",
+          labels: chLabels,
+          datasets: [
+            { label: "Liczba transakcji", data: chLabels.map(l => chCounts[l]), backgroundColor: "rgba(31,90,166,0.7)", yAxisID: "y" },
+            { label: "Kwota (PLN)", data: chLabels.map(l => Math.round(chAmounts[l]*100)/100), backgroundColor: "rgba(217,119,6,0.5)", yAxisID: "y1" },
+          ],
+        };
+      }
+
+      // ---- 4. DAILY ACTIVITY (aggregate day-of-week counts) ----
+      const dayNames = ["Pon","Wt","Sr","Czw","Pt","Sob","Ndz"];
+      const dayCounts = [0,0,0,0,0,0,0];
+      for(const d of validDetails){
+        const da = (d.charts || {}).daily_activity;
+        if(!da || !da.datasets || !da.datasets[0]) continue;
+        const src = da.datasets[0].data || [];
+        for(let i = 0; i < Math.min(src.length, 7); i++) dayCounts[i] += (src[i] || 0);
+      }
+      let mergedDaily = null;
+      if(dayCounts.some(v => v > 0)){
+        mergedDaily = {
+          type: "bar",
+          labels: dayNames,
+          datasets: [{ label: "Transakcje", data: dayCounts, backgroundColor: "rgba(31,90,166,0.7)" }],
+        };
+      }
+
+      // ---- 5. MONTHLY TREND (aggregate credit + debit per month) ----
+      const monthCredit = {}, monthDebit = {};
+      for(const d of validDetails){
+        const mt = (d.charts || {}).monthly_trend;
+        if(!mt || !mt.labels) continue;
+        const creditDs = mt.datasets[0] || {};
+        const debitDs = mt.datasets[1] || {};
+        for(let i = 0; i < mt.labels.length; i++){
+          const m = mt.labels[i];
+          monthCredit[m] = (monthCredit[m] || 0) + ((creditDs.data || [])[i] || 0);
+          monthDebit[m] = (monthDebit[m] || 0) + ((debitDs.data || [])[i] || 0);
+        }
+      }
+      let mergedMonthly = null;
+      const months = Object.keys({...monthCredit, ...monthDebit}).sort();
+      if(months.length > 0){
+        mergedMonthly = {
+          type: "bar",
+          labels: months,
+          datasets: [
+            { label: "Wplywy", data: months.map(m => Math.round((monthCredit[m]||0)*100)/100), backgroundColor: "rgba(21,128,61,0.7)" },
+            { label: "Wydatki", data: months.map(m => Math.round((monthDebit[m]||0)*100)/100), backgroundColor: "rgba(185,28,28,0.6)" },
+          ],
+        };
+      }
+
+      // ---- 6. TOP COUNTERPARTIES (aggregate amounts across statements) ----
+      const cpTotals = {};
+      for(const d of validDetails){
+        const tc = (d.charts || {}).top_counterparties;
+        if(!tc || !tc.labels) continue;
+        for(let i = 0; i < tc.labels.length; i++){
+          const name = tc.labels[i];
+          const val = (tc.datasets[0] || {}).data ? tc.datasets[0].data[i] : 0;
+          cpTotals[name] = (cpTotals[name] || 0) + (val || 0);
+        }
+      }
+      let mergedCounterparties = null;
+      const cpSorted = Object.entries(cpTotals).sort((a,b) => b[1] - a[1]).slice(0, 15);
+      if(cpSorted.length > 0){
+        mergedCounterparties = {
+          type: "bar",
+          labels: cpSorted.map(e => e[0]),
+          datasets: [{ label: "Kwota (PLN)", data: cpSorted.map(e => Math.round(e[1]*100)/100), backgroundColor: "rgba(31,90,166,0.7)" }],
+          options: { indexAxis: "y" },
+        };
+      }
+
+      // ---- Store all merged charts ----
       if(!St.chartsData) St.chartsData = {};
-      const merged = {
-        type: "line",
-        labels: allLabels,
-        datasets: mergedDatasets,
-        gaps: [],
-        tx_meta: mergedTxMeta[0],
-        _multiMeta: mergedTxMeta,
-      };
-      St.chartsData.balance_timeline = merged;
-      // Store in separate state so _renderResults can restore after overwriting chartsData
-      St._mergedBalanceTimeline = merged;
+      St._mergedCharts = {};
+      if(mergedTimeline){ St._mergedCharts.balance_timeline = mergedTimeline; St.chartsData.balance_timeline = mergedTimeline; }
+      if(mergedCategory){ St._mergedCharts.category_distribution = mergedCategory; St.chartsData.category_distribution = mergedCategory; }
+      if(mergedChannel){ St._mergedCharts.channel_distribution = mergedChannel; St.chartsData.channel_distribution = mergedChannel; }
+      if(mergedDaily){ St._mergedCharts.daily_activity = mergedDaily; St.chartsData.daily_activity = mergedDaily; }
+      if(mergedMonthly){ St._mergedCharts.monthly_trend = mergedMonthly; St.chartsData.monthly_trend = mergedMonthly; }
+      if(mergedCounterparties){ St._mergedCharts.top_counterparties = mergedCounterparties; St.chartsData.top_counterparties = mergedCounterparties; }
+
     } catch(e){
       console.warn("Multi-statement chart merge failed:", e);
     }
