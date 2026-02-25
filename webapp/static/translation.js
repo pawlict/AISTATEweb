@@ -1665,6 +1665,7 @@ function _proofreadToggle(lang) {
         if (prResult) prResult.innerHTML = '';
         var prResultWrap = _byId('proofread_result_wrap');
         if (prResultWrap) prResultWrap.style.display = 'none';
+        _prFmtBarSync();
         _proofreadSyncUI(false);
         return;
     }
@@ -1832,6 +1833,7 @@ async function proofreadRun() {
     if (resultWrap) resultWrap.style.display = '';
     if (progressEl) progressEl.style.display = '';
     if (resultEl) resultEl.innerHTML = '<div class="small muted">' + tr('translation.proofread.running_hint','Trwa korekta…') + '</div>';
+    _prFmtBarSync();
     if (acceptBtn) acceptBtn.style.display = 'none';
     if (copyBtn) copyBtn.style.display = 'none';
 
@@ -1883,6 +1885,36 @@ async function proofreadRun() {
         _proofreadState.running = false;
         if (progressEl) progressEl.style.display = 'none';
     }
+}
+
+// ============================================================================
+// Formatting toolbar for proofread result (Word-like ribbon)
+// ============================================================================
+
+/** Execute a document.execCommand formatting action on the proofread result */
+function _prFmt(cmd, value) {
+    var el = _byId('proofread_result');
+    if (!el) return;
+    el.focus();
+    document.execCommand(cmd, false, value || null);
+}
+
+/** Apply heading format via formatBlock */
+function _prFmtHeading(tag) {
+    if (!tag) return;
+    var el = _byId('proofread_result');
+    if (!el) return;
+    el.focus();
+    document.execCommand('formatBlock', false, tag);
+}
+
+/** Show/hide the formatting bar when proofread result becomes visible */
+function _prFmtBarSync() {
+    var bar = _byId('pr_fmt_bar');
+    var wrap = _byId('proofread_result_wrap');
+    if (!bar) return;
+    var visible = wrap && wrap.style.display !== 'none';
+    bar.style.display = visible ? 'flex' : 'none';
 }
 
 /** Make diff spans interactive:
