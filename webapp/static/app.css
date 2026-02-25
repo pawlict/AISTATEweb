@@ -522,6 +522,7 @@ textarea{min-height:220px; resize:vertical}
   top:0;
   z-index:5;
   backdrop-filter: blur(8px);
+  overflow:visible;
 }
 
 .analysis-toolbar-left{display:flex; flex-direction:column; gap:4px; min-width:140px; margin-right:18px}

@@ -285,36 +285,52 @@
 
 /* Proofreading diff styles — Word-like typography */
 .proofread-result {
-  padding: 28px 32px;
-  background: var(--panel, #fff);
-  border: 1px solid var(--border, #d0d0d0);
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
-  color: var(--text, inherit);
-  font-family: 'Cambria', 'Georgia', 'Times New Roman', serif;
+  padding: 40px 48px;
+  background: #fff;
+  border: none;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 2px 8px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.04);
+  font-family: 'Calibri', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   font-size: 14.5px;
-  line-height: 1.7;
+  line-height: 1.75;
   color: #1a1a1a;
-  min-height: 120px;
+  min-height: 200px;
   max-height: 70vh;
   overflow-y: auto;
+  /* A4-like page feel */
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
 }
+.proofread-result:focus { outline: none; }
 .proofread-result p {
-  margin: 0 0 12px 0;
+  margin: 0 0 13px 0;
   text-align: justify;
   text-indent: 0;
+  hyphens: auto;
 }
 .proofread-result p:last-child { margin-bottom: 0; }
 .proofread-result h1, .proofread-result h2, .proofread-result h3 {
   font-family: 'Calibri', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   color: #1e3a5f;
-  margin: 18px 0 8px 0;
+  margin: 20px 0 8px 0;
   padding-bottom: 4px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1.5px solid #e0e4ea;
+  font-weight: 600;
 }
-.proofread-result h1 { font-size: 20px; }
-.proofread-result h2 { font-size: 17px; }
-.proofread-result h3 { font-size: 15px; border-bottom: none; }
+.proofread-result h1 { font-size: 22px; }
+.proofread-result h2 { font-size: 18px; }
+.proofread-result h3 { font-size: 15.5px; border-bottom: none; }
+/* Lists */
+.proofread-result ul, .proofread-result ol {
+  margin: 6px 0 12px 24px; padding: 0;
+}
+.proofread-result li { margin-bottom: 4px; }
+/* Blockquote */
+.proofread-result blockquote {
+  border-left: 3px solid #b0c4de; margin: 10px 0; padding: 6px 16px;
+  color: #4a5568; font-style: italic; background: rgba(240,244,250,.4);
+}
 /* Diff markers */
 .proofread-result .pr-del {
   background: rgba(220,38,38,.10);
@@ -347,6 +363,52 @@
   border-bottom: 2px solid rgba(37,99,235,.25);
 }
 .proofread-result [contenteditable] { outline: none; }
+
+/* ---- Formatting toolbar (Word-like ribbon) ---- */
+.pr-fmt-bar {
+  display: none; /* shown via JS when result is visible */
+  align-items: center;
+  gap: 1px;
+  padding: 4px 6px;
+  background: linear-gradient(180deg, #f8f9fb 0%, #eef1f5 100%);
+  border: 1px solid #d0d5dd;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  flex-wrap: wrap;
+}
+.pr-fmt-bar .pr-sep {
+  width: 1px; height: 22px; background: #ccd2da; margin: 0 4px; flex-shrink: 0;
+}
+.pr-fmt-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 28px;
+  border: 1px solid transparent; background: transparent;
+  border-radius: 4px; cursor: pointer;
+  font-family: 'Calibri', 'Segoe UI', sans-serif;
+  font-size: 14px; color: #3b4252;
+  transition: all .12s ease;
+  padding: 0;
+  position: relative;
+}
+.pr-fmt-btn:hover { background: rgba(16,150,244,.08); border-color: rgba(16,150,244,.2); }
+.pr-fmt-btn:active, .pr-fmt-btn.active { background: rgba(16,150,244,.14); border-color: rgba(16,150,244,.35); }
+.pr-fmt-btn svg { width: 16px; height: 16px; stroke: #3b4252; fill: none; stroke-width: 2; }
+.pr-fmt-btn img { width: 16px; height: 16px; opacity: .65; }
+.pr-fmt-btn:hover img { opacity: 1; }
+/* Font size selector */
+.pr-fmt-select {
+  height: 26px; border: 1px solid #d0d5dd; border-radius: 4px;
+  background: #fff; font-size: 11.5px; color: #3b4252;
+  padding: 0 4px; cursor: pointer; min-width: 50px;
+}
+.pr-fmt-select:focus { outline: none; border-color: #1096f4; }
+.pr-fmt-bar + .proofread-result {
+  border-radius: 0 0 2px 2px;
+  border-top: 1px solid #d0d5dd;
+}
 
 /* Proofreading style icons — pill-icon compatible */
 .pr-style-icon {
@@ -402,10 +464,10 @@
   100% { transform: translateY(-2px); }
 }
 
-/* Tooltip (above toolbar) */
+/* Tooltip (below toolbar — avoids clipping at sticky top) */
 .pr-style-icon .pr-tip {
-  position: absolute; bottom: calc(100% + 10px); left: 50%;
-  transform: translateX(-50%) translateY(4px);
+  position: absolute; top: calc(100% + 10px); left: 50%;
+  transform: translateX(-50%) translateY(-4px);
   background: #0f172a; color: #f1f5f9; font-size: 11.5px;
   padding: 9px 13px; border-radius: 9px;
   pointer-events: none; opacity: 0; transition: all .2s ease;
@@ -413,18 +475,18 @@
   max-width: 260px; min-width: 160px; white-space: normal; text-align: center;
   z-index: 100;
 }
-.pr-style-icon .pr-tip::after {
-  content: ''; position: absolute; top: 100%; left: 50%;
+.pr-style-icon .pr-tip::before {
+  content: ''; position: absolute; bottom: 100%; left: 50%;
   transform: translateX(-50%);
-  border: 6px solid transparent; border-top-color: #0f172a;
+  border: 6px solid transparent; border-bottom-color: #0f172a;
 }
 .pr-style-icon:hover .pr-tip {
   opacity: 1; transform: translateX(-50%) translateY(0);
 }
-.pr-style-icon[data-style="light"] .pr-tip        { border-top: 2px solid #70c9f6; }
-.pr-style-icon[data-style="standard"] .pr-tip      { border-top: 2px solid #1096f4; }
-.pr-style-icon[data-style="professional"] .pr-tip   { border-top: 2px solid #2946b7; }
-.pr-style-icon[data-style="academic"] .pr-tip       { border-top: 2px solid #8426a4; }
+.pr-style-icon[data-style="light"] .pr-tip        { border-bottom: 2px solid #70c9f6; }
+.pr-style-icon[data-style="standard"] .pr-tip      { border-bottom: 2px solid #1096f4; }
+.pr-style-icon[data-style="professional"] .pr-tip   { border-bottom: 2px solid #2946b7; }
+.pr-style-icon[data-style="academic"] .pr-tip       { border-bottom: 2px solid #8426a4; }
 
 /* Magnifying glass PL / EN — always colorful */
 .pill-icon-mag { position: relative; }
@@ -723,6 +785,74 @@
                 <span id="proofread_prog_pct">0%</span>
               </div>
             </div>
+          </div>
+          <!-- Word-like formatting toolbar -->
+          <div class="pr-fmt-bar" id="pr_fmt_bar">
+            <!-- Font size -->
+            <select class="pr-fmt-select" id="pr_fmt_size" title="Rozmiar czcionki" onchange="_prFmt('fontSize',this.value)">
+              <option value="1">9</option>
+              <option value="2">10</option>
+              <option value="3" selected>12</option>
+              <option value="4">14</option>
+              <option value="5">18</option>
+              <option value="6">24</option>
+            </select>
+            <span class="pr-sep"></span>
+            <!-- Bold -->
+            <button class="pr-fmt-btn" title="Pogrubienie (Ctrl+B)" onclick="_prFmt('bold')">
+              <svg viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 0 8H6V4z"/><path d="M6 12h9a4 4 0 0 1 0 8H6V12z"/></svg>
+            </button>
+            <!-- Italic -->
+            <button class="pr-fmt-btn" title="Kursywa (Ctrl+I)" onclick="_prFmt('italic')">
+              <svg viewBox="0 0 24 24"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>
+            </button>
+            <!-- Underline -->
+            <button class="pr-fmt-btn" title="Podkreślenie (Ctrl+U)" onclick="_prFmt('underline')">
+              <svg viewBox="0 0 24 24"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
+            </button>
+            <!-- Strikethrough -->
+            <button class="pr-fmt-btn" title="Przekreślenie" onclick="_prFmt('strikeThrough')">
+              <svg viewBox="0 0 24 24"><path d="M16 4c-1.5-1-3.2-1.5-5-1.5C8 2.5 5.5 4.5 5.5 7c0 1.4.6 2.5 1.7 3.3"/><line x1="4" y1="12" x2="20" y2="12"/><path d="M17.7 13.5c.3.7.3 1.5.3 2.3 0 3-2.5 5.2-5.5 5.2-1.8 0-3.5-.6-5-1.5"/></svg>
+            </button>
+            <span class="pr-sep"></span>
+            <!-- Align left -->
+            <button class="pr-fmt-btn" title="Wyrównaj do lewej" onclick="_prFmt('justifyLeft')">
+              <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="15" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="18" x2="15" y2="18"/></svg>
+            </button>
+            <!-- Align center -->
+            <button class="pr-fmt-btn" title="Wyśrodkuj" onclick="_prFmt('justifyCenter')">
+              <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="10" x2="18" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="6" y1="18" x2="18" y2="18"/></svg>
+            </button>
+            <!-- Align justify -->
+            <button class="pr-fmt-btn" title="Wyjustuj" onclick="_prFmt('justifyFull')">
+              <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <span class="pr-sep"></span>
+            <!-- Unordered list -->
+            <button class="pr-fmt-btn" title="Lista punktowana" onclick="_prFmt('insertUnorderedList')">
+              <svg viewBox="0 0 24 24"><circle cx="4" cy="6" r="1.5" fill="#3b4252" stroke="none"/><line x1="9" y1="6" x2="21" y2="6"/><circle cx="4" cy="12" r="1.5" fill="#3b4252" stroke="none"/><line x1="9" y1="12" x2="21" y2="12"/><circle cx="4" cy="18" r="1.5" fill="#3b4252" stroke="none"/><line x1="9" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <!-- Ordered list -->
+            <button class="pr-fmt-btn" title="Lista numerowana" onclick="_prFmt('insertOrderedList')">
+              <svg viewBox="0 0 24 24"><text x="2" y="8" font-size="7" font-weight="600" fill="#3b4252" stroke="none" font-family="sans-serif">1.</text><line x1="9" y1="6" x2="21" y2="6"/><text x="2" y="14" font-size="7" font-weight="600" fill="#3b4252" stroke="none" font-family="sans-serif">2.</text><line x1="9" y1="12" x2="21" y2="12"/><text x="2" y="20" font-size="7" font-weight="600" fill="#3b4252" stroke="none" font-family="sans-serif">3.</text><line x1="9" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <span class="pr-sep"></span>
+            <!-- Heading -->
+            <select class="pr-fmt-select" title="Nagłówek" onchange="_prFmtHeading(this.value); this.selectedIndex=0;" style="min-width:60px;">
+              <option value="" selected disabled>H</option>
+              <option value="H1">H1</option>
+              <option value="H2">H2</option>
+              <option value="H3">H3</option>
+              <option value="P">Akapit</option>
+            </select>
+            <!-- Undo -->
+            <button class="pr-fmt-btn" title="Cofnij (Ctrl+Z)" onclick="_prFmt('undo')" style="margin-left:auto;">
+              <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            </button>
+            <!-- Redo -->
+            <button class="pr-fmt-btn" title="Ponów (Ctrl+Y)" onclick="_prFmt('redo')">
+              <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg>
+            </button>
           </div>
           <div id="proofread_result" class="proofread-result"></div>
           <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
