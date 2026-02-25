@@ -355,6 +355,23 @@ def run_aml_pipeline(
             )
             tx.counterparty_id = cp_id
 
+    # --- Step 7b: Apply learned categories from counterparty memory ---
+    _log("Stosowanie zapamiętanych kategorii kontrahentów...")
+    learned = 0
+    with get_conn() as conn:
+        for tx in normalized:
+            if tx.counterparty_id:
+                row = conn.execute(
+                    "SELECT auto_category FROM counterparties WHERE id = ? AND auto_category != ''",
+                    (tx.counterparty_id,),
+                ).fetchone()
+                if row:
+                    tx.category = row["auto_category"]
+                    tx.subcategory = row["auto_category"]
+                    learned += 1
+    if learned:
+        _log(f"Zastosowano zapamiętane kategorie dla {learned} transakcji")
+
     # --- Step 8: Rules classification ---
     _log("Klasyfikacja regułowa...")
     cp_labels = get_counterparty_labels()

@@ -1290,12 +1290,18 @@ button.pill-icon:hover{
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   max-height: 500px;
+  position: relative;
 }
 .rv-tx-table{
   min-width: 900px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 12px;
+}
+.rv-tx-table thead{
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 .rv-tx-table th{
   text-align: left;
@@ -1305,11 +1311,8 @@ button.pill-icon:hover{
   text-transform: uppercase;
   letter-spacing: .03em;
   color: var(--muted);
-  border-bottom: 2px solid var(--border);
-  position: sticky;
-  top: 0;
   background: #fff;
-  z-index: 3;
+  box-shadow: inset 0 -2px 0 var(--border, rgba(15,23,42,.12));
   white-space: nowrap;
   user-select: none;
 }
@@ -1318,45 +1321,42 @@ button.pill-icon:hover{
   border-bottom: 1px solid rgba(15,23,42,.05);
   white-space: nowrap;
   font-size: 12px;
-  background: inherit;
 }
 .rv-tx-table tr:hover td{background: rgba(15,23,42,.03)}
 
 /* Frozen first column (Data) — sticky left */
-.rv-tx-table th.rv-col-frozen-l,
-.rv-tx-table td.rv-col-frozen-l{
+.rv-col-frozen-l{
   position: sticky;
   left: 0;
   z-index: 2;
   background: #fff;
 }
-.rv-tx-table th.rv-col-frozen-l{
-  z-index: 4;  /* corner cell: sticky top + left */
+.rv-tx-table thead .rv-col-frozen-l{
+  z-index: 6;  /* corner: sticky top+left, above both thead and frozen-r */
 }
 
 /* Frozen last column (Klasyfikacja) — sticky right */
-.rv-tx-table th.rv-col-frozen-r,
-.rv-tx-table td.rv-col-frozen-r{
+.rv-col-frozen-r{
   position: sticky;
   right: 0;
   z-index: 2;
   background: #fff;
   border-left: 1px solid var(--border, #e2e8f0);
 }
-.rv-tx-table th.rv-col-frozen-r{
-  z-index: 4;  /* corner cell: sticky top + right */
+.rv-tx-table thead .rv-col-frozen-r{
+  z-index: 6;  /* corner: sticky top+right */
 }
-/* Inherit row color for frozen cells */
-.rv-tx-table tr.rv-row-suspicious td.rv-col-frozen-l,
-.rv-tx-table tr.rv-row-suspicious td.rv-col-frozen-r{background: #fef2f2}
-.rv-tx-table tr.rv-row-monitoring td.rv-col-frozen-l,
-.rv-tx-table tr.rv-row-monitoring td.rv-col-frozen-r{background: #fffbeb}
-.rv-tx-table tr.rv-row-legitimate td.rv-col-frozen-l,
-.rv-tx-table tr.rv-row-legitimate td.rv-col-frozen-r{background: #f0fdf4}
-.rv-tx-table tr.rv-row-anomaly td.rv-col-frozen-l,
-.rv-tx-table tr.rv-row-anomaly td.rv-col-frozen-r{background: #eff6ff}
-.rv-tx-table tr:hover td.rv-col-frozen-l,
-.rv-tx-table tr:hover td.rv-col-frozen-r{background: #f8fafc}
+/* Row colors on frozen cells */
+.rv-row-suspicious .rv-col-frozen-l,
+.rv-row-suspicious .rv-col-frozen-r{background: #fef2f2}
+.rv-row-monitoring .rv-col-frozen-l,
+.rv-row-monitoring .rv-col-frozen-r{background: #fffbeb}
+.rv-row-legitimate .rv-col-frozen-l,
+.rv-row-legitimate .rv-col-frozen-r{background: #f0fdf4}
+.rv-row-anomaly .rv-col-frozen-l,
+.rv-row-anomaly .rv-col-frozen-r{background: #eff6ff}
+.rv-tx-table tr:hover .rv-col-frozen-l,
+.rv-tx-table tr:hover .rv-col-frozen-r{background: #f8fafc}
 
 .rv-col-date{font-variant-numeric: tabular-nums; min-width: 78px}
 .rv-col-type{font-weight: 600; color: var(--muted); min-width: 55px}

@@ -722,13 +722,16 @@ async def aml_classify_batch(statement_id: str, request: Request):
 
 @router.post("/api/aml/review/{statement_id}/set-category")
 async def aml_set_category(statement_id: str, request: Request):
-    """Update category for a single transaction."""
+    """Update category for a transaction and propagate to same counterparty."""
     from backend.aml.review import set_transaction_category
     data = await request.json()
+    # statement_ids: all currently analysed statements (for bulk propagation)
+    stmt_ids = data.get("statement_ids") or [statement_id]
     result = set_transaction_category(
         tx_id=data.get("tx_id", ""),
         category=data.get("category", ""),
         subcategory=data.get("subcategory", ""),
+        statement_ids=stmt_ids,
     )
     return JSONResponse({"status": "ok", **result})
 
