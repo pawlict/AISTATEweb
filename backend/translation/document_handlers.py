@@ -89,16 +89,78 @@ class TXTHandler(DocumentHandler):
 
 class DOCXHandler(DocumentHandler):
     """Microsoft Word document handler"""
-    
+
+    # ------------------------------------------------------------------
+    # Helpers to iterate ALL document content in reading order
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _iter_block_items(doc):
+        """Yield paragraphs and tables from *doc.element.body* in document order.
+
+        python-docx's ``doc.paragraphs`` only returns top-level paragraphs
+        and completely ignores tables.  This helper walks the underlying XML
+        so we get every block element (paragraph **and** table) in the order
+        it appears in the document.
+        """
+        from docx.oxml.ns import qn  # type: ignore
+        from docx.table import Table  # type: ignore
+        from docx.text.paragraph import Paragraph  # type: ignore
+
+        for child in doc.element.body:
+            if child.tag == qn("w:p"):
+                yield Paragraph(child, doc)
+            elif child.tag == qn("w:tbl"):
+                yield Table(child, doc)
+
+    @staticmethod
+    def _extract_table_text(table) -> list[str]:
+        """Return a flat list of non-empty cell texts from a table."""
+        texts: list[str] = []
+        for row in table.rows:
+            for cell in row.cells:
+                ct = cell.text.strip()
+                if ct:
+                    texts.append(ct)
+        return texts
+
     def extract_text(self, file_path: Path) -> str:
-        """Extract text from DOCX file"""
+        """Extract text from DOCX: body paragraphs + tables + headers/footers."""
         if not DOCX_AVAILABLE:
             raise RuntimeError("python-docx not available")
-        
+
         try:
             doc = Document(file_path)
-            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-            text = '\n\n'.join(paragraphs)
+            parts: list[str] = []
+
+            # --- Headers (all sections) ---
+            for section in doc.sections:
+                for hdr in (section.header, section.first_page_header):
+                    if hdr and not hdr.is_linked_to_previous:
+                        for p in hdr.paragraphs:
+                            if p.text.strip():
+                                parts.append(p.text.strip())
+
+            # --- Body: paragraphs + tables in document order ---
+            from docx.table import Table as DocxTable  # type: ignore
+
+            for block in self._iter_block_items(doc):
+                if isinstance(block, DocxTable):
+                    parts.extend(self._extract_table_text(block))
+                else:
+                    # Paragraph
+                    if block.text.strip():
+                        parts.append(block.text.strip())
+
+            # --- Footers (all sections) ---
+            for section in doc.sections:
+                for ftr in (section.footer, section.first_page_footer):
+                    if ftr and not ftr.is_linked_to_previous:
+                        for p in ftr.paragraphs:
+                            if p.text.strip():
+                                parts.append(p.text.strip())
+
+            text = "\n\n".join(parts)
             logger.info(f"Extracted {len(text)} characters from {file_path.name}")
             return text
         except Exception as e:
