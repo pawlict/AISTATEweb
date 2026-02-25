@@ -24,6 +24,13 @@ except ImportError:
     logger.warning("pdfplumber not available - PDF support disabled")
 
 try:
+    import fitz as pymupdf  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+    logger.warning("PyMuPDF not available - PDF text overlay disabled")
+
+try:
     from pptx import Presentation
     from pptx.util import Inches, Pt
     PPTX_AVAILABLE = True
@@ -154,50 +161,174 @@ class DOCXHandler(DocumentHandler):
 
 
 class PDFHandler(DocumentHandler):
-    """PDF document handler"""
-    
+    """PDF document handler — extract text with page markers, re-inject via PyMuPDF overlay."""
+
+    # Unicode font embedded with PyMuPDF for non-Latin scripts
+    _FALLBACK_FONTNAME = "helv"
+
     def extract_text(self, file_path: Path) -> str:
-        """Extract text from PDF file using pdfplumber"""
+        """Extract text from PDF file, page by page with markers (like PPTX slides)."""
         if not PDF_AVAILABLE:
             raise RuntimeError("pdfplumber not available")
-        
+
         try:
-            text_parts = []
-            
+            parts: list[str] = []
+
             with pdfplumber.open(file_path) as pdf:
                 for i, page in enumerate(pdf.pages, 1):
                     page_text = page.extract_text()
                     if page_text:
-                        text_parts.append(page_text)
+                        parts.append(f"--- Strona {i} ---\n{page_text}")
                         logger.debug(f"Extracted page {i}/{len(pdf.pages)}")
-            
-            text = '\n\n'.join(text_parts)
-            logger.info(f"Extracted {len(text)} characters from PDF ({len(text_parts)} pages)")
+
+            text = "\n\n".join(parts)
+            logger.info(
+                f"Extracted {len(text)} chars from PDF "
+                f"({len(parts)} pages, {file_path.name})"
+            )
             return text
-            
+
         except Exception as e:
             logger.error(f"Failed to extract text from PDF: {e}")
             raise
-    
+
+    # ------------------------------------------------------------------
+    # PDF → PDF  text overlay (used by export-to-original endpoint)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def inject_translated_text(original_path: Path, translated_text: str) -> bytes:
+        """Replace text in original PDF with *translated_text* and return PDF bytes.
+
+        Algorithm (per page):
+        1. Extract text blocks with positions from the original via PyMuPDF.
+        2. Redact (white-out) original text areas.
+        3. Insert translated text into the same rectangles, auto-shrinking
+           the font size when the translation is longer than the original.
+
+        Returns raw PDF bytes ready to stream.
+        """
+        if not PYMUPDF_AVAILABLE:
+            raise RuntimeError("PyMuPDF (fitz) not available — cannot write PDF")
+
+        import re as _re
+
+        doc = pymupdf.open(str(original_path))
+
+        # --- 1. Collect text-block counts per page from original ----------
+        page_block_counts: list[int] = []
+        for page in doc:
+            blocks = page.get_text("dict", flags=pymupdf.TEXT_PRESERVE_WHITESPACE)["blocks"]
+            count = 0
+            for b in blocks:
+                if b["type"] != 0:  # skip image blocks
+                    continue
+                for line in b["lines"]:
+                    for span in line["spans"]:
+                        if span["text"].strip():
+                            count += 1
+            page_block_counts.append(count)
+
+        # --- 2. Strip page markers from translated text -------------------
+        _marker_re = _re.compile(
+            r"^-{2,}\s*(?:Strona|Page|strona|page)\s*\d+\s*-{2,}$",
+            _re.IGNORECASE,
+        )
+        flat_lines: list[str] = []
+        for line in translated_text.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if _marker_re.match(stripped):
+                continue
+            flat_lines.append(stripped)
+
+        # --- 3. Map translated lines → pages by block count ---------------
+        line_ptr = 0
+        for page_idx, page in enumerate(doc):
+            if page_idx >= len(page_block_counts):
+                break
+            expected = page_block_counts[page_idx]
+            page_lines = flat_lines[line_ptr: line_ptr + expected]
+            line_ptr += expected
+
+            # Collect original spans with their rects
+            blocks = page.get_text("dict", flags=pymupdf.TEXT_PRESERVE_WHITESPACE)["blocks"]
+            original_spans: list[dict] = []
+            for b in blocks:
+                if b["type"] != 0:
+                    continue
+                for line in b["lines"]:
+                    for span in line["spans"]:
+                        if span["text"].strip():
+                            original_spans.append(span)
+
+            # Redact original text areas
+            for span in original_spans:
+                rect = pymupdf.Rect(span["bbox"])
+                page.add_redact_annot(rect, fill=(1, 1, 1))  # white fill
+            page.apply_redactions()
+
+            # Insert translated text
+            sp = 0
+            for span in original_spans:
+                if sp >= len(page_lines):
+                    break
+                new_text = page_lines[sp]
+                sp += 1
+
+                rect = pymupdf.Rect(span["bbox"])
+                fontsize = span.get("size", 11)
+                color = span.get("color", 0)
+                # Normalize color: int → (r, g, b) tuple
+                if isinstance(color, int):
+                    r = ((color >> 16) & 0xFF) / 255.0
+                    g = ((color >> 8) & 0xFF) / 255.0
+                    b = (color & 0xFF) / 255.0
+                    color = (r, g, b)
+
+                # Auto-shrink font if translated text is longer
+                orig_len = len(span["text"].strip())
+                if orig_len > 0 and len(new_text) > orig_len:
+                    ratio = orig_len / len(new_text)
+                    fontsize = max(fontsize * ratio, 5)
+
+                page.insert_textbox(
+                    rect,
+                    new_text,
+                    fontsize=fontsize,
+                    color=color,
+                    align=pymupdf.TEXT_ALIGN_LEFT,
+                )
+
+        pdf_bytes = doc.tobytes()
+        doc.close()
+        return pdf_bytes
+
     def save_translated(
         self,
         original_path: Path,
         translated_text: str,
         output_path: Path,
-        **kwargs
+        **kwargs,
     ):
-        """
-        Save translated text to TXT file (PDF generation is complex)
-        
-        Note: For production, consider using reportlab for PDF generation
-        """
-        # Simple approach: save as TXT
-        txt_output = output_path.with_suffix('.txt')
-        with open(txt_output, 'w', encoding='utf-8') as f:
+        """Save translated PDF — overlay text on original preserving layout."""
+        if PYMUPDF_AVAILABLE:
+            try:
+                pdf_bytes = self.inject_translated_text(original_path, translated_text)
+                output_path = output_path.with_suffix(".pdf")
+                output_path.write_bytes(pdf_bytes)
+                logger.info(f"Saved PDF translation to {output_path}")
+                return
+            except Exception as e:
+                logger.error(f"PyMuPDF overlay failed, falling back to TXT: {e}")
+
+        # Fallback: save as TXT
+        txt_output = output_path.with_suffix(".txt")
+        with open(txt_output, "w", encoding="utf-8") as f:
             f.write(translated_text)
-        
         logger.info(f"Saved PDF translation as TXT: {txt_output}")
-        logger.warning("PDF → PDF translation requires reportlab library")
+        logger.warning("PDF → PDF translation requires PyMuPDF library")
 
 
 class SRTHandler(DocumentHandler):

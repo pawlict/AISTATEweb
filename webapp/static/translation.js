@@ -1170,7 +1170,7 @@ async function exportSelectedReports() {
 
     for (const v of selected) {
         // eslint-disable-next-line no-await-in-loop
-        if (v === 'pptx') {
+        if (v === 'pptx' || v === 'pdf_original' || v === 'docx_original') {
             await exportToOriginal();
         } else {
             await exportAs(mapFmt(v));
@@ -2044,14 +2044,27 @@ document.addEventListener('DOMContentLoaded', function() {
 // Save to Original (PPTX/DOCX) — inject translated text back into uploaded file
 // ============================================================================
 
-/** Show or hide the PPTX pill checkbox (in Report section).
- *  Visible ONLY in translation mode (not proofreading) and ONLY when a PPTX was uploaded. */
+/** Show or hide the save-to-original pill checkbox (in Report section).
+ *  Visible ONLY in translation mode (not proofreading) and when a PPTX/DOCX/PDF was uploaded. */
 function _trSyncSaveToOriginalBtn() {
     var proofActive = !!(_proofreadState && _proofreadState.lang);
-    var isPptx = !!_uploadExt && _uploadExt.replace('.', '').toLowerCase() === 'pptx';
-    var show = !proofActive && !!_uploadId && isPptx;
+    var extLower = !!_uploadExt ? _uploadExt.replace('.', '').toLowerCase() : '';
+    var canSaveToOriginal = (extLower === 'pptx' || extLower === 'docx' || extLower === 'pdf');
+    var show = !proofActive && !!_uploadId && canSaveToOriginal;
     var pill = _byId('save_to_original_pill');
     if (pill) pill.style.display = show ? '' : 'none';
+    // Update icon and checkbox value to match the uploaded file type
+    if (show && pill) {
+        var iconMap = {pptx: 'doc_pptx', docx: 'doc_docx', pdf: 'doc_pdf'};
+        var ico = _byId('save_to_original_icon');
+        if (ico) {
+            ico.src = '/static/icons/dokumenty/' + (iconMap[extLower] || 'doc_pptx') + '.svg';
+            ico.alt = extLower.toUpperCase();
+        }
+        var cb = _byId('save_to_original_cb');
+        var valMap = {pdf: 'pdf_original', docx: 'docx_original', pptx: 'pptx'};
+        if (cb) cb.value = valMap[extLower] || extLower;
+    }
     // Uncheck when hidden so it doesn't interfere with export
     if (!show && pill) {
         var cb = pill.querySelector('input[type="checkbox"]');

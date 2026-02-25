@@ -2561,7 +2561,7 @@ async def api_translation_upload(
     ext = (Path(name).suffix or "").lower()
     upload_id = uuid.uuid4().hex
     tmp_path = (TRANSLATION_UPLOAD_DIR / f"{upload_id}{ext}").resolve()
-    keep_original = ext in (".pptx", ".docx")
+    keep_original = ext in (".pptx", ".docx", ".pdf")
     try:
         content = await file.read()
         tmp_path.write_bytes(content)
@@ -2736,6 +2736,19 @@ async def api_translation_export_to_original(
                 buf,
                 media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 headers={"Content-Disposition": 'attachment; filename="translated.docx"'},
+            )
+
+        elif ext == ".pdf":
+            from backend.translation.document_handlers import PDFHandler  # type: ignore
+
+            pdf_bytes = PDFHandler.inject_translated_text(original_path, text)
+            buf = _io.BytesIO(pdf_bytes)
+            buf.seek(0)
+            dl_name = original_path.stem.split("_", 1)[-1] if "_" in original_path.stem else "dokument"
+            return StreamingResponse(
+                buf,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="translated_{dl_name}.pdf"'},
             )
 
         else:
