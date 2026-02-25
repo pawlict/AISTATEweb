@@ -50,6 +50,24 @@
         </div>
       </div>
     </div>
+
+    <!-- AML toolbar items (hidden by default, shown when AML tab active) -->
+    <div class="analysis-toolbar-right" id="aml_toolbar_items" style="display:none">
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="aml_generate_btn" title="Generuj analizę narracyjną"><img src="/static/icons/akcje/generate_ai.svg" alt="Generuj" draggable="false"></button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-section">
+        <div class="analysis-models">
+          <div class="analysis-model">
+            <label class="small" for="aml_llm_model_select">Model LLM</label>
+            <select class="input mini-select" id="aml_llm_model_select" disabled>
+              <option>Ładowanie…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Tab bar -->
@@ -383,11 +401,8 @@
       <div class="card" id="aml_llm_card">
         <div class="analysis-sidehdr">
           <div class="h2">Analiza narracyjna (LLM)</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button class="btn" id="aml_llm_run_btn">Generuj analize</button>
-          </div>
         </div>
-        <div id="aml_llm_status" class="small muted" style="margin:8px 0">Kliknij "Generuj analize" aby uzyskac profesjonalny raport AML od modelu LLM (wymaga Ollama).</div>
+        <div id="aml_llm_status" class="small muted" style="margin:8px 0">Wybierz model i kliknij przycisk Generuj na pasku narzędzi aby uzyskać analizę narracyjną (wymaga Ollama).</div>
         <div id="aml_llm_progress" style="display:none;margin:8px 0">
           <div class="an-progress">
             <div class="progress"><div id="aml_llm_prog_bar" style="width:0%;transition:width 0.3s"></div></div>
@@ -478,6 +493,7 @@
 
     const allContents = [llmContent, amlContent];
     const llmToolbar = ['analysis_models','analysis_report_formats','an_generate_btn','an_report_save_btn'];
+    const amlToolbarEl = document.getElementById('aml_toolbar_items');
 
     tabs.forEach(tab => {
       tab.addEventListener('click', async () => {
@@ -492,12 +508,14 @@
           llmContent.style.display = '';
           llmToolbar.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = ''; });
           if(sidebarToggle) sidebarToggle.style.display = '';
+          if(amlToolbarEl) amlToolbarEl.style.display = 'none';
         } else {
           llmToolbar.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
           if(sidebarToggle) sidebarToggle.style.display = 'none';
 
           if(which === 'aml'){
             amlContent.style.display = '';
+            if(amlToolbarEl) amlToolbarEl.style.display = '';
             if(window.AmlManager && !window.AmlManager._initialized){
               await AmlManager.init();
             }

@@ -394,7 +394,7 @@ async def aml_llm_analyze(statement_id: str, request: Request):
 
 
 @router.get("/api/aml/llm-stream/{statement_id}")
-async def aml_llm_stream(statement_id: str):
+async def aml_llm_stream(statement_id: str, model: str = Query("")):
     """SSE streaming LLM analysis — sends chunks as they arrive from Ollama."""
     from starlette.responses import StreamingResponse
     from backend.db.engine import fetch_one
@@ -410,13 +410,14 @@ async def aml_llm_stream(statement_id: str):
         return StreamingResponse(err_gen(), media_type="text/event-stream")
 
     prompt = row["value"]
+    chosen_model = model.strip()
 
     async def generate():
         import json as _json
         try:
             from backend.aml.llm_analysis import stream_llm_analysis
             chunk_count = 0
-            async for chunk in stream_llm_analysis(prompt):
+            async for chunk in stream_llm_analysis(prompt, model=chosen_model):
                 chunk_count += 1
                 yield f"data: {_json.dumps({'chunk': chunk, 'done': False}, ensure_ascii=False)}\n\n"
             yield f"data: {_json.dumps({'chunk': '', 'done': True, 'chunks': chunk_count})}\n\n"
