@@ -846,16 +846,15 @@
   // ============================================================
 
   function _setupLlmSection(hasPrompt){
-    const btn = QS("#aml_llm_run_btn");
+    const btn = QS("#aml_generate_btn");
     const status = QS("#aml_llm_status");
-    if(!btn) return;
 
     if(hasPrompt){
-      btn.disabled = false;
-      if(status) status.textContent = 'Kliknij "Generuj analize" aby uzyskac profesjonalny raport AML od modelu LLM (wymaga Ollama).';
+      if(btn) btn.disabled = false;
+      if(status) status.textContent = "Wybierz model i kliknij Generuj na pasku narzędzi.";
     } else {
-      btn.disabled = true;
-      if(status) status.textContent = "Brak danych do analizy LLM. Uruchom najpierw analize AML.";
+      if(btn) btn.disabled = true;
+      if(status) status.textContent = "Brak danych do analizy LLM. Uruchom najpierw analizę AML.";
     }
   }
 
@@ -863,7 +862,7 @@
     if(!St.statementId || St.llmRunning) return;
     St.llmRunning = true;
 
-    const btn = QS("#aml_llm_run_btn");
+    const btn = QS("#aml_generate_btn");
     const status = QS("#aml_llm_status");
     const resultDiv = QS("#aml_llm_result");
     const textDiv = QS("#aml_llm_text");
@@ -890,7 +889,9 @@
     let chunkCount = 0;
 
     try{
-      const url = "/api/aml/llm-stream/" + encodeURIComponent(St.statementId);
+      const selectedModel = (QS("#aml_llm_model_select") || {}).value || "";
+      let url = "/api/aml/llm-stream/" + encodeURIComponent(St.statementId);
+      if(selectedModel) url += "?model=" + encodeURIComponent(selectedModel);
       const response = await fetch(url);
       if(!response.ok) throw new Error("HTTP " + response.status);
 
@@ -1517,10 +1518,49 @@
       chartSel.onchange = ()=> _renderChart(chartSel.value);
     }
 
-    // LLM analysis button
-    const llmBtn = QS("#aml_llm_run_btn");
+    // LLM analysis button (toolbar)
+    const llmBtn = QS("#aml_generate_btn");
     if(llmBtn){
       llmBtn.onclick = ()=> _runLlmAnalysis();
+    }
+
+    // Load AML LLM models on init
+    _loadAmlLlmModels();
+  }
+
+  /** Load installed Ollama models into the AML LLM model selector. */
+  async function _loadAmlLlmModels(){
+    const sel = QS("#aml_llm_model_select");
+    if(!sel) return;
+    try {
+      const data = await _safeApi("/api/ollama/status");
+      const models = (data && Array.isArray(data.models)) ? data.models : [];
+      sel.innerHTML = "";
+      if(!models.length){
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "Brak modeli (uruchom Ollama)";
+        sel.appendChild(opt);
+        sel.disabled = true;
+        return;
+      }
+      // Prefer larger models for analysis
+      const preferred = ["llama3.1","mistral","qwen","gemma"];
+      let defaultModel = models[0];
+      for(const pref of preferred){
+        const found = models.find(m => m.toLowerCase().includes(pref));
+        if(found){ defaultModel = found; break; }
+      }
+      models.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        if(m === defaultModel) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.disabled = false;
+    } catch(e){
+      console.warn("Failed to load AML LLM models:", e);
     }
   }
 
