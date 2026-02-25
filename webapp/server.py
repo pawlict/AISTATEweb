@@ -7113,69 +7113,63 @@ async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
 
     # Build prompt based on mode.
     # ----------------------------------------------------------------
-    # Architecture: the system message provides the ROLE + OUTPUT FORMAT
-    # + core formatting rules.  The STYLE-SPECIFIC rules (light / standard
-    # / professional / academic) arrive from the frontend in `notes` and
-    # are appended verbatim — they are self-contained instruction sets.
-    # This avoids duplication and contradictions between layers.
+    # Architecture: single cohesive system message with structured sections.
+    # The style-specific rules arrive from the frontend in `notes` and
+    # are integrated as the "Styl korekty:" / "Proofreading style:" section.
     # ----------------------------------------------------------------
-    _PL_FORMAT_RULES = (
-        "\n\nZASADY FORMATOWANIA (stosuj zawsze):\n"
-        "- Dziel tekst na logiczne akapity (oddzielone pustą linią).\n"
-        "- Nie zostawiaj samotnych spójników (i, w, z, a, o, u, e) na końcu wiersza — "
-        "po jednoliterowym wyrazie wstaw niełamliwą spację.\n"
-        "- Zachowuj formatowanie markdown (## nagłówki, **bold**, *italic*, listy -, 1.) "
-        "jeśli występuje w tekście źródłowym."
-    )
-
-    _EN_FORMAT_RULES = (
-        "\n\nFORMATTING RULES (always apply):\n"
-        "- Divide text into logical paragraphs (separated by blank lines).\n"
-        "- Preserve markdown formatting (## headings, **bold**, *italic*, lists -, 1.) "
-        "if present in the source text."
-    )
-
     if mode == "expand":
         if lang == "pl":
             system_msg = (
-                "Jesteś profesjonalnym redaktorem tekstu polskiego.\n"
-                "Twoim zadaniem jest ROZWINIĘCIE i WZBOGACENIE podanego tekstu.\n"
-                "Rozbuduj zdania, dodaj szczegóły, synonimy, lepsze sformułowania.\n"
-                "Zachowaj sens i kontekst oryginału, ale tekst powinien być znacznie bogatszy, "
-                "bardziej opisowy i profesjonalny.\n"
-                "Popraw też ewentualne błędy ortograficzne i gramatyczne.\n"
-                "Odpowiedz WYŁĄCZNIE rozszerzonym tekstem — bez komentarzy, bez wyjaśnień."
-                + _PL_FORMAT_RULES
+                "Jesteś profesjonalnym redaktorem tekstu polskiego.\n\n"
+                "Twoje zadanie:\n"
+                "- rozwiń i wzbogać podany tekst\n"
+                "- rozbuduj zdania, dodaj szczegóły, synonimy, lepsze sformułowania\n"
+                "- zachowaj sens i kontekst oryginału\n"
+                "- popraw ewentualne błędy ortograficzne i gramatyczne\n"
+                "- zwracaj TYLKO rozszerzony tekst, bez komentarzy i wyjaśnień\n\n"
+                "Formatowanie:\n"
+                "- dziel tekst na logiczne akapity oddzielone pustą linią\n"
+                "- nie zostawiaj samotnych spójników (i, w, z, a, o) na końcu wiersza\n"
+                "- zachowuj markdown (##, **bold**, *italic*, listy) jeśli występuje"
             )
         else:
             system_msg = (
-                "You are a professional English editor.\n"
-                "Your task is to EXPAND and ENRICH the given text.\n"
-                "Elaborate on sentences, add details, synonyms, better phrasing.\n"
-                "Preserve the meaning and context of the original, but make the text significantly richer, "
-                "more descriptive and professional.\n"
-                "Also fix any spelling and grammar errors.\n"
-                "Reply ONLY with the expanded text — no comments, no explanations."
-                + _EN_FORMAT_RULES
+                "You are a professional English editor.\n\n"
+                "Your task:\n"
+                "- expand and enrich the given text\n"
+                "- elaborate on sentences, add details, synonyms, better phrasing\n"
+                "- preserve the meaning and context of the original\n"
+                "- fix any spelling and grammar errors\n"
+                "- return ONLY the expanded text, no comments or explanations\n\n"
+                "Formatting:\n"
+                "- divide text into logical paragraphs separated by blank lines\n"
+                "- preserve markdown (##, **bold**, *italic*, lists) if present"
             )
     else:
         # Correction mode — the style-specific rules in `notes` define
         # how aggressively to correct (light vs professional etc.)
         if lang == "pl":
             system_msg = (
-                "Jesteś profesjonalnym korektorem tekstu polskiego.\n"
-                "NIE zmieniaj znaczenia ani kontekstu tekstu.\n"
-                "Odpowiedz WYŁĄCZNIE poprawionym tekstem — bez komentarzy, bez wyjaśnień.\n"
-                "Szczegółowe reguły korekty znajdziesz poniżej."
-                + _PL_FORMAT_RULES
+                "Jesteś korektorem języka polskiego na poziomie profesjonalnego redaktora.\n\n"
+                "Twoje zadanie:\n"
+                "- popraw ortografię, gramatykę, interpunkcję i składnię\n"
+                "- zachowuj oryginalne znaczenie tekstu\n"
+                "- zwracaj TYLKO poprawiony tekst, bez komentarzy i wyjaśnień\n\n"
+                "Formatowanie:\n"
+                "- dziel tekst na logiczne akapity oddzielone pustą linią\n"
+                "- nie zostawiaj samotnych spójników (i, w, z, a, o) na końcu wiersza\n"
+                "- zachowuj markdown (##, **bold**, *italic*, listy) jeśli występuje"
             )
         else:
             system_msg = (
-                "You are a professional English proofreader.\n"
-                "Do NOT change the meaning or context of the text.\n"
-                "Reply ONLY with the corrected text — no comments, no explanations.\n"
-                "Detailed correction rules follow below."
-                + _EN_FORMAT_RULES
+                "You are an English proofreader at a professional editor level.\n\n"
+                "Your task:\n"
+                "- fix spelling, grammar, punctuation, and syntax\n"
+                "- preserve the original meaning of the text\n"
+                "- return ONLY the corrected text, no comments or explanations\n\n"
+                "Formatting:\n"
+                "- divide text into logical paragraphs separated by blank lines\n"
+                "- preserve markdown (##, **bold**, *italic*, lists) if present"
             )
 
     if notes:

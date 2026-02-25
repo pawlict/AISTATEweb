@@ -1471,92 +1471,84 @@ var _proofreadState = { lang: null, corrected: '', diffHtml: '', running: false 
 var _prCurrentPreset = 'standard';
 
 // --- PL preset prompt rules ---
-// Each preset is a COMPLETE, self-contained instruction set (no references
-// to other presets).  Proper Polish diacritics are used throughout so
-// the model sees correct spelling in the very instructions that ask for it.
+// Each preset contains ONLY style-specific rules (no duplication of base task
+// like "popraw ortografię" which is already in the backend system message).
+// Proper Polish diacritics are used throughout.
 var _PR_RULES_PL = {
     light: [
-        'STYL: Lekka korekta \u2014 minimalna ingerencja.',
-        'Popraw wyłącznie błędy ortograficzne, literówki i interpunkcję.',
-        'Stosuj polską interpunkcję: cudzysłów dolny „ i górny \u201D, myślnik długi \u2014, wielokropek \u2026.',
-        'NIE zmieniaj stylu, słownictwa ani struktury zdań autora.',
-        'NIE dodawaj rozdziałów, nagłówków ani nowych akapitów \u2014 zachowaj oryginalną strukturę tekstu.'
+        'LEKKA — minimalna ingerencja',
+        'poprawiaj wyłącznie błędy ortograficzne, literówki i interpunkcję',
+        'stosuj polską interpunkcję: cudzysłów „", myślnik —, wielokropek …',
+        'NIE zmieniaj stylu, słownictwa ani struktury zdań autora',
+        'NIE dodawaj rozdziałów, nagłówków ani nowych akapitów'
     ],
     standard: [
-        'STYL: Standardowa korekta \u2014 zrównoważona poprawa treści.',
-        'Popraw ortografię, gramatykę i interpunkcję.',
-        'Usuń powtórzenia wyrazów w bliskim sąsiedztwie \u2014 zastąp je synonimami bez zmiany sensu.',
-        'Usuń pleonazmy (np. „cofnąć się do tyłu" \u2192 „cofnąć się", „kontynuować dalej" \u2192 „kontynuować").',
-        'Zapewnij spójność czasu gramatycznego w całym tekście.',
-        'Stosuj polską interpunkcję: cudzysłów „\u201D, myślnik \u2014, wielokropek \u2026.',
-        'Jeśli tekst zawiera rozdziały/sekcje: tytuły muszą być krótkie (2\u20135 słów) i spójne stylistycznie.'
+        'STANDARDOWA — zrównoważona poprawa treści',
+        'usuń powtórzenia wyrazów w bliskim sąsiedztwie — zastąp synonimami bez zmiany sensu',
+        'usuń pleonazmy (np. „cofnąć się do tyłu" → „cofnąć się", „kontynuować dalej" → „kontynuować")',
+        'zapewnij spójność czasu gramatycznego w całym tekście',
+        'stosuj polską interpunkcję: cudzysłów „", myślnik —, wielokropek …',
+        'jeśli tekst zawiera rozdziały/sekcje: tytuły krótkie (2–5 słów) i spójne stylistycznie'
     ],
     professional: [
-        'STYL: Profesjonalna korekta \u2014 zwięzłość, ton formalny, pełna poprawa stylistyczna.',
-        'Popraw ortografię, gramatykę i interpunkcję.',
-        'Usuń powtórzenia wyrazów \u2014 zastąp synonimami.',
-        'Usuń pleonazmy i zbędne powtórzenia znaczeniowe.',
-        'Preferuj stronę czynną zamiast biernej (np. „decyzja została podjęta" \u2192 „podjęto decyzję").',
-        'Skracaj rozwlekłe zdania \u2014 pisz zwięźle i klarownie.',
-        'Zachowaj formalny, profesjonalny ton wypowiedzi.',
-        'Zapewnij spójność czasu gramatycznego.',
-        'Stosuj polską interpunkcję: cudzysłów „\u201D, myślnik \u2014, wielokropek \u2026.',
-        'Różnicuj długość zdań dla lepszego rytmu tekstu.',
-        'Jeśli tekst zawiera rozdziały/sekcje: tytuły muszą być krótkie (2\u20135 słów) i spójne stylistycznie.'
+        'PROFESJONALNA — zwięzłość, ton formalny, pełna poprawa stylistyczna',
+        'usuń powtórzenia wyrazów — zastąp synonimami',
+        'usuń pleonazmy i zbędne powtórzenia znaczeniowe',
+        'preferuj stronę czynną (np. „decyzja została podjęta" → „podjęto decyzję")',
+        'skracaj rozwlekłe zdania — pisz zwięźle i klarownie',
+        'zachowaj formalny, profesjonalny ton wypowiedzi',
+        'różnicuj długość zdań dla lepszego rytmu tekstu',
+        'stosuj polską interpunkcję: cudzysłów „", myślnik —, wielokropek …',
+        'jeśli tekst zawiera rozdziały/sekcje: tytuły krótkie (2–5 słów) i spójne stylistycznie'
     ],
     academic: [
-        'STYL: Akademicka korekta \u2014 precyzja terminologiczna, styl naukowy/prawniczy.',
-        'Popraw ortografię, gramatykę i interpunkcję.',
-        'Usuń powtórzenia wyrazów \u2014 zastąp synonimami.',
-        'Usuń pleonazmy.',
-        'Strona bierna jest DOZWOLONA tam, gdzie jest uzasadniona stylem naukowym lub prawniczym.',
-        'Zachowaj formalny ton i precyzję terminologiczną \u2014 nie upraszczaj terminów specjalistycznych.',
-        'Zapewnij spójność czasu gramatycznego.',
-        'Stosuj polską interpunkcję: cudzysłów „\u201D, myślnik \u2014, wielokropek \u2026.',
-        'Jeśli tekst zawiera rozdziały/sekcje: tytuły muszą być krótkie (2\u20135 słów) i spójne stylistycznie.'
+        'AKADEMICKA — precyzja terminologiczna, styl naukowy/prawniczy',
+        'usuń powtórzenia wyrazów — zastąp synonimami',
+        'usuń pleonazmy',
+        'strona bierna DOZWOLONA tam, gdzie uzasadniona stylem naukowym lub prawniczym',
+        'zachowaj formalny ton i precyzję terminologiczną — nie upraszczaj terminów specjalistycznych',
+        'zapewnij spójność czasu gramatycznego',
+        'stosuj polską interpunkcję: cudzysłów „", myślnik —, wielokropek …',
+        'jeśli tekst zawiera rozdziały/sekcje: tytuły krótkie (2–5 słów) i spójne stylistycznie'
     ]
 };
 
 // --- EN preset prompt rules ---
 var _PR_RULES_EN = {
     light: [
-        'STYLE: Light proofreading \u2014 minimal intervention.',
-        'Fix only spelling errors, typos, and punctuation.',
-        'Use proper punctuation: em dash \u2014, curly quotes where possible.',
-        'Do NOT change the author\u2019s style, vocabulary, or sentence structure.',
-        'Do NOT add chapters, headings, or new paragraphs \u2014 preserve the original text structure.'
+        'LIGHT — minimal intervention',
+        'fix only spelling errors, typos, and punctuation',
+        'use proper punctuation: em dash —, curly quotes where possible',
+        'do NOT change the author\'s style, vocabulary, or sentence structure',
+        'do NOT add chapters, headings, or new paragraphs'
     ],
     standard: [
-        'STYLE: Standard proofreading \u2014 balanced correction.',
-        'Fix spelling, grammar, and punctuation.',
-        'Replace repeated words in close proximity with synonyms without changing meaning.',
-        'Simplify wordy phrases (e.g. \u201Cin order to\u201D \u2192 \u201Cto\u201D, \u201Cat this point in time\u201D \u2192 \u201Cnow\u201D).',
-        'Ensure tense consistency throughout the text.',
-        'Use the Oxford comma in lists.',
-        'If the text has chapters/sections: titles must be short (2\u20135 words) and stylistically consistent.'
+        'STANDARD — balanced correction',
+        'replace repeated words in close proximity with synonyms without changing meaning',
+        'simplify wordy phrases (e.g. "in order to" → "to", "at this point in time" → "now")',
+        'ensure tense consistency throughout the text',
+        'use the Oxford comma in lists',
+        'if the text has chapters/sections: titles short (2–5 words) and stylistically consistent'
     ],
     professional: [
-        'STYLE: Professional proofreading \u2014 conciseness, formal tone, full style correction.',
-        'Fix spelling, grammar, and punctuation.',
-        'Replace repeated words with synonyms.',
-        'Simplify wordy phrases and reduce nominalizations (e.g. \u201Cmake a decision\u201D \u2192 \u201Cdecide\u201D).',
-        'Prefer active voice over passive (e.g. \u201Cthe report was written\u201D \u2192 \u201Cwe wrote the report\u201D).',
-        'Shorten verbose sentences \u2014 prefer concise, clear phrasing.',
-        'Maintain a formal, professional tone.',
-        'Ensure tense consistency.',
-        'Vary sentence length for better rhythm.',
-        'Use the Oxford comma.',
-        'If the text has chapters/sections: titles must be short (2\u20135 words) and stylistically consistent.'
+        'PROFESSIONAL — conciseness, formal tone, full style correction',
+        'replace repeated words with synonyms',
+        'simplify wordy phrases, reduce nominalizations (e.g. "make a decision" → "decide")',
+        'prefer active voice (e.g. "the report was written" → "we wrote the report")',
+        'shorten verbose sentences — prefer concise, clear phrasing',
+        'maintain a formal, professional tone',
+        'vary sentence length for better rhythm',
+        'use the Oxford comma',
+        'if the text has chapters/sections: titles short (2–5 words) and stylistically consistent'
     ],
     academic: [
-        'STYLE: Academic proofreading \u2014 terminological precision, scholarly/legal register.',
-        'Fix spelling, grammar, and punctuation.',
-        'Replace repeated words with synonyms.',
-        'Passive voice IS ALLOWED where appropriate for academic, legal, or scientific writing.',
-        'Maintain a formal tone and terminological precision \u2014 do not simplify specialist terms.',
-        'Ensure tense consistency.',
-        'Use the Oxford comma in lists.',
-        'If the text has chapters/sections: titles must be short (2\u20135 words) and stylistically consistent.'
+        'ACADEMIC — terminological precision, scholarly/legal register',
+        'replace repeated words with synonyms',
+        'passive voice IS ALLOWED where appropriate for academic, legal, or scientific writing',
+        'maintain a formal tone and terminological precision — do not simplify specialist terms',
+        'ensure tense consistency',
+        'use the Oxford comma in lists',
+        'if the text has chapters/sections: titles short (2–5 words) and stylistically consistent'
     ]
 };
 
@@ -1609,10 +1601,13 @@ function _prCollectRulePrompt(lang) {
     var dict = (lang === 'en') ? _PR_RULES_EN : _PR_RULES_PL;
     var rules = dict[_prCurrentPreset] || dict.standard;
     if (!rules || rules.length === 0) return '';
+    // First rule is the style name/description, rest are bullet points
+    var styleName = rules[0];
+    var bullets = rules.slice(1);
     var header = (lang === 'en')
-        ? '\n\nPROOFREADING STYLE RULES (apply these):\n'
-        : '\n\nREGULY STYLU KOREKTY (stosuj je):\n';
-    return header + rules.map(function(r) { return '- ' + r; }).join('\n');
+        ? 'Proofreading style: ' + styleName
+        : 'Styl korekty: ' + styleName;
+    return header + '\n' + bullets.map(function(r) { return '- ' + r; }).join('\n');
 }
 
 // Initialize tooltips on load
@@ -1833,10 +1828,14 @@ async function proofreadRun() {
 
     var userNotes = String((_byId('proofread_notes') || {}).value || '').trim();
     var styleRules = _prCollectRulePrompt(_proofreadState.lang);
-    var userNotesHeader = (_proofreadState.lang === 'en')
-        ? '\n\nADDITIONAL USER INSTRUCTIONS:\n'
-        : '\n\nDODATKOWE INSTRUKCJE UŻYTKOWNIKA:\n';
-    var notes = (styleRules + (userNotes ? userNotesHeader + userNotes : '')).trim();
+    var userNotesSection = '';
+    if (userNotes) {
+        var uHeader = (_proofreadState.lang === 'en')
+            ? 'Additional instructions:\n'
+            : 'Dodatkowe instrukcje:\n';
+        userNotesSection = '\n\n' + uHeader + '- ' + userNotes;
+    }
+    var notes = (styleRules + userNotesSection).trim();
     var selectedModel = (_byId('proofread_model_select') || {}).value || '';
     var modeRadio = document.querySelector('input[name="proofread_mode"]:checked');
     var proofMode = modeRadio ? modeRadio.value : 'correct';
