@@ -64,6 +64,7 @@
     "loans":            {pl:"Pożyczki",           en:"Loans"},
     // Transfers & bills
     "salary":           {pl:"Wynagrodzenie",      en:"Salary"},
+    "earnings":         {pl:"Zarobki",            en:"Earnings"},
     "benefits":         {pl:"Świadczenia",        en:"Benefits"},
     "rent":             {pl:"Czynsz/Mieszkanie",  en:"Rent/Housing"},
     "utilities":        {pl:"Rachunki",           en:"Utilities"},
@@ -107,7 +108,7 @@
     // Fuel → neutral
     fuel:"neutral",
     // Income / transfers → legitimate
-    salary:"legitimate", benefits:"legitimate", rent:"legitimate",
+    salary:"legitimate", earnings:"legitimate", benefits:"legitimate", rent:"legitimate",
     utilities:"legitimate", telecom:"legitimate",
     insurance:"legitimate", own_transfer:"legitimate",
     // Suspicious (red)
