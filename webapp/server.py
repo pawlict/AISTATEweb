@@ -2745,17 +2745,7 @@ async def api_translation_export_to_original(
                             return
                         new_text = translated_paras[ptr]
                         ptr += 1
-                        if cell.text_frame and cell.text_frame.paragraphs:
-                            p0 = cell.text_frame.paragraphs[0]
-                            if p0.runs:
-                                p0.runs[0].text = new_text
-                                for run in p0.runs[1:]:
-                                    run.text = ""
-                            else:
-                                p0.text = new_text
-                            for xp in cell.text_frame.paragraphs[1:]:
-                                xp.text = ""
-                        elif cell.paragraphs:
+                        if cell.paragraphs:
                             p0 = cell.paragraphs[0]
                             if p0.runs:
                                 p0.runs[0].text = new_text
