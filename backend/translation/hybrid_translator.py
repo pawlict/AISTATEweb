@@ -288,15 +288,32 @@ class HybridTranslator:
         if not text.strip():
             return text
 
-        # Split into chunks if too long
-        if len(text.split()) > 400:
-            chunks = self._split_text(text, max_words=400)
-            translated_chunks = []
-            for chunk in chunks:
-                translated_chunks.append(self._translate_chunk_nllb(chunk, src_code, tgt_code, max_length))
-            return ' '.join(translated_chunks)
+        import re as _re
 
-        return self._translate_chunk_nllb(text, src_code, tgt_code, max_length)
+        # Split around marker placeholders so they pass through untouched.
+        # Pattern captures [[MRK<n>]] with optional surrounding newlines.
+        _mrk_re = _re.compile(r'(\[\[MRK\d+\]\])')
+        segments = _mrk_re.split(text)
+
+        out_parts: List[str] = []
+        for seg in segments:
+            if _mrk_re.fullmatch(seg):
+                # Marker placeholder — keep as-is
+                out_parts.append(seg)
+            elif not seg.strip():
+                out_parts.append(seg)
+            else:
+                # Translate this segment
+                if len(seg.split()) > 400:
+                    chunks = self._split_text(seg, max_words=400)
+                    translated_chunks = []
+                    for chunk in chunks:
+                        translated_chunks.append(self._translate_chunk_nllb(chunk, src_code, tgt_code, max_length))
+                    out_parts.append(' '.join(translated_chunks))
+                else:
+                    out_parts.append(self._translate_chunk_nllb(seg, src_code, tgt_code, max_length))
+
+        return ''.join(out_parts)
 
     def _translate_preserve_formatting(self, text: str, src_code: str, tgt_code: str, max_length: int = 512) -> str:
         """Translate while preserving newlines / list prefixes as much as possible."""

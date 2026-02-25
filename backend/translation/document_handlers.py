@@ -225,8 +225,31 @@ class DOCXHandler(DocumentHandler):
 class PDFHandler(DocumentHandler):
     """PDF document handler — extract text with page markers, re-inject via PyMuPDF overlay."""
 
-    # Unicode font embedded with PyMuPDF for non-Latin scripts
+    # Unicode font for non-Latin scripts (Cyrillic, etc.)
     _FALLBACK_FONTNAME = "helv"
+
+    # System TrueType fonts with broad Unicode coverage (tried in order)
+    _UNICODE_FONT_PATHS = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    ]
+    _resolved_font_path: str | None = None
+    _font_resolved: bool = False
+
+    @classmethod
+    def _get_unicode_fontpath(cls) -> str | None:
+        """Return path to a system TTF with broad Unicode coverage, or None."""
+        if cls._font_resolved:
+            return cls._resolved_font_path
+        cls._font_resolved = True
+        for p in cls._UNICODE_FONT_PATHS:
+            if Path(p).is_file():
+                cls._resolved_font_path = p
+                logger.info(f"PDF overlay: using Unicode font {p}")
+                return p
+        logger.warning("PDF overlay: no Unicode TTF found, falling back to helv (Latin only)")
+        return None
 
     def extract_text(self, file_path: Path) -> str:
         """Extract text from PDF file, page by page with markers (like PPTX slides)."""
@@ -337,6 +360,28 @@ class PDFHandler(DocumentHandler):
             pages_text[page_num] = parts[idx + 1].strip()
             idx += 2
 
+        # Fallback: if no markers were found, distribute text across pages
+        # proportionally by original text length.
+        if not pages_text and translated_text.strip():
+            logger.warning("PDF inject: no page markers found — distributing text across pages")
+            all_lines = [ln for ln in translated_text.split("\n") if ln.strip()]
+            page_char_counts: list[int] = []
+            for p in doc:
+                pt = p.get_text().strip()
+                page_char_counts.append(len(pt) if pt else 0)
+            total_chars = sum(page_char_counts) or 1
+            lptr = 0
+            for pi, cnt in enumerate(page_char_counts):
+                if cnt == 0:
+                    continue
+                prop = cnt / total_chars
+                n_lines = max(1, round(prop * len(all_lines)))
+                if pi == len(page_char_counts) - 1:
+                    pages_text[pi] = "\n".join(all_lines[lptr:])
+                else:
+                    pages_text[pi] = "\n".join(all_lines[lptr:lptr + n_lines])
+                    lptr += n_lines
+
         # --- 2. Process each page ------------------------------------------
         for page_idx, page in enumerate(doc):
             if page_idx not in pages_text:
@@ -400,6 +445,9 @@ class PDFHandler(DocumentHandler):
             page.apply_redactions()
 
             # 2e. Insert translated text into block rectangles
+            # Use a Unicode font (DejaVu Sans / FreeSans) if available,
+            # so Cyrillic, Polish diacritics, etc. render correctly.
+            _ufont = PDFHandler._get_unicode_fontpath()
             for i, ob in enumerate(orig_blocks):
                 chunk = chunks[i].strip() if i < len(chunks) else ""
                 if not chunk:
@@ -409,13 +457,18 @@ class PDFHandler(DocumentHandler):
                 fi = block_fonts[i] if i < len(block_fonts) else {"size": 11, "color": (0, 0, 0)}
                 fontsize = PDFHandler._fit_fontsize(rect, chunk, fi["size"])
 
-                page.insert_textbox(
-                    rect,
-                    chunk,
+                tb_args: dict = dict(
+                    rect=rect,
+                    buffer=chunk,
                     fontsize=fontsize,
                     color=fi["color"],
                     align=pymupdf.TEXT_ALIGN_LEFT,
                 )
+                if _ufont:
+                    tb_args["fontfile"] = _ufont
+                    tb_args["fontname"] = "ujfont"
+
+                page.insert_textbox(**tb_args)
 
         pdf_bytes = doc.tobytes()
         doc.close()
