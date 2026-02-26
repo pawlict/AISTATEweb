@@ -1270,6 +1270,43 @@ button.pill-icon:hover{
 }
 .aml-hist-tx{min-width: 50px; text-align: right}
 .aml-hist-date{min-width: 120px; text-align: right}
+.aml-hist-badge{
+  display: inline-block;
+  background: var(--primary, #3b82f6);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.aml-hist-toggle{
+  font-size: 10px;
+  width: 14px;
+  text-align: center;
+  color: var(--muted);
+  user-select: none;
+}
+.aml-history-group{margin-bottom: 8px}
+.aml-history-group-header{
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,.6);
+  cursor: pointer;
+  transition: background .15s, box-shadow .15s;
+}
+.aml-history-group-header:hover{
+  background: var(--panel);
+  box-shadow: 0 2px 8px rgba(15,23,42,.06);
+}
+.aml-history-child{
+  padding: 6px 12px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  font-size: 13px;
+}
 
 /* ML anomaly rows */
 .aml-ml-row{

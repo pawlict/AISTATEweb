@@ -1797,18 +1797,120 @@
     card.style.display = "";
     if(countEl) countEl.textContent = St.history.length + " analiz";
 
-    list.innerHTML = St.history.map(item => {
-      const score = item.risk_score != null ? Math.round(item.risk_score) : "?";
+    // Group statements by case_id (each case = one analysis batch)
+    const groups = {};
+    const groupOrder = [];
+    for(const item of St.history){
+      const key = item.case_id || item.statement_id;
+      if(!groups[key]){
+        groups[key] = [];
+        groupOrder.push(key);
+      }
+      groups[key].push(item);
+    }
+
+    let html = "";
+    for(const gk of groupOrder){
+      const items = groups[gk];
+      const first = items[0];
+      const bankName = _esc(first.bank_name || "?");
+      const stmtCount = items.length;
+
+      // Aggregate stats across all statements in this group
+      let totalTx = 0, maxScore = 0, hasScore = false;
+      let minPeriod = "", maxPeriod = "";
+      for(const it of items){
+        totalTx += (it.tx_count || 0);
+        if(it.risk_score != null){
+          hasScore = true;
+          maxScore = Math.max(maxScore, it.risk_score);
+        }
+        if(it.period_from && (!minPeriod || it.period_from < minPeriod)) minPeriod = it.period_from;
+        if(it.period_to && (!maxPeriod || it.period_to > maxPeriod)) maxPeriod = it.period_to;
+      }
+      const score = hasScore ? Math.round(maxScore) : "?";
       const scoreColor = score >= 60 ? "var(--danger)" : score >= 30 ? "#d97706" : "var(--ok)";
-      return `<div class="aml-history-item" data-sid="${_esc(item.statement_id)}" style="display:flex;align-items:center;gap:8px">
-        <span class="aml-hist-bank" style="flex:1">${_esc(item.bank_name || "?")}</span>
-        <span class="aml-hist-period">${_esc(item.period_from || "")} \u2014 ${_esc(item.period_to || "")}</span>
-        <span class="aml-hist-score" style="color:${scoreColor}">${score}</span>
-        <span class="aml-hist-tx small muted">${item.tx_count || 0} tx</span>
-        <span class="aml-hist-date small muted">${_fmtDate(item.created_at)}</span>
-        <button class="aml-hist-delete" data-sid="${_esc(item.statement_id)}" title="Usun analize" style="background:none;border:none;cursor:pointer;color:var(--danger,#b91c1c);font-size:16px;padding:2px 6px;border-radius:4px;opacity:0.5;line-height:1">&times;</button>
-      </div>`;
-    }).join("");
+
+      if(stmtCount === 1){
+        // Single statement — render as before, clickable
+        html += `<div class="aml-history-item" data-sid="${_esc(first.statement_id)}" style="display:flex;align-items:center;gap:8px">
+          <span class="aml-hist-bank" style="flex:1">${bankName}</span>
+          <span class="aml-hist-period">${_esc(first.period_from || "")} \u2014 ${_esc(first.period_to || "")}</span>
+          <span class="aml-hist-score" style="color:${scoreColor}">${score}</span>
+          <span class="aml-hist-tx small muted">${first.tx_count || 0} tx</span>
+          <span class="aml-hist-date small muted">${_fmtDate(first.created_at)}</span>
+          <button class="aml-hist-delete" data-sid="${_esc(first.statement_id)}" title="Usun analize" style="background:none;border:none;cursor:pointer;color:var(--danger,#b91c1c);font-size:16px;padding:2px 6px;border-radius:4px;opacity:0.5;line-height:1">&times;</button>
+        </div>`;
+      } else {
+        // Multi-statement group — collapsible header + children
+        const groupId = "hist_grp_" + gk.replace(/[^a-zA-Z0-9]/g, "_");
+        html += `<div class="aml-history-group">
+          <div class="aml-history-group-header" data-sid="${_esc(first.statement_id)}" data-toggle="${groupId}" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <span class="aml-hist-toggle" id="${groupId}_toggle">\u25B6</span>
+            <span class="aml-hist-bank" style="flex:1">${bankName} <span class="aml-hist-badge">${stmtCount}x</span></span>
+            <span class="aml-hist-period">${_esc(minPeriod)} \u2014 ${_esc(maxPeriod)}</span>
+            <span class="aml-hist-score" style="color:${scoreColor}">${score}</span>
+            <span class="aml-hist-tx small muted">${totalTx} tx</span>
+            <span class="aml-hist-date small muted">${_fmtDate(first.created_at)}</span>
+          </div>
+          <div class="aml-history-group-body" id="${groupId}" style="display:none;margin-left:20px">`;
+
+        for(const it of items){
+          const itScore = it.risk_score != null ? Math.round(it.risk_score) : "?";
+          const itScoreColor = itScore >= 60 ? "var(--danger)" : itScore >= 30 ? "#d97706" : "var(--ok)";
+          html += `<div class="aml-history-item aml-history-child" data-sid="${_esc(it.statement_id)}" style="display:flex;align-items:center;gap:8px">
+            <span class="aml-hist-bank" style="flex:1;opacity:0.7">${_esc(it.period_from || "")} \u2014 ${_esc(it.period_to || "")}</span>
+            <span class="aml-hist-score" style="color:${itScoreColor}">${itScore}</span>
+            <span class="aml-hist-tx small muted">${it.tx_count || 0} tx</span>
+            <span class="aml-hist-date small muted">${_fmtDate(it.created_at)}</span>
+            <button class="aml-hist-delete" data-sid="${_esc(it.statement_id)}" title="Usun analize" style="background:none;border:none;cursor:pointer;color:var(--danger,#b91c1c);font-size:16px;padding:2px 6px;border-radius:4px;opacity:0.5;line-height:1">&times;</button>
+          </div>`;
+        }
+        html += `</div></div>`;
+      }
+    }
+    list.innerHTML = html;
+
+    // Bind toggle for grouped headers — click toggles children, also opens analysis
+    QSA(".aml-history-group-header", list).forEach(hdr => {
+      hdr.addEventListener("click", async (e) => {
+        if(e.target.closest(".aml-hist-delete")) return;
+
+        // Toggle group open/closed
+        const toggleId = hdr.getAttribute("data-toggle");
+        const body = QS("#" + toggleId);
+        const arrow = QS("#" + toggleId + "_toggle");
+        if(body){
+          const isOpen = body.style.display !== "none";
+          body.style.display = isOpen ? "none" : "";
+          if(arrow) arrow.textContent = isOpen ? "\u25B6" : "\u25BC";
+        }
+
+        // Also open the analysis (first statement in group — will load siblings)
+        const sid = hdr.getAttribute("data-sid");
+        if(!sid) return;
+        _showProgress("Ladowanie analizy...");
+        const detail = await _loadDetail(sid);
+        const siblings = (detail && detail.sibling_statement_ids) || [];
+        if(siblings.length > 1){
+          await _mergeMultiAccountCharts(siblings);
+        } else {
+          St._mergedCharts = null;
+          St._mergedInfo = null;
+          St._mergedCards = null;
+          St._mergedAccounts = null;
+        }
+        _renderResults();
+        _showResults();
+        if(window.ReviewManager){
+          if(siblings.length > 1){
+            await ReviewManager.loadForBatch(siblings);
+          } else {
+            await ReviewManager.loadForStatement(sid);
+          }
+        }
+      });
+    });
 
     // Bind clicks (open analysis)
     QSA(".aml-history-item", list).forEach(el=>{

@@ -448,7 +448,8 @@ async def aml_history(limit: int = Query(20)):
     from backend.db.engine import fetch_all
 
     rows = fetch_all(
-        """SELECT s.id AS statement_id, s.case_id, s.bank_name, s.account_holder,
+        """SELECT s.id AS statement_id, s.case_id, s.bank_name, s.bank_id,
+                  s.account_number, s.account_holder,
                   s.period_from, s.period_to, s.opening_balance, s.closing_balance,
                   s.currency, s.created_at,
                   r.total_score AS risk_score,
@@ -465,6 +466,8 @@ async def aml_history(limit: int = Query(20)):
             "statement_id": row["statement_id"],
             "case_id": row["case_id"],
             "bank_name": row["bank_name"] or "",
+            "bank_id": row["bank_id"] or "",
+            "account_number": row["account_number"] or "",
             "account_holder": row["account_holder"] or "",
             "period_from": row["period_from"] or "",
             "period_to": row["period_to"] or "",
@@ -493,6 +496,9 @@ async def aml_delete_analysis(statement_id: str):
     execute("DELETE FROM tx_classifications WHERE statement_id = ?", (statement_id,))
     execute("DELETE FROM risk_assessments WHERE statement_id = ?", (statement_id,))
     execute("DELETE FROM transactions WHERE statement_id = ?", (statement_id,))
+    # Clean up cached data in system_config
+    execute("DELETE FROM system_config WHERE key = ?", (f"detected_accounts:{statement_id}",))
+    execute("DELETE FROM system_config WHERE key = ?", (f"llm_prompt:{statement_id}",))
     # Graph data is per case; delete only if no other statements remain
     other = fetch_one(
         "SELECT id FROM statements WHERE case_id = ? AND id != ? LIMIT 1",
@@ -501,6 +507,8 @@ async def aml_delete_analysis(statement_id: str):
     if not other and case_id:
         execute("DELETE FROM graph_edges WHERE case_id = ?", (case_id,))
         execute("DELETE FROM graph_nodes WHERE case_id = ?", (case_id,))
+        # Delete the case itself if no statements remain
+        execute("DELETE FROM cases WHERE id = ?", (case_id,))
     execute("DELETE FROM statements WHERE id = ?", (statement_id,))
 
     return JSONResponse({"status": "ok", "deleted": statement_id})
