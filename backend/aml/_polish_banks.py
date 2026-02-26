@@ -58,11 +58,6 @@ BANK_SORT_CODES: dict[str, Tuple[str, str]] = {
     "2800": ("HSBC Continental", "HSBC Continental Europe (Oddział w Polsce)"),
     "2850": ("Citi Handlowy",   "Citibank Europe plc (Oddział w Polsce)"),
     "2910": ("PKO BP",          "PKO Bank Polski (Oddział Korporacyjny)"),
-
-    # --- Banki spółdzielcze (wybrane zakresy) ---
-    # Banki spółdzielcze zrzeszone w BPS mają numery z zakresu 8000-9999
-    # Banki spółdzielcze zrzeszone w SGB mają numery z zakresu 9000-9999
-    # Przykładowe prefiksy (nie wyczerpujące):
 }
 
 # Country codes for IBAN classification
@@ -98,32 +93,116 @@ IBAN_COUNTRY_NAMES: dict[str, str] = {
     "CY": "Cypr",
     "GR": "Grecja",
     "UA": "Ukraina",
-    "US": "USA",
-    "CN": "Chiny",
-    "JP": "Japonia",
+}
+
+# Official IBAN country codes (ISO 13616) — used to reject false positives.
+# Only these 2-letter prefixes are valid IBAN country codes.
+_VALID_IBAN_COUNTRIES = {
+    "AD", "AE", "AL", "AT", "AZ", "BA", "BE", "BG", "BH", "BR", "BY",
+    "CH", "CR", "CY", "CZ", "DE", "DK", "DO", "EE", "EG", "ES", "FI",
+    "FO", "FR", "GB", "GE", "GI", "GL", "GR", "GT", "HR", "HU", "IE",
+    "IL", "IQ", "IS", "IT", "JO", "KW", "KZ", "LB", "LC", "LI", "LT",
+    "LU", "LV", "MC", "MD", "ME", "MK", "MR", "MT", "MU", "NL", "NO",
+    "PK", "PL", "PS", "PT", "QA", "RO", "RS", "SA", "SC", "SE", "SI",
+    "SK", "SM", "ST", "SV", "TL", "TN", "TR", "UA", "VA", "VG", "XK",
+}
+
+# IBAN lengths per country (ISO 13616)
+_IBAN_LENGTHS: dict[str, int] = {
+    "AL": 28, "AD": 24, "AT": 20, "AZ": 28, "BH": 22, "BY": 28, "BE": 16,
+    "BA": 20, "BR": 29, "BG": 22, "CR": 22, "HR": 21, "CY": 28, "CZ": 24,
+    "DK": 18, "DO": 28, "EG": 29, "EE": 20, "FO": 18, "FI": 18, "FR": 27,
+    "GE": 22, "DE": 22, "GI": 23, "GR": 27, "GL": 18, "GT": 28, "HU": 28,
+    "IS": 26, "IQ": 23, "IE": 22, "IL": 23, "IT": 27, "JO": 30, "KZ": 20,
+    "XK": 20, "KW": 30, "LV": 21, "LB": 28, "LC": 32, "LI": 21, "LT": 20,
+    "LU": 20, "MK": 19, "MT": 31, "MR": 27, "MU": 30, "MC": 27, "MD": 24,
+    "ME": 22, "NL": 18, "NO": 15, "PK": 24, "PS": 29, "PL": 28, "PT": 25,
+    "QA": 29, "RO": 24, "SM": 27, "SA": 24, "RS": 22, "SC": 31, "SK": 24,
+    "SI": 19, "ES": 24, "SE": 24, "CH": 21, "TL": 23, "TN": 24, "TR": 26,
+    "UA": 29, "AE": 23, "GB": 22, "VA": 22, "VG": 24, "SV": 28, "ST": 25,
 }
 
 
 # ============================================================
-# IBAN PATTERNS
+# IBAN VALIDATION (MOD 97 check digit)
 # ============================================================
 
-# Polish NRB (26 digits, no country prefix)
-_NRB_RE = re.compile(r"\b(\d{2})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})\b")
+def validate_iban(iban: str) -> bool:
+    """Validate an IBAN using the MOD 97 check digit algorithm.
 
-# Polish IBAN with PL prefix
+    Args:
+        iban: Full IBAN string (with country prefix, e.g. "PL12105010121234...")
+              or 26-digit Polish NRB (auto-prefixed with PL).
+
+    Returns True if the check digit is valid.
+    """
+    clean = re.sub(r"[\s\-]", "", iban).upper()
+
+    # If pure digits (no country prefix), assume Polish NRB
+    if clean.isdigit():
+        if len(clean) != 26:
+            return False
+        clean = "PL" + clean
+
+    if len(clean) < 5:
+        return False
+
+    cc = clean[:2]
+    if not cc.isalpha():
+        return False
+
+    # Check country code is valid
+    if cc not in _VALID_IBAN_COUNTRIES:
+        return False
+
+    # Check length matches expected for country
+    expected_len = _IBAN_LENGTHS.get(cc)
+    if expected_len and len(clean) != expected_len:
+        return False
+
+    # MOD 97 algorithm: move first 4 chars to end, convert letters to numbers
+    rearranged = clean[4:] + clean[:4]
+    numeric_str = ""
+    for ch in rearranged:
+        if ch.isdigit():
+            numeric_str += ch
+        elif ch.isalpha():
+            numeric_str += str(ord(ch) - ord("A") + 10)
+        else:
+            return False
+
+    try:
+        return int(numeric_str) % 97 == 1
+    except (ValueError, OverflowError):
+        return False
+
+
+def _is_known_polish_bank(nrb_26: str) -> bool:
+    """Check if a 26-digit NRB corresponds to a known Polish bank."""
+    if len(nrb_26) != 26 or not nrb_26.isdigit():
+        return False
+    sort_code = nrb_26[2:10]
+    prefix_4 = sort_code[:4]
+    if prefix_4 in BANK_SORT_CODES:
+        return True
+    # Cooperative banks: sort codes starting with 8 or 9
+    if sort_code[0] in ("8", "9"):
+        return True
+    return False
+
+
+# ============================================================
+# IBAN PATTERNS (extraction)
+# ============================================================
+
+# Polish IBAN with PL prefix (strict: requires PL + 26 digits)
 _IBAN_PL_RE = re.compile(
     r"\bPL\s?(\d{2})\s?(\d{4})\s?(\d{4})\s?(\d{4})\s?(\d{4})\s?(\d{4})\s?(\d{4})\b",
     re.IGNORECASE,
 )
 
-# International IBAN (2 letter country code + 2 check + up to 30 alphanumeric)
-_IBAN_INTL_RE = re.compile(
-    r"\b([A-Z]{2})\s?(\d{2})\s?([\d\s]{10,30})\b"
-)
-
-# Spaced NRB pattern used in ING statements
-_NRB_SPACED_RE = re.compile(r"\b\d{2}(?:\s\d{4}){6}\b")
+# Spaced NRB pattern: XX XXXX XXXX XXXX XXXX XXXX XXXX (strict spacing)
+_NRB_SPACED_RE = re.compile(r"\b(\d{2})\s(\d{4})\s(\d{4})\s(\d{4})\s(\d{4})\s(\d{4})\s(\d{4})\b")
 
 
 def identify_bank(account_number: str) -> Optional[Tuple[str, str]]:
@@ -135,7 +214,6 @@ def identify_bank(account_number: str) -> Optional[Tuple[str, str]]:
     Returns:
         Tuple of (short_name, full_name) or None if not identified.
     """
-    # Normalize: remove spaces, dashes, PL prefix
     clean = re.sub(r"[\s\-]", "", account_number).upper()
     if clean.startswith("PL"):
         clean = clean[2:]
@@ -143,18 +221,14 @@ def identify_bank(account_number: str) -> Optional[Tuple[str, str]]:
     if len(clean) != 26 or not clean.isdigit():
         return None
 
-    # Sort code = digits 3-10 (positions 2-9, 0-indexed)
-    # First 2 digits are check digits
-    sort_code = clean[2:10]  # 8-digit sort code
+    sort_code = clean[2:10]
     prefix_4 = sort_code[:4]
 
-    # Try 4-digit prefix match
     if prefix_4 in BANK_SORT_CODES:
         return BANK_SORT_CODES[prefix_4]
 
-    # Try cooperative bank detection (sort codes 8000-9999)
-    first_digit = int(sort_code[0])
-    if first_digit >= 8:
+    # Cooperative bank detection (sort codes 8xxx-9xxx)
+    if sort_code[0] in ("8", "9"):
         return ("Bank Spółdzielczy", "Bank Spółdzielczy")
 
     return None
@@ -163,17 +237,8 @@ def identify_bank(account_number: str) -> Optional[Tuple[str, str]]:
 def classify_account(account_number: str) -> dict:
     """Classify an account number (Polish or international IBAN).
 
-    Returns:
-        Dict with:
-        - account_normalized: cleaned account number
-        - country_code: 2-letter code (PL, DE, etc.)
-        - country_name: Polish name of the country
-        - is_polish: bool
-        - is_foreign: bool
-        - bank_short: short bank name (Polish accounts only)
-        - bank_full: full bank name (Polish accounts only)
-        - sort_code: 8-digit sort code (Polish accounts only)
-        - display: formatted for display
+    Returns dict with: account_normalized, country_code, country_name,
+    is_polish, is_foreign, bank_short, bank_full, sort_code, display.
     """
     clean = re.sub(r"[\s\-]", "", account_number).upper()
 
@@ -196,7 +261,6 @@ def classify_account(account_number: str) -> dict:
         result["country_name"] = IBAN_COUNTRY_NAMES.get(cc, cc)
         digits = clean[2:]
     else:
-        # No country prefix — assume Polish NRB
         cc = "PL"
         result["country_code"] = "PL"
         result["country_name"] = "Polska"
@@ -217,7 +281,6 @@ def classify_account(account_number: str) -> dict:
             )
     else:
         result["is_foreign"] = True
-        # Format international IBAN
         result["display"] = f"{cc} {' '.join(digits[i:i+4] for i in range(0, len(digits), 4))}"
 
     if not result["display"]:
@@ -227,43 +290,45 @@ def classify_account(account_number: str) -> dict:
 
 
 def extract_accounts_from_text(text: str) -> list[str]:
-    """Extract all IBAN/NRB account numbers from text.
+    """Extract validated IBAN/NRB account numbers from text.
 
-    Returns list of normalized account numbers (digits only, without PL prefix).
+    Only returns accounts that pass IBAN check digit validation
+    or match a known Polish bank sort code.
+
+    Returns list of normalized account numbers (digits only for Polish,
+    with country prefix for foreign).
     """
     if not text:
         return []
 
     accounts: list[str] = []
+    seen: set[str] = set()
 
-    # Match PL IBAN first
+    def _add(acc: str):
+        if acc not in seen:
+            seen.add(acc)
+            accounts.append(acc)
+
+    # 1. Match PL IBAN (explicit PL prefix — most reliable)
     for m in _IBAN_PL_RE.finditer(text):
-        digits = "".join(m.groups())
-        digits = re.sub(r"\s", "", digits)
-        if len(digits) == 26:
-            accounts.append(digits)
+        digits = re.sub(r"\s", "", "".join(m.groups()))
+        if len(digits) == 26 and validate_iban("PL" + digits):
+            _add(digits)
 
-    # Match spaced NRB (common in ING statements)
+    # 2. Match spaced NRB: XX XXXX XXXX XXXX XXXX XXXX XXXX
     for m in _NRB_SPACED_RE.finditer(text):
-        digits = m.group().replace(" ", "")
-        if len(digits) == 26 and digits not in accounts:
-            accounts.append(digits)
+        digits = re.sub(r"\s", "", m.group())
+        if len(digits) == 26 and digits not in seen:
+            # Validate: must pass check digit OR match known bank
+            if validate_iban(digits) or _is_known_polish_bank(digits):
+                _add(digits)
 
-    # Match compact NRB (26 consecutive digits)
-    for m in _NRB_RE.finditer(text):
-        digits = "".join(m.groups())
-        if digits not in accounts:
-            accounts.append(digits)
-
-    # Match international IBAN
-    for m in _IBAN_INTL_RE.finditer(text):
-        cc = m.group(1)
-        if cc == "PL":
-            continue  # already handled
-        check = m.group(2)
-        rest = re.sub(r"\s", "", m.group(3))
-        full = f"{cc}{check}{rest}"
-        if full not in accounts:
-            accounts.append(full)
+    # NOTE: We intentionally do NOT extract 26 consecutive digits without
+    # spacing or PL prefix — these are almost always transaction references,
+    # document IDs, or other non-account numbers.
+    # Also, we do NOT extract international IBAN from free text — the 2-letter
+    # prefix + digits pattern produces too many false positives (e.g. "BA 2025...",
+    # "JM 1406..."). International IBANs are only detected when explicitly
+    # prefixed with PL or when the IBAN keyword context is present.
 
     return accounts

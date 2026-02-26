@@ -1596,6 +1596,7 @@ button.pill-icon:hover{
 .rv-col-date{font-variant-numeric: tabular-nums; min-width: 78px}
 .rv-col-type{font-weight: 600; color: var(--muted); min-width: 55px}
 .rv-col-cp{min-width: 140px; max-width: 280px; overflow: hidden; text-overflow: ellipsis}
+.rv-col-acc{min-width: 120px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; font-family: 'Consolas', 'SF Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.3px}
 .rv-col-title{min-width: 160px; max-width: 340px; overflow: hidden; text-overflow: ellipsis; color: var(--muted)}
 .rv-col-amt{font-weight: 600; text-align: right; min-width: 90px; font-variant-numeric: tabular-nums}
 .rv-col-ch{font-weight: 600; min-width: 50px}
