@@ -661,7 +661,13 @@ def parse_bank_statement(pdf_path: Path) -> ParseResult:
         # Preserve counterparty account number in raw_text for account detection
         cp_account = tx.get("counterparty_account")
         if cp_account:
-            raw_parts.append(f"Nr rachunku {cp_account}")
+            # Format with spaces for reliable extraction: XX XXXX XXXX XXXX XXXX XXXX XXXX
+            ca = re.sub(r"[\s\-]", "", cp_account)
+            if len(ca) == 26 and ca.isdigit():
+                spaced = f"{ca[:2]} {ca[2:6]} {ca[6:10]} {ca[10:14]} {ca[14:18]} {ca[18:22]} {ca[22:26]}"
+                raw_parts.append(f"Nr rachunku {spaced}")
+            else:
+                raw_parts.append(f"Nr rachunku {cp_account}")
 
         raw_transactions.append(RawTransaction(
             date=tx.get("posting_date", ""),
