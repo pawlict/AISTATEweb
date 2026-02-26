@@ -34,22 +34,46 @@ class CategoryMeta:
 
 CATEGORY_META: Dict[str, CategoryMeta] = {
     # --- Everyday (no risk) ---
-    "grocery":      CategoryMeta("Spożywcze",    "Grocery",        "none",       "🛒"),
-    "drugstore":    CategoryMeta("Drogeria",      "Drugstore",      "none",       "🧴"),
-    "fuel":         CategoryMeta("Paliwo",        "Fuel",           "none",       "⛽"),
-    "hardware":     CategoryMeta("Budowlane",     "Hardware/DIY",   "none",       "🔨"),
-    "gastronomy":   CategoryMeta("Gastronomia",   "Gastronomy",     "none",       "🍽️"),
-    "clothing":     CategoryMeta("Odzież",        "Clothing",       "none",       "👕"),
-    "health":       CategoryMeta("Zdrowie",       "Health",         "none",       "💊"),
-    "transport":    CategoryMeta("Transport",     "Transport",      "none",       "🚌"),
-    "education":    CategoryMeta("Edukacja",      "Education",      "none",       "📚"),
-    "electronics":  CategoryMeta("Elektronika",   "Electronics",    "none",       "📱"),
-    "home_garden":  CategoryMeta("Dom i ogród",   "Home & Garden",  "none",       "🏠"),
-    "pets":         CategoryMeta("Zwierzęta",     "Pets",           "none",       "🐾"),
-    "children":     CategoryMeta("Dzieci",        "Children",       "none",       "🧒"),
+    "grocery":      CategoryMeta("Spożywcze",       "Grocery",          "none",       "🛒"),
+    "bakery":       CategoryMeta("Piekarnia",        "Bakery",           "none",       "🥐"),
+    "drugstore":    CategoryMeta("Drogeria",         "Drugstore",        "none",       "🧴"),
+    "fuel":         CategoryMeta("Paliwo",           "Fuel",             "none",       "⛽"),
+    "hardware":     CategoryMeta("Budowlane",        "Hardware/DIY",     "none",       "🔨"),
+    "gastronomy":   CategoryMeta("Gastronomia",      "Gastronomy",       "none",       "🍽️"),
+    "clothing":     CategoryMeta("Odzież",           "Clothing",         "none",       "👕"),
+    "health":       CategoryMeta("Zdrowie",          "Health",           "none",       "💊"),
+    "pharmacy":     CategoryMeta("Apteka",           "Pharmacy",         "none",       "💊"),
+    "medical":      CategoryMeta("Medyczne",         "Medical",          "none",       "🏥"),
+    "transport":    CategoryMeta("Transport",        "Transport",        "none",       "🚌"),
+    "education":    CategoryMeta("Edukacja",         "Education",        "none",       "📚"),
+    "electronics":  CategoryMeta("Elektronika",      "Electronics",      "none",       "📱"),
+    "home_garden":  CategoryMeta("Dom i ogród",      "Home & Garden",    "none",       "🏠"),
+    "pets":         CategoryMeta("Zwierzęta",        "Pets",             "none",       "🐾"),
+    "children":     CategoryMeta("Dzieci",           "Children",         "none",       "🧒"),
+    "car_wash":     CategoryMeta("Myjnia",           "Car Wash",         "none",       "🚿"),
+    "auto_service": CategoryMeta("Serwis auto",      "Auto Service",     "none",       "🔧"),
+    # --- Financial (no risk) ---
+    "salary":       CategoryMeta("Wynagrodzenie",    "Salary",           "none",       "💰"),
+    "earnings":     CategoryMeta("Zarobki",          "Earnings",         "none",       "💵"),
+    "loan_payment": CategoryMeta("Rata/kredyt",      "Loan Payment",     "none",       "🏦"),
+    "insurance":    CategoryMeta("Ubezpieczenie",    "Insurance",        "none",       "🛡️"),
+    "utilities":    CategoryMeta("Rachunki",         "Utilities",        "none",       "📄"),
+    "rent":         CategoryMeta("Czynsz/Mieszkanie","Rent/Housing",     "none",       "🏠"),
+    "telecom":      CategoryMeta("Telekomunikacja",  "Telecom",          "none",       "📞"),
+    "delivery":     CategoryMeta("Kurier/przesyłki", "Delivery/Courier", "none",       "📦"),
+    "own_transfer": CategoryMeta("Przelew własny",   "Own Transfer",     "none",       "🔄"),
+    "fee":          CategoryMeta("Prowizja/opłata",  "Fee/Charge",       "none",       "📋"),
+    "cash":         CategoryMeta("Gotówka",          "Cash",             "none",       "💵"),
+    "online_shop":  CategoryMeta("Zakupy online",    "Online Shopping",  "none",       "🛍️"),
     # --- Elevated risk ---
     "digital_store":    CategoryMeta("Sklep cyfrowy",      "Digital Store",      "elevated", "📲"),
     "payment_operator": CategoryMeta("Operator płatności", "Payment Operator",   "monitoring", "💳"),
+    # --- Risk categories ---
+    "gambling":         CategoryMeta("Gry hazardowe",      "Gambling",           "high",     "🎰"),
+    "crypto":           CategoryMeta("Kryptowaluty",       "Cryptocurrency",     "elevated", "₿"),
+    "crypto_exchange":  CategoryMeta("Giełda krypto",      "Crypto Exchange",    "elevated", "₿"),
+    "stock_exchange":   CategoryMeta("Giełda",             "Stock Exchange",     "monitoring", "📈"),
+    "foreign":          CategoryMeta("Zagraniczne",        "Foreign",            "monitoring", "🌍"),
     # --- P2P ---
     "p2p_transfer": CategoryMeta("Przelew P2P",  "P2P Transfer",   "none",       "📱"),
 }
@@ -522,72 +546,10 @@ _FUEL_BRANDS = [
     "amic", "mol", "total", "moya", "avia", "anwim", "huzar",
 ]
 
-# Top 100+ Polish cities for location extraction
-POLISH_CITIES = {
-    # Województwo mazowieckie
-    "warszawa", "radom", "płock", "siedlce", "ostrołęka", "pruszków",
-    "legionowo", "otwock", "piaseczno", "wołomin", "mińsk mazowiecki",
-    # Województwo małopolskie
-    "kraków", "krakow", "tarnów", "tarnow", "nowy sącz", "nowy sacz",
-    "chrzanów", "chrzanow", "oświęcim", "oswiecim", "olkusz", "bochnia",
-    "wadowice", "myślenice", "myslenice", "zakopane",
-    # Województwo śląskie
-    "katowice", "częstochowa", "czestochowa", "sosnowiec", "gliwice",
-    "zabrze", "bytom", "ruda śląska", "ruda slaska", "rybnik", "tychy",
-    "dąbrowa górnicza", "dabrowa gornicza", "bielsko-biała", "bielsko biala",
-    "jaworzno", "mysłowice", "myslowice", "siemianowice", "chorzów",
-    "chorzow", "mikołów", "mikolow", "żory", "zory", "cieszyn",
-    # Województwo dolnośląskie
-    "wrocław", "wroclaw", "wałbrzych", "walbrzych", "legnica", "jelenia góra",
-    "jelenia gora", "lubin", "głogów", "glogow", "świdnica", "swidnica",
-    "bolesławiec", "boleslawiec", "oleśnica", "olesnica",
-    # Województwo wielkopolskie
-    "poznań", "poznan", "kalisz", "konin", "piła", "pila", "ostrów wielkopolski",
-    "ostrow wielkopolski", "gniezno", "leszno", "turek", "śrem", "srem",
-    "swarzędz", "swarzedz", "luboń", "lubon",
-    # Województwo łódzkie
-    "łódź", "lodz", "piotrków trybunalski", "piotrkow trybunalski",
-    "pabianice", "zgierz", "tomaszów mazowiecki", "tomaszow mazowiecki",
-    "bełchatów", "belchatow", "skierniewice", "kutno", "radomsko",
-    "sieradz", "zduńska wola", "zdunska wola", "łowicz", "lowicz",
-    # Województwo pomorskie
-    "gdańsk", "gdansk", "gdynia", "sopot", "słupsk", "slupsk",
-    "tczew", "starogard gdański", "starogard gdanski", "wejherowo",
-    "rumia", "reda", "pruszcz gdański", "pruszcz gdanski",
-    # Województwo lubelskie
-    "lublin", "chełm", "chelm", "zamość", "zamosc", "biała podlaska",
-    "biala podlaska", "puławy", "pulawy", "kraśnik", "krasnik",
-    "świdnik", "swidnik", "łuków", "lukow",
-    # Województwo podkarpackie
-    "rzeszów", "rzeszow", "przemyśl", "przemysl", "stalowa wola",
-    "mielec", "tarnobrzeg", "krosno", "dębica", "debica",
-    "sanok", "jasło", "jaslo", "łańcut", "lancut",
-    # Województwo warmińsko-mazurskie
-    "olsztyn", "elbląg", "elblag", "ełk", "elk", "ostróda", "ostroda",
-    "iława", "ilawa", "giżycko", "gizycko", "kętrzyn", "ketrzyn",
-    # Województwo zachodniopomorskie
-    "szczecin", "koszalin", "stargard", "kołobrzeg", "kolobrzeg",
-    "świnoujście", "swinoujscie", "police",
-    # Województwo podlaskie
-    "białystok", "bialystok", "suwałki", "suwalki", "łomża", "lomza",
-    "augustów", "augustow",
-    # Województwo świętokrzyskie
-    "kielce", "ostrowiec świętokrzyski", "ostrowiec swietokrzyski",
-    "starachowice", "skarżysko-kamienna", "skarzysko kamienna",
-    "sandomierz", "busko-zdrój", "busko zdroj",
-    # Województwo lubuskie
-    "zielona góra", "zielona gora", "gorzów wielkopolski",
-    "gorzow wielkopolski", "nowa sól", "nowa sol",
-    "żary", "zary", "żagań", "zagan",
-    # Województwo opolskie
-    "opole", "kędzierzyn-koźle", "kedzierzyn kozle",
-    "nysa", "brzeg", "kluczbork",
-    # Województwo kujawsko-pomorskie
-    "bydgoszcz", "toruń", "torun", "włocławek", "wloclawek",
-    "grudziądz", "grudziadz", "inowrocław", "inowroclaw",
-    # Trójmiasto alias
-    "trójmiasto", "trojmiasto",
-}
+# Complete gazetteer of Polish cities — imported from dedicated module.
+# Contains ALL ~960 cities with municipal rights + ASCII transliterations.
+# See _polish_cities.py for the full, organized listing.
+from ._polish_cities import POLISH_CITIES  # noqa: E402
 
 
 def detect_fuel_location(counterparty: str, title: str = "") -> Optional[str]:

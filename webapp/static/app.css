@@ -974,6 +974,16 @@ button.pill-icon:hover{
 .aml-card-details .detail-row:last-child{
   border-bottom: none;
 }
+.aml-card-details .detail-row.aml-card-link{
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  transition: background .15s;
+}
+.aml-card-details .detail-row.aml-card-link:hover{
+  background: rgba(255,255,255,.12);
+}
 
 /* Alerts */
 .aml-badge{

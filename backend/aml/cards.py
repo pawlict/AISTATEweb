@@ -90,19 +90,29 @@ def detect_cards(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         channel = (tx.get("channel") or "").upper()
         bank_cat = (tx.get("bank_category") or "").upper()
 
-        # Only consider card transactions
-        is_card = channel in ("CARD", "KARTA") or bank_cat in ("TR.KART",)
-        if not is_card:
-            # Also check title/raw for card indicators
+        # Primary: channel or bank_category marks it as a card tx
+        is_card_certain = channel in ("CARD", "KARTA") or bank_cat in ("TR.KART",)
+
+        if not is_card_certain:
+            # Secondary: keyword hint — only accept if a card number is found
             title = (tx.get("title") or "").lower()
             raw = (tx.get("raw_text") or "").lower()
-            if not any(kw in f"{title} {raw}" for kw in ("kartą", "karta", "kart ", "card")):
+            has_hint = any(kw in f"{title} {raw}" for kw in ("kartą", "karta", "kart ", "card"))
+            if not has_hint:
                 continue
+            # Keyword-matched: require extractable card number (avoid false positives)
+            card_num = _extract_card_number(tx)
+            if not card_num:
+                continue
+            card_txs[card_num].append(tx)
+            if card_num not in card_raw:
+                card_raw[card_num] = _format_masked(card_num)
+            continue
 
         # Try to extract card number
         card_num = _extract_card_number(tx)
         if not card_num:
-            # Unknown card — group under "unknown"
+            # Certain card tx without extractable number — group under "unknown"
             card_num = "****"
 
         card_txs[card_num].append(tx)

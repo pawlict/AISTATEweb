@@ -603,9 +603,12 @@ async def aml_detail(statement_id: str):
 
     # Card identification
     detected_cards = []
+    category_labels = {}
     try:
         from backend.aml.cards import detect_cards
+        from backend.aml.merchants import get_all_categories
         detected_cards = detect_cards(transactions)
+        category_labels = get_all_categories()
     except Exception as e:
         log.warning("Card detection failed: %s", e)
 
@@ -623,6 +626,7 @@ async def aml_detail(statement_id: str):
         "has_llm_prompt": has_llm_prompt,
         "sibling_statement_ids": sibling_ids,
         "cards": detected_cards,
+        "category_labels": category_labels,
     })
 
 

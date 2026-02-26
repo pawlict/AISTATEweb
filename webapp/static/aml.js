@@ -357,6 +357,20 @@
     grid.innerHTML = html;
   }
 
+  /**
+   * Resolve a raw category key (e.g. "everyday:grocery") to a display name
+   * using the category_labels map from the API and the current UI language.
+   */
+  function _catDisplayName(raw){
+    if(!raw) return "";
+    const leaf = raw.includes(":") ? raw.split(":").pop() : raw;
+    const labels = (St.detail && St.detail.category_labels) || {};
+    const meta = labels[leaf] || labels[raw];
+    if(!meta) return leaf;
+    const lang = (typeof getUiLang === "function") ? getUiLang() : "pl";
+    return lang === "en" ? (meta.display_name_en || meta.display_name || leaf) : (meta.display_name || leaf);
+  }
+
   function _renderCards(cards, stmt){
     const container = QS("#aml_cards_container");
     const cardCard = QS("#aml_cards_card");
@@ -382,40 +396,45 @@
       const lastDate = _esc(c.last_date || "");
 
       // Stats section
+      const _t = typeof t === "function" ? t : (k => k);
       let statsHtml = `
-        <div><b>Wydatki</b><div class="val">${_fmtAmount(c.total_debit, cur)}</div></div>
-        <div><b>Wpływy</b><div class="val">${_fmtAmount(c.total_credit, cur)}</div></div>
-        <div><b>Transakcje</b><div class="val">${c.tx_count}</div></div>
-        <div><b>Śr. kwota</b><div class="val">${_fmtAmount(c.avg_amount, cur)}</div></div>
+        <div><b>${_t("aml.card.expenses")}</b><div class="val">${_fmtAmount(c.total_debit, cur)}</div></div>
+        <div><b>${_t("aml.card.income")}</b><div class="val">${_fmtAmount(c.total_credit, cur)}</div></div>
+        <div><b>${_t("aml.card.transactions")}</b><div class="val">${c.tx_count}</div></div>
+        <div><b>${_t("aml.card.avg_amount")}</b><div class="val">${_fmtAmount(c.avg_amount, cur)}</div></div>
       `;
 
-      // Top merchants
+      // Top merchants — clickable: filter by merchant name
+      const _filterTitle = _t("aml.card.click_filter");
       let detailsHtml = "";
       if(c.top_merchants && c.top_merchants.length){
-        detailsHtml += '<div style="margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">TOP KONTRAHENCI</div>';
+        detailsHtml += `<div style="margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">${_t("aml.card.top_merchants")}</div>`;
         c.top_merchants.slice(0, 5).forEach(m => {
           const name = _esc((m[0] || "").slice(0, 25));
+          const raw = _esc(m[0] || "");
           const amt = _fmtAmount(m[1], cur);
           const cnt = m[2] || 0;
-          detailsHtml += `<div class="detail-row"><span>${name} (${cnt}x)</span><span>${amt}</span></div>`;
+          detailsHtml += `<div class="detail-row aml-card-link" data-filter="${raw}" title="${_filterTitle}"><span>${name} (${cnt}x)</span><span>${amt}</span></div>`;
         });
       }
 
-      // Top categories
+      // Top categories — localized, clickable
       if(c.top_categories && c.top_categories.length){
-        detailsHtml += '<div style="margin-top:6px;margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">KATEGORIE</div>';
+        detailsHtml += `<div style="margin-top:6px;margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">${_t("aml.card.categories")}</div>`;
         c.top_categories.slice(0, 4).forEach(cat => {
-          const name = _esc(cat[0] || "");
+          const rawCat = cat[0] || "";
+          const displayName = _catDisplayName(rawCat);
           const amt = _fmtAmount(cat[1], cur);
-          detailsHtml += `<div class="detail-row"><span>${name}</span><span>${amt}</span></div>`;
+          detailsHtml += `<div class="detail-row aml-card-link" data-filter-cat="${_esc(rawCat)}" title="${_filterTitle}"><span>${_esc(displayName)}</span><span>${amt}</span></div>`;
         });
       }
 
-      // Locations
+      // Locations — clickable: filter by location name
       if(c.locations && c.locations.length){
-        detailsHtml += '<div style="margin-top:6px;margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">LOKALIZACJE</div>';
+        detailsHtml += `<div style="margin-top:6px;margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">${_t("aml.card.locations")}</div>`;
         c.locations.slice(0, 4).forEach(loc => {
-          detailsHtml += `<div class="detail-row"><span>${_esc(loc[0])}</span><span>${loc[1]} tx</span></div>`;
+          const locName = _esc(loc[0] || "");
+          detailsHtml += `<div class="detail-row aml-card-link" data-filter="${locName}" title="${_filterTitle}"><span>${locName}</span><span>${loc[1]} tx</span></div>`;
         });
       }
 
@@ -433,6 +452,35 @@
         ${detailsHtml ? '<div class="aml-card-details">' + detailsHtml + '</div>' : ''}
       </div>`;
     }).join("");
+
+    // Click handlers: filter transactions in Review section and scroll to it
+    QSA(".aml-card-link", container).forEach(el => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const filterText = el.getAttribute("data-filter") || "";
+        const filterCat = el.getAttribute("data-filter-cat") || "";
+
+        // Target: Review & Classification search box
+        const rvSearch = QS("#rv_search");
+        const rvCard = QS("#aml_review_card");
+
+        if(rvSearch){
+          if(filterCat){
+            // For categories, search by the category label (localized)
+            rvSearch.value = _catDisplayName(filterCat);
+          } else {
+            rvSearch.value = filterText;
+          }
+          // Trigger filter update
+          rvSearch.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+
+        // Scroll to review section
+        if(rvCard){
+          rvCard.scrollIntoView({behavior: "smooth", block: "start"});
+        }
+      });
+    });
   }
 
   function _renderAlerts(alerts){

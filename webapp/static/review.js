@@ -725,6 +725,7 @@
         (tx.counterparty_raw || "").toLowerCase().includes(searchVal) ||
         (tx.title || "").toLowerCase().includes(searchVal) ||
         (tx.category || "").toLowerCase().includes(searchVal) ||
+        (tx.subcategory || "").toLowerCase().includes(searchVal) ||
         (tx.amount || "").toString().includes(searchVal)
       );
     }

@@ -17,19 +17,39 @@ log = logging.getLogger("aistate.aml.llm_analysis")
 
 # Human-readable category labels (PL) used in prompts
 _CAT_LABELS_PL: Dict[str, str] = {
+    # Everyday
     "grocery": "Spożywcze",
+    "bakery": "Piekarnia",
     "drugstore": "Drogeria",
     "fuel": "Paliwo",
     "hardware": "Budowlane",
     "gastronomy": "Gastronomia",
     "clothing": "Odzież",
     "health": "Zdrowie/Apteka",
+    "pharmacy": "Apteka",
+    "medical": "Medyczne",
     "transport": "Transport",
     "education": "Edukacja",
     "electronics": "Elektronika",
     "home_garden": "Dom i ogród",
     "pets": "Zwierzęta",
     "children": "Dzieci",
+    "car_wash": "Myjnia",
+    "auto_service": "Serwis auto",
+    # Financial
+    "salary": "Wynagrodzenie",
+    "earnings": "Zarobki",
+    "loan_payment": "Rata/kredyt",
+    "insurance": "Ubezpieczenie",
+    "utilities": "Rachunki",
+    "rent": "Czynsz/Mieszkanie",
+    "telecom": "Telekomunikacja",
+    "delivery": "Kurier/przesyłki",
+    "own_transfer": "Przelew własny",
+    "fee": "Prowizja/opłata",
+    "cash": "Gotówka",
+    "online_shop": "Zakupy online",
+    # Elevated
     "digital_store": "Sklep cyfrowy",
     "payment_operator": "Operator płatności",
     "p2p_transfer": "Przelew P2P",
@@ -41,8 +61,6 @@ _CAT_LABELS_PL: Dict[str, str] = {
     "stock_exchange": "Giełda",
     "risky": "Ryzykowne",
     "foreign": "Zagraniczne",
-    "cash": "Gotówka",
-    "own_transfer": "Przelew własny",
 }
 
 
