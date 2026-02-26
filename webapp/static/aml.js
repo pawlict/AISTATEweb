@@ -128,6 +128,9 @@
 
     const fd = new FormData();
     fd.append("file", file, file.name);
+    // Attach current project context so new analysis lands in the right project
+    const _pid = (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) ? AISTATE.projectId : "";
+    if(_pid) fd.append("project_id", _pid);
 
     let pct = 0;
     const bar = QS("#aml_prog_bar");
@@ -228,7 +231,10 @@
   }
 
   async function _loadHistory(){
-    const data = await _safeApi("/api/aml/history?limit=20");
+    const pid = (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) ? AISTATE.projectId : "";
+    let url = "/api/aml/history?limit=50";
+    if(pid) url += "&project_id=" + encodeURIComponent(pid);
+    const data = await _safeApi(url);
     if(data && Array.isArray(data.items)){
       St.history = data.items;
     }
