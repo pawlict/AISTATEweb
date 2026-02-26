@@ -612,7 +612,16 @@ async def aml_detail(statement_id: str):
     except Exception as e:
         log.warning("Card detection failed: %s", e)
 
-    # Strip raw_text from response to reduce payload (only needed for card detection)
+    # Account identification (must run before raw_text is stripped)
+    detected_accounts = []
+    try:
+        from backend.aml.accounts import detect_accounts
+        stmt_account = stmt_dict.get("account_number", "")
+        detected_accounts = detect_accounts(transactions, statement_account=stmt_account)
+    except Exception as e:
+        log.warning("Account detection failed: %s", e)
+
+    # Strip raw_text from response to reduce payload (only needed for card/account detection)
     for tx in transactions:
         tx.pop("raw_text", None)
 
@@ -626,6 +635,7 @@ async def aml_detail(statement_id: str):
         "has_llm_prompt": has_llm_prompt,
         "sibling_statement_ids": sibling_ids,
         "cards": detected_cards,
+        "accounts": detected_accounts,
         "category_labels": category_labels,
     })
 

@@ -985,6 +985,137 @@ button.pill-icon:hover{
   background: rgba(255,255,255,.12);
 }
 
+/* Identified Accounts */
+.aml-accounts-container{
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+.aml-account-item{
+  width: 340px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  color: #f8fafc;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  font-family: 'Consolas', 'SF Mono', monospace;
+  position: relative;
+}
+.aml-account-item.aml-acc-own-bg{
+  background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0369a1 100%);
+}
+.aml-account-item.aml-acc-foreign-bg{
+  background: linear-gradient(135deg, #581c87 0%, #6b21a8 50%, #7c3aed 100%);
+}
+.aml-acc-top{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 16px 4px;
+}
+.aml-acc-bank{
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.85;
+}
+.aml-acc-badges{
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.aml-acc-badge{
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  white-space: nowrap;
+}
+.aml-acc-own{
+  background: rgba(34,197,94,.25);
+  color: #86efac;
+}
+.aml-acc-third{
+  background: rgba(251,191,36,.2);
+  color: #fde68a;
+}
+.aml-acc-polish{
+  background: rgba(255,255,255,.12);
+  color: rgba(255,255,255,.75);
+}
+.aml-acc-foreign{
+  background: rgba(167,139,250,.3);
+  color: #c4b5fd;
+}
+.aml-acc-number{
+  padding: 6px 16px 2px;
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  font-weight: 600;
+  word-break: break-all;
+}
+.aml-acc-bankfull{
+  padding: 0 16px 4px;
+  font-size: 10px;
+  opacity: 0.6;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.aml-acc-dates{
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 16px 8px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+.aml-acc-stats{
+  background: rgba(255,255,255,.07);
+  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px 12px;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.aml-acc-stats b{
+  font-weight: 700;
+  opacity: 0.7;
+  font-size: 10px;
+  display: block;
+}
+.aml-acc-stats .val{
+  font-weight: 600;
+  font-size: 12px;
+}
+.aml-acc-stats .sub{
+  font-size: 9px;
+  opacity: 0.6;
+}
+.aml-acc-credit{
+  color: #86efac;
+}
+.aml-acc-debit{
+  color: #fca5a5;
+}
+.aml-acc-details{
+  padding: 8px 16px 12px;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: rgba(248,250,252,.85);
+}
+.aml-acc-details .detail-row{
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.aml-acc-details .detail-row:last-child{
+  border-bottom: none;
+}
+
 /* Alerts */
 .aml-badge{
   background: rgba(185,28,28,.1);
