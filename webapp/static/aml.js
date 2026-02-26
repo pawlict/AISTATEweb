@@ -890,8 +890,13 @@
 
     try{
       const selectedModel = (QS("#aml_llm_model_select") || {}).value || "";
+      const userPrompt = (QS("#aml_user_prompt") || {}).value || "";
       let url = "/api/aml/llm-stream/" + encodeURIComponent(St.statementId);
-      if(selectedModel) url += "?model=" + encodeURIComponent(selectedModel);
+      const params = new URLSearchParams();
+      if(selectedModel) params.set("model", selectedModel);
+      if(userPrompt.trim()) params.set("user_prompt", userPrompt.trim());
+      const qs = params.toString();
+      if(qs) url += "?" + qs;
       const response = await fetch(url);
       if(!response.ok) throw new Error("HTTP " + response.status);
 

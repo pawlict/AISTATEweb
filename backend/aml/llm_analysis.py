@@ -7,7 +7,9 @@ to Ollama for a written expert analysis in Polish.
 from __future__ import annotations
 
 import logging
+import re as _re
 from collections import Counter, defaultdict
+from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 log = logging.getLogger("aistate.aml.llm_analysis")
@@ -53,6 +55,25 @@ def _cat_label(raw: str) -> str:
     return _CAT_LABELS_PL.get(leaf, _CAT_LABELS_PL.get(raw, raw))
 
 
+# ============================================================
+# Keywords for pre-analysis detection
+# ============================================================
+
+_LOAN_KEYWORDS = [
+    "kredyt", "rata", "pożyczka", "pozyczka", "bank", "leasing",
+    "splata", "spłata", "hipoteczny", "ratalny", "rrso",
+    "prowizja", "odsetki", "ubezpieczenie kredytu",
+    "santander", "ing bank", "mbank", "pko", "bnp paribas",
+    "alior", "millennium", "getin", "nest bank", "credit agricole",
+]
+
+_ATM_KEYWORDS = [
+    "bankomat", "atm", "wyplata gotowk", "wypłata gotówk",
+    "wplata gotowk", "wpłata gotówk", "wplata wlasna", "wpłata własna",
+    "cash", "gotówka", "gotowka",
+]
+
+
 def build_aml_prompt(
     statement_info: Dict[str, Any],
     transactions: list,
@@ -62,6 +83,7 @@ def build_aml_prompt(
     ml_anomalies: Optional[List[Dict[str, Any]]] = None,
     enriched: Optional[Any] = None,
     cross_validation: Optional[Dict[str, Any]] = None,
+    user_prompt: str = "",
 ) -> str:
     """Build comprehensive AML analysis prompt for LLM.
 
@@ -74,25 +96,40 @@ def build_aml_prompt(
         ml_anomalies: Isolation Forest results
         enriched: EnrichedResult from enrich.py (channels, categories, recurring)
         cross_validation: MT940 vs PDF comparison report
+        user_prompt: Optional user question or instruction
 
     Returns a prompt string ready to send to Ollama.
     """
     parts: List[str] = []
 
-    # --- System context ---
-    parts.append("""# KONTEKST: Analiza AML wyciagu bankowego
+    # --- System context (with proper Polish diacritics) ---
+    parts.append("""# KONTEKST: Analiza AML wyciągu bankowego
 
-Jestes ekspertem ds. przeciwdzialania praniu pieniedzy (AML) i analityki finansowej.
-Przygotuj profesjonalna analize wyciagu bankowego na podstawie ponizszych danych.
-Dane zostaly automatycznie wyodrebnione z pliku bankowego i wzbogacone o klasyfikacje.
+Jesteś ekspertem ds. przeciwdziałania praniu pieniędzy (AML) i analityki finansowej.
+Przygotuj profesjonalny raport z analizy rachunku bankowego na podstawie poniższych danych.
+Dane zostały automatycznie wyodrębnione z plików bankowych i wzbogacone o klasyfikację.
 
-WAZNE:
+WAŻNE:
 - Pisz profesjonalnie ale zrozumiale
-- Odwoluj sie do konkretnych kwot, dat i kontrahentow
-- Wskazuj wzorce zachowan finansowych
-- Ocen ryzyko AML na podstawie danych
+- Odwołuj się do konkretnych kwot, dat i kontrahentów
+- Wskazuj wzorce zachowań finansowych
+- Oceń ryzyko AML na podstawie danych
 - Zaproponuj rekomendacje
-- Dla kazdego wniosku podaj poziom pewnosci: WYSOKI / SREDNI / NISKI""")
+- Dla każdego wniosku podaj poziom pewności: WYSOKI / ŚREDNI / NISKI""")
+
+    # --- Task section FIRST (so LLM knows what to look for) ---
+    parts.append(_build_task_section(
+        has_cross_validation=cross_validation is not None,
+        has_enriched=enriched is not None,
+    ))
+
+    # --- User prompt (if provided) ---
+    if user_prompt and user_prompt.strip():
+        parts.append(f"""## PYTANIE / INSTRUKCJA UŻYTKOWNIKA
+
+{user_prompt.strip()}
+
+WAŻNE: Uwzględnij powyższe pytanie/instrukcję w swojej analizie. Jeśli użytkownik pyta o konkretny aspekt, poświęć mu szczególną uwagę w raporcie.""")
 
     # --- Statement info ---
     info = statement_info
@@ -109,10 +146,10 @@ WAZNE:
 
     # --- Risk score ---
     if risk_score > 0:
-        level = "NISKI" if risk_score < 30 else ("SREDNI" if risk_score < 60 else "WYSOKI")
+        level = "NISKI" if risk_score < 30 else ("ŚREDNI" if risk_score < 60 else "WYSOKI")
         risk_text = f"## OCENA RYZYKA\n\nRisk score: **{risk_score:.0f}/100** ({level})"
         if risk_reasons:
-            risk_text += "\n\nSkladowe ryzyka:"
+            risk_text += "\n\nSkładowe ryzyka:"
             for reason in (risk_reasons or [])[:15]:
                 if isinstance(reason, dict):
                     risk_text += f"\n- {reason.get('tag', '?')}: +{reason.get('score', 0)} pkt — {reason.get('count', '?')} transakcji"
@@ -156,26 +193,32 @@ WAZNE:
         parts.append(_build_channel_breakdown(transactions))
         parts.append(_build_top_counterparties(transactions))
 
-    # --- NEW: Temporal patterns ---
+    # --- NEW: Monthly income/expense breakdown ---
+    parts.append(_build_monthly_breakdown(transactions))
+
+    # --- NEW: Loan/installment detection ---
+    parts.append(_build_loan_detection(transactions))
+
+    # --- NEW: ATM patterns ---
+    parts.append(_build_atm_patterns(transactions))
+
+    # --- NEW: Geographic analysis ---
+    parts.append(_build_geographic_analysis(transactions))
+
+    # --- Temporal patterns ---
     parts.append(_build_temporal_patterns(transactions))
 
-    # --- NEW: P2P transfers ---
+    # --- P2P transfers ---
     parts.append(_build_p2p_transfers(transactions))
 
-    # --- NEW: Counterparty profiles from memory ---
+    # --- Counterparty profiles from memory ---
     parts.append(_build_counterparty_profiles(transactions))
 
     # --- Flagged transactions ---
     parts.append(_build_flagged_transactions(transactions))
 
-    # --- Full transaction list (compact, with titles) ---
+    # --- Transaction table: smart aggregation for large datasets ---
     parts.append(_build_transaction_table(transactions))
-
-    # --- Task ---
-    parts.append(_build_task_section(
-        has_cross_validation=cross_validation is not None,
-        has_enriched=enriched is not None,
-    ))
 
     return "\n\n".join(p for p in parts if p)
 
@@ -187,14 +230,14 @@ WAZNE:
 def _build_statement_section(info: Dict[str, Any], transactions: list) -> str:
     rows = [
         ("Bank", info.get("bank_name", "?")),
-        ("Wlasciciel", info.get("account_holder", "?")),
+        ("Właściciel", info.get("account_holder", "?")),
         ("IBAN", info.get("account_number", "?")),
         ("Okres", f"{info.get('period_from', '?')} — {info.get('period_to', '?')}"),
-        ("Saldo poczatkowe", f"{info.get('opening_balance', '?')} {info.get('currency', 'PLN')}"),
-        ("Saldo koncowe", f"{info.get('closing_balance', '?')} {info.get('currency', 'PLN')}"),
+        ("Saldo początkowe", f"{info.get('opening_balance', '?')} {info.get('currency', 'PLN')}"),
+        ("Saldo końcowe", f"{info.get('closing_balance', '?')} {info.get('currency', 'PLN')}"),
         ("Liczba transakcji", str(len(transactions))),
     ]
-    lines = ["## DANE WYCIAGU\n", "| Pole | Wartosc |", "|------|---------|"]
+    lines = ["## DANE WYCIĄGU\n", "| Pole | Wartość |", "|------|---------|"]
     for label, val in rows:
         lines.append(f"| {label} | {val} |")
     return "\n".join(lines)
@@ -204,15 +247,15 @@ def _build_header_extras(info: Dict[str, Any]) -> str:
     """Build section for additional header fields (limits, commissions, etc.)."""
     extras = []
     field_map = [
-        ("previous_closing_balance", "Saldo konc. poprz. wyciagu"),
-        ("declared_credits_sum", "Suma uznan (kwota)"),
-        ("declared_credits_count", "Suma uznan (liczba)"),
-        ("declared_debits_sum", "Suma obciazen (kwota)"),
-        ("declared_debits_count", "Suma obciazen (liczba)"),
-        ("debt_limit", "Limit zadluzenia"),
-        ("overdue_commission", "Kwota prowizji zaleglej"),
+        ("previous_closing_balance", "Saldo końcowe poprzedniego wyciągu"),
+        ("declared_credits_sum", "Suma uznań (kwota)"),
+        ("declared_credits_count", "Suma uznań (liczba)"),
+        ("declared_debits_sum", "Suma obciążeń (kwota)"),
+        ("declared_debits_count", "Suma obciążeń (liczba)"),
+        ("debt_limit", "Limit zadłużenia"),
+        ("overdue_commission", "Kwota prowizji zaległej"),
         ("blocked_amount", "Kwota zablokowana"),
-        ("available_balance", "Saldo dostepne"),
+        ("available_balance", "Saldo dostępne"),
     ]
     for key, label in field_map:
         val = info.get(key)
@@ -222,7 +265,7 @@ def _build_header_extras(info: Dict[str, Any]) -> str:
     if not extras:
         return ""
 
-    lines = ["## DODATKOWE POLA NAGLOWKA\n", "| Pole | Wartosc |", "|------|---------|"]
+    lines = ["## DODATKOWE POLA NAGŁÓWKA\n", "| Pole | Wartość |", "|------|---------|"]
     lines.extend(extras)
     return "\n".join(lines)
 
@@ -233,7 +276,7 @@ def _build_header_extras(info: Dict[str, Any]) -> str:
 
 def _build_cross_validation_section(cv: Dict[str, Any]) -> str:
     """Build MT940 vs PDF cross-validation section."""
-    lines = ["## WALIDACJA KRZYZOWA (MT940 vs PDF)\n"]
+    lines = ["## WALIDACJA KRZYŻOWA (MT940 vs PDF)\n"]
 
     mt940_count = cv.get("mt940_tx_count", 0)
     pdf_count = cv.get("pdf_tx_count", 0)
@@ -248,7 +291,7 @@ def _build_cross_validation_section(cv: Dict[str, Any]) -> str:
     if balance_check:
         lines.append("\n### Sprawdzenie sald")
         for field_name, check in balance_check.items():
-            status = "OK" if check.get("match") else "ROZBIEZNOSC"
+            status = "OK" if check.get("match") else "ROZBIEŻNOŚĆ"
             lines.append(f"- {field_name}: MT940={check.get('mt940', '?')}, PDF={check.get('pdf', '?')} — **{status}**")
 
     # Unmatched
@@ -274,18 +317,18 @@ def _build_stats_from_enriched(enriched) -> str:
     s = enriched.stats
     return f"""## STATYSTYKI
 
-| Metryka | Wartosc |
+| Metryka | Wartość |
 |---------|---------|
-| Laczne wplywy | {s['total_credits']:,.2f} PLN ({s['credit_count']} transakcji) |
-| Laczne wydatki | {s['total_debits']:,.2f} PLN ({s['debit_count']} transakcji) |
+| Łączne wpływy | {s['total_credits']:,.2f} PLN ({s['credit_count']} transakcji) |
+| Łączne wydatki | {s['total_debits']:,.2f} PLN ({s['debit_count']} transakcji) |
 | Bilans netto | {s['net_flow']:+,.2f} PLN |
-| Srednia transakcja | {s['avg_transaction']:,.2f} PLN |
-| Najwieksza transakcja | {s['max_transaction']:,.2f} PLN |"""
+| Średnia transakcja | {s['avg_transaction']:,.2f} PLN |
+| Największa transakcja | {s['max_transaction']:,.2f} PLN |"""
 
 
 def _build_channels_from_enriched(enriched) -> str:
-    lines = ["## KANALY TRANSAKCJI\n",
-             "| Kanal | Liczba | Kwota |",
+    lines = ["## KANAŁY TRANSAKCJI\n",
+             "| Kanał | Liczba | Kwota |",
              "|-------|--------|-------|"]
     for ch, info in enriched.channel_summary.items():
         lines.append(f"| {info['label']} | {info['count']} | {info['total']:,.2f} PLN |")
@@ -307,7 +350,7 @@ def _build_recurring_from_enriched(enriched) -> str:
     if not recurring:
         return ""
     lines = ["## TRANSAKCJE CYKLICZNE / POWTARZALNE\n",
-             "| Kontrahent | Powtorzen | Srednia kwota | Lacznie |",
+             "| Kontrahent | Powtórzeń | Średnia kwota | Łącznie |",
              "|------------|-----------|---------------|---------|"]
     for r in recurring[:15]:
         lines.append(f"| {r.counterparty[:40]} | {r.count} | {r.avg_amount:,.2f} PLN | {r.total_amount:,.2f} PLN |")
@@ -324,16 +367,418 @@ def _build_top_counterparties_from_enriched(enriched) -> str:
 
 
 # ============================================================
-# Transaction table (compact, all transactions)
+# NEW: Monthly income/expense breakdown
 # ============================================================
 
-def _build_transaction_table(transactions: list, limit: int = 50) -> str:
-    """Compact table of all transactions for LLM context — includes title and location."""
+def _build_monthly_breakdown(transactions: list) -> str:
+    """Monthly income vs expenses breakdown with totals."""
     if not transactions:
         return ""
 
-    lines = [f"## LISTA TRANSAKCJI ({len(transactions)} szt, pokazano max {limit})\n",
-             "| # | Data | Kwota | Kanal | Kategoria | Kontrahent | Tytul | Lokalizacja |",
+    monthly_credit: Dict[str, float] = defaultdict(float)
+    monthly_debit: Dict[str, float] = defaultdict(float)
+    monthly_credit_cnt: Dict[str, int] = defaultdict(int)
+    monthly_debit_cnt: Dict[str, int] = defaultdict(int)
+
+    for tx in transactions:
+        date_str = _get(tx, "booking_date") or _get(tx, "date") or ""
+        if not date_str or len(date_str) < 7:
+            continue
+        month = date_str[:7]  # YYYY-MM
+        amt = float(abs(_get(tx, "amount") or 0))
+        direction = _get(tx, "direction") or ""
+        if direction == "CREDIT":
+            monthly_credit[month] += amt
+            monthly_credit_cnt[month] += 1
+        else:
+            monthly_debit[month] += amt
+            monthly_debit_cnt[month] += 1
+
+    if not monthly_credit and not monthly_debit:
+        return ""
+
+    months = sorted(set(list(monthly_credit.keys()) + list(monthly_debit.keys())))
+
+    lines = ["## MIESIĘCZNE ZESTAWIENIE WPŁYWÓW I WYDATKÓW\n"]
+    lines.append("| Miesiąc | Wpływy | Ilość | Wydatki | Ilość | Bilans |")
+    lines.append("|---------|--------|-------|---------|-------|--------|")
+
+    total_credit = 0.0
+    total_debit = 0.0
+    total_credit_cnt = 0
+    total_debit_cnt = 0
+
+    for m in months:
+        cr = monthly_credit.get(m, 0)
+        db = monthly_debit.get(m, 0)
+        cr_cnt = monthly_credit_cnt.get(m, 0)
+        db_cnt = monthly_debit_cnt.get(m, 0)
+        balance = cr - db
+        total_credit += cr
+        total_debit += db
+        total_credit_cnt += cr_cnt
+        total_debit_cnt += db_cnt
+        sign = "+" if balance >= 0 else ""
+        lines.append(f"| {m} | {cr:,.2f} PLN | {cr_cnt} | {db:,.2f} PLN | {db_cnt} | {sign}{balance:,.2f} PLN |")
+
+    # Totals row
+    total_balance = total_credit - total_debit
+    sign = "+" if total_balance >= 0 else ""
+    lines.append(f"| **SUMA** | **{total_credit:,.2f} PLN** | **{total_credit_cnt}** | **{total_debit:,.2f} PLN** | **{total_debit_cnt}** | **{sign}{total_balance:,.2f} PLN** |")
+
+    # Average monthly
+    if len(months) > 0:
+        avg_cr = total_credit / len(months)
+        avg_db = total_debit / len(months)
+        lines.append(f"\n- Średnie miesięczne wpływy: {avg_cr:,.2f} PLN")
+        lines.append(f"- Średnie miesięczne wydatki: {avg_db:,.2f} PLN")
+        if avg_cr > 0:
+            expense_ratio = avg_db / avg_cr * 100
+            lines.append(f"- Wskaźnik wydatków do wpływów: {expense_ratio:.1f}%")
+            if expense_ratio > 100:
+                lines.append("- ⚠ Wydatki przekraczają wpływy — możliwe problemy finansowe")
+            elif expense_ratio > 90:
+                lines.append("- ⚠ Wydatki bliskie wpływom — niska zdolność oszczędzania")
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# NEW: Loan/installment detection
+# ============================================================
+
+def _build_loan_detection(transactions: list) -> str:
+    """Detect recurring loan/credit payments based on keywords."""
+    if not transactions:
+        return ""
+
+    loan_txs = []
+    for tx in transactions:
+        title = (_get(tx, "title") or "").lower()
+        cp = (_get(tx, "counterparty_raw") or _get(tx, "counterparty") or "").lower()
+        search_text = f"{title} {cp}"
+
+        for kw in _LOAN_KEYWORDS:
+            if kw in search_text:
+                loan_txs.append(tx)
+                break
+
+    if not loan_txs:
+        return ""
+
+    # Group by counterparty to find recurring patterns
+    cp_groups: Dict[str, List] = defaultdict(list)
+    for tx in loan_txs:
+        cp = (_get(tx, "counterparty_raw") or _get(tx, "counterparty") or "Nieznany")[:50]
+        cp_groups[cp].append(tx)
+
+    lines = [f"## WYKRYTE RATY / KREDYTY / ZOBOWIĄZANIA BANKOWE ({len(loan_txs)} transakcji)\n"]
+
+    total_loan_amount = 0.0
+    lines.append("| Kontrahent / Tytuł | Powtórzeń | Kwota pojedyncza | Łącznie | Regularność |")
+    lines.append("|---------------------|-----------|------------------|---------|-------------|")
+
+    sorted_groups = sorted(cp_groups.items(), key=lambda x: -len(x[1]))
+    for cp, txs in sorted_groups[:20]:
+        count = len(txs)
+        amounts = [float(abs(_get(tx, "amount") or 0)) for tx in txs]
+        total = sum(amounts)
+        total_loan_amount += total
+
+        # Check if amounts are consistent (recurring installment)
+        if count >= 2 and amounts:
+            avg = sum(amounts) / len(amounts)
+            variance = sum((a - avg) ** 2 for a in amounts) / len(amounts)
+            is_regular = variance < (avg * 0.1) ** 2 if avg > 0 else False
+            regularity = "STAŁA RATA" if is_regular else "ZMIENNA"
+        else:
+            regularity = "JEDNORAZOWA" if count == 1 else "?"
+
+        # Representative title
+        title = (_get(txs[0], "title") or "")[:40]
+        display = f"{cp[:35]}"
+        if title and title.lower() != cp.lower():
+            display += f" ({title})"
+
+        lines.append(
+            f"| {display[:55]} | {count} | {amounts[0]:,.2f} PLN | {total:,.2f} PLN | {regularity} |"
+        )
+
+    lines.append(f"\n- Łączna kwota zobowiązań w badanym okresie: **{total_loan_amount:,.2f} PLN**")
+
+    # Monthly distribution of loan payments
+    monthly_loans: Dict[str, float] = defaultdict(float)
+    for tx in loan_txs:
+        date_str = _get(tx, "booking_date") or _get(tx, "date") or ""
+        if date_str and len(date_str) >= 7:
+            monthly_loans[date_str[:7]] += float(abs(_get(tx, "amount") or 0))
+
+    if monthly_loans:
+        avg_monthly = sum(monthly_loans.values()) / len(monthly_loans)
+        lines.append(f"- Średnie miesięczne obciążenie ratami: **{avg_monthly:,.2f} PLN**")
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# NEW: ATM patterns
+# ============================================================
+
+def _build_atm_patterns(transactions: list) -> str:
+    """Analyze ATM withdrawal and cash deposit patterns."""
+    if not transactions:
+        return ""
+
+    atm_withdrawals = []
+    atm_deposits = []
+
+    for tx in transactions:
+        title = (_get(tx, "title") or "").lower()
+        cp = (_get(tx, "counterparty_raw") or _get(tx, "counterparty") or "").lower()
+        channel = (_get(tx, "channel") or "").lower()
+        cat = (_get(tx, "category") or "").lower()
+        search_text = f"{title} {cp} {channel} {cat}"
+
+        is_atm = False
+        for kw in _ATM_KEYWORDS:
+            if kw in search_text:
+                is_atm = True
+                break
+
+        if is_atm or channel in ("atm", "cash"):
+            direction = _get(tx, "direction") or ""
+            if direction == "DEBIT":
+                atm_withdrawals.append(tx)
+            else:
+                atm_deposits.append(tx)
+
+    if not atm_withdrawals and not atm_deposits:
+        return ""
+
+    lines = [f"## OPERACJE GOTÓWKOWE / BANKOMATOWE\n"]
+
+    # Withdrawals
+    if atm_withdrawals:
+        w_amounts = [float(abs(_get(tx, "amount") or 0)) for tx in atm_withdrawals]
+        w_total = sum(w_amounts)
+        w_avg = w_total / len(w_amounts) if w_amounts else 0
+        w_max = max(w_amounts) if w_amounts else 0
+
+        lines.append(f"### Wypłaty gotówkowe ({len(atm_withdrawals)} operacji)")
+        lines.append(f"- Łączna kwota wypłat: **{w_total:,.2f} PLN**")
+        lines.append(f"- Średnia wypłata: {w_avg:,.2f} PLN")
+        lines.append(f"- Największa wypłata: {w_max:,.2f} PLN")
+
+        # Frequency analysis
+        w_dates = []
+        for tx in atm_withdrawals:
+            ds = _get(tx, "booking_date") or _get(tx, "date") or ""
+            if ds and len(ds) >= 10:
+                try:
+                    w_dates.append(datetime.strptime(ds[:10], "%Y-%m-%d"))
+                except ValueError:
+                    pass
+
+        if len(w_dates) >= 2:
+            w_dates.sort()
+            gaps = [(w_dates[i+1] - w_dates[i]).days for i in range(len(w_dates)-1)]
+            avg_gap = sum(gaps) / len(gaps)
+            if avg_gap <= 7:
+                lines.append(f"- Częstotliwość: co ~{avg_gap:.0f} dni (WYSOKA — cotygodniowa)")
+            elif avg_gap <= 14:
+                lines.append(f"- Częstotliwość: co ~{avg_gap:.0f} dni (co 2 tygodnie)")
+            elif avg_gap <= 35:
+                lines.append(f"- Częstotliwość: co ~{avg_gap:.0f} dni (comiesięczna)")
+            else:
+                lines.append(f"- Częstotliwość: co ~{avg_gap:.0f} dni (nieregularna)")
+
+        # Round amounts check (suspicious pattern)
+        round_count = sum(1 for a in w_amounts if a % 100 == 0)
+        if round_count > len(w_amounts) * 0.5 and len(w_amounts) >= 3:
+            lines.append(f"- ⚠ {round_count}/{len(w_amounts)} wypłat to okrągłe kwoty (wzorzec)")
+
+        # Monthly distribution
+        w_monthly: Dict[str, float] = defaultdict(float)
+        for tx in atm_withdrawals:
+            ds = _get(tx, "booking_date") or _get(tx, "date") or ""
+            if ds and len(ds) >= 7:
+                w_monthly[ds[:7]] += float(abs(_get(tx, "amount") or 0))
+
+        if w_monthly:
+            lines.append("\n| Miesiąc | Kwota wypłat |")
+            lines.append("|---------|-------------|")
+            for m in sorted(w_monthly.keys()):
+                lines.append(f"| {m} | {w_monthly[m]:,.2f} PLN |")
+
+    # Deposits
+    if atm_deposits:
+        d_amounts = [float(abs(_get(tx, "amount") or 0)) for tx in atm_deposits]
+        d_total = sum(d_amounts)
+        d_avg = d_total / len(d_amounts) if d_amounts else 0
+
+        lines.append(f"\n### Wpłaty gotówkowe ({len(atm_deposits)} operacji)")
+        lines.append(f"- Łączna kwota wpłat: **{d_total:,.2f} PLN**")
+        lines.append(f"- Średnia wpłata: {d_avg:,.2f} PLN")
+
+        # Large cash deposits are AML red flag
+        large_deposits = [a for a in d_amounts if a >= 10000]
+        if large_deposits:
+            lines.append(f"- ⚠ **{len(large_deposits)} wpłat >= 10 000 PLN** — próg raportowania GIIF")
+        structuring = [a for a in d_amounts if 9000 <= a < 10000]
+        if structuring:
+            lines.append(f"- ⚠ **{len(structuring)} wpłat w przedziale 9 000–9 999 PLN** — możliwe strukturyzowanie (smurfing)")
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# NEW: Geographic analysis
+# ============================================================
+
+def _build_geographic_analysis(transactions: list) -> str:
+    """Analyze transaction locations for out-of-area purchases."""
+    if not transactions:
+        return ""
+
+    location_amounts: Dict[str, float] = defaultdict(float)
+    location_counts: Dict[str, int] = defaultdict(int)
+    location_txs: Dict[str, List] = defaultdict(list)
+
+    for tx in transactions:
+        loc = _detect_location(tx)
+        if loc:
+            loc_clean = loc.strip().title()
+            location_amounts[loc_clean] += float(abs(_get(tx, "amount") or 0))
+            location_counts[loc_clean] += 1
+            location_txs[loc_clean].append(tx)
+
+    if not location_amounts:
+        return ""
+
+    # Sort by frequency
+    sorted_locs = sorted(location_counts.items(), key=lambda x: -x[1])
+    primary_city = sorted_locs[0][0] if sorted_locs else None
+
+    lines = [f"## ANALIZA GEOGRAFICZNA TRANSAKCJI\n"]
+    lines.append(f"Wykryto transakcje w **{len(location_amounts)}** lokalizacjach.")
+    if primary_city:
+        lines.append(f"Główna lokalizacja (najprawdopodobniej miejsce zamieszkania): **{primary_city}** ({location_counts[primary_city]} transakcji)")
+
+    lines.append("\n| Miasto | Transakcje | Kwota | Udział |")
+    lines.append("|--------|-----------|-------|--------|")
+
+    total_loc_amount = sum(location_amounts.values())
+    for loc, cnt in sorted_locs[:15]:
+        amt = location_amounts[loc]
+        pct = (amt / total_loc_amount * 100) if total_loc_amount > 0 else 0
+        marker = " ← główna" if loc == primary_city else ""
+        lines.append(f"| {loc}{marker} | {cnt} | {amt:,.2f} PLN | {pct:.1f}% |")
+
+    # Flag out-of-area transactions
+    if primary_city and len(sorted_locs) > 1:
+        other_locs = [(loc, cnt) for loc, cnt in sorted_locs if loc != primary_city]
+        if other_locs:
+            lines.append(f"\n### Transakcje poza główną lokalizacją ({primary_city})")
+            for loc, cnt in other_locs[:10]:
+                amt = location_amounts[loc]
+                # Show sample transactions from that location
+                sample_txs = location_txs[loc][:3]
+                samples = ", ".join(
+                    f"{_get(tx, 'booking_date') or '?'}: {(_get(tx, 'counterparty_raw') or '')[:25]}"
+                    for tx in sample_txs
+                )
+                lines.append(f"- **{loc}**: {cnt} tx, {amt:,.2f} PLN ({samples})")
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# Transaction table — smart aggregation for large datasets
+# ============================================================
+
+def _build_transaction_table(transactions: list) -> str:
+    """Smart transaction listing: full list for small datasets, aggregated for large ones."""
+    if not transactions:
+        return ""
+
+    tx_count = len(transactions)
+
+    # For small datasets (< 200 TX), show full list
+    if tx_count <= 200:
+        return _build_full_transaction_table(transactions, limit=200)
+
+    # For large datasets (200+ TX), show aggregated summary + flagged/notable transactions
+    lines = [f"## TRANSAKCJE — PODSUMOWANIE ({tx_count} szt.)\n"]
+    lines.append(f"Ze względu na dużą liczbę transakcji ({tx_count}), poniżej przedstawiono "
+                 f"zagregowane dane oraz wyróżnione transakcje.\n")
+
+    # --- Top 30 largest transactions ---
+    sorted_by_amount = sorted(transactions, key=lambda tx: -float(abs(_get(tx, "amount") or 0)))
+    large_txs = sorted_by_amount[:30]
+
+    lines.append(f"### Największe transakcje (top 30)\n")
+    lines.append("| # | Data | Kwota | Kierunek | Kontrahent | Tytuł | Lokalizacja |")
+    lines.append("|---|------|-------|----------|------------|-------|-------------|")
+    for i, tx in enumerate(large_txs):
+        date = _get(tx, "date") or _get(tx, "booking_date") or "?"
+        amt = float(_get(tx, "amount") or 0)
+        direction = _get(tx, "direction") or ""
+        cp = _get(tx, "counterparty") or _get(tx, "counterparty_raw") or "?"
+        title = (_get(tx, "title") or "")[:45]
+        location = _detect_location(tx) or ""
+        sign = "-" if direction == "DEBIT" else "+"
+        lines.append(
+            f"| {i+1} | {date} | {sign}{abs(amt):,.2f} | {direction[:5]} | {cp[:35]} | {title} | {location} |"
+        )
+
+    # --- Flagged/risk transactions ---
+    risk_txs = [tx for tx in transactions if _get(tx, "risk_tags")]
+    if risk_txs:
+        lines.append(f"\n### Transakcje z flagami ryzyka ({len(risk_txs)} szt.)\n")
+        lines.append("| Data | Kwota | Kontrahent | Tytuł | Tagi ryzyka |")
+        lines.append("|------|-------|------------|-------|-------------|")
+        for tx in risk_txs[:20]:
+            date = _get(tx, "date") or _get(tx, "booking_date") or "?"
+            amt = float(_get(tx, "amount") or 0)
+            cp = (_get(tx, "counterparty_raw") or _get(tx, "counterparty") or "?")[:30]
+            title = (_get(tx, "title") or "")[:35]
+            tags = _get(tx, "risk_tags") or []
+            if isinstance(tags, str):
+                import json as _json
+                try:
+                    tags = _json.loads(tags)
+                except Exception:
+                    tags = [tags]
+            tags_str = ", ".join(tags) if isinstance(tags, list) else str(tags)
+            lines.append(f"| {date} | {amt:+,.2f} | {cp} | {title} | {tags_str} |")
+
+    # --- Amount distribution ---
+    amounts = [float(abs(_get(tx, "amount") or 0)) for tx in transactions]
+    if amounts:
+        lines.append("\n### Rozkład kwot transakcji\n")
+        brackets = [
+            (0, 50, "0–50 PLN"),
+            (50, 200, "50–200 PLN"),
+            (200, 500, "200–500 PLN"),
+            (500, 1000, "500–1 000 PLN"),
+            (1000, 5000, "1 000–5 000 PLN"),
+            (5000, 15000, "5 000–15 000 PLN"),
+            (15000, float("inf"), "15 000+ PLN"),
+        ]
+        lines.append("| Przedział | Transakcje | Łączna kwota |")
+        lines.append("|-----------|-----------|-------------|")
+        for lo, hi, label in brackets:
+            in_bracket = [a for a in amounts if lo <= a < hi]
+            if in_bracket:
+                lines.append(f"| {label} | {len(in_bracket)} | {sum(in_bracket):,.2f} PLN |")
+
+    return "\n".join(lines)
+
+
+def _build_full_transaction_table(transactions: list, limit: int = 200) -> str:
+    """Full transaction table for smaller datasets."""
+    lines = [f"## LISTA TRANSAKCJI ({len(transactions)} szt.)\n",
+             "| # | Data | Kwota | Kanał | Kategoria | Kontrahent | Tytuł | Lokalizacja |",
              "|---|------|-------|-------|-----------|------------|-------|-------------|"]
 
     for i, tx in enumerate(transactions[:limit]):
@@ -375,13 +820,13 @@ def _build_transaction_summary(transactions: list) -> str:
     avg = (total_credit + total_debit) / max(len(transactions), 1)
     return f"""## STATYSTYKI
 
-| Metryka | Wartosc |
+| Metryka | Wartość |
 |---------|---------|
-| Laczne wplywy | {total_credit:,.2f} PLN |
-| Laczne wydatki | {total_debit:,.2f} PLN |
+| Łączne wpływy | {total_credit:,.2f} PLN |
+| Łączne wydatki | {total_debit:,.2f} PLN |
 | Bilans | {total_credit - total_debit:,.2f} PLN |
-| Srednia transakcja | {avg:,.2f} PLN |
-| Najwieksza transakcja | {max_single:,.2f} PLN |"""
+| Średnia transakcja | {avg:,.2f} PLN |
+| Największa transakcja | {max_single:,.2f} PLN |"""
 
 
 def _build_category_breakdown(transactions: list) -> str:
@@ -410,8 +855,8 @@ def _build_channel_breakdown(transactions: list) -> str:
         amt = float(abs(_get(tx, "amount") or 0))
         ch_counts[ch] += 1
         ch_amounts[ch] += amt
-    lines = ["## KANALY TRANSAKCJI\n",
-             "| Kanal | Liczba | Kwota |",
+    lines = ["## KANAŁY TRANSAKCJI\n",
+             "| Kanał | Liczba | Kwota |",
              "|-------|--------|-------|"]
     for ch, cnt in ch_counts.most_common():
         lines.append(f"| {ch} | {cnt} | {ch_amounts[ch]:,.2f} PLN |")
@@ -450,7 +895,7 @@ def _build_flagged_transactions(transactions: list, limit: int = 20) -> str:
     if not flagged:
         return ""
     lines = [f"## TRANSAKCJE Z FLAGAMI RYZYKA ({len(flagged)})\n",
-             "| Data | Kontrahent | Tytul | Kwota | Kanal | Kategoria | Tagi |",
+             "| Data | Kontrahent | Tytuł | Kwota | Kanał | Kategoria | Tagi |",
              "|------|-----------|-------|-------|-------|-----------|------|"]
     for tx in flagged[:limit]:
         date = _get(tx, "date") or _get(tx, "booking_date") or "?"
@@ -491,8 +936,6 @@ def _build_temporal_patterns(transactions: list) -> str:
     """Analyze day-of-week and time-of-month spending patterns."""
     if not transactions:
         return ""
-
-    from datetime import datetime
 
     # Day-of-week
     _DOW_PL = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
@@ -582,8 +1025,6 @@ def _build_p2p_transfers(transactions: list) -> str:
     if not transactions:
         return ""
 
-    import re as _re
-
     p2p_patterns = [
         _re.compile(r"blik\s*p2p", _re.I),
         _re.compile(r"p\.blik", _re.I),
@@ -617,7 +1058,7 @@ def _build_p2p_transfers(transactions: list) -> str:
     total_out = sum(float(abs(_get(tx, "amount") or 0)) for tx in p2p_list if (_get(tx, "direction") or "") == "DEBIT")
     total_in = sum(float(abs(_get(tx, "amount") or 0)) for tx in p2p_list if (_get(tx, "direction") or "") == "CREDIT")
 
-    lines = [f"## PRZELEWY P2P ({len(p2p_list)} szt)\n"]
+    lines = [f"## PRZELEWY P2P ({len(p2p_list)} szt.)\n"]
     lines.append(f"- Wysłane: {total_out:,.2f} PLN")
     lines.append(f"- Otrzymane: {total_in:,.2f} PLN")
     lines.append(f"- Bilans P2P: {total_in - total_out:+,.2f} PLN\n")
@@ -706,64 +1147,96 @@ def _build_counterparty_profiles(transactions: list) -> str:
 
 
 # ============================================================
-# Task section
+# Task section (instructions for the LLM)
 # ============================================================
 
 def _build_task_section(has_cross_validation: bool = False, has_enriched: bool = False) -> str:
-    sections = """## ZADANIE
+    sections = """## ZADANIE — STRUKTURA RAPORTU
 
-Na podstawie powyzszych danych napisz profesjonalny raport AML zawierajacy:
+Na podstawie poniższych danych napisz profesjonalny raport z analizy rachunku bankowego.
+Raport musi zawierać następujące sekcje:
 
-### 1. Podsumowanie
-2-3 zdania: kto, jaki bank, jaki okres, ogolna ocena ryzyka.
+### 1. Dane identyfikacyjne
+- Właściciel rachunku (imię i nazwisko / nazwa firmy)
+- Numer rachunku (IBAN)
+- Bank prowadzący
+- Analizowany czasookres (od–do)
+- Saldo początkowe i końcowe
 
-### 2. Profil finansowy
-- Wplywy vs wydatki — czy wlasciciel zyje w ramach wplywow?
-- Glowne zrodla dochodow i ich regularnosc
-- Glowne kategorie wydatkow (uzyj danych z sekcji KATEGORIE)
-- Zobowiazania cykliczne (uzyj danych z sekcji TRANSAKCJE CYKLICZNE)
+### 2. Podsumowanie finansowe
+- Łączne wpływy vs łączne wydatki
+- Czy właściciel żyje w ramach swoich wpływów?
+- Główne źródła dochodów i ich regularność
+- Bilans netto — trend pozytywny czy negatywny?
 
-### 3. Analiza kanalow platnosci
-- Rozklad platnosci wg kanalow (karta, BLIK, przelew, gotowka)
-- Czy widac nietypowe preferencje kanalowe?
-- Wyplaty gotowkowe — kwoty, czestotliwosc, lokalizacje
+### 3. Miesięczne zestawienie wydatków
+- Wykorzystaj dane z sekcji MIESIĘCZNE ZESTAWIENIE
+- Wskaż miesiące z najwyższymi/najniższymi wydatkami
+- Oceń stabilność wydatków — czy są przewidywalne?
+- Suma badanego czasookresu
 
-### 4. Analiza ryzyka AML
-- Strukturyzowanie (smurfing) — czy widac rozbijanie duzych kwot na mniejsze?
+### 4. Raty i zobowiązania kredytowe
+- Wykorzystaj dane z sekcji WYKRYTE RATY / KREDYTY
+- Ile rat/kredytów jest spłacanych? Jakie kwoty?
+- Czy raty są regularne (stała kwota)?
+- Jaki procent wydatków stanowią zobowiązania kredytowe?
+- Oceń obciążenie ratami względem wpływów
+
+### 5. Operacje gotówkowe i bankomatowe
+- Wykorzystaj dane z sekcji OPERACJE GOTÓWKOWE
+- Częstotliwość wypłat — jak często, czy regularnie?
+- Czy są wpłaty gotówkowe? Jakie kwoty?
+- Czy kwoty wypłat są okrągłe (wzorzec)?
+- Flagi AML: wpłaty >= 10 000 PLN, strukturyzowanie
+
+### 6. Profil finansowy i przyzwyczajenia
+- Główne kategorie wydatków (spożywcze, paliwo, gastronomia etc.)
+- Kanały płatności (karta, BLIK, przelew, gotówka)
+- Transakcje cykliczne / subskrypcje
+- Dni tygodnia i pory miesiąca z największą aktywnością
+
+### 7. Analiza geograficzna
+- Wykorzystaj dane z sekcji ANALIZA GEOGRAFICZNA
+- Główne miejsce zamieszkania / aktywności
+- Czy zdarzają się zakupy poza główną lokalizacją?
+- Jeśli tak — gdzie, jak często, jakie kwoty?
+
+### 8. Wskaźniki problemów finansowych
+- Czy wydatki przewyższają wpływy w jakimś miesiącu?
+- Czy widać narastające zadłużenie?
+- Czy pojawiają się windykacje, komornik, opłaty za opóźnienia?
+- Czy są duże jednorazowe wypłaty sugerujące nagłą potrzebę?
+- Trend salda — malejący czy rosnący?
+
+### 9. Analiza ryzyka AML
+- Strukturyzowanie (smurfing) — rozbijanie kwot na mniejsze
 - Transakcje zagraniczne — kontrahenci, kwoty, cel
-- Przelewy P2P i na telefon — uzyj sekcji PRZELEWY P2P: regularne transfery, kwoty, odbiorcy
-- Przelewy wlasne — miedzy kontami wlasciciela, ewentualne lokaty
-- Duze jednorazowe transakcje vs wzorzec codziennych wydatkow
-- Kontrahenci z czarnej/bialej listy — uzyj sekcji PROFILE KONTRAHENTOW
+- Przelewy P2P — wykorzystaj sekcję PRZELEWY P2P
+- Przelewy własne — między kontami
+- Kontrahenci z czarnej/białej listy — wykorzystaj sekcję PROFILE KONTRAHENTÓW
 
-### 5. Podejrzane transakcje
-Wskaz konkretne transakcje (z datami, kwotami i TYTULAMI) ktore budza watpliwosci i dlaczego.
-Uzyj tytulu transakcji jako dodatkowego kontekstu.
+### 10. Podejrzane transakcje
+Wskaż konkretne transakcje (z datami, kwotami i TYTUŁAMI) które budzą wątpliwości i dlaczego.
 
-### 6. Wzorce behawioralne
-- Uzyj sekcji WZORCE CZASOWE — porownaj dni tygodnia, pory miesiaca
-- Czy zachowania finansowe sa przewidywalne i stabilne?
-- Czy widac impulsy lub anomalie?
-- Lokalizacje — czy transakcje sa skoncentrowane geograficznie czy rozproszone?
-
-### 7. Rekomendacje
-Konkretne zalecenia — co nalezy dalej zweryfikowac i jakie dzialania podjac."""
+### 11. Rekomendacje
+Konkretne zalecenia — co należy dalej zweryfikować i jakie działania podjąć."""
 
     if has_cross_validation:
         sections += """
 
-### 8. Ocena walidacji krzyzowej
-Odwolaj sie do wynikow porownania MT940 vs PDF. Czy dane sa spojne?
-Jesli sa rozbieznosci — co moga oznaczac?"""
+### 12. Ocena walidacji krzyżowej
+Odwołaj się do wyników porównania MT940 vs PDF. Czy dane są spójne?
+Jeśli są rozbieżności — co mogą oznaczać?"""
 
     sections += """
 
-**WAZNE**:
-- Zachowaj ostroznosc interpretacyjna — nie nadinterpretuj
-- Dla kazdego wniosku podaj jawny **poziom pewnosci**: WYSOKI / SREDNI / NISKI
-- Jesli dane sa niewystarczajace do wniosku, napisz to wprost
+**WAŻNE**:
+- Zachowaj ostrożność interpretacyjną — nie nadinterpretuj
+- Dla każdego wniosku podaj jawny **poziom pewności**: WYSOKI / ŚREDNI / NISKI
+- Jeśli dane są niewystarczające do wniosku, napisz to wprost
 - Pisz po polsku, profesjonalnie ale zrozumiale
-- Uzywaj konkretnych danych z wyciagu — nie wymyslaj danych ktorych nie ma"""
+- Używaj konkretnych danych z wyciągu — nie wymyślaj danych których nie ma
+- Przy dużej liczbie transakcji opieraj się na zagregowanych danych, nie wymieniaj każdej transakcji"""
 
     return sections
 
@@ -788,7 +1261,7 @@ async def run_llm_analysis(
     # Check if Ollama is available
     status = await client.status()
     if status.status != "online":
-        raise RuntimeError("Ollama nie jest dostepny. Uruchom Ollama aby uzyskac analize LLM.")
+        raise RuntimeError("Ollama nie jest dostępny. Uruchom Ollama aby uzyskać analizę LLM.")
 
     # Pick model: use provided or find first available
     if not model:
@@ -810,10 +1283,11 @@ async def run_llm_analysis(
     log.info("Running LLM AML analysis with model: %s", model)
 
     system = system_prompt or (
-        "Jestes ekspertem ds. AML (Anti-Money Laundering) i analityki finansowej. "
+        "Jesteś ekspertem ds. AML (Anti-Money Laundering) i analityki finansowej. "
         "Piszesz profesjonalne raporty analityczne po polsku. "
-        "Bazujesz wylacznie na dostarczonych danych — nie wymyslasz informacji. "
-        "Uzywasz konkretnych kwot, dat i nazw kontrahentow w swoich analizach."
+        "Bazujesz wyłącznie na dostarczonych danych — nie wymyślasz informacji. "
+        "Używasz konkretnych kwot, dat i nazw kontrahentów w swoich analizach. "
+        "Tworzysz ustrukturyzowane raporty z wyraźnymi sekcjami i wnioskami."
     )
 
     result = await deep_analyze(
@@ -821,7 +1295,7 @@ async def run_llm_analysis(
         prompt,
         model=model,
         system=system,
-        options={"temperature": 0.3, "num_ctx": 8192},
+        options={"temperature": 0.3, "num_ctx": 16384},
     )
 
     return result
@@ -839,7 +1313,7 @@ async def stream_llm_analysis(
 
     status = await client.status()
     if status.status != "online":
-        raise RuntimeError("Ollama nie jest dostepny. Uruchom Ollama aby uzyskac analize LLM.")
+        raise RuntimeError("Ollama nie jest dostępny. Uruchom Ollama aby uzyskać analizę LLM.")
 
     if not model:
         models = status.models or []
@@ -859,15 +1333,16 @@ async def stream_llm_analysis(
     log.info("Streaming LLM AML analysis with model: %s", model)
 
     system = system_prompt or (
-        "Jestes ekspertem ds. AML (Anti-Money Laundering) i analityki finansowej. "
+        "Jesteś ekspertem ds. AML (Anti-Money Laundering) i analityki finansowej. "
         "Piszesz profesjonalne raporty analityczne po polsku. "
-        "Bazujesz wylacznie na dostarczonych danych — nie wymyslasz informacji. "
-        "Uzywasz konkretnych kwot, dat i nazw kontrahentow w swoich analizach."
+        "Bazujesz wyłącznie na dostarczonych danych — nie wymyślasz informacji. "
+        "Używasz konkretnych kwot, dat i nazw kontrahentów w swoich analizach. "
+        "Tworzysz ustrukturyzowane raporty z wyraźnymi sekcjami i wnioskami."
     )
 
     async for chunk in stream_analyze(
         client, prompt, model=model, system=system,
-        options={"temperature": 0.3, "num_ctx": 8192},
+        options={"temperature": 0.3, "num_ctx": 16384},
     ):
         yield chunk
 

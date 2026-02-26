@@ -397,6 +397,15 @@
         <div id="aml_graph_container" style="height:420px;border:1px solid var(--border);border-radius:12px;margin-top:10px;background:rgba(15,23,42,.02)"></div>
       </div>
 
+      <!-- User prompt for LLM -->
+      <div class="card" id="aml_user_prompt_card">
+        <div class="analysis-sidehdr">
+          <div class="h2"><i data-icon="edit" data-size="16"></i> Pytanie / instrukcja dla analizy</div>
+        </div>
+        <div class="small muted" style="margin:6px 0">Opcjonalnie wpisz pytanie lub instrukcję przed wygenerowaniem analizy. Możesz też dopytać po analizie.</div>
+        <textarea class="input" id="aml_user_prompt" style="min-height:80px;margin-top:6px" placeholder="Np. Sprawdź czy są jakieś raty kredytowe, Jakie są główne źródła dochodów?, Czy widać problemy finansowe?"></textarea>
+      </div>
+
       <!-- LLM Analysis -->
       <div class="card" id="aml_llm_card">
         <div class="analysis-sidehdr">

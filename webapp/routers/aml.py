@@ -394,7 +394,7 @@ async def aml_llm_analyze(statement_id: str, request: Request):
 
 
 @router.get("/api/aml/llm-stream/{statement_id}")
-async def aml_llm_stream(statement_id: str, model: str = Query("")):
+async def aml_llm_stream(statement_id: str, model: str = Query(""), user_prompt: str = Query("")):
     """SSE streaming LLM analysis — sends chunks as they arrive from Ollama."""
     from starlette.responses import StreamingResponse
     from backend.db.engine import fetch_one
@@ -411,6 +411,20 @@ async def aml_llm_stream(statement_id: str, model: str = Query("")):
 
     prompt = row["value"]
     chosen_model = model.strip()
+
+    # Inject user prompt/question into the LLM prompt
+    if user_prompt and user_prompt.strip():
+        user_section = (
+            f"\n\n## PYTANIE / INSTRUKCJA UŻYTKOWNIKA\n\n"
+            f"{user_prompt.strip()}\n\n"
+            f"WAŻNE: Uwzględnij powyższe pytanie/instrukcję w swojej analizie. "
+            f"Jeśli użytkownik pyta o konkretny aspekt, poświęć mu szczególną uwagę w raporcie."
+        )
+        # Insert after the KONTEKST section but before data
+        if "## ZADANIE" in prompt:
+            prompt = prompt.replace("## ZADANIE", user_section + "\n\n## ZADANIE", 1)
+        else:
+            prompt = prompt + user_section
 
     async def generate():
         import json as _json
