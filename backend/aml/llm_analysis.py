@@ -180,6 +180,9 @@ WAŻNE: Uwzględnij powyższe pytanie/instrukcję w swojej analizie. Jeśli uży
                 anom_lines.append(f"- TX {a.get('tx_id', '?')[:8]}... score={a.get('anomaly_score', 0):.2f}")
             parts.append("\n".join(anom_lines))
 
+    # --- NEW: Card identification ---
+    parts.append(_build_card_section(transactions))
+
     # --- Use enriched data if available, otherwise fallback to raw ---
     if enriched:
         parts.append(_build_stats_from_enriched(enriched))
@@ -363,6 +366,108 @@ def _build_top_counterparties_from_enriched(enriched) -> str:
              "|------------|-------|-----------|"]
     for cp in enriched.top_counterparties[:15]:
         lines.append(f"| {cp['name'][:45]} | {cp['total']:,.2f} PLN | {cp['count']} |")
+    return "\n".join(lines)
+
+
+# ============================================================
+# NEW: Card identification
+# ============================================================
+
+def _build_card_section(transactions: list) -> str:
+    """Detect and describe unique payment cards used on the account."""
+    try:
+        from .cards import detect_cards
+    except ImportError:
+        return ""
+
+    # Convert transaction objects to dicts if needed
+    tx_dicts = []
+    for tx in transactions:
+        if isinstance(tx, dict):
+            tx_dicts.append(tx)
+        else:
+            tx_dicts.append({
+                "raw_text": _get(tx, "raw_text") or "",
+                "title": _get(tx, "title") or "",
+                "counterparty_raw": _get(tx, "counterparty_raw") or "",
+                "channel": _get(tx, "channel") or "",
+                "bank_category": _get(tx, "bank_category") or "",
+                "category": _get(tx, "category") or "",
+                "subcategory": _get(tx, "subcategory") or "",
+                "amount": _get(tx, "amount") or 0,
+                "direction": _get(tx, "direction") or "",
+                "booking_date": _get(tx, "booking_date") or "",
+            })
+
+    cards = detect_cards(tx_dicts)
+    if not cards:
+        return ""
+
+    lines = [f"## ZIDENTYFIKOWANE KARTY PŁATNICZE ({len(cards)})\n"]
+
+    if len(cards) > 1:
+        lines.append(f"Wykryto **{len(cards)} kart** przypisanych do rachunku. "
+                     f"Może to oznaczać wielu użytkowników konta (np. współmałżonek, "
+                     f"osoba upoważniona).\n")
+
+    for i, c in enumerate(cards):
+        card_label = c.get("card_masked") or c.get("card_id") or f"Karta #{i+1}"
+        brand = c.get("brand") or ""
+        if brand:
+            card_label = f"{brand} {card_label}"
+
+        lines.append(f"### Karta {i+1}: {card_label}")
+        lines.append(f"- Transakcje: {c['tx_count']}")
+        lines.append(f"- Wydatki: {c['total_debit']:,.2f} PLN")
+        if c.get("total_credit", 0) > 0:
+            lines.append(f"- Wpływy/zwroty: {c['total_credit']:,.2f} PLN")
+        lines.append(f"- Średnia transakcja: {c['avg_amount']:,.2f} PLN")
+        lines.append(f"- Największa transakcja: {c['max_amount']:,.2f} PLN")
+        lines.append(f"- Okres aktywności: {c.get('first_date', '?')} — {c.get('last_date', '?')}")
+
+        # Top merchants
+        merchants = c.get("top_merchants") or []
+        if merchants:
+            lines.append("\nTop kontrahenci:")
+            for m in merchants[:5]:
+                lines.append(f"  - {m[0][:40]}: {m[1]:,.2f} PLN ({m[2]}x)")
+
+        # Categories
+        cats = c.get("top_categories") or []
+        if cats:
+            cat_str = ", ".join(f"{_cat_label(ct[0])} ({ct[1]:,.0f} PLN)" for ct in cats[:4])
+            lines.append(f"\nKategorie: {cat_str}")
+
+        # Locations
+        locs = c.get("locations") or []
+        if locs:
+            loc_str = ", ".join(f"{l[0]} ({l[1]}x)" for l in locs[:5])
+            lines.append(f"Lokalizacje: {loc_str}")
+
+        # Monthly breakdown
+        monthly = c.get("monthly") or {}
+        if monthly:
+            months_str = " | ".join(f"{m}: {v:,.0f}" for m, v in list(monthly.items())[:6])
+            lines.append(f"Miesięcznie: {months_str}")
+
+        lines.append("")  # blank line between cards
+
+    # Comparison if multiple cards
+    if len(cards) >= 2:
+        lines.append("### Porównanie kart\n")
+        lines.append("| Karta | Wydatki | Transakcje | Śr. kwota | Główna lokalizacja |")
+        lines.append("|-------|---------|-----------|-----------|-------------------|")
+        for c in cards:
+            card_label = c.get("card_id") or "?"
+            if len(card_label) > 12:
+                card_label = f"...{c.get('last_four', '????')}"
+            main_loc = c["locations"][0][0] if c.get("locations") else "?"
+            lines.append(
+                f"| {card_label} | {c['total_debit']:,.2f} PLN | {c['tx_count']} | "
+                f"{c['avg_amount']:,.2f} PLN | {main_loc} |"
+            )
+        lines.append("\n*Różne lokalizacje na różnych kartach mogą wskazywać na różnych użytkowników.*")
+
     return "\n".join(lines)
 
 
@@ -1175,56 +1280,64 @@ Raport musi zawierać następujące sekcje:
 - Oceń stabilność wydatków — czy są przewidywalne?
 - Suma badanego czasookresu
 
-### 4. Raty i zobowiązania kredytowe
+### 4. Karty płatnicze
+- Wykorzystaj dane z sekcji ZIDENTYFIKOWANE KARTY PŁATNICZE
+- Ile kart jest przypisanych do rachunku?
+- Jakie są wydatki na poszczególnych kartach?
+- Czy różne karty mają różne profile wydatków (kategorie, lokalizacje)?
+- Jeśli tak — co to sugeruje? (różni użytkownicy, podział wydatków?)
+- Porównaj karty między sobą (kwoty, kontrahenci, częstotliwość)
+
+### 5. Raty i zobowiązania kredytowe
 - Wykorzystaj dane z sekcji WYKRYTE RATY / KREDYTY
 - Ile rat/kredytów jest spłacanych? Jakie kwoty?
 - Czy raty są regularne (stała kwota)?
 - Jaki procent wydatków stanowią zobowiązania kredytowe?
 - Oceń obciążenie ratami względem wpływów
 
-### 5. Operacje gotówkowe i bankomatowe
+### 6. Operacje gotówkowe i bankomatowe
 - Wykorzystaj dane z sekcji OPERACJE GOTÓWKOWE
 - Częstotliwość wypłat — jak często, czy regularnie?
 - Czy są wpłaty gotówkowe? Jakie kwoty?
 - Czy kwoty wypłat są okrągłe (wzorzec)?
 - Flagi AML: wpłaty >= 10 000 PLN, strukturyzowanie
 
-### 6. Profil finansowy i przyzwyczajenia
+### 7. Profil finansowy i przyzwyczajenia
 - Główne kategorie wydatków (spożywcze, paliwo, gastronomia etc.)
 - Kanały płatności (karta, BLIK, przelew, gotówka)
 - Transakcje cykliczne / subskrypcje
 - Dni tygodnia i pory miesiąca z największą aktywnością
 
-### 7. Analiza geograficzna
+### 8. Analiza geograficzna
 - Wykorzystaj dane z sekcji ANALIZA GEOGRAFICZNA
 - Główne miejsce zamieszkania / aktywności
 - Czy zdarzają się zakupy poza główną lokalizacją?
 - Jeśli tak — gdzie, jak często, jakie kwoty?
 
-### 8. Wskaźniki problemów finansowych
+### 9. Wskaźniki problemów finansowych
 - Czy wydatki przewyższają wpływy w jakimś miesiącu?
 - Czy widać narastające zadłużenie?
 - Czy pojawiają się windykacje, komornik, opłaty za opóźnienia?
 - Czy są duże jednorazowe wypłaty sugerujące nagłą potrzebę?
 - Trend salda — malejący czy rosnący?
 
-### 9. Analiza ryzyka AML
+### 10. Analiza ryzyka AML
 - Strukturyzowanie (smurfing) — rozbijanie kwot na mniejsze
 - Transakcje zagraniczne — kontrahenci, kwoty, cel
 - Przelewy P2P — wykorzystaj sekcję PRZELEWY P2P
 - Przelewy własne — między kontami
 - Kontrahenci z czarnej/białej listy — wykorzystaj sekcję PROFILE KONTRAHENTÓW
 
-### 10. Podejrzane transakcje
+### 11. Podejrzane transakcje
 Wskaż konkretne transakcje (z datami, kwotami i TYTUŁAMI) które budzą wątpliwości i dlaczego.
 
-### 11. Rekomendacje
+### 12. Rekomendacje
 Konkretne zalecenia — co należy dalej zweryfikować i jakie działania podjąć."""
 
     if has_cross_validation:
         sections += """
 
-### 12. Ocena walidacji krzyżowej
+### 13. Ocena walidacji krzyżowej
 Odwołaj się do wyników porównania MT940 vs PDF. Czy dane są spójne?
 Jeśli są rozbieżności — co mogą oznaczać?"""
 

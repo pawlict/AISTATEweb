@@ -256,6 +256,10 @@
     // Bank info (merged with header fields: salda, IBAN, period, currency)
     _renderBankInfo(stmt, result);
 
+    // Identified cards (use merged cards when available for multi-statement)
+    const cards = St._mergedCards || detail.cards || result.cards || [];
+    _renderCards(cards, stmt);
+
     // Alerts
     const alerts = risk.score_breakdown && risk.score_breakdown.alerts
       ? risk.score_breakdown.alerts
@@ -351,6 +355,84 @@
     html += `</div>`;
 
     grid.innerHTML = html;
+  }
+
+  function _renderCards(cards, stmt){
+    const container = QS("#aml_cards_container");
+    const cardCard = QS("#aml_cards_card");
+    const countEl = QS("#aml_cards_count");
+
+    if(!container || !cardCard) return;
+
+    if(!cards || !cards.length){
+      cardCard.style.display = "none";
+      return;
+    }
+
+    cardCard.style.display = "";
+    if(countEl) countEl.textContent = cards.length;
+
+    const bankName = (stmt.bank_name || "Bank").toUpperCase();
+    const cur = stmt.currency || "PLN";
+
+    container.innerHTML = cards.map(c => {
+      const brand = _esc(c.brand || "");
+      const masked = _esc(c.card_masked || c.card_id || "****");
+      const firstDate = _esc(c.first_date || "");
+      const lastDate = _esc(c.last_date || "");
+
+      // Stats section
+      let statsHtml = `
+        <div><b>Wydatki</b><div class="val">${_fmtAmount(c.total_debit, cur)}</div></div>
+        <div><b>Wpływy</b><div class="val">${_fmtAmount(c.total_credit, cur)}</div></div>
+        <div><b>Transakcje</b><div class="val">${c.tx_count}</div></div>
+        <div><b>Śr. kwota</b><div class="val">${_fmtAmount(c.avg_amount, cur)}</div></div>
+      `;
+
+      // Top merchants
+      let detailsHtml = "";
+      if(c.top_merchants && c.top_merchants.length){
+        detailsHtml += '<div style="margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">TOP KONTRAHENCI</div>';
+        c.top_merchants.slice(0, 5).forEach(m => {
+          const name = _esc((m[0] || "").slice(0, 25));
+          const amt = _fmtAmount(m[1], cur);
+          const cnt = m[2] || 0;
+          detailsHtml += `<div class="detail-row"><span>${name} (${cnt}x)</span><span>${amt}</span></div>`;
+        });
+      }
+
+      // Top categories
+      if(c.top_categories && c.top_categories.length){
+        detailsHtml += '<div style="margin-top:6px;margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">KATEGORIE</div>';
+        c.top_categories.slice(0, 4).forEach(cat => {
+          const name = _esc(cat[0] || "");
+          const amt = _fmtAmount(cat[1], cur);
+          detailsHtml += `<div class="detail-row"><span>${name}</span><span>${amt}</span></div>`;
+        });
+      }
+
+      // Locations
+      if(c.locations && c.locations.length){
+        detailsHtml += '<div style="margin-top:6px;margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">LOKALIZACJE</div>';
+        c.locations.slice(0, 4).forEach(loc => {
+          detailsHtml += `<div class="detail-row"><span>${_esc(loc[0])}</span><span>${loc[1]} tx</span></div>`;
+        });
+      }
+
+      return `<div class="aml-card-item" data-brand="${brand}">
+        <div class="aml-card-top">
+          <div class="aml-card-bank">${_esc(bankName)}</div>
+          <div class="aml-card-brand">${brand || "DEBIT"}</div>
+        </div>
+        <div class="aml-card-number">${masked}</div>
+        <div class="aml-card-dates">
+          <span>OD ${firstDate}</span>
+          <span>DO ${lastDate}</span>
+        </div>
+        <div class="aml-card-stats">${statsHtml}</div>
+        ${detailsHtml ? '<div class="aml-card-details">' + detailsHtml + '</div>' : ''}
+      </div>`;
+    }).join("");
   }
 
   function _renderAlerts(alerts){
@@ -1608,6 +1690,7 @@
         } else {
           St._mergedCharts = null;
           St._mergedInfo = null;
+          St._mergedCards = null;
         }
 
         _renderResults();
@@ -1997,6 +2080,7 @@
       if(validDetails.length < 2){
         St._mergedCharts = null;
         St._mergedInfo = null;
+        St._mergedCards = null;
         return;
       }
 
@@ -2033,6 +2117,40 @@
             _statement_count: stmts.length,
             _total_tx: totalTx,
           };
+        }
+      }
+
+      // ---- 0b. MERGE CARDS across all statements ----
+      {
+        const allCards = [];
+        for(const d of validDetails){
+          if(d.cards && d.cards.length) allCards.push(...d.cards);
+        }
+        // Deduplicate by card_id — merge stats for same card across statements
+        if(allCards.length > 0){
+          const cardMap = {};
+          for(const c of allCards){
+            const cid = c.card_id || "unknown";
+            if(!cardMap[cid]){
+              cardMap[cid] = {...c, _sources: 1};
+            } else {
+              const existing = cardMap[cid];
+              existing.total_debit += (c.total_debit || 0);
+              existing.total_credit += (c.total_credit || 0);
+              existing.tx_count += (c.tx_count || 0);
+              existing.max_amount = Math.max(existing.max_amount || 0, c.max_amount || 0);
+              if(c.first_date && (!existing.first_date || c.first_date < existing.first_date)) existing.first_date = c.first_date;
+              if(c.last_date && (!existing.last_date || c.last_date > existing.last_date)) existing.last_date = c.last_date;
+              existing._sources += 1;
+              // Merge top_merchants, top_categories, locations (simple concat, may have duplicates)
+            }
+          }
+          // Recalculate avg
+          const mergedCards = Object.values(cardMap);
+          for(const c of mergedCards){
+            c.avg_amount = c.tx_count > 0 ? Math.round((c.total_debit + c.total_credit) / c.tx_count * 100) / 100 : 0;
+          }
+          St._mergedCards = mergedCards;
         }
       }
 
