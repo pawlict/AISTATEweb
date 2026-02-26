@@ -658,6 +658,10 @@ def parse_bank_statement(pdf_path: Path) -> ParseResult:
             raw_parts.append(f"Nr transakcji {details['blik_transaction_no']}")
         if details.get("phone_transfer_to"):
             raw_parts.append(f"Przelew na telefon {details['phone_transfer_to']}")
+        # Preserve counterparty account number in raw_text for account detection
+        cp_account = tx.get("counterparty_account")
+        if cp_account:
+            raw_parts.append(f"Nr rachunku {cp_account}")
 
         raw_transactions.append(RawTransaction(
             date=tx.get("posting_date", ""),

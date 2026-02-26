@@ -18,7 +18,7 @@ scoring:
   CASH_INTENSIVE: 10
   SPENDING_OVER_INCOME: 10
   DEBT_COLLECTION: 15
-  PAYDAY_LOAN: 10
+  PAYDAY_LOAN: 30
   MIXER_SUSPECTED: 40
   MONEY_MULE_PATTERN: 35
   STRUCTURING_SUSPECTED: 30
@@ -129,6 +129,7 @@ categories:
 
   loans:
     payday:
+      # Well-known Polish payday lenders (top brands)
       - "\\bvivus\\b"
       - "\\bwonga\\b"
       - "\\bprovident\\b"
@@ -142,10 +143,29 @@ categories:
       - "\\bfilarum\\b"
       - "\\bsolcredit\\b"
       - "\\balegotowka\\b"
-      - "pozyczkomat"
-      - "chwil[oó]wk"
       - "\\bcashper\\b"
       - "\\bwandoo\\b"
+      - "\\bprofi\\s*credit\\b"
+      - "\\beverest\\s*finanse\\b"
+      - "\\bmikrokasa\\b"
+      - "\\bhapipozyczk\\b"
+      - "\\bsupergrosz\\b"
+      - "\\bkuki\\b"
+      - "\\bextra\\s*portfel\\b"
+      - "\\bszybkasa\\b"
+      - "\\bekstrakasa\\b"
+      - "\\bpluskasa\\b"
+      - "\\bcapital\\s*service\\b"
+      - "\\bipf\\s*polska\\b"
+      - "\\bpaypo\\b"
+      - "\\btwisto\\b"
+      - "\\bavafin\\b"
+      # Generic payday loan keywords
+      - "pozyczkomat"
+      - "chwil[oó]wk"
+      - "szybka\\s*po[zż]yczk"
+      - "szybka\\s*got[oó]wk"
+      - "szybki\\s*kredyt"
     installment:
       - "\\brata\\b"
       - "rat[ay]\\s*(kredyt|po[zż]yczk)"
