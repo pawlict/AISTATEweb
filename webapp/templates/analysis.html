@@ -371,11 +371,9 @@
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <!-- Layout buttons -->
             <div style="display:flex;gap:3px;background:var(--bg-secondary,#f1f5f9);border-radius:10px;padding:2px">
-              <button class="btn mini aml-graph-layout-btn" data-layout="cose" title="Układ siłowy (automatyczny)" data-i18n-title="aml.layout.force" style="border-radius:8px;padding:4px 8px;font-size:12px;background:var(--primary);color:#fff">Siłowy</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="circle" title="Układ kołowy" data-i18n-title="aml.layout.circle" style="border-radius:8px;padding:4px 8px;font-size:12px">Okrąg</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="grid" title="Układ siatkowy" data-i18n-title="aml.layout.grid" style="border-radius:8px;padding:4px 8px;font-size:12px">Siatka</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="breadthfirst" title="Układ hierarchiczny (drzewiasty)" data-i18n-title="aml.layout.tree" style="border-radius:8px;padding:4px 8px;font-size:12px">Drzewo</button>
-              <button class="btn mini aml-graph-layout-btn" data-layout="concentric" title="Układ koncentryczny (ryzyko)" data-i18n-title="aml.layout.concentric" style="border-radius:8px;padding:4px 8px;font-size:12px">Koncentryczny</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="flow" title="Wpływy → Konto → Wydatki" style="border-radius:8px;padding:4px 8px;font-size:12px;background:var(--primary);color:#fff">Przepływ</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="amount" title="Węzły wg kwoty — duzi kontrahenci bliżej centrum" style="border-radius:8px;padding:4px 8px;font-size:12px">Kwotowy</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="timeline" title="Oś czasu — kontrahenci wg daty pierwszej transakcji" style="border-radius:8px;padding:4px 8px;font-size:12px">Czasowy</button>
             </div>
             <!-- Risk filter -->
             <select class="input" id="aml_graph_risk_filter" style="padding:5px 8px;border-radius:10px;min-width:130px">
@@ -392,7 +390,9 @@
           <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-right:3px"></span>Podejrzana</span>
           <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ea580c;margin-right:3px"></span>Obserwacja</span>
           <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#60a5fa;margin-right:3px"></span>Neutralna</span>
-          <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1f5aa6;margin-right:3px"></span>Własne konto</span>
+          <span><span style="display:inline-block;width:10px;height:10px;transform:rotate(45deg);background:#1f5aa6;margin-right:3px"></span>Własne konto</span>
+          <span style="margin-left:8px;border-left:1px solid #cbd5e1;padding-left:8px">◇ Konto &nbsp; ▭ Sklep &nbsp; ⬡ Gotówka &nbsp; ● Kontrahent</span>
+          <span style="margin-left:8px;border-left:1px solid #cbd5e1;padding-left:8px">Rozmiar węzła = kwota</span>
         </div>
         <div id="aml_graph_container" style="height:420px;border:1px solid var(--border);border-radius:12px;margin-top:10px;background:rgba(15,23,42,.02)"></div>
       </div>

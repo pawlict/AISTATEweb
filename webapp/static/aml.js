@@ -312,26 +312,35 @@
   function _renderBankInfo(stmt, result){
     const grid = QS("#aml_info_grid");
     if(!grid) return;
-    const bank = stmt.bank_name || result.bank_name || "";
-    const holder = stmt.account_holder || "";
-    const iban = stmt.account_number || "";
-    const period = [stmt.period_from, stmt.period_to].filter(Boolean).join(" \u2014 ");
-    const cur = stmt.currency || "PLN";
-    const txCount = (result.transaction_count || St.allTransactions.length) || 0;
-    const prevClosing = stmt.previous_closing_balance;
-    const availBal = stmt.available_balance;
+
+    // Use merged info when available (multi-statement case)
+    const mi = St._mergedInfo || null;
+    const src = mi || stmt;
+
+    const bank = src.bank_name || result.bank_name || "";
+    const holder = src.account_holder || "";
+    const iban = src.account_number || "";
+    const periodFrom = src.period_from || "";
+    const periodTo = src.period_to || "";
+    const period = [periodFrom, periodTo].filter(Boolean).join(" \u2014 ");
+    const cur = src.currency || "PLN";
+    const txCount = mi ? mi._total_tx : ((result.transaction_count || St.allTransactions.length) || 0);
+    const prevClosing = src.previous_closing_balance;
+    const availBal = src.available_balance;
+    const stmtCount = mi ? mi._statement_count : 0;
 
     let html = "";
     if(bank) html += `<div class="aml-info-row"><b>Bank:</b> ${_esc(bank)}</div>`;
-    if(holder) html += `<div class="aml-info-row"><b>Wlasciciel:</b> ${_esc(holder)}</div>`;
+    if(holder) html += `<div class="aml-info-row"><b>Właściciel:</b> ${_esc(holder)}</div>`;
     if(iban) html += `<div class="aml-info-row"><b>IBAN:</b> <span style="font-family:monospace">${_esc(iban)}</span></div>`;
     if(period) html += `<div class="aml-info-row"><b>Okres:</b> ${_esc(period)}</div>`;
+    if(stmtCount > 1) html += `<div class="aml-info-row"><b>Wyciągi:</b> ${stmtCount}</div>`;
     if(cur && cur !== "PLN") html += `<div class="aml-info-row"><b>Waluta:</b> ${_esc(cur)}</div>`;
 
     // Balances grid
     html += '<div class="aml-info-stats">';
-    if(stmt.opening_balance != null) html += `<span><b>Saldo otw.:</b> ${_fmtAmount(stmt.opening_balance, cur)}</span>`;
-    if(stmt.closing_balance != null) html += `<span><b>Saldo konc.:</b> ${_fmtAmount(stmt.closing_balance, cur)}</span>`;
+    if(src.opening_balance != null) html += `<span><b>Saldo otw.:</b> ${_fmtAmount(src.opening_balance, cur)}</span>`;
+    if(src.closing_balance != null) html += `<span><b>Saldo konc.:</b> ${_fmtAmount(src.closing_balance, cur)}</span>`;
     if(availBal != null) html += `<span><b>Saldo dost.:</b> ${_fmtAmount(availBal, cur)}</span>`;
     if(prevClosing != null) html += `<span><b>Saldo konc. poprz.:</b> ${_fmtAmount(prevClosing, cur)}</span>`;
     html += '</div>';
@@ -1039,39 +1048,216 @@
   const _EDGE_BASE = "#94a3b8";
   const _TYPE_SHAPES = {ACCOUNT:"diamond", MERCHANT:"round-rectangle", CASH_NODE:"hexagon", PAYMENT_PROVIDER:"barrel"};
 
-  // Layout configs
-  const _LAYOUTS = {
-    cose: {
-      name:"cose", animate:true, animationDuration:400,
-      nodeRepulsion:function(){return 8000;},
-      idealEdgeLength:function(){return 120;},
-      edgeElasticity:function(){return 100;},
-      gravity:0.3, padding:30,
-    },
-    circle: {
-      name:"circle", animate:true, animationDuration:400,
-      padding:30, startAngle: 0,
-    },
-    grid: {
-      name:"grid", animate:true, animationDuration:400,
-      padding:30, rows:undefined, condense:true, avoidOverlap:true,
-    },
-    breadthfirst: {
-      name:"breadthfirst", animate:true, animationDuration:400,
-      directed:true, padding:30, spacingFactor:1.2,
-      roots:"#account_own",
-    },
-    concentric: {
-      name:"concentric", animate:true, animationDuration:400,
-      padding:30, minNodeSpacing:40,
-      concentric:function(node){
-        // ACCOUNT at center, then by risk level (high=outer)
-        if(node.data("type") === "ACCOUNT") return 100;
-        const rl = node.data("riskLevel") || "none";
-        return ({none:80, low:60, medium:40, high:20})[rl] || 50;
+  // ---- Custom layout builders for bank flow analysis ----
+
+  /**
+   * FLOW LAYOUT: Bipartite — income sources left, account center, expenses right.
+   * Uses Cytoscape "preset" layout with manually computed positions.
+   */
+  function _buildFlowLayout(cy){
+    const w = cy.container().clientWidth || 800;
+    const h = cy.container().clientHeight || 400;
+    const pad = 60;
+
+    // Classify nodes into: account (center), credit (left), debit (right)
+    const accountNode = cy.nodes('[type="ACCOUNT"]');
+    const creditNodes = [];  // money coming IN → left side
+    const debitNodes = [];   // money going OUT → right side
+
+    cy.nodes().forEach(n => {
+      if(n.data("type") === "ACCOUNT") return;
+      const nid = n.id();
+      // Check edges: if this node is source → account = CREDIT (income)
+      // If account is source → this node = DEBIT (expense)
+      let inAmount = 0, outAmount = 0;
+      cy.edges().forEach(e => {
+        const amt = Math.abs(e.data("amount") || 0);
+        if(e.data("source") === nid) inAmount += amt;   // this→account = income
+        if(e.data("target") === nid) outAmount += amt;   // account→this = expense
+      });
+      if(inAmount >= outAmount){
+        creditNodes.push({node: n, amount: inAmount});
+      } else {
+        debitNodes.push({node: n, amount: outAmount});
+      }
+    });
+
+    // Sort by amount descending (biggest on top)
+    creditNodes.sort((a,b) => b.amount - a.amount);
+    debitNodes.sort((a,b) => b.amount - a.amount);
+
+    const positions = {};
+
+    // Account in center
+    if(accountNode.length){
+      positions[accountNode.id()] = {x: w / 2, y: h / 2};
+    }
+
+    // Left column: credit/income nodes
+    const leftX = pad + 40;
+    const creditSpacing = Math.min(60, (h - 2 * pad) / Math.max(creditNodes.length, 1));
+    const creditStartY = Math.max(pad, h / 2 - (creditNodes.length * creditSpacing) / 2);
+    creditNodes.forEach((item, i) => {
+      positions[item.node.id()] = {x: leftX, y: creditStartY + i * creditSpacing};
+    });
+
+    // Right column: debit/expense nodes
+    const rightX = w - pad - 40;
+    const debitSpacing = Math.min(60, (h - 2 * pad) / Math.max(debitNodes.length, 1));
+    const debitStartY = Math.max(pad, h / 2 - (debitNodes.length * debitSpacing) / 2);
+    debitNodes.forEach((item, i) => {
+      positions[item.node.id()] = {x: rightX, y: debitStartY + i * debitSpacing};
+    });
+
+    return {
+      name: "preset",
+      positions: function(node){ return positions[node.id()] || {x: w/2, y: h/2}; },
+      animate: true,
+      animationDuration: 500,
+      fit: true,
+      padding: 30,
+    };
+  }
+
+  /**
+   * AMOUNT LAYOUT: Concentric by transaction amount — biggest counterparties closest to center.
+   */
+  function _buildAmountLayout(cy){
+    // Compute total amount per node from edges
+    const nodeAmounts = {};
+    let maxAmt = 0;
+    cy.nodes().forEach(n => {
+      if(n.data("type") === "ACCOUNT"){
+        nodeAmounts[n.id()] = Infinity; // account always at center
+        return;
+      }
+      let total = 0;
+      n.connectedEdges().forEach(e => { total += Math.abs(e.data("amount") || 0); });
+      nodeAmounts[n.id()] = total;
+      if(total > maxAmt) maxAmt = total;
+    });
+
+    return {
+      name: "concentric",
+      animate: true,
+      animationDuration: 500,
+      padding: 30,
+      minNodeSpacing: 35,
+      concentric: function(node){
+        const amt = nodeAmounts[node.id()];
+        if(amt === Infinity) return 1000; // account at center
+        if(maxAmt === 0) return 50;
+        // Higher amount → higher concentric value → closer to center
+        return Math.round((amt / maxAmt) * 100);
       },
-      levelWidth:function(){ return 2; },
-    },
+      levelWidth: function(){ return 3; },
+    };
+  }
+
+  /**
+   * TIMELINE LAYOUT: X-axis = time, Y-axis = credit (top) / debit (bottom).
+   * Nodes positioned by date of first transaction on their edges.
+   */
+  function _buildTimelineLayout(cy){
+    const w = cy.container().clientWidth || 800;
+    const h = cy.container().clientHeight || 400;
+    const pad = 60;
+
+    // Collect first_date per node from connected edges
+    const nodeDates = {};
+    const nodeDirections = {}; // "credit" or "debit"
+    let minDate = null, maxDate = null;
+
+    cy.nodes().forEach(n => {
+      if(n.data("type") === "ACCOUNT") return;
+      const nid = n.id();
+      let earliest = null;
+      let inAmt = 0, outAmt = 0;
+
+      n.connectedEdges().forEach(e => {
+        const fd = e.data("firstDate") || e.data("first_date") || "";
+        if(fd && (!earliest || fd < earliest)) earliest = fd;
+        const amt = Math.abs(e.data("amount") || 0);
+        if(e.data("source") === nid) inAmt += amt;
+        if(e.data("target") === nid) outAmt += amt;
+      });
+
+      if(earliest){
+        nodeDates[nid] = earliest;
+        if(!minDate || earliest < minDate) minDate = earliest;
+        if(!maxDate || earliest > maxDate) maxDate = earliest;
+      }
+      nodeDirections[nid] = inAmt >= outAmt ? "credit" : "debit";
+    });
+
+    // Parse date strings to compute relative position
+    function dateToNum(ds){
+      if(!ds) return 0;
+      try{ return new Date(ds.slice(0,10)).getTime(); }catch(e){ return 0; }
+    }
+    const minT = dateToNum(minDate);
+    const maxT = dateToNum(maxDate);
+    const range = maxT - minT || 1;
+
+    const positions = {};
+
+    // Account node at center-left
+    const accountNode = cy.nodes('[type="ACCOUNT"]');
+    if(accountNode.length){
+      positions[accountNode.id()] = {x: pad, y: h / 2};
+    }
+
+    // Track Y positions per column to avoid overlap
+    const creditY = {};  // x-bucket → next Y
+    const debitY = {};
+
+    cy.nodes().forEach(n => {
+      if(n.data("type") === "ACCOUNT") return;
+      const nid = n.id();
+      const dateStr = nodeDates[nid];
+      if(!dateStr){
+        positions[nid] = {x: w/2, y: h/2};
+        return;
+      }
+
+      const t = dateToNum(dateStr);
+      const xPct = (t - minT) / range;
+      const x = pad + 60 + xPct * (w - 2*pad - 80);
+
+      // Bucket X into columns for overlap avoidance
+      const xBucket = Math.round(x / 40);
+      const isCredit = nodeDirections[nid] === "credit";
+
+      if(isCredit){
+        // Top half
+        if(!creditY[xBucket]) creditY[xBucket] = pad + 20;
+        const y = creditY[xBucket];
+        creditY[xBucket] += 45;
+        positions[nid] = {x, y: Math.min(y, h/2 - 30)};
+      } else {
+        // Bottom half
+        if(!debitY[xBucket]) debitY[xBucket] = h/2 + 30;
+        const y = debitY[xBucket];
+        debitY[xBucket] += 45;
+        positions[nid] = {x, y: Math.min(y, h - pad)};
+      }
+    });
+
+    return {
+      name: "preset",
+      positions: function(node){ return positions[node.id()] || {x: w/2, y: h/2}; },
+      animate: true,
+      animationDuration: 500,
+      fit: true,
+      padding: 30,
+    };
+  }
+
+  // Layout name → builder function map
+  const _LAYOUT_BUILDERS = {
+    flow: _buildFlowLayout,
+    amount: _buildAmountLayout,
+    timeline: _buildTimelineLayout,
   };
 
   function _nodeColor(ele){
@@ -1102,6 +1288,7 @@
       const elements = [];
 
       for(const node of graphData.nodes){
+        const meta = node.metadata || {};
         elements.push({
           data: {
             id: node.id,
@@ -1109,6 +1296,8 @@
             type: node.node_type || node.type || "COUNTERPARTY",
             riskLevel: node.risk_level || "none",
             classStatus: node.class_status || "",
+            totalAmount: meta.total_amount || 0,
+            txCount: meta.tx_count || 0,
           }
         });
       }
@@ -1123,6 +1312,8 @@
             edgeType: edge.edge_type || edge.type || "TRANSFER",
             amount: edge.total_amount || 0,
             classStatus: edge.class_status || "",
+            firstDate: edge.first_date || "",
+            lastDate: edge.last_date || "",
           }
         });
       }
@@ -1142,8 +1333,14 @@
               "font-size": "11px",
               "text-wrap": "ellipsis",
               "text-max-width": "100px",
-              "width": 40,
-              "height": 40,
+              "width": function(ele){
+                const amt = ele.data("totalAmount") || 0;
+                return Math.max(30, Math.min(70, 30 + Math.sqrt(amt) / 15));
+              },
+              "height": function(ele){
+                const amt = ele.data("totalAmount") || 0;
+                return Math.max(30, Math.min(70, 30 + Math.sqrt(amt) / 15));
+              },
               "background-color": _nodeColor,
               "color": "#1e293b",
               "text-valign": "bottom",
@@ -1179,23 +1376,28 @@
             }
           }
         ],
-        layout: _LAYOUTS.cose,
+        // Use flow layout as default — needs cy instance to compute positions
+        layout: {name: "preset", positions: function(){ return {x:0, y:0}; }},
         maxZoom: 3,
         minZoom: 0.3,
       });
+
+      // Apply initial flow layout now that cy instance exists
+      St.cyInstance.layout(_buildFlowLayout(St.cyInstance)).run();
 
       // --- Layout buttons ---
       const layoutBtns = QSA(".aml-graph-layout-btn");
       layoutBtns.forEach(btn=>{
         btn.onclick = ()=>{
           const layoutName = btn.getAttribute("data-layout");
-          if(!layoutName || !_LAYOUTS[layoutName] || !St.cyInstance) return;
+          if(!layoutName || !_LAYOUT_BUILDERS[layoutName] || !St.cyInstance) return;
           // Highlight active button
           layoutBtns.forEach(b=>{ b.style.background=""; b.style.color=""; });
           btn.style.background = "var(--primary)";
           btn.style.color = "#fff";
-          // Run layout
-          St.cyInstance.layout(_LAYOUTS[layoutName]).run();
+          // Build and run layout (custom builders need the cy instance)
+          const layoutConfig = _LAYOUT_BUILDERS[layoutName](St.cyInstance);
+          St.cyInstance.layout(layoutConfig).run();
         };
       });
 
@@ -1405,6 +1607,7 @@
           await _mergeMultiAccountCharts(siblings);
         } else {
           St._mergedCharts = null;
+          St._mergedInfo = null;
         }
 
         _renderResults();
@@ -1793,7 +1996,44 @@
       const validDetails = allDetails.filter(d => d && d.charts);
       if(validDetails.length < 2){
         St._mergedCharts = null;
+        St._mergedInfo = null;
         return;
+      }
+
+      // ---- 0. MERGE STATEMENT INFO (period, balances, tx count) ----
+      {
+        const stmts = validDetails.map(d => d.statement).filter(Boolean);
+        if(stmts.length > 1){
+          // Collect all periods and sort by period_from to find global range
+          const allPeriods = stmts
+            .filter(s => s.period_from)
+            .sort((a,b) => (a.period_from || "").localeCompare(b.period_from || ""));
+          const earliest = allPeriods.length ? allPeriods[0] : stmts[0];
+          const latest = allPeriods.length
+            ? allPeriods.reduce((a,b) => (b.period_to || "") > (a.period_to || "") ? b : a)
+            : stmts[stmts.length - 1];
+
+          // Sum tx counts from all details
+          let totalTx = 0;
+          for(const d of validDetails){
+            totalTx += (d.transactions || []).length;
+          }
+
+          St._mergedInfo = {
+            bank_name: earliest.bank_name || "",
+            account_holder: earliest.account_holder || "",
+            account_number: earliest.account_number || "",
+            period_from: earliest.period_from || "",
+            period_to: latest.period_to || "",
+            opening_balance: earliest.opening_balance,
+            closing_balance: latest.closing_balance,
+            currency: earliest.currency || "PLN",
+            available_balance: latest.available_balance,
+            previous_closing_balance: earliest.previous_closing_balance,
+            _statement_count: stmts.length,
+            _total_tx: totalTx,
+          };
+        }
       }
 
       // ---- 1. BALANCE TIMELINE (multi-dataset line chart) ----
