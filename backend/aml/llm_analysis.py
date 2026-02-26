@@ -490,7 +490,7 @@ def _build_monthly_breakdown(transactions: list) -> str:
         if not date_str or len(date_str) < 7:
             continue
         month = date_str[:7]  # YYYY-MM
-        amt = float(abs(_get(tx, "amount") or 0))
+        amt = abs(float(_get(tx, "amount") or 0))
         direction = _get(tx, "direction") or ""
         if direction == "CREDIT":
             monthly_credit[month] += amt
@@ -586,7 +586,7 @@ def _build_loan_detection(transactions: list) -> str:
     sorted_groups = sorted(cp_groups.items(), key=lambda x: -len(x[1]))
     for cp, txs in sorted_groups[:20]:
         count = len(txs)
-        amounts = [float(abs(_get(tx, "amount") or 0)) for tx in txs]
+        amounts = [abs(float(_get(tx, "amount") or 0)) for tx in txs]
         total = sum(amounts)
         total_loan_amount += total
 
@@ -616,7 +616,7 @@ def _build_loan_detection(transactions: list) -> str:
     for tx in loan_txs:
         date_str = _get(tx, "booking_date") or _get(tx, "date") or ""
         if date_str and len(date_str) >= 7:
-            monthly_loans[date_str[:7]] += float(abs(_get(tx, "amount") or 0))
+            monthly_loans[date_str[:7]] += abs(float(_get(tx, "amount") or 0))
 
     if monthly_loans:
         avg_monthly = sum(monthly_loans.values()) / len(monthly_loans)
@@ -664,7 +664,7 @@ def _build_atm_patterns(transactions: list) -> str:
 
     # Withdrawals
     if atm_withdrawals:
-        w_amounts = [float(abs(_get(tx, "amount") or 0)) for tx in atm_withdrawals]
+        w_amounts = [abs(float(_get(tx, "amount") or 0)) for tx in atm_withdrawals]
         w_total = sum(w_amounts)
         w_avg = w_total / len(w_amounts) if w_amounts else 0
         w_max = max(w_amounts) if w_amounts else 0
@@ -707,7 +707,7 @@ def _build_atm_patterns(transactions: list) -> str:
         for tx in atm_withdrawals:
             ds = _get(tx, "booking_date") or _get(tx, "date") or ""
             if ds and len(ds) >= 7:
-                w_monthly[ds[:7]] += float(abs(_get(tx, "amount") or 0))
+                w_monthly[ds[:7]] += abs(float(_get(tx, "amount") or 0))
 
         if w_monthly:
             lines.append("\n| Miesiąc | Kwota wypłat |")
@@ -717,7 +717,7 @@ def _build_atm_patterns(transactions: list) -> str:
 
     # Deposits
     if atm_deposits:
-        d_amounts = [float(abs(_get(tx, "amount") or 0)) for tx in atm_deposits]
+        d_amounts = [abs(float(_get(tx, "amount") or 0)) for tx in atm_deposits]
         d_total = sum(d_amounts)
         d_avg = d_total / len(d_amounts) if d_amounts else 0
 
@@ -753,7 +753,7 @@ def _build_geographic_analysis(transactions: list) -> str:
         loc = _detect_location(tx)
         if loc:
             loc_clean = loc.strip().title()
-            location_amounts[loc_clean] += float(abs(_get(tx, "amount") or 0))
+            location_amounts[loc_clean] += abs(float(_get(tx, "amount") or 0))
             location_counts[loc_clean] += 1
             location_txs[loc_clean].append(tx)
 
@@ -818,7 +818,7 @@ def _build_transaction_table(transactions: list) -> str:
                  f"zagregowane dane oraz wyróżnione transakcje.\n")
 
     # --- Top 30 largest transactions ---
-    sorted_by_amount = sorted(transactions, key=lambda tx: -float(abs(_get(tx, "amount") or 0)))
+    sorted_by_amount = sorted(transactions, key=lambda tx: -abs(float(_get(tx, "amount") or 0)))
     large_txs = sorted_by_amount[:30]
 
     lines.append(f"### Największe transakcje (top 30)\n")
@@ -858,7 +858,7 @@ def _build_transaction_table(transactions: list) -> str:
             lines.append(f"| {date} | {amt:+,.2f} | {cp} | {title} | {tags_str} |")
 
     # --- Amount distribution ---
-    amounts = [float(abs(_get(tx, "amount") or 0)) for tx in transactions]
+    amounts = [abs(float(_get(tx, "amount") or 0)) for tx in transactions]
     if amounts:
         lines.append("\n### Rozkład kwot transakcji\n")
         brackets = [
@@ -914,7 +914,7 @@ def _build_transaction_summary(transactions: list) -> str:
     total_debit = 0.0
     max_single = 0.0
     for tx in transactions:
-        amt = float(abs(_get(tx, "amount") or 0))
+        amt = abs(float(_get(tx, "amount") or 0))
         direction = _get(tx, "direction") or ""
         if direction == "CREDIT":
             total_credit += amt
@@ -940,7 +940,7 @@ def _build_category_breakdown(transactions: list) -> str:
     for tx in transactions:
         raw = _get(tx, "subcategory") or _get(tx, "category") or "brak_kategorii"
         label = _cat_label(raw)
-        amt = float(abs(_get(tx, "amount") or 0))
+        amt = abs(float(_get(tx, "amount") or 0))
         cats[label] += amt
         cat_counts[label] += 1
     sorted_cats = sorted(cats.items(), key=lambda x: -x[1])[:12]
@@ -957,7 +957,7 @@ def _build_channel_breakdown(transactions: list) -> str:
     ch_amounts: Dict[str, float] = defaultdict(float)
     for tx in transactions:
         ch = _get(tx, "channel") or "OTHER"
-        amt = float(abs(_get(tx, "amount") or 0))
+        amt = abs(float(_get(tx, "amount") or 0))
         ch_counts[ch] += 1
         ch_amounts[ch] += amt
     lines = ["## KANAŁY TRANSAKCJI\n",
@@ -973,7 +973,7 @@ def _build_top_counterparties(transactions: list, limit: int = 15) -> str:
     cp_counts: Dict[str, int] = defaultdict(int)
     for tx in transactions:
         name = (_get(tx, "counterparty_raw") or _get(tx, "counterparty") or "Nieznany")[:50]
-        amt = float(abs(_get(tx, "amount") or 0))
+        amt = abs(float(_get(tx, "amount") or 0))
         cp_totals[name] += amt
         cp_counts[name] += 1
     sorted_cps = sorted(cp_totals.items(), key=lambda x: -x[1])[:limit]
@@ -1006,7 +1006,7 @@ def _build_flagged_transactions(transactions: list, limit: int = 20) -> str:
         date = _get(tx, "date") or _get(tx, "booking_date") or "?"
         cp = (_get(tx, "counterparty_raw") or _get(tx, "counterparty") or "?")[:30]
         title = (_get(tx, "title") or "")[:35]
-        amt = float(abs(_get(tx, "amount") or 0))
+        amt = abs(float(_get(tx, "amount") or 0))
         direction = _get(tx, "direction") or ""
         ch = _get(tx, "channel") or ""
         raw_cat = _get(tx, "subcategory") or _get(tx, "category") or ""
@@ -1064,7 +1064,7 @@ def _build_temporal_patterns(transactions: list) -> str:
             except (ValueError, TypeError):
                 continue
 
-        amt = float(abs(_get(tx, "amount") or 0))
+        amt = abs(float(_get(tx, "amount") or 0))
         dow = dt.weekday()
         dow_amounts[dow] += amt
         dow_counts[dow] += 1
@@ -1160,8 +1160,8 @@ def _build_p2p_transfers(transactions: list) -> str:
     if not p2p_list:
         return ""
 
-    total_out = sum(float(abs(_get(tx, "amount") or 0)) for tx in p2p_list if (_get(tx, "direction") or "") == "DEBIT")
-    total_in = sum(float(abs(_get(tx, "amount") or 0)) for tx in p2p_list if (_get(tx, "direction") or "") == "CREDIT")
+    total_out = sum(abs(float(_get(tx, "amount") or 0)) for tx in p2p_list if (_get(tx, "direction") or "") == "DEBIT")
+    total_in = sum(abs(float(_get(tx, "amount") or 0)) for tx in p2p_list if (_get(tx, "direction") or "") == "CREDIT")
 
     lines = [f"## PRZELEWY P2P ({len(p2p_list)} szt.)\n"]
     lines.append(f"- Wysłane: {total_out:,.2f} PLN")

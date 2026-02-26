@@ -215,7 +215,7 @@ def _build_card_stats(card_id: str, txs: List[Dict]) -> Dict[str, Any]:
     monthly_amounts: Dict[str, float] = defaultdict(float)
 
     for tx in txs:
-        amt = float(abs(tx.get("amount") or 0))
+        amt = abs(float(tx.get("amount") or 0))
         direction = (tx.get("direction") or "").upper()
         date = tx.get("booking_date") or ""
 
