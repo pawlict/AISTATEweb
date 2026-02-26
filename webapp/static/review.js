@@ -723,6 +723,7 @@
     if(searchVal){
       filtered = filtered.filter(tx =>
         (tx.counterparty_raw || "").toLowerCase().includes(searchVal) ||
+        (tx.counterparty_account || "").toLowerCase().includes(searchVal) ||
         (tx.title || "").toLowerCase().includes(searchVal) ||
         (tx.category || "").toLowerCase().includes(searchVal) ||
         (tx.subcategory || "").toLowerCase().includes(searchVal) ||
@@ -758,7 +759,7 @@
       return;
     }
 
-    const colCount = 9;
+    const colCount = 10;
     const lang = (localStorage.getItem("aistate_ui_lang") || "pl");
 
     // Build category <option> list once
@@ -773,6 +774,7 @@
         <th class="rv-col-date rv-resizable">Data wal.</th>
         <th class="rv-col-type rv-resizable">Typ</th>
         <th class="rv-col-cp rv-resizable">Kontrahent</th>
+        <th class="rv-col-acc rv-resizable">Nr rachunku</th>
         <th class="rv-col-title rv-resizable">Tytul</th>
         <th class="rv-col-amt rv-resizable">Kwota</th>
         <th class="rv-col-ch rv-resizable">Kanal</th>
@@ -841,6 +843,7 @@
         <td class="rv-col-date">${_esc(tx.tx_date || "")}</td>
         <td class="rv-col-type">${_esc(tx.bank_category || "")}</td>
         <td class="rv-col-cp" title="${_esc(tx.counterparty_raw || "")}">${_esc((tx.counterparty_raw || "").slice(0,35))}</td>
+        <td class="rv-col-acc" title="${_esc(tx.counterparty_account || "")}">${_esc((tx.counterparty_account || "").slice(0,32))}</td>
         <td class="rv-col-title" title="${_esc(tx.title || "")}">${_esc((tx.title || "").slice(0,45))}</td>
         <td class="rv-col-amt ${amtClass}">${isDebit ? "-" : "+"}${absAmt.toLocaleString("pl-PL",{minimumFractionDigits:2, maximumFractionDigits:2})}</td>
         <td class="rv-col-ch">${_esc(tx.channel || "")}</td>

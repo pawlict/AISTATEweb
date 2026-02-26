@@ -540,7 +540,8 @@ async def aml_detail(statement_id: str):
         tx_rows = fetch_all(
             """SELECT id, booking_date, amount, direction, counterparty_raw,
                       channel, category, subcategory, risk_tags, risk_score,
-                      title, bank_category, balance_after, rule_explains
+                      title, bank_category, balance_after, rule_explains,
+                      tx_date, raw_text
                FROM transactions WHERE statement_id = ?
                ORDER BY booking_date, id""",
             (statement_id,),
@@ -612,18 +613,52 @@ async def aml_detail(statement_id: str):
     except Exception as e:
         log.warning("Card detection failed: %s", e)
 
-    # Account identification (must run before raw_text is stripped)
+    # Account identification — use cache if available
     detected_accounts = []
     try:
-        from backend.aml.accounts import detect_accounts
-        stmt_account = stmt_dict.get("account_number", "")
-        detected_accounts = detect_accounts(transactions, statement_account=stmt_account)
+        import json as _json
+        cache_key = f"detected_accounts:{statement_id}"
+        cached_row = fetch_one("SELECT value FROM system_config WHERE key = ?", (cache_key,))
+        if cached_row:
+            detected_accounts = _json.loads(cached_row["value"])
+        else:
+            from backend.aml.accounts import detect_accounts
+            stmt_account = stmt_dict.get("account_number", "")
+            detected_accounts = detect_accounts(transactions, statement_account=stmt_account)
+            # Cache for subsequent loads
+            try:
+                from backend.db.engine import get_conn
+                with get_conn() as conn:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",
+                        (cache_key, _json.dumps(detected_accounts, ensure_ascii=False)),
+                    )
+            except Exception:
+                pass  # Non-critical: cache write failure
     except Exception as e:
         log.warning("Account detection failed: %s", e)
 
-    # Strip raw_text from response to reduce payload (only needed for card/account detection)
-    for tx in transactions:
-        tx.pop("raw_text", None)
+    # Extract counterparty_account from raw_text, then strip raw_text to reduce payload
+    try:
+        from backend.aml._polish_banks import extract_accounts_from_text, classify_account
+        own_account = stmt_dict.get("account_number", "").replace(" ", "")
+        for tx in transactions:
+            raw = tx.get("raw_text") or ""
+            cp = tx.get("counterparty_raw") or ""
+            accs = extract_accounts_from_text(f"{cp}\n{raw}")
+            # Pick first account that isn't the statement owner's own
+            cp_acc = ""
+            for a in accs:
+                norm = a.upper().replace("PL", "")
+                if norm != own_account:
+                    info = classify_account(a)
+                    cp_acc = info.get("display", a)
+                    break
+            tx["counterparty_account"] = cp_acc
+            tx.pop("raw_text", None)
+    except Exception:
+        for tx in transactions:
+            tx.pop("raw_text", None)
 
     return JSONResponse({
         "statement": stmt_dict,
