@@ -645,6 +645,20 @@ def parse_bank_statement(pdf_path: Path) -> ParseResult:
         if not cp and tx.get("counterparty_account"):
             cp = tx["counterparty_account"]
 
+        # Build raw_text including structured details (card numbers, BLIK refs, etc.)
+        body_lines = tx.get("body_raw_lines", [])
+        details = tx.get("details") or {}
+        raw_parts = list(body_lines) if isinstance(body_lines, list) else [str(body_lines)]
+        # Re-inject structured details so card numbers etc. are searchable
+        if details.get("card_number_masked"):
+            raw_parts.append(f"Nr karty {details['card_number_masked']}")
+        if details.get("card_payment_date"):
+            raw_parts.append(f"Płatność kartą {details['card_payment_date']}")
+        if details.get("blik_transaction_no"):
+            raw_parts.append(f"Nr transakcji {details['blik_transaction_no']}")
+        if details.get("phone_transfer_to"):
+            raw_parts.append(f"Przelew na telefon {details['phone_transfer_to']}")
+
         raw_transactions.append(RawTransaction(
             date=tx.get("posting_date", ""),
             date_valuation=tx.get("transaction_date"),
@@ -653,7 +667,7 @@ def parse_bank_statement(pdf_path: Path) -> ParseResult:
             balance_after=None,  # ING doesn't provide per-tx balance
             counterparty=cp,
             title=tx.get("title", ""),
-            raw_text=str(tx.get("body_raw_lines", [])),
+            raw_text=" | ".join(raw_parts),
             direction="in" if amt >= 0 else "out",
             bank_category=tx.get("channel", ""),
         ))

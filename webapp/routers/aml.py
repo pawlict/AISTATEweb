@@ -525,15 +525,26 @@ async def aml_detail(statement_id: str):
                 stmt_dict[k] = []
 
     # Transactions (include raw_text for card number extraction)
-    tx_rows = fetch_all(
-        """SELECT id, booking_date, amount, direction, counterparty_raw,
-                  channel, category, subcategory, risk_tags, risk_score,
-                  title, bank_category, balance_after, rule_explains,
-                  raw_text
-           FROM transactions WHERE statement_id = ?
-           ORDER BY booking_date, id""",
-        (statement_id,),
-    )
+    try:
+        tx_rows = fetch_all(
+            """SELECT id, booking_date, amount, direction, counterparty_raw,
+                      channel, category, subcategory, risk_tags, risk_score,
+                      title, bank_category, balance_after, rule_explains,
+                      raw_text
+               FROM transactions WHERE statement_id = ?
+               ORDER BY booking_date, id""",
+            (statement_id,),
+        )
+    except Exception:
+        # Fallback if raw_text column doesn't exist in older DB
+        tx_rows = fetch_all(
+            """SELECT id, booking_date, amount, direction, counterparty_raw,
+                      channel, category, subcategory, risk_tags, risk_score,
+                      title, bank_category, balance_after, rule_explains
+               FROM transactions WHERE statement_id = ?
+               ORDER BY booking_date, id""",
+            (statement_id,),
+        )
     transactions = []
     for row in tx_rows:
         tx = dict(row)
