@@ -443,23 +443,40 @@ async def aml_llm_stream(statement_id: str, model: str = Query(""), user_prompt:
 
 
 @router.get("/api/aml/history")
-async def aml_history(limit: int = Query(20)):
-    """List past AML analyses with basic info."""
+async def aml_history(limit: int = Query(20), project_id: str = Query("")):
+    """List past AML analyses with basic info, filtered by project."""
     from backend.db.engine import fetch_all
 
-    rows = fetch_all(
-        """SELECT s.id AS statement_id, s.case_id, s.bank_name, s.bank_id,
-                  s.account_number, s.account_holder,
-                  s.period_from, s.period_to, s.opening_balance, s.closing_balance,
-                  s.currency, s.created_at,
-                  r.total_score AS risk_score,
-                  (SELECT COUNT(*) FROM transactions t WHERE t.statement_id = s.id) AS tx_count
-           FROM statements s
-           LEFT JOIN risk_assessments r ON r.statement_id = s.id
-           ORDER BY s.created_at DESC
-           LIMIT ?""",
-        (limit,),
-    )
+    if project_id:
+        rows = fetch_all(
+            """SELECT s.id AS statement_id, s.case_id, s.bank_name, s.bank_id,
+                      s.account_number, s.account_holder,
+                      s.period_from, s.period_to, s.opening_balance, s.closing_balance,
+                      s.currency, s.created_at,
+                      r.total_score AS risk_score,
+                      (SELECT COUNT(*) FROM transactions t WHERE t.statement_id = s.id) AS tx_count
+               FROM statements s
+               JOIN cases c ON c.id = s.case_id
+               LEFT JOIN risk_assessments r ON r.statement_id = s.id
+               WHERE c.project_id = ?
+               ORDER BY s.created_at DESC
+               LIMIT ?""",
+            (project_id, limit),
+        )
+    else:
+        rows = fetch_all(
+            """SELECT s.id AS statement_id, s.case_id, s.bank_name, s.bank_id,
+                      s.account_number, s.account_holder,
+                      s.period_from, s.period_to, s.opening_balance, s.closing_balance,
+                      s.currency, s.created_at,
+                      r.total_score AS risk_score,
+                      (SELECT COUNT(*) FROM transactions t WHERE t.statement_id = s.id) AS tx_count
+               FROM statements s
+               LEFT JOIN risk_assessments r ON r.statement_id = s.id
+               ORDER BY s.created_at DESC
+               LIMIT ?""",
+            (limit,),
+        )
     items = []
     for row in rows:
         items.append({
