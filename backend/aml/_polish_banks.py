@@ -204,6 +204,16 @@ _IBAN_PL_RE = re.compile(
 # Spaced NRB pattern: XX XXXX XXXX XXXX XXXX XXXX XXXX (strict spacing)
 _NRB_SPACED_RE = re.compile(r"\b(\d{2})\s(\d{4})\s(\d{4})\s(\d{4})\s(\d{4})\s(\d{4})\s(\d{4})\b")
 
+# Compact NRB (26 consecutive digits) only after a keyword context.
+# Matches: "Nr rachunku 12105010121234567890123456"
+#          "rachunek: 12105010121234567890123456"
+#          "IBAN 12105010121234567890123456"
+#          "konto 12105010121234567890123456"
+_NRB_CONTEXTUAL_RE = re.compile(
+    r"(?:Nr\s+rachunku|rachunk\w*|kont[oa]|IBAN|NRB)[:\s]+(\d{26})\b",
+    re.IGNORECASE,
+)
+
 
 def identify_bank(account_number: str) -> Optional[Tuple[str, str]]:
     """Identify a Polish bank from an account number (NRB or IBAN PL).
@@ -323,12 +333,13 @@ def extract_accounts_from_text(text: str) -> list[str]:
             if validate_iban(digits) or _is_known_polish_bank(digits):
                 _add(digits)
 
-    # NOTE: We intentionally do NOT extract 26 consecutive digits without
-    # spacing or PL prefix — these are almost always transaction references,
-    # document IDs, or other non-account numbers.
-    # Also, we do NOT extract international IBAN from free text — the 2-letter
-    # prefix + digits pattern produces too many false positives (e.g. "BA 2025...",
-    # "JM 1406..."). International IBANs are only detected when explicitly
-    # prefixed with PL or when the IBAN keyword context is present.
+    # 3. Match compact NRB (26 consecutive digits) ONLY when preceded by
+    #    a keyword indicating it's an account number. Without context,
+    #    26-digit sequences are usually transaction references.
+    for m in _NRB_CONTEXTUAL_RE.finditer(text):
+        digits = m.group(1)
+        if len(digits) == 26 and digits not in seen:
+            if validate_iban(digits) or _is_known_polish_bank(digits):
+                _add(digits)
 
     return accounts
