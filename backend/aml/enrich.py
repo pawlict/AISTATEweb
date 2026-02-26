@@ -119,6 +119,10 @@ _CATEGORY_PATTERNS: List[Tuple[str, str, List[str]]] = [
         r"zarobk", r"premi[ua]", r"nadgodzin", r"honorari",
         r"zleceni.*wyplat", r"dochod", r"prowizj.*za",
     ]),
+    ("payday_loan", "Chwilówki/Pożyczki", [
+        r"chwil[oó]wk", r"pozyczkomat", r"szybka\s*pozyczk",
+        r"szybka\s*got[oó]wk", r"szybkasa", r"ekstrakasa",
+    ]),
     ("loan_payment", "Rata/kredyt", [
         r"umowa\s*na\s*kredyt", r"ikanobank", r"rata\b",
         r"provident", r"wonga", r"vivus",

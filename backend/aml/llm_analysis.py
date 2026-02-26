@@ -36,6 +36,7 @@ _CAT_LABELS_PL: Dict[str, str] = {
     "children": "Dzieci",
     "car_wash": "Myjnia",
     "auto_service": "Serwis auto",
+    "payday_loan": "Chwilówki/Pożyczki",
     # Financial
     "salary": "Wynagrodzenie",
     "earnings": "Zarobki",

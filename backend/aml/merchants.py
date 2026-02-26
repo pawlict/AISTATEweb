@@ -69,6 +69,7 @@ CATEGORY_META: Dict[str, CategoryMeta] = {
     "digital_store":    CategoryMeta("Sklep cyfrowy",      "Digital Store",      "elevated", "📲"),
     "payment_operator": CategoryMeta("Operator płatności", "Payment Operator",   "monitoring", "💳"),
     # --- Risk categories ---
+    "payday_loan":      CategoryMeta("Chwilówki/Pożyczki", "Payday Loans",       "high",     "⚠️"),
     "gambling":         CategoryMeta("Gry hazardowe",      "Gambling",           "high",     "🎰"),
     "crypto":           CategoryMeta("Kryptowaluty",       "Cryptocurrency",     "elevated", "₿"),
     "crypto_exchange":  CategoryMeta("Giełda krypto",      "Crypto Exchange",    "elevated", "₿"),
@@ -550,6 +551,7 @@ _FUEL_BRANDS = [
 # Contains ALL ~960 cities with municipal rights + ASCII transliterations.
 # See _polish_cities.py for the full, organized listing.
 from ._polish_cities import POLISH_CITIES  # noqa: E402
+from ._payday_lenders import is_payday_lender, match_payday_lender  # noqa: E402
 
 
 def detect_fuel_location(counterparty: str, title: str = "") -> Optional[str]:
@@ -620,13 +622,18 @@ def classify_merchant(counterparty: str, title: str = "", raw_text: str = "") ->
     """Classify a transaction by matching merchant patterns.
 
     Returns category name (e.g. "grocery", "fuel") or None if no match.
-    First match wins — patterns are ordered by specificity.
+    Payday lender check runs first (high-risk), then general patterns.
     """
-    _ensure_compiled()
-    search = f"{counterparty} {title} {raw_text}".lower()
+    search = f"{counterparty} {title} {raw_text}"
 
+    # Payday lender check (high-risk, runs first)
+    if is_payday_lender(search):
+        return "payday_loan"
+
+    _ensure_compiled()
+    search_lower = search.lower()
     for category, pattern in _compiled_merchant_rules:
-        if pattern.search(search):
+        if pattern.search(search_lower):
             return category
     return None
 
