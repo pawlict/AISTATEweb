@@ -245,7 +245,7 @@ def detect_recurring(transactions: List[Dict[str, Any]], min_count: int = 2) -> 
         if len(txs) < min_count:
             continue
 
-        amounts = [abs(tx.get("amount", 0)) for tx in txs]
+        amounts = [abs(float(tx.get("amount", 0) or 0)) for tx in txs]
         dates = [tx.get("date", "") for tx in txs]
         total = sum(amounts)
         avg = total / len(amounts)
@@ -321,7 +321,7 @@ def enrich_transactions(
         # Channel
         channel = detect_channel(tx)
         etx["channel"] = channel
-        amt = abs(tx.get("amount", 0))
+        amt = abs(float(tx.get("amount", 0) or 0))
         channel_counts[channel] += 1
         channel_amounts[channel] += amt
 
@@ -377,7 +377,7 @@ def enrich_transactions(
     cp_counts: Dict[str, int] = defaultdict(int)
     for tx in enriched_txs:
         cp = tx.get("counterparty", "Nieznany")[:50]
-        cp_totals[cp] += abs(tx.get("amount", 0))
+        cp_totals[cp] += abs(float(tx.get("amount", 0) or 0))
         cp_counts[cp] += 1
 
     top_cps = sorted(cp_totals.items(), key=lambda x: -x[1])[:20]
