@@ -524,11 +524,12 @@ async def aml_detail(statement_id: str):
             except (json.JSONDecodeError, TypeError):
                 stmt_dict[k] = []
 
-    # Transactions
+    # Transactions (include raw_text for card number extraction)
     tx_rows = fetch_all(
         """SELECT id, booking_date, amount, direction, counterparty_raw,
                   channel, category, subcategory, risk_tags, risk_score,
-                  title, bank_category, balance_after, rule_explains
+                  title, bank_category, balance_after, rule_explains,
+                  raw_text
            FROM transactions WHERE statement_id = ?
            ORDER BY booking_date, id""",
         (statement_id,),
@@ -589,6 +590,18 @@ async def aml_detail(statement_id: str):
         )
         sibling_ids = [r["id"] for r in sib_rows]
 
+    # Card identification
+    detected_cards = []
+    try:
+        from backend.aml.cards import detect_cards
+        detected_cards = detect_cards(transactions)
+    except Exception as e:
+        log.warning("Card detection failed: %s", e)
+
+    # Strip raw_text from response to reduce payload (only needed for card detection)
+    for tx in transactions:
+        tx.pop("raw_text", None)
+
     return JSONResponse({
         "statement": stmt_dict,
         "transactions": transactions,
@@ -598,6 +611,7 @@ async def aml_detail(statement_id: str):
         "ml_anomalies": ml_anomalies,
         "has_llm_prompt": has_llm_prompt,
         "sibling_statement_ids": sibling_ids,
+        "cards": detected_cards,
     })
 
 

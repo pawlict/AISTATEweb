@@ -882,6 +882,99 @@ button.pill-icon:hover{
 .aml-info-row b{font-weight: 700}
 .aml-info-stats{display: flex; gap: 16px; flex-wrap: wrap}
 
+/* Card visualization */
+.aml-cards-container{
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+.aml-card-item{
+  width: 320px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  color: #f8fafc;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  font-family: 'Consolas', 'SF Mono', monospace;
+  position: relative;
+}
+.aml-card-item[data-brand="VISA"]{
+  background: linear-gradient(135deg, #1e3a5f 0%, #1f5aa6 50%, #2563eb 100%);
+}
+.aml-card-item[data-brand="Mastercard"]{
+  background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 50%, #dc2626 100%);
+}
+.aml-card-item[data-brand="Maestro"]{
+  background: linear-gradient(135deg, #14532d 0%, #166534 50%, #15803d 100%);
+}
+.aml-card-top{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 16px 6px;
+}
+.aml-card-bank{
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.85;
+  font-family: inherit;
+}
+.aml-card-brand{
+  font-size: 13px;
+  font-weight: 800;
+  opacity: 0.9;
+}
+.aml-card-number{
+  padding: 8px 16px 4px;
+  font-size: 17px;
+  letter-spacing: 3px;
+  font-weight: 600;
+}
+.aml-card-dates{
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 16px 10px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+.aml-card-stats{
+  background: rgba(255,255,255,.07);
+  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.aml-card-stats b{
+  font-weight: 700;
+  opacity: 0.7;
+  font-size: 10px;
+  display: block;
+}
+.aml-card-stats .val{
+  font-weight: 600;
+  font-size: 12px;
+}
+.aml-card-details{
+  padding: 8px 16px 12px;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: rgba(248,250,252,.85);
+}
+.aml-card-details .detail-row{
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.aml-card-details .detail-row:last-child{
+  border-bottom: none;
+}
+
 /* Alerts */
 .aml-badge{
   background: rgba(185,28,28,.1);
