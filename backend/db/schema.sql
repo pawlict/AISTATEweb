@@ -253,7 +253,7 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_gn_case ON graph_nodes(case_id);
-CREATE INDEX IF NOT EXISTS idx_gn_stmt ON graph_nodes(statement_id);
+-- idx_gn_stmt created in engine.py migration (after ALTER TABLE for existing DBs)
 CREATE INDEX IF NOT EXISTS idx_gn_type ON graph_nodes(node_type);
 
 CREATE TABLE IF NOT EXISTS graph_edges (
@@ -272,7 +272,7 @@ CREATE TABLE IF NOT EXISTS graph_edges (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ge_case ON graph_edges(case_id);
-CREATE INDEX IF NOT EXISTS idx_ge_stmt ON graph_edges(statement_id);
+-- idx_ge_stmt created in engine.py migration (after ALTER TABLE for existing DBs)
 CREATE INDEX IF NOT EXISTS idx_ge_source ON graph_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_ge_target ON graph_edges(target_id);
 

@@ -86,6 +86,9 @@ def init_db(path: Optional[Path] = None) -> None:
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN statement_id TEXT DEFAULT ''")
             except sqlite3.OperationalError:
                 pass  # column already exists
+        # Create indexes on statement_id (safe after column exists)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gn_stmt ON graph_nodes(statement_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ge_stmt ON graph_edges(statement_id)")
 
         # Store schema version
         conn.execute(
