@@ -517,18 +517,21 @@
       third_party: "Kontrahent",
       friend:      "Znajomy",
       family:      "Rodzina",
+      employer:    "Pracodawca",
     };
     const _catBadgeClass = {
       own:         "aml-acc-own",
       third_party: "aml-acc-third",
       friend:      "aml-acc-friend",
       family:      "aml-acc-family",
+      employer:    "aml-acc-employer",
     };
     const _catBgClass = {
       own:         "aml-acc-own-bg",
       third_party: "aml-acc-default",
       friend:      "aml-acc-friend-bg",
       family:      "aml-acc-family-bg",
+      employer:    "aml-acc-employer-bg",
     };
 
     container.innerHTML = accounts.map(acc => {
@@ -563,14 +566,14 @@
         <div><b>Transakcje</b><div class="val">${acc.tx_count}</div></div>
       `;
 
-      // Top counterparties
+      // Top counterparties — clickable: filter in Review section
       let cpHtml = "";
       if(acc.top_counterparties && acc.top_counterparties.length){
         cpHtml += `<div style="margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">Kontrahenci</div>`;
         acc.top_counterparties.slice(0, 4).forEach(cp => {
           const name = _esc((cp[0] || "").slice(0, 30));
           const cnt = cp[1] || 0;
-          cpHtml += `<div class="detail-row"><span>${name}</span><span>${cnt}x</span></div>`;
+          cpHtml += `<div class="detail-row aml-acc-cp-link" data-filter="${name}" title="Kliknij aby filtrować transakcje" style="cursor:pointer"><span>${name}</span><span>${cnt}x</span></div>`;
         });
       }
 
@@ -602,7 +605,7 @@
         const currentCat = btn.getAttribute("data-cat");
 
         // Show inline category picker
-        const cats = ["own", "third_party", "friend", "family"];
+        const cats = ["own", "third_party", "friend", "family", "employer"];
         const existing = container.querySelector(".aml-acc-cat-picker");
         if(existing) existing.remove();
 
@@ -665,6 +668,23 @@
           }
         };
         setTimeout(() => document.addEventListener("click", _close), 10);
+      });
+    });
+
+    // Counterparty click handlers: filter transactions in Review section
+    QSA(".aml-acc-cp-link", container).forEach(el => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const filterText = el.getAttribute("data-filter") || "";
+        const rvSearch = QS("#rv_search");
+        const rvCard = QS("#aml_review_card");
+        if(rvSearch && filterText){
+          rvSearch.value = filterText;
+          rvSearch.dispatchEvent(new Event("input", {bubbles: true}));
+        }
+        if(rvCard){
+          rvCard.scrollIntoView({behavior: "smooth", block: "start"});
+        }
       });
     });
   }

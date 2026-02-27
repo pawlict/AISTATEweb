@@ -73,7 +73,40 @@ _PERSON_NAME_RE = re.compile(
 # third_party  — business counterparty (Kontrahent)
 # friend       — personal transfer to a person (Znajomy)
 # family       — family member (Rodzina) — assigned manually by user
-VALID_CATEGORIES = {"own", "third_party", "friend", "family"}
+# employer     — employer account, credit-only (Pracodawca)
+VALID_CATEGORIES = {"own", "third_party", "friend", "family", "employer"}
+
+
+# ============================================================
+# Employer / salary detection keywords
+# ============================================================
+
+_SALARY_KEYWORDS = [
+    r"wynagrodzenie",
+    r"wynagrodz",
+    r"pensja",
+    r"premia",
+    r"zap[łl]ata",
+    r"wyp[łl]ata",
+    r"salary",
+    r"za\s+prac[ęe]",
+    r"umowa\s+o\s+prac[ęe]",
+    r"umowa\s+zleceni[ae]",
+    r"umowa\s+o\s+dzie[łl]o",
+]
+
+_SALARY_RE = re.compile(
+    "|".join(f"(?:{p})" for p in _SALARY_KEYWORDS),
+    re.IGNORECASE,
+)
+
+
+def _is_salary_tx(tx: Dict[str, Any]) -> bool:
+    """Check if transaction looks like a salary/wage payment."""
+    title = tx.get("title") or ""
+    raw = tx.get("raw_text") or ""
+    search = f"{title} {raw}"
+    return bool(_SALARY_RE.search(search))
 
 
 def _is_phone_transfer_tx(tx: Dict[str, Any]) -> bool:
@@ -237,6 +270,7 @@ def _build_account_stats(
     counterparty_counts: Dict[str, int] = defaultdict(int)
     own_tx_count = 0
     phone_tx_count = 0
+    salary_tx_count = 0
 
     for tx in txs:
         amt = abs(float(tx.get("amount") or 0))
@@ -266,6 +300,10 @@ def _build_account_stats(
         if _is_phone_transfer_tx(tx):
             phone_tx_count += 1
 
+        # Check for salary/employer payments
+        if _is_salary_tx(tx):
+            salary_tx_count += 1
+
     dates.sort()
     tx_count = len(txs)
 
@@ -285,6 +323,9 @@ def _build_account_stats(
 
     if is_own:
         ownership = "own"
+    elif debit_count == 0 and credit_count > 0 and salary_tx_count > 0:
+        # Credit-only account with salary keywords → employer
+        ownership = "employer"
     elif phone_tx_count > 0:
         # Phone/BLIK transfer to a person → likely a friend
         top_cp_name = max(counterparty_counts, key=counterparty_counts.get) if counterparty_counts else ""
