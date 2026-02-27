@@ -147,6 +147,7 @@ function _renderProjectCard(sp, ws, canEdit){
       localStorage.setItem('aistate_workspace_id', ws.id);
       localStorage.setItem('aistate_workspace_name', ws.name);
       localStorage.setItem('aistate_subproject_name', sp.name);
+      localStorage.setItem('aistate_subproject_type', sp.subproject_type || '');
     }
     const route = TYPE_ROUTES[sp.subproject_type] || '/analysis';
     window.location.href = route;
@@ -299,6 +300,7 @@ document.getElementById('npSubmit').addEventListener('click', async () => {
         localStorage.setItem('aistate_workspace_id', _ws.id);
         localStorage.setItem('aistate_workspace_name', _ws.name);
         localStorage.setItem('aistate_subproject_name', sp.name || name);
+        localStorage.setItem('aistate_subproject_type', type || '');
       }
       window.location.href = route;
       return;

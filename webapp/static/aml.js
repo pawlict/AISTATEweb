@@ -226,6 +226,10 @@
       St.statementId = statementId;
       St.caseId = data.statement.case_id;
       St.allTransactions = data.transactions || [];
+      // Persist for session restore after page reload
+      const pid = (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) || "";
+      localStorage.setItem("aistate_aml_statement_id", statementId);
+      localStorage.setItem("aistate_aml_project_id", pid);
     }
     return data;
   }
@@ -2078,6 +2082,12 @@
         if(res){
           // Remove from local state and re-render
           St.history = St.history.filter(h => h.statement_id !== sid);
+          if(St.statementId === sid){
+            St.statementId = null;
+            St.detail = null;
+            localStorage.removeItem("aistate_aml_statement_id");
+            _showUpload();
+          }
           _renderHistory();
         }
       });
@@ -2139,6 +2149,7 @@
         St.detail = null;
         St.statementId = null;
         St.caseId = null;
+        localStorage.removeItem("aistate_aml_statement_id");
         St.chartsData = {};
         St._mergedCharts = null;
         if(St.chartInstance){ St.chartInstance.destroy(); St.chartInstance = null; }
@@ -2951,7 +2962,49 @@
       _bindUpload();
       _bindActions();
       await _loadHistory();
-      _showUpload();
+
+      // Auto-restore last viewed analysis (from localStorage or first in history)
+      const savedSid = localStorage.getItem("aistate_aml_statement_id") || "";
+      const pid = (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) || "";
+      const savedPid = localStorage.getItem("aistate_aml_project_id") || "";
+
+      let restoreSid = "";
+      if(savedSid && savedPid === pid){
+        // Restore the specific statement the user was viewing
+        restoreSid = savedSid;
+      } else if(St.history.length){
+        // No saved state or project changed — load the most recent analysis
+        restoreSid = St.history[0].statement_id;
+      }
+
+      if(restoreSid){
+        _showProgress("Ładowanie analizy...");
+        const detail = await _loadDetail(restoreSid);
+        if(detail && detail.statement){
+          const siblings = detail.sibling_statement_ids || [];
+          if(siblings.length > 1){
+            await _mergeMultiAccountCharts(siblings);
+          } else {
+            St._mergedCharts = null;
+            St._mergedInfo = null;
+            St._mergedCards = null;
+            St._mergedAccounts = null;
+          }
+          _renderResults();
+          _showResults();
+          if(window.ReviewManager){
+            if(siblings.length > 1){
+              await ReviewManager.loadForBatch(siblings);
+            } else {
+              await ReviewManager.loadForStatement(restoreSid);
+            }
+          }
+        } else {
+          _showUpload();
+        }
+      } else {
+        _showUpload();
+      }
     },
 
     /** Called by ReviewManager after classification change. */
