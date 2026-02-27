@@ -121,24 +121,29 @@ async def aml_report(statement_id: str):
 @router.get("/api/aml/graph/{case_id}")
 async def aml_graph(
     case_id: str,
+    statement_id: str = Query(""),
     date_from: str = Query(""),
     date_to: str = Query(""),
     channel: str = Query(""),
     risk_level: str = Query(""),
     counterparty: str = Query(""),
 ):
-    """Get flow graph JSON for a case, with optional filters and classification colors."""
+    """Get flow graph JSON for a case/statement, with optional filters and classification colors."""
     from backend.aml.graph import filter_graph, get_graph_json, enrich_graph_with_classifications
     from backend.db.engine import fetch_one
 
-    graph = get_graph_json(case_id)
+    graph = get_graph_json(case_id=case_id, statement_id=statement_id)
     if not graph["nodes"]:
         return JSONResponse({"error": "no graph data"}, status_code=404)
 
     # Enrich with classification colors from review
-    stmt = fetch_one("SELECT id FROM statements WHERE case_id = ? LIMIT 1", (case_id,))
-    if stmt:
-        graph = enrich_graph_with_classifications(graph, stmt["id"])
+    enrich_sid = statement_id
+    if not enrich_sid:
+        stmt = fetch_one("SELECT id FROM statements WHERE case_id = ? LIMIT 1", (case_id,))
+        if stmt:
+            enrich_sid = stmt["id"]
+    if enrich_sid:
+        graph = enrich_graph_with_classifications(graph, enrich_sid)
 
     # Apply filters if any
     channels = [c.strip() for c in channel.split(",") if c.strip()] if channel else None
@@ -619,9 +624,9 @@ async def aml_detail(statement_id: str):
             charts = risk["score_breakdown"].get("charts", {})
             ml_anomalies = risk["score_breakdown"].get("ml_anomalies", [])
 
-    # Graph — enriched with classification colors
+    # Graph — enriched with classification colors (scoped per statement)
     from backend.aml.graph import get_graph_json, enrich_graph_with_classifications
-    graph = get_graph_json(stmt_dict["case_id"])
+    graph = get_graph_json(case_id=stmt_dict["case_id"], statement_id=statement_id)
     graph = enrich_graph_with_classifications(graph, statement_id)
 
     # Check if LLM prompt is available

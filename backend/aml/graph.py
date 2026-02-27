@@ -40,6 +40,7 @@ RISK_CLUSTERS = {
 def build_graph(
     transactions: List[NormalizedTransaction],
     case_id: str = "",
+    statement_id: str = "",
     account_label: str = "Moje konto",
     save_to_db: bool = True,
 ) -> Dict[str, Any]:
@@ -185,7 +186,7 @@ def build_graph(
 
     # Persist to DB if requested
     if save_to_db and case_id:
-        _save_graph_to_db(case_id, graph)
+        _save_graph_to_db(case_id, graph, statement_id=statement_id)
 
     return graph
 
@@ -204,37 +205,47 @@ def _channel_to_edge_type(channel: str) -> str:
     return mapping.get(channel, "TRANSFER")
 
 
-def _save_graph_to_db(case_id: str, graph: Dict[str, Any]) -> None:
-    """Persist graph nodes and edges to database."""
+def _save_graph_to_db(case_id: str, graph: Dict[str, Any], statement_id: str = "") -> None:
+    """Persist graph nodes and edges to database.
+
+    When *statement_id* is provided the graph is scoped per-statement
+    (so uploading a second statement won't overwrite the first one's graph).
+    """
+    scope_id = statement_id or case_id  # unique scope key
     with get_conn() as conn:
-        # Clear existing graph for this case
-        conn.execute("DELETE FROM graph_edges WHERE case_id = ?", (case_id,))
-        conn.execute("DELETE FROM graph_nodes WHERE case_id = ?", (case_id,))
+        # Clear existing graph for this scope (statement or case)
+        if statement_id:
+            conn.execute("DELETE FROM graph_edges WHERE statement_id = ?", (statement_id,))
+            conn.execute("DELETE FROM graph_nodes WHERE statement_id = ?", (statement_id,))
+        else:
+            conn.execute("DELETE FROM graph_edges WHERE case_id = ?", (case_id,))
+            conn.execute("DELETE FROM graph_nodes WHERE case_id = ?", (case_id,))
 
         # Build mapping from graph-local IDs to DB-unique IDs
         node_id_map: Dict[str, str] = {}
 
         # Insert nodes
         for node in graph["nodes"]:
-            db_id = f"{case_id}:{node['id']}"
+            db_id = f"{scope_id}:{node['id']}"
             node_id_map[node["id"]] = db_id
             conn.execute(
-                """INSERT INTO graph_nodes (id, case_id, node_type, label, entity_id, risk_level, metadata)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (db_id, case_id, node["type"], node["label"],
+                """INSERT INTO graph_nodes
+                   (id, case_id, statement_id, node_type, label, entity_id, risk_level, metadata)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (db_id, case_id, statement_id, node["type"], node["label"],
                  node.get("entity_id", ""), node["risk_level"],
                  json.dumps(node.get("metadata", {}), ensure_ascii=False)),
             )
 
         # Insert edges
         for edge in graph["edges"]:
-            db_id = f"{case_id}:{edge['id']}"
+            db_id = f"{scope_id}:{edge['id']}"
             conn.execute(
                 """INSERT INTO graph_edges
-                   (id, case_id, source_id, target_id, edge_type,
+                   (id, case_id, statement_id, source_id, target_id, edge_type,
                     tx_count, total_amount, first_date, last_date, tx_ids, metadata)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (db_id, case_id,
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (db_id, case_id, statement_id,
                  node_id_map.get(edge["source"], edge["source"]),
                  node_id_map.get(edge["target"], edge["target"]),
                  edge["type"], edge["tx_count"], edge["total_amount"],
@@ -244,12 +255,24 @@ def _save_graph_to_db(case_id: str, graph: Dict[str, Any]) -> None:
             )
 
 
-def get_graph_json(case_id: str) -> Dict[str, Any]:
-    """Load graph from database for a case."""
+def get_graph_json(case_id: str = "", statement_id: str = "") -> Dict[str, Any]:
+    """Load graph from database for a statement (preferred) or case.
+
+    When *statement_id* is given the graph is scoped to that single statement.
+    Falls back to case_id for backwards-compatibility with old data.
+    """
     from ..db.engine import fetch_all
 
-    raw_nodes = fetch_all("SELECT * FROM graph_nodes WHERE case_id = ?", (case_id,))
-    raw_edges = fetch_all("SELECT * FROM graph_edges WHERE case_id = ?", (case_id,))
+    if statement_id:
+        raw_nodes = fetch_all("SELECT * FROM graph_nodes WHERE statement_id = ?", (statement_id,))
+        raw_edges = fetch_all("SELECT * FROM graph_edges WHERE statement_id = ?", (statement_id,))
+        # Fallback: old data may not have statement_id set
+        if not raw_nodes and case_id:
+            raw_nodes = fetch_all("SELECT * FROM graph_nodes WHERE case_id = ? AND (statement_id IS NULL OR statement_id = '')", (case_id,))
+            raw_edges = fetch_all("SELECT * FROM graph_edges WHERE case_id = ? AND (statement_id IS NULL OR statement_id = '')", (case_id,))
+    else:
+        raw_nodes = fetch_all("SELECT * FROM graph_nodes WHERE case_id = ?", (case_id,))
+        raw_edges = fetch_all("SELECT * FROM graph_edges WHERE case_id = ?", (case_id,))
 
     nodes = []
     for row in raw_nodes:

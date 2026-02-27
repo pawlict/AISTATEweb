@@ -2928,7 +2928,9 @@
   async function _refreshGraphColors(){
     if(!St.caseId || !St.cyInstance) return;
     try {
-      const graph = await _safeApi("/api/aml/graph/" + encodeURIComponent(St.caseId));
+      let graphUrl = "/api/aml/graph/" + encodeURIComponent(St.caseId);
+      if(St.statementId) graphUrl += "?statement_id=" + encodeURIComponent(St.statementId);
+      const graph = await _safeApi(graphUrl);
       if(graph && graph.nodes){
         // Update node/edge data in place for smooth update
         const cy = St.cyInstance;

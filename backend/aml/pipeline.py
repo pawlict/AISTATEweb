@@ -409,7 +409,7 @@ def run_aml_pipeline(
     # --- Step 11: Build flow graph ---
     _log("Budowa grafu przepływów...")
     account_label = info.account_holder or info.account_number or "Moje konto"
-    graph_data = build_graph(tx_list, case_id=case_id, account_label=account_label)
+    graph_data = build_graph(tx_list, case_id=case_id, statement_id=statement_id, account_label=account_label)
     _log(f"Graf: {graph_data['stats']['total_nodes']} węzłów, "
          f"{graph_data['stats']['total_edges']} krawędzi")
 
