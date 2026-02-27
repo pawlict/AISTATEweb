@@ -554,6 +554,13 @@
     if(window.AnalysisManager){
       await AnalysisManager.init();
     }
+
+    // Auto-activate AML tab for finance subprojects
+    const spType = localStorage.getItem('aistate_subproject_type') || '';
+    if(spType === 'finance'){
+      const amlTab = document.querySelector('.analysis-tab[data-tab="aml"]');
+      if(amlTab) amlTab.click();
+    }
   }catch(e){
     console.error(e);
   }
