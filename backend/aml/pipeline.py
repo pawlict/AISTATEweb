@@ -583,6 +583,21 @@ def run_aml_pipeline(
         title=f"Raport AML — {bank_name} {info.period_from or ''}",
     )
 
+    # Register source PDF in case_files for traceability & cleanup
+    if case_id:
+        try:
+            add_case_file(
+                case_id=case_id,
+                file_type="source",
+                file_name=pdf_path.name,
+                file_path=str(pdf_path),
+                mime_type="application/pdf",
+                size_bytes=pdf_path.stat().st_size,
+                checksum=pdf_hash,
+            )
+        except Exception:
+            pass  # Non-critical
+
     # Save report
     report_path = None
     if save_report:
