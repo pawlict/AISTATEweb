@@ -985,6 +985,17 @@ button.pill-icon:hover{
   background: rgba(255,255,255,.12);
 }
 
+.aml-acc-details .detail-row.aml-acc-cp-link{
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  transition: background .15s;
+}
+.aml-acc-details .detail-row.aml-acc-cp-link:hover{
+  background: rgba(255,255,255,.12);
+}
+
 /* Identified Accounts */
 .aml-accounts-container{
   display: flex;
@@ -1056,6 +1067,13 @@ button.pill-icon:hover{
 }
 .aml-account-item.aml-acc-family-bg{
   background: linear-gradient(135deg, #831843 0%, #9d174d 50%, #be185d 100%);
+}
+.aml-acc-employer{
+  background: rgba(52,211,153,.25);
+  color: #6ee7b7;
+}
+.aml-account-item.aml-acc-employer-bg{
+  background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%);
 }
 .aml-acc-cat-btn{
   cursor: pointer;
