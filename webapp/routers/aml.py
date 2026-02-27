@@ -659,9 +659,16 @@ async def aml_detail(statement_id: str):
         import json as _json
         cache_key = f"detected_accounts:{statement_id}"
         cached_row = fetch_one("SELECT value FROM system_config WHERE key = ?", (cache_key,))
+        use_cache = False
         if cached_row:
             detected_accounts = _json.loads(cached_row["value"])
-        else:
+            # Check if cache has manual overrides (keep them) or needs re-detection
+            # Stale cache without 'ownership' field → re-detect to get new categories
+            has_manual = any(a.get("category_manual") for a in detected_accounts)
+            has_ownership = any("ownership" in a for a in detected_accounts) if detected_accounts else True
+            use_cache = has_manual or has_ownership
+
+        if not use_cache:
             from backend.aml.accounts import detect_accounts
             stmt_account = stmt_dict.get("account_number", "")
             detected_accounts = detect_accounts(transactions, statement_account=stmt_account)
@@ -974,6 +981,57 @@ async def aml_account_for_statement(statement_id: str):
         is_anonymized=is_anon,
     )
     return JSONResponse({"profile": profile})
+
+
+# ============================================================
+# ACCOUNT CATEGORY CHANGE (manual override)
+# ============================================================
+
+@router.patch("/api/aml/account-category")
+async def aml_account_category_change(request: Request):
+    """Change the ownership category of a detected account.
+
+    Body: { statement_id, account_number, category }
+    category: "own" | "third_party" | "friend" | "family"
+    """
+    import json as _json
+    from backend.db.engine import execute, fetch_one
+    from backend.aml.accounts import VALID_CATEGORIES
+
+    data = await request.json()
+    statement_id = data.get("statement_id", "")
+    account_number = data.get("account_number", "")
+    new_category = data.get("category", "")
+
+    if not statement_id or not account_number:
+        return JSONResponse({"error": "statement_id and account_number required"}, 400)
+    if new_category not in VALID_CATEGORIES:
+        return JSONResponse({"error": f"Invalid category. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}"}, 400)
+
+    cache_key = f"detected_accounts:{statement_id}"
+    row = fetch_one("SELECT value FROM system_config WHERE key = ?", (cache_key,))
+    if not row:
+        return JSONResponse({"error": "No cached account data for this statement"}, 404)
+
+    accounts = _json.loads(row["value"])
+    updated = False
+    for acc in accounts:
+        if acc.get("account_number") == account_number:
+            acc["ownership"] = new_category
+            acc["is_own_account"] = (new_category == "own")
+            acc["category_manual"] = True
+            updated = True
+            break
+
+    if not updated:
+        return JSONResponse({"error": "Account not found in this statement"}, 404)
+
+    execute(
+        "INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",
+        (cache_key, _json.dumps(accounts, ensure_ascii=False)),
+    )
+
+    return JSONResponse({"status": "ok", "category": new_category})
 
 
 # ============================================================

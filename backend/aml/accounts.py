@@ -41,6 +41,65 @@ _OWN_ACCOUNT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ============================================================
+# Phone transfer detection — suggests personal (friend/family) transfer
+# ============================================================
+
+_PHONE_TRANSFER_KEYWORDS = [
+    r"przelew\s+na\s+telefon",
+    r"przelew\s+na\s+numer",
+    r"przelew\s+blik",
+    r"blik",
+    r"przelew\s+mobilny",
+    r"przelew\s+telefoniczny",
+]
+
+_PHONE_TRANSFER_RE = re.compile(
+    "|".join(f"(?:{p})" for p in _PHONE_TRANSFER_KEYWORDS),
+    re.IGNORECASE,
+)
+
+# Simple heuristic: counterparty looks like a person name (2-3 capitalized words)
+_PERSON_NAME_RE = re.compile(
+    r"^[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+"
+    r"\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+"
+    r"(?:\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+)?$"
+)
+
+# ============================================================
+# Account ownership categories
+# ============================================================
+# own          — statement owner's own account
+# third_party  — business counterparty (Kontrahent)
+# friend       — personal transfer to a person (Znajomy)
+# family       — family member (Rodzina) — assigned manually by user
+VALID_CATEGORIES = {"own", "third_party", "friend", "family"}
+
+
+def _is_phone_transfer_tx(tx: Dict[str, Any]) -> bool:
+    """Check if transaction looks like a phone/BLIK transfer."""
+    title = tx.get("title") or ""
+    raw = tx.get("raw_text") or ""
+    search = f"{title} {raw}"
+    return bool(_PHONE_TRANSFER_RE.search(search))
+
+
+def _is_person_name(counterparty: str) -> bool:
+    """Check if counterparty looks like a person name (not a company)."""
+    cp = counterparty.strip()
+    if not cp or len(cp) < 4:
+        return False
+    # Companies tend to have keywords
+    company_markers = [
+        "sp.", "s.a.", "s.a", "sp.z", "sp. z", "z o.o", "zoo", "ltd",
+        "gmbh", "inc", "corp", "sklep", "market", "urząd", "zakład",
+        "firma", "bank", "ubezpiecz", "fundusz", "stowarzysz",
+    ]
+    lower = cp.lower()
+    if any(m in lower for m in company_markers):
+        return False
+    return bool(_PERSON_NAME_RE.match(cp))
+
 
 def detect_accounts(
     transactions: List[Dict[str, Any]],
@@ -177,6 +236,7 @@ def _build_account_stats(
     dates = []
     counterparty_counts: Dict[str, int] = defaultdict(int)
     own_tx_count = 0
+    phone_tx_count = 0
 
     for tx in txs:
         amt = abs(float(tx.get("amount") or 0))
@@ -202,19 +262,36 @@ def _build_account_stats(
         if _is_own_account_tx(tx):
             own_tx_count += 1
 
+        # Check for phone/BLIK transfers
+        if _is_phone_transfer_tx(tx):
+            phone_tx_count += 1
+
     dates.sort()
     tx_count = len(txs)
 
-    # Determine ownership
+    # Determine ownership category
+    # Priority: own account > friend (phone transfer to person) > third_party
     is_own = False
     if account_num == own_account_norm:
         is_own = True
     elif own_tx_count > 0 and own_tx_count >= tx_count * 0.5:
-        # More than half of transactions on this account are "own transfers"
-        is_own = True
+        # More than half of transactions are "own transfers"
+        # BUT: phone transfers (BLIK, "przelew na telefon") are NOT own transfers
+        # — they indicate a personal transfer to someone else
+        if phone_tx_count > 0 and phone_tx_count >= own_tx_count:
+            is_own = False
+        else:
+            is_own = True
 
     if is_own:
         ownership = "own"
+    elif phone_tx_count > 0:
+        # Phone/BLIK transfer to a person → likely a friend
+        top_cp_name = max(counterparty_counts, key=counterparty_counts.get) if counterparty_counts else ""
+        if _is_person_name(top_cp_name):
+            ownership = "friend"
+        else:
+            ownership = "third_party"
     else:
         ownership = "third_party"
 
