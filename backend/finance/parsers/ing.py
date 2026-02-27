@@ -439,6 +439,55 @@ class INGParser(BankParser):
 
     # --- segmentation + parsing of a single segment ---
 
+    @staticmethod
+    def _lookbehind_for_contractor(items: List[Dict], scan_from: int, lower_bound: int,
+                                   ref_page: int, ref_y: float, y_lookbehind: float = 8.0) -> int:
+        """Compute lookbehind start index for a transaction whose dates are at (ref_page, ref_y).
+
+        In ING statements, contractor info (name, address, account number) appears
+        ABOVE the date pair.  This helper walks backward through *items* and returns
+        the index of the first item that should belong to this transaction.
+
+        Three phases:
+          1. Standard lookbehind (any column, ≤ y_lookbehind pt, same page).
+          2. Extended lookbehind (scan all items within 50 pt on the same page;
+             only *contractor*-column items expand the boundary — this avoids
+             stopping when a title/details item is interleaved at the same Y).
+          3. Cross-page lookbehind: if the dates are near the top of a page,
+             contractor lines may sit at the bottom of the previous page.
+        """
+        start = scan_from  # initially points at the first date item
+
+        j = scan_from - 1
+
+        # Phase 1 — tight lookbehind (any column, ≤ y_lookbehind)
+        while j >= lower_bound and items[j]["page"] == ref_page and items[j]["y0"] >= ref_y - y_lookbehind:
+            start = j
+            j -= 1
+
+        # Phase 2 — extended lookbehind (50 pt, same page).
+        # Scan ALL items in the range but only move `start` when the item is in
+        # the contractor column.  Non-contractor items (title / details at the
+        # same visual row) are naturally included because they sit between `start`
+        # and the dates.
+        scan_j = j
+        while scan_j >= lower_bound and items[scan_j]["page"] == ref_page and items[scan_j]["y0"] >= ref_y - 50.0:
+            if items[scan_j]["col"] == "contractor":
+                start = scan_j
+            scan_j -= 1
+
+        # Phase 3 — cross-page lookbehind.
+        # If the dates are on page P, contractor lines may be at the bottom of
+        # page P-1 (page-break in the middle of a transaction block).
+        prev_page = ref_page - 1
+        if scan_j >= lower_bound and items[scan_j]["page"] == prev_page:
+            while scan_j >= lower_bound and items[scan_j]["page"] == prev_page:
+                if items[scan_j]["col"] == "contractor":
+                    start = scan_j
+                scan_j -= 1
+
+        return start
+
     def _segment_transactions(self, items: List[Dict], y_lookbehind: float = 8.0) -> List[List[Dict]]:
         date_idx = [i for i, it in enumerate(items) if it["col"] == "date" and self.DATE_ONLY_RE.match(it["text"])]
         # pair sequentially: (booking, transaction date)
@@ -450,39 +499,21 @@ class INGParser(BankParser):
         prev_end = 0
 
         for pi, (i1, i2) in enumerate(pairs):
-            # compute start with lookbehind:
-            # Phase 1: capture channel codes / ref IDs that appear slightly above booking date (8pt)
-            start = i1
-            start_page = items[i1]["page"]
-            start_y = items[i1]["y0"]
-            j = i1 - 1
-            while j >= prev_end and items[j]["page"] == start_page and items[j]["y0"] >= start_y - y_lookbehind:
-                start = j
-                j -= 1
+            # --- compute start (lookbehind from this pair's booking date) ---
+            start = self._lookbehind_for_contractor(
+                items, scan_from=i1, lower_bound=prev_end,
+                ref_page=items[i1]["page"], ref_y=items[i1]["y0"],
+                y_lookbehind=y_lookbehind,
+            )
 
-            # Phase 2: continue lookbehind for contractor-column lines (account numbers,
-            # counterparty name/address) which in ING appear above the date pair.
-            # These can be >8pt above the booking date, so we extend up to 30pt
-            # but ONLY for contractor-column lines.
-            while j >= prev_end and items[j]["page"] == start_page and items[j]["col"] == "contractor" and items[j]["y0"] >= start_y - 30.0:
-                start = j
-                j -= 1
-
-            # end at next segment start (also with lookbehind) to prevent grabbing next tx's pre-date lines
+            # --- compute end (lookbehind from NEXT pair's booking date) ---
             if pi + 1 < len(pairs):
                 next_i1 = pairs[pi + 1][0]
-                next_page = items[next_i1]["page"]
-                next_y = items[next_i1]["y0"]
-                ns = next_i1
-                jj = next_i1 - 1
-                while jj >= i2 + 1 and items[jj]["page"] == next_page and items[jj]["y0"] >= next_y - y_lookbehind:
-                    ns = jj
-                    jj -= 1
-                # Phase 2: same extended lookbehind for contractor lines
-                while jj >= i2 + 1 and items[jj]["page"] == next_page and items[jj]["col"] == "contractor" and items[jj]["y0"] >= next_y - 30.0:
-                    ns = jj
-                    jj -= 1
-                end = ns
+                end = self._lookbehind_for_contractor(
+                    items, scan_from=next_i1, lower_bound=i2 + 1,
+                    ref_page=items[next_i1]["page"], ref_y=items[next_i1]["y0"],
+                    y_lookbehind=y_lookbehind,
+                )
             else:
                 end = len(items)
 
