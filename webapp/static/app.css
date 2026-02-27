@@ -1043,6 +1043,28 @@ button.pill-icon:hover{
   background: rgba(251,191,36,.2);
   color: #fde68a;
 }
+.aml-acc-friend{
+  background: rgba(96,165,250,.25);
+  color: #93c5fd;
+}
+.aml-acc-family{
+  background: rgba(244,114,182,.25);
+  color: #f9a8d4;
+}
+.aml-account-item.aml-acc-friend-bg{
+  background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 50%, #2563eb 100%);
+}
+.aml-account-item.aml-acc-family-bg{
+  background: linear-gradient(135deg, #831843 0%, #9d174d 50%, #be185d 100%);
+}
+.aml-acc-cat-btn{
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+.aml-acc-cat-btn:hover{
+  opacity: 0.8;
+  transform: scale(1.05);
+}
 .aml-acc-polish{
   background: rgba(255,255,255,.12);
   color: rgba(255,255,255,.75);

@@ -511,8 +511,28 @@
     const cur = (stmt && stmt.currency) || "PLN";
     const _t = typeof t === "function" ? t : (k => k);
 
+    // Ownership category labels and CSS classes
+    const _catLabels = {
+      own:         "Właściciel",
+      third_party: "Kontrahent",
+      friend:      "Znajomy",
+      family:      "Rodzina",
+    };
+    const _catBadgeClass = {
+      own:         "aml-acc-own",
+      third_party: "aml-acc-third",
+      friend:      "aml-acc-friend",
+      family:      "aml-acc-family",
+    };
+    const _catBgClass = {
+      own:         "aml-acc-own-bg",
+      third_party: "aml-acc-default",
+      friend:      "aml-acc-friend-bg",
+      family:      "aml-acc-family-bg",
+    };
+
     container.innerHTML = accounts.map(acc => {
-      const isOwn = acc.is_own_account;
+      const ownership = acc.ownership || (acc.is_own_account ? "own" : "third_party");
       const isForeign = acc.is_foreign;
       const bankShort = _esc(acc.bank_short || "");
       const bankFull = _esc(acc.bank_full || "");
@@ -521,14 +541,12 @@
       const countryCode = _esc(acc.country_code || "");
       const firstDate = _esc(acc.first_date || "");
       const lastDate = _esc(acc.last_date || "");
+      const accNum = _esc(acc.account_number || "");
 
-      // Ownership badge
-      let ownershipBadge = "";
-      if(isOwn){
-        ownershipBadge = `<span class="aml-acc-badge aml-acc-own">Rachunek własny</span>`;
-      } else {
-        ownershipBadge = `<span class="aml-acc-badge aml-acc-third">Kontrahent</span>`;
-      }
+      // Ownership badge (clickable → category selector)
+      const catLabel = _catLabels[ownership] || _catLabels.third_party;
+      const catClass = _catBadgeClass[ownership] || _catBadgeClass.third_party;
+      const ownershipBadge = `<span class="aml-acc-badge ${catClass} aml-acc-cat-btn" data-acc="${accNum}" data-cat="${ownership}" title="Kliknij aby zmienić kategorię">${catLabel}</span>`;
 
       // Country badge
       let countryBadge = "";
@@ -557,9 +575,8 @@
       }
 
       // Determine gradient style
-      let gradientClass = "aml-acc-default";
-      if(isOwn) gradientClass = "aml-acc-own-bg";
-      else if(isForeign) gradientClass = "aml-acc-foreign-bg";
+      let gradientClass = _catBgClass[ownership] || "aml-acc-default";
+      if(isForeign && ownership !== "own") gradientClass = "aml-acc-foreign-bg";
 
       return `<div class="aml-account-item ${gradientClass}">
         <div class="aml-acc-top">
@@ -576,6 +593,80 @@
         ${cpHtml ? '<div class="aml-acc-details">' + cpHtml + '</div>' : ''}
       </div>`;
     }).join("");
+
+    // Category change click handlers
+    QSA(".aml-acc-cat-btn", container).forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const accNum = btn.getAttribute("data-acc");
+        const currentCat = btn.getAttribute("data-cat");
+
+        // Show inline category picker
+        const cats = ["own", "third_party", "friend", "family"];
+        const existing = container.querySelector(".aml-acc-cat-picker");
+        if(existing) existing.remove();
+
+        const picker = document.createElement("div");
+        picker.className = "aml-acc-cat-picker";
+        picker.style.cssText = "position:absolute;z-index:100;background:var(--bg-card,#fff);border:1px solid var(--border,#ddd);border-radius:8px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.18);display:flex;flex-direction:column;gap:2px;min-width:130px";
+
+        cats.forEach(cat => {
+          const opt = document.createElement("div");
+          opt.textContent = _catLabels[cat];
+          opt.style.cssText = "padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;transition:background .15s";
+          if(cat === currentCat) opt.style.opacity = "0.4";
+          opt.addEventListener("mouseenter", () => { opt.style.background = "var(--bg-hover,#f0f0f0)"; });
+          opt.addEventListener("mouseleave", () => { opt.style.background = "none"; });
+          opt.addEventListener("click", async () => {
+            picker.remove();
+            if(cat === currentCat) return;
+            try {
+              const resp = await fetch("/api/aml/account-category", {
+                method: "PATCH",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  statement_id: St.statementId,
+                  account_number: accNum,
+                  category: cat,
+                }),
+              });
+              if(resp.ok){
+                // Update local data & re-render
+                const accs = St._mergedAccounts || (St.detail && St.detail.accounts) || [];
+                const found = accs.find(a => a.account_number === accNum);
+                if(found){
+                  found.ownership = cat;
+                  found.is_own_account = (cat === "own");
+                  found.category_manual = true;
+                }
+                _renderAccounts(accs, stmt);
+              }
+            } catch(err) {
+              console.error("Category change failed:", err);
+            }
+          });
+          picker.appendChild(opt);
+        });
+
+        // Position near the badge
+        const rect = btn.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        picker.style.position = "absolute";
+        picker.style.top = (rect.bottom - containerRect.top + 2) + "px";
+        picker.style.left = (rect.left - containerRect.left) + "px";
+        container.style.position = "relative";
+        container.appendChild(picker);
+
+        // Close on outside click
+        const _close = (ev) => {
+          if(!picker.contains(ev.target)){
+            picker.remove();
+            document.removeEventListener("click", _close);
+          }
+        };
+        setTimeout(() => document.addEventListener("click", _close), 10);
+      });
+    });
   }
 
   function _renderAlerts(alerts){
