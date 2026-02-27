@@ -353,10 +353,36 @@ def get_review_transactions(
         if not tx.get("class_note"):
             tx["class_note"] = ""
 
-        if not include_raw:
-            tx.pop("raw_text", None)
-
         result.append(tx)
+
+    # Extract counterparty_account from raw_text (same logic as detail endpoint)
+    try:
+        from ..aml._polish_banks import extract_accounts_from_text, classify_account
+
+        stmt_row = fetch_one(
+            "SELECT account_number FROM statements WHERE id = ?",
+            (statement_id,),
+        )
+        own_account = (stmt_row["account_number"] if stmt_row else "").replace(" ", "")
+        for tx in result:
+            raw = tx.get("raw_text") or ""
+            cp = tx.get("counterparty_raw") or ""
+            accs = extract_accounts_from_text(f"{cp}\n{raw}")
+            cp_acc = ""
+            for a in accs:
+                norm = a.upper().replace("PL", "")
+                if norm != own_account:
+                    info = classify_account(a)
+                    cp_acc = info.get("display", a)
+                    break
+            tx["counterparty_account"] = cp_acc
+    except Exception:
+        pass
+
+    # Strip raw_text if not needed
+    if not include_raw:
+        for tx in result:
+            tx.pop("raw_text", None)
 
     return result
 
