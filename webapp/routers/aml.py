@@ -687,6 +687,11 @@ async def aml_detail(statement_id: str):
                     )
             except Exception:
                 pass  # Non-critical: cache write failure
+
+        # Tag each account with its source statement_id for category change tracking
+        for acc in detected_accounts:
+            acc["_statement_id"] = statement_id
+
     except Exception as e:
         log.warning("Account detection failed: %s", e)
 
@@ -997,10 +1002,10 @@ async def aml_account_category_change(request: Request):
     """Change the ownership category of a detected account.
 
     Body: { statement_id, account_number, category }
-    category: "own" | "third_party" | "friend" | "family"
+    category: "own" | "third_party" | "friend" | "family" | "employer"
     """
     import json as _json
-    from backend.db.engine import execute, fetch_one
+    from backend.db.engine import execute, fetch_one, fetch_all
     from backend.aml.accounts import VALID_CATEGORIES
 
     data = await request.json()
@@ -1013,27 +1018,52 @@ async def aml_account_category_change(request: Request):
     if new_category not in VALID_CATEGORIES:
         return JSONResponse({"error": f"Invalid category. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}"}, 400)
 
+    # Try to find and update the account in the given statement's cache.
+    # If not found, search sibling statements in the same case (batch mode).
     cache_key = f"detected_accounts:{statement_id}"
     row = fetch_one("SELECT value FROM system_config WHERE key = ?", (cache_key,))
-    if not row:
-        return JSONResponse({"error": "No cached account data for this statement"}, 404)
 
-    accounts = _json.loads(row["value"])
-    updated = False
+    target_key = cache_key
+    accounts = _json.loads(row["value"]) if row else []
+    found_acc = None
     for acc in accounts:
         if acc.get("account_number") == account_number:
-            acc["ownership"] = new_category
-            acc["is_own_account"] = (new_category == "own")
-            acc["category_manual"] = True
-            updated = True
+            found_acc = acc
             break
 
-    if not updated:
-        return JSONResponse({"error": "Account not found in this statement"}, 404)
+    # Fallback: search sibling statements (same case) if not found
+    if not found_acc:
+        stmt_row = fetch_one("SELECT case_id FROM statements WHERE id = ?", (statement_id,))
+        if stmt_row:
+            sib_rows = fetch_all(
+                "SELECT id FROM statements WHERE case_id = ? AND id != ?",
+                (stmt_row["case_id"], statement_id),
+            )
+            for sib in sib_rows:
+                sib_key = f"detected_accounts:{sib['id']}"
+                sib_cache = fetch_one("SELECT value FROM system_config WHERE key = ?", (sib_key,))
+                if not sib_cache:
+                    continue
+                sib_accounts = _json.loads(sib_cache["value"])
+                for acc in sib_accounts:
+                    if acc.get("account_number") == account_number:
+                        found_acc = acc
+                        accounts = sib_accounts
+                        target_key = sib_key
+                        break
+                if found_acc:
+                    break
+
+    if not found_acc:
+        return JSONResponse({"error": "Account not found in any statement"}, 404)
+
+    found_acc["ownership"] = new_category
+    found_acc["is_own_account"] = (new_category == "own")
+    found_acc["category_manual"] = True
 
     execute(
         "INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",
-        (cache_key, _json.dumps(accounts, ensure_ascii=False)),
+        (target_key, _json.dumps(accounts, ensure_ascii=False)),
     )
 
     return JSONResponse({"status": "ok", "category": new_category})
