@@ -303,6 +303,35 @@ def _delete_project_data(project_id: str, wipe_method: str = "none"):
         shutil.rmtree(pdir, ignore_errors=True)
 
 
+def _cleanup_aml_data(project_id: str):
+    """Delete AML DB data (cases, statements, transactions, etc.) for a project.
+
+    The project_id here is the UUID from subprojects.data_dir (projects/{uuid}).
+    It maps to cases.project_id -> projects.id in the AML database.
+    Deleting from `projects` cascades to cases -> statements -> transactions etc.
+    """
+    try:
+        from backend.db.engine import get_conn
+        with get_conn() as conn:
+            # Also clean up system_config entries for this project's statements
+            stmt_rows = conn.execute(
+                """SELECT s.id FROM statements s
+                   JOIN cases c ON s.case_id = c.id
+                   WHERE c.project_id = ?""",
+                (project_id,),
+            ).fetchall()
+            for row in stmt_rows:
+                sid = row["id"]
+                conn.execute("DELETE FROM system_config WHERE key = ?", (f"detected_accounts:{sid}",))
+                conn.execute("DELETE FROM system_config WHERE key = ?", (f"llm_prompt:{sid}",))
+            # Cascade delete: projects -> cases -> statements -> transactions,
+            #                  cases -> case_files, cases -> graph_nodes/edges
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        log.info("Cleaned up AML data for project %s (%d statements)", project_id[:8], len(stmt_rows))
+    except Exception as e:
+        log.warning("AML data cleanup failed for project %s: %s", project_id[:8], e)
+
+
 @router.post("/invitations/{invitation_id}/accept")
 def accept_invitation(request: Request, invitation_id: str):
     uid = _uid(request)
@@ -469,13 +498,14 @@ def delete_workspace(request: Request, workspace_id: str, wipe_method: str = "no
     ws = _STORE.get_workspace(workspace_id)
     ws_name = ws.get("name", "") if ws else ""
 
-    # Delete all subproject data directories before removing workspace from DB
+    # Delete all subproject data directories + AML DB data before removing workspace
     subs = _STORE.list_subprojects(workspace_id)
     for sp in subs:
         data_dir = sp.get("data_dir", "")
         if data_dir:
             dir_id = data_dir.replace("projects/", "")
             if dir_id:
+                _cleanup_aml_data(dir_id)
                 try:
                     _delete_project_data(dir_id, wipe_method)
                 except Exception:
@@ -591,10 +621,11 @@ def delete_subproject(request: Request, workspace_id: str, subproject_id: str,
                 _STORE.delete_workspace(copy_ws)
                 log.info("Cleaned up empty sharing workspace %s", copy_ws[:8])
 
-    # Delete the project data files
+    # Delete the project data files + AML DB data
     if data_dir:
         dir_id = data_dir.replace("projects/", "")
         if dir_id:
+            _cleanup_aml_data(dir_id)
             try:
                 _delete_project_data(dir_id, wipe_method)
             except Exception:

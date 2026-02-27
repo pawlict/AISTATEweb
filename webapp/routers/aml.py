@@ -64,12 +64,16 @@ async def aml_analyze(
     from starlette.concurrency import run_in_threadpool
     from backend.aml.pipeline import run_aml_pipeline
 
-    # Save uploaded file
+    # Save uploaded file — store in project folder (like audio files)
     data_dir = os.environ.get("AISTATEWEB_DATA_DIR", "data_www")
-    upload_dir = Path(data_dir) / "uploads" / "aml"
+    safe_name = Path(file.filename or "statement.pdf").name
+
+    if project_id:
+        upload_dir = Path(data_dir) / "projects" / project_id / "aml"
+    else:
+        upload_dir = Path(data_dir) / "uploads" / "aml"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    safe_name = Path(file.filename or "statement.pdf").name
     file_path = upload_dir / f"{uuid.uuid4().hex}_{safe_name}"
     with open(file_path, "wb") as f:
         content = await file.read()
@@ -501,7 +505,7 @@ async def aml_history(limit: int = Query(20), project_id: str = Query("")):
 @router.delete("/api/aml/history/{statement_id}")
 async def aml_delete_analysis(statement_id: str):
     """Delete an AML analysis (statement + related data)."""
-    from backend.db.engine import execute, fetch_one
+    from backend.db.engine import execute, fetch_all, fetch_one
 
     stmt = fetch_one("SELECT id, case_id FROM statements WHERE id = ?", (statement_id,))
     if not stmt:
@@ -524,6 +528,17 @@ async def aml_delete_analysis(statement_id: str):
     if not other and case_id:
         execute("DELETE FROM graph_edges WHERE case_id = ?", (case_id,))
         execute("DELETE FROM graph_nodes WHERE case_id = ?", (case_id,))
+        # Delete associated files (source PDFs + reports) from disk
+        try:
+            file_rows = fetch_all(
+                "SELECT file_path FROM case_files WHERE case_id = ?", (case_id,)
+            )
+            for fr in file_rows:
+                fp = Path(fr["file_path"])
+                if fp.is_file():
+                    fp.unlink(missing_ok=True)
+        except Exception:
+            pass  # best-effort
         # Delete the case itself if no statements remain
         execute("DELETE FROM cases WHERE id = ?", (case_id,))
     execute("DELETE FROM statements WHERE id = ?", (statement_id,))
