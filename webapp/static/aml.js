@@ -549,11 +549,12 @@
       const firstDate = _esc(acc.first_date || "");
       const lastDate = _esc(acc.last_date || "");
       const accNum = _esc(acc.account_number || "");
+      const accStmtId = _esc(acc._statement_id || St.statementId || "");
 
       // Ownership badge (clickable → category selector)
       const catLabel = _catLabels[ownership] || _catLabels.third_party;
       const catClass = _catBadgeClass[ownership] || _catBadgeClass.third_party;
-      const ownershipBadge = `<span class="aml-acc-badge ${catClass} aml-acc-cat-btn" data-acc="${accNum}" data-cat="${ownership}" title="Kliknij aby zmienić kategorię">${catLabel}</span>`;
+      const ownershipBadge = `<span class="aml-acc-badge ${catClass} aml-acc-cat-btn" data-acc="${accNum}" data-cat="${ownership}" data-stmt="${accStmtId}" title="Kliknij aby zmienić kategorię">${catLabel}</span>`;
 
       // Country badge
       let countryBadge = "";
@@ -607,6 +608,7 @@
         e.stopPropagation();
         const accNum = btn.getAttribute("data-acc");
         const currentCat = btn.getAttribute("data-cat");
+        const accStmtId = btn.getAttribute("data-stmt") || St.statementId;
 
         // Show inline category picker
         const cats = ["own", "third_party", "friend", "family", "employer"];
@@ -632,7 +634,7 @@
                 method: "PATCH",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
-                  statement_id: St.statementId,
+                  statement_id: accStmtId,
                   account_number: accNum,
                   category: cat,
                 }),
@@ -2928,7 +2930,9 @@
   async function _refreshGraphColors(){
     if(!St.caseId || !St.cyInstance) return;
     try {
-      const graph = await _safeApi("/api/aml/graph/" + encodeURIComponent(St.caseId));
+      let graphUrl = "/api/aml/graph/" + encodeURIComponent(St.caseId);
+      if(St.statementId) graphUrl += "?statement_id=" + encodeURIComponent(St.statementId);
+      const graph = await _safeApi(graphUrl);
       if(graph && graph.nodes){
         // Update node/edge data in place for smooth update
         const cy = St.cyInstance;

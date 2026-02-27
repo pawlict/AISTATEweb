@@ -409,7 +409,7 @@ def run_aml_pipeline(
     # --- Step 11: Build flow graph ---
     _log("Budowa grafu przepływów...")
     account_label = info.account_holder or info.account_number or "Moje konto"
-    graph_data = build_graph(tx_list, case_id=case_id, account_label=account_label)
+    graph_data = build_graph(tx_list, case_id=case_id, statement_id=statement_id, account_label=account_label)
     _log(f"Graf: {graph_data['stats']['total_nodes']} węzłów, "
          f"{graph_data['stats']['total_edges']} krawędzi")
 
@@ -617,6 +617,37 @@ def run_aml_pipeline(
                 mime_type="text/html",
                 size_bytes=len(report_html.encode("utf-8")),
             )
+
+    # --- Step 14: Save JSON analysis snapshot to project folder ---
+    try:
+        results_dir = pdf_path.parent / "aml_results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        result_json_path = results_dir / f"aml_result_{statement_id[:8]}.json"
+        result_snapshot = {
+            "statement_id": statement_id,
+            "case_id": case_id,
+            "bank": bank_id,
+            "bank_name": bank_name,
+            "period_from": getattr(info, "period_from", None),
+            "period_to": getattr(info, "period_to", None),
+            "account_number": getattr(info, "account_number", None),
+            "account_holder": getattr(info, "account_holder", None),
+            "transaction_count": len(tx_list),
+            "risk_score": risk_score,
+            "risk_reasons": risk_reasons,
+            "alerts_count": len(alerts),
+            "graph_stats": graph_data["stats"],
+            "pdf_hash": pdf_hash,
+            "ocr_used": ocr_used,
+            "warnings": warnings,
+        }
+        result_json_path.write_text(
+            json.dumps(result_snapshot, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        _log(f"Snapshot JSON zapisany: {result_json_path}")
+    except Exception as e:
+        log.warning("Failed to save JSON snapshot: %s", e)
 
     dt = time.time() - t0
     _log(f"Pipeline AML zakończony w {dt:.1f}s")

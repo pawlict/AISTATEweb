@@ -244,6 +244,7 @@ CREATE INDEX IF NOT EXISTS idx_risk_statement ON risk_assessments(statement_id);
 CREATE TABLE IF NOT EXISTS graph_nodes (
     id          TEXT PRIMARY KEY,
     case_id     TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+    statement_id TEXT DEFAULT '',  -- scopes graph per statement (not just per case)
     node_type   TEXT NOT NULL,  -- ACCOUNT | COUNTERPARTY | MERCHANT | CASH_NODE | PAYMENT_PROVIDER
     label       TEXT NOT NULL,
     entity_id   TEXT,           -- links to counterparties.id if applicable
@@ -252,11 +253,13 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_gn_case ON graph_nodes(case_id);
+CREATE INDEX IF NOT EXISTS idx_gn_stmt ON graph_nodes(statement_id);
 CREATE INDEX IF NOT EXISTS idx_gn_type ON graph_nodes(node_type);
 
 CREATE TABLE IF NOT EXISTS graph_edges (
     id          TEXT PRIMARY KEY,
     case_id     TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+    statement_id TEXT DEFAULT '',  -- scopes graph per statement (not just per case)
     source_id   TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
     target_id   TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
     edge_type   TEXT NOT NULL,  -- TRANSFER | CARD_PAYMENT | BLIK_P2P | BLIK_MERCHANT | CASH | REFUND | FEE
@@ -269,6 +272,7 @@ CREATE TABLE IF NOT EXISTS graph_edges (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ge_case ON graph_edges(case_id);
+CREATE INDEX IF NOT EXISTS idx_ge_stmt ON graph_edges(statement_id);
 CREATE INDEX IF NOT EXISTS idx_ge_source ON graph_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_ge_target ON graph_edges(target_id);
 

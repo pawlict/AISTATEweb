@@ -79,6 +79,14 @@ def init_db(path: Optional[Path] = None) -> None:
         schema_sql = _SCHEMA_FILE.read_text(encoding="utf-8")
         conn.executescript(schema_sql)
 
+        # Migrations for existing databases
+        # Add statement_id column to graph tables (scopes graphs per statement)
+        for tbl in ("graph_nodes", "graph_edges"):
+            try:
+                conn.execute(f"ALTER TABLE {tbl} ADD COLUMN statement_id TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
         # Store schema version
         conn.execute(
             "INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",
