@@ -439,8 +439,10 @@ class INGParser(BankParser):
 
     # --- segmentation + parsing of a single segment ---
 
-    @staticmethod
-    def _lookbehind_for_contractor(items: List[Dict], scan_from: int, lower_bound: int,
+    DATE_ONLY_CHECK = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
+
+    @classmethod
+    def _lookbehind_for_contractor(cls, items: List[Dict], scan_from: int, lower_bound: int,
                                    ref_page: int, ref_y: float, y_lookbehind: float = 8.0) -> int:
         """Compute lookbehind start index for a transaction whose dates are at (ref_page, ref_y).
 
@@ -448,13 +450,14 @@ class INGParser(BankParser):
         ABOVE the date pair.  This helper walks backward through *items* and returns
         the index of the first item that should belong to this transaction.
 
-        Three phases:
+        Two phases:
           1. Standard lookbehind (any column, ≤ y_lookbehind pt, same page).
-          2. Extended lookbehind (scan all items within 50 pt on the same page;
-             only *contractor*-column items expand the boundary — this avoids
-             stopping when a title/details item is interleaved at the same Y).
-          3. Cross-page lookbehind: if the dates are near the top of a page,
-             contractor lines may sit at the bottom of the previous page.
+          2. Row-based contractor block detection: groups items by Y-row and
+             extends start while the row contains contractor-column items.
+             Stops at: row without contractor items, row with date items,
+             "Nazwa i adres" header (block start found), Y-gap > 20 pt,
+             or a second NRB account number (each tx has at most one).
+             Also handles cross-page (continues to previous page).
         """
         start = scan_from  # initially points at the first date item
 
@@ -465,26 +468,90 @@ class INGParser(BankParser):
             start = j
             j -= 1
 
-        # Phase 2 — extended lookbehind (50 pt, same page).
-        # Scan ALL items in the range but only move `start` when the item is in
-        # the contractor column.  Non-contractor items (title / details at the
-        # same visual row) are naturally included because they sit between `start`
-        # and the dates.
-        scan_j = j
-        while scan_j >= lower_bound and items[scan_j]["page"] == ref_page and items[scan_j]["y0"] >= ref_y - 50.0:
-            if items[scan_j]["col"] == "contractor":
-                start = scan_j
-            scan_j -= 1
+        # Phase 2 — row-based contractor block detection.
+        # Scan backward grouping items by Y-row (±1.5 pt tolerance).
+        # Include rows that contain at least one contractor-column item.
+        # Stop conditions:
+        #   a) Row has NO contractor items → content from another transaction
+        #   b) Row has a date-column item → another transaction's date anchor
+        #   c) Gap between consecutive rows > 20 pt → different tx block
+        #   d) Row contains "Nazwa i adres" header → block start (include & stop)
+        #   e) Row contains a second NRB account number → crossed into prev tx
 
-        # Phase 3 — cross-page lookbehind.
-        # If the dates are on page P, contractor lines may be at the bottom of
-        # page P-1 (page-break in the middle of a transaction block).
-        prev_page = ref_page - 1
-        if scan_j >= lower_bound and items[scan_j]["page"] == prev_page:
-            while scan_j >= lower_bound and items[scan_j]["page"] == prev_page:
-                if items[scan_j]["col"] == "contractor":
-                    start = scan_j
-                scan_j -= 1
+        # Track NRB (account number) lines already captured in Phase 1
+        seen_nrb = False
+        for k in range(start, scan_from):
+            if (items[k]["col"] == "contractor"
+                    and cls.NRB_SPACED_RE.match(items[k]["text"].replace("\u00a0", " ").strip())):
+                seen_nrb = True
+                break
+
+        last_y = items[start]["y0"]
+        scan_j = j
+
+        for page_offset in (0, 1):  # 0=same page, 1=previous page (cross-page)
+            check_page = ref_page - page_offset
+            if check_page < 0:
+                break
+            while scan_j >= lower_bound and items[scan_j]["page"] == check_page:
+                row_y = items[scan_j]["y0"]
+
+                # Gap check (only meaningful within the same page;
+                # reset last_y when crossing to a previous page)
+                if page_offset == 0:
+                    gap = last_y - row_y
+                    if gap > 20.0:
+                        return start
+                else:
+                    # Cross-page: for the first row on the previous page
+                    # there is no meaningful Y-gap to check, so just continue.
+                    pass
+
+                # Collect all items in this Y-row
+                row_end = scan_j
+                while (scan_j >= lower_bound
+                       and items[scan_j]["page"] == check_page
+                       and abs(items[scan_j]["y0"] - row_y) <= 1.5):
+                    scan_j -= 1
+                row_start_idx = scan_j + 1
+
+                row_items = range(row_start_idx, row_end + 1)
+                has_contractor = any(items[k]["col"] == "contractor" for k in row_items)
+                has_date = any(
+                    items[k]["col"] == "date" and cls.DATE_ONLY_CHECK.match(items[k]["text"])
+                    for k in row_items
+                )
+
+                if has_date:
+                    # Date row → boundary of another transaction, stop
+                    return start
+
+                if not has_contractor:
+                    # Row with no contractor items → previous tx content, stop
+                    return start
+
+                # Check for NRB account number in this row
+                row_has_nrb = any(
+                    items[k]["col"] == "contractor"
+                    and cls.NRB_SPACED_RE.match(items[k]["text"].replace("\u00a0", " ").strip())
+                    for k in row_items
+                )
+
+                if row_has_nrb and seen_nrb:
+                    # Second NRB → we've crossed into a different transaction's
+                    # contractor block.  Each transaction has at most one NRB.
+                    return start
+
+                if row_has_nrb:
+                    seen_nrb = True
+
+                # Row has contractor items → include this row
+                start = row_start_idx
+                last_y = row_y
+
+                # If this row contains "Nazwa i adres" header → definitive block start
+                if any(items[k]["text"].startswith("Nazwa i adres") for k in row_items):
+                    return start
 
         return start
 
