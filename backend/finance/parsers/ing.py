@@ -330,6 +330,7 @@ class INGParser(BankParser):
                     ("refs", tx_data["refs"]),
                     ("transaction_ref", tx_data["refs"][0] if tx_data["refs"] else None),
                     ("counterparty_role", tx_data.get("counterparty_role")),
+                    ("counterparty_account", tx_data.get("counterparty_account")),
                 ):
                     try:
                         setattr(rt, attr, val)
@@ -449,12 +450,21 @@ class INGParser(BankParser):
         prev_end = 0
 
         for pi, (i1, i2) in enumerate(pairs):
-            # compute start with lookbehind (capture "10500031-.../..." and channel that appear slightly above booking date)
+            # compute start with lookbehind:
+            # Phase 1: capture channel codes / ref IDs that appear slightly above booking date (8pt)
             start = i1
             start_page = items[i1]["page"]
             start_y = items[i1]["y0"]
             j = i1 - 1
             while j >= prev_end and items[j]["page"] == start_page and items[j]["y0"] >= start_y - y_lookbehind:
+                start = j
+                j -= 1
+
+            # Phase 2: continue lookbehind for contractor-column lines (account numbers,
+            # counterparty name/address) which in ING appear above the date pair.
+            # These can be >8pt above the booking date, so we extend up to 30pt
+            # but ONLY for contractor-column lines.
+            while j >= prev_end and items[j]["page"] == start_page and items[j]["col"] == "contractor" and items[j]["y0"] >= start_y - 30.0:
                 start = j
                 j -= 1
 
@@ -466,6 +476,10 @@ class INGParser(BankParser):
                 ns = next_i1
                 jj = next_i1 - 1
                 while jj >= i2 + 1 and items[jj]["page"] == next_page and items[jj]["y0"] >= next_y - y_lookbehind:
+                    ns = jj
+                    jj -= 1
+                # Phase 2: same extended lookbehind for contractor lines
+                while jj >= i2 + 1 and items[jj]["page"] == next_page and items[jj]["col"] == "contractor" and items[jj]["y0"] >= next_y - 30.0:
                     ns = jj
                     jj -= 1
                 end = ns
@@ -556,8 +570,9 @@ class INGParser(BankParser):
 
         channel = self._infer_channel(title_lines, details_lines)
 
-        # counterparty
+        # counterparty + counterparty account number
         counterparty_role: Optional[str] = None
+        counterparty_account: Optional[str] = None
         cp_parts: List[str] = []
         for l in contractor_lines:
             if l.startswith("Nazwa i adres"):
@@ -570,7 +585,12 @@ class INGParser(BankParser):
                 continue
 
             ls = l.replace(self.NBSP, " ").strip()
-            if self.NRB_SPACED_RE.match(ls) or self.ING_INTERNAL_ID_RE.match(ls) or self.LONG_REF_RE.match(ls.replace(" ", "")):
+            if self.NRB_SPACED_RE.match(ls):
+                # Extract NRB as counterparty account (first match wins)
+                if not counterparty_account:
+                    counterparty_account = ls.replace(" ", "")
+                continue
+            if self.ING_INTERNAL_ID_RE.match(ls) or self.LONG_REF_RE.match(ls.replace(" ", "")):
                 continue
             cp_parts.append(l.strip())
 
@@ -596,6 +616,7 @@ class INGParser(BankParser):
             "channel": channel,
             "counterparty": counterparty,
             "counterparty_role": counterparty_role,
+            "counterparty_account": counterparty_account,
             "title": title,
             "refs": refs,
             "raw_text": raw_text,

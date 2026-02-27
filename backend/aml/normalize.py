@@ -207,6 +207,13 @@ def normalize_transactions(
         channel = detect_channel(raw.bank_category, raw.title, raw.counterparty)
         urls = extract_urls(f"{raw.counterparty} {raw.title} {raw.raw_text}")
 
+        # Include counterparty account in raw_text for downstream extraction
+        # (placed at the START so it's the first account found — avoids misattribution)
+        cp_account = getattr(raw, "counterparty_account", None) or ""
+        raw_text = raw.raw_text
+        if cp_account and cp_account not in raw_text:
+            raw_text = f"Nr rachunku {cp_account}\n{raw_text}"
+
         balance = to_decimal(raw.balance_after) if raw.balance_after is not None else None
 
         ntx = NormalizedTransaction(
@@ -223,7 +230,7 @@ def normalize_transactions(
             title=raw.title,
             title_clean=title_clean,
             bank_category=raw.bank_category,
-            raw_text=raw.raw_text,
+            raw_text=raw_text,
             channel=channel,
             urls=urls,
             tx_hash=tx_hash,
