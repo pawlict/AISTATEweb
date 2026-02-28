@@ -34,6 +34,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+
+logger = logging.getLogger(__name__)
 import shutil
 import tempfile
 import uuid
@@ -916,11 +918,26 @@ async def memory_queue_resolve(item_id: str, request: Request):
 @router.get("/api/aml/review/{statement_id}")
 async def aml_review_transactions(statement_id: str):
     """Get transactions for review with existing classifications."""
+    import traceback
     from backend.aml.review import get_review_transactions, get_statement_header, get_classification_stats
 
-    transactions = get_review_transactions(statement_id)
-    header = get_statement_header(statement_id)
-    stats = get_classification_stats(statement_id)
+    try:
+        transactions = get_review_transactions(statement_id)
+    except Exception as e:
+        logger.error("get_review_transactions(%s) failed: %s\n%s", statement_id, e, traceback.format_exc())
+        transactions = []
+
+    try:
+        header = get_statement_header(statement_id)
+    except Exception as e:
+        logger.error("get_statement_header(%s) failed: %s\n%s", statement_id, e, traceback.format_exc())
+        header = {}
+
+    try:
+        stats = get_classification_stats(statement_id)
+    except Exception as e:
+        logger.error("get_classification_stats(%s) failed: %s\n%s", statement_id, e, traceback.format_exc())
+        stats = {}
 
     return JSONResponse({
         "transactions": transactions,

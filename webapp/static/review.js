@@ -290,9 +290,18 @@
     St.classifications = {};
     St.headers = [];
 
-    // Load all statements in parallel
+    // Load all statements in parallel (with error tracking)
+    let _loadErrors = 0;
     const allData = await Promise.all(
-      statementIds.map(id => _safeApi("/api/aml/review/" + encodeURIComponent(id)))
+      statementIds.map(async (id) => {
+        try {
+          return await api("/api/aml/review/" + encodeURIComponent(id));
+        } catch(e) {
+          _loadErrors++;
+          console.error("[Review] Failed to load statement", id, e.message || e);
+          return null;
+        }
+      })
     );
 
     // Merge: collect headers and transactions
@@ -347,6 +356,20 @@
     });
 
     St.transactions = allTx;
+
+    // Show warning if some statements failed to load
+    if(_loadErrors > 0){
+      const warn = QS("#rv_table_wrap");
+      if(warn){
+        const msg = `<div style="background:#fef3cd;color:#856404;padding:10px 16px;border-radius:8px;margin-bottom:8px;border:1px solid #ffeeba">
+          <b>Uwaga:</b> Nie udalo sie zaladowac ${_loadErrors} z ${statementIds.length} wyciag\u00f3w.
+          Sprawdz konsole przegladarki (F12) po szczegoly bledu.
+          <button onclick="ReviewManager.loadForBatch(${JSON.stringify(statementIds)})" style="margin-left:8px;padding:2px 10px;border-radius:4px;border:1px solid #856404;background:#fff3cd;cursor:pointer">Ponow</button>
+        </div>`;
+        warn.insertAdjacentHTML("beforebegin", msg);
+      }
+      console.warn(`[Review] ${_loadErrors}/${statementIds.length} statements failed to load`);
+    }
 
     // Use first statement's header as primary
     if(St.headers.length > 0){
