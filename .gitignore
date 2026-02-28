@@ -6,3 +6,39 @@ test_data/
 backend/.aistate/users.json
 backend/.aistate/sessions.json
 backend/.aistate/deployment.json
+
+# === Sensitive data protection ===
+# Database files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# PDF bank statements
+*.pdf
+
+# Environment / secrets
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+credentials*.json
+secrets*.json
+*_secret*
+
+# Logs that may contain personal data
+*.log
+logs/
+
+# Backups
+*.bak
+*.backup
+*.dump
+
+# OS junk
+nul
+Thumbs.db
+.DS_Store
