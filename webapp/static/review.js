@@ -721,14 +721,22 @@
 
     let filtered = St.transactions;
     if(searchVal){
-      filtered = filtered.filter(tx =>
-        (tx.counterparty_raw || "").toLowerCase().includes(searchVal) ||
-        (tx.counterparty_account || "").toLowerCase().includes(searchVal) ||
-        (tx.title || "").toLowerCase().includes(searchVal) ||
-        (tx.category || "").toLowerCase().includes(searchVal) ||
-        (tx.subcategory || "").toLowerCase().includes(searchVal) ||
-        (tx.amount || "").toString().includes(searchVal)
-      );
+      // Support AND logic: space-separated terms must ALL match (each term
+      // can match any searchable field independently). This enables combined
+      // filters like "9674 Łódź" to find card 9674 transactions in Łódź.
+      const terms = searchVal.split(/\s+/).filter(t => t.length > 0);
+      filtered = filtered.filter(tx => {
+        const haystack = [
+          tx.counterparty_raw || "",
+          tx.counterparty_account || "",
+          tx.title || "",
+          tx.category || "",
+          tx.subcategory || "",
+          (tx.amount || "").toString(),
+          tx.raw_text || "",
+        ].join(" ").toLowerCase();
+        return terms.every(term => haystack.includes(term));
+      });
     }
     if(classVal){
       filtered = filtered.filter(tx => (St.classifications[tx.id] || "neutral") === classVal);

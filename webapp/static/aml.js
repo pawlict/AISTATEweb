@@ -431,6 +431,7 @@
       const masked = _esc(c.card_masked || c.card_id || "****");
       const firstDate = _esc(c.first_date || "");
       const lastDate = _esc(c.last_date || "");
+      const last4 = _esc(c.last_four || "");
 
       // Stats section
       const _t = typeof t === "function" ? t : (k => k);
@@ -441,7 +442,7 @@
         <div><b>${_t("aml.card.avg_amount")}</b><div class="val">${_fmtAmount(c.avg_amount, cur)}</div></div>
       `;
 
-      // Top merchants — clickable: filter by merchant name
+      // Top merchants — clickable: filter by merchant name (scoped to this card)
       const _filterTitle = _t("aml.card.click_filter");
       let detailsHtml = "";
       if(c.top_merchants && c.top_merchants.length){
@@ -451,34 +452,37 @@
           const raw = _esc(m[0] || "");
           const amt = _fmtAmount(m[1], cur);
           const cnt = m[2] || 0;
-          detailsHtml += `<div class="detail-row aml-card-link" data-filter="${raw}" title="${_filterTitle}"><span>${name} (${cnt}x)</span><span>${amt}</span></div>`;
+          detailsHtml += `<div class="detail-row aml-card-link" data-filter="${raw}" data-card-last4="${last4}" title="${_filterTitle}"><span>${name} (${cnt}x)</span><span>${amt}</span></div>`;
         });
       }
 
-      // Top categories — localized, clickable
+      // Top categories — localized, clickable (scoped to this card)
       if(c.top_categories && c.top_categories.length){
         detailsHtml += `<div style="margin-top:6px;margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">${_t("aml.card.categories")}</div>`;
         c.top_categories.slice(0, 4).forEach(cat => {
           const rawCat = cat[0] || "";
           const displayName = _catDisplayName(rawCat);
           const amt = _fmtAmount(cat[1], cur);
-          detailsHtml += `<div class="detail-row aml-card-link" data-filter-cat="${_esc(rawCat)}" title="${_filterTitle}"><span>${_esc(displayName)}</span><span>${amt}</span></div>`;
+          detailsHtml += `<div class="detail-row aml-card-link" data-filter-cat="${_esc(rawCat)}" data-card-last4="${last4}" title="${_filterTitle}"><span>${_esc(displayName)}</span><span>${amt}</span></div>`;
         });
       }
 
-      // Locations — clickable: filter by location name
+      // Locations — clickable: filter by location name (scoped to this card)
       if(c.locations && c.locations.length){
         detailsHtml += `<div style="margin-top:6px;margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">${_t("aml.card.locations")}</div>`;
         c.locations.slice(0, 4).forEach(loc => {
           const locName = _esc(loc[0] || "");
-          detailsHtml += `<div class="detail-row aml-card-link" data-filter="${locName}" title="${_filterTitle}"><span>${locName}</span><span>${loc[1]} tx</span></div>`;
+          detailsHtml += `<div class="detail-row aml-card-link" data-filter="${locName}" data-card-last4="${last4}" title="${_filterTitle}"><span>${locName}</span><span>${loc[1]} tx</span></div>`;
         });
       }
+
+      // Brand display: show detected brand or empty (not "DEBIT" fallback)
+      const brandDisplay = brand || "";
 
       return `<div class="aml-card-item" data-brand="${brand}">
         <div class="aml-card-top">
           <div class="aml-card-bank">${_esc(bankName)}</div>
-          <div class="aml-card-brand">${brand || "DEBIT"}</div>
+          ${brandDisplay ? `<div class="aml-card-brand">${brandDisplay}</div>` : ""}
         </div>
         <div class="aml-card-number">${masked}</div>
         <div class="aml-card-dates">
@@ -490,24 +494,32 @@
       </div>`;
     }).join("");
 
-    // Click handlers: filter transactions in Review section and scroll to it
+    // Click handlers: filter transactions in Review section — scoped to card
     QSA(".aml-card-link", container).forEach(el => {
       el.addEventListener("click", (e) => {
         e.stopPropagation();
         const filterText = el.getAttribute("data-filter") || "";
         const filterCat = el.getAttribute("data-filter-cat") || "";
+        const cardLast4 = el.getAttribute("data-card-last4") || "";
 
         // Target: Review & Classification search box
         const rvSearch = QS("#rv_search");
         const rvCard = QS("#aml_review_card");
 
         if(rvSearch){
+          let searchTerms = "";
           if(filterCat){
-            // For categories, search by the category label (localized)
-            rvSearch.value = _catDisplayName(filterCat);
+            searchTerms = _catDisplayName(filterCat);
           } else {
-            rvSearch.value = filterText;
+            searchTerms = filterText;
           }
+          // Prepend card's last 4 digits to scope filter to this card only.
+          // Review search uses AND logic for space-separated terms, so
+          // "9674 Łódź" finds only transactions matching BOTH terms.
+          if(cardLast4 && cardLast4 !== "????"){
+            searchTerms = cardLast4 + " " + searchTerms;
+          }
+          rvSearch.value = searchTerms.trim();
           // Trigger filter update
           rvSearch.dispatchEvent(new Event("input", {bubbles: true}));
         }
@@ -2007,11 +2019,16 @@
 
     let filtered = St.allTransactions;
     if(searchVal){
-      filtered = filtered.filter(tx=>
-        (tx.counterparty_raw || "").toLowerCase().includes(searchVal) ||
-        (tx.title || "").toLowerCase().includes(searchVal) ||
-        (tx.category || "").toLowerCase().includes(searchVal)
-      );
+      const terms = searchVal.split(/\s+/).filter(t => t.length > 0);
+      filtered = filtered.filter(tx => {
+        const haystack = [
+          tx.counterparty_raw || "",
+          tx.title || "",
+          tx.category || "",
+          tx.raw_text || "",
+        ].join(" ").toLowerCase();
+        return terms.every(term => haystack.includes(term));
+      });
     }
     if(channelVal){
       filtered = filtered.filter(tx => tx.channel === channelVal);
@@ -2724,7 +2741,42 @@
               if(c.first_date && (!existing.first_date || c.first_date < existing.first_date)) existing.first_date = c.first_date;
               if(c.last_date && (!existing.last_date || c.last_date > existing.last_date)) existing.last_date = c.last_date;
               existing._sources += 1;
-              // Merge top_merchants, top_categories, locations (simple concat, may have duplicates)
+
+              // Merge top_merchants: aggregate by name, keep top 5
+              const mMap = {};
+              for(const m of (existing.top_merchants || [])){
+                const key = m[0] || "";
+                mMap[key] = [key, (mMap[key] ? mMap[key][1] : 0) + (m[1] || 0), (mMap[key] ? mMap[key][2] : 0) + (m[2] || 0)];
+              }
+              for(const m of (c.top_merchants || [])){
+                const key = m[0] || "";
+                mMap[key] = [key, (mMap[key] ? mMap[key][1] : 0) + (m[1] || 0), (mMap[key] ? mMap[key][2] : 0) + (m[2] || 0)];
+              }
+              existing.top_merchants = Object.values(mMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+              // Merge top_categories: aggregate by name, keep top 6
+              const catMap = {};
+              for(const cat of (existing.top_categories || [])){
+                const key = cat[0] || "";
+                catMap[key] = [key, (catMap[key] ? catMap[key][1] : 0) + (cat[1] || 0)];
+              }
+              for(const cat of (c.top_categories || [])){
+                const key = cat[0] || "";
+                catMap[key] = [key, (catMap[key] ? catMap[key][1] : 0) + (cat[1] || 0)];
+              }
+              existing.top_categories = Object.values(catMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+              // Merge locations: aggregate counts, keep top 8
+              const locMap = {};
+              for(const loc of (existing.locations || [])){
+                const key = loc[0] || "";
+                locMap[key] = [key, (locMap[key] ? locMap[key][1] : 0) + (loc[1] || 0)];
+              }
+              for(const loc of (c.locations || [])){
+                const key = loc[0] || "";
+                locMap[key] = [key, (locMap[key] ? locMap[key][1] : 0) + (loc[1] || 0)];
+              }
+              existing.locations = Object.values(locMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
             }
           }
           // Recalculate avg

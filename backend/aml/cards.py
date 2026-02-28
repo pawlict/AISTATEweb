@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # ============================================================
 # Card number extraction patterns
@@ -48,6 +48,89 @@ _BIN_BRANDS = {
     "6": "Maestro",
 }
 
+# Keywords that confirm a transaction is card-related
+_CARD_EVIDENCE_KEYWORDS = (
+    "płatność kartą", "platnosc karta", "płatnosc kartą",
+    "nr karty", "numer karty", "karta nr",
+    "card payment", "wypłata z bankomatu", "wyplata z bankomatu",
+    "atm", "bankomat",
+)
+
+# ============================================================
+# Counterparty / merchant name cleanup
+# ============================================================
+
+# Label prefixes that should be stripped from counterparty_raw
+_LABEL_PREFIXES = (
+    "Nazwa i adres odbiorcy:",
+    "Nazwa i adres płatnika:",
+    "Nazwa i adres nadawcy:",
+    "Nazwa i adres odbiorcy",
+    "Nazwa i adres płatnika",
+    "Nazwa i adres nadawcy",
+)
+
+# ING internal counterparty ID pattern (e.g., "10500031-1915031/19730")
+_ING_INTERNAL_ID_RE = re.compile(r"\b\d{7,10}-\d{7,10}/\d{3,6}\b")
+
+# NRB account number (26 digits with optional spaces)
+_NRB_RE = re.compile(r"\b\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\b")
+
+# Address-like fragments at start of a name part
+_ADDRESS_PREFIX_RE = re.compile(
+    r"^(UL\.?|AL\.?|PL\.?|OS\.?|RYNEK|PLAC)\s",
+    re.IGNORECASE,
+)
+
+# Postal code at start
+_POSTAL_CODE_RE = re.compile(r"^\d{2}-\d{3}\b")
+
+
+def _clean_merchant_name(raw: str) -> str:
+    """Clean up raw counterparty text to extract merchant name.
+
+    Handles ING-specific artifacts:
+    - "Nazwa i adres odbiorcy: MERCHANT_NAME" labels
+    - ING internal IDs (10500031-1915031/19730)
+    - Account numbers (NRB)
+    - Semicolon-separated name+address → extract just the name
+    """
+    if not raw:
+        return ""
+
+    # Strip common label prefixes
+    for prefix in _LABEL_PREFIXES:
+        if raw.startswith(prefix):
+            raw = raw[len(prefix):].strip()
+
+    # Remove ING internal IDs
+    raw = _ING_INTERNAL_ID_RE.sub("", raw).strip()
+
+    # Remove NRB account numbers
+    raw = _NRB_RE.sub("", raw).strip()
+
+    # Handle semicolon-separated parts (name; address; city)
+    if ";" in raw:
+        parts = [p.strip() for p in raw.split(";") if p.strip()]
+        # Separate name parts from address parts
+        names = []
+        for p in parts:
+            if _ADDRESS_PREFIX_RE.match(p) or _POSTAL_CODE_RE.match(p):
+                continue  # skip address fragments
+            if len(p) <= 2:
+                continue  # skip tiny fragments
+            names.append(p)
+        if names:
+            raw = "; ".join(names[:2])  # keep max 2 name parts
+
+    # Collapse whitespace
+    raw = re.sub(r"\s+", " ", raw).strip()
+
+    # Strip trailing semicolons and whitespace
+    raw = raw.strip("; ").strip()
+
+    return raw[:50] if raw else ""
+
 
 def detect_cards(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Detect unique cards and compute per-card statistics.
@@ -58,28 +141,7 @@ def detect_cards(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             direction, booking_date).
 
     Returns:
-        List of card info dicts, sorted by total_amount descending:
-        [
-            {
-                "card_id": "4246**9674",
-                "card_masked": "4246 ** 9674",
-                "first_four": "4246",
-                "last_four": "9674",
-                "brand": "VISA",
-                "tx_count": 85,
-                "total_debit": 12500.00,
-                "total_credit": 200.00,
-                "avg_amount": 147.06,
-                "max_amount": 1200.00,
-                "first_date": "2025-01-05",
-                "last_date": "2025-12-28",
-                "top_categories": [("grocery", 4500), ("fuel", 2800), ...],
-                "top_merchants": [("BIEDRONKA", 3200, 24), ...],
-                "locations": [("Łódź", 45), ("Warszawa", 3), ...],
-                "monthly": {"2025-01": 1200, "2025-02": 980, ...},
-            },
-            ...
-        ]
+        List of card info dicts, sorted by total_amount descending.
     """
     # Map: normalized card_id → list of transactions
     card_txs: Dict[str, List[Dict]] = defaultdict(list)
@@ -112,12 +174,60 @@ def detect_cards(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         # Try to extract card number
         card_num = _extract_card_number(tx)
         if not card_num:
-            # Certain card tx without extractable number — group under "unknown"
+            # Channel says it's a card tx but no card number found.
+            # Verify with secondary evidence to avoid false positives.
+            title = (tx.get("title") or "").lower()
+            raw = (tx.get("raw_text") or "").lower()
+            combined = f"{title} {raw}"
+
+            has_card_evidence = any(kw in combined for kw in _CARD_EVIDENCE_KEYWORDS)
+            if not has_card_evidence:
+                # No card-specific keywords → skip (likely false positive)
+                continue
+
+            # Has card keywords but can't read the number — group under "unknown"
             card_num = "****"
 
         card_txs[card_num].append(tx)
         if card_num not in card_raw:
             card_raw[card_num] = _format_masked(card_num)
+
+    if not card_txs:
+        return []
+
+    # Try to re-assign "****" transactions to known cards if possible
+    if "****" in card_txs and len(card_txs) > 1:
+        known_cards = {cid for cid in card_txs if cid != "****"}
+        reassigned = []
+        remaining = []
+        for tx in card_txs["****"]:
+            # Try harder: search title for any known card's last 4 digits
+            title = (tx.get("title") or "") + " " + (tx.get("raw_text") or "")
+            matched = False
+            for known_id in known_cards:
+                last4 = known_id.split("**")[-1] if "**" in known_id else ""
+                if last4 and last4 in title:
+                    card_txs[known_id].append(tx)
+                    reassigned.append(tx)
+                    matched = True
+                    break
+            if not matched:
+                remaining.append(tx)
+
+        if remaining:
+            card_txs["****"] = remaining
+        else:
+            del card_txs["****"]
+
+    # Drop "****" card entirely if it has very few transactions
+    # and mostly credits (likely false positives)
+    if "****" in card_txs:
+        unknown_txs = card_txs["****"]
+        credits = sum(1 for t in unknown_txs if (t.get("direction") or "").upper() == "CREDIT")
+        debits = len(unknown_txs) - credits
+        if debits <= 2 or credits > debits:
+            # Mostly credits or very few debits → likely not a real card
+            del card_txs["****"]
 
     if not card_txs:
         return []
@@ -171,7 +281,7 @@ def _normalize_card_id(raw: str) -> str:
 
 
 def _format_masked(card_id: str) -> str:
-    """Format card ID for display: '4246 ** 9674'."""
+    """Format card ID for display: '4246 **** **** 9674'."""
     if card_id == "****":
         return "**** **** **** ****"
     # Split into parts
@@ -247,8 +357,9 @@ def _build_card_stats(card_id: str, txs: List[Dict]) -> Dict[str, Any]:
         if cat:
             category_amounts[cat] += amt
 
-        # Merchant
-        merchant = (tx.get("counterparty_raw") or "")[:50]
+        # Merchant — clean up counterparty_raw before using
+        raw_cp = tx.get("counterparty_raw") or ""
+        merchant = _clean_merchant_name(raw_cp)
         if merchant:
             merchant_amounts[merchant] += amt
             merchant_counts[merchant] += 1
@@ -266,11 +377,11 @@ def _build_card_stats(card_id: str, txs: List[Dict]) -> Dict[str, Any]:
     # Top categories
     top_cats = sorted(category_amounts.items(), key=lambda x: -x[1])[:6]
 
-    # Top merchants
+    # Top merchants (top 5 as requested)
     top_merchants = sorted(
         [(name, merchant_amounts[name], merchant_counts[name]) for name in merchant_amounts],
         key=lambda x: -x[1],
-    )[:8]
+    )[:5]
 
     # Locations
     locations = sorted(location_counts.items(), key=lambda x: -x[1])[:8]
