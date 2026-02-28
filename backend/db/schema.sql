@@ -106,6 +106,7 @@ CREATE INDEX IF NOT EXISTS idx_case_files_type ON case_files(file_type);
 CREATE TABLE IF NOT EXISTS statements (
     id              TEXT PRIMARY KEY,
     case_id         TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+    account_id      TEXT REFERENCES account_profiles(id),  -- FK to account profile (multi-account)
     file_id         TEXT REFERENCES case_files(id),
     bank_id         TEXT NOT NULL DEFAULT '',     -- ing, pko, mbank, etc.
     bank_name       TEXT NOT NULL DEFAULT '',
@@ -136,7 +137,9 @@ CREATE TABLE IF NOT EXISTS statements (
 
 CREATE INDEX IF NOT EXISTS idx_statements_case ON statements(case_id);
 CREATE INDEX IF NOT EXISTS idx_statements_bank ON statements(bank_id);
+-- NOTE: idx_statements_account is created in engine.py migration (after ALTER TABLE adds account_id)
 CREATE INDEX IF NOT EXISTS idx_statements_period ON statements(period_from, period_to);
+-- NOTE: idx_statements_case_hash is created in engine.py migration (safe for existing DBs)
 
 -- ============================================================
 -- NORMALIZED TRANSACTIONS

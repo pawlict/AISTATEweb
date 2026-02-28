@@ -256,8 +256,69 @@ def run_aml_pipeline(
 
     # --- Step 5: Save statement to DB ---
     _log("Zapis do bazy danych...")
-    statement_id = new_id()
     info = parse_result.info
+
+    # --- Step 5a: Duplicate detection by pdf_hash ---
+    # Check if this exact PDF has already been analyzed (in any case or globally)
+    _existing_stmt = None
+    _is_duplicate = False
+    with get_conn() as conn:
+        if case_id and pdf_hash:
+            # Strict: same PDF in the same case → return existing analysis
+            _existing_stmt = conn.execute(
+                "SELECT id, case_id FROM statements WHERE case_id = ? AND pdf_hash = ? LIMIT 1",
+                (case_id, pdf_hash),
+            ).fetchone()
+        if not _existing_stmt and pdf_hash:
+            # Broad: same PDF anywhere → warn but still check
+            _existing_stmt = conn.execute(
+                "SELECT id, case_id FROM statements WHERE pdf_hash = ? LIMIT 1",
+                (pdf_hash,),
+            ).fetchone()
+            if _existing_stmt and not case_id:
+                # Same PDF uploaded again without explicit case → return existing
+                pass
+            elif _existing_stmt and case_id:
+                # Same PDF exists in a *different* case — allow (user may want cross-case)
+                _existing_stmt = None
+
+    if _existing_stmt:
+        _is_duplicate = True
+        existing_id = _existing_stmt["id"]
+        existing_case = _existing_stmt["case_id"]
+        _log(f"DUPLIKAT: ten PDF został już przeanalizowany (statement={existing_id[:8]}, "
+             f"case={existing_case[:8]}). Pomijam ponowny zapis.")
+        # Return reference to existing analysis instead of re-inserting
+        dt = time.time() - t0
+        return {
+            "status": "duplicate",
+            "case_id": existing_case,
+            "statement_id": existing_id,
+            "bank": bank_id,
+            "bank_name": bank_name,
+            "transaction_count": len(parse_result.transactions),
+            "duplicate_of": existing_id,
+            "message": f"Ten wyciąg ({bank_name} {info.period_from}—{info.period_to}) "
+                        "został już wczytany. Używam istniejącej analizy.",
+            "warnings": warnings,
+            "pipeline_time_s": round(dt, 2),
+        }
+
+    statement_id = new_id()
+
+    # --- Step 5b: Create/update account profile (before main DB block to avoid nested connections) ---
+    account_profile_id = None
+    if info.account_number:
+        try:
+            profile = get_or_create_profile(
+                account_number=info.account_number,
+                bank_id=bank_id,
+                bank_name=bank_name,
+                account_holder=info.account_holder or "",
+            )
+            account_profile_id = profile.get("id")
+        except Exception as e:
+            log.warning("Account profile creation failed: %s", e)
 
     with get_conn() as conn:
         # Create case if needed
@@ -294,10 +355,10 @@ def run_aml_pipeline(
             except Exception:
                 conn.execute(f"ALTER TABLE statements ADD COLUMN {col} TEXT")
 
-        # Save statement
+        # Save statement (with account_id FK)
         conn.execute(
             """INSERT INTO statements
-               (id, case_id, bank_id, bank_name, period_from, period_to,
+               (id, case_id, account_id, bank_id, bank_name, period_from, period_to,
                 opening_balance, closing_balance, available_balance, currency,
                 account_number, account_holder,
                 declared_credits_sum, declared_credits_count,
@@ -306,8 +367,8 @@ def run_aml_pipeline(
                 overdue_commission, blocked_amount,
                 parse_method, ocr_used, ocr_confidence,
                 parser_version, pdf_hash, warnings)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (statement_id, case_id, bank_id, bank_name,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (statement_id, case_id, account_profile_id, bank_id, bank_name,
              info.period_from, info.period_to,
              str(info.opening_balance) if info.opening_balance is not None else None,
              str(info.closing_balance) if info.closing_balance is not None else None,
@@ -325,18 +386,6 @@ def run_aml_pipeline(
              f"{bank_id}_v1", pdf_hash,
              json.dumps(warnings, ensure_ascii=False)),
         )
-
-    # --- Step 5b: Create/update account profile ---
-    if info.account_number:
-        try:
-            get_or_create_profile(
-                account_number=info.account_number,
-                bank_id=bank_id,
-                bank_name=bank_name,
-                account_holder=info.account_holder or "",
-            )
-        except Exception as e:
-            log.warning("Account profile creation failed: %s", e)
 
     # --- Step 6: Normalize transactions ---
     _log("Normalizacja transakcji...")
@@ -626,6 +675,7 @@ def run_aml_pipeline(
         result_snapshot = {
             "statement_id": statement_id,
             "case_id": case_id,
+            "account_id": account_profile_id,
             "bank": bank_id,
             "bank_name": bank_name,
             "period_from": getattr(info, "period_from", None),
@@ -656,6 +706,7 @@ def run_aml_pipeline(
         "status": "ok",
         "case_id": case_id,
         "statement_id": statement_id,
+        "account_id": account_profile_id,
         "bank": bank_id,
         "bank_name": bank_name,
         "transaction_count": len(tx_list),

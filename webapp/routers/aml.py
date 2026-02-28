@@ -22,6 +22,9 @@ Endpoints:
 - POST /api/aml/upload-mt940  — upload & parse MT940/STA file
 - POST /api/aml/cross-validate — compare MT940 with PDF-parsed data
 
+- GET  /api/aml/cross-account/{case_id}  — cross-account analysis (internal transfers, shared counterparties)
+- GET  /api/aml/case-accounts/{case_id}  — list accounts grouped by case
+
 - GET  /api/system/setup       — first-run check
 - POST /api/system/setup       — first-run setup
 """
@@ -1164,6 +1167,85 @@ async def aml_account_category_change(request: Request):
     )
 
     return JSONResponse({"status": "ok", "category": new_category})
+
+
+# ============================================================
+# CROSS-ACCOUNT ANALYSIS (multi-bank / multi-account)
+# ============================================================
+
+@router.get("/api/aml/cross-account/{case_id}")
+async def aml_cross_account(case_id: str):
+    """Run cross-account analysis for a case.
+
+    Detects:
+    - Internal transfers between own accounts
+    - Shared counterparties across accounts
+    - Consolidated cash-flow totals
+    """
+    from backend.aml.cross_account import analyze_cross_account
+
+    try:
+        result = analyze_cross_account(case_id)
+        return JSONResponse(result.to_dict())
+    except Exception as e:
+        log.exception("Cross-account analysis error")
+        return JSONResponse(
+            {"status": "error", "error": str(e)},
+            status_code=500,
+        )
+
+
+@router.get("/api/aml/case-accounts/{case_id}")
+async def aml_case_accounts(case_id: str):
+    """List all accounts (account_profiles) linked to statements in a case.
+
+    Returns grouped view: account -> statements -> periods.
+    """
+    from backend.db.engine import fetch_all
+
+    rows = fetch_all(
+        """SELECT s.id as statement_id, s.account_id, s.account_number,
+                  s.account_holder, s.bank_id, s.bank_name,
+                  s.period_from, s.period_to,
+                  s.opening_balance, s.closing_balance,
+                  ap.display_name, ap.account_type, ap.is_anonymized
+           FROM statements s
+           LEFT JOIN account_profiles ap ON s.account_id = ap.id
+           WHERE s.case_id = ?
+           ORDER BY s.account_number, s.period_from""",
+        (case_id,),
+    )
+
+    # Group by account
+    accounts = {}
+    for r in rows:
+        r = dict(r)
+        acc_key = r["account_number"] or r["account_id"] or r["statement_id"]
+        if acc_key not in accounts:
+            accounts[acc_key] = {
+                "account_number": r["account_number"],
+                "account_id": r["account_id"],
+                "account_holder": r["account_holder"],
+                "bank_id": r["bank_id"],
+                "bank_name": r["bank_name"],
+                "display_name": r.get("display_name") or r["account_holder"] or acc_key,
+                "account_type": r.get("account_type") or "private",
+                "is_anonymized": r.get("is_anonymized") or 0,
+                "statements": [],
+            }
+        accounts[acc_key]["statements"].append({
+            "statement_id": r["statement_id"],
+            "period_from": r["period_from"],
+            "period_to": r["period_to"],
+            "opening_balance": r["opening_balance"],
+            "closing_balance": r["closing_balance"],
+        })
+
+    return JSONResponse({
+        "case_id": case_id,
+        "account_count": len(accounts),
+        "accounts": list(accounts.values()),
+    })
 
 
 # ============================================================

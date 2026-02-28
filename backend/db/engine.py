@@ -90,6 +90,19 @@ def init_db(path: Optional[Path] = None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_gn_stmt ON graph_nodes(statement_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ge_stmt ON graph_edges(statement_id)")
 
+        # Unique index to prevent duplicate PDF uploads in the same case
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_statements_case_hash "
+            "ON statements(case_id, pdf_hash) WHERE pdf_hash != ''"
+        )
+
+        # Add account_id column to statements (multi-account support)
+        try:
+            conn.execute("ALTER TABLE statements ADD COLUMN account_id TEXT REFERENCES account_profiles(id)")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_statements_account ON statements(account_id)")
+
         # Store schema version
         conn.execute(
             "INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",

@@ -116,6 +116,19 @@
     }
   }
 
+  function _showInfo(msg){
+    // Informational toast (e.g. duplicate detected) — non-blocking
+    const container = QS("#aml_results") || QS("#aml_upload_zone") || document.body;
+    const d = document.createElement("div");
+    d.className = "small aml-info-toast";
+    d.style.cssText = "background:var(--info-bg,#d1ecf1);color:var(--info-text,#0c5460);"
+      + "padding:10px 16px;border-radius:8px;margin:8px 0;border:1px solid var(--info-border,#bee5eb);"
+      + "font-size:0.92em;";
+    d.textContent = "\u2139\uFE0F " + msg;
+    container.prepend(d);
+    setTimeout(()=> d.remove(), 8000);
+  }
+
   async function _uploadAndAnalyze(file){
     if(!file || St.analyzing) return;
     if(!file.name.toLowerCase().endsWith(".pdf")){
@@ -169,7 +182,12 @@
       clearInterval(progTimer);
       clearInterval(stageTimer);
 
-      if(result && result.status === "ok"){
+      if(result && (result.status === "ok" || result.status === "duplicate")){
+        if(result.status === "duplicate"){
+          // Show info toast about duplicate — load existing analysis
+          const msg = result.message || "Ten wyciag zostal juz wczytany. Laduje istniejaca analize.";
+          _showInfo ? _showInfo(msg) : alert(msg);
+        }
         St.lastResult = result;
         St.statementId = result.statement_id;
         St.caseId = result.case_id;
@@ -303,6 +321,11 @@
 
     // LLM section
     _setupLlmSection(detail.has_llm_prompt || result.has_llm_prompt);
+
+    // Cross-account panel (shows only when 2+ accounts in case)
+    if(St.caseId){
+      _loadAndRenderCrossAccount(St.caseId);
+    }
   }
 
   function _renderRiskGauge(score){
@@ -722,6 +745,184 @@
         <div class="small">${_esc(a.explain || "")}</div>
       </div>`;
     }).join("");
+  }
+
+  // ============================================================
+  // CROSS-ACCOUNT PANEL (multi-bank / multi-account view)
+  // ============================================================
+
+  async function _loadAndRenderCrossAccount(caseId){
+    if(!caseId) return;
+
+    // Check if case has multiple accounts
+    const caseAccData = await _safeApi("/api/aml/case-accounts/" + encodeURIComponent(caseId));
+    if(!caseAccData || caseAccData.account_count < 2){
+      _hideCrossAccountPanel();
+      return;
+    }
+
+    // Load cross-account analysis
+    const xaData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(caseId));
+    if(!xaData || xaData.account_count < 2){
+      _hideCrossAccountPanel();
+      return;
+    }
+
+    St._crossAccountData = xaData;
+    _renderCrossAccountPanel(xaData, caseAccData);
+  }
+
+  function _hideCrossAccountPanel(){
+    const panel = QS("#aml_cross_account_card");
+    if(panel) panel.style.display = "none";
+  }
+
+  function _renderCrossAccountPanel(xaData, caseAccData){
+    let panel = QS("#aml_cross_account_card");
+    if(!panel){
+      // Create panel dynamically — insert after bank info card
+      const infoCard = QS("#aml_info_card");
+      if(!infoCard) return;
+      panel = document.createElement("div");
+      panel.id = "aml_cross_account_card";
+      panel.className = "card";
+      panel.style.cssText = "margin-top:16px;";
+      infoCard.parentNode.insertBefore(panel, infoCard.nextSibling);
+    }
+
+    panel.style.display = "";
+
+    const accounts = xaData.accounts || [];
+    const transfers = xaData.internal_transfers || [];
+    const sharedCps = xaData.shared_counterparties || [];
+
+    let html = `
+      <div class="card-header" style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:1.2em">&#127974;</span>
+        <strong>Multi-Account</strong>
+        <span class="badge">${xaData.account_count} rachunkow</span>
+      </div>
+      <div class="card-body" style="padding:12px">`;
+
+    // --- Account overview table ---
+    html += `<div style="margin-bottom:16px">
+      <div class="small muted" style="margin-bottom:6px">Rachunki w sprawie:</div>
+      <table class="aml-table" style="width:100%;font-size:0.88em">
+        <thead><tr>
+          <th>Bank</th><th>Rachunek</th><th>Okres</th>
+          <th style="text-align:right">Uznania</th>
+          <th style="text-align:right">Obciazenia</th>
+          <th style="text-align:right">Wyciagi</th>
+        </tr></thead><tbody>`;
+
+    for(const acc of accounts){
+      const accNum = acc.account_number || "";
+      const accDisplay = accNum.length >= 10
+        ? accNum.slice(0,2) + " ..." + accNum.slice(-4)
+        : accNum || "-";
+      html += `<tr>
+        <td><strong>${_esc(acc.bank_name || acc.bank_id || "?")}</strong></td>
+        <td title="${_esc(accNum)}">${_esc(accDisplay)}</td>
+        <td>${_esc(acc.period_from || "")} — ${_esc(acc.period_to || "")}</td>
+        <td style="text-align:right;color:#15803d">${_fmtAmt(acc.total_credit)}</td>
+        <td style="text-align:right;color:#b91c1c">${_fmtAmt(acc.total_debit)}</td>
+        <td style="text-align:right">${acc.statement_count}</td>
+      </tr>`;
+    }
+
+    html += `</tbody></table></div>`;
+
+    // --- Consolidated totals ---
+    html += `<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="aml-stat-box" style="flex:1;min-width:140px;background:var(--success-bg,#dcfce7);padding:10px;border-radius:8px">
+        <div class="small muted">Laczne uznania</div>
+        <div style="font-size:1.2em;font-weight:600;color:#15803d">${_fmtAmt(xaData.total_credit)}</div>
+      </div>
+      <div class="aml-stat-box" style="flex:1;min-width:140px;background:var(--danger-bg,#fee2e2);padding:10px;border-radius:8px">
+        <div class="small muted">Laczne obciazenia</div>
+        <div style="font-size:1.2em;font-weight:600;color:#b91c1c">${_fmtAmt(xaData.total_debit)}</div>
+      </div>
+      <div class="aml-stat-box" style="flex:1;min-width:140px;background:var(--info-bg,#dbeafe);padding:10px;border-radius:8px">
+        <div class="small muted">Transakcje lacznie</div>
+        <div style="font-size:1.2em;font-weight:600">${xaData.total_tx_count}</div>
+      </div>
+    </div>`;
+
+    // --- Internal transfers ---
+    if(transfers.length > 0){
+      const transferTotal = transfers.reduce((s,t)=>s+t.amount, 0);
+      html += `<div style="margin-bottom:16px">
+        <div class="small" style="margin-bottom:6px;font-weight:600">
+          &#128260; Przelewy wlasne (${transfers.length}, lacznie ${_fmtAmt(transferTotal)})
+        </div>
+        <table class="aml-table" style="width:100%;font-size:0.85em">
+          <thead><tr>
+            <th>Data</th><th>Z rachunku</th><th>Na rachunek</th>
+            <th style="text-align:right">Kwota</th><th>Pewnosc</th><th>Metoda</th>
+          </tr></thead><tbody>`;
+
+      for(const t of transfers.slice(0, 30)){
+        const fromShort = (t.from_account||"").slice(-4) || "?";
+        const toShort = (t.to_account||"").slice(-4) || "?";
+        const confPct = Math.round((t.confidence||0)*100);
+        const confColor = confPct >= 80 ? "#15803d" : confPct >= 60 ? "#d97706" : "#b91c1c";
+        html += `<tr>
+          <td>${_esc(t.date)}</td>
+          <td title="${_esc(t.from_account)}">...${_esc(fromShort)}</td>
+          <td title="${_esc(t.to_account)}">...${_esc(toShort)}</td>
+          <td style="text-align:right">${_fmtAmt(t.amount)}</td>
+          <td style="color:${confColor}">${confPct}%</td>
+          <td class="small">${_esc(t.match_method)}</td>
+        </tr>`;
+      }
+      if(transfers.length > 30){
+        html += `<tr><td colspan="6" class="small muted">...i ${transfers.length-30} wiecej</td></tr>`;
+      }
+      html += `</tbody></table></div>`;
+    }
+
+    // --- Shared counterparties ---
+    if(sharedCps.length > 0){
+      html += `<div style="margin-bottom:8px">
+        <div class="small" style="margin-bottom:6px;font-weight:600">
+          &#128101; Wspolni kontrahenci (${sharedCps.length})
+        </div>
+        <table class="aml-table" style="width:100%;font-size:0.85em">
+          <thead><tr>
+            <th>Kontrahent</th><th>Rachunki</th>
+            <th style="text-align:right">Kwota</th>
+            <th style="text-align:right">Transakcje</th><th>Okres</th>
+          </tr></thead><tbody>`;
+
+      for(const cp of sharedCps.slice(0, 20)){
+        const accsStr = cp.accounts.map(a => "..." + (a||"").slice(-4)).join(", ");
+        html += `<tr>
+          <td>${_esc(cp.counterparty_name)}</td>
+          <td class="small">${_esc(accsStr)}</td>
+          <td style="text-align:right">${_fmtAmt(cp.total_amount)}</td>
+          <td style="text-align:right">${cp.tx_count}</td>
+          <td class="small">${_esc(cp.first_date)} — ${_esc(cp.last_date)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+    }
+
+    // Warnings
+    if(xaData.warnings && xaData.warnings.length){
+      html += `<div class="small muted" style="margin-top:8px">`;
+      for(const w of xaData.warnings){
+        html += `<div>&#9432; ${_esc(w)}</div>`;
+      }
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+    panel.innerHTML = html;
+  }
+
+  function _fmtAmt(val){
+    if(val == null || isNaN(val)) return "-";
+    return Number(val).toLocaleString("pl-PL", {minimumFractionDigits:2, maximumFractionDigits:2});
   }
 
   // ============================================================
@@ -2278,13 +2479,23 @@
     try {
       const result = await _runPipelineForFile(entry.file, St.batchCaseId);
 
-      if(result && result.status === "ok"){
-        entry.status = "done";
-        entry.statementId = result.statement_id;
+      if(result && (result.status === "ok" || result.status === "duplicate")){
+        if(result.status === "duplicate"){
+          entry.status = "done";
+          entry.statementId = result.statement_id;
+          entry.error = "Duplikat — uzyto istniejacego wyciagu";
+          // Don't add duplicate statement_id to batchResults again
+          if(!St.batchResults.includes(result.statement_id)){
+            St.batchResults.push(result.statement_id);
+          }
+        } else {
+          entry.status = "done";
+          entry.statementId = result.statement_id;
+          St.batchResults.push(result.statement_id);
+        }
         if(!St.batchCaseId && result.case_id){
           St.batchCaseId = result.case_id;
         }
-        St.batchResults.push(result.statement_id);
       } else {
         entry.status = "error";
         let errMsg = result && result.error ? String(result.error) : "Blad analizy";

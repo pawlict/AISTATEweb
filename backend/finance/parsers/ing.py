@@ -58,6 +58,32 @@ class INGParser(BankParser):
 
     NBSP = "\u00A0"
 
+    # ISO-8859-2 (Latin-2) encoding fix for Polish characters.
+    # Some ING PDFs have broken ToUnicode maps that produce Latin-1
+    # code points instead of proper Unicode Polish characters.
+    _LATIN2_MAP = str.maketrans({
+        '\u00b3': '\u0142',  # ³ → ł
+        '\u00a3': '\u0141',  # £ → Ł
+        '\u00b6': '\u015b',  # ¶ → ś
+        '\u00a6': '\u015a',  # ¦ → Ś
+        '\u00e6': '\u0107',  # æ → ć
+        '\u00c6': '\u0106',  # Æ → Ć
+        '\u00b1': '\u0105',  # ± → ą
+        '\u00a1': '\u0104',  # ¡ → Ą
+        '\u00ea': '\u0119',  # ê → ę
+        '\u00ca': '\u0118',  # Ê → Ę
+        '\u00f1': '\u0144',  # ñ → ń
+        '\u00d1': '\u0143',  # Ñ → Ń
+        '\u00bf': '\u017c',  # ¿ → ż
+        '\u00af': '\u017b',  # ¯ → Ż
+        '\u00bc': '\u017a',  # ¼ → ź
+        '\u00ac': '\u0179',  # ¬ → Ź
+    })
+    # Diagnostic patterns for detecting broken encoding
+    _GARBLED_RE = re.compile(
+        'P\u00b3atno|wyci\u00b1g|\u00b6l\u00b1ski|rachunk\u00f3w'
+    )
+
     # Basic patterns
     DATE_ONLY_RE = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
     AMOUNT_LINE_RE = re.compile(r"^([+-]?\d[\d \u00A0]*,\d{2})\s*([A-Z]{3})$")
@@ -166,11 +192,18 @@ class INGParser(BankParser):
 
     def _extract_lines_from_pdf(self, pdf_path: Path) -> Tuple[List[str], int]:
         doc = fitz.open(str(pdf_path))
+        # Detect broken Latin-2 encoding from first page
+        _fix_enc = False
+        if doc.page_count > 0:
+            sample = doc[0].get_text("text") or ""
+            _fix_enc = bool(self._GARBLED_RE.search(sample))
         lines: List[str] = []
         for page in doc:
             txt = page.get_text("text") or ""
             for raw in txt.splitlines():
                 s = raw.replace(self.NBSP, " ").strip()
+                if _fix_enc:
+                    s = s.translate(self._LATIN2_MAP)
                 if s:
                     lines.append(s)
         return lines, doc.page_count
@@ -249,25 +282,31 @@ class INGParser(BankParser):
             if ln.startswith("Waluta rachunku:") and i + 1 < len(lines):
                 info.currency = lines[i + 1].strip()
 
-        # balances (if StatementInfo defines fields; otherwise ignored)
-        # match patterns like: "Saldo początkowe ... 5 808,76 PLN"
-        bal_re = re.compile(r"^(Saldo początkowe|Saldo końcowe):?\s*([+-]?\d[\d \u00A0]*,\d{2})\s*([A-Z]{3})$")
-        for ln in lines:
-            m = bal_re.match(ln.replace(self.NBSP, " "))
-            if not m:
-                continue
-            kind = m.group(1)
-            num = float(m.group(2).replace(" ", "").replace(",", "."))
-            if kind.startswith("Saldo początkowe"):
-                try:
-                    info.opening_balance = num
-                except Exception:
-                    pass
-            elif kind.startswith("Saldo końcowe"):
-                try:
-                    info.closing_balance = num
-                except Exception:
-                    pass
+        # balances — ING PDFs may put the label and amount on separate lines
+        amt_re = re.compile(r"([+-]?\d[\d \u00A0]*,\d{2})\s*([A-Z]{3})")
+        for i, ln in enumerate(lines):
+            clean = ln.replace(self.NBSP, " ").strip()
+            if clean.startswith("Saldo początkowe"):
+                # Try same line first, then look ahead up to 4 lines
+                for j in range(i, min(i + 5, len(lines))):
+                    m = amt_re.search(lines[j].replace(self.NBSP, " "))
+                    if m:
+                        num = float(m.group(1).replace(" ", "").replace(",", "."))
+                        try:
+                            info.opening_balance = num
+                        except Exception:
+                            pass
+                        break
+            elif clean.startswith("Saldo końcowe"):
+                for j in range(i, min(i + 5, len(lines))):
+                    m = amt_re.search(lines[j].replace(self.NBSP, " "))
+                    if m:
+                        num = float(m.group(1).replace(" ", "").replace(",", "."))
+                        try:
+                            info.closing_balance = num
+                        except Exception:
+                            pass
+                        break
 
         return info
 
@@ -279,11 +318,17 @@ class INGParser(BankParser):
         warnings: List[str] = []
         doc = fitz.open(str(pdf_path))
 
+        # Detect broken Latin-2 encoding from first page
+        _fix_enc = False
+        if doc.page_count > 0:
+            sample = doc[0].get_text("text") or ""
+            _fix_enc = bool(self._GARBLED_RE.search(sample))
+
         # Build a global list of table line-items (page,y,x,col,text)
         items: List[Dict] = []
         for pno in range(doc.page_count):
             page = doc[pno]
-            page_lines = self._extract_positioned_lines(page)
+            page_lines = self._extract_positioned_lines(page, fix_encoding=_fix_enc)
             y_start = self._find_table_y_start(page_lines)
             if y_start is None:
                 continue
@@ -305,7 +350,7 @@ class INGParser(BankParser):
             return [], ["No table items detected (statement may be scanned/OCR-only)."]
 
         # Segment transactions by pairing date rows (booking+transaction date)
-        segments = self._segment_transactions(items, y_lookbehind=8.0)
+        segments = self._segment_transactions(items)
 
         transactions: List[RawTransaction] = []
         for seg in segments:
@@ -345,7 +390,7 @@ class INGParser(BankParser):
 
     # --- low-level: positioned lines and column detection ---
 
-    def _extract_positioned_lines(self, page: fitz.Page) -> List[_Line]:
+    def _extract_positioned_lines(self, page: fitz.Page, fix_encoding: bool = False) -> List[_Line]:
         """
         Extract text lines with coordinates using page.get_text('dict').
         """
@@ -360,6 +405,8 @@ class INGParser(BankParser):
                     continue
                 spans_sorted = sorted(spans, key=lambda s: s["bbox"][0])
                 txt = "".join(s.get("text", "") for s in spans_sorted).strip()
+                if fix_encoding:
+                    txt = txt.translate(self._LATIN2_MAP)
                 if not txt:
                     continue
                 x0 = min(s["bbox"][0] for s in spans_sorted)
@@ -439,153 +486,58 @@ class INGParser(BankParser):
 
     # --- segmentation + parsing of a single segment ---
 
-    DATE_ONLY_CHECK = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
+    def _segment_transactions(self, items: List[Dict], y_lookbehind: float = 10.0) -> List[List[Dict]]:
+        """Segment items into per-transaction groups.
 
-    @classmethod
-    def _lookbehind_for_contractor(cls, items: List[Dict], scan_from: int, lower_bound: int,
-                                   ref_page: int, ref_y: float, y_lookbehind: float = 8.0) -> int:
-        """Compute lookbehind start index for a transaction whose dates are at (ref_page, ref_y).
+        ING transaction layout (top-to-bottom):
+            [contractor: ING internal ID]  [details: channel]   <- header row, ~5pt above dates
+            [date: booking]  [title: ...]  [amount: ...]        <- main row
+            [date: tx_date]  [title: ...]  [details: ref]       <- second date row
+            [contractor: "Nazwa i adres odbiorcy: NAME"]         <- ~15-25pt below dates
+            [contractor: address continuation lines]
 
-        In ING statements, contractor info (name, address, account number) appears
-        ABOVE the date pair.  This helper walks backward through *items* and returns
-        the index of the first item that should belong to this transaction.
-
-        Two phases:
-          1. Standard lookbehind (any column, ≤ y_lookbehind pt, same page).
-          2. Row-based contractor block detection: groups items by Y-row and
-             extends start while the row contains contractor-column items.
-             Stops at: row without contractor items, row with date items,
-             "Nazwa i adres" header (block start found), Y-gap > 20 pt,
-             or a second NRB account number (each tx has at most one).
-             Also handles cross-page (continues to previous page).
+        Strategy:
+        1. Find date pairs (booking + transaction date).
+        2. For each pair, look back within y_lookbehind for header items
+           (ING internal ID, channel code) that sit just above the dates.
+        3. Segment = all items from this tx's header to the next tx's header.
+           This naturally includes the "Nazwa i adres" block that appears
+           below the dates (it sits between the current dates and next tx's header).
         """
-        start = scan_from  # initially points at the first date item
+        date_idx = [i for i, it in enumerate(items)
+                    if it["col"] == "date" and self.DATE_ONLY_RE.match(it["text"])]
 
-        j = scan_from - 1
-
-        # Phase 1 — tight lookbehind (any column, ≤ y_lookbehind)
-        while j >= lower_bound and items[j]["page"] == ref_page and items[j]["y0"] >= ref_y - y_lookbehind:
-            start = j
-            j -= 1
-
-        # Phase 2 — row-based contractor block detection.
-        # Scan backward grouping items by Y-row (±1.5 pt tolerance).
-        # Include rows that contain at least one contractor-column item.
-        # Stop conditions:
-        #   a) Row has NO contractor items → content from another transaction
-        #   b) Row has a date-column item → another transaction's date anchor
-        #   c) Gap between consecutive rows > 20 pt → different tx block
-        #   d) Row contains "Nazwa i adres" header → block start (include & stop)
-        #   e) Row contains a second NRB account number → crossed into prev tx
-
-        # Track NRB (account number) lines already captured in Phase 1
-        seen_nrb = False
-        for k in range(start, scan_from):
-            if (items[k]["col"] == "contractor"
-                    and cls.NRB_SPACED_RE.match(items[k]["text"].replace("\u00a0", " ").strip())):
-                seen_nrb = True
-                break
-
-        last_y = items[start]["y0"]
-        scan_j = j
-
-        for page_offset in (0, 1):  # 0=same page, 1=previous page (cross-page)
-            check_page = ref_page - page_offset
-            if check_page < 0:
-                break
-            while scan_j >= lower_bound and items[scan_j]["page"] == check_page:
-                row_y = items[scan_j]["y0"]
-
-                # Gap check (only meaningful within the same page;
-                # reset last_y when crossing to a previous page)
-                if page_offset == 0:
-                    gap = last_y - row_y
-                    if gap > 20.0:
-                        return start
-                else:
-                    # Cross-page: for the first row on the previous page
-                    # there is no meaningful Y-gap to check, so just continue.
-                    pass
-
-                # Collect all items in this Y-row
-                row_end = scan_j
-                while (scan_j >= lower_bound
-                       and items[scan_j]["page"] == check_page
-                       and abs(items[scan_j]["y0"] - row_y) <= 1.5):
-                    scan_j -= 1
-                row_start_idx = scan_j + 1
-
-                row_items = range(row_start_idx, row_end + 1)
-                has_contractor = any(items[k]["col"] == "contractor" for k in row_items)
-                has_date = any(
-                    items[k]["col"] == "date" and cls.DATE_ONLY_CHECK.match(items[k]["text"])
-                    for k in row_items
-                )
-
-                if has_date:
-                    # Date row → boundary of another transaction, stop
-                    return start
-
-                if not has_contractor:
-                    # Row with no contractor items → previous tx content, stop
-                    return start
-
-                # Check for NRB account number in this row
-                row_has_nrb = any(
-                    items[k]["col"] == "contractor"
-                    and cls.NRB_SPACED_RE.match(items[k]["text"].replace("\u00a0", " ").strip())
-                    for k in row_items
-                )
-
-                if row_has_nrb and seen_nrb:
-                    # Second NRB → we've crossed into a different transaction's
-                    # contractor block.  Each transaction has at most one NRB.
-                    return start
-
-                if row_has_nrb:
-                    seen_nrb = True
-
-                # Row has contractor items → include this row
-                start = row_start_idx
-                last_y = row_y
-
-                # If this row contains "Nazwa i adres" header → definitive block start
-                if any(items[k]["text"].startswith("Nazwa i adres") for k in row_items):
-                    return start
-
-        return start
-
-    def _segment_transactions(self, items: List[Dict], y_lookbehind: float = 8.0) -> List[List[Dict]]:
-        date_idx = [i for i, it in enumerate(items) if it["col"] == "date" and self.DATE_ONLY_RE.match(it["text"])]
-        # pair sequentially: (booking, transaction date)
+        # Pair dates sequentially: (booking_date_idx, transaction_date_idx)
         pairs: List[Tuple[int, int]] = []
         for k in range(0, len(date_idx) - 1, 2):
             pairs.append((date_idx[k], date_idx[k + 1]))
 
+        if not pairs:
+            return []
+
+        # For each date pair, compute the transaction start index
+        # by looking back within y_lookbehind for the ING ID / channel header
+        tx_starts: List[int] = []
+        for i1, i2 in pairs:
+            ref_page = items[i1]["page"]
+            ref_y = items[i1]["y0"]
+            start = i1
+            j = i1 - 1
+            while (j >= 0
+                   and items[j]["page"] == ref_page
+                   and items[j]["y0"] >= ref_y - y_lookbehind):
+                start = j
+                j -= 1
+            tx_starts.append(start)
+
+        # Build segments: tx N = items[tx_starts[N] : tx_starts[N+1]]
         segments: List[List[Dict]] = []
-        prev_end = 0
-
-        for pi, (i1, i2) in enumerate(pairs):
-            # --- compute start (lookbehind from this pair's booking date) ---
-            start = self._lookbehind_for_contractor(
-                items, scan_from=i1, lower_bound=prev_end,
-                ref_page=items[i1]["page"], ref_y=items[i1]["y0"],
-                y_lookbehind=y_lookbehind,
-            )
-
-            # --- compute end (lookbehind from NEXT pair's booking date) ---
-            if pi + 1 < len(pairs):
-                next_i1 = pairs[pi + 1][0]
-                end = self._lookbehind_for_contractor(
-                    items, scan_from=next_i1, lower_bound=i2 + 1,
-                    ref_page=items[next_i1]["page"], ref_y=items[next_i1]["y0"],
-                    y_lookbehind=y_lookbehind,
-                )
-            else:
-                end = len(items)
-
-            segments.append(items[start:end])
-            prev_end = end
+        for pi in range(len(pairs)):
+            seg_start = tx_starts[pi]
+            seg_end = tx_starts[pi + 1] if pi + 1 < len(pairs) else len(items)
+            seg = items[seg_start:seg_end]
+            if seg:
+                segments.append(seg)
 
         return segments
 
