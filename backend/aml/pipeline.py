@@ -259,36 +259,24 @@ def run_aml_pipeline(
     info = parse_result.info
 
     # --- Step 5a: Duplicate detection by pdf_hash ---
-    # Check if this exact PDF has already been analyzed (in any case or globally)
+    # Only block duplicates within the SAME case (same PDF uploaded twice
+    # in one analysis session). New cases always get fresh analysis — this
+    # allows re-analysis after parser improvements.
     _existing_stmt = None
     _is_duplicate = False
-    with get_conn() as conn:
-        if case_id and pdf_hash:
-            # Strict: same PDF in the same case → return existing analysis
+    if case_id and pdf_hash:
+        with get_conn() as conn:
             _existing_stmt = conn.execute(
                 "SELECT id, case_id FROM statements WHERE case_id = ? AND pdf_hash = ? LIMIT 1",
                 (case_id, pdf_hash),
             ).fetchone()
-        if not _existing_stmt and pdf_hash:
-            # Broad: same PDF anywhere → warn but still check
-            _existing_stmt = conn.execute(
-                "SELECT id, case_id FROM statements WHERE pdf_hash = ? LIMIT 1",
-                (pdf_hash,),
-            ).fetchone()
-            if _existing_stmt and not case_id:
-                # Same PDF uploaded again without explicit case → return existing
-                pass
-            elif _existing_stmt and case_id:
-                # Same PDF exists in a *different* case — allow (user may want cross-case)
-                _existing_stmt = None
 
     if _existing_stmt:
         _is_duplicate = True
         existing_id = _existing_stmt["id"]
         existing_case = _existing_stmt["case_id"]
-        _log(f"DUPLIKAT: ten PDF został już przeanalizowany (statement={existing_id[:8]}, "
-             f"case={existing_case[:8]}). Pomijam ponowny zapis.")
-        # Return reference to existing analysis instead of re-inserting
+        _log(f"DUPLIKAT: ten PDF został już przeanalizowany w tej analizie "
+             f"(statement={existing_id[:8]}). Pomijam ponowny zapis.")
         dt = time.time() - t0
         return {
             "status": "duplicate",
@@ -299,7 +287,7 @@ def run_aml_pipeline(
             "transaction_count": len(parse_result.transactions),
             "duplicate_of": existing_id,
             "message": f"Ten wyciąg ({bank_name} {info.period_from}—{info.period_to}) "
-                        "został już wczytany. Używam istniejącej analizy.",
+                        "został już wczytany w tej analizie. Używam istniejącej analizy.",
             "warnings": warnings,
             "pipeline_time_s": round(dt, 2),
         }
