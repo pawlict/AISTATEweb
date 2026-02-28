@@ -778,7 +778,8 @@ async def aml_detail(statement_id: str):
         if not use_cache:
             from backend.aml.accounts import detect_accounts
             stmt_account = stmt_dict.get("account_number", "")
-            detected_accounts = detect_accounts(transactions, statement_account=stmt_account)
+            stmt_holder = stmt_dict.get("account_holder", "")
+            detected_accounts = detect_accounts(transactions, statement_account=stmt_account, account_holder=stmt_holder)
             # Cache for subsequent loads
             try:
                 from backend.db.engine import get_conn

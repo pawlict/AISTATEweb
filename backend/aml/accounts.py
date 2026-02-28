@@ -72,9 +72,124 @@ _PERSON_NAME_RE = re.compile(
 # own          — statement owner's own account
 # third_party  — business counterparty (Kontrahent)
 # friend       — personal transfer to a person (Znajomy)
-# family       — family member (Rodzina) — assigned manually by user
+# family       — family member, same last name (Rodzina)
 # employer     — employer account, credit-only (Pracodawca)
 VALID_CATEGORIES = {"own", "third_party", "friend", "family", "employer"}
+
+
+# ============================================================
+# Name-based ownership matching
+# ============================================================
+
+def _normalize_name(name: str) -> str:
+    """Lowercase, strip, collapse whitespace."""
+    s = (name or "").lower().strip()
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
+def _surname_stem(name: str) -> str:
+    """Normalize Polish surname gender suffix for comparison.
+
+    Pawlicki/Pawlicka → pawlick
+    Kowalski/Kowalska → kowalsk
+    Nowak/Nowak       → nowak
+    Wiśniewski/Wiśniewska → wiśniewsk
+    """
+    n = name.lower()
+    # -ski/-ska, -cki/-cka, -dzki/-dzka, -ński/-ńska → strip last gender letter
+    if re.search(r"(?:sk|ck|dzk|ńsk)[ia]$", n):
+        return n[:-1]
+    return n
+
+
+def _extract_name_parts(name: str) -> list:
+    """Extract name words from a string, stripping address parts.
+
+    Handles formats:
+      "IMIĘ NAZWISKO"
+      "NAZWISKO IMIĘ"
+      "PAWLICKI; TOMASZ; PODWODNA 44"  → only first 2 semicolon-parts
+
+    Returns list of lowercase name words (order preserved).
+    """
+    n = _normalize_name(name)
+    if not n:
+        return []
+
+    # If semicolons present: "NAZWISKO; IMIĘ; ADRES..." → take only first 2 parts
+    if ";" in n:
+        parts = [p.strip() for p in n.split(";")]
+        # First 2 parts are name, rest is address
+        n = " ".join(parts[:2])
+
+    # Split into words, filter out address fragments
+    words = n.split()
+    name_words = []
+    for w in words:
+        if re.search(r"\d", w):
+            continue
+        if w.rstrip(".") in ("ul", "al", "os", "pl", "m", "nr", "lok", "kl"):
+            continue
+        if len(w) < 2:
+            continue
+        name_words.append(w)
+
+    return name_words
+
+
+def _match_name_ownership(
+    counterparty_name: str,
+    account_holder: str,
+) -> Optional[str]:
+    """Compare counterparty name to account holder and return ownership hint.
+
+    Returns:
+        "own"    — same first + last name (the account holder themselves)
+        "family" — different first name, same last name (incl. gender forms)
+        None     — no name-based match (use other rules)
+    """
+    if not counterparty_name or not account_holder:
+        return None
+
+    holder_words = _extract_name_parts(account_holder)
+    cp_words = _extract_name_parts(counterparty_name)
+
+    if len(holder_words) < 2 or len(cp_words) < 2:
+        return None
+
+    holder_stems = {_surname_stem(w) for w in holder_words}
+    cp_stems = {_surname_stem(w) for w in cp_words}
+
+    # Also keep exact words for first-name comparison
+    holder_set = set(holder_words)
+    cp_set = set(cp_words)
+
+    # Check: all stem-normalized words match → same person (handles name order + gender)
+    if holder_stems == cp_stems:
+        return "own"
+
+    # Check: exact word match for >=2 words (e.g. reversed order)
+    common_exact = holder_set & cp_set
+    if len(common_exact) >= 2:
+        return "own"
+
+    # Check: at least one surname stem matches
+    common_stems = holder_stems & cp_stems
+    if common_stems:
+        # Some stems overlap → check if first names differ
+        # The overlapping stem is likely the last name
+        non_common_holder = holder_set - {w for w in holder_words if _surname_stem(w) in common_stems}
+        non_common_cp = cp_set - {w for w in cp_words if _surname_stem(w) in common_stems}
+
+        if non_common_holder and non_common_cp and non_common_holder != non_common_cp:
+            # Different first names, same last name stem → family
+            return "family"
+        elif not non_common_holder and not non_common_cp:
+            # All words matched via stems → same person
+            return "own"
+
+    return None
 
 
 # ============================================================
@@ -137,6 +252,7 @@ def _is_person_name(counterparty: str) -> bool:
 def detect_accounts(
     transactions: List[Dict[str, Any]],
     statement_account: str = "",
+    account_holder: str = "",
 ) -> List[Dict[str, Any]]:
     """Detect unique bank accounts and compute per-account statistics.
 
@@ -144,6 +260,8 @@ def detect_accounts(
         transactions: List of transaction dicts (from DB, must include
             raw_text, title, counterparty_raw, direction, amount, booking_date).
         statement_account: The statement owner's own account number (for detection).
+        account_holder: The statement owner's name (e.g. "Tomasz Pawlicki")
+            — used for name-based ownership matching.
 
     Returns:
         List of account info dicts, sorted by total volume descending:
@@ -206,7 +324,7 @@ def detect_accounts(
     accounts = []
     for account_num, txs in account_txs.items():
         info = _build_account_stats(
-            account_num, txs, own_account_norm,
+            account_num, txs, own_account_norm, account_holder,
         )
         accounts.append(info)
 
@@ -256,6 +374,7 @@ def _build_account_stats(
     account_num: str,
     txs: List[Dict],
     own_account_norm: str,
+    account_holder: str = "",
 ) -> Dict[str, Any]:
     """Build statistics for a single account."""
 
@@ -308,33 +427,61 @@ def _build_account_stats(
     tx_count = len(txs)
 
     # Determine ownership category
-    # Priority: own account > friend (phone transfer to person) > third_party
+    # Priority:
+    #   1. Exact account number match → own
+    #   2. Name-based matching (counterparty vs account holder):
+    #      - same first+last name → own
+    #      - same last name, different first name → family
+    #   3. Own-transfer keywords (>50% of tx) → own
+    #   4. Credit-only + salary keywords → employer
+    #   5. Phone/BLIK transfer to person → friend
+    #   6. Default → third_party
+
     is_own = False
+    ownership = "third_party"
+
+    # (1) Exact account number match
     if account_num == own_account_norm:
         is_own = True
-    elif own_tx_count > 0 and own_tx_count >= tx_count * 0.5:
-        # More than half of transactions are "own transfers"
-        # BUT: phone transfers (BLIK, "przelew na telefon") are NOT own transfers
-        # — they indicate a personal transfer to someone else
-        if phone_tx_count > 0 and phone_tx_count >= own_tx_count:
-            is_own = False
-        else:
-            is_own = True
-
-    if is_own:
         ownership = "own"
-    elif debit_count == 0 and credit_count > 0 and salary_tx_count > 0:
-        # Credit-only account with salary keywords → employer
-        ownership = "employer"
-    elif phone_tx_count > 0:
-        # Phone/BLIK transfer to a person → likely a friend
-        top_cp_name = max(counterparty_counts, key=counterparty_counts.get) if counterparty_counts else ""
-        if _is_person_name(top_cp_name):
-            ownership = "friend"
-        else:
-            ownership = "third_party"
     else:
-        ownership = "third_party"
+        # (2) Name-based matching: compare top counterparty name with account holder
+        name_hint = None
+        if account_holder:
+            top_cp_name = max(counterparty_counts, key=counterparty_counts.get) if counterparty_counts else ""
+            if top_cp_name:
+                name_hint = _match_name_ownership(top_cp_name, account_holder)
+                if not name_hint:
+                    # Also try other counterparty names (not just the top one)
+                    for cp_name in counterparty_counts:
+                        name_hint = _match_name_ownership(cp_name, account_holder)
+                        if name_hint:
+                            break
+
+        if name_hint == "own":
+            is_own = True
+            ownership = "own"
+        elif name_hint == "family":
+            ownership = "family"
+        elif own_tx_count > 0 and own_tx_count >= tx_count * 0.5:
+            # (3) Own-transfer keywords heuristic
+            if phone_tx_count > 0 and phone_tx_count >= own_tx_count:
+                is_own = False
+            else:
+                is_own = True
+                ownership = "own"
+
+        if not is_own and ownership not in ("family",):
+            if debit_count == 0 and credit_count > 0 and salary_tx_count > 0:
+                # (4) Credit-only account with salary keywords → employer
+                ownership = "employer"
+            elif phone_tx_count > 0:
+                # (5) Phone/BLIK transfer to a person → friend
+                cp_name = max(counterparty_counts, key=counterparty_counts.get) if counterparty_counts else ""
+                if _is_person_name(cp_name):
+                    ownership = "friend"
+                else:
+                    ownership = "third_party"
 
     # Top counterparties (by frequency)
     top_cp = sorted(counterparty_counts.items(), key=lambda x: -x[1])[:5]
