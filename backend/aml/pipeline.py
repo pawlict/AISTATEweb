@@ -337,7 +337,8 @@ def run_aml_pipeline(
 
         # Ensure extra columns exist (migration for existing DBs)
         for col in ("previous_closing_balance", "debt_limit",
-                     "overdue_commission", "blocked_amount"):
+                     "overdue_commission", "blocked_amount",
+                     "account_holder", "pdf_hash", "account_id"):
             try:
                 conn.execute(f"SELECT {col} FROM statements LIMIT 0")
             except Exception:
@@ -524,6 +525,13 @@ def run_aml_pipeline(
     # --- Step 12: Save transactions to DB ---
     _log("Zapis transakcji do bazy...")
     with get_conn() as conn:
+        # Ensure extra columns exist in transactions (migration for older DBs)
+        for col in ("raw_text", "tx_date"):
+            try:
+                conn.execute(f"SELECT {col} FROM transactions LIMIT 0")
+            except Exception:
+                conn.execute(f"ALTER TABLE transactions ADD COLUMN {col} TEXT DEFAULT ''")
+
         for tx in tx_list:
             d = tx.to_db_dict()
             # FK constraint: empty counterparty_id must be NULL, not ""

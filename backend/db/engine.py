@@ -80,28 +80,62 @@ def init_db(path: Optional[Path] = None) -> None:
         conn.executescript(schema_sql)
 
         # Migrations for existing databases
+        # Each migration wrapped in its own try/except to ensure all run independently
+
         # Add statement_id column to graph tables (scopes graphs per statement)
         for tbl in ("graph_nodes", "graph_edges"):
             try:
                 conn.execute(f"ALTER TABLE {tbl} ADD COLUMN statement_id TEXT DEFAULT ''")
             except sqlite3.OperationalError:
                 pass  # column already exists
-        # Create indexes on statement_id (safe after column exists)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_gn_stmt ON graph_nodes(statement_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_ge_stmt ON graph_edges(statement_id)")
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_gn_stmt ON graph_nodes(statement_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_ge_stmt ON graph_edges(statement_id)")
+        except sqlite3.OperationalError:
+            pass
+
+        # Add pdf_hash column to statements (deduplication)
+        try:
+            conn.execute("ALTER TABLE statements ADD COLUMN pdf_hash TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
         # Unique index to prevent duplicate PDF uploads in the same case
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_statements_case_hash "
-            "ON statements(case_id, pdf_hash) WHERE pdf_hash != ''"
-        )
+        try:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_statements_case_hash "
+                "ON statements(case_id, pdf_hash) WHERE pdf_hash != ''"
+            )
+        except sqlite3.OperationalError:
+            pass
+
+        # Add account_holder column to statements
+        try:
+            conn.execute("ALTER TABLE statements ADD COLUMN account_holder TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
 
         # Add account_id column to statements (multi-account support)
         try:
             conn.execute("ALTER TABLE statements ADD COLUMN account_id TEXT REFERENCES account_profiles(id)")
         except sqlite3.OperationalError:
             pass  # column already exists
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_statements_account ON statements(account_id)")
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_statements_account ON statements(account_id)")
+        except sqlite3.OperationalError:
+            pass
+
+        # Add raw_text column to transactions (for card/account extraction)
+        try:
+            conn.execute("ALTER TABLE transactions ADD COLUMN raw_text TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+
+        # Add tx_date column to transactions
+        try:
+            conn.execute("ALTER TABLE transactions ADD COLUMN tx_date TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
 
         # Store schema version
         conn.execute(
