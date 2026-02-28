@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -11,6 +12,8 @@ from fastapi.responses import JSONResponse
 from webapp.auth.passwords import hash_password
 from webapp.auth.user_store import UserStore, UserRecord
 from webapp.auth.deployment_store import DeploymentStore
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
@@ -171,3 +174,89 @@ async def migrate_projects(request: Request) -> JSONResponse:
         _app_log_fn(f"Setup: migrated {migrated} projects")
 
     return JSONResponse({"status": "ok", "migrated": migrated})
+
+
+@router.get("/backups")
+async def setup_list_backups(request: Request) -> JSONResponse:
+    """List available backups for restore during initial setup."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.db.backup import list_backups
+
+    try:
+        backups = await run_in_threadpool(list_backups)
+        return JSONResponse({"status": "ok", "backups": backups})
+    except Exception as exc:
+        logger.exception("setup_list_backups failed")
+        return JSONResponse(
+            {"status": "error", "message": str(exc)}, status_code=500
+        )
+
+
+@router.post("/restore")
+async def setup_restore_from_backup(request: Request) -> JSONResponse:
+    """Restore application from backup during initial setup.
+
+    Accepts either an auto-detected backup name or a manual filesystem path.
+    After restore the caller should reload the page — the server will pick up
+    the restored database and config on the next request.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from backend.db.backup import full_restore, restore_database, list_backups
+    from backend.db.engine import init_db
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"status": "error", "message": "Invalid request"}, status_code=400
+        )
+
+    backup_path_str = (body.get("path") or "").strip()
+    if not backup_path_str:
+        return JSONResponse(
+            {"status": "error", "message": "Backup path is required"},
+            status_code=400,
+        )
+
+    backup_path = Path(backup_path_str)
+
+    # If user provided just a name (not absolute), try to resolve from backups list
+    if not backup_path.is_absolute():
+        try:
+            known = await run_in_threadpool(list_backups)
+            match = next(
+                (b for b in known if b.get("name") == backup_path_str), None
+            )
+            if match:
+                backup_path = Path(match["path"])
+        except Exception:
+            pass
+
+    if not backup_path.exists():
+        return JSONResponse(
+            {"status": "error", "message": f"Backup not found: {backup_path}"},
+            status_code=404,
+        )
+
+    try:
+        if backup_path.is_dir():
+            result = await run_in_threadpool(full_restore, backup_path)
+        else:
+            await run_in_threadpool(restore_database, backup_path)
+            result = {"restored": ["database"], "errors": []}
+
+        # Re-initialize DB so schema migrations run on restored data
+        try:
+            init_db()
+        except Exception as init_exc:
+            logger.warning("init_db after restore: %s", init_exc)
+
+        if _app_log_fn:
+            _app_log_fn(f"Setup: restored from backup '{backup_path.name}'")
+
+        return JSONResponse({"status": "ok", **result})
+    except Exception as exc:
+        logger.exception("setup_restore_from_backup failed")
+        return JSONResponse(
+            {"status": "error", "message": str(exc)}, status_code=500
+        )

@@ -16,7 +16,7 @@
     .step.active { display: block; }
     h2 { font-size: 1.1rem; margin: 0 0 .3rem; color: var(--text, #1a1a2e); }
     .sub { font-size: .9rem; margin-bottom: 1rem; color: var(--muted, #666); }
-    .mode-options { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+    .mode-options { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
     .mode-card { flex: 1; padding: 1.2rem; border: 2px solid var(--border, #d0d5dd); border-radius: 12px; cursor: pointer; text-align: center; transition: border-color .2s, box-shadow .2s; }
     .mode-card:hover, .mode-card.selected { border-color: var(--accent, #4a6cf7); box-shadow: 0 0 0 3px rgba(74,108,247,.15); }
     .mode-card h3 { margin: 0 0 .3rem; font-size: 1rem; }
@@ -42,6 +42,20 @@
     .lang-btn:hover:not(.active) { border-color: var(--accent, #4a6cf7); color: var(--accent, #4a6cf7); }
     html:not(.lang-en) .en { display: none !important; }
     html.lang-en .pl { display: none !important; }
+    .mode-card.restore-card { border-color: #f59e0b; }
+    .mode-card.restore-card:hover, .mode-card.restore-card.selected { border-color: #d97706; box-shadow: 0 0 0 3px rgba(245,158,11,.2); }
+    .backup-list { max-height: 280px; overflow-y: auto; margin: 1rem 0; }
+    .backup-item { display: flex; align-items: center; gap: .7rem; padding: .6rem .8rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; margin-bottom: .5rem; cursor: pointer; transition: border-color .2s, background .15s; font-size: .88rem; }
+    .backup-item:hover { background: rgba(74,108,247,.04); }
+    .backup-item.selected { border-color: var(--accent, #4a6cf7); background: rgba(74,108,247,.06); }
+    .backup-item .bi-name { font-weight: 600; }
+    .backup-item .bi-meta { font-size: .78rem; color: var(--muted, #888); }
+    .backup-manual { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border, #eee); }
+    .backup-manual label { font-size: .85rem; font-weight: 600; }
+    .backup-manual input { width: 100%; padding: .5rem .7rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .9rem; box-sizing: border-box; margin-top: .3rem; }
+    .restore-progress { text-align: center; padding: 1.5rem 0; display: none; }
+    .restore-progress .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border, #d0d5dd); border-top-color: var(--accent, #4a6cf7); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -69,6 +83,10 @@
         <div class="mode-card" data-mode="multi" id="modeMulti">
           <h3><span class="pl">Wielu użytkowników</span><span class="en">Multiple users</span></h3>
           <p><span class="pl">Logowanie, role, kontrola dostępu do modułów. Wymaga utworzenia administratora.</span><span class="en">Login, roles, module access control. Requires creating an administrator.</span></p>
+        </div>
+        <div class="mode-card restore-card" data-mode="restore" id="modeRestore">
+          <h3><span class="pl">Przywróć po awarii</span><span class="en">Restore after failure</span></h3>
+          <p><span class="pl">Przywróć bazę danych, użytkowników i pliki z pełnego backupu.</span><span class="en">Restore database, users and files from a full backup.</span></p>
         </div>
       </div>
       <div class="btn-row">
@@ -119,6 +137,38 @@
         <button class="btn" id="step3Migrate"><span class="pl">Przypisz do Głównego Opiekuna</span><span class="en">Assign to Main Guardian</span></button>
       </div>
       <div class="error" id="step3Error"></div>
+    </div>
+
+    <!-- Step 5: Restore from Backup -->
+    <div class="step" id="step5">
+      <h2><span class="pl">Przywracanie z backupu</span><span class="en">Restore from backup</span></h2>
+      <p class="sub"><span class="pl">Wybierz backup do przywrócenia lub podaj ścieżkę ręcznie.</span><span class="en">Select a backup to restore or enter a path manually.</span></p>
+
+      <div id="backupListWrap">
+        <div id="backupListLoading" style="text-align:center;padding:1rem;color:var(--muted,#888)">
+          <span class="pl">Szukanie backupów...</span><span class="en">Searching for backups...</span>
+        </div>
+        <div class="backup-list" id="backupList" style="display:none"></div>
+        <div id="backupListEmpty" style="display:none;text-align:center;padding:1rem;color:var(--muted,#888)">
+          <span class="pl">Nie znaleziono backupów w katalogu domyślnym.</span><span class="en">No backups found in default directory.</span>
+        </div>
+      </div>
+
+      <div class="backup-manual">
+        <label><span class="pl">Lub podaj ścieżkę do katalogu backupu:</span><span class="en">Or enter backup directory path:</span></label>
+        <input type="text" id="backupManualPath" data-ph-pl="np. /home/user/backups/full_20260228_120000" data-ph-en="e.g. /home/user/backups/full_20260228_120000" placeholder="np. /home/user/backups/full_20260228_120000"/>
+      </div>
+
+      <div class="restore-progress" id="restoreProgress">
+        <div class="spinner"></div>
+        <p style="margin-top:.8rem;color:var(--muted,#888)"><span class="pl">Przywracanie danych... To może potrwać chwilę.</span><span class="en">Restoring data... This may take a moment.</span></p>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="step5Back"><span class="pl">Wstecz</span><span class="en">Back</span></button>
+        <button class="btn" id="step5Restore" disabled><span class="pl">Przywróć</span><span class="en">Restore</span></button>
+      </div>
+      <div class="error" id="step5Error"></div>
     </div>
 
     <!-- Step 4: Done -->
@@ -184,7 +234,11 @@
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
 
-      if (selectedMode === 'single') {
+      if (selectedMode === 'restore') {
+        showStep(5);
+        loadBackupList();
+        return;
+      } else if (selectedMode === 'single') {
         document.getElementById('doneMsg').innerHTML =
           '<span class="pl">Tryb pojedynczego użytkownika \u2014 brak zmian w aplikacji.</span>' +
           '<span class="en">Single user mode \u2014 no changes to the application.</span>';
@@ -279,6 +333,112 @@
       showStep(4);
     } catch (e) {
       errEl.textContent = txt('Błąd połączenia', 'Connection error');
+    }
+  });
+
+  // Step 5: Restore from backup
+  let selectedBackupPath = null;
+
+  async function loadBackupList() {
+    const listEl = document.getElementById('backupList');
+    const loadingEl = document.getElementById('backupListLoading');
+    const emptyEl = document.getElementById('backupListEmpty');
+    const restoreBtn = document.getElementById('step5Restore');
+    selectedBackupPath = null;
+    restoreBtn.disabled = true;
+    loadingEl.style.display = '';
+    listEl.style.display = 'none';
+    emptyEl.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/setup/backups');
+      const data = await res.json();
+      loadingEl.style.display = 'none';
+      const backups = data.backups || [];
+      if (!backups.length) {
+        emptyEl.style.display = '';
+        return;
+      }
+      listEl.style.display = '';
+      listEl.innerHTML = '';
+      backups.forEach(b => {
+        const div = document.createElement('div');
+        div.className = 'backup-item';
+        div.dataset.path = b.path || '';
+        const date = b.created ? new Date(b.created).toLocaleString() : '—';
+        const size = b.size_mb ? b.size_mb.toFixed(1) + ' MB' : '';
+        const comps = (b.components || []).join(', ');
+        div.innerHTML = '<div><div class="bi-name">' + (b.name || '?') + '</div>'
+          + '<div class="bi-meta">' + date + (size ? ' — ' + size : '') + (comps ? ' (' + comps + ')' : '') + '</div></div>';
+        div.addEventListener('click', () => {
+          listEl.querySelectorAll('.backup-item').forEach(i => i.classList.remove('selected'));
+          div.classList.add('selected');
+          selectedBackupPath = div.dataset.path;
+          document.getElementById('backupManualPath').value = '';
+          restoreBtn.disabled = false;
+        });
+        listEl.appendChild(div);
+      });
+    } catch (e) {
+      loadingEl.style.display = 'none';
+      emptyEl.style.display = '';
+      emptyEl.innerHTML = '<span style="color:#e74c3c">' + txt('Błąd ładowania backupów', 'Failed to load backups') + '</span>';
+    }
+  }
+
+  // Manual path input enables restore button
+  document.getElementById('backupManualPath').addEventListener('input', function() {
+    const restoreBtn = document.getElementById('step5Restore');
+    if (this.value.trim()) {
+      selectedBackupPath = this.value.trim();
+      document.querySelectorAll('.backup-item').forEach(i => i.classList.remove('selected'));
+      restoreBtn.disabled = false;
+    } else if (!document.querySelector('.backup-item.selected')) {
+      restoreBtn.disabled = true;
+    }
+  });
+
+  document.getElementById('step5Back').addEventListener('click', () => showStep(1));
+
+  document.getElementById('step5Restore').addEventListener('click', async () => {
+    const errEl = document.getElementById('step5Error');
+    const progressEl = document.getElementById('restoreProgress');
+    const restoreBtn = document.getElementById('step5Restore');
+    errEl.textContent = '';
+
+    const path = selectedBackupPath || document.getElementById('backupManualPath').value.trim();
+    if (!path) {
+      errEl.textContent = txt('Wybierz backup lub podaj ścieżkę', 'Select a backup or enter a path');
+      return;
+    }
+
+    restoreBtn.disabled = true;
+    progressEl.style.display = '';
+
+    try {
+      const res = await fetch('/api/setup/restore', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ path: path }),
+      });
+      const data = await res.json();
+      progressEl.style.display = 'none';
+
+      if (!res.ok) {
+        errEl.textContent = data.error || data.message || 'Error';
+        restoreBtn.disabled = false;
+        return;
+      }
+
+      const restored = (data.restored || []).join(', ') || 'all';
+      document.getElementById('doneMsg').innerHTML =
+        '<span class="pl">Przywrócono: ' + restored + '. Uruchom ponownie serwer.</span>' +
+        '<span class="en">Restored: ' + restored + '. Please restart the server.</span>';
+      showStep(4);
+    } catch (e) {
+      progressEl.style.display = 'none';
+      errEl.textContent = txt('Błąd połączenia', 'Connection error');
+      restoreBtn.disabled = false;
     }
   });
 
