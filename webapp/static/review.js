@@ -744,10 +744,15 @@
 
     let filtered = St.transactions;
     if(searchVal){
-      // Support AND logic: space-separated terms must ALL match (each term
-      // can match any searchable field independently). This enables combined
-      // filters like "9674 Łódź" to find card 9674 transactions in Łódź.
-      const terms = searchVal.split(/\s+/).filter(t => t.length > 0);
+      // Parse search: quoted phrases stay as one term, unquoted words are AND-ed.
+      // e.g. '"PAWLICKI; TOMASZ" 5160' → ["pawlicki; tomasz", "5160"]
+      const terms = [];
+      const re = /"([^"]+)"|(\S+)/g;
+      let m;
+      while((m = re.exec(searchVal)) !== null){
+        const t = (m[1] || m[2] || "").trim();
+        if(t) terms.push(t);
+      }
       filtered = filtered.filter(tx => {
         const haystack = [
           tx.counterparty_raw || "",

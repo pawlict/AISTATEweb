@@ -1083,6 +1083,62 @@ button.pill-icon:hover{
   opacity: 0.8;
   transform: scale(1.05);
 }
+.aml-acc-remove-btn{
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(239,68,68,.25);
+  color: #fca5a5;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity .2s, background .15s;
+  z-index: 5;
+}
+.aml-account-item:hover .aml-acc-remove-btn{
+  opacity: 1;
+}
+.aml-acc-remove-btn:hover{
+  background: rgba(239,68,68,.5);
+  color: #fff;
+}
+.aml-acc-restore-btn{
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(34,197,94,.25);
+  color: #86efac;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity .2s, background .15s;
+  z-index: 5;
+}
+.aml-account-item:hover .aml-acc-restore-btn{
+  opacity: 1;
+}
+.aml-acc-restore-btn:hover{
+  background: rgba(34,197,94,.5);
+  color: #fff;
+}
 .aml-acc-polish{
   background: rgba(255,255,255,.12);
   color: rgba(255,255,255,.75);

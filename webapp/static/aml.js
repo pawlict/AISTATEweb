@@ -56,6 +56,10 @@
     batchIdx: -1,          // current file index being processed
     batchCaseId: "",       // shared case_id for batch
     batchResults: [],      // statement IDs of successfully processed files
+    // Removed accounts state
+    removedAccounts: [],   // account objects hidden from main view
+    allAccounts: [],       // all accounts (for restore)
+    accountsStmt: null,    // stmt reference for re-render
   };
 
   // ============================================================
@@ -539,13 +543,23 @@
 
     if(!container || !accountsCard) return;
 
-    if(!accounts || !accounts.length){
+    // Store all accounts on first call; on subsequent calls only if accounts provided
+    if(accounts && accounts.length){
+      St.allAccounts = accounts;
+      St.accountsStmt = stmt;
+    }
+
+    // Separate visible vs removed
+    const removedNums = new Set(St.removedAccounts.map(a => a.account_number || ""));
+    const visible = (St.allAccounts || []).filter(a => !removedNums.has(a.account_number || ""));
+
+    if(!St.allAccounts || !St.allAccounts.length){
       accountsCard.style.display = "none";
       return;
     }
 
     accountsCard.style.display = "";
-    if(countEl) countEl.textContent = accounts.length;
+    if(countEl) countEl.textContent = visible.length;
 
     const cur = (stmt && stmt.currency) || "PLN";
     const _t = typeof t === "function" ? t : (k => k);
@@ -573,7 +587,8 @@
       employer:    "aml-acc-employer-bg",
     };
 
-    container.innerHTML = accounts.map(acc => {
+    // Helper to render a single account card (reused for both visible and removed)
+    function _accountCardHtml(acc, mode){
       const ownership = acc.ownership || (acc.is_own_account ? "own" : "third_party");
       const isForeign = acc.is_foreign;
       const bankShort = _esc(acc.bank_short || "");
@@ -621,7 +636,13 @@
       let gradientClass = _catBgClass[ownership] || "aml-acc-default";
       if(isForeign && ownership !== "own") gradientClass = "aml-acc-foreign-bg";
 
-      return `<div class="aml-account-item ${gradientClass}">
+      // Remove or Restore button
+      const actionBtn = mode === "removed"
+        ? `<button class="aml-acc-restore-btn" data-acc-num="${accNum}" title="Przywróć rachunek">+</button>`
+        : `<button class="aml-acc-remove-btn" data-acc-num="${accNum}" title="Usuń rachunek z widoku">&minus;</button>`;
+
+      return `<div class="aml-account-item ${gradientClass}" data-acc-num="${accNum}">
+        ${actionBtn}
         <div class="aml-acc-top">
           <div class="aml-acc-bank">${bankShort || countryCode || "BANK"}</div>
           <div class="aml-acc-badges">${ownershipBadge}${countryBadge}</div>
@@ -635,99 +656,156 @@
         <div class="aml-acc-stats">${statsHtml}</div>
         ${cpHtml ? '<div class="aml-acc-details">' + cpHtml + '</div>' : ''}
       </div>`;
-    }).join("");
+    }
 
-    // Category change click handlers
-    QSA(".aml-acc-cat-btn", container).forEach(btn => {
+    // Render visible accounts
+    container.innerHTML = visible.map(acc => _accountCardHtml(acc, "visible")).join("");
+
+    // Render removed accounts section
+    const removedSection = QS("#aml_removed_accounts_section");
+    const removedContainer = QS("#aml_removed_accounts_container");
+    const removedCount = QS("#aml_removed_count");
+    if(removedSection && removedContainer){
+      if(St.removedAccounts.length > 0){
+        removedSection.style.display = "";
+        if(removedCount) removedCount.textContent = St.removedAccounts.length;
+        removedContainer.innerHTML = St.removedAccounts.map(acc => _accountCardHtml(acc, "removed")).join("");
+      } else {
+        removedSection.style.display = "none";
+        removedContainer.innerHTML = "";
+      }
+    }
+
+    // Toggle expand/collapse for removed accounts
+    const toggleBtn = QS("#aml_removed_accounts_toggle");
+    if(toggleBtn && !toggleBtn._bound){
+      toggleBtn._bound = true;
+      toggleBtn.addEventListener("click", () => {
+        const rc = QS("#aml_removed_accounts_container");
+        const arrow = QS("#aml_removed_arrow");
+        if(!rc) return;
+        const open = rc.style.display !== "none";
+        rc.style.display = open ? "none" : "";
+        if(arrow) arrow.style.transform = open ? "" : "rotate(90deg)";
+      });
+    }
+
+    // Bind category change, counterparty click, and remove/restore handlers on BOTH containers
+    [container, removedContainer].forEach(cnt => {
+      if(!cnt) return;
+
+      // Category change click handlers
+      QSA(".aml-acc-cat-btn", cnt).forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const accNum = btn.getAttribute("data-acc");
+          const currentCat = btn.getAttribute("data-cat");
+          const accStmtId = btn.getAttribute("data-stmt") || St.statementId;
+
+          const cats = ["own", "third_party", "friend", "family", "employer"];
+          const existing = cnt.querySelector(".aml-acc-cat-picker");
+          if(existing) existing.remove();
+
+          const picker = document.createElement("div");
+          picker.className = "aml-acc-cat-picker";
+          picker.style.cssText = "position:absolute;z-index:100;background:var(--bg-card,#fff);border:1px solid var(--border,#ddd);border-radius:8px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.18);display:flex;flex-direction:column;gap:2px;min-width:130px";
+
+          cats.forEach(cat => {
+            const opt = document.createElement("div");
+            opt.textContent = _catLabels[cat];
+            opt.style.cssText = "padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;transition:background .15s";
+            if(cat === currentCat) opt.style.opacity = "0.4";
+            opt.addEventListener("mouseenter", () => { opt.style.background = "var(--bg-hover,#f0f0f0)"; });
+            opt.addEventListener("mouseleave", () => { opt.style.background = "none"; });
+            opt.addEventListener("click", async () => {
+              picker.remove();
+              if(cat === currentCat) return;
+              try {
+                const resp = await fetch("/api/aml/account-category", {
+                  method: "PATCH",
+                  headers: {"Content-Type": "application/json"},
+                  body: JSON.stringify({
+                    statement_id: accStmtId,
+                    account_number: accNum,
+                    category: cat,
+                  }),
+                });
+                if(resp.ok){
+                  const found = St.allAccounts.find(a => a.account_number === accNum);
+                  if(found){
+                    found.ownership = cat;
+                    found.is_own_account = (cat === "own");
+                    found.category_manual = true;
+                  }
+                  _renderAccounts(null, stmt);
+                }
+              } catch(err) {
+                console.error("Category change failed:", err);
+              }
+            });
+            picker.appendChild(opt);
+          });
+
+          const rect = btn.getBoundingClientRect();
+          const containerRect = cnt.getBoundingClientRect();
+          picker.style.position = "absolute";
+          picker.style.top = (rect.bottom - containerRect.top + 2) + "px";
+          picker.style.left = (rect.left - containerRect.left) + "px";
+          cnt.style.position = "relative";
+          cnt.appendChild(picker);
+
+          const _close = (ev) => {
+            if(!picker.contains(ev.target)){
+              picker.remove();
+              document.removeEventListener("click", _close);
+            }
+          };
+          setTimeout(() => document.addEventListener("click", _close), 10);
+        });
+      });
+
+      // Counterparty click handlers: filter transactions in Review section
+      QSA(".aml-acc-cp-link", cnt).forEach(el => {
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const filterText = el.getAttribute("data-filter") || "";
+          const rvSearch = QS("#rv_search");
+          const rvCard = QS("#aml_review_card");
+          if(rvSearch && filterText){
+            rvSearch.value = '"' + filterText + '"';
+            rvSearch.dispatchEvent(new Event("input", {bubbles: true}));
+          }
+          if(rvCard){
+            rvCard.scrollIntoView({behavior: "smooth", block: "start"});
+          }
+        });
+      });
+    });
+
+    // Remove button handlers (visible accounts → move to removed)
+    QSA(".aml-acc-remove-btn", container).forEach(btn => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const accNum = btn.getAttribute("data-acc");
-        const currentCat = btn.getAttribute("data-cat");
-        const accStmtId = btn.getAttribute("data-stmt") || St.statementId;
+        const accNum = btn.getAttribute("data-acc-num");
+        const acc = St.allAccounts.find(a => (a.account_number || "") === accNum);
+        if(acc && !St.removedAccounts.find(a => a.account_number === accNum)){
+          St.removedAccounts.push(acc);
+        }
+        _renderAccounts(null, stmt);
+      });
+    });
 
-        // Show inline category picker
-        const cats = ["own", "third_party", "friend", "family", "employer"];
-        const existing = container.querySelector(".aml-acc-cat-picker");
-        if(existing) existing.remove();
-
-        const picker = document.createElement("div");
-        picker.className = "aml-acc-cat-picker";
-        picker.style.cssText = "position:absolute;z-index:100;background:var(--bg-card,#fff);border:1px solid var(--border,#ddd);border-radius:8px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.18);display:flex;flex-direction:column;gap:2px;min-width:130px";
-
-        cats.forEach(cat => {
-          const opt = document.createElement("div");
-          opt.textContent = _catLabels[cat];
-          opt.style.cssText = "padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;transition:background .15s";
-          if(cat === currentCat) opt.style.opacity = "0.4";
-          opt.addEventListener("mouseenter", () => { opt.style.background = "var(--bg-hover,#f0f0f0)"; });
-          opt.addEventListener("mouseleave", () => { opt.style.background = "none"; });
-          opt.addEventListener("click", async () => {
-            picker.remove();
-            if(cat === currentCat) return;
-            try {
-              const resp = await fetch("/api/aml/account-category", {
-                method: "PATCH",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                  statement_id: accStmtId,
-                  account_number: accNum,
-                  category: cat,
-                }),
-              });
-              if(resp.ok){
-                // Update local data & re-render
-                const accs = St._mergedAccounts || (St.detail && St.detail.accounts) || [];
-                const found = accs.find(a => a.account_number === accNum);
-                if(found){
-                  found.ownership = cat;
-                  found.is_own_account = (cat === "own");
-                  found.category_manual = true;
-                }
-                _renderAccounts(accs, stmt);
-              }
-            } catch(err) {
-              console.error("Category change failed:", err);
-            }
-          });
-          picker.appendChild(opt);
+    // Restore button handlers (removed accounts → move back to visible)
+    if(removedContainer){
+      QSA(".aml-acc-restore-btn", removedContainer).forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const accNum = btn.getAttribute("data-acc-num");
+          St.removedAccounts = St.removedAccounts.filter(a => (a.account_number || "") !== accNum);
+          _renderAccounts(null, stmt);
         });
-
-        // Position near the badge
-        const rect = btn.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        picker.style.position = "absolute";
-        picker.style.top = (rect.bottom - containerRect.top + 2) + "px";
-        picker.style.left = (rect.left - containerRect.left) + "px";
-        container.style.position = "relative";
-        container.appendChild(picker);
-
-        // Close on outside click
-        const _close = (ev) => {
-          if(!picker.contains(ev.target)){
-            picker.remove();
-            document.removeEventListener("click", _close);
-          }
-        };
-        setTimeout(() => document.addEventListener("click", _close), 10);
       });
-    });
-
-    // Counterparty click handlers: filter transactions in Review section
-    QSA(".aml-acc-cp-link", container).forEach(el => {
-      el.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const filterText = el.getAttribute("data-filter") || "";
-        const rvSearch = QS("#rv_search");
-        const rvCard = QS("#aml_review_card");
-        if(rvSearch && filterText){
-          rvSearch.value = filterText;
-          rvSearch.dispatchEvent(new Event("input", {bubbles: true}));
-        }
-        if(rvCard){
-          rvCard.scrollIntoView({behavior: "smooth", block: "start"});
-        }
-      });
-    });
+    }
   }
 
   function _renderAlerts(alerts){
@@ -2019,7 +2097,14 @@
 
     let filtered = St.allTransactions;
     if(searchVal){
-      const terms = searchVal.split(/\s+/).filter(t => t.length > 0);
+      // Parse search: quoted phrases stay as one term, unquoted words are AND-ed.
+      const terms = [];
+      const re = /"([^"]+)"|(\S+)/g;
+      let m;
+      while((m = re.exec(searchVal)) !== null){
+        const t = (m[1] || m[2] || "").trim();
+        if(t) terms.push(t);
+      }
       filtered = filtered.filter(tx => {
         const haystack = [
           tx.counterparty_raw || "",
@@ -2476,6 +2561,8 @@
     St.batchIdx = -1;
     St.batchCaseId = "";
     St.batchResults = [];
+    St.removedAccounts = [];
+    St.allAccounts = [];
 
     _renderBatchPanel();
     _showBatchPanel();
