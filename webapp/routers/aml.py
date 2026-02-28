@@ -118,6 +118,103 @@ async def aml_report(statement_id: str):
     return HTMLResponse(html_content)
 
 
+@router.get("/api/aml/debug-segments/{statement_id}")
+async def aml_debug_segments(statement_id: str):
+    """Debug: show raw segmentation data for an ING statement PDF.
+
+    Returns items, segments and parsed transactions so we can see
+    exactly which text lines end up in which transaction.
+    """
+    from backend.db.engine import fetch_one
+    from pathlib import Path as _Path
+
+    # Find source PDF for this statement
+    row = fetch_one(
+        """SELECT cf.file_path FROM case_files cf
+           JOIN cases c ON cf.case_id = c.id
+           JOIN statements s ON s.case_id = c.id
+           WHERE s.id = ? AND cf.file_type = 'source'
+           LIMIT 1""",
+        (statement_id,),
+    )
+    if not row:
+        return JSONResponse({"error": "Source PDF not found for this statement"}, 404)
+
+    pdf_path = _Path(row["file_path"])
+    if not pdf_path.exists():
+        data_dir = os.environ.get("AISTATEWEB_DATA_DIR", "data_www")
+        pdf_path = _Path(data_dir) / row["file_path"]
+    if not pdf_path.exists():
+        return JSONResponse({"error": f"PDF file not found: {row['file_path']}"}, 404)
+
+    try:
+        import fitz
+        from backend.finance.parsers.ing import INGParser
+
+        parser = INGParser()
+        doc = fitz.open(str(pdf_path))
+
+        # Build global items (same logic as parser)
+        items = []
+        for pno in range(doc.page_count):
+            page = doc[pno]
+            page_lines = parser._extract_positioned_lines(page)
+            y_start = parser._find_table_y_start(page_lines)
+            if y_start is None:
+                continue
+            table_lines = [ln for ln in page_lines if ln.y0 >= y_start + 1]
+            thr = parser._detect_column_thresholds(table_lines)
+            for ln in table_lines:
+                if parser._is_noise_line(ln.text):
+                    continue
+                col = parser._classify_col(ln.x0, thr)
+                items.append({"page": pno, "y0": round(ln.y0, 2), "x0": round(ln.x0, 2),
+                              "col": col, "text": ln.text.strip()})
+
+        items.sort(key=lambda it: (it["page"], it["y0"], it["x0"]))
+
+        # Segment
+        segments = parser._segment_transactions(items, y_lookbehind=8.0)
+
+        # Parse each segment
+        parsed = []
+        for si, seg in enumerate(segments):
+            tx_data = parser._parse_segment(seg)
+            seg_info = {
+                "segment_index": si,
+                "items": seg,
+                "item_count": len(seg),
+                "page_range": f"{seg[0]['page']}-{seg[-1]['page']}" if seg else "",
+            }
+            if tx_data:
+                seg_info["booking_date"] = tx_data["booking_date"]
+                seg_info["transaction_date"] = tx_data["transaction_date"]
+                seg_info["amount"] = tx_data["amount"]
+                seg_info["currency"] = tx_data["currency"]
+                seg_info["counterparty"] = tx_data["counterparty"]
+                seg_info["counterparty_account"] = tx_data.get("counterparty_account")
+                seg_info["title"] = tx_data["title"]
+                seg_info["channel"] = tx_data["channel"]
+                seg_info["contractor_lines"] = tx_data["details"].get("contractor_raw", [])
+                seg_info["title_lines"] = tx_data["details"].get("title_raw", [])
+                seg_info["details_lines"] = tx_data["details"].get("details_raw", [])
+            else:
+                seg_info["parse_error"] = "Could not parse (missing dates or amount)"
+            parsed.append(seg_info)
+
+        return JSONResponse({
+            "statement_id": statement_id,
+            "pdf_path": str(pdf_path),
+            "page_count": doc.page_count,
+            "total_items": len(items),
+            "total_segments": len(segments),
+            "segments": parsed,
+        })
+    except Exception as e:
+        log.exception("Debug segments error")
+        return JSONResponse({"error": str(e)}, 500)
+
+
 @router.get("/api/aml/graph/{case_id}")
 async def aml_graph(
     case_id: str,
