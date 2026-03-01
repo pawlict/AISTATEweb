@@ -66,9 +66,16 @@
   // UPLOAD & ANALYZE
   // ============================================================
 
+  function _setAmlStatus(text, pct){
+    const el = QS("#aml_status"); if(el) el.textContent = text || "—";
+    const bar = QS("#aml_bar"); if(bar) bar.style.width = (pct != null ? pct + "%" : "0%");
+    const p = QS("#aml_pct"); if(p) p.textContent = (pct != null && pct > 0) ? Math.round(pct) + "%" : "";
+  }
+
   function _showUpload(){
-    _show("aml_upload_zone");
-    _hide("aml_progress_card");
+    _setAmlStatus("—", 0);
+    const progressDiv = QS("#aml_progress .progress");
+    if(progressDiv) progressDiv.classList.remove("indeterminate");
     _hide("aml_results");
     if(!St.batchMode) _hide("aml_batch_panel");
     const histCard = QS("#aml_history_card");
@@ -76,53 +83,46 @@
   }
 
   function _showProgress(text){
-    _hide("aml_upload_zone");
-    _show("aml_progress_card");
+    _setAmlStatus(text || "Analizuję...", 0);
+    // Show indeterminate animation on progress bar
+    const progressDiv = QS("#aml_progress .progress");
+    if(progressDiv) progressDiv.classList.add("indeterminate");
     _hide("aml_results");
     _hide("aml_history_card");
     if(!St.batchMode) _hide("aml_batch_panel");
-    const el = QS("#aml_prog_text");
-    if(el) el.textContent = text || "Przetwarzanie PDF...";
-    const bar = QS("#aml_prog_bar");
-    if(bar) bar.style.width = "0%";
   }
 
   function _showResults(){
-    _hide("aml_upload_zone");
-    _hide("aml_progress_card");
+    _setAmlStatus("Zakończono", 100);
+    const progressDiv = QS("#aml_progress .progress");
+    if(progressDiv) progressDiv.classList.remove("indeterminate");
     _show("aml_results");
     _hide("aml_history_card");
     _hide("aml_batch_panel");
   }
 
   function _showBatchPanel(){
-    _hide("aml_upload_zone");
-    _hide("aml_progress_card");
     _hide("aml_results");
     _hide("aml_history_card");
     _show("aml_batch_panel");
   }
 
   function _showError(msg){
-    _hide("aml_progress_card");
-    _show("aml_upload_zone");
-    const inner = QS("#aml_drop_area");
-    if(inner){
-      const errDiv = inner.querySelector(".aml-error");
-      if(errDiv) errDiv.remove();
-      const d = document.createElement("div");
-      d.className = "small aml-error";
-      d.style.color = "var(--danger)";
-      d.style.marginTop = "10px";
-      d.textContent = msg;
-      inner.appendChild(d);
-      setTimeout(()=> d.remove(), 8000);
+    const el = QS("#aml_status");
+    if(el){
+      el.textContent = "Błąd: " + msg;
+      el.style.color = "var(--danger)";
+      setTimeout(()=>{ el.style.color = ""; }, 8000);
     }
+    const bar = QS("#aml_bar"); if(bar) bar.style.width = "0%";
+    const p = QS("#aml_pct"); if(p) p.textContent = "";
+    const progressDiv = QS("#aml_progress .progress");
+    if(progressDiv) progressDiv.classList.remove("indeterminate");
   }
 
   function _showInfo(msg){
     // Informational toast (e.g. duplicate detected) — non-blocking
-    const container = QS("#aml_results") || QS("#aml_upload_zone") || document.body;
+    const container = QS("#aml_results") || QS("#aml_progress") || document.body;
     const d = document.createElement("div");
     d.className = "small aml-info-toast";
     d.style.cssText = "background:var(--info-bg,#d1ecf1);color:var(--info-text,#0c5460);"
@@ -141,7 +141,10 @@
     }
 
     St.analyzing = true;
-    _showProgress("Analiza AML...");
+    _showProgress("Parsowanie transakcji...");
+    // Switch to determinate progress for the upload phase
+    const _progDiv = QS("#aml_progress .progress");
+    if(_progDiv) _progDiv.classList.remove("indeterminate");
 
     const fd = new FormData();
     fd.append("file", file, file.name);
@@ -150,16 +153,18 @@
     if(_pid) fd.append("project_id", _pid);
 
     let pct = 0;
-    const bar = QS("#aml_prog_bar");
-    const progText = QS("#aml_prog_text");
+    const bar = QS("#aml_bar");
+    const pctEl = QS("#aml_pct");
+    const statusEl = QS("#aml_status");
     const progTimer = setInterval(()=>{
       pct = Math.min(pct + Math.random() * 8, 90);
       if(bar) bar.style.width = pct + "%";
+      if(pctEl) pctEl.textContent = Math.round(pct) + "%";
     }, 800);
 
     const stages = [
       "Parsowanie transakcji...",
-      "Klasyfikacja regul...",
+      "Klasyfikacja reguł...",
       "Detekcja anomalii...",
       "Budowa grafu...",
       "Generowanie raportu..."
@@ -167,8 +172,8 @@
     let stageIdx = 0;
     const stageTimer = setInterval(()=>{
       stageIdx++;
-      if(stageIdx < stages.length && progText){
-        progText.textContent = stages[stageIdx];
+      if(stageIdx < stages.length && statusEl){
+        statusEl.textContent = stages[stageIdx];
       }
     }, 2500);
 
@@ -2404,17 +2409,15 @@
   // ============================================================
 
   function _bindUpload(){
-    const dropArea = QS("#aml_drop_area");
     const fileInput = QS("#aml_file_input");
-    const uploadBtn = QS("#aml_upload_btn");
 
-    if(uploadBtn && fileInput){
-      uploadBtn.onclick = ()=> fileInput.click();
-    }
+    // Upload is handled by unified #an_upload_btn in analysis.html inline script
     if(fileInput){
       fileInput.onchange = _fileInputDefaultHandler;
     }
 
+    // Drag & drop on entire AML content area
+    const dropArea = QS("#aml_content");
     if(dropArea){
       dropArea.addEventListener("dragover", (e)=>{
         e.preventDefault();

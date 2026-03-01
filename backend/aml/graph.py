@@ -205,6 +205,15 @@ def _channel_to_edge_type(channel: str) -> str:
     return mapping.get(channel, "TRANSFER")
 
 
+def _ensure_graph_columns(conn) -> None:
+    """Ensure graph tables have the statement_id column (handles restored backups)."""
+    for tbl in ("graph_nodes", "graph_edges"):
+        try:
+            conn.execute(f"ALTER TABLE {tbl} ADD COLUMN statement_id TEXT DEFAULT ''")
+        except Exception:
+            pass  # column already exists
+
+
 def _save_graph_to_db(case_id: str, graph: Dict[str, Any], statement_id: str = "") -> None:
     """Persist graph nodes and edges to database.
 
@@ -213,6 +222,7 @@ def _save_graph_to_db(case_id: str, graph: Dict[str, Any], statement_id: str = "
     """
     scope_id = statement_id or case_id  # unique scope key
     with get_conn() as conn:
+        _ensure_graph_columns(conn)
         # Clear existing graph for this scope (statement or case)
         if statement_id:
             conn.execute("DELETE FROM graph_edges WHERE statement_id = ?", (statement_id,))
@@ -261,7 +271,11 @@ def get_graph_json(case_id: str = "", statement_id: str = "") -> Dict[str, Any]:
     When *statement_id* is given the graph is scoped to that single statement.
     Falls back to case_id for backwards-compatibility with old data.
     """
-    from ..db.engine import fetch_all
+    from ..db.engine import fetch_all, get_conn
+
+    # Ensure statement_id column exists (handles restored backups)
+    with get_conn() as conn:
+        _ensure_graph_columns(conn)
 
     if statement_id:
         raw_nodes = fetch_all("SELECT * FROM graph_nodes WHERE statement_id = ?", (statement_id,))

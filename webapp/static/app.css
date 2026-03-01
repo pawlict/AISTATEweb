@@ -295,7 +295,17 @@ textarea{min-height:220px; resize:vertical}
 .btn.danger:hover{background: rgba(185,28,28,.14)}
 
 .progress{width:100%; height:10px; background: rgba(15,23,42,.08); border-radius:999px; overflow:hidden}
-.progress > div{height:100%; width:0%; background: linear-gradient(90deg, var(--brand-cyan), var(--brand-sky), var(--brand-blue), var(--brand-purple))}
+.progress > div{height:100%; width:0%; background: linear-gradient(90deg, var(--brand-cyan), var(--brand-sky), var(--brand-blue), var(--brand-purple)); transition: width .4s ease}
+
+/* Indeterminate progress bar animation */
+.progress.indeterminate > div{
+  width:30% !important;
+  animation: progressIndeterminate 1.4s ease-in-out infinite;
+}
+@keyframes progressIndeterminate{
+  0%{transform:translateX(-100%)}
+  100%{transform:translateX(430%)}
+}
 
 .grid{display:grid; gap:14px}
 .topgrid{display:grid; grid-template-columns: 1fr 420px; gap:14px}
@@ -526,6 +536,7 @@ textarea{min-height:220px; resize:vertical}
 }
 
 .analysis-toolbar-left{display:flex; flex-direction:column; gap:4px; min-width:140px; margin-right:18px}
+.analysis-toolbar-left .h1{display:flex; align-items:center; gap:8px}
 .toolbar-project-name{
   display:inline-block;
   font-size:11px;

@@ -5,7 +5,9 @@
 
   <div class="card analysis-toolbar" id="analysis_toolbar">
     <div class="analysis-toolbar-left">
-      <div class="h1" style="margin:0"><i data-icon="analysis" data-size="40"></i> <span data-i18n="analysis.title">Analiza</span></div>
+      <div class="h1" style="margin:0"><i data-icon="analysis" data-size="40"></i> <span data-i18n="analysis.title">Analiza</span>
+        <button class="btn pill-icon" id="an_upload_btn" title="Dodaj pliki" data-i18n-title="analysis.add_docs_tooltip"><img src="/static/icons/pliki/file_upload.svg" alt="Dodaj" draggable="false"></button>
+      </div>
     </div>
 
     <div class="analysis-toolbar-right">
@@ -99,9 +101,6 @@
           <div class="analysis-docs">
             <div class="analysis-docs-top">
               <div class="h3" data-i18n="analysis.documents"><i data-icon="document" data-size="14"></i> Dokumenty</div>
-              <div class="analysis-docs-actions">
-                <button class="btn secondary" id="docs_upload_btn">+ <span data-i18n="analysis.add">Dodaj</span></button>
-              </div>
             </div>
             <div class="small" id="docs_hint" data-i18n="analysis.docs_hint">Zaznacz dokumenty, które mają wejść do analizy.</div>
             <div id="docs_list" class="docs-list"></div>
@@ -208,15 +207,10 @@
   <!-- AML Analysis content -->
   <div class="analysis-tab-content" id="aml_content" style="display:none">
 
-    <!-- Upload zone -->
-    <div class="card aml-upload-zone" id="aml_upload_zone">
-      <div class="aml-upload-inner" id="aml_drop_area">
-        <div class="aml-upload-icon"><i data-icon="document" data-size="32"></i></div>
-        <div class="h2">Analiza AML wyciągu bankowego</div>
-        <div class="small muted">Przeciągnij pliki PDF lub kliknij aby wybrać (można wiele na raz)</div>
-        <button class="btn" id="aml_upload_btn">Wybierz pliki</button>
-        <input type="file" id="aml_file_input" accept=".pdf" multiple style="display:none">
-      </div>
+    <!-- Progress bar (like transcription) -->
+    <div class="an-progress" id="aml_progress">
+      <div class="small">Status: <b id="aml_status">—</b> <span id="aml_pct"></span></div>
+      <div class="progress"><div id="aml_bar"></div></div>
     </div>
 
     <!-- Batch progress panel (shown during multi-file upload) -->
@@ -227,17 +221,6 @@
       </div>
       <div id="aml_batch_list" style="margin-top:8px"></div>
       <div id="aml_batch_validation" style="margin-top:12px;display:none"></div>
-    </div>
-
-    <!-- Progress -->
-    <div class="card aml-progress-card" id="aml_progress_card" style="display:none">
-      <div class="analysis-sidehdr">
-        <div class="h2">Analizuje wyciag...</div>
-      </div>
-      <div class="an-progress" style="padding:10px 0">
-        <div class="progress"><div id="aml_prog_bar" style="width:0%"></div></div>
-        <div class="small muted" id="aml_prog_text">Przetwarzanie PDF...</div>
-      </div>
     </div>
 
     <!-- Results -->
@@ -469,6 +452,7 @@
 
   <!-- Hidden file inputs -->
   <input type="file" id="docs_file_input" style="display:none" multiple>
+  <input type="file" id="aml_file_input" accept=".pdf" multiple style="display:none">
   <input type="file" id="prompt_import_input" style="display:none" accept="application/json">
 
   <!-- Prompt dialog -->
@@ -558,6 +542,22 @@
         }
       });
     });
+
+    // Unified upload button — delegates to LLM or AML file input based on active tab
+    const uploadBtn = document.getElementById('an_upload_btn');
+    if(uploadBtn){
+      uploadBtn.addEventListener('click', () => {
+        const activeTab = document.querySelector('.analysis-tab.active');
+        const which = activeTab ? activeTab.getAttribute('data-tab') : 'llm';
+        if(which === 'aml'){
+          const fi = document.getElementById('aml_file_input');
+          if(fi) fi.click();
+        } else {
+          const fi = document.getElementById('docs_file_input');
+          if(fi) fi.click();
+        }
+      });
+    }
 
     if(window.AnalysisManager){
       await AnalysisManager.init();

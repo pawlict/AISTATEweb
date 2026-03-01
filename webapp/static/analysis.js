@@ -1342,14 +1342,14 @@ async function _regenQuickIfNeeded(){
       };
     }
 
-    // docs upload
-    const docsBtn = QS("#docs_upload_btn");
+    // docs upload — handled by unified #an_upload_btn in analysis.html inline script
     const docsInput = QS("#docs_file_input");
-    docsBtn.onclick = ()=>docsInput.click();
-    docsInput.onchange = async ()=>{
-      await _uploadDocs(Array.from(docsInput.files||[]));
-      docsInput.value = "";
-    };
+    if(docsInput){
+      docsInput.onchange = async ()=>{
+        await _uploadDocs(Array.from(docsInput.files||[]));
+        docsInput.value = "";
+      };
+    }
 
     // prompt create/import
     QS("#prompt_new_btn").onclick = _createPrompt;
