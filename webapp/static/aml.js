@@ -2593,7 +2593,11 @@
         dropArea.classList.remove("aml-dragover");
         const files = e.dataTransfer && e.dataTransfer.files;
         if(!files || !files.length) return;
-        if(files.length === 1){
+        // Check if results are already displayed (existing analysis)
+        const hasExistingResults = St.statementId || (St.batchResults && St.batchResults.length > 0);
+        if(hasExistingResults){
+          _addFilesToExistingAnalysis(Array.from(files));
+        } else if(files.length === 1){
           _uploadAndAnalyze(files[0]);
         } else {
           _startBatch(Array.from(files));
@@ -2622,6 +2626,10 @@
         localStorage.removeItem("aistate_aml_statement_id");
         St.chartsData = {};
         St._mergedCharts = null;
+        St._mergedInfo = null;
+        St._mergedCards = null;
+        St._mergedAccounts = null;
+        St._perAccountDetails = null;
         if(St.chartInstance){ St.chartInstance.destroy(); St.chartInstance = null; }
         if(St.cyInstance){ St.cyInstance.destroy(); St.cyInstance = null; }
         _chartZoom.level = 1;
@@ -3377,13 +3385,156 @@
     }
   }
 
+  /** Collect all statement IDs from current analysis (batch + single + siblings). */
+  function _collectExistingStatementIds(){
+    let ids = [];
+    if(St.batchResults && St.batchResults.length > 0){
+      ids = [...St.batchResults];
+    } else if(St.statementId){
+      ids = [St.statementId];
+    }
+    // Also include sibling IDs from detail (e.g. after page reload restore)
+    if(St.detail && St.detail.sibling_statement_ids){
+      for(const sid of St.detail.sibling_statement_ids){
+        if(!ids.includes(sid)) ids.push(sid);
+      }
+    }
+    return ids;
+  }
+
+  /**
+   * Add new file(s) to an existing analysis without overwriting current data.
+   * Uploads each file, collects new statement IDs, then re-merges and re-renders all.
+   */
+  async function _addFilesToExistingAnalysis(files){
+    const pdfs = files.filter(f => f.name.toLowerCase().endsWith(".pdf"));
+    if(!pdfs.length){
+      _showError("Tylko pliki PDF sa obslugiwane.");
+      return;
+    }
+    if(St.analyzing) return;
+
+    St.analyzing = true;
+    _showProgress("Dodawanie wyciągu...");
+    const _progDiv = QS("#aml_progress .progress");
+    if(_progDiv) _progDiv.classList.remove("indeterminate");
+
+    let pct = 0;
+    const bar = QS("#aml_bar");
+    const pctEl = QS("#aml_pct");
+    const statusEl = QS("#aml_status");
+    const progTimer = setInterval(()=>{
+      pct = Math.min(pct + Math.random() * 8, 90);
+      if(bar) bar.style.width = pct + "%";
+      if(pctEl) pctEl.textContent = Math.round(pct) + "%";
+    }, 800);
+
+    const stages = [
+      "Parsowanie transakcji...",
+      "Klasyfikacja reguł...",
+      "Detekcja anomalii...",
+      "Budowa grafu...",
+      "Łączenie wyciągów..."
+    ];
+    let stageIdx = 0;
+    const stageTimer = setInterval(()=>{
+      stageIdx++;
+      if(stageIdx < stages.length && statusEl){
+        statusEl.textContent = stages[stageIdx];
+      }
+    }, 2500);
+
+    try {
+      // Collect existing statement IDs
+      let allIds = _collectExistingStatementIds();
+
+      // Upload each new file sequentially
+      for(const file of pdfs){
+        const fd = new FormData();
+        fd.append("file", file, file.name);
+        const _pid = (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) ? AISTATE.projectId : "";
+        if(_pid) fd.append("project_id", _pid);
+        if(St.caseId) fd.append("case_id", St.caseId);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(()=> controller.abort(), 120000);
+
+        let result;
+        try {
+          result = await _api("/api/aml/analyze", {method:"POST", body:fd, signal: controller.signal});
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        if(result && (result.status === "ok" || result.status === "duplicate")){
+          if(result.status === "duplicate"){
+            _showInfo(result.message || "Ten wyciag zostal juz wczytany.");
+          }
+          if(!St.caseId && result.case_id) St.caseId = result.case_id;
+          if(!allIds.includes(result.statement_id)){
+            allIds.push(result.statement_id);
+          }
+        } else {
+          let errMsg = result && result.error ? String(result.error) : "Blad analizy";
+          if(errMsg === "no_transactions") errMsg = "Nie znaleziono transakcji: " + file.name;
+          _showError(errMsg);
+        }
+      }
+
+      clearInterval(progTimer);
+      clearInterval(stageTimer);
+
+      // Update batch tracking
+      St.batchResults = allIds;
+
+      // Load detail for the first (original) statement
+      await _loadDetail(allIds[0]);
+
+      // Merge all statements if 2+
+      if(allIds.length > 1){
+        await _mergeMultiAccountCharts(allIds);
+      } else {
+        St._mergedCharts = null;
+        St._mergedInfo = null;
+        St._mergedCards = null;
+        St._mergedAccounts = null;
+        St._perAccountDetails = null;
+      }
+
+      _renderResults();
+      _showResults();
+
+      // Load all statements in ReviewManager
+      if(window.ReviewManager){
+        if(allIds.length > 1){
+          await ReviewManager.loadForBatch(allIds);
+        } else {
+          await ReviewManager.loadForStatement(allIds[0]);
+        }
+      }
+    } catch(e){
+      clearInterval(progTimer);
+      clearInterval(stageTimer);
+      _showError("Blad: " + String(e.message || e));
+    } finally {
+      St.analyzing = false;
+    }
+  }
+
   /** Default file input onchange handler (saved for restoring after batch add-more). */
   function _fileInputDefaultHandler(){
     const fileInput = QS("#aml_file_input");
     if(!fileInput) return;
     const files = fileInput.files;
     if(!files || !files.length) return;
-    if(files.length === 1){
+
+    // Check if results are already displayed (existing analysis)
+    const hasExistingResults = St.statementId || (St.batchResults && St.batchResults.length > 0);
+
+    if(hasExistingResults){
+      // Add new file(s) to existing analysis without overwriting
+      _addFilesToExistingAnalysis(Array.from(files));
+    } else if(files.length === 1){
       _uploadAndAnalyze(files[0]);
     } else {
       _startBatch(Array.from(files));
