@@ -136,7 +136,12 @@ def _detect_parser(lines: List[str]) -> _BankParser:
     for p in _PARSERS:
         if p.can_parse(lines):
             return p
-    raise RuntimeError("Nie rozpoznano banku — brak pasującego parsera.")
+    supported = ", ".join(p.name for p in _PARSERS)
+    raise RuntimeError(
+        f"Nie rozpoznano banku w przesłanym dokumencie. "
+        f"Obsługiwane banki: {supported}. "
+        f"Jeśli to wyciąg bankowy — zostanie użyty parser generyczny (fallback)."
+    )
 
 
 # ----------------------------------------------------------- ING parser
@@ -618,6 +623,443 @@ class _INGStatementParser(_BankParser):
 _register(_INGStatementParser())
 
 
+# ----------------------------------------------------------- mBank parser
+
+class _MBankStatementParser(_BankParser):
+    """Parser for mBank (Poland) 'Elektroniczne zestawienie operacji' statements."""
+
+    name = "mBank"
+
+    # Standalone date line: just YYYY-MM-DD (PyMuPDF extracts each cell separately)
+    _SOLE_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})$")
+    # Standalone money value on its own line: -353,39 or 18 835,28
+    _MONEY_LINE_RE = re.compile(r"^([\-+]?\d[\d ]*,\d{2})$")
+    # 26-digit NRB (Polish bank account)
+    _NRB_RE = re.compile(r"^\d{26}$")
+
+    # Page noise lines to skip
+    _NOISE_PATS = [
+        re.compile(r"^Strona\s*:", re.I),
+        re.compile(r"^mBank", re.I),
+        re.compile(r"^Skrytka", re.I),
+        re.compile(r"^www\.mbank", re.I),
+        re.compile(r"^mLinia", re.I),
+        re.compile(r"^\+?\d{2}\s*\(\d{2}\)"),
+        re.compile(r"^Niniejszy\s+dokument", re.I),
+        re.compile(r"^Nie\s+wymaga\s+podpisu", re.I),
+        re.compile(r"^W\s+przypadku\s+wyst", re.I),
+        re.compile(r"^kontakt\s+z\s+mLini", re.I),
+    ]
+
+    # Exact header fragments to skip (column headers repeated per page)
+    _SKIP_EXACT = frozenset({
+        "data", "księgowania", "operacji", "opis operacji",
+        "kwota", "saldo po", "saldo po operacji", "operacje",
+    })
+
+    # Operation type → standardised channel
+    _CHANNEL_MAP = {
+        "BLIK ZAKUP E-COMMERCE": "BLIK_MERCHANT",
+        "BLIK KOR. ZAKUPU E-COMMERCE": "BLIK_MERCHANT",
+        "BLIK P2P-WYCHODZĄCY": "BLIK_P2P",
+        "BLIK P2P-PRZYCHODZĄCY": "BLIK_P2P",
+        "ZAKUP PRZY UŻYCIU KARTY": "CARD",
+        "PRZELEW WEWNĘTRZNY PRZYCHODZĄCY": "TRANSFER",
+        "PRZELEW WEWNĘTRZNY WYCHODZĄCY": "TRANSFER",
+        "PRZELEW ZEWNĘTRZNY PRZYCHODZĄCY": "TRANSFER",
+        "PRZELEW ZEWNĘTRZNY WYCHODZĄCY": "TRANSFER",
+        "PRZELEW WŁASNY": "TRANSFER",
+        "PRZELEW NA TWOJE CELE": "TRANSFER",
+        "WYPŁATA Z CELU": "TRANSFER",
+        "WPŁATA WE WPŁATOMACIE": "CASH",
+        "WYPŁATA Z BANKOMATU": "CASH",
+    }
+
+    # ---- detection ----
+
+    def can_parse(self, lines: List[str]) -> bool:
+        head = " ".join(lines[:120]).lower()
+        return "mbank" in head and (
+            "zestawienie operacji" in head or "mkonto" in head
+        )
+
+    # ---- helpers ----
+
+    def _parse_money(self, s: str) -> Optional[float]:
+        """Parse Polish amount: '1 234,56' → 1234.56, '-20 000,00' → -20000.0"""
+        if not s:
+            return None
+        s = s.strip().replace("\xa0", " ").replace(" ", "").replace(",", ".")
+        try:
+            return float(s)
+        except ValueError:
+            return None
+
+    def _is_noise(self, line: str) -> bool:
+        for p in self._NOISE_PATS:
+            if p.match(line):
+                return True
+        if line.strip().lower() in self._SKIP_EXACT:
+            return True
+        if re.match(r"^Data\s+(księgowania|operacji)", line, re.I):
+            return True
+        return False
+
+    def _infer_channel(self, op_type: str) -> str:
+        upper = op_type.strip().upper()
+        for key, ch in self._CHANNEL_MAP.items():
+            if upper.startswith(key):
+                return ch
+        return ""
+
+    def _extract_counterparty(
+        self, desc_lines: List[str], op_type: str
+    ) -> Tuple[str, Optional[str], str]:
+        """Return (counterparty, counterparty_account, title)."""
+        upper = (op_type or "").upper()
+
+        # --- BLIK E-COMMERCE: next line = merchant ---
+        if upper.startswith("BLIK ZAKUP") or upper.startswith("BLIK KOR."):
+            cp = desc_lines[0] if desc_lines else ""
+            return cp.strip(), None, op_type
+
+        # --- CARD purchase: merchant DATA TRANSAKCJI: date ---
+        if upper.startswith("ZAKUP PRZY UŻYCIU KARTY"):
+            if desc_lines:
+                m = re.match(
+                    r"(.+?)\s+DATA TRANSAKCJI:\s*\S+", desc_lines[0]
+                )
+                cp = m.group(1).strip() if m else desc_lines[0]
+            else:
+                cp = ""
+            return cp.strip(), None, op_type
+
+        # --- Transfers: split on 26-digit NRB ---
+        if any(k in upper for k in ("PRZELEW", "WPŁATA", "WYPŁATA")):
+            name_parts: List[str] = []
+            title_parts: List[str] = []
+            cp_account: Optional[str] = None
+            found_acct = False
+            for ln in desc_lines:
+                stripped = re.sub(r"\s+", "", ln)
+                if not found_acct and self._NRB_RE.match(stripped):
+                    cp_account = stripped
+                    found_acct = True
+                elif not found_acct:
+                    name_parts.append(ln)
+                else:
+                    title_parts.append(ln)
+            cp = " ".join(name_parts).strip()
+            title = " ".join(title_parts).strip() if title_parts else op_type
+            return cp, cp_account, title
+
+        # --- BLIK P2P ---
+        if upper.startswith("BLIK P2P"):
+            title = " ".join(desc_lines).strip() if desc_lines else op_type
+            return "", None, title
+
+        # --- Default ---
+        if desc_lines:
+            return desc_lines[0].strip(), None, " ".join(desc_lines[1:]).strip() or op_type
+        return "", None, op_type
+
+    # ---- meta parsing ----
+
+    def _parse_meta(self, lines: List[str]) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {}
+
+        def _next_non_empty(idx: int, max_ahead: int = 3) -> str:
+            """Get next non-empty stripped line after *idx*."""
+            for j in range(idx + 1, min(idx + 1 + max_ahead, len(lines))):
+                s = lines[j].strip()
+                if s:
+                    return s
+            return ""
+
+        scan_limit = min(len(lines), 500)
+
+        for i, l in enumerate(lines[:scan_limit]):
+            # Period: "... za okres od YYYY-MM-DD do YYYY-MM-DD"
+            m = re.search(
+                r"za\s+okres\s+od\s+(\d{4}-\d{2}-\d{2})\s+do\s+(\d{4}-\d{2}-\d{2})",
+                l,
+            )
+            if m:
+                meta["period_from"] = m.group(1)
+                meta["period_to"] = m.group(2)
+                # Holder name: UPPERCASE line just before period line
+                for j in range(i - 1, max(i - 5, -1), -1):
+                    cand = lines[j].strip()
+                    if cand and re.match(
+                        r"^[A-ZĄĆĘŁŃÓŚŹŻ][A-ZĄĆĘŁŃÓŚŹŻ\s\-]+$", cand
+                    ):
+                        meta["holder_name"] = cand
+                        break
+
+            # --- Account number ---
+            # Multi-line: "Nr rachunku" alone, number on next line
+            if re.match(r"^Nr\s+rachunku$", l, re.I) and "account_number" not in meta:
+                nxt = _next_non_empty(i)
+                digits = nxt.replace(" ", "")
+                if re.match(r"^\d{26}$", digits):
+                    meta["account_number"] = digits
+            # Inline: "Nr rachunku 51 1140 2004 ..."
+            m = re.match(
+                r"Nr\s+rachunku\s+(\d[\d\s]+\d)", l
+            )
+            if m and "account_number" not in meta:
+                digits = m.group(1).replace(" ", "")
+                if len(digits) == 26:
+                    meta["account_number"] = digits
+
+            # --- Currency ---
+            # Multi-line: "Waluta" alone, "PLN" on next line
+            if re.match(r"^Waluta$", l, re.I) and "currency" not in meta:
+                nxt = _next_non_empty(i)
+                if re.match(r"^[A-Z]{3}$", nxt):
+                    meta["currency"] = nxt
+            # Inline: "Waluta PLN"
+            m = re.match(r"Waluta\s+([A-Z]{3})", l)
+            if m and "currency" not in meta:
+                meta["currency"] = m.group(1)
+
+            # --- Opening balance: "Saldo początkowe: 19 188,67" ---
+            m = re.match(r"Saldo\s+pocz[aą]tkowe:\s*([\d\s]+,\d{2})", l)
+            if m:
+                meta["opening_balance"] = self._parse_money(m.group(1))
+
+            # --- Closing balance (scans full file, not just first 300 lines) ---
+            m = re.match(r"Saldo\s+ko[nń]cowe:\s*([\d\s]+,\d{2})", l)
+            if m:
+                meta["closing_balance"] = self._parse_money(m.group(1))
+
+            # --- Summary: Uznania / Obciążenia ---
+            # Multi-line: "Uznania" alone, count on next, sum after that
+            if re.match(r"^Uznania$", l, re.I) and "credits_count" not in meta:
+                j = i + 1
+                while j < len(lines) and not lines[j].strip():
+                    j += 1
+                if j < len(lines) and re.match(r"^\d+$", lines[j].strip()):
+                    meta["credits_count"] = int(lines[j].strip())
+                    j += 1
+                    while j < len(lines) and not lines[j].strip():
+                        j += 1
+                    if j < len(lines):
+                        val = self._parse_money(lines[j].strip())
+                        if val is not None:
+                            meta["credits_total"] = abs(val)
+            # Inline: "Uznania 18 11 867,12"
+            m = re.match(r"Uznania\s+(\d+)\s+([\d\s]+,\d{2})", l)
+            if m and "credits_count" not in meta:
+                meta["credits_count"] = int(m.group(1))
+                meta["credits_total"] = self._parse_money(m.group(2))
+
+            # Multi-line: "Obciążenia" alone
+            if re.match(r"^Obci[aą][żz]enia$", l, re.I) and "debits_count" not in meta:
+                j = i + 1
+                while j < len(lines) and not lines[j].strip():
+                    j += 1
+                if j < len(lines) and re.match(r"^\d+$", lines[j].strip()):
+                    meta["debits_count"] = int(lines[j].strip())
+                    j += 1
+                    while j < len(lines) and not lines[j].strip():
+                        j += 1
+                    if j < len(lines):
+                        val = self._parse_money(lines[j].strip())
+                        if val is not None:
+                            meta["debits_total"] = abs(val)
+            # Inline: "Obciążenia 38 29 569,86"
+            m = re.match(r"Obci[aą][żz]enia\s+(\d+)\s+([\d\s]+,\d{2})", l)
+            if m and "debits_count" not in meta:
+                meta["debits_count"] = int(m.group(1))
+                meta["debits_total"] = self._parse_money(m.group(2))
+
+            # --- Credit limit ---
+            # Multi-line: "Limit kredytu" alone, "0,00 PLN" on next
+            if re.match(r"^Limit\s+kredytu$", l, re.I) and "debt_limit" not in meta:
+                nxt = _next_non_empty(i)
+                m2 = re.match(r"([\d\s]+,\d{2})", nxt)
+                if m2:
+                    meta["debt_limit"] = self._parse_money(m2.group(1))
+            # Inline: "Limit kredytu 0,00 PLN"
+            m = re.match(r"Limit\s+kredytu\s+([\d\s]+,\d{2})", l)
+            if m and "debt_limit" not in meta:
+                meta["debt_limit"] = self._parse_money(m.group(1))
+
+        return meta
+
+    # ---- transaction parsing ----
+
+    def _parse_transactions(self, lines: List[str]) -> List[Dict[str, Any]]:
+        """Parse transactions using a state machine for cell-per-line format.
+
+        PyMuPDF extracts mBank table cells as separate lines:
+          [i  ] 2025-11-02          ← booking date (alone)
+          [i+1] 2025-11-02          ← operation date (alone)
+          [i+2] BLIK ZAKUP E-COMMERCE  ← operation type
+          [i+3] LEK24.PL             ← description line(s)
+          [i+4] -353,39              ← amount (alone)
+          [i+5] 18 835,28            ← balance after (alone)
+        """
+        txs: List[Dict[str, Any]] = []
+
+        # Find table start (after "Saldo początkowe:")
+        start_idx: Optional[int] = None
+        for i, l in enumerate(lines):
+            if re.match(r"Saldo\s+pocz[aą]tkowe:", l):
+                start_idx = i + 1
+                break
+        if start_idx is None:
+            return txs
+
+        # --- State machine ---
+        SCAN, GOT_BOOKING, DESC, GOT_AMOUNT = 0, 1, 2, 3
+        state = SCAN
+        booking = ""
+        op_date = ""
+        op_type = ""
+        desc: List[str] = []
+        amount: Optional[float] = None
+        balance: Optional[float] = None
+
+        def _finalize() -> None:
+            nonlocal state
+            if amount is not None:
+                cp, cp_acct, title = self._extract_counterparty(desc, op_type)
+                channel = self._infer_channel(op_type)
+                txs.append({
+                    "posting_date": booking,
+                    "transaction_date": op_date,
+                    "amount": amount,
+                    "currency": "PLN",
+                    "balance_after": balance,
+                    "direction": "credit" if amount > 0 else "debit",
+                    "channel": channel,
+                    "counterparty_name_address": cp,
+                    "counterparty_account": cp_acct,
+                    "title": title or op_type,
+                    "body_raw_lines": [
+                        f"{booking} {op_date} {op_type}"
+                    ] + list(desc),
+                    "details": {},
+                })
+            state = SCAN
+
+        for i in range(start_idx, len(lines)):
+            l = lines[i].strip()
+
+            # End of transaction table
+            if re.match(r"Saldo\s+ko[nń]cowe:", l):
+                if state in (GOT_AMOUNT, DESC):
+                    _finalize()
+                break
+
+            # Skip empty lines and page noise at all states
+            if not l or self._is_noise(l):
+                continue
+
+            date_m = self._SOLE_DATE_RE.match(l)
+            money_m = self._MONEY_LINE_RE.match(l)
+
+            if state == SCAN:
+                if date_m:
+                    booking = date_m.group(1)
+                    state = GOT_BOOKING
+
+            elif state == GOT_BOOKING:
+                if date_m:
+                    # Second date = operation date → start reading description
+                    op_date = date_m.group(1)
+                    op_type = ""
+                    desc = []
+                    amount = None
+                    balance = None
+                    state = DESC
+                else:
+                    # Not a date — false positive, go back to scanning
+                    state = SCAN
+
+            elif state == DESC:
+                if money_m:
+                    amount = self._parse_money(money_m.group(1))
+                    state = GOT_AMOUNT
+                elif date_m:
+                    # New transaction started before we found amount
+                    # (shouldn't normally happen — finalize incomplete tx)
+                    _finalize()
+                    booking = date_m.group(1)
+                    state = GOT_BOOKING
+                else:
+                    # First non-empty text = operation type, rest = details
+                    if not op_type:
+                        op_type = l
+                    else:
+                        desc.append(l)
+
+            elif state == GOT_AMOUNT:
+                if money_m:
+                    # This is the balance-after line
+                    balance = self._parse_money(money_m.group(1))
+                    _finalize()
+                elif date_m:
+                    # Balance line was missing — new tx starting
+                    _finalize()
+                    booking = date_m.group(1)
+                    state = GOT_BOOKING
+                else:
+                    # Unexpected text — try to parse as money anyway
+                    val = self._parse_money(l)
+                    if val is not None:
+                        balance = val
+                        _finalize()
+
+        # Finalize last pending transaction (if file ends without "Saldo końcowe")
+        if state in (GOT_AMOUNT, DESC):
+            _finalize()
+        return txs
+
+    # ---- public API ----
+
+    def parse(self, lines: List[str], source_file: str) -> _Statement:
+        meta = self._parse_meta(lines)
+        txs = self._parse_transactions(lines)
+
+        # Reconciliation check
+        try:
+            ob = _safe_decimal(meta.get("opening_balance")) or Decimal("0")
+            cb = _safe_decimal(meta.get("closing_balance")) or Decimal("0")
+            credits = sum(
+                Decimal(str(t["amount"]))
+                for t in txs
+                if t.get("amount") is not None and t["amount"] > 0
+            )
+            debits = sum(
+                Decimal(str(t["amount"]))
+                for t in txs
+                if t.get("amount") is not None and t["amount"] < 0
+            )
+            meta["reconciliation_calc"] = {
+                "opening": float(ob),
+                "credits_sum": float(credits),
+                "debits_sum": float(debits),
+                "closing_expected": float(ob + credits + debits),
+                "closing_reported": float(cb),
+            }
+            meta["reconciliation_ok"] = ob + credits + debits == cb
+        except Exception:
+            meta["reconciliation_ok"] = None
+
+        return _Statement(
+            meta=meta,
+            transactions=txs,
+            source_file=source_file,
+            parse_method="pymupdf_lines_mbank",
+        )
+
+
+_register(_MBankStatementParser())
+
+
 # ------------------------------------------------ public API
 
 def parse_bank_statement(pdf_path: Path) -> ParseResult:
@@ -674,7 +1116,7 @@ def parse_bank_statement(pdf_path: Path) -> ParseResult:
             date_valuation=tx.get("transaction_date"),
             amount=float(amt),
             currency=tx.get("currency", "PLN"),
-            balance_after=None,  # ING doesn't provide per-tx balance
+            balance_after=tx.get("balance_after"),
             counterparty=cp,
             title=tx.get("title", ""),
             raw_text=" | ".join(raw_parts),
@@ -684,7 +1126,7 @@ def parse_bank_statement(pdf_path: Path) -> ParseResult:
 
     info = StatementInfo(
         bank=parser.name,
-        account_number=meta.get("iban_normalized", meta.get("nrb_normalized", "")),
+        account_number=meta.get("iban_normalized", meta.get("nrb_normalized", meta.get("account_number", ""))),
         account_holder=meta.get("holder_name", ""),
         period_from=meta.get("period_from"),
         period_to=meta.get("period_to"),
