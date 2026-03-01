@@ -397,9 +397,9 @@
     if(!wrap) return;
 
     // Multi-statement: render separate info cards side by side
-    if(St._perStatementDetails && St._perStatementDetails.length > 1){
+    if(St._perAccountDetails && St._perAccountDetails.length > 1){
       wrap.innerHTML = "";
-      for(const d of St._perStatementDetails){
+      for(const d of St._perAccountDetails){
         const s = d.statement || {};
         const txCount = (d.transactions || []).length;
         const iban = s.account_number || "";
@@ -532,14 +532,14 @@
     if(!cardsWrap) return;
 
     // Multi-statement: side by side per statement
-    if(St._perStatementDetails && St._perStatementDetails.length > 1){
-      const hasAnyCards = St._perStatementDetails.some(d => d.cards && d.cards.length);
+    if(St._perAccountDetails && St._perAccountDetails.length > 1){
+      const hasAnyCards = St._perAccountDetails.some(d => d.cards && d.cards.length);
       if(!hasAnyCards){
         cardsWrap.innerHTML = "";
         return;
       }
       let html = '<div style="display:flex;gap:12px;flex-wrap:wrap">';
-      for(const d of St._perStatementDetails){
+      for(const d of St._perAccountDetails){
         const s = d.statement || {};
         const stmtCards = d.cards || [];
         const iban = s.account_number || "";
@@ -664,8 +664,8 @@
     const countEl = QS("#aml_accounts_count");
 
     // Multi-statement: stacked vertically per statement
-    if(accountsWrap && St._perStatementDetails && St._perStatementDetails.length > 1){
-      const hasAny = St._perStatementDetails.some(d => d.accounts && d.accounts.length);
+    if(accountsWrap && St._perAccountDetails && St._perAccountDetails.length > 1){
+      const hasAny = St._perAccountDetails.some(d => d.accounts && d.accounts.length);
       if(!hasAny){
         accountsWrap.innerHTML = "";
         return;
@@ -678,7 +678,7 @@
       }
 
       let wrapHtml = "";
-      for(const d of St._perStatementDetails){
+      for(const d of St._perAccountDetails){
         const s = d.statement || {};
         const stmtAccounts = d.accounts || [];
         if(!stmtAccounts.length) continue;
@@ -2486,7 +2486,7 @@
           St._mergedInfo = null;
           St._mergedCards = null;
           St._mergedAccounts = null;
-          St._perStatementDetails = null;
+          St._perAccountDetails = null;
         }
         _renderResults();
         _showResults();
@@ -2519,7 +2519,7 @@
           St._mergedInfo = null;
           St._mergedCards = null;
           St._mergedAccounts = null;
-          St._perStatementDetails = null;
+          St._perAccountDetails = null;
         }
 
         _renderResults();
@@ -2932,12 +2932,98 @@
         St._mergedInfo = null;
         St._mergedCards = null;
         St._mergedAccounts = null;
-        St._perStatementDetails = null;
+        St._perAccountDetails = null;
         return;
       }
 
-      // Store per-statement details for side-by-side rendering
-      St._perStatementDetails = validDetails;
+      // Group statements by account number (IBAN) for multi-account layout.
+      // Only expose per-account details when 2+ distinct accounts exist.
+      {
+        const byAccount = {};
+        for(const d of validDetails){
+          const s = d.statement || {};
+          const iban = s.account_number || "unknown";
+          if(!byAccount[iban]) byAccount[iban] = [];
+          byAccount[iban].push(d);
+        }
+        const distinctAccounts = Object.keys(byAccount);
+        if(distinctAccounts.length >= 2){
+          // Merge per-account: combine statements within each account group
+          St._perAccountDetails = distinctAccounts.map(iban => {
+            const group = byAccount[iban];
+            const stmts = group.map(d => d.statement).filter(Boolean);
+            const allTx = group.flatMap(d => d.transactions || []);
+            const allCards = group.flatMap(d => d.cards || []);
+            const allAccs = group.flatMap(d => d.accounts || []);
+
+            // Sort statements by period to get earliest/latest
+            const sorted = [...stmts].sort((a,b) => (a.period_from||"").localeCompare(b.period_from||""));
+            const earliest = sorted[0] || {};
+            const latest = sorted.reduce((a,b) => (b.period_to||"") > (a.period_to||"") ? b : a, sorted[0]) || {};
+
+            // Build merged statement info for this account
+            const mergedStmt = {
+              bank_name: earliest.bank_name || "",
+              account_holder: earliest.account_holder || "",
+              account_number: iban,
+              period_from: earliest.period_from || "",
+              period_to: latest.period_to || "",
+              opening_balance: earliest.opening_balance,
+              closing_balance: latest.closing_balance,
+              available_balance: latest.available_balance,
+              previous_closing_balance: earliest.previous_closing_balance,
+              currency: earliest.currency || "PLN",
+            };
+
+            // Deduplicate cards by card_id within this account
+            const cardMap = {};
+            for(const c of allCards){
+              const cid = c.card_id || "unknown";
+              if(!cardMap[cid]){
+                cardMap[cid] = {...c};
+              } else {
+                const ex = cardMap[cid];
+                ex.total_debit += (c.total_debit||0);
+                ex.total_credit += (c.total_credit||0);
+                ex.tx_count += (c.tx_count||0);
+                if(c.first_date && (!ex.first_date || c.first_date < ex.first_date)) ex.first_date = c.first_date;
+                if(c.last_date && (!ex.last_date || c.last_date > ex.last_date)) ex.last_date = c.last_date;
+              }
+            }
+            for(const c of Object.values(cardMap)){
+              c.avg_amount = c.tx_count > 0 ? Math.round((c.total_debit+c.total_credit)/c.tx_count*100)/100 : 0;
+            }
+
+            // Deduplicate accounts by account_number within this group
+            const accMap = {};
+            for(const a of allAccs){
+              const aid = a.account_number || "unknown";
+              if(!accMap[aid]){
+                accMap[aid] = {...a};
+              } else {
+                const ex = accMap[aid];
+                ex.total_credit += (a.total_credit||0);
+                ex.total_debit += (a.total_debit||0);
+                ex.tx_count += (a.tx_count||0);
+                ex.credit_count += (a.credit_count||0);
+                ex.debit_count += (a.debit_count||0);
+                if(a.first_date && (!ex.first_date || a.first_date < ex.first_date)) ex.first_date = a.first_date;
+                if(a.last_date && (!ex.last_date || a.last_date > ex.last_date)) ex.last_date = a.last_date;
+                if(a.is_own_account) ex.is_own_account = true;
+              }
+            }
+
+            return {
+              statement: mergedStmt,
+              transactions: allTx,
+              cards: Object.values(cardMap),
+              accounts: Object.values(accMap),
+            };
+          });
+        } else {
+          St._perAccountDetails = null;
+        }
+      }
 
       // ---- 0. MERGE STATEMENT INFO (period, balances, tx count) ----
       {
