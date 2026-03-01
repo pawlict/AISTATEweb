@@ -359,35 +359,25 @@
     if(card) card.style.setProperty("--gauge-color", color);
   }
 
-  function _renderBankInfo(stmt, result){
-    const grid = QS("#aml_info_grid");
-    if(!grid) return;
-
-    // Use merged info when available (multi-statement case)
-    const mi = St._mergedInfo || null;
-    const src = mi || stmt;
-
-    const bank = src.bank_name || result.bank_name || "";
+  /** Render bank info HTML for a single statement */
+  function _bankInfoHtml(src, txCount, pipelineTime){
+    const bank = src.bank_name || "";
     const holder = src.account_holder || "";
     const iban = src.account_number || "";
     const periodFrom = src.period_from || "";
     const periodTo = src.period_to || "";
     const period = [periodFrom, periodTo].filter(Boolean).join(" \u2014 ");
     const cur = src.currency || "PLN";
-    const txCount = mi ? mi._total_tx : ((result.transaction_count || St.allTransactions.length) || 0);
     const prevClosing = src.previous_closing_balance;
     const availBal = src.available_balance;
-    const stmtCount = mi ? mi._statement_count : 0;
 
     let html = "";
     if(bank) html += `<div class="aml-info-row"><b>Bank:</b> ${_esc(bank)}</div>`;
     if(holder) html += `<div class="aml-info-row"><b>Właściciel:</b> ${_esc(holder)}</div>`;
     if(iban) html += `<div class="aml-info-row"><b>IBAN:</b> <span style="font-family:monospace">${_esc(iban)}</span></div>`;
     if(period) html += `<div class="aml-info-row"><b>Okres:</b> ${_esc(period)}</div>`;
-    if(stmtCount > 1) html += `<div class="aml-info-row"><b>Wyciągi:</b> ${stmtCount}</div>`;
     if(cur && cur !== "PLN") html += `<div class="aml-info-row"><b>Waluta:</b> ${_esc(cur)}</div>`;
 
-    // Balances grid
     html += '<div class="aml-info-stats">';
     if(src.opening_balance != null) html += `<span><b>Saldo otw.:</b> ${_fmtAmount(src.opening_balance, cur)}</span>`;
     if(src.closing_balance != null) html += `<span><b>Saldo konc.:</b> ${_fmtAmount(src.closing_balance, cur)}</span>`;
@@ -395,12 +385,48 @@
     if(prevClosing != null) html += `<span><b>Saldo konc. poprz.:</b> ${_fmtAmount(prevClosing, cur)}</span>`;
     html += '</div>';
 
-    // Summary stats
     html += `<div class="small muted" style="margin-top:4px">Transakcje: ${txCount}`;
-    if(result.pipeline_time_s) html += ` | Czas analizy: ${result.pipeline_time_s}s`;
+    if(pipelineTime) html += ` | Czas analizy: ${pipelineTime}s`;
     html += `</div>`;
 
-    grid.innerHTML = html;
+    return html;
+  }
+
+  function _renderBankInfo(stmt, result){
+    const wrap = QS("#aml_info_cards_wrap");
+    if(!wrap) return;
+
+    // Multi-statement: render separate info cards side by side
+    if(St._perStatementDetails && St._perStatementDetails.length > 1){
+      wrap.innerHTML = "";
+      for(const d of St._perStatementDetails){
+        const s = d.statement || {};
+        const txCount = (d.transactions || []).length;
+        const iban = s.account_number || "";
+        const ibanShort = iban.length > 12 ? "\u2026" + iban.slice(-8) : iban;
+        const title = _esc(s.bank_name || "Bank") + (ibanShort ? " " + _esc(ibanShort) : "");
+
+        const card = document.createElement("div");
+        card.className = "card aml-info-card";
+        card.style.flex = "1";
+        card.style.minWidth = "0";
+        card.innerHTML = `<div class="h2" style="font-size:14px">${title}</div><div class="aml-info-grid">${_bankInfoHtml(s, txCount, null)}</div>`;
+        wrap.appendChild(card);
+      }
+      return;
+    }
+
+    // Single statement: render in default card
+    wrap.innerHTML = "";
+    const card = document.createElement("div");
+    card.className = "card aml-info-card";
+    card.id = "aml_info_card";
+    card.style.flex = "1";
+
+    const src = stmt;
+    const txCount = (result.transaction_count || St.allTransactions.length) || 0;
+    card.innerHTML = `<div class="h2">Informacje o wyciagu</div><div class="aml-info-grid" id="aml_info_grid">${_bankInfoHtml(src, txCount, result.pipeline_time_s)}</div>`;
+    wrap.appendChild(card);
   }
 
   /**
@@ -417,33 +443,16 @@
     return lang === "en" ? (meta.display_name_en || meta.display_name || leaf) : (meta.display_name || leaf);
   }
 
-  function _renderCards(cards, stmt){
-    const container = QS("#aml_cards_container");
-    const cardCard = QS("#aml_cards_card");
-    const countEl = QS("#aml_cards_count");
-
-    if(!container || !cardCard) return;
-
-    if(!cards || !cards.length){
-      cardCard.style.display = "none";
-      return;
-    }
-
-    cardCard.style.display = "";
-    if(countEl) countEl.textContent = cards.length;
-
-    const bankName = (stmt.bank_name || "Bank").toUpperCase();
-    const cur = stmt.currency || "PLN";
-
-    container.innerHTML = cards.map(c => {
+  /** Generate HTML for a list of card items */
+  function _cardsItemsHtml(cardsList, bankName, cur){
+    const _t = typeof t === "function" ? t : (k => k);
+    return cardsList.map(c => {
       const brand = _esc(c.brand || "");
       const masked = _esc(c.card_masked || c.card_id || "****");
       const firstDate = _esc(c.first_date || "");
       const lastDate = _esc(c.last_date || "");
       const last4 = _esc(c.last_four || "");
 
-      // Stats section
-      const _t = typeof t === "function" ? t : (k => k);
       let statsHtml = `
         <div><b>${_t("aml.card.expenses")}</b><div class="val">${_fmtAmount(c.total_debit, cur)}</div></div>
         <div><b>${_t("aml.card.income")}</b><div class="val">${_fmtAmount(c.total_credit, cur)}</div></div>
@@ -451,7 +460,6 @@
         <div><b>${_t("aml.card.avg_amount")}</b><div class="val">${_fmtAmount(c.avg_amount, cur)}</div></div>
       `;
 
-      // Top merchants — clickable: filter by merchant name (scoped to this card)
       const _filterTitle = _t("aml.card.click_filter");
       let detailsHtml = "";
       if(c.top_merchants && c.top_merchants.length){
@@ -464,8 +472,6 @@
           detailsHtml += `<div class="detail-row aml-card-link" data-filter="${raw}" data-card-last4="${last4}" title="${_filterTitle}"><span>${name} (${cnt}x)</span><span>${amt}</span></div>`;
         });
       }
-
-      // Top categories — localized, clickable (scoped to this card)
       if(c.top_categories && c.top_categories.length){
         detailsHtml += `<div style="margin-top:6px;margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">${_t("aml.card.categories")}</div>`;
         c.top_categories.slice(0, 4).forEach(cat => {
@@ -475,8 +481,6 @@
           detailsHtml += `<div class="detail-row aml-card-link" data-filter-cat="${_esc(rawCat)}" data-card-last4="${last4}" title="${_filterTitle}"><span>${_esc(displayName)}</span><span>${amt}</span></div>`;
         });
       }
-
-      // Locations — clickable: filter by location name (scoped to this card)
       if(c.locations && c.locations.length){
         detailsHtml += `<div style="margin-top:6px;margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">${_t("aml.card.locations")}</div>`;
         c.locations.slice(0, 4).forEach(loc => {
@@ -485,9 +489,7 @@
         });
       }
 
-      // Brand display: show detected brand or empty (not "DEBIT" fallback)
       const brandDisplay = brand || "";
-
       return `<div class="aml-card-item" data-brand="${brand}">
         <div class="aml-card-top">
           <div class="aml-card-bank">${_esc(bankName)}</div>
@@ -502,49 +504,203 @@
         ${detailsHtml ? '<div class="aml-card-details">' + detailsHtml + '</div>' : ''}
       </div>`;
     }).join("");
+  }
 
-    // Click handlers: filter transactions in Review section — scoped to card
-    QSA(".aml-card-link", container).forEach(el => {
+  /** Bind card link click handlers within a container */
+  function _bindCardLinks(rootEl){
+    QSA(".aml-card-link", rootEl).forEach(el => {
       el.addEventListener("click", (e) => {
         e.stopPropagation();
         const filterText = el.getAttribute("data-filter") || "";
         const filterCat = el.getAttribute("data-filter-cat") || "";
         const cardLast4 = el.getAttribute("data-card-last4") || "";
-
-        // Target: Review & Classification search box
         const rvSearch = QS("#rv_search");
         const rvCard = QS("#aml_review_card");
-
         if(rvSearch){
-          let searchTerms = "";
-          if(filterCat){
-            searchTerms = _catDisplayName(filterCat);
-          } else {
-            searchTerms = filterText;
-          }
-          // Prepend card's last 4 digits to scope filter to this card only.
-          // Review search uses AND logic for space-separated terms, so
-          // "9674 Łódź" finds only transactions matching BOTH terms.
-          if(cardLast4 && cardLast4 !== "????"){
-            searchTerms = cardLast4 + " " + searchTerms;
-          }
+          let searchTerms = filterCat ? _catDisplayName(filterCat) : filterText;
+          if(cardLast4 && cardLast4 !== "????") searchTerms = cardLast4 + " " + searchTerms;
           rvSearch.value = searchTerms.trim();
-          // Trigger filter update
           rvSearch.dispatchEvent(new Event("input", {bubbles: true}));
         }
+        if(rvCard) rvCard.scrollIntoView({behavior: "smooth", block: "start"});
+      });
+    });
+  }
 
-        // Scroll to review section
-        if(rvCard){
-          rvCard.scrollIntoView({behavior: "smooth", block: "start"});
+  function _renderCards(cards, stmt){
+    const cardsWrap = QS("#aml_cards_wrap");
+    if(!cardsWrap) return;
+
+    // Multi-statement: side by side per statement
+    if(St._perStatementDetails && St._perStatementDetails.length > 1){
+      const hasAnyCards = St._perStatementDetails.some(d => d.cards && d.cards.length);
+      if(!hasAnyCards){
+        cardsWrap.innerHTML = "";
+        return;
+      }
+      let html = '<div style="display:flex;gap:12px;flex-wrap:wrap">';
+      for(const d of St._perStatementDetails){
+        const s = d.statement || {};
+        const stmtCards = d.cards || [];
+        const iban = s.account_number || "";
+        const ibanShort = iban.length > 12 ? "\u2026" + iban.slice(-8) : iban;
+        const title = _esc(s.bank_name || "Bank") + (ibanShort ? " " + _esc(ibanShort) : "");
+        const bankName = (s.bank_name || "Bank").toUpperCase();
+        const cur = s.currency || "PLN";
+        html += `<div class="card" style="flex:1;min-width:280px">
+          <div class="analysis-sidehdr">
+            <div class="h2" style="font-size:14px"><i data-icon="finance" data-size="16"></i> Karty: ${title}</div>
+            <span class="small aml-badge">${stmtCards.length}</span>
+          </div>
+          <div class="aml-cards-container" style="margin-top:10px">${_cardsItemsHtml(stmtCards, bankName, cur)}</div>
+        </div>`;
+      }
+      html += '</div>';
+      cardsWrap.innerHTML = html;
+      _bindCardLinks(cardsWrap);
+      return;
+    }
+
+    // Single statement: original layout
+    const cardCard = QS("#aml_cards_card");
+    const container = QS("#aml_cards_container");
+    const countEl = QS("#aml_cards_count");
+    if(!container || !cardCard) return;
+
+    if(!cards || !cards.length){
+      cardCard.style.display = "none";
+      return;
+    }
+
+    cardCard.style.display = "";
+    if(countEl) countEl.textContent = cards.length;
+
+    const bankName = (stmt.bank_name || "Bank").toUpperCase();
+    const cur = stmt.currency || "PLN";
+    container.innerHTML = _cardsItemsHtml(cards, bankName, cur);
+    _bindCardLinks(container);
+  }
+
+  /** Render a single account card HTML (for multi-statement mode) */
+  function _accountCardHtmlStatic(acc, cur){
+    const ownership = acc.ownership || (acc.is_own_account ? "own" : "third_party");
+    const isForeign = acc.is_foreign;
+    const bankShort = _esc(acc.bank_short || "");
+    const bankFull = _esc(acc.bank_full || "");
+    const displayNum = _esc(acc.account_display || acc.account_number || "");
+    const country = _esc(acc.country_name || "");
+    const countryCode = _esc(acc.country_code || "");
+    const firstDate = _esc(acc.first_date || "");
+    const lastDate = _esc(acc.last_date || "");
+    const accNum = _esc(acc.account_number || "");
+
+    const _catLabelsS = {own:"Właściciel",third_party:"Kontrahent",friend:"Znajomy",family:"Rodzina",employer:"Pracodawca"};
+    const _catBadgeS = {own:"aml-acc-own",third_party:"aml-acc-third",friend:"aml-acc-friend",family:"aml-acc-family",employer:"aml-acc-employer"};
+    const _catBgS = {own:"aml-acc-own-bg",third_party:"aml-acc-default",friend:"aml-acc-friend-bg",family:"aml-acc-family-bg",employer:"aml-acc-employer-bg"};
+
+    const catLabel = _catLabelsS[ownership] || _catLabelsS.third_party;
+    const catClass = _catBadgeS[ownership] || _catBadgeS.third_party;
+    const ownershipBadge = `<span class="aml-acc-badge ${catClass}">${catLabel}</span>`;
+    let countryBadge = "";
+    if(isForeign) countryBadge = `<span class="aml-acc-badge aml-acc-foreign">${countryCode} ${country}</span>`;
+    else if(countryCode) countryBadge = `<span class="aml-acc-badge aml-acc-polish">${countryCode} ${country}</span>`;
+
+    let statsHtml = `
+      <div><b>Wpływy</b><div class="val aml-acc-credit">+${_fmtAmount(acc.total_credit, cur)}</div><div class="sub">${acc.credit_count} transakcji</div></div>
+      <div><b>Wypływy</b><div class="val aml-acc-debit">-${_fmtAmount(acc.total_debit, cur)}</div><div class="sub">${acc.debit_count} transakcji</div></div>
+      <div><b>Transakcje</b><div class="val">${acc.tx_count}</div></div>
+    `;
+
+    let cpHtml = "";
+    if(acc.top_counterparties && acc.top_counterparties.length){
+      cpHtml += `<div style="margin-bottom:4px;opacity:0.65;font-weight:700;font-size:10px">Kontrahenci</div>`;
+      acc.top_counterparties.slice(0, 4).forEach(cp => {
+        const name = _esc((cp[0] || "").slice(0, 30));
+        const cnt = cp[1] || 0;
+        cpHtml += `<div class="detail-row aml-acc-cp-link" data-filter="${name}" title="Kliknij aby filtrować transakcje" style="cursor:pointer"><span>${name}</span><span>${cnt}x</span></div>`;
+      });
+    }
+
+    let gradientClass = _catBgS[ownership] || "aml-acc-default";
+    if(isForeign && ownership !== "own") gradientClass = "aml-acc-foreign-bg";
+
+    return `<div class="aml-account-item ${gradientClass}" data-acc-num="${accNum}">
+      <div class="aml-acc-top">
+        <div class="aml-acc-bank">${bankShort || countryCode || "BANK"}</div>
+        <div class="aml-acc-badges">${ownershipBadge}${countryBadge}</div>
+      </div>
+      <div class="aml-acc-number" title="${bankFull}">${displayNum}</div>
+      ${bankFull ? '<div class="aml-acc-bankfull">' + bankFull + '</div>' : ''}
+      <div class="aml-acc-dates">
+        <span>OD ${firstDate}</span>
+        <span>DO ${lastDate}</span>
+      </div>
+      <div class="aml-acc-stats">${statsHtml}</div>
+      ${cpHtml ? '<div class="aml-acc-details">' + cpHtml + '</div>' : ''}
+    </div>`;
+  }
+
+  /** Bind counterparty click handlers within a container (for multi-statement accounts) */
+  function _bindAccountLinks(rootEl){
+    QSA(".aml-acc-cp-link", rootEl).forEach(el => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const filterText = el.getAttribute("data-filter") || "";
+        const rvSearch = QS("#rv_search");
+        const rvCard = QS("#aml_review_card");
+        if(rvSearch && filterText){
+          rvSearch.value = '"' + filterText + '"';
+          rvSearch.dispatchEvent(new Event("input", {bubbles: true}));
         }
+        if(rvCard) rvCard.scrollIntoView({behavior: "smooth", block: "start"});
       });
     });
   }
 
   function _renderAccounts(accounts, stmt){
+    const accountsWrap = QS("#aml_accounts_wrap");
     const container = QS("#aml_accounts_container");
     const accountsCard = QS("#aml_accounts_card");
     const countEl = QS("#aml_accounts_count");
+
+    // Multi-statement: stacked vertically per statement
+    if(accountsWrap && St._perStatementDetails && St._perStatementDetails.length > 1){
+      const hasAny = St._perStatementDetails.some(d => d.accounts && d.accounts.length);
+      if(!hasAny){
+        accountsWrap.innerHTML = "";
+        return;
+      }
+
+      // Store all accounts combined for remove/restore
+      if(accounts && accounts.length){
+        St.allAccounts = accounts;
+        St.accountsStmt = stmt;
+      }
+
+      let wrapHtml = "";
+      for(const d of St._perStatementDetails){
+        const s = d.statement || {};
+        const stmtAccounts = d.accounts || [];
+        if(!stmtAccounts.length) continue;
+        const iban = s.account_number || "";
+        const ibanShort = iban.length > 12 ? "\u2026" + iban.slice(-8) : iban;
+        const title = _esc(s.bank_name || "Bank") + (ibanShort ? " " + _esc(ibanShort) : "");
+        const cur = s.currency || "PLN";
+
+        wrapHtml += `<div class="card" style="margin-bottom:12px">
+          <div class="analysis-sidehdr">
+            <div class="h2" style="font-size:14px"><i data-icon="finance" data-size="16"></i> Rachunki: ${title}</div>
+            <span class="small aml-badge">${stmtAccounts.length}</span>
+          </div>
+          <div class="aml-accounts-container" style="margin-top:10px">
+            ${stmtAccounts.map(acc => _accountCardHtmlStatic(acc, cur)).join("")}
+          </div>
+        </div>`;
+      }
+      accountsWrap.innerHTML = wrapHtml;
+      _bindAccountLinks(accountsWrap);
+      return;
+    }
 
     if(!container || !accountsCard) return;
 
@@ -2330,6 +2486,7 @@
           St._mergedInfo = null;
           St._mergedCards = null;
           St._mergedAccounts = null;
+          St._perStatementDetails = null;
         }
         _renderResults();
         _showResults();
@@ -2362,6 +2519,7 @@
           St._mergedInfo = null;
           St._mergedCards = null;
           St._mergedAccounts = null;
+          St._perStatementDetails = null;
         }
 
         _renderResults();
@@ -2774,8 +2932,12 @@
         St._mergedInfo = null;
         St._mergedCards = null;
         St._mergedAccounts = null;
+        St._perStatementDetails = null;
         return;
       }
+
+      // Store per-statement details for side-by-side rendering
+      St._perStatementDetails = validDetails;
 
       // ---- 0. MERGE STATEMENT INFO (period, balances, tx count) ----
       {

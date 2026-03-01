@@ -5,9 +5,7 @@
 
   <div class="card analysis-toolbar" id="analysis_toolbar">
     <div class="analysis-toolbar-left">
-      <div class="h1" style="margin:0"><i data-icon="analysis" data-size="40"></i> <span data-i18n="analysis.title">Analiza</span>
-        <button class="btn pill-icon" id="an_upload_btn" title="Dodaj pliki" data-i18n-title="analysis.add_docs_tooltip"><img src="/static/icons/pliki/file_upload.svg" alt="Dodaj" draggable="false"></button>
-      </div>
+      <div class="h1" style="margin:0"><i data-icon="analysis" data-size="40"></i> <span data-i18n="analysis.title">Analiza</span></div>
     </div>
 
     <div class="analysis-toolbar-right">
@@ -230,7 +228,7 @@
     <!-- Results -->
     <div id="aml_results" style="display:none">
 
-      <!-- Summary row: risk score + bank info (merged with header fields) -->
+      <!-- Summary row: risk score + bank info -->
       <div class="aml-summary-row">
         <div class="card aml-risk-card" id="aml_risk_card">
           <div class="aml-risk-gauge">
@@ -244,37 +242,42 @@
           <div class="aml-risk-label" id="aml_risk_label">Ryzyko AML</div>
         </div>
 
-        <div class="card aml-info-card" id="aml_info_card">
-          <div class="h2">Informacje o wyciagu</div>
-          <div class="aml-info-grid" id="aml_info_grid">
-            <!-- Filled by JS: bank, holder, IBAN, period, balances, currency -->
+        <!-- Info cards wrapper (flex row for multi-statement) -->
+        <div id="aml_info_cards_wrap" style="display:flex;gap:12px;flex:1;min-width:0">
+          <div class="card aml-info-card" id="aml_info_card" style="flex:1">
+            <div class="h2">Informacje o wyciagu</div>
+            <div class="aml-info-grid" id="aml_info_grid"></div>
           </div>
         </div>
       </div>
 
-      <!-- Identified Cards -->
-      <div class="card" id="aml_cards_card" style="display:none">
-        <div class="analysis-sidehdr">
-          <div class="h2"><i data-icon="finance" data-size="16"></i> Zidentyfikowane karty</div>
-          <span class="small aml-badge" id="aml_cards_count">0</span>
+      <!-- Identified Cards (multi-statement: side by side) -->
+      <div id="aml_cards_wrap">
+        <div class="card" id="aml_cards_card" style="display:none">
+          <div class="analysis-sidehdr">
+            <div class="h2"><i data-icon="finance" data-size="16"></i> Zidentyfikowane karty</div>
+            <span class="small aml-badge" id="aml_cards_count">0</span>
+          </div>
+          <div id="aml_cards_container" class="aml-cards-container" style="margin-top:10px"></div>
         </div>
-        <div id="aml_cards_container" class="aml-cards-container" style="margin-top:10px"></div>
       </div>
 
-      <!-- Identified Accounts -->
-      <div class="card" id="aml_accounts_card" style="display:none">
-        <div class="analysis-sidehdr">
-          <div class="h2"><i data-icon="finance" data-size="16"></i> Zidentyfikowane rachunki</div>
-          <span class="small aml-badge" id="aml_accounts_count">0</span>
-        </div>
-        <div id="aml_accounts_container" class="aml-accounts-container" style="margin-top:10px"></div>
-        <div id="aml_removed_accounts_section" style="display:none;margin-top:12px">
-          <div id="aml_removed_accounts_toggle" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted,#94a3b8);padding:4px 0">
-            <span style="transition:transform .2s;display:inline-block" id="aml_removed_arrow">&#9654;</span>
-            <span>Usunięte rachunki</span>
-            <span class="small aml-badge" style="background:rgba(239,68,68,.15);color:#f87171" id="aml_removed_count">0</span>
+      <!-- Identified Accounts (multi-statement: stacked vertically) -->
+      <div id="aml_accounts_wrap">
+        <div class="card" id="aml_accounts_card" style="display:none">
+          <div class="analysis-sidehdr">
+            <div class="h2"><i data-icon="finance" data-size="16"></i> Zidentyfikowane rachunki</div>
+            <span class="small aml-badge" id="aml_accounts_count">0</span>
           </div>
-          <div id="aml_removed_accounts_container" class="aml-accounts-container" style="display:none;margin-top:8px;opacity:0.6"></div>
+          <div id="aml_accounts_container" class="aml-accounts-container" style="margin-top:10px"></div>
+          <div id="aml_removed_accounts_section" style="display:none;margin-top:12px">
+            <div id="aml_removed_accounts_toggle" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted,#94a3b8);padding:4px 0">
+              <span style="transition:transform .2s;display:inline-block" id="aml_removed_arrow">&#9654;</span>
+              <span>Usunięte rachunki</span>
+              <span class="small aml-badge" style="background:rgba(239,68,68,.15);color:#f87171" id="aml_removed_count">0</span>
+            </div>
+            <div id="aml_removed_accounts_container" class="aml-accounts-container" style="display:none;margin-top:8px;opacity:0.6"></div>
+          </div>
         </div>
       </div>
 
