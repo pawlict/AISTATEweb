@@ -311,6 +311,15 @@ def run_aml_pipeline(
     with get_conn() as conn:
         # Create case if needed
         if not case_id:
+            # Verify provided project_id actually exists in DB; reset if not
+            if project_id:
+                exists = conn.execute(
+                    "SELECT id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                if not exists:
+                    log.warning("Provided project_id %s not found in DB, will create/find default", project_id)
+                    project_id = None
+
             if not project_id:
                 owner_id = get_default_user_id()
                 # Create or find default AML project
