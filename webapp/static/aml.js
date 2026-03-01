@@ -3201,11 +3201,12 @@
       html += `</div>`;
     }
 
-    // Progress bar
+    // Update top status bar with batch progress
     const pct = total > 0 ? Math.round(((done + errs) / total) * 100) : 0;
-    html += `<div style="margin-top:8px;background:var(--border,#e2e8f0);border-radius:4px;height:6px;overflow:hidden">
-      <div style="width:${pct}%;height:100%;background:${errs > 0 ? "#d97706" : "var(--ok,#15803d)"};transition:width .3s"></div>
-    </div>`;
+    const batchText = done + errs < total ? `Przetwarzanie ${done + errs + 1} / ${total}...` : "Zakończono";
+    _setAmlStatus(batchText, pct);
+    const _topBar = QS("#aml_bar");
+    if(_topBar) _topBar.style.background = errs > 0 ? "#d97706" : "";
 
     // If all done, show button to view results
     if(done + errs === total && done > 0){
