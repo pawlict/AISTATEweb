@@ -22,7 +22,6 @@ _DB_VERSION = "1.0.0"
 # Global connection reference (singleton per process)
 _db_path: Optional[Path] = None
 _initialized: bool = False
-_db_mtime: float = 0.0  # track DB file modification time to detect replacements
 
 
 def _get_db_path() -> Path:
@@ -145,12 +144,6 @@ def init_db(path: Optional[Path] = None) -> None:
         )
         conn.commit()
         _initialized = True
-        # Record file mtime so we can detect DB replacements (e.g. backup restore)
-        global _db_mtime
-        try:
-            _db_mtime = db_path.stat().st_mtime
-        except OSError:
-            _db_mtime = 0.0
         log.info("Database initialized (version %s)", _DB_VERSION)
     finally:
         conn.close()
@@ -159,22 +152,11 @@ def init_db(path: Optional[Path] = None) -> None:
 def ensure_initialized() -> None:
     """Ensure DB is initialized (call from app startup).
 
-    Also re-initializes if the DB file was deleted or replaced (e.g. backup restore).
+    Also re-initializes if the DB file was deleted after first init.
     """
-    global _initialized, _db_mtime
-    db = get_db_path()
-    if _initialized:
-        if not db.exists():
-            _initialized = False
-        else:
-            # Detect DB replacement (backup restore) by checking mtime
-            try:
-                current_mtime = db.stat().st_mtime
-                if _db_mtime and current_mtime != _db_mtime:
-                    log.info("Database file changed (mtime %s -> %s), re-running migrations", _db_mtime, current_mtime)
-                    _initialized = False
-            except OSError:
-                pass
+    global _initialized
+    if _initialized and not get_db_path().exists():
+        _initialized = False
     if not _initialized:
         init_db()
 

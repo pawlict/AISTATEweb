@@ -2411,7 +2411,11 @@
   function _bindUpload(){
     const fileInput = QS("#aml_file_input");
 
-    // Upload is handled by unified #an_upload_btn in analysis.html inline script
+    // Toolbar upload button
+    const toolbarAddBtn = QS("#aml_add_file_toolbar_btn");
+    if(toolbarAddBtn && fileInput){
+      toolbarAddBtn.onclick = ()=> fileInput.click();
+    }
     if(fileInput){
       fileInput.onchange = _fileInputDefaultHandler;
     }
