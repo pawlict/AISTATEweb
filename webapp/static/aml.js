@@ -609,7 +609,8 @@
   }
 
   /** Render a single account card HTML (for multi-statement mode) */
-  function _accountCardHtmlStatic(acc, cur, statementId){
+  function _accountCardHtmlStatic(acc, cur, statementId, mode){
+    const isRemoved = mode === "removed";
     const ownership = acc.ownership || (acc.is_own_account ? "own" : "third_party");
     const isForeign = acc.is_foreign;
     const bankShort = _esc(acc.bank_short || "");
@@ -652,13 +653,23 @@
     let gradientClass = _catBgS[ownership] || "aml-acc-default";
     if(isForeign && ownership !== "own") gradientClass = "aml-acc-foreign-bg";
 
-    return `<div class="aml-account-item ${gradientClass}" data-acc-num="${accNum}">
+    // Remove or Restore button (top-right corner)
+    const actionBtn = isRemoved
+      ? `<button class="aml-acc-restore-btn" data-acc-num="${accNum}" title="Przywróć rachunek do widoku">&#8635;</button>`
+      : `<button class="aml-acc-remove-btn" data-acc-num="${accNum}" title="Usuń rachunek z analizy">&times;</button>`;
+
+    const removedClass = isRemoved ? " aml-acc-removed" : "";
+    const removedLabel = isRemoved ? `<div class="aml-acc-removed-label">Usunięty z analizy</div>` : "";
+
+    return `<div class="aml-account-item ${gradientClass}${removedClass}" data-acc-num="${accNum}">
+      ${actionBtn}
       <div class="aml-acc-top">
         <div class="aml-acc-bank">${bankShort || countryCode || "BANK"}</div>
         <div class="aml-acc-badges">${ownershipBadge}${countryBadge}</div>
       </div>
       <div class="aml-acc-number" title="${bankFull}">${displayNum}</div>
       ${bankFull ? '<div class="aml-acc-bankfull">' + bankFull + '</div>' : ''}
+      ${removedLabel}
       <div class="aml-acc-dates">
         <span>OD ${firstDate}</span>
         <span>DO ${lastDate}</span>
@@ -772,6 +783,50 @@
     });
   }
 
+  /** Load removed-accounts list from backend for the current case. */
+  async function _loadRemovedAccounts(){
+    if(!St.caseId) return;
+    try {
+      const resp = await _safeApi("/api/aml/removed-accounts/" + encodeURIComponent(St.caseId));
+      if(resp && Array.isArray(resp.removed)){
+        // Convert stored account_numbers back to account objects from allAccounts/perAccountDetails
+        const numSet = new Set(resp.removed);
+        St.removedAccounts = [];
+        // Find matching account objects across all perAccountDetails
+        if(St._perAccountDetails){
+          for(const d of St._perAccountDetails){
+            for(const acc of (d.accounts || [])){
+              if(numSet.has(acc.account_number)){
+                St.removedAccounts.push(acc);
+              }
+            }
+          }
+        }
+        // Also check allAccounts for single-mode
+        if(!St.removedAccounts.length && St.allAccounts){
+          for(const acc of St.allAccounts){
+            if(numSet.has(acc.account_number)){
+              St.removedAccounts.push(acc);
+            }
+          }
+        }
+      }
+    } catch(e){ /* ignore */ }
+  }
+
+  /** Persist removed-accounts list to backend for the current case. */
+  async function _saveRemovedAccounts(){
+    if(!St.caseId) return;
+    const removed = St.removedAccounts.map(a => a.account_number).filter(Boolean);
+    try {
+      await _safeApi("/api/aml/removed-accounts/" + encodeURIComponent(St.caseId), {
+        method: "PUT",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({removed}),
+      });
+    } catch(e){ /* ignore */ }
+  }
+
   function _renderAccounts(accounts, stmt){
     const accountsWrap = QS("#aml_accounts_wrap");
     const container = QS("#aml_accounts_container");
@@ -792,6 +847,9 @@
         St.accountsStmt = stmt;
       }
 
+      // Set of removed account numbers
+      const removedNums = new Set(St.removedAccounts.map(a => a.account_number || ""));
+
       let wrapHtml = "";
       for(let i = 0; i < St._perAccountDetails.length; i++){
         const d = St._perAccountDetails[i];
@@ -805,19 +863,56 @@
         const accentColor = ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length];
         const stmtId = (s._statement_ids && s._statement_ids[0]) || St.statementId || "";
 
+        // Separate visible and removed accounts, visible first then removed at end
+        const visibleAccs = stmtAccounts.filter(a => !removedNums.has(a.account_number || ""));
+        const removedAccs = stmtAccounts.filter(a => removedNums.has(a.account_number || ""));
+        const visibleCount = visibleAccs.length;
+
         wrapHtml += `<div class="card aml-multi-accent" style="margin-bottom:12px;border-left-color:${accentColor}">
           <div class="analysis-sidehdr">
             <div class="h2" style="font-size:14px"><i data-icon="finance" data-size="16"></i> Rachunki: ${title}</div>
-            <span class="small aml-badge">${stmtAccounts.length}</span>
+            <span class="small aml-badge">${visibleCount}</span>
+            ${removedAccs.length ? `<span class="small aml-badge" style="background:rgba(239,68,68,.12);color:#f87171;margin-left:4px" title="Usunięte rachunki">${removedAccs.length} usun.</span>` : ""}
           </div>
           <div class="aml-accounts-container" style="margin-top:10px;position:relative">
-            ${stmtAccounts.map(acc => _accountCardHtmlStatic(acc, cur, stmtId)).join("")}
+            ${visibleAccs.map(acc => _accountCardHtmlStatic(acc, cur, stmtId, "visible")).join("")}
+            ${removedAccs.length ? removedAccs.map(acc => _accountCardHtmlStatic(acc, cur, stmtId, "removed")).join("") : ""}
           </div>
         </div>`;
       }
       accountsWrap.innerHTML = wrapHtml;
       _bindAccountLinks(accountsWrap);
       _bindCategoryPicker(accountsWrap);
+
+      // Bind remove buttons (visible → removed)
+      QSA(".aml-acc-remove-btn", accountsWrap).forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const accNum = btn.getAttribute("data-acc-num");
+          // Find the account in all perAccountDetails
+          let found = null;
+          for(const d of St._perAccountDetails){
+            found = (d.accounts || []).find(a => (a.account_number || "") === accNum);
+            if(found) break;
+          }
+          if(found && !St.removedAccounts.find(a => (a.account_number || "") === accNum)){
+            St.removedAccounts.push(found);
+          }
+          _saveRemovedAccounts();
+          _renderAccounts(null, stmt);
+        });
+      });
+
+      // Bind restore buttons (removed → visible)
+      QSA(".aml-acc-restore-btn", accountsWrap).forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const accNum = btn.getAttribute("data-acc-num");
+          St.removedAccounts = St.removedAccounts.filter(a => (a.account_number || "") !== accNum);
+          _saveRemovedAccounts();
+          _renderAccounts(null, stmt);
+        });
+      });
       return;
     }
 
@@ -1071,6 +1166,7 @@
         if(acc && !St.removedAccounts.find(a => a.account_number === accNum)){
           St.removedAccounts.push(acc);
         }
+        _saveRemovedAccounts();
         _renderAccounts(null, stmt);
       });
     });
@@ -1082,6 +1178,7 @@
           e.stopPropagation();
           const accNum = btn.getAttribute("data-acc-num");
           St.removedAccounts = St.removedAccounts.filter(a => (a.account_number || "") !== accNum);
+          _saveRemovedAccounts();
           _renderAccounts(null, stmt);
         });
       });
@@ -2986,6 +3083,7 @@
             St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
             _injectTransferMarkers();
           }
+          await _loadRemovedAccounts();
         } else {
           St._mergedCharts = null;
           St._mergedInfo = null;
@@ -3023,6 +3121,7 @@
             St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
             _injectTransferMarkers();
           }
+          await _loadRemovedAccounts();
         } else {
           St._mergedCharts = null;
           St._mergedInfo = null;
@@ -3414,6 +3513,7 @@
         St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
         _injectTransferMarkers();
       }
+      await _loadRemovedAccounts();
     }
 
     _renderResults();
@@ -4112,6 +4212,7 @@
           St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
           _injectTransferMarkers();
         }
+        await _loadRemovedAccounts();
       } else {
         St._mergedCharts = null;
         St._mergedInfo = null;
@@ -4368,6 +4469,7 @@
               St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
               _injectTransferMarkers();
             }
+            await _loadRemovedAccounts();
           } else {
             St._mergedCharts = null;
             St._mergedInfo = null;

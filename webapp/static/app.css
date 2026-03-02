@@ -1156,6 +1156,28 @@ button.pill-icon:hover{
   background: rgba(34,197,94,.5);
   color: #fff;
 }
+/* Faded removed account card */
+.aml-account-item.aml-acc-removed{
+  opacity: 0.35;
+  filter: grayscale(0.6);
+  transition: opacity .3s ease, filter .3s ease;
+  position: relative;
+}
+.aml-account-item.aml-acc-removed:hover{
+  opacity: 0.55;
+  filter: grayscale(0.3);
+}
+.aml-account-item.aml-acc-removed .aml-acc-restore-btn{
+  opacity: 0.6;
+}
+.aml-acc-removed-label{
+  padding: 2px 16px 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: #f87171;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
 .aml-acc-polish{
   background: rgba(255,255,255,.12);
   color: rgba(255,255,255,.75);

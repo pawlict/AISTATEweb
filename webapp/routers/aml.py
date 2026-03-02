@@ -1188,6 +1188,44 @@ async def aml_account_category_change(request: Request):
 
 
 # ============================================================
+# ACCOUNT REMOVAL (hide from analysis view)
+# ============================================================
+
+@router.get("/api/aml/removed-accounts/{case_id}")
+async def aml_removed_accounts_get(case_id: str):
+    """Get list of removed (hidden) account numbers for a case."""
+    import json as _json
+    from backend.db.engine import fetch_one
+
+    cache_key = f"removed_accounts:{case_id}"
+    row = fetch_one("SELECT value FROM system_config WHERE key = ?", (cache_key,))
+    removed = _json.loads(row["value"]) if row else []
+    return JSONResponse({"removed": removed})
+
+
+@router.put("/api/aml/removed-accounts/{case_id}")
+async def aml_removed_accounts_put(case_id: str, request: Request):
+    """Save list of removed (hidden) account numbers for a case.
+
+    Body: { removed: ["account_number_1", "account_number_2", ...] }
+    """
+    import json as _json
+    from backend.db.engine import execute
+
+    data = await request.json()
+    removed = data.get("removed", [])
+    if not isinstance(removed, list):
+        return JSONResponse({"error": "removed must be an array"}, 400)
+
+    cache_key = f"removed_accounts:{case_id}"
+    execute(
+        "INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",
+        (cache_key, _json.dumps(removed, ensure_ascii=False)),
+    )
+    return JSONResponse({"status": "ok", "count": len(removed)})
+
+
+# ============================================================
 # CROSS-ACCOUNT ANALYSIS (multi-bank / multi-account)
 # ============================================================
 
