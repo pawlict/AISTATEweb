@@ -852,12 +852,8 @@ button.pill-icon:hover{
 
 /* Summary row */
 .aml-summary-row{
-  display: grid;
-  grid-template-columns: 200px 1fr;
+  display: flex;
   gap: 14px;
-}
-@media (max-width: 768px){
-  .aml-summary-row{grid-template-columns: 1fr}
 }
 
 /* Risk gauge card */
