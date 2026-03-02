@@ -33,6 +33,16 @@
   }
 
   // ============================================================
+  // PALETTE (shared across info cards, charts, accounts)
+  // ============================================================
+  const ACCOUNT_PALETTE = ["#1f5aa6","#b91c1c","#15803d","#7c3aed","#d97706","#0891b2","#be185d","#65a30d"];
+  const ACCOUNT_BG_PALETTE = [
+    "rgba(31,90,166,0.08)","rgba(185,28,28,0.08)","rgba(21,128,61,0.08)",
+    "rgba(124,58,237,0.08)","rgba(217,119,6,0.08)","rgba(8,145,178,0.08)",
+    "rgba(190,24,93,0.08)","rgba(101,163,13,0.08)",
+  ];
+
+  // ============================================================
   // STATE
   // ============================================================
 
@@ -45,6 +55,7 @@
     history: [],
     cyInstance: null,      // Cytoscape.js instance
     chartInstance: null,   // Chart.js instance
+    _stackedChartInstances: null, // Chart.js instances for stacked multi-account charts
     chartsData: {},        // all chart datasets
     allTransactions: [],   // current transactions for filtering
     cyLoaded: false,
@@ -399,17 +410,20 @@
     // Multi-statement: render separate info cards side by side
     if(St._perAccountDetails && St._perAccountDetails.length > 1){
       wrap.innerHTML = "";
-      for(const d of St._perAccountDetails){
+      for(let i = 0; i < St._perAccountDetails.length; i++){
+        const d = St._perAccountDetails[i];
         const s = d.statement || {};
         const txCount = (d.transactions || []).length;
         const iban = s.account_number || "";
         const ibanShort = iban.length > 12 ? "\u2026" + iban.slice(-8) : iban;
         const title = _esc(s.bank_name || "Bank") + (ibanShort ? " " + _esc(ibanShort) : "");
+        const accentColor = ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length];
 
         const card = document.createElement("div");
-        card.className = "card aml-info-card";
+        card.className = "card aml-info-card aml-multi-accent";
         card.style.flex = "1";
         card.style.minWidth = "0";
+        card.style.borderLeftColor = accentColor;
         card.innerHTML = `<div class="h2" style="font-size:14px">${title}</div><div class="aml-info-grid">${_bankInfoHtml(s, txCount, null)}</div>`;
         wrap.appendChild(card);
       }
@@ -539,7 +553,8 @@
         return;
       }
       let html = '<div style="display:flex;gap:12px;flex-wrap:wrap">';
-      for(const d of St._perAccountDetails){
+      for(let i = 0; i < St._perAccountDetails.length; i++){
+        const d = St._perAccountDetails[i];
         const s = d.statement || {};
         const stmtCards = d.cards || [];
         const iban = s.account_number || "";
@@ -547,7 +562,8 @@
         const title = _esc(s.bank_name || "Bank") + (ibanShort ? " " + _esc(ibanShort) : "");
         const bankName = (s.bank_name || "Bank").toUpperCase();
         const cur = s.currency || "PLN";
-        html += `<div class="card" style="flex:1;min-width:280px">
+        const accentColor = ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length];
+        html += `<div class="card aml-multi-accent" style="flex:1;min-width:280px;border-left-color:${accentColor}">
           <div class="analysis-sidehdr">
             <div class="h2" style="font-size:14px"><i data-icon="finance" data-size="16"></i> Karty: ${title}</div>
             <span class="small aml-badge">${stmtCards.length}</span>
@@ -582,7 +598,7 @@
   }
 
   /** Render a single account card HTML (for multi-statement mode) */
-  function _accountCardHtmlStatic(acc, cur){
+  function _accountCardHtmlStatic(acc, cur, statementId){
     const ownership = acc.ownership || (acc.is_own_account ? "own" : "third_party");
     const isForeign = acc.is_foreign;
     const bankShort = _esc(acc.bank_short || "");
@@ -593,6 +609,7 @@
     const firstDate = _esc(acc.first_date || "");
     const lastDate = _esc(acc.last_date || "");
     const accNum = _esc(acc.account_number || "");
+    const accStmtId = _esc(acc._statement_id || statementId || St.statementId || "");
 
     const _catLabelsS = {own:"Właściciel",third_party:"Kontrahent",friend:"Znajomy",family:"Rodzina",employer:"Pracodawca"};
     const _catBadgeS = {own:"aml-acc-own",third_party:"aml-acc-third",friend:"aml-acc-friend",family:"aml-acc-family",employer:"aml-acc-employer"};
@@ -600,7 +617,7 @@
 
     const catLabel = _catLabelsS[ownership] || _catLabelsS.third_party;
     const catClass = _catBadgeS[ownership] || _catBadgeS.third_party;
-    const ownershipBadge = `<span class="aml-acc-badge ${catClass}">${catLabel}</span>`;
+    const ownershipBadge = `<span class="aml-acc-badge ${catClass} aml-acc-cat-btn" data-acc="${accNum}" data-cat="${ownership}" data-stmt="${accStmtId}" title="Kliknij aby zmienić kategorię">${catLabel}</span>`;
     let countryBadge = "";
     if(isForeign) countryBadge = `<span class="aml-acc-badge aml-acc-foreign">${countryCode} ${country}</span>`;
     else if(countryCode) countryBadge = `<span class="aml-acc-badge aml-acc-polish">${countryCode} ${country}</span>`;
@@ -657,6 +674,93 @@
     });
   }
 
+  /** Bind ownership category change handlers (clickable badge → dropdown picker).
+   *  Works for both single-account and multi-account containers. */
+  function _bindCategoryPicker(rootEl){
+    const _catLabelsP = {own:"Właściciel",third_party:"Kontrahent",friend:"Znajomy",family:"Rodzina",employer:"Pracodawca"};
+    QSA(".aml-acc-cat-btn", rootEl).forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const accNum = btn.getAttribute("data-acc");
+        const currentCat = btn.getAttribute("data-cat");
+        const accStmtId = btn.getAttribute("data-stmt") || St.statementId;
+
+        const cats = ["own", "third_party", "friend", "family", "employer"];
+        const existing = rootEl.querySelector(".aml-acc-cat-picker");
+        if(existing) existing.remove();
+
+        const picker = document.createElement("div");
+        picker.className = "aml-acc-cat-picker";
+        picker.style.cssText = "position:absolute;z-index:100;background:var(--bg-card,#fff);border:1px solid var(--border,#ddd);border-radius:8px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.18);display:flex;flex-direction:column;gap:2px;min-width:130px";
+
+        cats.forEach(cat => {
+          const opt = document.createElement("div");
+          opt.textContent = _catLabelsP[cat];
+          opt.style.cssText = "padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;transition:background .15s";
+          if(cat === currentCat) opt.style.opacity = "0.4";
+          opt.addEventListener("mouseenter", () => { opt.style.background = "var(--bg-hover,#f0f0f0)"; });
+          opt.addEventListener("mouseleave", () => { opt.style.background = "none"; });
+          opt.addEventListener("click", async () => {
+            picker.remove();
+            if(cat === currentCat) return;
+            try {
+              const resp = await fetch("/api/aml/account-category", {
+                method: "PATCH",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                  statement_id: accStmtId,
+                  account_number: accNum,
+                  category: cat,
+                }),
+              });
+              if(resp.ok){
+                // Update in allAccounts (single-account mode)
+                const found = St.allAccounts.find(a => a.account_number === accNum);
+                if(found){
+                  found.ownership = cat;
+                  found.is_own_account = (cat === "own");
+                  found.category_manual = true;
+                }
+                // Update in _perAccountDetails (multi-account mode)
+                if(St._perAccountDetails){
+                  for(const pad of St._perAccountDetails){
+                    const accs = pad.accounts || [];
+                    const f = accs.find(a => a.account_number === accNum);
+                    if(f){
+                      f.ownership = cat;
+                      f.is_own_account = (cat === "own");
+                      f.category_manual = true;
+                    }
+                  }
+                }
+                _renderAccounts(null, St.accountsStmt);
+              }
+            } catch(err) {
+              console.error("Category change failed:", err);
+            }
+          });
+          picker.appendChild(opt);
+        });
+
+        const rect = btn.getBoundingClientRect();
+        const containerRect = rootEl.getBoundingClientRect();
+        picker.style.position = "absolute";
+        picker.style.top = (rect.bottom - containerRect.top + 2) + "px";
+        picker.style.left = (rect.left - containerRect.left) + "px";
+        rootEl.style.position = "relative";
+        rootEl.appendChild(picker);
+
+        const _close = (ev) => {
+          if(!picker.contains(ev.target)){
+            picker.remove();
+            document.removeEventListener("click", _close);
+          }
+        };
+        setTimeout(() => document.addEventListener("click", _close), 10);
+      });
+    });
+  }
+
   function _renderAccounts(accounts, stmt){
     const accountsWrap = QS("#aml_accounts_wrap");
     const container = QS("#aml_accounts_container");
@@ -678,7 +782,8 @@
       }
 
       let wrapHtml = "";
-      for(const d of St._perAccountDetails){
+      for(let i = 0; i < St._perAccountDetails.length; i++){
+        const d = St._perAccountDetails[i];
         const s = d.statement || {};
         const stmtAccounts = d.accounts || [];
         if(!stmtAccounts.length) continue;
@@ -686,19 +791,22 @@
         const ibanShort = iban.length > 12 ? "\u2026" + iban.slice(-8) : iban;
         const title = _esc(s.bank_name || "Bank") + (ibanShort ? " " + _esc(ibanShort) : "");
         const cur = s.currency || "PLN";
+        const accentColor = ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length];
+        const stmtId = (s._statement_ids && s._statement_ids[0]) || St.statementId || "";
 
-        wrapHtml += `<div class="card" style="margin-bottom:12px">
+        wrapHtml += `<div class="card aml-multi-accent" style="margin-bottom:12px;border-left-color:${accentColor}">
           <div class="analysis-sidehdr">
             <div class="h2" style="font-size:14px"><i data-icon="finance" data-size="16"></i> Rachunki: ${title}</div>
             <span class="small aml-badge">${stmtAccounts.length}</span>
           </div>
-          <div class="aml-accounts-container" style="margin-top:10px">
-            ${stmtAccounts.map(acc => _accountCardHtmlStatic(acc, cur)).join("")}
+          <div class="aml-accounts-container" style="margin-top:10px;position:relative">
+            ${stmtAccounts.map(acc => _accountCardHtmlStatic(acc, cur, stmtId)).join("")}
           </div>
         </div>`;
       }
       accountsWrap.innerHTML = wrapHtml;
       _bindAccountLinks(accountsWrap);
+      _bindCategoryPicker(accountsWrap);
       return;
     }
 
@@ -1403,6 +1511,7 @@
   function _balanceTooltipConfig(txMeta, chartData){
     const multiMeta = chartData && chartData._multiMeta;
     const isMulti = multiMeta && multiMeta.length > 1;
+    const transferMarkers = chartData && chartData._transferMarkers;
     return {
       tooltip: {
         enabled: true,
@@ -1437,12 +1546,24 @@
             const ptIdx = ctx.dataIndex;
             const meta = isMulti ? (multiMeta[dsIdx] && multiMeta[dsIdx][ptIdx])
                                  : (txMeta && txMeta[ptIdx]);
-            if(!meta) return "";
             const lines = [];
-            if(meta.title) lines.push("  " + meta.title);
-            if(meta.counterparty) lines.push("  " + meta.counterparty);
-            if(meta.category) lines.push("  Kat: " + meta.category);
-            return lines;
+            if(meta){
+              if(meta.title) lines.push("  " + meta.title);
+              if(meta.counterparty) lines.push("  " + meta.counterparty);
+              if(meta.category) lines.push("  Kat: " + meta.category);
+            }
+            // Show cross-account transfer info
+            if(transferMarkers && transferMarkers.length){
+              const markers = transferMarkers.filter(m => m.labelIdx === ptIdx);
+              for(const m of markers){
+                const dir = m.direction === "out" ? "Przelew \u2192" : "Przelew \u2190";
+                const shortAcc = m.otherAccount.length > 12
+                  ? "\u2026" + m.otherAccount.slice(-8)
+                  : m.otherAccount;
+                lines.push(`  ${dir} ${shortAcc}: ${m.amount.toLocaleString("pl-PL",{minimumFractionDigits:2})} PLN`);
+              }
+            }
+            return lines.length ? lines : "";
           },
         },
         bodyFont: { size: 12 },
@@ -1477,6 +1598,193 @@
     };
   }
 
+  /** Chart.js plugin to draw cross-account transfer markers (dashed vertical lines + arrows). */
+  function _transferMarkerPlugin(markers){
+    if(!markers || !markers.length) return null;
+    return {
+      id: "transferMarkers",
+      afterDatasetsDraw(chart){
+        const ctx = chart.ctx;
+        const xScale = chart.scales.x;
+        const yScale = chart.scales.y;
+        if(!xScale || !yScale) return;
+
+        ctx.save();
+        for(const m of markers){
+          const x = xScale.getPixelForValue(m.labelIdx);
+          if(x == null || isNaN(x)) continue;
+          const yTop = yScale.top;
+          const yBottom = yScale.bottom;
+
+          // Vertical dashed line
+          ctx.strokeStyle = m.direction === "out" ? "#b91c1c" : "#15803d";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(x, yTop);
+          ctx.lineTo(x, yBottom);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Arrow icon at top
+          const arrowY = yTop + 14;
+          ctx.fillStyle = m.direction === "out" ? "#b91c1c" : "#15803d";
+          ctx.font = "bold 13px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(m.direction === "out" ? "\u2197" : "\u2199", x, arrowY);
+
+          // Short account label
+          const shortAcct = m.otherAccount.length > 8 ? "\u2026" + m.otherAccount.slice(-4) : m.otherAccount;
+          ctx.font = "9px sans-serif";
+          ctx.fillStyle = "rgba(100,100,100,0.85)";
+          ctx.fillText(
+            (m.direction === "out" ? "\u2192 " : "\u2190 ") + shortAcct,
+            x, arrowY + 12
+          );
+        }
+        ctx.restore();
+      },
+    };
+  }
+
+  /**
+   * Inject cross-account transfer markers into _perAccountCharts data.
+   * Call after both _mergeMultiAccountCharts and cross-account data are available.
+   */
+  function _injectTransferMarkers(){
+    const data = St.chartsData && St.chartsData.balance_timeline;
+    if(!data || !data._perAccountCharts) return;
+    const xaData = St._crossAccountData;
+    if(!xaData || !xaData.internal_transfers || !xaData.internal_transfers.length) return;
+
+    const transfers = xaData.internal_transfers;
+    const charts = data._perAccountCharts;
+
+    // Build IBAN → chart index mapping
+    const ibanToIdx = {};
+    if(St._perAccountDetails){
+      St._perAccountDetails.forEach((d, i) => {
+        const iban = (d.statement || {}).account_number || "";
+        if(iban) ibanToIdx[iban] = i;
+      });
+    }
+
+    // Clear any existing markers
+    for(const c of charts) c._transferMarkers = [];
+
+    const allLabels = charts[0] ? charts[0].labels : [];
+
+    for(const t of transfers){
+      const fromIdx = ibanToIdx[t.from_account];
+      const toIdx = ibanToIdx[t.to_account];
+
+      // Find nearest label index for this transfer date
+      let labelIdx = allLabels.indexOf(t.date);
+      if(labelIdx < 0){
+        for(let j = 0; j < allLabels.length; j++){
+          if(allLabels[j] >= t.date){ labelIdx = j; break; }
+        }
+      }
+      if(labelIdx < 0) continue;
+
+      const marker = {
+        labelIdx,
+        amount: t.amount,
+        title: t.title || "",
+        confidence: t.confidence || 0,
+      };
+
+      if(fromIdx !== undefined && fromIdx < charts.length){
+        charts[fromIdx]._transferMarkers.push({
+          ...marker, direction: "out", otherAccount: t.to_account,
+        });
+      }
+      if(toIdx !== undefined && toIdx < charts.length){
+        charts[toIdx]._transferMarkers.push({
+          ...marker, direction: "in", otherAccount: t.from_account,
+        });
+      }
+    }
+  }
+
+  /** Render stacked per-account charts for multi-account balance_timeline. */
+  function _renderStackedCharts(data){
+    const container = QS("#aml_chart_container");
+    const gapLegend = QS("#aml_chart_gap_legend");
+    const rangeWrap = QS("#aml_chart_range_wrap");
+    const zoomBar = QS("#aml_chart_zoom_bar");
+
+    if(!container) return;
+
+    // Destroy existing chart instances
+    if(St.chartInstance){ St.chartInstance.destroy(); St.chartInstance = null; }
+    if(St._stackedChartInstances){
+      St._stackedChartInstances.forEach(c => c.destroy());
+    }
+    St._stackedChartInstances = [];
+
+    // Hide single-chart-specific controls
+    if(gapLegend){ gapLegend.style.display = "none"; gapLegend.innerHTML = ""; }
+    if(rangeWrap) rangeWrap.style.display = "none";
+    if(zoomBar) zoomBar.style.display = "none";
+
+    const charts = data._perAccountCharts;
+    const chartHeight = 260;
+
+    // Build HTML with per-account canvases
+    let html = "";
+    for(let i = 0; i < charts.length; i++){
+      const c = charts[i];
+      html += `<div class="aml-stacked-chart-wrapper" style="border-left:4px solid ${c.color};padding-left:8px;margin-bottom:16px">
+        <div class="small" style="font-weight:700;margin-bottom:4px;color:${c.color}">${_esc(c.accountLabel)}</div>
+        <div style="height:${chartHeight}px;position:relative">
+          <canvas id="aml_chart_canvas_${i}"></canvas>
+        </div>
+      </div>`;
+    }
+    container.style.width = "";
+    container.style.minWidth = "100%";
+    container.style.height = "auto";
+    container.innerHTML = html;
+
+    _ensureChartJs(()=>{
+      for(let i = 0; i < charts.length; i++){
+        const c = charts[i];
+        const canvas = QS(`#aml_chart_canvas_${i}`);
+        if(!canvas) continue;
+
+        const chartConfig = {
+          type: "line",
+          data: {
+            labels: c.labels,
+            datasets: c.datasets,
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              ..._balanceTooltipConfig(c.tx_meta, {tx_meta: c.tx_meta, _transferMarkers: c._transferMarkers}),
+            },
+            elements: {
+              point: { radius: 2, hoverRadius: 6, hitRadius: 10 },
+            },
+            scales: _adaptiveXTicks(c.labels.length),
+            interaction: { mode: "index", intersect: false, axis: "x" },
+          },
+          plugins: [],
+        };
+
+        // Add transfer markers plugin if available
+        const tPlugin = _transferMarkerPlugin(c._transferMarkers);
+        if(tPlugin) chartConfig.plugins.push(tPlugin);
+
+        const instance = new Chart(canvas, chartConfig);
+        St._stackedChartInstances.push(instance);
+      }
+    });
+  }
+
   function _renderChart(chartKey){
     const data = St.chartsData[chartKey];
     const container = QS("#aml_chart_container");
@@ -1488,6 +1796,22 @@
       if(container) container.innerHTML = '<div class="small muted" style="padding:20px">Brak danych wykresu</div>';
       if(gapLegend) gapLegend.style.display = "none";
       if(rangeWrap) rangeWrap.style.display = "none";
+      return;
+    }
+
+    // Destroy stacked chart instances if switching away
+    if(St._stackedChartInstances){
+      St._stackedChartInstances.forEach(c => c.destroy());
+      St._stackedChartInstances = null;
+    }
+    if(container) container.style.height = "380px";
+
+    // Multi-account: stacked charts for balance_timeline
+    const isMultiAccount = chartKey === "balance_timeline"
+      && data._perAccountCharts
+      && data._perAccountCharts.length >= 2;
+    if(isMultiAccount){
+      _renderStackedCharts(data);
       return;
     }
 
@@ -2481,6 +2805,10 @@
         const siblings = (detail && detail.sibling_statement_ids) || [];
         if(siblings.length > 1){
           await _mergeMultiAccountCharts(siblings);
+          if(St.caseId){
+            St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
+            _injectTransferMarkers();
+          }
         } else {
           St._mergedCharts = null;
           St._mergedInfo = null;
@@ -2514,6 +2842,10 @@
         const siblings = (detail && detail.sibling_statement_ids) || [];
         if(siblings.length > 1){
           await _mergeMultiAccountCharts(siblings);
+          if(St.caseId){
+            St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
+            _injectTransferMarkers();
+          }
         } else {
           St._mergedCharts = null;
           St._mergedInfo = null;
@@ -2630,12 +2962,14 @@
         St._mergedCards = null;
         St._mergedAccounts = null;
         St._perAccountDetails = null;
+        St._crossAccountData = null;
         if(St.chartInstance){ St.chartInstance.destroy(); St.chartInstance = null; }
+        if(St._stackedChartInstances){ St._stackedChartInstances.forEach(c => c.destroy()); St._stackedChartInstances = null; }
         if(St.cyInstance){ St.cyInstance.destroy(); St.cyInstance = null; }
         _chartZoom.level = 1;
         _chartZoom.activeKey = null;
         const _cont = QS("#aml_chart_container");
-        if(_cont){ _cont.style.width = ""; _cont.style.minWidth = "100%"; }
+        if(_cont){ _cont.style.width = ""; _cont.style.minWidth = "100%"; _cont.style.height = "380px"; }
         const _gapL = QS("#aml_chart_gap_legend");
         if(_gapL){ _gapL.style.display = "none"; _gapL.innerHTML = ""; }
         _resetBatchState();
@@ -2899,6 +3233,10 @@
     // Multi-account: merge balance timelines from all statements
     if(St.batchResults.length > 1){
       await _mergeMultiAccountCharts(St.batchResults);
+      if(St.caseId){
+        St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
+        _injectTransferMarkers();
+      }
     }
 
     _renderResults();
@@ -2921,12 +3259,8 @@
    * so _renderResults can restore them after overwriting St.chartsData.
    */
   async function _mergeMultiAccountCharts(stmtIds){
-    const palette = ["#1f5aa6","#b91c1c","#15803d","#7c3aed","#d97706","#0891b2","#be185d","#65a30d"];
-    const bgPalette = [
-      "rgba(31,90,166,0.08)","rgba(185,28,28,0.08)","rgba(21,128,61,0.08)",
-      "rgba(124,58,237,0.08)","rgba(217,119,6,0.08)","rgba(8,145,178,0.08)",
-      "rgba(190,24,93,0.08)","rgba(101,163,13,0.08)",
-    ];
+    const palette = ACCOUNT_PALETTE;
+    const bgPalette = ACCOUNT_BG_PALETTE;
 
     try {
       // Fetch detail for all statements in parallel
@@ -2981,6 +3315,7 @@
               available_balance: latest.available_balance,
               previous_closing_balance: earliest.previous_closing_balance,
               currency: earliest.currency || "PLN",
+              _statement_ids: stmts.map(s => s.id).filter(Boolean),
             };
 
             // Deduplicate cards by card_id within this account
@@ -3253,6 +3588,32 @@
           tx_meta: mergedTxMeta[0],
           _multiMeta: mergedTxMeta,
         };
+
+        // Build per-account chart data for stacked rendering
+        mergedTimeline._perAccountCharts = allTimelines.map((tl, ti) => {
+          const ci = ti % palette.length;
+          const labelMap = {};
+          for(let j = 0; j < tl.labels.length; j++) labelMap[tl.labels[j]] = j;
+          const aData = allLabels.map(lbl => lbl in labelMap ? tl.data[labelMap[lbl]] : null);
+          const aMeta = allLabels.map(lbl => lbl in labelMap && tl.txMeta ? tl.txMeta[labelMap[lbl]] : null);
+          return {
+            type: "line",
+            labels: allLabels,
+            accountLabel: tl.label,
+            accountIndex: ti,
+            color: palette[ci],
+            bgColor: bgPalette[ci],
+            datasets: [{
+              label: tl.label,
+              data: aData,
+              borderColor: palette[ci],
+              backgroundColor: bgPalette[ci],
+              fill: true, tension: 0.2, pointRadius: 2, spanGaps: true, borderWidth: 2,
+            }],
+            tx_meta: aMeta,
+            _transferMarkers: [],
+          };
+        });
       }
 
       // ---- 2. CATEGORY DISTRIBUTION (aggregate amounts per category) ----
@@ -3493,6 +3854,10 @@
       // Merge all statements if 2+
       if(allIds.length > 1){
         await _mergeMultiAccountCharts(allIds);
+        if(St.caseId){
+          St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
+          _injectTransferMarkers();
+        }
       } else {
         St._mergedCharts = null;
         St._mergedInfo = null;
@@ -3745,6 +4110,10 @@
           const siblings = detail.sibling_statement_ids || [];
           if(siblings.length > 1){
             await _mergeMultiAccountCharts(siblings);
+            if(St.caseId){
+              St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
+              _injectTransferMarkers();
+            }
           } else {
             St._mergedCharts = null;
             St._mergedInfo = null;

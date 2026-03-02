@@ -886,6 +886,12 @@ button.pill-icon:hover{
   font-size: 14px;
 }
 
+/* Multi-account accent border */
+.aml-multi-accent{
+  border-left: 4px solid var(--accent, #1f5aa6);
+  padding-left: 14px;
+}
+
 /* Bank info card */
 .aml-info-card{padding: 16px}
 .aml-info-card .h2{margin: 0 0 10px 0; font-size: 15px}
@@ -1550,6 +1556,14 @@ button.pill-icon:hover{
 }
 .aml-chart-range:active::-webkit-slider-thumb{ cursor: grabbing; }
 .aml-chart-range:active::-moz-range-thumb{ cursor: grabbing; }
+
+/* Stacked per-account charts */
+.aml-stacked-chart-wrapper{
+  transition: border-color 0.2s;
+}
+.aml-stacked-chart-wrapper:last-child{
+  margin-bottom: 0 !important;
+}
 
 /* Gap legend below chart */
 .aml-chart-gap-legend{
