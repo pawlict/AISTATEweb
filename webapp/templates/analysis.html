@@ -228,20 +228,8 @@
     <!-- Results -->
     <div id="aml_results" style="display:none">
 
-      <!-- Summary row: risk score + bank info -->
+      <!-- Summary row: bank info -->
       <div class="aml-summary-row">
-        <div class="card aml-risk-card" id="aml_risk_card">
-          <div class="aml-risk-gauge">
-            <svg viewBox="0 0 120 80" class="aml-gauge-svg">
-              <path d="M 10 70 A 50 50 0 0 1 110 70" fill="none" stroke="rgba(0,0,0,.08)" stroke-width="10" stroke-linecap="round"/>
-              <path d="M 10 70 A 50 50 0 0 1 110 70" fill="none" stroke="var(--gauge-color, #15803d)" stroke-width="10" stroke-linecap="round"
-                    id="aml_gauge_arc" stroke-dasharray="0 157" />
-            </svg>
-            <div class="aml-risk-number" id="aml_risk_number">0</div>
-          </div>
-          <div class="aml-risk-label" id="aml_risk_label">Ryzyko AML</div>
-        </div>
-
         <!-- Info cards wrapper (flex row for multi-statement) -->
         <div id="aml_info_cards_wrap" style="display:flex;gap:12px;flex:1;min-width:0">
           <div class="card aml-info-card" id="aml_info_card" style="flex:1">
