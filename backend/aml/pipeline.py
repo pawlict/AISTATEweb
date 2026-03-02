@@ -325,6 +325,10 @@ def run_aml_pipeline(
     bank_id = bank_name.lower().replace(" ", "_")[:20] if bank_name else "unknown"
     info = parse_result.info
 
+    # Merge any parser-level warnings (e.g. exchange tx exclusion notes)
+    if parse_result.warnings:
+        warnings.extend(parse_result.warnings)
+
     _log(f"Bank: {bank_name} | Metoda: {parse_result.parse_method}")
 
     _log(f"Znaleziono {len(parse_result.transactions)} transakcji")

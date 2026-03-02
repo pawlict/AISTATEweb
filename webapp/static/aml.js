@@ -430,9 +430,9 @@
     let html = "";
     if(bank) html += `<div class="aml-info-row"><b>Bank:</b> ${_esc(bank)}</div>`;
     if(holder) html += `<div class="aml-info-row"><b>Właściciel:</b> ${_esc(holder)}</div>`;
-    if(iban) html += `<div class="aml-info-row"><b>IBAN:</b> <span style="font-family:monospace">${_esc(iban)}</span></div>`;
+    if(iban) html += `<div class="aml-info-row"><b>IBAN:</b> <span style="font-family:monospace;word-break:break-all;font-size:0.92em">${_esc(iban)}</span></div>`;
     if(period) html += `<div class="aml-info-row"><b>Okres:</b> ${_esc(period)}</div>`;
-    if(cur && cur !== "PLN") html += `<div class="aml-info-row"><b>Waluta:</b> ${_esc(cur)}</div>`;
+    if(cur) html += `<div class="aml-info-row"><b>Waluta:</b> ${_esc(cur)}</div>`;
 
     html += '<div class="aml-info-stats">';
     if(src.opening_balance != null) html += `<span><b>Saldo otw.:</b> ${_fmtAmount(src.opening_balance, cur)}</span>`;
@@ -452,22 +452,27 @@
     const wrap = QS("#aml_info_cards_wrap");
     if(!wrap) return;
 
-    // Multi-statement: render separate info cards side by side
+    // Multi-statement: render separate info cards with wrapping
     if(St._perAccountDetails && St._perAccountDetails.length > 1){
       wrap.innerHTML = "";
-      for(let i = 0; i < St._perAccountDetails.length; i++){
+      wrap.style.flexWrap = "wrap";
+      const count = St._perAccountDetails.length;
+      // ≤3 cards: fill row equally; 4+: wrap with min-width so text is readable
+      const minW = count <= 3 ? "0" : "280px";
+      for(let i = 0; i < count; i++){
         const d = St._perAccountDetails[i];
         const s = d.statement || {};
         const txCount = (d.transactions || []).length;
         const iban = s.account_number || "";
         const ibanShort = iban.length > 12 ? "\u2026" + iban.slice(-8) : iban;
-        const title = _esc(s.bank_name || "Bank") + (ibanShort ? " " + _esc(ibanShort) : "");
+        const cur = s.currency || "";
+        const title = _esc(s.bank_name || "Bank") + (cur ? " <b>" + _esc(cur) + "</b>" : "") + (ibanShort ? " " + _esc(ibanShort) : "");
         const accentColor = ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length];
 
         const card = document.createElement("div");
         card.className = "card aml-info-card aml-multi-accent";
-        card.style.flex = "1";
-        card.style.minWidth = "0";
+        card.style.flex = "1 1 " + minW;
+        card.style.minWidth = minW;
         card.style.borderLeftColor = accentColor;
         card.innerHTML = `<div class="h2" style="font-size:14px">${title}</div><div class="aml-info-grid">${_bankInfoHtml(s, txCount, null)}</div>`;
         wrap.appendChild(card);

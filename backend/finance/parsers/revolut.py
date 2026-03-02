@@ -334,6 +334,12 @@ class RevolutParser(BankParser):
         page_infos = [self._parse_page_info(i, p) for i, p in enumerate(pages)]
         sections = self._group_into_sections(page_infos)
 
+        # Track which currencies had exchange transaction sections
+        currencies_with_exchange: set = set()
+        for pi in page_infos:
+            if pi.has_exchange_tx and pi.currency:
+                currencies_with_exchange.add(pi.currency)
+
         # Parse transactions per-section with opening_balance as initial prev_balance
         section_txns: Dict[str, List[RawTransaction]] = defaultdict(list)
         for sec in sections:
@@ -369,11 +375,18 @@ class RevolutParser(BankParser):
                 declared_credits_sum=merged.get("total_income"),
             )
 
+            cur_warnings: List[str] = []
+            if currency in currencies_with_exchange:
+                cur_warnings.append(
+                    "INFO: Pominięto transakcje giełdowe/wymiany walut "
+                    "— mogą wystąpić przerwania w łańcuchu sald"
+                )
+
             result = ParseResult(
                 bank=self.BANK_NAME,
                 info=info,
                 transactions=txns,
-                warnings=[],
+                warnings=cur_warnings,
                 parse_method="text_revolut",
             )
             results.append(result)

@@ -611,13 +611,14 @@
     function _verificationBadge(hdr){
       const ws = (hdr.header && hdr.header.warnings) || [];
       if(!ws.length) return "";
-      // Find the sum check warning (e.g. "Suma uznań: OK (19,202.11)")
       let parts = [];
       for(const w of ws){
         const isOk = /\bOK\b/.test(w);
-        const color = isOk ? "#16a34a" : "#dc2626";
-        const icon = isOk ? "\u2705" : "\u26A0\uFE0F";
-        parts.push(`<span style="color:${color};white-space:nowrap">${icon} ${_esc(w)}</span>`);
+        const isInfo = /^INFO:/i.test(w);
+        const color = isOk ? "#16a34a" : isInfo ? "#2563eb" : "#dc2626";
+        const icon = isOk ? "\u2705" : isInfo ? "\u2139\uFE0F" : "\u26A0\uFE0F";
+        const text = isInfo ? w.replace(/^INFO:\s*/i, "") : w;
+        parts.push(`<span style="color:${color};white-space:nowrap">${icon} ${_esc(text)}</span>`);
       }
       return parts.join("<br>");
     }
