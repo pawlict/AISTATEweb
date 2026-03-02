@@ -222,15 +222,29 @@
           St.statementId = first;
           St.lastResult = result;
 
-          const msg = `Wykryto ${result.statements.length} walut w jednym PDF (${result.total_transactions} transakcji). Laduje pierwsza...`;
+          const msg = `Wykryto ${result.statements.length} walut w jednym PDF (${result.total_transactions} transakcji).`;
           _showInfo ? _showInfo(msg) : null;
 
-          await _loadDetail(first);
+          // Load detail and check for siblings — same pattern as history click handler
+          const detail = await _loadDetail(first);
+          const siblings = (detail && detail.sibling_statement_ids) || St.batchResults;
+          if(siblings.length > 1){
+            await _mergeMultiAccountCharts(siblings);
+            if(St.caseId){
+              St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
+              _injectTransferMarkers();
+            }
+            await _loadRemovedAccounts();
+          }
           _renderResults();
           _showResults();
 
-          if(window.ReviewManager && first){
-            ReviewManager.loadForStatement(first);
+          if(window.ReviewManager){
+            if(siblings.length > 1){
+              await ReviewManager.loadForBatch(siblings);
+            } else {
+              await ReviewManager.loadForStatement(first);
+            }
           }
         } else {
           if(result.status === "duplicate"){
@@ -1302,22 +1316,40 @@
           <th>Bank</th><th>Rachunek</th><th>Okres</th>
           <th style="text-align:right">Uznania</th>
           <th style="text-align:right">Obciazenia</th>
-          <th style="text-align:right">Wyciagi</th>
+          <th style="text-align:right">Trans.</th>
         </tr></thead><tbody>`;
 
+    const _currFlag = c => ({EUR:"🇪🇺",PLN:"🇵🇱",GBP:"🇬🇧",USD:"🇺🇸",RON:"🇷🇴",HRK:"🇭🇷",CZK:"🇨🇿",SEK:"🇸🇪",CHF:"🇨🇭",DKK:"🇩🇰"})[c]||"💱";
     for(const acc of accounts){
       const accNum = acc.account_number || "";
       const accDisplay = accNum.length >= 10
         ? accNum.slice(0,2) + " ..." + accNum.slice(-4)
         : accNum || "-";
-      html += `<tr>
+      const subs = acc.sub_statements || [];
+      const hasSubs = subs.length > 1;
+      // Main account row
+      html += `<tr style="${hasSubs ? 'background:var(--table-header-bg,#f8fafc)' : ''}">
         <td><strong>${_esc(acc.bank_name || acc.bank_id || "?")}</strong></td>
         <td title="${_esc(accNum)}">${_esc(accDisplay)}</td>
         <td>${_esc(acc.period_from || "")} — ${_esc(acc.period_to || "")}</td>
         <td style="text-align:right;color:#15803d">${_fmtAmt(acc.total_credit)}</td>
         <td style="text-align:right;color:#b91c1c">${_fmtAmt(acc.total_debit)}</td>
-        <td style="text-align:right">${acc.statement_count}</td>
+        <td style="text-align:right">${acc.tx_count || acc.statement_count}</td>
       </tr>`;
+      // Per-currency sub-rows for multi-currency accounts
+      if(hasSubs){
+        for(const sub of subs){
+          const cur = sub.currency || "?";
+          html += `<tr style="font-size:0.92em;color:var(--text-secondary,#555)">
+            <td></td>
+            <td style="padding-left:18px">${_currFlag(cur)} <strong>${_esc(cur)}</strong></td>
+            <td>${_esc(sub.period_from || "")} — ${_esc(sub.period_to || "")}</td>
+            <td style="text-align:right;color:#15803d">${_fmtAmt(sub.total_credit)}</td>
+            <td style="text-align:right;color:#b91c1c">${_fmtAmt(sub.total_debit)}</td>
+            <td style="text-align:right">${sub.tx_count}</td>
+          </tr>`;
+        }
+      }
     }
 
     html += `</tbody></table></div>`;

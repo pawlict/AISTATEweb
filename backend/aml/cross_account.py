@@ -80,6 +80,8 @@ class AccountSummary:
     tx_count: int
     opening_balance: Optional[float]
     closing_balance: Optional[float]
+    # Per-statement currency breakdown (populated for multi-currency accounts)
+    sub_statements: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -136,7 +138,7 @@ def analyze_cross_account(case_id: str) -> CrossAccountResult:
     statements = fetch_all(
         """SELECT s.id, s.account_id, s.account_number, s.account_holder,
                   s.bank_id, s.bank_name, s.period_from, s.period_to,
-                  s.opening_balance, s.closing_balance
+                  s.opening_balance, s.closing_balance, s.currency
            FROM statements s
            WHERE s.case_id = ?
            ORDER BY s.account_number, s.period_from""",
@@ -238,6 +240,29 @@ def _build_account_summary(
     opening = _safe_float(sorted_stmts[0].get("opening_balance"))
     closing = _safe_float(sorted_stmts[-1].get("closing_balance"))
 
+    # Per-statement currency breakdown (useful for multi-currency accounts)
+    sub_stmts: List[Dict[str, Any]] = []
+    if len(stmts) > 1:
+        for s in sorted_stmts:
+            sid = s["id"]
+            sub_row = fetch_one(
+                """SELECT
+                      COUNT(*) as tx_count,
+                      COALESCE(SUM(CASE WHEN direction='CREDIT' THEN CAST(amount AS REAL) ELSE 0 END), 0) as total_credit,
+                      COALESCE(SUM(CASE WHEN direction='DEBIT' THEN ABS(CAST(amount AS REAL)) ELSE 0 END), 0) as total_debit
+                   FROM transactions WHERE statement_id = ?""",
+                (sid,),
+            )
+            sub_stmts.append({
+                "statement_id": sid,
+                "currency": s.get("currency") or "",
+                "period_from": s.get("period_from") or "",
+                "period_to": s.get("period_to") or "",
+                "total_credit": round(sub_row["total_credit"], 2) if sub_row else 0,
+                "total_debit": round(sub_row["total_debit"], 2) if sub_row else 0,
+                "tx_count": sub_row["tx_count"] if sub_row else 0,
+            })
+
     first_stmt = stmts[0]
     return AccountSummary(
         account_number=first_stmt.get("account_number") or acc_key,
@@ -253,6 +278,7 @@ def _build_account_summary(
         tx_count=row["tx_count"] if row else 0,
         opening_balance=opening,
         closing_balance=closing,
+        sub_statements=sub_stmts,
     )
 
 
