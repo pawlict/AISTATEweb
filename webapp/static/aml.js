@@ -25,6 +25,14 @@
     return String(iso).replace("T"," ").replace("Z","").slice(0,16);
   }
 
+  /** Normalize IBAN for matching (mirrors backend _normalize_account). */
+  function _normalizeIban(iban){
+    if(!iban) return "";
+    let clean = iban.replace(/[\s\-]/g, "").toUpperCase();
+    if(clean.startsWith("PL")) clean = clean.slice(2);
+    return clean.length >= 15 ? clean : "";
+  }
+
   async function _api(url, opts){
     return await api(url, opts);
   }
@@ -1663,12 +1671,24 @@
     const transfers = xaData.internal_transfers;
     const charts = data._perAccountCharts;
 
-    // Build IBAN → chart index mapping
-    const ibanToIdx = {};
+    // Build normalized IBAN → chart index mapping
+    // Uses both _perAccountDetails IBANs AND chart.iban for redundancy
+    const normToIdx = {};
+    for(let i = 0; i < charts.length; i++){
+      const chartIban = charts[i].iban || "";
+      const norm = _normalizeIban(chartIban);
+      if(norm) normToIdx[norm] = i;
+      // Also try raw (in case backend didn't normalize)
+      if(chartIban) normToIdx[chartIban] = i;
+    }
     if(St._perAccountDetails){
       St._perAccountDetails.forEach((d, i) => {
         const iban = (d.statement || {}).account_number || "";
-        if(iban) ibanToIdx[iban] = i;
+        if(iban){
+          normToIdx[iban] = i;
+          const norm = _normalizeIban(iban);
+          if(norm) normToIdx[norm] = i;
+        }
       });
     }
 
@@ -1678,8 +1698,11 @@
     const allLabels = charts[0] ? charts[0].labels : [];
 
     for(const t of transfers){
-      const fromIdx = ibanToIdx[t.from_account];
-      const toIdx = ibanToIdx[t.to_account];
+      // Match IBANs using both raw and normalized forms
+      const fromNorm = _normalizeIban(t.from_account);
+      const toNorm = _normalizeIban(t.to_account);
+      const fromIdx = normToIdx[t.from_account] ?? normToIdx[fromNorm];
+      const toIdx = normToIdx[t.to_account] ?? normToIdx[toNorm];
 
       // Find nearest label index for this transfer date
       let labelIdx = allLabels.indexOf(t.date);
@@ -1700,11 +1723,13 @@
       if(fromIdx !== undefined && fromIdx < charts.length){
         charts[fromIdx]._transferMarkers.push({
           ...marker, direction: "out", otherAccount: t.to_account,
+          targetChartIdx: toIdx !== undefined ? toIdx : -1,
         });
       }
       if(toIdx !== undefined && toIdx < charts.length){
         charts[toIdx]._transferMarkers.push({
           ...marker, direction: "in", otherAccount: t.from_account,
+          targetChartIdx: fromIdx !== undefined ? fromIdx : -1,
         });
       }
     }
@@ -1816,6 +1841,14 @@
     svg.setAttribute("height", containerRect.height);
     svg.innerHTML = "";
 
+    // Build normalized IBAN → chart index for fallback matching
+    const normIbanToIdx = {};
+    for(let i = 0; i < charts.length; i++){
+      const norm = _normalizeIban(charts[i].iban);
+      if(norm) normIbanToIdx[norm] = i;
+      if(charts[i].iban) normIbanToIdx[charts[i].iban] = i;
+    }
+
     // Collect all cross-account transfer markers and draw connections
     for(let ci = 0; ci < charts.length; ci++){
       const c = charts[ci];
@@ -1824,10 +1857,13 @@
       for(const marker of c._transferMarkers){
         if(marker.direction !== "out") continue; // Draw only outgoing → avoid duplicates
 
-        // Find the target chart index
-        const targetIban = marker.otherAccount;
-        const targetIdx = charts.findIndex(tc => tc.iban === targetIban);
-        if(targetIdx < 0 || targetIdx === ci) continue;
+        // Find the target chart index — prefer pre-resolved, fallback to IBAN matching
+        let targetIdx = marker.targetChartIdx;
+        if(targetIdx === undefined || targetIdx < 0){
+          const targetIban = marker.otherAccount;
+          targetIdx = normIbanToIdx[targetIban] ?? normIbanToIdx[_normalizeIban(targetIban)] ?? -1;
+        }
+        if(targetIdx < 0 || targetIdx === ci || targetIdx >= instances.length) continue;
 
         // Get pixel coordinates from Chart.js instances
         const srcChart = instances[ci];
@@ -1845,12 +1881,16 @@
         const srcCanvasRect = srcCanvas.getBoundingClientRect();
         const tgtCanvasRect = tgtCanvas.getBoundingClientRect();
 
-        // Source point: bottom of source chart at transfer date
+        // Determine source/target points based on relative chart positions.
+        // Arrow points in the direction of fund flow: from source → to target.
+        const srcBelow = srcCanvasRect.top > tgtCanvasRect.top;
+
+        // Source point: edge of source chart facing the target chart
         const srcX = srcXScale.getPixelForValue(marker.labelIdx);
-        const srcY = srcYScale.bottom;
-        // Target point: top of target chart at transfer date
+        const srcY = srcBelow ? srcYScale.top : srcYScale.bottom;
+        // Target point: edge of target chart facing the source chart
         const tgtX = tgtXScale.getPixelForValue(marker.labelIdx);
-        const tgtY = tgtYScale.top;
+        const tgtY = srcBelow ? tgtYScale.bottom : tgtYScale.top;
 
         // Convert to SVG coordinates (relative to container)
         const svgSrcX = (srcCanvasRect.left - containerRect.left) + srcX;
@@ -1858,8 +1898,8 @@
         const svgTgtX = (tgtCanvasRect.left - containerRect.left) + tgtX;
         const svgTgtY = (tgtCanvasRect.top - containerRect.top) + tgtY;
 
-        // Determine color based on source chart accent
-        const lineColor = ci < targetIdx ? c.color : charts[targetIdx].color;
+        // Color: use red-ish for outgoing direction
+        const lineColor = "#e11d48";
 
         // Draw curved connection path
         const midY = (svgSrcY + svgTgtY) / 2;
@@ -1869,30 +1909,52 @@
         path.setAttribute("stroke", lineColor);
         path.setAttribute("stroke-width", "2");
         path.setAttribute("stroke-dasharray", "6 4");
-        path.setAttribute("opacity", "0.6");
+        path.setAttribute("opacity", "0.7");
         svg.appendChild(path);
 
-        // Arrow at target end
-        const arrowSize = 6;
+        // Arrow at target end (points in the direction of money flow)
+        const arrowSize = 7;
         const arrowDir = svgTgtY > svgSrcY ? 1 : -1;
         const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
         arrow.setAttribute("points",
           `${svgTgtX},${svgTgtY} ${svgTgtX - arrowSize},${svgTgtY - arrowSize * arrowDir} ${svgTgtX + arrowSize},${svgTgtY - arrowSize * arrowDir}`
         );
         arrow.setAttribute("fill", lineColor);
-        arrow.setAttribute("opacity", "0.7");
+        arrow.setAttribute("opacity", "0.85");
         svg.appendChild(arrow);
+
+        // Small circle at source end (origin of transfer)
+        const srcDot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        srcDot.setAttribute("cx", svgSrcX);
+        srcDot.setAttribute("cy", svgSrcY);
+        srcDot.setAttribute("r", "3");
+        srcDot.setAttribute("fill", lineColor);
+        srcDot.setAttribute("opacity", "0.7");
+        svg.appendChild(srcDot);
 
         // Amount label at midpoint
         const amtStr = marker.amount ? Number(marker.amount).toLocaleString("pl-PL", {minimumFractionDigits:2, maximumFractionDigits:2}) + " PLN" : "";
         if(amtStr){
+          // Background rectangle for readability
+          const textX = (svgSrcX + svgTgtX) / 2 + 6;
+          const textY = midY - 2;
+          const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          bg.setAttribute("x", textX - 2);
+          bg.setAttribute("y", textY - 10);
+          bg.setAttribute("width", amtStr.length * 6 + 4);
+          bg.setAttribute("height", 13);
+          bg.setAttribute("fill", "white");
+          bg.setAttribute("opacity", "0.85");
+          bg.setAttribute("rx", "2");
+          svg.appendChild(bg);
+
           const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-          text.setAttribute("x", (svgSrcX + svgTgtX) / 2 + 8);
-          text.setAttribute("y", midY);
+          text.setAttribute("x", textX);
+          text.setAttribute("y", textY);
           text.setAttribute("fill", lineColor);
           text.setAttribute("font-size", "10");
-          text.setAttribute("font-weight", "600");
-          text.setAttribute("opacity", "0.8");
+          text.setAttribute("font-weight", "700");
+          text.setAttribute("opacity", "0.9");
           text.textContent = amtStr;
           svg.appendChild(text);
         }

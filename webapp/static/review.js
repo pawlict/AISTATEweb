@@ -539,6 +539,10 @@
     const warningsEl = QS("#rv_header_warnings");
     if(!grid || !St.header) return;
 
+    // Show "Zapisz" button in single-statement mode (editable headers)
+    const saveBtn = QS("#rv_header_save");
+    if(saveBtn) saveBtn.style.display = "";
+
     St.headerDirty = {};
     const blocks = St.header.blocks || [];
 
@@ -593,6 +597,10 @@
       _renderHeader(); // fallback to single-statement
       return;
     }
+
+    // Hide "Zapisz" button in batch mode (headers are not editable)
+    const saveBtn = QS("#rv_header_save");
+    if(saveBtn) saveBtn.style.display = "none";
 
     // Accent palette (matching aml.js ACCOUNT_PALETTE)
     const PALETTE = ["#1f5aa6","#b91c1c","#15803d","#7c3aed","#d97706","#0891b2","#be185d","#65a30d"];
