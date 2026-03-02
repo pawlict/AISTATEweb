@@ -1734,17 +1734,20 @@
     const charts = data._perAccountCharts;
     const chartHeight = 260;
 
-    // Build HTML with per-account canvases
-    let html = "";
+    // Build HTML with per-account canvases + SVG overlay for connections
+    let html = '<div id="aml_stacked_charts_inner" style="position:relative">';
     for(let i = 0; i < charts.length; i++){
       const c = charts[i];
-      html += `<div class="aml-stacked-chart-wrapper" style="border-left:4px solid ${c.color};padding-left:8px;margin-bottom:16px">
+      html += `<div class="aml-stacked-chart-wrapper" id="aml_chart_wrap_${i}" style="border-left:4px solid ${c.color};padding-left:8px;margin-bottom:16px;position:relative">
         <div class="small" style="font-weight:700;margin-bottom:4px;color:${c.color}">${_esc(c.accountLabel)}</div>
         <div style="height:${chartHeight}px;position:relative">
           <canvas id="aml_chart_canvas_${i}"></canvas>
         </div>
       </div>`;
     }
+    html += '<svg id="aml_transfer_connections" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10"></svg>';
+    html += '</div>';
+
     container.style.width = "";
     container.style.minWidth = "100%";
     container.style.height = "auto";
@@ -1756,6 +1759,7 @@
         const canvas = QS(`#aml_chart_canvas_${i}`);
         if(!canvas) continue;
 
+        const showLegend = c.datasets.length > 1;
         const chartConfig = {
           type: "line",
           data: {
@@ -1766,11 +1770,14 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-              legend: { display: false },
-              ..._balanceTooltipConfig(c.tx_meta, {tx_meta: c.tx_meta, _transferMarkers: c._transferMarkers}),
+              legend: showLegend ? {
+                display: true, position: "top",
+                labels: { boxWidth: 10, font: { size: 10 }, padding: 6 },
+              } : { display: false },
+              ..._balanceTooltipConfig(c.tx_meta, {tx_meta: c.tx_meta, _multiMeta: c._multiMeta, _transferMarkers: c._transferMarkers}),
             },
             elements: {
-              point: { radius: 2, hoverRadius: 6, hitRadius: 10 },
+              point: { radius: 1, hoverRadius: 5, hitRadius: 10 },
             },
             scales: _adaptiveXTicks(c.labels.length),
             interaction: { mode: "index", intersect: false, axis: "x" },
@@ -1785,7 +1792,112 @@
         const instance = new Chart(canvas, chartConfig);
         St._stackedChartInstances.push(instance);
       }
+
+      // Draw cross-account connection lines after all charts are rendered
+      _drawTransferConnectionLines(charts);
     });
+  }
+
+  /**
+   * Draw SVG connection lines between stacked charts for cross-account transfers.
+   * Lines go from a transfer point on one chart to the corresponding point on another chart.
+   */
+  function _drawTransferConnectionLines(charts){
+    const svg = QS("#aml_transfer_connections");
+    const inner = QS("#aml_stacked_charts_inner");
+    if(!svg || !inner || !St._stackedChartInstances || !charts) return;
+
+    const instances = St._stackedChartInstances;
+    if(instances.length < 2) return;
+
+    // Resize SVG to match container
+    const containerRect = inner.getBoundingClientRect();
+    svg.setAttribute("width", containerRect.width);
+    svg.setAttribute("height", containerRect.height);
+    svg.innerHTML = "";
+
+    // Collect all cross-account transfer markers and draw connections
+    for(let ci = 0; ci < charts.length; ci++){
+      const c = charts[ci];
+      if(!c._transferMarkers || !c._transferMarkers.length) continue;
+
+      for(const marker of c._transferMarkers){
+        if(marker.direction !== "out") continue; // Draw only outgoing → avoid duplicates
+
+        // Find the target chart index
+        const targetIban = marker.otherAccount;
+        const targetIdx = charts.findIndex(tc => tc.iban === targetIban);
+        if(targetIdx < 0 || targetIdx === ci) continue;
+
+        // Get pixel coordinates from Chart.js instances
+        const srcChart = instances[ci];
+        const tgtChart = instances[targetIdx];
+        if(!srcChart || !tgtChart) continue;
+
+        const srcXScale = srcChart.scales.x;
+        const srcYScale = srcChart.scales.y;
+        const tgtXScale = tgtChart.scales.x;
+        const tgtYScale = tgtChart.scales.y;
+        if(!srcXScale || !srcYScale || !tgtXScale || !tgtYScale) continue;
+
+        const srcCanvas = srcChart.canvas;
+        const tgtCanvas = tgtChart.canvas;
+        const srcCanvasRect = srcCanvas.getBoundingClientRect();
+        const tgtCanvasRect = tgtCanvas.getBoundingClientRect();
+
+        // Source point: bottom of source chart at transfer date
+        const srcX = srcXScale.getPixelForValue(marker.labelIdx);
+        const srcY = srcYScale.bottom;
+        // Target point: top of target chart at transfer date
+        const tgtX = tgtXScale.getPixelForValue(marker.labelIdx);
+        const tgtY = tgtYScale.top;
+
+        // Convert to SVG coordinates (relative to container)
+        const svgSrcX = (srcCanvasRect.left - containerRect.left) + srcX;
+        const svgSrcY = (srcCanvasRect.top - containerRect.top) + srcY;
+        const svgTgtX = (tgtCanvasRect.left - containerRect.left) + tgtX;
+        const svgTgtY = (tgtCanvasRect.top - containerRect.top) + tgtY;
+
+        // Determine color based on source chart accent
+        const lineColor = ci < targetIdx ? c.color : charts[targetIdx].color;
+
+        // Draw curved connection path
+        const midY = (svgSrcY + svgTgtY) / 2;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", `M ${svgSrcX} ${svgSrcY} C ${svgSrcX} ${midY}, ${svgTgtX} ${midY}, ${svgTgtX} ${svgTgtY}`);
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", lineColor);
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("stroke-dasharray", "6 4");
+        path.setAttribute("opacity", "0.6");
+        svg.appendChild(path);
+
+        // Arrow at target end
+        const arrowSize = 6;
+        const arrowDir = svgTgtY > svgSrcY ? 1 : -1;
+        const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        arrow.setAttribute("points",
+          `${svgTgtX},${svgTgtY} ${svgTgtX - arrowSize},${svgTgtY - arrowSize * arrowDir} ${svgTgtX + arrowSize},${svgTgtY - arrowSize * arrowDir}`
+        );
+        arrow.setAttribute("fill", lineColor);
+        arrow.setAttribute("opacity", "0.7");
+        svg.appendChild(arrow);
+
+        // Amount label at midpoint
+        const amtStr = marker.amount ? Number(marker.amount).toLocaleString("pl-PL", {minimumFractionDigits:2, maximumFractionDigits:2}) + " PLN" : "";
+        if(amtStr){
+          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          text.setAttribute("x", (svgSrcX + svgTgtX) / 2 + 8);
+          text.setAttribute("y", midY);
+          text.setAttribute("fill", lineColor);
+          text.setAttribute("font-size", "10");
+          text.setAttribute("font-weight", "600");
+          text.setAttribute("opacity", "0.8");
+          text.textContent = amtStr;
+          svg.appendChild(text);
+        }
+      }
+    }
   }
 
   function _renderChart(chartKey){
@@ -3609,24 +3721,18 @@
             ? St._perAccountDetails.map(d => (d.statement || {}).account_number || "unknown")
             : Object.keys(tlByIban);
 
+          // Monthly color palette (distinct from IBAN accent palette)
+          const monthPalette = [
+            "#3b82f6","#ef4444","#22c55e","#a855f7","#f59e0b","#06b6d4",
+            "#ec4899","#84cc16","#f97316","#6366f1","#14b8a6","#e11d48",
+            "#0ea5e9","#8b5cf6","#d946ef","#10b981","#f43f5e","#0891b2",
+          ];
+          const monthBgPalette = monthPalette.map(c => c + "18");
+
           mergedTimeline._perAccountCharts = ibanOrder.map((iban, ai) => {
             const group = tlByIban[iban] || [];
             if(!group.length) return null;
-            const ci = ai % palette.length;
-
-            // Merge all monthly timelines of this IBAN into one combined dataset
-            const combinedLabelMap = {};
-            const combinedMetaMap = {};
-            for(const tl of group){
-              for(let j = 0; j < tl.labels.length; j++){
-                const lbl = tl.labels[j];
-                combinedLabelMap[lbl] = tl.data[j];
-                if(tl.txMeta && tl.txMeta[j]) combinedMetaMap[lbl] = tl.txMeta[j];
-              }
-            }
-
-            const aData = allLabels.map(lbl => lbl in combinedLabelMap ? combinedLabelMap[lbl] : null);
-            const aMeta = allLabels.map(lbl => combinedMetaMap[lbl] || null);
+            const accentIdx = ai % palette.length;
 
             // Build label from _perAccountDetails info
             const pad = St._perAccountDetails ? St._perAccountDetails[ai] : null;
@@ -3638,22 +3744,64 @@
             const periodStr = [periodFrom, periodTo].filter(Boolean).join(" \u2014 ");
             const accountLabel = (bankName ? bankName + " " : "") + shortIban + (periodStr ? " (" + periodStr + ")" : "");
 
+            // Keep each monthly timeline as a SEPARATE dataset with different color
+            // Sort by first date within group
+            group.sort((a, b) => a.firstDate.localeCompare(b.firstDate));
+
+            const datasets = [];
+            const multiMeta = [];
+            for(let mi = 0; mi < group.length; mi++){
+              const tl = group[mi];
+              const mci = mi % monthPalette.length;
+              const labelMap = {};
+              for(let j = 0; j < tl.labels.length; j++) labelMap[tl.labels[j]] = j;
+
+              const alignedData = [];
+              const alignedMeta = [];
+              // Bridge: connect end of this month to start of next month
+              const nextTl = group[mi + 1];
+              const nextFirstDate = nextTl ? nextTl.labels[0] : null;
+
+              for(const lbl of allLabels){
+                if(lbl in labelMap){
+                  alignedData.push(tl.data[labelMap[lbl]]);
+                  alignedMeta.push(tl.txMeta ? tl.txMeta[labelMap[lbl]] : null);
+                } else {
+                  alignedData.push(null);
+                  alignedMeta.push(null);
+                }
+              }
+
+              // Bridge to next month
+              if(nextFirstDate && tl.data.length > 0){
+                const nextIdx = allLabels.indexOf(nextFirstDate);
+                if(nextIdx >= 0 && alignedData[nextIdx] === null){
+                  alignedData[nextIdx] = tl.data[tl.data.length - 1];
+                  alignedMeta[nextIdx] = null;
+                }
+              }
+
+              datasets.push({
+                label: tl.label || `Okres ${mi + 1}`,
+                data: alignedData,
+                borderColor: monthPalette[mci],
+                backgroundColor: monthBgPalette[mci],
+                fill: true, tension: 0.2, pointRadius: 1, spanGaps: true, borderWidth: 2,
+              });
+              multiMeta.push(alignedMeta);
+            }
+
             return {
               type: "line",
               labels: allLabels,
               accountLabel: accountLabel,
               accountIndex: ai,
               iban: iban,
-              color: palette[ci],
-              bgColor: bgPalette[ci],
-              datasets: [{
-                label: accountLabel,
-                data: aData,
-                borderColor: palette[ci],
-                backgroundColor: bgPalette[ci],
-                fill: true, tension: 0.2, pointRadius: 2, spanGaps: true, borderWidth: 2,
-              }],
-              tx_meta: aMeta,
+              color: palette[accentIdx],         // IBAN accent (left border only)
+              bgColor: bgPalette[accentIdx],
+              datasets: datasets,
+              tx_meta: multiMeta[0] || [],
+              _multiMeta: multiMeta,
               _transferMarkers: [],
             };
           }).filter(Boolean);

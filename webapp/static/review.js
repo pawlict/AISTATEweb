@@ -599,7 +599,22 @@
 
     let html = "";
 
-    // Use ibanGroups if available (multi-IBAN), else fall back to headers
+    // Helper: build verification string from warnings for a header
+    function _verificationBadge(hdr){
+      const ws = (hdr.header && hdr.header.warnings) || [];
+      if(!ws.length) return "";
+      // Find the sum check warning (e.g. "Suma uznań: OK (19,202.11)")
+      let parts = [];
+      for(const w of ws){
+        const isOk = /\bOK\b/.test(w);
+        const color = isOk ? "#16a34a" : "#dc2626";
+        const icon = isOk ? "\u2705" : "\u26A0\uFE0F";
+        parts.push(`<span style="color:${color};white-space:nowrap">${icon} ${_esc(w)}</span>`);
+      }
+      return parts.join("<br>");
+    }
+
+    // Render ALL individual statement headers, grouped by IBAN
     if(St.ibanGroups && St.ibanGroups.length > 1){
       for(let gi = 0; gi < St.ibanGroups.length; gi++){
         const grp = St.ibanGroups[gi];
@@ -608,44 +623,35 @@
         // IBAN group separator
         html += `<div class="rv-batch-separator" style="grid-column:1/-1;padding:8px 10px;margin:4px 0;background:var(--bg-alt,#f1f5f9);border-radius:6px;border-left:4px solid ${accentColor};font-weight:600;font-size:13px">\uD83C\uDFE6 ${_esc(grp.label)}</div>`;
 
-        // Collect all key blocks from all statements in this IBAN group,
-        // but show only unique fields with merged values (earliest opening, latest closing)
+        // Show ALL individual statement headers within this IBAN group
         const keyFields = ["bank_name","account_number","period_from","period_to","opening_balance","closing_balance","currency"];
-        const mergedBlocks = {};
         for(const hdr of grp.headers){
           const h = hdr.header;
           if(!h || !h.blocks) continue;
-          for(const b of h.blocks){
-            if(!keyFields.includes(b.field)) continue;
-            if(!mergedBlocks[b.field]){
-              mergedBlocks[b.field] = {...b, _stmtId: hdr.id};
-            } else {
-              // Merge: for period_from take earliest, for period_to take latest
-              // For balances: opening from earliest statement, closing from latest
-              const existing = mergedBlocks[b.field];
-              if(b.field === "period_from" && b.value && (!existing.value || b.value < existing.value)){
-                existing.value = b.value;
-              } else if(b.field === "period_to" && b.value && (!existing.value || b.value > existing.value)){
-                existing.value = b.value;
-              } else if(b.field === "closing_balance"){
-                // Take value from latest period
-                existing.value = b.value;
-              }
-            }
+
+          // Per-statement sub-separator
+          html += `<div class="rv-batch-separator" style="grid-column:1/-1;padding:4px 10px;margin:2px 0;background:transparent;border-left:3px solid ${accentColor}44;font-weight:500;font-size:12px;color:${accentColor}">\uD83D\uDCC4 ${_esc(hdr.label)}</div>`;
+
+          const blocks = h.blocks.filter(b => keyFields.includes(b.field));
+          for(const b of blocks){
+            const typeIcon = b.type === "amount" ? "\uD83D\uDCB0" : b.type === "date" ? "\uD83D\uDCC5" : b.type === "iban" ? "\uD83C\uDFE6" : "";
+            html += `<div class="rv-hdr-block" data-field="${_esc(b.field)}" data-stmt="${_esc(hdr.id)}">
+              <div class="rv-hdr-label">${typeIcon} ${_esc(b.label)}</div>
+              <div class="rv-hdr-value">${_esc(b.value || "\u2014")}</div>
+            </div>`;
           }
-        }
-        for(const field of keyFields){
-          const b = mergedBlocks[field];
-          if(!b) continue;
-          const typeIcon = b.type === "amount" ? "\uD83D\uDCB0" : b.type === "date" ? "\uD83D\uDCC5" : b.type === "iban" ? "\uD83C\uDFE6" : "";
-          html += `<div class="rv-hdr-block" data-field="${_esc(b.field)}" data-stmt="${_esc(b._stmtId || "")}">
-            <div class="rv-hdr-label">${typeIcon} ${_esc(b.label)}</div>
-            <div class="rv-hdr-value">${_esc(b.value || "\u2014")}</div>
-          </div>`;
+          // Add verification field after currency
+          const vBadge = _verificationBadge(hdr);
+          if(vBadge){
+            html += `<div class="rv-hdr-block" data-field="verification" data-stmt="${_esc(hdr.id)}">
+              <div class="rv-hdr-label">\u2714 Weryfikacja</div>
+              <div class="rv-hdr-value" style="font-size:11px;line-height:1.5">${vBadge}</div>
+            </div>`;
+          }
         }
       }
     } else {
-      // Single IBAN or legacy: show per-statement headers
+      // Single IBAN: show all statement headers individually
       for(const hdr of St.headers){
         const h = hdr.header;
         if(!h || !h.blocks) continue;
@@ -659,31 +665,21 @@
             <div class="rv-hdr-value">${_esc(b.value || "\u2014")}</div>
           </div>`;
         }
+        // Add verification field
+        const vBadge = _verificationBadge(hdr);
+        if(vBadge){
+          html += `<div class="rv-hdr-block" data-field="verification" data-stmt="${_esc(hdr.id)}">
+            <div class="rv-hdr-label">\u2714 Weryfikacja</div>
+            <div class="rv-hdr-value" style="font-size:11px;line-height:1.5">${vBadge}</div>
+          </div>`;
+        }
       }
     }
 
     grid.innerHTML = html;
 
-    // Warnings (aggregate, grouped by IBAN)
-    if(warningsEl){
-      let allWarnings = [];
-      for(const hdr of St.headers){
-        const ws = (hdr.header && hdr.header.warnings) || [];
-        for(const w of ws){
-          allWarnings.push(`[${hdr.label}] ${w}`);
-        }
-      }
-      if(allWarnings.length){
-        warningsEl.innerHTML = allWarnings.map(w => {
-          const isOk = /\bOK\b/.test(w);
-          const color = isOk ? "var(--success, #16a34a)" : "var(--danger)";
-          const icon = isOk ? aiIcon("success",12) : aiIcon("warning",12);
-          return `<div class="small" style="color:${color};margin:2px 0">${icon} ${_esc(w)}</div>`;
-        }).join("");
-      } else {
-        warningsEl.innerHTML = "";
-      }
-    }
+    // Warnings — now shown inline per-statement, clear the aggregate section
+    if(warningsEl) warningsEl.innerHTML = "";
   }
 
   async function _saveHeaderChanges(){
