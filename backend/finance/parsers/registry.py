@@ -11,6 +11,7 @@ from .mbank import MBankParser
 from .santander import SantanderParser
 from .pekao import PekaoParser
 from .millennium import MillenniumParser
+from .revolut import RevolutParser
 from .generic import GenericParser
 
 
@@ -22,6 +23,7 @@ PARSERS: List[Type[BankParser]] = [
     SantanderParser,
     PekaoParser,
     MillenniumParser,
+    RevolutParser,
 ]
 
 

@@ -151,12 +151,81 @@ def _run_ocr(pdf_path: Path) -> Tuple[str, float]:
         return "", 0.0
 
 
+def _run_multi_statement_aml(
+    results: "List[ParseResult]",
+    pdf_path: Path,
+    pdf_hash: str,
+    case_id: str,
+    project_id: str,
+    page_count: int,
+    save_report: bool,
+    log_cb,
+    t0: float,
+) -> Dict[str, Any]:
+    """Process multiple ParseResults from a single multi-currency PDF.
+
+    Runs ``run_aml_pipeline`` for each currency sub-statement, reusing
+    the same case_id so all sub-statements belong to one analysis case.
+    """
+    statements: List[Dict[str, Any]] = []
+    all_warnings: List[str] = []
+    shared_case_id = case_id  # may be empty — first call will create it
+
+    for pr in results:
+        currency = pr.info.currency if pr.info else "?"
+        sub_hash = f"{pdf_hash}_{currency}"
+
+        sub_result = run_aml_pipeline(
+            pdf_path=pdf_path,
+            case_id=shared_case_id,
+            project_id=project_id,
+            save_report=save_report,
+            log_cb=log_cb,
+            _parse_result=pr,
+            _pdf_hash=sub_hash,
+        )
+
+        # Reuse the case created by the first sub-statement
+        if not shared_case_id and sub_result.get("case_id"):
+            shared_case_id = sub_result["case_id"]
+
+        statements.append({
+            "statement_id": sub_result.get("statement_id"),
+            "account_id": sub_result.get("account_id"),
+            "bank": sub_result.get("bank"),
+            "bank_name": sub_result.get("bank_name"),
+            "currency": currency,
+            "transaction_count": sub_result.get("transaction_count", 0),
+            "risk_score": sub_result.get("risk_score", 0),
+            "status": sub_result.get("status", "error"),
+            "warnings": sub_result.get("warnings", []),
+        })
+        all_warnings.extend(sub_result.get("warnings", []))
+
+    dt = time.time() - t0
+    total_tx = sum(s.get("transaction_count", 0) for s in statements)
+
+    return {
+        "status": "ok",
+        "multi": True,
+        "case_id": shared_case_id,
+        "statements": statements,
+        "total_transactions": total_tx,
+        "statement_count": len(statements),
+        "warnings": all_warnings,
+        "pipeline_time_s": round(dt, 2),
+    }
+
+
 def run_aml_pipeline(
     pdf_path: Path,
     case_id: str = "",
     project_id: str = "",
     save_report: bool = True,
     log_cb=None,
+    *,
+    _parse_result: Optional[ParseResult] = None,
+    _pdf_hash: str = "",
 ) -> Dict[str, Any]:
     """Run the full AML analysis pipeline on a bank statement PDF.
 
@@ -166,6 +235,8 @@ def run_aml_pipeline(
         project_id: Project ID for new case creation
         save_report: Whether to save HTML report to disk
         log_cb: Optional progress callback
+        _parse_result: Pre-parsed result (for multi-currency sub-statements).
+        _pdf_hash: Overridden PDF hash (for multi-currency dedup).
 
     Returns:
         Dict with all pipeline results including report HTML.
@@ -181,44 +252,73 @@ def run_aml_pipeline(
             except Exception:
                 pass
 
-    pdf_hash = _compute_pdf_hash(pdf_path)
+    pdf_hash = _pdf_hash or _compute_pdf_hash(pdf_path)
     rules_config = load_rules()
     rules_version = rules_config.get("version", "1.0.0")
     warnings: List[str] = []
 
-    # --- Step 1: Parse PDF with PyMuPDF universal parser ---
-    _log("Parsowanie PDF (PyMuPDF)...")
-    from .universal_parser import parse_bank_statement
-
     ocr_used = False
     ocr_confidence = 0.0
 
-    try:
-        parse_result = parse_bank_statement(pdf_path)
-    except RuntimeError as e:
-        _log(f"Universal parser: {e}")
-        # Fallback to legacy pdfplumber-based parsers
-        _log("Fallback: parsowanie pdfplumber...")
-        tables, full_text, page_count = extract_pdf_tables(pdf_path)
+    if _parse_result is not None:
+        # Multi-statement mode: ParseResult provided externally
+        parse_result = _parse_result
+    else:
+        # --- Step 1: Parse PDF with PyMuPDF universal parser ---
+        _log("Parsowanie PDF (PyMuPDF)...")
+        from .universal_parser import parse_bank_statement
 
-        if _check_ocr_needed(full_text, page_count):
-            _log("Brak warstwy tekstowej — uruchamiam OCR...")
-            ocr_text, ocr_confidence = _run_ocr(pdf_path)
-            if ocr_text:
-                full_text = ocr_text
-                ocr_used = True
+        try:
+            parse_result = parse_bank_statement(pdf_path)
+        except RuntimeError as e:
+            _log(f"Universal parser: {e}")
+            # Fallback to legacy pdfplumber-based parsers
+            _log("Fallback: parsowanie pdfplumber...")
+            tables, full_text, page_count = extract_pdf_tables(pdf_path)
+
+            if _check_ocr_needed(full_text, page_count):
+                _log("Brak warstwy tekstowej — uruchamiam OCR...")
+                ocr_text, ocr_confidence = _run_ocr(pdf_path)
+                if ocr_text:
+                    full_text = ocr_text
+                    ocr_used = True
+                else:
+                    warnings.append("OCR nie powiódł się")
+
+            parser = get_parser(full_text[:5000])
+            _log(f"Bank (fallback): {parser.BANK_NAME}")
+
+            header_words = None
+            if parser.BANK_ID == "ing":
+                header_words = extract_header_words(pdf_path)
+
+            # Check for multi-result parser (e.g., Revolut multi-currency)
+            if hasattr(parser, "parse_multi"):
+                multi_results = parser.parse_multi(
+                    tables, full_text, header_words=header_words,
+                )
+                if len(multi_results) > 1:
+                    _log(f"Multi-statement: {len(multi_results)} walut wykrytych")
+                    for r in multi_results:
+                        r.page_count = page_count
+                    return _run_multi_statement_aml(
+                        multi_results, pdf_path, pdf_hash,
+                        case_id, project_id, page_count,
+                        save_report, log_cb, t0,
+                    )
+                elif multi_results:
+                    parse_result = multi_results[0]
+                    parse_result.page_count = page_count
+                else:
+                    parse_result = parser.parse(
+                        tables, full_text, header_words=header_words,
+                    )
+                    parse_result.page_count = page_count
             else:
-                warnings.append("OCR nie powiódł się")
-
-        parser = get_parser(full_text[:5000])
-        _log(f"Bank (fallback): {parser.BANK_NAME}")
-
-        header_words = None
-        if parser.BANK_ID == "ing":
-            header_words = extract_header_words(pdf_path)
-
-        parse_result = parser.parse(tables, full_text, header_words=header_words)
-        parse_result.page_count = page_count
+                parse_result = parser.parse(
+                    tables, full_text, header_words=header_words,
+                )
+                parse_result.page_count = page_count
 
     bank_name = parse_result.bank or parse_result.info.bank
     # Derive bank_id from bank name

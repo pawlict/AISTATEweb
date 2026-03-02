@@ -211,21 +211,44 @@
       clearInterval(stageTimer);
 
       if(result && (result.status === "ok" || result.status === "duplicate")){
-        if(result.status === "duplicate"){
-          // Show info toast about duplicate — load existing analysis
-          const msg = result.message || "Ten wyciag zostal juz wczytany. Laduje istniejaca analize.";
-          _showInfo ? _showInfo(msg) : alert(msg);
-        }
-        St.lastResult = result;
-        St.statementId = result.statement_id;
-        St.caseId = result.case_id;
+        // Multi-statement response (e.g., Revolut multi-currency PDF)
+        if(result.multi && result.statements && result.statements.length > 0){
+          St.caseId = result.case_id;
+          // Treat each sub-statement as a separate batch entry
+          St.batchResults = result.statements
+            .filter(s => s.statement_id)
+            .map(s => s.statement_id);
+          const first = St.batchResults[0];
+          St.statementId = first;
+          St.lastResult = result;
 
-        await _loadDetail(result.statement_id);
-        _renderResults();
-        _showResults();
+          const msg = `Wykryto ${result.statements.length} walut w jednym PDF (${result.total_transactions} transakcji). Laduje pierwsza...`;
+          _showInfo ? _showInfo(msg) : null;
 
-        if(window.ReviewManager && result.statement_id){
-          ReviewManager.loadForStatement(result.statement_id);
+          await _loadDetail(first);
+          _renderResults();
+          _showResults();
+
+          if(window.ReviewManager && first){
+            ReviewManager.loadForStatement(first);
+          }
+        } else {
+          if(result.status === "duplicate"){
+            // Show info toast about duplicate — load existing analysis
+            const msg = result.message || "Ten wyciag zostal juz wczytany. Laduje istniejaca analize.";
+            _showInfo ? _showInfo(msg) : alert(msg);
+          }
+          St.lastResult = result;
+          St.statementId = result.statement_id;
+          St.caseId = result.case_id;
+
+          await _loadDetail(result.statement_id);
+          _renderResults();
+          _showResults();
+
+          if(window.ReviewManager && result.statement_id){
+            ReviewManager.loadForStatement(result.statement_id);
+          }
         }
       } else {
         clearInterval(progTimer);
@@ -3367,7 +3390,17 @@
       const result = await _runPipelineForFile(entry.file, St.batchCaseId);
 
       if(result && (result.status === "ok" || result.status === "duplicate")){
-        if(result.status === "duplicate"){
+        // Multi-statement response (e.g., Revolut multi-currency PDF)
+        if(result.multi && result.statements){
+          entry.status = "done";
+          entry.statementId = result.statements[0] && result.statements[0].statement_id;
+          entry.multiCount = result.statements.length;
+          for(const sub of result.statements){
+            if(sub.statement_id && !St.batchResults.includes(sub.statement_id)){
+              St.batchResults.push(sub.statement_id);
+            }
+          }
+        } else if(result.status === "duplicate"){
           entry.status = "done";
           entry.statementId = result.statement_id;
           entry.error = "Duplikat — uzyto istniejacego wyciagu";
@@ -4182,12 +4215,22 @@
         }
 
         if(result && (result.status === "ok" || result.status === "duplicate")){
-          if(result.status === "duplicate"){
-            _showInfo(result.message || "Ten wyciag zostal juz wczytany.");
-          }
-          if(!St.caseId && result.case_id) St.caseId = result.case_id;
-          if(!allIds.includes(result.statement_id)){
-            allIds.push(result.statement_id);
+          // Multi-statement response (e.g., Revolut multi-currency PDF)
+          if(result.multi && result.statements){
+            if(!St.caseId && result.case_id) St.caseId = result.case_id;
+            for(const sub of result.statements){
+              if(sub.statement_id && !allIds.includes(sub.statement_id)){
+                allIds.push(sub.statement_id);
+              }
+            }
+          } else {
+            if(result.status === "duplicate"){
+              _showInfo(result.message || "Ten wyciag zostal juz wczytany.");
+            }
+            if(!St.caseId && result.case_id) St.caseId = result.case_id;
+            if(!allIds.includes(result.statement_id)){
+              allIds.push(result.statement_id);
+            }
           }
         } else {
           let errMsg = result && result.error ? String(result.error) : "Blad analizy";
