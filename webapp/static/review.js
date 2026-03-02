@@ -304,7 +304,7 @@
       })
     );
 
-    // Merge: collect headers and transactions
+    // Merge: collect headers and transactions with IBAN info
     let allTx = [];
     for(let i = 0; i < allData.length; i++){
       const data = allData[i];
@@ -313,13 +313,14 @@
       const stmtId = statementIds[i];
       const header = data.header || null;
 
-      // Extract period info from header blocks
-      let periodFrom = "", periodTo = "", bankName = "";
+      // Extract period info and IBAN from header blocks
+      let periodFrom = "", periodTo = "", bankName = "", iban = "";
       if(header && header.blocks){
         for(const b of header.blocks){
           if(b.field === "period_from") periodFrom = b.value || "";
           if(b.field === "period_to") periodTo = b.value || "";
           if(b.field === "bank_name") bankName = b.value || "";
+          if(b.field === "account_number") iban = b.value || "";
         }
       }
 
@@ -327,33 +328,67 @@
         ? `${bankName}: ${periodFrom || "?"} \u2014 ${periodTo || "?"}`
         : `Wyciag ${i+1}: ${periodFrom || "?"} \u2014 ${periodTo || "?"}`;
 
-      St.headers.push({id: stmtId, header, label, periodFrom, periodTo, bankName, idx: i});
+      St.headers.push({id: stmtId, header, label, periodFrom, periodTo, bankName, iban, idx: i});
 
       const txs = data.transactions || [];
       for(const tx of txs){
         tx._statement_id = stmtId;
         tx._statement_idx = i;
         tx._statement_label = label;
+        tx._iban = iban;
         St.txStatementMap[tx.id] = stmtId;
         allTx.push(tx);
       }
     }
 
-    // Sort by period start, then by booking date
-    // First, sort headers by periodFrom
-    St.headers.sort((a, b) => (a.periodFrom || "").localeCompare(b.periodFrom || ""));
-    const headerOrder = {};
-    St.headers.forEach((h, idx) => { headerOrder[h.id] = idx; });
+    // Group headers by IBAN for consolidated display
+    const ibanGroups = {};
+    for(const h of St.headers){
+      const key = h.iban || h.id;
+      if(!ibanGroups[key]) ibanGroups[key] = [];
+      ibanGroups[key].push(h);
+    }
+    // Sort each group by periodFrom, build merged labels per IBAN
+    St.ibanGroups = [];
+    for(const [key, group] of Object.entries(ibanGroups)){
+      group.sort((a, b) => (a.periodFrom || "").localeCompare(b.periodFrom || ""));
+      const earliest = group[0];
+      const latest = group.reduce((a, b) => (b.periodTo || "") > (a.periodTo || "") ? b : a, group[0]);
+      const mergedLabel = (earliest.bankName || "Bank")
+        + (key ? " " + (key.length > 16 ? "\u2026" + key.slice(-8) : key) : "")
+        + ": " + (earliest.periodFrom || "?") + " \u2014 " + (latest.periodTo || "?");
+      St.ibanGroups.push({
+        iban: key,
+        bankName: earliest.bankName,
+        periodFrom: earliest.periodFrom,
+        periodTo: latest.periodTo,
+        label: mergedLabel,
+        headers: group,
+        statementIds: group.map(h => h.id),
+      });
+    }
+    // Sort IBAN groups by periodFrom
+    St.ibanGroups.sort((a, b) => (a.periodFrom || "").localeCompare(b.periodFrom || ""));
 
-    // Sort transactions: first by statement period order, then by booking_date
+    // Build IBAN ordering for transaction sort
+    const ibanOrder = {};
+    St.ibanGroups.forEach((g, idx) => { ibanOrder[g.iban] = idx; });
+
+    // Sort transactions: first by IBAN group, then by booking_date
     allTx.sort((a, b) => {
-      const orderA = headerOrder[a._statement_id] ?? 999;
-      const orderB = headerOrder[b._statement_id] ?? 999;
+      const orderA = ibanOrder[a._iban] ?? 999;
+      const orderB = ibanOrder[b._iban] ?? 999;
       if(orderA !== orderB) return orderA - orderB;
       const da = a.booking_date || "";
       const db = b.booking_date || "";
       return da.localeCompare(db);
     });
+
+    // Assign IBAN group label to transactions
+    for(const tx of allTx){
+      const g = St.ibanGroups.find(ig => ig.iban === tx._iban);
+      if(g) tx._iban_label = g.label;
+    }
 
     St.transactions = allTx;
 
@@ -559,29 +594,77 @@
       return;
     }
 
+    // Accent palette (matching aml.js ACCOUNT_PALETTE)
+    const PALETTE = ["#1f5aa6","#b91c1c","#15803d","#7c3aed","#d97706","#0891b2","#be185d","#65a30d"];
+
     let html = "";
-    for(const hdr of St.headers){
-      const h = hdr.header;
-      if(!h || !h.blocks) continue;
 
-      // Period separator
-      html += `<div class="rv-batch-separator" style="grid-column:1/-1;padding:8px 10px;margin:4px 0;background:var(--bg-alt,#f1f5f9);border-radius:6px;border-left:4px solid var(--primary,#3b82f6);font-weight:600;font-size:13px">\uD83D\uDCC4 ${_esc(hdr.label)}</div>`;
+    // Use ibanGroups if available (multi-IBAN), else fall back to headers
+    if(St.ibanGroups && St.ibanGroups.length > 1){
+      for(let gi = 0; gi < St.ibanGroups.length; gi++){
+        const grp = St.ibanGroups[gi];
+        const accentColor = PALETTE[gi % PALETTE.length];
 
-      // Show key blocks only (bank, period, balances)
-      const keyFields = ["bank_name","account_number","period_from","period_to","opening_balance","closing_balance","currency"];
-      const blocks = h.blocks.filter(b => keyFields.includes(b.field));
-      for(const b of blocks){
-        const typeIcon = b.type === "amount" ? "\uD83D\uDCB0" : b.type === "date" ? "\uD83D\uDCC5" : b.type === "iban" ? "\uD83C\uDFE6" : "";
-        html += `<div class="rv-hdr-block" data-field="${_esc(b.field)}" data-stmt="${_esc(hdr.id)}">
-          <div class="rv-hdr-label">${typeIcon} ${_esc(b.label)}</div>
-          <div class="rv-hdr-value">${_esc(b.value || "\u2014")}</div>
-        </div>`;
+        // IBAN group separator
+        html += `<div class="rv-batch-separator" style="grid-column:1/-1;padding:8px 10px;margin:4px 0;background:var(--bg-alt,#f1f5f9);border-radius:6px;border-left:4px solid ${accentColor};font-weight:600;font-size:13px">\uD83C\uDFE6 ${_esc(grp.label)}</div>`;
+
+        // Collect all key blocks from all statements in this IBAN group,
+        // but show only unique fields with merged values (earliest opening, latest closing)
+        const keyFields = ["bank_name","account_number","period_from","period_to","opening_balance","closing_balance","currency"];
+        const mergedBlocks = {};
+        for(const hdr of grp.headers){
+          const h = hdr.header;
+          if(!h || !h.blocks) continue;
+          for(const b of h.blocks){
+            if(!keyFields.includes(b.field)) continue;
+            if(!mergedBlocks[b.field]){
+              mergedBlocks[b.field] = {...b, _stmtId: hdr.id};
+            } else {
+              // Merge: for period_from take earliest, for period_to take latest
+              // For balances: opening from earliest statement, closing from latest
+              const existing = mergedBlocks[b.field];
+              if(b.field === "period_from" && b.value && (!existing.value || b.value < existing.value)){
+                existing.value = b.value;
+              } else if(b.field === "period_to" && b.value && (!existing.value || b.value > existing.value)){
+                existing.value = b.value;
+              } else if(b.field === "closing_balance"){
+                // Take value from latest period
+                existing.value = b.value;
+              }
+            }
+          }
+        }
+        for(const field of keyFields){
+          const b = mergedBlocks[field];
+          if(!b) continue;
+          const typeIcon = b.type === "amount" ? "\uD83D\uDCB0" : b.type === "date" ? "\uD83D\uDCC5" : b.type === "iban" ? "\uD83C\uDFE6" : "";
+          html += `<div class="rv-hdr-block" data-field="${_esc(b.field)}" data-stmt="${_esc(b._stmtId || "")}">
+            <div class="rv-hdr-label">${typeIcon} ${_esc(b.label)}</div>
+            <div class="rv-hdr-value">${_esc(b.value || "\u2014")}</div>
+          </div>`;
+        }
+      }
+    } else {
+      // Single IBAN or legacy: show per-statement headers
+      for(const hdr of St.headers){
+        const h = hdr.header;
+        if(!h || !h.blocks) continue;
+        html += `<div class="rv-batch-separator" style="grid-column:1/-1;padding:8px 10px;margin:4px 0;background:var(--bg-alt,#f1f5f9);border-radius:6px;border-left:4px solid var(--primary,#3b82f6);font-weight:600;font-size:13px">\uD83D\uDCC4 ${_esc(hdr.label)}</div>`;
+        const keyFields = ["bank_name","account_number","period_from","period_to","opening_balance","closing_balance","currency"];
+        const blocks = h.blocks.filter(b => keyFields.includes(b.field));
+        for(const b of blocks){
+          const typeIcon = b.type === "amount" ? "\uD83D\uDCB0" : b.type === "date" ? "\uD83D\uDCC5" : b.type === "iban" ? "\uD83C\uDFE6" : "";
+          html += `<div class="rv-hdr-block" data-field="${_esc(b.field)}" data-stmt="${_esc(hdr.id)}">
+            <div class="rv-hdr-label">${typeIcon} ${_esc(b.label)}</div>
+            <div class="rv-hdr-value">${_esc(b.value || "\u2014")}</div>
+          </div>`;
+        }
       }
     }
 
     grid.innerHTML = html;
 
-    // Warnings (aggregate)
+    // Warnings (aggregate, grouped by IBAN)
     if(warningsEl){
       let allWarnings = [];
       for(const hdr of St.headers){
@@ -818,7 +901,15 @@
         <th class="rv-col-class rv-col-frozen-r">Klasyfikacja</th>
       </tr></thead><tbody>`;
 
-    let lastStmtId = null;
+    let lastIban = null;
+
+    // Accent palette (matching aml.js ACCOUNT_PALETTE)
+    const PALETTE = ["#1f5aa6","#b91c1c","#15803d","#7c3aed","#d97706","#0891b2","#be185d","#65a30d"];
+    // Build IBAN→index map for accent colors
+    const ibanIdxMap = {};
+    if(St.ibanGroups){
+      St.ibanGroups.forEach((g, i) => { ibanIdxMap[g.iban] = i; });
+    }
 
     // Auto-classification pass: set initial classification from category
     // only for transactions that haven't been manually classified yet
@@ -841,12 +932,15 @@
     }
 
     for(const tx of transactions){
-      // Period separator row in batch mode
-      if(St.batchMode && tx._statement_id && tx._statement_id !== lastStmtId){
-        lastStmtId = tx._statement_id;
-        const label = tx._statement_label || "Wyciag";
+      // IBAN separator row in batch mode (group by IBAN, not by statement)
+      const txIban = tx._iban || tx._statement_id || "";
+      if(St.batchMode && St.ibanGroups && St.ibanGroups.length > 1 && txIban && txIban !== lastIban){
+        lastIban = txIban;
+        const label = tx._iban_label || tx._statement_label || "Wyci\u0105g";
+        const ibanIdx = ibanIdxMap[txIban] ?? 0;
+        const accentColor = PALETTE[ibanIdx % PALETTE.length];
         html += `<tr class="rv-period-separator">
-          <td colspan="${colCount}" style="padding:8px 10px;background:var(--bg-alt,#f0f4f8);border-left:4px solid var(--primary,#3b82f6);font-weight:600;font-size:13px;color:var(--primary,#3b82f6)">\uD83D\uDCC4 ${_esc(label)}</td>
+          <td colspan="${colCount}" style="padding:8px 10px;background:var(--bg-alt,#f0f4f8);border-left:4px solid ${accentColor};font-weight:600;font-size:13px;color:${accentColor}">\uD83C\uDFE6 ${_esc(label)}</td>
         </tr>`;
       }
 

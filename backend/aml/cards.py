@@ -54,6 +54,10 @@ _CARD_EVIDENCE_KEYWORDS = (
     "nr karty", "numer karty", "karta nr",
     "card payment", "wypłata z bankomatu", "wyplata z bankomatu",
     "atm", "bankomat",
+    "zakup przy użyciu karty", "zakup przy uzyciu karty",
+    "zakup kartą", "zakup karta",
+    "operacja kartą", "operacja karta",
+    "transakcja kartą", "transakcja karta",
 )
 
 # ============================================================
@@ -156,19 +160,28 @@ def detect_cards(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         is_card_certain = channel in ("CARD", "KARTA") or bank_cat in ("TR.KART",)
 
         if not is_card_certain:
-            # Secondary: keyword hint — only accept if a card number is found
+            # Secondary: keyword hint
             title = (tx.get("title") or "").lower()
             raw = (tx.get("raw_text") or "").lower()
-            has_hint = any(kw in f"{title} {raw}" for kw in ("kartą", "karta", "kart ", "card"))
+            bank_cat_low = (tx.get("bank_category") or "").lower()
+            combined = f"{title} {raw} {bank_cat_low}"
+            has_hint = any(kw in combined for kw in ("kartą", "karta", "kart ", "card"))
             if not has_hint:
                 continue
-            # Keyword-matched: require extractable card number (avoid false positives)
+            # Try to extract card number first
             card_num = _extract_card_number(tx)
-            if not card_num:
+            if card_num:
+                card_txs[card_num].append(tx)
+                if card_num not in card_raw:
+                    card_raw[card_num] = _format_masked(card_num)
                 continue
-            card_txs[card_num].append(tx)
-            if card_num not in card_raw:
-                card_raw[card_num] = _format_masked(card_num)
+            # No card number found — check for strong card evidence keywords
+            has_card_evidence = any(kw in combined for kw in _CARD_EVIDENCE_KEYWORDS)
+            if has_card_evidence:
+                # Group under unknown card
+                card_txs["****"].append(tx)
+                if "****" not in card_raw:
+                    card_raw["****"] = _format_masked("****")
             continue
 
         # Try to extract card number
@@ -219,14 +232,15 @@ def detect_cards(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         else:
             del card_txs["****"]
 
-    # Drop "****" card entirely if it has very few transactions
+    # Drop "****" card only if it has very few transactions
     # and mostly credits (likely false positives)
     if "****" in card_txs:
         unknown_txs = card_txs["****"]
         credits = sum(1 for t in unknown_txs if (t.get("direction") or "").upper() == "CREDIT")
         debits = len(unknown_txs) - credits
-        if debits <= 2 or credits > debits:
-            # Mostly credits or very few debits → likely not a real card
+        # Keep if there are at least 3 debit transactions or significant count
+        if debits <= 1 and credits > debits and len(unknown_txs) < 3:
+            # Mostly credits and very few transactions → likely not a real card
             del card_txs["****"]
 
     if not card_txs:

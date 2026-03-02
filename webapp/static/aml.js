@@ -462,7 +462,10 @@
     const _t = typeof t === "function" ? t : (k => k);
     return cardsList.map(c => {
       const brand = _esc(c.brand || "");
-      const masked = _esc(c.card_masked || c.card_id || "****");
+      const rawMasked = c.card_masked || c.card_id || "****";
+      // Show friendly message when card number is unknown
+      const isUnknownCard = rawMasked === "**** **** **** ****" || rawMasked === "****" || (c.card_id === "****");
+      const masked = isUnknownCard ? "Brak informacji o numerze karty" : _esc(rawMasked);
       const firstDate = _esc(c.first_date || "");
       const lastDate = _esc(c.last_date || "");
       const last4 = _esc(c.last_four || "");
@@ -509,7 +512,7 @@
           <div class="aml-card-bank">${_esc(bankName)}</div>
           ${brandDisplay ? `<div class="aml-card-brand">${brandDisplay}</div>` : ""}
         </div>
-        <div class="aml-card-number">${masked}</div>
+        <div class="aml-card-number"${isUnknownCard ? ' style="font-size:12px;opacity:0.7;letter-spacing:0"' : ''}>${masked}</div>
         <div class="aml-card-dates">
           <span>OD ${firstDate}</span>
           <span>DO ${lastDate}</span>
@@ -3503,6 +3506,7 @@
       }
 
       // ---- 1. BALANCE TIMELINE (multi-dataset line chart) ----
+      // Collect per-statement timelines WITH IBAN for grouping
       const allTimelines = [];
       let allLabelsSet = new Set();
 
@@ -3531,6 +3535,7 @@
           label: label,
           txMeta: bt.tx_meta || null,
           firstDate: bt.labels[0] || "",
+          iban: acctNum,
         });
       }
 
@@ -3589,31 +3594,70 @@
           _multiMeta: mergedTxMeta,
         };
 
-        // Build per-account chart data for stacked rendering
-        mergedTimeline._perAccountCharts = allTimelines.map((tl, ti) => {
-          const ci = ti % palette.length;
-          const labelMap = {};
-          for(let j = 0; j < tl.labels.length; j++) labelMap[tl.labels[j]] = j;
-          const aData = allLabels.map(lbl => lbl in labelMap ? tl.data[labelMap[lbl]] : null);
-          const aMeta = allLabels.map(lbl => lbl in labelMap && tl.txMeta ? tl.txMeta[labelMap[lbl]] : null);
-          return {
-            type: "line",
-            labels: allLabels,
-            accountLabel: tl.label,
-            accountIndex: ti,
-            color: palette[ci],
-            bgColor: bgPalette[ci],
-            datasets: [{
-              label: tl.label,
-              data: aData,
-              borderColor: palette[ci],
-              backgroundColor: bgPalette[ci],
-              fill: true, tension: 0.2, pointRadius: 2, spanGaps: true, borderWidth: 2,
-            }],
-            tx_meta: aMeta,
-            _transferMarkers: [],
-          };
-        });
+        // Build per-account chart data for stacked rendering.
+        // Group timelines by IBAN so each distinct account = one chart.
+        {
+          const tlByIban = {};
+          for(const tl of allTimelines){
+            const iban = tl.iban || "unknown";
+            if(!tlByIban[iban]) tlByIban[iban] = [];
+            tlByIban[iban].push(tl);
+          }
+
+          // Use same IBAN order as _perAccountDetails
+          const ibanOrder = St._perAccountDetails
+            ? St._perAccountDetails.map(d => (d.statement || {}).account_number || "unknown")
+            : Object.keys(tlByIban);
+
+          mergedTimeline._perAccountCharts = ibanOrder.map((iban, ai) => {
+            const group = tlByIban[iban] || [];
+            if(!group.length) return null;
+            const ci = ai % palette.length;
+
+            // Merge all monthly timelines of this IBAN into one combined dataset
+            const combinedLabelMap = {};
+            const combinedMetaMap = {};
+            for(const tl of group){
+              for(let j = 0; j < tl.labels.length; j++){
+                const lbl = tl.labels[j];
+                combinedLabelMap[lbl] = tl.data[j];
+                if(tl.txMeta && tl.txMeta[j]) combinedMetaMap[lbl] = tl.txMeta[j];
+              }
+            }
+
+            const aData = allLabels.map(lbl => lbl in combinedLabelMap ? combinedLabelMap[lbl] : null);
+            const aMeta = allLabels.map(lbl => combinedMetaMap[lbl] || null);
+
+            // Build label from _perAccountDetails info
+            const pad = St._perAccountDetails ? St._perAccountDetails[ai] : null;
+            const padStmt = pad ? (pad.statement || {}) : {};
+            const bankName = padStmt.bank_name || "";
+            const shortIban = iban.length > 12 ? "\u2026" + iban.slice(-8) : iban;
+            const periodFrom = padStmt.period_from || "";
+            const periodTo = padStmt.period_to || "";
+            const periodStr = [periodFrom, periodTo].filter(Boolean).join(" \u2014 ");
+            const accountLabel = (bankName ? bankName + " " : "") + shortIban + (periodStr ? " (" + periodStr + ")" : "");
+
+            return {
+              type: "line",
+              labels: allLabels,
+              accountLabel: accountLabel,
+              accountIndex: ai,
+              iban: iban,
+              color: palette[ci],
+              bgColor: bgPalette[ci],
+              datasets: [{
+                label: accountLabel,
+                data: aData,
+                borderColor: palette[ci],
+                backgroundColor: bgPalette[ci],
+                fill: true, tension: 0.2, pointRadius: 2, spanGaps: true, borderWidth: 2,
+              }],
+              tx_meta: aMeta,
+              _transferMarkers: [],
+            };
+          }).filter(Boolean);
+        }
       }
 
       // ---- 2. CATEGORY DISTRIBUTION (aggregate amounts per category) ----
