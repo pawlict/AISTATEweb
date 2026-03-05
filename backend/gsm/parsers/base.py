@@ -161,6 +161,8 @@ TYPE_LABEL_MAP: Dict[str, str] = {
     "wychodzące głosowe": "CALL_OUT",
     "przychodzące głosowe": "CALL_IN",
     "połączenie telefoniczne": "CALL_OUT",
+    "połączenie głosowe": "CALL_OUT",
+    "próba połączenia": "CALL_OUT",
     "poczta głosowa": "VOICEMAIL",
     "voicemail": "VOICEMAIL",
     # SMS
