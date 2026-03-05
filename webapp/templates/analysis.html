@@ -72,6 +72,13 @@
         </div>
       </div>
     </div>
+
+    <!-- GSM toolbar items (hidden by default, shown when GSM tab active) -->
+    <div class="analysis-toolbar-right" id="gsm_toolbar_items" style="display:none">
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="gsm_add_file_toolbar_btn" title="Wczytaj biling GSM (XLSX)"><img src="/static/icons/pliki/file_upload.svg" alt="Wczytaj XLSX" draggable="false"></button>
+      </div>
+    </div>
   </div>
 
   <!-- Tab bar -->
@@ -81,6 +88,9 @@
     </button>
     <button class="analysis-tab" data-tab="aml" id="tab_aml">
       <span class="analysis-tab-icon"><i data-icon="search" data-size="14"></i></span> Analiza AML
+    </button>
+    <button class="analysis-tab" data-tab="gsm" id="tab_gsm">
+      <span class="analysis-tab-icon"><i data-icon="phone" data-size="14"></i></span> Analiza GSM
     </button>
   </div>
 
@@ -445,9 +455,73 @@
 
   </div><!-- /aml_content -->
 
+  <!-- GSM Analysis content -->
+  <div class="analysis-tab-content" id="gsm_content" style="display:none">
+
+    <!-- Progress bar -->
+    <div class="an-progress" id="gsm_progress" style="display:none">
+      <div class="small">Status: <b id="gsm_status">—</b></div>
+      <div class="progress"><div id="gsm_bar"></div></div>
+    </div>
+
+    <!-- Results -->
+    <div id="gsm_results" style="display:none">
+
+      <!-- Subscriber info -->
+      <div class="card">
+        <div class="h2">Informacje o bilingu</div>
+        <div class="gsm-info-grid" id="gsm_info_grid"></div>
+      </div>
+
+      <!-- Summary stats -->
+      <div class="card">
+        <div class="h2">Podsumowanie</div>
+        <div class="gsm-summary-grid" id="gsm_summary_grid"></div>
+      </div>
+
+      <!-- Analysis -->
+      <div class="card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Analiza</div>
+        </div>
+        <div id="gsm_analysis_body"></div>
+      </div>
+
+      <!-- Records table -->
+      <div class="card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Rekordy</div>
+          <span class="small muted" id="gsm_records_count"></span>
+        </div>
+        <div id="gsm_records_body" style="max-height:500px;overflow:auto"></div>
+      </div>
+
+      <!-- Warnings -->
+      <div class="card" style="display:none">
+        <div class="h2">Ostrzeżenia parsera</div>
+        <div id="gsm_warnings_body"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="analysis-actions">
+        <button class="btn secondary" id="gsm_new_analysis">Nowa analiza</button>
+      </div>
+    </div>
+
+    <!-- Empty state (before upload) -->
+    <div id="gsm_empty_state" class="card" style="text-align:center;padding:60px 20px">
+      <div style="font-size:48px;margin-bottom:16px;opacity:0.3"><i data-icon="phone" data-size="48"></i></div>
+      <div class="h2" style="margin-bottom:8px">Analiza bilingu GSM</div>
+      <div class="small muted" style="margin-bottom:20px">Wczytaj plik XLSX z bilingiem operatora (T-Mobile, Orange, Play, Plus).</div>
+      <button class="btn" id="gsm_upload_empty_btn">Wczytaj plik XLSX</button>
+    </div>
+
+  </div><!-- /gsm_content -->
+
   <!-- Hidden file inputs -->
   <input type="file" id="docs_file_input" style="display:none" multiple>
   <input type="file" id="aml_file_input" accept=".pdf" multiple style="display:none">
+  <input type="file" id="gsm_file_input" accept=".xlsx,.xls" style="display:none">
   <input type="file" id="prompt_import_input" style="display:none" accept="application/json">
 
   <!-- Prompt dialog -->
@@ -495,6 +569,7 @@
 <script src="/static/analysis.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/aml.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/review.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/gsm.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script>
 (async()=>{
   try{
@@ -502,12 +577,14 @@
     const tabs = document.querySelectorAll('.analysis-tab[data-tab]');
     const llmContent = document.getElementById('llm_content');
     const amlContent = document.getElementById('aml_content');
+    const gsmContent = document.getElementById('gsm_content');
     const toolbar = document.getElementById('analysis_toolbar');
     const sidebarToggle = document.getElementById('analysis_sidebar_toggle');
 
-    const allContents = [llmContent, amlContent];
+    const allContents = [llmContent, amlContent, gsmContent];
     const llmToolbar = ['analysis_models','analysis_report_formats','an_generate_btn','an_report_save_btn'];
     const amlToolbarEl = document.getElementById('aml_toolbar_items');
+    const gsmToolbarEl = document.getElementById('gsm_toolbar_items');
 
     tabs.forEach(tab => {
       tab.addEventListener('click', async () => {
@@ -515,14 +592,15 @@
         tab.classList.add('active');
         const which = tab.getAttribute('data-tab');
 
-        // Hide all content
+        // Hide all content and extra toolbars
         allContents.forEach(c => { if(c) c.style.display = 'none'; });
+        if(amlToolbarEl) amlToolbarEl.style.display = 'none';
+        if(gsmToolbarEl) gsmToolbarEl.style.display = 'none';
 
         if(which === 'llm'){
           llmContent.style.display = '';
           llmToolbar.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = ''; });
           if(sidebarToggle) sidebarToggle.style.display = '';
-          if(amlToolbarEl) amlToolbarEl.style.display = 'none';
         } else {
           llmToolbar.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
           if(sidebarToggle) sidebarToggle.style.display = 'none';
@@ -532,6 +610,12 @@
             if(amlToolbarEl) amlToolbarEl.style.display = '';
             if(window.AmlManager && !window.AmlManager._initialized){
               await AmlManager.init();
+            }
+          } else if(which === 'gsm'){
+            gsmContent.style.display = '';
+            if(gsmToolbarEl) gsmToolbarEl.style.display = '';
+            if(window.GsmManager && !window.GsmManager._initialized){
+              await GsmManager.init();
             }
           }
         }
