@@ -12,6 +12,7 @@ Real T-Mobile billing column layout (from actual billing XLSX):
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from .base import (
@@ -120,6 +121,55 @@ class TMobileParser(BillingParser):
         r"billing",
     ]
 
+    # Metadata key patterns found in T-Mobile header rows before column headers.
+    # Format: "Key: Value" in individual cells or across cells in a row.
+    _META_PATTERNS: Dict[str, str] = {
+        r"identyfikator\s*zlecenia": "order_id",
+        r"nazwa\s*zapytania": "query_name",
+        r"sygnatura": "signature",
+        r"data\s*od": "period_from",
+        r"data\s*do": "period_to",
+        r"msisdn": "msisdn",
+        r"dane\s*abonenta": "subscriber_data",
+    }
+
+    @classmethod
+    def _parse_metadata_rows(
+        cls,
+        rows: List[List[Any]],
+        header_idx: int,
+    ) -> Dict[str, str]:
+        """Extract metadata from rows above the column header.
+
+        T-Mobile billing files have a metadata block before the data columns:
+            Identyfikator zlecenia: 10222118
+            Nazwa zapytania: 01. Połączenia z lokalizacją dla MSISDN
+            Sygnatura: 6922485-25-1_32
+            Data od: 2023-10-14 12:00:00
+            Data do: 2023-11-13 23:59:59
+            MSISDN: 48697890632
+            Dane abonenta: 0
+        """
+        meta: Dict[str, str] = {}
+        for row in rows[:header_idx]:
+            # Join all non-empty cells in the row into one text line
+            text = " ".join(
+                str(c).strip() for c in row if c is not None and str(c).strip()
+            )
+            if not text:
+                continue
+            for pattern, key in cls._META_PATTERNS.items():
+                if key in meta:
+                    continue
+                m = re.search(
+                    pattern + r"\s*[:\-]\s*(.+)",
+                    text,
+                    re.I,
+                )
+                if m:
+                    meta[key] = m.group(1).strip()
+        return meta
+
     def parse_sheet(
         self,
         rows: List[List[Any]],
@@ -151,6 +201,9 @@ class TMobileParser(BillingParser):
             )
             return result
 
+        # Parse metadata header (rows above column headers)
+        meta = self._parse_metadata_rows(rows, header_idx)
+
         header_row = rows[header_idx]
 
         # Build column map with T-Mobile specific patterns
@@ -163,8 +216,13 @@ class TMobileParser(BillingParser):
         mapped = list(col_map.keys())
         result.warnings.append(f"T-Mobile parser — kolumny: {mapped}")
 
-        # Extract subscriber info from first data row's MSISDN column
+        # Build subscriber info from metadata header + first data row
         subscriber = SubscriberInfo(operator=self.OPERATOR_NAME)
+        if meta.get("msisdn"):
+            subscriber.msisdn = self.normalize_phone(meta["msisdn"])
+        subscriber.extra = {
+            k: v for k, v in meta.items() if k != "msisdn"
+        }
 
         # Parse data rows
         for row_idx, row in enumerate(rows[header_idx + 1:], start=header_idx + 2):
@@ -248,7 +306,8 @@ class TMobileParser(BillingParser):
             )
             result.records.append(record)
 
-            # Grab subscriber MSISDN from first data row
+            # Grab subscriber MSISDN/IMSI/IMEI from first data row if not
+            # already populated from metadata header
             if not subscriber.msisdn and msisdn:
                 subscriber.msisdn = self.normalize_phone(msisdn)
             if not subscriber.imsi:
@@ -262,6 +321,17 @@ class TMobileParser(BillingParser):
 
         result.subscriber = subscriber
         result.summary = compute_summary(result.records)
+
+        # Override summary period with metadata if available
+        if meta.get("period_from"):
+            parsed_from = self.parse_datetime(meta["period_from"])
+            if parsed_from:
+                result.summary.period_from = parsed_from.split(" ")[0]
+        if meta.get("period_to"):
+            parsed_to = self.parse_datetime(meta["period_to"])
+            if parsed_to:
+                result.summary.period_to = parsed_to.split(" ")[0]
+
         return result
 
     @staticmethod
@@ -286,6 +356,9 @@ class TMobileParser(BillingParser):
             return "MMS_IN" if is_in else "MMS_OUT"
         if any(k in s for k in ("internet", "dane", "data", "gprs", "lte", "transmisja")):
             return "DATA"
+        if any(k in s for k in ("próba", "proba", "attempt")):
+            # "Próba połączenia" — call attempt (failed/unanswered call)
+            return "CALL_IN" if is_in else "CALL_OUT"
         if any(k in s for k in ("ussd",)):
             return "USSD"
         if any(k in s for k in ("poczta głosowa", "voicemail", "poczta glosowa")):
