@@ -59,6 +59,7 @@ from webapp.routers import chat as chat_router
 from webapp.routers import admin as admin_router
 from webapp.routers import tasks as tasks_router
 from webapp.routers import aml as aml_router
+from webapp.routers import gsm as gsm_router
 from webapp.routers import messages as messages_router
 from webapp.routers import workspaces as workspaces_router
 
@@ -1815,6 +1816,9 @@ app.include_router(tasks_router.router)
 
 # AML/DB router (SQL-backed project management + AML analysis)
 app.include_router(aml_router.router)
+
+# GSM billing analysis router
+app.include_router(gsm_router.router)
 
 # Workspaces router (project workspaces, subprojects, collaboration)
 workspaces_router.init(workspace_store=WORKSPACE_STORE, user_store=USER_STORE)
