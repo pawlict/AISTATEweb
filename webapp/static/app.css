@@ -3478,6 +3478,7 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-anomaly-high{border-color:#dc2626;background:#fef2f2}
 .gsm-anomaly-medium{border-color:#f59e0b;background:#fffbeb}
 .gsm-anomaly-low{border-color:#3b82f6;background:#eff6ff}
+.gsm-device-badge{display:inline-block;background:#e0e7ff;color:#3730a3;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600;margin-left:6px}
 .gsm-stats-row{display:flex;flex-wrap:wrap;gap:16px;font-size:13px}
 .gsm-warning{padding:6px 10px;border-radius:6px;margin-bottom:4px;font-size:12px;background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e}
 .gsm-log-line{padding:2px 6px;border-radius:4px;margin-bottom:2px}

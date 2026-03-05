@@ -148,12 +148,18 @@
     const sub = data.subscriber || {};
     const meta = sub.extra || {};
 
+    const imeiVal = sub.imei
+      ? (sub.device && sub.device.display_name
+          ? `${sub.imei} <span class="gsm-device-badge">${sub.device.display_name}</span>`
+          : sub.imei)
+      : "—";
+
     const rows = [
       ["Plik", data.filename],
       ["Operator", data.operator],
       ["MSISDN", sub.msisdn || "—"],
       ["IMSI", sub.imsi || "—"],
-      ["IMEI", sub.imei || "—"],
+      ["IMEI", imeiVal],
     ];
     if (meta.signature) rows.push(["Sygnatura", meta.signature]);
     if (meta.order_id) rows.push(["Nr zlecenia", meta.order_id]);
@@ -255,11 +261,34 @@
       html += `</div></div>`;
     }
 
+    // Devices (IMEI identification)
+    if (a.devices && a.devices.length) {
+      html += `<div class="gsm-section"><div class="h3">Urządzenia</div><table class="gsm-table"><thead><tr>
+        <th>IMEI</th><th>Urządzenie</th><th>Typ</th><th>Rekordy</th><th>Okres</th>
+      </tr></thead><tbody>`;
+      for (const d of a.devices) {
+        const name = d.display_name || '<span class="muted">nieznane</span>';
+        const typeMap = { smartphone: "Smartfon", tablet: "Tablet", modem: "Modem", feature_phone: "Telefon", smartwatch: "Smartwatch" };
+        const typeName = typeMap[d.type] || d.type || "—";
+        const period = d.first_seen ? (d.first_seen === d.last_seen ? d.first_seen : `${d.first_seen} – ${d.last_seen}`) : "—";
+        html += `<tr>
+          <td><code>${d.imei || "?"}</code></td>
+          <td>${d.known ? `<strong>${name}</strong>` : name}</td>
+          <td>${typeName}</td>
+          <td>${_fmt(d.record_count)}</td>
+          <td>${period}</td>
+        </tr>`;
+      }
+      html += "</tbody></table></div>";
+    }
+
     // IMEI changes
     if (a.imei_changes && a.imei_changes.length) {
       html += `<div class="gsm-section"><div class="h3">Zmiany IMEI</div>`;
       for (const ch of a.imei_changes) {
-        html += `<div class="gsm-anomaly gsm-anomaly-medium">${ch.date || ""}: ${ch.old_imei || "?"} → ${ch.new_imei || "?"}</div>`;
+        const oldDev = ch.old_device ? ` (${ch.old_device})` : "";
+        const newDev = ch.new_device ? ` (${ch.new_device})` : "";
+        html += `<div class="gsm-anomaly gsm-anomaly-medium">${ch.date || ""}: ${ch.old_imei || "?"}${oldDev} → ${ch.new_imei || "?"}${newDev}</div>`;
       }
       html += "</div>";
     }
