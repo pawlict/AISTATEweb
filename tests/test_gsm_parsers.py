@@ -61,6 +61,88 @@ def _make_billing_rows(
     return rows
 
 
+def _make_tmobile_billing_rows() -> List[List[Any]]:
+    """Build synthetic T-Mobile billing rows matching real column layout.
+
+    Real T-Mobile columns:
+    MSISDN | IMEI | IMSI | Data i godz. | Rozmówca | Nr powiązany |
+    Długość | Kierunek | Dane wysłane | Usługa |
+    System obsługujacy połaczenie | Publiczne Ip |
+    BTS X | BTS Y | CI | LAC | Azymut | Wiązka |
+    BTS R | BTS kod | BTS Miasto | BTS Ulica | Kraj | Operator
+    """
+    rows: List[List[Any]] = []
+
+    # Header row (24 columns)
+    rows.append([
+        "MSISDN", "IMEI", "IMSI", "Data i godz.", "Rozmówca", "Nr powiązany",
+        "Długość", "Kierunek", "Dane wysłane", "Usługa",
+        "System obsługujacy połaczenie", "Publiczne Ip",
+        "BTS X", "BTS Y", "CI", "LAC", "Azymut", "Wiązka",
+        "BTS R", "BTS kod", "BTS Miasto", "BTS Ulica", "Kraj", "Operator",
+    ])
+
+    # Data rows
+    rows.append([
+        "501234567", "351234567890123", "260010012345678",
+        "01.03.2026 08:15:30", "601234567", "",
+        "02:35", "wychodzące", "", "Rozmowa telefoniczna",
+        "GSM", "",
+        "21.0123", "52.2345", "12345", "4567", "120", "A",
+        "R1", "BTS001", "Warszawa", "ul. Testowa 1", "Polska", "Orange",
+    ])
+    rows.append([
+        "501234567", "351234567890123", "260010012345678",
+        "01.03.2026 09:00:00", "602345678", "",
+        "", "wychodzące", "", "SMS",
+        "GSM", "",
+        "21.0123", "52.2345", "12345", "4567", "120", "A",
+        "R1", "BTS001", "Warszawa", "ul. Testowa 1", "Polska", "Play",
+    ])
+    rows.append([
+        "501234567", "351234567890123", "260010012345678",
+        "01.03.2026 12:30:45", "603456789", "",
+        "05:12", "przychodzące", "", "Rozmowa telefoniczna",
+        "GSM", "",
+        "20.5678", "50.1234", "23456", "5678", "240", "B",
+        "R2", "BTS002", "Kraków", "ul. Inna 5", "Polska", "T-Mobile",
+    ])
+    rows.append([
+        "501234567", "351234567890123", "260010012345678",
+        "02.03.2026 14:20:00", "", "",
+        "", "", "1024", "Internet",
+        "LTE", "10.0.0.1",
+        "20.5678", "50.1234", "23456", "5678", "240", "B",
+        "R2", "BTS002", "Kraków", "ul. Inna 5", "Polska", "",
+    ])
+    rows.append([
+        "501234567", "351234567890123", "260010012345678",
+        "02.03.2026 18:45:10", "604567890", "",
+        "15:00", "wychodzące", "", "Rozmowa telefoniczna",
+        "GSM", "",
+        "21.0123", "52.2345", "12346", "4567", "60", "C",
+        "R1", "BTS003", "Warszawa", "ul. Nowa 3", "Polska", "Plus",
+    ])
+    rows.append([
+        "501234567", "351234567890123", "260010012345678",
+        "03.03.2026 23:15:00", "605678901", "",
+        "", "wychodzące", "", "SMS",
+        "GSM", "",
+        "18.6789", "54.3456", "34567", "6789", "0", "A",
+        "R3", "BTS004", "Gdańsk", "ul. Morska 10", "Polska", "Orange",
+    ])
+    rows.append([
+        "501234567", "351234567890123", "260010012345678",
+        "03.03.2026 02:30:00", "606789012", "",
+        "01:05", "wychodzące", "", "Rozmowa telefoniczna",
+        "GSM", "",
+        "18.6789", "54.3456", "34567", "6789", "0", "A",
+        "R3", "BTS004", "Gdańsk", "ul. Morska 10", "Polska", "Play",
+    ])
+
+    return rows
+
+
 def _make_subscriber_rows_tabular() -> List[List[Any]]:
     """Build synthetic subscriber ID file rows (tabular format)."""
     return [
@@ -307,21 +389,83 @@ class TestGenericParser:
 # ---------------------------------------------------------------------------
 
 class TestTMobileParser:
-    def test_parse_synthetic(self):
+    def test_parse_real_format(self):
+        """Test T-Mobile parser with real column layout."""
         parser = TMobileParser()
-        rows = _make_billing_rows("T-Mobile")
+        rows = _make_tmobile_billing_rows()
         result = parser.parse_sheet(rows, "T-Mobile Biling")
 
         assert result.operator_id == "tmobile"
         assert len(result.records) == 7
 
-    def test_subscriber_extraction(self):
+        # Check first record (outgoing call)
+        r0 = result.records[0]
+        assert r0.datetime == "2026-03-01 08:15:30"
+        assert r0.record_type == "CALL_OUT"
+        assert r0.duration_seconds == 155  # 02:35
+        assert r0.caller == "+48501234567"
+        assert r0.callee == "+48601234567"
+        assert r0.network == "Orange"
+        assert "Warszawa" in r0.location
+
+        # Check SMS record
+        r1 = result.records[1]
+        assert r1.record_type == "SMS_OUT"
+
+        # Check incoming call
+        r2 = result.records[2]
+        assert r2.record_type == "CALL_IN"
+        assert r2.duration_seconds == 312  # 05:12
+
+        # Check data record
+        r3 = result.records[3]
+        assert r3.record_type == "DATA"
+        assert r3.data_volume_kb == 1024.0
+
+        # Check BTS extra fields
+        assert r0.extra.get("bts_x") == "21.0123"
+        assert r0.extra.get("azimuth") == "120"
+
+    def test_subscriber_from_data_rows(self):
+        """T-Mobile parser extracts subscriber MSISDN from data rows."""
         parser = TMobileParser()
-        rows = _make_billing_rows("T-Mobile")
+        rows = _make_tmobile_billing_rows()
         result = parser.parse_sheet(rows, "Biling")
 
         assert result.subscriber.msisdn == "+48501234567"
-        assert "kowalski" in result.subscriber.owner_name.lower()
+        assert result.subscriber.imsi == "260010012345678"
+        assert result.subscriber.imei == "351234567890123"
+
+    def test_detect_tmobile_by_headers(self):
+        """T-Mobile detection by distinctive column names."""
+        rows = _make_tmobile_billing_rows()
+        headers = [str(c).strip().lower() for c in rows[0] if c is not None]
+        sheet_names = ["biling"]
+        parser_cls, score = detect_operator(headers, sheet_names)
+        assert parser_cls is not None
+        assert parser_cls.OPERATOR_ID == "tmobile"
+
+    def test_roaming_detection(self):
+        """Records with non-Polish country should be marked as roaming."""
+        parser = TMobileParser()
+        rows = _make_tmobile_billing_rows()
+        # Change last row's country to Germany
+        rows[-1][22] = "Niemcy"
+        result = parser.parse_sheet(rows, "Biling")
+        roaming_records = [r for r in result.records if r.roaming]
+        assert len(roaming_records) == 1
+        assert roaming_records[0].roaming_country == "Niemcy"
+
+    def test_record_type_classification(self):
+        """Test T-Mobile specific record type classification."""
+        classify = TMobileParser._classify_tmobile_record
+        assert classify("wychodzące", "Rozmowa telefoniczna") == "CALL_OUT"
+        assert classify("przychodzące", "Rozmowa telefoniczna") == "CALL_IN"
+        assert classify("wychodzące", "SMS") == "SMS_OUT"
+        assert classify("przychodzące", "SMS") == "SMS_IN"
+        assert classify("", "Internet") == "DATA"
+        assert classify("wychodzące", "MMS") == "MMS_OUT"
+        assert classify("przekierowanie", "Rozmowa telefoniczna") == "CALL_FORWARDED"
 
 
 # ---------------------------------------------------------------------------
