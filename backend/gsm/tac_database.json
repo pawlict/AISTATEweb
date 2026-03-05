@@ -4,173 +4,3579 @@
     "format": "TAC → {brand, model, type}",
     "last_updated": "2026-03-05"
   },
-
-  "35332508": {"brand": "Apple", "model": "iPhone 6", "type": "smartphone"},
-  "35391508": {"brand": "Apple", "model": "iPhone 6 Plus", "type": "smartphone"},
-  "35332509": {"brand": "Apple", "model": "iPhone 6s", "type": "smartphone"},
-  "35693208": {"brand": "Apple", "model": "iPhone 6s Plus", "type": "smartphone"},
-  "35880009": {"brand": "Apple", "model": "iPhone 7", "type": "smartphone"},
-  "35407510": {"brand": "Apple", "model": "iPhone 7 Plus", "type": "smartphone"},
-  "35325610": {"brand": "Apple", "model": "iPhone 8", "type": "smartphone"},
-  "35402210": {"brand": "Apple", "model": "iPhone 8 Plus", "type": "smartphone"},
-  "35316110": {"brand": "Apple", "model": "iPhone X", "type": "smartphone"},
-  "35320010": {"brand": "Apple", "model": "iPhone XR", "type": "smartphone"},
-  "35397610": {"brand": "Apple", "model": "iPhone XS", "type": "smartphone"},
-  "35397710": {"brand": "Apple", "model": "iPhone XS Max", "type": "smartphone"},
-  "35395611": {"brand": "Apple", "model": "iPhone 11", "type": "smartphone"},
-  "35344211": {"brand": "Apple", "model": "iPhone 11 Pro", "type": "smartphone"},
-  "35368011": {"brand": "Apple", "model": "iPhone 11 Pro Max", "type": "smartphone"},
-  "35363711": {"brand": "Apple", "model": "iPhone SE (2nd gen)", "type": "smartphone"},
-  "35271412": {"brand": "Apple", "model": "iPhone 12 mini", "type": "smartphone"},
-  "35433112": {"brand": "Apple", "model": "iPhone 12", "type": "smartphone"},
-  "35258812": {"brand": "Apple", "model": "iPhone 12 Pro", "type": "smartphone"},
-  "35238212": {"brand": "Apple", "model": "iPhone 12 Pro Max", "type": "smartphone"},
-  "35366313": {"brand": "Apple", "model": "iPhone 13 mini", "type": "smartphone"},
-  "35331613": {"brand": "Apple", "model": "iPhone 13", "type": "smartphone"},
-  "35233513": {"brand": "Apple", "model": "iPhone 13 Pro", "type": "smartphone"},
-  "35388113": {"brand": "Apple", "model": "iPhone 13 Pro Max", "type": "smartphone"},
-  "35398513": {"brand": "Apple", "model": "iPhone SE (3rd gen)", "type": "smartphone"},
-  "35423614": {"brand": "Apple", "model": "iPhone 14", "type": "smartphone"},
-  "35434214": {"brand": "Apple", "model": "iPhone 14 Plus", "type": "smartphone"},
-  "35403914": {"brand": "Apple", "model": "iPhone 14 Pro", "type": "smartphone"},
-  "35391514": {"brand": "Apple", "model": "iPhone 14 Pro Max", "type": "smartphone"},
-  "35445715": {"brand": "Apple", "model": "iPhone 15", "type": "smartphone"},
-  "35447915": {"brand": "Apple", "model": "iPhone 15 Plus", "type": "smartphone"},
-  "35449115": {"brand": "Apple", "model": "iPhone 15 Pro", "type": "smartphone"},
-  "35449215": {"brand": "Apple", "model": "iPhone 15 Pro Max", "type": "smartphone"},
-  "35450316": {"brand": "Apple", "model": "iPhone 16", "type": "smartphone"},
-  "35450416": {"brand": "Apple", "model": "iPhone 16 Plus", "type": "smartphone"},
-  "35450516": {"brand": "Apple", "model": "iPhone 16 Pro", "type": "smartphone"},
-  "35450616": {"brand": "Apple", "model": "iPhone 16 Pro Max", "type": "smartphone"},
-
-  "35260910": {"brand": "Samsung", "model": "Galaxy S10", "type": "smartphone"},
-  "35260911": {"brand": "Samsung", "model": "Galaxy S10+", "type": "smartphone"},
-  "35260912": {"brand": "Samsung", "model": "Galaxy S10e", "type": "smartphone"},
-  "35679520": {"brand": "Samsung", "model": "Galaxy S20", "type": "smartphone"},
-  "35219320": {"brand": "Samsung", "model": "Galaxy S20+", "type": "smartphone"},
-  "35219420": {"brand": "Samsung", "model": "Galaxy S20 Ultra", "type": "smartphone"},
-  "35570321": {"brand": "Samsung", "model": "Galaxy S21", "type": "smartphone"},
-  "35432221": {"brand": "Samsung", "model": "Galaxy S21+", "type": "smartphone"},
-  "35256821": {"brand": "Samsung", "model": "Galaxy S21 Ultra", "type": "smartphone"},
-  "35284222": {"brand": "Samsung", "model": "Galaxy S22", "type": "smartphone"},
-  "35436822": {"brand": "Samsung", "model": "Galaxy S22+", "type": "smartphone"},
-  "35240722": {"brand": "Samsung", "model": "Galaxy S22 Ultra", "type": "smartphone"},
-  "35387523": {"brand": "Samsung", "model": "Galaxy S23", "type": "smartphone"},
-  "35387623": {"brand": "Samsung", "model": "Galaxy S23+", "type": "smartphone"},
-  "35387723": {"brand": "Samsung", "model": "Galaxy S23 Ultra", "type": "smartphone"},
-  "35430724": {"brand": "Samsung", "model": "Galaxy S24", "type": "smartphone"},
-  "35430824": {"brand": "Samsung", "model": "Galaxy S24+", "type": "smartphone"},
-  "35430924": {"brand": "Samsung", "model": "Galaxy S24 Ultra", "type": "smartphone"},
-  "35224709": {"brand": "Samsung", "model": "Galaxy A50", "type": "smartphone"},
-  "35260020": {"brand": "Samsung", "model": "Galaxy A51", "type": "smartphone"},
-  "35428821": {"brand": "Samsung", "model": "Galaxy A52", "type": "smartphone"},
-  "35558522": {"brand": "Samsung", "model": "Galaxy A53", "type": "smartphone"},
-  "35608023": {"brand": "Samsung", "model": "Galaxy A54", "type": "smartphone"},
-  "35297520": {"brand": "Samsung", "model": "Galaxy A71", "type": "smartphone"},
-  "35282821": {"brand": "Samsung", "model": "Galaxy A72", "type": "smartphone"},
-  "35610423": {"brand": "Samsung", "model": "Galaxy A34", "type": "smartphone"},
-  "35610523": {"brand": "Samsung", "model": "Galaxy A14", "type": "smartphone"},
-  "35335510": {"brand": "Samsung", "model": "Galaxy Note 10", "type": "smartphone"},
-  "35430420": {"brand": "Samsung", "model": "Galaxy Note 20", "type": "smartphone"},
-  "35451720": {"brand": "Samsung", "model": "Galaxy Note 20 Ultra", "type": "smartphone"},
-  "35600321": {"brand": "Samsung", "model": "Galaxy Z Flip3", "type": "smartphone"},
-  "35620022": {"brand": "Samsung", "model": "Galaxy Z Flip4", "type": "smartphone"},
-  "35620123": {"brand": "Samsung", "model": "Galaxy Z Flip5", "type": "smartphone"},
-  "35601021": {"brand": "Samsung", "model": "Galaxy Z Fold3", "type": "smartphone"},
-  "35621022": {"brand": "Samsung", "model": "Galaxy Z Fold4", "type": "smartphone"},
-  "35621123": {"brand": "Samsung", "model": "Galaxy Z Fold5", "type": "smartphone"},
-
-  "86388104": {"brand": "Huawei", "model": "P30", "type": "smartphone"},
-  "86831305": {"brand": "Huawei", "model": "P30 Pro", "type": "smartphone"},
-  "86786703": {"brand": "Huawei", "model": "P40", "type": "smartphone"},
-  "86786803": {"brand": "Huawei", "model": "P40 Pro", "type": "smartphone"},
-  "86818505": {"brand": "Huawei", "model": "Mate 20 Pro", "type": "smartphone"},
-  "86803003": {"brand": "Huawei", "model": "Mate 30 Pro", "type": "smartphone"},
-  "86419604": {"brand": "Huawei", "model": "P20 Lite", "type": "smartphone"},
-  "86639203": {"brand": "Huawei", "model": "P Smart 2019", "type": "smartphone"},
-
-  "86154803": {"brand": "Xiaomi", "model": "Redmi Note 8", "type": "smartphone"},
-  "86209604": {"brand": "Xiaomi", "model": "Redmi Note 9", "type": "smartphone"},
-  "86446005": {"brand": "Xiaomi", "model": "Redmi Note 10", "type": "smartphone"},
-  "86442206": {"brand": "Xiaomi", "model": "Redmi Note 11", "type": "smartphone"},
-  "86459007": {"brand": "Xiaomi", "model": "Redmi Note 12", "type": "smartphone"},
-  "86460008": {"brand": "Xiaomi", "model": "Redmi Note 13", "type": "smartphone"},
-  "86152704": {"brand": "Xiaomi", "model": "Mi 10", "type": "smartphone"},
-  "86201805": {"brand": "Xiaomi", "model": "Mi 11", "type": "smartphone"},
-  "86253506": {"brand": "Xiaomi", "model": "12 Pro", "type": "smartphone"},
-  "86305507": {"brand": "Xiaomi", "model": "13 Pro", "type": "smartphone"},
-  "86355608": {"brand": "Xiaomi", "model": "14 Pro", "type": "smartphone"},
-  "86190005": {"brand": "Xiaomi", "model": "POCO X3", "type": "smartphone"},
-  "86253805": {"brand": "Xiaomi", "model": "POCO F3", "type": "smartphone"},
-  "86304306": {"brand": "Xiaomi", "model": "POCO X5 Pro", "type": "smartphone"},
-
-  "35871005": {"brand": "Google", "model": "Pixel 4", "type": "smartphone"},
-  "35871205": {"brand": "Google", "model": "Pixel 4a", "type": "smartphone"},
-  "35839806": {"brand": "Google", "model": "Pixel 5", "type": "smartphone"},
-  "35461206": {"brand": "Google", "model": "Pixel 6", "type": "smartphone"},
-  "35855506": {"brand": "Google", "model": "Pixel 6 Pro", "type": "smartphone"},
-  "35543907": {"brand": "Google", "model": "Pixel 7", "type": "smartphone"},
-  "35544007": {"brand": "Google", "model": "Pixel 7 Pro", "type": "smartphone"},
-  "35545008": {"brand": "Google", "model": "Pixel 8", "type": "smartphone"},
-  "35545108": {"brand": "Google", "model": "Pixel 8 Pro", "type": "smartphone"},
-  "35546009": {"brand": "Google", "model": "Pixel 9", "type": "smartphone"},
-  "35546109": {"brand": "Google", "model": "Pixel 9 Pro", "type": "smartphone"},
-
-  "35937205": {"brand": "OnePlus", "model": "7 Pro", "type": "smartphone"},
-  "35937306": {"brand": "OnePlus", "model": "8 Pro", "type": "smartphone"},
-  "86274106": {"brand": "OnePlus", "model": "Nord", "type": "smartphone"},
-  "86250007": {"brand": "OnePlus", "model": "9 Pro", "type": "smartphone"},
-
-  "35422007": {"brand": "Motorola", "model": "Moto G7", "type": "smartphone"},
-  "35497009": {"brand": "Motorola", "model": "Moto G9 Power", "type": "smartphone"},
-  "35527510": {"brand": "Motorola", "model": "Moto G100", "type": "smartphone"},
-  "35614511": {"brand": "Motorola", "model": "Edge 30", "type": "smartphone"},
-  "35375205": {"brand": "Motorola", "model": "Moto G5", "type": "smartphone"},
-
-  "35399505": {"brand": "Sony", "model": "Xperia 1 II", "type": "smartphone"},
-  "35399606": {"brand": "Sony", "model": "Xperia 5 III", "type": "smartphone"},
-  "35399707": {"brand": "Sony", "model": "Xperia 10 IV", "type": "smartphone"},
-
-  "35415906": {"brand": "LG", "model": "G8 ThinQ", "type": "smartphone"},
-  "35415807": {"brand": "LG", "model": "Velvet", "type": "smartphone"},
-
-  "35567107": {"brand": "Nokia", "model": "5.3", "type": "smartphone"},
-  "35567208": {"brand": "Nokia", "model": "G20", "type": "smartphone"},
-  "35567309": {"brand": "Nokia", "model": "X30", "type": "smartphone"},
-
-  "35918604": {"brand": "OPPO", "model": "Reno 4", "type": "smartphone"},
-  "86303605": {"brand": "OPPO", "model": "A74", "type": "smartphone"},
-  "86316206": {"brand": "OPPO", "model": "Reno 6 Pro", "type": "smartphone"},
-  "86317207": {"brand": "OPPO", "model": "Find X5 Pro", "type": "smartphone"},
-
-  "86175404": {"brand": "Realme", "model": "7 Pro", "type": "smartphone"},
-  "86226005": {"brand": "Realme", "model": "GT", "type": "smartphone"},
-  "86280506": {"brand": "Realme", "model": "9 Pro", "type": "smartphone"},
-
-  "86745003": {"brand": "Honor", "model": "20 Pro", "type": "smartphone"},
-  "86847004": {"brand": "Honor", "model": "50", "type": "smartphone"},
-  "86848005": {"brand": "Honor", "model": "Magic 5 Pro", "type": "smartphone"},
-
-  "35164709": {"brand": "Apple", "model": "iPad Pro 11\"", "type": "tablet"},
-  "35164809": {"brand": "Apple", "model": "iPad Pro 12.9\"", "type": "tablet"},
-  "35163510": {"brand": "Apple", "model": "iPad Air (4th gen)", "type": "tablet"},
-  "35398610": {"brand": "Apple", "model": "iPad (8th gen)", "type": "tablet"},
-
-  "35679011": {"brand": "Samsung", "model": "Galaxy Tab S7", "type": "tablet"},
-  "35680012": {"brand": "Samsung", "model": "Galaxy Tab S8", "type": "tablet"},
-
-  "86158204": {"brand": "Huawei", "model": "E5577 (modem LTE)", "type": "modem"},
-  "86158305": {"brand": "ZTE", "model": "MF971V (router LTE)", "type": "modem"},
-
-  "01388600": {"brand": "Alcatel", "model": "One Touch", "type": "feature_phone"},
-  "35398804": {"brand": "Nokia", "model": "3310 (2017)", "type": "feature_phone"},
-  "35850305": {"brand": "Nokia", "model": "105 (2019)", "type": "feature_phone"},
-  "35470504": {"brand": "Nokia", "model": "230", "type": "feature_phone"},
-  "35577005": {"brand": "myPhone", "model": "Halo Easy", "type": "feature_phone"},
-  "35578006": {"brand": "myPhone", "model": "Maestro 2", "type": "feature_phone"},
-  "35579007": {"brand": "Maxcom", "model": "MM426", "type": "feature_phone"},
-
-  "35456506": {"brand": "Apple", "model": "Apple Watch Series 6", "type": "smartwatch"},
-  "35456607": {"brand": "Apple", "model": "Apple Watch Series 7", "type": "smartwatch"},
-  "35285221": {"brand": "Samsung", "model": "Galaxy Watch4", "type": "smartwatch"}
+  "35900604": {
+    "brand": "Alcatel",
+    "model": "1S (2019)",
+    "type": "smartphone"
+  },
+  "35902605": {
+    "brand": "Alcatel",
+    "model": "1SE",
+    "type": "smartphone"
+  },
+  "01389600": {
+    "brand": "Alcatel",
+    "model": "2019G",
+    "type": "feature_phone"
+  },
+  "35901604": {
+    "brand": "Alcatel",
+    "model": "3L (2020)",
+    "type": "smartphone"
+  },
+  "35900505": {
+    "brand": "Alcatel",
+    "model": "IK40V (modem LTE)",
+    "type": "modem"
+  },
+  "01388600": {
+    "brand": "Alcatel",
+    "model": "One Touch",
+    "type": "feature_phone"
+  },
+  "35456506": {
+    "brand": "Apple",
+    "model": "Apple Watch Series 6",
+    "type": "smartwatch"
+  },
+  "35456507": {
+    "brand": "Apple",
+    "model": "Apple Watch Series 7",
+    "type": "smartwatch"
+  },
+  "35456607": {
+    "brand": "Apple",
+    "model": "Apple Watch Series 7",
+    "type": "smartwatch"
+  },
+  "35456608": {
+    "brand": "Apple",
+    "model": "Apple Watch Series 8",
+    "type": "smartwatch"
+  },
+  "35456810": {
+    "brand": "Apple",
+    "model": "Apple Watch Series 9",
+    "type": "smartwatch"
+  },
+  "35456709": {
+    "brand": "Apple",
+    "model": "Apple Watch Ultra",
+    "type": "smartwatch"
+  },
+  "35456911": {
+    "brand": "Apple",
+    "model": "Apple Watch Ultra 2",
+    "type": "smartwatch"
+  },
+  "35431013": {
+    "brand": "Apple",
+    "model": "iPad (10th gen)",
+    "type": "tablet"
+  },
+  "35398610": {
+    "brand": "Apple",
+    "model": "iPad (8th gen)",
+    "type": "tablet"
+  },
+  "35398611": {
+    "brand": "Apple",
+    "model": "iPad (9th gen)",
+    "type": "tablet"
+  },
+  "35163510": {
+    "brand": "Apple",
+    "model": "iPad Air (4th gen)",
+    "type": "tablet"
+  },
+  "35163511": {
+    "brand": "Apple",
+    "model": "iPad Air (4th gen)",
+    "type": "tablet"
+  },
+  "35405612": {
+    "brand": "Apple",
+    "model": "iPad Air (5th gen)",
+    "type": "tablet"
+  },
+  "35420014": {
+    "brand": "Apple",
+    "model": "iPad Air 11\" M2",
+    "type": "tablet"
+  },
+  "35420114": {
+    "brand": "Apple",
+    "model": "iPad Air 13\" M2",
+    "type": "tablet"
+  },
+  "35164709": {
+    "brand": "Apple",
+    "model": "iPad Pro 11\"",
+    "type": "tablet"
+  },
+  "35164710": {
+    "brand": "Apple",
+    "model": "iPad Pro 11\" (2nd gen)",
+    "type": "tablet"
+  },
+  "35410014": {
+    "brand": "Apple",
+    "model": "iPad Pro 11\" M4",
+    "type": "tablet"
+  },
+  "35164809": {
+    "brand": "Apple",
+    "model": "iPad Pro 12.9\"",
+    "type": "tablet"
+  },
+  "35164810": {
+    "brand": "Apple",
+    "model": "iPad Pro 12.9\" (4th gen)",
+    "type": "tablet"
+  },
+  "35410114": {
+    "brand": "Apple",
+    "model": "iPad Pro 13\" M4",
+    "type": "tablet"
+  },
+  "35430015": {
+    "brand": "Apple",
+    "model": "iPad mini (7th gen)",
+    "type": "tablet"
+  },
+  "35016883": {
+    "brand": "Apple",
+    "model": "iPhone 11",
+    "type": "smartphone"
+  },
+  "35279071": {
+    "brand": "Apple",
+    "model": "iPhone 11",
+    "type": "smartphone"
+  },
+  "35395610": {
+    "brand": "Apple",
+    "model": "iPhone 11",
+    "type": "smartphone"
+  },
+  "35395611": {
+    "brand": "Apple",
+    "model": "iPhone 11",
+    "type": "smartphone"
+  },
+  "35516942": {
+    "brand": "Apple",
+    "model": "iPhone 11",
+    "type": "smartphone"
+  },
+  "35606554": {
+    "brand": "Apple",
+    "model": "iPhone 11",
+    "type": "smartphone"
+  },
+  "35680211": {
+    "brand": "Apple",
+    "model": "iPhone 11",
+    "type": "smartphone"
+  },
+  "35344210": {
+    "brand": "Apple",
+    "model": "iPhone 11 Pro",
+    "type": "smartphone"
+  },
+  "35344211": {
+    "brand": "Apple",
+    "model": "iPhone 11 Pro",
+    "type": "smartphone"
+  },
+  "35391810": {
+    "brand": "Apple",
+    "model": "iPhone 11 Pro",
+    "type": "smartphone"
+  },
+  "35368010": {
+    "brand": "Apple",
+    "model": "iPhone 11 Pro Max",
+    "type": "smartphone"
+  },
+  "35368011": {
+    "brand": "Apple",
+    "model": "iPhone 11 Pro Max",
+    "type": "smartphone"
+  },
+  "35390610": {
+    "brand": "Apple",
+    "model": "iPhone 11 Pro Max",
+    "type": "smartphone"
+  },
+  "35371957": {
+    "brand": "Apple",
+    "model": "iPhone 12",
+    "type": "smartphone"
+  },
+  "35433111": {
+    "brand": "Apple",
+    "model": "iPhone 12",
+    "type": "smartphone"
+  },
+  "35433112": {
+    "brand": "Apple",
+    "model": "iPhone 12",
+    "type": "smartphone"
+  },
+  "35433211": {
+    "brand": "Apple",
+    "model": "iPhone 12",
+    "type": "smartphone"
+  },
+  "35258811": {
+    "brand": "Apple",
+    "model": "iPhone 12 Pro",
+    "type": "smartphone"
+  },
+  "35258812": {
+    "brand": "Apple",
+    "model": "iPhone 12 Pro",
+    "type": "smartphone"
+  },
+  "35326911": {
+    "brand": "Apple",
+    "model": "iPhone 12 Pro",
+    "type": "smartphone"
+  },
+  "35238211": {
+    "brand": "Apple",
+    "model": "iPhone 12 Pro Max",
+    "type": "smartphone"
+  },
+  "35238212": {
+    "brand": "Apple",
+    "model": "iPhone 12 Pro Max",
+    "type": "smartphone"
+  },
+  "35406411": {
+    "brand": "Apple",
+    "model": "iPhone 12 Pro Max",
+    "type": "smartphone"
+  },
+  "35566052": {
+    "brand": "Apple",
+    "model": "iPhone 12 Pro Max",
+    "type": "smartphone"
+  },
+  "35271411": {
+    "brand": "Apple",
+    "model": "iPhone 12 mini",
+    "type": "smartphone"
+  },
+  "35271412": {
+    "brand": "Apple",
+    "model": "iPhone 12 mini",
+    "type": "smartphone"
+  },
+  "35301011": {
+    "brand": "Apple",
+    "model": "iPhone 12 mini",
+    "type": "smartphone"
+  },
+  "35282448": {
+    "brand": "Apple",
+    "model": "iPhone 13",
+    "type": "smartphone"
+  },
+  "35331612": {
+    "brand": "Apple",
+    "model": "iPhone 13",
+    "type": "smartphone"
+  },
+  "35331613": {
+    "brand": "Apple",
+    "model": "iPhone 13",
+    "type": "smartphone"
+  },
+  "35433312": {
+    "brand": "Apple",
+    "model": "iPhone 13",
+    "type": "smartphone"
+  },
+  "35685890": {
+    "brand": "Apple",
+    "model": "iPhone 13",
+    "type": "smartphone"
+  },
+  "35233512": {
+    "brand": "Apple",
+    "model": "iPhone 13 Pro",
+    "type": "smartphone"
+  },
+  "35233513": {
+    "brand": "Apple",
+    "model": "iPhone 13 Pro",
+    "type": "smartphone"
+  },
+  "35327612": {
+    "brand": "Apple",
+    "model": "iPhone 13 Pro",
+    "type": "smartphone"
+  },
+  "35567781": {
+    "brand": "Apple",
+    "model": "iPhone 13 Pro",
+    "type": "smartphone"
+  },
+  "35075072": {
+    "brand": "Apple",
+    "model": "iPhone 13 Pro Max",
+    "type": "smartphone"
+  },
+  "35220620": {
+    "brand": "Apple",
+    "model": "iPhone 13 Pro Max",
+    "type": "smartphone"
+  },
+  "35388112": {
+    "brand": "Apple",
+    "model": "iPhone 13 Pro Max",
+    "type": "smartphone"
+  },
+  "35388113": {
+    "brand": "Apple",
+    "model": "iPhone 13 Pro Max",
+    "type": "smartphone"
+  },
+  "35366312": {
+    "brand": "Apple",
+    "model": "iPhone 13 mini",
+    "type": "smartphone"
+  },
+  "35366313": {
+    "brand": "Apple",
+    "model": "iPhone 13 mini",
+    "type": "smartphone"
+  },
+  "35398312": {
+    "brand": "Apple",
+    "model": "iPhone 13 mini",
+    "type": "smartphone"
+  },
+  "35183649": {
+    "brand": "Apple",
+    "model": "iPhone 14",
+    "type": "smartphone"
+  },
+  "35423613": {
+    "brand": "Apple",
+    "model": "iPhone 14",
+    "type": "smartphone"
+  },
+  "35423614": {
+    "brand": "Apple",
+    "model": "iPhone 14",
+    "type": "smartphone"
+  },
+  "35433413": {
+    "brand": "Apple",
+    "model": "iPhone 14",
+    "type": "smartphone"
+  },
+  "35434213": {
+    "brand": "Apple",
+    "model": "iPhone 14 Plus",
+    "type": "smartphone"
+  },
+  "35434214": {
+    "brand": "Apple",
+    "model": "iPhone 14 Plus",
+    "type": "smartphone"
+  },
+  "35443513": {
+    "brand": "Apple",
+    "model": "iPhone 14 Plus",
+    "type": "smartphone"
+  },
+  "35403913": {
+    "brand": "Apple",
+    "model": "iPhone 14 Pro",
+    "type": "smartphone"
+  },
+  "35403914": {
+    "brand": "Apple",
+    "model": "iPhone 14 Pro",
+    "type": "smartphone"
+  },
+  "35413213": {
+    "brand": "Apple",
+    "model": "iPhone 14 Pro",
+    "type": "smartphone"
+  },
+  "35461575": {
+    "brand": "Apple",
+    "model": "iPhone 14 Pro",
+    "type": "smartphone"
+  },
+  "35391513": {
+    "brand": "Apple",
+    "model": "iPhone 14 Pro Max",
+    "type": "smartphone"
+  },
+  "35391514": {
+    "brand": "Apple",
+    "model": "iPhone 14 Pro Max",
+    "type": "smartphone"
+  },
+  "35421113": {
+    "brand": "Apple",
+    "model": "iPhone 14 Pro Max",
+    "type": "smartphone"
+  },
+  "35508675": {
+    "brand": "Apple",
+    "model": "iPhone 14 Pro Max",
+    "type": "smartphone"
+  },
+  "35582226": {
+    "brand": "Apple",
+    "model": "iPhone 14 Pro Max",
+    "type": "smartphone"
+  },
+  "35445714": {
+    "brand": "Apple",
+    "model": "iPhone 15",
+    "type": "smartphone"
+  },
+  "35445715": {
+    "brand": "Apple",
+    "model": "iPhone 15",
+    "type": "smartphone"
+  },
+  "35453714": {
+    "brand": "Apple",
+    "model": "iPhone 15",
+    "type": "smartphone"
+  },
+  "35447914": {
+    "brand": "Apple",
+    "model": "iPhone 15 Plus",
+    "type": "smartphone"
+  },
+  "35447915": {
+    "brand": "Apple",
+    "model": "iPhone 15 Plus",
+    "type": "smartphone"
+  },
+  "35457914": {
+    "brand": "Apple",
+    "model": "iPhone 15 Plus",
+    "type": "smartphone"
+  },
+  "35343165": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro",
+    "type": "smartphone"
+  },
+  "35449114": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro",
+    "type": "smartphone"
+  },
+  "35449115": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro",
+    "type": "smartphone"
+  },
+  "35459114": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro",
+    "type": "smartphone"
+  },
+  "35540736": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro",
+    "type": "smartphone"
+  },
+  "35611698": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro",
+    "type": "smartphone"
+  },
+  "35437977": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro Max",
+    "type": "smartphone"
+  },
+  "35449214": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro Max",
+    "type": "smartphone"
+  },
+  "35449215": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro Max",
+    "type": "smartphone"
+  },
+  "35459214": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro Max",
+    "type": "smartphone"
+  },
+  "35637148": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro Max",
+    "type": "smartphone"
+  },
+  "35989765": {
+    "brand": "Apple",
+    "model": "iPhone 15 Pro Max",
+    "type": "smartphone"
+  },
+  "35450315": {
+    "brand": "Apple",
+    "model": "iPhone 16",
+    "type": "smartphone"
+  },
+  "35450316": {
+    "brand": "Apple",
+    "model": "iPhone 16",
+    "type": "smartphone"
+  },
+  "35460315": {
+    "brand": "Apple",
+    "model": "iPhone 16",
+    "type": "smartphone"
+  },
+  "35450415": {
+    "brand": "Apple",
+    "model": "iPhone 16 Plus",
+    "type": "smartphone"
+  },
+  "35450416": {
+    "brand": "Apple",
+    "model": "iPhone 16 Plus",
+    "type": "smartphone"
+  },
+  "35460415": {
+    "brand": "Apple",
+    "model": "iPhone 16 Plus",
+    "type": "smartphone"
+  },
+  "35270394": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro",
+    "type": "smartphone"
+  },
+  "35326839": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro",
+    "type": "smartphone"
+  },
+  "35450515": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro",
+    "type": "smartphone"
+  },
+  "35450516": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro",
+    "type": "smartphone"
+  },
+  "35460515": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro",
+    "type": "smartphone"
+  },
+  "35551560": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro",
+    "type": "smartphone"
+  },
+  "35596494": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro",
+    "type": "smartphone"
+  },
+  "35672749": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro",
+    "type": "smartphone"
+  },
+  "35732479": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro",
+    "type": "smartphone"
+  },
+  "35213057": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro Max",
+    "type": "smartphone"
+  },
+  "35450615": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro Max",
+    "type": "smartphone"
+  },
+  "35450616": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro Max",
+    "type": "smartphone"
+  },
+  "35460615": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro Max",
+    "type": "smartphone"
+  },
+  "35544552": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro Max",
+    "type": "smartphone"
+  },
+  "35672638": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro Max",
+    "type": "smartphone"
+  },
+  "35674460": {
+    "brand": "Apple",
+    "model": "iPhone 16 Pro Max",
+    "type": "smartphone"
+  },
+  "01332700": {
+    "brand": "Apple",
+    "model": "iPhone 5s",
+    "type": "smartphone"
+  },
+  "35332505": {
+    "brand": "Apple",
+    "model": "iPhone 5s",
+    "type": "smartphone"
+  },
+  "35397005": {
+    "brand": "Apple",
+    "model": "iPhone 5s",
+    "type": "smartphone"
+  },
+  "35332506": {
+    "brand": "Apple",
+    "model": "iPhone 6",
+    "type": "smartphone"
+  },
+  "35332508": {
+    "brand": "Apple",
+    "model": "iPhone 6",
+    "type": "smartphone"
+  },
+  "35391506": {
+    "brand": "Apple",
+    "model": "iPhone 6",
+    "type": "smartphone"
+  },
+  "35833206": {
+    "brand": "Apple",
+    "model": "iPhone 6",
+    "type": "smartphone"
+  },
+  "35391508": {
+    "brand": "Apple",
+    "model": "iPhone 6 Plus",
+    "type": "smartphone"
+  },
+  "35397506": {
+    "brand": "Apple",
+    "model": "iPhone 6 Plus",
+    "type": "smartphone"
+  },
+  "35693206": {
+    "brand": "Apple",
+    "model": "iPhone 6 Plus",
+    "type": "smartphone"
+  },
+  "35332509": {
+    "brand": "Apple",
+    "model": "iPhone 6s",
+    "type": "smartphone"
+  },
+  "35391507": {
+    "brand": "Apple",
+    "model": "iPhone 6s",
+    "type": "smartphone"
+  },
+  "35693207": {
+    "brand": "Apple",
+    "model": "iPhone 6s",
+    "type": "smartphone"
+  },
+  "35833207": {
+    "brand": "Apple",
+    "model": "iPhone 6s",
+    "type": "smartphone"
+  },
+  "35332907": {
+    "brand": "Apple",
+    "model": "iPhone 6s Plus",
+    "type": "smartphone"
+  },
+  "35340907": {
+    "brand": "Apple",
+    "model": "iPhone 6s Plus",
+    "type": "smartphone"
+  },
+  "35693208": {
+    "brand": "Apple",
+    "model": "iPhone 6s Plus",
+    "type": "smartphone"
+  },
+  "35291608": {
+    "brand": "Apple",
+    "model": "iPhone 7",
+    "type": "smartphone"
+  },
+  "35342508": {
+    "brand": "Apple",
+    "model": "iPhone 7",
+    "type": "smartphone"
+  },
+  "35539708": {
+    "brand": "Apple",
+    "model": "iPhone 7",
+    "type": "smartphone"
+  },
+  "35880009": {
+    "brand": "Apple",
+    "model": "iPhone 7",
+    "type": "smartphone"
+  },
+  "35396008": {
+    "brand": "Apple",
+    "model": "iPhone 7 Plus",
+    "type": "smartphone"
+  },
+  "35407508": {
+    "brand": "Apple",
+    "model": "iPhone 7 Plus",
+    "type": "smartphone"
+  },
+  "35407510": {
+    "brand": "Apple",
+    "model": "iPhone 7 Plus",
+    "type": "smartphone"
+  },
+  "35455508": {
+    "brand": "Apple",
+    "model": "iPhone 7 Plus",
+    "type": "smartphone"
+  },
+  "35325609": {
+    "brand": "Apple",
+    "model": "iPhone 8",
+    "type": "smartphone"
+  },
+  "35325610": {
+    "brand": "Apple",
+    "model": "iPhone 8",
+    "type": "smartphone"
+  },
+  "35379509": {
+    "brand": "Apple",
+    "model": "iPhone 8",
+    "type": "smartphone"
+  },
+  "35443209": {
+    "brand": "Apple",
+    "model": "iPhone 8",
+    "type": "smartphone"
+  },
+  "35402209": {
+    "brand": "Apple",
+    "model": "iPhone 8 Plus",
+    "type": "smartphone"
+  },
+  "35402210": {
+    "brand": "Apple",
+    "model": "iPhone 8 Plus",
+    "type": "smartphone"
+  },
+  "35413509": {
+    "brand": "Apple",
+    "model": "iPhone 8 Plus",
+    "type": "smartphone"
+  },
+  "35365207": {
+    "brand": "Apple",
+    "model": "iPhone SE (1st gen)",
+    "type": "smartphone"
+  },
+  "35659608": {
+    "brand": "Apple",
+    "model": "iPhone SE (1st gen)",
+    "type": "smartphone"
+  },
+  "35363710": {
+    "brand": "Apple",
+    "model": "iPhone SE (2nd gen)",
+    "type": "smartphone"
+  },
+  "35363711": {
+    "brand": "Apple",
+    "model": "iPhone SE (2nd gen)",
+    "type": "smartphone"
+  },
+  "35415510": {
+    "brand": "Apple",
+    "model": "iPhone SE (2nd gen)",
+    "type": "smartphone"
+  },
+  "35398512": {
+    "brand": "Apple",
+    "model": "iPhone SE (3rd gen)",
+    "type": "smartphone"
+  },
+  "35398513": {
+    "brand": "Apple",
+    "model": "iPhone SE (3rd gen)",
+    "type": "smartphone"
+  },
+  "35423212": {
+    "brand": "Apple",
+    "model": "iPhone SE (3rd gen)",
+    "type": "smartphone"
+  },
+  "35296909": {
+    "brand": "Apple",
+    "model": "iPhone X",
+    "type": "smartphone"
+  },
+  "35316109": {
+    "brand": "Apple",
+    "model": "iPhone X",
+    "type": "smartphone"
+  },
+  "35316110": {
+    "brand": "Apple",
+    "model": "iPhone X",
+    "type": "smartphone"
+  },
+  "35397009": {
+    "brand": "Apple",
+    "model": "iPhone X",
+    "type": "smartphone"
+  },
+  "35317210": {
+    "brand": "Apple",
+    "model": "iPhone XR",
+    "type": "smartphone"
+  },
+  "35320009": {
+    "brand": "Apple",
+    "model": "iPhone XR",
+    "type": "smartphone"
+  },
+  "35320010": {
+    "brand": "Apple",
+    "model": "iPhone XR",
+    "type": "smartphone"
+  },
+  "35413010": {
+    "brand": "Apple",
+    "model": "iPhone XR",
+    "type": "smartphone"
+  },
+  "35332110": {
+    "brand": "Apple",
+    "model": "iPhone XS",
+    "type": "smartphone"
+  },
+  "35397610": {
+    "brand": "Apple",
+    "model": "iPhone XS",
+    "type": "smartphone"
+  },
+  "35397710": {
+    "brand": "Apple",
+    "model": "iPhone XS Max",
+    "type": "smartphone"
+  },
+  "35423810": {
+    "brand": "Apple",
+    "model": "iPhone XS Max",
+    "type": "smartphone"
+  },
+  "35903505": {
+    "brand": "D-Link",
+    "model": "DWR-932 (router LTE)",
+    "type": "modem"
+  },
+  "35871005": {
+    "brand": "Google",
+    "model": "Pixel 4",
+    "type": "smartphone"
+  },
+  "35871205": {
+    "brand": "Google",
+    "model": "Pixel 4a",
+    "type": "smartphone"
+  },
+  "35839806": {
+    "brand": "Google",
+    "model": "Pixel 5",
+    "type": "smartphone"
+  },
+  "35461206": {
+    "brand": "Google",
+    "model": "Pixel 6",
+    "type": "smartphone"
+  },
+  "35772316": {
+    "brand": "Google",
+    "model": "Pixel 6",
+    "type": "smartphone"
+  },
+  "35966827": {
+    "brand": "Google",
+    "model": "Pixel 6",
+    "type": "smartphone"
+  },
+  "35180461": {
+    "brand": "Google",
+    "model": "Pixel 6 Pro",
+    "type": "smartphone"
+  },
+  "35833977": {
+    "brand": "Google",
+    "model": "Pixel 6 Pro",
+    "type": "smartphone"
+  },
+  "35855506": {
+    "brand": "Google",
+    "model": "Pixel 6 Pro",
+    "type": "smartphone"
+  },
+  "35016289": {
+    "brand": "Google",
+    "model": "Pixel 6a",
+    "type": "smartphone"
+  },
+  "35206165": {
+    "brand": "Google",
+    "model": "Pixel 6a",
+    "type": "smartphone"
+  },
+  "35557843": {
+    "brand": "Google",
+    "model": "Pixel 6a",
+    "type": "smartphone"
+  },
+  "35635680": {
+    "brand": "Google",
+    "model": "Pixel 6a",
+    "type": "smartphone"
+  },
+  "35187091": {
+    "brand": "Google",
+    "model": "Pixel 7",
+    "type": "smartphone"
+  },
+  "35444980": {
+    "brand": "Google",
+    "model": "Pixel 7",
+    "type": "smartphone"
+  },
+  "35543907": {
+    "brand": "Google",
+    "model": "Pixel 7",
+    "type": "smartphone"
+  },
+  "35305068": {
+    "brand": "Google",
+    "model": "Pixel 7 Pro",
+    "type": "smartphone"
+  },
+  "35544007": {
+    "brand": "Google",
+    "model": "Pixel 7 Pro",
+    "type": "smartphone"
+  },
+  "35543807": {
+    "brand": "Google",
+    "model": "Pixel 7a",
+    "type": "smartphone"
+  },
+  "35545008": {
+    "brand": "Google",
+    "model": "Pixel 8",
+    "type": "smartphone"
+  },
+  "35545108": {
+    "brand": "Google",
+    "model": "Pixel 8 Pro",
+    "type": "smartphone"
+  },
+  "35895161": {
+    "brand": "Google",
+    "model": "Pixel 8 Pro",
+    "type": "smartphone"
+  },
+  "35116352": {
+    "brand": "Google",
+    "model": "Pixel 8a",
+    "type": "smartphone"
+  },
+  "35546009": {
+    "brand": "Google",
+    "model": "Pixel 9",
+    "type": "smartphone"
+  },
+  "35546109": {
+    "brand": "Google",
+    "model": "Pixel 9 Pro",
+    "type": "smartphone"
+  },
+  "35547009": {
+    "brand": "Google",
+    "model": "Pixel 9 Pro Fold",
+    "type": "smartphone"
+  },
+  "35580306": {
+    "brand": "Hammer",
+    "model": "Blade 3",
+    "type": "smartphone"
+  },
+  "35580707": {
+    "brand": "Hammer",
+    "model": "Boost",
+    "type": "feature_phone"
+  },
+  "35580507": {
+    "brand": "Hammer",
+    "model": "Construction 2",
+    "type": "feature_phone"
+  },
+  "35580006": {
+    "brand": "Hammer",
+    "model": "Energy 18x9",
+    "type": "smartphone"
+  },
+  "35580206": {
+    "brand": "Hammer",
+    "model": "Explorer",
+    "type": "smartphone"
+  },
+  "35580406": {
+    "brand": "Hammer",
+    "model": "Explorer Pro",
+    "type": "smartphone"
+  },
+  "35580106": {
+    "brand": "Hammer",
+    "model": "Iron 3",
+    "type": "smartphone"
+  },
+  "35580607": {
+    "brand": "Hammer",
+    "model": "Patriot+",
+    "type": "feature_phone"
+  },
+  "86780003": {
+    "brand": "Honor",
+    "model": "10 Lite",
+    "type": "smartphone"
+  },
+  "86746003": {
+    "brand": "Honor",
+    "model": "20",
+    "type": "smartphone"
+  },
+  "86747003": {
+    "brand": "Honor",
+    "model": "20 Lite",
+    "type": "smartphone"
+  },
+  "86745003": {
+    "brand": "Honor",
+    "model": "20 Pro",
+    "type": "smartphone"
+  },
+  "86851107": {
+    "brand": "Honor",
+    "model": "200 Pro",
+    "type": "smartphone"
+  },
+  "86847004": {
+    "brand": "Honor",
+    "model": "50",
+    "type": "smartphone"
+  },
+  "86848104": {
+    "brand": "Honor",
+    "model": "50 Lite",
+    "type": "smartphone"
+  },
+  "86790103": {
+    "brand": "Honor",
+    "model": "9X",
+    "type": "smartphone"
+  },
+  "86849105": {
+    "brand": "Honor",
+    "model": "Magic 4 Pro",
+    "type": "smartphone"
+  },
+  "86848005": {
+    "brand": "Honor",
+    "model": "Magic 5 Pro",
+    "type": "smartphone"
+  },
+  "86850106": {
+    "brand": "Honor",
+    "model": "Magic 6 Pro",
+    "type": "smartphone"
+  },
+  "86852106": {
+    "brand": "Honor",
+    "model": "X6a",
+    "type": "smartphone"
+  },
+  "86846004": {
+    "brand": "Honor",
+    "model": "X7",
+    "type": "smartphone"
+  },
+  "86845004": {
+    "brand": "Honor",
+    "model": "X8",
+    "type": "smartphone"
+  },
+  "86853106": {
+    "brand": "Honor",
+    "model": "X8a",
+    "type": "smartphone"
+  },
+  "86162205": {
+    "brand": "Huawei",
+    "model": "B535 (router LTE)",
+    "type": "modem"
+  },
+  "86163205": {
+    "brand": "Huawei",
+    "model": "B818 (router LTE)",
+    "type": "modem"
+  },
+  "86164205": {
+    "brand": "Huawei",
+    "model": "E3372 (modem USB LTE)",
+    "type": "modem"
+  },
+  "86160104": {
+    "brand": "Huawei",
+    "model": "E5576 (modem LTE)",
+    "type": "modem"
+  },
+  "86158204": {
+    "brand": "Huawei",
+    "model": "E5577 (modem LTE)",
+    "type": "modem"
+  },
+  "86161204": {
+    "brand": "Huawei",
+    "model": "E5785 (router LTE)",
+    "type": "modem"
+  },
+  "86165205": {
+    "brand": "Huawei",
+    "model": "E8372 (modem WiFi LTE)",
+    "type": "modem"
+  },
+  "86620803": {
+    "brand": "Huawei",
+    "model": "Mate 20 Lite",
+    "type": "smartphone"
+  },
+  "86818505": {
+    "brand": "Huawei",
+    "model": "Mate 20 Pro",
+    "type": "smartphone"
+  },
+  "86802003": {
+    "brand": "Huawei",
+    "model": "Mate 30",
+    "type": "smartphone"
+  },
+  "86803003": {
+    "brand": "Huawei",
+    "model": "Mate 30 Pro",
+    "type": "smartphone"
+  },
+  "86899604": {
+    "brand": "Huawei",
+    "model": "Mate 40 Pro",
+    "type": "smartphone"
+  },
+  "86800806": {
+    "brand": "Huawei",
+    "model": "Nova 10",
+    "type": "smartphone"
+  },
+  "86500505": {
+    "brand": "Huawei",
+    "model": "Nova 5T",
+    "type": "smartphone"
+  },
+  "86600605": {
+    "brand": "Huawei",
+    "model": "Nova 8",
+    "type": "smartphone"
+  },
+  "86700705": {
+    "brand": "Huawei",
+    "model": "Nova 9",
+    "type": "smartphone"
+  },
+  "86424003": {
+    "brand": "Huawei",
+    "model": "P Smart 2019",
+    "type": "smartphone"
+  },
+  "86639203": {
+    "brand": "Huawei",
+    "model": "P Smart 2019",
+    "type": "smartphone"
+  },
+  "86560604": {
+    "brand": "Huawei",
+    "model": "P Smart 2020",
+    "type": "smartphone"
+  },
+  "86638004": {
+    "brand": "Huawei",
+    "model": "P Smart 2021",
+    "type": "smartphone"
+  },
+  "86170202": {
+    "brand": "Huawei",
+    "model": "P10",
+    "type": "smartphone"
+  },
+  "86170402": {
+    "brand": "Huawei",
+    "model": "P10 Lite",
+    "type": "smartphone"
+  },
+  "86170302": {
+    "brand": "Huawei",
+    "model": "P10 Plus",
+    "type": "smartphone"
+  },
+  "86309203": {
+    "brand": "Huawei",
+    "model": "P20",
+    "type": "smartphone"
+  },
+  "86419604": {
+    "brand": "Huawei",
+    "model": "P20 Lite",
+    "type": "smartphone"
+  },
+  "86309303": {
+    "brand": "Huawei",
+    "model": "P20 Pro",
+    "type": "smartphone"
+  },
+  "86388104": {
+    "brand": "Huawei",
+    "model": "P30",
+    "type": "smartphone"
+  },
+  "86836404": {
+    "brand": "Huawei",
+    "model": "P30 Lite",
+    "type": "smartphone"
+  },
+  "86791504": {
+    "brand": "Huawei",
+    "model": "P30 Pro",
+    "type": "smartphone"
+  },
+  "86831305": {
+    "brand": "Huawei",
+    "model": "P30 Pro",
+    "type": "smartphone"
+  },
+  "86786703": {
+    "brand": "Huawei",
+    "model": "P40",
+    "type": "smartphone"
+  },
+  "86787703": {
+    "brand": "Huawei",
+    "model": "P40 Lite",
+    "type": "smartphone"
+  },
+  "86788703": {
+    "brand": "Huawei",
+    "model": "P40 Lite E",
+    "type": "smartphone"
+  },
+  "86786803": {
+    "brand": "Huawei",
+    "model": "P40 Pro",
+    "type": "smartphone"
+  },
+  "86300104": {
+    "brand": "Huawei",
+    "model": "Y5p",
+    "type": "smartphone"
+  },
+  "86100103": {
+    "brand": "Huawei",
+    "model": "Y6 2019",
+    "type": "smartphone"
+  },
+  "86250004": {
+    "brand": "Huawei",
+    "model": "Y6p",
+    "type": "smartphone"
+  },
+  "86350204": {
+    "brand": "Huawei",
+    "model": "Y6s",
+    "type": "smartphone"
+  },
+  "86100203": {
+    "brand": "Huawei",
+    "model": "Y7 2019",
+    "type": "smartphone"
+  },
+  "86100303": {
+    "brand": "Huawei",
+    "model": "Y9 2019",
+    "type": "smartphone"
+  },
+  "35411505": {
+    "brand": "LG",
+    "model": "G7 ThinQ",
+    "type": "smartphone"
+  },
+  "35415906": {
+    "brand": "LG",
+    "model": "G8 ThinQ",
+    "type": "smartphone"
+  },
+  "35416806": {
+    "brand": "LG",
+    "model": "K42",
+    "type": "smartphone"
+  },
+  "35413706": {
+    "brand": "LG",
+    "model": "K50",
+    "type": "smartphone"
+  },
+  "35414706": {
+    "brand": "LG",
+    "model": "K51",
+    "type": "smartphone"
+  },
+  "35417806": {
+    "brand": "LG",
+    "model": "K52",
+    "type": "smartphone"
+  },
+  "35415706": {
+    "brand": "LG",
+    "model": "K61",
+    "type": "smartphone"
+  },
+  "35418806": {
+    "brand": "LG",
+    "model": "K62",
+    "type": "smartphone"
+  },
+  "35412505": {
+    "brand": "LG",
+    "model": "V40 ThinQ",
+    "type": "smartphone"
+  },
+  "35416906": {
+    "brand": "LG",
+    "model": "V60 ThinQ",
+    "type": "smartphone"
+  },
+  "35415807": {
+    "brand": "LG",
+    "model": "Velvet",
+    "type": "smartphone"
+  },
+  "35417906": {
+    "brand": "LG",
+    "model": "Wing 5G",
+    "type": "smartphone"
+  },
+  "86204004": {
+    "brand": "Lenovo",
+    "model": "K14 Plus",
+    "type": "smartphone"
+  },
+  "86200004": {
+    "brand": "Lenovo",
+    "model": "Tab M10 HD",
+    "type": "tablet"
+  },
+  "86201004": {
+    "brand": "Lenovo",
+    "model": "Tab M10 Plus",
+    "type": "tablet"
+  },
+  "86203004": {
+    "brand": "Lenovo",
+    "model": "Tab M8",
+    "type": "tablet"
+  },
+  "86202004": {
+    "brand": "Lenovo",
+    "model": "Tab P11",
+    "type": "tablet"
+  },
+  "35579307": {
+    "brand": "Maxcom",
+    "model": "MM135",
+    "type": "feature_phone"
+  },
+  "35579407": {
+    "brand": "Maxcom",
+    "model": "MM237",
+    "type": "feature_phone"
+  },
+  "35579507": {
+    "brand": "Maxcom",
+    "model": "MM334",
+    "type": "feature_phone"
+  },
+  "35579007": {
+    "brand": "Maxcom",
+    "model": "MM426",
+    "type": "feature_phone"
+  },
+  "35579107": {
+    "brand": "Maxcom",
+    "model": "MM428",
+    "type": "feature_phone"
+  },
+  "35579207": {
+    "brand": "Maxcom",
+    "model": "MM720BB",
+    "type": "feature_phone"
+  },
+  "35579607": {
+    "brand": "Maxcom",
+    "model": "MS507",
+    "type": "smartphone"
+  },
+  "35579707": {
+    "brand": "Maxcom",
+    "model": "MS571",
+    "type": "smartphone"
+  },
+  "35614511": {
+    "brand": "Motorola",
+    "model": "Edge 30",
+    "type": "smartphone"
+  },
+  "35615511": {
+    "brand": "Motorola",
+    "model": "Edge 30 Pro",
+    "type": "smartphone"
+  },
+  "35618512": {
+    "brand": "Motorola",
+    "model": "Edge 40",
+    "type": "smartphone"
+  },
+  "35619512": {
+    "brand": "Motorola",
+    "model": "Edge 40 Pro",
+    "type": "smartphone"
+  },
+  "35621513": {
+    "brand": "Motorola",
+    "model": "Edge 50 Pro",
+    "type": "smartphone"
+  },
+  "35250406": {
+    "brand": "Motorola",
+    "model": "Moto E6 Plus",
+    "type": "smartphone"
+  },
+  "35421568": {
+    "brand": "Motorola",
+    "model": "Moto G Play 2023",
+    "type": "smartphone"
+  },
+  "35968721": {
+    "brand": "Motorola",
+    "model": "Moto G Play 2023",
+    "type": "smartphone"
+  },
+  "35203636": {
+    "brand": "Motorola",
+    "model": "Moto G Play 2024",
+    "type": "smartphone"
+  },
+  "35790251": {
+    "brand": "Motorola",
+    "model": "Moto G Pure",
+    "type": "smartphone"
+  },
+  "35527610": {
+    "brand": "Motorola",
+    "model": "Moto G10",
+    "type": "smartphone"
+  },
+  "35527510": {
+    "brand": "Motorola",
+    "model": "Moto G100",
+    "type": "smartphone"
+  },
+  "35528610": {
+    "brand": "Motorola",
+    "model": "Moto G20",
+    "type": "smartphone"
+  },
+  "35529610": {
+    "brand": "Motorola",
+    "model": "Moto G30",
+    "type": "smartphone"
+  },
+  "35375205": {
+    "brand": "Motorola",
+    "model": "Moto G5",
+    "type": "smartphone"
+  },
+  "35375305": {
+    "brand": "Motorola",
+    "model": "Moto G5 Plus",
+    "type": "smartphone"
+  },
+  "35530610": {
+    "brand": "Motorola",
+    "model": "Moto G50",
+    "type": "smartphone"
+  },
+  "35376205": {
+    "brand": "Motorola",
+    "model": "Moto G5S",
+    "type": "smartphone"
+  },
+  "35376305": {
+    "brand": "Motorola",
+    "model": "Moto G5S Plus",
+    "type": "smartphone"
+  },
+  "35612511": {
+    "brand": "Motorola",
+    "model": "Moto G60",
+    "type": "smartphone"
+  },
+  "35422007": {
+    "brand": "Motorola",
+    "model": "Moto G7",
+    "type": "smartphone"
+  },
+  "35422107": {
+    "brand": "Motorola",
+    "model": "Moto G7 Plus",
+    "type": "smartphone"
+  },
+  "35422207": {
+    "brand": "Motorola",
+    "model": "Moto G7 Power",
+    "type": "smartphone"
+  },
+  "35613511": {
+    "brand": "Motorola",
+    "model": "Moto G71 5G",
+    "type": "smartphone"
+  },
+  "35617512": {
+    "brand": "Motorola",
+    "model": "Moto G73 5G",
+    "type": "smartphone"
+  },
+  "35497109": {
+    "brand": "Motorola",
+    "model": "Moto G8",
+    "type": "smartphone"
+  },
+  "35498009": {
+    "brand": "Motorola",
+    "model": "Moto G8 Plus",
+    "type": "smartphone"
+  },
+  "35497209": {
+    "brand": "Motorola",
+    "model": "Moto G8 Power",
+    "type": "smartphone"
+  },
+  "35616511": {
+    "brand": "Motorola",
+    "model": "Moto G82 5G",
+    "type": "smartphone"
+  },
+  "35620513": {
+    "brand": "Motorola",
+    "model": "Moto G84 5G",
+    "type": "smartphone"
+  },
+  "35497009": {
+    "brand": "Motorola",
+    "model": "Moto G9 Power",
+    "type": "smartphone"
+  },
+  "35902505": {
+    "brand": "Netgear",
+    "model": "Nighthawk M1 (router LTE)",
+    "type": "modem"
+  },
+  "35850305": {
+    "brand": "Nokia",
+    "model": "105 (2019)",
+    "type": "feature_phone"
+  },
+  "35850405": {
+    "brand": "Nokia",
+    "model": "105 (2023)",
+    "type": "feature_phone"
+  },
+  "35851305": {
+    "brand": "Nokia",
+    "model": "110 (2019)",
+    "type": "feature_phone"
+  },
+  "35852305": {
+    "brand": "Nokia",
+    "model": "150 (2020)",
+    "type": "feature_phone"
+  },
+  "35571007": {
+    "brand": "Nokia",
+    "model": "2.2",
+    "type": "smartphone"
+  },
+  "35576108": {
+    "brand": "Nokia",
+    "model": "2.3",
+    "type": "smartphone"
+  },
+  "35853305": {
+    "brand": "Nokia",
+    "model": "210",
+    "type": "feature_phone"
+  },
+  "35854305": {
+    "brand": "Nokia",
+    "model": "225 4G",
+    "type": "feature_phone"
+  },
+  "35470504": {
+    "brand": "Nokia",
+    "model": "230",
+    "type": "feature_phone"
+  },
+  "35856305": {
+    "brand": "Nokia",
+    "model": "2660 Flip",
+    "type": "feature_phone"
+  },
+  "35567006": {
+    "brand": "Nokia",
+    "model": "3.1",
+    "type": "smartphone"
+  },
+  "35572007": {
+    "brand": "Nokia",
+    "model": "3.2",
+    "type": "smartphone"
+  },
+  "35398804": {
+    "brand": "Nokia",
+    "model": "3310 (2017)",
+    "type": "feature_phone"
+  },
+  "35573007": {
+    "brand": "Nokia",
+    "model": "4.2",
+    "type": "smartphone"
+  },
+  "35568006": {
+    "brand": "Nokia",
+    "model": "5.1",
+    "type": "smartphone"
+  },
+  "35567107": {
+    "brand": "Nokia",
+    "model": "5.3",
+    "type": "smartphone"
+  },
+  "35577108": {
+    "brand": "Nokia",
+    "model": "5.4",
+    "type": "smartphone"
+  },
+  "35569006": {
+    "brand": "Nokia",
+    "model": "6.1",
+    "type": "smartphone"
+  },
+  "35574007": {
+    "brand": "Nokia",
+    "model": "6.2",
+    "type": "smartphone"
+  },
+  "35570006": {
+    "brand": "Nokia",
+    "model": "7.1",
+    "type": "smartphone"
+  },
+  "35575007": {
+    "brand": "Nokia",
+    "model": "7.2",
+    "type": "smartphone"
+  },
+  "35578108": {
+    "brand": "Nokia",
+    "model": "8.3 5G",
+    "type": "smartphone"
+  },
+  "35855305": {
+    "brand": "Nokia",
+    "model": "8210 4G",
+    "type": "feature_phone"
+  },
+  "35579109": {
+    "brand": "Nokia",
+    "model": "G10",
+    "type": "smartphone"
+  },
+  "35567208": {
+    "brand": "Nokia",
+    "model": "G20",
+    "type": "smartphone"
+  },
+  "35581110": {
+    "brand": "Nokia",
+    "model": "G22",
+    "type": "smartphone"
+  },
+  "35582110": {
+    "brand": "Nokia",
+    "model": "G42 5G",
+    "type": "smartphone"
+  },
+  "35580109": {
+    "brand": "Nokia",
+    "model": "G50 5G",
+    "type": "smartphone"
+  },
+  "35567309": {
+    "brand": "Nokia",
+    "model": "X30",
+    "type": "smartphone"
+  },
+  "86304605": {
+    "brand": "OPPO",
+    "model": "A54",
+    "type": "smartphone"
+  },
+  "86316306": {
+    "brand": "OPPO",
+    "model": "A57",
+    "type": "smartphone"
+  },
+  "86303605": {
+    "brand": "OPPO",
+    "model": "A74",
+    "type": "smartphone"
+  },
+  "86315206": {
+    "brand": "OPPO",
+    "model": "A76",
+    "type": "smartphone"
+  },
+  "86317306": {
+    "brand": "OPPO",
+    "model": "A77 5G",
+    "type": "smartphone"
+  },
+  "86319207": {
+    "brand": "OPPO",
+    "model": "A78 5G",
+    "type": "smartphone"
+  },
+  "86321208": {
+    "brand": "OPPO",
+    "model": "A79 5G",
+    "type": "smartphone"
+  },
+  "86305605": {
+    "brand": "OPPO",
+    "model": "A94",
+    "type": "smartphone"
+  },
+  "86317207": {
+    "brand": "OPPO",
+    "model": "Find X5 Pro",
+    "type": "smartphone"
+  },
+  "35675904": {
+    "brand": "OPPO",
+    "model": "N1",
+    "type": "smartphone"
+  },
+  "86320208": {
+    "brand": "OPPO",
+    "model": "Reno 10 Pro",
+    "type": "smartphone"
+  },
+  "35918604": {
+    "brand": "OPPO",
+    "model": "Reno 4",
+    "type": "smartphone"
+  },
+  "86316206": {
+    "brand": "OPPO",
+    "model": "Reno 6 Pro",
+    "type": "smartphone"
+  },
+  "86314206": {
+    "brand": "OPPO",
+    "model": "Reno 7",
+    "type": "smartphone"
+  },
+  "86318207": {
+    "brand": "OPPO",
+    "model": "Reno 8 Pro",
+    "type": "smartphone"
+  },
+  "86251007": {
+    "brand": "OnePlus",
+    "model": "10 Pro",
+    "type": "smartphone"
+  },
+  "86450508": {
+    "brand": "OnePlus",
+    "model": "11",
+    "type": "smartphone"
+  },
+  "86515406": {
+    "brand": "OnePlus",
+    "model": "12",
+    "type": "smartphone"
+  },
+  "86649307": {
+    "brand": "OnePlus",
+    "model": "13",
+    "type": "smartphone"
+  },
+  "86618907": {
+    "brand": "OnePlus",
+    "model": "13R",
+    "type": "smartphone"
+  },
+  "86051708": {
+    "brand": "OnePlus",
+    "model": "15",
+    "type": "smartphone"
+  },
+  "86929503": {
+    "brand": "OnePlus",
+    "model": "6",
+    "type": "smartphone"
+  },
+  "86520804": {
+    "brand": "OnePlus",
+    "model": "6T",
+    "type": "smartphone"
+  },
+  "35937205": {
+    "brand": "OnePlus",
+    "model": "7 Pro",
+    "type": "smartphone"
+  },
+  "35937306": {
+    "brand": "OnePlus",
+    "model": "8 Pro",
+    "type": "smartphone"
+  },
+  "86905705": {
+    "brand": "OnePlus",
+    "model": "8T",
+    "type": "smartphone"
+  },
+  "86250007": {
+    "brand": "OnePlus",
+    "model": "9 Pro",
+    "type": "smartphone"
+  },
+  "86274106": {
+    "brand": "OnePlus",
+    "model": "Nord",
+    "type": "smartphone"
+  },
+  "86275106": {
+    "brand": "OnePlus",
+    "model": "Nord 2",
+    "type": "smartphone"
+  },
+  "86274206": {
+    "brand": "OnePlus",
+    "model": "Nord CE",
+    "type": "smartphone"
+  },
+  "86351107": {
+    "brand": "OnePlus",
+    "model": "Nord CE 2",
+    "type": "smartphone"
+  },
+  "86400108": {
+    "brand": "OnePlus",
+    "model": "Nord CE 3 Lite",
+    "type": "smartphone"
+  },
+  "86330607": {
+    "brand": "Realme",
+    "model": "10 Pro",
+    "type": "smartphone"
+  },
+  "86331607": {
+    "brand": "Realme",
+    "model": "11 Pro",
+    "type": "smartphone"
+  },
+  "86340608": {
+    "brand": "Realme",
+    "model": "12 Pro+",
+    "type": "smartphone"
+  },
+  "86176404": {
+    "brand": "Realme",
+    "model": "6 Pro",
+    "type": "smartphone"
+  },
+  "86177404": {
+    "brand": "Realme",
+    "model": "7",
+    "type": "smartphone"
+  },
+  "86175404": {
+    "brand": "Realme",
+    "model": "7 Pro",
+    "type": "smartphone"
+  },
+  "86280506": {
+    "brand": "Realme",
+    "model": "9 Pro",
+    "type": "smartphone"
+  },
+  "86281506": {
+    "brand": "Realme",
+    "model": "9 Pro+",
+    "type": "smartphone"
+  },
+  "86332607": {
+    "brand": "Realme",
+    "model": "C55",
+    "type": "smartphone"
+  },
+  "86341608": {
+    "brand": "Realme",
+    "model": "C67",
+    "type": "smartphone"
+  },
+  "86226005": {
+    "brand": "Realme",
+    "model": "GT",
+    "type": "smartphone"
+  },
+  "86282506": {
+    "brand": "Realme",
+    "model": "GT 2 Pro",
+    "type": "smartphone"
+  },
+  "86227005": {
+    "brand": "Realme",
+    "model": "GT Neo 2",
+    "type": "smartphone"
+  },
+  "35172111": {
+    "brand": "Samsung",
+    "model": "Galaxy A01",
+    "type": "smartphone"
+  },
+  "35176511": {
+    "brand": "Samsung",
+    "model": "Galaxy A01",
+    "type": "smartphone"
+  },
+  "35176711": {
+    "brand": "Samsung",
+    "model": "Galaxy A01",
+    "type": "smartphone"
+  },
+  "35701329": {
+    "brand": "Samsung",
+    "model": "Galaxy A01",
+    "type": "smartphone"
+  },
+  "35466097": {
+    "brand": "Samsung",
+    "model": "Galaxy A05",
+    "type": "smartphone"
+  },
+  "35335709": {
+    "brand": "Samsung",
+    "model": "Galaxy A10",
+    "type": "smartphone"
+  },
+  "35429809": {
+    "brand": "Samsung",
+    "model": "Galaxy A10",
+    "type": "smartphone"
+  },
+  "35091804": {
+    "brand": "Samsung",
+    "model": "Galaxy A10s",
+    "type": "smartphone"
+  },
+  "35108212": {
+    "brand": "Samsung",
+    "model": "Galaxy A13 5G",
+    "type": "smartphone"
+  },
+  "35610523": {
+    "brand": "Samsung",
+    "model": "Galaxy A14",
+    "type": "smartphone"
+  },
+  "35054546": {
+    "brand": "Samsung",
+    "model": "Galaxy A14 5G",
+    "type": "smartphone"
+  },
+  "35205426": {
+    "brand": "Samsung",
+    "model": "Galaxy A14 5G",
+    "type": "smartphone"
+  },
+  "35025648": {
+    "brand": "Samsung",
+    "model": "Galaxy A15 5G",
+    "type": "smartphone"
+  },
+  "35031840": {
+    "brand": "Samsung",
+    "model": "Galaxy A15 5G",
+    "type": "smartphone"
+  },
+  "35168159": {
+    "brand": "Samsung",
+    "model": "Galaxy A15 5G",
+    "type": "smartphone"
+  },
+  "35503076": {
+    "brand": "Samsung",
+    "model": "Galaxy A15 5G",
+    "type": "smartphone"
+  },
+  "35640851": {
+    "brand": "Samsung",
+    "model": "Galaxy A15 5G",
+    "type": "smartphone"
+  },
+  "35949612": {
+    "brand": "Samsung",
+    "model": "Galaxy A15 5G",
+    "type": "smartphone"
+  },
+  "35367077": {
+    "brand": "Samsung",
+    "model": "Galaxy A16 5G",
+    "type": "smartphone"
+  },
+  "35292709": {
+    "brand": "Samsung",
+    "model": "Galaxy A20",
+    "type": "smartphone"
+  },
+  "35414709": {
+    "brand": "Samsung",
+    "model": "Galaxy A20e",
+    "type": "smartphone"
+  },
+  "35440809": {
+    "brand": "Samsung",
+    "model": "Galaxy A20s",
+    "type": "smartphone"
+  },
+  "35408310": {
+    "brand": "Samsung",
+    "model": "Galaxy A21s",
+    "type": "smartphone"
+  },
+  "35554310": {
+    "brand": "Samsung",
+    "model": "Galaxy A21s",
+    "type": "smartphone"
+  },
+  "35614012": {
+    "brand": "Samsung",
+    "model": "Galaxy A23",
+    "type": "smartphone"
+  },
+  "35693013": {
+    "brand": "Samsung",
+    "model": "Galaxy A24",
+    "type": "smartphone"
+  },
+  "35608513": {
+    "brand": "Samsung",
+    "model": "Galaxy A25 5G",
+    "type": "smartphone"
+  },
+  "35439309": {
+    "brand": "Samsung",
+    "model": "Galaxy A30",
+    "type": "smartphone"
+  },
+  "35459709": {
+    "brand": "Samsung",
+    "model": "Galaxy A30s",
+    "type": "smartphone"
+  },
+  "35530510": {
+    "brand": "Samsung",
+    "model": "Galaxy A31",
+    "type": "smartphone"
+  },
+  "35239640": {
+    "brand": "Samsung",
+    "model": "Galaxy A32",
+    "type": "smartphone"
+  },
+  "35582049": {
+    "brand": "Samsung",
+    "model": "Galaxy A32 5G",
+    "type": "smartphone"
+  },
+  "35525012": {
+    "brand": "Samsung",
+    "model": "Galaxy A33 5G",
+    "type": "smartphone"
+  },
+  "35610423": {
+    "brand": "Samsung",
+    "model": "Galaxy A34",
+    "type": "smartphone"
+  },
+  "35333956": {
+    "brand": "Samsung",
+    "model": "Galaxy A34 5G",
+    "type": "smartphone"
+  },
+  "35561555": {
+    "brand": "Samsung",
+    "model": "Galaxy A34 5G",
+    "type": "smartphone"
+  },
+  "35178225": {
+    "brand": "Samsung",
+    "model": "Galaxy A35 5G",
+    "type": "smartphone"
+  },
+  "35261071": {
+    "brand": "Samsung",
+    "model": "Galaxy A35 5G",
+    "type": "smartphone"
+  },
+  "35226310": {
+    "brand": "Samsung",
+    "model": "Galaxy A40",
+    "type": "smartphone"
+  },
+  "35345610": {
+    "brand": "Samsung",
+    "model": "Galaxy A40",
+    "type": "smartphone"
+  },
+  "35313210": {
+    "brand": "Samsung",
+    "model": "Galaxy A41",
+    "type": "smartphone"
+  },
+  "35076050": {
+    "brand": "Samsung",
+    "model": "Galaxy A42 5G",
+    "type": "smartphone"
+  },
+  "35404947": {
+    "brand": "Samsung",
+    "model": "Galaxy A42 5G",
+    "type": "smartphone"
+  },
+  "35999082": {
+    "brand": "Samsung",
+    "model": "Galaxy A42 5G",
+    "type": "smartphone"
+  },
+  "35224709": {
+    "brand": "Samsung",
+    "model": "Galaxy A50",
+    "type": "smartphone"
+  },
+  "35601010": {
+    "brand": "Samsung",
+    "model": "Galaxy A50",
+    "type": "smartphone"
+  },
+  "35260020": {
+    "brand": "Samsung",
+    "model": "Galaxy A51",
+    "type": "smartphone"
+  },
+  "35443910": {
+    "brand": "Samsung",
+    "model": "Galaxy A51",
+    "type": "smartphone"
+  },
+  "35601410": {
+    "brand": "Samsung",
+    "model": "Galaxy A51",
+    "type": "smartphone"
+  },
+  "35616811": {
+    "brand": "Samsung",
+    "model": "Galaxy A51 5G",
+    "type": "smartphone"
+  },
+  "35265911": {
+    "brand": "Samsung",
+    "model": "Galaxy A52",
+    "type": "smartphone"
+  },
+  "35428821": {
+    "brand": "Samsung",
+    "model": "Galaxy A52",
+    "type": "smartphone"
+  },
+  "35018373": {
+    "brand": "Samsung",
+    "model": "Galaxy A52 5G",
+    "type": "smartphone"
+  },
+  "35352011": {
+    "brand": "Samsung",
+    "model": "Galaxy A52s 5G",
+    "type": "smartphone"
+  },
+  "35435011": {
+    "brand": "Samsung",
+    "model": "Galaxy A52s 5G",
+    "type": "smartphone"
+  },
+  "35558522": {
+    "brand": "Samsung",
+    "model": "Galaxy A53",
+    "type": "smartphone"
+  },
+  "35345419": {
+    "brand": "Samsung",
+    "model": "Galaxy A53 5G",
+    "type": "smartphone"
+  },
+  "35608023": {
+    "brand": "Samsung",
+    "model": "Galaxy A54",
+    "type": "smartphone"
+  },
+  "35235027": {
+    "brand": "Samsung",
+    "model": "Galaxy A54 5G",
+    "type": "smartphone"
+  },
+  "35664273": {
+    "brand": "Samsung",
+    "model": "Galaxy A54 5G",
+    "type": "smartphone"
+  },
+  "35315414": {
+    "brand": "Samsung",
+    "model": "Galaxy A55 5G",
+    "type": "smartphone"
+  },
+  "35723014": {
+    "brand": "Samsung",
+    "model": "Galaxy A55 5G",
+    "type": "smartphone"
+  },
+  "35361610": {
+    "brand": "Samsung",
+    "model": "Galaxy A70",
+    "type": "smartphone"
+  },
+  "35422610": {
+    "brand": "Samsung",
+    "model": "Galaxy A70",
+    "type": "smartphone"
+  },
+  "35297520": {
+    "brand": "Samsung",
+    "model": "Galaxy A71",
+    "type": "smartphone"
+  },
+  "35481511": {
+    "brand": "Samsung",
+    "model": "Galaxy A71 5G",
+    "type": "smartphone"
+  },
+  "35282821": {
+    "brand": "Samsung",
+    "model": "Galaxy A72",
+    "type": "smartphone"
+  },
+  "35570012": {
+    "brand": "Samsung",
+    "model": "Galaxy A73 5G",
+    "type": "smartphone"
+  },
+  "35293710": {
+    "brand": "Samsung",
+    "model": "Galaxy A80",
+    "type": "smartphone"
+  },
+  "35441906": {
+    "brand": "Samsung",
+    "model": "Galaxy J3 (2016)",
+    "type": "smartphone"
+  },
+  "35340007": {
+    "brand": "Samsung",
+    "model": "Galaxy J3 (2017)",
+    "type": "smartphone"
+  },
+  "35305508": {
+    "brand": "Samsung",
+    "model": "Galaxy J4+",
+    "type": "smartphone"
+  },
+  "35562606": {
+    "brand": "Samsung",
+    "model": "Galaxy J5 (2016)",
+    "type": "smartphone"
+  },
+  "35555007": {
+    "brand": "Samsung",
+    "model": "Galaxy J5 (2017)",
+    "type": "smartphone"
+  },
+  "35460008": {
+    "brand": "Samsung",
+    "model": "Galaxy J6 (2018)",
+    "type": "smartphone"
+  },
+  "35306508": {
+    "brand": "Samsung",
+    "model": "Galaxy J6+",
+    "type": "smartphone"
+  },
+  "35645606": {
+    "brand": "Samsung",
+    "model": "Galaxy J7 (2016)",
+    "type": "smartphone"
+  },
+  "35666007": {
+    "brand": "Samsung",
+    "model": "Galaxy J7 (2017)",
+    "type": "smartphone"
+  },
+  "35410509": {
+    "brand": "Samsung",
+    "model": "Galaxy M12",
+    "type": "smartphone"
+  },
+  "35525410": {
+    "brand": "Samsung",
+    "model": "Galaxy M13",
+    "type": "smartphone"
+  },
+  "35395710": {
+    "brand": "Samsung",
+    "model": "Galaxy M21",
+    "type": "smartphone"
+  },
+  "35309492": {
+    "brand": "Samsung",
+    "model": "Galaxy M31",
+    "type": "smartphone"
+  },
+  "35767443": {
+    "brand": "Samsung",
+    "model": "Galaxy M32",
+    "type": "smartphone"
+  },
+  "35541812": {
+    "brand": "Samsung",
+    "model": "Galaxy M33 5G",
+    "type": "smartphone"
+  },
+  "35475811": {
+    "brand": "Samsung",
+    "model": "Galaxy M51",
+    "type": "smartphone"
+  },
+  "35550812": {
+    "brand": "Samsung",
+    "model": "Galaxy M52 5G",
+    "type": "smartphone"
+  },
+  "35626813": {
+    "brand": "Samsung",
+    "model": "Galaxy M53 5G",
+    "type": "smartphone"
+  },
+  "35335510": {
+    "brand": "Samsung",
+    "model": "Galaxy Note 10",
+    "type": "smartphone"
+  },
+  "35430420": {
+    "brand": "Samsung",
+    "model": "Galaxy Note 20",
+    "type": "smartphone"
+  },
+  "35451720": {
+    "brand": "Samsung",
+    "model": "Galaxy Note 20 Ultra",
+    "type": "smartphone"
+  },
+  "35573208": {
+    "brand": "Samsung",
+    "model": "Galaxy Note 8",
+    "type": "smartphone"
+  },
+  "35424909": {
+    "brand": "Samsung",
+    "model": "Galaxy Note 9",
+    "type": "smartphone"
+  },
+  "35620509": {
+    "brand": "Samsung",
+    "model": "Galaxy Note 9",
+    "type": "smartphone"
+  },
+  "35191210": {
+    "brand": "Samsung",
+    "model": "Galaxy S10",
+    "type": "smartphone"
+  },
+  "35260910": {
+    "brand": "Samsung",
+    "model": "Galaxy S10",
+    "type": "smartphone"
+  },
+  "35461610": {
+    "brand": "Samsung",
+    "model": "Galaxy S10",
+    "type": "smartphone"
+  },
+  "35175110": {
+    "brand": "Samsung",
+    "model": "Galaxy S10+",
+    "type": "smartphone"
+  },
+  "35260911": {
+    "brand": "Samsung",
+    "model": "Galaxy S10+",
+    "type": "smartphone"
+  },
+  "35269510": {
+    "brand": "Samsung",
+    "model": "Galaxy S10+",
+    "type": "smartphone"
+  },
+  "35260912": {
+    "brand": "Samsung",
+    "model": "Galaxy S10e",
+    "type": "smartphone"
+  },
+  "35280810": {
+    "brand": "Samsung",
+    "model": "Galaxy S10e",
+    "type": "smartphone"
+  },
+  "35480410": {
+    "brand": "Samsung",
+    "model": "Galaxy S10e",
+    "type": "smartphone"
+  },
+  "35679520": {
+    "brand": "Samsung",
+    "model": "Galaxy S20",
+    "type": "smartphone"
+  },
+  "35642011": {
+    "brand": "Samsung",
+    "model": "Galaxy S20 5G",
+    "type": "smartphone"
+  },
+  "35848515": {
+    "brand": "Samsung",
+    "model": "Galaxy S20 FE",
+    "type": "smartphone"
+  },
+  "35858335": {
+    "brand": "Samsung",
+    "model": "Galaxy S20 FE",
+    "type": "smartphone"
+  },
+  "35219420": {
+    "brand": "Samsung",
+    "model": "Galaxy S20 Ultra",
+    "type": "smartphone"
+  },
+  "35408411": {
+    "brand": "Samsung",
+    "model": "Galaxy S20 Ultra 5G",
+    "type": "smartphone"
+  },
+  "35219320": {
+    "brand": "Samsung",
+    "model": "Galaxy S20+",
+    "type": "smartphone"
+  },
+  "35570321": {
+    "brand": "Samsung",
+    "model": "Galaxy S21",
+    "type": "smartphone"
+  },
+  "35461841": {
+    "brand": "Samsung",
+    "model": "Galaxy S21 5G",
+    "type": "smartphone"
+  },
+  "35079951": {
+    "brand": "Samsung",
+    "model": "Galaxy S21 FE 5G",
+    "type": "smartphone"
+  },
+  "35256821": {
+    "brand": "Samsung",
+    "model": "Galaxy S21 Ultra",
+    "type": "smartphone"
+  },
+  "35012167": {
+    "brand": "Samsung",
+    "model": "Galaxy S21 Ultra 5G",
+    "type": "smartphone"
+  },
+  "35432221": {
+    "brand": "Samsung",
+    "model": "Galaxy S21+",
+    "type": "smartphone"
+  },
+  "35239578": {
+    "brand": "Samsung",
+    "model": "Galaxy S21+ 5G",
+    "type": "smartphone"
+  },
+  "35315826": {
+    "brand": "Samsung",
+    "model": "Galaxy S21+ 5G",
+    "type": "smartphone"
+  },
+  "35284222": {
+    "brand": "Samsung",
+    "model": "Galaxy S22",
+    "type": "smartphone"
+  },
+  "35666698": {
+    "brand": "Samsung",
+    "model": "Galaxy S22",
+    "type": "smartphone"
+  },
+  "35923159": {
+    "brand": "Samsung",
+    "model": "Galaxy S22",
+    "type": "smartphone"
+  },
+  "35240722": {
+    "brand": "Samsung",
+    "model": "Galaxy S22 Ultra",
+    "type": "smartphone"
+  },
+  "35264289": {
+    "brand": "Samsung",
+    "model": "Galaxy S22 Ultra",
+    "type": "smartphone"
+  },
+  "35813292": {
+    "brand": "Samsung",
+    "model": "Galaxy S22 Ultra",
+    "type": "smartphone"
+  },
+  "35853313": {
+    "brand": "Samsung",
+    "model": "Galaxy S22 Ultra",
+    "type": "smartphone"
+  },
+  "35028038": {
+    "brand": "Samsung",
+    "model": "Galaxy S22 Ultra 5G",
+    "type": "smartphone"
+  },
+  "35077953": {
+    "brand": "Samsung",
+    "model": "Galaxy S22+",
+    "type": "smartphone"
+  },
+  "35251640": {
+    "brand": "Samsung",
+    "model": "Galaxy S22+",
+    "type": "smartphone"
+  },
+  "35272348": {
+    "brand": "Samsung",
+    "model": "Galaxy S22+",
+    "type": "smartphone"
+  },
+  "35329971": {
+    "brand": "Samsung",
+    "model": "Galaxy S22+",
+    "type": "smartphone"
+  },
+  "35436822": {
+    "brand": "Samsung",
+    "model": "Galaxy S22+",
+    "type": "smartphone"
+  },
+  "35632920": {
+    "brand": "Samsung",
+    "model": "Galaxy S22+",
+    "type": "smartphone"
+  },
+  "35870796": {
+    "brand": "Samsung",
+    "model": "Galaxy S22+",
+    "type": "smartphone"
+  },
+  "35066964": {
+    "brand": "Samsung",
+    "model": "Galaxy S23",
+    "type": "smartphone"
+  },
+  "35124687": {
+    "brand": "Samsung",
+    "model": "Galaxy S23",
+    "type": "smartphone"
+  },
+  "35170881": {
+    "brand": "Samsung",
+    "model": "Galaxy S23",
+    "type": "smartphone"
+  },
+  "35277252": {
+    "brand": "Samsung",
+    "model": "Galaxy S23",
+    "type": "smartphone"
+  },
+  "35359684": {
+    "brand": "Samsung",
+    "model": "Galaxy S23",
+    "type": "smartphone"
+  },
+  "35387523": {
+    "brand": "Samsung",
+    "model": "Galaxy S23",
+    "type": "smartphone"
+  },
+  "35555251": {
+    "brand": "Samsung",
+    "model": "Galaxy S23",
+    "type": "smartphone"
+  },
+  "35162868": {
+    "brand": "Samsung",
+    "model": "Galaxy S23 FE",
+    "type": "smartphone"
+  },
+  "35010509": {
+    "brand": "Samsung",
+    "model": "Galaxy S23 Ultra",
+    "type": "smartphone"
+  },
+  "35136439": {
+    "brand": "Samsung",
+    "model": "Galaxy S23 Ultra",
+    "type": "smartphone"
+  },
+  "35313860": {
+    "brand": "Samsung",
+    "model": "Galaxy S23 Ultra",
+    "type": "smartphone"
+  },
+  "35387723": {
+    "brand": "Samsung",
+    "model": "Galaxy S23 Ultra",
+    "type": "smartphone"
+  },
+  "35824597": {
+    "brand": "Samsung",
+    "model": "Galaxy S23 Ultra",
+    "type": "smartphone"
+  },
+  "35883596": {
+    "brand": "Samsung",
+    "model": "Galaxy S23 Ultra",
+    "type": "smartphone"
+  },
+  "35387623": {
+    "brand": "Samsung",
+    "model": "Galaxy S23+",
+    "type": "smartphone"
+  },
+  "35580295": {
+    "brand": "Samsung",
+    "model": "Galaxy S23+",
+    "type": "smartphone"
+  },
+  "35006048": {
+    "brand": "Samsung",
+    "model": "Galaxy S24",
+    "type": "smartphone"
+  },
+  "35084944": {
+    "brand": "Samsung",
+    "model": "Galaxy S24",
+    "type": "smartphone"
+  },
+  "35251762": {
+    "brand": "Samsung",
+    "model": "Galaxy S24",
+    "type": "smartphone"
+  },
+  "35430724": {
+    "brand": "Samsung",
+    "model": "Galaxy S24",
+    "type": "smartphone"
+  },
+  "35437694": {
+    "brand": "Samsung",
+    "model": "Galaxy S24",
+    "type": "smartphone"
+  },
+  "35430924": {
+    "brand": "Samsung",
+    "model": "Galaxy S24 Ultra",
+    "type": "smartphone"
+  },
+  "35799425": {
+    "brand": "Samsung",
+    "model": "Galaxy S24 Ultra",
+    "type": "smartphone"
+  },
+  "35049066": {
+    "brand": "Samsung",
+    "model": "Galaxy S24+",
+    "type": "smartphone"
+  },
+  "35430824": {
+    "brand": "Samsung",
+    "model": "Galaxy S24+",
+    "type": "smartphone"
+  },
+  "35013500": {
+    "brand": "Samsung",
+    "model": "Galaxy S25",
+    "type": "smartphone"
+  },
+  "35103668": {
+    "brand": "Samsung",
+    "model": "Galaxy S25",
+    "type": "smartphone"
+  },
+  "35319484": {
+    "brand": "Samsung",
+    "model": "Galaxy S25",
+    "type": "smartphone"
+  },
+  "35348558": {
+    "brand": "Samsung",
+    "model": "Galaxy S25",
+    "type": "smartphone"
+  },
+  "35073023": {
+    "brand": "Samsung",
+    "model": "Galaxy S25 Ultra",
+    "type": "smartphone"
+  },
+  "35112758": {
+    "brand": "Samsung",
+    "model": "Galaxy S25 Ultra",
+    "type": "smartphone"
+  },
+  "35251214": {
+    "brand": "Samsung",
+    "model": "Galaxy S25 Ultra",
+    "type": "smartphone"
+  },
+  "35284430": {
+    "brand": "Samsung",
+    "model": "Galaxy S25 Ultra",
+    "type": "smartphone"
+  },
+  "35863654": {
+    "brand": "Samsung",
+    "model": "Galaxy S25 Ultra",
+    "type": "smartphone"
+  },
+  "35239341": {
+    "brand": "Samsung",
+    "model": "Galaxy S25+",
+    "type": "smartphone"
+  },
+  "35289277": {
+    "brand": "Samsung",
+    "model": "Galaxy S25+",
+    "type": "smartphone"
+  },
+  "35801924": {
+    "brand": "Samsung",
+    "model": "Galaxy S25+",
+    "type": "smartphone"
+  },
+  "35461908": {
+    "brand": "Samsung",
+    "model": "Galaxy S7",
+    "type": "smartphone"
+  },
+  "35534508": {
+    "brand": "Samsung",
+    "model": "Galaxy S7",
+    "type": "smartphone"
+  },
+  "35566508": {
+    "brand": "Samsung",
+    "model": "Galaxy S7",
+    "type": "smartphone"
+  },
+  "35495508": {
+    "brand": "Samsung",
+    "model": "Galaxy S7 Edge",
+    "type": "smartphone"
+  },
+  "35503208": {
+    "brand": "Samsung",
+    "model": "Galaxy S7 Edge",
+    "type": "smartphone"
+  },
+  "35472609": {
+    "brand": "Samsung",
+    "model": "Galaxy S8",
+    "type": "smartphone"
+  },
+  "35516109": {
+    "brand": "Samsung",
+    "model": "Galaxy S8",
+    "type": "smartphone"
+  },
+  "35730509": {
+    "brand": "Samsung",
+    "model": "Galaxy S8",
+    "type": "smartphone"
+  },
+  "35437109": {
+    "brand": "Samsung",
+    "model": "Galaxy S8+",
+    "type": "smartphone"
+  },
+  "35694409": {
+    "brand": "Samsung",
+    "model": "Galaxy S8+",
+    "type": "smartphone"
+  },
+  "35263009": {
+    "brand": "Samsung",
+    "model": "Galaxy S9",
+    "type": "smartphone"
+  },
+  "35418109": {
+    "brand": "Samsung",
+    "model": "Galaxy S9",
+    "type": "smartphone"
+  },
+  "35569809": {
+    "brand": "Samsung",
+    "model": "Galaxy S9",
+    "type": "smartphone"
+  },
+  "35306509": {
+    "brand": "Samsung",
+    "model": "Galaxy S9+",
+    "type": "smartphone"
+  },
+  "35539009": {
+    "brand": "Samsung",
+    "model": "Galaxy S9+",
+    "type": "smartphone"
+  },
+  "35685010": {
+    "brand": "Samsung",
+    "model": "Galaxy Tab A7",
+    "type": "tablet"
+  },
+  "35686011": {
+    "brand": "Samsung",
+    "model": "Galaxy Tab A8",
+    "type": "tablet"
+  },
+  "35687012": {
+    "brand": "Samsung",
+    "model": "Galaxy Tab A9",
+    "type": "tablet"
+  },
+  "35679011": {
+    "brand": "Samsung",
+    "model": "Galaxy Tab S7",
+    "type": "tablet"
+  },
+  "35680012": {
+    "brand": "Samsung",
+    "model": "Galaxy Tab S8",
+    "type": "tablet"
+  },
+  "35681012": {
+    "brand": "Samsung",
+    "model": "Galaxy Tab S8+",
+    "type": "tablet"
+  },
+  "35682013": {
+    "brand": "Samsung",
+    "model": "Galaxy Tab S9",
+    "type": "tablet"
+  },
+  "35684013": {
+    "brand": "Samsung",
+    "model": "Galaxy Tab S9 Ultra",
+    "type": "tablet"
+  },
+  "35683013": {
+    "brand": "Samsung",
+    "model": "Galaxy Tab S9+",
+    "type": "tablet"
+  },
+  "35285221": {
+    "brand": "Samsung",
+    "model": "Galaxy Watch4",
+    "type": "smartwatch"
+  },
+  "35285322": {
+    "brand": "Samsung",
+    "model": "Galaxy Watch5",
+    "type": "smartwatch"
+  },
+  "35285423": {
+    "brand": "Samsung",
+    "model": "Galaxy Watch6",
+    "type": "smartwatch"
+  },
+  "35285524": {
+    "brand": "Samsung",
+    "model": "Galaxy Watch7",
+    "type": "smartwatch"
+  },
+  "35600321": {
+    "brand": "Samsung",
+    "model": "Galaxy Z Flip3",
+    "type": "smartphone"
+  },
+  "35620022": {
+    "brand": "Samsung",
+    "model": "Galaxy Z Flip4",
+    "type": "smartphone"
+  },
+  "35620123": {
+    "brand": "Samsung",
+    "model": "Galaxy Z Flip5",
+    "type": "smartphone"
+  },
+  "35443524": {
+    "brand": "Samsung",
+    "model": "Galaxy Z Flip6",
+    "type": "smartphone"
+  },
+  "35601021": {
+    "brand": "Samsung",
+    "model": "Galaxy Z Fold3",
+    "type": "smartphone"
+  },
+  "35621022": {
+    "brand": "Samsung",
+    "model": "Galaxy Z Fold4",
+    "type": "smartphone"
+  },
+  "35621123": {
+    "brand": "Samsung",
+    "model": "Galaxy Z Fold5",
+    "type": "smartphone"
+  },
+  "35444524": {
+    "brand": "Samsung",
+    "model": "Galaxy Z Fold6",
+    "type": "smartphone"
+  },
+  "35399505": {
+    "brand": "Sony",
+    "model": "Xperia 1 II",
+    "type": "smartphone"
+  },
+  "35400606": {
+    "brand": "Sony",
+    "model": "Xperia 1 III",
+    "type": "smartphone"
+  },
+  "35400707": {
+    "brand": "Sony",
+    "model": "Xperia 1 IV",
+    "type": "smartphone"
+  },
+  "35402808": {
+    "brand": "Sony",
+    "model": "Xperia 1 V",
+    "type": "smartphone"
+  },
+  "35405909": {
+    "brand": "Sony",
+    "model": "Xperia 1 VI",
+    "type": "smartphone"
+  },
+  "35399405": {
+    "brand": "Sony",
+    "model": "Xperia 10 II",
+    "type": "smartphone"
+  },
+  "35399707": {
+    "brand": "Sony",
+    "model": "Xperia 10 IV",
+    "type": "smartphone"
+  },
+  "35404808": {
+    "brand": "Sony",
+    "model": "Xperia 10 V",
+    "type": "smartphone"
+  },
+  "35399305": {
+    "brand": "Sony",
+    "model": "Xperia 5 II",
+    "type": "smartphone"
+  },
+  "35399606": {
+    "brand": "Sony",
+    "model": "Xperia 5 III",
+    "type": "smartphone"
+  },
+  "35401707": {
+    "brand": "Sony",
+    "model": "Xperia 5 IV",
+    "type": "smartphone"
+  },
+  "35403808": {
+    "brand": "Sony",
+    "model": "Xperia 5 V",
+    "type": "smartphone"
+  },
+  "35903605": {
+    "brand": "TCL",
+    "model": "20 SE",
+    "type": "smartphone"
+  },
+  "35904606": {
+    "brand": "TCL",
+    "model": "30 SE",
+    "type": "smartphone"
+  },
+  "35905607": {
+    "brand": "TCL",
+    "model": "40 SE",
+    "type": "smartphone"
+  },
+  "35906608": {
+    "brand": "TCL",
+    "model": "50 SE",
+    "type": "smartphone"
+  },
+  "35901505": {
+    "brand": "TP-Link",
+    "model": "M7350 (router LTE)",
+    "type": "modem"
+  },
+  "86291506": {
+    "brand": "Vivo",
+    "model": "V25 Pro",
+    "type": "smartphone"
+  },
+  "86341507": {
+    "brand": "Vivo",
+    "model": "V27",
+    "type": "smartphone"
+  },
+  "86400608": {
+    "brand": "Vivo",
+    "model": "V30 Pro",
+    "type": "smartphone"
+  },
+  "86342507": {
+    "brand": "Vivo",
+    "model": "X90 Pro",
+    "type": "smartphone"
+  },
+  "86230005": {
+    "brand": "Vivo",
+    "model": "Y21",
+    "type": "smartphone"
+  },
+  "86290506": {
+    "brand": "Vivo",
+    "model": "Y22",
+    "type": "smartphone"
+  },
+  "86401608": {
+    "brand": "Vivo",
+    "model": "Y28 5G",
+    "type": "smartphone"
+  },
+  "86231005": {
+    "brand": "Vivo",
+    "model": "Y33s",
+    "type": "smartphone"
+  },
+  "86340507": {
+    "brand": "Vivo",
+    "model": "Y36",
+    "type": "smartphone"
+  },
+  "86152704": {
+    "brand": "Xiaomi",
+    "model": "Mi 10",
+    "type": "smartphone"
+  },
+  "86201805": {
+    "brand": "Xiaomi",
+    "model": "Mi 11",
+    "type": "smartphone"
+  },
+  "86096403": {
+    "brand": "Xiaomi",
+    "model": "Mi 9",
+    "type": "smartphone"
+  },
+  "86095503": {
+    "brand": "Xiaomi",
+    "model": "Mi 9T",
+    "type": "smartphone"
+  },
+  "86145003": {
+    "brand": "Xiaomi",
+    "model": "Mi 9T Pro",
+    "type": "smartphone"
+  },
+  "86098003": {
+    "brand": "Xiaomi",
+    "model": "Mi A3",
+    "type": "smartphone"
+  },
+  "86138703": {
+    "brand": "Xiaomi",
+    "model": "Mi Note 10",
+    "type": "smartphone"
+  },
+  "86355006": {
+    "brand": "Xiaomi",
+    "model": "POCO C55",
+    "type": "smartphone"
+  },
+  "86253805": {
+    "brand": "Xiaomi",
+    "model": "POCO F3",
+    "type": "smartphone"
+  },
+  "86305606": {
+    "brand": "Xiaomi",
+    "model": "POCO F5",
+    "type": "smartphone"
+  },
+  "86349006": {
+    "brand": "Xiaomi",
+    "model": "POCO M5",
+    "type": "smartphone"
+  },
+  "86350006": {
+    "brand": "Xiaomi",
+    "model": "POCO M5s",
+    "type": "smartphone"
+  },
+  "86190005": {
+    "brand": "Xiaomi",
+    "model": "POCO X3 NFC",
+    "type": "smartphone"
+  },
+  "86254105": {
+    "brand": "Xiaomi",
+    "model": "POCO X3 Pro",
+    "type": "smartphone"
+  },
+  "86304306": {
+    "brand": "Xiaomi",
+    "model": "POCO X5 Pro",
+    "type": "smartphone"
+  },
+  "86380205": {
+    "brand": "Xiaomi",
+    "model": "Redmi 10",
+    "type": "smartphone"
+  },
+  "86440006": {
+    "brand": "Xiaomi",
+    "model": "Redmi 10 2022",
+    "type": "smartphone"
+  },
+  "86093206": {
+    "brand": "Xiaomi",
+    "model": "Redmi 10C",
+    "type": "smartphone"
+  },
+  "86456006": {
+    "brand": "Xiaomi",
+    "model": "Redmi 10C",
+    "type": "smartphone"
+  },
+  "86457006": {
+    "brand": "Xiaomi",
+    "model": "Redmi 11",
+    "type": "smartphone"
+  },
+  "86087106": {
+    "brand": "Xiaomi",
+    "model": "Redmi 12",
+    "type": "smartphone"
+  },
+  "86285406": {
+    "brand": "Xiaomi",
+    "model": "Redmi 12",
+    "type": "smartphone"
+  },
+  "86316406": {
+    "brand": "Xiaomi",
+    "model": "Redmi 12",
+    "type": "smartphone"
+  },
+  "86815506": {
+    "brand": "Xiaomi",
+    "model": "Redmi 12",
+    "type": "smartphone"
+  },
+  "86816506": {
+    "brand": "Xiaomi",
+    "model": "Redmi 12C",
+    "type": "smartphone"
+  },
+  "86890507": {
+    "brand": "Xiaomi",
+    "model": "Redmi 13C",
+    "type": "smartphone"
+  },
+  "86900508": {
+    "brand": "Xiaomi",
+    "model": "Redmi 14C",
+    "type": "smartphone"
+  },
+  "86033903": {
+    "brand": "Xiaomi",
+    "model": "Redmi 7",
+    "type": "smartphone"
+  },
+  "86065603": {
+    "brand": "Xiaomi",
+    "model": "Redmi 7A",
+    "type": "smartphone"
+  },
+  "86144803": {
+    "brand": "Xiaomi",
+    "model": "Redmi 8",
+    "type": "smartphone"
+  },
+  "86145403": {
+    "brand": "Xiaomi",
+    "model": "Redmi 8A",
+    "type": "smartphone"
+  },
+  "86713105": {
+    "brand": "Xiaomi",
+    "model": "Redmi 9",
+    "type": "smartphone"
+  },
+  "86911205": {
+    "brand": "Xiaomi",
+    "model": "Redmi 9",
+    "type": "smartphone"
+  },
+  "86207804": {
+    "brand": "Xiaomi",
+    "model": "Redmi 9A",
+    "type": "smartphone"
+  },
+  "86208804": {
+    "brand": "Xiaomi",
+    "model": "Redmi 9C",
+    "type": "smartphone"
+  },
+  "86446005": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 10",
+    "type": "smartphone"
+  },
+  "86240705": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 10 Pro",
+    "type": "smartphone"
+  },
+  "86482005": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 10 Pro",
+    "type": "smartphone"
+  },
+  "86472605": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 10S",
+    "type": "smartphone"
+  },
+  "86162005": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 11",
+    "type": "smartphone"
+  },
+  "86416306": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 11",
+    "type": "smartphone"
+  },
+  "86442206": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 11",
+    "type": "smartphone"
+  },
+  "86765406": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 11",
+    "type": "smartphone"
+  },
+  "86926406": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 11",
+    "type": "smartphone"
+  },
+  "86004105": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 11 Pro+",
+    "type": "smartphone"
+  },
+  "86459006": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 12",
+    "type": "smartphone"
+  },
+  "86459007": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 12",
+    "type": "smartphone"
+  },
+  "86148506": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 12 Pro",
+    "type": "smartphone"
+  },
+  "86167806": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 13",
+    "type": "smartphone"
+  },
+  "86204606": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 13",
+    "type": "smartphone"
+  },
+  "86460007": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 13",
+    "type": "smartphone"
+  },
+  "86460008": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 13",
+    "type": "smartphone"
+  },
+  "86997206": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 13",
+    "type": "smartphone"
+  },
+  "86094906": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 13 Pro",
+    "type": "smartphone"
+  },
+  "86257406": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 13 Pro",
+    "type": "smartphone"
+  },
+  "86461008": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 13 Pro+ 5G",
+    "type": "smartphone"
+  },
+  "86099303": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 7",
+    "type": "smartphone"
+  },
+  "86233003": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 7",
+    "type": "smartphone"
+  },
+  "86154803": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 8",
+    "type": "smartphone"
+  },
+  "86154804": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 8",
+    "type": "smartphone"
+  },
+  "86236004": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 8",
+    "type": "smartphone"
+  },
+  "86209604": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 9",
+    "type": "smartphone"
+  },
+  "86302004": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 9 Pro",
+    "type": "smartphone"
+  },
+  "86385004": {
+    "brand": "Xiaomi",
+    "model": "Redmi Note 9S",
+    "type": "smartphone"
+  },
+  "86253506": {
+    "brand": "Xiaomi",
+    "model": "Xiaomi 12 Pro",
+    "type": "smartphone"
+  },
+  "86305507": {
+    "brand": "Xiaomi",
+    "model": "Xiaomi 13 Pro",
+    "type": "smartphone"
+  },
+  "86355608": {
+    "brand": "Xiaomi",
+    "model": "Xiaomi 14 Pro",
+    "type": "smartphone"
+  },
+  "86356609": {
+    "brand": "Xiaomi",
+    "model": "Xiaomi 15",
+    "type": "smartphone"
+  },
+  "86164305": {
+    "brand": "ZTE",
+    "model": "Blade A52",
+    "type": "smartphone"
+  },
+  "86162305": {
+    "brand": "ZTE",
+    "model": "Blade A7 2020",
+    "type": "smartphone"
+  },
+  "86161305": {
+    "brand": "ZTE",
+    "model": "Blade V10",
+    "type": "smartphone"
+  },
+  "86163305": {
+    "brand": "ZTE",
+    "model": "Blade V30",
+    "type": "smartphone"
+  },
+  "86160305": {
+    "brand": "ZTE",
+    "model": "MC888 (router 5G)",
+    "type": "modem"
+  },
+  "86159305": {
+    "brand": "ZTE",
+    "model": "MF286R (router LTE)",
+    "type": "modem"
+  },
+  "86158305": {
+    "brand": "ZTE",
+    "model": "MF971V (router LTE)",
+    "type": "modem"
+  },
+  "35577105": {
+    "brand": "myPhone",
+    "model": "Halo 2",
+    "type": "feature_phone"
+  },
+  "35577205": {
+    "brand": "myPhone",
+    "model": "Halo 3",
+    "type": "feature_phone"
+  },
+  "35577005": {
+    "brand": "myPhone",
+    "model": "Halo Easy",
+    "type": "feature_phone"
+  },
+  "35578206": {
+    "brand": "myPhone",
+    "model": "Hammer Energy 2",
+    "type": "smartphone"
+  },
+  "35578306": {
+    "brand": "myPhone",
+    "model": "Hammer Explorer",
+    "type": "smartphone"
+  },
+  "35578006": {
+    "brand": "myPhone",
+    "model": "Maestro 2",
+    "type": "feature_phone"
+  },
+  "35578406": {
+    "brand": "myPhone",
+    "model": "NOW eSIM",
+    "type": "smartphone"
+  },
+  "35577305": {
+    "brand": "myPhone",
+    "model": "Tango",
+    "type": "feature_phone"
+  },
+  "35578106": {
+    "brand": "myPhone",
+    "model": "UP Smart",
+    "type": "smartphone"
+  }
 }
