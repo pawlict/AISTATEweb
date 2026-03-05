@@ -88,10 +88,62 @@ def _load_db() -> Dict[str, dict]:
     return db
 
 
+def _luhn_check_digit(digits_14: str) -> str:
+    """Compute the Luhn check digit for a 14-digit IMEI body.
+
+    The Luhn algorithm doubles every second digit (from the right of the
+    final 15-digit number, i.e. even-indexed digits of the 14-digit body),
+    sums them up, and the check digit makes the total divisible by 10.
+    """
+    total = 0
+    for i, ch in enumerate(digits_14):
+        n = int(ch)
+        if i % 2 == 1:
+            n *= 2
+            if n > 9:
+                n -= 9
+        total += n
+    return str((10 - (total % 10)) % 10)
+
+
+def normalize_imei(imei: str) -> str:
+    """Normalize an IMEI string.
+
+    - Strips whitespace, dashes, spaces, slashes
+    - 14-digit IMEI → appends Luhn check digit to make 15
+    - 16-digit IMEISV → truncates to 15 (drops SV byte)
+    - Returns empty string if input is not a valid IMEI-like number
+    """
+    if not imei:
+        return ""
+    digits = re.sub(r"[^0-9]", "", str(imei).strip())
+    if len(digits) == 14:
+        digits = digits + _luhn_check_digit(digits)
+    elif len(digits) == 16:
+        # IMEISV — drop the 2-digit software version, recompute check
+        digits = digits[:14] + _luhn_check_digit(digits[:14])
+    elif len(digits) != 15:
+        return digits  # return as-is (may be partial/invalid)
+    return digits
+
+
+def validate_imei(imei: str) -> bool:
+    """Validate a 15-digit IMEI using the Luhn algorithm.
+
+    Returns True if valid, False otherwise.  Also returns False for
+    non-15-digit strings.
+    """
+    digits = re.sub(r"[^0-9]", "", str(imei).strip())
+    if len(digits) != 15:
+        return False
+    expected = _luhn_check_digit(digits[:14])
+    return digits[14] == expected
+
+
 def extract_tac(imei: str) -> str:
     """Extract the 8-digit TAC from an IMEI string.
 
-    Handles IMEI (15 digits), IMEISV (16 digits), and IMEI with
+    Handles IMEI (14/15 digits), IMEISV (16 digits), and IMEI with
     separators (dashes, spaces).
     """
     if not imei:

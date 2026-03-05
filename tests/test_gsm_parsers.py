@@ -23,7 +23,10 @@ from backend.gsm.parsers.generic import GenericBillingParser
 from backend.gsm.normalize import normalize_records, extract_contact_numbers
 from backend.gsm.subscriber import parse_subscriber_file
 from backend.gsm.analyzer import analyze_billing
-from backend.gsm.imei_db import lookup_imei, extract_tac, lookup_imeis, get_db_stats, DeviceInfo
+from backend.gsm.imei_db import (
+    lookup_imei, extract_tac, lookup_imeis, get_db_stats, DeviceInfo,
+    normalize_imei, validate_imei, _luhn_check_digit,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -722,6 +725,69 @@ class TestImeiDb:
         assert "Apple" in ch["old_device"]
         assert "new_device" in ch
         assert "Samsung" in ch["new_device"]
+
+    # --- IMEI normalization & validation (Luhn) ---
+
+    def test_luhn_check_digit(self):
+        # Known IMEI: 490154203237518 → check digit = 8
+        assert _luhn_check_digit("49015420323751") == "8"
+
+    def test_normalize_14_to_15(self):
+        """14-digit IMEI should get Luhn check digit appended."""
+        result = normalize_imei("49015420323751")
+        assert len(result) == 15
+        assert result == "490154203237518"
+
+    def test_normalize_15_passthrough(self):
+        """15-digit IMEI should pass through unchanged."""
+        assert normalize_imei("490154203237518") == "490154203237518"
+
+    def test_normalize_16_imeisv(self):
+        """16-digit IMEISV should be truncated to 15 with check digit."""
+        result = normalize_imei("4901542032375199")  # 16 digits
+        assert len(result) == 15
+        assert result[:14] == "49015420323751"
+
+    def test_normalize_with_separators(self):
+        result = normalize_imei("49-0154-2032-3751")
+        assert result == "490154203237518"
+
+    def test_normalize_empty(self):
+        assert normalize_imei("") == ""
+
+    def test_validate_valid_imei(self):
+        assert validate_imei("490154203237518") is True
+
+    def test_validate_invalid_imei(self):
+        assert validate_imei("490154203237519") is False  # wrong check digit
+
+    def test_validate_short(self):
+        assert validate_imei("12345") is False
+
+    def test_normalize_in_records(self):
+        """normalize_records should normalize 14-digit IMEIs to 15."""
+        records = [
+            BillingRecord(
+                datetime="2026-03-01 08:00:00",
+                record_type="CALL_OUT",
+                callee="+48601234567",
+                imei="49015420323751",  # 14 digits
+                duration_seconds=60,
+            ),
+        ]
+        result = BillingParseResult(
+            operator="Test",
+            records=records,
+            subscriber=SubscriberInfo(
+                msisdn="+48501234567",
+                imei="49015420323751",
+            ),
+        )
+        result.summary = compute_summary(records)
+        from backend.gsm.normalize import normalize_records
+        normalized = normalize_records(result)
+        assert len(normalized.records[0].imei) == 15
+        assert len(normalized.subscriber.imei) == 15
 
 
 class TestSerialization:
