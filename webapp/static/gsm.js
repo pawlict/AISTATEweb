@@ -39,6 +39,19 @@
     return e;
   }
 
+  /* ── log panel ──────────────────────────────────────────── */
+  function _addLog(level, msg) {
+    const el = QS("#gsm_log_body");
+    if (!el) return;
+    const card = QS("#gsm_log_card");
+    if (card) card.style.display = "";
+    const ts = new Date().toLocaleTimeString("pl-PL");
+    const cls = level === "error" ? "gsm-log-error" : level === "warn" ? "gsm-log-warn" : "gsm-log-info";
+    const div = _el("div", `gsm-log-line ${cls}`, `<span class="gsm-log-ts">${ts}</span> ${msg}`);
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+
   /* ── upload & parse ─────────────────────────────────────── */
   async function _uploadAndParse(file) {
     if (St.analyzing) return;
@@ -63,18 +76,38 @@
       if (bar) bar.style.width = "60%";
 
       const resp = await fetch("/api/gsm/parse", { method: "POST", body: fd });
-      const data = await resp.json();
+
+      if (bar) bar.style.width = "90%";
+
+      // Handle non-JSON responses (e.g. HTML error pages)
+      let data;
+      const contentType = resp.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await resp.json();
+      } else {
+        const text = await resp.text();
+        console.error("GSM: non-JSON response:", resp.status, text.slice(0, 500));
+        const detail = `HTTP ${resp.status}: ${text.slice(0, 200)}`;
+        if (status) status.textContent = `Błąd: ${detail}`;
+        _addLog("error", detail);
+        St.analyzing = false;
+        return;
+      }
 
       if (bar) bar.style.width = "100%";
 
       if (data.status !== "ok") {
-        if (status) status.textContent = `Błąd: ${data.detail || "nieznany"}`;
+        const detail = data.detail || data.error || data.message || JSON.stringify(data);
+        console.error("GSM parse error:", detail);
+        if (status) status.textContent = `Błąd: ${detail}`;
+        _addLog("error", detail);
         St.analyzing = false;
         return;
       }
 
       St.lastResult = data;
       if (status) status.textContent = "Gotowe";
+      _addLog("info", `Sparsowano ${data.record_count} rekordów (${data.operator || "?"})`);
 
       setTimeout(() => {
         if (progress) progress.style.display = "none";
@@ -83,7 +116,9 @@
       _renderResults(data);
     } catch (e) {
       console.error("GSM parse error:", e);
-      if (status) status.textContent = `Błąd: ${e.message}`;
+      const msg = e.message || String(e);
+      if (status) status.textContent = `Błąd: ${msg}`;
+      _addLog("error", msg);
     } finally {
       St.analyzing = false;
     }
@@ -305,6 +340,17 @@
           _uploadAndParse(fileInput.files[0]);
           fileInput.value = "";
         }
+      };
+    }
+
+    // Clear log button
+    const clearLogBtn = QS("#gsm_log_clear");
+    if (clearLogBtn) {
+      clearLogBtn.onclick = () => {
+        const body = QS("#gsm_log_body");
+        if (body) body.innerHTML = "";
+        const card = QS("#gsm_log_card");
+        if (card) card.style.display = "none";
       };
     }
 
