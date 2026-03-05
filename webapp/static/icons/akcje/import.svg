@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="aim" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#10b981" stroke-width="1" fill="none" opacity=".15"/>
+<!-- box/tray -->
+<path d="M6 30v10a3 3 0 0 0 3 3h30a3 3 0 0 0 3-3V30" stroke="url(#aim)" stroke-width="2.2" fill="none"/>
+<line x1="6" y1="30" x2="14" y2="30" stroke="url(#aim)" stroke-width="2"/>
+<line x1="34" y1="30" x2="42" y2="30" stroke="url(#aim)" stroke-width="2"/>
+<!-- file shape falling in -->
+<path d="M16 4h8l6 6v12H16z" stroke="#10b981" stroke-width="2" fill="none"/>
+<path d="M24 4v6h6" stroke="#10b981" stroke-width="1.5" fill="none" opacity=".4"/>
+<!-- text lines on file -->
+<line x1="19" y1="14" x2="27" y2="14" stroke="#10b981" stroke-width="1.2" opacity=".3"/>
+<line x1="19" y1="18" x2="25" y2="18" stroke="#10b981" stroke-width="1.2" opacity=".25"/>
+<!-- arrow down -->
+<path d="M24 22v12" stroke="#00d4ff" stroke-width="2.5"/>
+<path d="M19 29l5 5 5-5" stroke="#00d4ff" stroke-width="2.5" fill="none"/>
+</svg>
