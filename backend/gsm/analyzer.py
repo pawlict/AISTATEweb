@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .parsers.base import BillingRecord, BillingParseResult, BillingSummary
+from .imei_db import lookup_imei, DeviceInfo
 
 
 @dataclass
@@ -91,6 +92,8 @@ class AnalysisResult:
     busiest_date_count: int = 0
     # IMEI tracking
     imei_changes: List[Dict[str, str]] = field(default_factory=list)
+    # Device identification (IMEI → brand/model)
+    devices: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -105,6 +108,7 @@ class AnalysisResult:
             "busiest_date": self.busiest_date,
             "busiest_date_count": self.busiest_date_count,
             "imei_changes": self.imei_changes,
+            "devices": self.devices,
         }
 
 
@@ -152,7 +156,18 @@ def analyze_billing(
     # 6. IMEI changes
     analysis.imei_changes = _detect_imei_changes(records)
 
-    # 7. Anomaly detection
+    # 7. Device identification (IMEI → brand/model)
+    analysis.devices = _identify_devices(records, result.subscriber)
+
+    # Enrich IMEI changes with device names
+    for ch in analysis.imei_changes:
+        for d in analysis.devices:
+            if d["imei"] == ch.get("old_imei"):
+                ch["old_device"] = d["display_name"]
+            if d["imei"] == ch.get("new_imei"):
+                ch["new_device"] = d["display_name"]
+
+    # 8. Anomaly detection
     analysis.anomalies = _detect_anomalies(records, analysis, own_numbers)
 
     return analysis
@@ -358,6 +373,64 @@ def _analyze_busiest_date(
         busiest = date_counts.most_common(1)[0]
         analysis.busiest_date = busiest[0]
         analysis.busiest_date_count = busiest[1]
+
+
+def _identify_devices(
+    records: List[BillingRecord],
+    subscriber: Any = None,
+) -> List[Dict[str, Any]]:
+    """Identify devices from unique IMEI numbers found in records and subscriber info."""
+    seen_imeis: Dict[str, Dict[str, Any]] = {}
+
+    # Collect unique IMEIs with usage stats
+    for r in records:
+        if not r.imei:
+            continue
+        imei = r.imei.strip()
+        if imei not in seen_imeis:
+            seen_imeis[imei] = {
+                "imei": imei,
+                "first_seen": r.date,
+                "last_seen": r.date,
+                "record_count": 0,
+            }
+        entry = seen_imeis[imei]
+        entry["record_count"] += 1
+        if r.date:
+            if not entry["first_seen"] or r.date < entry["first_seen"]:
+                entry["first_seen"] = r.date
+            if not entry["last_seen"] or r.date > entry["last_seen"]:
+                entry["last_seen"] = r.date
+
+    # Also check subscriber IMEI (may not appear in individual records)
+    if subscriber and hasattr(subscriber, "imei") and subscriber.imei:
+        imei = subscriber.imei.strip()
+        if imei and imei not in seen_imeis:
+            seen_imeis[imei] = {
+                "imei": imei,
+                "first_seen": "",
+                "last_seen": "",
+                "record_count": 0,
+            }
+
+    # Look up each IMEI in the TAC database
+    devices: List[Dict[str, Any]] = []
+    for imei, stats in seen_imeis.items():
+        info = lookup_imei(imei)
+        device: Dict[str, Any] = {
+            **stats,
+            "brand": info.brand if info else "",
+            "model": info.model if info else "",
+            "type": info.device_type if info else "",
+            "tac": info.tac if info else "",
+            "display_name": info.display_name if info else "",
+            "known": info is not None,
+        }
+        devices.append(device)
+
+    # Sort: most-used first
+    devices.sort(key=lambda d: -d["record_count"])
+    return devices
 
 
 def _detect_imei_changes(records: List[BillingRecord]) -> List[Dict[str, str]]:

@@ -10,6 +10,7 @@ import re
 from typing import Dict, List, Optional, Set, Tuple
 
 from .parsers.base import BillingRecord, BillingParseResult, SubscriberInfo
+from .imei_db import normalize_imei
 
 
 def normalize_records(
@@ -30,10 +31,18 @@ def normalize_records(
         if result.subscriber.msisdn:
             own_numbers.add(result.subscriber.msisdn)
 
+    # Normalize subscriber IMEI (14→15 digits)
+    if result.subscriber.imei:
+        result.subscriber.imei = normalize_imei(result.subscriber.imei)
+
     for record in result.records:
         # Normalize phones
         record.caller = _normalize_phone(record.caller)
         record.callee = _normalize_phone(record.callee)
+
+        # Normalize IMEI (14→15 digits with Luhn check digit)
+        if record.imei:
+            record.imei = normalize_imei(record.imei)
 
         # Fix direction based on own numbers
         if own_numbers:

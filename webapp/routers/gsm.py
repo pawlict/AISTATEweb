@@ -35,6 +35,7 @@ def _do_parse(file_path: Path, filename: str) -> dict:
     """Synchronous billing parse + analysis (runs in threadpool)."""
     from backend.gsm.pipeline import process_billing
     from backend.gsm.analyzer import analyze_billing
+    from backend.gsm.imei_db import lookup_imei
 
     _app_log(f"[GSM] Parsing billing: {filename}")
 
@@ -47,13 +48,20 @@ def _do_parse(file_path: Path, filename: str) -> dict:
 
     analysis = analyze_billing(result)
 
+    # Enrich subscriber with device name from IMEI
+    sub_dict = result.subscriber.to_dict()
+    if result.subscriber.imei:
+        dev = lookup_imei(result.subscriber.imei)
+        if dev:
+            sub_dict["device"] = dev.to_dict()
+
     response = {
         "status": "ok",
         "id": str(uuid.uuid4()),
         "filename": filename,
         "operator": result.operator,
         "operator_id": result.operator_id,
-        "subscriber": result.subscriber.to_dict(),
+        "subscriber": sub_dict,
         "summary": result.summary.to_dict(),
         "warnings": result.warnings,
         "analysis": analysis.to_dict() if hasattr(analysis, "to_dict") else analysis,

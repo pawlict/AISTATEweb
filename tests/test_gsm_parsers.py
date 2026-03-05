@@ -23,6 +23,10 @@ from backend.gsm.parsers.generic import GenericBillingParser
 from backend.gsm.normalize import normalize_records, extract_contact_numbers
 from backend.gsm.subscriber import parse_subscriber_file
 from backend.gsm.analyzer import analyze_billing
+from backend.gsm.imei_db import (
+    lookup_imei, extract_tac, lookup_imeis, get_db_stats, DeviceInfo,
+    normalize_imei, validate_imei, _luhn_check_digit,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -591,6 +595,200 @@ class TestAnalyzer:
 # ---------------------------------------------------------------------------
 # Tests: BillingParseResult serialization
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Tests: IMEI / TAC device identification
+# ---------------------------------------------------------------------------
+
+class TestImeiDb:
+    def test_extract_tac_basic(self):
+        assert extract_tac("354236140123456") == "35423614"
+
+    def test_extract_tac_with_separators(self):
+        assert extract_tac("35-4236-14-012345-6") == "35423614"
+
+    def test_extract_tac_short(self):
+        assert extract_tac("12345") == ""
+
+    def test_extract_tac_empty(self):
+        assert extract_tac("") == ""
+
+    def test_lookup_known_imei(self):
+        # iPhone 14 — TAC 35423614
+        result = lookup_imei("354236140123456")
+        assert result is not None
+        assert result.brand == "Apple"
+        assert "iPhone 14" in result.model
+        assert result.device_type == "smartphone"
+        assert result.display_name == "Apple iPhone 14"
+
+    def test_lookup_unknown_imei(self):
+        result = lookup_imei("999999990000000")
+        assert result is None
+
+    def test_lookup_samsung(self):
+        # Galaxy S23 Ultra — TAC 35387723
+        result = lookup_imei("353877230000000")
+        assert result is not None
+        assert result.brand == "Samsung"
+        assert "S23 Ultra" in result.model
+
+    def test_lookup_xiaomi(self):
+        # Redmi Note 12 — TAC 86459007
+        result = lookup_imei("864590070000000")
+        assert result is not None
+        assert result.brand == "Xiaomi"
+
+    def test_lookup_imeis_batch(self):
+        results = lookup_imeis([
+            "354236140123456",  # iPhone 14
+            "353877230000000",  # Galaxy S23 Ultra
+            "999999990000000",  # unknown
+        ])
+        assert len(results) == 2
+        assert "354236140123456" in results
+        assert "999999990000000" not in results
+
+    def test_db_stats(self):
+        stats = get_db_stats()
+        assert stats["total_entries"] > 50
+        assert "Apple" in stats["brands"]
+        assert "Samsung" in stats["brands"]
+        assert "smartphone" in stats["types"]
+
+    def test_device_info_display_name(self):
+        d = DeviceInfo(brand="Apple", model="iPhone 15 Pro")
+        assert d.display_name == "Apple iPhone 15 Pro"
+
+    def test_device_info_empty(self):
+        d = DeviceInfo()
+        assert d.display_name == ""
+
+    def test_analyzer_identifies_devices(self):
+        """Analyzer should populate devices list from record IMEIs."""
+        records = [
+            BillingRecord(
+                datetime="2026-03-01 08:00:00",
+                record_type="CALL_OUT",
+                callee="+48601234567",
+                imei="354236140123456",  # iPhone 14
+                duration_seconds=60,
+            ),
+            BillingRecord(
+                datetime="2026-03-02 09:00:00",
+                record_type="SMS_OUT",
+                callee="+48601234567",
+                imei="354236140123456",  # same iPhone 14
+            ),
+        ]
+        result = BillingParseResult(
+            operator="Test",
+            records=records,
+            subscriber=SubscriberInfo(msisdn="+48501234567", imei="354236140123456"),
+        )
+        result.summary = compute_summary(records)
+        analysis = analyze_billing(result)
+        assert len(analysis.devices) >= 1
+        dev = analysis.devices[0]
+        assert dev["brand"] == "Apple"
+        assert dev["known"] is True
+        assert dev["record_count"] == 2
+
+    def test_analyzer_imei_changes_with_device_names(self):
+        """IMEI changes should include device names when available."""
+        records = [
+            BillingRecord(
+                datetime="2026-03-01 08:00:00",
+                record_type="CALL_OUT",
+                callee="+48601234567",
+                imei="354236140123456",  # iPhone 14
+                duration_seconds=60,
+            ),
+            BillingRecord(
+                datetime="2026-03-10 09:00:00",
+                record_type="CALL_OUT",
+                callee="+48601234567",
+                imei="353877230000000",  # Galaxy S23 Ultra
+                duration_seconds=120,
+            ),
+        ]
+        result = BillingParseResult(
+            operator="Test",
+            records=records,
+            subscriber=SubscriberInfo(msisdn="+48501234567"),
+        )
+        result.summary = compute_summary(records)
+        analysis = analyze_billing(result)
+        assert len(analysis.imei_changes) == 1
+        ch = analysis.imei_changes[0]
+        assert "old_device" in ch
+        assert "Apple" in ch["old_device"]
+        assert "new_device" in ch
+        assert "Samsung" in ch["new_device"]
+
+    # --- IMEI normalization & validation (Luhn) ---
+
+    def test_luhn_check_digit(self):
+        # Known IMEI: 490154203237518 → check digit = 8
+        assert _luhn_check_digit("49015420323751") == "8"
+
+    def test_normalize_14_to_15(self):
+        """14-digit IMEI should get Luhn check digit appended."""
+        result = normalize_imei("49015420323751")
+        assert len(result) == 15
+        assert result == "490154203237518"
+
+    def test_normalize_15_passthrough(self):
+        """15-digit IMEI should pass through unchanged."""
+        assert normalize_imei("490154203237518") == "490154203237518"
+
+    def test_normalize_16_imeisv(self):
+        """16-digit IMEISV should be truncated to 15 with check digit."""
+        result = normalize_imei("4901542032375199")  # 16 digits
+        assert len(result) == 15
+        assert result[:14] == "49015420323751"
+
+    def test_normalize_with_separators(self):
+        result = normalize_imei("49-0154-2032-3751")
+        assert result == "490154203237518"
+
+    def test_normalize_empty(self):
+        assert normalize_imei("") == ""
+
+    def test_validate_valid_imei(self):
+        assert validate_imei("490154203237518") is True
+
+    def test_validate_invalid_imei(self):
+        assert validate_imei("490154203237519") is False  # wrong check digit
+
+    def test_validate_short(self):
+        assert validate_imei("12345") is False
+
+    def test_normalize_in_records(self):
+        """normalize_records should normalize 14-digit IMEIs to 15."""
+        records = [
+            BillingRecord(
+                datetime="2026-03-01 08:00:00",
+                record_type="CALL_OUT",
+                callee="+48601234567",
+                imei="49015420323751",  # 14 digits
+                duration_seconds=60,
+            ),
+        ]
+        result = BillingParseResult(
+            operator="Test",
+            records=records,
+            subscriber=SubscriberInfo(
+                msisdn="+48501234567",
+                imei="49015420323751",
+            ),
+        )
+        result.summary = compute_summary(records)
+        from backend.gsm.normalize import normalize_records
+        normalized = normalize_records(result)
+        assert len(normalized.records[0].imei) == 15
+        assert len(normalized.subscriber.imei) == 15
+
 
 class TestSerialization:
     def test_full_result_to_dict(self):
