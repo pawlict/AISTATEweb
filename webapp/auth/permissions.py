@@ -40,7 +40,8 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     "admin_settings": {
         "pages": [
             "/settings", "/llm-settings", "/asr-settings",
-            "/nllb-settings", "/tts-settings", "/admin", "/logs",
+            "/nllb-settings", "/tts-settings", "/bts-settings",
+            "/admin", "/logs",
             "/ustawienia", "/ustawienia-llm", "/logi",
         ],
         "api_prefixes": [
