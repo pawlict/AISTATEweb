@@ -3504,14 +3504,15 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-period-select{font-size:12px;padding:4px 8px;border:1px solid var(--border,#e2e8f0);border-radius:6px;background:var(--bg-secondary,#f8fafc);color:var(--text,#334155);cursor:pointer;max-width:220px}
 .gsm-chart-summary{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--text-muted,#64748b);margin-bottom:14px}
 .gsm-chart-summary b{color:var(--text,#334155)}
-.gsm-bar-chart{display:flex;align-items:flex-end;gap:8px;height:160px;padding:0 4px;border-bottom:2px solid var(--border,#e2e8f0)}
+.gsm-bar-chart{display:flex;align-items:stretch;gap:8px;height:180px;padding:0 4px;border-bottom:2px solid var(--border,#e2e8f0)}
 .gsm-bar-col{display:flex;flex-direction:column;align-items:center;flex:1;min-width:0}
 .gsm-bar-col-wide{flex:1.5}
+.gsm-bar-wrap{flex:1;display:flex;align-items:flex-end;justify-content:center;width:100%;min-height:0}
 .gsm-bar{width:100%;min-width:22px;max-width:52px;border-radius:6px 6px 0 0;transition:height .3s ease}
-.gsm-bar-night{background:linear-gradient(180deg,#4338ca,#818cf8)}
-.gsm-bar-weekend{background:linear-gradient(180deg,#d97706,#fbbf24)}
-.gsm-bar-value{font-size:11px;font-weight:700;color:var(--text,#334155);margin-bottom:2px}
-.gsm-bar-label{font-size:10px;color:var(--text-muted,#94a3b8);margin-top:4px;text-align:center;white-space:nowrap}
+.gsm-bar-night{background:linear-gradient(180deg,#4338ca 0%,#818cf8 100%)}
+.gsm-bar-weekend{background:linear-gradient(180deg,#d97706 0%,#fbbf24 100%)}
+.gsm-bar-value{font-size:11px;font-weight:700;color:var(--text,#334155);margin-bottom:2px;flex-shrink:0}
+.gsm-bar-label{font-size:10px;color:var(--text-muted,#94a3b8);margin-top:4px;text-align:center;white-space:nowrap;flex-shrink:0}
 /* Anomaly descriptions below chart */
 .gsm-chart-anomalies{margin-top:14px;border-top:1px solid var(--border,#e2e8f0);padding-top:10px}
 .gsm-chart-anomaly-item{font-size:12px;padding:5px 10px;margin-bottom:4px;border-radius:6px;line-height:1.5}

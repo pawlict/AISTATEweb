@@ -403,7 +403,9 @@
       const pct = Math.round((item.value / maxVal) * 100);
       html += `<div class="gsm-bar-col${item.wide ? ' gsm-bar-col-wide' : ''}">
         <div class="gsm-bar-value">${item.value}</div>
-        <div class="gsm-bar ${cssBarClass}" style="height:${Math.max(pct, 3)}%" title="${item.label}: ${item.value}"></div>
+        <div class="gsm-bar-wrap">
+          <div class="gsm-bar ${cssBarClass}" style="height:${Math.max(pct, 4)}%" title="${item.label}: ${item.value}"></div>
+        </div>
         <div class="gsm-bar-label">${item.label}</div>
       </div>`;
     }
