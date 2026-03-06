@@ -615,12 +615,10 @@ def _detect_special_numbers(
 def _compute_night_activity(records: List[BillingRecord]) -> Dict[str, Any]:
     """Compute night activity stats (22:00-6:00).
 
-    Returns aggregate data for a single bar chart showing:
-    - total records in night hours
-    - calls, sms, data breakdown
-    - percentage of total
-    - per-hour breakdown (22,23,0,1,2,3,4,5)
+    Returns aggregate totals plus weekly and monthly breakdowns for drill-down.
     """
+    from datetime import date as date_cls, timedelta
+
     night_hours = {22, 23, 0, 1, 2, 3, 4, 5}
     total = 0
     night_total = 0
@@ -630,6 +628,12 @@ def _compute_night_activity(records: List[BillingRecord]) -> Dict[str, Any]:
     other = 0
     duration_sec = 0
     hourly: Dict[int, int] = {h: 0 for h in [22, 23, 0, 1, 2, 3, 4, 5]}
+    # Weekly/monthly collectors
+    weekly: Dict[str, Dict[str, Any]] = {}   # "2024-W03" → {records, calls, sms, ...}
+    monthly: Dict[str, Dict[str, Any]] = {}  # "2024-01" → {records, calls, sms, ...}
+
+    def _empty_bucket() -> Dict[str, Any]:
+        return {"records": 0, "calls": 0, "sms": 0, "data": 0, "other": 0, "duration_sec": 0}
 
     for r in records:
         total += 1
@@ -648,14 +652,48 @@ def _compute_night_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         duration_sec += r.duration_seconds
 
         rt = r.record_type
+        cat = "other"
         if "CALL" in rt:
             calls += 1
+            cat = "calls"
         elif "SMS" in rt or "MMS" in rt:
             sms += 1
+            cat = "sms"
         elif rt == "DATA":
             data += 1
+            cat = "data"
         else:
             other += 1
+
+        # Bucket by week and month
+        if r.date:
+            try:
+                parts = r.date.split("-")
+                d = date_cls(int(parts[0]), int(parts[1]), int(parts[2]))
+                iso = d.isocalendar()
+                week_key = f"{iso[0]}-W{iso[1]:02d}"
+                month_key = r.date[:7]
+
+                if week_key not in weekly:
+                    weekly[week_key] = _empty_bucket()
+                weekly[week_key]["records"] += 1
+                weekly[week_key][cat] += 1
+                weekly[week_key]["duration_sec"] += r.duration_seconds
+
+                if month_key not in monthly:
+                    monthly[month_key] = _empty_bucket()
+                monthly[month_key]["records"] += 1
+                monthly[month_key][cat] += 1
+                monthly[month_key]["duration_sec"] += r.duration_seconds
+            except (ValueError, IndexError):
+                pass
+
+    # Sort weekly/monthly by key
+    weekly_sorted = dict(sorted(weekly.items()))
+    monthly_sorted = dict(sorted(monthly.items()))
+
+    # Compute anomalies — weeks/months deviating significantly from average
+    anomalies = _detect_period_anomalies(weekly_sorted, monthly_sorted, "nocna")
 
     return {
         "total_records": night_total,
@@ -667,13 +705,16 @@ def _compute_night_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         "other": other,
         "total_duration_seconds": duration_sec,
         "hourly": hourly,
+        "weekly": weekly_sorted,
+        "monthly": monthly_sorted,
+        "anomalies": anomalies,
     }
 
 
 def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
     """Compute weekend activity stats (Friday 20:00 - Monday 6:00).
 
-    Returns aggregate data for a single bar chart.
+    Returns aggregate totals plus weekly and monthly breakdowns for drill-down.
     """
     from datetime import date as date_cls
 
@@ -684,13 +725,18 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
     data = 0
     other = 0
     duration_sec = 0
-    # Breakdown by day segment: Fri evening, Sat, Sun, Mon morning
     segments: Dict[str, int] = {
         "fri_evening": 0,
         "saturday": 0,
         "sunday": 0,
         "mon_morning": 0,
     }
+    weekly: Dict[str, Dict[str, Any]] = {}
+    monthly: Dict[str, Dict[str, Any]] = {}
+
+    def _empty_bucket() -> Dict[str, Any]:
+        return {"records": 0, "calls": 0, "sms": 0, "data": 0, "other": 0, "duration_sec": 0,
+                "fri_evening": 0, "saturday": 0, "sunday": 0, "mon_morning": 0}
 
     for r in records:
         total += 1
@@ -700,7 +746,7 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         try:
             parts = r.date.split("-")
             d = date_cls(int(parts[0]), int(parts[1]), int(parts[2]))
-            weekday = d.weekday()  # 0=Mon .. 4=Fri, 5=Sat, 6=Sun
+            weekday = d.weekday()
             hour = int(r.time.split(":")[0])
         except (ValueError, IndexError):
             continue
@@ -708,16 +754,16 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         is_weekend = False
         segment = ""
 
-        if weekday == 4 and hour >= 20:  # Friday 20:00+
+        if weekday == 4 and hour >= 20:
             is_weekend = True
             segment = "fri_evening"
-        elif weekday == 5:  # Saturday all day
+        elif weekday == 5:
             is_weekend = True
             segment = "saturday"
-        elif weekday == 6:  # Sunday all day
+        elif weekday == 6:
             is_weekend = True
             segment = "sunday"
-        elif weekday == 0 and hour < 6:  # Monday before 6:00
+        elif weekday == 0 and hour < 6:
             is_weekend = True
             segment = "mon_morning"
 
@@ -729,14 +775,45 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         duration_sec += r.duration_seconds
 
         rt = r.record_type
+        cat = "other"
         if "CALL" in rt:
             calls += 1
+            cat = "calls"
         elif "SMS" in rt or "MMS" in rt:
             sms += 1
+            cat = "sms"
         elif rt == "DATA":
             data += 1
+            cat = "data"
         else:
             other += 1
+
+        # Bucket by week and month
+        try:
+            iso = d.isocalendar()
+            week_key = f"{iso[0]}-W{iso[1]:02d}"
+            month_key = r.date[:7]
+
+            if week_key not in weekly:
+                weekly[week_key] = _empty_bucket()
+            weekly[week_key]["records"] += 1
+            weekly[week_key][cat] += 1
+            weekly[week_key][segment] += 1
+            weekly[week_key]["duration_sec"] += r.duration_seconds
+
+            if month_key not in monthly:
+                monthly[month_key] = _empty_bucket()
+            monthly[month_key]["records"] += 1
+            monthly[month_key][cat] += 1
+            monthly[month_key][segment] += 1
+            monthly[month_key]["duration_sec"] += r.duration_seconds
+        except (ValueError, IndexError):
+            pass
+
+    weekly_sorted = dict(sorted(weekly.items()))
+    monthly_sorted = dict(sorted(monthly.items()))
+
+    anomalies = _detect_period_anomalies(weekly_sorted, monthly_sorted, "weekendowa")
 
     return {
         "total_records": weekend_total,
@@ -748,7 +825,148 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         "other": other,
         "total_duration_seconds": duration_sec,
         "segments": segments,
+        "weekly": weekly_sorted,
+        "monthly": monthly_sorted,
+        "anomalies": anomalies,
     }
+
+
+def _format_duration_short(sec: int) -> str:
+    """Format seconds as short Polish duration string."""
+    if sec <= 0:
+        return "0s"
+    h = sec // 3600
+    m = (sec % 3600) // 60
+    s = sec % 60
+    if h > 0:
+        return f"{h}h {m}m"
+    if m > 0:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
+def _detect_period_anomalies(
+    weekly: Dict[str, Dict[str, Any]],
+    monthly: Dict[str, Dict[str, Any]],
+    activity_name: str,
+) -> List[Dict[str, Any]]:
+    """Detect anomalies and build per-period + overall summary descriptions."""
+    anomalies: List[Dict[str, Any]] = []
+
+    # --- Per-week descriptions with anomaly flagging ---
+    if len(weekly) >= 2:
+        counts = [b["records"] for b in weekly.values()]
+        avg = sum(counts) / len(counts)
+        std_dev = (sum((c - avg) ** 2 for c in counts) / len(counts)) ** 0.5
+        threshold_hi = avg + max(std_dev * 1.5, 1)
+        threshold_lo = max(avg - max(std_dev * 1.5, 1), 0)
+
+        for key, bucket in weekly.items():
+            rec = bucket["records"]
+            dur = _format_duration_short(bucket.get("duration_sec", 0))
+            detail = (
+                f"rozmowy: {bucket.get('calls', 0)}, "
+                f"SMS/MMS: {bucket.get('sms', 0)}, "
+                f"dane: {bucket.get('data', 0)}, "
+                f"czas: {dur}"
+            )
+
+            if rec > threshold_hi and avg > 0:
+                ratio = rec / avg
+                anomalies.append({
+                    "period_type": "week",
+                    "period_key": key,
+                    "records": rec,
+                    "average": round(avg, 1),
+                    "ratio": round(ratio, 1),
+                    "description": (
+                        f"Tydzień {key}: {rec} rekordów "
+                        f"({ratio:.1f}x powyżej średniej {avg:.0f}/tydz.) — "
+                        f"{detail}"
+                    ),
+                })
+            elif rec < threshold_lo and avg > 2:
+                ratio = rec / avg if avg > 0 else 0
+                anomalies.append({
+                    "period_type": "week",
+                    "period_key": key,
+                    "records": rec,
+                    "average": round(avg, 1),
+                    "ratio": round(ratio, 1),
+                    "description": (
+                        f"Tydzień {key}: tylko {rec} rekordów "
+                        f"(poniżej średniej {avg:.0f}/tydz.) — "
+                        f"{detail}"
+                    ),
+                })
+
+    # --- Per-month descriptions with anomaly flagging ---
+    if len(monthly) >= 2:
+        counts = [b["records"] for b in monthly.values()]
+        avg = sum(counts) / len(counts)
+        std_dev = (sum((c - avg) ** 2 for c in counts) / len(counts)) ** 0.5
+        threshold_hi = avg + max(std_dev * 1.5, 1)
+
+        for key, bucket in monthly.items():
+            rec = bucket["records"]
+            dur = _format_duration_short(bucket.get("duration_sec", 0))
+            detail = (
+                f"rozmowy: {bucket.get('calls', 0)}, "
+                f"SMS/MMS: {bucket.get('sms', 0)}, "
+                f"dane: {bucket.get('data', 0)}, "
+                f"czas: {dur}"
+            )
+
+            if rec > threshold_hi and avg > 0:
+                ratio = rec / avg
+                anomalies.append({
+                    "period_type": "month",
+                    "period_key": key,
+                    "records": rec,
+                    "average": round(avg, 1),
+                    "ratio": round(ratio, 1),
+                    "description": (
+                        f"Miesiąc {key}: {rec} rekordów "
+                        f"({ratio:.1f}x powyżej średniej {avg:.0f}/mies.) — "
+                        f"{detail}"
+                    ),
+                })
+
+    # --- Overall summary (always present if data exists) ---
+    total_weeks = len(weekly)
+    total_months = len(monthly)
+    if total_weeks > 0:
+        total_rec = sum(b["records"] for b in weekly.values())
+        total_calls = sum(b.get("calls", 0) for b in weekly.values())
+        total_sms = sum(b.get("sms", 0) for b in weekly.values())
+        total_data = sum(b.get("data", 0) for b in weekly.values())
+        total_dur = sum(b.get("duration_sec", 0) for b in weekly.values())
+
+        avg_week = total_rec / total_weeks if total_weeks else 0
+        avg_month = total_rec / total_months if total_months else 0
+
+        max_week = max(weekly.items(), key=lambda x: x[1]["records"])
+        min_week = min(weekly.items(), key=lambda x: x[1]["records"])
+
+        summary_lines = [
+            f"Łącznie {total_rec} rekordów aktywności {activity_name} "
+            f"w {total_weeks} tygodniach ({total_months} miesięcy).",
+            f"Rozkład: rozmowy {total_calls}, SMS/MMS {total_sms}, "
+            f"dane {total_data}, łączny czas {_format_duration_short(total_dur)}.",
+            f"Średnio {avg_week:.1f} rek./tydzień, {avg_month:.1f} rek./miesiąc.",
+        ]
+        if total_weeks >= 2:
+            summary_lines.append(
+                f"Najaktywniejszy tydzień: {max_week[0]} ({max_week[1]['records']} rek.), "
+                f"najcichszy: {min_week[0]} ({min_week[1]['records']} rek.)."
+            )
+
+        anomalies.append({
+            "period_type": "summary",
+            "description": " ".join(summary_lines),
+        })
+
+    return anomalies
 
 
 def _detect_anomalies(

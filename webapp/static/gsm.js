@@ -393,7 +393,58 @@
     el.innerHTML = html;
   }
 
-  /* ── activity charts (pure CSS bar charts) ──────────── */
+  /* ── activity charts ──────────────────────────────────── */
+
+  /** Build bars HTML from an array of {label, value} */
+  function _buildBars(items, cssBarClass) {
+    const maxVal = Math.max(1, ...items.map(i => i.value));
+    let html = '';
+    for (const item of items) {
+      const pct = Math.round((item.value / maxVal) * 100);
+      html += `<div class="gsm-bar-col${item.wide ? ' gsm-bar-col-wide' : ''}">
+        <div class="gsm-bar-value">${item.value}</div>
+        <div class="gsm-bar ${cssBarClass}" style="height:${Math.max(pct, 3)}%" title="${item.label}: ${item.value}"></div>
+        <div class="gsm-bar-label">${item.label}</div>
+      </div>`;
+    }
+    return html;
+  }
+
+  /** Build anomaly descriptions + overall summary HTML */
+  function _buildAnomalies(anomalies) {
+    if (!anomalies || !anomalies.length) return '';
+
+    // Separate anomalies from summary
+    const items = anomalies.filter(a => a.period_type !== "summary");
+    const summaries = anomalies.filter(a => a.period_type === "summary");
+
+    let html = '';
+
+    // Per-period anomalies
+    if (items.length) {
+      html += '<div class="gsm-chart-anomalies">';
+      for (const a of items) {
+        const icon = a.ratio > 1 ? '&#9650;' : '&#9660;';
+        const cls = a.ratio > 1 ? 'gsm-anomaly-up' : 'gsm-anomaly-down';
+        html += `<div class="gsm-chart-anomaly-item ${cls}">
+          <span class="gsm-chart-anomaly-icon">${icon}</span> ${a.description}
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    // Overall summary block
+    if (summaries.length) {
+      html += '<div class="gsm-chart-summary-block">';
+      for (const s of summaries) {
+        html += `<div>${s.description}</div>`;
+      }
+      html += '</div>';
+    }
+
+    return html;
+  }
+
   function _renderActivityCharts(analysis) {
     const wrap = QS("#gsm_activity_charts");
     if (!wrap || !analysis) { if (wrap) wrap.style.display = "none"; return; }
@@ -409,73 +460,183 @@
 
     let html = '<div class="gsm-charts-row">';
 
-    // --- Night activity chart (22:00-6:00) ---
+    // --- Night activity ---
     if (night && night.total_records) {
-      html += `<div class="gsm-chart-card">
-        <div class="h3">Aktywność nocna <span class="small muted">(22:00–6:00)</span></div>
-        <div class="gsm-chart-summary">
-          <span><b>${_fmt(night.total_records)}</b> rekordów (${night.percentage}% całości)</span>
-          <span>Rozmowy: <b>${_fmt(night.calls)}</b></span>
-          <span>SMS/MMS: <b>${_fmt(night.sms)}</b></span>
-          <span>Dane: <b>${_fmt(night.data)}</b></span>
-          <span>Czas: <b>${_dur(night.total_duration_seconds)}</b></span>
-        </div>
-        <div class="gsm-bar-chart">`;
-
-      // Per-hour bars
-      const hourly = night.hourly || {};
-      const hours = [22, 23, 0, 1, 2, 3, 4, 5];
-      const maxH = Math.max(1, ...hours.map(h => hourly[h] || 0));
-      for (const h of hours) {
-        const val = hourly[h] || 0;
-        const pct = Math.round((val / maxH) * 100);
-        const label = `${String(h).padStart(2, "0")}:00`;
-        html += `<div class="gsm-bar-col">
-          <div class="gsm-bar-value">${val}</div>
-          <div class="gsm-bar" style="height:${Math.max(pct, 2)}%" title="${label}: ${val} rekordów"></div>
-          <div class="gsm-bar-label">${label}</div>
-        </div>`;
-      }
-
-      html += `</div></div>`;
+      html += _renderOneActivityChart({
+        id: "night",
+        title: "Aktywność nocna",
+        subtitle: "22:00–6:00",
+        data: night,
+        barClass: "gsm-bar-night",
+        buildTotalBars: () => {
+          const hourly = night.hourly || {};
+          const hours = [22, 23, 0, 1, 2, 3, 4, 5];
+          return _buildBars(
+            hours.map(h => ({ label: `${String(h).padStart(2, "0")}:00`, value: hourly[h] || 0 })),
+            "gsm-bar-night"
+          );
+        },
+      });
     }
 
-    // --- Weekend activity chart (Fri 20:00 - Mon 6:00) ---
+    // --- Weekend activity ---
     if (weekend && weekend.total_records) {
-      html += `<div class="gsm-chart-card">
-        <div class="h3">Aktywność weekendowa <span class="small muted">(Pt 20:00–Pn 6:00)</span></div>
-        <div class="gsm-chart-summary">
-          <span><b>${_fmt(weekend.total_records)}</b> rekordów (${weekend.percentage}% całości)</span>
-          <span>Rozmowy: <b>${_fmt(weekend.calls)}</b></span>
-          <span>SMS/MMS: <b>${_fmt(weekend.sms)}</b></span>
-          <span>Dane: <b>${_fmt(weekend.data)}</b></span>
-          <span>Czas: <b>${_dur(weekend.total_duration_seconds)}</b></span>
-        </div>
-        <div class="gsm-bar-chart">`;
-
-      const segs = weekend.segments || {};
-      const segDef = [
-        { key: "fri_evening", label: "Pt wieczór" },
-        { key: "saturday", label: "Sobota" },
-        { key: "sunday", label: "Niedziela" },
-        { key: "mon_morning", label: "Pn rano" },
-      ];
-      const maxS = Math.max(1, ...segDef.map(s => segs[s.key] || 0));
-      for (const seg of segDef) {
-        const val = segs[seg.key] || 0;
-        const pct = Math.round((val / maxS) * 100);
-        html += `<div class="gsm-bar-col gsm-bar-col-wide">
-          <div class="gsm-bar-value">${val}</div>
-          <div class="gsm-bar gsm-bar-weekend" style="height:${Math.max(pct, 2)}%" title="${seg.label}: ${val} rekordów"></div>
-          <div class="gsm-bar-label">${seg.label}</div>
-        </div>`;
-      }
-
-      html += `</div></div>`;
+      html += _renderOneActivityChart({
+        id: "weekend",
+        title: "Aktywność weekendowa",
+        subtitle: "Pt 20:00–Pn 6:00",
+        data: weekend,
+        barClass: "gsm-bar-weekend",
+        buildTotalBars: () => {
+          const segs = weekend.segments || {};
+          return _buildBars([
+            { label: "Pt wieczór", value: segs.fri_evening || 0, wide: true },
+            { label: "Sobota", value: segs.saturday || 0, wide: true },
+            { label: "Niedziela", value: segs.sunday || 0, wide: true },
+            { label: "Pn rano", value: segs.mon_morning || 0, wide: true },
+          ], "gsm-bar-weekend");
+        },
+      });
     }
 
     html += "</div>";
     wrap.innerHTML = html;
+
+    // Bind period selectors
+    QSA(".gsm-period-select", wrap).forEach(sel => {
+      sel.onchange = () => _onPeriodChange(sel, analysis);
+    });
+  }
+
+  function _renderOneActivityChart(cfg) {
+    const d = cfg.data;
+    const weeklyKeys = Object.keys(d.weekly || {});
+    const monthlyKeys = Object.keys(d.monthly || {});
+
+    let html = `<div class="gsm-chart-card" data-chart-id="${cfg.id}">
+      <div class="gsm-chart-header">
+        <div class="h3">${cfg.title} <span class="small muted">(${cfg.subtitle})</span></div>
+        <select class="gsm-period-select" data-chart="${cfg.id}">
+          <option value="total" selected>Łącznie</option>`;
+
+    // Weekly options
+    if (weeklyKeys.length > 1) {
+      html += `<optgroup label="Tygodnie">`;
+      for (const k of weeklyKeys) {
+        const bucket = d.weekly[k];
+        html += `<option value="week:${k}">Tydzień ${k} (${bucket.records} rek.)</option>`;
+      }
+      html += `</optgroup>`;
+    }
+
+    // Monthly options
+    if (monthlyKeys.length > 1) {
+      html += `<optgroup label="Miesiące">`;
+      for (const k of monthlyKeys) {
+        const bucket = d.monthly[k];
+        html += `<option value="month:${k}">Miesiąc ${k} (${bucket.records} rek.)</option>`;
+      }
+      html += `</optgroup>`;
+    }
+
+    html += `</select></div>`;
+
+    // Summary stats
+    html += `<div class="gsm-chart-summary">
+      <span><b>${_fmt(d.total_records)}</b> rekordów (${d.percentage}% całości)</span>
+      <span>Rozmowy: <b>${_fmt(d.calls)}</b></span>
+      <span>SMS/MMS: <b>${_fmt(d.sms)}</b></span>
+      <span>Dane: <b>${_fmt(d.data)}</b></span>
+      <span>Czas: <b>${_dur(d.total_duration_seconds)}</b></span>
+    </div>`;
+
+    // Bar chart
+    html += `<div class="gsm-bar-chart" data-bars="${cfg.id}">${cfg.buildTotalBars()}</div>`;
+
+    // Anomaly descriptions (below chart)
+    html += _buildAnomalies(d.anomalies);
+
+    html += `</div>`;
+    return html;
+  }
+
+  function _onPeriodChange(selectEl, analysis) {
+    const chartId = selectEl.dataset.chart;
+    const val = selectEl.value;
+    const card = selectEl.closest(".gsm-chart-card");
+    const barContainer = QS(`[data-bars="${chartId}"]`, card);
+    const summaryEl = QS(".gsm-chart-summary", card);
+    if (!barContainer) return;
+
+    const src = chartId === "night" ? analysis.night_activity : analysis.weekend_activity;
+    if (!src) return;
+
+    let bucket = null;
+    let periodLabel = "Łącznie";
+
+    if (val === "total") {
+      bucket = src;
+    } else if (val.startsWith("week:")) {
+      const key = val.slice(5);
+      bucket = (src.weekly || {})[key];
+      periodLabel = `Tydzień ${key}`;
+    } else if (val.startsWith("month:")) {
+      const key = val.slice(6);
+      bucket = (src.monthly || {})[key];
+      periodLabel = `Miesiąc ${key}`;
+    }
+
+    if (!bucket) return;
+
+    // Update summary
+    if (summaryEl) {
+      const recs = val === "total" ? bucket.total_records : bucket.records;
+      const dur = val === "total" ? bucket.total_duration_seconds : (bucket.duration_sec || 0);
+      summaryEl.innerHTML = `
+        <span><b>${_fmt(recs)}</b> rekordów${val === "total" ? ` (${bucket.percentage}% całości)` : ` — ${periodLabel}`}</span>
+        <span>Rozmowy: <b>${_fmt(bucket.calls)}</b></span>
+        <span>SMS/MMS: <b>${_fmt(bucket.sms)}</b></span>
+        <span>Dane: <b>${_fmt(bucket.data)}</b></span>
+        <span>Czas: <b>${_dur(dur)}</b></span>`;
+    }
+
+    // Update bars
+    if (chartId === "night") {
+      if (val === "total") {
+        const hourly = src.hourly || {};
+        const hours = [22, 23, 0, 1, 2, 3, 4, 5];
+        barContainer.innerHTML = _buildBars(
+          hours.map(h => ({ label: `${String(h).padStart(2, "0")}:00`, value: hourly[h] || 0 })),
+          "gsm-bar-night"
+        );
+      } else {
+        // For week/month — show single summary bar with breakdown
+        barContainer.innerHTML = _buildBars([
+          { label: "Rozmowy", value: bucket.calls || 0 },
+          { label: "SMS/MMS", value: bucket.sms || 0 },
+          { label: "Dane", value: bucket.data || 0 },
+          { label: "Inne", value: bucket.other || 0 },
+        ], "gsm-bar-night");
+      }
+    } else {
+      // Weekend
+      if (val === "total") {
+        const segs = src.segments || {};
+        barContainer.innerHTML = _buildBars([
+          { label: "Pt wieczór", value: segs.fri_evening || 0, wide: true },
+          { label: "Sobota", value: segs.saturday || 0, wide: true },
+          { label: "Niedziela", value: segs.sunday || 0, wide: true },
+          { label: "Pn rano", value: segs.mon_morning || 0, wide: true },
+        ], "gsm-bar-weekend");
+      } else {
+        barContainer.innerHTML = _buildBars([
+          { label: "Pt wieczór", value: bucket.fri_evening || 0, wide: true },
+          { label: "Sobota", value: bucket.saturday || 0, wide: true },
+          { label: "Niedziela", value: bucket.sunday || 0, wide: true },
+          { label: "Pn rano", value: bucket.mon_morning || 0, wide: true },
+        ], "gsm-bar-weekend");
+      }
+    }
   }
 
   function _renderWarnings(warnings) {
