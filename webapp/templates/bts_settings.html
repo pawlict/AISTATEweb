@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1 class="h1" data-i18n="bts.page_title">Ustawienia BTS (Geolokalizacja)</h1>
+
+  <div class="grid">
+    <div class="subcard">
+
+      <style>
+        .bts-model-row{ display:grid; grid-template-columns: minmax(360px, 520px) 1fr; gap:14px; align-items:start; }
+        .bts-model-left{ min-width: 0; }
+        .bts-model-right{ min-width: 0; }
+        .bts-info-box{
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(0,0,0,0.08);
+          border-radius: 10px;
+          padding: 10px 12px;
+        }
+        .bts-info-title{ font-weight:600; margin-bottom:6px; }
+        .bts-install-row{ display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+        .bts-install-row .small{ margin:0; }
+        .bts-kv{ display:grid; grid-template-columns: 140px 1fr; gap:4px 12px; }
+        .bts-kv .kv-h{ font-weight:600; opacity:.95; }
+        .bts-warn{
+          border: 1px solid rgba(185, 28, 28, 0.22);
+          background: rgba(185, 28, 28, 0.10);
+          border-radius: 10px;
+          padding: 8px 10px;
+          margin-top: 10px;
+          font-size: 12px;
+          color: var(--text);
+        }
+        .bts-stats-row{ display:flex; gap:16px; flex-wrap:wrap; margin:10px 0; }
+        .bts-stats-row .bts-stat{ display:flex; gap:4px; align-items:center; }
+        .bts-stats-row .bts-stat b{ font-size:16px; }
+        .bts-source-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
+        .bts-source-card{
+          border: 1px solid var(--border, rgba(255,255,255,0.10));
+          border-radius: 12px;
+          padding: 14px;
+        }
+        .bts-source-card .h3{ margin-bottom:6px; }
+        .bts-dl-row{ display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+        .bts-or-divider{ text-align:center; font-size:12px; color:var(--text-muted,#94a3b8); margin:8px 0; }
+        @media (max-width: 980px){
+          .bts-model-row{ grid-template-columns: 1fr; }
+          .bts-source-grid{ grid-template-columns: 1fr; }
+        }
+      </style>
+
+      <!-- ───────────── BTS Database ───────────── -->
+      <div class="label" style="font-size:16px;margin-bottom:4px">Baza stacji BTS</div>
+      <div class="small muted" style="margin-bottom:10px">
+        Baza stacji BTS umożliwia geolokalizację rekordów bilingowych na mapie.
+        Dla T-Mobile współrzędne są w bilingu. Dla pozostałych operatorów (Play, Orange, Plus) potrzebna jest zewnętrzna baza.
+      </div>
+
+      <!-- Stats -->
+      <div class="bts-stats-row" id="bts_stats_row">
+        <div class="bts-stat"><span>Stacje:</span> <b id="bts_total">0</b></div>
+        <div class="bts-stat"><span>Rozmiar:</span> <b id="bts_size">0</b> MB</div>
+        <div class="bts-stat"><span>Miasta:</span> <b id="bts_cities">0</b></div>
+        <div class="bts-stat"><span>Źródła:</span> <span id="bts_sources" class="small muted">—</span></div>
+      </div>
+
+      <div class="bts-source-grid">
+
+        <!-- OpenCelliD card -->
+        <div class="bts-source-card">
+          <div class="bts-model-row">
+            <div class="bts-model-left">
+              <div class="h3">OpenCelliD</div>
+              <div class="small muted">Globalna, community-driven baza stacji. Wymaga darmowego tokena API.</div>
+
+              <div style="margin-top:10px">
+                <div class="label">Token API (opencellid.org)</div>
+                <input class="input" id="bts_ocid_token" type="text" placeholder="pk.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style="font-family:monospace;font-size:12px">
+                <div class="small muted" style="margin-top:4px">
+                  Uzyskaj darmowy token na <a href="https://opencellid.org" target="_blank" rel="noopener">opencellid.org</a> (rejestracja).
+                </div>
+              </div>
+
+              <div class="bts-dl-row">
+                <button class="btn" id="bts_ocid_download_btn">Pobierz bazę PL</button>
+                <span class="small" id="bts_ocid_status"></span>
+              </div>
+
+              <div class="bts-or-divider">— lub wgraj plik CSV ręcznie —</div>
+
+              <div class="bts-dl-row">
+                <button class="btn secondary" id="bts_ocid_upload_btn">Import CSV</button>
+                <input type="file" id="bts_ocid_file" accept=".csv,.csv.gz,.txt" style="display:none">
+                <span class="small" id="bts_ocid_upload_status"></span>
+              </div>
+            </div>
+            <div class="bts-model-right">
+              <div class="bts-info-box">
+                <div class="bts-info-title">OpenCelliD</div>
+                <div class="bts-kv">
+                  <span>Źródło</span> <span>Community (crowdsourced)</span>
+                  <span>Pokrycie</span> <span>Globalne (filtr: Polska MCC=260)</span>
+                  <span>Dane</span> <span>MCC, MNC, LAC, CID, GPS, zasięg</span>
+                  <span>Azymut</span> <span style="color:var(--danger,#ef4444)">Nie</span>
+                  <span>Licencja</span> <span>CC BY-SA 4.0</span>
+                  <span>Rozmiar (PL)</span> <span>~25-50 MB (CSV)</span>
+                  <span>Aktualizacja</span> <span>Codziennie</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- UKE card -->
+        <div class="bts-source-card">
+          <div class="bts-model-row">
+            <div class="bts-model-left">
+              <div class="h3">UKE (Urząd Komunikacji Elektronicznej)</div>
+              <div class="small muted">Polska baza pozwoleń radiowych. Zawiera azymut, wysokość anteny, tilt.</div>
+
+              <div class="bts-dl-row" style="margin-top:10px">
+                <button class="btn" id="bts_uke_download_btn">Pobierz z BIP UKE</button>
+                <span class="small" id="bts_uke_status"></span>
+              </div>
+
+              <div class="bts-or-divider">— lub wgraj plik CSV ręcznie —</div>
+
+              <div class="bts-dl-row">
+                <button class="btn secondary" id="bts_uke_upload_btn">Import CSV</button>
+                <input type="file" id="bts_uke_file" accept=".csv,.txt" style="display:none">
+                <span class="small" id="bts_uke_upload_status"></span>
+              </div>
+            </div>
+            <div class="bts-model-right">
+              <div class="bts-info-box">
+                <div class="bts-info-title">UKE — Rejestr pozwoleń radiowych</div>
+                <div class="bts-kv">
+                  <span>Źródło</span> <span>Polski regulator (oficjalne)</span>
+                  <span>Pokrycie</span> <span>Polska</span>
+                  <span>Dane</span> <span>GPS, azymut, tilt, wysokość, moc</span>
+                  <span>Azymut</span> <span style="color:#22c55e">Tak</span>
+                  <span>Licencja</span> <span>Dane publiczne (BIP)</span>
+                  <span>Rozmiar</span> <span>~100-200 MB (CSV)</span>
+                  <span>Aktualizacja</span> <span>Okresowo</span>
+                </div>
+                <div class="bts-warn" style="border-color:rgba(234,179,8,0.3);background:rgba(234,179,8,0.08)">
+                  UKE nie zawiera CID/LAC — dopasowanie do bilingów odbywa się po współrzędnych GPS.
+                  Dla najlepszych wyników, połącz bazę UKE z OpenCelliD.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn secondary" id="bts_refresh_btn" title="Odśwież statystyki">↻ Odśwież</button>
+        <button class="btn secondary" id="bts_clear_btn" style="color:var(--danger,#b91c1c)">Wyczyść bazę</button>
+        <select class="input" id="bts_clear_source_select" style="padding:5px 8px;border-radius:10px;min-width:120px">
+          <option value="">Wszystkie źródła</option>
+          <option value="opencellid">Tylko OpenCelliD</option>
+          <option value="uke">Tylko UKE</option>
+          <option value="billing">Tylko z bilingów</option>
+        </select>
+      </div>
+
+      <!-- Progress -->
+      <div class="an-progress" id="bts_progress" style="display:none;margin-top:12px">
+        <div class="small">Status: <b id="bts_progress_status">—</b></div>
+        <div class="progress"><div id="bts_progress_bar"></div></div>
+      </div>
+
+      <hr style="border-color:rgba(255,255,255,0.06);margin:24px 0 20px">
+
+      <!-- ───────────── Offline Map ───────────── -->
+      <div class="label" style="font-size:16px;margin-bottom:4px">Mapa offline (MBTiles)</div>
+      <div class="small muted" style="margin-bottom:10px">
+        Mapa offline umożliwia wyświetlanie geolokalizacji bez połączenia z internetem.
+        Obsługiwane formaty: MBTiles z kafelkami PNG/JPG (raster) lub PBF (wektor).
+      </div>
+
+      <div class="bts-model-row">
+        <div class="bts-model-left">
+          <!-- Map status -->
+          <div id="bts_tiles_status_wrap" style="margin-bottom:12px">
+            <span class="small" id="bts_tiles_status">Sprawdzanie...</span>
+          </div>
+
+          <!-- Upload MBTiles -->
+          <div class="bts-dl-row">
+            <button class="btn" id="bts_mbtiles_upload_btn">Wgraj plik MBTiles</button>
+            <input type="file" id="bts_mbtiles_file" accept=".mbtiles" style="display:none">
+            <span class="small" id="bts_mbtiles_upload_status"></span>
+          </div>
+
+          <div class="an-progress" id="bts_mbtiles_progress" style="display:none;margin-top:8px">
+            <div class="small">Upload: <b id="bts_mbtiles_pct">0%</b></div>
+            <div class="progress"><div id="bts_mbtiles_bar"></div></div>
+          </div>
+
+          <!-- Remove map -->
+          <div style="margin-top:12px">
+            <button class="btn secondary" id="bts_mbtiles_remove_btn" style="color:var(--danger,#b91c1c);display:none">Usuń mapę offline</button>
+          </div>
+        </div>
+        <div class="bts-model-right">
+          <div class="bts-info-box">
+            <div class="bts-info-title">MBTiles — mapy offline</div>
+            <div class="bts-kv">
+              <span>Format</span> <span>SQLite z kafelkami mapy</span>
+              <span>Zalecany</span> <span>OpenStreetMap raster (PNG)</span>
+              <span>Polska</span> <span>~1.5–3 GB (raster), ~1.9 GB (wektor)</span>
+              <span>Narzędzia</span> <span>tilemaker, tippecanoe, QGIS</span>
+            </div>
+            <div class="bts-warn" style="border-color:rgba(234,179,8,0.3);background:rgba(234,179,8,0.08)">
+              Bez mapy offline mapa w analizie GSM używa kafelków OpenStreetMap online.
+              Dla pełnej pracy offline wgraj plik MBTiles.
+            </div>
+            <div class="small muted" style="margin-top:8px">
+              <b>Generowanie MBTiles:</b><br>
+              1. Pobierz dane OSM dla Polski z <a href="https://download.geofabrik.de/europe/poland.html" target="_blank" rel="noopener">Geofabrik</a><br>
+              2. Użyj <code>tilemaker</code> lub QGIS do wygenerowania pliku MBTiles<br>
+              3. Wgraj plik tutaj lub umieść ręcznie w <code>data_www/gsm/map.mbtiles</code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <span id="bts_settings_msg" class="small" style="margin-top:10px;display:inline-block"></span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/bts_settings.js?v={{ app_version }}&_={{ static_ts }}"></script>
+{% endblock %}
