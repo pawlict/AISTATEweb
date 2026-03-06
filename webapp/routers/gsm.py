@@ -183,7 +183,7 @@ async def bts_import(
     """Import BTS data from CSV file.
 
     Args:
-        file: CSV file (OpenCelliD or UKE format).
+        file: Data file (CSV for OpenCelliD; ZIP/XLSX/CSV for UKE).
         source: 'opencellid' or 'uke'.
     """
     if not file.filename:
@@ -193,9 +193,17 @@ async def bts_import(
         )
 
     suffix = Path(file.filename).suffix.lower()
-    if suffix not in (".csv", ".txt"):
+    allowed_opencellid = (".csv", ".csv.gz", ".txt")
+    allowed_uke = (".zip", ".xlsx", ".csv", ".txt")
+
+    if source == "uke" and suffix not in allowed_uke:
         return JSONResponse(
-            {"status": "error", "detail": f"Wymagany plik CSV, otrzymano: {suffix}"},
+            {"status": "error", "detail": f"UKE: wymagany plik ZIP, XLSX lub CSV, otrzymano: {suffix}"},
+            status_code=400,
+        )
+    elif source != "uke" and suffix not in allowed_opencellid:
+        return JSONResponse(
+            {"status": "error", "detail": f"OpenCelliD: wymagany plik CSV, otrzymano: {suffix}"},
             status_code=400,
         )
 
@@ -207,11 +215,18 @@ async def bts_import(
         size_mb = len(content) / 1048576
         _app_log(f"[GSM] BTS import: {file.filename} ({size_mb:.1f} MB, source={source})")
 
+        # Save uploaded file to persistent storage
+        folder_name = "UKE" if source == "uke" else "OpenCelliD"
+        store_dir = _data_dir() / "gsm" / "BTS" / folder_name
+        store_dir.mkdir(parents=True, exist_ok=True)
+        (store_dir / file.filename).write_bytes(content)
+        _app_log(f"[GSM] File saved to BTS/{folder_name}/{file.filename}")
+
         from backend.gsm.bts_db import get_bts_db
         db = get_bts_db(_data_dir())
 
         if source == "uke":
-            count = await run_in_threadpool(db.import_uke_csv, tmp_path)
+            count = await run_in_threadpool(db.import_uke_file, tmp_path)
         else:
             count = await run_in_threadpool(db.import_opencellid_csv, tmp_path)
 
@@ -394,10 +409,13 @@ async def _download_opencellid(token: str):
                 status_code=500,
             )
 
-        content_type = resp.headers.get("content-type", "")
         raw = resp.content
         size_mb = len(raw) / 1048576
         _app_log(f"[GSM] Downloaded {size_mb:.1f} MB from OpenCelliD")
+
+        # Save to persistent storage folder
+        store_dir = _data_dir() / "gsm" / "BTS" / "OpenCelliD"
+        store_dir.mkdir(parents=True, exist_ok=True)
 
         # Decompress if gzipped
         csv_path = tmp_dir / "cell_towers.csv"
@@ -405,8 +423,12 @@ async def _download_opencellid(token: str):
             decompressed = gzip.decompress(raw)
             csv_path.write_bytes(decompressed)
             _app_log(f"[GSM] Decompressed to {len(decompressed)/1048576:.1f} MB")
+            # Save both compressed and decompressed to store
+            (store_dir / "cell_towers.csv.gz").write_bytes(raw)
+            (store_dir / "cell_towers.csv").write_bytes(decompressed)
         else:
             csv_path.write_bytes(raw)
+            (store_dir / "cell_towers.csv").write_bytes(raw)
 
         # Import into BTS database
         from backend.gsm.bts_db import get_bts_db
@@ -468,17 +490,30 @@ async def _download_uke():
                     continue
 
         if raw is None:
-            detail = "Nie udało się pobrać danych z BIP UKE. Wgraj plik CSV ręcznie."
+            detail = "Nie udało się pobrać danych z BIP UKE. Wgraj plik ZIP/XLSX ręcznie."
             if last_error:
                 detail += f" ({last_error})"
             return JSONResponse({"status": "error", "detail": detail}, status_code=500)
 
-        csv_path = tmp_dir / "uke_stacje.csv"
-        csv_path.write_bytes(raw)
+        # Save to persistent storage folder
+        store_dir = _data_dir() / "gsm" / "BTS" / "UKE"
+        store_dir.mkdir(parents=True, exist_ok=True)
+
+        # Detect file type from content
+        if raw[:4] == b"PK\x03\x04" or raw[:2] == b"PK":
+            file_name = "uke_stacje.zip"
+        else:
+            file_name = "uke_stacje.csv"
+        file_path = tmp_dir / file_name
+        file_path.write_bytes(raw)
+
+        # Keep a copy in persistent storage
+        (store_dir / file_name).write_bytes(raw)
+        _app_log(f"[GSM] UKE data saved to BTS/UKE/{file_name}")
 
         from backend.gsm.bts_db import get_bts_db
         db = get_bts_db(_data_dir())
-        count = await run_in_threadpool(db.import_uke_csv, csv_path)
+        count = await run_in_threadpool(db.import_uke_file, file_path)
 
         _app_log(f"[GSM] Imported {count} stations from UKE")
         stats = await run_in_threadpool(db.get_stats)
