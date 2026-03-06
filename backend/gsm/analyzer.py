@@ -628,6 +628,10 @@ def _compute_night_activity(records: List[BillingRecord]) -> Dict[str, Any]:
     other = 0
     duration_sec = 0
     hourly: Dict[int, int] = {h: 0 for h in [22, 23, 0, 1, 2, 3, 4, 5]}
+    # Per-hour per-type for grouped bar chart
+    hourly_calls: Dict[int, int] = {h: 0 for h in [22, 23, 0, 1, 2, 3, 4, 5]}
+    hourly_sms: Dict[int, int] = {h: 0 for h in [22, 23, 0, 1, 2, 3, 4, 5]}
+    hourly_data: Dict[int, int] = {h: 0 for h in [22, 23, 0, 1, 2, 3, 4, 5]}
     # Weekly/monthly collectors
     weekly: Dict[str, Dict[str, Any]] = {}   # "2024-W03" → {records, calls, sms, ...}
     monthly: Dict[str, Dict[str, Any]] = {}  # "2024-01" → {records, calls, sms, ...}
@@ -656,12 +660,15 @@ def _compute_night_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         if "CALL" in rt:
             calls += 1
             cat = "calls"
+            hourly_calls[hour] += 1
         elif "SMS" in rt or "MMS" in rt:
             sms += 1
             cat = "sms"
+            hourly_sms[hour] += 1
         elif rt == "DATA":
             data += 1
             cat = "data"
+            hourly_data[hour] += 1
         else:
             other += 1
 
@@ -705,6 +712,9 @@ def _compute_night_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         "other": other,
         "total_duration_seconds": duration_sec,
         "hourly": hourly,
+        "hourly_calls": hourly_calls,
+        "hourly_sms": hourly_sms,
+        "hourly_data": hourly_data,
         "weekly": weekly_sorted,
         "monthly": monthly_sorted,
         "anomalies": anomalies,
@@ -731,6 +741,11 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         "sunday": 0,
         "mon_morning": 0,
     }
+    # Per-segment per-type for grouped bar chart
+    seg_keys = ["fri_evening", "saturday", "sunday", "mon_morning"]
+    seg_calls: Dict[str, int] = {s: 0 for s in seg_keys}
+    seg_sms: Dict[str, int] = {s: 0 for s in seg_keys}
+    seg_data: Dict[str, int] = {s: 0 for s in seg_keys}
     weekly: Dict[str, Dict[str, Any]] = {}
     monthly: Dict[str, Dict[str, Any]] = {}
 
@@ -779,12 +794,15 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         if "CALL" in rt:
             calls += 1
             cat = "calls"
+            seg_calls[segment] += 1
         elif "SMS" in rt or "MMS" in rt:
             sms += 1
             cat = "sms"
+            seg_sms[segment] += 1
         elif rt == "DATA":
             data += 1
             cat = "data"
+            seg_data[segment] += 1
         else:
             other += 1
 
@@ -825,6 +843,9 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
         "other": other,
         "total_duration_seconds": duration_sec,
         "segments": segments,
+        "seg_calls": seg_calls,
+        "seg_sms": seg_sms,
+        "seg_data": seg_data,
         "weekly": weekly_sorted,
         "monthly": monthly_sorted,
         "anomalies": anomalies,

@@ -3496,22 +3496,24 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-sn-short{background:#f3e8ff;color:#7c3aed}
 .gsm-sn-intl{background:#fce7f3;color:#9d174d}
 .gsm-sn-info{background:#e0f2fe;color:#0369a1}
-/* Activity charts */
+/* Activity charts — grouped bars */
 .gsm-charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:0}
 .gsm-chart-card{background:var(--bg-card,#fff);border:1px solid var(--border,#e2e8f0);border-radius:12px;padding:16px 20px}
-.gsm-chart-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.gsm-chart-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap}
 .gsm-chart-header .h3{margin:0}
 .gsm-period-select{font-size:12px;padding:4px 8px;border:1px solid var(--border,#e2e8f0);border-radius:6px;background:var(--bg-secondary,#f8fafc);color:var(--text,#334155);cursor:pointer;max-width:220px}
-.gsm-chart-summary{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--text-muted,#64748b);margin-bottom:14px}
-.gsm-chart-summary b{color:var(--text,#334155)}
-.gsm-bar-chart{display:flex;align-items:stretch;gap:8px;height:180px;padding:0 4px;border-bottom:2px solid var(--border,#e2e8f0)}
-.gsm-bar-col{display:flex;flex-direction:column;align-items:center;flex:1;min-width:0}
-.gsm-bar-col-wide{flex:1.5}
-.gsm-bar-wrap{flex:1;display:flex;align-items:flex-end;justify-content:center;width:100%;min-height:0}
-.gsm-bar{width:100%;min-width:22px;max-width:52px;border-radius:6px 6px 0 0;transition:height .3s ease}
-.gsm-bar-night{background:linear-gradient(180deg,#4338ca 0%,#818cf8 100%)}
-.gsm-bar-weekend{background:linear-gradient(180deg,#d97706 0%,#fbbf24 100%)}
-.gsm-bar-value{font-size:11px;font-weight:700;color:var(--text,#334155);margin-bottom:2px;flex-shrink:0}
+.gsm-chart-legend{display:flex;gap:14px;margin-bottom:10px;font-size:11px;color:var(--text-muted,#64748b)}
+.gsm-legend-item{display:flex;align-items:center;gap:4px}
+.gsm-legend-dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+.gsm-bar-chart{display:flex;align-items:stretch;gap:4px;height:190px;padding:20px 4px 0;border-bottom:2px solid var(--border,#e2e8f0)}
+.gsm-bar-group{display:flex;flex-direction:column;align-items:center;flex:1;min-width:0}
+.gsm-bar-group-bars{flex:1;display:flex;align-items:flex-end;gap:2px;width:100%;min-height:0}
+.gsm-bar-wrap{flex:1;display:flex;align-items:flex-end;justify-content:center;min-height:0;height:100%}
+.gsm-bar{width:100%;max-width:28px;min-width:6px;border-radius:4px 4px 0 0;transition:height .3s ease;position:relative;display:flex;align-items:flex-start;justify-content:center}
+.gsm-bar-val{font-size:9px;font-weight:700;color:var(--text,#334155);position:absolute;top:-14px;white-space:nowrap}
+.gsm-bar-calls{background:linear-gradient(180deg,#2563eb 0%,#60a5fa 100%)}
+.gsm-bar-sms{background:linear-gradient(180deg,#059669 0%,#34d399 100%)}
+.gsm-bar-data{background:linear-gradient(180deg,#7c3aed 0%,#a78bfa 100%)}
 .gsm-bar-label{font-size:10px;color:var(--text-muted,#94a3b8);margin-top:4px;text-align:center;white-space:nowrap;flex-shrink:0}
 /* Anomaly descriptions below chart */
 .gsm-chart-anomalies{margin-top:14px;border-top:1px solid var(--border,#e2e8f0);padding-top:10px}
@@ -3528,8 +3530,7 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 [data-theme="dark"] .gsm-log-error{background:rgba(220,38,38,.15);color:#f87171}
 [data-theme="dark"] .gsm-log-warn{background:rgba(245,158,11,.1);color:#fbbf24}
 [data-theme="dark"] .gsm-chart-card{background:var(--bg-secondary,#1e293b);border-color:var(--border,#334155)}
-[data-theme="dark"] .gsm-bar-value{color:var(--text,#e2e8f0)}
-[data-theme="dark"] .gsm-chart-summary b{color:var(--text,#e2e8f0)}
+[data-theme="dark"] .gsm-bar-val{color:var(--text,#e2e8f0)}
 [data-theme="dark"] .gsm-period-select{background:var(--bg-card,#0f172a);border-color:var(--border,#334155);color:var(--text,#e2e8f0)}
 [data-theme="dark"] .gsm-anomaly-up{background:rgba(220,38,38,.12);color:#f87171}
 [data-theme="dark"] .gsm-anomaly-down{background:rgba(59,130,246,.12);color:#93c5fd}
