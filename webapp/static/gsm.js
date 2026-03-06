@@ -1,7 +1,8 @@
 /**
  * GSM Billing Analysis module.
  *
- * Handles XLSX upload, parsing via /api/gsm/parse, and result display.
+ * Handles XLSX upload, parsing via /api/gsm/parse, result display,
+ * BTS geolocation map, and BTS admin panel.
  */
 (function () {
   "use strict";
@@ -14,6 +15,9 @@
     analyzing: false,
     lastResult: null,
     filename: "",
+    map: null,          // Leaflet map instance
+    mapLayers: {},      // Named layer groups
+    leafletLoaded: false,
   };
 
   /* ── helpers ────────────────────────────────────────────── */
@@ -50,6 +54,26 @@
     const div = _el("div", `gsm-log-line ${cls}`, `<span class="gsm-log-ts">${ts}</span> ${msg}`);
     el.appendChild(div);
     el.scrollTop = el.scrollHeight;
+  }
+
+  /* ── Leaflet loader ────────────────────────────────────── */
+  function _loadLeaflet() {
+    return new Promise((resolve) => {
+      if (St.leafletLoaded || window.L) { St.leafletLoaded = true; resolve(); return; }
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(css);
+      const js = document.createElement("script");
+      js.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      js.onload = () => { St.leafletLoaded = true; resolve(); };
+      js.onerror = () => {
+        // Fallback: try local tiles API without Leaflet (show placeholder)
+        console.warn("Leaflet CDN unavailable — map will use fallback mode");
+        resolve();
+      };
+      document.head.appendChild(js);
+    });
   }
 
   /* ── upload & parse ─────────────────────────────────────── */
@@ -140,6 +164,9 @@
     _renderRecords(data.records, data.records_truncated, data.record_count);
     _renderSpecialNumbers(data.analysis ? data.analysis.special_numbers : []);
     _renderActivityCharts(data.analysis);
+    _renderMap(data.geolocation);
+    _renderBtsAdmin();
+    _renderTilesAdmin();
     _renderWarnings(data.warnings);
   }
 
@@ -395,11 +422,6 @@
 
   /* ── activity charts — grouped bars (Rozmowy / SMS / Dane) ── */
 
-  /**
-   * Build grouped bar chart HTML.
-   * groups: [{label, calls, sms, data}]
-   * Each group renders 3 bars side by side.
-   */
   function _buildGroupedBars(groups) {
     const allVals = groups.flatMap(g => [g.calls || 0, g.sms || 0, g.data || 0]);
     const maxVal = Math.max(1, ...allVals);
@@ -421,7 +443,6 @@
     return html;
   }
 
-  /** Build anomaly descriptions + overall summary HTML */
   function _buildAnomalies(anomalies) {
     if (!anomalies || !anomalies.length) return '';
     const items = anomalies.filter(a => a.period_type !== "summary");
@@ -444,7 +465,6 @@
     return html;
   }
 
-  /** Night: build grouped bars per hour */
   function _nightTotalBars(d) {
     const hours = [22, 23, 0, 1, 2, 3, 4, 5];
     const hc = d.hourly_calls || {}, hs = d.hourly_sms || {}, hd = d.hourly_data || {};
@@ -454,7 +474,6 @@
     })));
   }
 
-  /** Weekend: build grouped bars per segment */
   function _weekendTotalBars(d) {
     const sc = d.seg_calls || {}, ss = d.seg_sms || {}, sd = d.seg_data || {};
     return _buildGroupedBars([
@@ -465,7 +484,6 @@
     ]);
   }
 
-  /** Period bucket → grouped bars by type */
   function _bucketTypeBars(bucket) {
     return _buildGroupedBars([{
       label: "Łącznie",
@@ -500,7 +518,6 @@
     html += "</div>";
     wrap.innerHTML = html;
 
-    // Bind selectors
     QSA(".gsm-period-select", wrap).forEach(sel => {
       sel.onchange = () => _onPeriodChange(sel, analysis);
     });
@@ -527,19 +544,14 @@
     }
     html += `</select></div>`;
 
-    // Legend
     html += `<div class="gsm-chart-legend">
       <span class="gsm-legend-item"><span class="gsm-legend-dot gsm-bar-calls"></span>Rozmowy</span>
       <span class="gsm-legend-item"><span class="gsm-legend-dot gsm-bar-sms"></span>SMS/MMS</span>
       <span class="gsm-legend-item"><span class="gsm-legend-dot gsm-bar-data"></span>Dane</span>
     </div>`;
 
-    // Chart
     html += `<div class="gsm-bar-chart" data-bars="${id}">${buildTotalBars(d)}</div>`;
-
-    // Anomalies + summary below chart
     html += _buildAnomalies(d.anomalies);
-
     html += `</div>`;
     return html;
   }
@@ -565,7 +577,6 @@
     if (!bucket) return;
 
     if (chartId === "night" && bucket.hourly_calls) {
-      // Night period — show per-hour breakdown like total view
       const hours = [22, 23, 0, 1, 2, 3, 4, 5];
       const hc = bucket.hourly_calls || {}, hs = bucket.hourly_sms || {}, hd = bucket.hourly_data || {};
       barContainer.innerHTML = _buildGroupedBars(hours.map(h => ({
@@ -575,7 +586,6 @@
         data: hd[h] || hd[String(h)] || 0,
       })));
     } else if (chartId === "weekend" && bucket.fri_evening != null) {
-      // Weekend period — show segments breakdown with per-type data
       const sc = bucket.seg_calls || {}, ss = bucket.seg_sms || {}, sd = bucket.seg_data || {};
       barContainer.innerHTML = _buildGroupedBars([
         { label: "Pt wieczór", calls: sc.fri_evening || 0, sms: ss.fri_evening || 0, data: sd.fri_evening || 0 },
@@ -585,6 +595,303 @@
       ]);
     } else {
       barContainer.innerHTML = _bucketTypeBars(bucket);
+    }
+  }
+
+  /* ── BTS Map ─────────────────────────────────────────────── */
+
+  async function _renderMap(geo) {
+    const card = QS("#gsm_map_card");
+    if (!card) return;
+
+    if (!geo || !geo.geolocated_records || geo.geolocated_records === 0) {
+      card.style.display = "none";
+      return;
+    }
+
+    card.style.display = "";
+    const statsEl = QS("#gsm_map_stats");
+    if (statsEl) {
+      statsEl.textContent = `${geo.geolocated_records}/${geo.total_records} zlokalizowanych, ${geo.unique_cells} komórek`;
+    }
+
+    await _loadLeaflet();
+
+    if (!window.L) {
+      // Fallback — no Leaflet
+      const container = QS("#gsm_map_container");
+      if (container) {
+        container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">
+          <div style="text-align:center">
+            <div style="font-size:24px;margin-bottom:8px">Mapa niedostępna</div>
+            <div class="small">Nie udało się załadować biblioteki Leaflet. Sprawdź połączenie internetowe lub dodaj mapę offline (MBTiles).</div>
+          </div>
+        </div>`;
+      }
+      return;
+    }
+
+    _initMap(geo);
+    _renderClusters(geo);
+
+    // Layer switcher
+    const layerSelect = QS("#gsm_map_layer_select");
+    if (layerSelect) {
+      layerSelect.onchange = () => _switchMapLayer(layerSelect.value, geo);
+    }
+  }
+
+  function _initMap(geo) {
+    const container = QS("#gsm_map_container");
+    if (!container || !window.L) return;
+
+    // Destroy existing map
+    if (St.map) {
+      St.map.remove();
+      St.map = null;
+    }
+
+    const map = L.map(container, {
+      zoomControl: true,
+      attributionControl: true,
+    });
+    St.map = map;
+
+    // Try offline tiles first, fallback to OSM
+    _addTileLayer(map);
+
+    // Add markers
+    _addAllPoints(map, geo);
+  }
+
+  async function _addTileLayer(map) {
+    // Check for offline tiles
+    try {
+      const resp = await fetch("/api/gsm/tiles/info");
+      const info = await resp.json();
+      if (info.available) {
+        const fmt = info.format || "pbf";
+        if (fmt === "png" || fmt === "jpg" || fmt === "jpeg") {
+          L.tileLayer("/api/gsm/tiles/{z}/{x}/{y}", {
+            maxZoom: parseInt(info.maxzoom) || 18,
+            minZoom: parseInt(info.minzoom) || 0,
+            attribution: "Offline map | OpenStreetMap",
+          }).addTo(map);
+          _addLog("info", "Używam mapy offline (MBTiles)");
+          return;
+        }
+      }
+    } catch (e) {
+      // Ignore — use online fallback
+    }
+
+    // Fallback: OpenStreetMap online tiles
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+  }
+
+  function _addAllPoints(map, geo) {
+    const points = (geo.geo_records || []).filter(r => r.point && (r.point.lat || r.point.lon));
+
+    if (!points.length) return;
+
+    // Clear existing layers
+    Object.values(St.mapLayers).forEach(lg => { if (map.hasLayer(lg)) map.removeLayer(lg); });
+    St.mapLayers = {};
+
+    // All points layer
+    const allGroup = L.layerGroup();
+    const typeColors = {
+      CALL_OUT: "#3b82f6",
+      CALL_IN: "#22c55e",
+      SMS_OUT: "#a855f7",
+      SMS_IN: "#ec4899",
+      DATA: "#f97316",
+      VOICEMAIL: "#6b7280",
+      OTHER: "#6b7280",
+    };
+
+    for (const r of points) {
+      const p = r.point;
+      const color = typeColors[r.record_type] || "#6b7280";
+      const marker = L.circleMarker([p.lat, p.lon], {
+        radius: 5,
+        fillColor: color,
+        color: "#fff",
+        weight: 1,
+        fillOpacity: 0.8,
+      });
+
+      const popupHtml = `<b>${r.datetime}</b><br>
+        ${_typeLabel(r.record_type)} ${r.callee ? `→ ${r.callee}` : ""}<br>
+        ${r.duration_seconds ? _dur(r.duration_seconds) : ""}
+        ${p.city ? `<br>${p.city}${p.street ? ", " + p.street : ""}` : ""}
+        ${p.azimuth != null ? `<br>Azymut: ${p.azimuth}°` : ""}
+        <br><span class="small">LAC: ${p.lac}, CID: ${p.cid}</span>`;
+      marker.bindPopup(popupHtml);
+      allGroup.addLayer(marker);
+    }
+    St.mapLayers.all = allGroup;
+    allGroup.addTo(map);
+
+    // Path layer
+    const pathGroup = L.layerGroup();
+    if (geo.path && geo.path.length) {
+      const pathCoords = [];
+      for (const seg of geo.path) {
+        pathCoords.push([seg.from_point.lat, seg.from_point.lon]);
+        pathCoords.push([seg.to_point.lat, seg.to_point.lon]);
+      }
+      if (pathCoords.length >= 2) {
+        L.polyline(pathCoords, {
+          color: "#3b82f6",
+          weight: 2,
+          opacity: 0.7,
+          dashArray: "5, 10",
+        }).addTo(pathGroup);
+      }
+    }
+    St.mapLayers.path = pathGroup;
+
+    // Clusters layer
+    const clusterGroup = L.layerGroup();
+    if (geo.clusters && geo.clusters.length) {
+      for (const c of geo.clusters) {
+        const color = c.label === "dom" ? "#22c55e" : c.label === "praca" ? "#3b82f6" : "#f97316";
+        const label = c.label === "dom" ? "DOM" : c.label === "praca" ? "PRACA" : `Klaster (${c.record_count})`;
+
+        L.circle([c.lat, c.lon], {
+          radius: c.radius_m || 500,
+          fillColor: color,
+          color: color,
+          weight: 2,
+          fillOpacity: 0.15,
+        }).addTo(clusterGroup);
+
+        L.marker([c.lat, c.lon], {
+          icon: L.divIcon({
+            className: "gsm-cluster-icon",
+            html: `<div style="background:${color};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;white-space:nowrap">${label}</div>`,
+            iconSize: null,
+          }),
+        }).bindPopup(`<b>${label}</b><br>
+          ${c.city || ""}${c.street ? ", " + c.street : ""}<br>
+          Rekordy: ${c.record_count}<br>
+          Unikalne dni: ${c.unique_days}<br>
+          Okres: ${c.first_seen} — ${c.last_seen}<br>
+          Godziny: ${(c.hours_active || []).join(", ")}
+        `).addTo(clusterGroup);
+      }
+    }
+    St.mapLayers.clusters = clusterGroup;
+
+    // Fit bounds
+    const allCoords = points.map(r => [r.point.lat, r.point.lon]);
+    if (allCoords.length) {
+      map.fitBounds(allCoords, { padding: [30, 30], maxZoom: 14 });
+    }
+  }
+
+  function _switchMapLayer(layer, geo) {
+    if (!St.map) return;
+    const map = St.map;
+
+    // Remove all custom layers
+    Object.values(St.mapLayers).forEach(lg => {
+      if (map.hasLayer(lg)) map.removeLayer(lg);
+    });
+
+    if (layer === "all" || layer === "heatmap") {
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+    }
+    if (layer === "path") {
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+      if (St.mapLayers.path) St.mapLayers.path.addTo(map);
+    }
+    if (layer === "clusters") {
+      if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+    }
+  }
+
+  function _renderClusters(geo) {
+    const wrap = QS("#gsm_cluster_info");
+    const list = QS("#gsm_cluster_list");
+    if (!wrap || !list) return;
+
+    if (!geo.clusters || !geo.clusters.length) {
+      wrap.style.display = "none";
+      return;
+    }
+    wrap.style.display = "";
+
+    let html = '<div style="display:flex;gap:12px;flex-wrap:wrap">';
+    for (const c of geo.clusters.slice(0, 10)) {
+      const color = c.label === "dom" ? "#22c55e" : c.label === "praca" ? "#3b82f6" : "#f97316";
+      const label = c.label === "dom" ? "DOM" : c.label === "praca" ? "PRACA" : "Lokalizacja";
+      html += `<div style="border:2px solid ${color};border-radius:12px;padding:10px 14px;min-width:160px">
+        <div style="color:${color};font-weight:bold;margin-bottom:4px">${label}</div>
+        <div class="small">${c.city || "—"}${c.street ? ", " + c.street : ""}</div>
+        <div class="small muted">${c.record_count} rekordów, ${c.unique_days} dni</div>
+        <div class="small muted">${c.first_seen} — ${c.last_seen}</div>
+      </div>`;
+    }
+    html += '</div>';
+
+    if (geo.home_cluster) {
+      html += `<div class="small" style="margin-top:8px"><b style="color:#22c55e">DOM:</b> ${geo.home_cluster.city || ""}${geo.home_cluster.street ? ", " + geo.home_cluster.street : ""}</div>`;
+    }
+    if (geo.work_cluster) {
+      html += `<div class="small"><b style="color:#3b82f6">PRACA:</b> ${geo.work_cluster.city || ""}${geo.work_cluster.street ? ", " + geo.work_cluster.street : ""}</div>`;
+    }
+
+    list.innerHTML = html;
+  }
+
+  /* ── BTS Admin ─────────────────────────────────────────── */
+
+  async function _renderBtsAdmin() {
+    const card = QS("#gsm_bts_admin_card");
+    if (!card) return;
+    card.style.display = "";
+    await _refreshBtsStats();
+  }
+
+  async function _refreshBtsStats() {
+    try {
+      const resp = await fetch("/api/gsm/bts/stats");
+      const data = await resp.json();
+      const totalEl = QS("#gsm_bts_total");
+      const sizeEl = QS("#gsm_bts_size");
+      const citiesEl = QS("#gsm_bts_cities");
+      if (totalEl) totalEl.textContent = _fmt(data.total_stations || 0);
+      if (sizeEl) sizeEl.textContent = data.db_size_mb || "0";
+      if (citiesEl) citiesEl.textContent = _fmt(data.unique_cities || 0);
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  async function _renderTilesAdmin() {
+    const card = QS("#gsm_tiles_admin_card");
+    if (!card) return;
+    card.style.display = "";
+
+    try {
+      const resp = await fetch("/api/gsm/tiles/info");
+      const info = await resp.json();
+      const statusEl = QS("#gsm_tiles_status");
+      if (statusEl) {
+        if (info.available) {
+          statusEl.innerHTML = `<span style="color:#22c55e">Dostępna</span> — ${info.name || "map.mbtiles"}, ${info.size_mb} MB, ${_fmt(info.tile_count)} kafelków, format: ${info.format}, zoom: ${info.minzoom}–${info.maxzoom}`;
+        } else {
+          statusEl.innerHTML = `<span style="color:#f97316">Niedostępna</span> — umieść plik <code>map.mbtiles</code> w <code>data_www/gsm/</code>`;
+        }
+      }
+    } catch (e) {
+      // Ignore
     }
   }
 
@@ -647,11 +954,74 @@
     if (newBtn) {
       newBtn.onclick = () => {
         St.lastResult = null;
+        if (St.map) { St.map.remove(); St.map = null; }
         const results = QS("#gsm_results");
         const empty = QS("#gsm_empty_state");
         if (results) results.style.display = "none";
         if (empty) empty.style.display = "";
         if (fileInput) fileInput.click();
+      };
+    }
+
+    // BTS Admin buttons
+    const btsRefresh = QS("#gsm_bts_refresh");
+    if (btsRefresh) btsRefresh.onclick = _refreshBtsStats;
+
+    const btsImportBtn = QS("#gsm_bts_import_btn");
+    const btsFileInput = QS("#gsm_bts_file_input");
+    if (btsImportBtn && btsFileInput) {
+      btsImportBtn.onclick = () => btsFileInput.click();
+      btsFileInput.onchange = async () => {
+        if (!btsFileInput.files || !btsFileInput.files.length) return;
+        const file = btsFileInput.files[0];
+        const source = QS("#gsm_bts_source_select")?.value || "opencellid";
+
+        const progress = QS("#gsm_bts_progress");
+        const statusEl = QS("#gsm_bts_import_status");
+        const barEl = QS("#gsm_bts_import_bar");
+        if (progress) progress.style.display = "";
+        if (statusEl) statusEl.textContent = `Importowanie ${file.name}...`;
+        if (barEl) barEl.style.width = "50%";
+
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("source", source);
+
+        try {
+          const resp = await fetch("/api/gsm/bts/import", { method: "POST", body: fd });
+          const data = await resp.json();
+          if (barEl) barEl.style.width = "100%";
+          if (data.status === "ok") {
+            if (statusEl) statusEl.textContent = `Zaimportowano ${_fmt(data.imported)} stacji`;
+            _addLog("info", `BTS import: ${_fmt(data.imported)} stacji z ${source}`);
+            await _refreshBtsStats();
+          } else {
+            if (statusEl) statusEl.textContent = `Błąd: ${data.detail || "?"}`;
+            _addLog("error", `BTS import error: ${data.detail}`);
+          }
+        } catch (e) {
+          if (statusEl) statusEl.textContent = `Błąd: ${e.message}`;
+          _addLog("error", `BTS import: ${e.message}`);
+        }
+        setTimeout(() => { if (progress) progress.style.display = "none"; }, 3000);
+        btsFileInput.value = "";
+      };
+    }
+
+    const btsClearBtn = QS("#gsm_bts_clear_btn");
+    if (btsClearBtn) {
+      btsClearBtn.onclick = async () => {
+        if (!confirm("Wyczyścić całą bazę stacji BTS?")) return;
+        try {
+          const fd = new FormData();
+          fd.append("source", "");
+          const resp = await fetch("/api/gsm/bts/clear", { method: "POST", body: fd });
+          const data = await resp.json();
+          _addLog("info", `BTS cleared: ${data.deleted} stacji`);
+          await _refreshBtsStats();
+        } catch (e) {
+          _addLog("error", `BTS clear: ${e.message}`);
+        }
       };
     }
   }
