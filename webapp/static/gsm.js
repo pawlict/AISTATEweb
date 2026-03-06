@@ -138,6 +138,8 @@
     _renderSummary(data.summary);
     _renderAnalysis(data.analysis);
     _renderRecords(data.records, data.records_truncated, data.record_count);
+    _renderSpecialNumbers(data.analysis ? data.analysis.special_numbers : []);
+    _renderActivityCharts(data.analysis);
     _renderWarnings(data.warnings);
   }
 
@@ -333,6 +335,147 @@
       html += `<div class="small muted" style="margin-top:8px">Pokazano ${records.length} z ${_fmt(totalCount)} rekordów.</div>`;
     }
     el.innerHTML = html;
+  }
+
+  /* ── special numbers ──────────────────────────────────── */
+  function _renderSpecialNumbers(specials) {
+    const el = QS("#gsm_special_numbers_body");
+    if (!el) return;
+    const card = el.closest(".card");
+
+    if (!specials || !specials.length) {
+      if (card) card.style.display = "none";
+      return;
+    }
+    if (card) card.style.display = "";
+
+    const catLabels = {
+      voicemail: "Poczta głosowa",
+      service: "Usługa operatora",
+      emergency: "Nr alarmowy",
+      premium: "Nr premium",
+      toll_free: "Nr bezpłatny",
+      short_code: "Kod krótki",
+      international: "Zagraniczny",
+      info: "Informacja",
+    };
+    const catCls = {
+      voicemail: "gsm-sn-voicemail",
+      service: "gsm-sn-service",
+      emergency: "gsm-sn-emergency",
+      premium: "gsm-sn-premium",
+      toll_free: "gsm-sn-tollfree",
+      short_code: "gsm-sn-short",
+      international: "gsm-sn-intl",
+      info: "gsm-sn-info",
+    };
+
+    let html = `<table class="gsm-table"><thead><tr>
+      <th>Numer</th><th>Kategoria</th><th>Opis</th><th>Interakcje</th><th>Czas rozmów</th><th>Okres</th>
+    </tr></thead><tbody>`;
+
+    for (const s of specials) {
+      const cat = catLabels[s.category] || s.category;
+      const cls = catCls[s.category] || "";
+      const period = s.first_date
+        ? (s.first_date === s.last_date ? s.first_date : `${s.first_date} – ${s.last_date}`)
+        : "—";
+      html += `<tr>
+        <td><code>${s.number}</code></td>
+        <td><span class="gsm-sn-badge ${cls}">${cat}</span></td>
+        <td>${s.label || "—"}</td>
+        <td>${_fmt(s.interactions)}</td>
+        <td>${_dur(s.total_duration_seconds || 0)}</td>
+        <td>${period}</td>
+      </tr>`;
+    }
+    html += "</tbody></table>";
+    el.innerHTML = html;
+  }
+
+  /* ── activity charts (pure CSS bar charts) ──────────── */
+  function _renderActivityCharts(analysis) {
+    const wrap = QS("#gsm_activity_charts");
+    if (!wrap || !analysis) { if (wrap) wrap.style.display = "none"; return; }
+
+    const night = analysis.night_activity;
+    const weekend = analysis.weekend_activity;
+
+    if ((!night || !night.total_records) && (!weekend || !weekend.total_records)) {
+      wrap.style.display = "none";
+      return;
+    }
+    wrap.style.display = "";
+
+    let html = '<div class="gsm-charts-row">';
+
+    // --- Night activity chart (22:00-6:00) ---
+    if (night && night.total_records) {
+      html += `<div class="gsm-chart-card">
+        <div class="h3">Aktywność nocna <span class="small muted">(22:00–6:00)</span></div>
+        <div class="gsm-chart-summary">
+          <span><b>${_fmt(night.total_records)}</b> rekordów (${night.percentage}% całości)</span>
+          <span>Rozmowy: <b>${_fmt(night.calls)}</b></span>
+          <span>SMS/MMS: <b>${_fmt(night.sms)}</b></span>
+          <span>Dane: <b>${_fmt(night.data)}</b></span>
+          <span>Czas: <b>${_dur(night.total_duration_seconds)}</b></span>
+        </div>
+        <div class="gsm-bar-chart">`;
+
+      // Per-hour bars
+      const hourly = night.hourly || {};
+      const hours = [22, 23, 0, 1, 2, 3, 4, 5];
+      const maxH = Math.max(1, ...hours.map(h => hourly[h] || 0));
+      for (const h of hours) {
+        const val = hourly[h] || 0;
+        const pct = Math.round((val / maxH) * 100);
+        const label = `${String(h).padStart(2, "0")}:00`;
+        html += `<div class="gsm-bar-col">
+          <div class="gsm-bar-value">${val}</div>
+          <div class="gsm-bar" style="height:${Math.max(pct, 2)}%" title="${label}: ${val} rekordów"></div>
+          <div class="gsm-bar-label">${label}</div>
+        </div>`;
+      }
+
+      html += `</div></div>`;
+    }
+
+    // --- Weekend activity chart (Fri 20:00 - Mon 6:00) ---
+    if (weekend && weekend.total_records) {
+      html += `<div class="gsm-chart-card">
+        <div class="h3">Aktywność weekendowa <span class="small muted">(Pt 20:00–Pn 6:00)</span></div>
+        <div class="gsm-chart-summary">
+          <span><b>${_fmt(weekend.total_records)}</b> rekordów (${weekend.percentage}% całości)</span>
+          <span>Rozmowy: <b>${_fmt(weekend.calls)}</b></span>
+          <span>SMS/MMS: <b>${_fmt(weekend.sms)}</b></span>
+          <span>Dane: <b>${_fmt(weekend.data)}</b></span>
+          <span>Czas: <b>${_dur(weekend.total_duration_seconds)}</b></span>
+        </div>
+        <div class="gsm-bar-chart">`;
+
+      const segs = weekend.segments || {};
+      const segDef = [
+        { key: "fri_evening", label: "Pt wieczór" },
+        { key: "saturday", label: "Sobota" },
+        { key: "sunday", label: "Niedziela" },
+        { key: "mon_morning", label: "Pn rano" },
+      ];
+      const maxS = Math.max(1, ...segDef.map(s => segs[s.key] || 0));
+      for (const seg of segDef) {
+        const val = segs[seg.key] || 0;
+        const pct = Math.round((val / maxS) * 100);
+        html += `<div class="gsm-bar-col gsm-bar-col-wide">
+          <div class="gsm-bar-value">${val}</div>
+          <div class="gsm-bar gsm-bar-weekend" style="height:${Math.max(pct, 2)}%" title="${seg.label}: ${val} rekordów"></div>
+          <div class="gsm-bar-label">${seg.label}</div>
+        </div>`;
+      }
+
+      html += `</div></div>`;
+    }
+
+    html += "</div>";
+    wrap.innerHTML = html;
   }
 
   function _renderWarnings(warnings) {
