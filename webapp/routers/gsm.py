@@ -66,9 +66,8 @@ def _do_parse(file_path: Path, filename: str) -> dict:
         "warnings": result.warnings,
         "analysis": analysis.to_dict() if hasattr(analysis, "to_dict") else analysis,
         "record_count": len(result.records),
-        # Send first 500 records to avoid huge payloads
-        "records": [r.to_dict() for r in result.records[:500]],
-        "records_truncated": len(result.records) > 500,
+        "records": [r.to_dict() for r in result.records],
+        "records_truncated": False,
     }
 
     _app_log(f"[GSM] Done: {filename} — {len(result.records)} records, {len(result.warnings)} warnings")

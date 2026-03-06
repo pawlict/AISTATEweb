@@ -94,6 +94,12 @@ class AnalysisResult:
     imei_changes: List[Dict[str, str]] = field(default_factory=list)
     # Device identification (IMEI → brand/model)
     devices: List[Dict[str, Any]] = field(default_factory=list)
+    # Special numbers (non-standard: voicemail, services, premium, short codes)
+    special_numbers: List[Dict[str, Any]] = field(default_factory=list)
+    # Night activity aggregates (22:00-6:00) for chart
+    night_activity: Dict[str, Any] = field(default_factory=dict)
+    # Weekend activity aggregates (Fri 20:00 - Mon 6:00) for chart
+    weekend_activity: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -109,6 +115,9 @@ class AnalysisResult:
             "busiest_date_count": self.busiest_date_count,
             "imei_changes": self.imei_changes,
             "devices": self.devices,
+            "special_numbers": self.special_numbers,
+            "night_activity": self.night_activity,
+            "weekend_activity": self.weekend_activity,
         }
 
 
@@ -167,7 +176,14 @@ def analyze_billing(
             if d["imei"] == ch.get("new_imei"):
                 ch["new_device"] = d["display_name"]
 
-    # 8. Anomaly detection
+    # 8. Special numbers detection
+    analysis.special_numbers = _detect_special_numbers(records, own_numbers)
+
+    # 9. Night activity (22:00-6:00) and weekend activity (Fri 20:00 - Mon 6:00)
+    analysis.night_activity = _compute_night_activity(records)
+    analysis.weekend_activity = _compute_weekend_activity(records)
+
+    # 10. Anomaly detection
     analysis.anomalies = _detect_anomalies(records, analysis, own_numbers)
 
     return analysis
@@ -449,6 +465,290 @@ def _detect_imei_changes(records: List[BillingRecord]) -> List[Dict[str, str]]:
             last_imei = r.imei
 
     return changes
+
+
+# ---------------------------------------------------------------------------
+# Special numbers — Polish operator service numbers, short codes, premium, etc.
+# ---------------------------------------------------------------------------
+
+# Known special number patterns for Polish operators
+_SPECIAL_NUMBER_DB: Dict[str, Dict[str, str]] = {
+    # --- Poczta głosowa (voicemail) ---
+    "+48601000600": {"category": "voicemail", "label": "Poczta głosowa T-Mobile"},
+    "+48600100600": {"category": "voicemail", "label": "Poczta głosowa T-Mobile"},
+    "+48501200500": {"category": "voicemail", "label": "Poczta głosowa Orange"},
+    "+48501200300": {"category": "voicemail", "label": "Poczta głosowa Orange"},
+    "+48601000400": {"category": "voicemail", "label": "Poczta głosowa Plus"},
+    "+48601000100": {"category": "voicemail", "label": "Poczta głosowa Plus"},
+    "+48790200200": {"category": "voicemail", "label": "Poczta głosowa Play"},
+    "+48790100100": {"category": "voicemail", "label": "Poczta głosowa Play"},
+    # --- BOK / Biuro Obsługi Klienta ---
+    "+48602900000": {"category": "service", "label": "BOK T-Mobile"},
+    "+48510100100": {"category": "service", "label": "BOK Orange"},
+    "+48501100100": {"category": "service", "label": "BOK Orange"},
+    "+48510100200": {"category": "service", "label": "Orange — informacja"},
+    "+48601102601": {"category": "service", "label": "BOK Plus"},
+    "+48601100100": {"category": "service", "label": "BOK Plus"},
+    "+48790500500": {"category": "service", "label": "BOK Play"},
+    "+48790200500": {"category": "service", "label": "BOK Play"},
+    # --- Sklep / usługi dodatkowe ---
+    "+48602100100": {"category": "service", "label": "T-Mobile — usługi"},
+    "+48601000200": {"category": "service", "label": "Plus — usługi"},
+    "+48790300300": {"category": "service", "label": "Play — usługi"},
+    "+48510100300": {"category": "service", "label": "Orange — usługi"},
+    # --- Numery alarmowe ---
+    "112": {"category": "emergency", "label": "Numer alarmowy 112"},
+    "997": {"category": "emergency", "label": "Policja"},
+    "998": {"category": "emergency", "label": "Straż pożarna"},
+    "999": {"category": "emergency", "label": "Pogotowie ratunkowe"},
+    "984": {"category": "emergency", "label": "Pogotowie wodociągowe"},
+    "985": {"category": "emergency", "label": "Pogotowie rzeczne"},
+    "986": {"category": "emergency", "label": "Straż Miejska"},
+    "991": {"category": "emergency", "label": "Pogotowie energetyczne"},
+    "992": {"category": "emergency", "label": "Pogotowie gazowe"},
+    "993": {"category": "emergency", "label": "Pogotowie ciepłownicze"},
+    "994": {"category": "emergency", "label": "Pogotowie wodociągowe"},
+    "116000": {"category": "emergency", "label": "Telefon zaufania dla dzieci"},
+    "116111": {"category": "emergency", "label": "Telefon zaufania dla młodzieży"},
+    "116123": {"category": "emergency", "label": "Telefon zaufania"},
+    # --- Informacja / usługi krótkie ---
+    "118913": {"category": "info", "label": "Informacja o numerach"},
+    "118912": {"category": "info", "label": "Informacja o numerach"},
+    "19115": {"category": "info", "label": "Miejskie Centrum Kontaktu (Warszawa)"},
+    "19116": {"category": "info", "label": "Informacja PKP"},
+}
+
+# Patterns for number classification
+_SPECIAL_PATTERNS: List[Tuple[str, str, str]] = [
+    # (regex_pattern, category, label_prefix)
+    # Toll-free must be checked before premium (800/801 are toll-free, not premium)
+    (r"^\+?48800\d{6}$", "toll_free", "Numer bezpłatny 800"),
+    (r"^\+?48801\d{6}$", "toll_free", "Numer bezpłatny 801"),
+    (r"^\+?48[78]0[01]\d{6}$", "premium", "Numer premium"),
+    (r"^\+?48700\d{6}$", "premium", "Numer premium 700"),
+    (r"^\+?48300\d{6}$", "premium", "Numer premium 300"),
+    (r"^\d{3,6}$", "short_code", "Kod krótki"),
+]
+
+
+def _classify_special_number(number: str) -> Optional[Dict[str, str]]:
+    """Check if a number is 'special' (non-standard mobile number).
+
+    Returns dict with category/label or None if it's a regular mobile number.
+    """
+    if not number:
+        return None
+
+    # Exact match in known DB
+    if number in _SPECIAL_NUMBER_DB:
+        return dict(_SPECIAL_NUMBER_DB[number])
+
+    # Also check without +48 prefix
+    bare = number
+    if bare.startswith("+48"):
+        bare = bare[3:]
+    for db_num, info in _SPECIAL_NUMBER_DB.items():
+        db_bare = db_num[3:] if db_num.startswith("+48") else db_num
+        if bare == db_bare:
+            return dict(info)
+
+    # Pattern-based
+    for pat, cat, label in _SPECIAL_PATTERNS:
+        if re.match(pat, number):
+            return {"category": cat, "label": f"{label} ({number})"}
+
+    # Foreign numbers (non-Polish, non-short)
+    if number.startswith("+") and not number.startswith("+48") and len(number) > 8:
+        return {"category": "international", "label": f"Numer zagraniczny ({number[:4]}…)"}
+
+    return None
+
+
+def _detect_special_numbers(
+    records: List[BillingRecord],
+    own_numbers: Set[str],
+) -> List[Dict[str, Any]]:
+    """Detect all interactions with special (non-standard) numbers."""
+    seen: Dict[str, Dict[str, Any]] = {}
+
+    for r in records:
+        contact = r.callee or r.caller
+        if not contact or contact in own_numbers:
+            continue
+
+        if contact in seen:
+            seen[contact]["interactions"] += 1
+            seen[contact]["total_duration_seconds"] += r.duration_seconds
+            continue
+
+        info = _classify_special_number(contact)
+        if info is None:
+            continue
+
+        seen[contact] = {
+            "number": contact,
+            "category": info["category"],
+            "label": info["label"],
+            "interactions": 1,
+            "total_duration_seconds": r.duration_seconds,
+            "first_date": r.date,
+            "last_date": r.date,
+        }
+
+    # Update date ranges
+    for r in records:
+        contact = r.callee or r.caller
+        if contact in seen and r.date:
+            if not seen[contact]["first_date"] or r.date < seen[contact]["first_date"]:
+                seen[contact]["first_date"] = r.date
+            if not seen[contact]["last_date"] or r.date > seen[contact]["last_date"]:
+                seen[contact]["last_date"] = r.date
+
+    result = sorted(seen.values(), key=lambda x: -x["interactions"])
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Night / Weekend activity for charts
+# ---------------------------------------------------------------------------
+
+def _compute_night_activity(records: List[BillingRecord]) -> Dict[str, Any]:
+    """Compute night activity stats (22:00-6:00).
+
+    Returns aggregate data for a single bar chart showing:
+    - total records in night hours
+    - calls, sms, data breakdown
+    - percentage of total
+    - per-hour breakdown (22,23,0,1,2,3,4,5)
+    """
+    night_hours = {22, 23, 0, 1, 2, 3, 4, 5}
+    total = 0
+    night_total = 0
+    calls = 0
+    sms = 0
+    data = 0
+    other = 0
+    duration_sec = 0
+    hourly: Dict[int, int] = {h: 0 for h in [22, 23, 0, 1, 2, 3, 4, 5]}
+
+    for r in records:
+        total += 1
+        if not r.time:
+            continue
+        try:
+            hour = int(r.time.split(":")[0])
+        except (ValueError, IndexError):
+            continue
+
+        if hour not in night_hours:
+            continue
+
+        night_total += 1
+        hourly[hour] += 1
+        duration_sec += r.duration_seconds
+
+        rt = r.record_type
+        if "CALL" in rt:
+            calls += 1
+        elif "SMS" in rt or "MMS" in rt:
+            sms += 1
+        elif rt == "DATA":
+            data += 1
+        else:
+            other += 1
+
+    return {
+        "total_records": night_total,
+        "all_records": total,
+        "percentage": round(night_total / total * 100, 1) if total > 0 else 0,
+        "calls": calls,
+        "sms": sms,
+        "data": data,
+        "other": other,
+        "total_duration_seconds": duration_sec,
+        "hourly": hourly,
+    }
+
+
+def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
+    """Compute weekend activity stats (Friday 20:00 - Monday 6:00).
+
+    Returns aggregate data for a single bar chart.
+    """
+    from datetime import date as date_cls
+
+    total = 0
+    weekend_total = 0
+    calls = 0
+    sms = 0
+    data = 0
+    other = 0
+    duration_sec = 0
+    # Breakdown by day segment: Fri evening, Sat, Sun, Mon morning
+    segments: Dict[str, int] = {
+        "fri_evening": 0,
+        "saturday": 0,
+        "sunday": 0,
+        "mon_morning": 0,
+    }
+
+    for r in records:
+        total += 1
+        if not r.date or not r.time:
+            continue
+
+        try:
+            parts = r.date.split("-")
+            d = date_cls(int(parts[0]), int(parts[1]), int(parts[2]))
+            weekday = d.weekday()  # 0=Mon .. 4=Fri, 5=Sat, 6=Sun
+            hour = int(r.time.split(":")[0])
+        except (ValueError, IndexError):
+            continue
+
+        is_weekend = False
+        segment = ""
+
+        if weekday == 4 and hour >= 20:  # Friday 20:00+
+            is_weekend = True
+            segment = "fri_evening"
+        elif weekday == 5:  # Saturday all day
+            is_weekend = True
+            segment = "saturday"
+        elif weekday == 6:  # Sunday all day
+            is_weekend = True
+            segment = "sunday"
+        elif weekday == 0 and hour < 6:  # Monday before 6:00
+            is_weekend = True
+            segment = "mon_morning"
+
+        if not is_weekend:
+            continue
+
+        weekend_total += 1
+        segments[segment] += 1
+        duration_sec += r.duration_seconds
+
+        rt = r.record_type
+        if "CALL" in rt:
+            calls += 1
+        elif "SMS" in rt or "MMS" in rt:
+            sms += 1
+        elif rt == "DATA":
+            data += 1
+        else:
+            other += 1
+
+    return {
+        "total_records": weekend_total,
+        "all_records": total,
+        "percentage": round(weekend_total / total * 100, 1) if total > 0 else 0,
+        "calls": calls,
+        "sms": sms,
+        "data": data,
+        "other": other,
+        "total_duration_seconds": duration_sec,
+        "segments": segments,
+    }
 
 
 def _detect_anomalies(
