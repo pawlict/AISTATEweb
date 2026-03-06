@@ -2403,6 +2403,12 @@ def page_tts_settings(request: Request) -> Any:
     return render_page(request, "tts_settings.html", "Ustawienia TTS", "tts_settings")
 
 
+@app.get("/bts-settings", response_class=HTMLResponse)
+def page_bts_settings(request: Request) -> Any:
+    # Admin panel: BTS geolocation database & offline map management
+    return render_page(request, "bts_settings.html", "Ustawienia BTS", "bts_settings")
+
+
 @app.get("/admin", response_class=HTMLResponse)
 def page_admin(request: Request) -> Any:
     return render_page(request, "admin.html", "Ustawienia GPU", "admin")

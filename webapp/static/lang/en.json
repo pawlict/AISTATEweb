@@ -719,6 +719,7 @@
   "player.play": "Play / Pause",
   "player.back5": "Rewind 5s",
   "player.fwd5": "Forward 5s",
+  "nav.bts_settings": "BTS Settings",
   "nav.tts_settings": "TTS Settings",
   "tts.page_title": "TTS Settings (Text-to-Speech)",
   "tts.task_title": "Task Progress",

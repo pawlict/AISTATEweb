@@ -331,3 +331,246 @@ async def get_tile(z: int, x: int, y: int):
     except Exception as e:
         log.warning("Tile error z=%d x=%d y=%d: %s", z, x, y, e)
         return Response(status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# BTS database download (auto-download from internet)
+# ---------------------------------------------------------------------------
+
+@router.post("/api/gsm/bts/download")
+async def bts_download(request: Request):
+    """Download BTS database from the internet.
+
+    Body JSON: { "source": "opencellid"|"uke", "token": "..." }
+    For OpenCelliD, a token is required (from opencellid.org).
+    For UKE, no token is needed.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "detail": "Invalid JSON body"}, status_code=400)
+
+    source = body.get("source", "")
+    token = body.get("token", "")
+
+    if source == "opencellid":
+        return await _download_opencellid(token)
+    elif source == "uke":
+        return await _download_uke()
+    else:
+        return JSONResponse({"status": "error", "detail": f"Unknown source: {source}"}, status_code=400)
+
+
+async def _download_opencellid(token: str):
+    """Download OpenCelliD Poland cell towers CSV."""
+    if not token:
+        return JSONResponse(
+            {"status": "error", "detail": "Token API OpenCelliD jest wymagany. Uzyskaj go na opencellid.org."},
+            status_code=400,
+        )
+
+    import gzip
+    import io
+    import httpx
+
+    _app_log("[GSM] Downloading OpenCelliD Poland database...")
+
+    url = f"https://opencellid.org/ocid/downloads?token={token}&type=full&file=cell_towers.csv.gz"
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="bts_dl_"))
+    try:
+        # Download (can be large, ~100+ MB compressed)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=30.0)) as client:
+            resp = await client.get(url, follow_redirects=True)
+
+        if resp.status_code == 403:
+            return JSONResponse(
+                {"status": "error", "detail": "Nieprawidłowy token API OpenCelliD. Sprawdź token na opencellid.org."},
+                status_code=400,
+            )
+        if resp.status_code != 200:
+            return JSONResponse(
+                {"status": "error", "detail": f"Błąd pobierania: HTTP {resp.status_code}"},
+                status_code=500,
+            )
+
+        content_type = resp.headers.get("content-type", "")
+        raw = resp.content
+        size_mb = len(raw) / 1048576
+        _app_log(f"[GSM] Downloaded {size_mb:.1f} MB from OpenCelliD")
+
+        # Decompress if gzipped
+        csv_path = tmp_dir / "cell_towers.csv"
+        if raw[:2] == b"\x1f\x8b" or url.endswith(".gz"):
+            decompressed = gzip.decompress(raw)
+            csv_path.write_bytes(decompressed)
+            _app_log(f"[GSM] Decompressed to {len(decompressed)/1048576:.1f} MB")
+        else:
+            csv_path.write_bytes(raw)
+
+        # Import into BTS database
+        from backend.gsm.bts_db import get_bts_db
+        db = get_bts_db(_data_dir())
+        count = await run_in_threadpool(db.import_opencellid_csv, csv_path)
+
+        _app_log(f"[GSM] Imported {count} stations from OpenCelliD")
+        stats = await run_in_threadpool(db.get_stats)
+        return JSONResponse({"status": "ok", "imported": count, **stats})
+
+    except httpx.TimeoutException:
+        return JSONResponse(
+            {"status": "error", "detail": "Timeout — plik jest duży, spróbuj ponownie."},
+            status_code=500,
+        )
+    except Exception as e:
+        log.exception("OpenCelliD download error: %s", e)
+        return JSONResponse(
+            {"status": "error", "detail": f"{type(e).__name__}: {e}"},
+            status_code=500,
+        )
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+async def _download_uke():
+    """Download UKE (Polish regulator) BTS database."""
+    import httpx
+
+    _app_log("[GSM] Downloading UKE BTS database...")
+
+    # UKE publishes BTS data at their BIP site.
+    # The CSV export of radio permits is at a known URL pattern.
+    uke_url = "https://bip.uke.gov.pl/pozwolenia-radiowe/wykorzystywane-czestotliwosci-702-703-713-MHz/stacje.csv"
+
+    # Fallback URLs to try
+    uke_urls = [
+        uke_url,
+        "https://bip.uke.gov.pl/pozwolenia-radiowe/stacje-bazowe-702-703-713/stacje.csv",
+    ]
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="bts_uke_"))
+    try:
+        raw = None
+        last_error = None
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(300.0, connect=30.0),
+            follow_redirects=True,
+        ) as client:
+            for url in uke_urls:
+                try:
+                    resp = await client.get(url)
+                    if resp.status_code == 200 and len(resp.content) > 1000:
+                        raw = resp.content
+                        _app_log(f"[GSM] Downloaded {len(raw)/1048576:.1f} MB from UKE ({url})")
+                        break
+                except Exception as e:
+                    last_error = e
+                    continue
+
+        if raw is None:
+            detail = "Nie udało się pobrać danych z BIP UKE. Wgraj plik CSV ręcznie."
+            if last_error:
+                detail += f" ({last_error})"
+            return JSONResponse({"status": "error", "detail": detail}, status_code=500)
+
+        csv_path = tmp_dir / "uke_stacje.csv"
+        csv_path.write_bytes(raw)
+
+        from backend.gsm.bts_db import get_bts_db
+        db = get_bts_db(_data_dir())
+        count = await run_in_threadpool(db.import_uke_csv, csv_path)
+
+        _app_log(f"[GSM] Imported {count} stations from UKE")
+        stats = await run_in_threadpool(db.get_stats)
+        return JSONResponse({"status": "ok", "imported": count, **stats})
+
+    except Exception as e:
+        log.exception("UKE download error: %s", e)
+        return JSONResponse(
+            {"status": "error", "detail": f"{type(e).__name__}: {e}"},
+            status_code=500,
+        )
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# MBTiles upload / remove
+# ---------------------------------------------------------------------------
+
+@router.post("/api/gsm/tiles/upload")
+async def tiles_upload(
+    file: UploadFile = File(...),
+):
+    """Upload an MBTiles file for offline map tiles."""
+    if not file.filename:
+        return JSONResponse({"status": "error", "detail": "Brak pliku"}, status_code=400)
+
+    suffix = Path(file.filename).suffix.lower()
+    if suffix != ".mbtiles":
+        return JSONResponse(
+            {"status": "error", "detail": f"Wymagany plik .mbtiles, otrzymano: {suffix}"},
+            status_code=400,
+        )
+
+    gsm_dir = _data_dir() / "gsm"
+    gsm_dir.mkdir(parents=True, exist_ok=True)
+    target = gsm_dir / "map.mbtiles"
+
+    try:
+        # Write to temp file first, then move (atomic-ish)
+        tmp_path = gsm_dir / "map.mbtiles.tmp"
+        content = await file.read()
+        tmp_path.write_bytes(content)
+
+        # Basic validation — check it's a valid SQLite file
+        if content[:16] != b"SQLite format 3\x00":
+            tmp_path.unlink(missing_ok=True)
+            return JSONResponse(
+                {"status": "error", "detail": "Plik nie jest prawidłową bazą SQLite/MBTiles."},
+                status_code=400,
+            )
+
+        # Replace existing file
+        if target.exists():
+            target.unlink()
+        tmp_path.rename(target)
+
+        # Reset tile server singleton so it picks up the new file
+        try:
+            import backend.gsm.tile_server as ts_mod
+            ts_mod._default_server = None
+        except Exception:
+            pass
+
+        size_mb = len(content) / 1048576
+        _app_log(f"[GSM] MBTiles uploaded: {file.filename} ({size_mb:.1f} MB)")
+        return JSONResponse({"status": "ok", "size_mb": round(size_mb, 1)})
+
+    except Exception as e:
+        log.exception("MBTiles upload error: %s", e)
+        return JSONResponse(
+            {"status": "error", "detail": f"{type(e).__name__}: {e}"},
+            status_code=500,
+        )
+
+
+@router.post("/api/gsm/tiles/remove")
+async def tiles_remove():
+    """Remove the offline map MBTiles file."""
+    target = _data_dir() / "gsm" / "map.mbtiles"
+    try:
+        if target.exists():
+            target.unlink()
+            _app_log("[GSM] MBTiles removed")
+
+            # Reset tile server singleton
+            try:
+                import backend.gsm.tile_server as ts_mod
+                ts_mod._default_server = None
+            except Exception:
+                pass
+
+        return JSONResponse({"status": "ok"})
+    except Exception as e:
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)

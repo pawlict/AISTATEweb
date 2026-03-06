@@ -527,49 +527,6 @@
         </div>
       </div>
 
-      <!-- BTS Admin panel -->
-      <div class="card" id="gsm_bts_admin_card" style="display:none">
-        <div class="analysis-sidehdr">
-          <div class="h2"><i data-icon="settings" data-size="16"></i> Baza stacji BTS</div>
-          <button class="btn mini" id="gsm_bts_refresh" title="Odśwież">↻</button>
-        </div>
-        <div class="small muted" style="margin:6px 0">Import bazy stacji BTS z pliku CSV (UKE lub OpenCelliD) do geolokalizacji offline.</div>
-
-        <div class="gsm-bts-stats" id="gsm_bts_stats" style="margin:10px 0;display:flex;gap:16px;flex-wrap:wrap">
-          <span class="small">Stacje: <b id="gsm_bts_total">0</b></span>
-          <span class="small">Rozmiar: <b id="gsm_bts_size">0</b> MB</span>
-          <span class="small">Miasta: <b id="gsm_bts_cities">0</b></span>
-        </div>
-
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
-          <select class="input" id="gsm_bts_source_select" style="padding:5px 8px;border-radius:10px;min-width:140px">
-            <option value="opencellid">OpenCelliD CSV</option>
-            <option value="uke">UKE CSV</option>
-          </select>
-          <button class="btn" id="gsm_bts_import_btn">Import CSV</button>
-          <button class="btn secondary" id="gsm_bts_clear_btn" style="color:var(--danger)">Wyczyść bazę</button>
-          <input type="file" id="gsm_bts_file_input" accept=".csv,.txt" style="display:none">
-        </div>
-
-        <div class="an-progress" id="gsm_bts_progress" style="display:none;margin-top:8px">
-          <div class="small">Status: <b id="gsm_bts_import_status">—</b></div>
-          <div class="progress"><div id="gsm_bts_import_bar"></div></div>
-        </div>
-      </div>
-
-      <!-- Tile / Map admin -->
-      <div class="card" id="gsm_tiles_admin_card" style="display:none">
-        <div class="analysis-sidehdr">
-          <div class="h2"><i data-icon="map" data-size="16"></i> Mapa offline</div>
-        </div>
-        <div class="small muted" style="margin:6px 0">
-          Status mapy offline (MBTiles). Aby dodać mapę, umieść plik <code>map.mbtiles</code> w katalogu <code>data_www/gsm/</code>.
-        </div>
-        <div id="gsm_tiles_info" style="margin-top:8px">
-          <span class="small" id="gsm_tiles_status">Sprawdzanie...</span>
-        </div>
-      </div>
-
       <!-- Warnings -->
       <div class="card" style="display:none">
         <div class="h2">Ostrzeżenia parsera</div>

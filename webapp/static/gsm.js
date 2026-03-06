@@ -165,8 +165,6 @@
     _renderSpecialNumbers(data.analysis ? data.analysis.special_numbers : []);
     _renderActivityCharts(data.analysis);
     _renderMap(data.geolocation);
-    _renderBtsAdmin();
-    _renderTilesAdmin();
     _renderWarnings(data.warnings);
   }
 
@@ -850,51 +848,6 @@
     list.innerHTML = html;
   }
 
-  /* ── BTS Admin ─────────────────────────────────────────── */
-
-  async function _renderBtsAdmin() {
-    const card = QS("#gsm_bts_admin_card");
-    if (!card) return;
-    card.style.display = "";
-    await _refreshBtsStats();
-  }
-
-  async function _refreshBtsStats() {
-    try {
-      const resp = await fetch("/api/gsm/bts/stats");
-      const data = await resp.json();
-      const totalEl = QS("#gsm_bts_total");
-      const sizeEl = QS("#gsm_bts_size");
-      const citiesEl = QS("#gsm_bts_cities");
-      if (totalEl) totalEl.textContent = _fmt(data.total_stations || 0);
-      if (sizeEl) sizeEl.textContent = data.db_size_mb || "0";
-      if (citiesEl) citiesEl.textContent = _fmt(data.unique_cities || 0);
-    } catch (e) {
-      // Ignore
-    }
-  }
-
-  async function _renderTilesAdmin() {
-    const card = QS("#gsm_tiles_admin_card");
-    if (!card) return;
-    card.style.display = "";
-
-    try {
-      const resp = await fetch("/api/gsm/tiles/info");
-      const info = await resp.json();
-      const statusEl = QS("#gsm_tiles_status");
-      if (statusEl) {
-        if (info.available) {
-          statusEl.innerHTML = `<span style="color:#22c55e">Dostępna</span> — ${info.name || "map.mbtiles"}, ${info.size_mb} MB, ${_fmt(info.tile_count)} kafelków, format: ${info.format}, zoom: ${info.minzoom}–${info.maxzoom}`;
-        } else {
-          statusEl.innerHTML = `<span style="color:#f97316">Niedostępna</span> — umieść plik <code>map.mbtiles</code> w <code>data_www/gsm/</code>`;
-        }
-      }
-    } catch (e) {
-      // Ignore
-    }
-  }
-
   function _renderWarnings(warnings) {
     const el = QS("#gsm_warnings_body");
     if (!el) return;
@@ -963,67 +916,6 @@
       };
     }
 
-    // BTS Admin buttons
-    const btsRefresh = QS("#gsm_bts_refresh");
-    if (btsRefresh) btsRefresh.onclick = _refreshBtsStats;
-
-    const btsImportBtn = QS("#gsm_bts_import_btn");
-    const btsFileInput = QS("#gsm_bts_file_input");
-    if (btsImportBtn && btsFileInput) {
-      btsImportBtn.onclick = () => btsFileInput.click();
-      btsFileInput.onchange = async () => {
-        if (!btsFileInput.files || !btsFileInput.files.length) return;
-        const file = btsFileInput.files[0];
-        const source = QS("#gsm_bts_source_select")?.value || "opencellid";
-
-        const progress = QS("#gsm_bts_progress");
-        const statusEl = QS("#gsm_bts_import_status");
-        const barEl = QS("#gsm_bts_import_bar");
-        if (progress) progress.style.display = "";
-        if (statusEl) statusEl.textContent = `Importowanie ${file.name}...`;
-        if (barEl) barEl.style.width = "50%";
-
-        const fd = new FormData();
-        fd.append("file", file);
-        fd.append("source", source);
-
-        try {
-          const resp = await fetch("/api/gsm/bts/import", { method: "POST", body: fd });
-          const data = await resp.json();
-          if (barEl) barEl.style.width = "100%";
-          if (data.status === "ok") {
-            if (statusEl) statusEl.textContent = `Zaimportowano ${_fmt(data.imported)} stacji`;
-            _addLog("info", `BTS import: ${_fmt(data.imported)} stacji z ${source}`);
-            await _refreshBtsStats();
-          } else {
-            if (statusEl) statusEl.textContent = `Błąd: ${data.detail || "?"}`;
-            _addLog("error", `BTS import error: ${data.detail}`);
-          }
-        } catch (e) {
-          if (statusEl) statusEl.textContent = `Błąd: ${e.message}`;
-          _addLog("error", `BTS import: ${e.message}`);
-        }
-        setTimeout(() => { if (progress) progress.style.display = "none"; }, 3000);
-        btsFileInput.value = "";
-      };
-    }
-
-    const btsClearBtn = QS("#gsm_bts_clear_btn");
-    if (btsClearBtn) {
-      btsClearBtn.onclick = async () => {
-        if (!confirm("Wyczyścić całą bazę stacji BTS?")) return;
-        try {
-          const fd = new FormData();
-          fd.append("source", "");
-          const resp = await fetch("/api/gsm/bts/clear", { method: "POST", body: fd });
-          const data = await resp.json();
-          _addLog("info", `BTS cleared: ${data.deleted} stacji`);
-          await _refreshBtsStats();
-        } catch (e) {
-          _addLog("error", `BTS clear: ${e.message}`);
-        }
-      };
-    }
   }
 
   /* ── public manager ─────────────────────────────────────── */
