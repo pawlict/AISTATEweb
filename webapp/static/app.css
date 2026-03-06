@@ -3507,9 +3507,9 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-legend-dot{width:10px;height:10px;border-radius:3px;display:inline-block}
 .gsm-bar-chart{display:flex;align-items:stretch;gap:4px;height:190px;padding:20px 4px 0;border-bottom:2px solid var(--border,#e2e8f0)}
 .gsm-bar-group{display:flex;flex-direction:column;align-items:center;flex:1;min-width:0}
-.gsm-bar-group-bars{flex:1;display:flex;align-items:flex-end;gap:0;width:100%;min-height:0}
-.gsm-bar-wrap{flex:1;display:flex;align-items:flex-end;justify-content:center;min-height:0;height:100%}
-.gsm-bar{width:100%;max-width:28px;min-width:6px;border-radius:0;transition:height .3s ease;position:relative;display:flex;align-items:flex-start;justify-content:center}
+.gsm-bar-group-bars{flex:1;display:flex;align-items:flex-end;gap:0;width:100%;min-height:0;justify-content:center}
+.gsm-bar-wrap{display:flex;align-items:flex-end;min-height:0;height:100%;width:18px}
+.gsm-bar{width:100%;border-radius:0;transition:height .3s ease;position:relative;display:flex;align-items:flex-start;justify-content:center}
 .gsm-bar-val{font-size:9px;font-weight:700;color:var(--text,#334155);position:absolute;top:-14px;white-space:nowrap}
 .gsm-bar-group-bars .gsm-bar-wrap:first-child .gsm-bar{border-radius:4px 0 0 0}
 .gsm-bar-group-bars .gsm-bar-wrap:last-child .gsm-bar{border-radius:0 4px 0 0}

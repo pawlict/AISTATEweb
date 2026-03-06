@@ -637,7 +637,12 @@ def _compute_night_activity(records: List[BillingRecord]) -> Dict[str, Any]:
     monthly: Dict[str, Dict[str, Any]] = {}  # "2024-01" → {records, calls, sms, ...}
 
     def _empty_bucket() -> Dict[str, Any]:
-        return {"records": 0, "calls": 0, "sms": 0, "data": 0, "other": 0, "duration_sec": 0}
+        return {
+            "records": 0, "calls": 0, "sms": 0, "data": 0, "other": 0, "duration_sec": 0,
+            "hourly_calls": {h: 0 for h in [22, 23, 0, 1, 2, 3, 4, 5]},
+            "hourly_sms": {h: 0 for h in [22, 23, 0, 1, 2, 3, 4, 5]},
+            "hourly_data": {h: 0 for h in [22, 23, 0, 1, 2, 3, 4, 5]},
+        }
 
     for r in records:
         total += 1
@@ -686,18 +691,29 @@ def _compute_night_activity(records: List[BillingRecord]) -> Dict[str, Any]:
                 weekly[week_key]["records"] += 1
                 weekly[week_key][cat] += 1
                 weekly[week_key]["duration_sec"] += r.duration_seconds
+                if cat in ("calls", "sms", "data"):
+                    weekly[week_key][f"hourly_{cat}"][hour] += 1
 
                 if month_key not in monthly:
                     monthly[month_key] = _empty_bucket()
                 monthly[month_key]["records"] += 1
                 monthly[month_key][cat] += 1
                 monthly[month_key]["duration_sec"] += r.duration_seconds
+                if cat in ("calls", "sms", "data"):
+                    monthly[month_key][f"hourly_{cat}"][hour] += 1
             except (ValueError, IndexError):
                 pass
 
+    # Convert hourly dict keys to strings for JSON serialization
+    def _stringify_hourly(bucket: Dict[str, Any]) -> Dict[str, Any]:
+        for key in ("hourly_calls", "hourly_sms", "hourly_data"):
+            if key in bucket:
+                bucket[key] = {str(h): v for h, v in bucket[key].items()}
+        return bucket
+
     # Sort weekly/monthly by key
-    weekly_sorted = dict(sorted(weekly.items()))
-    monthly_sorted = dict(sorted(monthly.items()))
+    weekly_sorted = {k: _stringify_hourly(v) for k, v in sorted(weekly.items())}
+    monthly_sorted = {k: _stringify_hourly(v) for k, v in sorted(monthly.items())}
 
     # Compute anomalies — weeks/months deviating significantly from average
     anomalies = _detect_period_anomalies(weekly_sorted, monthly_sorted, "nocna")
@@ -751,7 +767,10 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
 
     def _empty_bucket() -> Dict[str, Any]:
         return {"records": 0, "calls": 0, "sms": 0, "data": 0, "other": 0, "duration_sec": 0,
-                "fri_evening": 0, "saturday": 0, "sunday": 0, "mon_morning": 0}
+                "fri_evening": 0, "saturday": 0, "sunday": 0, "mon_morning": 0,
+                "seg_calls": {s: 0 for s in seg_keys},
+                "seg_sms": {s: 0 for s in seg_keys},
+                "seg_data": {s: 0 for s in seg_keys}}
 
     for r in records:
         total += 1
@@ -818,6 +837,8 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
             weekly[week_key][cat] += 1
             weekly[week_key][segment] += 1
             weekly[week_key]["duration_sec"] += r.duration_seconds
+            if cat in ("calls", "sms", "data"):
+                weekly[week_key][f"seg_{cat}"][segment] += 1
 
             if month_key not in monthly:
                 monthly[month_key] = _empty_bucket()
@@ -825,6 +846,8 @@ def _compute_weekend_activity(records: List[BillingRecord]) -> Dict[str, Any]:
             monthly[month_key][cat] += 1
             monthly[month_key][segment] += 1
             monthly[month_key]["duration_sec"] += r.duration_seconds
+            if cat in ("calls", "sms", "data"):
+                monthly[month_key][f"seg_{cat}"][segment] += 1
         except (ValueError, IndexError):
             pass
 
