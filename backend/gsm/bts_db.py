@@ -323,24 +323,10 @@ class BTSDatabase:
         csv_path: Path,
         progress_cb=None,
     ) -> int:
-        """Import UKE radio license CSV.
+        """Import UKE radio license CSV (legacy fallback).
 
-        UKE CSV has columns including:
-        - Długość geograficzna (longitude)
-        - Szerokość geograficzna (latitude)
-        - Azymut (azimuth in degrees)
-        - Kąt pochylenia (tilt angle)
-        - Wysokość zawieszenia anteny (antenna height)
-        - Various frequency and operator info
-
-        Note: UKE data uses license references, not CID/LAC directly.
-        We import coordinates + azimuth and match by location proximity.
+        Delegates to the generic _import_uke_rows() after parsing CSV.
         """
-        conn = self._get_conn()
-        imported = 0
-        batch: List[tuple] = []
-        batch_size = 5000
-
         # Try to detect encoding and delimiter
         with open(csv_path, "rb") as f:
             sample = f.read(8192)
@@ -365,105 +351,295 @@ class BTSDatabase:
             header = next(reader, None)
             if not header:
                 return 0
+            rows_list = [row for row in reader]
 
-            # Find column indices by header names (case-insensitive)
-            col_map = self._map_uke_columns(header)
-            if "lat" not in col_map or "lon" not in col_map:
-                log.warning("UKE CSV: could not find lat/lon columns in header: %s", header)
-                return 0
+        return self._import_uke_rows(header, rows_list, progress_cb)
 
-            for i, row in enumerate(reader):
-                try:
-                    lat = self._parse_coord(
-                        row[col_map["lat"]] if col_map.get("lat") is not None else ""
-                    )
-                    lon = self._parse_coord(
-                        row[col_map["lon"]] if col_map.get("lon") is not None else ""
-                    )
-                    if not lat or not lon:
-                        continue
+    def import_uke_xlsx(
+        self,
+        xlsx_path: Path,
+        progress_cb=None,
+    ) -> int:
+        """Import UKE radio license XLSX file.
 
-                    azimuth = None
-                    if col_map.get("azimuth") is not None:
-                        az_str = row[col_map["azimuth"]].strip()
-                        if az_str and az_str not in ("-", ""):
-                            try:
-                                azimuth = float(az_str.replace(",", "."))
-                            except ValueError:
-                                pass
+        UKE XLSX has columns including:
+        - Długość geograficzna / StGeoDlg (longitude)
+        - Szerokość geograficzna / StGeoSzr (latitude)
+        - Azymut / IdAzymut (azimuth in degrees)
+        - Kąt pochylenia / Tilt
+        - Wysokość zawieszenia anteny / WysokoscAnteny
+        - Operator / NazwaPodmiotu
+        - Technology / Standard
 
-                    tilt = None
-                    if col_map.get("tilt") is not None:
-                        tilt_str = row[col_map["tilt"]].strip()
-                        if tilt_str and tilt_str not in ("-", ""):
-                            try:
-                                tilt = float(tilt_str.replace(",", "."))
-                            except ValueError:
-                                pass
+        Returns number of imported stations.
+        """
+        try:
+            import openpyxl
+        except ImportError:
+            log.warning("openpyxl not installed, trying csv fallback")
+            return 0
 
-                    antenna_height = None
-                    if col_map.get("height") is not None:
-                        h_str = row[col_map["height"]].strip()
-                        if h_str and h_str not in ("-", ""):
-                            try:
-                                antenna_height = float(h_str.replace(",", "."))
-                            except ValueError:
-                                pass
+        wb = openpyxl.load_workbook(str(xlsx_path), read_only=True, data_only=True)
+        total_imported = 0
 
-                    # Detect MNC from operator column or frequency
-                    mnc = 0
-                    if col_map.get("operator") is not None:
-                        op_text = row[col_map["operator"]].lower()
-                        if "orange" in op_text or "ptk" in op_text:
-                            mnc = 3
-                        elif "t-mobile" in op_text or "ptc" in op_text:
-                            mnc = 2
-                        elif "play" in op_text or "p4" in op_text:
-                            mnc = 6
-                        elif "plus" in op_text or "polkomtel" in op_text:
-                            mnc = 1
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            rows_iter = ws.iter_rows(values_only=True)
 
-                    # UKE doesn't have CID/LAC — use a synthetic ID based on coordinates
-                    # We'll use the row index as CID placeholder
-                    synthetic_cid = i + 1
-                    synthetic_lac = 0
+            header_row = next(rows_iter, None)
+            if not header_row:
+                continue
 
-                    radio = ""
-                    if col_map.get("radio") is not None:
-                        r_text = row[col_map["radio"]].upper()
-                        if "LTE" in r_text or "4G" in r_text:
-                            radio = "LTE"
-                        elif "UMTS" in r_text or "3G" in r_text:
-                            radio = "UMTS"
-                        elif "GSM" in r_text or "2G" in r_text:
-                            radio = "GSM"
-                        elif "NR" in r_text or "5G" in r_text:
-                            radio = "NR"
+            header = [str(c) if c is not None else "" for c in header_row]
+            rows_list = []
+            for row in rows_iter:
+                rows_list.append([str(c) if c is not None else "" for c in row])
 
-                    batch.append((
-                        MCC_POLAND, mnc, synthetic_lac, synthetic_cid,
-                        lat, lon, azimuth, None, radio,
-                        "", "", "", "uke",
-                        0, antenna_height, tilt, "",
-                    ))
-                    imported += 1
+            if rows_list:
+                count = self._import_uke_rows(header, rows_list, progress_cb, sheet_hint=sheet_name)
+                total_imported += count
 
-                    if len(batch) >= batch_size:
-                        self._insert_batch(conn, batch)
-                        batch.clear()
-                        if progress_cb:
-                            progress_cb(imported, 0)
+        wb.close()
+        return total_imported
 
-                except (ValueError, IndexError):
+    def import_uke_zip(
+        self,
+        zip_path: Path,
+        progress_cb=None,
+    ) -> int:
+        """Import UKE data from a ZIP archive containing XLSX files.
+
+        UKE publishes BTS data as a ZIP with multiple XLSX files
+        (one per technology/band: gsm900, lte800, umts2100, etc.)
+
+        Returns total number of imported stations across all files.
+        """
+        import zipfile
+        import tempfile
+
+        if not zipfile.is_zipfile(str(zip_path)):
+            log.warning("Not a valid ZIP file: %s", zip_path)
+            return 0
+
+        total_imported = 0
+        tmp_dir = Path(tempfile.mkdtemp(prefix="uke_zip_"))
+
+        try:
+            with zipfile.ZipFile(str(zip_path), "r") as zf:
+                # List all XLSX/CSV files in the archive
+                members = [m for m in zf.namelist()
+                          if not m.startswith("__MACOSX") and not m.startswith(".")
+                          ]
+                xlsx_files = [m for m in members if m.lower().endswith(".xlsx")]
+                csv_files = [m for m in members if m.lower().endswith(".csv")]
+
+                log.info("UKE ZIP contains %d XLSX and %d CSV files: %s",
+                         len(xlsx_files), len(csv_files), members)
+
+                # Extract all
+                zf.extractall(str(tmp_dir))
+
+            # Import XLSX files first
+            for xlsx_name in xlsx_files:
+                extracted = tmp_dir / xlsx_name
+                if not extracted.exists():
                     continue
+                try:
+                    count = self.import_uke_xlsx(extracted, progress_cb)
+                    log.info("UKE ZIP: %s → %d stations", xlsx_name, count)
+                    total_imported += count
+                except Exception as e:
+                    log.warning("UKE ZIP: error importing %s: %s", xlsx_name, e)
+
+            # Fallback: import CSV files if no XLSX found
+            if not xlsx_files and csv_files:
+                for csv_name in csv_files:
+                    extracted = tmp_dir / csv_name
+                    if not extracted.exists():
+                        continue
+                    try:
+                        count = self.import_uke_csv(extracted, progress_cb)
+                        log.info("UKE ZIP: %s → %d stations", csv_name, count)
+                        total_imported += count
+                    except Exception as e:
+                        log.warning("UKE ZIP: error importing %s: %s", csv_name, e)
+
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        conn = self._get_conn()
+        conn.commit()
+        self._set_meta("uke_imported", str(int(time.time())))
+        self._set_meta("uke_count", str(total_imported))
+        log.info("Imported %d total UKE stations from ZIP", total_imported)
+        return total_imported
+
+    def import_uke_file(
+        self,
+        file_path: Path,
+        progress_cb=None,
+    ) -> int:
+        """Auto-detect UKE file format and import.
+
+        Supports: .zip (with XLSX/CSV inside), .xlsx, .csv
+        """
+        suffix = file_path.suffix.lower()
+        if suffix == ".zip":
+            return self.import_uke_zip(file_path, progress_cb)
+        elif suffix == ".xlsx":
+            return self.import_uke_xlsx(file_path, progress_cb)
+        elif suffix in (".csv", ".txt"):
+            return self.import_uke_csv(file_path, progress_cb)
+        else:
+            log.warning("UKE import: unsupported file format: %s", suffix)
+            return 0
+
+    def _import_uke_rows(
+        self,
+        header: List[str],
+        rows: List[List[str]],
+        progress_cb=None,
+        sheet_hint: str = "",
+    ) -> int:
+        """Common UKE import logic for both CSV and XLSX sources.
+
+        Args:
+            header: Column header names.
+            rows: List of row data (each row is a list of strings).
+            progress_cb: Optional progress callback(imported, total).
+            sheet_hint: Sheet/file name for radio tech auto-detection.
+
+        Returns number of imported stations.
+        """
+        conn = self._get_conn()
+        imported = 0
+        batch: List[tuple] = []
+        batch_size = 5000
+
+        col_map = self._map_uke_columns(header)
+        if "lat" not in col_map or "lon" not in col_map:
+            log.warning("UKE: could not find lat/lon columns in header: %s", header[:20])
+            return 0
+
+        # Auto-detect radio technology from sheet/file name
+        radio_from_name = ""
+        hint = sheet_hint.lower()
+        if "lte" in hint or "4g" in hint:
+            radio_from_name = "LTE"
+        elif "umts" in hint or "3g" in hint:
+            radio_from_name = "UMTS"
+        elif "gsm" in hint or "2g" in hint:
+            radio_from_name = "GSM"
+        elif "nr" in hint or "5g" in hint:
+            radio_from_name = "NR"
+        elif "cdma" in hint:
+            radio_from_name = "CDMA"
+
+        for i, row in enumerate(rows):
+            try:
+                lat = self._parse_coord(
+                    row[col_map["lat"]] if col_map.get("lat") is not None and col_map["lat"] < len(row) else ""
+                )
+                lon = self._parse_coord(
+                    row[col_map["lon"]] if col_map.get("lon") is not None and col_map["lon"] < len(row) else ""
+                )
+                if not lat or not lon:
+                    continue
+
+                # Validate coords are in Poland range
+                if not (48.0 < lat < 55.5 and 13.5 < lon < 25.0):
+                    continue
+
+                azimuth = None
+                if col_map.get("azimuth") is not None and col_map["azimuth"] < len(row):
+                    az_str = row[col_map["azimuth"]].strip()
+                    if az_str and az_str not in ("-", "", "None"):
+                        try:
+                            azimuth = float(az_str.replace(",", "."))
+                        except ValueError:
+                            pass
+
+                tilt = None
+                if col_map.get("tilt") is not None and col_map["tilt"] < len(row):
+                    tilt_str = row[col_map["tilt"]].strip()
+                    if tilt_str and tilt_str not in ("-", "", "None"):
+                        try:
+                            tilt = float(tilt_str.replace(",", "."))
+                        except ValueError:
+                            pass
+
+                antenna_height = None
+                if col_map.get("height") is not None and col_map["height"] < len(row):
+                    h_str = row[col_map["height"]].strip()
+                    if h_str and h_str not in ("-", "", "None"):
+                        try:
+                            antenna_height = float(h_str.replace(",", "."))
+                        except ValueError:
+                            pass
+
+                # Detect MNC from operator column
+                mnc = 0
+                if col_map.get("operator") is not None and col_map["operator"] < len(row):
+                    op_text = row[col_map["operator"]].lower()
+                    if "orange" in op_text or "ptk" in op_text:
+                        mnc = 3
+                    elif "t-mobile" in op_text or "ptc" in op_text:
+                        mnc = 2
+                    elif "play" in op_text or "p4" in op_text:
+                        mnc = 6
+                    elif "plus" in op_text or "polkomtel" in op_text:
+                        mnc = 1
+
+                # UKE doesn't have CID/LAC — use synthetic ID
+                synthetic_cid = i + 1
+                synthetic_lac = 0
+
+                # Radio tech from column or sheet name
+                radio = radio_from_name
+                if col_map.get("radio") is not None and col_map["radio"] < len(row):
+                    r_text = row[col_map["radio"]].upper()
+                    if "LTE" in r_text or "4G" in r_text:
+                        radio = "LTE"
+                    elif "UMTS" in r_text or "3G" in r_text:
+                        radio = "UMTS"
+                    elif "GSM" in r_text or "2G" in r_text:
+                        radio = "GSM"
+                    elif "NR" in r_text or "5G" in r_text:
+                        radio = "NR"
+
+                # City from column if available
+                city = ""
+                if col_map.get("city") is not None and col_map["city"] < len(row):
+                    city = row[col_map["city"]].strip()
+
+                batch.append((
+                    MCC_POLAND, mnc, synthetic_lac, synthetic_cid,
+                    lat, lon, azimuth, None, radio,
+                    city, "", "", "uke",
+                    0, antenna_height, tilt, "",
+                ))
+                imported += 1
+
+                if len(batch) >= batch_size:
+                    self._insert_batch(conn, batch)
+                    batch.clear()
+                    if progress_cb:
+                        progress_cb(imported, len(rows))
+
+            except (ValueError, IndexError):
+                continue
 
         if batch:
             self._insert_batch(conn, batch)
 
         conn.commit()
-        self._set_meta("uke_imported", str(int(time.time())))
-        self._set_meta("uke_count", str(imported))
-        log.info("Imported %d UKE stations", imported)
+        if not sheet_hint:
+            # Only set metadata from top-level call
+            self._set_meta("uke_imported", str(int(time.time())))
+            self._set_meta("uke_count", str(imported))
+        log.info("Imported %d UKE stations%s", imported,
+                 f" from {sheet_hint}" if sheet_hint else "")
         return imported
 
     def import_from_billing_records(
@@ -605,24 +781,54 @@ class BTSDatabase:
 
     @staticmethod
     def _map_uke_columns(header: List[str]) -> Dict[str, int]:
-        """Map UKE CSV column names to indices."""
+        """Map UKE CSV/XLSX column names to indices.
+
+        Handles various UKE naming conventions across years:
+        - Polish long names: 'Długość geograficzna', 'Szerokość geograficzna'
+        - UKE short codes: 'StGeoDlg', 'StGeoSzr', 'IdAzymut'
+        - Various casing and spelling variants
+        """
         col_map: Dict[str, int] = {}
         for i, h in enumerate(header):
             h_lower = h.strip().lower()
-            if re.search(r"d[łl]ugo[śs][ćc]\s*geogr", h_lower) or h_lower == "lon":
+            h_stripped = h.strip()
+
+            # Longitude
+            if (re.search(r"d[łl]ugo[śs][ćc]\s*geogr", h_lower)
+                    or h_lower in ("lon", "longitude", "dlugosc", "dlug_geo")
+                    or h_stripped.lower() in ("stgeodlg", "dlugosc_geograficzna")):
                 col_map["lon"] = i
-            elif re.search(r"szeroko[śs][ćc]\s*geogr", h_lower) or h_lower == "lat":
+            # Latitude
+            elif (re.search(r"szeroko[śs][ćc]\s*geogr", h_lower)
+                  or h_lower in ("lat", "latitude", "szerokosc", "szer_geo")
+                  or h_stripped.lower() in ("stgeoszr", "szerokosc_geograficzna")):
                 col_map["lat"] = i
-            elif re.search(r"azymut", h_lower):
+            # Azimuth
+            elif (re.search(r"azymut", h_lower)
+                  or h_stripped.lower() in ("idazymut", "azimuth")):
                 col_map["azimuth"] = i
-            elif re.search(r"k[aą]t\s*pochyl", h_lower):
+            # Tilt
+            elif (re.search(r"k[aą]t\s*pochyl", h_lower)
+                  or h_lower in ("tilt", "pochylenie")
+                  or h_stripped.lower() == "katpochylenia"):
                 col_map["tilt"] = i
-            elif re.search(r"wysoko[śs][ćc].*anten", h_lower):
+            # Antenna height
+            elif (re.search(r"wysoko[śs][ćc].*anten", h_lower)
+                  or h_lower in ("wysokosc_anteny", "wys_anteny")
+                  or h_stripped.lower() in ("wysokoscanteny", "wysokosc")):
                 col_map["height"] = i
-            elif re.search(r"operator|nazwa\s*podmiotu", h_lower):
+            # Operator name
+            elif (re.search(r"operator|nazwa\s*podmiotu", h_lower)
+                  or h_stripped.lower() in ("nazwapodmiotu", "operator", "podmiot")):
                 col_map["operator"] = i
-            elif re.search(r"system|technolog", h_lower):
+            # Radio technology
+            elif (re.search(r"system|technolog|standard", h_lower)
+                  or h_stripped.lower() in ("standard", "technologia")):
                 col_map["radio"] = i
+            # City / location name
+            elif (re.search(r"miejscowo[śs][ćc]|miasto|lokalizacja", h_lower)
+                  or h_stripped.lower() in ("miejscowosc", "miasto", "stmiejscowosc")):
+                col_map["city"] = i
         return col_map
 
     @staticmethod
