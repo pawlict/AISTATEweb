@@ -564,13 +564,24 @@
     else if (val.startsWith("month:")) bucket = (src.monthly || {})[val.slice(6)];
     if (!bucket) return;
 
-    if (chartId === "weekend" && bucket.fri_evening != null) {
-      // Weekend period — show segments breakdown
+    if (chartId === "night" && bucket.hourly_calls) {
+      // Night period — show per-hour breakdown like total view
+      const hours = [22, 23, 0, 1, 2, 3, 4, 5];
+      const hc = bucket.hourly_calls || {}, hs = bucket.hourly_sms || {}, hd = bucket.hourly_data || {};
+      barContainer.innerHTML = _buildGroupedBars(hours.map(h => ({
+        label: `${String(h).padStart(2, "0")}:00`,
+        calls: hc[h] || hc[String(h)] || 0,
+        sms: hs[h] || hs[String(h)] || 0,
+        data: hd[h] || hd[String(h)] || 0,
+      })));
+    } else if (chartId === "weekend" && bucket.fri_evening != null) {
+      // Weekend period — show segments breakdown with per-type data
+      const sc = bucket.seg_calls || {}, ss = bucket.seg_sms || {}, sd = bucket.seg_data || {};
       barContainer.innerHTML = _buildGroupedBars([
-        { label: "Pt wieczór", calls: bucket.fri_evening || 0, sms: 0, data: 0 },
-        { label: "Sobota",     calls: bucket.saturday || 0,    sms: 0, data: 0 },
-        { label: "Niedziela",  calls: bucket.sunday || 0,      sms: 0, data: 0 },
-        { label: "Pn rano",    calls: bucket.mon_morning || 0, sms: 0, data: 0 },
+        { label: "Pt wieczór", calls: sc.fri_evening || 0, sms: ss.fri_evening || 0, data: sd.fri_evening || 0 },
+        { label: "Sobota",     calls: sc.saturday || 0,    sms: ss.saturday || 0,    data: sd.saturday || 0 },
+        { label: "Niedziela",  calls: sc.sunday || 0,      sms: ss.sunday || 0,      data: sd.sunday || 0 },
+        { label: "Pn rano",    calls: sc.mon_morning || 0, sms: ss.mon_morning || 0, data: sd.mon_morning || 0 },
       ]);
     } else {
       barContainer.innerHTML = _bucketTypeBars(bucket);
