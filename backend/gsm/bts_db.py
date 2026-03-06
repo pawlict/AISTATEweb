@@ -383,6 +383,7 @@ class BTSDatabase:
 
         wb = openpyxl.load_workbook(str(xlsx_path), read_only=True, data_only=True)
         total_imported = 0
+        log.info("UKE XLSX: %s — sheets: %s", xlsx_path.name, wb.sheetnames)
 
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
@@ -520,9 +521,15 @@ class BTSDatabase:
         batch_size = 5000
 
         col_map = self._map_uke_columns(header)
+        log.info("UKE columns mapping: header=%s → col_map=%s (sheet=%s)",
+                 header[:30], col_map, sheet_hint)
         if "lat" not in col_map or "lon" not in col_map:
             log.warning("UKE: could not find lat/lon columns in header: %s", header[:20])
             return 0
+
+        # Log first data row for debugging
+        if rows:
+            log.info("UKE first data row (len=%d): %s", len(rows[0]), rows[0][:20])
 
         # Auto-detect radio technology from sheet/file name
         radio_from_name = ""
