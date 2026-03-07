@@ -602,8 +602,41 @@
     const card = QS("#gsm_map_card");
     if (!card) return;
 
+    // Show debug info in log
+    if (geo && geo.debug) {
+      const d = geo.debug;
+      _addLog("info", `[Geolokalizacja] Rekordy: ${geo.total_records}, ` +
+        `z koordynatami BTS: ${d.has_direct_coords}, ` +
+        `z LAC/CID: ${d.has_lac_cid}, ` +
+        `bez danych: ${d.no_location_data}`);
+      _addLog("info", `[Geolokalizacja] Zlokalizowane: ${geo.geolocated_records} ` +
+        `(z bilingu: ${d.resolved_billing}, z bazy BTS: ${d.resolved_bts_db}, ` +
+        `nieznalezione w bazie: ${d.lookup_miss})`);
+      if (d.lookup_miss > 0 && d.resolved_bts_db === 0 && d.has_lac_cid > 0) {
+        _addLog("warn", `[Geolokalizacja] Żaden rekord z LAC/CID nie znalazł dopasowania w bazie BTS! ` +
+          `Sprawdź czy baza OpenCelliD jest pobrana. Przykładowe LAC/CID: ${(d.sample_lac_cid || []).join(", ")}`);
+      }
+    }
+
     if (!geo || !geo.geolocated_records || geo.geolocated_records === 0) {
-      card.style.display = "none";
+      // Show card with diagnostic message if we have debug info
+      if (geo && geo.debug && geo.debug.has_lac_cid > 0) {
+        card.style.display = "";
+        const container = QS("#gsm_map_container");
+        if (container) {
+          const d = geo.debug;
+          container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">
+            <div style="text-align:center;max-width:500px">
+              <div style="font-size:24px;margin-bottom:8px">Brak danych lokalizacyjnych</div>
+              <div class="small" style="margin-bottom:8px">Znaleziono ${d.has_lac_cid} rekordów z LAC/CID, ale żaden nie pasuje do bazy BTS.</div>
+              <div class="small">Pobierz bazę OpenCelliD w <a href="/bts-settings" style="color:var(--accent)">ustawieniach BTS</a>, aby umożliwić geolokalizację.</div>
+              ${d.sample_lac_cid && d.sample_lac_cid.length ? `<div class="small muted" style="margin-top:8px;font-family:monospace;font-size:11px">Przykładowe: ${d.sample_lac_cid.join(", ")}</div>` : ""}
+            </div>
+          </div>`;
+        }
+      } else {
+        card.style.display = "none";
+      }
       return;
     }
 
@@ -629,7 +662,7 @@
       return;
     }
 
-    _initMap(geo);
+    await _initMap(geo);
     _renderClusters(geo);
 
     // Layer switcher
@@ -639,13 +672,13 @@
     }
   }
 
-  function _initMap(geo) {
+  async function _initMap(geo) {
     const container = QS("#gsm_map_container");
     if (!container || !window.L) return;
 
     // Destroy existing map
     if (St.map) {
-      St.map.remove();
+      try { St.map.remove(); } catch(e) { /* ignore */ }
       St.map = null;
     }
 
@@ -655,8 +688,8 @@
     });
     St.map = map;
 
-    // Try offline tiles first, fallback to OSM
-    _addTileLayer(map);
+    // Load tiles first, then add markers
+    await _addTileLayer(map);
 
     // Add markers
     _addAllPoints(map, geo);
@@ -693,7 +726,13 @@
   function _addAllPoints(map, geo) {
     const points = (geo.geo_records || []).filter(r => r.point && (r.point.lat || r.point.lon));
 
-    if (!points.length) return;
+    console.log("[GSM Map] geo_records total:", (geo.geo_records || []).length,
+                "with valid points:", points.length);
+
+    if (!points.length) {
+      _addLog("warn", `Mapa: brak punktów do wyświetlenia (geo_records: ${(geo.geo_records || []).length})`);
+      return;
+    }
 
     // Clear existing layers
     Object.values(St.mapLayers).forEach(lg => { if (map.hasLayer(lg)) map.removeLayer(lg); });

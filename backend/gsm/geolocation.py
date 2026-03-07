@@ -9,12 +9,15 @@ Resolves billing records to geographic coordinates using:
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .parsers.base import BillingRecord
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -125,6 +128,7 @@ class GeoAnalysis:
     center_lat: float = 0.0
     center_lon: float = 0.0
     bounds: Dict[str, float] = field(default_factory=dict)
+    debug: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -139,6 +143,7 @@ class GeoAnalysis:
             "center_lat": self.center_lat,
             "center_lon": self.center_lon,
             "bounds": self.bounds,
+            "debug": self.debug,
         }
 
 
@@ -162,7 +167,20 @@ def geolocate_records(
     analysis = GeoAnalysis(total_records=len(records))
 
     if not records:
+        log.info("Geolocation: no records to process")
         return analysis
+
+    log.info("Geolocation: processing %d records, bts_db=%s",
+             len(records), "available" if bts_db else "NONE")
+
+    # Debug counters
+    has_direct_coords = 0
+    has_lac_cid = 0
+    no_location_data = 0
+    resolved_billing = 0
+    resolved_bts_db = 0
+    lookup_miss = 0
+    sample_lac_cid: List[str] = []
 
     geo_records: List[GeoRecord] = []
     seen_cells: Set[Tuple[int, int]] = set()
@@ -178,17 +196,64 @@ def geolocate_records(
             raw_row=r.raw_row,
         )
 
+        # Track what data each record has
+        extra = r.extra or {}
+        has_bts_xy = bool(extra.get("bts_x") and extra.get("bts_y"))
+        has_lac = bool(r.location_lac)
+        has_cid = bool(r.location_cell_id)
+
+        if has_bts_xy:
+            has_direct_coords += 1
+        if has_lac and has_cid:
+            has_lac_cid += 1
+            if len(sample_lac_cid) < 5:
+                sample_lac_cid.append(f"LAC={r.location_lac},CID={r.location_cell_id}")
+        if not has_bts_xy and not (has_lac and has_cid):
+            no_location_data += 1
+
         point = _resolve_point(r, bts_db)
         if point and point.is_valid:
             gr.point = point
             analysis.geolocated_records += 1
+            if point.source == "billing":
+                resolved_billing += 1
+            elif point.source == "bts_db":
+                resolved_bts_db += 1
             if point.lac and point.cid:
                 seen_cells.add((point.lac, point.cid))
+        elif has_lac and has_cid:
+            lookup_miss += 1
 
         geo_records.append(gr)
 
     analysis.geo_records = geo_records
     analysis.unique_cells = len(seen_cells)
+
+    # Log diagnostic summary
+    log.info(
+        "Geolocation results: %d/%d resolved "
+        "(direct_coords=%d, bts_db=%d, no_data=%d, lookup_miss=%d)",
+        analysis.geolocated_records, len(records),
+        has_direct_coords, resolved_bts_db,
+        no_location_data, lookup_miss,
+    )
+    if has_lac_cid and resolved_bts_db == 0 and has_direct_coords == 0:
+        log.warning(
+            "Geolocation: %d records had LAC/CID but 0 matched BTS database! "
+            "Sample: %s  — check if BTS database (OpenCelliD) is loaded.",
+            has_lac_cid, "; ".join(sample_lac_cid),
+        )
+
+    # Store debug info for frontend
+    analysis.debug = {
+        "has_direct_coords": has_direct_coords,
+        "has_lac_cid": has_lac_cid,
+        "no_location_data": no_location_data,
+        "resolved_billing": resolved_billing,
+        "resolved_bts_db": resolved_bts_db,
+        "lookup_miss": lookup_miss,
+        "sample_lac_cid": sample_lac_cid,
+    }
 
     # Compute center and bounds
     valid_points = [gr.point for gr in geo_records if gr.point and gr.point.is_valid]
@@ -212,6 +277,13 @@ def geolocate_records(
 
     # Path reconstruction
     analysis.path = _build_path(geo_records)
+
+    log.info(
+        "Geolocation complete: %d clusters, %d path segments, "
+        "home=%s, work=%s",
+        len(analysis.clusters), len(analysis.path),
+        bool(analysis.home_cluster), bool(analysis.work_cluster),
+    )
 
     return analysis
 

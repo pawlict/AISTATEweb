@@ -73,7 +73,27 @@ def _do_parse(file_path: Path, filename: str) -> dict:
         from backend.gsm.geolocation import geolocate_records
         from backend.gsm.bts_db import get_bts_db
         bts_db = get_bts_db(_data_dir())
+
+        # Log BTS database status
+        try:
+            stats = bts_db.get_stats()
+            _app_log(f"[GSM] BTS database: {stats.get('total_stations', 0)} stations "
+                     f"(sources: {stats.get('by_source', {})})")
+        except Exception:
+            _app_log("[GSM] BTS database: unavailable or empty")
+
         geo = geolocate_records(result.records, bts_db)
+
+        # Log geolocation summary
+        if geo:
+            dbg = geo.debug or {}
+            _app_log(
+                f"[GSM] Geolocation: {geo.geolocated_records}/{geo.total_records} resolved "
+                f"(billing_coords={dbg.get('resolved_billing', 0)}, "
+                f"bts_db={dbg.get('resolved_bts_db', 0)}, "
+                f"lac_cid_miss={dbg.get('lookup_miss', 0)}, "
+                f"no_data={dbg.get('no_location_data', 0)})"
+            )
 
         # Auto-import BTS data from billing (T-Mobile has coords)
         records_with_coords = [
@@ -84,7 +104,8 @@ def _do_parse(file_path: Path, filename: str) -> dict:
             bts_db.import_from_billing_records(records_with_coords)
             _app_log(f"[GSM] Auto-imported {len(records_with_coords)} BTS stations from billing")
     except Exception as e:
-        log.warning("Geolocation error: %s", e)
+        log.warning("Geolocation error: %s", e, exc_info=True)
+        _app_log(f"[GSM] Geolocation ERROR: {type(e).__name__}: {e}")
 
     response = {
         "status": "ok",
