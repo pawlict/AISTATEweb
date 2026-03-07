@@ -868,7 +868,7 @@
     if (geo.clusters && geo.clusters.length) {
       for (const c of geo.clusters) {
         const color = c.label === "dom" ? "#22c55e" : c.label === "praca" ? "#3b82f6" : "#f97316";
-        const label = c.label === "dom" ? "DOM" : c.label === "praca" ? "PRACA" : `Klaster (${c.record_count})`;
+        const label = c.label === "dom" ? "DOM" : c.label === "praca" ? "PRACA" : `Lokalizacja (${c.record_count})`;
 
         L.circle([c.lat, c.lon], {
           radius: c.radius_m || 500,
@@ -877,6 +877,18 @@
           weight: 2,
           fillOpacity: 0.15,
         }).addTo(clusterGroup);
+
+        // Popup with enhanced info
+        const wdNames = ["Pn","Wt","Śr","Cz","Pt","Sb","Nd"];
+        let wdInfo = "";
+        if (c.weekday_counts) {
+          const parts = [];
+          for (let d = 0; d < 7; d++) {
+            const v = c.weekday_counts[d] || c.weekday_counts[String(d)] || 0;
+            if (v > 0) parts.push(`${wdNames[d]}:${v}`);
+          }
+          if (parts.length) wdInfo = `<br>Dni tyg.: ${parts.join(", ")}`;
+        }
 
         L.marker([c.lat, c.lon], {
           icon: L.divIcon({
@@ -890,10 +902,94 @@
           Unikalne dni: ${c.unique_days}<br>
           Okres: ${c.first_seen} — ${c.last_seen}<br>
           Godziny: ${(c.hours_active || []).join(", ")}
+          ${wdInfo}
         `).addTo(clusterGroup);
       }
     }
     St.mapLayers.clusters = clusterGroup;
+
+    // ── Trips layer (inter-city travel arrows) ──
+    const tripsGroup = L.layerGroup();
+    if (geo.trips && geo.trips.length && geo.clusters && geo.clusters.length) {
+      // Aggregate trips by from→to pair for cleaner display
+      const tripPairs = {};
+      for (const t of geo.trips) {
+        const key = `${t.from_cluster_idx}_${t.to_cluster_idx}`;
+        if (!tripPairs[key]) tripPairs[key] = { trips: [], from: t.from_cluster_idx, to: t.to_cluster_idx };
+        tripPairs[key].trips.push(t);
+      }
+
+      for (const pair of Object.values(tripPairs)) {
+        const fromC = geo.clusters.find(c => c.cluster_idx === pair.from);
+        const toC = geo.clusters.find(c => c.cluster_idx === pair.to);
+        if (!fromC || !toC) continue;
+
+        const count = pair.trips.length;
+        const avgDist = pair.trips.reduce((s, t) => s + t.distance_km, 0) / count;
+
+        // Draw polyline with arrow-like dash
+        const line = L.polyline(
+          [[fromC.lat, fromC.lon], [toC.lat, toC.lon]],
+          { color: "#8b5cf6", weight: 3, opacity: 0.7, dashArray: "12 6" }
+        );
+
+        // Popup with trip details
+        let popupHtml = `<b>Podróż: ${fromC.city || "?"} → ${toC.city || "?"}</b><br>
+          ${count} ${count === 1 ? "podróż" : "podróży"}, ~${avgDist.toFixed(0)} km<br>`;
+        for (const t of pair.trips.slice(0, 5)) {
+          popupHtml += `<div class="small muted">${t.depart_datetime} → ${t.arrive_datetime} (${t.distance_km} km)</div>`;
+        }
+        if (pair.trips.length > 5) {
+          popupHtml += `<div class="small muted">...i ${pair.trips.length - 5} więcej</div>`;
+        }
+        line.bindPopup(popupHtml);
+        tripsGroup.addLayer(line);
+
+        // Arrow marker at midpoint
+        const midLat = (fromC.lat + toC.lat) / 2;
+        const midLon = (fromC.lon + toC.lon) / 2;
+        const arrowIcon = L.divIcon({
+          className: "gsm-trip-arrow-icon",
+          html: `<div style="background:#8b5cf6;color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:bold;white-space:nowrap">${count}×</div>`,
+          iconSize: null,
+        });
+        L.marker([midLat, midLon], { icon: arrowIcon }).addTo(tripsGroup);
+      }
+      _addLog("info", `Podróże: ${geo.trips.length} między klastrami (${Object.keys(tripPairs).length} unikalnych tras)`);
+    }
+    St.mapLayers.trips = tripsGroup;
+
+    // ── Border crossings layer ──
+    const borderGroup = L.layerGroup();
+    if (geo.border_crossings && geo.border_crossings.length) {
+      for (const bc of geo.border_crossings) {
+        // Try to find cluster locations for departure/return
+        const depCity = bc.last_domestic_city;
+        const retCity = bc.first_return_city;
+        const depCluster = depCity ? geo.clusters.find(c => c.city === depCity) : null;
+        const retCluster = retCity ? geo.clusters.find(c => c.city === retCity) : null;
+
+        if (depCluster) {
+          L.circleMarker([depCluster.lat, depCluster.lon], {
+            radius: 8, fillColor: "#ef4444", color: "#fff", weight: 2, fillOpacity: 0.9,
+          }).bindPopup(`<b>Wyjazd za granicę</b><br>${bc.last_domestic_datetime}<br>${depCity}`)
+            .addTo(borderGroup);
+        }
+        if (retCluster) {
+          L.circleMarker([retCluster.lat, retCluster.lon], {
+            radius: 8, fillColor: "#22c55e", color: "#fff", weight: 2, fillOpacity: 0.9,
+          }).bindPopup(`<b>Powrót</b><br>${bc.first_return_datetime}<br>${retCity}`)
+            .addTo(borderGroup);
+        }
+        if (depCluster && retCluster) {
+          L.polyline(
+            [[depCluster.lat, depCluster.lon], [retCluster.lat, retCluster.lon]],
+            { color: "#ef4444", weight: 2, opacity: 0.5, dashArray: "6 4" }
+          ).addTo(borderGroup);
+        }
+      }
+    }
+    St.mapLayers.border = borderGroup;
 
     // Fit bounds using unique locations (much smaller than all points)
     const boundsCoords = uniqueLocations.map(loc => [loc.lat, loc.lon]);
@@ -922,9 +1018,58 @@
       if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
       if (St.mapLayers.all) St.mapLayers.all.addTo(map);
     }
+    if (layer === "trips") {
+      if (St.mapLayers.trips) St.mapLayers.trips.addTo(map);
+      if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+    }
+    if (layer === "border") {
+      if (St.mapLayers.border) St.mapLayers.border.addTo(map);
+      if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+    }
     if (layer === "heatmap") {
       if (St.mapLayers.all) St.mapLayers.all.addTo(map);
     }
+  }
+
+  /* ── Hour mini-bar chart (for cluster tiles) ── */
+  function _hourMiniChart(hour_counts) {
+    if (!hour_counts || !Object.keys(hour_counts).length) return "";
+    const maxVal = Math.max(1, ...Object.values(hour_counts));
+    let bars = "";
+    for (let h = 0; h < 24; h++) {
+      const v = hour_counts[h] || hour_counts[String(h)] || 0;
+      const pct = Math.round((v / maxVal) * 100);
+      const isNight = [22,23,0,1,2,3,4,5,6].includes(h);
+      const isWork = [8,9,10,11,12,13,14,15,16].includes(h);
+      const barColor = isNight ? "#22c55e" : isWork ? "#3b82f6" : "#f97316";
+      bars += `<div title="${String(h).padStart(2,'0')}:00 — ${v}" style="width:${100/24}%;height:${Math.max(pct,4)}%;background:${barColor};opacity:0.7;border-radius:1px"></div>`;
+    }
+    return `<div style="display:flex;align-items:flex-end;height:28px;gap:1px;margin-top:6px" title="Rozkład godzinowy">${bars}</div>`;
+  }
+
+  /* ── Weekday pattern label ── */
+  function _weekdayLabel(weekday_counts) {
+    if (!weekday_counts || !Object.keys(weekday_counts).length) return "";
+    const dayNames = ["Pn","Wt","Śr","Cz","Pt","Sb","Nd"];
+    let weekdayTotal = 0, weekendTotal = 0;
+    for (let d = 0; d < 7; d++) {
+      const v = weekday_counts[d] || weekday_counts[String(d)] || 0;
+      if (d < 5) weekdayTotal += v; else weekendTotal += v;
+    }
+    const total = weekdayTotal + weekendTotal;
+    if (!total) return "";
+    const wdRatio = weekdayTotal / total;
+    if (wdRatio > 0.85) return `<span class="small muted" style="display:block;margin-top:2px">głównie Pn–Pt</span>`;
+    if (wdRatio < 0.4) return `<span class="small muted" style="display:block;margin-top:2px">głównie weekendy</span>`;
+    // Show day distribution
+    const topDays = [];
+    for (let d = 0; d < 7; d++) {
+      const v = weekday_counts[d] || weekday_counts[String(d)] || 0;
+      if (v > 0) topDays.push({d, v, name: dayNames[d]});
+    }
+    topDays.sort((a,b) => b.v - a.v);
+    return `<span class="small muted" style="display:block;margin-top:2px">${topDays.slice(0,3).map(x => x.name).join(", ")}</span>`;
   }
 
   function _renderClusters(geo) {
@@ -938,27 +1083,128 @@
     }
     wrap.style.display = "";
 
-    let html = '<div style="display:flex;gap:12px;flex-wrap:wrap">';
-    for (const c of geo.clusters.slice(0, 10)) {
+    // Build trip index: cluster_idx → list of trips from/to
+    const tripIndex = {};
+    for (const t of (geo.trips || [])) {
+      if (!tripIndex[t.from_cluster_idx]) tripIndex[t.from_cluster_idx] = [];
+      tripIndex[t.from_cluster_idx].push(t);
+    }
+
+    let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
+    const maxTiles = 10;
+    const shownClusters = geo.clusters.slice(0, maxTiles);
+
+    for (let ci = 0; ci < shownClusters.length; ci++) {
+      const c = shownClusters[ci];
       const color = c.label === "dom" ? "#22c55e" : c.label === "praca" ? "#3b82f6" : "#f97316";
       const label = c.label === "dom" ? "DOM" : c.label === "praca" ? "PRACA" : "Lokalizacja";
-      html += `<div style="border:2px solid ${color};border-radius:12px;padding:10px 14px;min-width:160px">
+      const cityStr = c.city || "—";
+      const streetStr = c.street ? `, ${c.street}` : "";
+
+      html += `<div style="border:2px solid ${color};border-radius:12px;padding:10px 14px;min-width:180px;max-width:240px">
         <div style="color:${color};font-weight:bold;margin-bottom:4px">${label}</div>
-        <div class="small">${c.city || "—"}${c.street ? ", " + c.street : ""}</div>
-        <div class="small muted">${c.record_count} rekordów, ${c.unique_days} dni</div>
+        <div class="small">${cityStr}${streetStr}</div>
+        <div class="small muted">${_fmt(c.record_count)} rekordów, ${c.unique_days} dni</div>
         <div class="small muted">${c.first_seen} — ${c.last_seen}</div>
+        ${_weekdayLabel(c.weekday_counts)}
+        ${_hourMiniChart(c.hour_counts)}
       </div>`;
+
+      // Trip arrows to next clusters
+      const tripsFrom = tripIndex[c.cluster_idx] || [];
+      if (tripsFrom.length > 0 && ci < shownClusters.length - 1) {
+        // Count unique destination clusters
+        const destCounts = {};
+        for (const t of tripsFrom) {
+          if (!destCounts[t.to_cluster_idx]) destCounts[t.to_cluster_idx] = { count: 0, dist: t.distance_km, city: t.to_city };
+          destCounts[t.to_cluster_idx].count++;
+        }
+        const destList = Object.values(destCounts);
+        const totalTrips = destList.reduce((s, d) => s + d.count, 0);
+        if (totalTrips > 0) {
+          html += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 4px;color:var(--text-muted)">
+            <div style="font-size:18px">→</div>
+            <div class="small" style="white-space:nowrap">${totalTrips} ${totalTrips === 1 ? "podróż" : "podróży"}</div>
+          </div>`;
+        }
+      }
     }
     html += '</div>';
 
+    // Home/work summary
     if (geo.home_cluster) {
-      html += `<div class="small" style="margin-top:8px"><b style="color:#22c55e">DOM:</b> ${geo.home_cluster.city || ""}${geo.home_cluster.street ? ", " + geo.home_cluster.street : ""}</div>`;
+      html += `<div class="small" style="margin-top:8px"><b style="color:#22c55e">DOM:</b> ${geo.home_cluster.city || "—"}${geo.home_cluster.street ? ", " + geo.home_cluster.street : ""}</div>`;
     }
     if (geo.work_cluster) {
-      html += `<div class="small"><b style="color:#3b82f6">PRACA:</b> ${geo.work_cluster.city || ""}${geo.work_cluster.street ? ", " + geo.work_cluster.street : ""}</div>`;
+      html += `<div class="small"><b style="color:#3b82f6">PRACA:</b> ${geo.work_cluster.city || "—"}${geo.work_cluster.street ? ", " + geo.work_cluster.street : ""}</div>`;
     }
 
     list.innerHTML = html;
+
+    // Render border crossings below clusters
+    _renderBorderCrossings(geo);
+  }
+
+  /* ── Border crossings section ── */
+  function _renderBorderCrossings(geo) {
+    let container = QS("#gsm_border_crossings");
+    if (!container) {
+      // Create container after cluster list if it doesn't exist in template
+      const clusterWrap = QS("#gsm_cluster_info");
+      if (clusterWrap) {
+        container = _el("div", "", "");
+        container.id = "gsm_border_crossings";
+        clusterWrap.appendChild(container);
+      } else return;
+    }
+
+    const crossings = geo.border_crossings || [];
+    if (!crossings.length) {
+      container.style.display = "none";
+      return;
+    }
+    container.style.display = "";
+
+    let html = '<div class="h3" style="margin-top:16px;margin-bottom:8px">Przekroczenia granic / wyjazdy zagraniczne</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+
+    for (const bc of crossings) {
+      const absence = _formatHours(bc.absence_hours);
+      const countries = (bc.roaming_countries || []).join(", ");
+      const confirmed = bc.roaming_confirmed
+        ? `<span style="color:#22c55e" title="Potwierdzone danymi roamingu">✓ roaming</span>`
+        : `<span style="color:#f97316" title="Wykryte na podstawie przerwy w aktywności">⚠ przerwa w aktywności</span>`;
+
+      html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary)">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+          <div>
+            <span style="color:#ef4444">●</span> <b>Wyjazd:</b> ${bc.last_domestic_datetime || "?"}
+            ${bc.last_domestic_city ? `<span class="muted">(${bc.last_domestic_city})</span>` : ""}
+          </div>
+          <div>
+            <span style="color:#22c55e">●</span> <b>Powrót:</b> ${bc.first_return_datetime || "brak danych"}
+            ${bc.first_return_city ? `<span class="muted">(${bc.first_return_city})</span>` : ""}
+          </div>
+        </div>
+        <div class="small" style="margin-top:4px">
+          Nieobecność: <b>${absence}</b>
+          ${countries ? ` · Kraje: <b>${countries}</b>` : ""}
+          ${bc.roaming_records ? ` · ${bc.roaming_records} rekordów roamingu` : ""}
+          · ${confirmed}
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  function _formatHours(h) {
+    if (!h || h <= 0) return "—";
+    if (h < 1) return `${Math.round(h * 60)} min`;
+    const days = Math.floor(h / 24);
+    const hrs = Math.round(h % 24);
+    if (days > 0) return `${days}d ${hrs}h`;
+    return `${hrs}h`;
   }
 
   function _renderWarnings(warnings) {

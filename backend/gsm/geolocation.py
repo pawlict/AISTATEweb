@@ -5,6 +5,8 @@ Resolves billing records to geographic coordinates using:
 2. BTS database lookup by CID/LAC
 3. Sector positioning using azimuth data
 4. Location clustering for home/work detection
+5. Trip detection between clusters (inter-city travel)
+6. Border crossing / foreign travel detection (roaming + gap analysis)
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import logging
 import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
+from datetime import datetime as _dt
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .parsers.base import BillingRecord
@@ -54,6 +57,9 @@ class GeoRecord:
     duration_seconds: int = 0
     point: Optional[GeoPoint] = None
     raw_row: int = 0
+    roaming: bool = False
+    roaming_country: str = ""
+    weekday: int = -1  # 0=Mon..6=Sun, derived from date
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
@@ -82,10 +88,13 @@ class LocationCluster:
     first_seen: str = ""
     last_seen: str = ""
     hours_active: List[int] = field(default_factory=list)
+    hour_counts: Dict[int, int] = field(default_factory=dict)
+    weekday_counts: Dict[int, int] = field(default_factory=dict)
     label: str = ""  # 'dom', 'praca', 'frequent', etc.
     city: str = ""
     street: str = ""
     cells: List[Dict[str, Any]] = field(default_factory=list)
+    cluster_idx: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -114,12 +123,48 @@ class PathSegment:
 
 
 @dataclass
+class Trip:
+    """Detected inter-city movement between clusters."""
+
+    from_cluster_idx: int = 0
+    to_cluster_idx: int = 0
+    from_city: str = ""
+    to_city: str = ""
+    depart_datetime: str = ""
+    arrive_datetime: str = ""
+    distance_km: float = 0.0
+    duration_minutes: float = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class BorderCrossing:
+    """Detected border crossing / foreign travel event."""
+
+    last_domestic_datetime: str = ""
+    first_return_datetime: str = ""
+    last_domestic_city: str = ""
+    first_return_city: str = ""
+    absence_hours: float = 0.0
+    roaming_countries: List[str] = field(default_factory=list)
+    roaming_records: int = 0
+    roaming_confirmed: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class GeoAnalysis:
     """Complete geolocation analysis result."""
 
     geo_records: List[GeoRecord] = field(default_factory=list)
     clusters: List[LocationCluster] = field(default_factory=list)
     path: List[PathSegment] = field(default_factory=list)
+    trips: List[Trip] = field(default_factory=list)
+    border_crossings: List[BorderCrossing] = field(default_factory=list)
     home_cluster: Optional[LocationCluster] = None
     work_cluster: Optional[LocationCluster] = None
     total_records: int = 0
@@ -139,6 +184,8 @@ class GeoAnalysis:
             "geo_records": geolocated,
             "clusters": [c.to_dict() for c in self.clusters],
             "path": [p.to_dict() for p in self.path],
+            "trips": [t.to_dict() for t in self.trips],
+            "border_crossings": [bc.to_dict() for bc in self.border_crossings],
             "home_cluster": self.home_cluster.to_dict() if self.home_cluster else None,
             "work_cluster": self.work_cluster.to_dict() if self.work_cluster else None,
             "total_records": self.total_records,
@@ -250,7 +297,8 @@ def geolocate_records(
         bts_db: Optional BTSDatabase instance for CID/LAC lookup.
 
     Returns:
-        GeoAnalysis with geo_records, clusters, path, home/work.
+        GeoAnalysis with geo_records, clusters, path, trips,
+        border_crossings, home/work.
     """
     analysis = GeoAnalysis(total_records=len(records))
 
@@ -284,7 +332,16 @@ def geolocate_records(
             callee=r.callee or r.caller,
             duration_seconds=r.duration_seconds,
             raw_row=r.raw_row,
+            roaming=r.roaming,
+            roaming_country=r.roaming_country or "",
         )
+
+        # Derive weekday from date
+        if r.date:
+            try:
+                gr.weekday = _dt.strptime(r.date, "%Y-%m-%d").weekday()
+            except (ValueError, TypeError):
+                pass
 
         # Track what data each record has
         extra = r.extra or {}
@@ -387,13 +444,20 @@ def geolocate_records(
     # Home/work detection
     _detect_home_work(analysis)
 
-    # Path reconstruction
+    # Path reconstruction (fine-grained, within-cluster)
     analysis.path = _build_path(geo_records)
 
+    # Trip detection (inter-city movements between clusters)
+    analysis.trips = _detect_trips(geo_records, analysis.clusters)
+
+    # Border crossing / foreign travel detection
+    analysis.border_crossings = _detect_border_crossings(geo_records, analysis.clusters)
+
     log.info(
-        "Geolocation complete: %d clusters, %d path segments, "
-        "home=%s, work=%s",
+        "Geolocation complete: %d clusters, %d path segments, %d trips, "
+        "%d border crossings, home=%s, work=%s",
         len(analysis.clusters), len(analysis.path),
+        len(analysis.trips), len(analysis.border_crossings),
         bool(analysis.home_cluster), bool(analysis.work_cluster),
     )
 
@@ -490,6 +554,8 @@ def _cluster_locations(
     """Cluster geolocated records by proximity.
 
     Uses a simplified grid-based approach (faster than full DBSCAN).
+    Collects frequency-weighted hour_counts and weekday_counts for
+    proper home/work scoring.
     """
     valid = [gr for gr in geo_records if gr.point and gr.point.is_valid]
     if not valid:
@@ -536,11 +602,14 @@ def _cluster_locations(
 
         dates = set()
         hours: List[int] = []
+        hour_counts: Dict[int, int] = Counter()
+        weekday_counts: Dict[int, int] = Counter()
         cells_in_cluster: Dict[Tuple[int, int], int] = Counter()
         first = ""
         last = ""
-        city = ""
-        street = ""
+        # Track city frequency to pick most common (not just first)
+        city_counter: Dict[str, int] = Counter()
+        street_counter: Dict[str, int] = Counter()
 
         for gr in cluster_recs:
             if gr.date:
@@ -553,14 +622,21 @@ def _cluster_locations(
                 try:
                     h = int(gr.time.split(":")[0])
                     hours.append(h)
+                    hour_counts[h] += 1
                 except (ValueError, IndexError):
                     pass
+            if gr.weekday >= 0:
+                weekday_counts[gr.weekday] += 1
             if gr.point:
                 cells_in_cluster[(gr.point.lac, gr.point.cid)] += 1
-                if not city and gr.point.city:
-                    city = gr.point.city
-                if not street and gr.point.street:
-                    street = gr.point.street
+                if gr.point.city:
+                    city_counter[gr.point.city] += 1
+                if gr.point.street:
+                    street_counter[gr.point.street] += 1
+
+        # Pick most common city/street
+        city = city_counter.most_common(1)[0][0] if city_counter else ""
+        street = street_counter.most_common(1)[0][0] if street_counter else ""
 
         cluster = LocationCluster(
             lat=center_lat,
@@ -570,6 +646,8 @@ def _cluster_locations(
             first_seen=first,
             last_seen=last,
             hours_active=sorted(set(hours)),
+            hour_counts=dict(hour_counts),
+            weekday_counts=dict(weekday_counts),
             city=city,
             street=street,
             cells=[
@@ -579,22 +657,29 @@ def _cluster_locations(
         )
         clusters.append(cluster)
 
-    # Sort by record count
+    # Sort by record count, assign indices
     clusters.sort(key=lambda c: -c.record_count)
-    return clusters[:20]
+    clusters = clusters[:30]  # cap at 30
+    for i, c in enumerate(clusters):
+        c.cluster_idx = i
+
+    return clusters
 
 
 def _detect_home_work(analysis: GeoAnalysis) -> None:
     """Detect home and work locations from clusters.
 
-    Home: cluster with most activity during 22:00-07:00 hours.
-    Work: cluster with most activity during 09:00-17:00 hours on weekdays.
+    Home: cluster with highest frequency-weighted night activity (22:00-07:00)
+          multiplied by unique_days.  Requires at least 3 unique days.
+    Work: cluster with highest frequency-weighted work-hour activity (8:00-16:00)
+          on weekdays (Mon-Fri), multiplied by unique_days and weekday ratio.
+          Must not be the same as home.  Requires at least 3 unique days.
     """
     if not analysis.clusters:
         return
 
     night_hours = {22, 23, 0, 1, 2, 3, 4, 5, 6}
-    work_hours = {9, 10, 11, 12, 13, 14, 15, 16}
+    work_hours = {8, 9, 10, 11, 12, 13, 14, 15, 16}
 
     best_home = None
     best_home_score = 0
@@ -602,18 +687,20 @@ def _detect_home_work(analysis: GeoAnalysis) -> None:
     best_work_score = 0
 
     for cluster in analysis.clusters:
-        night_count = sum(1 for h in cluster.hours_active if h in night_hours)
-        work_count = sum(1 for h in cluster.hours_active if h in work_hours)
-
-        # Home score: night hours * record count * unique days
-        home_score = night_count * cluster.record_count * cluster.unique_days
-        if home_score > best_home_score:
+        # Home: frequency-weighted night records × unique days
+        night_freq = sum(cluster.hour_counts.get(h, 0) for h in night_hours)
+        home_score = night_freq * max(1, cluster.unique_days)
+        if home_score > best_home_score and cluster.unique_days >= 3:
             best_home_score = home_score
             best_home = cluster
 
-        # Work score: work hours * record count * unique days
-        work_score = work_count * cluster.record_count * cluster.unique_days
-        if work_score > best_work_score:
+        # Work: frequency-weighted work-hour records × weekday ratio × unique days
+        work_freq = sum(cluster.hour_counts.get(h, 0) for h in work_hours)
+        weekday_records = sum(cluster.weekday_counts.get(d, 0) for d in range(5))
+        total_records = sum(cluster.weekday_counts.values()) or 1
+        weekday_ratio = weekday_records / total_records
+        work_score = work_freq * max(1, cluster.unique_days) * weekday_ratio
+        if work_score > best_work_score and cluster.unique_days >= 3:
             best_work_score = work_score
             best_work = cluster
 
@@ -624,6 +711,205 @@ def _detect_home_work(analysis: GeoAnalysis) -> None:
     if best_work and best_work != best_home:
         best_work.label = "praca"
         analysis.work_cluster = best_work
+
+
+# ---------------------------------------------------------------------------
+# Trip detection (inter-city travel)
+# ---------------------------------------------------------------------------
+
+def _detect_trips(
+    geo_records: List[GeoRecord],
+    clusters: List[LocationCluster],
+    min_distance_km: float = 5.0,
+) -> List[Trip]:
+    """Detect inter-city trips as cluster-to-cluster transitions.
+
+    Algorithm:
+    1. Assign each geolocated record to its nearest cluster.
+    2. Walk chronologically — when cluster changes and distance > min_distance_km,
+       record a Trip.
+    3. Collapse consecutive same-cluster records to avoid noise.
+    """
+    if not clusters or len(clusters) < 2:
+        return []
+
+    valid = [gr for gr in geo_records
+             if gr.point and gr.point.is_valid and gr.datetime]
+    if len(valid) < 2:
+        return []
+
+    valid.sort(key=lambda gr: gr.datetime)
+
+    def _nearest_cluster_idx(p: GeoPoint) -> int:
+        best_idx = 0
+        best_dist = float("inf")
+        for i, c in enumerate(clusters):
+            d = _haversine(p.lat, p.lon, c.lat, c.lon)
+            if d < best_dist:
+                best_dist = d
+                best_idx = i
+        return best_idx
+
+    trips: List[Trip] = []
+    prev_idx = _nearest_cluster_idx(valid[0].point)
+    prev_record = valid[0]
+
+    for gr in valid[1:]:
+        idx = _nearest_cluster_idx(gr.point)
+        if idx != prev_idx:
+            # Cluster changed — check if it's a meaningful trip
+            dist = _haversine(
+                clusters[prev_idx].lat, clusters[prev_idx].lon,
+                clusters[idx].lat, clusters[idx].lon,
+            )
+            if dist >= min_distance_km * 1000:
+                dur_sec = _time_diff_seconds(prev_record.datetime, gr.datetime)
+                trips.append(Trip(
+                    from_cluster_idx=prev_idx,
+                    to_cluster_idx=idx,
+                    from_city=clusters[prev_idx].city or f"Lokalizacja #{prev_idx + 1}",
+                    to_city=clusters[idx].city or f"Lokalizacja #{idx + 1}",
+                    depart_datetime=prev_record.datetime,
+                    arrive_datetime=gr.datetime,
+                    distance_km=round(dist / 1000, 1),
+                    duration_minutes=round(dur_sec / 60, 1),
+                ))
+            prev_idx = idx
+        prev_record = gr
+
+    log.info("Trip detection: %d trips between %d clusters (min distance %.1f km)",
+             len(trips), len(clusters), min_distance_km)
+    return trips
+
+
+# ---------------------------------------------------------------------------
+# Border crossing / foreign travel detection
+# ---------------------------------------------------------------------------
+
+def _detect_border_crossings(
+    geo_records: List[GeoRecord],
+    clusters: List[LocationCluster],
+) -> List[BorderCrossing]:
+    """Detect border crossings using roaming data and activity gaps.
+
+    Strategy A (roaming-based): Track domestic → roaming → domestic transitions.
+    Strategy B (gap-based):     Detect long gaps (> 48h) with no records.
+    Results from both strategies are merged and deduplicated.
+    """
+    if not geo_records:
+        return []
+
+    sorted_records = sorted(
+        [gr for gr in geo_records if gr.datetime],
+        key=lambda gr: gr.datetime,
+    )
+    if not sorted_records:
+        return []
+
+    crossings: List[BorderCrossing] = []
+
+    # ── Strategy A: Roaming-based ──
+    roaming_any = any(gr.roaming for gr in sorted_records)
+    if roaming_any:
+        in_roaming = False
+        last_domestic: Optional[GeoRecord] = None
+        roaming_countries: List[str] = []
+        roaming_count = 0
+
+        for gr in sorted_records:
+            if gr.roaming:
+                if not in_roaming:
+                    # Transition: domestic → roaming
+                    in_roaming = True
+                    roaming_countries = []
+                    roaming_count = 0
+                if gr.roaming_country and gr.roaming_country not in roaming_countries:
+                    roaming_countries.append(gr.roaming_country)
+                roaming_count += 1
+            else:
+                if in_roaming:
+                    # Transition: roaming → domestic
+                    in_roaming = False
+                    absence = _time_diff_seconds(
+                        last_domestic.datetime if last_domestic else "",
+                        gr.datetime,
+                    )
+                    crossings.append(BorderCrossing(
+                        last_domestic_datetime=last_domestic.datetime if last_domestic else "",
+                        first_return_datetime=gr.datetime,
+                        last_domestic_city=_city_for_record(last_domestic, clusters) if last_domestic else "",
+                        first_return_city=_city_for_record(gr, clusters),
+                        absence_hours=round(absence / 3600, 1),
+                        roaming_countries=list(roaming_countries),
+                        roaming_records=roaming_count,
+                        roaming_confirmed=True,
+                    ))
+                last_domestic = gr
+
+        # If still in roaming at end of data
+        if in_roaming and last_domestic:
+            last_roaming = sorted_records[-1]
+            absence = _time_diff_seconds(
+                last_domestic.datetime, last_roaming.datetime,
+            )
+            crossings.append(BorderCrossing(
+                last_domestic_datetime=last_domestic.datetime,
+                first_return_datetime="",  # not yet returned
+                last_domestic_city=_city_for_record(last_domestic, clusters),
+                first_return_city="",
+                absence_hours=round(absence / 3600, 1),
+                roaming_countries=list(roaming_countries),
+                roaming_records=roaming_count,
+                roaming_confirmed=True,
+            ))
+
+    # ── Strategy B: Gap-based (fallback when no roaming data) ──
+    if not roaming_any and len(sorted_records) >= 2:
+        gap_threshold_hours = 48
+        for i in range(1, len(sorted_records)):
+            prev = sorted_records[i - 1]
+            curr = sorted_records[i]
+            gap_sec = _time_diff_seconds(prev.datetime, curr.datetime)
+            gap_hours = gap_sec / 3600
+
+            if gap_hours >= gap_threshold_hours:
+                crossings.append(BorderCrossing(
+                    last_domestic_datetime=prev.datetime,
+                    first_return_datetime=curr.datetime,
+                    last_domestic_city=_city_for_record(prev, clusters),
+                    first_return_city=_city_for_record(curr, clusters),
+                    absence_hours=round(gap_hours, 1),
+                    roaming_countries=[],
+                    roaming_records=0,
+                    roaming_confirmed=False,
+                ))
+
+    # Sort by departure time
+    crossings.sort(key=lambda bc: bc.last_domestic_datetime)
+
+    log.info("Border crossing detection: %d crossings (roaming_data=%s)",
+             len(crossings), "yes" if roaming_any else "no (gap-based)")
+    return crossings
+
+
+def _city_for_record(
+    gr: GeoRecord,
+    clusters: List[LocationCluster],
+) -> str:
+    """Get city name for a GeoRecord — from its point or nearest cluster."""
+    if gr.point and gr.point.city:
+        return gr.point.city
+    if gr.point and gr.point.is_valid and clusters:
+        best_idx = 0
+        best_dist = float("inf")
+        for i, c in enumerate(clusters):
+            d = _haversine(gr.point.lat, gr.point.lon, c.lat, c.lon)
+            if d < best_dist:
+                best_dist = d
+                best_idx = i
+        if best_dist < 5000 and clusters[best_idx].city:
+            return clusters[best_idx].city
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -692,10 +978,9 @@ def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def _time_diff_seconds(dt1: str, dt2: str) -> int:
     """Calculate time difference in seconds between two datetime strings."""
     try:
-        from datetime import datetime
         fmt = "%Y-%m-%d %H:%M:%S"
-        t1 = datetime.strptime(dt1, fmt)
-        t2 = datetime.strptime(dt2, fmt)
+        t1 = _dt.strptime(dt1, fmt)
+        t2 = _dt.strptime(dt2, fmt)
         return max(0, int((t2 - t1).total_seconds()))
     except (ValueError, TypeError):
         return 0
