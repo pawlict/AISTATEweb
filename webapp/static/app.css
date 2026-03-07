@@ -1634,16 +1634,6 @@ button.pill-icon:hover{
 .gsm-timeline-range:active::-webkit-slider-thumb{ cursor: grabbing; }
 .gsm-timeline-range:active::-moz-range-thumb{ cursor: grabbing; }
 
-@keyframes gsm-pulse{
-  0%   { transform: scale(1); opacity: 1; }
-  50%  { transform: scale(1.4); opacity: 0.8; }
-  100% { transform: scale(1); opacity: 1; }
-}
-.gsm-tl-pulse{
-  animation: gsm-pulse 1.2s ease-in-out infinite;
-  transform-origin: center;
-}
-
 /* Stacked per-account charts */
 .aml-stacked-chart-wrapper{
   transition: border-color 0.2s;
