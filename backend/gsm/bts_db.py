@@ -802,6 +802,7 @@ class BTSDatabase:
         """Map UKE CSV/XLSX column names to indices.
 
         Handles various UKE naming conventions across years:
+        - Current (2024+): 'Dł geogr stacji', 'Szer geogr stacji', 'Nazwa Operatora'
         - Polish long names: 'Długość geograficzna', 'Szerokość geograficzna'
         - UKE short codes: 'StGeoDlg', 'StGeoSzr', 'IdAzymut'
         - Various casing and spelling variants
@@ -811,13 +812,13 @@ class BTSDatabase:
             h_lower = h.strip().lower()
             h_stripped = h.strip()
 
-            # Longitude
-            if (re.search(r"d[łl]ugo[śs][ćc]\s*geogr", h_lower)
+            # Longitude — matches: "Dł geogr stacji", "Długość geograficzna", etc.
+            if (re.search(r"d[łl]\w*\s*geogr", h_lower)
                     or h_lower in ("lon", "longitude", "dlugosc", "dlug_geo")
                     or h_stripped.lower() in ("stgeodlg", "dlugosc_geograficzna")):
                 col_map["lon"] = i
-            # Latitude
-            elif (re.search(r"szeroko[śs][ćc]\s*geogr", h_lower)
+            # Latitude — matches: "Szer geogr stacji", "Szerokość geograficzna", etc.
+            elif (re.search(r"szer\w*\s*geogr", h_lower)
                   or h_lower in ("lat", "latitude", "szerokosc", "szer_geo")
                   or h_stripped.lower() in ("stgeoszr", "szerokosc_geograficzna")):
                 col_map["lat"] = i
@@ -835,40 +836,65 @@ class BTSDatabase:
                   or h_lower in ("wysokosc_anteny", "wys_anteny")
                   or h_stripped.lower() in ("wysokoscanteny", "wysokosc")):
                 col_map["height"] = i
-            # Operator name
-            elif (re.search(r"operator|nazwa\s*podmiotu", h_lower)
+            # Operator name — matches: "Nazwa Operatora", "Nazwa podmiotu", etc.
+            elif (re.search(r"nazwa\s*(operator|podmiotu)", h_lower)
+                  or h_lower in ("operator",)
                   or h_stripped.lower() in ("nazwapodmiotu", "operator", "podmiot")):
                 col_map["operator"] = i
             # Radio technology
             elif (re.search(r"system|technolog|standard", h_lower)
                   or h_stripped.lower() in ("standard", "technologia")):
                 col_map["radio"] = i
-            # City / location name
-            elif (re.search(r"miejscowo[śs][ćc]|miasto|lokalizacja", h_lower)
+            # City / location name — matches: "Miejscowość", "Miasto"
+            # (but NOT "Lokalizacja" which is street address)
+            elif (re.search(r"miejscowo", h_lower)
+                  or h_lower in ("miasto",)
                   or h_stripped.lower() in ("miejscowosc", "miasto", "stmiejscowosc")):
                 col_map["city"] = i
         return col_map
 
     @staticmethod
     def _parse_coord(text: str) -> Optional[float]:
-        """Parse coordinate string (handles both decimal and DMS formats)."""
+        """Parse coordinate string (handles decimal, DMS, and UKE formats).
+
+        Supported formats:
+        - Decimal:  52.2297
+        - Standard DMS:  52°13'24.5"N
+        - UKE DMS:  21E00'28"  or  52N27'03"
+          (direction letter between degrees and minutes)
+        """
         text = text.strip().replace(",", ".")
         if not text or text == "-":
             return None
         try:
             return float(text)
         except ValueError:
-            # Try DMS format: 52°13'24.5"N
-            m = re.match(
-                r"(\d+)[°]\s*(\d+)[′']\s*([\d.]+)[″\"]?\s*([NSEW])?",
-                text,
-            )
-            if m:
-                deg = float(m.group(1)) + float(m.group(2)) / 60 + float(m.group(3)) / 3600
-                if m.group(4) in ("S", "W"):
-                    deg = -deg
-                return deg
-            return None
+            pass
+
+        # UKE format: 21E00'28" or 52N27'03"
+        # Pattern: <degrees><direction><minutes>'<seconds>"
+        m = re.match(
+            r"(\d+)\s*([NSEW])\s*(\d+)[′']\s*([\d.]+)[″\"]?",
+            text,
+        )
+        if m:
+            deg = float(m.group(1)) + float(m.group(3)) / 60 + float(m.group(4)) / 3600
+            if m.group(2) in ("S", "W"):
+                deg = -deg
+            return deg
+
+        # Standard DMS format: 52°13'24.5"N
+        m = re.match(
+            r"(\d+)[°]\s*(\d+)[′']\s*([\d.]+)[″\"]?\s*([NSEW])?",
+            text,
+        )
+        if m:
+            deg = float(m.group(1)) + float(m.group(2)) / 60 + float(m.group(3)) / 3600
+            if m.group(4) in ("S", "W"):
+                deg = -deg
+            return deg
+
+        return None
 
 
 # ---------------------------------------------------------------------------
