@@ -456,8 +456,11 @@ def _resolve_point(
         try:
             lac_int = int(record.location_lac)
             cid_int = int(record.location_cell_id)
+            # Skip sentinel LAC/CID values
+            if lac_int <= 0 or cid_int <= 0:
+                return None
             station = bts_db.lookup_best(lac_int, cid_int)
-            if station:
+            if station and _is_plausible_wgs84(station.lat, station.lon):
                 return GeoPoint(
                     lat=station.lat,
                     lon=station.lon,

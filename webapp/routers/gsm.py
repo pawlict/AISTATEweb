@@ -95,14 +95,25 @@ def _do_parse(file_path: Path, filename: str) -> dict:
                 f"no_data={dbg.get('no_location_data', 0)})"
             )
 
+        # Clean up any previously imported bad coordinates from BTS database
+        # (e.g. raw DDMMSS stored as decimal, sentinel -1/0 values)
+        cleaned = bts_db.cleanup_bad_coords()
+        if cleaned:
+            _app_log(f"[GSM] Cleaned {cleaned} bad entries from BTS database")
+
         # Auto-import BTS data from billing (T-Mobile has coords)
+        # Skip sentinel values (-1, 0) and UNKNOWN city — filtering is also
+        # done inside import_from_billing_records() but pre-filter here too
+        _sentinel = {"-1", "0", "", "UNKNOWN"}
         records_with_coords = [
             r.to_dict() for r in result.records
             if r.extra.get("bts_x") and r.extra.get("bts_y")
+            and str(r.extra.get("bts_x")) not in _sentinel
+            and str(r.extra.get("bts_y")) not in _sentinel
         ]
         if records_with_coords:
-            bts_db.import_from_billing_records(records_with_coords)
-            _app_log(f"[GSM] Auto-imported {len(records_with_coords)} BTS stations from billing")
+            count = bts_db.import_from_billing_records(records_with_coords)
+            _app_log(f"[GSM] Auto-imported {count} BTS stations from billing")
     except Exception as e:
         log.warning("Geolocation error: %s", e, exc_info=True)
         _app_log(f"[GSM] Geolocation ERROR: {type(e).__name__}: {e}")

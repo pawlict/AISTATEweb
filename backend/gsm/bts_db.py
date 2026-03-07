@@ -667,7 +667,11 @@ class BTSDatabase:
         """Import BTS data extracted from billing records (e.g. T-Mobile).
 
         T-Mobile billing records contain BTS X, BTS Y, CI, LAC, Azimuth, city, street.
+        Uses geolocation module's _parse_bts_value() and _detect_coord_order()
+        to correctly handle DDMMSS format and auto-detect lat/lon ordering.
         """
+        from backend.gsm.geolocation import _parse_bts_value, _detect_coord_order
+
         conn = self._get_conn()
         imported = 0
         batch: List[tuple] = []
@@ -684,31 +688,44 @@ class BTSDatabase:
             if not bts_x and not bts_y:
                 continue
 
+            # Use shared parsing: handles DDMMSS, sentinel rejection, coord order
+            val_x = _parse_bts_value(bts_x)
+            val_y = _parse_bts_value(bts_y)
+            if val_x is None or val_y is None:
+                continue
+
+            lat_lon = _detect_coord_order(val_x, val_y)
+            if lat_lon[0] is None:
+                continue
+            lat, lon = lat_lon
+
             try:
-                lon = float(bts_x) if bts_x else 0.0
-                lat = float(bts_y) if bts_y else 0.0
                 cid_int = int(ci)
                 lac_int = int(lac)
             except (ValueError, TypeError):
                 continue
 
-            if lat == 0.0 and lon == 0.0:
+            # Skip invalid LAC/CID sentinel values
+            if lac_int <= 0 or cid_int <= 0:
                 continue
 
             azimuth = None
             az_str = extra.get("azimuth", "")
             if az_str:
                 try:
-                    azimuth = float(az_str)
+                    azimuth = float(str(az_str).replace(",", "."))
                 except (ValueError, TypeError):
                     pass
 
             city = extra.get("bts_city", "") if "bts_city" in extra else ""
             street = extra.get("bts_street", "") if "bts_street" in extra else ""
 
+            # Skip "UNKNOWN" city sentinel
+            if city and city.upper() == "UNKNOWN":
+                continue
+
             # Determine MNC from network operator
             mnc = 2  # T-Mobile default
-            location = r.get("location", "")
 
             batch.append((
                 MCC_POLAND, mnc, lac_int, cid_int,
@@ -748,6 +765,26 @@ class BTSDatabase:
             cursor = conn.execute("DELETE FROM bts_stations")
         conn.commit()
         return cursor.rowcount
+
+    def cleanup_bad_coords(self) -> int:
+        """Remove stations with obviously invalid coordinates.
+
+        Cleans up entries with sentinel values (lat/lon = -1, 0, etc.)
+        or coordinates outside Europe (e.g. raw DDMMSS values stored
+        as decimal degrees).
+        """
+        conn = self._get_conn()
+        cursor = conn.execute(
+            "DELETE FROM bts_stations WHERE "
+            "lat < 35 OR lat > 72 OR lon < -12 OR lon > 45 "
+            "OR lat IN (-1, 0, 1) OR lon IN (-1, 0, 1) "
+            "OR lac <= 0 OR cid <= 0"
+        )
+        conn.commit()
+        removed = cursor.rowcount
+        if removed:
+            log.info("Cleaned up %d stations with invalid coordinates", removed)
+        return removed
 
     # --- Internal helpers ---
 
