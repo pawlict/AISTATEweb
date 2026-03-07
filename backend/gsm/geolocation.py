@@ -131,8 +131,12 @@ class GeoAnalysis:
     debug: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
+        # Only include geolocated records (those with valid point)
+        # to avoid sending 20k+ empty records in the JSON response
+        geolocated = [r.to_dict() for r in self.geo_records
+                      if r.point and r.point.is_valid]
         return {
-            "geo_records": [r.to_dict() for r in self.geo_records],
+            "geo_records": geolocated,
             "clusters": [c.to_dict() for c in self.clusters],
             "path": [p.to_dict() for p in self.path],
             "home_cluster": self.home_cluster.to_dict() if self.home_cluster else None,
@@ -244,6 +248,17 @@ def geolocate_records(
             has_lac_cid, "; ".join(sample_lac_cid),
         )
 
+    # Collect sample coordinates for debug
+    sample_coords: List[str] = []
+    for gr in geo_records:
+        if gr.point and gr.point.is_valid and len(sample_coords) < 3:
+            sample_coords.append(
+                f"lat={gr.point.lat:.6f},lon={gr.point.lon:.6f},src={gr.point.source}"
+            )
+
+    if sample_coords:
+        log.info("Geolocation sample coords: %s", "; ".join(sample_coords))
+
     # Store debug info for frontend
     analysis.debug = {
         "has_direct_coords": has_direct_coords,
@@ -253,6 +268,7 @@ def geolocate_records(
         "resolved_bts_db": resolved_bts_db,
         "lookup_miss": lookup_miss,
         "sample_lac_cid": sample_lac_cid,
+        "sample_coords": sample_coords,
     }
 
     # Compute center and bounds

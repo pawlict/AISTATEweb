@@ -616,6 +616,9 @@
         _addLog("warn", `[Geolokalizacja] Żaden rekord z LAC/CID nie znalazł dopasowania w bazie BTS! ` +
           `Sprawdź czy baza OpenCelliD jest pobrana. Przykładowe LAC/CID: ${(d.sample_lac_cid || []).join(", ")}`);
       }
+      if (d.sample_coords && d.sample_coords.length) {
+        _addLog("info", `[Geolokalizacja] Przykładowe koordynaty: ${d.sample_coords.join("; ")}`);
+      }
     }
 
     if (!geo || !geo.geolocated_records || geo.geolocated_records === 0) {
@@ -738,8 +741,6 @@
     Object.values(St.mapLayers).forEach(lg => { if (map.hasLayer(lg)) map.removeLayer(lg); });
     St.mapLayers = {};
 
-    // All points layer
-    const allGroup = L.layerGroup();
     const typeColors = {
       CALL_OUT: "#3b82f6",
       CALL_IN: "#22c55e",
@@ -750,49 +751,113 @@
       OTHER: "#6b7280",
     };
 
+    // ── Group points by unique BTS location ──
+    // Many records share the same BTS (lat/lon). Group them to avoid
+    // rendering 20k+ overlapping markers.
+    const locationMap = new Map(); // key: "lat,lon" → { lat, lon, records: [], ... }
     for (const r of points) {
       const p = r.point;
-      const color = typeColors[r.record_type] || "#6b7280";
-      const marker = L.circleMarker([p.lat, p.lon], {
-        radius: 5,
+      // Round to ~10m precision for grouping (4 decimal places)
+      const key = `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`;
+      if (!locationMap.has(key)) {
+        locationMap.set(key, {
+          lat: p.lat, lon: p.lon,
+          city: p.city || "", street: p.street || "",
+          azimuth: p.azimuth,
+          lac: p.lac, cid: p.cid,
+          records: [],
+          types: {},
+        });
+      }
+      const loc = locationMap.get(key);
+      loc.records.push(r);
+      loc.types[r.record_type] = (loc.types[r.record_type] || 0) + 1;
+    }
+
+    const uniqueLocations = Array.from(locationMap.values());
+    _addLog("info", `Mapa: ${points.length} rekordów → ${uniqueLocations.length} unikalnych lokalizacji BTS`);
+
+    // ── Unique locations layer (main view) ──
+    const allGroup = L.layerGroup();
+    for (const loc of uniqueLocations) {
+      const count = loc.records.length;
+      // Size based on record count: min 4, max 14
+      const radius = Math.min(14, Math.max(4, 3 + Math.log2(count) * 2));
+      // Dominant type determines color
+      const dominantType = Object.entries(loc.types)
+        .sort((a, b) => b[1] - a[1])[0][0];
+      const color = typeColors[dominantType] || "#6b7280";
+
+      const marker = L.circleMarker([loc.lat, loc.lon], {
+        radius: radius,
         fillColor: color,
         color: "#fff",
-        weight: 1,
-        fillOpacity: 0.8,
+        weight: 1.5,
+        fillOpacity: 0.75,
       });
 
-      const popupHtml = `<b>${r.datetime}</b><br>
-        ${_typeLabel(r.record_type)} ${r.callee ? `→ ${r.callee}` : ""}<br>
-        ${r.duration_seconds ? _dur(r.duration_seconds) : ""}
-        ${p.city ? `<br>${p.city}${p.street ? ", " + p.street : ""}` : ""}
-        ${p.azimuth != null ? `<br>Azymut: ${p.azimuth}°` : ""}
-        <br><span class="small">LAC: ${p.lac}, CID: ${p.cid}</span>`;
+      // Build popup with summary of all records at this location
+      const typeList = Object.entries(loc.types)
+        .map(([t, n]) => `${_typeLabel(t)}: ${n}`)
+        .join(", ");
+      const firstDt = loc.records[0].datetime;
+      const lastDt = loc.records[loc.records.length - 1].datetime;
+
+      const popupHtml = `<b>${loc.city || "BTS"}${loc.street ? ", " + loc.street : ""}</b><br>
+        <b>${count}</b> rekordów (${typeList})<br>
+        ${firstDt} — ${lastDt}
+        ${loc.azimuth != null ? `<br>Azymut: ${loc.azimuth}°` : ""}
+        <br><span class="small muted">LAC: ${loc.lac}, CID: ${loc.cid}<br>
+        ${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}</span>`;
       marker.bindPopup(popupHtml);
       allGroup.addLayer(marker);
     }
     St.mapLayers.all = allGroup;
     allGroup.addTo(map);
 
-    // Path layer
+    // ── Path / route layer ──
+    // Build chronological route from all geolocated records
     const pathGroup = L.layerGroup();
-    if (geo.path && geo.path.length) {
-      const pathCoords = [];
-      for (const seg of geo.path) {
-        pathCoords.push([seg.from_point.lat, seg.from_point.lon]);
-        pathCoords.push([seg.to_point.lat, seg.to_point.lon]);
+
+    // Use chronological route from geo_records (already sorted by datetime)
+    const routeCoords = [];
+    let prevLat = null, prevLon = null;
+    for (const r of points) {
+      const p = r.point;
+      // Avoid duplicate consecutive coords
+      if (p.lat !== prevLat || p.lon !== prevLon) {
+        routeCoords.push([p.lat, p.lon]);
+        prevLat = p.lat;
+        prevLon = p.lon;
       }
-      if (pathCoords.length >= 2) {
-        L.polyline(pathCoords, {
-          color: "#3b82f6",
-          weight: 2,
-          opacity: 0.7,
-          dashArray: "5, 10",
-        }).addTo(pathGroup);
+    }
+
+    if (routeCoords.length >= 2) {
+      L.polyline(routeCoords, {
+        color: "#3b82f6",
+        weight: 2.5,
+        opacity: 0.6,
+        smoothFactor: 1.5,
+      }).addTo(pathGroup);
+      _addLog("info", `Trasa: ${routeCoords.length} punktów`);
+    }
+
+    // Also add path segments from analysis (> 200m movements)
+    if (geo.path && geo.path.length) {
+      for (const seg of geo.path) {
+        const dist_km = (seg.distance_m / 1000).toFixed(1);
+        L.polyline(
+          [[seg.from_point.lat, seg.from_point.lon],
+           [seg.to_point.lat, seg.to_point.lon]],
+          { color: "#ef4444", weight: 3, opacity: 0.5 }
+        ).bindPopup(`<b>Przemieszczenie</b><br>${dist_km} km<br>${seg.from_datetime} → ${seg.to_datetime}`)
+         .addTo(pathGroup);
       }
     }
     St.mapLayers.path = pathGroup;
+    pathGroup.addTo(map); // Show path by default
 
-    // Clusters layer
+    // ── Clusters layer ──
     const clusterGroup = L.layerGroup();
     if (geo.clusters && geo.clusters.length) {
       for (const c of geo.clusters) {
@@ -824,10 +889,10 @@
     }
     St.mapLayers.clusters = clusterGroup;
 
-    // Fit bounds
-    const allCoords = points.map(r => [r.point.lat, r.point.lon]);
-    if (allCoords.length) {
-      map.fitBounds(allCoords, { padding: [30, 30], maxZoom: 14 });
+    // Fit bounds using unique locations (much smaller than all points)
+    const boundsCoords = uniqueLocations.map(loc => [loc.lat, loc.lon]);
+    if (boundsCoords.length) {
+      map.fitBounds(boundsCoords, { padding: [30, 30], maxZoom: 14 });
     }
   }
 
@@ -840,15 +905,18 @@
       if (map.hasLayer(lg)) map.removeLayer(lg);
     });
 
-    if (layer === "all" || layer === "heatmap") {
+    if (layer === "all") {
       if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+      if (St.mapLayers.path) St.mapLayers.path.addTo(map);
     }
     if (layer === "path") {
-      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
       if (St.mapLayers.path) St.mapLayers.path.addTo(map);
     }
     if (layer === "clusters") {
       if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+    }
+    if (layer === "heatmap") {
       if (St.mapLayers.all) St.mapLayers.all.addTo(map);
     }
   }
