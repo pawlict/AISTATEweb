@@ -455,70 +455,137 @@ async def _download_opencellid(token: str):
 
 
 async def _download_uke():
-    """Download UKE (Polish regulator) BTS database."""
+    """Download UKE (Polish regulator) BTS database.
+
+    Scrapes the BIP UKE page listing GSM/UMTS/LTE/5G NR station permits,
+    finds all XLSX download links, downloads each file and imports into
+    the BTS database.
+
+    Page: https://bip.uke.gov.pl/pozwolenia-radiowe/wykaz-pozwolen-radiowych-tresci/
+          stacje-gsm-umts-lte-5gnr-oraz-cdma,12,0.html
+    """
     import httpx
+    import re as _re
 
     _app_log("[GSM] Downloading UKE BTS database...")
 
-    # UKE publishes BTS data at their BIP site.
-    # The CSV export of radio permits is at a known URL pattern.
-    uke_url = "https://bip.uke.gov.pl/pozwolenia-radiowe/wykorzystywane-czestotliwosci-702-703-713-MHz/stacje.csv"
-
-    # Fallback URLs to try
-    uke_urls = [
-        uke_url,
-        "https://bip.uke.gov.pl/pozwolenia-radiowe/stacje-bazowe-702-703-713/stacje.csv",
-    ]
+    # UKE BIP page with links to individual XLSX files per technology/band
+    UKE_PAGE_URL = (
+        "https://bip.uke.gov.pl/pozwolenia-radiowe/"
+        "wykaz-pozwolen-radiowych-tresci/"
+        "stacje-gsm-umts-lte-5gnr-oraz-cdma,12,0.html"
+    )
+    UKE_BASE = "https://bip.uke.gov.pl"
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="bts_uke_"))
     try:
-        raw = None
-        last_error = None
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(300.0, connect=30.0),
             follow_redirects=True,
         ) as client:
-            for url in uke_urls:
+            # ── Step 1: fetch listing page ───────────────────────
+            _app_log("[GSM] Fetching UKE BIP page...")
+            page_resp = await client.get(UKE_PAGE_URL)
+            if page_resp.status_code != 200:
+                return JSONResponse(
+                    {"status": "error",
+                     "detail": f"Nie udało się pobrać strony UKE BIP (HTTP {page_resp.status_code}). "
+                               f"Wgraj plik ZIP/XLSX ręcznie."},
+                    status_code=500,
+                )
+
+            html = page_resp.text
+
+            # ── Step 2: extract XLSX download links ──────────────
+            # Links look like:
+            #   href="/download/gfx/bip/pl/defaultaktualnosci/140/12/90/
+            #         lte800_-_stan_na_2026-02-25.xlsx"
+            xlsx_pattern = _re.compile(
+                r'href="(/download/[^"]+\.xlsx)"', _re.IGNORECASE
+            )
+            xlsx_paths = list(set(xlsx_pattern.findall(html)))
+            xlsx_paths.sort()
+
+            if not xlsx_paths:
+                _app_log("[GSM] ERROR: No XLSX links found on UKE page")
+                return JSONResponse(
+                    {"status": "error",
+                     "detail": "Nie znaleziono linków XLSX na stronie BIP UKE. "
+                               "Struktura strony mogła się zmienić. Wgraj plik ZIP/XLSX ręcznie."},
+                    status_code=500,
+                )
+
+            _app_log(f"[GSM] Found {len(xlsx_paths)} XLSX files on UKE page")
+
+            # ── Step 3: download and import each XLSX ────────────
+            store_dir = _data_dir() / "gsm" / "BTS" / "UKE"
+            store_dir.mkdir(parents=True, exist_ok=True)
+
+            from backend.gsm.bts_db import get_bts_db
+            db = get_bts_db(_data_dir())
+
+            total_imported = 0
+            downloaded = 0
+            errors = []
+
+            for xlsx_path in xlsx_paths:
+                file_url = UKE_BASE + xlsx_path
+                file_name = Path(xlsx_path).name
+
                 try:
-                    resp = await client.get(url)
-                    if resp.status_code == 200 and len(resp.content) > 1000:
-                        raw = resp.content
-                        _app_log(f"[GSM] Downloaded {len(raw)/1048576:.1f} MB from UKE ({url})")
-                        break
+                    resp = await client.get(file_url)
+                    if resp.status_code != 200:
+                        errors.append(f"{file_name}: HTTP {resp.status_code}")
+                        continue
+
+                    raw = resp.content
+                    if len(raw) < 500:
+                        errors.append(f"{file_name}: plik zbyt mały ({len(raw)} B)")
+                        continue
+
+                    downloaded += 1
+                    size_kb = len(raw) / 1024
+                    _app_log(f"[GSM] Downloaded {file_name} ({size_kb:.0f} KB) [{downloaded}/{len(xlsx_paths)}]")
+
+                    # Save to persistent storage
+                    (store_dir / file_name).write_bytes(raw)
+
+                    # Save to temp and import
+                    tmp_path = tmp_dir / file_name
+                    tmp_path.write_bytes(raw)
+
+                    count = await run_in_threadpool(db.import_uke_xlsx, tmp_path)
+                    total_imported += count
+                    _app_log(f"[GSM] Imported {count} stations from {file_name}")
+
                 except Exception as e:
-                    last_error = e
-                    continue
+                    errors.append(f"{file_name}: {e}")
+                    log.warning("UKE download error for %s: %s", file_name, e)
 
-        if raw is None:
-            detail = "Nie udało się pobrać danych z BIP UKE. Wgraj plik ZIP/XLSX ręcznie."
-            if last_error:
-                detail += f" ({last_error})"
-            return JSONResponse({"status": "error", "detail": detail}, status_code=500)
+            # ── Step 4: summary ──────────────────────────────────
+            if errors:
+                _app_log(f"[GSM] UKE download warnings: {'; '.join(errors)}")
 
-        # Save to persistent storage folder
-        store_dir = _data_dir() / "gsm" / "BTS" / "UKE"
-        store_dir.mkdir(parents=True, exist_ok=True)
+            _app_log(
+                f"[GSM] UKE done: downloaded {downloaded}/{len(xlsx_paths)} files, "
+                f"imported {total_imported} stations total"
+            )
+            stats = await run_in_threadpool(db.get_stats)
+            return JSONResponse({
+                "status": "ok",
+                "imported": total_imported,
+                "files_downloaded": downloaded,
+                "files_total": len(xlsx_paths),
+                "errors": errors[:10] if errors else [],
+                **stats,
+            })
 
-        # Detect file type from content
-        if raw[:4] == b"PK\x03\x04" or raw[:2] == b"PK":
-            file_name = "uke_stacje.zip"
-        else:
-            file_name = "uke_stacje.csv"
-        file_path = tmp_dir / file_name
-        file_path.write_bytes(raw)
-
-        # Keep a copy in persistent storage
-        (store_dir / file_name).write_bytes(raw)
-        _app_log(f"[GSM] UKE data saved to BTS/UKE/{file_name}")
-
-        from backend.gsm.bts_db import get_bts_db
-        db = get_bts_db(_data_dir())
-        count = await run_in_threadpool(db.import_uke_file, file_path)
-
-        _app_log(f"[GSM] Imported {count} stations from UKE")
-        stats = await run_in_threadpool(db.get_stats)
-        return JSONResponse({"status": "ok", "imported": count, **stats})
-
+    except httpx.TimeoutException:
+        return JSONResponse(
+            {"status": "error",
+             "detail": "Timeout przy pobieraniu z BIP UKE. Spróbuj ponownie."},
+            status_code=500,
+        )
     except Exception as e:
         log.exception("UKE download error: %s", e)
         return JSONResponse(
