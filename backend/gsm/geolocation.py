@@ -13,10 +13,17 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
 from datetime import datetime as _dt
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+try:
+    import httpx
+    _HAS_HTTPX = True
+except ImportError:
+    _HAS_HTTPX = False
 
 from .parsers.base import BillingRecord
 
@@ -444,6 +451,9 @@ def geolocate_records(
 
     # Cluster analysis
     analysis.clusters = _cluster_locations(geo_records)
+
+    # Reverse geocode clusters without city names
+    _reverse_geocode_clusters(analysis.clusters)
 
     # Home/work detection
     _detect_home_work(analysis)
@@ -1021,6 +1031,80 @@ def _city_for_record(
         if best_dist < 5000 and clusters[best_idx].city:
             return clusters[best_idx].city
     return ""
+
+
+# ---------------------------------------------------------------------------
+# Reverse geocoding for clusters without city names
+# ---------------------------------------------------------------------------
+
+def _reverse_geocode_clusters(clusters: List[LocationCluster]) -> None:
+    """Fill in missing city/street for clusters using Nominatim reverse geocoding.
+
+    Only geocodes clusters that have no city name.
+    Uses OpenStreetMap Nominatim API (free, 1 request/sec rate limit).
+    Modifies clusters in place.
+    """
+    if not _HAS_HTTPX:
+        log.debug("httpx not available — skipping reverse geocoding")
+        return
+
+    need_geocode = [c for c in clusters if not c.city and c.lat and c.lon]
+    if not need_geocode:
+        return
+
+    log.info("Reverse geocoding %d clusters without city names", len(need_geocode))
+
+    headers = {
+        "User-Agent": "AISTATEweb/3.2 (GSM billing analysis tool)",
+        "Accept-Language": "pl,en",
+    }
+
+    geocoded = 0
+    for cluster in need_geocode[:15]:  # cap at 15 requests to respect rate limits
+        try:
+            url = (
+                f"https://nominatim.openstreetmap.org/reverse"
+                f"?lat={cluster.lat:.6f}&lon={cluster.lon:.6f}"
+                f"&format=json&zoom=16&addressdetails=1"
+            )
+            resp = httpx.get(url, headers=headers, timeout=5.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                addr = data.get("address", {})
+
+                # Extract city (try multiple fields)
+                city = (
+                    addr.get("city")
+                    or addr.get("town")
+                    or addr.get("village")
+                    or addr.get("municipality")
+                    or addr.get("county", "")
+                )
+                # Extract street/area
+                street = addr.get("road", "")
+                suburb = addr.get("suburb") or addr.get("neighbourhood", "")
+
+                if city:
+                    cluster.city = city
+                    geocoded += 1
+                if street and not cluster.street:
+                    cluster.street = f"{street}" + (f", {suburb}" if suburb else "")
+                elif suburb and not cluster.street:
+                    cluster.street = suburb
+
+                log.debug(
+                    "Geocoded cluster #%d (%.4f,%.4f) → %s, %s",
+                    cluster.cluster_idx, cluster.lat, cluster.lon,
+                    cluster.city, cluster.street,
+                )
+
+            time.sleep(1.1)  # Nominatim rate limit: 1 req/sec
+        except Exception as e:
+            log.warning("Reverse geocoding failed for cluster #%d: %s",
+                        cluster.cluster_idx, e)
+
+    log.info("Reverse geocoding complete: %d/%d clusters resolved",
+             geocoded, len(need_geocode))
 
 
 # ---------------------------------------------------------------------------

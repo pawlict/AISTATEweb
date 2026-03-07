@@ -56,6 +56,25 @@
     el.scrollTop = el.scrollHeight;
   }
 
+  /* ── OSRM road routing helper ─────────────────────────── */
+  async function _fetchOSRMRoute(fromLat, fromLon, toLat, toLon) {
+    // Uses the free OSRM demo server to get real road geometry
+    // Returns array of [lat, lon] or null on failure
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson`;
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (data.code !== "Ok" || !data.routes || !data.routes.length) return null;
+      const coords = data.routes[0].geometry.coordinates;
+      // GeoJSON: [lon, lat] → Leaflet: [lat, lon]
+      return coords.map(c => [c[1], c[0]]);
+    } catch (e) {
+      console.warn("[OSRM] Route fetch failed:", e);
+      return null;
+    }
+  }
+
   /* ── Leaflet loader ────────────────────────────────────── */
   function _loadLeaflet() {
     return new Promise((resolve) => {
@@ -821,47 +840,24 @@
     St.mapLayers.all = allGroup;
     allGroup.addTo(map);
 
-    // ── Path / route layer ──
-    // Build chronological route from all geolocated records
+    // ── Path / route layer (simplified — only large movements >2km) ──
     const pathGroup = L.layerGroup();
-
-    // Use chronological route from geo_records (already sorted by datetime)
-    const routeCoords = [];
-    let prevLat = null, prevLon = null;
-    for (const r of points) {
-      const p = r.point;
-      // Avoid duplicate consecutive coords
-      if (p.lat !== prevLat || p.lon !== prevLon) {
-        routeCoords.push([p.lat, p.lon]);
-        prevLat = p.lat;
-        prevLon = p.lon;
-      }
-    }
-
-    if (routeCoords.length >= 2) {
-      L.polyline(routeCoords, {
-        color: "#3b82f6",
-        weight: 2.5,
-        opacity: 0.6,
-        smoothFactor: 1.5,
-      }).addTo(pathGroup);
-      _addLog("info", `Trasa: ${routeCoords.length} punktów`);
-    }
-
-    // Also add path segments from analysis (> 200m movements)
     if (geo.path && geo.path.length) {
-      for (const seg of geo.path) {
+      // Filter only significant movements (> 2km) to avoid BTS noise
+      const significant = geo.path.filter(s => s.distance_m > 2000);
+      for (const seg of significant) {
         const dist_km = (seg.distance_m / 1000).toFixed(1);
         L.polyline(
           [[seg.from_point.lat, seg.from_point.lon],
            [seg.to_point.lat, seg.to_point.lon]],
-          { color: "#ef4444", weight: 3, opacity: 0.5 }
+          { color: "#3b82f6", weight: 2, opacity: 0.3, dashArray: "4 4" }
         ).bindPopup(`<b>Przemieszczenie</b><br>${dist_km} km<br>${seg.from_datetime} → ${seg.to_datetime}`)
          .addTo(pathGroup);
       }
+      if (significant.length) _addLog("info", `Trasa: ${significant.length} istotnych przemieszczeń (z ${geo.path.length})`);
     }
     St.mapLayers.path = pathGroup;
-    pathGroup.addTo(map); // Show path by default
+    // Do NOT add path to map by default — it's a supplementary layer
 
     // ── Clusters layer ──
     const clusterGroup = L.layerGroup();
@@ -909,66 +905,93 @@
     }
     St.mapLayers.clusters = clusterGroup;
 
-    // ── Trips layer (inter-city travel arrows) ──
+    // ── Trips layer (OSRM-routed roads between clusters) ──
     const tripsGroup = L.layerGroup();
     if (geo.trips && geo.trips.length && geo.clusters && geo.clusters.length) {
-      // Aggregate trips by from→to pair for cleaner display
+      // Aggregate trips by from→to pair (bidirectional)
       const tripPairs = {};
       for (const t of geo.trips) {
+        // Treat A→B and B→A as same route pair for routing
+        const a = Math.min(t.from_cluster_idx, t.to_cluster_idx);
+        const b = Math.max(t.from_cluster_idx, t.to_cluster_idx);
         const key = `${t.from_cluster_idx}_${t.to_cluster_idx}`;
-        if (!tripPairs[key]) tripPairs[key] = { trips: [], from: t.from_cluster_idx, to: t.to_cluster_idx };
+        const routeKey = `${a}_${b}`;
+        if (!tripPairs[key]) tripPairs[key] = { trips: [], from: t.from_cluster_idx, to: t.to_cluster_idx, routeKey };
         tripPairs[key].trips.push(t);
       }
 
-      for (const pair of Object.values(tripPairs)) {
-        const fromC = geo.clusters.find(c => c.cluster_idx === pair.from);
-        const toC = geo.clusters.find(c => c.cluster_idx === pair.to);
-        if (!fromC || !toC) continue;
+      // Route cache: routeKey → coords (to reuse A→B route for B→A)
+      const routeCache = {};
 
-        const count = pair.trips.length;
-        const avgDist = pair.trips.reduce((s, t) => s + t.distance_km, 0) / count;
+      // Process trip pairs sequentially (to respect OSRM rate limits)
+      const pairList = Object.values(tripPairs);
+      _addLog("info", `Podróże: ${geo.trips.length} między klastrami, wyznaczam ${pairList.length} tras drogowych…`);
 
-        // Draw polyline with arrow-like dash
-        const line = L.polyline(
-          [[fromC.lat, fromC.lon], [toC.lat, toC.lon]],
-          { color: "#8b5cf6", weight: 3, opacity: 0.7, dashArray: "12 6" }
-        );
+      (async function() {
+        for (const pair of pairList) {
+          const fromC = geo.clusters.find(c => c.cluster_idx === pair.from);
+          const toC = geo.clusters.find(c => c.cluster_idx === pair.to);
+          if (!fromC || !toC) continue;
 
-        // Popup with trip details — including travel mode and estimates
-        const modeCounts = {};
-        pair.trips.forEach(t => { if (t.travel_mode) modeCounts[t.travel_mode] = (modeCounts[t.travel_mode]||0)+1; });
-        const modeStr = Object.entries(modeCounts).map(([m,n]) => `${_travelModeIcon(m)} ${_travelModeLabel(m)}: ${n}`).join(", ");
-        const sampleTrip = pair.trips[0];
-        const estCarStr = sampleTrip.est_car_minutes ? `${_formatHours(sampleTrip.est_car_minutes / 60)}` : "";
-        const estFlightStr = sampleTrip.est_flight_minutes ? `${_formatHours(sampleTrip.est_flight_minutes / 60)}` : "";
+          const count = pair.trips.length;
+          const avgDist = pair.trips.reduce((s, t) => s + t.distance_km, 0) / count;
 
-        let popupHtml = `<b>Podróż: ${fromC.city || "?"} → ${toC.city || "?"}</b><br>
-          ${count} ${count === 1 ? "podróż" : "podróży"}, ~${avgDist.toFixed(0)} km<br>`;
-        if (modeStr) popupHtml += `${modeStr}<br>`;
-        if (estCarStr) popupHtml += `Szac. samochód: ~${estCarStr}`;
-        if (estFlightStr) popupHtml += ` | Szac. lot: ~${estFlightStr}`;
-        if (estCarStr || estFlightStr) popupHtml += `<br>`;
-        for (const t of pair.trips.slice(0, 5)) {
-          const icon = _travelModeIcon(t.travel_mode);
-          popupHtml += `<div class="small muted">${icon} ${t.depart_datetime} → ${t.arrive_datetime} (${t.distance_km} km, ${t.duration_minutes} min)</div>`;
+          // Try OSRM routing (with cache)
+          let routeCoords = routeCache[pair.routeKey] || null;
+          if (!routeCoords) {
+            routeCoords = await _fetchOSRMRoute(fromC.lat, fromC.lon, toC.lat, toC.lon);
+            if (routeCoords) {
+              routeCache[pair.routeKey] = routeCoords;
+            }
+          }
+
+          // Use routed path if available, fallback to straight line
+          const lineCoords = routeCoords || [[fromC.lat, fromC.lon], [toC.lat, toC.lon]];
+          const isRouted = !!routeCoords;
+          const line = L.polyline(lineCoords, {
+            color: "#8b5cf6",
+            weight: isRouted ? 4 : 3,
+            opacity: 0.75,
+            dashArray: isRouted ? null : "12 6",
+          });
+
+          // Build popup
+          const modeCounts = {};
+          pair.trips.forEach(t => { if (t.travel_mode) modeCounts[t.travel_mode] = (modeCounts[t.travel_mode]||0)+1; });
+          const modeStr = Object.entries(modeCounts).map(([m,n]) => `${_travelModeIcon(m)} ${_travelModeLabel(m)}: ${n}`).join(", ");
+          const sampleTrip = pair.trips[0];
+          const estCarStr = sampleTrip.est_car_minutes ? `${_formatHours(sampleTrip.est_car_minutes / 60)}` : "";
+          const estFlightStr = sampleTrip.est_flight_minutes ? `${_formatHours(sampleTrip.est_flight_minutes / 60)}` : "";
+
+          let popupHtml = `<b>Podróż: ${fromC.city || "?"} → ${toC.city || "?"}</b><br>
+            ${count} ${count === 1 ? "podróż" : "podróży"}, ~${avgDist.toFixed(0)} km${isRouted ? " (trasa drogowa)" : ""}<br>`;
+          if (modeStr) popupHtml += `${modeStr}<br>`;
+          if (estCarStr) popupHtml += `Szac. samochód: ~${estCarStr}`;
+          if (estFlightStr) popupHtml += ` | Szac. lot: ~${estFlightStr}`;
+          if (estCarStr || estFlightStr) popupHtml += `<br>`;
+          for (const t of pair.trips.slice(0, 5)) {
+            const icon = _travelModeIcon(t.travel_mode);
+            popupHtml += `<div class="small muted">${icon} ${t.depart_datetime} → ${t.arrive_datetime} (${t.distance_km} km, ${t.duration_minutes} min)</div>`;
+          }
+          if (pair.trips.length > 5) {
+            popupHtml += `<div class="small muted">...i ${pair.trips.length - 5} więcej</div>`;
+          }
+          line.bindPopup(popupHtml);
+          tripsGroup.addLayer(line);
+
+          // Midpoint label
+          const mid = routeCoords
+            ? routeCoords[Math.floor(routeCoords.length / 2)]
+            : [(fromC.lat + toC.lat) / 2, (fromC.lon + toC.lon) / 2];
+          const arrowIcon = L.divIcon({
+            className: "gsm-trip-arrow-icon",
+            html: `<div style="background:#8b5cf6;color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:bold;white-space:nowrap">${_travelModeIcon(sampleTrip.travel_mode)} ${count}×</div>`,
+            iconSize: null,
+          });
+          L.marker(mid, { icon: arrowIcon }).addTo(tripsGroup);
         }
-        if (pair.trips.length > 5) {
-          popupHtml += `<div class="small muted">...i ${pair.trips.length - 5} więcej</div>`;
-        }
-        line.bindPopup(popupHtml);
-        tripsGroup.addLayer(line);
-
-        // Arrow marker at midpoint
-        const midLat = (fromC.lat + toC.lat) / 2;
-        const midLon = (fromC.lon + toC.lon) / 2;
-        const arrowIcon = L.divIcon({
-          className: "gsm-trip-arrow-icon",
-          html: `<div style="background:#8b5cf6;color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:bold;white-space:nowrap">${count}×</div>`,
-          iconSize: null,
-        });
-        L.marker([midLat, midLon], { icon: arrowIcon }).addTo(tripsGroup);
-      }
-      _addLog("info", `Podróże: ${geo.trips.length} między klastrami (${Object.keys(tripPairs).length} unikalnych tras)`);
+        _addLog("info", `Trasy drogowe: ${Object.keys(routeCache).length} wyznaczonych (OSRM)`);
+      })();
     }
     St.mapLayers.trips = tripsGroup;
 
@@ -1022,10 +1045,11 @@
 
     if (layer === "all") {
       if (St.mapLayers.all) St.mapLayers.all.addTo(map);
-      if (St.mapLayers.path) St.mapLayers.path.addTo(map);
+      if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
     }
     if (layer === "path") {
       if (St.mapLayers.path) St.mapLayers.path.addTo(map);
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
     }
     if (layer === "clusters") {
       if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
