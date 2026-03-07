@@ -159,19 +159,53 @@ class GeoAnalysis:
 _LAT_MIN, _LAT_MAX = 35.0, 72.0   # Europe: from southern Greece to northern Norway
 _LON_MIN, _LON_MAX = -12.0, 45.0  # Europe: from Atlantic coast to Ural
 
-# Tighter bounds for Poland (used for auto-detection preference)
-_PL_LAT_MIN, _PL_LAT_MAX = 49.0, 55.5
-_PL_LON_MIN, _PL_LON_MAX = 14.0, 24.5
-
 
 def _is_plausible_wgs84(lat: float, lon: float) -> bool:
     """Check if (lat, lon) falls within European bounds."""
     return _LAT_MIN <= lat <= _LAT_MAX and _LON_MIN <= lon <= _LON_MAX
 
 
-def _is_in_poland(lat: float, lon: float) -> bool:
-    """Check if (lat, lon) falls within Poland bounds."""
-    return _PL_LAT_MIN <= lat <= _PL_LAT_MAX and _PL_LON_MIN <= lon <= _PL_LON_MAX
+def _ddmmss_to_decimal(val: float) -> Optional[float]:
+    """Convert DDMMSS integer to decimal degrees.
+
+    Polish telecom BTS coordinates use DDMMSS format:
+        190813 → 19°08'13" → 19.13694°
+        513507 → 51°35'07" → 51.58528°
+    """
+    ival = int(round(abs(val)))
+    sign = -1 if val < 0 else 1
+
+    ss = ival % 100
+    mm = (ival // 100) % 100
+    dd = ival // 10000
+
+    if mm > 59 or ss > 59 or dd > 180:
+        return None
+
+    return sign * (dd + mm / 60.0 + ss / 3600.0)
+
+
+def _parse_bts_value(raw) -> Optional[float]:
+    """Parse a raw BTS coordinate value to decimal degrees.
+
+    Supports:
+    - WGS84 decimal degrees (e.g., 19.0813 or 51.3507)
+    - DDMMSS integer format (e.g., 190813 → 19°08'13" → 19.1369°)
+    """
+    try:
+        val = float(str(raw).replace(",", "."))
+    except (ValueError, TypeError):
+        return None
+
+    if val == 0.0:
+        return None
+
+    # Already valid decimal degrees (fits in WGS84 range)
+    if -180.0 <= val <= 180.0:
+        return val
+
+    # Try DDMMSS integer format (common in Polish telecom billing)
+    return _ddmmss_to_decimal(val)
 
 
 def _detect_coord_order(
@@ -370,51 +404,48 @@ def _resolve_point(
     extra = record.extra or {}
 
     # 1. Direct coordinates from billing (T-Mobile BTS X/Y)
+    #    T-Mobile Poland uses DDMMSS integer format:
+    #    BTS X = 190813 → 19°08'13" = 19.1369° (longitude for Łask)
+    #    BTS Y = 513507 → 51°35'07" = 51.5853° (latitude for Łask)
     bts_x = extra.get("bts_x", "")
     bts_y = extra.get("bts_y", "")
     if bts_x and bts_y:
-        try:
-            val_x = float(str(bts_x).replace(",", "."))
-            val_y = float(str(bts_y).replace(",", "."))
-            if val_x == 0.0 and val_y == 0.0:
-                pass  # skip zero coords
-            else:
-                # Auto-detect coordinate order.
-                # Polish geodetic convention: X = northing (lat), Y = easting (lon).
-                # Programming convention: X = east (lon), Y = north (lat).
-                # We try both and pick whichever places the point in Europe.
-                lat, lon = _detect_coord_order(val_x, val_y)
+        val_x = _parse_bts_value(bts_x)
+        val_y = _parse_bts_value(bts_y)
 
-                if lat is not None and lon is not None:
-                    azimuth = None
-                    az_str = extra.get("azimuth", "")
-                    if az_str:
-                        try:
-                            azimuth = float(str(az_str).replace(",", "."))
-                        except (ValueError, TypeError):
-                            pass
+        if val_x is not None and val_y is not None:
+            # Auto-detect coordinate order (handles both Polish geodetic
+            # convention X=lat,Y=lon and programming convention X=lon,Y=lat)
+            lat, lon = _detect_coord_order(val_x, val_y)
 
-                    lac_int = 0
-                    cid_int = 0
+            if lat is not None and lon is not None:
+                azimuth = None
+                az_str = extra.get("azimuth", "")
+                if az_str:
                     try:
-                        lac_int = int(record.location_lac) if record.location_lac else 0
-                        cid_int = int(record.location_cell_id) if record.location_cell_id else 0
+                        azimuth = float(str(az_str).replace(",", "."))
                     except (ValueError, TypeError):
                         pass
 
-                    return GeoPoint(
-                        lat=lat,
-                        lon=lon,
-                        accuracy_m=200 if azimuth is not None else 500,
-                        azimuth=azimuth,
-                        lac=lac_int,
-                        cid=cid_int,
-                        city=extra.get("bts_city", ""),
-                        street=extra.get("bts_street", ""),
-                        source="billing",
-                    )
-        except (ValueError, TypeError):
-            pass
+                lac_int = 0
+                cid_int = 0
+                try:
+                    lac_int = int(record.location_lac) if record.location_lac else 0
+                    cid_int = int(record.location_cell_id) if record.location_cell_id else 0
+                except (ValueError, TypeError):
+                    pass
+
+                return GeoPoint(
+                    lat=lat,
+                    lon=lon,
+                    accuracy_m=200 if azimuth is not None else 500,
+                    azimuth=azimuth,
+                    lac=lac_int,
+                    cid=cid_int,
+                    city=extra.get("bts_city", ""),
+                    street=extra.get("bts_street", ""),
+                    source="billing",
+                )
 
     # 2. BTS database lookup by CID/LAC
     if bts_db and record.location_cell_id and record.location_lac:
