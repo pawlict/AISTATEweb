@@ -3100,7 +3100,11 @@ async def api_translation_export(
 @app.get("/api/settings")
 def api_get_settings() -> Any:
     s = load_settings()
-    return {"hf_token_present": bool(getattr(s, "hf_token", "")), "whisper_model": getattr(s, "whisper_model", "large-v3")}
+    return {
+        "hf_token_present": bool(getattr(s, "hf_token", "")),
+        "whisper_model": getattr(s, "whisper_model", "large-v3"),
+        "opencellid_token": getattr(s, "opencellid_token", ""),
+    }
 
 
 @app.post("/api/settings")
@@ -3110,6 +3114,8 @@ def api_save_settings(payload: Dict[str, Any]) -> Any:
         s.hf_token = str(payload.get("hf_token") or "")
     if "whisper_model" in payload:
         s.whisper_model = str(payload.get("whisper_model") or "large-v3")
+    if "opencellid_token" in payload:
+        s.opencellid_token = str(payload.get("opencellid_token") or "")
     if "ui_language" in payload:
         s.ui_language = str(payload.get("ui_language") or "pl")
     # Security settings

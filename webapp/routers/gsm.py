@@ -368,6 +368,15 @@ async def bts_download(request: Request):
     source = body.get("source", "")
     token = body.get("token", "")
 
+    # Fallback: use saved token from settings if not provided in request
+    if source == "opencellid" and not token:
+        try:
+            from backend.settings_store import load_settings
+            s = load_settings()
+            token = getattr(s, "opencellid_token", "") or ""
+        except Exception:
+            pass
+
     if source == "opencellid":
         return await _download_opencellid(token)
     elif source == "uke":

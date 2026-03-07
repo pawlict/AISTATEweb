@@ -11,6 +11,7 @@ AUTHOR_NAME: str = "pawlict"
 @dataclass
 class Settings:
     hf_token: str = ""
+    opencellid_token: str = ""
     default_language: str = "auto"
     whisper_model: str = "base"
     theme: str = "Fusion Light (Blue)"

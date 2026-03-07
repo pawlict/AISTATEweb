@@ -105,6 +105,39 @@
     _hideProgress(2000);
   }
 
+  /* ── OpenCelliD token persistence ─────────────────────── */
+
+  let _ocidTokenSaveTimer = null;
+
+  async function loadOcidToken() {
+    try {
+      const resp = await fetch("/api/settings");
+      const data = await resp.json();
+      const tokenInput = QS("#bts_ocid_token");
+      if (tokenInput && data.opencellid_token) {
+        tokenInput.value = data.opencellid_token;
+      }
+    } catch (e) {
+      console.warn("Failed to load OpenCelliD token:", e);
+    }
+  }
+
+  function saveOcidToken(token) {
+    // Debounce: save 500ms after the user stops typing
+    if (_ocidTokenSaveTimer) clearTimeout(_ocidTokenSaveTimer);
+    _ocidTokenSaveTimer = setTimeout(async () => {
+      try {
+        await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ opencellid_token: token }),
+        });
+      } catch (e) {
+        console.warn("Failed to save OpenCelliD token:", e);
+      }
+    }, 500);
+  }
+
   /* ── Download OpenCelliD ──────────────────────────────── */
 
   async function downloadOpenCelliD() {
@@ -117,6 +150,9 @@
       if (tokenInput) tokenInput.focus();
       return;
     }
+
+    // Save token before downloading
+    saveOcidToken(token);
 
     if (statusEl) statusEl.textContent = "Pobieranie bazy PL…";
     _showProgress("Pobieranie bazy OpenCelliD (Polska)…", 20);
@@ -305,6 +341,13 @@
     const clearBtn = QS("#bts_clear_btn");
     if (clearBtn) clearBtn.onclick = clearDB;
 
+    // OpenCelliD token auto-save on edit
+    const ocidTokenInput = QS("#bts_ocid_token");
+    if (ocidTokenInput) {
+      ocidTokenInput.addEventListener("input", () => saveOcidToken(ocidTokenInput.value.trim()));
+      ocidTokenInput.addEventListener("change", () => saveOcidToken(ocidTokenInput.value.trim()));
+    }
+
     // OpenCelliD download
     const ocidDlBtn = QS("#bts_ocid_download_btn");
     if (ocidDlBtn) ocidDlBtn.onclick = downloadOpenCelliD;
@@ -360,6 +403,7 @@
   /* ── Init ─────────────────────────────────────────────── */
 
   bind();
+  loadOcidToken();
   refreshStats();
   refreshTilesStatus();
 })();
