@@ -1587,6 +1587,17 @@ button.pill-icon:hover{
   padding: 4px 10px;
   font-size: 14px;
 }
+.gsm-timeline-day-controls{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px 4px;
+}
+.gsm-timeline-day-controls .btn-sm{
+  min-width: 30px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
 .gsm-timeline-range-wrap{
   padding: 0 12px 4px;
 }
