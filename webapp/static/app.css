@@ -1575,7 +1575,7 @@ button.pill-icon:hover{
 .aml-chart-range:active::-webkit-slider-thumb{ cursor: grabbing; }
 .aml-chart-range:active::-moz-range-thumb{ cursor: grabbing; }
 
-/* GSM Timeline player */
+/* GSM Timeline player v4 */
 .gsm-timeline-controls{
   display: flex;
   align-items: center;
@@ -1586,6 +1586,34 @@ button.pill-icon:hover{
   min-width: 36px;
   padding: 4px 10px;
   font-size: 14px;
+}
+.gsm-timeline-months{
+  display: flex;
+  gap: 4px;
+  padding: 2px 12px 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.gsm-tl-month-chip{
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border, #cbd5e1);
+  background: var(--bg-secondary, #f8fafc);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  color: var(--text, #334155);
+}
+.gsm-tl-month-chip:hover{
+  background: var(--primary, #1f5aa6);
+  color: #fff;
+  border-color: var(--primary, #1f5aa6);
+}
+.gsm-tl-month-chip.active{
+  background: var(--primary, #1f5aa6);
+  color: #fff;
+  border-color: var(--primary, #1f5aa6);
 }
 .gsm-timeline-day-controls{
   display: flex;
@@ -1633,6 +1661,17 @@ button.pill-icon:hover{
 }
 .gsm-timeline-range:active::-webkit-slider-thumb{ cursor: grabbing; }
 .gsm-timeline-range:active::-moz-range-thumb{ cursor: grabbing; }
+/* Timeline marker icon */
+.gsm-tl-marker-icon{
+  background: none !important;
+  border: none !important;
+}
+.gsm-tl-marker{
+  font-size: 28px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+  text-align: center;
+  line-height: 36px;
+}
 
 /* Stacked per-account charts */
 .aml-stacked-chart-wrapper{

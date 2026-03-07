@@ -523,18 +523,20 @@
           </div>
         </div>
         <div id="gsm_map_container" style="height:500px;border-radius:12px;border:1px solid var(--border);margin-top:10px;background:#e8e8e8;position:relative"></div>
-        <!-- Timeline player -->
+        <!-- Timeline player v4 -->
         <div id="gsm_timeline_wrap" style="display:none;margin-top:8px">
           <div class="gsm-timeline-controls">
             <button class="btn btn-sm" id="gsm_tl_play" title="Odtwórz / Pauza">▶</button>
             <button class="btn btn-sm" id="gsm_tl_speed" title="Prędkość">1×</button>
-            <span class="small muted" id="gsm_tl_datetime" style="min-width:140px;text-align:center">—</span>
+            <span class="small" id="gsm_tl_datetime" style="min-width:170px;text-align:center;font-weight:bold">—</span>
+            <span id="gsm_tl_mode_icon" style="font-size:20px;line-height:1" title=""></span>
             <span class="small muted" id="gsm_tl_counter" style="margin-left:auto">0 / 0</span>
           </div>
+          <div class="gsm-timeline-months" id="gsm_tl_months"></div>
           <div class="gsm-timeline-day-controls">
-            <button class="btn btn-sm" id="gsm_tl_prev_day" title="Poprzedni dzień">◀</button>
-            <span class="small" id="gsm_tl_day_label" style="min-width:120px;text-align:center;font-weight:bold">—</span>
-            <button class="btn btn-sm" id="gsm_tl_next_day" title="Następny dzień">▶</button>
+            <button class="btn btn-sm" id="gsm_tl_prev_day" title="Poprzedni dzień">◀ dzień</button>
+            <span class="small" id="gsm_tl_day_label" style="min-width:100px;text-align:center;font-weight:bold">—</span>
+            <button class="btn btn-sm" id="gsm_tl_next_day" title="Następny dzień">dzień ▶</button>
             <span class="small muted" id="gsm_tl_day_info" style="margin-left:8px"></span>
           </div>
           <div class="gsm-timeline-range-wrap">

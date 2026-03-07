@@ -18,21 +18,23 @@
     map: null,          // Leaflet map instance
     mapLayers: {},      // Named layer groups
     leafletLoaded: false,
-    /* Timeline state */
-    tlAllRecords: [],   // all valid geo_records sorted by datetime
-    tlWaypoints: [],    // deduplicated waypoints for current day
-    tlDays: [],         // sorted unique dates
-    tlDayIdx: 0,        // current day index
-    tlIdx: 0,           // current waypoint index
+    /* Timeline state — v4 */
+    tlAllRecords: [],     // all valid geo_records sorted by datetime
+    tlAllWaypoints: [],   // global waypoints across all days
+    tlDays: [],           // sorted unique dates
+    tlDayBoundaries: [],  // [{day, startIdx, endIdx}] for each day
+    tlIdx: 0,             // current position in tlAllWaypoints
     tlPlaying: false,
-    tlSpeed: 1,         // 1×, 2×, 5×, 10×, 50×
-    tlTimer: null,      // setInterval handle
-    tlMarker: null,     // Leaflet circleMarker (current position)
-    tlTrail: null,      // Leaflet polyline (visited trail, blue)
-    tlFullRoute: null,  // Leaflet polyline (full day route, gray dashed)
-    tlRouteDots: null,  // Leaflet layerGroup for waypoint dots
-    tlTrailCoords: [],  // accumulated [lat,lon] for visited trail
-    tlSavedZoom: null,  // zoom level before timeline play
+    tlSpeed: 1,           // 1×, 2×, 5×, 10×
+    tlTimer: null,        // fallback timer handle
+    tlAnimFrame: null,    // requestAnimationFrame handle
+    tlMarker: null,       // Leaflet marker (divIcon with mode emoji)
+    tlVisitedTrail: null, // faint visited path polyline
+    tlFullRoute: null,    // full route polyline (gray dashed)
+    tlRouteDots: null,    // layerGroup for waypoint dots
+    tlFadeSegments: [],   // fading trail segments (Marauder's Map)
+    tlTrailCoords: [],    // accumulated [lat,lon] for visited trail
+    tlSavedZoom: null,    // zoom level before timeline play
   };
 
   /* ── helpers ────────────────────────────────────────────── */
@@ -1301,8 +1303,8 @@
   }
 
   /* ══════════════════════════════════════════════════════════
-   *  Timeline Player v3 — slider-first, full route visible,
-   *  BTS wobble filter, reliable play/pause
+   *  Timeline Player v4 — smooth animation, mode icons,
+   *  fading Marauder trail, year-spanning global slider
    * ══════════════════════════════════════════════════════════ */
 
   /** Haversine distance in meters. */
@@ -1336,10 +1338,35 @@
     return { lat: newLat * 180 / Math.PI, lon: newLon * 180 / Math.PI };
   }
 
+  /** Parse datetime string to ms timestamp. */
+  function _parseDt(s) {
+    if (!s) return 0;
+    const d = new Date(s.replace(" ", "T"));
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+
+  /** Travel mode emoji. */
+  function _modeEmoji(mode) {
+    if (mode === "walk") return "\uD83D\uDEB6";
+    if (mode === "car") return "\uD83D\uDE97";
+    if (mode === "plane") return "\u2708\uFE0F";
+    return "\uD83D\uDCCD";
+  }
+
+  /** Calculate smooth animation duration (ms) based on distance between waypoints. */
+  function _calcAnimDuration(distMeters) {
+    if (distMeters < 500)   return 700;
+    if (distMeters < 2000)  return 1000;
+    if (distMeters < 10000) return 1400;
+    if (distMeters < 50000) return 1800;
+    return 2200;
+  }
+
   /**
    * Build waypoints: deduplicate consecutive same-BTS records,
    * adjust position using azimuth (shift toward user),
    * then remove BTS oscillation (A→B→A within short time/distance).
+   * Finally, calculate travel mode for each waypoint.
    */
   function _buildWaypoints(recs) {
     if (!recs.length) return [];
@@ -1380,12 +1407,8 @@
     merged.push(cur);
 
     // Step 1b: Adjust position using average azimuth
-    // Shift each waypoint ~400m in the direction of the average azimuth.
-    // This estimates the user's position (they're in front of the antenna,
-    // not at the tower itself). This smooths out movement significantly.
     for (const wp of merged) {
       if (wp.azimuths.length > 0) {
-        // Circular mean of azimuths
         let sinSum = 0, cosSum = 0;
         for (const az of wp.azimuths) {
           sinSum += Math.sin(az * Math.PI / 180);
@@ -1399,21 +1422,15 @@
     }
 
     // Step 2: remove BTS oscillations (A→B→A where B is brief & close)
-    if (merged.length < 3) return merged;
+    if (merged.length < 3) return _addTravelModes(merged);
     const filtered = [merged[0]];
     for (let i = 1; i < merged.length - 1; i++) {
       const prev = filtered[filtered.length - 1];
       const curr = merged[i];
       const next = merged[i + 1];
-
-      // Check if prev and next are basically the same position (A→B→A)
       const prevNextDist = _haversineDist(prev.lat, prev.lon, next.lat, next.lon);
       const prevCurrDist = _haversineDist(prev.lat, prev.lon, curr.lat, curr.lon);
-
-      // If prev≈next (within 500m) and curr is a brief visit (≤2 records, <3km away),
-      // it's likely BTS oscillation — skip curr
       if (prevNextDist < 500 && curr.count <= 2 && prevCurrDist < 3000) {
-        // Absorb curr's records into prev
         prev.count += curr.count;
         prev.lastDt = curr.lastDt;
         prev.records = prev.records.concat(curr.records);
@@ -1422,8 +1439,40 @@
       filtered.push(curr);
     }
     filtered.push(merged[merged.length - 1]);
-    return filtered;
+    return _addTravelModes(filtered);
   }
+
+  /** Add travelMode to each waypoint based on speed to next waypoint. */
+  function _addTravelModes(wps) {
+    for (let i = 0; i < wps.length; i++) {
+      if (i < wps.length - 1) {
+        const curr = wps[i];
+        const next = wps[i + 1];
+        const dist = _haversineDist(curr.lat, curr.lon, next.lat, next.lon);
+        const t1 = _parseDt(curr.lastDt);
+        const t2 = _parseDt(next.firstDt);
+        if (t1 && t2 && t2 > t1) {
+          const hours = (t2 - t1) / 3600000;
+          const speed = (dist / 1000) / hours;
+          curr.travelMode = speed < 7 ? "walk" : speed < 250 ? "car" : "plane";
+          curr.speedKmh = speed;
+        } else {
+          curr.travelMode = dist > 100000 ? "plane" : dist > 2000 ? "car" : "walk";
+          curr.speedKmh = 0;
+        }
+        curr.distToNext = dist;
+      } else {
+        wps[i].travelMode = "stationary";
+        wps[i].speedKmh = 0;
+        wps[i].distToNext = 0;
+      }
+    }
+    return wps;
+  }
+
+  // ── Fading trail constants ──
+  const FADE_COUNT = 18;
+  const FADE_DECAY = 0.80;
 
   function _initTimeline(geo) {
     const wrap = QS("#gsm_timeline_wrap");
@@ -1445,7 +1494,26 @@
       if (d.length === 10) daySet.add(d);
     }
     St.tlDays = Array.from(daySet).sort();
-    St.tlDayIdx = 0;
+
+    // Build global waypoints: per-day build, then concatenate
+    St.tlAllWaypoints = [];
+    St.tlDayBoundaries = [];
+    for (const day of St.tlDays) {
+      const dayRecs = recs.filter(r => (r.datetime || "").startsWith(day));
+      const startIdx = St.tlAllWaypoints.length;
+      const dayWps = _buildWaypoints(dayRecs);
+      for (const wp of dayWps) wp.day = day;
+      St.tlAllWaypoints = St.tlAllWaypoints.concat(dayWps);
+      St.tlDayBoundaries.push({
+        day: day,
+        startIdx: startIdx,
+        endIdx: St.tlAllWaypoints.length - 1,
+      });
+    }
+
+    if (St.tlAllWaypoints.length < 2) { wrap.style.display = "none"; return; }
+
+    St.tlIdx = 0;
     St.tlPlaying = false;
     St.tlSpeed = 1;
     St.tlSavedZoom = null;
@@ -1455,44 +1523,80 @@
     const tlGroup = L.layerGroup();
     St.mapLayers.timeline = tlGroup;
 
-    // Full route polyline (entire day, thin gray dashed)
-    St.tlFullRoute = L.polyline([], {
-      color: "#94a3b8", weight: 2, opacity: 0.4, dashArray: "4 4",
+    // Full route polyline (entire range, very thin gray dashed)
+    const allCoords = St.tlAllWaypoints.map(w => [w.lat, w.lon]);
+    St.tlFullRoute = L.polyline(allCoords, {
+      color: "#94a3b8", weight: 1.5, opacity: 0.2, dashArray: "4 6",
     });
     St.tlFullRoute.addTo(tlGroup);
 
-    // Visited trail polyline (bold blue solid)
-    St.tlTrailCoords = [];
-    St.tlTrail = L.polyline([], {
-      color: "#2563eb", weight: 3.5, opacity: 0.85,
+    // Visited trail — faint line showing the full visited path so far
+    St.tlTrailCoords = [[St.tlAllWaypoints[0].lat, St.tlAllWaypoints[0].lon]];
+    St.tlVisitedTrail = L.polyline(St.tlTrailCoords, {
+      color: "#2563eb", weight: 2, opacity: 0.12,
     });
-    St.tlTrail.addTo(tlGroup);
+    St.tlVisitedTrail.addTo(tlGroup);
 
-    // Waypoint dots along the route (small gray circles)
+    // Fading trail segments (Marauder's Map effect)
+    St.tlFadeSegments = [];
+
+    // Waypoint dots along the route (subtle)
     St.tlRouteDots = L.layerGroup();
+    for (let i = 0; i < St.tlAllWaypoints.length; i++) {
+      const w = St.tlAllWaypoints[i];
+      const dotColor = w.count > 10 ? "#3b82f6" : w.count > 3 ? "#60a5fa" : "#cbd5e1";
+      const dotR = Math.min(5, Math.max(1.5, 0.5 + Math.log2(w.count)));
+      L.circleMarker([w.lat, w.lon], {
+        radius: dotR, color: dotColor, fillColor: dotColor,
+        fillOpacity: 0.3, weight: 0.5,
+      }).bindTooltip(
+        `${(w.firstDt || "").substring(11, 16)} \u00B7 ${w.count} rek.` +
+        (w.city ? `<br>${w.city}` : ""),
+        { direction: "top", opacity: 0.9 }
+      ).addTo(St.tlRouteDots);
+    }
     tlGroup.addLayer(St.tlRouteDots);
 
-    // Marker (solid red dot, no pulse — stable)
-    St.tlMarker = L.circleMarker([recs[0].point.lat, recs[0].point.lon], {
-      radius: 8, color: "#fff", fillColor: "#ef4444",
-      fillOpacity: 1, weight: 3,
+    // Marker — L.marker with divIcon showing mode emoji
+    const firstWp = St.tlAllWaypoints[0];
+    St.tlMarker = L.marker([firstWp.lat, firstWp.lon], {
+      icon: L.divIcon({
+        className: "gsm-tl-marker-icon",
+        html: '<div class="gsm-tl-marker">' + _modeEmoji("stationary") + '</div>',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      }),
+      zIndexOffset: 1000,
     });
     St.tlMarker.addTo(tlGroup);
     St.tlMarker.bindPopup("");
-    // Bring marker to front
-    St.tlMarker.setZIndexOffset && St.tlMarker.setZIndexOffset(1000);
 
     wrap.style.display = "";
-    _timelineLoadDay(0);
+
+    // Slider setup (global — covers all waypoints across all days)
+    const slider = QS("#gsm_tl_slider");
+    if (slider) {
+      slider.min = 0;
+      slider.max = St.tlAllWaypoints.length - 1;
+      slider.value = 0;
+    }
+
+    // Build month strip for quick navigation
+    _buildMonthStrip();
+
+    // Draw global density bar
     _drawDensityBar(recs);
 
-    // ── Wire up controls (use named functions to allow re-binding) ──
+    // Initial labels
+    _timelineUpdateLabels();
+
+    // ── Wire up controls ──
     const playBtn = QS("#gsm_tl_play");
     if (playBtn) {
       playBtn.onclick = function (e) {
         e.preventDefault();
         e.stopPropagation();
-        if (St.tlPlaying) { _timelinePause(); } else { _timelinePlay(); }
+        if (St.tlPlaying) _timelinePause(); else _timelinePlay();
       };
     }
 
@@ -1500,20 +1604,15 @@
     if (speedBtn) {
       speedBtn.onclick = function (e) {
         e.preventDefault();
-        const speeds = [1, 2, 5, 10, 50];
+        e.stopPropagation();
+        const speeds = [1, 2, 5, 10];
         const idx = speeds.indexOf(St.tlSpeed);
         St.tlSpeed = speeds[(idx + 1) % speeds.length];
-        speedBtn.textContent = St.tlSpeed + "×";
-        if (St.tlPlaying) {
-          _tlClearTimer();
-          St.tlTimer = setInterval(_timelineStep, _tlInterval());
-        }
+        speedBtn.textContent = St.tlSpeed + "\u00D7";
       };
     }
 
-    const slider = QS("#gsm_tl_slider");
     if (slider) {
-      // Pause playback when user grabs slider
       slider.onmousedown = slider.ontouchstart = function () {
         if (St.tlPlaying) _timelinePause();
       };
@@ -1528,116 +1627,98 @@
         if (St.tlPlaying) _timelinePause();
         const rect = canvas.getBoundingClientRect();
         const ratio = (e.clientX - rect.left) / rect.width;
-        const idx = Math.round(ratio * Math.max(0, St.tlWaypoints.length - 1));
-        _timelineSeek(Math.max(0, Math.min(idx, St.tlWaypoints.length - 1)));
+        const idx = Math.round(ratio * Math.max(0, St.tlAllWaypoints.length - 1));
+        _timelineSeek(Math.max(0, Math.min(idx, St.tlAllWaypoints.length - 1)));
       };
     }
 
     const prevDay = QS("#gsm_tl_prev_day");
     const nextDay = QS("#gsm_tl_next_day");
-    if (prevDay) prevDay.onclick = () => _timelineSwitchDay(St.tlDayIdx - 1);
-    if (nextDay) nextDay.onclick = () => _timelineSwitchDay(St.tlDayIdx + 1);
+    if (prevDay) prevDay.onclick = function () { _timelineJumpDay(-1); };
+    if (nextDay) nextDay.onclick = function () { _timelineJumpDay(1); };
 
-    console.log("[GSM Timeline v3]", recs.length, "records,", St.tlDays.length, "days");
+    console.log("[GSM Timeline v4]", recs.length, "records,",
+      St.tlAllWaypoints.length, "waypoints,", St.tlDays.length, "days");
+  }
+
+  /** Build month navigation strip. */
+  function _buildMonthStrip() {
+    const el = QS("#gsm_tl_months");
+    if (!el || !St.tlAllWaypoints.length) return;
+
+    const monthMap = new Map();
+    for (let i = 0; i < St.tlAllWaypoints.length; i++) {
+      const m = (St.tlAllWaypoints[i].firstDt || "").substring(0, 7);
+      if (m.length === 7 && !monthMap.has(m)) monthMap.set(m, i);
+    }
+    if (monthMap.size <= 1) { el.style.display = "none"; return; }
+
+    const mNames = ["Sty","Lut","Mar","Kwi","Maj","Cze","Lip","Sie","Wrz","Pa\u017A","Lis","Gru"];
+    var html = "";
+    for (const [key, firstIdx] of monthMap) {
+      const parts = key.split("-");
+      html += '<button class="gsm-tl-month-chip" data-idx="' + firstIdx + '">' +
+              mNames[parseInt(parts[1]) - 1] + "'" + parts[0].slice(2) + '</button>';
+    }
+    el.innerHTML = html;
+
+    QSA(".gsm-tl-month-chip", el).forEach(function (btn) {
+      btn.onclick = function () {
+        if (St.tlPlaying) _timelinePause();
+        _timelineSeek(parseInt(btn.dataset.idx));
+      };
+    });
+  }
+
+  /** Highlight current month in strip. */
+  function _updateMonthHighlight() {
+    var el = QS("#gsm_tl_months");
+    if (!el || !St.tlAllWaypoints.length) return;
+    var wp = St.tlAllWaypoints[St.tlIdx];
+    if (!wp) return;
+    var curMonth = (wp.firstDt || "").substring(0, 7);
+    QSA(".gsm-tl-month-chip", el).forEach(function (btn) {
+      var idx = parseInt(btn.dataset.idx);
+      var btnMonth = (St.tlAllWaypoints[idx] && St.tlAllWaypoints[idx].firstDt || "").substring(0, 7);
+      if (btnMonth === curMonth) btn.classList.add("active");
+      else btn.classList.remove("active");
+    });
   }
 
   function _tlClearTimer() {
     if (St.tlTimer) { clearInterval(St.tlTimer); St.tlTimer = null; }
-  }
-  function _tlInterval() {
-    return Math.max(20, Math.round(500 / St.tlSpeed));
+    if (St.tlAnimFrame) { cancelAnimationFrame(St.tlAnimFrame); St.tlAnimFrame = null; }
   }
 
-  /** Load a day: build waypoints, draw full route, reset position. */
-  function _timelineLoadDay(dayIdx) {
-    dayIdx = Math.max(0, Math.min(dayIdx, St.tlDays.length - 1));
-    St.tlDayIdx = dayIdx;
-    const day = St.tlDays[dayIdx];
-    const dayRecs = St.tlAllRecords.filter(r => (r.datetime || "").startsWith(day));
+  /** Jump to next/prev day from current position. */
+  function _timelineJumpDay(dir) {
+    if (!St.tlAllWaypoints.length) return;
+    if (St.tlPlaying) _timelinePause();
 
-    St.tlWaypoints = _buildWaypoints(dayRecs);
-    St.tlIdx = 0;
-    St.tlTrailCoords = [];
+    var curDay = St.tlAllWaypoints[St.tlIdx].day;
+    var curDayIdx = St.tlDays.indexOf(curDay);
+    var newDayIdx = curDayIdx + dir;
+    if (newDayIdx < 0 || newDayIdx >= St.tlDays.length) return;
 
-    // Slider
-    const slider = QS("#gsm_tl_slider");
-    if (slider) {
-      slider.min = 0;
-      slider.max = Math.max(0, St.tlWaypoints.length - 1);
-      slider.value = 0;
-    }
+    var boundary = St.tlDayBoundaries[newDayIdx];
+    if (!boundary) return;
+    _timelineSeek(boundary.startIdx);
 
-    // Day label
-    const dayLabel = QS("#gsm_tl_day_label");
-    const dayInfo = QS("#gsm_tl_day_info");
-    if (dayLabel) {
-      const parts = day.split("-");
-      const dayNames = ["Nd","Pn","Wt","Śr","Cz","Pt","Sb"];
-      try {
-        const dt = new Date(day + "T00:00:00");
-        dayLabel.textContent = `${dayNames[dt.getDay()]} ${parts[2]}.${parts[1]}.${parts[0]}`;
-      } catch(e) { dayLabel.textContent = day; }
-    }
-    if (dayInfo) {
-      dayInfo.textContent = `${dayRecs.length} rek. → ${St.tlWaypoints.length} pkt (${dayIdx + 1}/${St.tlDays.length})`;
-    }
-
-    // Draw full route as thin gray line
-    const allCoords = St.tlWaypoints.map(w => [w.lat, w.lon]);
-    if (St.tlFullRoute) St.tlFullRoute.setLatLngs(allCoords);
-
-    // Draw waypoint dots along route
-    if (St.tlRouteDots) {
-      St.tlRouteDots.clearLayers();
-      for (let i = 0; i < St.tlWaypoints.length; i++) {
-        const w = St.tlWaypoints[i];
-        const dotColor = w.count > 10 ? "#3b82f6" : w.count > 3 ? "#60a5fa" : "#94a3b8";
-        const dotR = Math.min(6, Math.max(2, 1 + Math.log2(w.count)));
-        L.circleMarker([w.lat, w.lon], {
-          radius: dotR, color: dotColor, fillColor: dotColor,
-          fillOpacity: 0.5, weight: 0.5,
-        }).bindTooltip(
-          `${(w.firstDt || "").substring(11, 16)} · ${w.count} rek.` +
-          (w.city ? `<br>${w.city}` : ""),
-          { direction: "top", opacity: 0.9 }
-        ).addTo(St.tlRouteDots);
-      }
-    }
-
-    // Reset visited trail
-    if (St.tlTrail) St.tlTrail.setLatLngs([]);
-
-    // Move marker to first waypoint
-    if (St.tlWaypoints.length > 0) {
-      const first = St.tlWaypoints[0];
-      if (St.tlMarker) St.tlMarker.setLatLng([first.lat, first.lon]);
-    }
-
-    _timelineUpdateLabels();
-    _drawDensityBar(St.tlWaypoints.map(w => w.records[0]));
-  }
-
-  function _timelineSwitchDay(newIdx) {
-    if (newIdx < 0 || newIdx >= St.tlDays.length) return;
-    _timelinePause();
-    _timelineLoadDay(newIdx);
-    if (St.map && St.tlWaypoints.length > 0) {
-      const bounds = St.tlWaypoints.map(w => [w.lat, w.lon]);
+    // Fit map to the new day's bounds
+    var dayWps = St.tlAllWaypoints.slice(boundary.startIdx, boundary.endIdx + 1);
+    if (dayWps.length && St.map) {
+      var bounds = dayWps.map(function (w) { return [w.lat, w.lon]; });
       St.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-    }
-    // Ensure timeline layer visible
-    if (St.map && St.mapLayers.timeline && !St.map.hasLayer(St.mapLayers.timeline)) {
-      St.mapLayers.timeline.addTo(St.map);
     }
   }
 
   function _timelinePlay() {
-    if (!St.tlWaypoints.length) return;
-    if (St.tlIdx >= St.tlWaypoints.length - 1) _timelineSeek(0);
+    if (!St.tlAllWaypoints.length) return;
+    if (St.tlIdx >= St.tlAllWaypoints.length - 1) _timelineSeek(0);
 
     St.tlPlaying = true;
-    const playBtn = QS("#gsm_tl_play");
-    if (playBtn) playBtn.textContent = "⏸";
+    var playBtn = QS("#gsm_tl_play");
+    if (playBtn) playBtn.textContent = "\u23F8";
 
     // Ensure timeline layer visible
     if (St.map && St.mapLayers.timeline && !St.map.hasLayer(St.mapLayers.timeline)) {
@@ -1645,88 +1726,205 @@
     }
 
     _tlClearTimer();
-    St.tlTimer = setInterval(_timelineStep, _tlInterval());
+    // Start smooth animation loop
+    St._tlAnimating = false;
+    St.tlAnimFrame = requestAnimationFrame(_timelineAnimLoop);
   }
 
   function _timelinePause() {
     St.tlPlaying = false;
     _tlClearTimer();
-    const playBtn = QS("#gsm_tl_play");
-    if (playBtn) playBtn.textContent = "▶";
+    var playBtn = QS("#gsm_tl_play");
+    if (playBtn) playBtn.textContent = "\u25B6";
+
+    // Snap marker to current waypoint position
+    if (St.tlMarker && St.tlAllWaypoints[St.tlIdx]) {
+      var wp = St.tlAllWaypoints[St.tlIdx];
+      St.tlMarker.setLatLng([wp.lat, wp.lon]);
+    }
   }
 
-  function _timelineStep() {
-    // Double-check we should still be playing
-    if (!St.tlPlaying) { _tlClearTimer(); return; }
+  /** Smooth animation loop using requestAnimationFrame.
+   *  Interpolates marker position between consecutive waypoints. */
+  function _timelineAnimLoop(now) {
+    if (!St.tlPlaying) return;
 
-    if (St.tlIdx >= St.tlWaypoints.length - 1) {
+    if (St.tlIdx >= St.tlAllWaypoints.length - 1) {
       _timelinePause();
       return;
     }
 
-    St.tlIdx++;
-    const wp = St.tlWaypoints[St.tlIdx];
-    const latlng = [wp.lat, wp.lon];
-
-    // Move marker
-    if (St.tlMarker) St.tlMarker.setLatLng(latlng);
-
-    // Append to visited trail
-    const last = St.tlTrailCoords[St.tlTrailCoords.length - 1];
-    if (!last || last[0] !== latlng[0] || last[1] !== latlng[1]) {
-      St.tlTrailCoords.push(latlng);
-      if (St.tlTrail) St.tlTrail.setLatLngs(St.tlTrailCoords);
+    // Start new animation segment if not currently animating
+    if (!St._tlAnimating) {
+      St._tlAnimating = true;
+      St._tlAnimStart = now;
+      var curr = St.tlAllWaypoints[St.tlIdx];
+      var next = St.tlAllWaypoints[St.tlIdx + 1];
+      St._tlAnimFrom = [curr.lat, curr.lon];
+      St._tlAnimTo = [next.lat, next.lon];
+      var dist = _haversineDist(curr.lat, curr.lon, next.lat, next.lon);
+      St._tlAnimDuration = Math.max(80, _calcAnimDuration(dist) / St.tlSpeed);
     }
 
-    // Slider
-    const slider = QS("#gsm_tl_slider");
-    if (slider) slider.value = St.tlIdx;
+    var elapsed = now - St._tlAnimStart;
+    var t = Math.min(1, elapsed / St._tlAnimDuration);
 
+    // Ease-in-out for smooth movement
+    var ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+    var lat = St._tlAnimFrom[0] + (St._tlAnimTo[0] - St._tlAnimFrom[0]) * ease;
+    var lon = St._tlAnimFrom[1] + (St._tlAnimTo[1] - St._tlAnimFrom[1]) * ease;
+
+    if (St.tlMarker) St.tlMarker.setLatLng([lat, lon]);
+
+    // Intermediate trail: draw partial line during animation
+    if (t >= 1) {
+      // Arrived at next waypoint
+      St._tlAnimating = false;
+      St.tlIdx++;
+      _onWaypointArrived(St.tlIdx);
+    }
+
+    St.tlAnimFrame = requestAnimationFrame(_timelineAnimLoop);
+  }
+
+  /** Called when animation reaches a new waypoint. */
+  function _onWaypointArrived(idx) {
+    var wp = St.tlAllWaypoints[idx];
+    if (!wp) return;
+
+    // Add fading trail segment
+    if (idx > 0) {
+      var prev = St.tlAllWaypoints[idx - 1];
+      _addFadeSegment([prev.lat, prev.lon], [wp.lat, wp.lon]);
+    }
+
+    // Update visited trail (faint full path)
+    St.tlTrailCoords.push([wp.lat, wp.lon]);
+    if (St.tlVisitedTrail) St.tlVisitedTrail.setLatLngs(St.tlTrailCoords);
+
+    // Update marker icon based on travel mode
+    _updateMarkerMode(wp);
+
+    // Update slider
+    var slider = QS("#gsm_tl_slider");
+    if (slider) slider.value = idx;
+
+    // Update labels
     _timelineUpdateLabels();
     _timelineUpdatePopup(wp);
+    _updateMonthHighlight();
 
-    // Follow marker: keep centered
-    if (St.map) {
-      const bounds = St.map.getBounds();
-      const padLat = (bounds.getNorth() - bounds.getSouth()) * 0.25;
-      const padLng = (bounds.getEast() - bounds.getWest()) * 0.25;
-      const inner = L.latLngBounds(
-        [bounds.getSouth() + padLat, bounds.getWest() + padLng],
-        [bounds.getNorth() - padLat, bounds.getEast() - padLng]
-      );
-      if (!inner.contains(latlng)) {
-        St.map.panTo(latlng, { animate: true, duration: 0.3 });
-      }
+    // Follow map
+    _timelineFollowMap([wp.lat, wp.lon]);
+  }
+
+  /** Update marker emoji to match travel mode. */
+  function _updateMarkerMode(wp) {
+    if (!St.tlMarker) return;
+    var emoji = _modeEmoji(wp.travelMode || "stationary");
+    var iconEl = St.tlMarker.getElement();
+    if (iconEl) {
+      var inner = iconEl.querySelector(".gsm-tl-marker");
+      if (inner) inner.textContent = emoji;
+    }
+    // Also update mode label in controls
+    var modeEl = QS("#gsm_tl_mode_icon");
+    if (modeEl) {
+      modeEl.textContent = emoji;
+      var labels = { walk: "pieszo", car: "samoch\u00F3d", plane: "samolot", stationary: "" };
+      modeEl.title = labels[wp.travelMode] || "";
     }
   }
 
+  /** Add a fading trail segment (Marauder's Map effect). */
+  function _addFadeSegment(from, to) {
+    if (!St.mapLayers.timeline) return;
+    var seg = L.polyline([from, to], {
+      color: "#2563eb", weight: 4, opacity: 0.9, lineCap: "round",
+    });
+    seg.addTo(St.mapLayers.timeline);
+    St.tlFadeSegments.push(seg);
+    _updateFadeOpacities();
+    // Remove oldest segments beyond limit
+    while (St.tlFadeSegments.length > FADE_COUNT) {
+      var old = St.tlFadeSegments.shift();
+      St.mapLayers.timeline.removeLayer(old);
+    }
+  }
+
+  /** Update opacity of all fade segments (newest=bright, oldest=faint). */
+  function _updateFadeOpacities() {
+    var n = St.tlFadeSegments.length;
+    for (var i = 0; i < n; i++) {
+      var age = n - 1 - i; // 0 = newest
+      var opacity = 0.9 * Math.pow(FADE_DECAY, age);
+      St.tlFadeSegments[i].setStyle({ opacity: Math.max(0.04, opacity) });
+    }
+  }
+
+  /** Clear all fading trail segments. */
+  function _clearFadeSegments() {
+    if (!St.mapLayers.timeline) return;
+    for (var i = 0; i < St.tlFadeSegments.length; i++) {
+      St.mapLayers.timeline.removeLayer(St.tlFadeSegments[i]);
+    }
+    St.tlFadeSegments = [];
+  }
+
+  /** Rebuild fading segments around a given index (for seek). */
+  function _rebuildFadeSegments(upToIdx) {
+    _clearFadeSegments();
+    var start = Math.max(1, upToIdx - FADE_COUNT + 1);
+    for (var i = start; i <= upToIdx; i++) {
+      var prev = St.tlAllWaypoints[i - 1];
+      var curr = St.tlAllWaypoints[i];
+      var seg = L.polyline(
+        [[prev.lat, prev.lon], [curr.lat, curr.lon]],
+        { color: "#2563eb", weight: 4, opacity: 0.9, lineCap: "round" }
+      );
+      seg.addTo(St.mapLayers.timeline);
+      St.tlFadeSegments.push(seg);
+    }
+    _updateFadeOpacities();
+  }
+
+  /** Seek to a specific global waypoint index (slider-driven). */
   function _timelineSeek(idx) {
-    idx = Math.max(0, Math.min(idx, St.tlWaypoints.length - 1));
+    idx = Math.max(0, Math.min(idx, St.tlAllWaypoints.length - 1));
     St.tlIdx = idx;
-    if (!St.tlWaypoints.length) return;
-    const wp = St.tlWaypoints[idx];
-    const latlng = [wp.lat, wp.lon];
+    St._tlAnimating = false; // reset animation state
+
+    if (!St.tlAllWaypoints.length) return;
+    var wp = St.tlAllWaypoints[idx];
+    var latlng = [wp.lat, wp.lon];
 
     if (St.tlMarker) St.tlMarker.setLatLng(latlng);
 
     // Rebuild visited trail up to idx
-    const coords = [];
-    for (let i = 0; i <= idx; i++) {
-      const w = St.tlWaypoints[i];
-      coords.push([w.lat, w.lon]);
+    var coords = [];
+    for (var i = 0; i <= idx; i++) {
+      coords.push([St.tlAllWaypoints[i].lat, St.tlAllWaypoints[i].lon]);
     }
     St.tlTrailCoords = coords;
-    if (St.tlTrail) St.tlTrail.setLatLngs(coords);
+    if (St.tlVisitedTrail) St.tlVisitedTrail.setLatLngs(coords);
 
-    const slider = QS("#gsm_tl_slider");
+    // Rebuild fading segments
+    _rebuildFadeSegments(idx);
+
+    // Update marker mode
+    _updateMarkerMode(wp);
+
+    var slider = QS("#gsm_tl_slider");
     if (slider && parseInt(slider.value) !== idx) slider.value = idx;
 
     _timelineUpdateLabels();
     _timelineUpdatePopup(wp);
+    _updateMonthHighlight();
 
-    // Pan map to marker position (don't force zoom change)
+    // Pan map to marker position
     if (St.map) {
-      const bounds = St.map.getBounds();
+      var bounds = St.map.getBounds();
       if (!bounds.contains(latlng)) {
         St.map.panTo(latlng, { animate: true, duration: 0.3 });
       }
@@ -1738,71 +1936,118 @@
     }
   }
 
+  /** Pan map to keep marker visible (with inner padding). */
+  function _timelineFollowMap(latlng) {
+    if (!St.map) return;
+    var bounds = St.map.getBounds();
+    var padLat = (bounds.getNorth() - bounds.getSouth()) * 0.25;
+    var padLng = (bounds.getEast() - bounds.getWest()) * 0.25;
+    var inner = L.latLngBounds(
+      [bounds.getSouth() + padLat, bounds.getWest() + padLng],
+      [bounds.getNorth() - padLat, bounds.getEast() - padLng]
+    );
+    if (!inner.contains(latlng)) {
+      St.map.panTo(latlng, { animate: true, duration: 0.4 });
+    }
+  }
+
   function _timelineUpdateLabels() {
-    const dtLabel = QS("#gsm_tl_datetime");
-    const counter = QS("#gsm_tl_counter");
-    if (!St.tlWaypoints.length) return;
-    const wp = St.tlWaypoints[St.tlIdx];
+    var dtLabel = QS("#gsm_tl_datetime");
+    var counter = QS("#gsm_tl_counter");
+    var dayLabel = QS("#gsm_tl_day_label");
+    var dayInfo = QS("#gsm_tl_day_info");
+
+    if (!St.tlAllWaypoints.length) return;
+    var wp = St.tlAllWaypoints[St.tlIdx];
+
     if (dtLabel) {
-      const t1 = (wp.firstDt || "").substring(11, 16);
+      var date = (wp.firstDt || "").substring(0, 10);
+      var t1 = (wp.firstDt || "").substring(11, 16);
       if (wp.count > 1 && wp.firstDt !== wp.lastDt) {
-        const t2 = (wp.lastDt || "").substring(11, 16);
-        dtLabel.textContent = `${t1} — ${t2}`;
+        var t2 = (wp.lastDt || "").substring(11, 16);
+        dtLabel.textContent = date + " " + t1 + "\u2014" + t2;
       } else {
-        dtLabel.textContent = t1 || "—";
+        dtLabel.textContent = date + " " + t1;
       }
     }
-    if (counter) counter.textContent = `${St.tlIdx + 1} / ${St.tlWaypoints.length}`;
+
+    if (counter) counter.textContent = (St.tlIdx + 1) + " / " + St.tlAllWaypoints.length;
+
+    if (dayLabel) {
+      var day = wp.day || (wp.firstDt || "").substring(0, 10);
+      var parts = day.split("-");
+      var dayNames = ["Nd","Pn","Wt","\u015Ar","Cz","Pt","Sb"];
+      try {
+        var dt = new Date(day + "T00:00:00");
+        dayLabel.textContent = dayNames[dt.getDay()] + " " + parts[2] + "." + parts[1] + "." + parts[0];
+      } catch(e) { dayLabel.textContent = day; }
+    }
+
+    if (dayInfo) {
+      var curDay = wp.day;
+      var boundary = null;
+      for (var b = 0; b < St.tlDayBoundaries.length; b++) {
+        if (St.tlDayBoundaries[b].day === curDay) { boundary = St.tlDayBoundaries[b]; break; }
+      }
+      var dayCount = boundary ? (boundary.endIdx - boundary.startIdx + 1) : 0;
+      var dayIdx = St.tlDays.indexOf(curDay);
+      dayInfo.textContent = dayCount + " pkt \u00B7 dzie\u0144 " + (dayIdx + 1) + "/" + St.tlDays.length;
+    }
   }
 
   function _timelineUpdatePopup(wp) {
     if (!St.tlMarker) return;
-    const loc = [wp.city, wp.street].filter(Boolean).join(", ")
-              || `${wp.lat.toFixed(4)}, ${wp.lon.toFixed(4)}`;
-    const t1 = (wp.firstDt || "").substring(11, 16);
-    const timeRange = (wp.count > 1 && wp.firstDt !== wp.lastDt)
-      ? `${t1} — ${(wp.lastDt || "").substring(11, 16)}`
+    var loc = [wp.city, wp.street].filter(Boolean).join(", ")
+              || wp.lat.toFixed(4) + ", " + wp.lon.toFixed(4);
+    var t1 = (wp.firstDt || "").substring(11, 16);
+    var timeRange = (wp.count > 1 && wp.firstDt !== wp.lastDt)
+      ? t1 + " \u2014 " + (wp.lastDt || "").substring(11, 16)
       : t1;
-    const types = {};
-    for (const r of wp.records) {
-      if (r.record_type) types[r.record_type] = (types[r.record_type] || 0) + 1;
+    var types = {};
+    for (var ri = 0; ri < wp.records.length; ri++) {
+      var rt = wp.records[ri].record_type;
+      if (rt) types[rt] = (types[rt] || 0) + 1;
     }
-    const typeStr = Object.entries(types).map(([t, n]) => `${_typeLabel(t)}: ${n}`).join(", ");
+    var typeStr = Object.entries(types).map(function (e) { return _typeLabel(e[0]) + ": " + e[1]; }).join(", ");
+    var modeStr = wp.travelMode ? " " + _modeEmoji(wp.travelMode) : "";
+    var speedStr = wp.speedKmh > 0 ? " ~" + Math.round(wp.speedKmh) + " km/h" : "";
     St.tlMarker.setPopupContent(
-      `<b>${loc}</b><br>${timeRange} · ${wp.count} rek.${typeStr ? "<br>" + typeStr : ""}`
+      "<b>" + loc + "</b><br>" + timeRange + " \u00B7 " + wp.count + " rek." + modeStr + speedStr + (typeStr ? "<br>" + typeStr : "")
     );
   }
 
   function _drawDensityBar(recs) {
-    const canvas = QS("#gsm_tl_density");
+    var canvas = QS("#gsm_tl_density");
     if (!canvas || !recs.length) return;
 
-    const rect = canvas.getBoundingClientRect();
+    var rect = canvas.getBoundingClientRect();
     canvas.width = Math.max(rect.width, 300);
     canvas.height = 24;
-    const ctx = canvas.getContext("2d");
+    var ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const numBuckets = Math.min(canvas.width, 500);
-    const buckets = new Array(numBuckets).fill(null).map(() => ({ count: 0, hours: [] }));
+    var numBuckets = Math.min(canvas.width, 500);
+    var buckets = [];
+    for (var bi = 0; bi < numBuckets; bi++) buckets.push({ count: 0, hours: [] });
 
-    for (let i = 0; i < recs.length; i++) {
-      const bi = Math.min(Math.floor((i / recs.length) * numBuckets), numBuckets - 1);
-      buckets[bi].count++;
-      const dt = recs[i].datetime || "";
-      const m = dt.match(/(\d{2}):\d{2}/);
-      if (m) buckets[bi].hours.push(parseInt(m[1]));
+    for (var i = 0; i < recs.length; i++) {
+      var bIdx = Math.min(Math.floor((i / recs.length) * numBuckets), numBuckets - 1);
+      buckets[bIdx].count++;
+      var dt = recs[i].datetime || "";
+      var m = dt.match(/(\d{2}):\d{2}/);
+      if (m) buckets[bIdx].hours.push(parseInt(m[1]));
     }
 
-    const maxCount = Math.max(1, ...buckets.map(b => b.count));
-    const colW = canvas.width / numBuckets;
+    var maxCount = 1;
+    for (var j = 0; j < numBuckets; j++) { if (buckets[j].count > maxCount) maxCount = buckets[j].count; }
+    var colW = canvas.width / numBuckets;
 
-    for (let b = 0; b < numBuckets; b++) {
+    for (var b = 0; b < numBuckets; b++) {
       if (buckets[b].count === 0) continue;
-      const h = Math.max(2, (buckets[b].count / maxCount) * canvas.height);
-      const avgH = buckets[b].hours.length
-        ? Math.round(buckets[b].hours.reduce((s, v) => s + v, 0) / buckets[b].hours.length) : 12;
+      var h = Math.max(2, (buckets[b].count / maxCount) * canvas.height);
+      var avgH = buckets[b].hours.length
+        ? Math.round(buckets[b].hours.reduce(function (s, v) { return s + v; }, 0) / buckets[b].hours.length) : 12;
       ctx.fillStyle = (avgH >= 22 || avgH < 6) ? "#1e3a5f"
                     : avgH < 10 ? "#f97316" : avgH < 18 ? "#22c55e" : "#8b5cf6";
       ctx.globalAlpha = 0.7;
@@ -1810,6 +2055,7 @@
     }
     ctx.globalAlpha = 1.0;
   }
+
 
   function _renderWarnings(warnings) {
     const el = QS("#gsm_warnings_body");
