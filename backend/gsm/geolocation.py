@@ -152,6 +152,52 @@ class GeoAnalysis:
 
 
 # ---------------------------------------------------------------------------
+# Coordinate helpers
+# ---------------------------------------------------------------------------
+
+# Valid WGS84 range for European BTS (generous bounding box)
+_LAT_MIN, _LAT_MAX = 35.0, 72.0   # Europe: from southern Greece to northern Norway
+_LON_MIN, _LON_MAX = -12.0, 45.0  # Europe: from Atlantic coast to Ural
+
+# Tighter bounds for Poland (used for auto-detection preference)
+_PL_LAT_MIN, _PL_LAT_MAX = 49.0, 55.5
+_PL_LON_MIN, _PL_LON_MAX = 14.0, 24.5
+
+
+def _is_plausible_wgs84(lat: float, lon: float) -> bool:
+    """Check if (lat, lon) falls within European bounds."""
+    return _LAT_MIN <= lat <= _LAT_MAX and _LON_MIN <= lon <= _LON_MAX
+
+
+def _is_in_poland(lat: float, lon: float) -> bool:
+    """Check if (lat, lon) falls within Poland bounds."""
+    return _PL_LAT_MIN <= lat <= _PL_LAT_MAX and _PL_LON_MIN <= lon <= _PL_LON_MAX
+
+
+def _detect_coord_order(
+    val_x: float, val_y: float,
+) -> Tuple[Optional[float], Optional[float]]:
+    """Auto-detect whether (val_x, val_y) is (lat, lon) or (lon, lat).
+
+    Polish geodetic convention: X = northing (latitude), Y = easting (longitude).
+    Programming/math convention: X = east (longitude), Y = north (latitude).
+
+    Returns (lat, lon) or (None, None) if neither ordering is valid.
+    """
+    # Try Polish geodetic convention first: X = lat, Y = lon
+    if _is_plausible_wgs84(val_x, val_y):
+        return val_x, val_y
+
+    # Try programming convention: X = lon, Y = lat
+    if _is_plausible_wgs84(val_y, val_x):
+        return val_y, val_x
+
+    # Neither ordering works — coordinates outside Europe
+    log.debug("Coordinate out of range: val_x=%s, val_y=%s", val_x, val_y)
+    return None, None
+
+
+# ---------------------------------------------------------------------------
 # Core geolocation
 # ---------------------------------------------------------------------------
 
@@ -184,7 +230,9 @@ def geolocate_records(
     resolved_billing = 0
     resolved_bts_db = 0
     lookup_miss = 0
+    coord_rejected = 0  # coords outside valid range
     sample_lac_cid: List[str] = []
+    sample_raw_bts: List[str] = []  # raw BTS X/Y values for debugging
 
     geo_records: List[GeoRecord] = []
     seen_cells: Set[Tuple[int, int]] = set()
@@ -208,6 +256,10 @@ def geolocate_records(
 
         if has_bts_xy:
             has_direct_coords += 1
+            if len(sample_raw_bts) < 3:
+                sample_raw_bts.append(
+                    f"BTS_X={extra.get('bts_x')},BTS_Y={extra.get('bts_y')}"
+                )
         if has_lac and has_cid:
             has_lac_cid += 1
             if len(sample_lac_cid) < 5:
@@ -225,6 +277,8 @@ def geolocate_records(
                 resolved_bts_db += 1
             if point.lac and point.cid:
                 seen_cells.add((point.lac, point.cid))
+        elif has_bts_xy:
+            coord_rejected += 1
         elif has_lac and has_cid:
             lookup_miss += 1
 
@@ -234,12 +288,14 @@ def geolocate_records(
     analysis.unique_cells = len(seen_cells)
 
     # Log diagnostic summary
+    if sample_raw_bts:
+        log.info("Raw BTS X/Y samples: %s", "; ".join(sample_raw_bts))
     log.info(
         "Geolocation results: %d/%d resolved "
-        "(direct_coords=%d, bts_db=%d, no_data=%d, lookup_miss=%d)",
+        "(direct_coords=%d, bts_db=%d, no_data=%d, lookup_miss=%d, coord_rejected=%d)",
         analysis.geolocated_records, len(records),
         has_direct_coords, resolved_bts_db,
-        no_location_data, lookup_miss,
+        no_location_data, lookup_miss, coord_rejected,
     )
     if has_lac_cid and resolved_bts_db == 0 and has_direct_coords == 0:
         log.warning(
@@ -267,7 +323,9 @@ def geolocate_records(
         "resolved_billing": resolved_billing,
         "resolved_bts_db": resolved_bts_db,
         "lookup_miss": lookup_miss,
+        "coord_rejected": coord_rejected,
         "sample_lac_cid": sample_lac_cid,
+        "sample_raw_bts": sample_raw_bts,
         "sample_coords": sample_coords,
     }
 
@@ -316,36 +374,45 @@ def _resolve_point(
     bts_y = extra.get("bts_y", "")
     if bts_x and bts_y:
         try:
-            lon = float(bts_x)
-            lat = float(bts_y)
-            if lat != 0.0 or lon != 0.0:
-                azimuth = None
-                az_str = extra.get("azimuth", "")
-                if az_str:
+            val_x = float(str(bts_x).replace(",", "."))
+            val_y = float(str(bts_y).replace(",", "."))
+            if val_x == 0.0 and val_y == 0.0:
+                pass  # skip zero coords
+            else:
+                # Auto-detect coordinate order.
+                # Polish geodetic convention: X = northing (lat), Y = easting (lon).
+                # Programming convention: X = east (lon), Y = north (lat).
+                # We try both and pick whichever places the point in Europe.
+                lat, lon = _detect_coord_order(val_x, val_y)
+
+                if lat is not None and lon is not None:
+                    azimuth = None
+                    az_str = extra.get("azimuth", "")
+                    if az_str:
+                        try:
+                            azimuth = float(str(az_str).replace(",", "."))
+                        except (ValueError, TypeError):
+                            pass
+
+                    lac_int = 0
+                    cid_int = 0
                     try:
-                        azimuth = float(az_str)
+                        lac_int = int(record.location_lac) if record.location_lac else 0
+                        cid_int = int(record.location_cell_id) if record.location_cell_id else 0
                     except (ValueError, TypeError):
                         pass
 
-                lac_int = 0
-                cid_int = 0
-                try:
-                    lac_int = int(record.location_lac) if record.location_lac else 0
-                    cid_int = int(record.location_cell_id) if record.location_cell_id else 0
-                except (ValueError, TypeError):
-                    pass
-
-                return GeoPoint(
-                    lat=lat,
-                    lon=lon,
-                    accuracy_m=200 if azimuth is not None else 500,
-                    azimuth=azimuth,
-                    lac=lac_int,
-                    cid=cid_int,
-                    city=extra.get("bts_city", ""),
-                    street=extra.get("bts_street", ""),
-                    source="billing",
-                )
+                    return GeoPoint(
+                        lat=lat,
+                        lon=lon,
+                        accuracy_m=200 if azimuth is not None else 500,
+                        azimuth=azimuth,
+                        lac=lac_int,
+                        cid=cid_int,
+                        city=extra.get("bts_city", ""),
+                        street=extra.get("bts_street", ""),
+                        source="billing",
+                    )
         except (ValueError, TypeError):
             pass
 
