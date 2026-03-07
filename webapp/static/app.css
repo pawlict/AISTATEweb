@@ -1575,6 +1575,64 @@ button.pill-icon:hover{
 .aml-chart-range:active::-webkit-slider-thumb{ cursor: grabbing; }
 .aml-chart-range:active::-moz-range-thumb{ cursor: grabbing; }
 
+/* GSM Timeline player */
+.gsm-timeline-controls{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+}
+.gsm-timeline-controls .btn-sm{
+  min-width: 36px;
+  padding: 4px 10px;
+  font-size: 14px;
+}
+.gsm-timeline-range-wrap{
+  padding: 0 12px 4px;
+}
+.gsm-timeline-range{
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border, #cbd5e1);
+  outline: none;
+  cursor: pointer;
+}
+.gsm-timeline-range::-webkit-slider-thumb{
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  cursor: grab;
+}
+.gsm-timeline-range::-moz-range-thumb{
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  cursor: grab;
+}
+.gsm-timeline-range:active::-webkit-slider-thumb{ cursor: grabbing; }
+.gsm-timeline-range:active::-moz-range-thumb{ cursor: grabbing; }
+
+@keyframes gsm-pulse{
+  0%   { transform: scale(1); opacity: 1; }
+  50%  { transform: scale(1.4); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.gsm-tl-pulse{
+  animation: gsm-pulse 1.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
 /* Stacked per-account charts */
 .aml-stacked-chart-wrapper{
   transition: border-color 0.2s;

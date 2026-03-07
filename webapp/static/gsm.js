@@ -18,6 +18,15 @@
     map: null,          // Leaflet map instance
     mapLayers: {},      // Named layer groups
     leafletLoaded: false,
+    /* Timeline state */
+    tlRecords: [],      // sorted geo_records with valid lat/lon/datetime
+    tlIdx: 0,           // current position in tlRecords
+    tlPlaying: false,
+    tlSpeed: 1,         // 1×, 2×, 5×, 10×, 50×
+    tlTimer: null,      // setInterval handle
+    tlMarker: null,     // Leaflet circleMarker (current position)
+    tlTrail: null,      // Leaflet polyline (visited path)
+    tlTrailCoords: [],  // accumulated [lat,lon] for trail
   };
 
   /* ── helpers ────────────────────────────────────────────── */
@@ -692,6 +701,7 @@
 
     await _initMap(geo);
     _renderClusters(geo);
+    _initTimeline(geo);
 
     // Layer switcher
     const layerSelect = QS("#gsm_map_layer_select");
@@ -1067,6 +1077,10 @@
     if (layer === "heatmap") {
       if (St.mapLayers.all) St.mapLayers.all.addTo(map);
     }
+    if (layer === "timeline") {
+      if (St.mapLayers.timeline) St.mapLayers.timeline.addTo(map);
+      if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+    }
   }
 
   /* ── Hour mini-bar chart (for cluster tiles) ── */
@@ -1278,6 +1292,301 @@
     if (!code) return "";
     const up = code.toUpperCase().trim();
     return _COUNTRY_NAMES[up] || up;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+   *  Timeline Player — animated movement on map
+   * ══════════════════════════════════════════════════════════ */
+  function _initTimeline(geo) {
+    const wrap = QS("#gsm_timeline_wrap");
+    if (!wrap || !St.map) return;
+
+    // Filter and sort records with valid coordinates + datetime
+    const recs = (geo.geo_records || []).filter(r =>
+      r.point && r.point.lat && r.point.lon && r.datetime
+    );
+    recs.sort((a, b) => (a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0));
+
+    if (recs.length < 2) {
+      wrap.style.display = "none";
+      return;
+    }
+
+    St.tlRecords = recs;
+    St.tlIdx = 0;
+    St.tlPlaying = false;
+    St.tlSpeed = 1;
+    St.tlTrailCoords = [];
+    if (St.tlTimer) { clearInterval(St.tlTimer); St.tlTimer = null; }
+
+    // Setup slider
+    const slider = QS("#gsm_tl_slider");
+    if (slider) {
+      slider.min = 0;
+      slider.max = recs.length - 1;
+      slider.value = 0;
+      slider.oninput = function () { _timelineSeek(parseInt(this.value)); };
+    }
+
+    // Create timeline layer group
+    const tlGroup = L.layerGroup();
+    St.mapLayers.timeline = tlGroup;
+
+    // Create marker (pulsing red dot)
+    const firstRec = recs[0];
+    St.tlMarker = L.circleMarker([firstRec.point.lat, firstRec.point.lon], {
+      radius: 8,
+      color: "#ef4444",
+      fillColor: "#ef4444",
+      fillOpacity: 0.9,
+      weight: 2,
+      className: "gsm-tl-pulse",
+    });
+    St.tlMarker.addTo(tlGroup);
+
+    // Create trail polyline
+    St.tlTrailCoords = [[firstRec.point.lat, firstRec.point.lon]];
+    St.tlTrail = L.polyline(St.tlTrailCoords, {
+      color: "#2563eb",
+      weight: 2,
+      opacity: 0.7,
+    });
+    St.tlTrail.addTo(tlGroup);
+
+    // Show wrap
+    wrap.style.display = "";
+
+    // Update labels
+    _timelineUpdateLabels();
+
+    // Draw density mini-bar
+    _drawDensityBar(recs);
+
+    // Play/Pause button
+    const playBtn = QS("#gsm_tl_play");
+    if (playBtn) {
+      playBtn.onclick = function () {
+        if (St.tlPlaying) {
+          _timelinePause();
+        } else {
+          _timelinePlay();
+        }
+      };
+    }
+
+    // Speed button
+    const speedBtn = QS("#gsm_tl_speed");
+    if (speedBtn) {
+      speedBtn.onclick = function () {
+        const speeds = [1, 2, 5, 10, 50];
+        const idx = speeds.indexOf(St.tlSpeed);
+        St.tlSpeed = speeds[(idx + 1) % speeds.length];
+        speedBtn.textContent = St.tlSpeed + "×";
+        if (St.tlPlaying) {
+          clearInterval(St.tlTimer);
+          St.tlTimer = setInterval(_timelineStep, Math.max(16, 300 / St.tlSpeed));
+        }
+      };
+    }
+
+    // Canvas click → seek to proportional position
+    const canvas = QS("#gsm_tl_density");
+    if (canvas) {
+      canvas.onclick = function (e) {
+        const rect = canvas.getBoundingClientRect();
+        const ratio = (e.clientX - rect.left) / rect.width;
+        const idx = Math.round(ratio * (St.tlRecords.length - 1));
+        _timelineSeek(Math.max(0, Math.min(idx, St.tlRecords.length - 1)));
+      };
+    }
+
+    // Add a popup to marker
+    St.tlMarker.bindPopup("");
+
+    console.log("[GSM Timeline] Initialized with", recs.length, "records");
+  }
+
+  function _timelinePlay() {
+    if (!St.tlRecords.length) return;
+    // If at end, restart
+    if (St.tlIdx >= St.tlRecords.length - 1) {
+      _timelineSeek(0);
+    }
+    St.tlPlaying = true;
+    const playBtn = QS("#gsm_tl_play");
+    if (playBtn) playBtn.textContent = "⏸";
+    // Make sure timeline layer is visible
+    if (St.map && St.mapLayers.timeline && !St.map.hasLayer(St.mapLayers.timeline)) {
+      St.mapLayers.timeline.addTo(St.map);
+    }
+    St.tlTimer = setInterval(_timelineStep, Math.max(16, 300 / St.tlSpeed));
+  }
+
+  function _timelinePause() {
+    St.tlPlaying = false;
+    const playBtn = QS("#gsm_tl_play");
+    if (playBtn) playBtn.textContent = "▶";
+    if (St.tlTimer) { clearInterval(St.tlTimer); St.tlTimer = null; }
+  }
+
+  function _timelineStep() {
+    if (St.tlIdx >= St.tlRecords.length - 1) {
+      _timelinePause();
+      return;
+    }
+    St.tlIdx++;
+    const r = St.tlRecords[St.tlIdx];
+    const latlng = [r.point.lat, r.point.lon];
+
+    // Move marker
+    if (St.tlMarker) St.tlMarker.setLatLng(latlng);
+
+    // Append to trail (skip if same position as last)
+    const last = St.tlTrailCoords[St.tlTrailCoords.length - 1];
+    if (!last || last[0] !== latlng[0] || last[1] !== latlng[1]) {
+      St.tlTrailCoords.push(latlng);
+      if (St.tlTrail) St.tlTrail.setLatLngs(St.tlTrailCoords);
+    }
+
+    // Update slider
+    const slider = QS("#gsm_tl_slider");
+    if (slider) slider.value = St.tlIdx;
+
+    // Update labels
+    _timelineUpdateLabels();
+
+    // Auto-pan: check if marker is outside current view
+    if (St.map) {
+      const bounds = St.map.getBounds();
+      if (!bounds.contains(latlng)) {
+        St.map.panTo(latlng, { animate: true, duration: 0.3 });
+      }
+    }
+
+    // Update popup
+    if (St.tlMarker) {
+      const city = r.point.city || "";
+      const street = r.point.street || "";
+      const loc = [city, street].filter(Boolean).join(", ") || `${r.point.lat.toFixed(4)}, ${r.point.lon.toFixed(4)}`;
+      const typeStr = r.record_type ? _typeLabel(r.record_type) : "";
+      St.tlMarker.setPopupContent(
+        `<b>${r.datetime}</b><br>${loc}${typeStr ? "<br>" + typeStr : ""}`
+      );
+    }
+  }
+
+  function _timelineSeek(idx) {
+    idx = Math.max(0, Math.min(idx, St.tlRecords.length - 1));
+    St.tlIdx = idx;
+    const r = St.tlRecords[idx];
+    const latlng = [r.point.lat, r.point.lon];
+
+    // Move marker
+    if (St.tlMarker) St.tlMarker.setLatLng(latlng);
+
+    // Rebuild trail from start to idx
+    // For performance with large datasets, sample if idx > 5000
+    const coords = [];
+    const step = idx > 5000 ? Math.ceil(idx / 5000) : 1;
+    for (let i = 0; i <= idx; i += step) {
+      const rec = St.tlRecords[i];
+      coords.push([rec.point.lat, rec.point.lon]);
+    }
+    // Always include the exact current point
+    if (step > 1) coords.push(latlng);
+    St.tlTrailCoords = coords;
+    if (St.tlTrail) St.tlTrail.setLatLngs(coords);
+
+    // Update slider
+    const slider = QS("#gsm_tl_slider");
+    if (slider) slider.value = idx;
+
+    // Update labels
+    _timelineUpdateLabels();
+
+    // Pan map to marker
+    if (St.map) {
+      St.map.panTo(latlng, { animate: true, duration: 0.3 });
+    }
+
+    // Make sure timeline layer is visible
+    if (St.map && St.mapLayers.timeline && !St.map.hasLayer(St.mapLayers.timeline)) {
+      St.mapLayers.timeline.addTo(St.map);
+    }
+
+    // Update popup
+    if (St.tlMarker) {
+      const city = r.point.city || "";
+      const street = r.point.street || "";
+      const loc = [city, street].filter(Boolean).join(", ") || `${r.point.lat.toFixed(4)}, ${r.point.lon.toFixed(4)}`;
+      const typeStr = r.record_type ? _typeLabel(r.record_type) : "";
+      St.tlMarker.setPopupContent(
+        `<b>${r.datetime}</b><br>${loc}${typeStr ? "<br>" + typeStr : ""}`
+      );
+    }
+  }
+
+  function _timelineUpdateLabels() {
+    const dtLabel = QS("#gsm_tl_datetime");
+    const counter = QS("#gsm_tl_counter");
+    if (!St.tlRecords.length) return;
+
+    const r = St.tlRecords[St.tlIdx];
+    if (dtLabel) dtLabel.textContent = r.datetime || "—";
+    if (counter) counter.textContent = `${St.tlIdx + 1} / ${St.tlRecords.length}`;
+  }
+
+  function _drawDensityBar(recs) {
+    const canvas = QS("#gsm_tl_density");
+    if (!canvas || !recs.length) return;
+
+    // Set canvas dimensions to match CSS width
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(rect.width, 300);
+    canvas.height = 24;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Bucket records into N columns (same as canvas width, capped at 500)
+    const numBuckets = Math.min(canvas.width, 500);
+    const buckets = new Array(numBuckets).fill(null).map(() => ({ count: 0, hours: [] }));
+
+    for (let i = 0; i < recs.length; i++) {
+      const bIdx = Math.floor((i / recs.length) * numBuckets);
+      const bi = Math.min(bIdx, numBuckets - 1);
+      buckets[bi].count++;
+      // Extract hour from datetime for coloring
+      const dt = recs[i].datetime || "";
+      const match = dt.match(/(\d{2}):\d{2}/);
+      if (match) buckets[bi].hours.push(parseInt(match[1]));
+    }
+
+    const maxCount = Math.max(1, ...buckets.map(b => b.count));
+    const colW = canvas.width / numBuckets;
+
+    for (let b = 0; b < numBuckets; b++) {
+      if (buckets[b].count === 0) continue;
+      const h = Math.max(2, (buckets[b].count / maxCount) * canvas.height);
+
+      // Dominant hour color
+      const avgHour = buckets[b].hours.length
+        ? Math.round(buckets[b].hours.reduce((s, v) => s + v, 0) / buckets[b].hours.length)
+        : 12;
+
+      let color;
+      if (avgHour >= 22 || avgHour < 6) color = "#1e3a5f";    // night: dark blue
+      else if (avgHour < 10)             color = "#f97316";    // morning: orange
+      else if (avgHour < 18)             color = "#22c55e";    // day: green
+      else                               color = "#8b5cf6";    // evening: purple
+
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(b * colW, canvas.height - h, colW, h);
+    }
+    ctx.globalAlpha = 1.0;
   }
 
   function _renderWarnings(warnings) {
