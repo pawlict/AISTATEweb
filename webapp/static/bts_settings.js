@@ -31,6 +31,28 @@
 
   /* ── Stats ────────────────────────────────────────────── */
 
+  function _fmtDate(ts) {
+    if (!ts) return "";
+    const d = new Date(parseInt(ts, 10) * 1000);
+    return d.toLocaleDateString("pl-PL") + " " + d.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function _updateSourceStatus(prefix, count, importedTs) {
+    const wrap = QS(`#bts_${prefix}_source_status`);
+    const info = QS(`#bts_${prefix}_source_info`);
+    if (!wrap || !info) return;
+
+    if (count > 0) {
+      wrap.className = "bts-source-status active ok";
+      let text = `Załadowano ${_fmt(count)} stacji`;
+      if (importedTs) text += ` (import: ${_fmtDate(importedTs)})`;
+      info.textContent = text;
+    } else {
+      wrap.className = "bts-source-status active empty";
+      info.textContent = "Baza nie jest pobrana";
+    }
+  }
+
   async function refreshStats() {
     try {
       const resp = await fetch("/api/gsm/bts/stats");
@@ -47,6 +69,13 @@
         const parts = Object.entries(bySrc).map(([k, v]) => `${k}: ${_fmt(v)}`);
         src.textContent = parts.length ? parts.join(", ") : "—";
       }
+
+      // Per-source status banners
+      const bySrc = data.by_source || {};
+      const meta = data.meta || {};
+      _updateSourceStatus("ocid", bySrc.opencellid || 0, meta.opencellid_imported);
+      _updateSourceStatus("uke", bySrc.uke || 0, meta.uke_imported);
+
     } catch (e) {
       console.warn("BTS stats error:", e);
     }

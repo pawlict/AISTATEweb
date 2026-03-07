@@ -230,6 +230,14 @@ class BTSDatabase:
         cities = conn.execute(
             "SELECT COUNT(DISTINCT city) FROM bts_stations WHERE city != ''"
         ).fetchone()[0]
+        # Import metadata (timestamps)
+        meta = {}
+        for key in ("opencellid_imported", "opencellid_count",
+                     "uke_imported", "uke_count"):
+            val = self._get_meta(key)
+            if val is not None:
+                meta[key] = val
+
         return {
             "total_stations": total,
             "by_source": by_source,
@@ -237,6 +245,7 @@ class BTSDatabase:
             "unique_cities": cities,
             "db_size_mb": round(self.db_path.stat().st_size / 1048576, 1)
             if self.db_path.exists() else 0,
+            "meta": meta,
         }
 
     # --- Import ---
