@@ -191,13 +191,17 @@ def _parse_bts_value(raw) -> Optional[float]:
     Supports:
     - WGS84 decimal degrees (e.g., 19.0813 or 51.3507)
     - DDMMSS integer format (e.g., 190813 → 19°08'13" → 19.1369°)
+
+    Rejects sentinel/null values used in billing (-1, 0, 999, etc.).
     """
     try:
         val = float(str(raw).replace(",", "."))
     except (ValueError, TypeError):
         return None
 
-    if val == 0.0:
+    # Reject common sentinel/null placeholder values in billing data
+    # T-Mobile uses -1 for "unknown", other operators may use 0, 999, etc.
+    if val in (0.0, -1.0, 1.0, 999.0, -999.0, 9999.0, -9999.0):
         return None
 
     # Already valid decimal degrees (fits in WGS84 range)
