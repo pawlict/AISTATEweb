@@ -134,6 +134,10 @@ class Trip:
     arrive_datetime: str = ""
     distance_km: float = 0.0
     duration_minutes: float = 0.0
+    speed_kmh: float = 0.0          # actual observed speed
+    travel_mode: str = ""           # 'car', 'plane', 'bts_hop', 'unknown'
+    est_car_minutes: float = 0.0    # estimated car drive time
+    est_flight_minutes: float = 0.0 # estimated total flight time (incl. airport)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -729,6 +733,8 @@ def _detect_trips(
     2. Walk chronologically — when cluster changes and distance > min_distance_km,
        record a Trip.
     3. Collapse consecutive same-cluster records to avoid noise.
+    4. Infer travel mode: car, plane, or BTS hop (false positive).
+    5. Filter out BTS hops (unrealistic speed with very short duration).
     """
     if not clusters or len(clusters) < 2:
         return []
@@ -750,7 +756,7 @@ def _detect_trips(
                 best_idx = i
         return best_idx
 
-    trips: List[Trip] = []
+    raw_trips: List[Trip] = []
     prev_idx = _nearest_cluster_idx(valid[0].point)
     prev_record = valid[0]
 
@@ -764,22 +770,127 @@ def _detect_trips(
             )
             if dist >= min_distance_km * 1000:
                 dur_sec = _time_diff_seconds(prev_record.datetime, gr.datetime)
-                trips.append(Trip(
+                dist_km = dist / 1000
+                dur_min = dur_sec / 60 if dur_sec > 0 else 0.01
+                speed = (dist_km / (dur_min / 60)) if dur_min > 0 else 0
+
+                # Estimate realistic travel times
+                est_car = _estimate_car_time(dist_km)
+                est_flight = _estimate_flight_time(dist_km)
+
+                # Infer travel mode
+                mode = _infer_travel_mode(dist_km, dur_min, speed)
+
+                raw_trips.append(Trip(
                     from_cluster_idx=prev_idx,
                     to_cluster_idx=idx,
                     from_city=clusters[prev_idx].city or f"Lokalizacja #{prev_idx + 1}",
                     to_city=clusters[idx].city or f"Lokalizacja #{idx + 1}",
                     depart_datetime=prev_record.datetime,
                     arrive_datetime=gr.datetime,
-                    distance_km=round(dist / 1000, 1),
-                    duration_minutes=round(dur_sec / 60, 1),
+                    distance_km=round(dist_km, 1),
+                    duration_minutes=round(dur_min, 1),
+                    speed_kmh=round(speed, 0),
+                    travel_mode=mode,
+                    est_car_minutes=round(est_car, 0),
+                    est_flight_minutes=round(est_flight, 0),
                 ))
             prev_idx = idx
         prev_record = gr
 
-    log.info("Trip detection: %d trips between %d clusters (min distance %.1f km)",
-             len(trips), len(clusters), min_distance_km)
+    # Filter out BTS hops (false positives)
+    trips = [t for t in raw_trips if t.travel_mode != "bts_hop"]
+    filtered = len(raw_trips) - len(trips)
+
+    log.info(
+        "Trip detection: %d trips (%d BTS hops filtered) between %d clusters "
+        "(min distance %.1f km)",
+        len(trips), filtered, len(clusters), min_distance_km,
+    )
     return trips
+
+
+def _infer_travel_mode(
+    distance_km: float,
+    duration_min: float,
+    speed_kmh: float,
+) -> str:
+    """Infer travel mode based on distance, duration and speed.
+
+    Returns: 'bts_hop', 'car', 'plane', or 'unknown'.
+
+    BTS hop detection:
+    - Very short duration (< 10 min) with unrealistic speed (> 200 km/h)
+      for the distance — this is BTS tower switching, not real travel.
+    - Duration < 3 min for any distance > 5 km — physically impossible
+      by any transport mode in that timeframe.
+
+    Car detection:
+    - Speed between 20-160 km/h (average, including stops/traffic).
+    - Or duration roughly matches estimated car time (within 3x factor).
+
+    Plane detection:
+    - Distance > 200 km AND speed > 200 km/h.
+    - Or distance > 400 km and duration is much shorter than car time.
+    """
+    # BTS hop: unrealistically fast for short durations
+    if duration_min < 3 and distance_km > 5:
+        return "bts_hop"
+    if duration_min < 10 and speed_kmh > 300:
+        return "bts_hop"
+    if duration_min < 15 and speed_kmh > 500:
+        return "bts_hop"
+
+    # Plane: long distance with high speed
+    est_car = _estimate_car_time(distance_km)
+    if distance_km > 200 and speed_kmh > 200:
+        return "plane"
+    if distance_km > 400 and duration_min < est_car * 0.4:
+        return "plane"
+
+    # Car: reasonable speed range or duration matches estimate
+    if 10 <= speed_kmh <= 200:
+        return "car"
+    if duration_min > 0 and est_car > 0:
+        ratio = duration_min / est_car
+        if 0.3 <= ratio <= 4.0:
+            return "car"
+
+    return "unknown"
+
+
+def _estimate_car_time(distance_km: float) -> float:
+    """Estimate car travel time in minutes.
+
+    Uses tiered average speeds:
+    - Short trips (<30 km): ~40 km/h (city/suburban driving)
+    - Medium trips (30-150 km): ~70 km/h (mix of city and highway)
+    - Long trips (>150 km): ~90 km/h (mostly highway)
+    """
+    if distance_km <= 0:
+        return 0
+    if distance_km < 30:
+        return (distance_km / 40) * 60
+    if distance_km < 150:
+        return (distance_km / 70) * 60
+    return (distance_km / 90) * 60
+
+
+def _estimate_flight_time(distance_km: float) -> float:
+    """Estimate total flight travel time in minutes.
+
+    Includes:
+    - Airport overhead: ~90 min (check-in + security + boarding + taxi + deplane)
+    - Flight time: distance / 700 km/h (average jet cruise)
+    - Minimum 120 min total for any flight.
+
+    For distances < 200 km, flights are impractical — returns 0.
+    """
+    if distance_km < 200:
+        return 0
+    flight_min = (distance_km / 700) * 60
+    total = 90 + flight_min  # airport overhead + flight
+    return max(120, total)
 
 
 # ---------------------------------------------------------------------------

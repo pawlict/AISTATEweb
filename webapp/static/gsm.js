@@ -868,7 +868,8 @@
     if (geo.clusters && geo.clusters.length) {
       for (const c of geo.clusters) {
         const color = c.label === "dom" ? "#22c55e" : c.label === "praca" ? "#3b82f6" : "#f97316";
-        const label = c.label === "dom" ? "DOM" : c.label === "praca" ? "PRACA" : `Lokalizacja (${c.record_count})`;
+        const cityTag = c.city ? ` (${c.city})` : "";
+        const label = c.label === "dom" ? `DOM${cityTag}` : c.label === "praca" ? `PRACA${cityTag}` : `Lokalizacja${cityTag || ` (${c.record_count})`}`;
 
         L.circle([c.lat, c.lon], {
           radius: c.radius_m || 500,
@@ -933,11 +934,23 @@
           { color: "#8b5cf6", weight: 3, opacity: 0.7, dashArray: "12 6" }
         );
 
-        // Popup with trip details
+        // Popup with trip details — including travel mode and estimates
+        const modeCounts = {};
+        pair.trips.forEach(t => { if (t.travel_mode) modeCounts[t.travel_mode] = (modeCounts[t.travel_mode]||0)+1; });
+        const modeStr = Object.entries(modeCounts).map(([m,n]) => `${_travelModeIcon(m)} ${_travelModeLabel(m)}: ${n}`).join(", ");
+        const sampleTrip = pair.trips[0];
+        const estCarStr = sampleTrip.est_car_minutes ? `${_formatHours(sampleTrip.est_car_minutes / 60)}` : "";
+        const estFlightStr = sampleTrip.est_flight_minutes ? `${_formatHours(sampleTrip.est_flight_minutes / 60)}` : "";
+
         let popupHtml = `<b>Podróż: ${fromC.city || "?"} → ${toC.city || "?"}</b><br>
           ${count} ${count === 1 ? "podróż" : "podróży"}, ~${avgDist.toFixed(0)} km<br>`;
+        if (modeStr) popupHtml += `${modeStr}<br>`;
+        if (estCarStr) popupHtml += `Szac. samochód: ~${estCarStr}`;
+        if (estFlightStr) popupHtml += ` | Szac. lot: ~${estFlightStr}`;
+        if (estCarStr || estFlightStr) popupHtml += `<br>`;
         for (const t of pair.trips.slice(0, 5)) {
-          popupHtml += `<div class="small muted">${t.depart_datetime} → ${t.arrive_datetime} (${t.distance_km} km)</div>`;
+          const icon = _travelModeIcon(t.travel_mode);
+          popupHtml += `<div class="small muted">${icon} ${t.depart_datetime} → ${t.arrive_datetime} (${t.distance_km} km, ${t.duration_minutes} min)</div>`;
         }
         if (pair.trips.length > 5) {
           popupHtml += `<div class="small muted">...i ${pair.trips.length - 5} więcej</div>`;
@@ -1097,13 +1110,13 @@
     for (let ci = 0; ci < shownClusters.length; ci++) {
       const c = shownClusters[ci];
       const color = c.label === "dom" ? "#22c55e" : c.label === "praca" ? "#3b82f6" : "#f97316";
-      const label = c.label === "dom" ? "DOM" : c.label === "praca" ? "PRACA" : "Lokalizacja";
-      const cityStr = c.city || "—";
-      const streetStr = c.street ? `, ${c.street}` : "";
+      const cityTag = c.city ? ` (${c.city})` : "";
+      const label = c.label === "dom" ? `DOM${cityTag}` : c.label === "praca" ? `PRACA${cityTag}` : `Lokalizacja${cityTag}`;
+      const streetStr = c.street || "";
 
       html += `<div style="border:2px solid ${color};border-radius:12px;padding:10px 14px;min-width:180px;max-width:240px">
         <div style="color:${color};font-weight:bold;margin-bottom:4px">${label}</div>
-        <div class="small">${cityStr}${streetStr}</div>
+        ${streetStr ? `<div class="small">${streetStr}</div>` : ""}
         <div class="small muted">${_fmt(c.record_count)} rekordów, ${c.unique_days} dni</div>
         <div class="small muted">${c.first_seen} — ${c.last_seen}</div>
         ${_weekdayLabel(c.weekday_counts)}
@@ -1113,17 +1126,22 @@
       // Trip arrows to next clusters
       const tripsFrom = tripIndex[c.cluster_idx] || [];
       if (tripsFrom.length > 0 && ci < shownClusters.length - 1) {
-        // Count unique destination clusters
+        // Count unique destination clusters, collect travel modes
         const destCounts = {};
         for (const t of tripsFrom) {
-          if (!destCounts[t.to_cluster_idx]) destCounts[t.to_cluster_idx] = { count: 0, dist: t.distance_km, city: t.to_city };
+          if (!destCounts[t.to_cluster_idx]) destCounts[t.to_cluster_idx] = { count: 0, dist: t.distance_km, city: t.to_city, modes: {} };
           destCounts[t.to_cluster_idx].count++;
+          if (t.travel_mode) destCounts[t.to_cluster_idx].modes[t.travel_mode] = (destCounts[t.to_cluster_idx].modes[t.travel_mode] || 0) + 1;
         }
         const destList = Object.values(destCounts);
         const totalTrips = destList.reduce((s, d) => s + d.count, 0);
+        // Collect dominant mode icons
+        const allModes = {};
+        destList.forEach(d => { Object.entries(d.modes).forEach(([m,n]) => { allModes[m] = (allModes[m]||0)+n; }); });
+        const modeIcons = Object.keys(allModes).map(m => _travelModeIcon(m)).filter(Boolean).join(" ");
         if (totalTrips > 0) {
           html += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 4px;color:var(--text-muted)">
-            <div style="font-size:18px">→</div>
+            <div style="font-size:18px">${modeIcons || "→"}</div>
             <div class="small" style="white-space:nowrap">${totalTrips} ${totalTrips === 1 ? "podróż" : "podróży"}</div>
           </div>`;
         }
@@ -1170,7 +1188,7 @@
 
     for (const bc of crossings) {
       const absence = _formatHours(bc.absence_hours);
-      const countries = (bc.roaming_countries || []).join(", ");
+      const countries = (bc.roaming_countries || []).map(c => _countryName(c)).join(", ");
       const confirmed = bc.roaming_confirmed
         ? `<span style="color:#22c55e" title="Potwierdzone danymi roamingu">✓ roaming</span>`
         : `<span style="color:#f97316" title="Wykryte na podstawie przerwy w aktywności">⚠ przerwa w aktywności</span>`;
@@ -1205,6 +1223,37 @@
     const hrs = Math.round(h % 24);
     if (days > 0) return `${days}d ${hrs}h`;
     return `${hrs}h`;
+  }
+
+  /* ── Travel mode label / icon ── */
+  function _travelModeLabel(mode) {
+    if (mode === "car") return "samochód";
+    if (mode === "plane") return "samolot";
+    if (mode === "bts_hop") return "przeskok BTS";
+    return "";
+  }
+  function _travelModeIcon(mode) {
+    if (mode === "car") return "\uD83D\uDE97";
+    if (mode === "plane") return "\u2708\uFE0F";
+    return "";
+  }
+
+  /* ── Country code → full Polish name mapping ── */
+  const _COUNTRY_NAMES = {
+    PL:"Polska",DE:"Niemcy",CZ:"Czechy",SK:"Słowacja",UA:"Ukraina",
+    BY:"Białoruś",LT:"Litwa",RU:"Rosja",AT:"Austria",CH:"Szwajcaria",
+    FR:"Francja",GB:"Wielka Brytania",IT:"Włochy",ES:"Hiszpania",
+    NL:"Holandia",BE:"Belgia",DK:"Dania",SE:"Szwecja",NO:"Norwegia",
+    FI:"Finlandia",PT:"Portugalia",IE:"Irlandia",HU:"Węgry",RO:"Rumunia",
+    BG:"Bułgaria",HR:"Chorwacja",SI:"Słowenia",RS:"Serbia",BA:"Bośnia i Hercegowina",
+    ME:"Czarnogóra",MK:"Macedonia Północna",AL:"Albania",GR:"Grecja",TR:"Turcja",
+    EE:"Estonia",LV:"Łotwa",LU:"Luksemburg",MT:"Malta",CY:"Cypr",
+    IS:"Islandia",MD:"Mołdawia",XK:"Kosowo",US:"USA",CA:"Kanada",
+  };
+  function _countryName(code) {
+    if (!code) return "";
+    const up = code.toUpperCase().trim();
+    return _COUNTRY_NAMES[up] || up;
   }
 
   function _renderWarnings(warnings) {
