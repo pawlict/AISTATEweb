@@ -1381,7 +1381,7 @@
         const confirmed = bc.roaming_confirmed
           ? `<span style="color:#22c55e" title="Potwierdzone danymi roamingu">✓ roaming</span>`
           : `<span style="color:#f97316" title="Wykryte na podstawie przerwy w aktywności">⚠ przerwa</span>`;
-        html += `<div data-bc-idx="${i}" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
+        html += `<div data-bc-idx="${i}" class="gsm-travel-card" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
             <div><span style="color:#ef4444">●</span> <b>Wyjazd:</b> ${bc.last_domestic_datetime || "?"}${bc.last_domestic_city ? ` <span class="muted">(${bc.last_domestic_city})</span>` : ""}</div>
             <div><span style="color:#22c55e">●</span> <b>Powrót:</b> ${bc.first_return_datetime || "brak danych"}${bc.first_return_city ? ` <span class="muted">(${bc.first_return_city})</span>` : ""}</div>
@@ -1414,7 +1414,7 @@
         for (const d of (stay.details || [])) {
           detailsHtml += `<div>${d.date}: ${d.last_time || ""} <span class="muted">(${d.location_evening || ""})</span> → ${d.first_time || ""} <span class="muted">(${d.location_morning || ""})</span></div>`;
         }
-        html += `<div data-stay-idx="${j}" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
+        html += `<div data-stay-idx="${j}" class="gsm-travel-card" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
             <div><b>${period}</b></div>
             <div>${stay.nights} ${stay.nights === 1 ? "noc" : (stay.nights < 5 ? "noce" : "nocy")}</div>
