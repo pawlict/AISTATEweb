@@ -136,6 +136,7 @@
 
     _renderInfo(data);
     _renderSummary(data.summary);
+    _renderDevices(data.analysis ? data.analysis.devices : [], data.analysis ? data.analysis.imei_changes : [], data.records);
     _renderAnalysis(data.analysis);
     _renderRecords(data.records, data.records_truncated, data.record_count);
     _renderWarnings(data.warnings);
@@ -261,31 +262,68 @@
       html += `</div></div>`;
     }
 
-    // Devices (IMEI identification)
-    if (a.devices && a.devices.length) {
-      html += `<div class="gsm-section"><div class="h3">Urządzenia</div><table class="gsm-table"><thead><tr>
-        <th>IMEI</th><th>Urządzenie</th><th>Typ</th><th>Rekordy</th><th>Okres</th>
-      </tr></thead><tbody>`;
-      for (const d of a.devices) {
-        const name = d.display_name || '<span class="muted">nieznane</span>';
-        const typeMap = { smartphone: "Smartfon", tablet: "Tablet", modem: "Modem", feature_phone: "Telefon", smartwatch: "Smartwatch" };
-        const typeName = typeMap[d.type] || d.type || "—";
-        const period = d.first_seen ? (d.first_seen === d.last_seen ? d.first_seen : `${d.first_seen} – ${d.last_seen}`) : "—";
-        html += `<tr>
-          <td><code>${d.imei || "?"}</code></td>
-          <td>${d.known ? `<strong>${name}</strong>` : name}</td>
-          <td>${typeName}</td>
-          <td>${_fmt(d.record_count)}</td>
-          <td>${period}</td>
-        </tr>`;
+    el.innerHTML = html || '<div class="small muted">Brak danych do analizy.</div>';
+  }
+
+  /* ── Devices (standalone card) ──────────────────────────── */
+  function _renderDevices(devices, imeiChanges, records) {
+    const card = QS("#gsm_devices_card");
+    const el   = QS("#gsm_devices_body");
+    if (!el) return;
+    if (!devices || !devices.length) { if (card) card.style.display = "none"; return; }
+    if (card) card.style.display = "";
+
+    /* Build IMEI ↔ IMSI map from individual records */
+    const imeiImsiMap = {};   // imei → Set of imsi
+    const imsiImeiMap = {};   // imsi → Set of imei
+    if (records && records.length) {
+      for (const r of records) {
+        const imei = (r.imei || "").trim();
+        const imsi = (r.imsi || "").trim();
+        if (!imei) continue;
+        if (!imeiImsiMap[imei]) imeiImsiMap[imei] = new Set();
+        if (imsi) imeiImsiMap[imei].add(imsi);
+        if (imsi) {
+          if (!imsiImeiMap[imsi]) imsiImeiMap[imsi] = new Set();
+          imsiImeiMap[imsi].add(imei);
+        }
       }
-      html += "</tbody></table></div>";
     }
 
-    // IMEI changes
-    if (a.imei_changes && a.imei_changes.length) {
-      html += `<div class="gsm-section"><div class="h3">Zmiany IMEI</div>`;
-      for (const ch of a.imei_changes) {
+    /* Collect unique IMSI per device for table */
+    const deviceImsis = {};
+    for (const d of devices) {
+      const imei = (d.imei || "").trim();
+      deviceImsis[imei] = imeiImsiMap[imei] ? [...imeiImsiMap[imei]].join(", ") : "—";
+    }
+
+    /* Table */
+    const typeMap = { smartphone: "Smartfon", tablet: "Tablet", modem: "Modem", feature_phone: "Telefon", smartwatch: "Smartwatch" };
+    let html = `<table class="gsm-table"><thead><tr>
+      <th>IMEI</th><th>IMSI</th><th>Urządzenie</th><th>Typ</th><th>Rekordy</th><th>Okres</th>
+    </tr></thead><tbody>`;
+    for (const d of devices) {
+      const name = d.display_name || '<span class="muted">nieznane</span>';
+      const typeName = typeMap[d.type] || d.type || "—";
+      const period = d.first_seen
+        ? (d.first_seen === d.last_seen ? d.first_seen : `${d.first_seen} – ${d.last_seen}`)
+        : "—";
+      const imsi = deviceImsis[d.imei] || "—";
+      html += `<tr>
+        <td><code>${d.imei || "?"}</code></td>
+        <td><code>${imsi}</code></td>
+        <td>${d.known ? `<strong>${name}</strong>` : name}</td>
+        <td>${typeName}</td>
+        <td>${_fmt(d.record_count)}</td>
+        <td>${period}</td>
+      </tr>`;
+    }
+    html += "</tbody></table>";
+
+    /* IMEI changes timeline */
+    if (imeiChanges && imeiChanges.length) {
+      html += `<div class="gsm-section" style="margin-top:12px"><div class="h3">Zmiany IMEI</div>`;
+      for (const ch of imeiChanges) {
         const oldDev = ch.old_device ? ` (${ch.old_device})` : "";
         const newDev = ch.new_device ? ` (${ch.new_device})` : "";
         html += `<div class="gsm-anomaly gsm-anomaly-medium">${ch.date || ""}: ${ch.old_imei || "?"}${oldDev} → ${ch.new_imei || "?"}${newDev}</div>`;
@@ -293,7 +331,44 @@
       html += "</div>";
     }
 
-    el.innerHTML = html || '<div class="small muted">Brak danych do analizy.</div>';
+    /* IMEI / IMSI relationship analysis */
+    const findings = [];
+
+    // Multiple IMEIs for one IMSI → phone changes (same SIM, different phones)
+    for (const [imsi, imeis] of Object.entries(imsiImeiMap)) {
+      if (imeis.size > 1) {
+        const list = [...imeis].map(i => `<code>${i}</code>`).join(", ");
+        findings.push({
+          type: "phone_change",
+          icon: "📱",
+          msg: `IMSI <code>${imsi}</code> — wykryto <b>${imeis.size}</b> różnych IMEI: ${list}. Wskazuje na zmianę telefonu przy tej samej karcie SIM.`
+        });
+      }
+    }
+
+    // One IMEI with multiple IMSIs → SIM changes (same phone, different SIMs)
+    for (const [imei, imsis] of Object.entries(imeiImsiMap)) {
+      if (imsis.size > 1) {
+        const list = [...imsis].map(i => `<code>${i}</code>`).join(", ");
+        findings.push({
+          type: "sim_change",
+          icon: "💳",
+          msg: `IMEI <code>${imei}</code> — wykryto <b>${imsis.size}</b> różnych IMSI: ${list}. Wskazuje na zmianę karty SIM w tym samym urządzeniu.`
+        });
+      }
+    }
+
+    html += `<div class="gsm-section" style="margin-top:12px"><div class="h3">Analiza IMEI / IMSI</div>`;
+    if (findings.length) {
+      for (const f of findings) {
+        html += `<div class="gsm-anomaly gsm-anomaly-medium">${f.icon} ${f.msg}</div>`;
+      }
+    } else {
+      html += `<div class="gsm-anomaly gsm-anomaly-low">✅ Brak zmian urządzeń ani kart SIM — jeden IMEI i jeden IMSI w całym okresie bilingu.</div>`;
+    }
+    html += "</div>";
+
+    el.innerHTML = html;
   }
 
   function _renderRecords(records, truncated, totalCount) {
