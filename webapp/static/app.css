@@ -3594,6 +3594,12 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-sn-short{background:#f3e8ff;color:#7c3aed}
 .gsm-sn-intl{background:#fce7f3;color:#9d174d}
 .gsm-sn-info{background:#e0f2fe;color:#0369a1}
+/* Identification type badges */
+.gsm-id-person{color:#065f46;font-weight:500}
+.gsm-id-company{color:#1e40af;font-weight:500}
+.gsm-id-other{color:#92400e;font-style:italic}
+.gsm-id-notfound{color:var(--text-muted,#94a3b8);font-style:italic}
+.gsm-id-unknown{color:var(--text-muted,#94a3b8)}
 /* Activity charts — grouped bars */
 .gsm-charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:0}
 .gsm-chart-card{background:var(--bg-card,#fff);border:1px solid var(--border,#e2e8f0);border-radius:12px;padding:16px 20px}

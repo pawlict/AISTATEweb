@@ -2,6 +2,7 @@
 
 Endpoints:
 - POST /api/gsm/parse           — upload XLSX billing file and parse it
+- POST /api/gsm/identification  — upload identification file(s) (XLSX/CSV)
 - POST /api/gsm/geolocate       — geolocate parsed billing records
 - GET  /api/gsm/bts/stats       — BTS database statistics
 - POST /api/gsm/bts/import      — import BTS data from CSV (UKE/OpenCelliD)
@@ -20,6 +21,8 @@ import tempfile
 import traceback
 import uuid
 from pathlib import Path
+
+from typing import List
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -182,6 +185,111 @@ async def gsm_parse(
         error_msg = f"{type(e).__name__}: {e}"
         log.exception("GSM parse error: %s", e)
         _app_log(f"[GSM] ERROR parsing {file.filename}: {error_msg}\n{tb}")
+        return JSONResponse(
+            {"status": "error", "detail": error_msg},
+            status_code=500,
+        )
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Identification file upload
+# ---------------------------------------------------------------------------
+
+@router.post("/api/gsm/identification")
+async def gsm_identification(
+    request: Request,
+    files: List[UploadFile] = File(...),
+):
+    """Upload identification file(s) (XLSX / CSV) and parse them.
+
+    Returns a mapping of normalised MSISDN → subscriber info for
+    frontend lookup in Top Contacts and Records tables.
+    Supports Orange (XLSX), Play (CSV), Plus (CSV) formats with
+    auto-detection.
+    """
+    if not files:
+        return JSONResponse(
+            {"status": "error", "detail": "Brak pliku"},
+            status_code=400,
+        )
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="gsm_id_"))
+    try:
+        from backend.gsm.identification import IdentificationStore
+
+        store = IdentificationStore()
+        file_results = []
+
+        for f in files:
+            if not f.filename:
+                continue
+
+            suffix = Path(f.filename).suffix.lower()
+            if suffix not in (".xlsx", ".xls", ".csv", ".txt"):
+                file_results.append({
+                    "filename": f.filename,
+                    "status": "skipped",
+                    "detail": f"Nieobsługiwany format: {suffix}",
+                })
+                continue
+
+            tmp_path = tmp_dir / f.filename
+            content = await f.read()
+            tmp_path.write_bytes(content)
+
+            try:
+                count = await run_in_threadpool(store.load_file, tmp_path)
+                file_results.append({
+                    "filename": f.filename,
+                    "status": "ok",
+                    "records_loaded": count,
+                })
+                _app_log(
+                    f"[GSM] Identification: {f.filename} — "
+                    f"{count} records loaded"
+                )
+            except Exception as e:
+                file_results.append({
+                    "filename": f.filename,
+                    "status": "error",
+                    "detail": f"{type(e).__name__}: {e}",
+                })
+                log.warning("Identification parse error for %s: %s",
+                            f.filename, e, exc_info=True)
+
+        # Build a compact lookup map: normalised_number → {label, type}
+        lookup_map = {}
+        for msisdn, rec in store._records.items():
+            lookup_map[msisdn] = {
+                "label": rec.display_label,
+                "type": rec.identification_type,
+                "name": rec.name or "",
+                "address": rec.address or "",
+                "city": rec.city or "",
+                "pesel": rec.pesel or "",
+                "nip": rec.nip or "",
+                "operator": rec.source_operator or "",
+            }
+
+        _app_log(
+            f"[GSM] Identification done: {store.count} total records "
+            f"from {len(file_results)} file(s)"
+        )
+
+        return JSONResponse({
+            "status": "ok",
+            "total_records": store.count,
+            "files": file_results,
+            "identification": lookup_map,
+        })
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        error_msg = f"{type(e).__name__}: {e}"
+        log.exception("Identification parse error: %s", e)
+        _app_log(f"[GSM] ERROR identification: {error_msg}\n{tb}")
         return JSONResponse(
             {"status": "error", "detail": error_msg},
             status_code=500,

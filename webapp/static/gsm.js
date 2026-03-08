@@ -18,6 +18,8 @@
     map: null,          // Leaflet map instance
     mapLayers: {},      // Named layer groups
     leafletLoaded: false,
+    /* Identification lookup: normalised MSISDN → {label, type, name, ...} */
+    idMap: {},
     /* Timeline state — v4 */
     tlAllRecords: [],     // all valid geo_records sorted by datetime
     tlAllWaypoints: [],   // global waypoints across all days
@@ -184,6 +186,104 @@
     }
   }
 
+  /* ── identification upload & lookup ──────────────────────── */
+
+  /**
+   * Normalise a phone number to 11-digit format (48XXXXXXXXX) to match
+   * the backend normalisation used by IdentificationStore.
+   */
+  function _normMsisdn(raw) {
+    if (!raw) return "";
+    let d = raw.replace(/\D/g, "");
+    if (d.length === 9) d = "48" + d;
+    if (d.length > 11 && d.startsWith("48")) d = d.slice(0, 11);
+    return d;
+  }
+
+  /**
+   * Look up a phone number in the identification map.
+   * Returns an object { label, type, css } or null.
+   */
+  function _idLookup(number) {
+    if (!number || !Object.keys(St.idMap).length) return null;
+    const n = _normMsisdn(number);
+    const rec = St.idMap[n];
+    if (!rec) return null;
+    const cssMap = {
+      person: "gsm-id-person",
+      company: "gsm-id-company",
+      other_operator: "gsm-id-other",
+      not_found: "gsm-id-notfound",
+      unknown: "gsm-id-unknown",
+    };
+    return {
+      label: rec.label || "",
+      type: rec.type || "unknown",
+      css: cssMap[rec.type] || "gsm-id-unknown",
+    };
+  }
+
+  /**
+   * Render an identification cell value.
+   */
+  function _idCell(number) {
+    const info = _idLookup(number);
+    if (!info) return '<span class="muted">—</span>';
+    return `<span class="${info.css}" title="${info.type}">${info.label}</span>`;
+  }
+
+  /**
+   * Upload identification file(s) and build lookup map.
+   */
+  async function _uploadIdentification(files) {
+    if (!files || !files.length) return;
+
+    _addLog("info", `Wczytywanie ${files.length} pliku(ów) identyfikacji…`);
+
+    const fd = new FormData();
+    for (const f of files) {
+      fd.append("files", f);
+    }
+
+    try {
+      const resp = await fetch("/api/gsm/identification", { method: "POST", body: fd });
+      const data = await resp.json();
+
+      if (data.status !== "ok") {
+        const detail = data.detail || JSON.stringify(data);
+        _addLog("error", `Identyfikacja: ${detail}`);
+        return;
+      }
+
+      // Merge into existing idMap (allows multiple uploads)
+      if (data.identification) {
+        Object.assign(St.idMap, data.identification);
+      }
+
+      const loaded = data.total_records || 0;
+      _addLog("info", `Identyfikacja: wczytano ${loaded} rekordów z ${(data.files || []).length} pliku(ów)`);
+
+      // Log per-file results
+      for (const fr of (data.files || [])) {
+        if (fr.status === "ok") {
+          _addLog("info", `  ${fr.filename}: ${fr.records_loaded} rekordów`);
+        } else {
+          _addLog("warn", `  ${fr.filename}: ${fr.detail || fr.status}`);
+        }
+      }
+
+      // Re-render tables if we have results loaded
+      if (St.lastResult) {
+        _renderAnalysis(St.lastResult.analysis);
+        _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+      }
+
+    } catch (e) {
+      console.error("Identification upload error:", e);
+      _addLog("error", `Identyfikacja: ${e.message || e}`);
+    }
+  }
+
   /* ── render ─────────────────────────────────────────────── */
   function _renderResults(data) {
     const wrap = QS("#gsm_results");
@@ -286,12 +386,14 @@
 
     // Top contacts
     if (a.top_contacts && a.top_contacts.length) {
+      const hasId = Object.keys(St.idMap).length > 0;
       html += `<div class="gsm-section"><div class="h3">Top kontakty</div><table class="gsm-table"><thead><tr>
-        <th>Numer</th><th>Interakcje</th><th>Rozmowy ↑</th><th>Rozmowy ↓</th><th>SMS ↑</th><th>SMS ↓</th><th>Czas rozmów</th><th>Aktywne dni</th>
+        <th>Numer</th>${hasId ? '<th>Identyfikacja</th>' : ''}<th>Interakcje</th><th>Rozmowy ↑</th><th>Rozmowy ↓</th><th>SMS ↑</th><th>SMS ↓</th><th>Czas rozmów</th><th>Aktywne dni</th>
       </tr></thead><tbody>`;
       for (const c of a.top_contacts.slice(0, 20)) {
         html += `<tr>
           <td><code>${c.number}</code></td>
+          ${hasId ? `<td>${_idCell(c.number)}</td>` : ''}
           <td>${_fmt(c.total_interactions)}</td>
           <td>${_fmt(c.calls_out)}</td><td>${_fmt(c.calls_in)}</td>
           <td>${_fmt(c.sms_out)}</td><td>${_fmt(c.sms_in)}</td>
@@ -373,8 +475,9 @@
       countLabel.textContent = truncated ? `${records.length} z ${_fmt(totalCount)}` : _fmt(totalCount);
     }
 
+    const hasId = Object.keys(St.idMap).length > 0;
     let html = `<table class="gsm-table"><thead><tr>
-      <th>Data i czas</th><th>Typ</th><th>Kierunek</th><th>Numer</th><th>Czas</th><th>Lokalizacja</th><th>Sieć</th>
+      <th>Data i czas</th><th>Typ</th><th>Kierunek</th><th>Numer</th>${hasId ? '<th>Identyfikacja</th>' : ''}<th>Czas</th><th>Lokalizacja</th><th>Sieć</th>
     </tr></thead><tbody>`;
 
     for (const r of records) {
@@ -386,6 +489,7 @@
         <td><span class="gsm-type gsm-type-${r.record_type}">${typeLabel}</span></td>
         <td>${dir}</td>
         <td><code>${r.callee || "—"}</code></td>
+        ${hasId ? `<td>${_idCell(r.callee)}</td>` : ''}
         <td>${r.duration_seconds ? _dur(r.duration_seconds) : (r.data_volume_kb ? _fmt(Math.round(r.data_volume_kb)) + " KB" : "—")}</td>
         <td>${r.location || "—"}</td>
         <td>${r.network || "—"}</td>
@@ -2094,6 +2198,21 @@
       };
     }
 
+    // Identification file upload
+    const idFileInput = QS("#gsm_id_file_input");
+    const idBtn = QS("#gsm_id_file_toolbar_btn");
+    if (idBtn) {
+      idBtn.onclick = () => { if (idFileInput) idFileInput.click(); };
+    }
+    if (idFileInput) {
+      idFileInput.onchange = () => {
+        if (idFileInput.files && idFileInput.files.length > 0) {
+          _uploadIdentification(idFileInput.files);
+          idFileInput.value = "";
+        }
+      };
+    }
+
     // Clear log button
     const clearLogBtn = QS("#gsm_log_clear");
     if (clearLogBtn) {
@@ -2116,6 +2235,7 @@
     if (newBtn) {
       newBtn.onclick = () => {
         St.lastResult = null;
+        St.idMap = {};
         if (St.map) { St.map.remove(); St.map = null; }
         const results = QS("#gsm_results");
         const empty = QS("#gsm_empty_state");
