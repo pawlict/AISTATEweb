@@ -2253,9 +2253,34 @@
     }
   }
 
+  /* ── loading progress on empty state ─────────────────── */
+
+  function _showLoadingOverlay(text) {
+    const progress = QS("#gsm_progress");
+    const status = QS("#gsm_status");
+    const bar = QS("#gsm_bar");
+    const progressDiv = progress ? progress.querySelector(".progress") : null;
+
+    if (status) status.textContent = text || "Ładowanie…";
+    if (progressDiv) progressDiv.classList.add("indeterminate");
+    if (bar) bar.style.width = "30%";
+    if (progress) progress.style.display = "";
+  }
+
+  function _hideLoadingOverlay() {
+    const progress = QS("#gsm_progress");
+    const bar = QS("#gsm_bar");
+    const progressDiv = progress ? progress.querySelector(".progress") : null;
+
+    if (progressDiv) progressDiv.classList.remove("indeterminate");
+    if (bar) bar.style.width = "0%";
+    if (progress) progress.style.display = "none";
+  }
+
   /**
    * Load GSM state from the current project.
    * Called on GsmManager.init() to auto-restore data.
+   * Shows a progress indicator over the empty state while loading.
    */
   async function _loadFromProject() {
     const pid = _getProjectId();
@@ -2264,15 +2289,21 @@
       return false;
     }
 
+    _showLoadingOverlay("Ładowanie danych GSM z projektu…");
+
     try {
       const resp = await fetch(`/api/gsm/${encodeURIComponent(pid)}/load`);
       if (!resp.ok) {
         console.warn("[GSM] Load failed:", resp.status);
+        _hideLoadingOverlay();
         return false;
       }
 
       const data = await resp.json();
-      if (!data.has_data) return false;
+      if (!data.has_data) {
+        _hideLoadingOverlay();
+        return false;
+      }
 
       // Restore identification map
       if (data.identification && data.identification.lookup) {
@@ -2283,7 +2314,9 @@
       if (data.billing) {
         St.lastResult = data.billing;
         St.filename = data.billing.filename || "";
+        _showLoadingOverlay("Renderowanie wyników…");
         _renderResults(data.billing);
+        _hideLoadingOverlay();
         const idCount = Object.keys(St.idMap).length;
         _addLog("info",
           `Przywrócono dane GSM z projektu: ${data.billing.record_count || 0} rekordów`
@@ -2292,9 +2325,11 @@
         return true;
       }
 
+      _hideLoadingOverlay();
       return false;
     } catch (e) {
       console.warn("[GSM] Load error:", e);
+      _hideLoadingOverlay();
       _addLog("warn", `Nie udało się wczytać danych GSM: ${e.message || e}`);
       return false;
     }
