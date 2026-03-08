@@ -423,7 +423,6 @@
         </tr>`;
       }
       html += "</tbody></table>";
-      html += '<div id="gsm_contact_graph" style="margin-top:14px"></div>';
       html += "</div>";
     }
 
@@ -483,11 +482,29 @@
 
     el.innerHTML = html || '<div class="small muted">Brak danych do analizy.</div>';
 
-    // Render contact relationship graph (SVG)
-    if (a.top_contacts && a.top_contacts.length) {
+    // Render contact relationship graph (SVG) — separate card
+    const graphCard = QS("#gsm_graph_card");
+    if (a.top_contacts && a.top_contacts.length && graphCard) {
+      graphCard.style.display = "";
+      St._graphContacts = a.top_contacts;
       const msisdn = (St.lastResult && St.lastResult.subscriber)
         ? St.lastResult.subscriber.msisdn || "" : "";
-      _renderContactGraph(a.top_contacts.slice(0, 10), msisdn);
+      St._graphMsisdn = msisdn;
+      const topN = parseInt(QS("#gsm_graph_top_n")?.value || "10");
+      _renderContactGraph(a.top_contacts.slice(0, topN), msisdn);
+
+      // Wire top-N selector
+      const topSel = QS("#gsm_graph_top_n");
+      if (topSel) topSel.onchange = () => {
+        const n = parseInt(topSel.value);
+        QS("#gsm_graph_filter").value = "all";
+        _renderContactGraph(St._graphContacts.slice(0, n), St._graphMsisdn);
+      };
+      // Wire type filter
+      const filtSel = QS("#gsm_graph_filter");
+      if (filtSel) filtSel.onchange = () => _applyGraphFilter(filtSel.value);
+    } else if (graphCard) {
+      graphCard.style.display = "none";
     }
   }
 
@@ -497,119 +514,106 @@
     const wrap = QS("#gsm_contact_graph");
     if (!wrap || !contacts || !contacts.length) return;
 
-    const W = 800, H = 440;
-    const CX = W / 2, CY = 390;          // subscriber position
-    const R = 280;                         // arc radius
-    const N = Math.min(contacts.length, 10);
+    const N = contacts.length;
+    // Dynamic height: more contacts → taller graph
+    const W = 700, H = N <= 5 ? 360 : N <= 10 ? 420 : N <= 15 ? 460 : 500;
+    const CX = W / 2, CY = H - 50;       // subscriber position
+    const R = N <= 5 ? 220 : N <= 10 ? 260 : N <= 15 ? 280 : 300;
 
     // Positions for contacts on a semicircle arc
     const nodes = [];
     for (let i = 0; i < N; i++) {
-      const angleDeg = 165 - i * (150 / Math.max(N - 1, 1));
+      const angleDeg = N === 1 ? 90 : 165 - i * (150 / (N - 1));
       const rad = angleDeg * Math.PI / 180;
       nodes.push({
         x: CX + R * Math.cos(rad),
-        y: CY - 50 - R * Math.sin(rad),
+        y: CY - 40 - R * Math.sin(rad),
         c: contacts[i],
       });
     }
 
-    // SVG person icon (head + shoulders), centered at (0,0), fits in ~28×28
-    const personIcon = `<circle cx="0" cy="-8" r="6" fill="none" stroke-width="1.8"/>
-      <path d="M-10 8 Q-10 0 0 -1 Q10 0 10 8" fill="none" stroke-width="1.8"/>`;
-    // SVG company/building icon, centered at (0,0)
-    const companyIcon = `<rect x="-8" y="-12" width="16" height="20" rx="1.5" fill="none" stroke-width="1.6"/>
-      <line x1="-4" y1="-6" x2="-4" y2="-2" stroke-width="1.4"/>
-      <line x1="0" y1="-6" x2="0" y2="-2" stroke-width="1.4"/>
-      <line x1="4" y1="-6" x2="4" y2="-2" stroke-width="1.4"/>
-      <line x1="-4" y1="2" x2="-4" y2="6" stroke-width="1.4"/>
-      <line x1="0" y1="2" x2="0" y2="6" stroke-width="1.4"/>
-      <line x1="4" y1="2" x2="4" y2="6" stroke-width="1.4"/>`;
-    // SVG subscriber icon (person + phone)
-    const subscriberIcon = `<circle cx="-4" cy="-8" r="6" fill="none" stroke-width="1.8"/>
-      <path d="M-14 8 Q-14 0 -4 -1 Q6 0 6 8" fill="none" stroke-width="1.8"/>
-      <rect x="9" y="-10" width="7" height="14" rx="1.5" fill="none" stroke-width="1.4"/>
-      <circle cx="12.5" cy="2" r="1" fill="currentColor"/>`;
+    // SVG icons
+    const personIcon = `<circle cx="0" cy="-7" r="5" fill="none" stroke-width="1.5"/>
+      <path d="M-9 7 Q-9 0 0 -1 Q9 0 9 7" fill="none" stroke-width="1.5"/>`;
+    const companyIcon = `<rect x="-7" y="-10" width="14" height="18" rx="1.5" fill="none" stroke-width="1.4"/>
+      <line x1="-3" y1="-5" x2="-3" y2="-2" stroke-width="1.2"/>
+      <line x1="0" y1="-5" x2="0" y2="-2" stroke-width="1.2"/>
+      <line x1="3" y1="-5" x2="3" y2="-2" stroke-width="1.2"/>
+      <line x1="-3" y1="2" x2="-3" y2="5" stroke-width="1.2"/>
+      <line x1="0" y1="2" x2="0" y2="5" stroke-width="1.2"/>
+      <line x1="3" y1="2" x2="3" y2="5" stroke-width="1.2"/>`;
+    const subscriberIcon = `<circle cx="-4" cy="-7" r="5" fill="none" stroke-width="1.5"/>
+      <path d="M-13 7 Q-13 0 -4 -1 Q5 0 5 7" fill="none" stroke-width="1.5"/>
+      <rect x="8" y="-9" width="6" height="12" rx="1.5" fill="none" stroke-width="1.2"/>
+      <circle cx="11" cy="1" r="0.8" fill="currentColor"/>`;
 
-    // Truncate text helper
-    const trunc = (s, max) => s.length > max ? s.slice(0, max - 1) + "…" : s;
+    const trunc = (s, max) => s.length > max ? s.slice(0, max - 1) + "\u2026" : s;
 
-    // Build SVG
     let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
       style="width:100%;height:auto;font-family:system-ui,-apple-system,sans-serif">`;
 
-    // Defs: arrow markers
+    // Defs: smaller, delicate arrow markers
     svg += `<defs>
-      <marker id="gsm_arrow_out" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L8,3 L0,6" fill="#22c55e"/>
+      <marker id="gsm_arrow_out" markerWidth="6" markerHeight="5" refX="5.5" refY="2.5" orient="auto">
+        <path d="M0,0.5 L5,2.5 L0,4.5" fill="#22c55e" opacity="0.8"/>
       </marker>
-      <marker id="gsm_arrow_in" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L8,3 L0,6" fill="#ef4444"/>
+      <marker id="gsm_arrow_in" markerWidth="6" markerHeight="5" refX="5.5" refY="2.5" orient="auto">
+        <path d="M0,0.5 L5,2.5 L0,4.5" fill="#ef4444" opacity="0.8"/>
       </marker>
+      <filter id="gsm_lbl_bg" x="-0.12" y="-0.1" width="1.24" height="1.2">
+        <feFlood flood-color="var(--bg-card,#fff)" flood-opacity="0.85" result="bg"/>
+        <feMerge><feMergeNode in="bg"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
     </defs>`;
 
-    // Filter selector (foreignObject)
-    svg += `<foreignObject x="10" y="4" width="180" height="30">
-      <select xmlns="http://www.w3.org/1999/xhtml" id="gsm_graph_filter"
-        class="gsm-period-select" style="font-size:12px;padding:3px 8px">
-        <option value="all">Wszystkie</option>
-        <option value="calls">Połączenia</option>
-        <option value="sms">SMS / MMS</option>
-      </select>
-    </foreignObject>`;
-
-    // Draw edges (arrows) — behind nodes
+    // Draw edges (arrows) — behind nodes, thinner & more delicate
+    const curve = 25;
     for (let i = 0; i < N; i++) {
       const nd = nodes[i];
       const c = nd.c;
       const dx = nd.x - CX, dy = nd.y - CY;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      // Perpendicular offset direction for curving
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
       const px = -dy / len, py = dx / len;
-      const curve = 30; // Bézier offset
 
-      // OUT arrow (green): subscriber → contact
-      const outVal_all = (c.calls_out || 0) + (c.sms_out || 0);
-      const outVal_calls = c.calls_out || 0;
-      const outVal_sms = c.sms_out || 0;
+      // OUT arrow (green): subscriber -> contact
+      const outAll = (c.calls_out || 0) + (c.sms_out || 0);
+      const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
       const cx1 = (CX + nd.x) / 2 + px * curve;
       const cy1 = (CY + nd.y) / 2 + py * curve;
-      const sw_out = Math.min(4, Math.max(1.5, 1 + Math.log2(Math.max(outVal_all, 1)) * 0.5));
-      svg += `<path data-edge="out" data-idx="${i}"
+      const swOut = Math.min(2.5, Math.max(0.8, 0.6 + Math.log2(Math.max(outAll, 1)) * 0.35));
+      svg += `<path class="gsm-graph-edge" data-edge="out" data-idx="${i}" data-number="${c.number}"
         d="M${CX},${CY} Q${cx1.toFixed(1)},${cy1.toFixed(1)} ${nd.x.toFixed(1)},${nd.y.toFixed(1)}"
-        fill="none" stroke="#22c55e" stroke-width="${sw_out.toFixed(1)}" opacity="0.7"
+        fill="none" stroke="#22c55e" stroke-width="${swOut.toFixed(1)}" opacity="0.5"
         marker-end="url(#gsm_arrow_out)"
-        data-all="${outVal_all}" data-calls="${outVal_calls}" data-sms="${outVal_sms}"
-        ${outVal_all === 0 ? 'style="display:none"' : ""}/>`;
-      // Label on OUT arrow
+        data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"
+        ${outAll === 0 ? 'style="display:none"' : ""}/>`;
+      // Label — readable with bg filter
       const lx1 = (CX + 2 * cx1 + nd.x) / 4;
       const ly1 = (CY + 2 * cy1 + nd.y) / 4;
       svg += `<text data-elabel="out" data-idx="${i}" x="${lx1.toFixed(1)}" y="${ly1.toFixed(1)}"
-        text-anchor="middle" font-size="10" font-weight="600" fill="#16a34a"
-        ${outVal_all === 0 ? 'style="display:none"' : ""}>${outVal_all}</text>`;
+        text-anchor="middle" font-size="11" font-weight="700" fill="#16a34a" filter="url(#gsm_lbl_bg)"
+        ${outAll === 0 ? 'style="display:none"' : ""}>${outAll}</text>`;
 
-      // IN arrow (red): contact → subscriber
-      const inVal_all = (c.calls_in || 0) + (c.sms_in || 0);
-      const inVal_calls = c.calls_in || 0;
-      const inVal_sms = c.sms_in || 0;
+      // IN arrow (red): contact -> subscriber
+      const inAll = (c.calls_in || 0) + (c.sms_in || 0);
+      const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
       const cx2 = (CX + nd.x) / 2 - px * curve;
       const cy2 = (CY + nd.y) / 2 - py * curve;
-      const sw_in = Math.min(4, Math.max(1.5, 1 + Math.log2(Math.max(inVal_all, 1)) * 0.5));
-      svg += `<path data-edge="in" data-idx="${i}"
+      const swIn = Math.min(2.5, Math.max(0.8, 0.6 + Math.log2(Math.max(inAll, 1)) * 0.35));
+      svg += `<path class="gsm-graph-edge" data-edge="in" data-idx="${i}" data-number="${c.number}"
         d="M${nd.x.toFixed(1)},${nd.y.toFixed(1)} Q${cx2.toFixed(1)},${cy2.toFixed(1)} ${CX},${CY}"
-        fill="none" stroke="#ef4444" stroke-width="${sw_in.toFixed(1)}" opacity="0.7"
+        fill="none" stroke="#ef4444" stroke-width="${swIn.toFixed(1)}" opacity="0.5"
         marker-end="url(#gsm_arrow_in)"
-        data-all="${inVal_all}" data-calls="${inVal_calls}" data-sms="${inVal_sms}"
-        ${inVal_all === 0 ? 'style="display:none"' : ""}/>`;
-      // Label on IN arrow
+        data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"
+        ${inAll === 0 ? 'style="display:none"' : ""}/>`;
       const lx2 = (nd.x + 2 * cx2 + CX) / 4;
       const ly2 = (nd.y + 2 * cy2 + CY) / 4;
       svg += `<text data-elabel="in" data-idx="${i}" x="${lx2.toFixed(1)}" y="${ly2.toFixed(1)}"
-        text-anchor="middle" font-size="10" font-weight="600" fill="#dc2626"
-        ${inVal_all === 0 ? 'style="display:none"' : ""}>${inVal_all}</text>`;
+        text-anchor="middle" font-size="11" font-weight="700" fill="#dc2626" filter="url(#gsm_lbl_bg)"
+        ${inAll === 0 ? 'style="display:none"' : ""}>${inAll}</text>`;
     }
 
-    // Draw contact nodes
+    // Draw contact nodes — interactive (hover + dblclick)
     for (let i = 0; i < N; i++) {
       const nd = nodes[i];
       const c = nd.c;
@@ -619,48 +623,90 @@
       const icon = isCompany ? companyIcon : personIcon;
       const color = isCompany ? "#7c3aed" : "#334155";
 
-      svg += `<g transform="translate(${nd.x.toFixed(1)},${nd.y.toFixed(1)})" style="cursor:default">
-        <circle r="20" fill="var(--bg-card,#fff)" stroke="${color}" stroke-width="1.5" opacity="0.9"/>
+      svg += `<g class="gsm-graph-node" data-idx="${i}" data-number="${c.number}"
+        transform="translate(${nd.x.toFixed(1)},${nd.y.toFixed(1)})" style="cursor:pointer"
+        title="2\u00d7LPM \u2192 filtruj rekordy">
+        <circle class="gsm-graph-node-bg" r="18" fill="var(--bg-card,#fff)" stroke="${color}" stroke-width="1.3" opacity="0.95"/>
         <g stroke="${color}" fill="none" color="${color}">${icon}</g>
-        <text y="30" text-anchor="middle" font-size="10" fill="var(--text,#334155)">${label}</text>
+        <text y="28" text-anchor="middle" font-size="9.5" fill="var(--text,#334155)">${label}</text>
       </g>`;
     }
 
-    // Draw subscriber node (center bottom)
+    // Subscriber node (center bottom)
     const subLabel = msisdn ? trunc(msisdn, 14) : "Abonent";
     svg += `<g transform="translate(${CX},${CY})" style="cursor:default">
-      <circle r="24" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="2"/>
+      <circle r="22" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="1.8"/>
       <g stroke="#2563eb" fill="none" color="#2563eb">${subscriberIcon}</g>
-      <text y="36" text-anchor="middle" font-size="10" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>
-      <text y="46" text-anchor="middle" font-size="9" fill="var(--text-muted,#64748b)">Abonent</text>
+      <text y="34" text-anchor="middle" font-size="10" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>
+      <text y="44" text-anchor="middle" font-size="8.5" fill="var(--text-muted,#64748b)">Abonent</text>
     </g>`;
 
     svg += "</svg>";
     wrap.innerHTML = svg;
 
-    // Wire filter
-    const filterSel = QS("#gsm_graph_filter");
-    if (filterSel) {
-      filterSel.onchange = () => {
-        const mode = filterSel.value; // "all", "calls", "sms"
-        wrap.querySelectorAll("[data-edge]").forEach(path => {
-          const val = parseInt(path.dataset[mode] || "0");
-          path.style.display = val > 0 ? "" : "none";
-          // Update stroke width
-          const sw = Math.min(4, Math.max(1.5, 1 + Math.log2(Math.max(val, 1)) * 0.5));
-          path.setAttribute("stroke-width", sw.toFixed(1));
+    // ── Hover highlight on contact nodes ──
+    wrap.querySelectorAll(".gsm-graph-node").forEach(g => {
+      g.addEventListener("mouseenter", () => {
+        const idx = g.dataset.idx;
+        const bg = g.querySelector(".gsm-graph-node-bg");
+        if (bg) { bg.setAttribute("stroke-width", "2.4"); bg.setAttribute("opacity", "1"); }
+        // Highlight connected edges
+        wrap.querySelectorAll(`.gsm-graph-edge[data-idx="${idx}"]`).forEach(e => {
+          e.setAttribute("opacity", "0.9");
+          const sw = parseFloat(e.getAttribute("stroke-width")) || 1;
+          e.dataset._origSw = sw;
+          e.setAttribute("stroke-width", (sw * 1.6).toFixed(1));
         });
-        wrap.querySelectorAll("[data-elabel]").forEach(txt => {
-          const idx = txt.dataset.idx;
-          const dir = txt.dataset.elabel; // "out" or "in"
-          const edge = wrap.querySelector(`[data-edge="${dir}"][data-idx="${idx}"]`);
-          if (!edge) return;
-          const val = parseInt(edge.dataset[mode] || "0");
-          txt.textContent = val;
-          txt.style.display = val > 0 ? "" : "none";
+      });
+      g.addEventListener("mouseleave", () => {
+        const idx = g.dataset.idx;
+        const bg = g.querySelector(".gsm-graph-node-bg");
+        if (bg) { bg.setAttribute("stroke-width", "1.3"); bg.setAttribute("opacity", "0.95"); }
+        wrap.querySelectorAll(`.gsm-graph-edge[data-idx="${idx}"]`).forEach(e => {
+          e.setAttribute("opacity", "0.5");
+          if (e.dataset._origSw) e.setAttribute("stroke-width", e.dataset._origSw);
         });
-      };
-    }
+      });
+      // Double-click → filter Records by this contact number
+      g.addEventListener("dblclick", () => {
+        const num = g.dataset.number;
+        if (!num) return;
+        const allRecs = St.lastResult ? St.lastResult.records : [];
+        const filtered = allRecs.filter(r =>
+          r.other_number === num || r.called_number === num || r.calling_number === num
+        );
+        const info = _idLookup(num);
+        const label = info && info.label ? info.label : num;
+        const filterText = `${label} \u2014 ${filtered.length} rek.`;
+        _setRecordsFilter(filterText, () => {
+          _clearRecordsFilter();
+          if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+        });
+        _renderRecords(filtered, false, filtered.length);
+        QS("#gsm_records_card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }
+
+  /** Apply type filter (all/calls/sms) to the contact graph arrows + labels. */
+  function _applyGraphFilter(mode) {
+    const wrap = QS("#gsm_contact_graph");
+    if (!wrap) return;
+    wrap.querySelectorAll("[data-edge]").forEach(path => {
+      const val = parseInt(path.dataset[mode] || "0");
+      path.style.display = val > 0 ? "" : "none";
+      const sw = Math.min(2.5, Math.max(0.8, 0.6 + Math.log2(Math.max(val, 1)) * 0.35));
+      path.setAttribute("stroke-width", sw.toFixed(1));
+    });
+    wrap.querySelectorAll("[data-elabel]").forEach(txt => {
+      const idx = txt.dataset.idx;
+      const dir = txt.dataset.elabel;
+      const edge = wrap.querySelector(`[data-edge="${dir}"][data-idx="${idx}"]`);
+      if (!edge) return;
+      const val = parseInt(edge.dataset[mode] || "0");
+      txt.textContent = val;
+      txt.style.display = val > 0 ? "" : "none";
+    });
   }
 
   function _renderRecords(records, truncated, totalCount) {

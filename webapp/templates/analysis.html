@@ -487,6 +487,27 @@
         <div id="gsm_analysis_body"></div>
       </div>
 
+      <!-- Contact relationship graph -->
+      <div class="card" id="gsm_graph_card" style="display:none">
+        <div class="gsm-chart-header">
+          <span class="h3" style="margin:0">Wykres — Największa ilość kontaktów</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="gsm_graph_top_n" class="gsm-period-select" style="min-width:60px">
+              <option value="5">Top 5</option>
+              <option value="10" selected>Top 10</option>
+              <option value="15">Top 15</option>
+              <option value="20">Top 20</option>
+            </select>
+            <select id="gsm_graph_filter" class="gsm-period-select" style="min-width:110px">
+              <option value="all">Wszystkie</option>
+              <option value="calls">Połączenia</option>
+              <option value="sms">SMS / MMS</option>
+            </select>
+          </div>
+        </div>
+        <div id="gsm_contact_graph"></div>
+      </div>
+
       <!-- Records table -->
       <div class="card" id="gsm_records_card">
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:10px">
