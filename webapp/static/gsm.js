@@ -3039,6 +3039,31 @@
       });
     }
 
+    // Graph card 2D resize handle (bottom-right corner)
+    const graphResize = QS("#gsm_graph_resize");
+    if (graphResize) {
+      graphResize.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const card = QS("#gsm_graph_card");
+        if (!card) return;
+        const startX = e.clientX, startY = e.clientY;
+        const startW = card.offsetWidth, startH = card.offsetHeight;
+        const onMove = (ev) => {
+          const newW = Math.max(320, startW + (ev.clientX - startX));
+          const newH = Math.max(200, startH + (ev.clientY - startY));
+          card.style.width = newW + "px";
+          card.style.maxWidth = newW + "px";
+          card.style.height = newH + "px";
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+
     // New analysis button
     const newBtn = QS("#gsm_new_analysis");
     if (newBtn) {
