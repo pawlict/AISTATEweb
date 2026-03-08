@@ -514,11 +514,19 @@
 
       <!-- Heatmap: Godzina × Dzień tygodnia -->
       <div class="card" id="gsm_heatmap_card" style="display:none">
-        <div class="card-header" style="display:flex;align-items:center;gap:8px">
+        <div class="card-header" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span class="h3" style="margin:0">Rozkład aktywności</span>
-          <select id="gsm_hm_month" class="input" style="margin-left:auto;padding:4px 8px;border-radius:8px;min-width:130px;font-size:0.85em">
-            <option value="all">Cały okres</option>
-          </select>
+          <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+            <select id="gsm_hm_type" class="input" style="padding:4px 8px;border-radius:8px;min-width:110px;font-size:0.85em">
+              <option value="all">Wszystkie</option>
+              <option value="calls">Połączenia</option>
+              <option value="sms">SMS / MMS</option>
+              <option value="data">Sesje danych</option>
+            </select>
+            <select id="gsm_hm_month" class="input" style="padding:4px 8px;border-radius:8px;min-width:130px;font-size:0.85em">
+              <option value="all">Cały okres</option>
+            </select>
+          </div>
         </div>
         <div id="gsm_heatmap_body" style="overflow-x:auto;padding:8px 12px"></div>
         <div id="gsm_hm_filter_bar" class="gsm-hm-filter-bar" style="display:none">

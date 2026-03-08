@@ -41,6 +41,7 @@
     hmData: null,          // {grid, months, maxTotal}
     hmActiveCell: null,    // {hour, dow} — active filter cell
     hmMonth: "all",        // selected month filter
+    hmType: "all",         // selected type filter: all, calls, sms, data
   };
 
   /* ── helpers ────────────────────────────────────────────── */
@@ -2277,8 +2278,21 @@
     }
     if (card) card.style.display = "";
 
-    const { grid, maxTotal } = St.hmData;
+    const { grid } = St.hmData;
     const ac = St.hmActiveCell;
+    const typeKey = St.hmType || "all";  // all, calls, sms, data
+
+    // Compute max for the selected type (for heatmap color scaling)
+    let typeMax = 0;
+    for (let h = 0; h < 24; h++)
+      for (let d = 0; d < 7; d++) {
+        const v = typeKey === "all" ? grid[h][d].total : (grid[h][d][typeKey] || 0);
+        if (v > typeMax) typeMax = v;
+      }
+
+    // Heatmap color per type
+    const colorMap = { all: "37,99,235", calls: "22,163,74", sms: "234,88,12", data: "124,58,237" };
+    const rgb = colorMap[typeKey] || colorMap.all;
 
     let html = '<table class="gsm-heatmap"><thead><tr><th class="gsm-hm-hour">Godzina</th>';
     for (const d of _DOW_LABELS) html += `<th>${d}</th>`;
@@ -2290,20 +2304,20 @@
 
       for (let d = 0; d < 7; d++) {
         const c = grid[h][d];
-        const opacity = c.total > 0 ? (c.total / maxTotal) * 0.65 + 0.08 : 0;
-        const bg = c.total > 0 ? `background-color:rgba(37,99,235,${opacity.toFixed(3)})` : "";
+        const val = typeKey === "all" ? c.total : (c[typeKey] || 0);
+        const opacity = val > 0 && typeMax > 0 ? (val / typeMax) * 0.65 + 0.08 : 0;
+        const bg = val > 0 ? `background-color:rgba(${rgb},${opacity.toFixed(3)})` : "";
         const isActive = ac && ac.hour === h && ac.dow === d;
         const cls = isActive ? " gsm-hm-active" : "";
 
-        // Tooltip
+        // Tooltip — always show full breakdown
         const parts = [];
         if (c.calls) parts.push(`${c.calls} rozm.`);
         if (c.sms) parts.push(`${c.sms} SMS`);
         if (c.data) parts.push(`${c.data} dane`);
         const tip = `${_DOW_LABELS[d]} ${hLabel}: ${parts.join(", ") || "brak"}`;
 
-        const val = c.total > 0 ? c.total : "";
-        html += `<td data-hour="${h}" data-dow="${d}" class="${cls}" style="${bg}" title="${tip}">${val}</td>`;
+        html += `<td data-hour="${h}" data-dow="${d}" class="${cls}" style="${bg}" title="${tip}">${val || ""}</td>`;
       }
       html += "</tr>";
     }
@@ -2326,40 +2340,51 @@
     _initHeatmapMonthSelector();
   }
 
-  /** Populate the month <select>. */
+  /** Populate the month <select> and wire the type <select>. */
   function _initHeatmapMonthSelector() {
     const sel = QS("#gsm_hm_month");
-    if (!sel || !St.hmData) return;
+    if (sel && St.hmData) {
+      // Rebuild options
+      sel.innerHTML = '<option value="all">Cały okres</option>';
+      for (const ym of St.hmData.months) {
+        const [y, m] = ym.split("-");
+        const label = `${_MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
+        sel.innerHTML += `<option value="${ym}">${label}</option>`;
+      }
 
-    // Remember current value
-    const cur = sel.value;
+      // Restore selection
+      sel.value = St.hmMonth;
+      if (sel.value !== St.hmMonth) sel.value = "all";
 
-    // Rebuild options
-    sel.innerHTML = '<option value="all">Cały okres</option>';
-    for (const ym of St.hmData.months) {
-      const [y, m] = ym.split("-");
-      const label = `${_MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
-      sel.innerHTML += `<option value="${ym}">${label}</option>`;
+      sel.onchange = () => {
+        St.hmMonth = sel.value;
+        St.hmActiveCell = null;
+        _clearHeatmapFilter();
+        _buildHeatmapData(St.lastResult ? St.lastResult.records : []);
+        _renderHeatmap();
+      };
     }
 
-    // Restore selection
-    sel.value = St.hmMonth;
-    if (sel.value !== St.hmMonth) sel.value = "all";
-
-    // Bind change (remove old handler by replacing)
-    sel.onchange = () => {
-      St.hmMonth = sel.value;
-      St.hmActiveCell = null;
-      _clearHeatmapFilter();
-      _buildHeatmapData(St.lastResult ? St.lastResult.records : []);
-      _renderHeatmap();
-    };
+    // Type selector
+    const typeSel = QS("#gsm_hm_type");
+    if (typeSel) {
+      typeSel.value = St.hmType || "all";
+      typeSel.onchange = () => {
+        St.hmType = typeSel.value;
+        // Re-render heatmap with different type key
+        _renderHeatmap();
+        // Re-apply active cell filter if any (type changes what records match)
+        if (St.hmActiveCell) {
+          _heatmapFilter(St.hmActiveCell.hour, St.hmActiveCell.dow, true);
+        }
+      };
+    }
   }
 
-  /** Filter records by clicked heatmap cell. */
-  function _heatmapFilter(hour, dow) {
-    // Toggle off if clicking same cell
-    if (St.hmActiveCell && St.hmActiveCell.hour === hour && St.hmActiveCell.dow === dow) {
+  /** Filter records by clicked heatmap cell. skipToggle=true to re-apply without toggling off. */
+  function _heatmapFilter(hour, dow, skipToggle) {
+    // Toggle off if clicking same cell (unless re-applying from selector change)
+    if (!skipToggle && St.hmActiveCell && St.hmActiveCell.hour === hour && St.hmActiveCell.dow === dow) {
       _clearHeatmapFilter();
       return;
     }
@@ -2369,12 +2394,14 @@
     // Filter records
     const records = St.lastResult ? St.lastResult.records : [];
     const monthFilter = St.hmMonth !== "all" ? St.hmMonth : null;
+    const typeFilter = St.hmType !== "all" ? St.hmType : null;
 
     const filtered = records.filter(r => {
       if (!r.datetime) return false;
       const dt = new Date(r.datetime.replace(" ", "T"));
       if (isNaN(dt.getTime())) return false;
       if (monthFilter && r.datetime.slice(0, 7) !== monthFilter) return false;
+      if (typeFilter && _hmCategory(r.record_type) !== typeFilter) return false;
       return dt.getHours() === hour && _jsDowToIdx(dt.getDay()) === dow;
     });
 
@@ -2383,7 +2410,8 @@
 
     // Build filter label
     const hLabel = String(hour).padStart(2, "0") + ":00–" + String(hour + 1 === 24 ? 0 : hour + 1).padStart(2, "0") + ":00";
-    const filterText = `${_DOW_LABELS[dow]} ${hLabel} — ${filtered.length} rek.`;
+    const typeLabels = { all: "", calls: " · Połączenia", sms: " · SMS/MMS", data: " · Dane" };
+    const filterText = `${_DOW_LABELS[dow]} ${hLabel}${typeLabels[St.hmType] || ""} — ${filtered.length} rek.`;
 
     // Show filter bar under heatmap
     const bar = QS("#gsm_hm_filter_bar");
@@ -2636,6 +2664,7 @@
         St.hmData = null;
         St.hmActiveCell = null;
         St.hmMonth = "all";
+        St.hmType = "all";
         if (St.map) { St.map.remove(); St.map = null; }
         const results = QS("#gsm_results");
         const empty = QS("#gsm_empty_state");
