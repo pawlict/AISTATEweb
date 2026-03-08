@@ -498,6 +498,9 @@
       if (topSel) topSel.onchange = () => {
         const n = parseInt(topSel.value);
         QS("#gsm_graph_filter").value = "all";
+        // Reset manual resize so auto-scaling can adapt to new count
+        const gc = QS("#gsm_graph_card");
+        if (gc) { delete gc.dataset.userResized; gc.style.height = ""; }
         _renderContactGraph(St._graphContacts.slice(0, n), St._graphMsisdn);
       };
       // Wire type filter
@@ -523,6 +526,14 @@
     const maxPerRow = Math.max(topN, botN);
     const CW = 115, CH = 82, CGAP = 10;
     const W = Math.max(maxPerRow * (CW + CGAP) - CGAP + 30, 460);
+
+    // Auto-scale card width to fit content at readable size
+    const graphCard = QS("#gsm_graph_card");
+    if (graphCard && !graphCard.dataset.userResized) {
+      const pct = Math.min(100, Math.max(33, maxPerRow * 11 + 2));
+      graphCard.style.width = pct + "%";
+      graphCard.style.maxWidth = "";
+    }
     const CARD_Y_TOP = 22;
     const SUB_Y = CARD_Y_TOP + CH + 70;
     const CARD_Y_BOT = SUB_Y + 70;
@@ -3176,6 +3187,7 @@
           card.style.width = newW + "px";
           card.style.maxWidth = newW + "px";
           card.style.height = newH + "px";
+          card.dataset.userResized = "1";
         };
         const onUp = () => {
           document.removeEventListener("mousemove", onMove);
