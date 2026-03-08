@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .parsers.base import BillingRecord, BillingParseResult, BillingSummary
@@ -100,6 +101,9 @@ class AnalysisResult:
     night_activity: Dict[str, Any] = field(default_factory=dict)
     # Weekend activity aggregates (Fri 20:00 - Mon 6:00) for chart
     weekend_activity: Dict[str, Any] = field(default_factory=dict)
+    # Overnight stays away from home
+    overnight_stays: List[Dict[str, Any]] = field(default_factory=list)
+    overnight_stays_home: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -118,6 +122,8 @@ class AnalysisResult:
             "special_numbers": self.special_numbers,
             "night_activity": self.night_activity,
             "weekend_activity": self.weekend_activity,
+            "overnight_stays": self.overnight_stays,
+            "overnight_stays_home": self.overnight_stays_home,
         }
 
 
@@ -155,6 +161,11 @@ def analyze_billing(
 
     # 3. Location analysis
     analysis.locations = _analyze_locations(records)
+
+    # 3b. Overnight stays away from home
+    analysis.overnight_stays, analysis.overnight_stays_home = (
+        _analyze_overnight_stays(records, analysis.locations)
+    )
 
     # 4. Call duration statistics
     _analyze_duration_stats(records, analysis)
@@ -345,6 +356,115 @@ def _analyze_locations(records: List[BillingRecord]) -> List[LocationProfile]:
 
     sorted_locs = sorted(locs.values(), key=lambda p: -p.record_count)
     return sorted_locs[:50]
+
+
+def _analyze_overnight_stays(
+    records: List[BillingRecord],
+    locations: List[LocationProfile],
+) -> Tuple[List[Dict[str, Any]], str]:
+    """Detect overnight stays away from home.
+
+    Algorithm:
+    1. Home = most frequent location (locations[0]).
+    2. Group records by date, keeping only those with a location.
+    3. For each pair of consecutive days: if the last record of day N
+       and the first record of day N+1 are both NOT at the home
+       location → overnight stay detected.
+    4. Group consecutive overnight nights into "stays".
+
+    Returns:
+        (stays, home_location) where stays is a list of dicts.
+    """
+    if not locations or not records:
+        return [], ""
+
+    home = locations[0].location
+    if not home:
+        return [], ""
+
+    # Group records by date (only those with a location)
+    by_day: Dict[str, List[BillingRecord]] = defaultdict(list)
+    for r in records:
+        if r.date and r.location:
+            by_day[r.date].append(r)
+
+    if len(by_day) < 2:
+        return [], home
+
+    # Sort each day's records by datetime
+    for day_recs in by_day.values():
+        day_recs.sort(key=lambda r: r.datetime)
+
+    sorted_days = sorted(by_day.keys())
+
+    # Detect overnight nights
+    nights: List[Dict[str, Any]] = []
+    for i in range(len(sorted_days) - 1):
+        day_cur = sorted_days[i]
+        day_next = sorted_days[i + 1]
+
+        last_rec = by_day[day_cur][-1]   # last activity of current day
+        first_rec = by_day[day_next][0]  # first activity of next day
+
+        last_loc = last_rec.location
+        first_loc = first_rec.location
+
+        if last_loc != home and first_loc != home:
+            nights.append({
+                "date": day_cur,
+                "date_next": day_next,
+                "location_evening": last_loc,
+                "location_morning": first_loc,
+                "last_time": last_rec.time or last_rec.datetime[-8:],
+                "first_time": first_rec.time or first_rec.datetime[-8:],
+            })
+
+    if not nights:
+        return [], home
+
+    # Group consecutive nights into stays
+    stays: List[Dict[str, Any]] = []
+    current_stay: Dict[str, Any] | None = None
+
+    for n in nights:
+        if current_stay is None:
+            current_stay = {
+                "start_date": n["date"],
+                "end_date": n["date_next"],
+                "nights": 1,
+                "locations": set(),
+                "details": [n],
+            }
+            current_stay["locations"].add(n["location_evening"])
+            current_stay["locations"].add(n["location_morning"])
+        else:
+            # Check if this night is consecutive (previous end == this start)
+            if n["date"] == current_stay["end_date"]:
+                current_stay["end_date"] = n["date_next"]
+                current_stay["nights"] += 1
+                current_stay["locations"].add(n["location_evening"])
+                current_stay["locations"].add(n["location_morning"])
+                current_stay["details"].append(n)
+            else:
+                # Finalize previous stay
+                current_stay["locations"] = sorted(current_stay["locations"])
+                stays.append(current_stay)
+                # Start new stay
+                current_stay = {
+                    "start_date": n["date"],
+                    "end_date": n["date_next"],
+                    "nights": 1,
+                    "locations": set(),
+                    "details": [n],
+                }
+                current_stay["locations"].add(n["location_evening"])
+                current_stay["locations"].add(n["location_morning"])
+
+    if current_stay:
+        current_stay["locations"] = sorted(current_stay["locations"])
+        stays.append(current_stay)
+
+    return stays, home
 
 
 def _analyze_duration_stats(

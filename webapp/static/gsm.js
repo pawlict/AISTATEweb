@@ -435,6 +435,23 @@
       html += "</div>";
     }
 
+    // Overnight stays away from home
+    if (a.overnight_stays && a.overnight_stays.length) {
+      const totalNights = a.overnight_stays.reduce((s, v) => s + (v.nights || 0), 0);
+      html += `<div class="gsm-section"><div class="h3">Nocowanie poza domem</div>`;
+      html += `<div class="small muted" style="margin-bottom:6px">Lokalizacja domowa: <b>${a.overnight_stays_home || "?"}</b> — wykryto <b>${a.overnight_stays.length}</b> ${a.overnight_stays.length === 1 ? "pobyt" : "pobytów"} (${totalNights} ${totalNights === 1 ? "noc" : "nocy"})</div>`;
+      html += `<table class="gsm-table"><thead><tr><th>Okres</th><th>Noce</th><th>Lokalizacje</th><th>Szczegóły</th></tr></thead><tbody>`;
+      for (const stay of a.overnight_stays) {
+        const period = stay.start_date === stay.end_date ? stay.start_date : `${stay.start_date} – ${stay.end_date}`;
+        const locs = (stay.locations || []).join(", ");
+        const details = (stay.details || []).map(d =>
+          `${d.date}: ${d.last_time || ""} <span class="muted">(${d.location_evening || ""})</span> → ${d.first_time || ""} <span class="muted">(${d.location_morning || ""})</span>`
+        ).join("<br>");
+        html += `<tr><td style="white-space:nowrap">${period}</td><td>${stay.nights}</td><td>${locs}</td><td class="small">${details}</td></tr>`;
+      }
+      html += "</tbody></table></div>";
+    }
+
     // Stats
     if (a.avg_call_duration || a.longest_call_seconds) {
       html += `<div class="gsm-section"><div class="h3">Statystyki połączeń</div><div class="gsm-stats-row">`;
