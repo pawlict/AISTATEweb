@@ -548,11 +548,11 @@
       style="width:100%;height:auto;font-family:system-ui,-apple-system,sans-serif">`;
 
     svg += `<defs>
-      <marker id="gsm_arrow_out" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-        <path d="M1,1 L9,4 L1,7" fill="#34c759" stroke="none"/>
+      <marker id="gsm_arrow_out" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0.5,0.5 L6,2.5 L0.5,4.5" fill="#34c759" stroke="none"/>
       </marker>
-      <marker id="gsm_arrow_in" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-        <path d="M1,1 L9,4 L1,7" fill="#ff4d4f" stroke="none"/>
+      <marker id="gsm_arrow_in" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0.5,0.5 L6,2.5 L0.5,4.5" fill="#ff4d4f" stroke="none"/>
       </marker>
       <filter id="gsm_card_shadow" x="-4%" y="-4%" width="108%" height="116%">
         <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.07"/>
@@ -561,9 +561,9 @@
 
     // Legend (top-right)
     const legX = W - 175;
-    svg += `<line x1="${legX}" y1="10" x2="${legX + 18}" y2="10" stroke="#34c759" stroke-width="2" stroke-linecap="round" marker-end="url(#gsm_arrow_out)"/>
+    svg += `<line x1="${legX}" y1="10" x2="${legX + 18}" y2="10" stroke="#34c759" stroke-width="1.5" stroke-linecap="round" marker-end="url(#gsm_arrow_out)"/>
     <text x="${legX + 23}" y="13" font-size="7.5" fill="var(--text-muted,#64748b)">Wychodz\u0105ce</text>
-    <line x1="${legX + 82}" y1="10" x2="${legX + 100}" y2="10" stroke="#ff4d4f" stroke-width="2" stroke-linecap="round" marker-end="url(#gsm_arrow_in)"/>
+    <line x1="${legX + 82}" y1="10" x2="${legX + 100}" y2="10" stroke="#ff4d4f" stroke-width="1.5" stroke-linecap="round" marker-end="url(#gsm_arrow_in)"/>
     <text x="${legX + 105}" y="13" font-size="7.5" fill="var(--text-muted,#64748b)">Przychodz\u0105ce</text>`;
 
     // Card positions helper
@@ -578,14 +578,35 @@
                       ...botCards.map((p, j) => ({ ...p, i: topN + j, c: contacts[topN + j], isTop: false }))];
 
     // ── Smooth Bézier arrows — behind cards ──
-    // Each contact gets two symmetric curves forming a V-shape fan:
-    //   green (OUT): subscriber → contact, bows to one side
-    //   red  (IN):  contact → subscriber, bows to the other side
-    // Both curves share the same two endpoints (A near subscriber, B near card)
-    // so they are perfectly symmetric mirrors of each other.
-    const SUB_R = 24; // subscriber circle radius
-    const EDGE_GAP = 8; // gap before card edge for visible arrowheads
-    for (const card of allCards) {
+    // Each contact gets two symmetric curves (V-shape):
+    //   green (OUT): subscriber → contact
+    //   red  (IN):  contact → subscriber
+    // Anti-crossing: compute min angular gap between adjacent contacts,
+    // then limit curve offset so arcs stay within their angular lane.
+    const SUB_R = 24;
+    const EDGE_GAP = 8;
+    const SEP = 3; // perpendicular pixel offset to separate OUT/IN at endpoints
+
+    // Pre-compute angles from subscriber to each contact's edge point
+    const contactAngles = allCards.map(card => {
+      const ddx = (card.x + CW / 2) - CX;
+      const ddy = (card.isTop ? card.y + CH : card.y) - SUB_Y;
+      return Math.atan2(ddy, ddx);
+    });
+    // Find minimum angular gap to any neighbor for each contact
+    const minGaps = contactAngles.map((a, i) => {
+      let gap = Math.PI;
+      for (let j = 0; j < contactAngles.length; j++) {
+        if (j === i) continue;
+        let d = Math.abs(a - contactAngles[j]);
+        if (d > Math.PI) d = 2 * Math.PI - d;
+        if (d < gap) gap = d;
+      }
+      return gap;
+    });
+
+    for (let ci = 0; ci < allCards.length; ci++) {
+      const card = allCards[ci];
       const c = card.c, idx = card.i;
       const cardCX = card.x + CW / 2;
       const cardEdgeY = card.isTop ? card.y + CH : card.y;
@@ -594,36 +615,42 @@
       const inAll = (c.calls_in || 0) + (c.sms_in || 0);
       const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
 
-      // Direction & perpendicular vectors
+      // Direction & perpendicular
       const dx = cardCX - CX, dy = cardEdgeY - SUB_Y;
       const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const nx = dx / len, ny = dy / len;           // unit: sub → card
-      const perpX = -ny, perpY = nx;                // perpendicular (left side)
+      const nx = dx / len, ny = dy / len;
+      const perpX = -ny, perpY = nx;
 
-      // Shared symmetric endpoints
-      const ptAx = CX + nx * (SUB_R + 2), ptAy = SUB_Y + ny * (SUB_R + 2);       // near subscriber
-      const ptBx = cardCX - nx * EDGE_GAP, ptBy = cardEdgeY - ny * EDGE_GAP;      // near card
+      // Base endpoints on the straight line (shared by OUT and IN)
+      const baseAx = CX + nx * (SUB_R + 2), baseAy = SUB_Y + ny * (SUB_R + 2);
+      const baseBx = cardCX - nx * EDGE_GAP, baseBy = cardEdgeY - ny * EDGE_GAP;
 
-      // Curve offset — proportional to distance, clamped for aesthetics
-      const curveOff = Math.min(Math.max(len * 0.15, 14), 35);
-      // Midpoint of straight line between the two shared endpoints
-      const midX = (ptAx + ptBx) / 2, midY = (ptAy + ptBy) / 2;
+      // Curve offset limited by angular gap so arcs don't cross neighbors
+      const angGap = minGaps[ci];
+      const maxBow = len * Math.sin(angGap / 2) * 0.4; // max safe bowing
+      const curveOff = Math.min(Math.max(len * 0.07, 6), maxBow, 16);
 
-      // OUT: A → B (subscriber → contact), green, bows left
+      const midX = (baseAx + baseBx) / 2, midY = (baseAy + baseBy) / 2;
+
+      // OUT: subscriber → contact (green), start/end shifted +perp
       if (outAll > 0) {
-        const cpx = midX + perpX * curveOff, cpy = midY + perpY * curveOff;
+        const ax = baseAx + perpX * SEP, ay = baseAy + perpY * SEP;
+        const bx = baseBx + perpX * SEP, by = baseBy + perpY * SEP;
+        const cpx = midX + perpX * (curveOff + SEP), cpy = midY + perpY * (curveOff + SEP);
         svg += `<path class="gsm-graph-edge" data-edge="out" data-idx="${idx}" data-number="${c.number}"
-          d="M${ptAx.toFixed(1)},${ptAy.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${ptBx.toFixed(1)},${ptBy.toFixed(1)}"
-          fill="none" stroke="#34c759" stroke-width="2.5" stroke-linecap="round" opacity="0.7"
+          d="M${ax.toFixed(1)},${ay.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${bx.toFixed(1)},${by.toFixed(1)}"
+          fill="none" stroke="#34c759" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
           marker-end="url(#gsm_arrow_out)"
           data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"/>`;
       }
-      // IN: B → A (contact → subscriber), red, bows to the other side (mirror)
+      // IN: contact → subscriber (red), start/end shifted −perp (mirror)
       if (inAll > 0) {
-        const cpx = midX - perpX * curveOff, cpy = midY - perpY * curveOff;
+        const ax = baseAx - perpX * SEP, ay = baseAy - perpY * SEP;
+        const bx = baseBx - perpX * SEP, by = baseBy - perpY * SEP;
+        const cpx = midX - perpX * (curveOff + SEP), cpy = midY - perpY * (curveOff + SEP);
         svg += `<path class="gsm-graph-edge" data-edge="in" data-idx="${idx}" data-number="${c.number}"
-          d="M${ptBx.toFixed(1)},${ptBy.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${ptAx.toFixed(1)},${ptAy.toFixed(1)}"
-          fill="none" stroke="#ff4d4f" stroke-width="2.5" stroke-linecap="round" opacity="0.7"
+          d="M${bx.toFixed(1)},${by.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${ax.toFixed(1)},${ay.toFixed(1)}"
+          fill="none" stroke="#ff4d4f" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
           marker-end="url(#gsm_arrow_in)"
           data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"/>`;
       }
@@ -706,7 +733,7 @@
         wrap.querySelectorAll(`.gsm-graph-edge[data-idx="${idx}"]`).forEach(e => {
           e.dataset._origSw = e.getAttribute("stroke-width");
           e.dataset._origOp = e.getAttribute("opacity");
-          e.setAttribute("opacity", "1"); e.setAttribute("stroke-width", "3.5");
+          e.setAttribute("opacity", "1"); e.setAttribute("stroke-width", "2.5");
         });
       });
       g.addEventListener("mouseleave", () => {
@@ -818,8 +845,8 @@
     wrap.querySelectorAll("[data-edge]").forEach(path => {
       const val = parseInt(path.dataset[mode] || "0");
       path.style.display = val > 0 ? "" : "none";
-      // Keep stroke-width in the 2–3px range
-      const sw = Math.min(3, Math.max(2, 2 + Math.log2(Math.max(val, 1)) * 0.2));
+      // Keep stroke-width in the 1.2–2px range
+      const sw = Math.min(2, Math.max(1.2, 1.2 + Math.log2(Math.max(val, 1)) * 0.15));
       path.setAttribute("stroke-width", sw.toFixed(1));
     });
     // Update card badges (<g data-elabel> with two <text> children: label + number)
