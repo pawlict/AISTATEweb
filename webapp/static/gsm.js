@@ -548,11 +548,11 @@
       style="width:100%;height:auto;font-family:system-ui,-apple-system,sans-serif">`;
 
     svg += `<defs>
-      <marker id="gsm_arrow_out" markerWidth="7" markerHeight="6" refX="3.5" refY="3" orient="auto" markerUnits="userSpaceOnUse">
-        <path d="M0,0.5 L6,3 L0,5.5" fill="#22c55e"/>
+      <marker id="gsm_arrow_out" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M1,1 L9,4 L1,7" fill="#34c759" stroke="none"/>
       </marker>
-      <marker id="gsm_arrow_in" markerWidth="7" markerHeight="6" refX="3.5" refY="3" orient="auto" markerUnits="userSpaceOnUse">
-        <path d="M0,0.5 L6,3 L0,5.5" fill="#ef4444"/>
+      <marker id="gsm_arrow_in" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M1,1 L9,4 L1,7" fill="#ff4d4f" stroke="none"/>
       </marker>
       <filter id="gsm_card_shadow" x="-4%" y="-4%" width="108%" height="116%">
         <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.07"/>
@@ -561,9 +561,9 @@
 
     // Legend (top-right)
     const legX = W - 175;
-    svg += `<line x1="${legX}" y1="10" x2="${legX + 18}" y2="10" stroke="#22c55e" stroke-width="1.3" marker-end="url(#gsm_arrow_out)"/>
+    svg += `<line x1="${legX}" y1="10" x2="${legX + 18}" y2="10" stroke="#34c759" stroke-width="2" stroke-linecap="round" marker-end="url(#gsm_arrow_out)"/>
     <text x="${legX + 23}" y="13" font-size="7.5" fill="var(--text-muted,#64748b)">Wychodz\u0105ce</text>
-    <line x1="${legX + 82}" y1="10" x2="${legX + 100}" y2="10" stroke="#ef4444" stroke-width="1.3" marker-end="url(#gsm_arrow_in)"/>
+    <line x1="${legX + 82}" y1="10" x2="${legX + 100}" y2="10" stroke="#ff4d4f" stroke-width="2" stroke-linecap="round" marker-end="url(#gsm_arrow_in)"/>
     <text x="${legX + 105}" y="13" font-size="7.5" fill="var(--text-muted,#64748b)">Przychodz\u0105ce</text>`;
 
     // Card positions helper
@@ -577,7 +577,11 @@
     const allCards = [...topCards.map((p, i) => ({ ...p, i, c: contacts[i], isTop: true })),
                       ...botCards.map((p, j) => ({ ...p, i: topN + j, c: contacts[topN + j], isTop: false }))];
 
-    // ── Curved arrows (Bézier) — behind cards ──
+    // ── Smooth Bézier arrows — behind cards ──
+    // Each contact gets two curves forming a V-shape fan:
+    //   green (OUT): subscriber → contact, bows to one side
+    //   red  (IN):  contact → subscriber, bows to the other side
+    const SUB_R = 24; // subscriber circle radius
     for (const card of allCards) {
       const c = card.c, idx = card.i;
       const cardCX = card.x + CW / 2;
@@ -587,40 +591,41 @@
       const inAll = (c.calls_in || 0) + (c.sms_in || 0);
       const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
 
-      // Control point offset for curve (horizontal pull toward card)
-      const cpOff = 5;
+      // Direction & perpendicular vectors
+      const dx = cardCX - CX, dy = cardEdgeY - SUB_Y;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      const nx = dx / len, ny = dy / len;           // unit: sub → card
+      const perpX = -ny, perpY = nx;                // perpendicular (left side)
+
+      // Curve offset — proportional to distance, clamped for aesthetics
+      const curveOff = Math.min(Math.max(len * 0.15, 14), 35);
+      // Midpoint of straight line
+      const midX = (CX + cardCX) / 2, midY = (SUB_Y + cardEdgeY) / 2;
+
+      // OUT: subscriber → contact (green #34c759)
       if (outAll > 0) {
-        const x1 = CX - cpOff, y1 = SUB_Y, x2 = cardCX - cpOff, y2 = cardEdgeY;
-        const cpy1 = y1 + (y2 - y1) * 0.3, cpy2 = y1 + (y2 - y1) * 0.7;
-        const cpx = (x1 + x2) / 2;
-        const midT = 0.5, mt = 1 - midT;
-        const mx = mt*mt*mt*x1 + 3*mt*mt*midT*cpx + 3*mt*midT*midT*cpx + midT*midT*midT*x2;
-        const my = mt*mt*mt*y1 + 3*mt*mt*midT*cpy1 + 3*mt*midT*midT*cpy2 + midT*midT*midT*y2;
+        // Start at subscriber circle edge, end 10px before card edge
+        const sx = CX + nx * SUB_R, sy = SUB_Y + ny * SUB_R;
+        const ex = cardCX - nx * 10, ey = cardEdgeY - ny * 10;
+        // Control point: midpoint shifted to LEFT of the line
+        const cpx = midX + perpX * curveOff, cpy = midY + perpY * curveOff;
         svg += `<path class="gsm-graph-edge" data-edge="out" data-idx="${idx}" data-number="${c.number}"
-          d="M${x1},${y1} C${cpx},${cpy1} ${cpx},${cpy2} ${mx.toFixed(0)},${my.toFixed(0)}"
-          fill="none" stroke="#22c55e" stroke-width="1" opacity="0.4"
+          d="M${sx.toFixed(1)},${sy.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}"
+          fill="none" stroke="#34c759" stroke-width="2.5" stroke-linecap="round" opacity="0.7"
           marker-end="url(#gsm_arrow_out)"
           data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"/>`;
-        svg += `<path class="gsm-graph-edge gsm-graph-edge-ext" data-edge="out" data-idx="${idx}"
-          d="M${mx.toFixed(0)},${my.toFixed(0)} C${cpx},${cpy2} ${cpx},${cpy2} ${x2},${y2}"
-          fill="none" stroke="#22c55e" stroke-width="1" opacity="0.4"
-          data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"/>`;
       }
+      // IN: contact → subscriber (red #ff4d4f)
       if (inAll > 0) {
-        const x1 = cardCX + cpOff, y1 = cardEdgeY, x2 = CX + cpOff, y2 = SUB_Y;
-        const cpy1 = y1 + (y2 - y1) * 0.3, cpy2 = y1 + (y2 - y1) * 0.7;
-        const cpx = (x1 + x2) / 2;
-        const midT = 0.5, mt = 1 - midT;
-        const mx = mt*mt*mt*x1 + 3*mt*mt*midT*cpx + 3*mt*midT*midT*cpx + midT*midT*midT*x2;
-        const my = mt*mt*mt*y1 + 3*mt*mt*midT*cpy1 + 3*mt*midT*midT*cpy2 + midT*midT*midT*y2;
+        // Start at card edge (hidden by card drawn on top), end just outside subscriber circle
+        const sx = cardCX, sy = cardEdgeY;
+        const ex = CX + nx * (SUB_R + 4), ey = SUB_Y + ny * (SUB_R + 4);
+        // Control point: midpoint shifted to RIGHT of the line (opposite side)
+        const cpx = midX - perpX * curveOff, cpy = midY - perpY * curveOff;
         svg += `<path class="gsm-graph-edge" data-edge="in" data-idx="${idx}" data-number="${c.number}"
-          d="M${x1},${y1} C${cpx},${cpy1} ${cpx},${cpy2} ${mx.toFixed(0)},${my.toFixed(0)}"
-          fill="none" stroke="#ef4444" stroke-width="1" opacity="0.4"
+          d="M${sx.toFixed(1)},${sy.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}"
+          fill="none" stroke="#ff4d4f" stroke-width="2.5" stroke-linecap="round" opacity="0.7"
           marker-end="url(#gsm_arrow_in)"
-          data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"/>`;
-        svg += `<path class="gsm-graph-edge gsm-graph-edge-ext" data-edge="in" data-idx="${idx}"
-          d="M${mx.toFixed(0)},${my.toFixed(0)} C${cpx},${cpy2} ${cpx},${cpy2} ${x2},${y2}"
-          fill="none" stroke="#ef4444" stroke-width="1" opacity="0.4"
           data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"/>`;
       }
     }
@@ -700,7 +705,9 @@
         const bg = g.querySelector(".gsm-graph-node-bg");
         if (bg) { bg.setAttribute("stroke", "var(--primary,#2563eb)"); bg.setAttribute("stroke-width", "1.8"); }
         wrap.querySelectorAll(`.gsm-graph-edge[data-idx="${idx}"]`).forEach(e => {
-          e.setAttribute("opacity", "0.85"); e.dataset._origSw = e.getAttribute("stroke-width"); e.setAttribute("stroke-width", "2.2");
+          e.dataset._origSw = e.getAttribute("stroke-width");
+          e.dataset._origOp = e.getAttribute("opacity");
+          e.setAttribute("opacity", "1"); e.setAttribute("stroke-width", "3.5");
         });
       });
       g.addEventListener("mouseleave", () => {
@@ -708,7 +715,8 @@
         const bg = g.querySelector(".gsm-graph-node-bg");
         if (bg) { bg.setAttribute("stroke", "var(--border,#e2e8f0)"); bg.setAttribute("stroke-width", "0.8"); }
         wrap.querySelectorAll(`.gsm-graph-edge[data-idx="${idx}"]`).forEach(e => {
-          e.setAttribute("opacity", "0.4"); if (e.dataset._origSw) e.setAttribute("stroke-width", e.dataset._origSw);
+          e.setAttribute("opacity", e.dataset._origOp || "0.7");
+          if (e.dataset._origSw) e.setAttribute("stroke-width", e.dataset._origSw);
         });
       });
       // Double-click → filter Records
@@ -794,7 +802,8 @@
     wrap.querySelectorAll("[data-edge]").forEach(path => {
       const val = parseInt(path.dataset[mode] || "0");
       path.style.display = val > 0 ? "" : "none";
-      const sw = Math.min(2.5, Math.max(0.8, 0.6 + Math.log2(Math.max(val, 1)) * 0.35));
+      // Keep stroke-width in the 2–3px range
+      const sw = Math.min(3, Math.max(2, 2 + Math.log2(Math.max(val, 1)) * 0.2));
       path.setAttribute("stroke-width", sw.toFixed(1));
     });
     // Update card badges (<g data-elabel> with two <text> children: label + number)
