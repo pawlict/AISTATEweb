@@ -1332,108 +1332,112 @@
     _renderBorderCrossings(geo);
   }
 
-  /* ── Border crossings section ── */
+  /* ── Border crossings + Overnight stays (side by side) ── */
   function _renderBorderCrossings(geo) {
-    let container = QS("#gsm_border_crossings");
-    if (!container) {
-      // Create container after cluster list if it doesn't exist in template
-      const clusterWrap = QS("#gsm_cluster_info");
-      if (clusterWrap) {
-        container = _el("div", "", "");
-        container.id = "gsm_border_crossings";
-        clusterWrap.appendChild(container);
-      } else return;
-    }
-
-    const crossings = geo.border_crossings || [];
-    if (!crossings.length) {
-      container.style.display = "none";
-      return;
-    }
-    container.style.display = "";
-
-    let html = '<div class="h3" style="margin-top:16px;margin-bottom:8px">Przekroczenia granic / wyjazdy zagraniczne</div>';
-    html += '<div style="display:flex;flex-direction:column;gap:8px">';
-
-    for (const bc of crossings) {
-      const absence = _formatHours(bc.absence_hours);
-      const countries = (bc.roaming_countries || []).map(c => _countryName(c)).join(", ");
-      const confirmed = bc.roaming_confirmed
-        ? `<span style="color:#22c55e" title="Potwierdzone danymi roamingu">✓ roaming</span>`
-        : `<span style="color:#f97316" title="Wykryte na podstawie przerwy w aktywności">⚠ przerwa w aktywności</span>`;
-
-      html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary)">
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
-          <div>
-            <span style="color:#ef4444">●</span> <b>Wyjazd:</b> ${bc.last_domestic_datetime || "?"}
-            ${bc.last_domestic_city ? `<span class="muted">(${bc.last_domestic_city})</span>` : ""}
-          </div>
-          <div>
-            <span style="color:#22c55e">●</span> <b>Powrót:</b> ${bc.first_return_datetime || "brak danych"}
-            ${bc.first_return_city ? `<span class="muted">(${bc.first_return_city})</span>` : ""}
-          </div>
-        </div>
-        <div class="small" style="margin-top:4px">
-          Nieobecność: <b>${absence}</b>
-          ${countries ? ` · Kraje: <b>${countries}</b>` : ""}
-          ${bc.roaming_records ? ` · ${bc.roaming_records} rekordów roamingu` : ""}
-          · ${confirmed}
-        </div>
-      </div>`;
-    }
-    html += '</div>';
-    container.innerHTML = html;
+    _renderTravelSections(geo, null);
   }
 
-  /* ── Overnight stays away from home section ── */
   function _renderOvernightStays(analysis) {
-    // Render inside gsm_cluster_info, right after border crossings
+    _renderTravelSections(null, analysis);
+  }
+
+  /**
+   * Render border crossings (left) and overnight stays (right) in a
+   * two-column grid, analogous to night/weekend activity charts.
+   * Either argument may be null — the function merges with previously
+   * rendered data stored on the DOM container.
+   */
+  function _renderTravelSections(geo, analysis) {
     const clusterWrap = QS("#gsm_cluster_info");
     if (!clusterWrap) return;
 
-    let container = QS("#gsm_overnight_stays");
+    // Ensure container exists
+    let container = QS("#gsm_travel_sections");
     if (!container) {
       container = _el("div", "", "");
-      container.id = "gsm_overnight_stays";
+      container.id = "gsm_travel_sections";
       clusterWrap.appendChild(container);
     }
 
-    const stays = (analysis && analysis.overnight_stays) || [];
-    const home = (analysis && analysis.overnight_stays_home) || "";
-    if (!stays.length) {
+    // Cache data on the container so either caller can update independently
+    if (geo) container._geo = geo;
+    if (analysis) container._analysis = analysis;
+
+    const crossings = (container._geo && container._geo.border_crossings) || [];
+    const stays = (container._analysis && container._analysis.overnight_stays) || [];
+    const home = (container._analysis && container._analysis.overnight_stays_home) || "";
+
+    if (!crossings.length && !stays.length) {
       container.style.display = "none";
       return;
     }
     container.style.display = "";
 
-    const totalNights = stays.reduce((s, v) => s + (v.nights || 0), 0);
-    const stayWord = stays.length === 1 ? "pobyt" : (stays.length < 5 ? "pobyty" : "pobytów");
-    const nightWord = totalNights === 1 ? "noc" : (totalNights < 5 ? "noce" : "nocy");
+    let html = '<div class="gsm-charts-row" style="margin-top:16px">';
 
-    let html = '<div class="h3" style="margin-top:16px;margin-bottom:8px">Nocowanie poza domem</div>';
-    html += `<div class="small muted" style="margin-bottom:8px">Lokalizacja domowa: <b>${home}</b> — wykryto <b>${stays.length}</b> ${stayWord} (${totalNights} ${nightWord})</div>`;
-    html += '<div style="display:flex;flex-direction:column;gap:8px">';
-
-    for (const stay of stays) {
-      const period = stay.start_date === stay.end_date
-        ? stay.start_date
-        : `${stay.start_date} – ${stay.end_date}`;
-      const locs = (stay.locations || []).join(", ");
-
-      let detailsHtml = "";
-      for (const d of (stay.details || [])) {
-        detailsHtml += `<div>${d.date}: ${d.last_time || ""} <span class="muted">(${d.location_evening || ""})</span> → ${d.first_time || ""} <span class="muted">(${d.location_morning || ""})</span></div>`;
+    // ── LEFT: Border crossings ──
+    html += '<div>';
+    if (crossings.length) {
+      html += '<div class="h3" style="margin-bottom:8px">Przekroczenia granic / wyjazdy zagraniczne</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:8px">';
+      for (const bc of crossings) {
+        const absence = _formatHours(bc.absence_hours);
+        const countries = (bc.roaming_countries || []).map(c => _countryName(c)).join(", ");
+        const confirmed = bc.roaming_confirmed
+          ? `<span style="color:#22c55e" title="Potwierdzone danymi roamingu">✓ roaming</span>`
+          : `<span style="color:#f97316" title="Wykryte na podstawie przerwy w aktywności">⚠ przerwa</span>`;
+        html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary)">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+            <div><span style="color:#ef4444">●</span> <b>Wyjazd:</b> ${bc.last_domestic_datetime || "?"}${bc.last_domestic_city ? ` <span class="muted">(${bc.last_domestic_city})</span>` : ""}</div>
+            <div><span style="color:#22c55e">●</span> <b>Powrót:</b> ${bc.first_return_datetime || "brak danych"}${bc.first_return_city ? ` <span class="muted">(${bc.first_return_city})</span>` : ""}</div>
+          </div>
+          <div class="small" style="margin-top:4px">
+            Nieobecność: <b>${absence}</b>
+            ${countries ? ` · Kraje: <b>${countries}</b>` : ""}
+            ${bc.roaming_records ? ` · ${bc.roaming_records} rek. roamingu` : ""}
+            · ${confirmed}
+          </div>
+        </div>`;
       }
-
-      html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary)">
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
-          <div><b>${period}</b></div>
-          <div>${stay.nights} ${stay.nights === 1 ? "noc" : (stay.nights < 5 ? "noce" : "nocy")}</div>
-          <div class="muted">${locs}</div>
-        </div>
-        <div class="small" style="margin-top:4px">${detailsHtml}</div>
-      </div>`;
+      html += '</div>';
+    } else {
+      html += '<div class="h3" style="margin-bottom:8px">Przekroczenia granic / wyjazdy zagraniczne</div>';
+      html += '<div class="small muted">Nie wykryto wyjazdów zagranicznych</div>';
     }
+    html += '</div>';
+
+    // ── RIGHT: Overnight stays ──
+    html += '<div>';
+    if (stays.length) {
+      const totalNights = stays.reduce((s, v) => s + (v.nights || 0), 0);
+      const stayWord = stays.length === 1 ? "pobyt" : (stays.length < 5 ? "pobyty" : "pobytów");
+      const nightWord = totalNights === 1 ? "noc" : (totalNights < 5 ? "noce" : "nocy");
+      html += '<div class="h3" style="margin-bottom:8px">Nocowanie poza domem</div>';
+      html += `<div class="small muted" style="margin-bottom:8px">Lokalizacja domowa: <b>${home}</b> — ${stays.length} ${stayWord} (${totalNights} ${nightWord})</div>`;
+      html += '<div style="display:flex;flex-direction:column;gap:8px">';
+      for (const stay of stays) {
+        const period = stay.start_date === stay.end_date ? stay.start_date : `${stay.start_date} – ${stay.end_date}`;
+        const locs = (stay.locations || []).join(", ");
+        let detailsHtml = "";
+        for (const d of (stay.details || [])) {
+          detailsHtml += `<div>${d.date}: ${d.last_time || ""} <span class="muted">(${d.location_evening || ""})</span> → ${d.first_time || ""} <span class="muted">(${d.location_morning || ""})</span></div>`;
+        }
+        html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary)">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+            <div><b>${period}</b></div>
+            <div>${stay.nights} ${stay.nights === 1 ? "noc" : (stay.nights < 5 ? "noce" : "nocy")}</div>
+            <div class="muted">${locs}</div>
+          </div>
+          <div class="small" style="margin-top:4px">${detailsHtml}</div>
+        </div>`;
+      }
+      html += '</div>';
+    } else {
+      html += '<div class="h3" style="margin-bottom:8px">Nocowanie poza domem</div>';
+      html += `<div class="small muted">${home ? `Lokalizacja domowa: <b>${home}</b> — ` : ""}Nie wykryto noclegów poza domem</div>`;
+    }
+    html += '</div>';
+
     html += '</div>';
     container.innerHTML = html;
   }

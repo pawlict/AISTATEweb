@@ -1008,9 +1008,76 @@ def _detect_border_crossings(
     # Sort by departure time
     crossings.sort(key=lambda bc: bc.last_domestic_datetime)
 
+    # Merge consecutive crossings to the same country/region
+    crossings = _merge_consecutive_crossings(crossings)
+
     log.info("Border crossing detection: %d crossings (roaming_data=%s)",
              len(crossings), "yes" if roaming_any else "no (gap-based)")
     return crossings
+
+
+def _merge_consecutive_crossings(
+    crossings: List[BorderCrossing],
+) -> List[BorderCrossing]:
+    """Merge consecutive crossings to the same country into single trips.
+
+    If a crossing ends (return) on the same day or the day before the next
+    crossing departs, and they share at least one roaming country, they are
+    considered a single continuous trip abroad.
+    """
+    if len(crossings) <= 1:
+        return crossings
+
+    merged: List[BorderCrossing] = [crossings[0]]
+
+    for bc in crossings[1:]:
+        prev = merged[-1]
+
+        # Check if they can be merged:
+        # 1. Previous trip has a return datetime
+        # 2. The return of the previous is the same day or next day as
+        #    the departure of the current
+        # 3. They share at least one roaming country (or both have none)
+        can_merge = False
+        if prev.first_return_datetime and bc.last_domestic_datetime:
+            prev_return_date = prev.first_return_datetime[:10]
+            curr_depart_date = bc.last_domestic_datetime[:10]
+
+            try:
+                from datetime import datetime, timedelta
+                pr = datetime.strptime(prev_return_date, "%Y-%m-%d")
+                cd = datetime.strptime(curr_depart_date, "%Y-%m-%d")
+                day_gap = (cd - pr).days
+            except (ValueError, TypeError):
+                day_gap = 999
+
+            # Same day or next day AND overlapping countries
+            if day_gap <= 1:
+                prev_countries = set(prev.roaming_countries)
+                curr_countries = set(bc.roaming_countries)
+                # Merge if same countries, or both empty (gap-based)
+                if (prev_countries & curr_countries) or (
+                    not prev_countries and not curr_countries
+                ):
+                    can_merge = True
+
+        if can_merge:
+            # Extend the previous crossing
+            prev.first_return_datetime = bc.first_return_datetime
+            prev.first_return_city = bc.first_return_city
+            prev.absence_hours = round(prev.absence_hours + bc.absence_hours, 1)
+            prev.roaming_records += bc.roaming_records
+            # Merge country lists (preserving order, no duplicates)
+            for c in bc.roaming_countries:
+                if c not in prev.roaming_countries:
+                    prev.roaming_countries.append(c)
+            # Keep roaming_confirmed if either was confirmed
+            if bc.roaming_confirmed:
+                prev.roaming_confirmed = True
+        else:
+            merged.append(bc)
+
+    return merged
 
 
 def _city_for_record(
