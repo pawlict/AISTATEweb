@@ -1478,14 +1478,7 @@
     if (hmBar) hmBar.style.display = "none";
 
     // Show filter badge in Records header
-    const badge = QS("#gsm_records_filter_badge");
-    const badgeText = QS("#gsm_records_filter_text");
-    if (badge) badge.style.display = "inline-flex";
-    if (badgeText) badgeText.textContent = filterText;
-
-    // Wire clear button
-    const recClearBtn = QS("#gsm_records_filter_clear");
-    if (recClearBtn) recClearBtn.onclick = () => _clearTravelFilter();
+    _setRecordsFilter(filterText, () => _clearTravelFilter());
 
     // Render filtered records
     _renderRecords(filtered, false, filtered.length);
@@ -1497,9 +1490,7 @@
 
   /** Clear travel filter and restore original records. */
   function _clearTravelFilter() {
-    const badge = QS("#gsm_records_filter_badge");
-    if (badge) badge.style.display = "none";
-
+    _clearRecordsFilter();
     if (St.lastResult) {
       _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
     }
@@ -2505,6 +2496,35 @@
     }
   }
 
+  /* ── Records filter badge helpers ────────────────────── */
+
+  /** Show an active filter in the Records header. */
+  function _setRecordsFilter(text, onClear) {
+    const badgeText = QS("#gsm_records_filter_text");
+    const clearBtn = QS("#gsm_records_filter_clear");
+    if (badgeText) {
+      badgeText.textContent = text;
+      badgeText.classList.remove("muted");
+      badgeText.style.color = "var(--brand-blue,#2563eb)";
+    }
+    if (clearBtn) {
+      clearBtn.style.display = "";
+      clearBtn.onclick = onClear;
+    }
+  }
+
+  /** Reset the filter badge to "Brak". */
+  function _clearRecordsFilter() {
+    const badgeText = QS("#gsm_records_filter_text");
+    const clearBtn = QS("#gsm_records_filter_clear");
+    if (badgeText) {
+      badgeText.textContent = "Brak";
+      badgeText.classList.add("muted");
+      badgeText.style.color = "";
+    }
+    if (clearBtn) clearBtn.style.display = "none";
+  }
+
   /** Filter records by clicked heatmap cell. skipToggle=true to re-apply without toggling off. */
   function _heatmapFilter(hour, dow, skipToggle) {
     // Toggle off if clicking same cell (unless re-applying from selector change)
@@ -2544,16 +2564,11 @@
     if (label) label.textContent = `Filtr: ${filterText}`;
 
     // Show filter badge in Records header
-    const badge = QS("#gsm_records_filter_badge");
-    const badgeText = QS("#gsm_records_filter_text");
-    if (badge) badge.style.display = "inline-flex";
-    if (badgeText) badgeText.textContent = filterText;
+    _setRecordsFilter(filterText, () => _clearHeatmapFilter());
 
-    // Wire clear buttons (both heatmap bar and records header)
+    // Wire heatmap bar clear button
     const clearBtn = QS("#gsm_hm_filter_clear");
     if (clearBtn) clearBtn.onclick = () => _clearHeatmapFilter();
-    const recClearBtn = QS("#gsm_records_filter_clear");
-    if (recClearBtn) recClearBtn.onclick = () => _clearHeatmapFilter();
 
     // Render filtered records
     _renderRecords(filtered, false, filtered.length);
@@ -2567,11 +2582,12 @@
   function _clearHeatmapFilter() {
     St.hmActiveCell = null;
 
-    // Hide filter bars
+    // Hide heatmap filter bar
     const bar = QS("#gsm_hm_filter_bar");
     if (bar) bar.style.display = "none";
-    const badge = QS("#gsm_records_filter_badge");
-    if (badge) badge.style.display = "none";
+
+    // Reset Records filter badge
+    _clearRecordsFilter();
 
     // Re-render heatmap (remove active highlight)
     _renderHeatmap();
