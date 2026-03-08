@@ -652,31 +652,28 @@
   }
 
   function _renderActivityCharts(analysis) {
-    const wrap = QS("#gsm_activity_charts");
-    if (!wrap || !analysis) { if (wrap) wrap.style.display = "none"; return; }
+    const row = QS("#gsm_activity_row");
+    if (!row) return;
+
+    // Remove previously injected night/weekend chart cards (keep heatmap card)
+    row.querySelectorAll("[data-chart-id]").forEach(el => el.remove());
+
+    if (!analysis) return;
 
     const night = analysis.night_activity;
     const weekend = analysis.weekend_activity;
 
-    if ((!night || !night.total_records) && (!weekend || !weekend.total_records)) {
-      wrap.style.display = "none";
-      return;
-    }
-    wrap.style.display = "";
-
-    let html = '<div class="gsm-charts-row">';
-
     if (night && night.total_records) {
-      html += _renderOneChart("night", "Aktywność nocna", "22:00–6:00", night, _nightTotalBars);
+      row.insertAdjacentHTML("beforeend",
+        _renderOneChart("night", "Aktywność nocna", "22:00–6:00", night, _nightTotalBars));
     }
     if (weekend && weekend.total_records) {
-      html += _renderOneChart("weekend", "Aktywność weekendowa", "Pt 20:00–Pn 6:00", weekend, _weekendTotalBars);
+      row.insertAdjacentHTML("beforeend",
+        _renderOneChart("weekend", "Aktywność weekendowa", "Pt 20:00–Pn 6:00", weekend, _weekendTotalBars));
     }
 
-    html += "</div>";
-    wrap.innerHTML = html;
-
-    QSA(".gsm-period-select", wrap).forEach(sel => {
+    // Wire period selectors (only for night/weekend, not heatmap selects)
+    row.querySelectorAll("[data-chart-id] .gsm-period-select").forEach(sel => {
       sel.onchange = () => _onPeriodChange(sel, analysis);
     });
   }
@@ -2419,7 +2416,7 @@
     const rgb = colorMap[typeKey] || colorMap.all;
 
     // table-layout:fixed — hour col 80px + 7 equal day cols
-    let html = '<table class="gsm-heatmap" style="width:min(100%,720px)"><thead><tr><th class="gsm-hm-hour" style="width:80px">Godzina</th>';
+    let html = '<table class="gsm-heatmap" style="width:100%"><thead><tr><th class="gsm-hm-hour" style="width:60px">Godzina</th>';
     for (const d of _DOW_LABELS) html += `<th>${d}</th>`;
     html += "</tr></thead><tbody>";
 

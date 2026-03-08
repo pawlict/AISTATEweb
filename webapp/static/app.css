@@ -3603,7 +3603,7 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-id-notfound{color:var(--text-muted,#94a3b8);font-style:italic}
 .gsm-id-unknown{color:var(--text-muted,#94a3b8)}
 /* Activity charts — grouped bars */
-.gsm-charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:0}
+.gsm-charts-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:0}
 .gsm-chart-card{background:var(--bg-card,#fff);border:1px solid var(--border,#e2e8f0);border-radius:12px;padding:16px 20px}
 .gsm-chart-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap}
 .gsm-chart-header .h3{margin:0}
@@ -3631,6 +3631,7 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-anomaly-down{background:#eff6ff;color:#1e40af;border-left:3px solid #3b82f6}
 .gsm-chart-summary-block{margin-top:12px;border-top:1px solid var(--border,#e2e8f0);padding-top:10px;font-size:12px;color:var(--text-muted,#64748b);line-height:1.7}
 .gsm-chart-summary-block b{color:var(--text,#334155)}
+@media(max-width:1100px){.gsm-charts-row{grid-template-columns:1fr 1fr}}
 @media(max-width:768px){.gsm-charts-row{grid-template-columns:1fr}}
 [data-theme="dark"] .gsm-travel-card:hover{background:rgba(74,158,237,.08)!important;box-shadow:0 2px 8px rgba(0,0,0,.18)}
 [data-theme="dark"] .gsm-stat-card{background:var(--bg-secondary,#1e293b)}
@@ -3653,7 +3654,7 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-heatmap td{padding:2px 3px;text-align:center;cursor:pointer;border:1px solid var(--border,#e2e8f0);transition:box-shadow .15s;position:relative;overflow:hidden}
 .gsm-heatmap td:hover{box-shadow:inset 0 0 0 2px var(--primary,#1f5aa6)}
 .gsm-heatmap td.gsm-hm-active{box-shadow:inset 0 0 0 2.5px var(--brand-blue,#2563eb);font-weight:700}
-.gsm-heatmap .gsm-hm-hour{text-align:right;font-weight:500;white-space:nowrap;background:var(--bg-card,#fff);cursor:default;padding-right:6px;color:var(--text-muted,#64748b);border:none;font-size:.9em;width:80px}
+.gsm-heatmap .gsm-hm-hour{text-align:right;font-weight:500;white-space:nowrap;background:var(--bg-card,#fff);cursor:default;padding-right:6px;color:var(--text-muted,#64748b);border:none;font-size:.85em;width:60px}
 .gsm-heatmap .gsm-hm-hour:hover{box-shadow:none}
 .gsm-hm-filter-bar{display:flex;align-items:center;gap:6px;padding:6px 12px 10px;font-size:.85em;background:rgba(37,99,235,.06);border-top:1px solid var(--border,#e2e8f0);border-radius:0 0 12px 12px}
 /* GSM Records — resizable panel */

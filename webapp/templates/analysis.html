@@ -509,30 +509,31 @@
         <div id="gsm_special_numbers_body"></div>
       </div>
 
-      <!-- Activity charts -->
-      <div id="gsm_activity_charts" style="display:none"></div>
-
-      <!-- Heatmap: Godzina × Dzień tygodnia -->
-      <div class="card" id="gsm_heatmap_card" style="display:none">
-        <div class="card-header" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="h3" style="margin:0">Rozkład aktywności</span>
-          <div style="margin-left:12px;display:flex;gap:6px;align-items:center">
-            <select id="gsm_hm_type" class="input" style="padding:4px 8px;border-radius:8px;min-width:110px;font-size:0.85em">
-              <option value="all">Wszystkie</option>
-              <option value="calls">Połączenia</option>
-              <option value="sms">SMS / MMS</option>
-              <option value="data">Sesje danych</option>
-            </select>
-            <select id="gsm_hm_month" class="input" style="padding:4px 8px;border-radius:8px;min-width:130px;font-size:0.85em">
-              <option value="all">Cały okres</option>
-            </select>
+      <!-- Activity row: Heatmap + Night + Weekend (3-col grid) -->
+      <div id="gsm_activity_row" class="gsm-charts-row">
+        <!-- Col 1: Heatmap -->
+        <div class="gsm-chart-card" id="gsm_heatmap_card" style="display:none">
+          <div class="gsm-chart-header" style="flex-wrap:wrap;gap:6px">
+            <span class="h3" style="margin:0">Rozkład aktywności</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select id="gsm_hm_type" class="gsm-period-select" style="min-width:100px">
+                <option value="all">Wszystkie</option>
+                <option value="calls">Połączenia</option>
+                <option value="sms">SMS / MMS</option>
+                <option value="data">Sesje danych</option>
+              </select>
+              <select id="gsm_hm_month" class="gsm-period-select" style="min-width:120px">
+                <option value="all">Cały okres</option>
+              </select>
+            </div>
+          </div>
+          <div id="gsm_heatmap_body" style="overflow-x:auto;padding:4px 0"></div>
+          <div id="gsm_hm_filter_bar" class="gsm-hm-filter-bar" style="display:none">
+            <span id="gsm_hm_filter_label"></span>
+            <button class="btn btn-xs" id="gsm_hm_filter_clear" style="margin-left:8px">✕ Wyczyść filtr</button>
           </div>
         </div>
-        <div id="gsm_heatmap_body" style="overflow-x:auto;padding:8px 12px"></div>
-        <div id="gsm_hm_filter_bar" class="gsm-hm-filter-bar" style="display:none">
-          <span id="gsm_hm_filter_label"></span>
-          <button class="btn btn-xs" id="gsm_hm_filter_clear" style="margin-left:8px">✕ Wyczyść filtr</button>
-        </div>
+        <!-- Col 2+3: Night + Weekend (injected by JS) -->
       </div>
 
       <!-- BTS Map -->
