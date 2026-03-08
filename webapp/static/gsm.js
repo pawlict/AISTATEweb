@@ -974,6 +974,23 @@
         <br><span class="small muted">LAC: ${loc.lac}, CID: ${loc.cid}<br>
         ${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}</span>`;
       marker.bindPopup(popupHtml);
+
+      // Double-click → filter Records by this BTS location
+      marker.on("dblclick", () => {
+        const dtSet = new Set(loc.records.map(r => r.datetime));
+        const allRecs = St.lastResult ? St.lastResult.records : [];
+        const filtered = allRecs.filter(r => dtSet.has(r.datetime));
+        const label = loc.city || "BTS";
+        const filterText = `${label} — ${filtered.length} rek.`;
+        _setRecordsFilter(filterText, () => {
+          _clearRecordsFilter();
+          if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+        });
+        _renderRecords(filtered, false, filtered.length);
+        const recCard = QS("#gsm_records_card");
+        if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+
       allGroup.addLayer(marker);
     }
     St.mapLayers.all = allGroup;
@@ -2513,12 +2530,12 @@
     }
   }
 
-  /** Reset the filter badge to "Brak". */
+  /** Reset the filter badge to "brak". */
   function _clearRecordsFilter() {
     const badgeText = QS("#gsm_records_filter_text");
     const clearBtn = QS("#gsm_records_filter_clear");
     if (badgeText) {
-      badgeText.textContent = "Brak";
+      badgeText.textContent = "brak";
       badgeText.classList.add("muted");
       badgeText.style.color = "";
     }

@@ -489,18 +489,16 @@
 
       <!-- Records table -->
       <div class="card" id="gsm_records_card">
-        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
-          <div>
-            <div class="h2" style="margin:0">Rekordy</div>
-            <div style="margin-top:4px;font-size:.85em;display:flex;align-items:center;gap:6px">
-              <span class="muted">Filtry:</span>
-              <span id="gsm_records_filter_badge" style="display:inline-flex;align-items:center;gap:4px">
-                <span id="gsm_records_filter_text" class="muted">Brak</span>
-                <button id="gsm_records_filter_clear" style="display:none;background:none;border:none;cursor:pointer;font-size:1em;color:var(--brand-blue,#2563eb);padding:0 2px" title="Wyczyść filtr">✕</button>
-              </span>
-            </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:10px">
+          <div class="h2" style="margin:0">Rekordy</div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:13px">
+            <span class="muted">Filtr:</span>
+            <span id="gsm_records_filter_badge" style="display:inline-flex;align-items:center;gap:5px">
+              <span id="gsm_records_filter_text" class="muted">brak</span>
+              <button id="gsm_records_filter_clear" style="display:none;background:none;border:none;cursor:pointer;font-size:.9em;color:var(--brand-blue,#2563eb);padding:0 2px" title="Wyczyść filtr">✕</button>
+            </span>
           </div>
-          <span class="small muted" id="gsm_records_count"></span>
+          <span class="small muted" id="gsm_records_count" style="margin-left:auto"></span>
         </div>
         <div class="gsm-records-wrap" style="height:500px">
           <div id="gsm_records_body" class="gsm-records-inner" style="height:100%;overflow:auto"></div>
