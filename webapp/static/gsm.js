@@ -578,10 +578,13 @@
                       ...botCards.map((p, j) => ({ ...p, i: topN + j, c: contacts[topN + j], isTop: false }))];
 
     // ── Smooth Bézier arrows — behind cards ──
-    // Each contact gets two curves forming a V-shape fan:
+    // Each contact gets two symmetric curves forming a V-shape fan:
     //   green (OUT): subscriber → contact, bows to one side
     //   red  (IN):  contact → subscriber, bows to the other side
+    // Both curves share the same two endpoints (A near subscriber, B near card)
+    // so they are perfectly symmetric mirrors of each other.
     const SUB_R = 24; // subscriber circle radius
+    const EDGE_GAP = 8; // gap before card edge for visible arrowheads
     for (const card of allCards) {
       const c = card.c, idx = card.i;
       const cardCX = card.x + CW / 2;
@@ -597,33 +600,29 @@
       const nx = dx / len, ny = dy / len;           // unit: sub → card
       const perpX = -ny, perpY = nx;                // perpendicular (left side)
 
+      // Shared symmetric endpoints
+      const ptAx = CX + nx * (SUB_R + 2), ptAy = SUB_Y + ny * (SUB_R + 2);       // near subscriber
+      const ptBx = cardCX - nx * EDGE_GAP, ptBy = cardEdgeY - ny * EDGE_GAP;      // near card
+
       // Curve offset — proportional to distance, clamped for aesthetics
       const curveOff = Math.min(Math.max(len * 0.15, 14), 35);
-      // Midpoint of straight line
-      const midX = (CX + cardCX) / 2, midY = (SUB_Y + cardEdgeY) / 2;
+      // Midpoint of straight line between the two shared endpoints
+      const midX = (ptAx + ptBx) / 2, midY = (ptAy + ptBy) / 2;
 
-      // OUT: subscriber → contact (green #34c759)
+      // OUT: A → B (subscriber → contact), green, bows left
       if (outAll > 0) {
-        // Start at subscriber circle edge, end 10px before card edge
-        const sx = CX + nx * SUB_R, sy = SUB_Y + ny * SUB_R;
-        const ex = cardCX - nx * 10, ey = cardEdgeY - ny * 10;
-        // Control point: midpoint shifted to LEFT of the line
         const cpx = midX + perpX * curveOff, cpy = midY + perpY * curveOff;
         svg += `<path class="gsm-graph-edge" data-edge="out" data-idx="${idx}" data-number="${c.number}"
-          d="M${sx.toFixed(1)},${sy.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}"
+          d="M${ptAx.toFixed(1)},${ptAy.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${ptBx.toFixed(1)},${ptBy.toFixed(1)}"
           fill="none" stroke="#34c759" stroke-width="2.5" stroke-linecap="round" opacity="0.7"
           marker-end="url(#gsm_arrow_out)"
           data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"/>`;
       }
-      // IN: contact → subscriber (red #ff4d4f)
+      // IN: B → A (contact → subscriber), red, bows to the other side (mirror)
       if (inAll > 0) {
-        // Start at card edge (hidden by card drawn on top), end just outside subscriber circle
-        const sx = cardCX, sy = cardEdgeY;
-        const ex = CX + nx * (SUB_R + 4), ey = SUB_Y + ny * (SUB_R + 4);
-        // Control point: midpoint shifted to RIGHT of the line (opposite side)
         const cpx = midX - perpX * curveOff, cpy = midY - perpY * curveOff;
         svg += `<path class="gsm-graph-edge" data-edge="in" data-idx="${idx}" data-number="${c.number}"
-          d="M${sx.toFixed(1)},${sy.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}"
+          d="M${ptBx.toFixed(1)},${ptBy.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${ptAx.toFixed(1)},${ptAy.toFixed(1)}"
           fill="none" stroke="#ff4d4f" stroke-width="2.5" stroke-linecap="round" opacity="0.7"
           marker-end="url(#gsm_arrow_in)"
           data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"/>`;
@@ -736,62 +735,79 @@
       });
     });
 
-    // ── Click on contact label (empty or existing) to edit identification ──
+    // ── Inline editing helper — overlays <input> on SVG text element ──
+    function _startInlineEdit(textEl, number) {
+      if (!wrap || !number) return;
+      // Remove any existing inline input
+      wrap.querySelectorAll(".gsm-inline-input").forEach(el => el.remove());
+      wrap.style.position = "relative";
+
+      const wrapRect = wrap.getBoundingClientRect();
+      const textRect = textEl.getBoundingClientRect();
+      const existing = _idLookup(number);
+      const currentVal = existing && existing.label ? existing.label : "";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = currentVal;
+      input.placeholder = "Wpisz nazw\u0119\u2026";
+      input.className = "gsm-inline-input";
+      const inputW = Math.max(textRect.width + 30, 110);
+      input.style.cssText = `
+        position:absolute;
+        left:${textRect.left - wrapRect.left - (inputW - textRect.width) / 2}px;
+        top:${textRect.top - wrapRect.top - 3}px;
+        width:${inputW}px; height:20px;
+        font-size:11px; text-align:center;
+        border:1.5px solid var(--primary,#2563eb); border-radius:5px;
+        outline:none; background:var(--bg-card,#fff); color:var(--text,#334155);
+        padding:0 6px; z-index:10;
+        box-shadow:0 2px 10px rgba(0,0,0,0.18);
+      `;
+      wrap.appendChild(input);
+      input.focus();
+      if (currentVal) input.select();
+
+      let saved = false;
+      const save = () => {
+        if (saved) return; saved = true;
+        const name = input.value.trim();
+        if (input.parentNode) input.remove();
+        if (!name) return;
+        const norm = _normMsisdn(number);
+        St.idMap[norm] = { label: name, type: St.idMap[norm]?.type || "person" };
+        _saveToProject();
+        const topSel = QS("#gsm_graph_top_n");
+        const n = parseInt(topSel?.value || "10");
+        _renderContactGraph(St._graphContacts.slice(0, n), St._graphMsisdn);
+      };
+      const cancel = () => { saved = true; if (input.parentNode) input.remove(); };
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); save(); }
+        if (e.key === "Escape") { e.preventDefault(); cancel(); }
+      });
+      input.addEventListener("blur", () => setTimeout(save, 80));
+    }
+
+    // ── Click on contact label (empty or existing) → inline edit ──
     wrap.querySelectorAll(".gsm-graph-id-empty, .gsm-graph-id-edit").forEach(txt => {
       txt.addEventListener("click", (e) => {
         e.stopPropagation();
         const num = txt.dataset.number;
-        if (!num) return;
-        const existing = _idLookup(num);
-        const current = existing && existing.label ? existing.label : "";
-        const name = prompt("Podaj nazw\u0119 dla numeru " + num + ":", current);
-        if (name === null || !name.trim()) return;
-        const norm = _normMsisdn(num);
-        St.idMap[norm] = { label: name.trim(), type: St.idMap[norm]?.type || "person" };
-        _saveToProject();
-        const topSel = QS("#gsm_graph_top_n");
-        const n = parseInt(topSel?.value || "10");
-        _renderContactGraph(St._graphContacts.slice(0, n), St._graphMsisdn);
+        if (num) _startInlineEdit(txt, num);
       });
     });
 
-    // ── Click on subscriber "dodaj nazwę" to edit identification ──
-    const subEmpty = wrap.querySelector(".gsm-graph-sub-id-empty");
-    if (subEmpty) {
-      subEmpty.addEventListener("click", (e) => {
+    // ── Click on subscriber label (empty or existing) → inline edit ──
+    wrap.querySelectorAll(".gsm-graph-sub-id").forEach(txt => {
+      txt.style.cursor = "text";
+      txt.addEventListener("click", (e) => {
         e.stopPropagation();
-        const num = subEmpty.dataset.number;
-        if (!num) return;
-        const name = prompt("Podaj nazw\u0119 dla abonenta " + num + ":", "");
-        if (name === null || !name.trim()) return;
-        const norm = _normMsisdn(num);
-        St.idMap[norm] = { label: name.trim(), type: "person" };
-        _saveToProject();
-        const topSel = QS("#gsm_graph_top_n");
-        const n = parseInt(topSel?.value || "10");
-        _renderContactGraph(St._graphContacts.slice(0, n), St._graphMsisdn);
+        const num = txt.dataset.number || msisdn;
+        if (num) _startInlineEdit(txt, num);
       });
-    }
-    // ── Click on existing subscriber label to re-edit ──
-    const subLabel2 = wrap.querySelector(".gsm-graph-sub-id:not(.gsm-graph-sub-id-empty)");
-    if (subLabel2) {
-      subLabel2.style.cursor = "text";
-      subLabel2.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const num = msisdn;
-        if (!num) return;
-        const subInfo2 = _idLookup(num);
-        const current = subInfo2 && subInfo2.label ? subInfo2.label : "";
-        const name = prompt("Zmie\u0144 nazw\u0119 dla abonenta " + num + ":", current);
-        if (name === null || !name.trim()) return;
-        const norm = _normMsisdn(num);
-        St.idMap[norm] = { label: name.trim(), type: St.idMap[norm]?.type || "person" };
-        _saveToProject();
-        const topSel = QS("#gsm_graph_top_n");
-        const n = parseInt(topSel?.value || "10");
-        _renderContactGraph(St._graphContacts.slice(0, n), St._graphMsisdn);
-      });
-    }
+    });
   }
 
   /** Apply type filter (all/calls/sms) to the contact graph arrows + labels. */
