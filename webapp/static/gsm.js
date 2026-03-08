@@ -1374,13 +1374,14 @@
       html += '<div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:16px;background:var(--card-bg,#fff)">';
       html += '<div class="h3" style="margin-bottom:8px">Przekroczenia granic / wyjazdy zagraniczne</div>';
       html += '<div style="display:flex;flex-direction:column;gap:8px">';
-      for (const bc of crossings) {
+      for (let i = 0; i < crossings.length; i++) {
+        const bc = crossings[i];
         const absence = _formatHours(bc.absence_hours);
         const countries = (bc.roaming_countries || []).map(c => _countryName(c)).join(", ");
         const confirmed = bc.roaming_confirmed
           ? `<span style="color:#22c55e" title="Potwierdzone danymi roamingu">✓ roaming</span>`
           : `<span style="color:#f97316" title="Wykryte na podstawie przerwy w aktywności">⚠ przerwa</span>`;
-        html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary)">
+        html += `<div data-bc-idx="${i}" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
             <div><span style="color:#ef4444">●</span> <b>Wyjazd:</b> ${bc.last_domestic_datetime || "?"}${bc.last_domestic_city ? ` <span class="muted">(${bc.last_domestic_city})</span>` : ""}</div>
             <div><span style="color:#22c55e">●</span> <b>Powrót:</b> ${bc.first_return_datetime || "brak danych"}${bc.first_return_city ? ` <span class="muted">(${bc.first_return_city})</span>` : ""}</div>
@@ -1405,14 +1406,15 @@
       html += '<div class="h3" style="margin-bottom:8px">Nocowanie poza domem</div>';
       html += `<div class="small muted" style="margin-bottom:8px">Lokalizacja domowa: <b>${home}</b> — ${stays.length} ${stayWord} (${totalNights} ${nightWord})</div>`;
       html += '<div style="display:flex;flex-direction:column;gap:8px">';
-      for (const stay of stays) {
+      for (let j = 0; j < stays.length; j++) {
+        const stay = stays[j];
         const period = stay.start_date === stay.end_date ? stay.start_date : `${stay.start_date} – ${stay.end_date}`;
         const locs = (stay.locations || []).join(", ");
         let detailsHtml = "";
         for (const d of (stay.details || [])) {
           detailsHtml += `<div>${d.date}: ${d.last_time || ""} <span class="muted">(${d.location_evening || ""})</span> → ${d.first_time || ""} <span class="muted">(${d.location_morning || ""})</span></div>`;
         }
-        html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary)">
+        html += `<div data-stay-idx="${j}" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
             <div><b>${period}</b></div>
             <div>${stay.nights} ${stay.nights === 1 ? "noc" : (stay.nights < 5 ? "noce" : "nocy")}</div>
@@ -1425,6 +1427,85 @@
     }
 
     container.innerHTML = html;
+
+    // Wire double-click → filter Records (analogous to heatmap cell click)
+    container.querySelectorAll("[data-bc-idx]").forEach(el => {
+      el.addEventListener("dblclick", () => {
+        const bc = crossings[parseInt(el.dataset.bcIdx)];
+        if (bc) _travelFilter("bc", bc);
+      });
+    });
+    container.querySelectorAll("[data-stay-idx]").forEach(el => {
+      el.addEventListener("dblclick", () => {
+        const stay = stays[parseInt(el.dataset.stayIdx)];
+        if (stay) _travelFilter("stay", stay);
+      });
+    });
+  }
+
+  /** Filter Records by border crossing or overnight stay date range. */
+  function _travelFilter(type, data) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    let filtered, filterText;
+
+    if (type === "bc") {
+      // Border crossing: filter by datetime range
+      const from = _parseDt(data.last_domestic_datetime);
+      const to = _parseDt(data.first_return_datetime);
+      filtered = records.filter(r => {
+        if (!r.datetime) return false;
+        const t = _parseDt(r.datetime);
+        return t >= from && t <= to;
+      });
+      const countries = (data.roaming_countries || []).map(c => _countryName(c)).join(", ");
+      const fromDate = (data.last_domestic_datetime || "").slice(0, 10);
+      const toDate = (data.first_return_datetime || "").slice(0, 10);
+      const period = fromDate === toDate ? fromDate : `${fromDate} – ${toDate}`;
+      filterText = `Wyjazd: ${period}${countries ? ` (${countries})` : ""} — ${filtered.length} rek.`;
+    } else {
+      // Overnight stay: filter by date range (start_date to end_date inclusive)
+      filtered = records.filter(r => {
+        if (!r.date) return false;
+        return r.date >= data.start_date && r.date <= data.end_date;
+      });
+      const period = data.start_date === data.end_date
+        ? data.start_date
+        : `${data.start_date} – ${data.end_date}`;
+      const locs = (data.locations || []).join(", ");
+      filterText = `Nocleg: ${period}${locs ? ` (${locs})` : ""} — ${filtered.length} rek.`;
+    }
+
+    // Clear any active heatmap filter state
+    St.hmActiveCell = null;
+    const hmBar = QS("#gsm_hm_filter_bar");
+    if (hmBar) hmBar.style.display = "none";
+
+    // Show filter badge in Records header
+    const badge = QS("#gsm_records_filter_badge");
+    const badgeText = QS("#gsm_records_filter_text");
+    if (badge) badge.style.display = "inline-flex";
+    if (badgeText) badgeText.textContent = filterText;
+
+    // Wire clear button
+    const recClearBtn = QS("#gsm_records_filter_clear");
+    if (recClearBtn) recClearBtn.onclick = () => _clearTravelFilter();
+
+    // Render filtered records
+    _renderRecords(filtered, false, filtered.length);
+
+    // Scroll to Records card
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** Clear travel filter and restore original records. */
+  function _clearTravelFilter() {
+    const badge = QS("#gsm_records_filter_badge");
+    if (badge) badge.style.display = "none";
+
+    if (St.lastResult) {
+      _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    }
   }
 
   function _formatHours(h) {
