@@ -386,14 +386,13 @@
 
     // Top contacts
     if (a.top_contacts && a.top_contacts.length) {
-      const hasId = Object.keys(St.idMap).length > 0;
       html += `<div class="gsm-section"><div class="h3">Top kontakty</div><table class="gsm-table"><thead><tr>
-        <th>Numer</th>${hasId ? '<th>Identyfikacja</th>' : ''}<th>Interakcje</th><th>Rozmowy ↑</th><th>Rozmowy ↓</th><th>SMS ↑</th><th>SMS ↓</th><th>Czas rozmów</th><th>Aktywne dni</th>
+        <th>Numer</th><th>Identyfikacja</th><th>Interakcje</th><th>Rozmowy ↑</th><th>Rozmowy ↓</th><th>SMS ↑</th><th>SMS ↓</th><th>Czas rozmów</th><th>Aktywne dni</th>
       </tr></thead><tbody>`;
       for (const c of a.top_contacts.slice(0, 20)) {
         html += `<tr>
           <td><code>${c.number}</code></td>
-          ${hasId ? `<td>${_idCell(c.number)}</td>` : ''}
+          <td>${_idCell(c.number)}</td>
           <td>${_fmt(c.total_interactions)}</td>
           <td>${_fmt(c.calls_out)}</td><td>${_fmt(c.calls_in)}</td>
           <td>${_fmt(c.sms_out)}</td><td>${_fmt(c.sms_in)}</td>
@@ -475,9 +474,8 @@
       countLabel.textContent = truncated ? `${records.length} z ${_fmt(totalCount)}` : _fmt(totalCount);
     }
 
-    const hasId = Object.keys(St.idMap).length > 0;
     let html = `<table class="gsm-table"><thead><tr>
-      <th>Data i czas</th><th>Typ</th><th>Kierunek</th><th>Numer</th>${hasId ? '<th>Identyfikacja</th>' : ''}<th>Czas</th><th>Lokalizacja</th><th>Sieć</th>
+      <th>Data i czas</th><th>Typ</th><th>Kierunek</th><th>Numer</th><th>Identyfikacja</th><th>Czas</th><th>Lokalizacja</th><th>Sieć</th>
     </tr></thead><tbody>`;
 
     for (const r of records) {
@@ -489,7 +487,7 @@
         <td><span class="gsm-type gsm-type-${r.record_type}">${typeLabel}</span></td>
         <td>${dir}</td>
         <td><code>${r.callee || "—"}</code></td>
-        ${hasId ? `<td>${_idCell(r.callee)}</td>` : ''}
+        <td>${_idCell(r.callee)}</td>
         <td>${r.duration_seconds ? _dur(r.duration_seconds) : (r.data_volume_kb ? _fmt(Math.round(r.data_volume_kb)) + " KB" : "—")}</td>
         <td>${r.location || "—"}</td>
         <td>${r.network || "—"}</td>
