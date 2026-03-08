@@ -2409,7 +2409,7 @@
 
     // table-layout:fixed — narrow hour col + 7 equal day cols
     let html = '<table class="gsm-heatmap" style="width:100%"><thead><tr><th class="gsm-hm-hour"></th>';
-    for (let i = 0; i < 7; i++) html += `<th title="${_DOW_LABELS[i]}">${_DOW_SHORT[i]}</th>`;
+    for (const d of _DOW_LABELS) html += `<th>${d}</th>`;
     html += "</tr></thead><tbody>";
 
     for (let h = 0; h < 24; h++) {
