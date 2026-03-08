@@ -3572,7 +3572,7 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-type-SMS_OUT,.gsm-type-SMS_IN{background:#d1fae5;color:#065f46}
 .gsm-type-MMS_OUT,.gsm-type-MMS_IN{background:#fef3c7;color:#92400e}
 .gsm-type-DATA{background:#fff0e0;color:#c2410c}
-#gsm_graph_card{max-width:720px;position:relative;overflow:hidden;min-width:320px;min-height:200px;margin-bottom:10px}
+#gsm_graph_card{position:relative;overflow:hidden;min-width:320px;min-height:200px;margin-bottom:10px}
 #gsm_contact_graph svg{display:block;width:100%;height:auto}
 .gsm-graph-node{transition:opacity .15s}
 .gsm-graph-edge{transition:opacity .15s,stroke-width .15s}

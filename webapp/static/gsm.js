@@ -515,155 +515,195 @@
     if (!wrap || !contacts || !contacts.length) return;
 
     const N = contacts.length;
-
-    // ── Horizontal row layout ──────────────────────────────
-    // Subscriber on the left, contacts stacked as rows on the right.
-    // Two straight lines per contact (green out / red in) — never overlap.
-    const ROW_H = 48;                            // row height per contact
-    const SUB_X = 60, CONT_X = 590;              // X positions
-    const LINE_X0 = 90, LINE_X1 = 530;           // line start/end X
-    const TOP_PAD = 10;
-    const W = 660, H = TOP_PAD + N * ROW_H + 20;
-    const SUB_Y = H / 2;                         // subscriber vertical center
-
-    // SVG icons
-    const personIcon = `<circle cx="0" cy="-7" r="5" fill="none" stroke-width="1.5"/>
-      <path d="M-9 7 Q-9 0 0 -1 Q9 0 9 7" fill="none" stroke-width="1.5"/>`;
-    const companyIcon = `<rect x="-7" y="-10" width="14" height="18" rx="1.5" fill="none" stroke-width="1.4"/>
-      <line x1="-3" y1="-5" x2="-3" y2="-2" stroke-width="1.2"/>
-      <line x1="0" y1="-5" x2="0" y2="-2" stroke-width="1.2"/>
-      <line x1="3" y1="-5" x2="3" y2="-2" stroke-width="1.2"/>
-      <line x1="-3" y1="2" x2="-3" y2="5" stroke-width="1.2"/>
-      <line x1="0" y1="2" x2="0" y2="5" stroke-width="1.2"/>
-      <line x1="3" y1="2" x2="3" y2="5" stroke-width="1.2"/>`;
-    const subscriberIcon = `<circle cx="-4" cy="-7" r="5" fill="none" stroke-width="1.5"/>
-      <path d="M-13 7 Q-13 0 -4 -1 Q5 0 5 7" fill="none" stroke-width="1.5"/>
-      <rect x="8" y="-9" width="6" height="12" rx="1.5" fill="none" stroke-width="1.2"/>
-      <circle cx="11" cy="1" r="0.8" fill="currentColor"/>`;
-
     const trunc = (s, max) => s.length > max ? s.slice(0, max - 1) + "\u2026" : s;
+
+    // ── Card-based layout: two rows (top + bottom) around centered subscriber ──
+    const CW = 120, CH = 100, CGAP = 14;        // card width, height, gap
+    const topN = Math.ceil(N / 2);               // cards in top row
+    const botN = N - topN;                        // cards in bottom row
+    const maxPerRow = Math.max(topN, botN);
+    const W = Math.max(maxPerRow * (CW + CGAP) - CGAP + 40, 500);
+    const CARD_Y_TOP = 30;                        // top-row card Y
+    const SUB_Y = CARD_Y_TOP + CH + 100;          // subscriber center Y
+    const CARD_Y_BOT = SUB_Y + 100;               // bottom-row card Y
+    const H = botN > 0 ? CARD_Y_BOT + CH + 30 : SUB_Y + 80;
+    const CX = W / 2;
+
+    // SVG icons (small)
+    const personIcon = `<circle cx="0" cy="-6" r="4.5" fill="none" stroke-width="1.4"/>
+      <path d="M-8 6 Q-8 0 0 -0.5 Q8 0 8 6" fill="none" stroke-width="1.4"/>`;
+    const companyIcon = `<rect x="-6" y="-9" width="12" height="16" rx="1.5" fill="none" stroke-width="1.3"/>
+      <line x1="-3" y1="-4" x2="-3" y2="-1" stroke-width="1.1"/>
+      <line x1="0" y1="-4" x2="0" y2="-1" stroke-width="1.1"/>
+      <line x1="3" y1="-4" x2="3" y2="-1" stroke-width="1.1"/>
+      <line x1="-3" y1="2" x2="-3" y2="5" stroke-width="1.1"/>
+      <line x1="0" y1="2" x2="0" y2="5" stroke-width="1.1"/>
+      <line x1="3" y1="2" x2="3" y2="5" stroke-width="1.1"/>`;
+    const subscriberIcon = `<circle cx="-3" cy="-6" r="5" fill="none" stroke-width="1.6"/>
+      <path d="M-11 7 Q-11 0 -3 -0.5 Q5 0 5 7" fill="none" stroke-width="1.6"/>
+      <rect x="8" y="-8" width="6" height="12" rx="1.5" fill="none" stroke-width="1.3"/>
+      <circle cx="11" cy="1" r="0.8" fill="currentColor"/>`;
 
     let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
       style="width:100%;height:auto;font-family:system-ui,-apple-system,sans-serif">`;
 
     // Defs: midpoint arrow markers
     svg += `<defs>
-      <marker id="gsm_arrow_out" markerWidth="7" markerHeight="6" refX="3.5" refY="3" orient="auto" markerUnits="userSpaceOnUse">
-        <path d="M0,0.5 L6,3 L0,5.5" fill="#22c55e"/>
+      <marker id="gsm_arrow_out" markerWidth="8" markerHeight="7" refX="4" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0.5 L7,3.5 L0,6.5" fill="#22c55e"/>
       </marker>
-      <marker id="gsm_arrow_in" markerWidth="7" markerHeight="6" refX="3.5" refY="3" orient="auto" markerUnits="userSpaceOnUse">
-        <path d="M0,0.5 L6,3 L0,5.5" fill="#ef4444"/>
+      <marker id="gsm_arrow_in" markerWidth="8" markerHeight="7" refX="4" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0.5 L7,3.5 L0,6.5" fill="#ef4444"/>
       </marker>
+      <filter id="gsm_card_shadow" x="-4%" y="-4%" width="108%" height="116%">
+        <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.08"/>
+      </filter>
     </defs>`;
 
-    // Horizontal connector from subscriber to the vertical bus
-    const busX = LINE_X0;
-    svg += `<line x1="${SUB_X + 26}" y1="${SUB_Y}" x2="${busX}" y2="${SUB_Y}"
-      stroke="var(--border,#cbd5e1)" stroke-width="1" opacity="0.5"/>`;
+    // ── Legend (top-right) ──
+    const legX = W - 200;
+    svg += `<line x1="${legX}" y1="12" x2="${legX + 22}" y2="12" stroke="#22c55e" stroke-width="1.5" marker-end="url(#gsm_arrow_out)"/>
+    <text x="${legX + 28}" y="16" font-size="9" fill="var(--text-muted,#64748b)">Wychodz\u0105ce</text>
+    <line x1="${legX + 95}" y1="12" x2="${legX + 117}" y2="12" stroke="#ef4444" stroke-width="1.5" marker-end="url(#gsm_arrow_in)"/>
+    <text x="${legX + 123}" y="16" font-size="9" fill="var(--text-muted,#64748b)">Przychodz\u0105ce</text>`;
 
-    // Draw rows: one per contact
-    for (let i = 0; i < N; i++) {
-      const c = contacts[i];
-      const cy = TOP_PAD + i * ROW_H + ROW_H / 2;
+    // Helper: position cards evenly in a row
+    const cardPositions = (count, y) => {
+      const totalW = count * CW + (count - 1) * CGAP;
+      const startX = (W - totalW) / 2;
+      const arr = [];
+      for (let i = 0; i < count; i++) arr.push({ x: startX + i * (CW + CGAP), y });
+      return arr;
+    };
+
+    const topCards = cardPositions(topN, CARD_Y_TOP);
+    const botCards = cardPositions(botN, CARD_Y_BOT);
+    const allCards = [...topCards.map((p, i) => ({ ...p, i, c: contacts[i], isTop: true })),
+                      ...botCards.map((p, j) => ({ ...p, i: topN + j, c: contacts[topN + j], isTop: false }))];
+
+    // ── Draw arrows FIRST (behind cards) ──
+    for (const card of allCards) {
+      const c = card.c, idx = card.i;
+      const cardCX = card.x + CW / 2;
+      const cardEdgeY = card.isTop ? card.y + CH : card.y;
 
       const outAll = (c.calls_out || 0) + (c.sms_out || 0);
       const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
       const inAll = (c.calls_in || 0) + (c.sms_in || 0);
       const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
 
-      // Vertical connector stub: from subscriber bus to this row
-      svg += `<path d="M${busX},${SUB_Y} L${busX},${cy} L${LINE_X0 + 4},${cy}"
-        fill="none" stroke="var(--border,#cbd5e1)" stroke-width="0.8" opacity="0.35"/>`;
-
-      // ── OUT line (green, top) — subscriber → contact ──
-      const outY = cy - 6;
+      // OUT arrow: subscriber → contact (green), offset left
       if (outAll > 0) {
-        // Split line in two halves for midpoint marker
-        const midX = (LINE_X0 + LINE_X1) / 2;
-        svg += `<line class="gsm-graph-edge" data-edge="out" data-idx="${i}" data-number="${c.number}"
-          x1="${LINE_X0}" y1="${outY}" x2="${midX}" y2="${outY}"
-          stroke="#22c55e" stroke-width="1.2" opacity="0.5"
+        const x1 = CX - 4, y1 = SUB_Y, x2 = cardCX - 4, y2 = cardEdgeY;
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        svg += `<line class="gsm-graph-edge" data-edge="out" data-idx="${idx}" data-number="${c.number}"
+          x1="${x1}" y1="${y1}" x2="${mx}" y2="${my}"
+          stroke="#22c55e" stroke-width="1.2" opacity="0.4"
           marker-end="url(#gsm_arrow_out)"
           data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"/>`;
-        svg += `<line class="gsm-graph-edge gsm-graph-edge-ext" data-edge="out" data-idx="${i}"
-          x1="${midX + 4}" y1="${outY}" x2="${LINE_X1}" y2="${outY}"
-          stroke="#22c55e" stroke-width="1.2" opacity="0.5"
+        svg += `<line class="gsm-graph-edge gsm-graph-edge-ext" data-edge="out" data-idx="${idx}"
+          x1="${mx}" y1="${my}" x2="${x2}" y2="${y2}"
+          stroke="#22c55e" stroke-width="1.2" opacity="0.4"
           data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"/>`;
-        // Count label
-        svg += `<text data-elabel="out" data-idx="${i}" data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"
-          x="${midX + 16}" y="${outY - 3}" font-size="9" font-weight="600" fill="#16a34a">\u2191${outAll}</text>`;
       }
-
-      // ── IN line (red, bottom) — contact → subscriber ──
-      const inY = cy + 6;
+      // IN arrow: contact → subscriber (red), offset right
       if (inAll > 0) {
-        const midX = (LINE_X0 + LINE_X1) / 2;
-        svg += `<line class="gsm-graph-edge" data-edge="in" data-idx="${i}" data-number="${c.number}"
-          x1="${LINE_X1}" y1="${inY}" x2="${midX + 4}" y2="${inY}"
-          stroke="#ef4444" stroke-width="1.2" opacity="0.5"
-          data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"/>`;
-        svg += `<line class="gsm-graph-edge gsm-graph-edge-ext" data-edge="in" data-idx="${i}"
-          x1="${midX}" y1="${inY}" x2="${LINE_X0}" y2="${inY}"
-          stroke="#ef4444" stroke-width="1.2" opacity="0.5"
+        const x1 = cardCX + 4, y1 = cardEdgeY, x2 = CX + 4, y2 = SUB_Y;
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        svg += `<line class="gsm-graph-edge" data-edge="in" data-idx="${idx}" data-number="${c.number}"
+          x1="${x1}" y1="${y1}" x2="${mx}" y2="${my}"
+          stroke="#ef4444" stroke-width="1.2" opacity="0.4"
           marker-end="url(#gsm_arrow_in)"
           data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"/>`;
-        // Count label
-        svg += `<text data-elabel="in" data-idx="${i}" data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"
-          x="${midX - 16}" y="${inY + 10}" font-size="9" font-weight="600" fill="#dc2626" text-anchor="end">\u2193${inAll}</text>`;
-      }
-
-      // ── Contact node (right side) ──
-      const info = _idLookup(c.number);
-      const isCompany = info && info.type === "company";
-      const label = info && info.label ? trunc(info.label, 16) : trunc(c.number, 16);
-      const icon = isCompany ? companyIcon : personIcon;
-      const color = isCompany ? "#7c3aed" : "#334155";
-
-      svg += `<g class="gsm-graph-node" data-idx="${i}" data-number="${c.number}"
-        transform="translate(${CONT_X},${cy})" style="cursor:pointer"
-        title="2\u00d7LPM \u2192 filtruj rekordy">
-        <circle class="gsm-graph-node-bg" r="16" fill="var(--bg-card,#fff)" stroke="${color}" stroke-width="1.2" opacity="0.95"/>
-        <g stroke="${color}" fill="none" color="${color}" transform="scale(0.85)">${icon}</g>
-        <text x="24" y="4" font-size="9.5" fill="var(--text,#334155)">${label}</text>
-      </g>`;
-
-      // Faint separator between rows
-      if (i < N - 1) {
-        svg += `<line x1="${LINE_X0}" y1="${TOP_PAD + (i + 1) * ROW_H}" x2="${LINE_X1}"
-          y2="${TOP_PAD + (i + 1) * ROW_H}" stroke="var(--border,#e2e8f0)" stroke-width="0.4" opacity="0.4"/>`;
+        svg += `<line class="gsm-graph-edge gsm-graph-edge-ext" data-edge="in" data-idx="${idx}"
+          x1="${mx}" y1="${my}" x2="${x2}" y2="${y2}"
+          stroke="#ef4444" stroke-width="1.2" opacity="0.4"
+          data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"/>`;
       }
     }
 
-    // ── Subscriber node (left side, vertically centered) ──
-    const subLabel = msisdn ? trunc(msisdn, 14) : "Abonent";
-    svg += `<g transform="translate(${SUB_X},${SUB_Y})" style="cursor:default">
-      <circle r="22" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="1.8"/>
+    // ── Draw contact cards ──
+    for (const card of allCards) {
+      const c = card.c, idx = card.i;
+      const info = _idLookup(c.number);
+      const isCompany = info && info.type === "company";
+      const label = info && info.label ? trunc(info.label, 13) : trunc(c.number, 15);
+      const icon = isCompany ? companyIcon : personIcon;
+      const color = isCompany ? "#7c3aed" : "#64748b";
+
+      const outAll = (c.calls_out || 0) + (c.sms_out || 0);
+      const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
+      const inAll = (c.calls_in || 0) + (c.sms_in || 0);
+      const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
+
+      svg += `<g class="gsm-graph-node" data-idx="${idx}" data-number="${c.number}" style="cursor:pointer"
+        title="2\u00d7LPM \u2192 filtruj rekordy">`;
+      // Card background
+      svg += `<rect class="gsm-graph-node-bg" x="${card.x}" y="${card.y}" width="${CW}" height="${CH}"
+        rx="8" fill="var(--bg-card,#fff)" stroke="var(--border,#e2e8f0)" stroke-width="1" filter="url(#gsm_card_shadow)"/>`;
+      // Icon
+      const icx = card.x + CW / 2, icy = card.y + 20;
+      svg += `<g transform="translate(${icx},${icy})" stroke="${color}" fill="none" color="${color}">${icon}</g>`;
+      // Number/name
+      svg += `<text x="${icx}" y="${card.y + 42}" text-anchor="middle" font-size="9" fill="var(--text,#334155)">${label}</text>`;
+      // OUT badge
+      if (outAll > 0) {
+        const by = card.y + 52;
+        svg += `<g data-elabel="out" data-idx="${idx}" data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}">
+          <rect x="${card.x + 6}" y="${by}" width="${CW / 2 - 9}" height="16" rx="4" fill="#dcfce7"/>
+          <text x="${card.x + 12}" y="${by + 12}" font-size="8" font-weight="700" fill="#16a34a">OUT</text>
+          <text x="${card.x + CW / 2 - 6}" y="${by + 12}" font-size="9" font-weight="600" fill="#16a34a" text-anchor="end">${outAll}</text>
+        </g>`;
+      }
+      // IN badge
+      if (inAll > 0) {
+        const by = card.y + 52;
+        svg += `<g data-elabel="in" data-idx="${idx}" data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}">
+          <rect x="${card.x + CW / 2 + 3}" y="${by}" width="${CW / 2 - 9}" height="16" rx="4" fill="#fee2e2"/>
+          <text x="${card.x + CW / 2 + 9}" y="${by + 12}" font-size="8" font-weight="700" fill="#dc2626">IN</text>
+          <text x="${card.x + CW - 6}" y="${by + 12}" font-size="9" font-weight="600" fill="#dc2626" text-anchor="end">${inAll}</text>
+        </g>`;
+      }
+      // OUT-only or IN-only: center the single badge
+      if (outAll > 0 && inAll === 0) {
+        // already drawn left, also draw an empty right placeholder (optional)
+      }
+      if (inAll > 0 && outAll === 0) {
+        // already drawn right side
+      }
+      svg += `</g>`;
+    }
+
+    // ── Subscriber node (centered) ──
+    const subLabel = msisdn ? trunc(msisdn, 16) : "Abonent";
+    svg += `<g transform="translate(${CX},${SUB_Y})" style="cursor:default">
+      <circle r="30" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="2"/>
       <g stroke="#2563eb" fill="none" color="#2563eb">${subscriberIcon}</g>
-      <text y="34" text-anchor="middle" font-size="9.5" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>
-      <text y="44" text-anchor="middle" font-size="8" fill="var(--text-muted,#64748b)">Abonent</text>
+      <text y="44" text-anchor="middle" font-size="10" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>
+      <text y="55" text-anchor="middle" font-size="8.5" fill="var(--text-muted,#64748b)">Abonent</text>
     </g>`;
 
     svg += "</svg>";
     wrap.innerHTML = svg;
 
-    // ── Hover highlight on contact nodes ──
+    // ── Hover highlight on contact cards ──
     wrap.querySelectorAll(".gsm-graph-node").forEach(g => {
       g.addEventListener("mouseenter", () => {
         const idx = g.dataset.idx;
         const bg = g.querySelector(".gsm-graph-node-bg");
-        if (bg) { bg.setAttribute("stroke-width", "2.4"); bg.setAttribute("opacity", "1"); }
+        if (bg) { bg.setAttribute("stroke", "var(--primary,#2563eb)"); bg.setAttribute("stroke-width", "2"); }
         wrap.querySelectorAll(`.gsm-graph-edge[data-idx="${idx}"]`).forEach(e => {
           e.setAttribute("opacity", "0.9");
           e.dataset._origSw = e.getAttribute("stroke-width");
-          e.setAttribute("stroke-width", "2.2");
+          e.setAttribute("stroke-width", "2.5");
         });
       });
       g.addEventListener("mouseleave", () => {
         const idx = g.dataset.idx;
         const bg = g.querySelector(".gsm-graph-node-bg");
-        if (bg) { bg.setAttribute("stroke-width", "1.2"); bg.setAttribute("opacity", "0.95"); }
+        if (bg) { bg.setAttribute("stroke", "var(--border,#e2e8f0)"); bg.setAttribute("stroke-width", "1"); }
         wrap.querySelectorAll(`.gsm-graph-edge[data-idx="${idx}"]`).forEach(e => {
-          e.setAttribute("opacity", "0.5");
+          e.setAttribute("opacity", "0.4");
           if (e.dataset._origSw) e.setAttribute("stroke-width", e.dataset._origSw);
         });
       });
@@ -697,15 +737,14 @@
       const sw = Math.min(2.5, Math.max(0.8, 0.6 + Math.log2(Math.max(val, 1)) * 0.35));
       path.setAttribute("stroke-width", sw.toFixed(1));
     });
-    // Update count labels (<text> elements with data-elabel)
-    wrap.querySelectorAll("[data-elabel]").forEach(el => {
-      const val = parseInt(el.dataset[mode] || "0");
-      el.style.display = val > 0 ? "" : "none";
-      const dir = el.dataset.elabel;
-      const arrow = dir === "out" ? "\u2191" : "\u2193";
-      // For <text> directly or <g> wrapping <text>
-      const txt = el.tagName === "text" ? el : el.querySelector("text");
-      if (txt) txt.textContent = arrow + val;
+    // Update card badges (<g data-elabel> with two <text> children: label + number)
+    wrap.querySelectorAll("[data-elabel]").forEach(badge => {
+      const val = parseInt(badge.dataset[mode] || "0");
+      badge.style.display = val > 0 ? "" : "none";
+      // Update the LAST text child (the number), keep the first ("OUT"/"IN")
+      const texts = badge.querySelectorAll("text");
+      if (texts.length >= 2) texts[texts.length - 1].textContent = val;
+      else if (texts.length === 1) texts[0].textContent = val;
     });
   }
 
