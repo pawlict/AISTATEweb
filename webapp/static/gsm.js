@@ -321,6 +321,7 @@
     _buildHeatmapData(data.records);
     _renderHeatmap();
     _renderMap(data.geolocation);
+    _renderOvernightStays(data.analysis);
     _renderWarnings(data.warnings);
   }
 
@@ -433,23 +434,6 @@
         </div>`;
       }
       html += "</div>";
-    }
-
-    // Overnight stays away from home
-    if (a.overnight_stays && a.overnight_stays.length) {
-      const totalNights = a.overnight_stays.reduce((s, v) => s + (v.nights || 0), 0);
-      html += `<div class="gsm-section"><div class="h3">Nocowanie poza domem</div>`;
-      html += `<div class="small muted" style="margin-bottom:6px">Lokalizacja domowa: <b>${a.overnight_stays_home || "?"}</b> — wykryto <b>${a.overnight_stays.length}</b> ${a.overnight_stays.length === 1 ? "pobyt" : "pobytów"} (${totalNights} ${totalNights === 1 ? "noc" : "nocy"})</div>`;
-      html += `<table class="gsm-table"><thead><tr><th>Okres</th><th>Noce</th><th>Lokalizacje</th><th>Szczegóły</th></tr></thead><tbody>`;
-      for (const stay of a.overnight_stays) {
-        const period = stay.start_date === stay.end_date ? stay.start_date : `${stay.start_date} – ${stay.end_date}`;
-        const locs = (stay.locations || []).join(", ");
-        const details = (stay.details || []).map(d =>
-          `${d.date}: ${d.last_time || ""} <span class="muted">(${d.location_evening || ""})</span> → ${d.first_time || ""} <span class="muted">(${d.location_morning || ""})</span>`
-        ).join("<br>");
-        html += `<tr><td style="white-space:nowrap">${period}</td><td>${stay.nights}</td><td>${locs}</td><td class="small">${details}</td></tr>`;
-      }
-      html += "</tbody></table></div>";
     }
 
     // Stats
@@ -1395,6 +1379,59 @@
           ${bc.roaming_records ? ` · ${bc.roaming_records} rekordów roamingu` : ""}
           · ${confirmed}
         </div>
+      </div>`;
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  /* ── Overnight stays away from home section ── */
+  function _renderOvernightStays(analysis) {
+    // Render inside gsm_cluster_info, right after border crossings
+    const clusterWrap = QS("#gsm_cluster_info");
+    if (!clusterWrap) return;
+
+    let container = QS("#gsm_overnight_stays");
+    if (!container) {
+      container = _el("div", "", "");
+      container.id = "gsm_overnight_stays";
+      clusterWrap.appendChild(container);
+    }
+
+    const stays = (analysis && analysis.overnight_stays) || [];
+    const home = (analysis && analysis.overnight_stays_home) || "";
+    if (!stays.length) {
+      container.style.display = "none";
+      return;
+    }
+    container.style.display = "";
+
+    const totalNights = stays.reduce((s, v) => s + (v.nights || 0), 0);
+    const stayWord = stays.length === 1 ? "pobyt" : (stays.length < 5 ? "pobyty" : "pobytów");
+    const nightWord = totalNights === 1 ? "noc" : (totalNights < 5 ? "noce" : "nocy");
+
+    let html = '<div class="h3" style="margin-top:16px;margin-bottom:8px">Nocowanie poza domem</div>';
+    html += `<div class="small muted" style="margin-bottom:8px">Lokalizacja domowa: <b>${home}</b> — wykryto <b>${stays.length}</b> ${stayWord} (${totalNights} ${nightWord})</div>`;
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+
+    for (const stay of stays) {
+      const period = stay.start_date === stay.end_date
+        ? stay.start_date
+        : `${stay.start_date} – ${stay.end_date}`;
+      const locs = (stay.locations || []).join(", ");
+
+      let detailsHtml = "";
+      for (const d of (stay.details || [])) {
+        detailsHtml += `<div>${d.date}: ${d.last_time || ""} <span class="muted">(${d.location_evening || ""})</span> → ${d.first_time || ""} <span class="muted">(${d.location_morning || ""})</span></div>`;
+      }
+
+      html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary)">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+          <div><b>${period}</b></div>
+          <div>${stay.nights} ${stay.nights === 1 ? "noc" : (stay.nights < 5 ? "noce" : "nocy")}</div>
+          <div class="muted">${locs}</div>
+        </div>
+        <div class="small" style="margin-top:4px">${detailsHtml}</div>
       </div>`;
     }
     html += '</div>';
