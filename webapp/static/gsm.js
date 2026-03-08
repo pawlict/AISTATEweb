@@ -517,16 +517,19 @@
     const N = contacts.length;
     const trunc = (s, max) => s.length > max ? s.slice(0, max - 1) + "\u2026" : s;
 
-    // ── Card-based layout: two rows (top + bottom) around centered subscriber ──
-    const CW = 120, CH = 100, CGAP = 14;        // card width, height, gap
-    const topN = Math.ceil(N / 2);               // cards in top row
-    const botN = N - topN;                        // cards in bottom row
+    // ── Card-based layout: two equal rows (top + bottom) around subscriber ──
+    const topN = Math.ceil(N / 2);
+    const botN = N - topN;
     const maxPerRow = Math.max(topN, botN);
+    // Dynamic card width: shrink for many contacts
+    const CW = maxPerRow <= 5 ? 120 : maxPerRow <= 7 ? 110 : maxPerRow <= 8 ? 100 : 90;
+    const CH = 76;
+    const CGAP = maxPerRow <= 7 ? 14 : 10;
     const W = Math.max(maxPerRow * (CW + CGAP) - CGAP + 40, 500);
-    const CARD_Y_TOP = 30;                        // top-row card Y
-    const SUB_Y = CARD_Y_TOP + CH + 100;          // subscriber center Y
-    const CARD_Y_BOT = SUB_Y + 100;               // bottom-row card Y
-    const H = botN > 0 ? CARD_Y_BOT + CH + 30 : SUB_Y + 80;
+    const CARD_Y_TOP = 28;
+    const SUB_Y = CARD_Y_TOP + CH + 80;
+    const CARD_Y_BOT = SUB_Y + 80;
+    const H = botN > 0 ? CARD_Y_BOT + CH + 10 : SUB_Y + 70;
     const CX = W / 2;
 
     // SVG icons (small)
@@ -627,7 +630,8 @@
       const c = card.c, idx = card.i;
       const info = _idLookup(c.number);
       const isCompany = info && info.type === "company";
-      const label = info && info.label ? trunc(info.label, 13) : trunc(c.number, 15);
+      const maxLbl = CW <= 95 ? 11 : 14;
+      const label = info && info.label ? trunc(info.label, maxLbl) : trunc(c.number, maxLbl);
       const icon = isCompany ? companyIcon : personIcon;
       const color = isCompany ? "#7c3aed" : "#64748b";
 
@@ -635,6 +639,8 @@
       const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
       const inAll = (c.calls_in || 0) + (c.sms_in || 0);
       const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
+      const bw = CW - 10;  // badge width (inside card with 5px padding each side)
+      const fs = CW <= 95 ? 7.5 : 8;
 
       svg += `<g class="gsm-graph-node" data-idx="${idx}" data-number="${c.number}" style="cursor:pointer"
         title="2\u00d7LPM \u2192 filtruj rekordy">`;
@@ -642,35 +648,26 @@
       svg += `<rect class="gsm-graph-node-bg" x="${card.x}" y="${card.y}" width="${CW}" height="${CH}"
         rx="8" fill="var(--bg-card,#fff)" stroke="var(--border,#e2e8f0)" stroke-width="1" filter="url(#gsm_card_shadow)"/>`;
       // Icon
-      const icx = card.x + CW / 2, icy = card.y + 20;
-      svg += `<g transform="translate(${icx},${icy})" stroke="${color}" fill="none" color="${color}">${icon}</g>`;
+      const icx = card.x + CW / 2, icy = card.y + 16;
+      svg += `<g transform="translate(${icx},${icy}) scale(0.8)" stroke="${color}" fill="none" color="${color}">${icon}</g>`;
       // Number/name
-      svg += `<text x="${icx}" y="${card.y + 42}" text-anchor="middle" font-size="9" fill="var(--text,#334155)">${label}</text>`;
-      // OUT badge
-      if (outAll > 0) {
-        const by = card.y + 52;
-        svg += `<g data-elabel="out" data-idx="${idx}" data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}">
-          <rect x="${card.x + 6}" y="${by}" width="${CW / 2 - 9}" height="16" rx="4" fill="#dcfce7"/>
-          <text x="${card.x + 12}" y="${by + 12}" font-size="8" font-weight="700" fill="#16a34a">OUT</text>
-          <text x="${card.x + CW / 2 - 6}" y="${by + 12}" font-size="9" font-weight="600" fill="#16a34a" text-anchor="end">${outAll}</text>
-        </g>`;
-      }
-      // IN badge
-      if (inAll > 0) {
-        const by = card.y + 52;
-        svg += `<g data-elabel="in" data-idx="${idx}" data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}">
-          <rect x="${card.x + CW / 2 + 3}" y="${by}" width="${CW / 2 - 9}" height="16" rx="4" fill="#fee2e2"/>
-          <text x="${card.x + CW / 2 + 9}" y="${by + 12}" font-size="8" font-weight="700" fill="#dc2626">IN</text>
-          <text x="${card.x + CW - 6}" y="${by + 12}" font-size="9" font-weight="600" fill="#dc2626" text-anchor="end">${inAll}</text>
-        </g>`;
-      }
-      // OUT-only or IN-only: center the single badge
-      if (outAll > 0 && inAll === 0) {
-        // already drawn left, also draw an empty right placeholder (optional)
-      }
-      if (inAll > 0 && outAll === 0) {
-        // already drawn right side
-      }
+      svg += `<text x="${icx}" y="${card.y + 36}" text-anchor="middle" font-size="${fs + 0.5}" fill="var(--text,#334155)">${label}</text>`;
+      // OUT badge row
+      const by1 = card.y + 43;
+      svg += `<g data-elabel="out" data-idx="${idx}" data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"
+        ${outAll === 0 ? 'style="display:none"' : ""}>
+        <rect x="${card.x + 5}" y="${by1}" width="${bw}" height="13" rx="3" fill="#dcfce7"/>
+        <text x="${card.x + 10}" y="${by1 + 10}" font-size="${fs}" font-weight="700" fill="#16a34a">OUT</text>
+        <text x="${card.x + CW - 7}" y="${by1 + 10}" font-size="${fs + 0.5}" font-weight="600" fill="#16a34a" text-anchor="end">${outAll}</text>
+      </g>`;
+      // IN badge row
+      const by2 = card.y + 58;
+      svg += `<g data-elabel="in" data-idx="${idx}" data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"
+        ${inAll === 0 ? 'style="display:none"' : ""}>
+        <rect x="${card.x + 5}" y="${by2}" width="${bw}" height="13" rx="3" fill="#fee2e2"/>
+        <text x="${card.x + 10}" y="${by2 + 10}" font-size="${fs}" font-weight="700" fill="#dc2626">IN</text>
+        <text x="${card.x + CW - 7}" y="${by2 + 10}" font-size="${fs + 0.5}" font-weight="600" fill="#dc2626" text-anchor="end">${inAll}</text>
+      </g>`;
       svg += `</g>`;
     }
 
