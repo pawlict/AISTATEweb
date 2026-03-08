@@ -2323,6 +2323,7 @@
   /* ── heatmap: hour × day-of-week grid ─────────────────── */
 
   const _DOW_LABELS = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"];
+  const _DOW_SHORT  = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
   const _MONTH_NAMES = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
                          "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
 
@@ -2415,14 +2416,15 @@
     const colorMap = { all: "37,99,235", calls: "22,163,74", sms: "234,88,12", data: "124,58,237" };
     const rgb = colorMap[typeKey] || colorMap.all;
 
-    // table-layout:fixed — hour col 80px + 7 equal day cols
-    let html = '<table class="gsm-heatmap" style="width:100%"><thead><tr><th class="gsm-hm-hour" style="width:60px">Godzina</th>';
-    for (const d of _DOW_LABELS) html += `<th>${d}</th>`;
+    // table-layout:fixed — narrow hour col + 7 equal day cols
+    let html = '<table class="gsm-heatmap" style="width:100%"><thead><tr><th class="gsm-hm-hour"></th>';
+    for (let i = 0; i < 7; i++) html += `<th title="${_DOW_LABELS[i]}">${_DOW_SHORT[i]}</th>`;
     html += "</tr></thead><tbody>";
 
     for (let h = 0; h < 24; h++) {
+      const hShort = String(h).padStart(2, "0") + "–" + String(h + 1 === 24 ? 0 : h + 1).padStart(2, "0");
       const hLabel = String(h).padStart(2, "0") + ":00–" + String(h + 1 === 24 ? 0 : h + 1).padStart(2, "0") + ":00";
-      html += `<tr><td class="gsm-hm-hour">${hLabel}</td>`;
+      html += `<tr><td class="gsm-hm-hour" title="${hLabel}">${hShort}</td>`;
 
       for (let d = 0; d < 7; d++) {
         const c = grid[h][d];
