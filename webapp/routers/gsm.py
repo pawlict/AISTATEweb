@@ -15,6 +15,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -23,7 +24,7 @@ import traceback
 import uuid
 from pathlib import Path
 
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -431,6 +432,110 @@ async def gsm_smart_import(
         shutil.rmtree(tmp_dir, ignore_errors=True)
         for d in extra_tmp_dirs:
             shutil.rmtree(d, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# GSM data persistence (project-scoped, multi-user aware)
+# ---------------------------------------------------------------------------
+
+def _gsm_project_helpers():
+    """Lazy-import server helpers to avoid circular imports."""
+    from webapp.server import (
+        read_project_meta, write_project_meta,
+        project_path, now_iso, _check_project_access,
+    )
+    return read_project_meta, write_project_meta, project_path, now_iso, _check_project_access
+
+
+@router.post("/api/gsm/{project_id}/save")
+async def gsm_save(request: Request, project_id: str):
+    """Save GSM analysis results to the project.
+
+    The request body should contain the full GSM state:
+    { billing: {...}, identification: {...} }
+
+    Data is stored in projects/{project_id}/analysis/gsm_latest.json
+    and a flag is set in project.json for quick lookup.
+    Access-controlled per user (multiuser mode).
+    """
+    read_meta, write_meta, proj_path, now_iso, check_access = _gsm_project_helpers()
+
+    # Check user access
+    check_access(request, project_id)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "detail": "Invalid JSON"}, status_code=400)
+
+    try:
+        # Ensure analysis directory exists
+        analysis_dir = proj_path(project_id) / "analysis"
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save full GSM data to separate file (can be large)
+        gsm_path = analysis_dir / "gsm_latest.json"
+        tmp = gsm_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(gsm_path)  # Atomic write
+
+        # Update project metadata with GSM flag
+        meta = read_meta(project_id)
+        meta["has_gsm"] = True
+        meta["gsm_summary"] = {
+            "saved_at": now_iso(),
+            "filename": payload.get("billing", {}).get("filename", ""),
+            "operator": payload.get("billing", {}).get("operator", ""),
+            "record_count": payload.get("billing", {}).get("record_count", 0),
+            "identification_count": len(
+                (payload.get("identification", {}) or {}).get("lookup", {})
+            ),
+        }
+        meta["updated_at"] = now_iso()
+        write_meta(project_id, meta)
+
+        _app_log(f"[GSM] Saved to project {project_id[:8]}…")
+        return JSONResponse({"status": "ok"})
+
+    except Exception as e:
+        log.exception("GSM save error: %s", e)
+        return JSONResponse(
+            {"status": "error", "detail": f"{type(e).__name__}: {e}"},
+            status_code=500,
+        )
+
+
+@router.get("/api/gsm/{project_id}/load")
+async def gsm_load(request: Request, project_id: str):
+    """Load saved GSM analysis results from the project.
+
+    Returns the full GSM state (billing + identification) if it exists.
+    Access-controlled per user (multiuser mode).
+    """
+    read_meta, write_meta, proj_path, now_iso, check_access = _gsm_project_helpers()
+
+    # Check user access
+    check_access(request, project_id)
+
+    try:
+        gsm_path = proj_path(project_id) / "analysis" / "gsm_latest.json"
+
+        if not gsm_path.exists():
+            return JSONResponse({"status": "ok", "has_data": False})
+
+        data = json.loads(gsm_path.read_text(encoding="utf-8"))
+        return JSONResponse({
+            "status": "ok",
+            "has_data": True,
+            **data,
+        })
+
+    except Exception as e:
+        log.exception("GSM load error: %s", e)
+        return JSONResponse(
+            {"status": "error", "detail": f"{type(e).__name__}: {e}"},
+            status_code=500,
+        )
 
 
 # ---------------------------------------------------------------------------

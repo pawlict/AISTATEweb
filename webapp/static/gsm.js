@@ -236,6 +236,9 @@
         if (progress) progress.style.display = "none";
       }, 800);
 
+      // Auto-save to project (fire-and-forget)
+      _saveToProject();
+
     } catch (e) {
       console.error("GSM import error:", e);
       const msg = e.message || String(e);
@@ -2187,6 +2190,94 @@
     return map[t] || t;
   }
 
+  /* ── project persistence ──────────────────────────────── */
+
+  /**
+   * Get current project ID from AISTATE global.
+   */
+  function _getProjectId() {
+    return (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId)
+      ? String(AISTATE.projectId) : "";
+  }
+
+  /**
+   * Save GSM state (billing + identification) to the current project.
+   * Called automatically after a successful smart import.
+   */
+  async function _saveToProject() {
+    const pid = _getProjectId();
+    if (!pid) {
+      console.log("[GSM] No project ID — skip save");
+      return;
+    }
+
+    const payload = {};
+
+    // Include billing data
+    if (St.lastResult) {
+      payload.billing = St.lastResult;
+    }
+
+    // Include identification map
+    if (Object.keys(St.idMap).length > 0) {
+      payload.identification = { lookup: St.idMap };
+    }
+
+    if (!payload.billing && !payload.identification) return;
+
+    try {
+      const resp = await fetch(`/api/gsm/${encodeURIComponent(pid)}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (resp.ok) {
+        _addLog("info", "Dane GSM zapisane w projekcie");
+      } else {
+        const data = await resp.json().catch(() => ({}));
+        console.warn("[GSM] Save failed:", data.detail || resp.status);
+      }
+    } catch (e) {
+      console.warn("[GSM] Save error:", e);
+    }
+  }
+
+  /**
+   * Load GSM state from the current project.
+   * Called on GsmManager.init() to auto-restore data.
+   */
+  async function _loadFromProject() {
+    const pid = _getProjectId();
+    if (!pid) return false;
+
+    try {
+      const resp = await fetch(`/api/gsm/${encodeURIComponent(pid)}/load`);
+      if (!resp.ok) return false;
+
+      const data = await resp.json();
+      if (!data.has_data) return false;
+
+      // Restore identification map
+      if (data.identification && data.identification.lookup) {
+        St.idMap = data.identification.lookup;
+      }
+
+      // Restore billing data and render
+      if (data.billing) {
+        St.lastResult = data.billing;
+        St.filename = data.billing.filename || "";
+        _renderResults(data.billing);
+        _addLog("info", `Przywrócono dane GSM z projektu (${data.billing.record_count || 0} rekordów)`);
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      console.warn("[GSM] Load error:", e);
+      return false;
+    }
+  }
+
   /* ── bindings ───────────────────────────────────────────── */
   function _bind() {
     const fileInput = QS("#gsm_file_input");
@@ -2241,6 +2332,13 @@
       if (this._initialized) return;
       this._initialized = true;
       _bind();
+
+      // Auto-load saved GSM data from the current project
+      try {
+        await _loadFromProject();
+      } catch (e) {
+        console.warn("[GSM] Auto-load failed:", e);
+      }
     },
   };
 })();
