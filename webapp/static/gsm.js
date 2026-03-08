@@ -355,9 +355,20 @@
       .join("");
   }
 
+  function _dataSize(kb) {
+    if (!kb) return "0 KB";
+    if (kb < 1024) return kb.toFixed(1) + " KB";
+    const mb = kb / 1024;
+    if (mb < 1024) return mb.toFixed(1) + " MB";
+    return (mb / 1024).toFixed(2) + " GB";
+  }
+
   function _renderSummary(s) {
     const el = QS("#gsm_summary_grid");
     if (!el || !s) return;
+
+    // Use call-only duration if available, fall back to total for older data
+    const callDur = s.call_duration_seconds != null ? s.call_duration_seconds : s.total_duration_seconds;
 
     el.innerHTML = `
       <div class="gsm-stat-card">
@@ -366,34 +377,34 @@
       </div>
       <div class="gsm-stat-card">
         <div class="gsm-stat-value">${_fmt(s.calls_out + s.calls_in)}</div>
-        <div class="gsm-stat-label">Połączenia (${_fmt(s.calls_out)}↑ ${_fmt(s.calls_in)}↓)</div>
+        <div class="gsm-stat-label">Po\u0142\u0105czenia (${_fmt(s.calls_out)}\u2191 ${_fmt(s.calls_in)}\u2193)</div>
+      </div>
+      <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${_dur(callDur)}</div>
+        <div class="gsm-stat-label">Czas rozm\u00f3w (${_fmt(s.calls_out)}\u2191 ${_fmt(s.calls_in)}\u2193)</div>
       </div>
       <div class="gsm-stat-card">
         <div class="gsm-stat-value">${_fmt(s.sms_out + s.sms_in)}</div>
-        <div class="gsm-stat-label">SMS (${_fmt(s.sms_out)}↑ ${_fmt(s.sms_in)}↓)</div>
+        <div class="gsm-stat-label">SMS (${_fmt(s.sms_out)}\u2191 ${_fmt(s.sms_in)}\u2193)</div>
       </div>
       <div class="gsm-stat-card">
         <div class="gsm-stat-value">${_fmt(s.mms_out + s.mms_in)}</div>
-        <div class="gsm-stat-label">MMS</div>
+        <div class="gsm-stat-label">MMS (${_fmt(s.mms_out)}\u2191 ${_fmt(s.mms_in)}\u2193)</div>
       </div>
       <div class="gsm-stat-card">
-        <div class="gsm-stat-value">${_fmt(s.data_sessions)}</div>
-        <div class="gsm-stat-label">Sesje danych</div>
-      </div>
-      <div class="gsm-stat-card">
-        <div class="gsm-stat-value">${_dur(s.total_duration_seconds)}</div>
-        <div class="gsm-stat-label">Czas rozmów</div>
+        <div class="gsm-stat-value">${_dataSize(s.total_data_kb)}</div>
+        <div class="gsm-stat-label">Dane (${_fmt(s.data_sessions)} sesji)</div>
       </div>
       <div class="gsm-stat-card">
         <div class="gsm-stat-value">${_fmt(s.unique_contacts)}</div>
         <div class="gsm-stat-label">Unikalne kontakty</div>
       </div>
       <div class="gsm-stat-card">
-        <div class="gsm-stat-value">${s.period_from || "—"}</div>
+        <div class="gsm-stat-value">${s.period_from || "\u2014"}</div>
         <div class="gsm-stat-label">Okres od</div>
       </div>
       <div class="gsm-stat-card">
-        <div class="gsm-stat-value">${s.period_to || "—"}</div>
+        <div class="gsm-stat-value">${s.period_to || "\u2014"}</div>
         <div class="gsm-stat-label">Okres do</div>
       </div>
       ${s.roaming_records ? `<div class="gsm-stat-card"><div class="gsm-stat-value">${_fmt(s.roaming_records)}</div><div class="gsm-stat-label">Roaming</div></div>` : ""}
