@@ -2200,7 +2200,7 @@
 
   /* ── heatmap: hour × day-of-week grid ─────────────────── */
 
-  const _DOW_LABELS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
+  const _DOW_LABELS = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"];
   const _MONTH_NAMES = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
                          "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
 
@@ -2381,34 +2381,45 @@
     // Update heatmap visuals
     _renderHeatmap();
 
-    // Show filter bar
+    // Build filter label
+    const hLabel = String(hour).padStart(2, "0") + ":00–" + String(hour + 1 === 24 ? 0 : hour + 1).padStart(2, "0") + ":00";
+    const filterText = `${_DOW_LABELS[dow]} ${hLabel} — ${filtered.length} rek.`;
+
+    // Show filter bar under heatmap
     const bar = QS("#gsm_hm_filter_bar");
     const label = QS("#gsm_hm_filter_label");
     if (bar) bar.style.display = "flex";
-    if (label) {
-      const hLabel = String(hour).padStart(2, "0") + ":00–" + String(hour + 1 === 24 ? 0 : hour + 1).padStart(2, "0") + ":00";
-      label.textContent = `Filtr: ${_DOW_LABELS[dow]} ${hLabel} — ${filtered.length} rekordów`;
-    }
+    if (label) label.textContent = `Filtr: ${filterText}`;
 
-    // Wire clear button
+    // Show filter badge in Records header
+    const badge = QS("#gsm_records_filter_badge");
+    const badgeText = QS("#gsm_records_filter_text");
+    if (badge) badge.style.display = "inline-flex";
+    if (badgeText) badgeText.textContent = filterText;
+
+    // Wire clear buttons (both heatmap bar and records header)
     const clearBtn = QS("#gsm_hm_filter_clear");
     if (clearBtn) clearBtn.onclick = () => _clearHeatmapFilter();
+    const recClearBtn = QS("#gsm_records_filter_clear");
+    if (recClearBtn) recClearBtn.onclick = () => _clearHeatmapFilter();
 
     // Render filtered records
     _renderRecords(filtered, false, filtered.length);
 
-    // Scroll to records table
-    const recEl = QS("#gsm_records_body");
-    if (recEl) recEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Scroll to Records card
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   /** Clear heatmap filter and restore original records. */
   function _clearHeatmapFilter() {
     St.hmActiveCell = null;
 
-    // Hide filter bar
+    // Hide filter bars
     const bar = QS("#gsm_hm_filter_bar");
     if (bar) bar.style.display = "none";
+    const badge = QS("#gsm_records_filter_badge");
+    if (badge) badge.style.display = "none";
 
     // Re-render heatmap (remove active highlight)
     _renderHeatmap();
@@ -2593,6 +2604,28 @@
     }
 
     // (empty state has no button — upload via toolbar icon only)
+
+    // Records panel resize handle
+    const resizeHandle = QS("#gsm_records_resize");
+    if (resizeHandle) {
+      let startY = 0, startH = 0, wrap = null;
+      resizeHandle.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        wrap = resizeHandle.parentElement;
+        startY = e.clientY;
+        startH = wrap.offsetHeight;
+        const onMove = (ev) => {
+          const newH = Math.max(100, startH + (ev.clientY - startY));
+          wrap.style.height = newH + "px";
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
 
     // New analysis button
     const newBtn = QS("#gsm_new_analysis");
