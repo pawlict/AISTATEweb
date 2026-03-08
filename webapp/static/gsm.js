@@ -2294,7 +2294,8 @@
     const colorMap = { all: "37,99,235", calls: "22,163,74", sms: "234,88,12", data: "124,58,237" };
     const rgb = colorMap[typeKey] || colorMap.all;
 
-    let html = '<table class="gsm-heatmap"><thead><tr><th class="gsm-hm-hour">Godzina</th>';
+    // table-layout:fixed — hour col 80px + 7 equal day cols
+    let html = '<table class="gsm-heatmap" style="width:min(100%,720px)"><thead><tr><th class="gsm-hm-hour" style="width:80px">Godzina</th>';
     for (const d of _DOW_LABELS) html += `<th>${d}</th>`;
     html += "</tr></thead><tbody>";
 
