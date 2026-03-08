@@ -1373,11 +1373,11 @@
     }
     container.style.display = "";
 
-    let html = '<div class="gsm-charts-row" style="margin-top:16px">';
+    let html = '';
 
-    // ── LEFT: Border crossings ──
-    html += '<div>';
+    // ── Card 1: Border crossings ──
     if (crossings.length) {
+      html += '<div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:16px;background:var(--card-bg,#fff)">';
       html += '<div class="h3" style="margin-bottom:8px">Przekroczenia granic / wyjazdy zagraniczne</div>';
       html += '<div style="display:flex;flex-direction:column;gap:8px">';
       for (const bc of crossings) {
@@ -1399,19 +1399,15 @@
           </div>
         </div>`;
       }
-      html += '</div>';
-    } else {
-      html += '<div class="h3" style="margin-bottom:8px">Przekroczenia granic / wyjazdy zagraniczne</div>';
-      html += '<div class="small muted">Nie wykryto wyjazdów zagranicznych</div>';
+      html += '</div></div>';
     }
-    html += '</div>';
 
-    // ── RIGHT: Overnight stays ──
-    html += '<div>';
+    // ── Card 2: Overnight stays ──
     if (stays.length) {
       const totalNights = stays.reduce((s, v) => s + (v.nights || 0), 0);
       const stayWord = stays.length === 1 ? "pobyt" : (stays.length < 5 ? "pobyty" : "pobytów");
       const nightWord = totalNights === 1 ? "noc" : (totalNights < 5 ? "noce" : "nocy");
+      html += '<div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px;background:var(--card-bg,#fff)">';
       html += '<div class="h3" style="margin-bottom:8px">Nocowanie poza domem</div>';
       html += `<div class="small muted" style="margin-bottom:8px">Lokalizacja domowa: <b>${home}</b> — ${stays.length} ${stayWord} (${totalNights} ${nightWord})</div>`;
       html += '<div style="display:flex;flex-direction:column;gap:8px">';
@@ -1431,14 +1427,9 @@
           <div class="small" style="margin-top:4px">${detailsHtml}</div>
         </div>`;
       }
-      html += '</div>';
-    } else {
-      html += '<div class="h3" style="margin-bottom:8px">Nocowanie poza domem</div>';
-      html += `<div class="small muted">${home ? `Lokalizacja domowa: <b>${home}</b> — ` : ""}Nie wykryto noclegów poza domem</div>`;
+      html += '</div></div>';
     }
-    html += '</div>';
 
-    html += '</div>';
     container.innerHTML = html;
   }
 
