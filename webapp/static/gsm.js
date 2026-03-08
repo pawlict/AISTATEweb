@@ -236,8 +236,8 @@
         if (progress) progress.style.display = "none";
       }, 800);
 
-      // Auto-save to project (fire-and-forget)
-      _saveToProject();
+      // Auto-save to project (awaited to ensure it completes before navigation)
+      await _saveToProject();
 
     } catch (e) {
       console.error("GSM import error:", e);
@@ -2203,11 +2203,22 @@
   /**
    * Save GSM state (billing + identification) to the current project.
    * Called automatically after a successful smart import.
+   * Ensures a project is selected (prompts if not).
    */
   async function _saveToProject() {
-    const pid = _getProjectId();
+    let pid = _getProjectId();
+
+    // If no project is selected, ask the user to pick/create one
+    if (!pid && typeof requireProjectId === "function") {
+      try {
+        pid = await requireProjectId("gsm");
+      } catch (e) {
+        _addLog("warn", "Nie wybrano projektu — dane GSM nie zostały zapisane");
+        return;
+      }
+    }
     if (!pid) {
-      console.log("[GSM] No project ID — skip save");
+      _addLog("warn", "Brak projektu — dane GSM nie zostały zapisane");
       return;
     }
 
@@ -2232,13 +2243,13 @@
         body: JSON.stringify(payload),
       });
       if (resp.ok) {
-        _addLog("info", "Dane GSM zapisane w projekcie");
+        _addLog("info", "💾 Dane GSM zapisane w projekcie");
       } else {
         const data = await resp.json().catch(() => ({}));
-        console.warn("[GSM] Save failed:", data.detail || resp.status);
+        _addLog("error", `Błąd zapisu GSM: ${data.detail || resp.status}`);
       }
     } catch (e) {
-      console.warn("[GSM] Save error:", e);
+      _addLog("error", `Błąd zapisu GSM: ${e.message || e}`);
     }
   }
 
@@ -2248,11 +2259,17 @@
    */
   async function _loadFromProject() {
     const pid = _getProjectId();
-    if (!pid) return false;
+    if (!pid) {
+      console.log("[GSM] No project ID — skip auto-load");
+      return false;
+    }
 
     try {
       const resp = await fetch(`/api/gsm/${encodeURIComponent(pid)}/load`);
-      if (!resp.ok) return false;
+      if (!resp.ok) {
+        console.warn("[GSM] Load failed:", resp.status);
+        return false;
+      }
 
       const data = await resp.json();
       if (!data.has_data) return false;
@@ -2267,13 +2284,18 @@
         St.lastResult = data.billing;
         St.filename = data.billing.filename || "";
         _renderResults(data.billing);
-        _addLog("info", `Przywrócono dane GSM z projektu (${data.billing.record_count || 0} rekordów)`);
+        const idCount = Object.keys(St.idMap).length;
+        _addLog("info",
+          `Przywrócono dane GSM z projektu: ${data.billing.record_count || 0} rekordów`
+          + (idCount ? `, ${idCount} identyfikacji` : "")
+          + ` (${data.billing.operator || "?"})`);
         return true;
       }
 
       return false;
     } catch (e) {
       console.warn("[GSM] Load error:", e);
+      _addLog("warn", `Nie udało się wczytać danych GSM: ${e.message || e}`);
       return false;
     }
   }
