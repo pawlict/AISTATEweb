@@ -76,8 +76,7 @@
     <!-- GSM toolbar items (hidden by default, shown when GSM tab active) -->
     <div class="analysis-toolbar-right" id="gsm_toolbar_items" style="display:none">
       <div class="toolbar-section">
-        <button class="btn pill-icon" id="gsm_add_file_toolbar_btn" title="Wczytaj biling GSM (XLSX)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj XLSX" draggable="false"></button>
-        <button class="btn pill-icon" id="gsm_id_file_toolbar_btn" title="Wczytaj identyfikację numerów (XLSX/CSV)"><img src="/static/icons/pliki/file_upload.svg" alt="Identyfikacja" draggable="false"></button>
+        <button class="btn pill-icon" id="gsm_add_file_toolbar_btn" title="Wczytaj dane GSM (biling, identyfikacja, ZIP, folder)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj dane" draggable="false"></button>
       </div>
     </div>
   </div>
@@ -574,11 +573,10 @@
     </div>
 
     <!-- Empty state (before upload) -->
-    <div id="gsm_empty_state" class="card" style="text-align:center;padding:60px 20px">
-      <div style="font-size:48px;margin-bottom:16px;opacity:0.3"><i data-icon="phone" data-size="48"></i></div>
-      <div class="h2" style="margin-bottom:8px">Analiza bilingu GSM</div>
-      <div class="small muted" style="margin-bottom:20px">Wczytaj plik XLSX z bilingiem operatora (T-Mobile, Orange, Play, Plus).</div>
-      <button class="btn" id="gsm_upload_empty_btn">Wczytaj plik XLSX</button>
+    <div id="gsm_empty_state" class="card" style="text-align:center;padding:40px 20px">
+      <img src="/static/logo_gsm.png" alt="Moduł GSM" style="max-width:480px;width:100%;margin-bottom:24px" draggable="false">
+      <div class="small muted" style="margin-bottom:20px;max-width:500px;margin-left:auto;margin-right:auto">Wczytaj dane GSM — biling (XLSX), identyfikację (XLSX/CSV), folder lub archiwum ZIP.<br>Program automatycznie rozpozna pliki i przypisze je do operatora.</div>
+      <button class="btn" id="gsm_upload_empty_btn" style="min-width:180px">Wczytaj dane</button>
     </div>
 
   </div><!-- /gsm_content -->
@@ -586,8 +584,7 @@
   <!-- Hidden file inputs -->
   <input type="file" id="docs_file_input" style="display:none" multiple>
   <input type="file" id="aml_file_input" accept=".pdf" multiple style="display:none">
-  <input type="file" id="gsm_file_input" accept=".xlsx,.xls" style="display:none">
-  <input type="file" id="gsm_id_file_input" accept=".xlsx,.xls,.csv,.txt" multiple style="display:none">
+  <input type="file" id="gsm_file_input" accept=".xlsx,.xls,.csv,.txt,.zip" multiple style="display:none">
   <input type="file" id="prompt_import_input" style="display:none" accept="application/json">
 
   <!-- Prompt dialog -->

@@ -114,11 +114,18 @@
     });
   }
 
-  /* ── upload & parse ─────────────────────────────────────── */
-  async function _uploadAndParse(file) {
-    if (St.analyzing) return;
+  /* ── smart import ──────────────────────────────────────── */
+
+  /**
+   * Smart import: upload file(s), auto-detect billing/identification/ZIP.
+   * Replaces old _uploadAndParse + _uploadIdentification.
+   */
+  async function _smartImport(files) {
+    if (St.analyzing || !files || !files.length) return;
     St.analyzing = true;
-    St.filename = file.name;
+
+    const fileNames = Array.from(files).map(f => f.name);
+    St.filename = fileNames[0];
 
     const progress = QS("#gsm_progress");
     const status = QS("#gsm_status");
@@ -126,22 +133,24 @@
     const results = QS("#gsm_results");
 
     if (progress) progress.style.display = "";
-    if (status) status.textContent = "Wczytywanie pliku…";
-    if (bar) bar.style.width = "30%";
+    if (status) status.textContent = `Wczytywanie ${files.length} pliku(ów)…`;
+    if (bar) bar.style.width = "20%";
     if (results) results.style.display = "none";
 
     const fd = new FormData();
-    fd.append("file", file);
+    for (const f of files) {
+      fd.append("files", f);
+    }
 
     try {
-      if (status) status.textContent = "Parsowanie bilingu…";
-      if (bar) bar.style.width = "60%";
+      if (status) status.textContent = "Skanowanie i klasyfikacja plików…";
+      if (bar) bar.style.width = "40%";
 
-      const resp = await fetch("/api/gsm/parse", { method: "POST", body: fd });
+      const resp = await fetch("/api/gsm/import", { method: "POST", body: fd });
 
-      if (bar) bar.style.width = "90%";
+      if (bar) bar.style.width = "80%";
 
-      // Handle non-JSON responses (e.g. HTML error pages)
+      // Handle non-JSON responses
       let data;
       const contentType = resp.headers.get("content-type") || "";
       if (contentType.includes("application/json")) {
@@ -160,24 +169,75 @@
 
       if (data.status !== "ok") {
         const detail = data.detail || data.error || data.message || JSON.stringify(data);
-        console.error("GSM parse error:", detail);
+        console.error("GSM import error:", detail);
         if (status) status.textContent = `Błąd: ${detail}`;
         _addLog("error", detail);
         St.analyzing = false;
         return;
       }
 
-      St.lastResult = data;
-      if (status) status.textContent = "Gotowe";
-      _addLog("info", `Sparsowano ${data.record_count} rekordów (${data.operator || "?"})`);
+      // Log scan results
+      const sc = data.scan || {};
+      _addLog("info", `Skanowanie: ${sc.total_files || 0} plików — `
+        + `${sc.billing_count || 0} bilingów, `
+        + `${sc.identification_count || 0} identyfikacji, `
+        + `${sc.unknown_count || 0} nierozpoznanych`
+        + (sc.zips_extracted ? `, ${sc.zips_extracted} ZIP rozp.` : ""));
+
+      // Log each scanned file
+      for (const sf of (sc.files || [])) {
+        const icon = sf.file_type === "billing" ? "📊" :
+                     sf.file_type === "identification" ? "🔍" :
+                     sf.file_type === "skipped" ? "⏭" : "❓";
+        _addLog("info", `  ${icon} ${sf.filename}: ${sf.detail || sf.file_type}`);
+      }
+
+      // Process identification data
+      if (data.identification && data.identification.lookup) {
+        Object.assign(St.idMap, data.identification.lookup);
+        const idCount = data.identification.total_records || 0;
+        _addLog("info", `Identyfikacja: ${idCount} rekordów załadowanych`);
+      }
+
+      // Process billing data
+      if (data.billing) {
+        const bd = data.billing;
+        if (bd.status === "ok") {
+          St.lastResult = bd;
+          St.filename = bd.filename || St.filename;
+          if (status) status.textContent = "Gotowe";
+          _addLog("info", `Biling: ${bd.record_count || 0} rekordów (${bd.operator || "?"})`);
+          _renderResults(bd);
+        } else {
+          const detail = bd.detail || "Błąd parsowania bilingu";
+          _addLog("error", `Biling: ${detail}`);
+          if (status) status.textContent = `Błąd bilingu: ${detail}`;
+        }
+      } else if (!data.identification) {
+        // No billing and no identification found
+        if (status) status.textContent = "Nie znaleziono bilingów ani identyfikacji";
+        _addLog("warn", "Nie znaleziono plików bilingów ani identyfikacji w przesłanych danych");
+      } else {
+        // Only identification, no billing
+        if (status) status.textContent = "Załadowano identyfikację (brak bilingu)";
+        // Re-render if we already had billing loaded
+        if (St.lastResult) {
+          _renderAnalysis(St.lastResult.analysis);
+          _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+        }
+      }
+
+      // Extra billings warning
+      if (data.extra_billings && data.extra_billings.length) {
+        _addLog("warn", `Dodatkowe bilingi (nie przetworzone): ${data.extra_billings.join(", ")}`);
+      }
 
       setTimeout(() => {
         if (progress) progress.style.display = "none";
       }, 800);
 
-      _renderResults(data);
     } catch (e) {
-      console.error("GSM parse error:", e);
+      console.error("GSM import error:", e);
       const msg = e.message || String(e);
       if (status) status.textContent = `Błąd: ${msg}`;
       _addLog("error", msg);
@@ -186,7 +246,7 @@
     }
   }
 
-  /* ── identification upload & lookup ──────────────────────── */
+  /* ── identification lookup helpers ─────────────────────── */
 
   /**
    * Normalise a phone number to 11-digit format (48XXXXXXXXX) to match
@@ -230,58 +290,6 @@
     const info = _idLookup(number);
     if (!info) return '<span class="muted">—</span>';
     return `<span class="${info.css}" title="${info.type}">${info.label}</span>`;
-  }
-
-  /**
-   * Upload identification file(s) and build lookup map.
-   */
-  async function _uploadIdentification(files) {
-    if (!files || !files.length) return;
-
-    _addLog("info", `Wczytywanie ${files.length} pliku(ów) identyfikacji…`);
-
-    const fd = new FormData();
-    for (const f of files) {
-      fd.append("files", f);
-    }
-
-    try {
-      const resp = await fetch("/api/gsm/identification", { method: "POST", body: fd });
-      const data = await resp.json();
-
-      if (data.status !== "ok") {
-        const detail = data.detail || JSON.stringify(data);
-        _addLog("error", `Identyfikacja: ${detail}`);
-        return;
-      }
-
-      // Merge into existing idMap (allows multiple uploads)
-      if (data.identification) {
-        Object.assign(St.idMap, data.identification);
-      }
-
-      const loaded = data.total_records || 0;
-      _addLog("info", `Identyfikacja: wczytano ${loaded} rekordów z ${(data.files || []).length} pliku(ów)`);
-
-      // Log per-file results
-      for (const fr of (data.files || [])) {
-        if (fr.status === "ok") {
-          _addLog("info", `  ${fr.filename}: ${fr.records_loaded} rekordów`);
-        } else {
-          _addLog("warn", `  ${fr.filename}: ${fr.detail || fr.status}`);
-        }
-      }
-
-      // Re-render tables if we have results loaded
-      if (St.lastResult) {
-        _renderAnalysis(St.lastResult.analysis);
-        _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
-      }
-
-    } catch (e) {
-      console.error("Identification upload error:", e);
-      _addLog("error", `Identyfikacja: ${e.message || e}`);
-    }
   }
 
   /* ── render ─────────────────────────────────────────────── */
@@ -2190,23 +2198,8 @@
     if (fileInput) {
       fileInput.onchange = () => {
         if (fileInput.files && fileInput.files.length > 0) {
-          _uploadAndParse(fileInput.files[0]);
+          _smartImport(fileInput.files);
           fileInput.value = "";
-        }
-      };
-    }
-
-    // Identification file upload
-    const idFileInput = QS("#gsm_id_file_input");
-    const idBtn = QS("#gsm_id_file_toolbar_btn");
-    if (idBtn) {
-      idBtn.onclick = () => { if (idFileInput) idFileInput.click(); };
-    }
-    if (idFileInput) {
-      idFileInput.onchange = () => {
-        if (idFileInput.files && idFileInput.files.length > 0) {
-          _uploadIdentification(idFileInput.files);
-          idFileInput.value = "";
         }
       };
     }

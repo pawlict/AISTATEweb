@@ -2,6 +2,7 @@
 
 Endpoints:
 - POST /api/gsm/parse           — upload XLSX billing file and parse it
+- POST /api/gsm/import          — smart import: auto-detect billing/identification/ZIP
 - POST /api/gsm/identification  — upload identification file(s) (XLSX/CSV)
 - POST /api/gsm/geolocate       — geolocate parsed billing records
 - GET  /api/gsm/bts/stats       — BTS database statistics
@@ -296,6 +297,140 @@ async def gsm_identification(
         )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Smart import — auto-detect billing / identification / ZIP
+# ---------------------------------------------------------------------------
+
+@router.post("/api/gsm/import")
+async def gsm_smart_import(
+    request: Request,
+    files: List[UploadFile] = File(...),
+):
+    """Smart import: upload files (XLSX, CSV, ZIP) and auto-detect type.
+
+    Automatically classifies each file as billing, identification, or unknown.
+    ZIPs are extracted recursively. Billing is parsed + analysed + geolocated.
+    Identification records are returned as a lookup map.
+    """
+    if not files:
+        return JSONResponse(
+            {"status": "error", "detail": "Brak plików"},
+            status_code=400,
+        )
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="gsm_import_"))
+    extra_tmp_dirs: list = []
+
+    try:
+        # Save all uploaded files to temp directory
+        saved_paths: list = []
+        for f in files:
+            if not f.filename:
+                continue
+            tmp_path = tmp_dir / f.filename
+            content = await f.read()
+            tmp_path.write_bytes(content)
+            saved_paths.append(tmp_path)
+            _app_log(f"[GSM] Import: {f.filename} ({len(content)} bytes)")
+
+        # Scan and classify
+        from backend.gsm.folder_scanner import scan_files
+        scan_result, extra_tmp_dirs = await run_in_threadpool(
+            scan_files, saved_paths
+        )
+
+        _app_log(
+            f"[GSM] Scan: {len(scan_result.billing_files)} bilingów, "
+            f"{len(scan_result.identification_files)} identyfikacji, "
+            f"{len(scan_result.unknown_files)} nierozpoznanych, "
+            f"{scan_result.zips_extracted} ZIP rozp."
+        )
+
+        response: dict = {
+            "status": "ok",
+            "scan": scan_result.to_dict(),
+        }
+
+        # --- Process billing files ---
+        if scan_result.billing_files:
+            # Use the first (or best confidence) billing file
+            best_billing = max(scan_result.billing_files, key=lambda f: f.confidence)
+            _app_log(f"[GSM] Processing billing: {best_billing.filename} ({best_billing.operator})")
+
+            billing_data = await run_in_threadpool(
+                _do_parse, best_billing.path, best_billing.filename
+            )
+            response["billing"] = billing_data
+
+            # If there are more billing files, note them
+            if len(scan_result.billing_files) > 1:
+                extra = [f.filename for f in scan_result.billing_files if f is not best_billing]
+                response["extra_billings"] = extra
+                _app_log(f"[GSM] Additional billing files (not processed): {extra}")
+
+        # --- Process identification files ---
+        if scan_result.identification_files:
+            from backend.gsm.identification import IdentificationStore
+            store = IdentificationStore()
+
+            id_file_results = []
+            for sf in scan_result.identification_files:
+                try:
+                    count = store.load_file(sf.path)
+                    id_file_results.append({
+                        "filename": sf.filename,
+                        "operator": sf.operator,
+                        "status": "ok",
+                        "records_loaded": count,
+                    })
+                    _app_log(f"[GSM] Identification: {sf.filename} ({sf.operator}) — {count} records")
+                except Exception as e:
+                    id_file_results.append({
+                        "filename": sf.filename,
+                        "operator": sf.operator,
+                        "status": "error",
+                        "detail": str(e),
+                    })
+                    log.warning("ID parse error for %s: %s", sf.filename, e)
+
+            # Build lookup map
+            lookup_map = {}
+            for msisdn, rec in store._records.items():
+                lookup_map[msisdn] = {
+                    "label": rec.display_label,
+                    "type": rec.identification_type,
+                    "name": rec.name or "",
+                    "address": rec.address or "",
+                    "city": rec.city or "",
+                    "pesel": rec.pesel or "",
+                    "nip": rec.nip or "",
+                    "operator": rec.source_operator or "",
+                }
+
+            response["identification"] = {
+                "total_records": store.count,
+                "files": id_file_results,
+                "lookup": lookup_map,
+            }
+
+        _app_log(f"[GSM] Import complete")
+        return JSONResponse(response)
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        error_msg = f"{type(e).__name__}: {e}"
+        log.exception("Smart import error: %s", e)
+        _app_log(f"[GSM] ERROR import: {error_msg}\n{tb}")
+        return JSONResponse(
+            {"status": "error", "detail": error_msg},
+            status_code=500,
+        )
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        for d in extra_tmp_dirs:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
