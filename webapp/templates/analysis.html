@@ -505,6 +505,21 @@
       <!-- Activity charts -->
       <div id="gsm_activity_charts" style="display:none"></div>
 
+      <!-- Heatmap: Godzina × Dzień tygodnia -->
+      <div class="card" id="gsm_heatmap_card" style="display:none">
+        <div class="card-header" style="display:flex;align-items:center;gap:8px">
+          <span class="h3" style="margin:0">Rozkład aktywności</span>
+          <select id="gsm_hm_month" class="input" style="margin-left:auto;padding:4px 8px;border-radius:8px;min-width:130px;font-size:0.85em">
+            <option value="all">Cały okres</option>
+          </select>
+        </div>
+        <div id="gsm_heatmap_body" style="overflow-x:auto;padding:8px 12px"></div>
+        <div id="gsm_hm_filter_bar" style="display:none;padding:4px 12px 8px;font-size:0.85em;display:none;align-items:center;gap:6px">
+          <span id="gsm_hm_filter_label"></span>
+          <button class="btn btn-xs" id="gsm_hm_filter_clear" style="margin-left:8px">✕ Wyczyść filtr</button>
+        </div>
+      </div>
+
       <!-- BTS Map -->
       <div class="card" id="gsm_map_card" style="display:none">
         <div class="analysis-sidehdr">

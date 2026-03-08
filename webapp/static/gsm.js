@@ -37,6 +37,10 @@
     tlFadeSegments: [],   // fading trail segments (Marauder's Map)
     tlTrailCoords: [],    // accumulated [lat,lon] for visited trail
     tlSavedZoom: null,    // zoom level before timeline play
+    /* Heatmap state */
+    hmData: null,          // {grid, months, maxTotal}
+    hmActiveCell: null,    // {hour, dow} — active filter cell
+    hmMonth: "all",        // selected month filter
   };
 
   /* ── helpers ────────────────────────────────────────────── */
@@ -311,6 +315,10 @@
     _renderRecords(data.records, data.records_truncated, data.record_count);
     _renderSpecialNumbers(data.analysis ? data.analysis.special_numbers : []);
     _renderActivityCharts(data.analysis);
+    // Heatmap: hour × day-of-week
+    St.hmActiveCell = null;
+    _buildHeatmapData(data.records);
+    _renderHeatmap();
     _renderMap(data.geolocation);
     _renderWarnings(data.warnings);
   }
@@ -2190,6 +2198,227 @@
     return map[t] || t;
   }
 
+  /* ── heatmap: hour × day-of-week grid ─────────────────── */
+
+  const _DOW_LABELS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
+  const _MONTH_NAMES = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
+                         "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
+
+  /** Map JS getDay() (0=Sun..6=Sat) → our index (0=Mon..6=Sun). */
+  function _jsDowToIdx(jsDay) {
+    return jsDay === 0 ? 6 : jsDay - 1;
+  }
+
+  /** Classify record_type to category. */
+  function _hmCategory(rt) {
+    if (!rt) return null;
+    if (rt.startsWith("CALL")) return "calls";
+    if (rt === "SMS_OUT" || rt === "SMS_IN" || rt === "MMS_OUT" || rt === "MMS_IN") return "sms";
+    if (rt === "DATA") return "data";
+    return null;
+  }
+
+  /** Build heatmap grid from records. */
+  function _buildHeatmapData(records) {
+    if (!records || !records.length) { St.hmData = null; return; }
+
+    // Init 24×7 grid
+    const grid = [];
+    for (let h = 0; h < 24; h++) {
+      grid[h] = [];
+      for (let d = 0; d < 7; d++) {
+        grid[h][d] = { calls: 0, sms: 0, data: 0, total: 0 };
+      }
+    }
+
+    const monthsSet = new Set();
+    const monthFilter = St.hmMonth !== "all" ? St.hmMonth : null;
+
+    for (const r of records) {
+      if (!r.datetime) continue;
+      // Parse "YYYY-MM-DD HH:MM:SS" or similar
+      const dt = new Date(r.datetime.replace(" ", "T"));
+      if (isNaN(dt.getTime())) continue;
+
+      const ym = r.datetime.slice(0, 7); // "YYYY-MM"
+      monthsSet.add(ym);
+
+      if (monthFilter && ym !== monthFilter) continue;
+
+      const hour = dt.getHours();
+      const dow = _jsDowToIdx(dt.getDay());
+      const cat = _hmCategory(r.record_type);
+      if (!cat) continue;
+
+      grid[hour][dow][cat]++;
+      grid[hour][dow].total++;
+    }
+
+    // Find max for heatmap scaling
+    let maxTotal = 0;
+    for (let h = 0; h < 24; h++)
+      for (let d = 0; d < 7; d++)
+        if (grid[h][d].total > maxTotal) maxTotal = grid[h][d].total;
+
+    const months = Array.from(monthsSet).sort();
+
+    St.hmData = { grid, months, maxTotal };
+  }
+
+  /** Render the heatmap table HTML. */
+  function _renderHeatmap() {
+    const card = QS("#gsm_heatmap_card");
+    const body = QS("#gsm_heatmap_body");
+    if (!body) return;
+
+    if (!St.hmData || !St.hmData.maxTotal) {
+      if (card) card.style.display = "none";
+      return;
+    }
+    if (card) card.style.display = "";
+
+    const { grid, maxTotal } = St.hmData;
+    const ac = St.hmActiveCell;
+
+    let html = '<table class="gsm-heatmap"><thead><tr><th class="gsm-hm-hour">Godzina</th>';
+    for (const d of _DOW_LABELS) html += `<th>${d}</th>`;
+    html += "</tr></thead><tbody>";
+
+    for (let h = 0; h < 24; h++) {
+      const hLabel = String(h).padStart(2, "0") + ":00–" + String(h + 1 === 24 ? 0 : h + 1).padStart(2, "0") + ":00";
+      html += `<tr><td class="gsm-hm-hour">${hLabel}</td>`;
+
+      for (let d = 0; d < 7; d++) {
+        const c = grid[h][d];
+        const opacity = c.total > 0 ? (c.total / maxTotal) * 0.65 + 0.08 : 0;
+        const bg = c.total > 0 ? `background-color:rgba(37,99,235,${opacity.toFixed(3)})` : "";
+        const isActive = ac && ac.hour === h && ac.dow === d;
+        const cls = isActive ? " gsm-hm-active" : "";
+
+        // Tooltip
+        const parts = [];
+        if (c.calls) parts.push(`${c.calls} rozm.`);
+        if (c.sms) parts.push(`${c.sms} SMS`);
+        if (c.data) parts.push(`${c.data} dane`);
+        const tip = `${_DOW_LABELS[d]} ${hLabel}: ${parts.join(", ") || "brak"}`;
+
+        const val = c.total > 0 ? c.total : "";
+        html += `<td data-hour="${h}" data-dow="${d}" class="${cls}" style="${bg}" title="${tip}">${val}</td>`;
+      }
+      html += "</tr>";
+    }
+    html += "</tbody></table>";
+    body.innerHTML = html;
+
+    // Event delegation — click on cell
+    const table = body.querySelector("table");
+    if (table) {
+      table.onclick = (e) => {
+        const td = e.target.closest("td[data-hour]");
+        if (!td) return;
+        const hour = parseInt(td.dataset.hour, 10);
+        const dow = parseInt(td.dataset.dow, 10);
+        _heatmapFilter(hour, dow);
+      };
+    }
+
+    // Month selector
+    _initHeatmapMonthSelector();
+  }
+
+  /** Populate the month <select>. */
+  function _initHeatmapMonthSelector() {
+    const sel = QS("#gsm_hm_month");
+    if (!sel || !St.hmData) return;
+
+    // Remember current value
+    const cur = sel.value;
+
+    // Rebuild options
+    sel.innerHTML = '<option value="all">Cały okres</option>';
+    for (const ym of St.hmData.months) {
+      const [y, m] = ym.split("-");
+      const label = `${_MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
+      sel.innerHTML += `<option value="${ym}">${label}</option>`;
+    }
+
+    // Restore selection
+    sel.value = St.hmMonth;
+    if (sel.value !== St.hmMonth) sel.value = "all";
+
+    // Bind change (remove old handler by replacing)
+    sel.onchange = () => {
+      St.hmMonth = sel.value;
+      St.hmActiveCell = null;
+      _clearHeatmapFilter();
+      _buildHeatmapData(St.lastResult ? St.lastResult.records : []);
+      _renderHeatmap();
+    };
+  }
+
+  /** Filter records by clicked heatmap cell. */
+  function _heatmapFilter(hour, dow) {
+    // Toggle off if clicking same cell
+    if (St.hmActiveCell && St.hmActiveCell.hour === hour && St.hmActiveCell.dow === dow) {
+      _clearHeatmapFilter();
+      return;
+    }
+
+    St.hmActiveCell = { hour, dow };
+
+    // Filter records
+    const records = St.lastResult ? St.lastResult.records : [];
+    const monthFilter = St.hmMonth !== "all" ? St.hmMonth : null;
+
+    const filtered = records.filter(r => {
+      if (!r.datetime) return false;
+      const dt = new Date(r.datetime.replace(" ", "T"));
+      if (isNaN(dt.getTime())) return false;
+      if (monthFilter && r.datetime.slice(0, 7) !== monthFilter) return false;
+      return dt.getHours() === hour && _jsDowToIdx(dt.getDay()) === dow;
+    });
+
+    // Update heatmap visuals
+    _renderHeatmap();
+
+    // Show filter bar
+    const bar = QS("#gsm_hm_filter_bar");
+    const label = QS("#gsm_hm_filter_label");
+    if (bar) bar.style.display = "flex";
+    if (label) {
+      const hLabel = String(hour).padStart(2, "0") + ":00–" + String(hour + 1 === 24 ? 0 : hour + 1).padStart(2, "0") + ":00";
+      label.textContent = `Filtr: ${_DOW_LABELS[dow]} ${hLabel} — ${filtered.length} rekordów`;
+    }
+
+    // Wire clear button
+    const clearBtn = QS("#gsm_hm_filter_clear");
+    if (clearBtn) clearBtn.onclick = () => _clearHeatmapFilter();
+
+    // Render filtered records
+    _renderRecords(filtered, false, filtered.length);
+
+    // Scroll to records table
+    const recEl = QS("#gsm_records_body");
+    if (recEl) recEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** Clear heatmap filter and restore original records. */
+  function _clearHeatmapFilter() {
+    St.hmActiveCell = null;
+
+    // Hide filter bar
+    const bar = QS("#gsm_hm_filter_bar");
+    if (bar) bar.style.display = "none";
+
+    // Re-render heatmap (remove active highlight)
+    _renderHeatmap();
+
+    // Restore original records
+    if (St.lastResult) {
+      _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    }
+  }
+
   /* ── project persistence ──────────────────────────────── */
 
   /**
@@ -2371,6 +2600,9 @@
       newBtn.onclick = () => {
         St.lastResult = null;
         St.idMap = {};
+        St.hmData = null;
+        St.hmActiveCell = null;
+        St.hmMonth = "all";
         if (St.map) { St.map.remove(); St.map = null; }
         const results = QS("#gsm_results");
         const empty = QS("#gsm_empty_state");
