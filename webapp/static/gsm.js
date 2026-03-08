@@ -577,36 +577,16 @@
     const allCards = [...topCards.map((p, i) => ({ ...p, i, c: contacts[i], isTop: true })),
                       ...botCards.map((p, j) => ({ ...p, i: topN + j, c: contacts[topN + j], isTop: false }))];
 
-    // ── Smooth Bézier arrows — behind cards ──
-    // Each contact gets two symmetric curves (V-shape):
-    //   green (OUT): subscriber → contact
-    //   red  (IN):  contact → subscriber
-    // Anti-crossing: compute min angular gap between adjacent contacts,
-    // then limit curve offset so arcs stay within their angular lane.
+    // ── Straight-line arrows — behind cards ──
+    // Each contact: two straight lines with small perpendicular V-separation.
+    //   green (OUT): subscriber → contact, shifted +3px left of axis
+    //   red  (IN):  contact → subscriber, shifted -3px right of axis
+    // Lines stay strictly between their own card and subscriber — no crossing.
     const SUB_R = 24;
-    const EDGE_GAP = 8;
-    const SEP = 3; // perpendicular pixel offset to separate OUT/IN at endpoints
+    const EDGE_GAP = 6;
+    const SEP = 3; // perpendicular separation between OUT and IN
 
-    // Pre-compute angles from subscriber to each contact's edge point
-    const contactAngles = allCards.map(card => {
-      const ddx = (card.x + CW / 2) - CX;
-      const ddy = (card.isTop ? card.y + CH : card.y) - SUB_Y;
-      return Math.atan2(ddy, ddx);
-    });
-    // Find minimum angular gap to any neighbor for each contact
-    const minGaps = contactAngles.map((a, i) => {
-      let gap = Math.PI;
-      for (let j = 0; j < contactAngles.length; j++) {
-        if (j === i) continue;
-        let d = Math.abs(a - contactAngles[j]);
-        if (d > Math.PI) d = 2 * Math.PI - d;
-        if (d < gap) gap = d;
-      }
-      return gap;
-    });
-
-    for (let ci = 0; ci < allCards.length; ci++) {
-      const card = allCards[ci];
+    for (const card of allCards) {
       const c = card.c, idx = card.i;
       const cardCX = card.x + CW / 2;
       const cardEdgeY = card.isTop ? card.y + CH : card.y;
@@ -615,42 +595,33 @@
       const inAll = (c.calls_in || 0) + (c.sms_in || 0);
       const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
 
-      // Direction & perpendicular
+      // Direction from subscriber to card & perpendicular
       const dx = cardCX - CX, dy = cardEdgeY - SUB_Y;
       const len = Math.sqrt(dx * dx + dy * dy) || 1;
       const nx = dx / len, ny = dy / len;
       const perpX = -ny, perpY = nx;
 
-      // Base endpoints on the straight line (shared by OUT and IN)
-      const baseAx = CX + nx * (SUB_R + 2), baseAy = SUB_Y + ny * (SUB_R + 2);
-      const baseBx = cardCX - nx * EDGE_GAP, baseBy = cardEdgeY - ny * EDGE_GAP;
+      // Endpoints: A near subscriber circle edge, B near card edge
+      const ax = CX + nx * (SUB_R + 2), ay = SUB_Y + ny * (SUB_R + 2);
+      const bx = cardCX - nx * EDGE_GAP, by = cardEdgeY - ny * EDGE_GAP;
 
-      // Curve offset limited by angular gap so arcs don't cross neighbors
-      const angGap = minGaps[ci];
-      const maxBow = len * Math.sin(angGap / 2) * 0.4; // max safe bowing
-      const curveOff = Math.min(Math.max(len * 0.07, 6), maxBow, 16);
-
-      const midX = (baseAx + baseBx) / 2, midY = (baseAy + baseBy) / 2;
-
-      // OUT: subscriber → contact (green), start/end shifted +perp
+      // OUT: A→B shifted +perp (green, arrow at card end)
       if (outAll > 0) {
-        const ax = baseAx + perpX * SEP, ay = baseAy + perpY * SEP;
-        const bx = baseBx + perpX * SEP, by = baseBy + perpY * SEP;
-        const cpx = midX + perpX * (curveOff + SEP), cpy = midY + perpY * (curveOff + SEP);
-        svg += `<path class="gsm-graph-edge" data-edge="out" data-idx="${idx}" data-number="${c.number}"
-          d="M${ax.toFixed(1)},${ay.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${bx.toFixed(1)},${by.toFixed(1)}"
-          fill="none" stroke="#34c759" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
+        const x1 = ax + perpX * SEP, y1 = ay + perpY * SEP;
+        const x2 = bx + perpX * SEP, y2 = by + perpY * SEP;
+        svg += `<line class="gsm-graph-edge" data-edge="out" data-idx="${idx}" data-number="${c.number}"
+          x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+          stroke="#34c759" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
           marker-end="url(#gsm_arrow_out)"
           data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"/>`;
       }
-      // IN: contact → subscriber (red), start/end shifted −perp (mirror)
+      // IN: B→A shifted −perp (red, arrow at subscriber end)
       if (inAll > 0) {
-        const ax = baseAx - perpX * SEP, ay = baseAy - perpY * SEP;
-        const bx = baseBx - perpX * SEP, by = baseBy - perpY * SEP;
-        const cpx = midX - perpX * (curveOff + SEP), cpy = midY - perpY * (curveOff + SEP);
-        svg += `<path class="gsm-graph-edge" data-edge="in" data-idx="${idx}" data-number="${c.number}"
-          d="M${bx.toFixed(1)},${by.toFixed(1)} Q${cpx.toFixed(1)},${cpy.toFixed(1)} ${ax.toFixed(1)},${ay.toFixed(1)}"
-          fill="none" stroke="#ff4d4f" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
+        const x1 = bx - perpX * SEP, y1 = by - perpY * SEP;
+        const x2 = ax - perpX * SEP, y2 = ay - perpY * SEP;
+        svg += `<line class="gsm-graph-edge" data-edge="in" data-idx="${idx}" data-number="${c.number}"
+          x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+          stroke="#ff4d4f" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
           marker-end="url(#gsm_arrow_in)"
           data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"/>`;
       }
