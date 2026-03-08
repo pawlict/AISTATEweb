@@ -212,7 +212,7 @@
           St.filename = bd.filename || St.filename;
           if (status) status.textContent = "Gotowe";
           _addLog("info", `Biling: ${bd.record_count || 0} rekordów (${bd.operator || "?"})`);
-          _renderResults(bd);
+          await _renderResults(bd);
         } else {
           const detail = bd.detail || "Błąd parsowania bilingu";
           _addLog("error", `Biling: ${detail}`);
@@ -301,7 +301,7 @@
   }
 
   /* ── render ─────────────────────────────────────────────── */
-  function _renderResults(data) {
+  async function _renderResults(data) {
     const wrap = QS("#gsm_results");
     if (!wrap) return;
     wrap.style.display = "";
@@ -320,7 +320,8 @@
     St.hmActiveCell = null;
     _buildHeatmapData(data.records);
     _renderHeatmap();
-    _renderMap(data.geolocation);
+    // Map is async (loads Leaflet) — must finish before travel sections
+    await _renderMap(data.geolocation);
     _renderOvernightStays(data.analysis);
     _renderWarnings(data.warnings);
   }
@@ -1348,16 +1349,9 @@
    * rendered data stored on the DOM container.
    */
   function _renderTravelSections(geo, analysis) {
-    const clusterWrap = QS("#gsm_cluster_info");
-    if (!clusterWrap) return;
-
-    // Ensure container exists
-    let container = QS("#gsm_travel_sections");
-    if (!container) {
-      container = _el("div", "", "");
-      container.id = "gsm_travel_sections";
-      clusterWrap.appendChild(container);
-    }
+    // Container is in the template, independent of #gsm_cluster_info visibility
+    const container = QS("#gsm_travel_sections");
+    if (!container) return;
 
     // Cache data on the container so either caller can update independently
     if (geo) container._geo = geo;
@@ -2633,7 +2627,7 @@
         St.lastResult = data.billing;
         St.filename = data.billing.filename || "";
         _showLoadingOverlay("Renderowanie wyników…");
-        _renderResults(data.billing);
+        await _renderResults(data.billing);
         _hideLoadingOverlay();
         const idCount = Object.keys(St.idMap).length;
         _addLog("info",
