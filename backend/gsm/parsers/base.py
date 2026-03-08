@@ -87,6 +87,7 @@ class BillingSummary:
     mms_in: int = 0
     data_sessions: int = 0
     total_duration_seconds: int = 0
+    call_duration_seconds: int = 0     # only CALL_OUT + CALL_IN (excludes DATA)
     total_data_kb: float = 0.0
     total_cost: float = 0.0
     total_cost_gross: float = 0.0
@@ -569,6 +570,8 @@ def compute_summary(records: List[BillingRecord]) -> BillingSummary:
             summary.data_sessions += 1
 
         summary.total_duration_seconds += r.duration_seconds
+        if rt in ("CALL_OUT", "CALL_IN"):
+            summary.call_duration_seconds += r.duration_seconds
         summary.total_data_kb += r.data_volume_kb
 
         if r.cost is not None:

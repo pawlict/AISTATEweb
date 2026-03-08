@@ -24,12 +24,23 @@
 
   function _dur(sec) {
     if (!sec) return "0s";
-    const h = Math.floor(sec / 3600);
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
     const m = Math.floor((sec % 3600) / 60);
     const s = sec % 60;
-    if (h > 0) return `${h}h ${m}m ${s}s`;
+    const totalH = Math.floor(sec / 3600);
+    if (totalH >= 100) return `${d}d ${h}h ${m}m ${s}s`;
+    if (totalH > 0) return `${totalH}h ${m}m ${s}s`;
     if (m > 0) return `${m}m ${s}s`;
     return `${s}s`;
+  }
+
+  function _dataSize(kb) {
+    if (!kb) return "0 KB";
+    if (kb < 1024) return kb.toFixed(1) + " KB";
+    const mb = kb / 1024;
+    if (mb < 1024) return mb.toFixed(1) + " MB";
+    return (mb / 1024).toFixed(2) + " GB";
   }
 
   function _el(tag, cls, html) {
@@ -175,6 +186,8 @@
     const el = QS("#gsm_summary_grid");
     if (!el || !s) return;
 
+    const callDur = s.call_duration_seconds != null ? s.call_duration_seconds : s.total_duration_seconds;
+
     el.innerHTML = `
       <div class="gsm-stat-card">
         <div class="gsm-stat-value">${_fmt(s.total_records)}</div>
@@ -185,20 +198,20 @@
         <div class="gsm-stat-label">Połączenia (${_fmt(s.calls_out)}↑ ${_fmt(s.calls_in)}↓)</div>
       </div>
       <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${_dur(callDur)}</div>
+        <div class="gsm-stat-label">Czas rozmów (${_fmt(s.calls_out)}↑ ${_fmt(s.calls_in)}↓)</div>
+      </div>
+      <div class="gsm-stat-card">
         <div class="gsm-stat-value">${_fmt(s.sms_out + s.sms_in)}</div>
         <div class="gsm-stat-label">SMS (${_fmt(s.sms_out)}↑ ${_fmt(s.sms_in)}↓)</div>
       </div>
       <div class="gsm-stat-card">
         <div class="gsm-stat-value">${_fmt(s.mms_out + s.mms_in)}</div>
-        <div class="gsm-stat-label">MMS</div>
+        <div class="gsm-stat-label">MMS (${_fmt(s.mms_out)}↑ ${_fmt(s.mms_in)}↓)</div>
       </div>
       <div class="gsm-stat-card">
-        <div class="gsm-stat-value">${_fmt(s.data_sessions)}</div>
-        <div class="gsm-stat-label">Sesje danych</div>
-      </div>
-      <div class="gsm-stat-card">
-        <div class="gsm-stat-value">${_dur(s.total_duration_seconds)}</div>
-        <div class="gsm-stat-label">Czas rozmów</div>
+        <div class="gsm-stat-value">${_dataSize(s.total_data_kb)}</div>
+        <div class="gsm-stat-label">Dane (${_fmt(s.data_sessions)} sesji)</div>
       </div>
       <div class="gsm-stat-card">
         <div class="gsm-stat-value">${_fmt(s.unique_contacts)}</div>
