@@ -2215,11 +2215,7 @@
       };
     }
 
-    // Empty state upload button
-    const emptyBtn = QS("#gsm_upload_empty_btn");
-    if (emptyBtn) {
-      emptyBtn.onclick = () => { if (fileInput) fileInput.click(); };
-    }
+    // (empty state has no button — upload via toolbar icon only)
 
     // New analysis button
     const newBtn = QS("#gsm_new_analysis");
