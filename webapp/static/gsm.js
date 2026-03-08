@@ -52,9 +52,15 @@
 
   function _dur(sec) {
     if (!sec) return "0s";
-    const h = Math.floor(sec / 3600);
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
     const m = Math.floor((sec % 3600) / 60);
     const s = sec % 60;
+    if (d > 0 || h >= 100) {
+      const totalD = Math.floor(sec / 86400);
+      const remH = Math.floor((sec % 86400) / 3600);
+      return `${totalD}d ${remH}h ${m}m ${s}s`;
+    }
     if (h > 0) return `${h}h ${m}m ${s}s`;
     if (m > 0) return `${m}m ${s}s`;
     return `${s}s`;
