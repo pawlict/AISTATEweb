@@ -516,15 +516,20 @@
 
     const N = contacts.length;
     // Dynamic dimensions based on contact count
-    const W = 700, H = N <= 5 ? 380 : N <= 10 ? 440 : N <= 15 ? 480 : 520;
+    const W = 700, H = N <= 5 ? 380 : N <= 10 ? 440 : N <= 15 ? 510 : 550;
     const CX = W / 2, CY = H - 55;
-    const R = N <= 5 ? 220 : N <= 10 ? 250 : N <= 15 ? 270 : 290;
+    const Rbase = N <= 5 ? 220 : N <= 10 ? 250 : N <= 15 ? 270 : 290;
+    // For many contacts: wider spread angle so edges drop lower
+    const arcFrom = N > 10 ? 172 : 165;
+    const arcSpan = N > 10 ? 164 : 150;
 
     // Positions for contacts on a semicircle arc
+    // For N>10: alternating long/short radius to stagger nodes
     const nodes = [];
     for (let i = 0; i < N; i++) {
-      const angleDeg = N === 1 ? 90 : 165 - i * (150 / (N - 1));
+      const angleDeg = N === 1 ? 90 : arcFrom - i * (arcSpan / (N - 1));
       const rad = angleDeg * Math.PI / 180;
+      const R = (N > 10) ? (i % 2 === 0 ? Rbase : Rbase * 0.75) : Rbase;
       nodes.push({
         x: CX + R * Math.cos(rad),
         y: CY - 40 - R * Math.sin(rad),
@@ -562,7 +567,16 @@
       </marker>
     </defs>`;
 
-    // Draw edges (arrows) — single curved path per direction
+    // Helper: offset a point towards another by `dist` px (shorten endpoint)
+    const _offset = (x, y, tx, ty, dist) => {
+      const ddx = tx - x, ddy = ty - y;
+      const l = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+      return { x: x + ddx / l * dist, y: y + ddy / l * dist };
+    };
+    const nodeR = 20; // contact node collision radius
+    const subR = 24;  // subscriber node collision radius
+
+    // Draw edges (arrows) — endpoints shortened so arrowheads are visible
     const curve = 28;
     for (let i = 0; i < N; i++) {
       const nd = nodes[i];
@@ -571,13 +585,19 @@
       const len = Math.sqrt(dx * dx + dy * dy) || 1;
       const px = -dy / len, py = dx / len;
 
+      // Shorten start/end so arrows stop before node circles
+      const sOut = _offset(CX, CY, nd.x, nd.y, subR);   // start away from subscriber
+      const eOut = _offset(nd.x, nd.y, CX, CY, nodeR);   // end before contact
+      const sIn  = _offset(nd.x, nd.y, CX, CY, nodeR);   // start away from contact
+      const eIn  = _offset(CX, CY, nd.x, nd.y, subR);    // end before subscriber
+
       const outAll = (c.calls_out || 0) + (c.sms_out || 0);
       const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
       const cx1 = (CX + nd.x) / 2 + px * curve;
       const cy1 = (CY + nd.y) / 2 + py * curve;
       const swOut = Math.min(2.5, Math.max(0.8, 0.6 + Math.log2(Math.max(outAll, 1)) * 0.35));
       svg += `<path class="gsm-graph-edge" data-edge="out" data-idx="${i}" data-number="${c.number}"
-        d="M${CX},${CY} Q${cx1.toFixed(1)},${cy1.toFixed(1)} ${nd.x.toFixed(1)},${nd.y.toFixed(1)}"
+        d="M${sOut.x.toFixed(1)},${sOut.y.toFixed(1)} Q${cx1.toFixed(1)},${cy1.toFixed(1)} ${eOut.x.toFixed(1)},${eOut.y.toFixed(1)}"
         fill="none" stroke="#22c55e" stroke-width="${swOut.toFixed(1)}" opacity="0.45"
         marker-end="url(#gsm_arrow_out)"
         data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"
@@ -589,7 +609,7 @@
       const cy2 = (CY + nd.y) / 2 - py * curve;
       const swIn = Math.min(2.5, Math.max(0.8, 0.6 + Math.log2(Math.max(inAll, 1)) * 0.35));
       svg += `<path class="gsm-graph-edge" data-edge="in" data-idx="${i}" data-number="${c.number}"
-        d="M${nd.x.toFixed(1)},${nd.y.toFixed(1)} Q${cx2.toFixed(1)},${cy2.toFixed(1)} ${CX},${CY}"
+        d="M${sIn.x.toFixed(1)},${sIn.y.toFixed(1)} Q${cx2.toFixed(1)},${cy2.toFixed(1)} ${eIn.x.toFixed(1)},${eIn.y.toFixed(1)}"
         fill="none" stroke="#ef4444" stroke-width="${swIn.toFixed(1)}" opacity="0.45"
         marker-end="url(#gsm_arrow_in)"
         data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"
