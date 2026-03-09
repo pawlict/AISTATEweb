@@ -572,16 +572,18 @@
         <div class="analysis-sidehdr">
           <div class="h2"><i data-icon="map" data-size="16"></i> Mapa lokalizacji BTS</div>
           <div style="display:flex;gap:8px;align-items:center">
-            <select class="input" id="gsm_map_layer_select" style="padding:5px 8px;border-radius:10px;min-width:140px">
-              <option value="all">Wszystkie punkty</option>
-              <option value="path">Ścieżka</option>
-              <option value="clusters">Klastry</option>
-              <option value="trips">Podróże</option>
-              <option value="border">Granica</option>
-              <option value="coverage">Zasięg BTS</option>
-              <option value="heatmap">Mapa cieplna</option>
-              <option value="timeline">Oś czasu</option>
+            <select class="input" id="gsm_map_layer_select" style="padding:5px 8px;border-radius:10px;min-width:140px"
+                    title="Wybierz widok mapy">
+              <option value="all" title="Wszystkie unikalne lokalizacje BTS z bilingu. Rozmiar punktu zależy od liczby rekordów, kolor od dominującego typu (połączenie/SMS/dane). 2×klik filtruje tabelę.">Wszystkie punkty</option>
+              <option value="path" title="Trasa przemieszczania się — linia łącząca kolejne punkty BTS z filtrowaniem przemieszczeń >2km. Wizualizuje fizyczną drogę urządzenia w czasie.">Ścieżka</option>
+              <option value="clusters" title="Algorytm grupuje bliskie stacje BTS w „miejsca" (dom, praca, inne). Każdy klaster ma kółko z zasięgiem i etykietę z miastem. Pod mapą widać kafelki z mini-wykresem godzinowym.">Klastry</option>
+              <option value="trips" title="Podróże między klastrami — strzałki łączące klastry z informacją o kierunku, dystansie i trybie podróży (samochód/pociąg). Trasy rysowane po drogach (OSRM).">Podróże</option>
+              <option value="border" title="Przekroczenia granicy — linie z ostatniego punktu BTS w Polsce do centrum odwiedzanego kraju. Ikona trybu podróży (samolot/samochód/pieszo) na linii, daty wyjazdu i powrotu.">Granica</option>
+              <option value="coverage" title="Obszarowy zasięg BTS — sektory (kierunek azymutu) lub kółka (dookólne). Kolory wg technologii: GSM=czerwony, UMTS=pomarańczowy, LTE=niebieski, 5G=fioletowy. Promień z bazy BTS.">Zasięg BTS</option>
+              <option value="heatmap" title="Mapa cieplna — wizualizacja gęstości punktów BTS. Kolorowy gradient pokazuje gdzie urządzenie przebywało najczęściej.">Mapa cieplna</option>
+              <option value="timeline" title="Animowany odtwarzacz — chronologicznie odtwarza ruch urządzenia na mapie. Marker z emoji trybu podróży, kontrolki play/pauza/prędkość, suwak czasu.">Oś czasu</option>
             </select>
+            <span class="small muted" id="gsm_map_layer_desc"></span>
             <span class="small muted" id="gsm_map_stats"></span>
           </div>
         </div>

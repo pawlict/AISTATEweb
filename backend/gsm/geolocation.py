@@ -164,6 +164,12 @@ class BorderCrossing:
     roaming_countries: List[str] = field(default_factory=list)
     roaming_records: int = 0
     roaming_confirmed: bool = False
+    # Enhanced fields for map visualization
+    last_domestic_lat: float = 0.0
+    last_domestic_lon: float = 0.0
+    first_return_lat: float = 0.0
+    first_return_lon: float = 0.0
+    border_travel_mode: str = ""  # 'plane', 'car', 'walk', 'unknown'
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -961,6 +967,8 @@ def _detect_border_crossings(
                         last_domestic.datetime if last_domestic else "",
                         gr.datetime,
                     )
+                    dep_lat, dep_lon = _coords_for_record(last_domestic) if last_domestic else (0.0, 0.0)
+                    ret_lat, ret_lon = _coords_for_record(gr)
                     crossings.append(BorderCrossing(
                         last_domestic_datetime=last_domestic.datetime if last_domestic else "",
                         first_return_datetime=gr.datetime,
@@ -970,6 +978,10 @@ def _detect_border_crossings(
                         roaming_countries=list(roaming_countries),
                         roaming_records=roaming_count,
                         roaming_confirmed=True,
+                        last_domestic_lat=dep_lat,
+                        last_domestic_lon=dep_lon,
+                        first_return_lat=ret_lat,
+                        first_return_lon=ret_lon,
                     ))
                 last_domestic = gr
 
@@ -979,6 +991,7 @@ def _detect_border_crossings(
             absence = _time_diff_seconds(
                 last_domestic.datetime, last_roaming.datetime,
             )
+            dep_lat, dep_lon = _coords_for_record(last_domestic)
             crossings.append(BorderCrossing(
                 last_domestic_datetime=last_domestic.datetime,
                 first_return_datetime="",  # not yet returned
@@ -988,6 +1001,8 @@ def _detect_border_crossings(
                 roaming_countries=list(roaming_countries),
                 roaming_records=roaming_count,
                 roaming_confirmed=True,
+                last_domestic_lat=dep_lat,
+                last_domestic_lon=dep_lon,
             ))
 
     # ── Strategy B: Gap-based (fallback when no roaming data) ──
@@ -1000,6 +1015,8 @@ def _detect_border_crossings(
             gap_hours = gap_sec / 3600
 
             if gap_hours >= gap_threshold_hours:
+                dep_lat, dep_lon = _coords_for_record(prev)
+                ret_lat, ret_lon = _coords_for_record(curr)
                 crossings.append(BorderCrossing(
                     last_domestic_datetime=prev.datetime,
                     first_return_datetime=curr.datetime,
@@ -1009,6 +1026,10 @@ def _detect_border_crossings(
                     roaming_countries=[],
                     roaming_records=0,
                     roaming_confirmed=False,
+                    last_domestic_lat=dep_lat,
+                    last_domestic_lon=dep_lon,
+                    first_return_lat=ret_lat,
+                    first_return_lon=ret_lon,
                 ))
 
     # Sort by departure time
@@ -1016,6 +1037,10 @@ def _detect_border_crossings(
 
     # Merge consecutive crossings to the same country/region
     crossings = _merge_consecutive_crossings(crossings)
+
+    # Infer travel mode for each crossing
+    for bc in crossings:
+        bc.border_travel_mode = _infer_border_travel_mode(bc)
 
     log.info("Border crossing detection: %d crossings (roaming_data=%s)",
              len(crossings), "yes" if roaming_any else "no (gap-based)")
@@ -1090,6 +1115,95 @@ def _merge_consecutive_crossings(
             merged.append(bc)
 
     return merged
+
+
+def _coords_for_record(gr: GeoRecord) -> Tuple[float, float]:
+    """Get (lat, lon) for a GeoRecord, or (0, 0) if unavailable."""
+    if gr and gr.point and gr.point.is_valid:
+        return gr.point.lat, gr.point.lon
+    return 0.0, 0.0
+
+
+# Polish airports: name → (lat, lon)
+_POLISH_AIRPORTS = {
+    "WAW": (52.1657, 20.9671),   # Warszawa Chopina
+    "WMI": (52.4511, 20.6517),   # Warszawa Modlin
+    "KRK": (50.0777, 19.7848),   # Kraków Balice
+    "GDN": (54.3776, 18.4662),   # Gdańsk
+    "KTW": (50.4743, 19.0800),   # Katowice Pyrzowice
+    "WRO": (51.1027, 16.8858),   # Wrocław
+    "POZ": (52.4211, 16.8263),   # Poznań Ławica
+    "RZE": (50.1100, 22.0190),   # Rzeszów Jasionka
+    "SZZ": (53.5847, 14.9022),   # Szczecin Goleniów
+    "BZG": (53.0968, 17.9777),   # Bydgoszcz
+    "LUZ": (51.2403, 22.7134),   # Lublin
+    "LCJ": (51.7219, 19.3981),   # Łódź Lublinek
+    "IEG": (51.9564, 15.7986),   # Zielona Góra Babimost
+    "RDO": (51.3892, 21.2133),   # Radom
+    "SZY": (53.4819, 20.9377),   # Olsztyn-Mazury
+}
+
+# Countries bordering Poland (reachable by land)
+_LAND_NEIGHBORS = {"DE", "CZ", "SK", "UA", "BY", "LT", "RU"}
+
+
+def _is_near_airport(lat: float, lon: float, threshold_km: float = 15.0) -> bool:
+    """Check if coordinates are within threshold_km of any Polish airport."""
+    for _, (alat, alon) in _POLISH_AIRPORTS.items():
+        dist = _haversine(lat, lon, alat, alon) / 1000
+        if dist <= threshold_km:
+            return True
+    return False
+
+
+def _infer_border_travel_mode(bc: BorderCrossing) -> str:
+    """Infer how the person left the country: plane, car, or walk.
+
+    Plane indicators:
+    - Last domestic BTS near a Polish airport (< 15 km)
+    - Short transition time (< 12 hours for distant countries)
+    - Destination not a direct land neighbor of Poland
+
+    Car indicators:
+    - Last BTS near a border area
+    - Moderate transition time
+    - Destination is a land neighbor
+
+    Walk indicators:
+    - Very slow movement near the border
+    - Short absence
+    """
+    countries = bc.roaming_countries or []
+    has_coords = bc.last_domestic_lat != 0.0 and bc.last_domestic_lon != 0.0
+
+    # Check if destination is a non-neighbor country (requires flight)
+    non_neighbor_countries = [c for c in countries if c not in _LAND_NEIGHBORS]
+    all_neighbors = all(c in _LAND_NEIGHBORS for c in countries) if countries else True
+
+    if has_coords:
+        near_airport = _is_near_airport(bc.last_domestic_lat, bc.last_domestic_lon)
+
+        # Plane: near airport + non-neighbor country
+        if near_airport and non_neighbor_countries:
+            return "plane"
+
+        # Plane: near airport + short absence for any country
+        if near_airport and bc.absence_hours < 12 and countries:
+            return "plane"
+
+    # Non-neighbor country with no airport data: likely plane anyway
+    if non_neighbor_countries and not all_neighbors:
+        return "plane"
+
+    # Very short absence at border: walk
+    if bc.absence_hours < 6 and all_neighbors:
+        return "walk"
+
+    # Default for neighbor countries: car
+    if all_neighbors and countries:
+        return "car"
+
+    return "unknown"
 
 
 def _city_for_record(

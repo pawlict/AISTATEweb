@@ -1301,10 +1301,21 @@
     _renderClusters(geo);
     _initTimeline(geo);
 
-    // Layer switcher
+    // Layer switcher with description tooltip
     const layerSelect = QS("#gsm_map_layer_select");
+    const layerDesc = QS("#gsm_map_layer_desc");
     if (layerSelect) {
-      layerSelect.onchange = () => _switchMapLayer(layerSelect.value, geo);
+      const _updateLayerDesc = () => {
+        if (layerDesc) {
+          const opt = layerSelect.options[layerSelect.selectedIndex];
+          layerDesc.textContent = opt ? opt.title : "";
+        }
+      };
+      layerSelect.onchange = () => {
+        _switchMapLayer(layerSelect.value, geo);
+        _updateLayerDesc();
+      };
+      _updateLayerDesc();
     }
   }
 
@@ -1686,28 +1697,137 @@
     const borderGroup = L.layerGroup();
     if (geo.border_crossings && geo.border_crossings.length) {
       for (const bc of geo.border_crossings) {
-        // Try to find cluster locations for departure/return
-        const depCity = bc.last_domestic_city;
-        const retCity = bc.first_return_city;
-        const depCluster = depCity ? geo.clusters.find(c => c.city === depCity) : null;
-        const retCluster = retCity ? geo.clusters.find(c => c.city === retCity) : null;
+        // Departure point: use backend coords, fallback to cluster lookup
+        let depLat = bc.last_domestic_lat || 0;
+        let depLon = bc.last_domestic_lon || 0;
+        if (!depLat && bc.last_domestic_city) {
+          const cl = geo.clusters.find(c => c.city === bc.last_domestic_city);
+          if (cl) { depLat = cl.lat; depLon = cl.lon; }
+        }
+        // Return point: same logic
+        let retLat = bc.first_return_lat || 0;
+        let retLon = bc.first_return_lon || 0;
+        if (!retLat && bc.first_return_city) {
+          const cl = geo.clusters.find(c => c.city === bc.first_return_city);
+          if (cl) { retLat = cl.lat; retLon = cl.lon; }
+        }
 
-        if (depCluster) {
-          L.circleMarker([depCluster.lat, depCluster.lon], {
-            radius: 8, fillColor: "#ef4444", color: "#fff", weight: 2, fillOpacity: 0.9,
-          }).bindPopup(`<b>Wyjazd za granicę</b><br>${bc.last_domestic_datetime}<br>${depCity}`)
-            .addTo(borderGroup);
+        const mode = bc.border_travel_mode || "unknown";
+        const modeIcon = mode === "plane" ? "✈️" : mode === "car" ? "🚗" : mode === "walk" ? "🚶" : "❓";
+        const modeLabel = mode === "plane" ? "Samolot" : mode === "car" ? "Samochód" : mode === "walk" ? "Pieszo" : "Nieznany";
+        const countries = (bc.roaming_countries || []);
+        const countryNames = countries.map(c => _countryName(c)).join(", ");
+        const depDate = (bc.last_domestic_datetime || "").slice(0, 10);
+        const retDate = (bc.first_return_datetime || "").slice(0, 10);
+        const lineColor = mode === "plane" ? "#8b5cf6" : mode === "car" ? "#3b82f6" : "#f97316";
+
+        // Departure marker (red)
+        if (depLat) {
+          L.circleMarker([depLat, depLon], {
+            radius: 9, fillColor: "#ef4444", color: "#fff", weight: 2, fillOpacity: 0.9,
+          }).bindPopup(
+            `<b>Ostatni punkt w Polsce</b><br>` +
+            `${bc.last_domestic_datetime || "?"}<br>` +
+            `${bc.last_domestic_city || ""}<br>` +
+            `<b>${modeIcon} ${modeLabel}</b>`
+          ).addTo(borderGroup);
         }
-        if (retCluster) {
-          L.circleMarker([retCluster.lat, retCluster.lon], {
-            radius: 8, fillColor: "#22c55e", color: "#fff", weight: 2, fillOpacity: 0.9,
-          }).bindPopup(`<b>Powrót</b><br>${bc.first_return_datetime}<br>${retCity}`)
-            .addTo(borderGroup);
+
+        // Return marker (green) — only if returned
+        if (retLat && bc.first_return_datetime) {
+          L.circleMarker([retLat, retLon], {
+            radius: 9, fillColor: "#22c55e", color: "#fff", weight: 2, fillOpacity: 0.9,
+          }).bindPopup(
+            `<b>Powrót do Polski</b><br>` +
+            `${bc.first_return_datetime}<br>` +
+            `${bc.first_return_city || ""}`
+          ).addTo(borderGroup);
         }
-        if (depCluster && retCluster) {
-          L.polyline(
-            [[depCluster.lat, depCluster.lon], [retCluster.lat, retCluster.lon]],
-            { color: "#ef4444", weight: 2, opacity: 0.5, dashArray: "6 4" }
+
+        // Lines to each country center
+        for (const cc of countries) {
+          const center = _COUNTRY_CENTERS[cc];
+          if (!center) continue;
+          const [cLat, cLon] = center;
+          const cName = _countryName(cc);
+
+          // Country center marker (flag-style label)
+          L.marker([cLat, cLon], {
+            icon: L.divIcon({
+              className: "gsm-border-country-icon",
+              html: `<div style="background:${lineColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;white-space:nowrap;text-align:center">${cName}</div>`,
+              iconSize: null,
+            }),
+          }).bindPopup(
+            `<b>${cName}</b><br>` +
+            `Pobyt: ${depDate} → ${retDate || "?"}<br>` +
+            `Nieobecność: ${_formatHours(bc.absence_hours)}<br>` +
+            `${bc.roaming_records ? bc.roaming_records + " rekordów roamingu" : ""}`
+          ).addTo(borderGroup);
+
+          // Line from departure to country center
+          if (depLat) {
+            const lineStyle = mode === "plane"
+              ? { color: lineColor, weight: 2.5, opacity: 0.7, dashArray: "8 6" }
+              : { color: lineColor, weight: 2.5, opacity: 0.7 };
+
+            // Build curved line for plane, straight for others
+            let lineCoords;
+            if (mode === "plane") {
+              lineCoords = _buildArcCoords(depLat, depLon, cLat, cLon, 20);
+            } else {
+              lineCoords = [[depLat, depLon], [cLat, cLon]];
+            }
+
+            L.polyline(lineCoords, lineStyle)
+              .bindPopup(
+                `<b>${modeIcon} ${bc.last_domestic_city || "PL"} → ${cName}</b><br>` +
+                `Wyjazd: ${depDate}<br>Powrót: ${retDate || "brak danych"}<br>` +
+                `Nieobecność: ${_formatHours(bc.absence_hours)}`
+              ).addTo(borderGroup);
+
+            // Travel mode icon on the midpoint of the line
+            const midIdx = Math.floor(lineCoords.length / 2);
+            const midPt = lineCoords[midIdx];
+            L.marker(midPt, {
+              icon: L.divIcon({
+                className: "gsm-border-mode-icon",
+                html: `<div style="font-size:18px;text-align:center;line-height:1">${modeIcon}</div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+              }),
+            }).addTo(borderGroup);
+
+            // Date labels near departure and midpoint
+            const dateLabelDep = L.marker([depLat, depLon], {
+              icon: L.divIcon({
+                className: "gsm-border-date",
+                html: `<div style="background:rgba(239,68,68,0.9);color:#fff;padding:1px 5px;border-radius:6px;font-size:9px;white-space:nowrap;transform:translateY(-18px)">${depDate}</div>`,
+                iconSize: null,
+              }),
+            }).addTo(borderGroup);
+
+            if (retDate) {
+              const retPt = retLat ? [retLat, retLon] : [cLat, cLon];
+              L.marker(retPt, {
+                icon: L.divIcon({
+                  className: "gsm-border-date",
+                  html: `<div style="background:rgba(34,197,94,0.9);color:#fff;padding:1px 5px;border-radius:6px;font-size:9px;white-space:nowrap;transform:translateY(-18px)">${retDate}</div>`,
+                  iconSize: null,
+                }),
+              }).addTo(borderGroup);
+            }
+          }
+        }
+
+        // If no roaming countries but we have coords, draw a dashed line to indicate unknown destination
+        if (!countries.length && depLat && retLat) {
+          L.polyline([[depLat, depLon], [retLat, retLon]], {
+            color: "#9ca3af", weight: 2, opacity: 0.5, dashArray: "6 4",
+          }).bindPopup(
+            `<b>Przerwa w aktywności</b><br>` +
+            `${depDate} → ${retDate}<br>` +
+            `Nieobecność: ${_formatHours(bc.absence_hours)}`
           ).addTo(borderGroup);
         }
       }
@@ -2071,6 +2191,29 @@
   }
 
   /**
+   * Build a curved arc between two points (great-circle-like visual).
+   * Used for plane routes — adds a visible bulge to the line.
+   */
+  function _buildArcCoords(lat1, lon1, lat2, lon2, segments) {
+    const coords = [];
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const lat = lat1 + (lat2 - lat1) * t;
+      const lon = lon1 + (lon2 - lon1) * t;
+      // Add parabolic bulge perpendicular to the line
+      const bulge = Math.sin(t * Math.PI) * 0.15 * Math.sqrt(
+        Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2)
+      );
+      // Perpendicular direction: rotate 90°
+      const dx = lon2 - lon1;
+      const dy = lat2 - lat1;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      coords.push([lat + (-dx / len) * bulge, lon + (dy / len) * bulge]);
+    }
+    return coords;
+  }
+
+  /**
    * Build polygon coords for a sector (pie-slice) on the map.
    * Returns array of [lat,lon] pairs forming a closed polygon.
    */
@@ -2097,6 +2240,21 @@
     ME:"Czarnogóra",MK:"Macedonia Północna",AL:"Albania",GR:"Grecja",TR:"Turcja",
     EE:"Estonia",LV:"Łotwa",LU:"Luksemburg",MT:"Malta",CY:"Cypr",
     IS:"Islandia",MD:"Mołdawia",XK:"Kosowo",US:"USA",CA:"Kanada",
+  };
+
+  /* ── Country center coordinates (approx geographic center) ── */
+  const _COUNTRY_CENTERS = {
+    PL:[52.07,19.48],DE:[51.16,10.45],CZ:[49.82,15.47],SK:[48.67,19.70],
+    UA:[48.38,31.17],BY:[53.71,27.95],LT:[55.17,23.88],RU:[55.75,37.62],
+    AT:[47.52,14.55],CH:[46.82,8.23],FR:[46.23,2.21],GB:[55.38,-3.44],
+    IT:[41.87,12.57],ES:[40.46,-3.75],NL:[52.13,5.29],BE:[50.50,4.47],
+    DK:[56.26,9.50],SE:[60.13,18.64],NO:[60.47,8.47],FI:[61.92,25.75],
+    PT:[39.40,-8.22],IE:[53.14,-7.69],HU:[47.16,19.50],RO:[45.94,24.97],
+    BG:[42.73,25.49],HR:[45.10,15.20],SI:[46.15,14.99],RS:[44.02,21.01],
+    BA:[43.92,17.68],ME:[42.71,19.37],MK:[41.51,21.75],AL:[41.15,20.17],
+    GR:[39.07,21.82],TR:[38.96,35.24],EE:[58.60,25.01],LV:[56.88,24.60],
+    LU:[49.82,6.13],MT:[35.94,14.38],CY:[35.13,33.43],IS:[64.96,-19.02],
+    MD:[47.41,28.37],XK:[42.60,20.90],US:[37.09,-95.71],CA:[56.13,-106.35],
   };
   function _countryName(code) {
     if (!code) return "";
