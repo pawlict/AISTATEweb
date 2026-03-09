@@ -619,22 +619,20 @@
 
     const groups = (a && a.anomalies) || [];
     if (!groups.length) { card.style.display = "none"; return; }
-
-    // Check if any group has items
-    const hasAny = groups.some(g => g.items && g.items.length);
     card.style.display = "";
 
-    let html = '<div style="display:flex;flex-direction:column;gap:12px">';
+    let html = '<div style="display:flex;flex-direction:column;gap:10px">';
     for (const g of groups) {
       const items = g.items || [];
       const hasItems = items.length > 0;
-      const sev = hasItems ? (g.severity || "info") : "ok";
-      const sevColor = sev === "warning" ? "#f97316" : sev === "ok" ? "#22c55e" : "#3b82f6";
-      const sevIcon = sev === "warning" ? "⚠" : sev === "ok" ? "✓" : "ℹ";
+      const sev = g.severity || (hasItems ? "info" : "ok");
+      const sevColor = sev === "warning" ? "#f97316" : sev === "info" ? "#3b82f6" : "#22c55e";
+      const sevIcon = sev === "warning" ? "⚠" : sev === "info" ? "ℹ" : "✓";
 
       html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;border-left:3px solid ${sevColor}">`;
-      html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:${hasItems ? '6' : '0'}px">`;
-      html += `<span style="color:${sevColor}">${sevIcon}</span>`;
+      // Header line: icon + label + count or "brak"
+      html += `<div style="display:flex;align-items:center;gap:6px">`;
+      html += `<span style="color:${sevColor};font-size:15px">${sevIcon}</span>`;
       html += `<b>${g.label || g.type}</b>`;
       if (!hasItems) {
         html += ` <span class="muted">— brak</span>`;
@@ -642,11 +640,14 @@
         html += ` <span class="muted">(${items.length})</span>`;
       }
       html += `</div>`;
-
+      // Description line (always)
+      if (g.description) {
+        html += `<div class="small muted" style="margin-top:2px;margin-bottom:${hasItems ? '6' : '0'}px">${g.description}</div>`;
+      }
+      // Items
       if (hasItems) {
         html += _renderAnomalyItems(g.type, items);
       }
-
       html += `</div>`;
     }
     html += '</div>';
@@ -660,9 +661,19 @@
       for (const it of items) {
         html += `<div><code>${it.contact}</code> — ${it.duration_min} min (${it.date} ${it.time})</div>`;
       }
+    } else if (type === "late_night_calls") {
+      for (const it of items) {
+        html += `<div><code>${it.contact}</code> — ${it.direction}, ${it.duration_min} min (${it.date} ${it.time})</div>`;
+      }
     } else if (type === "night_activity") {
       for (const it of items) {
-        html += `<div>${it.ratio} połączeń w godzinach 23:00–05:00</div>`;
+        html += `<div>${it.ratio_pct}% zdarzeń w godzinach 23:00–05:00</div>`;
+      }
+    } else if (type === "night_movement") {
+      for (const it of items) {
+        html += `<div>${it.date} ${it.time_from} → ${it.time_to}: <span class="muted">${it.bts_from} → ${it.bts_to}</span>`;
+        if (it.contact) html += ` (kontakt: <code>${it.contact}</code>)`;
+        html += `</div>`;
       }
     } else if (type === "burst_activity") {
       for (const it of items) {
@@ -674,25 +685,15 @@
       }
     } else if (type === "roaming") {
       for (const it of items) {
-        const c = it.countries && it.countries.length ? it.countries.join(", ") : "brak danych";
-        html += `<div>${it.count} rekordów — kraje: ${c}</div>`;
-      }
-    } else if (type === "night_movement") {
-      for (const it of items) {
-        html += `<div>${it.date} ${it.time_from}→${it.time_to}: zmiana BTS <span class="muted">${it.bts_from} → ${it.bts_to}</span>`;
-        if (it.contact) html += ` (kontakt: <code>${it.contact}</code>)`;
-        html += `</div>`;
+        const nets = it.networks && it.networks.length ? ` [${it.networks.join(", ")}]` : "";
+        html += `<div><b>${it.country}</b> — ${it.count} rekordów, ${it.period}${nets}</div>`;
       }
     } else if (type === "one_time_contacts") {
       for (const it of items) {
-        html += `<div><code>${it.contact}</code> — ${it.record_type} (${it.date})</div>`;
-      }
-    } else if (type === "late_night_calls") {
-      for (const it of items) {
-        html += `<div><code>${it.contact}</code> — ${it.duration_min} min (${it.date} ${it.time})</div>`;
+        const typeLabel = (it.record_type || "").replace(/_/g, " ");
+        html += `<div><code>${it.contact}</code> — ${typeLabel} (${it.date})</div>`;
       }
     } else {
-      // Fallback for unknown types
       for (const it of items) {
         html += `<div>${it.description || JSON.stringify(it)}</div>`;
       }
