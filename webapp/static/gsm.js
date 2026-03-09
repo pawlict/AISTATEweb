@@ -3778,6 +3778,38 @@
       });
     }
 
+    // Map card 2D resize handle (bottom-right corner)
+    const mapResize = QS("#gsm_map_resize");
+    if (mapResize) {
+      mapResize.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const card = QS("#gsm_map_card");
+        const mapCont = QS("#gsm_map_container");
+        if (!card || !mapCont) return;
+        const startX = e.clientX, startY = e.clientY;
+        const startW = card.offsetWidth, startH = card.offsetHeight;
+        const startMapH = mapCont.offsetHeight;
+        const onMove = (ev) => {
+          const dx = ev.clientX - startX, dy = ev.clientY - startY;
+          const newW = Math.max(400, startW + dx);
+          const newH = Math.max(300, startH + dy);
+          const newMapH = Math.max(200, startMapH + dy);
+          card.style.width = newW + "px";
+          card.style.maxWidth = newW + "px";
+          card.style.height = newH + "px";
+          mapCont.style.height = newMapH + "px";
+          if (St.map) St.map.invalidateSize();
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          if (St.map) St.map.invalidateSize();
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+
     // New analysis button
     const newBtn = QS("#gsm_new_analysis");
     if (newBtn) {
