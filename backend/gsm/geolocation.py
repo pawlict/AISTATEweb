@@ -170,6 +170,8 @@ class BorderCrossing:
     first_return_lat: float = 0.0
     first_return_lon: float = 0.0
     border_travel_mode: str = ""  # 'plane', 'car', 'walk', 'unknown'
+    # Last 24h domestic path before departure: list of {lat, lon, datetime, city}
+    last_24h_path: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -1042,6 +1044,9 @@ def _detect_border_crossings(
     for bc in crossings:
         bc.border_travel_mode = _infer_border_travel_mode(bc)
 
+    # Build last 24h domestic path for each crossing
+    _populate_last_24h_paths(crossings, sorted_records)
+
     log.info("Border crossing detection: %d crossings (roaming_data=%s)",
              len(crossings), "yes" if roaming_any else "no (gap-based)")
     return crossings
@@ -1095,6 +1100,8 @@ def _merge_consecutive_crossings(
             # Extend the previous crossing to cover the new one
             prev.first_return_datetime = bc.first_return_datetime
             prev.first_return_city = bc.first_return_city
+            prev.first_return_lat = bc.first_return_lat
+            prev.first_return_lon = bc.first_return_lon
             # Recalculate total absence from original departure to final return
             total_sec = _time_diff_seconds(
                 prev.last_domestic_datetime,
@@ -1115,6 +1122,55 @@ def _merge_consecutive_crossings(
             merged.append(bc)
 
     return merged
+
+
+def _populate_last_24h_paths(
+    crossings: List[BorderCrossing],
+    sorted_records: List[GeoRecord],
+) -> None:
+    """For each crossing, collect the last 24h of domestic BTS positions before departure.
+
+    This builds a path showing the user's movement in Poland before leaving.
+    Only includes records with valid geo coordinates, deduplicated by location.
+    """
+    for bc in crossings:
+        if not bc.last_domestic_datetime:
+            continue
+
+        dep_ts = _time_diff_seconds("2000-01-01 00:00:00", bc.last_domestic_datetime)
+        window_start_ts = dep_ts - 24 * 3600  # 24 hours before departure
+
+        path_points: List[Dict[str, Any]] = []
+        seen_locs: set = set()
+
+        for gr in sorted_records:
+            if gr.roaming:
+                continue
+            if not gr.point or not gr.point.is_valid:
+                continue
+            if not gr.datetime:
+                continue
+
+            rec_ts = _time_diff_seconds("2000-01-01 00:00:00", gr.datetime)
+            if rec_ts < window_start_ts:
+                continue
+            if rec_ts > dep_ts:
+                break
+
+            # Deduplicate by ~100m grid
+            loc_key = f"{gr.point.lat:.3f},{gr.point.lon:.3f}"
+            if loc_key in seen_locs:
+                continue
+            seen_locs.add(loc_key)
+
+            path_points.append({
+                "lat": gr.point.lat,
+                "lon": gr.point.lon,
+                "datetime": gr.datetime,
+                "city": gr.point.city or "",
+            })
+
+        bc.last_24h_path = path_points
 
 
 def _coords_for_record(gr: GeoRecord) -> Tuple[float, float]:
