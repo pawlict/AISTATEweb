@@ -1301,21 +1301,10 @@
     _renderClusters(geo);
     _initTimeline(geo);
 
-    // Layer switcher with description tooltip
+    // Layer switcher (descriptions are in title attributes — native tooltips)
     const layerSelect = QS("#gsm_map_layer_select");
-    const layerDesc = QS("#gsm_map_layer_desc");
     if (layerSelect) {
-      const _updateLayerDesc = () => {
-        if (layerDesc) {
-          const opt = layerSelect.options[layerSelect.selectedIndex];
-          layerDesc.textContent = opt ? opt.title : "";
-        }
-      };
-      layerSelect.onchange = () => {
-        _switchMapLayer(layerSelect.value, geo);
-        _updateLayerDesc();
-      };
-      _updateLayerDesc();
+      layerSelect.onchange = () => _switchMapLayer(layerSelect.value, geo);
     }
   }
 
@@ -1554,17 +1543,17 @@
       // Color by radio technology
       const radioColors = { "GSM": "#ef4444", "UMTS": "#f97316", "LTE": "#3b82f6", "5G NR": "#8b5cf6" };
       const color = radioColors[loc.radio] || "#6b7280";
-      const opacity = Math.min(0.35, 0.10 + Math.log2(count + 1) * 0.04);
+      const opacity = Math.min(0.55, 0.20 + Math.log2(count + 1) * 0.06);
 
       if (loc.azimuth != null) {
-        // Faint omnidirectional circle (full range, always visible behind sector)
+        // Omnidirectional circle (full range, visible behind sector)
         L.circle([loc.lat, loc.lon], {
           radius: range,
           fillColor: color,
           color: color,
-          weight: 0.5,
-          fillOpacity: opacity * 0.15,
-          dashArray: "3 4",
+          weight: 1,
+          fillOpacity: opacity * 0.25,
+          dashArray: "4 5",
         }).addTo(coverageGroup);
 
         // Draw sector (pie-slice) for directional antenna
@@ -1575,7 +1564,7 @@
         L.polygon(sectorCoords, {
           fillColor: color,
           color: color,
-          weight: 1,
+          weight: 1.5,
           fillOpacity: opacity,
         }).bindPopup(
           `<b>${loc.city || "BTS"}${loc.street ? ", " + loc.street : ""}</b><br>` +
@@ -1590,8 +1579,8 @@
           radius: range,
           fillColor: color,
           color: color,
-          weight: 1,
-          fillOpacity: opacity * 0.7,
+          weight: 1.5,
+          fillOpacity: opacity * 0.8,
         }).bindPopup(
           `<b>${loc.city || "BTS"}${loc.street ? ", " + loc.street : ""}</b><br>` +
           `Zasięg: ${(range / 1000).toFixed(1)} km<br>` +
@@ -1721,10 +1710,32 @@
         const retDate = (bc.first_return_datetime || "").slice(0, 10);
         const lineColor = mode === "plane" ? "#8b5cf6" : mode === "car" ? "#3b82f6" : "#f97316";
 
-        // Departure marker (red)
+        // Last 24h domestic path before departure
+        const path24h = bc.last_24h_path || [];
+        if (path24h.length >= 2) {
+          const pathCoords = path24h.map(p => [p.lat, p.lon]);
+          L.polyline(pathCoords, {
+            color: "#3b82f6", weight: 3, opacity: 0.7,
+          }).bindPopup(
+            `<b>Ostatnie 24h w Polsce</b><br>` +
+            `${path24h.length} punktów BTS<br>` +
+            `${path24h[0].datetime} → ${path24h[path24h.length - 1].datetime}`
+          ).addTo(borderGroup);
+
+          // Small dots along the path
+          for (const p of path24h) {
+            L.circleMarker([p.lat, p.lon], {
+              radius: 4, fillColor: "#3b82f6", color: "#fff", weight: 1, fillOpacity: 0.8,
+            }).bindPopup(
+              `${p.datetime}<br>${p.city || ""}`
+            ).addTo(borderGroup);
+          }
+        }
+
+        // Departure marker (red) — last BTS before leaving
         if (depLat) {
           L.circleMarker([depLat, depLon], {
-            radius: 9, fillColor: "#ef4444", color: "#fff", weight: 2, fillOpacity: 0.9,
+            radius: 10, fillColor: "#ef4444", color: "#fff", weight: 2.5, fillOpacity: 0.95,
           }).bindPopup(
             `<b>Ostatni punkt w Polsce</b><br>` +
             `${bc.last_domestic_datetime || "?"}<br>` +
