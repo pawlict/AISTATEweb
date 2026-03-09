@@ -612,46 +612,84 @@
 
   /* ── Anomalies card ──────────────────────────────────────── */
 
+  // Canonical category definitions — always shown, always in this order
+  const _ANOMALY_CATS = [
+    { type: "long_call",        label: "D\u0142ugie po\u0142\u0105czenia",               desc: "Po\u0142\u0105czenia trwaj\u0105ce ponad 2 godziny" },
+    { type: "late_night_calls", label: "Po\u0142\u0105czenia g\u0142osowe w nocy",       desc: "Rozmowy telefoniczne mi\u0119dzy 00:00 a 05:00 (d\u0142u\u017Csze ni\u017C 10 sek.)" },
+    { type: "night_activity",   label: "Wysoka aktywno\u015B\u0107 nocna",          desc: "Ponad 30% wszystkich zdarze\u0144 (po\u0142\u0105czenia, SMS, dane) przypada na godziny 23:00\u201305:00" },
+    { type: "night_movement",   label: "Przemieszczanie nocne",           desc: "Zmiana stacji BTS mi\u0119dzy kolejnymi zdarzeniami nocnymi (23:00\u201305:00) \u2014 wskazuje na ruch urz\u0105dzenia w nocy" },
+    { type: "burst_activity",   label: "Nag\u0142y wzrost aktywno\u015Bci",         desc: "Co najmniej 20 rekord\u00F3w (po\u0142\u0105czenia/SMS) w ci\u0105gu 30 minut \u2014 mo\u017Ce wskazywa\u0107 na masowe wysy\u0142anie SMS, automatyczne systemy lub intensywn\u0105 komunikacj\u0119" },
+    { type: "premium_number",   label: "Numery premium / p\u0142atne",        desc: "Kontakty z numerami o podwy\u017Cszonej op\u0142acie (70x, 80x)" },
+    { type: "roaming",          label: "Aktywno\u015B\u0107 w sieciach zagranicznych", desc: "Rekordy z flag\u0105 roamingu lub z sieci\u0105 zagraniczn\u0105. Szczeg\u00F3\u0142y wyjazd\u00F3w \u2014 patrz sekcja \u201EPrzekroczenia granic\u201D" },
+    { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
+  ];
+
   function _renderAnomalies(a) {
     const card = QS("#gsm_anomalies_card");
     const body = QS("#gsm_anomalies_body");
     if (!card || !body) return;
 
-    const groups = (a && a.anomalies) || [];
-    if (!groups.length) { card.style.display = "none"; return; }
+    const raw = (a && a.anomalies) || [];
+    if (!raw.length) { card.style.display = "none"; return; }
     card.style.display = "";
 
+    // Detect old flat format (entries without items array) and convert
+    const isOldFormat = raw.length > 0 && !raw[0].items && (raw[0].description || raw[0].contact);
+    const groupMap = {};
+    if (isOldFormat) {
+      for (const entry of raw) {
+        const t = entry.type || "unknown";
+        if (!groupMap[t]) groupMap[t] = { items: [], severity: entry.severity || "info" };
+        groupMap[t].items.push(entry);
+        if (entry.severity === "warning") groupMap[t].severity = "warning";
+      }
+    } else {
+      for (const g of raw) {
+        groupMap[g.type] = { items: g.items || [], severity: g.severity || "ok" };
+      }
+    }
+
+    // Render ALL categories in canonical order
     let html = '<div style="display:flex;flex-direction:column;gap:10px">';
-    for (const g of groups) {
-      const items = g.items || [];
+    for (const cat of _ANOMALY_CATS) {
+      const data = groupMap[cat.type] || { items: [], severity: "ok" };
+      const items = data.items;
       const hasItems = items.length > 0;
-      const sev = g.severity || (hasItems ? "info" : "ok");
+      const sev = hasItems ? (data.severity || "info") : "ok";
       const sevColor = sev === "warning" ? "#f97316" : sev === "info" ? "#3b82f6" : "#22c55e";
-      const sevIcon = sev === "warning" ? "⚠" : sev === "info" ? "ℹ" : "✓";
+      const sevIcon = sev === "warning" ? "\u26A0" : sev === "info" ? "\u2139" : "\u2713";
 
       html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;border-left:3px solid ${sevColor}">`;
-      // Header line: icon + label + count or "brak"
       html += `<div style="display:flex;align-items:center;gap:6px">`;
       html += `<span style="color:${sevColor};font-size:15px">${sevIcon}</span>`;
-      html += `<b>${g.label || g.type}</b>`;
+      html += `<b>${cat.label}</b>`;
       if (!hasItems) {
-        html += ` <span class="muted">— brak</span>`;
+        html += ` <span class="muted">\u2014 brak</span>`;
       } else {
         html += ` <span class="muted">(${items.length})</span>`;
       }
       html += `</div>`;
-      // Description line (always)
-      if (g.description) {
-        html += `<div class="small muted" style="margin-top:2px;margin-bottom:${hasItems ? '6' : '0'}px">${g.description}</div>`;
-      }
-      // Items
+      html += `<div class="small muted" style="margin-top:2px;margin-bottom:${hasItems ? '6' : '0'}px">${cat.desc}</div>`;
+
       if (hasItems) {
-        html += _renderAnomalyItems(g.type, items);
+        html += isOldFormat
+          ? _renderOldAnomalyItems(items)
+          : _renderAnomalyItems(cat.type, items);
       }
       html += `</div>`;
     }
     html += '</div>';
     body.innerHTML = html;
+  }
+
+  /** Render old-format anomaly items (just description text). */
+  function _renderOldAnomalyItems(items) {
+    let html = '<div style="display:flex;flex-direction:column;gap:3px;font-size:13px">';
+    for (const it of items) {
+      html += `<div>${it.description || ""}</div>`;
+    }
+    html += '</div>';
+    return html;
   }
 
   function _renderAnomalyItems(type, items) {
