@@ -3328,8 +3328,9 @@
     const clearBtn = QS("#gsm_hm_filter_clear");
     if (clearBtn) clearBtn.onclick = () => _clearHeatmapFilter();
 
-    // Render filtered records
+    // Render filtered records and unique numbers panel
     _renderRecords(filtered, false, filtered.length);
+    _renderUniqueNumbers(filtered);
 
     // Scroll to Records card
     const recCard = QS("#gsm_records_card");
@@ -3408,12 +3409,101 @@
     const clearBtn = QS("#gsm_hm_filter_clear");
     if (clearBtn) clearBtn.onclick = () => _clearHeatmapFilter();
 
-    // Render filtered records
+    // Render filtered records and unique numbers panel
     _renderRecords(filtered, false, filtered.length);
+    _renderUniqueNumbers(filtered);
 
     // Scroll to Records card
     const recCard = QS("#gsm_records_card");
     if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /**
+   * Show panel with unique numbers (appearing only 1×) from the filtered records.
+   * Called after heatmap single or multi-cell filter is applied.
+   */
+  function _renderUniqueNumbers(filteredRecords) {
+    const container = QS("#gsm_hm_unique_numbers");
+    if (!container) return;
+
+    if (!filteredRecords || !filteredRecords.length) {
+      container.style.display = "none";
+      return;
+    }
+
+    // Count occurrences of each number (callee) in filtered records
+    const numberCounts = {};
+    const numberTypes = {};  // number → Set of record_types
+    for (const r of filteredRecords) {
+      const num = r.callee;
+      if (!num || num === "—") continue;
+      numberCounts[num] = (numberCounts[num] || 0) + 1;
+      if (!numberTypes[num]) numberTypes[num] = {};
+      numberTypes[num][r.record_type] = (numberTypes[num][r.record_type] || 0) + 1;
+    }
+
+    // Get only unique numbers (exactly 1 occurrence)
+    const uniqueNums = Object.entries(numberCounts)
+      .filter(([, cnt]) => cnt === 1)
+      .map(([num]) => num)
+      .sort();
+
+    if (!uniqueNums.length) {
+      container.style.display = "none";
+      return;
+    }
+
+    container.style.display = "";
+
+    let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">`;
+    html += `<span class="h3" style="margin:0;font-size:13px">Pojedyncze numery <span class="muted">(1× w filtrze)</span></span>`;
+    html += `<span class="small muted">${uniqueNums.length} z ${Object.keys(numberCounts).length} numerów</span>`;
+    html += `</div>`;
+
+    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    for (const num of uniqueNums) {
+      const types = numberTypes[num] || {};
+      const typeEntries = Object.entries(types);
+      const typeTag = typeEntries.map(([t, n]) => _typeLabel(t)).join(", ");
+      // Color by dominant type
+      const domType = typeEntries.sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+      const colorMap = {
+        CALL_OUT: "#3b82f6", CALL_IN: "#22c55e",
+        SMS_OUT: "#a855f7", SMS_IN: "#ec4899",
+        DATA: "#f97316",
+      };
+      const tagColor = colorMap[domType] || "#6b7280";
+
+      html += `<div class="gsm-unique-num" data-num="${num}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;cursor:pointer;background:var(--card-bg,#fff)" title="${typeTag} · klik → filtruj rekordy">`;
+      html += `<span style="color:${tagColor};font-size:10px">●</span>`;
+      html += `<code style="font-size:11px">${num}</code>`;
+      // Show identification label if available
+      const idInfo = _idLookup(num);
+      if (idInfo) {
+        html += ` <span class="small ${idInfo.css}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${idInfo.type}">${idInfo.label}</span>`;
+      }
+      html += `</div>`;
+    }
+    html += '</div>';
+
+    container.innerHTML = html;
+
+    // Click on number → filter Records table to that number
+    container.querySelectorAll(".gsm-unique-num").forEach(el => {
+      el.addEventListener("click", () => {
+        const num = el.dataset.num;
+        const allRecs = St.lastResult ? St.lastResult.records : [];
+        const numFiltered = allRecs.filter(r => r.callee === num);
+        const filterText = `Nr: ${num} — ${numFiltered.length} rek.`;
+        _setRecordsFilter(filterText, () => {
+          _clearRecordsFilter();
+          if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+        });
+        _renderRecords(numFiltered, false, numFiltered.length);
+        const recCard = QS("#gsm_records_card");
+        if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
   }
 
   /** Clear heatmap filter and restore original records. */
@@ -3421,8 +3511,10 @@
     St.hmActiveCell = null;
     St.hmActiveCells = [];
 
-    // Hide heatmap filter bar
+    // Hide heatmap filter bar and unique numbers panel
     const bar = QS("#gsm_hm_filter_bar");
+    const uniqPanel = QS("#gsm_hm_unique_numbers");
+    if (uniqPanel) uniqPanel.style.display = "none";
     if (bar) bar.style.display = "none";
 
     // Reset Records filter badge
