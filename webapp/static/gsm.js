@@ -1546,6 +1546,16 @@
       const opacity = Math.min(0.35, 0.10 + Math.log2(count + 1) * 0.04);
 
       if (loc.azimuth != null) {
+        // Faint omnidirectional circle (full range, always visible behind sector)
+        L.circle([loc.lat, loc.lon], {
+          radius: range,
+          fillColor: color,
+          color: color,
+          weight: 0.5,
+          fillOpacity: opacity * 0.15,
+          dashArray: "3 4",
+        }).addTo(coverageGroup);
+
         // Draw sector (pie-slice) for directional antenna
         const beamWidth = loc.radio === "5G NR" ? 30 : loc.radio === "LTE" ? 45 : 60;
         const startAngle = loc.azimuth - beamWidth / 2;
