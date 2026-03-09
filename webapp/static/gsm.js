@@ -3129,7 +3129,8 @@
     if (card) card.style.display = "";
 
     const { grid } = St.hmData;
-    const ac = St.hmActiveCell;
+    const ac = St.hmActiveCell;  // legacy single cell (or null)
+    const activeCells = St.hmActiveCells || [];  // multi-select set
     const typeKey = St.hmType || "all";  // all, calls, sms, data
 
     // Compute max for the selected type (for heatmap color scaling)
@@ -3159,7 +3160,8 @@
         const val = typeKey === "all" ? c.total : (c[typeKey] || 0);
         const opacity = val > 0 && typeMax > 0 ? (val / typeMax) * 0.65 + 0.08 : 0;
         const bg = val > 0 ? `background-color:rgba(${rgb},${opacity.toFixed(3)})` : "";
-        const isActive = ac && ac.hour === h && ac.dow === d;
+        const isActive = activeCells.some(c => c.hour === h && c.dow === d)
+          || (ac && ac.hour === h && ac.dow === d);
         const cls = isActive ? " gsm-hm-active" : "";
 
         // Tooltip — always show full breakdown
@@ -3176,7 +3178,7 @@
     html += "</tbody></table>";
     body.innerHTML = html;
 
-    // Event delegation — click on cell
+    // Event delegation — click on cell (supports Ctrl+click multi-select)
     const table = body.querySelector("table");
     if (table) {
       table.onclick = (e) => {
@@ -3184,8 +3186,27 @@
         if (!td) return;
         const hour = parseInt(td.dataset.hour, 10);
         const dow = parseInt(td.dataset.dow, 10);
-        _heatmapFilter(hour, dow);
+
+        if (e.ctrlKey || e.metaKey) {
+          // Ctrl+click: toggle this cell in multi-select (don't scroll yet)
+          _heatmapMultiToggle(hour, dow);
+        } else {
+          // Normal click: single-cell filter (original behavior)
+          St.hmActiveCells = [];
+          _heatmapFilter(hour, dow);
+        }
       };
+
+      // When Ctrl is released, apply the accumulated multi-select filter
+      const _onKeyUp = (e) => {
+        if ((e.key === "Control" || e.key === "Meta") && St.hmActiveCells && St.hmActiveCells.length) {
+          _heatmapApplyMultiFilter();
+        }
+      };
+      // Store handler ref for cleanup; use capture on document
+      if (St._hmKeyUpHandler) document.removeEventListener("keyup", St._hmKeyUpHandler);
+      St._hmKeyUpHandler = _onKeyUp;
+      document.addEventListener("keyup", _onKeyUp);
     }
 
     // Month selector
@@ -3315,9 +3336,90 @@
     if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  /** Toggle a cell in multi-select mode (Ctrl+click). Does not scroll or filter records yet. */
+  function _heatmapMultiToggle(hour, dow) {
+    if (!St.hmActiveCells) St.hmActiveCells = [];
+
+    // Clear single-cell mode
+    St.hmActiveCell = null;
+
+    const idx = St.hmActiveCells.findIndex(c => c.hour === hour && c.dow === dow);
+    if (idx >= 0) {
+      // Deselect
+      St.hmActiveCells.splice(idx, 1);
+    } else {
+      // Add to selection
+      St.hmActiveCells.push({ hour, dow });
+    }
+
+    // Re-render heatmap to show updated highlights (no record filtering yet)
+    _renderHeatmap();
+
+    // Update filter bar to show how many cells are selected
+    const bar = QS("#gsm_hm_filter_bar");
+    const label = QS("#gsm_hm_filter_label");
+    if (St.hmActiveCells.length) {
+      if (bar) bar.style.display = "flex";
+      if (label) label.textContent = `Zaznaczono ${St.hmActiveCells.length} pól (puść Ctrl aby filtrować)`;
+    } else {
+      _clearHeatmapFilter();
+    }
+  }
+
+  /** Apply the accumulated multi-cell filter when Ctrl is released. */
+  function _heatmapApplyMultiFilter() {
+    const cells = St.hmActiveCells || [];
+    if (!cells.length) return;
+
+    // Filter records matching ANY of the selected cells
+    const records = St.lastResult ? St.lastResult.records : [];
+    const monthFilter = St.hmMonth !== "all" ? St.hmMonth : null;
+    const typeFilter = St.hmType !== "all" ? St.hmType : null;
+
+    const filtered = records.filter(r => {
+      if (!r.datetime) return false;
+      const dt = new Date(r.datetime.replace(" ", "T"));
+      if (isNaN(dt.getTime())) return false;
+      if (monthFilter && r.datetime.slice(0, 7) !== monthFilter) return false;
+      if (typeFilter && _hmCategory(r.record_type) !== typeFilter) return false;
+      const rHour = dt.getHours();
+      const rDow = _jsDowToIdx(dt.getDay());
+      return cells.some(c => c.hour === rHour && c.dow === rDow);
+    });
+
+    // Build filter label
+    const typeLabels = { all: "", calls: " · Połączenia", sms: " · SMS/MMS", data: " · Dane" };
+    const cellLabels = cells.map(c => {
+      const hLabel = String(c.hour).padStart(2, "0") + ":00";
+      return `${_DOW_LABELS[c.dow]} ${hLabel}`;
+    });
+    const filterText = `${cells.length} pól (${cellLabels.slice(0, 3).join(", ")}${cells.length > 3 ? "…" : ""})${typeLabels[St.hmType] || ""} — ${filtered.length} rek.`;
+
+    // Show filter bar
+    const bar = QS("#gsm_hm_filter_bar");
+    const label = QS("#gsm_hm_filter_label");
+    if (bar) bar.style.display = "flex";
+    if (label) label.textContent = `Filtr: ${filterText}`;
+
+    // Show filter badge in Records header
+    _setRecordsFilter(filterText, () => _clearHeatmapFilter());
+
+    // Wire clear button
+    const clearBtn = QS("#gsm_hm_filter_clear");
+    if (clearBtn) clearBtn.onclick = () => _clearHeatmapFilter();
+
+    // Render filtered records
+    _renderRecords(filtered, false, filtered.length);
+
+    // Scroll to Records card
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   /** Clear heatmap filter and restore original records. */
   function _clearHeatmapFilter() {
     St.hmActiveCell = null;
+    St.hmActiveCells = [];
 
     // Hide heatmap filter bar
     const bar = QS("#gsm_hm_filter_bar");
