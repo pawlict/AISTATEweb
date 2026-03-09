@@ -3419,8 +3419,9 @@
   }
 
   /**
-   * Show panel with unique numbers (appearing only 1×) from the filtered records.
-   * Called after heatmap single or multi-cell filter is applied.
+   * Show panel with all numbers from filtered records, grouped by occurrence count.
+   * Numbers appearing only 1× are highlighted (potential one-off contacts).
+   * Records without a callee (DATA sessions, VOICEMAIL etc.) are counted separately.
    */
   function _renderUniqueNumbers(filteredRecords) {
     const container = QS("#gsm_hm_unique_numbers");
@@ -3433,51 +3434,76 @@
 
     // Count occurrences of each number (callee) in filtered records
     const numberCounts = {};
-    const numberTypes = {};  // number → Set of record_types
+    const numberTypes = {};  // number → { record_type: count }
+    let noCallee = 0;  // records without a number (DATA, VOICEMAIL etc.)
+
     for (const r of filteredRecords) {
       const num = r.callee;
-      if (!num || num === "—") continue;
+      if (!num || num === "—" || num === "") {
+        noCallee++;
+        continue;
+      }
       numberCounts[num] = (numberCounts[num] || 0) + 1;
       if (!numberTypes[num]) numberTypes[num] = {};
       numberTypes[num][r.record_type] = (numberTypes[num][r.record_type] || 0) + 1;
     }
 
-    // Get only unique numbers (exactly 1 occurrence)
-    const uniqueNums = Object.entries(numberCounts)
-      .filter(([, cnt]) => cnt === 1)
-      .map(([num]) => num)
-      .sort();
-
-    if (!uniqueNums.length) {
-      container.style.display = "none";
+    const allNums = Object.entries(numberCounts);
+    if (!allNums.length) {
+      // All records are DATA/VOICEMAIL without callee
+      if (noCallee > 0) {
+        container.style.display = "";
+        container.innerHTML = `<div class="small muted">Brak numerów w ${noCallee} ${noCallee === 1 ? "rekordzie" : "rekordach"} (sesje danych / poczta głosowa)</div>`;
+      } else {
+        container.style.display = "none";
+      }
       return;
     }
 
+    // Sort: single-occurrence first, then by count ascending
+    allNums.sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]));
+
+    const singleCount = allNums.filter(([, c]) => c === 1).length;
+    const totalNums = allNums.length;
+
     container.style.display = "";
 
-    let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">`;
-    html += `<span class="h3" style="margin:0;font-size:13px">Pojedyncze numery <span class="muted">(1× w filtrze)</span></span>`;
-    html += `<span class="small muted">${uniqueNums.length} z ${Object.keys(numberCounts).length} numerów</span>`;
-    html += `</div>`;
+    let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">`;
+    html += `<span class="h3" style="margin:0;font-size:13px">Numery w filtrze</span>`;
+    html += `<span class="small muted">${totalNums} ${totalNums === 1 ? "numer" : (totalNums < 5 ? "numery" : "numerów")}`;
+    if (singleCount > 0) html += ` · <b>${singleCount}</b> pojedynczych (1×)`;
+    if (noCallee > 0) html += ` · ${noCallee} bez numeru`;
+    html += `</span></div>`;
 
     html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-    for (const num of uniqueNums) {
+
+    const colorMap = {
+      CALL_OUT: "#3b82f6", CALL_IN: "#22c55e",
+      SMS_OUT: "#a855f7", SMS_IN: "#ec4899",
+      MMS_OUT: "#a855f7", MMS_IN: "#ec4899",
+      DATA: "#f97316", VOICEMAIL: "#6b7280",
+    };
+
+    for (const [num, count] of allNums) {
       const types = numberTypes[num] || {};
       const typeEntries = Object.entries(types);
-      const typeTag = typeEntries.map(([t, n]) => _typeLabel(t)).join(", ");
-      // Color by dominant type
+      const typeTag = typeEntries.map(([t, n]) => `${_typeLabel(t)}: ${n}`).join(", ");
       const domType = typeEntries.sort((a, b) => b[1] - a[1])[0]?.[0] || "";
-      const colorMap = {
-        CALL_OUT: "#3b82f6", CALL_IN: "#22c55e",
-        SMS_OUT: "#a855f7", SMS_IN: "#ec4899",
-        DATA: "#f97316",
-      };
       const tagColor = colorMap[domType] || "#6b7280";
+      const isSingle = count === 1;
 
-      html += `<div class="gsm-unique-num" data-num="${num}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;cursor:pointer;background:var(--card-bg,#fff)" title="${typeTag} · klik → filtruj rekordy">`;
+      // Single-occurrence numbers get a highlighted border
+      const borderStyle = isSingle
+        ? `border:1.5px solid ${tagColor}`
+        : `border:1px solid var(--border)`;
+
+      html += `<div class="gsm-unique-num" data-num="${num}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;${borderStyle};border-radius:8px;font-size:12px;cursor:pointer;background:var(--card-bg,#fff)" title="${typeTag} · klik → filtruj rekordy">`;
       html += `<span style="color:${tagColor};font-size:10px">●</span>`;
       html += `<code style="font-size:11px">${num}</code>`;
-      // Show identification label if available
+      if (count > 1) {
+        html += ` <span class="small muted" style="font-size:10px">${count}×</span>`;
+      }
+      // Identification label
       const idInfo = _idLookup(num);
       if (idInfo) {
         html += ` <span class="small ${idInfo.css}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${idInfo.type}">${idInfo.label}</span>`;
@@ -3488,7 +3514,7 @@
 
     container.innerHTML = html;
 
-    // Click on number → filter Records table to that number
+    // Click on number → filter Records table to that number (all records, not just filtered)
     container.querySelectorAll(".gsm-unique-num").forEach(el => {
       el.addEventListener("click", () => {
         const num = el.dataset.num;
