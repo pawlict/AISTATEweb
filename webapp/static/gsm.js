@@ -2029,98 +2029,98 @@
    * rendered data stored on the DOM container.
    */
   function _renderTravelSections(geo, analysis) {
-    // Container is in the template, independent of #gsm_cluster_info visibility
-    const container = QS("#gsm_travel_sections");
-    if (!container) return;
+    // Use a hidden scratch element to cache data between calls
+    let _cache = _renderTravelSections._cache || (_renderTravelSections._cache = {});
+    if (geo) _cache.geo = geo;
+    if (analysis) _cache.analysis = analysis;
 
-    // Cache data on the container so either caller can update independently
-    if (geo) container._geo = geo;
-    if (analysis) container._analysis = analysis;
+    const crossings = (_cache.geo && _cache.geo.border_crossings) || [];
+    const stays = (_cache.analysis && _cache.analysis.overnight_stays) || [];
+    const home = (_cache.analysis && _cache.analysis.overnight_stays_home) || "";
 
-    const crossings = (container._geo && container._geo.border_crossings) || [];
-    const stays = (container._analysis && container._analysis.overnight_stays) || [];
-    const home = (container._analysis && container._analysis.overnight_stays_home) || "";
-
-    if (!crossings.length && !stays.length) {
-      container.style.display = "none";
-      return;
-    }
-    container.style.display = "";
-
-    let html = '';
-
-    // ── Card 1: Border crossings ──
-    if (crossings.length) {
-      html += '<div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:16px;background:var(--card-bg,#fff)">';
-      html += '<div class="h3" style="margin-bottom:8px">Przekroczenia granic / wyjazdy zagraniczne</div>';
-      html += '<div style="display:flex;flex-direction:column;gap:8px">';
-      for (let i = 0; i < crossings.length; i++) {
-        const bc = crossings[i];
-        const absence = _formatHours(bc.absence_hours);
-        const countries = (bc.roaming_countries || []).map(c => _countryName(c)).join(", ");
-        const confirmed = bc.roaming_confirmed
-          ? `<span style="color:#22c55e" title="Potwierdzone danymi roamingu">✓ roaming</span>`
-          : `<span style="color:#f97316" title="Wykryte na podstawie przerwy w aktywności">⚠ przerwa</span>`;
-        html += `<div data-bc-idx="${i}" class="gsm-travel-card" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-            <div><span style="color:#ef4444">●</span> <b>Wyjazd:</b> ${bc.last_domestic_datetime || "?"}${bc.last_domestic_city ? ` <span class="muted">(${bc.last_domestic_city})</span>` : ""}</div>
-            <div><span style="color:#22c55e">●</span> <b>Powrót:</b> ${bc.first_return_datetime || "brak danych"}${bc.first_return_city ? ` <span class="muted">(${bc.first_return_city})</span>` : ""}</div>
-          </div>
-          <div class="small" style="margin-top:4px">
-            Nieobecność: <b>${absence}</b>
-            ${countries ? ` · Kraje: <b>${countries}</b>` : ""}
-            ${bc.roaming_records ? ` · ${bc.roaming_records} rek. roamingu` : ""}
-            · ${confirmed}
-          </div>
-        </div>`;
-      }
-      html += '</div></div>';
-    }
-
-    // ── Card 2: Overnight stays ──
-    if (stays.length) {
-      const totalNights = stays.reduce((s, v) => s + (v.nights || 0), 0);
-      const stayWord = stays.length === 1 ? "pobyt" : (stays.length < 5 ? "pobyty" : "pobytów");
-      const nightWord = totalNights === 1 ? "noc" : (totalNights < 5 ? "noce" : "nocy");
-      html += '<div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px;background:var(--card-bg,#fff)">';
-      html += '<div class="h3" style="margin-bottom:8px">Nocowanie poza domem</div>';
-      html += `<div class="small muted" style="margin-bottom:8px">Lokalizacja domowa: <b>${home}</b> — ${stays.length} ${stayWord} (${totalNights} ${nightWord})</div>`;
-      html += '<div style="display:flex;flex-direction:column;gap:8px">';
-      for (let j = 0; j < stays.length; j++) {
-        const stay = stays[j];
-        const period = stay.start_date === stay.end_date ? stay.start_date : `${stay.start_date} – ${stay.end_date}`;
-        const locs = (stay.locations || []).join(", ");
-        let detailsHtml = "";
-        for (const d of (stay.details || [])) {
-          detailsHtml += `<div>${d.date}: ${d.last_time || ""} <span class="muted">(${d.location_evening || ""})</span> → ${d.first_time || ""} <span class="muted">(${d.location_morning || ""})</span></div>`;
+    // ── Border crossings card ──
+    const borderCard = QS("#gsm_border_card");
+    const borderList = QS("#gsm_border_list");
+    if (borderCard && borderList) {
+      if (!crossings.length) {
+        borderCard.style.display = "none";
+      } else {
+        borderCard.style.display = "";
+        let bHtml = '<div style="display:flex;flex-direction:column;gap:8px">';
+        for (let i = 0; i < crossings.length; i++) {
+          const bc = crossings[i];
+          const absence = _formatHours(bc.absence_hours);
+          const countries = (bc.roaming_countries || []).map(c => _countryName(c)).join(", ");
+          const confirmed = bc.roaming_confirmed
+            ? `<span style="color:#22c55e" title="Potwierdzone danymi roamingu">✓ roaming</span>`
+            : `<span style="color:#f97316" title="Wykryte na podstawie przerwy w aktywności">⚠ przerwa</span>`;
+          bHtml += `<div data-bc-idx="${i}" class="gsm-travel-card" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+              <div><span style="color:#ef4444">●</span> <b>Wyjazd:</b> ${bc.last_domestic_datetime || "?"}${bc.last_domestic_city ? ` <span class="muted">(${bc.last_domestic_city})</span>` : ""}</div>
+              <div><span style="color:#22c55e">●</span> <b>Powrót:</b> ${bc.first_return_datetime || "brak danych"}${bc.first_return_city ? ` <span class="muted">(${bc.first_return_city})</span>` : ""}</div>
+            </div>
+            <div class="small" style="margin-top:4px">
+              Nieobecność: <b>${absence}</b>
+              ${countries ? ` · Kraje: <b>${countries}</b>` : ""}
+              ${bc.roaming_records ? ` · ${bc.roaming_records} rek. roamingu` : ""}
+              · ${confirmed}
+            </div>
+          </div>`;
         }
-        html += `<div data-stay-idx="${j}" class="gsm-travel-card" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-            <div><b>${period}</b></div>
-            <div>${stay.nights} ${stay.nights === 1 ? "noc" : (stay.nights < 5 ? "noce" : "nocy")}</div>
-            <div class="muted">${locs}</div>
-          </div>
-          <div class="small" style="margin-top:4px">${detailsHtml}</div>
-        </div>`;
+        bHtml += '</div>';
+        borderList.innerHTML = bHtml;
+        borderList.querySelectorAll("[data-bc-idx]").forEach(el => {
+          el.addEventListener("dblclick", () => {
+            const bc = crossings[parseInt(el.dataset.bcIdx)];
+            if (bc) _travelFilter("bc", bc);
+          });
+        });
       }
-      html += '</div></div>';
     }
 
-    container.innerHTML = html;
-
-    // Wire double-click → filter Records (analogous to heatmap cell click)
-    container.querySelectorAll("[data-bc-idx]").forEach(el => {
-      el.addEventListener("dblclick", () => {
-        const bc = crossings[parseInt(el.dataset.bcIdx)];
-        if (bc) _travelFilter("bc", bc);
-      });
-    });
-    container.querySelectorAll("[data-stay-idx]").forEach(el => {
-      el.addEventListener("dblclick", () => {
-        const stay = stays[parseInt(el.dataset.stayIdx)];
-        if (stay) _travelFilter("stay", stay);
-      });
-    });
+    // ── Overnight stays card ──
+    const overnightCard = QS("#gsm_overnight_card");
+    const overnightHeader = QS("#gsm_overnight_header");
+    const overnightList = QS("#gsm_overnight_list");
+    if (overnightCard && overnightList) {
+      if (!stays.length) {
+        overnightCard.style.display = "none";
+      } else {
+        overnightCard.style.display = "";
+        const totalNights = stays.reduce((s, v) => s + (v.nights || 0), 0);
+        const stayWord = stays.length === 1 ? "pobyt" : (stays.length < 5 ? "pobyty" : "pobytów");
+        const nightWord = totalNights === 1 ? "noc" : (totalNights < 5 ? "noce" : "nocy");
+        if (overnightHeader) {
+          overnightHeader.innerHTML = `Lokalizacja domowa: <b>${home}</b> — ${stays.length} ${stayWord} (${totalNights} ${nightWord})`;
+        }
+        let sHtml = '<div style="display:flex;flex-direction:column;gap:8px">';
+        for (let j = 0; j < stays.length; j++) {
+          const stay = stays[j];
+          const period = stay.start_date === stay.end_date ? stay.start_date : `${stay.start_date} – ${stay.end_date}`;
+          const locs = (stay.locations || []).join(", ");
+          let detailsHtml = "";
+          for (const d of (stay.details || [])) {
+            detailsHtml += `<div>${d.date}: ${d.last_time || ""} <span class="muted">(${d.location_evening || ""})</span> → ${d.first_time || ""} <span class="muted">(${d.location_morning || ""})</span></div>`;
+          }
+          sHtml += `<div data-stay-idx="${j}" class="gsm-travel-card" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+              <div><b>${period}</b></div>
+              <div>${stay.nights} ${stay.nights === 1 ? "noc" : (stay.nights < 5 ? "noce" : "nocy")}</div>
+              <div class="muted">${locs}</div>
+            </div>
+            <div class="small" style="margin-top:4px">${detailsHtml}</div>
+          </div>`;
+        }
+        sHtml += '</div>';
+        overnightList.innerHTML = sHtml;
+        overnightList.querySelectorAll("[data-stay-idx]").forEach(el => {
+          el.addEventListener("dblclick", () => {
+            const stay = stays[parseInt(el.dataset.stayIdx)];
+            if (stay) _travelFilter("stay", stay);
+          });
+        });
+      }
+    }
   }
 
   /** Filter Records by border crossing or overnight stay date range. */
