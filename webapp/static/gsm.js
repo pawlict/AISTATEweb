@@ -235,6 +235,7 @@
         if (St.lastResult) {
           _renderDevices(St.lastResult.analysis ? St.lastResult.analysis.devices : [], St.lastResult.analysis ? St.lastResult.analysis.imei_changes : [], St.lastResult.records, St.lastResult.subscriber);
           _renderAnalysis(St.lastResult.analysis);
+          _renderAnomalies(St.lastResult.analysis);
           _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
         }
       }
@@ -321,6 +322,7 @@
     _renderSummary(data.summary);
     _renderDevices(data.analysis ? data.analysis.devices : [], data.analysis ? data.analysis.imei_changes : [], data.records, data.subscriber);
     _renderAnalysis(data.analysis);
+    _renderAnomalies(data.analysis);
     _renderRecords(data.records, data.records_truncated, data.record_count);
     _renderSpecialNumbers(data.analysis ? data.analysis.special_numbers : []);
     _renderActivityCharts(data.analysis);
@@ -567,18 +569,6 @@
       html += "</div>";
     }
 
-    // Anomalies
-    if (a.anomalies && a.anomalies.length) {
-      html += `<div class="gsm-section"><div class="h3">Anomalie</div>`;
-      for (const an of a.anomalies) {
-        const sev = an.severity || "info";
-        html += `<div class="gsm-anomaly gsm-anomaly-${sev}">
-          <strong>${an.type || ""}</strong>: ${an.description || ""}
-        </div>`;
-      }
-      html += "</div>";
-    }
-
     // Stats
     if (a.avg_call_duration || a.longest_call_seconds) {
       html += `<div class="gsm-section"><div class="h3">Statystyki połączeń</div><div class="gsm-stats-row">`;
@@ -618,6 +608,98 @@
     } else if (graphCard) {
       graphCard.style.display = "none";
     }
+  }
+
+  /* ── Anomalies card ──────────────────────────────────────── */
+
+  function _renderAnomalies(a) {
+    const card = QS("#gsm_anomalies_card");
+    const body = QS("#gsm_anomalies_body");
+    if (!card || !body) return;
+
+    const groups = (a && a.anomalies) || [];
+    if (!groups.length) { card.style.display = "none"; return; }
+
+    // Check if any group has items
+    const hasAny = groups.some(g => g.items && g.items.length);
+    card.style.display = "";
+
+    let html = '<div style="display:flex;flex-direction:column;gap:12px">';
+    for (const g of groups) {
+      const items = g.items || [];
+      const hasItems = items.length > 0;
+      const sev = hasItems ? (g.severity || "info") : "ok";
+      const sevColor = sev === "warning" ? "#f97316" : sev === "ok" ? "#22c55e" : "#3b82f6";
+      const sevIcon = sev === "warning" ? "⚠" : sev === "ok" ? "✓" : "ℹ";
+
+      html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;border-left:3px solid ${sevColor}">`;
+      html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:${hasItems ? '6' : '0'}px">`;
+      html += `<span style="color:${sevColor}">${sevIcon}</span>`;
+      html += `<b>${g.label || g.type}</b>`;
+      if (!hasItems) {
+        html += ` <span class="muted">— brak</span>`;
+      } else {
+        html += ` <span class="muted">(${items.length})</span>`;
+      }
+      html += `</div>`;
+
+      if (hasItems) {
+        html += _renderAnomalyItems(g.type, items);
+      }
+
+      html += `</div>`;
+    }
+    html += '</div>';
+    body.innerHTML = html;
+  }
+
+  function _renderAnomalyItems(type, items) {
+    let html = '<div style="display:flex;flex-direction:column;gap:3px;font-size:13px">';
+
+    if (type === "long_call") {
+      for (const it of items) {
+        html += `<div><code>${it.contact}</code> — ${it.duration_min} min (${it.date} ${it.time})</div>`;
+      }
+    } else if (type === "night_activity") {
+      for (const it of items) {
+        html += `<div>${it.ratio} połączeń w godzinach 23:00–05:00</div>`;
+      }
+    } else if (type === "burst_activity") {
+      for (const it of items) {
+        html += `<div>${it.count} rekordów w ${it.window_min} min — ${it.date} od ${it.time}</div>`;
+      }
+    } else if (type === "premium_number") {
+      for (const it of items) {
+        html += `<div><code>${it.contact}</code> — ${it.count}× (${it.dates.join(", ")})</div>`;
+      }
+    } else if (type === "roaming") {
+      for (const it of items) {
+        const c = it.countries && it.countries.length ? it.countries.join(", ") : "brak danych";
+        html += `<div>${it.count} rekordów — kraje: ${c}</div>`;
+      }
+    } else if (type === "night_movement") {
+      for (const it of items) {
+        html += `<div>${it.date} ${it.time_from}→${it.time_to}: zmiana BTS <span class="muted">${it.bts_from} → ${it.bts_to}</span>`;
+        if (it.contact) html += ` (kontakt: <code>${it.contact}</code>)`;
+        html += `</div>`;
+      }
+    } else if (type === "one_time_contacts") {
+      for (const it of items) {
+        html += `<div><code>${it.contact}</code> — ${it.record_type} (${it.date})</div>`;
+      }
+    } else if (type === "late_night_calls") {
+      for (const it of items) {
+        html += `<div><code>${it.contact}</code> — ${it.duration_min} min (${it.date} ${it.time})</div>`;
+      }
+    } else {
+      // Fallback for unknown types
+      for (const it of items) {
+        html += `<div>${it.description || JSON.stringify(it)}</div>`;
+      }
+    }
+
+    html += '</div>';
+    return html;
   }
 
   /* ── Contact relationship graph (SVG) ──────────────────── */

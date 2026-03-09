@@ -1138,88 +1138,218 @@ def _detect_anomalies(
     analysis: AnalysisResult,
     own_numbers: Set[str],
 ) -> List[Dict[str, Any]]:
-    """Detect anomalies and unusual patterns."""
-    anomalies: List[Dict[str, Any]] = []
+    """Detect anomalies and unusual patterns.
+
+    Returns a list of anomaly groups. Each group has:
+      - type: category key
+      - label: human-readable category name
+      - severity: info | warning
+      - items: list of individual findings (may be empty = "brak")
+      - summary: optional overall summary string
+    """
+    groups: List[Dict[str, Any]] = []
 
     if not records:
-        return anomalies
+        return groups
 
-    # 1. Unusually long calls (> 2 hours)
+    # ── 1. Long calls (> 2 hours) ──
+    long_calls = []
     for r in records:
         if r.duration_seconds > 7200 and "CALL" in r.record_type:
-            anomalies.append({
-                "type": "long_call",
-                "severity": "info",
-                "description": (
-                    f"Długie połączenie: {r.duration_seconds // 60} min "
-                    f"z {r.callee or r.caller} ({r.date} {r.time})"
-                ),
-                "record_datetime": r.datetime,
-                "contact": r.callee or r.caller,
+            long_calls.append({
+                "contact": r.callee or r.caller or "nieznany",
+                "duration_min": r.duration_seconds // 60,
+                "date": r.date,
+                "time": r.time,
+                "datetime": r.datetime,
             })
+    groups.append({
+        "type": "long_call",
+        "label": "Długie połączenia (> 2h)",
+        "severity": "info",
+        "items": long_calls,
+    })
 
-    # 2. High night activity
+    # ── 2. High night activity (23:00–05:00) ──
+    night_items = []
     if analysis.temporal.night_activity_ratio > 0.3:
-        anomalies.append({
-            "type": "night_activity",
-            "severity": "warning",
-            "description": (
-                f"Wysoka aktywność nocna: "
-                f"{analysis.temporal.night_activity_ratio:.0%} "
-                f"połączeń między 23:00-05:00"
-            ),
+        night_items.append({
+            "ratio": f"{analysis.temporal.night_activity_ratio:.0%}",
         })
+    groups.append({
+        "type": "night_activity",
+        "label": "Wysoka aktywność nocna (23:00–05:00)",
+        "severity": "warning" if night_items else "info",
+        "items": night_items,
+    })
 
-    # 3. Burst activity — many records in short time
-    _detect_burst_activity(records, anomalies)
+    # ── 3. Burst activity — many records in short time ──
+    burst_items: List[Dict[str, Any]] = []
+    _detect_burst_activity(records, burst_items)
+    groups.append({
+        "type": "burst_activity",
+        "label": "Skoki aktywności (≥20 rekordów / 30 min)",
+        "severity": "warning" if burst_items else "info",
+        "items": burst_items,
+    })
 
-    # 4. IMEI changes
-    if len(analysis.imei_changes) > 2:
-        anomalies.append({
-            "type": "frequent_imei_change",
-            "severity": "warning",
-            "description": (
-                f"Częste zmiany urządzenia (IMEI): "
-                f"{len(analysis.imei_changes)} zmian"
-            ),
-            "changes": analysis.imei_changes,
-        })
-
-    # 5. Premium/foreign numbers
+    # ── 4. Premium numbers ──
+    premium_seen: Dict[str, List[str]] = {}
     for r in records:
         contact = r.callee or r.caller
         if not contact:
             continue
-        # Premium rate numbers (70x, 80x)
         if re.match(r"^\+?48[78]0\d", contact):
-            anomalies.append({
-                "type": "premium_number",
-                "severity": "info",
-                "description": f"Połączenie z numerem premium: {contact} ({r.date})",
-                "record_datetime": r.datetime,
-                "contact": contact,
-            })
+            premium_seen.setdefault(contact, []).append(r.date)
+    premium_items = [
+        {"contact": num, "count": len(dates), "dates": sorted(set(dates))}
+        for num, dates in premium_seen.items()
+    ]
+    groups.append({
+        "type": "premium_number",
+        "label": "Numery premium",
+        "severity": "info",
+        "items": premium_items,
+    })
 
-    # 6. Roaming usage
+    # ── 5. Roaming ──
     roaming_records = [r for r in records if r.roaming]
+    roaming_items = []
     if roaming_records:
         countries = set(r.roaming_country for r in roaming_records if r.roaming_country)
-        anomalies.append({
-            "type": "roaming",
-            "severity": "info",
-            "description": (
-                f"Aktywność roamingowa: {len(roaming_records)} rekordów"
-                + (f" (kraje: {', '.join(countries)})" if countries else "")
-            ),
+        roaming_items.append({
             "count": len(roaming_records),
+            "countries": sorted(countries),
         })
+    groups.append({
+        "type": "roaming",
+        "label": "Aktywność roamingowa",
+        "severity": "info",
+        "items": roaming_items,
+    })
 
-    return anomalies
+    # ── 6. Night movement — BTS change after communication 23:00–05:00 ──
+    night_move_items = _detect_night_movement(records)
+    groups.append({
+        "type": "night_movement",
+        "label": "Przemieszczanie nocne (zmiana BTS po aktywności 23:00–05:00)",
+        "severity": "warning" if night_move_items else "info",
+        "items": night_move_items,
+    })
+
+    # ── 7. One-time contacts (single interaction numbers) ──
+    one_time_items = _detect_one_time_contacts(records, own_numbers)
+    groups.append({
+        "type": "one_time_contacts",
+        "label": "Jednorazowe kontakty (jeden rekord w całym bilingu)",
+        "severity": "info",
+        "items": one_time_items,
+    })
+
+    # ── 8. Late-night calls (00:00–05:00, actual voice calls) ──
+    late_calls = []
+    for r in records:
+        if "CALL" not in r.record_type or r.duration_seconds < 10:
+            continue
+        try:
+            hour = int(r.time.split(":")[0])
+        except (ValueError, IndexError):
+            continue
+        if 0 <= hour < 5:
+            late_calls.append({
+                "contact": r.callee or r.caller or "nieznany",
+                "date": r.date,
+                "time": r.time,
+                "duration_min": r.duration_seconds // 60,
+                "datetime": r.datetime,
+            })
+    groups.append({
+        "type": "late_night_calls",
+        "label": "Połączenia głosowe w nocy (00:00–05:00)",
+        "severity": "warning" if late_calls else "info",
+        "items": late_calls,
+    })
+
+    return groups
+
+
+def _detect_night_movement(records: List[BillingRecord]) -> List[Dict[str, Any]]:
+    """Detect BTS location changes after night-time activity (23:00–05:00).
+
+    Finds cases where the user has communication at night and the BTS location
+    changes significantly between consecutive night records — suggesting
+    they were on the move at unusual hours.
+    """
+    items: List[Dict[str, Any]] = []
+    sorted_recs = sorted(
+        [r for r in records if r.datetime and r.location],
+        key=lambda r: r.datetime,
+    )
+
+    prev_night_rec = None
+    for r in sorted_recs:
+        try:
+            hour = int(r.time.split(":")[0])
+        except (ValueError, IndexError):
+            continue
+        if hour >= 23 or hour < 5:
+            if prev_night_rec and prev_night_rec.date == r.date:
+                loc_a = prev_night_rec.location.strip()
+                loc_b = r.location.strip()
+                if loc_a and loc_b and loc_a != loc_b:
+                    items.append({
+                        "date": r.date,
+                        "time_from": prev_night_rec.time,
+                        "time_to": r.time,
+                        "bts_from": loc_a,
+                        "bts_to": loc_b,
+                        "contact": r.callee or r.caller or "",
+                    })
+            prev_night_rec = r
+        else:
+            prev_night_rec = None
+
+    # Deduplicate — keep unique (date, bts_from, bts_to) combos
+    seen = set()
+    unique = []
+    for it in items:
+        key = (it["date"], it["bts_from"], it["bts_to"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(it)
+    return unique
+
+
+def _detect_one_time_contacts(
+    records: List[BillingRecord],
+    own_numbers: Set[str],
+) -> List[Dict[str, Any]]:
+    """Find phone numbers that appear exactly once in the entire billing."""
+    contact_counts: Dict[str, Dict[str, Any]] = {}
+    for r in records:
+        contact = r.callee or r.caller
+        if not contact or contact in own_numbers:
+            continue
+        if contact not in contact_counts:
+            contact_counts[contact] = {"count": 0, "date": r.date, "type": r.record_type}
+        contact_counts[contact]["count"] += 1
+
+    items = []
+    for num, info in contact_counts.items():
+        if info["count"] == 1:
+            items.append({
+                "contact": num,
+                "date": info["date"],
+                "record_type": info["type"],
+            })
+    # Limit to 30 most recent
+    items.sort(key=lambda x: x["date"], reverse=True)
+    return items[:30]
 
 
 def _detect_burst_activity(
     records: List[BillingRecord],
-    anomalies: List[Dict[str, Any]],
+    items: List[Dict[str, Any]],
     threshold: int = 20,
     window_minutes: int = 30,
 ) -> None:
@@ -1233,7 +1363,6 @@ def _detect_burst_activity(
         for j in range(i + 1, min(i + threshold * 2, len(sorted_records))):
             if not sorted_records[j].datetime:
                 continue
-            # Simple comparison — same date and close time
             if sorted_records[j].date == r.date:
                 try:
                     t1_parts = r.time.split(":")
@@ -1250,15 +1379,10 @@ def _detect_burst_activity(
                 break
 
         if count >= threshold:
-            anomalies.append({
-                "type": "burst_activity",
-                "severity": "warning",
-                "description": (
-                    f"Skok aktywności: {count} rekordów w {window_minutes} min "
-                    f"({r.date} od {r.time})"
-                ),
+            items.append({
                 "date": r.date,
                 "time": r.time,
                 "count": count,
+                "window_min": window_minutes,
             })
             break  # Report only the first burst
