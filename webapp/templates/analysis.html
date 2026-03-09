@@ -611,13 +611,25 @@
           </div>
           <canvas id="gsm_tl_density" height="24" style="width:100%;cursor:pointer"></canvas>
         </div>
-        <!-- Cluster info below map -->
-        <div id="gsm_cluster_info" style="display:none;margin-top:12px">
-          <div class="h3">Wykryte lokalizacje</div>
-          <div id="gsm_cluster_list"></div>
-        </div>
-        <!-- Travel sections: border crossings + overnight stays (independent of clusters) -->
-        <div id="gsm_travel_sections" style="display:none"></div>
+      </div>
+
+      <!-- Cluster info — separate card -->
+      <div class="card" id="gsm_cluster_info" style="display:none">
+        <div class="h3">Wykryte lokalizacje</div>
+        <div id="gsm_cluster_list"></div>
+      </div>
+
+      <!-- Border crossings — separate card -->
+      <div class="card" id="gsm_border_card" style="display:none">
+        <div class="h3">Przekroczenia granic / wyjazdy zagraniczne</div>
+        <div id="gsm_border_list"></div>
+      </div>
+
+      <!-- Overnight stays — separate card -->
+      <div class="card" id="gsm_overnight_card" style="display:none">
+        <div class="h3">Nocowanie poza domem</div>
+        <div id="gsm_overnight_header" class="small muted" style="margin-bottom:8px"></div>
+        <div id="gsm_overnight_list"></div>
       </div>
 
       <!-- Warnings -->
