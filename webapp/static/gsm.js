@@ -1397,6 +1397,8 @@
           lat: p.lat, lon: p.lon,
           city: p.city || "", street: p.street || "",
           azimuth: p.azimuth,
+          range_m: p.range_m || null,
+          radio: p.radio || "",
           lac: p.lac, cid: p.cid,
           records: [],
           types: {},
@@ -1440,6 +1442,8 @@
         <b>${count}</b> rekordów (${typeList})<br>
         ${firstDt} — ${lastDt}
         ${loc.azimuth != null ? `<br>Azymut: ${loc.azimuth}°` : ""}
+        ${loc.radio ? `<br>Technologia: ${loc.radio}` : ""}
+        ${loc.range_m ? `<br>Zasięg: ${(loc.range_m / 1000).toFixed(1)} km` : ""}
         <br><span class="small muted">LAC: ${loc.lac}, CID: ${loc.cid}<br>
         ${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}</span>`;
       marker.bindPopup(popupHtml);
@@ -1529,6 +1533,54 @@
       }
     }
     St.mapLayers.clusters = clusterGroup;
+
+    // ── Coverage layer (BTS sector / circle coverage areas) ──
+    const coverageGroup = L.layerGroup();
+    const _defaultRange = { "GSM": 5000, "UMTS": 3000, "LTE": 2000, "5G NR": 1000 };
+    for (const loc of uniqueLocations) {
+      const range = loc.range_m || _defaultRange[loc.radio] || 2000;
+      const count = loc.records.length;
+      // Color by radio technology
+      const radioColors = { "GSM": "#ef4444", "UMTS": "#f97316", "LTE": "#3b82f6", "5G NR": "#8b5cf6" };
+      const color = radioColors[loc.radio] || "#6b7280";
+      const opacity = Math.min(0.35, 0.10 + Math.log2(count + 1) * 0.04);
+
+      if (loc.azimuth != null) {
+        // Draw sector (pie-slice) for directional antenna
+        const beamWidth = loc.radio === "5G NR" ? 30 : loc.radio === "LTE" ? 45 : 60;
+        const startAngle = loc.azimuth - beamWidth / 2;
+        const endAngle = loc.azimuth + beamWidth / 2;
+        const sectorCoords = _buildSectorCoords(loc.lat, loc.lon, range, startAngle, endAngle, 24);
+        L.polygon(sectorCoords, {
+          fillColor: color,
+          color: color,
+          weight: 1,
+          fillOpacity: opacity,
+        }).bindPopup(
+          `<b>${loc.city || "BTS"}${loc.street ? ", " + loc.street : ""}</b><br>` +
+          `Azymut: ${loc.azimuth}°, Zasięg: ${(range / 1000).toFixed(1)} km<br>` +
+          `${loc.radio ? "Technologia: " + loc.radio + "<br>" : ""}` +
+          `Rekordy: ${count}<br>` +
+          `<span class="small muted">LAC: ${loc.lac}, CID: ${loc.cid}</span>`
+        ).addTo(coverageGroup);
+      } else {
+        // Draw circle for omnidirectional / unknown azimuth
+        L.circle([loc.lat, loc.lon], {
+          radius: range,
+          fillColor: color,
+          color: color,
+          weight: 1,
+          fillOpacity: opacity * 0.7,
+        }).bindPopup(
+          `<b>${loc.city || "BTS"}${loc.street ? ", " + loc.street : ""}</b><br>` +
+          `Zasięg: ${(range / 1000).toFixed(1)} km<br>` +
+          `${loc.radio ? "Technologia: " + loc.radio + "<br>" : ""}` +
+          `Rekordy: ${count}<br>` +
+          `<span class="small muted">LAC: ${loc.lac}, CID: ${loc.cid}</span>`
+        ).addTo(coverageGroup);
+      }
+    }
+    St.mapLayers.coverage = coverageGroup;
 
     // ── Trips layer (OSRM-routed roads between clusters) ──
     const tripsGroup = L.layerGroup();
@@ -1687,6 +1739,10 @@
     if (layer === "border") {
       if (St.mapLayers.border) St.mapLayers.border.addTo(map);
       if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+    }
+    if (layer === "coverage") {
+      if (St.mapLayers.coverage) St.mapLayers.coverage.addTo(map);
       if (St.mapLayers.all) St.mapLayers.all.addTo(map);
     }
     if (layer === "heatmap") {
@@ -2002,6 +2058,22 @@
     if (mode === "car") return "\uD83D\uDE97";
     if (mode === "plane") return "\u2708\uFE0F";
     return "";
+  }
+
+  /**
+   * Build polygon coords for a sector (pie-slice) on the map.
+   * Returns array of [lat,lon] pairs forming a closed polygon.
+   */
+  function _buildSectorCoords(lat, lon, radiusM, startAngle, endAngle, segments) {
+    const coords = [[lat, lon]]; // center point
+    const step = (endAngle - startAngle) / segments;
+    for (let i = 0; i <= segments; i++) {
+      const angle = startAngle + step * i;
+      const pt = _offsetByAzimuth(lat, lon, angle, radiusM);
+      coords.push([pt.lat, pt.lon]);
+    }
+    coords.push([lat, lon]); // close polygon
+    return coords;
   }
 
   /* ── Country code → full Polish name mapping ── */

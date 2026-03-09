@@ -38,6 +38,8 @@ class GeoPoint:
     lon: float = 0.0
     accuracy_m: int = 1000  # estimated accuracy in meters
     azimuth: Optional[float] = None
+    range_m: Optional[int] = None  # estimated coverage radius in meters
+    radio: str = ""  # radio technology: GSM, UMTS, LTE, 5G NR
     lac: int = 0
     cid: int = 0
     city: str = ""
@@ -522,6 +524,8 @@ def _resolve_point(
                     lon=lon,
                     accuracy_m=200 if azimuth is not None else 500,
                     azimuth=azimuth,
+                    range_m=int(extra["bts_range"]) if extra.get("bts_range") else None,
+                    radio=extra.get("bts_radio", ""),
                     lac=lac_int,
                     cid=cid_int,
                     city=extra.get("bts_city", ""),
@@ -544,6 +548,8 @@ def _resolve_point(
                     lon=station.lon,
                     accuracy_m=200 if station.azimuth is not None else 500,
                     azimuth=station.azimuth,
+                    range_m=station.range_m,
+                    radio=station.radio or "",
                     lac=lac_int,
                     cid=cid_int,
                     city=station.city,
