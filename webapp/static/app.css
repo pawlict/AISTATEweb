@@ -283,6 +283,8 @@ textarea{min-height:220px; resize:vertical}
   cursor:pointer;
 }
 .btn:hover{background: rgba(31,90,166,.14)}
+.btn.btn-icon{background:transparent;border-color:transparent}
+.btn.btn-icon:hover{background:rgba(31,90,166,.14);border-color:rgba(31,90,166,.22)}
 .btn.secondary{
   border-color: rgba(15,23,42,.14);
   background: rgba(15,23,42,.06);
@@ -3144,6 +3146,8 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 [data-theme="dark"] .btn:hover{
   background: rgba(74,158,237,.22);
 }
+[data-theme="dark"] .btn.btn-icon{background:transparent;border-color:transparent}
+[data-theme="dark"] .btn.btn-icon:hover{background:rgba(74,158,237,.18);border-color:rgba(74,158,237,.25)}
 [data-theme="dark"] .btn.secondary{
   background: rgba(226,232,240,.08);
   border-color: var(--border);

@@ -2087,28 +2087,30 @@
       const cy = mapCanvas.height + barH / 2;
       const pad = Math.round(barH * 0.4);
 
-      // Left: AISTATEweb + date
+      // Left: AISTATEweb + layer name + date
+      let lx = pad;
       ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
       ctx.fillStyle = "rgba(255,255,255,0.92)";
-      ctx.fillText("AISTATEweb", pad, cy);
-      const appW = ctx.measureText("AISTATEweb").width;
+      ctx.fillText("AISTATEweb", lx, cy);
+      lx += ctx.measureText("AISTATEweb").width;
+
+      if (layerLabel) {
+        ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        ctx.fillText(`  |  ${layerLabel}`, lx, cy);
+        lx += ctx.measureText(`  |  ${layerLabel}`).width;
+      }
 
       ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.55)";
-      ctx.fillText(`  ${dateStr}`, pad + appW, cy);
+      ctx.fillStyle = "rgba(255,255,255,0.40)";
+      ctx.fillText(`  ${dateStr}`, lx, cy);
 
-      // Right: © OSM + layer name
+      // Right: © OSM
       const rightText = `© OpenStreetMap contributors`;
       ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.fillStyle = "rgba(255,255,255,0.45)";
       const rightW = ctx.measureText(rightText).width;
-      const layerW = layerLabel ? ctx.measureText("  |  " + layerLabel).width : 0;
-      const rx = w - pad - rightW - layerW;
-      ctx.fillText(rightText, rx, cy);
-      if (layerLabel) {
-        ctx.fillStyle = "rgba(255,255,255,0.40)";
-        ctx.fillText("  |  " + layerLabel, rx + rightW, cy);
-      }
+      ctx.fillText(rightText, w - pad - rightW, cy);
 
       // Convert to blob and trigger download
       out.toBlob((blob) => {
