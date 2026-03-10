@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="pin" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ef4444"/><stop offset="100%" stop-color="#f97316"/></linearGradient></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#ef4444" stroke-width="1" fill="none" opacity=".15"/>
+<!-- pin head (circle) -->
+<circle cx="24" cy="12" r="8" stroke="url(#pin)" stroke-width="2.2" fill="url(#pin)" fill-opacity=".08"/>
+<!-- pin neck -->
+<path d="M20 19h8v6H20z" stroke="url(#pin)" stroke-width="1.8" fill="none"/>
+<!-- pin body (tapers) -->
+<path d="M20 25l4 19 4-19" stroke="url(#pin)" stroke-width="2" fill="url(#pin)" fill-opacity=".06"/>
+<!-- highlight on head -->
+<circle cx="21" cy="10" r="2" fill="#f97316" opacity=".15"/>
+</svg>
