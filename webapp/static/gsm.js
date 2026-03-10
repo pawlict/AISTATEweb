@@ -73,6 +73,356 @@
     return e;
   }
 
+  /* ── Pinned BTS cards system ──────────────────────────── */
+
+  /** All currently pinned cards. Each entry: { id, card, tether, latlng, loc } */
+  const _pinnedCards = [];
+  let _pinnedCardIdCounter = 0;
+  let _pinnedAutoFilter = true; // auto-filter Records when single card open
+
+  /** SVG icons for card buttons */
+  const _PIN_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18 8l-2.6 2.6a2 2 0 0 0-.5 1V14a1 1 0 0 1-1 1H10a1 1 0 0 1-1-1v-2.4a2 2 0 0 0-.5-1L6 8"/><path d="M12 15v7"/></svg>`;
+  const _CLOSE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+  /**
+   * Build record detail rows HTML for a pinned card.
+   * Shows date, phone number, and interaction type+direction.
+   */
+  function _buildRecordRows(records) {
+    if (!records || !records.length) return '<div class="small muted">Brak rekordów.</div>';
+
+    let html = '';
+    for (const r of records) {
+      const dt = r.datetime || r.date || "";
+      const num = r.callee || "—";
+      const label = _typeLabel(r.record_type);
+      html += `<div class="gsm-pc-rec">` +
+        `<span class="gsm-pc-dt">${dt}</span>` +
+        `<span class="gsm-pc-num">${num}</span>` +
+        `<span class="gsm-pc-type"><span class="gsm-type gsm-type-${r.record_type}">${label}</span></span>` +
+        `</div>`;
+    }
+    return html;
+  }
+
+  /**
+   * Create and show a pinned card for a BTS location.
+   *
+   * @param {L.LatLng|{lat,lon}} latlng  BTS coordinates
+   * @param {Object} loc                 Location data (city, street, records, types, etc.)
+   * @param {Object} [opts]              Extra options
+   * @param {boolean} [opts.pinned=false] Start pinned
+   */
+  function _openPinnedCard(latlng, loc, opts = {}) {
+    if (!St.map) return;
+    const map = St.map;
+    const container = map.getContainer();
+    const id = ++_pinnedCardIdCounter;
+
+    // Convert latlng to Leaflet LatLng if needed
+    const ll = latlng.lat !== undefined && latlng.lng !== undefined
+      ? latlng : L.latLng(latlng.lat, latlng.lon || latlng.lng);
+
+    // ── Build card DOM ──
+    const card = document.createElement("div");
+    card.className = "gsm-pinned-card";
+    card.dataset.pcId = id;
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "gsm-pinned-card-header";
+
+    const title = document.createElement("span");
+    title.className = "gsm-pinned-card-title";
+    title.textContent = `${loc.city || "BTS"}${loc.street ? ", " + loc.street : ""}`;
+
+    const pinBtn = document.createElement("button");
+    pinBtn.className = "gsm-pinned-card-btn";
+    pinBtn.innerHTML = _PIN_SVG;
+    pinBtn.title = "Przypnij kartę";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "gsm-pinned-card-btn";
+    closeBtn.innerHTML = _CLOSE_SVG;
+    closeBtn.title = "Zamknij";
+
+    header.appendChild(title);
+    header.appendChild(pinBtn);
+    header.appendChild(closeBtn);
+
+    // Body
+    const body = document.createElement("div");
+    body.className = "gsm-pinned-card-body";
+
+    // Summary section
+    const count = loc.records ? loc.records.length : 0;
+    const typeList = loc.types
+      ? Object.entries(loc.types).map(([t, n]) => `${_typeLabel(t)}: ${n}`).join(", ")
+      : "";
+    const firstDt = loc.records && loc.records.length ? loc.records[0].datetime : "";
+    const lastDt = loc.records && loc.records.length ? loc.records[loc.records.length - 1].datetime : "";
+
+    let summaryHtml = `<div class="gsm-pc-summary">`;
+    summaryHtml += `<b>${count}</b> rekordów${typeList ? ` (${typeList})` : ""}<br>`;
+    if (firstDt) summaryHtml += `${firstDt} — ${lastDt}<br>`;
+    if (loc.azimuth != null) summaryHtml += `Azymut: ${loc.azimuth}° `;
+    if (loc.radio) summaryHtml += `${loc.radio} `;
+    if (loc.range_m) summaryHtml += `${(loc.range_m / 1000).toFixed(1)} km `;
+    summaryHtml += `<br><span class="small muted">LAC: ${loc.lac || "?"}, CID: ${loc.cid || "?"}</span>`;
+    summaryHtml += `</div>`;
+
+    // Record detail rows
+    summaryHtml += _buildRecordRows(loc.records || []);
+
+    body.innerHTML = summaryHtml;
+
+    // Resize handle
+    const resizeHandle = document.createElement("div");
+    resizeHandle.className = "gsm-pinned-card-resize";
+
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(resizeHandle);
+
+    // Position card near the point on screen
+    const point = map.latLngToContainerPoint(ll);
+    let cardX = point.x + 18;
+    let cardY = point.y - 40;
+    // Clamp within container
+    const cRect = container.getBoundingClientRect();
+    if (cardX + 260 > cRect.width) cardX = point.x - 270;
+    if (cardY < 10) cardY = 10;
+    card.style.left = cardX + "px";
+    card.style.top = cardY + "px";
+    // Default width for body scroll
+    card.style.width = "300px";
+    card.style.maxHeight = "340px";
+
+    container.appendChild(card);
+
+    // ── Tether line (SVG overlay) ──
+    let tetherSvg = container.querySelector(".gsm-pinned-tether-svg");
+    if (!tetherSvg) {
+      tetherSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      tetherSvg.classList.add("gsm-pinned-tether-svg");
+      tetherSvg.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;overflow:visible";
+      container.appendChild(tetherSvg);
+    }
+    const tetherLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    tetherLine.setAttribute("stroke", "#64748b");
+    tetherLine.setAttribute("stroke-width", "1.5");
+    tetherLine.setAttribute("stroke-dasharray", "5 4");
+    tetherLine.dataset.pcId = id;
+    tetherSvg.appendChild(tetherLine);
+
+    function _updateTether() {
+      const pt = map.latLngToContainerPoint(ll);
+      const cx = parseFloat(card.style.left) + card.offsetWidth / 2;
+      const cy = parseFloat(card.style.top) + card.offsetHeight / 2;
+      tetherLine.setAttribute("x1", pt.x);
+      tetherLine.setAttribute("y1", pt.y);
+      tetherLine.setAttribute("x2", cx);
+      tetherLine.setAttribute("y2", cy);
+    }
+    _updateTether();
+
+    // Update tether when map moves
+    const _onMapMove = () => _updateTether();
+    map.on("move", _onMapMove);
+
+    // ── Card state ──
+    const entry = {
+      id,
+      card,
+      tetherLine,
+      latlng: ll,
+      loc,
+      pinned: !!opts.pinned,
+      _onMapMove,
+    };
+    _pinnedCards.push(entry);
+
+    // Update pin button visual
+    function _updatePinVisual() {
+      pinBtn.classList.toggle("active", entry.pinned);
+      pinBtn.title = entry.pinned ? "Odepnij kartę" : "Przypnij kartę";
+    }
+    _updatePinVisual();
+
+    // ── Pin button ──
+    pinBtn.onclick = (e) => {
+      e.stopPropagation();
+      entry.pinned = !entry.pinned;
+      _updatePinVisual();
+      _syncPinnedFilter();
+    };
+
+    // ── Close button ──
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      _closePinnedCard(id);
+    };
+
+    // ── Drag (header) ──
+    let dragOx, dragOy;
+    header.addEventListener("mousedown", (e) => {
+      if (e.target.closest(".gsm-pinned-card-btn")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      dragOx = e.clientX - parseFloat(card.style.left);
+      dragOy = e.clientY - parseFloat(card.style.top);
+      function onMove(ev) {
+        card.style.left = (ev.clientX - dragOx) + "px";
+        card.style.top = (ev.clientY - dragOy) + "px";
+        _updateTether();
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+
+    // ── Resize (bottom-right handle) ──
+    resizeHandle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startW = card.offsetWidth;
+      const startH = card.offsetHeight;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      function onMove(ev) {
+        card.style.width = Math.max(200, startW + ev.clientX - startX) + "px";
+        card.style.maxHeight = Math.max(80, startH + ev.clientY - startY) + "px";
+        _updateTether();
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+
+    // Prevent map interactions when interacting with card
+    card.addEventListener("mousedown", (e) => e.stopPropagation());
+    card.addEventListener("dblclick", (e) => e.stopPropagation());
+    card.addEventListener("wheel", (e) => e.stopPropagation());
+
+    // If this is the only card and not pinned yet, auto-filter Records
+    if (_pinnedCards.length === 1 && _pinnedAutoFilter) {
+      _filterRecordsByPinnedCards();
+    }
+    _syncPinnedFilter();
+
+    return entry;
+  }
+
+  /** Close and remove a pinned card by id */
+  function _closePinnedCard(id) {
+    const idx = _pinnedCards.findIndex(c => c.id === id);
+    if (idx === -1) return;
+    const entry = _pinnedCards[idx];
+
+    // Remove DOM
+    entry.card.remove();
+    entry.tetherLine.remove();
+
+    // Remove map listener
+    if (St.map) St.map.off("move", entry._onMapMove);
+
+    _pinnedCards.splice(idx, 1);
+
+    // Clean up tether SVG if no more cards
+    if (!_pinnedCards.length) {
+      const svg = St.map && St.map.getContainer().querySelector(".gsm-pinned-tether-svg");
+      if (svg) svg.remove();
+    }
+
+    _syncPinnedFilter();
+  }
+
+  /** Close all pinned cards */
+  function _closeAllPinnedCards() {
+    while (_pinnedCards.length) {
+      _closePinnedCard(_pinnedCards[0].id);
+    }
+  }
+
+  /** Sync record table filter based on pinned cards */
+  function _syncPinnedFilter() {
+    const pinned = _pinnedCards.filter(c => c.pinned);
+    if (pinned.length > 0) {
+      _filterRecordsByPinnedCards();
+    } else if (_pinnedCards.length === 1) {
+      // Single unpinned card — light filter
+      _filterRecordsByPinnedCards();
+    } else if (_pinnedCards.length === 0) {
+      // No cards — clear filter
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    }
+  }
+
+  /** Filter the main Records table to show only records from pinned/open card locations */
+  function _filterRecordsByPinnedCards() {
+    const cards = _pinnedCards.filter(c => c.pinned);
+    const active = cards.length ? cards : _pinnedCards;
+    if (!active.length || !St.lastResult) return;
+
+    // Collect all record datetimes from active cards
+    const dtSet = new Set();
+    for (const entry of active) {
+      if (entry.loc && entry.loc.records) {
+        for (const r of entry.loc.records) {
+          if (r.datetime) dtSet.add(r.datetime);
+        }
+      }
+    }
+
+    const allRecs = St.lastResult.records || [];
+    const filtered = allRecs.filter(r => dtSet.has(r.datetime));
+    const labels = active.map(c => c.loc.city || "BTS").join(" + ");
+    const filterText = `📌 ${labels} — ${filtered.length} rek.`;
+
+    _setRecordsFilter(filterText, () => {
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(filtered, false, filtered.length);
+  }
+
+  /**
+   * Open a pinned card for a BTS marker click. Replaces the default Leaflet popup.
+   * If clicked BTS already has an open card, close it (toggle).
+   */
+  function _handleBtsClick(latlng, loc) {
+    // Check if card for this location already exists
+    const existing = _pinnedCards.find(c =>
+      c.latlng.lat === (latlng.lat || latlng.lat) &&
+      c.latlng.lng === (latlng.lng || latlng.lon)
+    );
+    if (existing) {
+      // If unpinned and only card, close it
+      if (!existing.pinned && _pinnedCards.length === 1) {
+        _closePinnedCard(existing.id);
+        return;
+      }
+      // If pinned, just unpin and close
+      _closePinnedCard(existing.id);
+      return;
+    }
+
+    // If there's already an unpinned card, close it before opening new one
+    const unpinned = _pinnedCards.filter(c => !c.pinned);
+    for (const u of unpinned) {
+      _closePinnedCard(u.id);
+    }
+
+    _openPinnedCard(latlng, loc);
+  }
+
   /* ── log panel ──────────────────────────────────────────── */
   function _addLog(level, msg) {
     const el = QS("#gsm_log_body");
@@ -1603,6 +1953,7 @@
     if (layerSelect) {
       layerSelect.onchange = () => {
         const layer = layerSelect.value;
+        _closeAllPinnedCards();
         _switchMapLayer(layer, geo);
         // Show/hide coverage sub-options
         if (coverageOpts) coverageOpts.style.display = layer === "coverage" ? "" : "none";
@@ -1772,22 +2123,11 @@
         fillOpacity: 0.75,
       });
 
-      // Build popup with summary of all records at this location
-      const typeList = Object.entries(loc.types)
-        .map(([t, n]) => `${_typeLabel(t)}: ${n}`)
-        .join(", ");
-      const firstDt = loc.records[0].datetime;
-      const lastDt = loc.records[loc.records.length - 1].datetime;
-
-      const popupHtml = `<b>${loc.city || "BTS"}${loc.street ? ", " + loc.street : ""}</b><br>
-        <b>${count}</b> rekordów (${typeList})<br>
-        ${firstDt} — ${lastDt}
-        ${loc.azimuth != null ? `<br>Azymut: ${loc.azimuth}°` : ""}
-        ${loc.radio ? `<br>Technologia: ${loc.radio}` : ""}
-        ${loc.range_m ? `<br>Zasięg: ${(loc.range_m / 1000).toFixed(1)} km` : ""}
-        <br><span class="small muted">LAC: ${loc.lac}, CID: ${loc.cid}<br>
-        ${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}</span>`;
-      marker.bindPopup(popupHtml);
+      // Click → open pinned card (replaces popup)
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        _handleBtsClick(L.latLng(loc.lat, loc.lon), loc);
+      });
 
       // Double-click → filter Records by this BTS location
       marker.on("dblclick", () => {
@@ -1907,13 +2247,10 @@
           color: color,
           weight: 1.5,
           fillOpacity: opacity,
-        }).bindPopup(
-          `<b>${loc.city || "BTS"}${loc.street ? ", " + loc.street : ""}</b><br>` +
-          `Azymut: ${loc.azimuth}°, Zasięg: ${(range / 1000).toFixed(1)} km<br>` +
-          `${loc.radio ? "Technologia: " + loc.radio + "<br>" : ""}` +
-          `Rekordy: ${count}<br>` +
-          `<span class="small muted">LAC: ${loc.lac}, CID: ${loc.cid}</span>`
-        ).addTo(coverageGroup);
+        }).on("click", ((covLoc) => (e) => {
+          L.DomEvent.stopPropagation(e);
+          _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+        })(loc)).addTo(coverageGroup);
       } else {
         // Draw circle for omnidirectional / unknown azimuth
         L.circle([loc.lat, loc.lon], {
@@ -1922,12 +2259,10 @@
           color: color,
           weight: 1.5,
           fillOpacity: opacity * 0.8,
-        }).bindPopup(
-          `<b>${loc.city || "BTS"}${loc.street ? ", " + loc.street : ""}</b><br>` +
-          `Zasięg: ${(range / 1000).toFixed(1)} km<br>` +
-          `${loc.radio ? "Technologia: " + loc.radio + "<br>" : ""}` +
-          `Rekordy: ${count}<br>` +
-          `<span class="small muted">LAC: ${loc.lac}, CID: ${loc.cid}</span>`
+        }).on("click", ((covLoc) => (e) => {
+          L.DomEvent.stopPropagation(e);
+          _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+        })(loc)
         ).addTo(coverageGroup);
       }
     }

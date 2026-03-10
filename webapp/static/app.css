@@ -3572,6 +3572,29 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-type-SMS_OUT,.gsm-type-SMS_IN{background:#d1fae5;color:#065f46}
 .gsm-type-MMS_OUT,.gsm-type-MMS_IN{background:#fef3c7;color:#92400e}
 .gsm-type-DATA{background:#fff0e0;color:#c2410c}
+.gsm-type-DATA{background:#fff0e0;color:#c2410c}
+
+/* ── Pinned BTS card (draggable, resizable popup) ── */
+.gsm-pinned-card{position:absolute;z-index:1000;background:var(--bg-card,#fff);border:1px solid var(--border,#d1d5db);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:220px;min-height:80px;max-width:420px;display:flex;flex-direction:column;font-size:12px;line-height:1.4;overflow:hidden}
+.gsm-pinned-card-header{display:flex;align-items:center;gap:4px;padding:6px 8px 4px;background:var(--bg-secondary,#f1f5f9);border-bottom:1px solid var(--border,#e2e8f0);cursor:grab;user-select:none;border-radius:10px 10px 0 0}
+.gsm-pinned-card-header:active{cursor:grabbing}
+.gsm-pinned-card-title{flex:1;font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gsm-pinned-card-btn{background:none;border:none;cursor:pointer;padding:2px 4px;border-radius:4px;font-size:14px;line-height:1;color:var(--text-muted,#64748b);display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.gsm-pinned-card-btn:hover{background:var(--bg-secondary,#e2e8f0);color:var(--text,#1e293b)}
+.gsm-pinned-card-btn.active{color:var(--brand-blue,#2563eb)}
+.gsm-pinned-card-body{padding:6px 8px;overflow-y:auto;flex:1}
+.gsm-pinned-card-body .gsm-pc-summary{margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid var(--border,#e2e8f0)}
+.gsm-pinned-card-body .gsm-pc-rec{display:flex;gap:6px;padding:2px 0;font-size:11px;border-bottom:1px solid rgba(0,0,0,.04);align-items:baseline}
+.gsm-pinned-card-body .gsm-pc-rec:last-child{border-bottom:none}
+.gsm-pinned-card-body .gsm-pc-rec .gsm-pc-dt{color:var(--text-muted,#64748b);white-space:nowrap;min-width:90px;flex-shrink:0}
+.gsm-pinned-card-body .gsm-pc-rec .gsm-pc-num{font-family:var(--font-mono,"Fira Code",monospace);font-size:10.5px;min-width:80px;flex-shrink:0}
+.gsm-pinned-card-body .gsm-pc-rec .gsm-pc-type{white-space:nowrap}
+.gsm-pinned-card-resize{position:absolute;bottom:0;right:0;width:14px;height:14px;cursor:nwse-resize;opacity:.4;transition:opacity .15s}
+.gsm-pinned-card-resize:hover{opacity:.8}
+.gsm-pinned-card-resize::after{content:"";position:absolute;right:2px;bottom:2px;width:8px;height:8px;border-right:2px solid var(--text-muted,#94a3b8);border-bottom:2px solid var(--text-muted,#94a3b8)}
+[data-theme="dark"] .gsm-pinned-card{background:var(--bg-card,#1e293b);box-shadow:0 4px 16px rgba(0,0,0,.4)}
+[data-theme="dark"] .gsm-pinned-card-header{background:var(--bg-secondary,#334155)}
+
 #gsm_graph_card{position:relative;overflow:hidden;width:33%;min-width:320px;min-height:200px;margin-bottom:10px}
 #gsm_map_card{position:relative;overflow:hidden}
 #gsm_contact_graph svg{display:block;width:100%;height:auto}
