@@ -1941,6 +1941,10 @@
     _renderClusters(geo);
     _initTimeline(geo);
 
+    // Screenshot button
+    const screenshotBtn = QS("#gsm_map_screenshot_btn");
+    if (screenshotBtn) screenshotBtn.onclick = () => _takeMapScreenshot();
+
     // Layer switcher (descriptions are in title attributes — native tooltips)
     const layerSelect = QS("#gsm_map_layer_select");
     const coverageOpts = QS("#gsm_coverage_opts");
@@ -1997,6 +2001,78 @@
       St.map.on("moveend", () => {
         if (_otherBtsEnabled) _scheduleOtherBtsReload();
       });
+    }
+  }
+
+  /* ── Map screenshot ──────────────────────────────────── */
+
+  let _html2canvasLoaded = false;
+
+  async function _ensureHtml2Canvas() {
+    if (_html2canvasLoaded || window.html2canvas) {
+      _html2canvasLoaded = true;
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+      s.onload = () => { _html2canvasLoaded = true; resolve(); };
+      s.onerror = () => reject(new Error("Nie udało się załadować html2canvas"));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function _takeMapScreenshot() {
+    const container = QS("#gsm_map_container");
+    if (!container) return;
+    const btn = QS("#gsm_map_screenshot_btn");
+    if (btn) btn.disabled = true;
+
+    try {
+      await _ensureHtml2Canvas();
+
+      // Temporarily hide pinned cards' tether SVG for cleaner screenshot
+      // (cards themselves are inside the container so will be captured)
+      const canvas = await window.html2canvas(container, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        scale: 2, // high-res
+        logging: false,
+        // Ignore tile cross-origin errors
+        onclone: (doc) => {
+          // Remove Leaflet attribution control for cleaner look (optional)
+          const attr = doc.querySelector(".leaflet-control-attribution");
+          if (attr) attr.style.display = "none";
+        },
+      });
+
+      // Convert to blob and trigger download
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          _addLog("warn", "Nie udało się utworzyć zdjęcia mapy");
+          return;
+        }
+        const layerSelect = QS("#gsm_map_layer_select");
+        const layerName = layerSelect ? layerSelect.value : "mapa";
+        const now = new Date();
+        const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `BTS_${layerName}_${ts}.png`;
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zdjęcie mapy: ${filename}`);
+      }, "image/png");
+    } catch (e) {
+      _addLog("error", `Błąd zdjęcia mapy: ${e.message}`);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
