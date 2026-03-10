@@ -2031,31 +2031,79 @@
     try {
       await _ensureHtml2Canvas();
 
-      // Temporarily hide pinned cards' tether SVG for cleaner screenshot
-      // (cards themselves are inside the container so will be captured)
-      const canvas = await window.html2canvas(container, {
+      const mapCanvas = await window.html2canvas(container, {
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        scale: 2, // high-res
+        scale: 2,
         logging: false,
-        // Ignore tile cross-origin errors
         onclone: (doc) => {
-          // Remove Leaflet attribution control for cleaner look (optional)
           const attr = doc.querySelector(".leaflet-control-attribution");
           if (attr) attr.style.display = "none";
         },
       });
 
+      // ── Draw watermark bar on canvas ──
+      const layerSelect = QS("#gsm_map_layer_select");
+      const layerLabel = layerSelect ? layerSelect.options[layerSelect.selectedIndex].text : "";
+      const now = new Date();
+      const dateStr = now.toLocaleString("pl-PL", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+      const w = mapCanvas.width;
+      const barH = Math.round(Math.max(28, w * 0.028)); // ~2.8% of width, min 28px
+      const fontSize = Math.round(barH * 0.42);
+      const totalH = mapCanvas.height + barH;
+
+      // Create final canvas with watermark bar
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = totalH;
+      const ctx = out.getContext("2d");
+
+      // Draw map
+      ctx.drawImage(mapCanvas, 0, 0);
+
+      // Watermark bar background
+      ctx.fillStyle = "rgba(13,19,80,0.78)";
+      ctx.fillRect(0, mapCanvas.height, w, barH);
+      // Subtle top border
+      ctx.fillStyle = "rgba(16,150,244,0.35)";
+      ctx.fillRect(0, mapCanvas.height, w, 1);
+
+      ctx.textBaseline = "middle";
+      const cy = mapCanvas.height + barH / 2;
+      const pad = Math.round(barH * 0.4);
+
+      // Left: AISTATEweb + date
+      ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.fillText("AISTATEweb", pad, cy);
+      const appW = ctx.measureText("AISTATEweb").width;
+
+      ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.fillText(`  ${dateStr}`, pad + appW, cy);
+
+      // Right: © OSM + layer name
+      const rightText = `© OpenStreetMap contributors`;
+      ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      const rightW = ctx.measureText(rightText).width;
+      const layerW = layerLabel ? ctx.measureText("  |  " + layerLabel).width : 0;
+      const rx = w - pad - rightW - layerW;
+      ctx.fillText(rightText, rx, cy);
+      if (layerLabel) {
+        ctx.fillStyle = "rgba(255,255,255,0.40)";
+        ctx.fillText("  |  " + layerLabel, rx + rightW, cy);
+      }
+
       // Convert to blob and trigger download
-      canvas.toBlob((blob) => {
+      out.toBlob((blob) => {
         if (!blob) {
           _addLog("warn", "Nie udało się utworzyć zdjęcia mapy");
           return;
         }
-        const layerSelect = QS("#gsm_map_layer_select");
         const layerName = layerSelect ? layerSelect.value : "mapa";
-        const now = new Date();
         const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
         const filename = `BTS_${layerName}_${ts}.png`;
 
