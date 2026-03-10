@@ -589,7 +589,7 @@
           roaming: "Aktywność w sieciach zagranicznych",
         };
         const label = typeLabels[an.type] || an.type || "";
-        html += `<div class="gsm-anomaly gsm-anomaly-${sev}" data-anomaly-idx="${ai}" style="cursor:pointer" title="2×LPM → filtruj rekordy">
+        html += `<div class="gsm-anomaly gsm-anomaly-${sev}" data-anomaly-idx="${ai}" title="2×LPM → filtruj rekordy">
           <strong>${label}</strong>: ${desc}
         </div>`;
       }
@@ -608,17 +608,15 @@
 
     el.innerHTML = html || '<div class="small muted">Brak danych do analizy.</div>';
 
-    // ── Double-click on anomaly → filter Records ──
-    if (a.anomalies && a.anomalies.length) {
-      el.querySelectorAll("[data-anomaly-idx]").forEach(div => {
-        div.addEventListener("dblclick", () => {
-          const idx = parseInt(div.dataset.anomalyIdx);
-          const an = a.anomalies[idx];
-          if (!an) return;
-          _anomalyFilter(an);
-        });
-      });
-    }
+    // ── Double-click on anomaly → filter Records (event delegation) ──
+    el.addEventListener("dblclick", function(e) {
+      const div = e.target.closest("[data-anomaly-idx]");
+      if (!div || !a.anomalies) return;
+      const idx = parseInt(div.dataset.anomalyIdx);
+      const an = a.anomalies[idx];
+      if (!an) return;
+      _anomalyFilter(an);
+    });
 
     // Render contact relationship graph (SVG) — separate card
     const graphCard = QS("#gsm_graph_card");
@@ -2084,7 +2082,13 @@
     _renderRecords(filtered, false, filtered.length);
 
     const recCard = QS("#gsm_records_card");
-    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (recCard) {
+      recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      // Brief highlight flash on the Records card
+      recCard.style.transition = "box-shadow .2s";
+      recCard.style.boxShadow = "0 0 0 3px var(--brand-blue,#2563eb)";
+      setTimeout(() => { recCard.style.boxShadow = ""; }, 1200);
+    }
   }
 
   function _formatHours(h) {
