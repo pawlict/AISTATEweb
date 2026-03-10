@@ -428,6 +428,13 @@
            '<path d="M6 8h3M6 11h2M15 8h3M15 11h2" ' + _sc("#8426a4") + " " + _w(1) + " " + S + ' fill="none" opacity=".4"/>';
   };
 
+  // Camera — screenshot / photo capture
+  icons.camera = function () {
+    return '<path d="M4 8h3l2-3h6l2 3h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" ' + _s("sky-purple") + " " + _w(1.5) + " " + S + ' fill="none"/>' +
+           '<circle cx="12" cy="14" r="4" ' + _s("sky-purple") + " " + _w(1.5) + ' fill="none"/>' +
+           '<circle cx="12" cy="14" r="1.5" ' + _f("sky-purple") + ' opacity=".35"/>';
+  };
+
   /* ---- main API ---- */
   function aiIcon(name, size, colour) {
     _ensureDefs();

@@ -1941,6 +1941,10 @@
     _renderClusters(geo);
     _initTimeline(geo);
 
+    // Screenshot button
+    const screenshotBtn = QS("#gsm_map_screenshot_btn");
+    if (screenshotBtn) screenshotBtn.onclick = () => _takeMapScreenshot();
+
     // Layer switcher (descriptions are in title attributes — native tooltips)
     const layerSelect = QS("#gsm_map_layer_select");
     const coverageOpts = QS("#gsm_coverage_opts");
@@ -1997,6 +2001,126 @@
       St.map.on("moveend", () => {
         if (_otherBtsEnabled) _scheduleOtherBtsReload();
       });
+    }
+  }
+
+  /* ── Map screenshot ──────────────────────────────────── */
+
+  let _html2canvasLoaded = false;
+
+  async function _ensureHtml2Canvas() {
+    if (_html2canvasLoaded || window.html2canvas) {
+      _html2canvasLoaded = true;
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+      s.onload = () => { _html2canvasLoaded = true; resolve(); };
+      s.onerror = () => reject(new Error("Nie udało się załadować html2canvas"));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function _takeMapScreenshot() {
+    const container = QS("#gsm_map_container");
+    if (!container) return;
+    const btn = QS("#gsm_map_screenshot_btn");
+    if (btn) btn.disabled = true;
+
+    try {
+      await _ensureHtml2Canvas();
+
+      const mapCanvas = await window.html2canvas(container, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        scale: 2,
+        logging: false,
+        onclone: (doc) => {
+          const attr = doc.querySelector(".leaflet-control-attribution");
+          if (attr) attr.style.display = "none";
+        },
+      });
+
+      // ── Draw watermark bar on canvas ──
+      const layerSelect = QS("#gsm_map_layer_select");
+      const layerLabel = layerSelect ? layerSelect.options[layerSelect.selectedIndex].text : "";
+      const now = new Date();
+      const dateStr = now.toLocaleString("pl-PL", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+      const w = mapCanvas.width;
+      const barH = Math.round(Math.max(28, w * 0.028)); // ~2.8% of width, min 28px
+      const fontSize = Math.round(barH * 0.42);
+      const totalH = mapCanvas.height + barH;
+
+      // Create final canvas with watermark bar
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = totalH;
+      const ctx = out.getContext("2d");
+
+      // Draw map
+      ctx.drawImage(mapCanvas, 0, 0);
+
+      // Watermark bar background
+      ctx.fillStyle = "rgba(13,19,80,0.78)";
+      ctx.fillRect(0, mapCanvas.height, w, barH);
+      // Subtle top border
+      ctx.fillStyle = "rgba(16,150,244,0.35)";
+      ctx.fillRect(0, mapCanvas.height, w, 1);
+
+      ctx.textBaseline = "middle";
+      const cy = mapCanvas.height + barH / 2;
+      const pad = Math.round(barH * 0.4);
+
+      // Left: AISTATEweb + date
+      ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.fillText("AISTATEweb", pad, cy);
+      const appW = ctx.measureText("AISTATEweb").width;
+
+      ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.fillText(`  ${dateStr}`, pad + appW, cy);
+
+      // Right: © OSM + layer name
+      const rightText = `© OpenStreetMap contributors`;
+      ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      const rightW = ctx.measureText(rightText).width;
+      const layerW = layerLabel ? ctx.measureText("  |  " + layerLabel).width : 0;
+      const rx = w - pad - rightW - layerW;
+      ctx.fillText(rightText, rx, cy);
+      if (layerLabel) {
+        ctx.fillStyle = "rgba(255,255,255,0.40)";
+        ctx.fillText("  |  " + layerLabel, rx + rightW, cy);
+      }
+
+      // Convert to blob and trigger download
+      out.toBlob((blob) => {
+        if (!blob) {
+          _addLog("warn", "Nie udało się utworzyć zdjęcia mapy");
+          return;
+        }
+        const layerName = layerSelect ? layerSelect.value : "mapa";
+        const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `BTS_${layerName}_${ts}.png`;
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zdjęcie mapy: ${filename}`);
+      }, "image/png");
+    } catch (e) {
+      _addLog("error", `Błąd zdjęcia mapy: ${e.message}`);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
