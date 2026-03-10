@@ -42,7 +42,737 @@
     hmActiveCell: null,    // {hour, dow} — active filter cell
     hmMonth: "all",        // selected month filter
     hmType: "all",         // selected type filter: all, calls, sms, data
+    /* Column & filter state */
+    columnOrder: null,       // array of column keys (user-ordered); null = use defaults
+    columnHidden: {},        // { colKey: true } for hidden columns
+    columnFilters: {},       // { colKey: { mode, value, ... } } active filters
+    columnSort: null,        // { key, dir } — current sort column
   };
+
+  /* ── Column definitions ─────────────────────────────────── */
+
+  /**
+   * Each column definition:
+   *  key         — unique id matching BillingRecord field path
+   *  label       — display name (Polish)
+   *  type        — "text" | "categorical" | "numeric" | "boolean"
+   *  defaultVisible — shown by default
+   *  getValue    — fn(record) → raw value for filtering / sorting
+   *  renderCell  — fn(record) → HTML string for table cell
+   *  categoryValues — fn(records) → [{value,label,count}] for categorical
+   *  unit        — optional unit label for numeric columns
+   */
+  const _COL_DEFS = [
+    {
+      key: "datetime", label: "Data i czas", type: "text", defaultVisible: true,
+      getValue: r => r.datetime || "",
+      renderCell: r => r.datetime || "",
+    },
+    {
+      key: "date", label: "Data", type: "text", defaultVisible: false,
+      getValue: r => r.date || "",
+      renderCell: r => r.date || "",
+    },
+    {
+      key: "time", label: "Godzina", type: "text", defaultVisible: false,
+      getValue: r => r.time || "",
+      renderCell: r => r.time || "",
+    },
+    {
+      key: "record_type", label: "Typ", type: "categorical", defaultVisible: true,
+      getValue: r => r.record_type || "",
+      renderCell: r => {
+        const t = r.record_type || "";
+        return `<span class="gsm-type gsm-type-${t}">${_typeLabel(t)}</span>`;
+      },
+      categoryValues: recs => {
+        const counts = {};
+        for (const r of recs) { const v = r.record_type || ""; counts[v] = (counts[v] || 0) + 1; }
+        return Object.keys(counts).sort().map(v => ({ value: v, label: _typeLabel(v), count: counts[v] }));
+      },
+    },
+    {
+      key: "direction", label: "Kierunek", type: "categorical", defaultVisible: true,
+      getValue: r => (r.extra || {}).direction || "",
+      renderCell: r => (r.extra || {}).direction || "",
+      categoryValues: recs => {
+        const counts = {};
+        for (const r of recs) { const v = (r.extra || {}).direction || ""; if (v) counts[v] = (counts[v] || 0) + 1; }
+        return Object.keys(counts).sort().map(v => ({ value: v, label: v, count: counts[v] }));
+      },
+    },
+    {
+      key: "callee", label: "Numer (MSISDN B)", type: "text", defaultVisible: true,
+      getValue: r => r.callee || "",
+      renderCell: r => r.callee ? `<code>${r.callee}</code>` : "—",
+    },
+    {
+      key: "caller", label: "Numer dzwoniącego", type: "text", defaultVisible: false,
+      getValue: r => r.caller || "",
+      renderCell: r => r.caller ? `<code>${r.caller}</code>` : "—",
+    },
+    {
+      key: "identification", label: "Identyfikacja", type: "text", defaultVisible: true,
+      getValue: r => { const info = _idLookup(r.callee); return info ? info.label : ""; },
+      renderCell: r => _idCell(r.callee),
+    },
+    {
+      key: "duration_seconds", label: "Czas trwania", type: "numeric", defaultVisible: true, unit: "s",
+      getValue: r => r.duration_seconds || 0,
+      renderCell: r => r.duration_seconds ? _dur(r.duration_seconds) : "—",
+    },
+    {
+      key: "data_volume_kb", label: "Dane (KB)", type: "numeric", defaultVisible: false, unit: "KB",
+      getValue: r => r.data_volume_kb || 0,
+      renderCell: r => r.data_volume_kb ? _fmt(Math.round(r.data_volume_kb)) + " KB" : "—",
+    },
+    {
+      key: "cost", label: "Koszt netto", type: "numeric", defaultVisible: false, unit: "PLN",
+      getValue: r => r.cost != null ? r.cost : 0,
+      renderCell: r => r.cost != null ? r.cost.toFixed(2) + " zł" : "—",
+    },
+    {
+      key: "cost_gross", label: "Koszt brutto", type: "numeric", defaultVisible: false, unit: "PLN",
+      getValue: r => r.cost_gross != null ? r.cost_gross : 0,
+      renderCell: r => r.cost_gross != null ? r.cost_gross.toFixed(2) + " zł" : "—",
+    },
+    {
+      key: "location", label: "Lokalizacja", type: "text", defaultVisible: true,
+      getValue: r => r.location || "",
+      renderCell: r => r.location || "—",
+    },
+    {
+      key: "location_lac", label: "LAC", type: "text", defaultVisible: false,
+      getValue: r => r.location_lac || "",
+      renderCell: r => r.location_lac || "—",
+    },
+    {
+      key: "location_cell_id", label: "Cell ID", type: "text", defaultVisible: false,
+      getValue: r => r.location_cell_id || "",
+      renderCell: r => r.location_cell_id || "—",
+    },
+    {
+      key: "network", label: "Sieć", type: "categorical", defaultVisible: true,
+      getValue: r => r.network || "",
+      renderCell: r => r.network || "—",
+      categoryValues: recs => {
+        const counts = {};
+        for (const r of recs) { const v = r.network || ""; if (v) counts[v] = (counts[v] || 0) + 1; }
+        return Object.keys(counts).sort().map(v => ({ value: v, label: v, count: counts[v] }));
+      },
+    },
+    {
+      key: "roaming", label: "Roaming", type: "boolean", defaultVisible: false,
+      getValue: r => r.roaming ? "Tak" : "Nie",
+      renderCell: r => r.roaming ? "Tak" : "Nie",
+      categoryValues: () => [
+        { value: "Tak", label: "Tak", count: 0 },
+        { value: "Nie", label: "Nie", count: 0 },
+      ],
+    },
+    {
+      key: "roaming_country", label: "Kraj roamingu", type: "text", defaultVisible: false,
+      getValue: r => r.roaming_country || "",
+      renderCell: r => r.roaming_country || "—",
+    },
+    {
+      key: "imsi", label: "IMSI", type: "text", defaultVisible: false,
+      getValue: r => r.imsi || "",
+      renderCell: r => r.imsi ? `<code>${r.imsi}</code>` : "—",
+    },
+    {
+      key: "imei", label: "IMEI", type: "text", defaultVisible: false,
+      getValue: r => r.imei || "",
+      renderCell: r => r.imei ? `<code>${r.imei}</code>` : "—",
+    },
+  ];
+
+  const _COL_MAP = {};
+  for (const c of _COL_DEFS) _COL_MAP[c.key] = c;
+
+  /** Get visible columns in current order. */
+  function _visibleColumns() {
+    const order = St.columnOrder || _COL_DEFS.map(c => c.key);
+    return order.filter(k => !St.columnHidden[k] && _COL_MAP[k]).map(k => _COL_MAP[k]);
+  }
+
+  /** Initialize column order + visibility from defaults (called once). */
+  function _initColumns() {
+    if (!St.columnOrder) {
+      St.columnOrder = _COL_DEFS.map(c => c.key);
+      St.columnHidden = {};
+      for (const c of _COL_DEFS) {
+        if (!c.defaultVisible) St.columnHidden[c.key] = true;
+      }
+    }
+  }
+
+  /* ── Filter engine ──────────────────────────────────────── */
+
+  /** Text filter modes. */
+  const _TEXT_FILTERS = [
+    { id: "contains",    label: "Fragment",     desc: "grep -i \"tekst\"" },
+    { id: "exact",       label: "Zgodność",     desc: "grep -x \"wartość\"" },
+    { id: "exclude",     label: "Odrzucenie",   desc: "grep -xv \"wartość\"" },
+    { id: "not_contains",label: "Wykluczenie",  desc: "grep -vi \"tekst\"" },
+    { id: "starts",      label: "Początek",     desc: "grep \"^tekst\"" },
+    { id: "ends",        label: "Zakończenie",  desc: "grep \"tekst$\"" },
+    { id: "regex",       label: "Wzorzec",      desc: "grep -E \"regex\"" },
+  ];
+
+  /** Numeric filter modes. */
+  const _NUM_FILTERS = [
+    { id: "eq",    label: "Równe (=)",          symbol: "=" },
+    { id: "neq",   label: "Różne od (≠)",       symbol: "≠" },
+    { id: "gt",    label: "Większe niż (>)",     symbol: ">" },
+    { id: "lt",    label: "Mniejsze niż (<)",    symbol: "<" },
+    { id: "gte",   label: "Większe lub równe (≥)", symbol: "≥" },
+    { id: "lte",   label: "Mniejsze lub równe (≤)", symbol: "≤" },
+    { id: "range", label: "Zakres (od — do)",    symbol: "↔" },
+    { id: "regex", label: "Wzorzec (grep)",      symbol: "~" },
+  ];
+
+  /**
+   * Test a single value against a filter.
+   * @param {string|number} val — raw value from getValue()
+   * @param {object} filter — { mode, value, value2?, ignoreCase?, checkedValues? }
+   * @param {object} colDef — column definition
+   * @returns {boolean}
+   */
+  function _testFilter(val, filter, colDef) {
+    // Categorical / boolean checkbox filter
+    if (filter.checkedValues) {
+      const sv = String(val);
+      // If using categoryValues from colDef, match against value; for display match against label
+      return filter.checkedValues.has(sv);
+    }
+
+    const fv = filter.value || "";
+    if (!fv && filter.mode !== "range") return true; // empty filter = pass
+
+    // Numeric filters
+    if (colDef.type === "numeric" && filter.mode !== "regex") {
+      const numVal = typeof val === "number" ? val : parseFloat(val);
+      if (isNaN(numVal)) return false;
+      const numFv = parseFloat(fv);
+      switch (filter.mode) {
+        case "eq":  return numVal === numFv;
+        case "neq": return numVal !== numFv;
+        case "gt":  return numVal > numFv;
+        case "lt":  return numVal < numFv;
+        case "gte": return numVal >= numFv;
+        case "lte": return numVal <= numFv;
+        case "range": {
+          const lo = parseFloat(fv);
+          const hi = parseFloat(filter.value2 || "");
+          if (isNaN(lo) || isNaN(hi)) return true;
+          return numVal >= lo && numVal <= hi;
+        }
+        default: return true;
+      }
+    }
+
+    // Text filters
+    const sv = String(val);
+    const ic = filter.ignoreCase !== false;
+    const a = ic ? sv.toLowerCase() : sv;
+    const b = ic ? fv.toLowerCase() : fv;
+    switch (filter.mode) {
+      case "exact":        return a === b;
+      case "exclude":      return a !== b;
+      case "contains":     return a.includes(b);
+      case "not_contains": return !a.includes(b);
+      case "starts":       return a.startsWith(b);
+      case "ends":         return a.endsWith(b);
+      case "regex": {
+        try {
+          const rx = new RegExp(fv, ic ? "i" : "");
+          return rx.test(sv);
+        } catch (_) { return true; }
+      }
+      default: return true;
+    }
+  }
+
+  /** Apply all active column filters to records. Returns filtered array. */
+  function _applyColumnFilters(records) {
+    const keys = Object.keys(St.columnFilters);
+    if (!keys.length) return records;
+    return records.filter(r => {
+      for (const k of keys) {
+        const colDef = _COL_MAP[k];
+        if (!colDef) continue;
+        const val = colDef.getValue(r);
+        if (!_testFilter(val, St.columnFilters[k], colDef)) return false;
+      }
+      return true;
+    });
+  }
+
+  /** Count active column filters. */
+  function _activeFilterCount() {
+    return Object.keys(St.columnFilters).length;
+  }
+
+  /* ── Column Filter Dropdown UI ──────────────────────────── */
+
+  let _openFilterDropdown = null; // reference to open dropdown element
+
+  function _closeFilterDropdown() {
+    if (_openFilterDropdown) {
+      _openFilterDropdown.remove();
+      _openFilterDropdown = null;
+    }
+    document.removeEventListener("mousedown", _onFilterOutsideClick, true);
+  }
+
+  function _onFilterOutsideClick(e) {
+    if (_openFilterDropdown && !_openFilterDropdown.contains(e.target)) {
+      // Don't close if clicking on the header that opened it
+      if (e.target.closest && e.target.closest(".gsm-col-filter-btn")) return;
+      _closeFilterDropdown();
+    }
+  }
+
+  /**
+   * Open a filter dropdown for a column.
+   * @param {string} colKey — column key
+   * @param {HTMLElement} anchor — the th element to anchor below
+   */
+  function _openColFilter(colKey, anchor) {
+    _closeFilterDropdown();
+    _closeColumnPanel();
+
+    const colDef = _COL_MAP[colKey];
+    if (!colDef) return;
+
+    const drop = document.createElement("div");
+    drop.className = "gsm-filter-dropdown";
+
+    const existing = St.columnFilters[colKey] || null;
+    const records = St.lastResult ? St.lastResult.records : [];
+
+    if (colDef.type === "categorical" || colDef.type === "boolean") {
+      _buildCategoryFilterUI(drop, colDef, existing, records);
+    } else if (colDef.type === "numeric") {
+      _buildNumericFilterUI(drop, colDef, existing);
+    } else {
+      _buildTextFilterUI(drop, colDef, existing);
+    }
+
+    document.body.appendChild(drop);
+    _openFilterDropdown = drop;
+
+    // Position
+    const rect = anchor.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + 4;
+    // Keep within viewport
+    const dw = drop.offsetWidth;
+    if (left + dw > window.innerWidth - 8) left = window.innerWidth - dw - 8;
+    if (left < 4) left = 4;
+    drop.style.left = left + "px";
+    drop.style.top = top + "px";
+
+    setTimeout(() => document.addEventListener("mousedown", _onFilterOutsideClick, true), 0);
+  }
+
+  /** Build text filter UI inside dropdown. */
+  function _buildTextFilterUI(drop, colDef, existing) {
+    const mode = existing ? existing.mode : "contains";
+    const val = existing ? (existing.value || "") : "";
+    const ic = existing ? existing.ignoreCase !== false : true;
+
+    drop.innerHTML = `
+      <div class="gsm-fd-header">Filtr: ${colDef.label}<button class="gsm-fd-close" title="Zamknij">✕</button></div>
+      <div class="gsm-fd-body">
+        <label class="gsm-fd-label">Typ filtra</label>
+        <div class="gsm-fd-modes">${_TEXT_FILTERS.map(f =>
+          `<label class="gsm-fd-radio"><input type="radio" name="fmode" value="${f.id}" ${f.id === mode ? "checked" : ""}><span>${f.label}</span><span class="gsm-fd-grep">${f.desc}</span></label>`
+        ).join("")}</div>
+        <label class="gsm-fd-label" style="margin-top:8px">Wartość</label>
+        <input type="text" class="gsm-fd-input" value="${_escAttr(val)}" placeholder="Wpisz wartość...">
+        <label class="gsm-fd-check"><input type="checkbox" ${ic ? "checked" : ""}> Ignoruj wielkość liter</label>
+      </div>
+      <div class="gsm-fd-footer">
+        <button class="gsm-fd-apply">Zastosuj</button>
+        <button class="gsm-fd-clear">Wyczyść</button>
+      </div>`;
+
+    drop.querySelector(".gsm-fd-close").onclick = () => _closeFilterDropdown();
+    drop.querySelector(".gsm-fd-apply").onclick = () => {
+      const selMode = drop.querySelector('input[name="fmode"]:checked').value;
+      const selVal = drop.querySelector(".gsm-fd-input").value;
+      const selIc = drop.querySelector(".gsm-fd-check input").checked;
+      if (selVal.trim()) {
+        St.columnFilters[colDef.key] = { mode: selMode, value: selVal, ignoreCase: selIc };
+      } else {
+        delete St.columnFilters[colDef.key];
+      }
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+    drop.querySelector(".gsm-fd-clear").onclick = () => {
+      delete St.columnFilters[colDef.key];
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+    // Auto-focus input
+    setTimeout(() => drop.querySelector(".gsm-fd-input").focus(), 50);
+  }
+
+  /** Build numeric filter UI inside dropdown. */
+  function _buildNumericFilterUI(drop, colDef, existing) {
+    const mode = existing ? existing.mode : "gt";
+    const val = existing ? (existing.value || "") : "";
+    const val2 = existing ? (existing.value2 || "") : "";
+    const unit = colDef.unit || "";
+
+    drop.innerHTML = `
+      <div class="gsm-fd-header">Filtr: ${colDef.label}<button class="gsm-fd-close" title="Zamknij">✕</button></div>
+      <div class="gsm-fd-body">
+        <label class="gsm-fd-label">Typ filtra</label>
+        <div class="gsm-fd-modes">${_NUM_FILTERS.map(f =>
+          `<label class="gsm-fd-radio"><input type="radio" name="fmode" value="${f.id}" ${f.id === mode ? "checked" : ""}><span>${f.label}</span></label>`
+        ).join("")}</div>
+        <label class="gsm-fd-label" style="margin-top:8px">Wartość ${unit ? "(" + unit + ")" : ""}</label>
+        <div class="gsm-fd-num-row">
+          <input type="number" class="gsm-fd-input gsm-fd-num1" value="${_escAttr(val)}" placeholder="Wartość" step="any">
+          <input type="number" class="gsm-fd-input gsm-fd-num2" value="${_escAttr(val2)}" placeholder="Do" step="any" style="display:${mode === "range" ? "" : "none"}">
+        </div>
+      </div>
+      <div class="gsm-fd-footer">
+        <button class="gsm-fd-apply">Zastosuj</button>
+        <button class="gsm-fd-clear">Wyczyść</button>
+      </div>`;
+
+    // Show/hide range second input
+    drop.querySelectorAll('input[name="fmode"]').forEach(radio => {
+      radio.onchange = () => {
+        drop.querySelector(".gsm-fd-num2").style.display = radio.value === "range" ? "" : "none";
+      };
+    });
+
+    drop.querySelector(".gsm-fd-close").onclick = () => _closeFilterDropdown();
+    drop.querySelector(".gsm-fd-apply").onclick = () => {
+      const selMode = drop.querySelector('input[name="fmode"]:checked').value;
+      const selVal = drop.querySelector(".gsm-fd-num1").value;
+      const selVal2 = drop.querySelector(".gsm-fd-num2").value;
+      if (selMode === "regex") {
+        if (selVal.trim()) {
+          St.columnFilters[colDef.key] = { mode: "regex", value: selVal, ignoreCase: true };
+        } else {
+          delete St.columnFilters[colDef.key];
+        }
+      } else if (selVal.trim() || (selMode === "range" && selVal2.trim())) {
+        St.columnFilters[colDef.key] = { mode: selMode, value: selVal, value2: selVal2 };
+      } else {
+        delete St.columnFilters[colDef.key];
+      }
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+    drop.querySelector(".gsm-fd-clear").onclick = () => {
+      delete St.columnFilters[colDef.key];
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+    setTimeout(() => drop.querySelector(".gsm-fd-num1").focus(), 50);
+  }
+
+  /** Build categorical / boolean filter UI inside dropdown. */
+  function _buildCategoryFilterUI(drop, colDef, existing, records) {
+    // Compute category values from actual data
+    let cats = [];
+    if (colDef.categoryValues) {
+      cats = colDef.categoryValues(records);
+    }
+    // For boolean with real counts
+    if (colDef.type === "boolean" && cats.length) {
+      const counts = { Tak: 0, Nie: 0 };
+      for (const r of records) {
+        const v = colDef.getValue(r);
+        counts[v] = (counts[v] || 0) + 1;
+      }
+      cats = [
+        { value: "Tak", label: "Tak", count: counts["Tak"] || 0 },
+        { value: "Nie", label: "Nie", count: counts["Nie"] || 0 },
+      ];
+    }
+
+    const checkedSet = existing && existing.checkedValues ? existing.checkedValues : null;
+    const allChecked = !checkedSet; // all checked by default when no filter
+
+    // Also allow text filter below checkboxes
+    const textMode = existing && existing.mode ? existing.mode : "";
+    const textVal = existing && existing.value && !existing.checkedValues ? existing.value : "";
+
+    drop.innerHTML = `
+      <div class="gsm-fd-header">Filtr: ${colDef.label}<button class="gsm-fd-close" title="Zamknij">✕</button></div>
+      <div class="gsm-fd-body">
+        <label class="gsm-fd-check gsm-fd-select-all"><input type="checkbox" ${allChecked ? "checked" : ""}> Zaznacz wszystkie</label>
+        <div class="gsm-fd-cats">${cats.map(c => {
+          const chk = allChecked || (checkedSet && checkedSet.has(c.value));
+          return `<label class="gsm-fd-check gsm-fd-cat-item"><input type="checkbox" value="${_escAttr(c.value)}" ${chk ? "checked" : ""}><span>${c.label}</span><span class="gsm-fd-cat-count">(${c.count})</span></label>`;
+        }).join("")}</div>
+        <div class="gsm-fd-separator">— lub wyszukaj tekstowo —</div>
+        <div class="gsm-fd-modes gsm-fd-modes-sm">${_TEXT_FILTERS.filter(f => ["starts","ends","regex"].includes(f.id)).map(f =>
+          `<label class="gsm-fd-radio"><input type="radio" name="fmode" value="${f.id}" ${f.id === textMode ? "checked" : ""}><span>${f.label}</span></label>`
+        ).join("")}</div>
+        <input type="text" class="gsm-fd-input gsm-fd-cat-text" value="${_escAttr(textVal)}" placeholder="Wpisz wartość...">
+      </div>
+      <div class="gsm-fd-footer">
+        <button class="gsm-fd-apply">Zastosuj</button>
+        <button class="gsm-fd-clear">Wyczyść</button>
+      </div>`;
+
+    // Select all toggle
+    const selAll = drop.querySelector(".gsm-fd-select-all input");
+    const catBoxes = drop.querySelectorAll(".gsm-fd-cat-item input");
+    selAll.onchange = () => {
+      catBoxes.forEach(cb => cb.checked = selAll.checked);
+    };
+    catBoxes.forEach(cb => {
+      cb.onchange = () => {
+        const total = catBoxes.length;
+        const checked = [...catBoxes].filter(x => x.checked).length;
+        selAll.checked = checked === total;
+        selAll.indeterminate = checked > 0 && checked < total;
+      };
+    });
+
+    drop.querySelector(".gsm-fd-close").onclick = () => _closeFilterDropdown();
+    drop.querySelector(".gsm-fd-apply").onclick = () => {
+      const textInput = drop.querySelector(".gsm-fd-cat-text").value.trim();
+      const modeRadio = drop.querySelector('input[name="fmode"]:checked');
+
+      if (textInput && modeRadio) {
+        // Text filter mode takes precedence
+        St.columnFilters[colDef.key] = { mode: modeRadio.value, value: textInput, ignoreCase: true };
+      } else {
+        // Checkbox mode
+        const checked = [...catBoxes].filter(x => x.checked).map(x => x.value);
+        if (checked.length === catBoxes.length || checked.length === 0) {
+          // All or none = no filter
+          delete St.columnFilters[colDef.key];
+        } else {
+          St.columnFilters[colDef.key] = { checkedValues: new Set(checked) };
+        }
+      }
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+    drop.querySelector(".gsm-fd-clear").onclick = () => {
+      delete St.columnFilters[colDef.key];
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+  }
+
+  function _escAttr(s) { return String(s).replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
+
+  /* ── Column Visibility Panel ────────────────────────────── */
+
+  let _openColumnPanel = null;
+
+  function _closeColumnPanel() {
+    if (_openColumnPanel) {
+      _openColumnPanel.remove();
+      _openColumnPanel = null;
+    }
+    document.removeEventListener("mousedown", _onColPanelOutsideClick, true);
+  }
+
+  function _onColPanelOutsideClick(e) {
+    if (_openColumnPanel && !_openColumnPanel.contains(e.target)) {
+      if (e.target.closest && e.target.closest("#gsm_columns_btn")) return;
+      _closeColumnPanel();
+    }
+  }
+
+  function _openColumnsPanel(anchor) {
+    _closeColumnPanel();
+    _closeFilterDropdown();
+    _initColumns();
+
+    const panel = document.createElement("div");
+    panel.className = "gsm-col-panel";
+
+    const order = St.columnOrder || _COL_DEFS.map(c => c.key);
+
+    let html = `<div class="gsm-fd-header">Widoczne kolumny<button class="gsm-fd-close" title="Zamknij">✕</button></div>`;
+    html += `<div class="gsm-col-panel-list">`;
+    for (const k of order) {
+      const col = _COL_MAP[k];
+      if (!col) continue;
+      const visible = !St.columnHidden[k];
+      html += `<div class="gsm-col-panel-item" draggable="true" data-key="${k}">
+        <span class="gsm-col-drag-handle" title="Przeciągnij">☰</span>
+        <label class="gsm-col-panel-check"><input type="checkbox" data-key="${k}" ${visible ? "checked" : ""}> ${col.label}</label>
+      </div>`;
+    }
+    html += `</div>`;
+    html += `<div class="gsm-fd-footer"><button class="gsm-col-show-all">Pokaż wszystkie</button><button class="gsm-col-defaults">Domyślne</button></div>`;
+    panel.innerHTML = html;
+
+    document.body.appendChild(panel);
+    _openColumnPanel = panel;
+
+    // Position
+    const rect = anchor.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + 4;
+    const pw = panel.offsetWidth;
+    if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+    if (left < 4) left = 4;
+    panel.style.left = left + "px";
+    panel.style.top = top + "px";
+
+    // Close button
+    panel.querySelector(".gsm-fd-close").onclick = () => _closeColumnPanel();
+
+    // Checkbox changes
+    panel.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.onchange = () => {
+        const key = cb.dataset.key;
+        if (cb.checked) {
+          delete St.columnHidden[key];
+        } else {
+          St.columnHidden[key] = true;
+        }
+        _refilterRecords();
+      };
+    });
+
+    // Show all
+    panel.querySelector(".gsm-col-show-all").onclick = () => {
+      St.columnHidden = {};
+      panel.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+      _refilterRecords();
+    };
+
+    // Defaults
+    panel.querySelector(".gsm-col-defaults").onclick = () => {
+      St.columnOrder = _COL_DEFS.map(c => c.key);
+      St.columnHidden = {};
+      for (const c of _COL_DEFS) { if (!c.defaultVisible) St.columnHidden[c.key] = true; }
+      _closeColumnPanel();
+      _refilterRecords();
+    };
+
+    // Drag & drop reordering
+    let dragKey = null;
+    const listEl = panel.querySelector(".gsm-col-panel-list");
+    listEl.addEventListener("dragstart", e => {
+      const item = e.target.closest(".gsm-col-panel-item");
+      if (!item) return;
+      dragKey = item.dataset.key;
+      item.classList.add("gsm-col-dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    listEl.addEventListener("dragend", e => {
+      const item = e.target.closest(".gsm-col-panel-item");
+      if (item) item.classList.remove("gsm-col-dragging");
+      dragKey = null;
+      listEl.querySelectorAll(".gsm-col-panel-item").forEach(el => el.classList.remove("gsm-col-drag-over"));
+    });
+    listEl.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const target = e.target.closest(".gsm-col-panel-item");
+      if (target) {
+        listEl.querySelectorAll(".gsm-col-panel-item").forEach(el => el.classList.remove("gsm-col-drag-over"));
+        target.classList.add("gsm-col-drag-over");
+      }
+    });
+    listEl.addEventListener("drop", e => {
+      e.preventDefault();
+      const target = e.target.closest(".gsm-col-panel-item");
+      if (!target || !dragKey) return;
+      const targetKey = target.dataset.key;
+      if (dragKey === targetKey) return;
+      // Reorder in St.columnOrder
+      const order = St.columnOrder;
+      const fromIdx = order.indexOf(dragKey);
+      const toIdx = order.indexOf(targetKey);
+      if (fromIdx === -1 || toIdx === -1) return;
+      order.splice(fromIdx, 1);
+      order.splice(toIdx, 0, dragKey);
+      // Reorder DOM
+      const dragEl = listEl.querySelector(`.gsm-col-panel-item[data-key="${dragKey}"]`);
+      if (fromIdx < toIdx) {
+        target.after(dragEl);
+      } else {
+        target.before(dragEl);
+      }
+      listEl.querySelectorAll(".gsm-col-panel-item").forEach(el => el.classList.remove("gsm-col-drag-over"));
+      _refilterRecords();
+    });
+
+    setTimeout(() => document.addEventListener("mousedown", _onColPanelOutsideClick, true), 0);
+  }
+
+  /* ── Filter Chips Bar ───────────────────────────────────── */
+
+  function _renderFilterChips() {
+    const bar = QS("#gsm_filter_chips");
+    if (!bar) return;
+    const keys = Object.keys(St.columnFilters);
+    if (!keys.length) {
+      bar.style.display = "none";
+      return;
+    }
+    bar.style.display = "";
+    let html = '<span class="gsm-fc-label">Filtry kolumn:</span>';
+    for (const k of keys) {
+      const colDef = _COL_MAP[k];
+      if (!colDef) continue;
+      const f = St.columnFilters[k];
+      let desc = "";
+      if (f.checkedValues) {
+        const vals = [...f.checkedValues];
+        desc = vals.length <= 2 ? vals.join(", ") : vals.slice(0, 2).join(", ") + "…";
+      } else if (f.mode === "range") {
+        desc = `${f.value || "?"} — ${f.value2 || "?"}`;
+      } else {
+        const modeLabel = [..._TEXT_FILTERS, ..._NUM_FILTERS].find(m => m.id === f.mode);
+        desc = (modeLabel ? (modeLabel.symbol || modeLabel.label) + " " : "") + `"${f.value || ""}"`;
+      }
+      html += `<span class="gsm-fc-chip" data-key="${k}">${colDef.label}: ${desc} <button class="gsm-fc-remove" data-key="${k}" title="Usuń filtr">✕</button></span>`;
+    }
+    html += `<button class="gsm-fc-clear-all" title="Wyczyść wszystkie filtry kolumn">Wyczyść ▿</button>`;
+    bar.innerHTML = html;
+
+    // Bind chip remove buttons
+    bar.querySelectorAll(".gsm-fc-remove").forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        delete St.columnFilters[btn.dataset.key];
+        _refilterRecords();
+      };
+    });
+    bar.querySelector(".gsm-fc-clear-all").onclick = () => {
+      St.columnFilters = {};
+      _refilterRecords();
+    };
+  }
+
+  /* ── Re-filter and re-render records ────────────────────── */
+
+  /** The "source" records currently fed into the table (may already be pre-filtered by heatmap/map/analysis). */
+  let _currentSourceRecords = null;
+  let _currentSourceTruncated = false;
+  let _currentSourceTotal = 0;
+
+  /** Central re-filter: apply column filters over current source and re-render. */
+  function _refilterRecords() {
+    const src = _currentSourceRecords || (St.lastResult ? St.lastResult.records : []);
+    const filtered = _applyColumnFilters(src);
+    const total = _currentSourceTotal || (St.lastResult ? St.lastResult.record_count : 0);
+
+    _renderFilterChips();
+    _renderRecordsTable(filtered, false, filtered.length);
+  }
 
   /* ── helpers ────────────────────────────────────────────── */
   function _fmt(n) {
@@ -1604,44 +2334,114 @@
     });
   }
 
+  /**
+   * Main entry point for rendering records.
+   * Stores source records, applies column filters, and renders.
+   */
   function _renderRecords(records, truncated, totalCount) {
+    _initColumns();
+    _currentSourceRecords = records;
+    _currentSourceTruncated = truncated;
+    _currentSourceTotal = totalCount;
+
+    const filtered = _applyColumnFilters(records || []);
+    _renderFilterChips();
+    _renderRecordsTable(filtered, truncated && !Object.keys(St.columnFilters).length, Object.keys(St.columnFilters).length ? filtered.length : totalCount);
+  }
+
+  /**
+   * Low-level table renderer (called by _renderRecords and _refilterRecords).
+   */
+  function _renderRecordsTable(records, truncated, totalCount) {
     const el = QS("#gsm_records_body");
     if (!el) return;
 
     if (!records || !records.length) {
       el.innerHTML = '<div class="small muted">Brak rekordów.</div>';
+      const countLabel = QS("#gsm_records_count");
+      if (countLabel) countLabel.textContent = _activeFilterCount() ? "0 (filtr)" : "";
       return;
     }
 
     const countLabel = QS("#gsm_records_count");
     if (countLabel) {
-      countLabel.textContent = truncated ? `${records.length} z ${_fmt(totalCount)}` : _fmt(totalCount);
+      if (_activeFilterCount()) {
+        countLabel.textContent = `${_fmt(records.length)} (filtr kolumn)`;
+      } else {
+        countLabel.textContent = truncated ? `${records.length} z ${_fmt(totalCount)}` : _fmt(totalCount);
+      }
     }
 
-    let html = `<table class="gsm-table"><thead><tr>
-      <th>Data i czas</th><th>Typ</th><th>Kierunek</th><th>Numer</th><th>Identyfikacja</th><th>Czas</th><th>Lokalizacja</th><th>Sieć</th>
-    </tr></thead><tbody>`;
+    const cols = _visibleColumns();
 
-    for (const r of records) {
-      const extra = r.extra || {};
-      const typeLabel = _typeLabel(r.record_type);
-      const dir = extra.direction || "";
-      html += `<tr>
-        <td>${r.datetime || ""}</td>
-        <td><span class="gsm-type gsm-type-${r.record_type}">${typeLabel}</span></td>
-        <td>${dir}</td>
-        <td><code>${r.callee || "—"}</code></td>
-        <td>${_idCell(r.callee)}</td>
-        <td>${r.duration_seconds ? _dur(r.duration_seconds) : (r.data_volume_kb ? _fmt(Math.round(r.data_volume_kb)) + " KB" : "—")}</td>
-        <td>${r.location || "—"}</td>
-        <td>${r.network || "—"}</td>
-      </tr>`;
+    // Sort if active
+    let sorted = records;
+    if (St.columnSort) {
+      const colDef = _COL_MAP[St.columnSort.key];
+      if (colDef) {
+        sorted = [...records].sort((a, b) => {
+          let va = colDef.getValue(a), vb = colDef.getValue(b);
+          if (colDef.type === "numeric") {
+            va = typeof va === "number" ? va : parseFloat(va) || 0;
+            vb = typeof vb === "number" ? vb : parseFloat(vb) || 0;
+            return St.columnSort.dir === "asc" ? va - vb : vb - va;
+          }
+          va = String(va).toLowerCase();
+          vb = String(vb).toLowerCase();
+          const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+          return St.columnSort.dir === "asc" ? cmp : -cmp;
+        });
+      }
+    }
+
+    let html = `<table class="gsm-table gsm-table-adv"><thead><tr>`;
+    for (const col of cols) {
+      const hasFilter = !!St.columnFilters[col.key];
+      const sortDir = St.columnSort && St.columnSort.key === col.key ? St.columnSort.dir : null;
+      const sortIcon = sortDir === "asc" ? " ↑" : sortDir === "desc" ? " ↓" : "";
+      html += `<th class="${hasFilter ? "gsm-th-filtered" : ""}" data-col="${col.key}">
+        <span class="gsm-th-content">
+          <span class="gsm-th-label" title="Kliknij aby sortować">${col.label}${sortIcon}</span>
+          <button class="gsm-col-filter-btn${hasFilter ? " active" : ""}" data-col="${col.key}" title="Filtruj kolumnę">▿</button>
+        </span>
+      </th>`;
+    }
+    html += `</tr></thead><tbody>`;
+
+    for (const r of sorted) {
+      html += `<tr>`;
+      for (const col of cols) {
+        html += `<td>${col.renderCell(r)}</td>`;
+      }
+      html += `</tr>`;
     }
     html += "</tbody></table>";
     if (truncated) {
       html += `<div class="small muted" style="margin-top:8px">Pokazano ${records.length} z ${_fmt(totalCount)} rekordów.</div>`;
     }
     el.innerHTML = html;
+
+    // Bind header interactions
+    el.querySelectorAll(".gsm-col-filter-btn").forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const colKey = btn.dataset.col;
+        const th = btn.closest("th");
+        _openColFilter(colKey, th);
+      };
+    });
+    el.querySelectorAll(".gsm-th-label").forEach(label => {
+      label.onclick = () => {
+        const colKey = label.closest("th").dataset.col;
+        if (St.columnSort && St.columnSort.key === colKey) {
+          St.columnSort.dir = St.columnSort.dir === "asc" ? "desc" : "asc";
+        } else {
+          St.columnSort = { key: colKey, dir: "asc" };
+        }
+        _refilterRecords();
+      };
+      label.style.cursor = "pointer";
+    });
   }
 
   /* ── special numbers ──────────────────────────────────── */
@@ -4688,6 +5488,12 @@
     }
 
     // (empty state has no button — upload via toolbar icon only)
+
+    // Columns manager button
+    const colsBtn = QS("#gsm_columns_btn");
+    if (colsBtn) {
+      colsBtn.onclick = () => _openColumnsPanel(colsBtn);
+    }
 
     // Records panel resize handle
     const resizeHandle = QS("#gsm_records_resize");
