@@ -1417,6 +1417,7 @@
     await _renderMap(data.geolocation);
     _renderOvernightStays(data.analysis);
     _renderWarnings(data.warnings);
+    _bindCardScreenshotButtons();
   }
 
   function _renderInfo(data) {
@@ -1960,12 +1961,14 @@
     const CW = 115, CH = 82, CGAP = 10;
     const W = Math.max(maxPerRow * (CW + CGAP) - CGAP + 30, 460);
 
-    // Auto-scale card width to fit content at readable size
+    // Auto-scale card width — capped at 1/3 of Records card width
     const graphCard = QS("#gsm_graph_card");
     if (graphCard && !graphCard.dataset.userResized) {
+      const recordsCard = QS("#gsm_records_card");
+      const maxW = recordsCard ? Math.round(recordsCard.offsetWidth / 3) : Infinity;
       const pct = Math.min(100, Math.max(33, maxPerRow * 11 + 2));
       graphCard.style.width = pct + "%";
-      graphCard.style.maxWidth = "";
+      if (maxW < Infinity) graphCard.style.maxWidth = maxW + "px";
     }
     const CARD_Y_TOP = 22;
     const SUB_Y = CARD_Y_TOP + CH + 70;
@@ -2757,6 +2760,8 @@
     row.querySelectorAll("[data-chart-id] .gsm-period-select").forEach(sel => {
       sel.onchange = () => _onPeriodChange(sel, analysis);
     });
+
+    _bindCardScreenshotButtons(row);
   }
 
   function _renderOneChart(id, title, subtitle, d, buildTotalBars) {
@@ -2765,7 +2770,11 @@
 
     let html = `<div class="gsm-chart-card" data-chart-id="${id}">
       <div class="gsm-chart-header">
-        <div class="h3">${title} <span class="small muted">(${subtitle})</span></div>
+        <div class="h3">${title} <span class="small muted">(${subtitle})</span>
+          <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="[data-chart-id='${id}']" data-name="${id}" title="Zrób zrzut">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
+        </div>
         <select class="gsm-period-select" data-chart="${id}">
           <option value="total" selected>Łącznie</option>`;
     if (weeklyKeys.length > 1) {
@@ -3096,6 +3105,89 @@
     } finally {
       if (btn) btn.disabled = false;
     }
+  }
+
+  /* ── Generic card screenshot ───────────────────────────── */
+
+  async function _takeCardScreenshot(btn) {
+    const targetSel = btn.dataset.target;
+    const name = btn.dataset.name || "screenshot";
+    const card = document.querySelector(targetSel);
+    if (!card) return;
+    btn.disabled = true;
+
+    try {
+      await _ensureHtml2Canvas();
+
+      const cardCanvas = await window.html2canvas(card, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: getComputedStyle(card).backgroundColor || "#fff",
+        scale: 2,
+        logging: false,
+      });
+
+      // Watermark bar
+      const now = new Date();
+      const dateStr = now.toLocaleString("pl-PL", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const w = cardCanvas.width;
+      const barH = Math.round(Math.max(28, w * 0.028));
+      const fontSize = Math.round(barH * 0.42);
+      const totalH = cardCanvas.height + barH;
+
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = totalH;
+      const ctx = out.getContext("2d");
+      ctx.drawImage(cardCanvas, 0, 0);
+
+      ctx.fillStyle = "rgba(13,19,80,0.78)";
+      ctx.fillRect(0, cardCanvas.height, w, barH);
+      ctx.fillStyle = "rgba(16,150,244,0.35)";
+      ctx.fillRect(0, cardCanvas.height, w, 1);
+
+      ctx.textBaseline = "middle";
+      const cy = cardCanvas.height + barH / 2;
+      const pad = Math.round(barH * 0.4);
+      ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.fillText("AISTATEweb", pad, cy);
+      let lx = pad + ctx.measureText("AISTATEweb").width;
+      ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.40)";
+      ctx.fillText(`  ${dateStr}`, lx, cy);
+
+      out.toBlob((blob) => {
+        if (!blob) return;
+        const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `GSM_${name}_${ts}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zrzut: ${filename}`);
+      }, "image/png");
+    } catch (e) {
+      _addLog("error", `Błąd zrzutu: ${e.message}`);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Bind all card screenshot buttons (called after render)
+  function _bindCardScreenshotButtons(root) {
+    (root || document).querySelectorAll(".gsm-card-screenshot-btn").forEach(btn => {
+      if (btn._screenshotBound) return;
+      btn._screenshotBound = true;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        _takeCardScreenshot(btn);
+      };
+    });
   }
 
   async function _initMap(geo) {
