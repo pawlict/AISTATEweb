@@ -508,10 +508,11 @@
       <!-- Contact relationship graph -->
       <div class="card" id="gsm_graph_card" style="display:none">
         <div class="gsm-chart-header">
-          <span class="h3" style="margin:0">Top kontakty graf</span>
-          <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="#gsm_graph_card" data-name="kontakty_graf" title="Zrób zrzut">
-            <i data-icon="camera" data-size="22"></i>
-          </button>
+          <span class="h3" style="margin:0;display:inline-flex;align-items:center;gap:6px">Top kontakty graf
+            <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="#gsm_graph_card" data-name="kontakty_graf" title="Zrób zrzut">
+              <i data-icon="camera" data-size="22"></i>
+            </button>
+          </span>
           <div style="display:flex;gap:8px;align-items:center">
             <select id="gsm_graph_top_n" class="gsm-period-select" style="min-width:60px">
               <option value="5">Top 5</option>
@@ -556,10 +557,11 @@
         <!-- Col 1: Heatmap -->
         <div class="gsm-chart-card" id="gsm_heatmap_card" style="display:none">
           <div class="gsm-chart-header" style="flex-wrap:wrap;gap:6px">
-            <span class="h3" style="margin:0">Rozkład aktywności</span>
-            <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="#gsm_heatmap_card" data-name="heatmap" title="Zrób zrzut">
-              <i data-icon="camera" data-size="22"></i>
-            </button>
+            <span class="h3" style="margin:0;display:inline-flex;align-items:center;gap:6px">Rozkład aktywności
+              <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="#gsm_heatmap_card" data-name="heatmap" title="Zrób zrzut">
+                <i data-icon="camera" data-size="22"></i>
+              </button>
+            </span>
             <div style="display:flex;gap:6px;align-items:center">
               <select id="gsm_hm_type" class="gsm-period-select" style="min-width:100px">
                 <option value="all">Wszystkie</option>
@@ -586,7 +588,7 @@
       <!-- BTS Map -->
       <div class="card" id="gsm_map_card" style="display:none">
         <div class="analysis-sidehdr">
-          <div class="h2"><i data-icon="map" data-size="16"></i> Mapa lokalizacji BTS
+          <div class="h2" style="display:inline-flex;align-items:center;gap:6px"><i data-icon="map" data-size="16"></i> Mapa lokalizacji BTS
             <button class="btn btn-icon gsm-map-screenshot-btn" id="gsm_map_screenshot_btn" title="Zrób zrzut">
               <i data-icon="camera" data-size="22"></i>
             </button>
