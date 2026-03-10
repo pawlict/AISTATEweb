@@ -198,6 +198,10 @@
     card.style.width = "300px";
     card.style.maxHeight = "340px";
 
+    // Track offset from marker so card moves with the map
+    let _cardOffsetX = cardX - point.x;
+    let _cardOffsetY = cardY - point.y;
+
     container.appendChild(card);
 
     // ── Tether line (SVG overlay) ──
@@ -226,8 +230,13 @@
     }
     _updateTether();
 
-    // Update tether when map moves
-    const _onMapMove = () => _updateTether();
+    // Move card with the map (maintain geo-relative offset)
+    const _onMapMove = () => {
+      const pt = map.latLngToContainerPoint(ll);
+      card.style.left = (pt.x + _cardOffsetX) + "px";
+      card.style.top = (pt.y + _cardOffsetY) + "px";
+      _updateTether();
+    };
     map.on("move", _onMapMove);
 
     // ── Card state ──
@@ -279,6 +288,10 @@
       function onUp() {
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
+        // Recalculate offset so card keeps new position on map pan
+        const pt = map.latLngToContainerPoint(ll);
+        _cardOffsetX = parseFloat(card.style.left) - pt.x;
+        _cardOffsetY = parseFloat(card.style.top) - pt.y;
       }
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
@@ -2137,6 +2150,7 @@
     const map = L.map(container, {
       zoomControl: true,
       attributionControl: true,
+      preferCanvas: true,  // render vectors to <canvas> (better screenshot capture)
     });
     St.map = map;
 
