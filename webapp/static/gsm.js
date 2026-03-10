@@ -2442,6 +2442,175 @@
       };
       label.style.cursor = "pointer";
     });
+
+    // Bind column drag-and-drop reordering on headers
+    _bindColumnDragDrop(el);
+  }
+
+  /* ── Column drag & drop (custom mouse events) ────────── */
+
+  let _colDrag = null; // active drag state
+
+  function _bindColumnDragDrop(container) {
+    const ths = container.querySelectorAll("thead th[data-col]");
+    ths.forEach(th => {
+      th.addEventListener("mousedown", e => _colDragStart(e, th, container));
+      th.style.cursor = "grab";
+    });
+  }
+
+  function _colDragStart(e, th, container) {
+    // Ignore right-click, filter button clicks
+    if (e.button !== 0) return;
+    if (e.target.closest(".gsm-col-filter-btn")) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const colKey = th.dataset.col;
+    const THRESHOLD = 5;
+    let dragging = false;
+
+    function onMove(ev) {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+
+      if (!dragging) {
+        if (Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return;
+        // Start drag
+        dragging = true;
+        _colDragBegin(th, colKey, container, startX);
+      }
+      _colDragMove(ev.clientX);
+    }
+
+    function onUp(ev) {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      if (dragging) {
+        _colDragEnd();
+      }
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
+  function _colDragBegin(th, colKey, container, startX) {
+    // Collect header rects
+    const thead = container.querySelector("thead");
+    const allThs = Array.from(thead.querySelectorAll("th[data-col]"));
+    const rects = allThs.map(el => ({ el, key: el.dataset.col, rect: el.getBoundingClientRect() }));
+
+    // Ghost element
+    const ghost = document.createElement("div");
+    ghost.className = "gsm-col-drag-ghost";
+    ghost.textContent = th.textContent.replace(/[▿↑↓]/g, "").trim();
+    const thRect = th.getBoundingClientRect();
+    ghost.style.width = thRect.width + "px";
+    ghost.style.left = thRect.left + "px";
+    ghost.style.top = (thRect.top - 4) + "px";
+    document.body.appendChild(ghost);
+
+    // Drop indicator line
+    const indicator = document.createElement("div");
+    indicator.className = "gsm-col-drop-indicator";
+    document.body.appendChild(indicator);
+
+    // Dim source column
+    th.classList.add("gsm-th-dragging");
+
+    _colDrag = {
+      colKey,
+      th,
+      ghost,
+      indicator,
+      container,
+      rects,
+      allThs,
+      startX,
+      offsetX: startX - thRect.left,
+      dropIndex: -1,
+    };
+
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+  }
+
+  function _colDragMove(clientX) {
+    if (!_colDrag) return;
+    const { ghost, indicator, rects, colKey, offsetX } = _colDrag;
+
+    // Move ghost
+    ghost.style.left = (clientX - offsetX) + "px";
+
+    // Find drop position
+    let dropIdx = -1;
+    let indicatorLeft = 0;
+    const sourceIdx = rects.findIndex(r => r.key === colKey);
+
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i].rect;
+      const mid = r.left + r.width / 2;
+      if (clientX < mid) {
+        dropIdx = i;
+        indicatorLeft = r.left - 2;
+        break;
+      }
+    }
+    if (dropIdx === -1) {
+      // After last column
+      dropIdx = rects.length;
+      const last = rects[rects.length - 1].rect;
+      indicatorLeft = last.right - 2;
+    }
+
+    // Don't show indicator if drop would result in no change
+    if (dropIdx === sourceIdx || dropIdx === sourceIdx + 1) {
+      indicator.style.display = "none";
+    } else {
+      const headerTop = rects[0].rect.top;
+      const headerBottom = rects[0].rect.bottom;
+      indicator.style.display = "";
+      indicator.style.left = indicatorLeft + "px";
+      indicator.style.top = (headerTop - 4) + "px";
+      indicator.style.height = (headerBottom - headerTop + 8) + "px";
+    }
+
+    _colDrag.dropIndex = dropIdx;
+  }
+
+  function _colDragEnd() {
+    if (!_colDrag) return;
+    const { colKey, ghost, indicator, th, dropIndex, rects } = _colDrag;
+
+    // Cleanup DOM
+    ghost.remove();
+    indicator.remove();
+    th.classList.remove("gsm-th-dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+
+    const sourceIdx = rects.findIndex(r => r.key === colKey);
+
+    // Apply reorder if position changed
+    if (dropIndex !== -1 && dropIndex !== sourceIdx && dropIndex !== sourceIdx + 1) {
+      const visibleKeys = rects.map(r => r.key);
+      // Remove from old position
+      visibleKeys.splice(sourceIdx, 1);
+      // Insert at new position (adjust index if after source)
+      const insertAt = dropIndex > sourceIdx ? dropIndex - 1 : dropIndex;
+      visibleKeys.splice(insertAt, 0, colKey);
+
+      // Rebuild full columnOrder: keep hidden columns in their relative positions,
+      // but reorder visible ones according to new order
+      const hiddenKeys = (St.columnOrder || []).filter(k => St.columnHidden[k]);
+      // Merge: visible in new order, hidden appended at end
+      St.columnOrder = [...visibleKeys, ...hiddenKeys];
+
+      _refilterRecords();
+    }
+
+    _colDrag = null;
   }
 
   /* ── special numbers ──────────────────────────────────── */
