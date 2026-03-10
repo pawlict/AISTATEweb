@@ -614,7 +614,7 @@
 
   // Canonical category definitions — always shown, always in this order
   const _ANOMALY_CATS = [
-    { type: "long_call",        label: "D\u0142ugie po\u0142\u0105czenia",               desc: "Po\u0142\u0105czenia trwaj\u0105ce ponad 2 godziny" },
+    { type: "long_call",        label: "D\u0142ugie po\u0142\u0105czenia",               desc: "Po\u0142\u0105czenia trwaj\u0105ce ponad 1 godzin\u0119" },
     { type: "late_night_calls", label: "Po\u0142\u0105czenia g\u0142osowe w nocy",       desc: "Rozmowy telefoniczne mi\u0119dzy 00:00 a 05:00 (d\u0142u\u017Csze ni\u017C 10 sek.)" },
     { type: "night_activity",   label: "Wysoka aktywno\u015B\u0107 nocna",          desc: "Ponad 30% wszystkich zdarze\u0144 (po\u0142\u0105czenia, SMS, dane) przypada na godziny 23:00\u201305:00" },
     { type: "night_movement",   label: "Przemieszczanie nocne",           desc: "Zmiana stacji BTS mi\u0119dzy kolejnymi zdarzeniami nocnymi (23:00\u201305:00) \u2014 wskazuje na ruch urz\u0105dzenia w nocy" },
@@ -659,7 +659,9 @@
       const sevColor = sev === "warning" ? "#f97316" : sev === "info" ? "#3b82f6" : "#22c55e";
       const sevIcon = sev === "warning" ? "\u26A0" : sev === "info" ? "\u2139" : "\u2713";
 
-      html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;border-left:3px solid ${sevColor}">`;
+      const clickable = hasItems ? ` data-anomaly-type="${cat.type}"` : '';
+      const clickStyle = hasItems ? ';cursor:pointer;transition:background .15s,box-shadow .15s' : '';
+      html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;border-left:3px solid ${sevColor}${clickStyle}"${clickable}${hasItems ? ' title="2×LPM → filtruj rekordy"' : ''}>`;
       html += `<div style="display:flex;align-items:center;gap:6px">`;
       html += `<span style="color:${sevColor};font-size:15px">${sevIcon}</span>`;
       html += `<b>${cat.label}</b>`;
@@ -680,6 +682,123 @@
     }
     html += '</div>';
     body.innerHTML = html;
+
+    // ── Hover effect on anomaly categories with items ──
+    body.querySelectorAll("[data-anomaly-type]").forEach(div => {
+      div.addEventListener("mouseenter", () => {
+        div.style.background = "rgba(31,90,166,.08)";
+        div.style.boxShadow = "0 2px 8px rgba(15,23,42,.06)";
+      });
+      div.addEventListener("mouseleave", () => {
+        div.style.background = "";
+        div.style.boxShadow = "";
+      });
+    });
+
+    // ── Double-click on anomaly category → filter Records ──
+    body.addEventListener("dblclick", function(e) {
+      const div = e.target.closest("[data-anomaly-type]");
+      if (!div) return;
+      const type = div.dataset.anomalyType;
+      const data = groupMap[type];
+      if (!data || !data.items.length) return;
+      _anomalyGroupFilter(type, data.items);
+    });
+  }
+
+  /** Filter Records by anomaly group — invoked on double-click. */
+  function _anomalyGroupFilter(type, items) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    let filtered = [];
+    let filterText = "";
+
+    switch (type) {
+      case "long_call":
+        filtered = records.filter(r => r.duration_seconds > 3600 && (r.record_type || "").includes("CALL"));
+        filterText = `Długie połączenia (>1h) — ${filtered.length} rek.`;
+        break;
+      case "late_night_calls":
+        filtered = records.filter(r => {
+          if (!r.time || !(r.record_type || "").includes("CALL")) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 0 && h < 5;
+        });
+        filterText = `Połączenia nocne (00:00–05:00) — ${filtered.length} rek.`;
+        break;
+      case "night_activity":
+        filtered = records.filter(r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        });
+        filterText = `Aktywność nocna (23:00–05:00) — ${filtered.length} rek.`;
+        break;
+      case "night_movement":
+        filtered = records.filter(r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        });
+        filterText = `Przemieszczanie nocne — ${filtered.length} rek.`;
+        break;
+      case "burst_activity":
+        if (items.length > 0) {
+          const b = items[0];
+          filtered = records.filter(r => {
+            if (r.date !== b.date) return false;
+            if (!b.time || !r.time) return true;
+            try {
+              const bp = b.time.split(":"), rp = r.time.split(":");
+              const bm = parseInt(bp[0]) * 60 + parseInt(bp[1]);
+              const rm = parseInt(rp[0]) * 60 + parseInt(rp[1]);
+              return rm >= bm && rm <= bm + (b.window_min || 30);
+            } catch (_) { return false; }
+          });
+          filterText = `Skok aktywności (${b.date} ${b.time}) — ${filtered.length} rek.`;
+        }
+        break;
+      case "premium_number": {
+        const nums = new Set(items.map(it => it.contact));
+        filtered = records.filter(r => nums.has(r.callee) || nums.has(r.caller));
+        filterText = `Numery premium — ${filtered.length} rek.`;
+        break;
+      }
+      case "roaming":
+        filtered = records.filter(r => r.roaming);
+        if (!filtered.length) {
+          filtered = records.filter(r => r.roaming || (r.network && !/orange|play|plus|t-mobile|polkomtel|p4|heyah/i.test(r.network)));
+        }
+        filterText = `Roaming — ${filtered.length} rek.`;
+        break;
+      case "one_time_contacts": {
+        const otNums = new Set(items.map(it => it.contact));
+        filtered = records.filter(r => otNums.has(r.callee) || otNums.has(r.caller));
+        filterText = `Jednorazowe kontakty — ${filtered.length} rek.`;
+        break;
+      }
+      default:
+        filtered = records;
+        filterText = `${type} — ${filtered.length} rek.`;
+    }
+
+    // Clear heatmap filter state
+    St.hmActiveCell = null;
+    const hmBar = QS("#gsm_hm_filter_bar");
+    if (hmBar) hmBar.style.display = "none";
+
+    _setRecordsFilter(filterText, () => {
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(filtered, false, filtered.length);
+
+    const recCard = QS("#gsm_records_card");
+    if (recCard) {
+      recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      recCard.style.transition = "box-shadow .2s";
+      recCard.style.boxShadow = "0 0 0 3px var(--brand-blue,#2563eb)";
+      setTimeout(() => { recCard.style.boxShadow = ""; }, 1200);
+    }
   }
 
   /** Render old-format anomaly items (just description text). */
@@ -724,7 +843,8 @@
     } else if (type === "roaming") {
       for (const it of items) {
         const nets = it.networks && it.networks.length ? ` [${it.networks.join(", ")}]` : "";
-        html += `<div><b>${it.country}</b> — ${it.count} rekordów, ${it.period}${nets}</div>`;
+        const name = _countryName(it.country) || it.country;
+        html += `<div><b>${name}</b> — ${it.count} rekordów, ${it.period}${nets}</div>`;
       }
     } else if (type === "one_time_contacts") {
       for (const it of items) {

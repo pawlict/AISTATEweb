@@ -1152,10 +1152,10 @@ def _detect_anomalies(
     if not records:
         return groups
 
-    # ── 1. Long calls (> 2 hours) ──
+    # ── 1. Long calls (> 1 hour) ──
     long_calls = []
     for r in records:
-        if r.duration_seconds > 7200 and "CALL" in r.record_type:
+        if r.duration_seconds > 3600 and "CALL" in r.record_type:
             long_calls.append({
                 "contact": r.callee or r.caller or "nieznany",
                 "duration_min": r.duration_seconds // 60,
@@ -1165,7 +1165,7 @@ def _detect_anomalies(
     groups.append({
         "type": "long_call",
         "label": "Długie połączenia",
-        "description": "Połączenia trwające ponad 2 godziny",
+        "description": "Połączenia trwające ponad 1 godzinę",
         "severity": "info" if long_calls else "ok",
         "items": long_calls,
     })
