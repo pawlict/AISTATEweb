@@ -1144,9 +1144,9 @@ def _detect_anomalies(
     if not records:
         return anomalies
 
-    # 1. Unusually long calls (> 2 hours)
+    # 1. Unusually long calls (> 1 hour)
     for r in records:
-        if r.duration_seconds > 7200 and "CALL" in r.record_type:
+        if r.duration_seconds > 3600 and "CALL" in r.record_type:
             anomalies.append({
                 "type": "long_call",
                 "severity": "info",
@@ -1203,7 +1203,7 @@ def _detect_anomalies(
     # 6. Roaming usage
     roaming_records = [r for r in records if r.roaming]
     if roaming_records:
-        countries = set(r.roaming_country for r in roaming_records if r.roaming_country)
+        countries = sorted(set(r.roaming_country for r in roaming_records if r.roaming_country))
         anomalies.append({
             "type": "roaming",
             "severity": "info",
@@ -1212,6 +1212,7 @@ def _detect_anomalies(
                 + (f" (kraje: {', '.join(countries)})" if countries else "")
             ),
             "count": len(roaming_records),
+            "countries": countries,
         })
 
     return anomalies

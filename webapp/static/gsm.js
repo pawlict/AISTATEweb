@@ -570,10 +570,27 @@
     // Anomalies
     if (a.anomalies && a.anomalies.length) {
       html += `<div class="gsm-section"><div class="h3">Anomalie</div>`;
-      for (const an of a.anomalies) {
+      for (let ai = 0; ai < a.anomalies.length; ai++) {
+        const an = a.anomalies[ai];
         const sev = an.severity || "info";
-        html += `<div class="gsm-anomaly gsm-anomaly-${sev}">
-          <strong>${an.type || ""}</strong>: ${an.description || ""}
+        // Build display description — translate country codes to full names for roaming
+        let desc = an.description || "";
+        if (an.type === "roaming" && an.countries && an.countries.length) {
+          const fullNames = an.countries.map(c => _countryName(c)).join(", ");
+          desc = `Aktywność roamingowa: ${an.count || 0} rekordów (kraje: ${fullNames})`;
+        }
+        // Label mapping
+        const typeLabels = {
+          long_call: "Długie połączenie (>1h)",
+          night_activity: "Aktywność nocna",
+          burst_activity: "Skok aktywności",
+          frequent_imei_change: "Częste zmiany IMEI",
+          premium_number: "Numer premium",
+          roaming: "Aktywność w sieciach zagranicznych",
+        };
+        const label = typeLabels[an.type] || an.type || "";
+        html += `<div class="gsm-anomaly gsm-anomaly-${sev}" data-anomaly-idx="${ai}" style="cursor:pointer" title="2×LPM → filtruj rekordy">
+          <strong>${label}</strong>: ${desc}
         </div>`;
       }
       html += "</div>";
@@ -590,6 +607,18 @@
     }
 
     el.innerHTML = html || '<div class="small muted">Brak danych do analizy.</div>';
+
+    // ── Double-click on anomaly → filter Records ──
+    if (a.anomalies && a.anomalies.length) {
+      el.querySelectorAll("[data-anomaly-idx]").forEach(div => {
+        div.addEventListener("dblclick", () => {
+          const idx = parseInt(div.dataset.anomalyIdx);
+          const an = a.anomalies[idx];
+          if (!an) return;
+          _anomalyFilter(an);
+        });
+      });
+    }
 
     // Render contact relationship graph (SVG) — separate card
     const graphCard = QS("#gsm_graph_card");
@@ -1980,6 +2009,82 @@
     if (St.lastResult) {
       _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
     }
+  }
+
+  /** Filter Records by anomaly — invoked on double-click. */
+  function _anomalyFilter(an) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    let filtered = [];
+    let filterText = "";
+
+    switch (an.type) {
+      case "long_call":
+        filtered = records.filter(r => r.duration_seconds > 3600 && (r.record_type || "").includes("CALL"));
+        filterText = `Długie połączenia (>1h) — ${filtered.length} rek.`;
+        break;
+      case "roaming": {
+        filtered = records.filter(r => r.roaming);
+        const names = (an.countries || []).map(c => _countryName(c)).join(", ");
+        filterText = `Roaming${names ? ` (${names})` : ""} — ${filtered.length} rek.`;
+        break;
+      }
+      case "night_activity":
+        filtered = records.filter(r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        });
+        filterText = `Aktywność nocna (23:00–05:00) — ${filtered.length} rek.`;
+        break;
+      case "burst_activity": {
+        const bDate = an.date || "";
+        const bTime = an.time || "";
+        if (bDate) {
+          filtered = records.filter(r => {
+            if (r.date !== bDate) return false;
+            if (!bTime || !r.time) return true;
+            try {
+              const bp = bTime.split(":");
+              const rp = r.time.split(":");
+              const bm = parseInt(bp[0]) * 60 + parseInt(bp[1]);
+              const rm = parseInt(rp[0]) * 60 + parseInt(rp[1]);
+              return rm >= bm && rm <= bm + 30;
+            } catch (_) { return false; }
+          });
+        }
+        filterText = `Skok aktywności (${bDate} ${bTime}) — ${filtered.length} rek.`;
+        break;
+      }
+      case "premium_number":
+        filtered = records.filter(r => {
+          const c = r.callee || r.caller || "";
+          return /^\+?48[78]0\d/.test(c);
+        });
+        filterText = `Numery premium — ${filtered.length} rek.`;
+        break;
+      case "frequent_imei_change":
+        // Show all records — IMEI changes are visible in the device column
+        filtered = records;
+        filterText = `Wszystkie rekordy (zmiany IMEI) — ${filtered.length} rek.`;
+        break;
+      default:
+        filtered = records;
+        filterText = `${an.type || "Anomalia"} — ${filtered.length} rek.`;
+    }
+
+    // Clear heatmap filter state
+    St.hmActiveCell = null;
+    const hmBar = QS("#gsm_hm_filter_bar");
+    if (hmBar) hmBar.style.display = "none";
+
+    _setRecordsFilter(filterText, () => {
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(filtered, false, filtered.length);
+
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function _formatHours(h) {
