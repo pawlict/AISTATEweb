@@ -594,6 +594,16 @@
             <span class="small muted" id="gsm_map_stats"></span>
           </div>
         </div>
+        <!-- Coverage sub-options (visible only when layer=coverage) -->
+        <div id="gsm_coverage_opts" style="display:none;margin-top:6px;padding:6px 12px;background:var(--bg-muted,#f1f5f9);border-radius:8px;font-size:12px">
+          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;margin-right:14px">
+            <input type="checkbox" id="gsm_cov_billing" checked> Stacje BTS billing
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+            <input type="checkbox" id="gsm_cov_other"> Stacje BTS inne
+          </label>
+          <span class="small muted" id="gsm_cov_other_count" style="margin-left:8px"></span>
+        </div>
         <div id="gsm_map_container" style="height:500px;border-radius:12px;border:1px solid var(--border);margin-top:10px;background:#e8e8e8;position:relative"></div>
         <div class="gsm-graph-resize" id="gsm_map_resize" title="Przeciągnij aby zmienić rozmiar"></div>
         <!-- Timeline player v4 -->

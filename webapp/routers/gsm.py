@@ -8,6 +8,7 @@ Endpoints:
 - GET  /api/gsm/bts/stats       — BTS database statistics
 - POST /api/gsm/bts/import      — import BTS data from CSV (UKE/OpenCelliD)
 - POST /api/gsm/bts/clear       — clear BTS database
+- GET  /api/gsm/bts/nearby      — find nearby BTS stations in visible area
 - GET  /api/gsm/bts/lookup      — lookup BTS station by LAC/CID
 - GET  /api/gsm/tiles/info      — offline map tile info
 - GET  /api/gsm/tiles/{z}/{x}/{y} — serve map tiles from MBTiles
@@ -640,6 +641,45 @@ async def bts_clear(
         _app_log(f"[GSM] Cleared {deleted} BTS stations (source={source or 'all'})")
         stats = await run_in_threadpool(db.get_stats)
         return JSONResponse({"status": "ok", "deleted": deleted, **stats})
+    except Exception as e:
+        return JSONResponse(
+            {"status": "error", "detail": str(e)},
+            status_code=500,
+        )
+
+
+@router.get("/api/gsm/bts/nearby")
+async def bts_nearby(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius_deg: float = Query(0.01),
+    limit: int = Query(80, ge=1, le=200),
+    exclude: str = Query(""),
+):
+    """Find BTS stations near given coordinates, excluding specified LAC:CID pairs."""
+    try:
+        from backend.gsm.bts_db import get_bts_db
+        db = get_bts_db(_data_dir())
+        stations = await run_in_threadpool(db.search_nearby, lat, lon, radius_deg, limit + len(exclude.split(",")) if exclude else limit)
+        # Build exclusion set from "lac:cid,lac:cid,..." string
+        exclude_set = set()
+        if exclude:
+            for pair in exclude.split(","):
+                parts = pair.strip().split(":")
+                if len(parts) == 2:
+                    try:
+                        exclude_set.add((int(parts[0]), int(parts[1])))
+                    except ValueError:
+                        pass
+        # Filter out excluded stations and apply limit
+        result = []
+        for s in stations:
+            if (s.lac, s.cid) in exclude_set:
+                continue
+            result.append(s.to_dict())
+            if len(result) >= limit:
+                break
+        return JSONResponse({"status": "ok", "stations": result})
     except Exception as e:
         return JSONResponse(
             {"status": "error", "detail": str(e)},

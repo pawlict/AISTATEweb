@@ -943,10 +943,15 @@
     const SUB_X = CX - SUB_W / 2;
     // Compute total OUT/IN across all displayed contacts
     let subTotalOut = 0, subTotalIn = 0;
+    let subCallsOut = 0, subCallsIn = 0, subSmsOut = 0, subSmsIn = 0;
     for (const card of allCards) {
-      subTotalOut += (card.c.calls_out || 0) + (card.c.sms_out || 0);
-      subTotalIn  += (card.c.calls_in  || 0) + (card.c.sms_in  || 0);
+      subCallsOut += card.c.calls_out || 0;
+      subSmsOut   += card.c.sms_out   || 0;
+      subCallsIn  += card.c.calls_in  || 0;
+      subSmsIn    += card.c.sms_in    || 0;
     }
+    subTotalOut = subCallsOut + subSmsOut;
+    subTotalIn  = subCallsIn  + subSmsIn;
 
     // ── Straight-line arrows — behind cards ──
     const EDGE_GAP = 6;
@@ -1076,14 +1081,14 @@
     }
     // OUT badge
     const sby1 = SUB_Y - SUB_H / 2 + 32;
-    svg += `<g>
+    svg += `<g data-sub-label="out" data-all="${subTotalOut}" data-calls="${subCallsOut}" data-sms="${subSmsOut}">
       <rect x="${SUB_X + 5}" y="${sby1}" width="${subBw}" height="14" rx="3" fill="#dcfce7"/>
       <text x="${SUB_X + 10}" y="${sby1 + 10}" font-size="7" font-weight="700" fill="#16a34a">OUT</text>
       <text x="${SUB_X + SUB_W - 8}" y="${sby1 + 10}" font-size="8" font-weight="600" fill="#16a34a" text-anchor="end">${subTotalOut}</text>
     </g>`;
     // IN badge
     const sby2 = SUB_Y - SUB_H / 2 + 48;
-    svg += `<g>
+    svg += `<g data-sub-label="in" data-all="${subTotalIn}" data-calls="${subCallsIn}" data-sms="${subSmsIn}">
       <rect x="${SUB_X + 5}" y="${sby2}" width="${subBw}" height="14" rx="3" fill="#fee2e2"/>
       <text x="${SUB_X + 10}" y="${sby2 + 10}" font-size="7" font-weight="700" fill="#dc2626">IN</text>
       <text x="${SUB_X + SUB_W - 8}" y="${sby2 + 10}" font-size="8" font-weight="600" fill="#dc2626" text-anchor="end">${subTotalIn}</text>
@@ -1226,6 +1231,13 @@
       const texts = badge.querySelectorAll("text");
       if (texts.length >= 2) texts[texts.length - 1].textContent = val;
       else if (texts.length === 1) texts[0].textContent = val;
+    });
+    // Update subscriber OUT/IN badges (sum visible contacts)
+    wrap.querySelectorAll("[data-sub-label]").forEach(badge => {
+      const val = parseInt(badge.dataset[mode] || "0");
+      badge.style.display = val > 0 ? "" : "none";
+      const texts = badge.querySelectorAll("text");
+      if (texts.length >= 2) texts[texts.length - 1].textContent = val;
     });
   }
 
@@ -1581,8 +1593,59 @@
 
     // Layer switcher (descriptions are in title attributes — native tooltips)
     const layerSelect = QS("#gsm_map_layer_select");
+    const coverageOpts = QS("#gsm_coverage_opts");
+    const covBillingCb = QS("#gsm_cov_billing");
+    const covOtherCb = QS("#gsm_cov_other");
+
+    // Build exclude list once from billing data
+    _otherBtsExclude = _buildExcludeList(geo);
+
     if (layerSelect) {
-      layerSelect.onchange = () => _switchMapLayer(layerSelect.value, geo);
+      layerSelect.onchange = () => {
+        const layer = layerSelect.value;
+        _switchMapLayer(layer, geo);
+        // Show/hide coverage sub-options
+        if (coverageOpts) coverageOpts.style.display = layer === "coverage" ? "" : "none";
+        // Disable other BTS when switching away from coverage
+        if (layer !== "coverage") {
+          _otherBtsEnabled = false;
+          _removeOtherBts();
+        } else if (covOtherCb && covOtherCb.checked) {
+          _otherBtsEnabled = true;
+          _loadOtherBts();
+        }
+      };
+    }
+
+    // Coverage billing checkbox — toggle billing coverage layer
+    if (covBillingCb) {
+      covBillingCb.onchange = () => {
+        if (!St.map || !St.mapLayers.coverage) return;
+        if (covBillingCb.checked) {
+          St.mapLayers.coverage.addTo(St.map);
+        } else {
+          St.map.removeLayer(St.mapLayers.coverage);
+        }
+      };
+    }
+
+    // Coverage other BTS checkbox — toggle dynamic nearby BTS
+    if (covOtherCb) {
+      covOtherCb.onchange = () => {
+        _otherBtsEnabled = covOtherCb.checked;
+        if (_otherBtsEnabled) {
+          _loadOtherBts();
+        } else {
+          _removeOtherBts();
+        }
+      };
+    }
+
+    // Reload other BTS on map move/zoom (debounced)
+    if (St.map) {
+      St.map.on("moveend", () => {
+        if (_otherBtsEnabled) _scheduleOtherBtsReload();
+      });
     }
   }
 
@@ -2161,7 +2224,13 @@
       if (St.mapLayers.all) St.mapLayers.all.addTo(map);
     }
     if (layer === "coverage") {
-      if (St.mapLayers.coverage) St.mapLayers.coverage.addTo(map);
+      const billingCb = QS("#gsm_cov_billing");
+      if (St.mapLayers.coverage && (!billingCb || billingCb.checked)) {
+        St.mapLayers.coverage.addTo(map);
+      }
+      if (St.mapLayers.coverageOther && _otherBtsEnabled) {
+        St.mapLayers.coverageOther.addTo(map);
+      }
       if (St.mapLayers.all) St.mapLayers.all.addTo(map);
     }
     if (layer === "heatmap") {
@@ -2171,6 +2240,143 @@
       if (St.mapLayers.timeline) St.mapLayers.timeline.addTo(map);
       if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
     }
+  }
+
+  /* ── Dynamic "Other BTS" layer ── */
+
+  /** Zoom-based radius and limit for nearby BTS queries */
+  function _nearbyParams(zoom) {
+    if (zoom >= 16) return { radius: 0.003, limit: 50 };
+    if (zoom >= 15) return { radius: 0.005, limit: 60 };
+    if (zoom >= 13) return { radius: 0.015, limit: 80 };
+    if (zoom >= 11) return { radius: 0.04,  limit: 100 };
+    return { radius: 0.1, limit: 80 };
+  }
+
+  /** Build exclude string from billing locations (LAC:CID pairs) */
+  function _buildExcludeList(geo) {
+    const seen = new Set();
+    if (geo && geo.geo_records) {
+      for (const r of geo.geo_records) {
+        if (r.point && r.point.lac && r.point.cid) {
+          seen.add(`${r.point.lac}:${r.point.cid}`);
+        }
+      }
+    }
+    return Array.from(seen).join(",");
+  }
+
+  let _otherBtsDebounce = null;
+  let _otherBtsEnabled = false;
+  let _otherBtsExclude = "";
+
+  /** Fetch and render nearby BTS stations on the map */
+  async function _loadOtherBts() {
+    if (!St.map || !_otherBtsEnabled) return;
+    const map = St.map;
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const params = _nearbyParams(zoom);
+
+    const countEl = QS("#gsm_cov_other_count");
+
+    try {
+      const url = `/api/gsm/bts/nearby?lat=${center.lat.toFixed(6)}&lon=${center.lng.toFixed(6)}&radius_deg=${params.radius}&limit=${params.limit}&exclude=${encodeURIComponent(_otherBtsExclude)}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.status !== "ok" || !data.stations) {
+        if (countEl) countEl.textContent = "";
+        return;
+      }
+
+      // Remove old layer
+      if (St.mapLayers.coverageOther) {
+        map.removeLayer(St.mapLayers.coverageOther);
+      }
+
+      const otherGroup = L.layerGroup();
+      const defaultRange = { "GSM": 5000, "UMTS": 3000, "LTE": 2000, "5G NR": 1000 };
+      const color = "#2563eb"; // blue for "other" BTS
+
+      for (const s of data.stations) {
+        const range = s.range_m || defaultRange[s.radio] || 2000;
+
+        // Small blue marker
+        L.circleMarker([s.lat, s.lon], {
+          radius: 4,
+          fillColor: color,
+          color: "#fff",
+          weight: 1.2,
+          fillOpacity: 0.7,
+        }).bindPopup(
+          `<b>${s.city || "BTS"}${s.street ? ", " + s.street : ""}</b><br>` +
+          `${s.radio ? "Technologia: " + s.radio + "<br>" : ""}` +
+          `${s.azimuth != null ? "Azymut: " + s.azimuth + "°<br>" : ""}` +
+          `Zasięg: ${(range / 1000).toFixed(1)} km<br>` +
+          `<span class="small muted">LAC: ${s.lac}, CID: ${s.cid}</span><br>` +
+          `<span class="small muted">Źródło: ${s.source || "?"}</span>`
+        ).addTo(otherGroup);
+
+        // Coverage visualization
+        if (s.azimuth != null) {
+          // Dashed circle behind sector
+          L.circle([s.lat, s.lon], {
+            radius: range,
+            fillColor: color,
+            color: color,
+            weight: 0.8,
+            fillOpacity: 0.04,
+            dashArray: "4 6",
+          }).addTo(otherGroup);
+
+          // Sector
+          const beamWidth = s.radio === "5G NR" ? 30 : s.radio === "LTE" ? 45 : 60;
+          const startAngle = s.azimuth - beamWidth / 2;
+          const endAngle = s.azimuth + beamWidth / 2;
+          const sectorCoords = _buildSectorCoords(s.lat, s.lon, range, startAngle, endAngle, 24);
+          L.polygon(sectorCoords, {
+            fillColor: color,
+            color: color,
+            weight: 1,
+            fillOpacity: 0.10,
+            dashArray: "3 4",
+          }).addTo(otherGroup);
+        } else {
+          // Omnidirectional circle
+          L.circle([s.lat, s.lon], {
+            radius: range,
+            fillColor: color,
+            color: color,
+            weight: 1,
+            fillOpacity: 0.08,
+            dashArray: "3 4",
+          }).addTo(otherGroup);
+        }
+      }
+
+      St.mapLayers.coverageOther = otherGroup;
+      otherGroup.addTo(map);
+      if (countEl) countEl.textContent = data.stations.length ? `(${data.stations.length} stacji)` : "";
+    } catch (e) {
+      _addLog("warn", `Błąd ładowania innych BTS: ${e.message}`);
+      if (countEl) countEl.textContent = "";
+    }
+  }
+
+  /** Schedule a debounced reload of other BTS */
+  function _scheduleOtherBtsReload() {
+    if (_otherBtsDebounce) clearTimeout(_otherBtsDebounce);
+    _otherBtsDebounce = setTimeout(_loadOtherBts, 400);
+  }
+
+  /** Remove the other BTS layer from the map */
+  function _removeOtherBts() {
+    if (St.map && St.mapLayers.coverageOther) {
+      St.map.removeLayer(St.mapLayers.coverageOther);
+      delete St.mapLayers.coverageOther;
+    }
+    const countEl = QS("#gsm_cov_other_count");
+    if (countEl) countEl.textContent = "";
   }
 
   /* ── Hour mini-bar chart (for cluster tiles) ── */

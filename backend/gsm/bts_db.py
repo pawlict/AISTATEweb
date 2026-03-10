@@ -199,6 +199,7 @@ class BTSDatabase:
         lat: float,
         lon: float,
         radius_deg: float = 0.01,
+        limit: int = 50,
     ) -> List[BTSStation]:
         """Find stations near given coordinates (simple bounding box)."""
         conn = self._get_conn()
@@ -206,10 +207,10 @@ class BTSDatabase:
             """SELECT * FROM bts_stations
                WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
                ORDER BY ABS(lat - ?) + ABS(lon - ?)
-               LIMIT 50""",
+               LIMIT ?""",
             (lat - radius_deg, lat + radius_deg,
              lon - radius_deg, lon + radius_deg,
-             lat, lon),
+             lat, lon, min(limit, 200)),
         ).fetchall()
         return [self._row_to_station(r) for r in rows]
 
