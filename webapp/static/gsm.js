@@ -943,10 +943,15 @@
     const SUB_X = CX - SUB_W / 2;
     // Compute total OUT/IN across all displayed contacts
     let subTotalOut = 0, subTotalIn = 0;
+    let subCallsOut = 0, subCallsIn = 0, subSmsOut = 0, subSmsIn = 0;
     for (const card of allCards) {
-      subTotalOut += (card.c.calls_out || 0) + (card.c.sms_out || 0);
-      subTotalIn  += (card.c.calls_in  || 0) + (card.c.sms_in  || 0);
+      subCallsOut += card.c.calls_out || 0;
+      subSmsOut   += card.c.sms_out   || 0;
+      subCallsIn  += card.c.calls_in  || 0;
+      subSmsIn    += card.c.sms_in    || 0;
     }
+    subTotalOut = subCallsOut + subSmsOut;
+    subTotalIn  = subCallsIn  + subSmsIn;
 
     // ── Straight-line arrows — behind cards ──
     const EDGE_GAP = 6;
@@ -1076,14 +1081,14 @@
     }
     // OUT badge
     const sby1 = SUB_Y - SUB_H / 2 + 32;
-    svg += `<g>
+    svg += `<g data-sub-label="out" data-all="${subTotalOut}" data-calls="${subCallsOut}" data-sms="${subSmsOut}">
       <rect x="${SUB_X + 5}" y="${sby1}" width="${subBw}" height="14" rx="3" fill="#dcfce7"/>
       <text x="${SUB_X + 10}" y="${sby1 + 10}" font-size="7" font-weight="700" fill="#16a34a">OUT</text>
       <text x="${SUB_X + SUB_W - 8}" y="${sby1 + 10}" font-size="8" font-weight="600" fill="#16a34a" text-anchor="end">${subTotalOut}</text>
     </g>`;
     // IN badge
     const sby2 = SUB_Y - SUB_H / 2 + 48;
-    svg += `<g>
+    svg += `<g data-sub-label="in" data-all="${subTotalIn}" data-calls="${subCallsIn}" data-sms="${subSmsIn}">
       <rect x="${SUB_X + 5}" y="${sby2}" width="${subBw}" height="14" rx="3" fill="#fee2e2"/>
       <text x="${SUB_X + 10}" y="${sby2 + 10}" font-size="7" font-weight="700" fill="#dc2626">IN</text>
       <text x="${SUB_X + SUB_W - 8}" y="${sby2 + 10}" font-size="8" font-weight="600" fill="#dc2626" text-anchor="end">${subTotalIn}</text>
@@ -1226,6 +1231,13 @@
       const texts = badge.querySelectorAll("text");
       if (texts.length >= 2) texts[texts.length - 1].textContent = val;
       else if (texts.length === 1) texts[0].textContent = val;
+    });
+    // Update subscriber OUT/IN badges (sum visible contacts)
+    wrap.querySelectorAll("[data-sub-label]").forEach(badge => {
+      const val = parseInt(badge.dataset[mode] || "0");
+      badge.style.display = val > 0 ? "" : "none";
+      const texts = badge.querySelectorAll("text");
+      if (texts.length >= 2) texts[texts.length - 1].textContent = val;
     });
   }
 
