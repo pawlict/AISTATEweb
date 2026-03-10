@@ -2768,11 +2768,12 @@
     const weeklyKeys = Object.keys(d.weekly || {});
     const monthlyKeys = Object.keys(d.monthly || {});
 
+    const camSvg = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="cam-g-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1096f4"/><stop offset="100%" stop-color="#8426a4"/></linearGradient></defs><path d="M4 8h3l2-3h6l2 3h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" stroke="url(#cam-g-${id})" fill="none"/><circle cx="12" cy="14" r="4" stroke="url(#cam-g-${id})" fill="none"/></svg>`;
     let html = `<div class="gsm-chart-card" data-chart-id="${id}">
       <div class="gsm-chart-header">
-        <div class="h3">${title} <span class="small muted">(${subtitle})</span>
+        <div class="h3" style="display:inline-flex;align-items:center;gap:6px">${title} <span class="small muted">(${subtitle})</span>
           <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="[data-chart-id='${id}']" data-name="${id}" title="Zrób zrzut">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            ${camSvg}
           </button>
         </div>
         <select class="gsm-period-select" data-chart="${id}">
@@ -3003,6 +3004,77 @@
     });
   }
 
+  /**
+   * Draw a transparent watermark line below the source canvas.
+   * "AISTATEweb" in brand gradient, extra parts + date in gray.
+   * No background bar — suitable for print and Word embedding.
+   * @param {HTMLCanvasElement} srcCanvas
+   * @param {string[]} [extraParts] - additional text segments after the brand name
+   * @returns {HTMLCanvasElement} final canvas with watermark row appended
+   */
+  function _drawWatermark(srcCanvas, extraParts) {
+    const w = srcCanvas.width;
+    const barH = Math.round(Math.max(32, w * 0.032));
+    const fontSize = Math.round(barH * 0.44);
+    const totalH = srcCanvas.height + barH;
+
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = totalH;
+    const ctx = out.getContext("2d");
+
+    // Draw source content
+    ctx.drawImage(srcCanvas, 0, 0);
+
+    // White background for watermark row (print-friendly)
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, srcCanvas.height, w, barH);
+
+    // Subtle top separator
+    ctx.fillStyle = "rgba(0,0,0,0.08)";
+    ctx.fillRect(0, srcCanvas.height, w, 1);
+
+    ctx.textBaseline = "middle";
+    const cy = srcCanvas.height + barH / 2;
+    const pad = Math.round(barH * 0.45);
+
+    // "AI" in navy, "STATE" in brand-blue, "web" in sky
+    const parts = [
+      { text: "AI", color: "#0d1350" },
+      { text: "STATE", color: "#2946b7" },
+      { text: "web", color: "#1096f4" },
+    ];
+    let lx = pad;
+    ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+    for (const p of parts) {
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, lx, cy);
+      lx += ctx.measureText(p.text).width;
+    }
+
+    // Date (always present)
+    const now = new Date();
+    const dateStr = now.toLocaleString("pl-PL", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const grayColor = "rgba(0,0,0,0.38)";
+
+    ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = grayColor;
+
+    // Extra parts (layer name, copyright, etc.)
+    if (extraParts && extraParts.length) {
+      for (const part of extraParts) {
+        ctx.fillText(`  |  ${part}`, lx, cy);
+        lx += ctx.measureText(`  |  ${part}`).width;
+      }
+    }
+
+    // Date on the right
+    const dateW = ctx.measureText(dateStr).width;
+    ctx.fillText(dateStr, w - pad - dateW, cy);
+
+    return out;
+  }
+
   async function _takeMapScreenshot() {
     const container = QS("#gsm_map_container");
     if (!container) return;
@@ -3024,63 +3096,17 @@
         },
       });
 
-      // ── Draw watermark bar on canvas ──
+      // ── Draw watermark ──
       const layerSelect = QS("#gsm_map_layer_select");
       const layerLabel = layerSelect ? layerSelect.options[layerSelect.selectedIndex].text : "";
-      const now = new Date();
-      const dateStr = now.toLocaleString("pl-PL", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const extraParts = [];
+      if (layerLabel) extraParts.push(layerLabel);
+      extraParts.push("© OpenStreetMap contributors");
 
-      const w = mapCanvas.width;
-      const barH = Math.round(Math.max(28, w * 0.028)); // ~2.8% of width, min 28px
-      const fontSize = Math.round(barH * 0.42);
-      const totalH = mapCanvas.height + barH;
-
-      // Create final canvas with watermark bar
-      const out = document.createElement("canvas");
-      out.width = w;
-      out.height = totalH;
-      const ctx = out.getContext("2d");
-
-      // Draw map
-      ctx.drawImage(mapCanvas, 0, 0);
-
-      // Watermark bar background
-      ctx.fillStyle = "rgba(13,19,80,0.78)";
-      ctx.fillRect(0, mapCanvas.height, w, barH);
-      // Subtle top border
-      ctx.fillStyle = "rgba(16,150,244,0.35)";
-      ctx.fillRect(0, mapCanvas.height, w, 1);
-
-      ctx.textBaseline = "middle";
-      const cy = mapCanvas.height + barH / 2;
-      const pad = Math.round(barH * 0.4);
-
-      // Left: AISTATEweb + layer name + date
-      let lx = pad;
-      ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.92)";
-      ctx.fillText("AISTATEweb", lx, cy);
-      lx += ctx.measureText("AISTATEweb").width;
-
-      if (layerLabel) {
-        ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
-        ctx.fillStyle = "rgba(255,255,255,0.55)";
-        ctx.fillText(`  |  ${layerLabel}`, lx, cy);
-        lx += ctx.measureText(`  |  ${layerLabel}`).width;
-      }
-
-      ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.40)";
-      ctx.fillText(`  ${dateStr}`, lx, cy);
-
-      // Right: © OSM
-      const rightText = `© OpenStreetMap contributors`;
-      ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.45)";
-      const rightW = ctx.measureText(rightText).width;
-      ctx.fillText(rightText, w - pad - rightW, cy);
+      const out = _drawWatermark(mapCanvas, extraParts);
 
       // Convert to blob and trigger download
+      const now = new Date();
       out.toBlob((blob) => {
         if (!blob) {
           _addLog("warn", "Nie udało się utworzyć zdjęcia mapy");
@@ -3109,6 +3135,13 @@
 
   /* ── Generic card screenshot ───────────────────────────── */
 
+  // Elements to hide in card screenshots (filters, selects, resize handles, screenshot buttons)
+  const _SCREENSHOT_HIDE_SELECTORS = [
+    ".gsm-period-select", "select", ".gsm-hm-filter-bar", ".gsm-filter-chips",
+    ".gsm-col-filter-btn", ".gsm-card-screenshot-btn", ".gsm-map-screenshot-btn",
+    ".gsm-graph-resize", ".gsm-records-resize",
+  ].join(",");
+
   async function _takeCardScreenshot(btn) {
     const targetSel = btn.dataset.target;
     const name = btn.dataset.name || "screenshot";
@@ -3125,41 +3158,19 @@
         backgroundColor: getComputedStyle(card).backgroundColor || "#fff",
         scale: 2,
         logging: false,
+        onclone: (doc, clonedCard) => {
+          // Hide filter/select/resize elements in the clone
+          clonedCard.querySelectorAll(_SCREENSHOT_HIDE_SELECTORS).forEach(el => {
+            el.style.display = "none";
+          });
+        },
       });
 
-      // Watermark bar
-      const now = new Date();
-      const dateStr = now.toLocaleString("pl-PL", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-      const w = cardCanvas.width;
-      const barH = Math.round(Math.max(28, w * 0.028));
-      const fontSize = Math.round(barH * 0.42);
-      const totalH = cardCanvas.height + barH;
-
-      const out = document.createElement("canvas");
-      out.width = w;
-      out.height = totalH;
-      const ctx = out.getContext("2d");
-      ctx.drawImage(cardCanvas, 0, 0);
-
-      ctx.fillStyle = "rgba(13,19,80,0.78)";
-      ctx.fillRect(0, cardCanvas.height, w, barH);
-      ctx.fillStyle = "rgba(16,150,244,0.35)";
-      ctx.fillRect(0, cardCanvas.height, w, 1);
-
-      ctx.textBaseline = "middle";
-      const cy = cardCanvas.height + barH / 2;
-      const pad = Math.round(barH * 0.4);
-      ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.92)";
-      ctx.fillText("AISTATEweb", pad, cy);
-      let lx = pad + ctx.measureText("AISTATEweb").width;
-      ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.40)";
-      ctx.fillText(`  ${dateStr}`, lx, cy);
+      const out = _drawWatermark(cardCanvas);
 
       out.toBlob((blob) => {
         if (!blob) return;
-        const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
         const filename = `GSM_${name}_${ts}.png`;
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");

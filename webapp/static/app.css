@@ -285,7 +285,7 @@ textarea{min-height:220px; resize:vertical}
 .btn:hover{background: rgba(31,90,166,.14)}
 .btn.btn-icon{background:transparent;border-color:transparent}
 .btn.btn-icon:hover{background:rgba(31,90,166,.14);border-color:rgba(31,90,166,.22)}
-.gsm-map-screenshot-btn{padding:3px 7px;border-radius:10px;margin-left:8px;vertical-align:middle;display:inline-flex;align-items:center;line-height:1;position:relative;top:-1px}
+.gsm-map-screenshot-btn{padding:3px 7px;border-radius:10px;display:inline-flex;align-items:center;line-height:1}
 .gsm-map-screenshot-btn:hover{background:rgba(37,99,235,.10)!important;border-color:rgba(37,99,235,.18)!important;color:var(--brand-blue,#2563eb)}
 .btn.secondary{
   border-color: rgba(15,23,42,.14);
