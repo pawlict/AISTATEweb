@@ -938,14 +938,19 @@
     const allCards = [...topCards.map((p, i) => ({ ...p, i, c: contacts[i], isTop: true })),
                       ...botCards.map((p, j) => ({ ...p, i: topN + j, c: contacts[topN + j], isTop: false }))];
 
+    // ── Subscriber card dimensions (rectangular, wider than contact cards) ──
+    const SUB_W = 180, SUB_H = 82;
+    const SUB_X = CX - SUB_W / 2;
+    // Compute total OUT/IN across all displayed contacts
+    let subTotalOut = 0, subTotalIn = 0;
+    for (const card of allCards) {
+      subTotalOut += (card.c.calls_out || 0) + (card.c.sms_out || 0);
+      subTotalIn  += (card.c.calls_in  || 0) + (card.c.sms_in  || 0);
+    }
+
     // ── Straight-line arrows — behind cards ──
-    // Each contact: two straight lines with small perpendicular V-separation.
-    //   green (OUT): subscriber → contact, shifted +3px left of axis
-    //   red  (IN):  contact → subscriber, shifted -3px right of axis
-    // Lines stay strictly between their own card and subscriber — no crossing.
-    const SUB_R = 24;
     const EDGE_GAP = 6;
-    const SEP = 3; // perpendicular separation between OUT and IN
+    const SEP = 3;
 
     for (const card of allCards) {
       const c = card.c, idx = card.i;
@@ -962,8 +967,19 @@
       const nx = dx / len, ny = dy / len;
       const perpX = -ny, perpY = nx;
 
-      // Endpoints: A near subscriber circle edge, B near card edge
-      const ax = CX + nx * (SUB_R + 2), ay = SUB_Y + ny * (SUB_R + 2);
+      // Endpoints: A near subscriber rect edge, B near card edge
+      // Clamp to subscriber rectangle boundary
+      const _clampToRect = (cx, cy, rw, rh, tgtX, tgtY) => {
+        const ddx = tgtX - cx, ddy = tgtY - cy;
+        const hw = rw / 2, hh = rh / 2;
+        if (ddx === 0 && ddy === 0) return { x: cx, y: cy - hh };
+        const sx = Math.abs(ddx) > 0.01 ? hw / Math.abs(ddx) : 1e9;
+        const sy = Math.abs(ddy) > 0.01 ? hh / Math.abs(ddy) : 1e9;
+        const s = Math.min(sx, sy);
+        return { x: cx + ddx * s, y: cy + ddy * s };
+      };
+      const subEdge = _clampToRect(CX, SUB_Y, SUB_W + 4, SUB_H + 4, cardCX, cardEdgeY);
+      const ax = subEdge.x, ay = subEdge.y;
       const bx = cardCX - nx * EDGE_GAP, by = cardEdgeY - ny * EDGE_GAP;
 
       // OUT: A→B shifted +perp (green, arrow at card end)
@@ -1036,21 +1052,42 @@
       svg += `</g>`;
     }
 
-    // ── Subscriber node (centered between rows) ──
+    // ── Subscriber node (rectangular card, centered between rows) ──
     const subLabel = msisdn || "Abonent";
     const subInfo = msisdn ? _idLookup(msisdn) : null;
-    const subIdLabel = subInfo && subInfo.label ? trunc(subInfo.label, 18) : "";
-    svg += `<g transform="translate(${CX},${SUB_Y})" style="cursor:default">
-      <circle r="24" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="1.8"/>
-      <g stroke="#2563eb" fill="none" color="#2563eb">${subscriberIcon}</g>
-      <text y="36" text-anchor="middle" font-size="8" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>`;
+    const subIdLabel = subInfo && subInfo.label ? trunc(subInfo.label, 22) : "";
+    const subBw = SUB_W - 10;
+
+    svg += `<g style="cursor:default">`;
+    // Card background
+    svg += `<rect x="${SUB_X}" y="${SUB_Y - SUB_H / 2}" width="${SUB_W}" height="${SUB_H}"
+      rx="8" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="1.8" filter="url(#gsm_card_shadow)"/>`;
+    // Subscriber icon (top-left area)
+    svg += `<g transform="translate(${SUB_X + 16},${SUB_Y - SUB_H / 2 + 16})" stroke="#2563eb" fill="none" color="#2563eb">${subscriberIcon}</g>`;
+    // Phone number
+    svg += `<text x="${SUB_X + 32}" y="${SUB_Y - SUB_H / 2 + 14}" font-size="8.5" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>`;
+    // Identification label
     if (subIdLabel) {
-      svg += `<text class="gsm-graph-sub-id" y="45" text-anchor="middle" font-size="7" font-weight="500" fill="#2563eb" font-style="italic">${subIdLabel}</text>`;
+      svg += `<text class="gsm-graph-sub-id" x="${SUB_X + 32}" y="${SUB_Y - SUB_H / 2 + 24}" font-size="7" font-weight="500" fill="#2563eb" font-style="italic">${subIdLabel}</text>`;
     } else if (msisdn) {
-      svg += `<text class="gsm-graph-sub-id gsm-graph-sub-id-empty" data-number="${msisdn}" y="45" text-anchor="middle" font-size="7" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
+      svg += `<text class="gsm-graph-sub-id gsm-graph-sub-id-empty" data-number="${msisdn}" x="${SUB_X + 32}" y="${SUB_Y - SUB_H / 2 + 24}" font-size="7" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
     } else {
-      svg += `<text y="45" text-anchor="middle" font-size="7" fill="var(--text-muted,#64748b)">Abonent</text>`;
+      svg += `<text x="${SUB_X + 32}" y="${SUB_Y - SUB_H / 2 + 24}" font-size="7" fill="var(--text-muted,#64748b)">Abonent</text>`;
     }
+    // OUT badge
+    const sby1 = SUB_Y - SUB_H / 2 + 32;
+    svg += `<g>
+      <rect x="${SUB_X + 5}" y="${sby1}" width="${subBw}" height="14" rx="3" fill="#dcfce7"/>
+      <text x="${SUB_X + 10}" y="${sby1 + 10}" font-size="7" font-weight="700" fill="#16a34a">OUT</text>
+      <text x="${SUB_X + SUB_W - 8}" y="${sby1 + 10}" font-size="8" font-weight="600" fill="#16a34a" text-anchor="end">${subTotalOut}</text>
+    </g>`;
+    // IN badge
+    const sby2 = SUB_Y - SUB_H / 2 + 48;
+    svg += `<g>
+      <rect x="${SUB_X + 5}" y="${sby2}" width="${subBw}" height="14" rx="3" fill="#fee2e2"/>
+      <text x="${SUB_X + 10}" y="${sby2 + 10}" font-size="7" font-weight="700" fill="#dc2626">IN</text>
+      <text x="${SUB_X + SUB_W - 8}" y="${sby2 + 10}" font-size="8" font-weight="600" fill="#dc2626" text-anchor="end">${subTotalIn}</text>
+    </g>`;
     svg += `</g>`;
 
     svg += "</svg>";
@@ -3710,7 +3747,7 @@
     container.style.display = "";
 
     let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">`;
-    html += `<span class="h3" style="margin:0;font-size:13px">Numery w filtrze</span>`;
+    html += `<span class="h3" style="margin:0;font-size:13px">Unikatowe numery</span>`;
     html += `<span class="small muted">${totalNums} ${totalNums === 1 ? "numer" : (totalNums < 5 ? "numery" : "numerów")}`;
     if (singleCount > 0) html += ` · <b>${singleCount}</b> pojedynczych (1×)`;
     if (noCallee > 0) html += ` · ${noCallee} bez numeru`;
