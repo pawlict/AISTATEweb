@@ -127,16 +127,6 @@
       renderCell: r => r.data_volume_kb ? _fmt(Math.round(r.data_volume_kb)) + " KB" : "—",
     },
     {
-      key: "cost", label: "Koszt netto", type: "numeric", defaultVisible: false, unit: "PLN",
-      getValue: r => r.cost != null ? r.cost : 0,
-      renderCell: r => r.cost != null ? r.cost.toFixed(2) + " zł" : "—",
-    },
-    {
-      key: "cost_gross", label: "Koszt brutto", type: "numeric", defaultVisible: false, unit: "PLN",
-      getValue: r => r.cost_gross != null ? r.cost_gross : 0,
-      renderCell: r => r.cost_gross != null ? r.cost_gross.toFixed(2) + " zł" : "—",
-    },
-    {
       key: "location", label: "Lokalizacja", type: "text", defaultVisible: true,
       getValue: r => r.location || "",
       renderCell: r => r.location || "—",
