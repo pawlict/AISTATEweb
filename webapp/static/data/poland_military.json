@@ -651,20 +651,6 @@
     "desc": "Grupa przeciwlotnicza w Stargardzie."
   },
   {
-    "name": "Lotnisko wojskowe Inowrocław",
-    "type": "lotnisko_wojskowe",
-    "lat": 52.8294,
-    "lon": 18.3306,
-    "desc": "56. Baza Lotnicza w Inowrocławiu, śmigłowce bojowe."
-  },
-  {
-    "name": "Lotnisko wojskowe Leźnica Wielka",
-    "type": "lotnisko_wojskowe",
-    "lat": 51.8861,
-    "lon": 19.18,
-    "desc": "Lotnisko wojskowe Leźnica Wielka k. Łodzi."
-  },
-  {
     "name": "Centrum Szkolenia Marynarki Wojennej Ustka",
     "type": "centrum",
     "lat": 54.5808,
@@ -698,13 +684,6 @@
     "lat": 52.425,
     "lon": 20.6472,
     "desc": "Historyczne lotnisko wojskowe w Modlinie, Twierdza Modlin."
-  },
-  {
-    "name": "Lotnisko wojskowe Łęczyca/Sieradz",
-    "type": "lotnisko_wojskowe",
-    "lat": 51.5944,
-    "lon": 18.7542,
-    "desc": "Zapasowe lotnisko wojskowe w rejonie Łęczycy."
   },
   {
     "name": "Lotniczy Oddział Specjalnego Przeznaczenia Powidz",
@@ -875,13 +854,6 @@
     "desc": "Lotnisko wojskowe w Białej Podlaskiej, dawna baza lotnictwa szturmowego, pas 2500m."
   },
   {
-    "name": "Lotnisko wojskowe Tomaszów Mazowiecki",
-    "type": "lotnisko_wojskowe",
-    "lat": 51.57,
-    "lon": 20.0325,
-    "desc": "Lotnisko wojskowe Tomaszów Mazowiecki-Nowy Glinnik, baza śmigłowcowa."
-  },
-  {
     "name": "Lotnisko wojskowe Krzesininy (Nadarzyce)",
     "type": "lotnisko_wojskowe",
     "lat": 53.3833,
@@ -901,20 +873,6 @@
     "lat": 52.325,
     "lon": 17.0833,
     "desc": "Dodatkowe lotnisko wojskowe w Babkach k. Poznania, zapasowy pas dla Krzesin."
-  },
-  {
-    "name": "Lotnisko wojskowe Śrem",
-    "type": "lotnisko_wojskowe",
-    "lat": 52.075,
-    "lon": 17.0306,
-    "desc": "Dawne lotnisko wojskowe w Śremie, infrastruktura rezerwy."
-  },
-  {
-    "name": "Lotnisko wojskowe Pruszcz Gdański",
-    "type": "lotnisko_wojskowe",
-    "lat": 54.2667,
-    "lon": 18.6306,
-    "desc": "Dawne lotnisko wojskowe Pruszcz Gdański, historycznie baza lotnictwa taktycznego."
   },
   {
     "name": "5. Mazowiecka Brygada Obrony Terytorialnej",
@@ -1134,13 +1092,6 @@
     "desc": "Planowana baza zestawów Patriot w Mrzeżynie/Trzebiatowie, obrona powietrzna wybrzeża."
   },
   {
-    "name": "37. Dywizjon Rakietowy Obrony Powietrznej Skwierzyna",
-    "type": "dywizjon",
-    "lat": 52.595,
-    "lon": 15.5025,
-    "desc": "Dywizjon rakietowy OP w Skwierzynie, systemy przeciwlotnicze."
-  },
-  {
     "name": "78. Pułk Rakietowy Obrony Powietrznej Mrzeżyno",
     "type": "pulk",
     "lat": 54.1344,
@@ -1244,5 +1195,215 @@
     "lat": 52.2275,
     "lon": 20.9842,
     "desc": "Dowództwo Wojsk Obrony Cyberprzestrzeni, szósty rodzaj sił zbrojnych od 2022."
+  },
+  {
+    "name": "1. Baza Lotnictwa Transportowego Warszawa-Okęcie",
+    "type": "lotnisko_wojskowe",
+    "lat": 52.1657,
+    "lon": 20.9671,
+    "desc": "1. BLTr na lotnisku Chopina — transport VIP: 3× Boeing 737-800 BBJ, 2× Gulfstream G550, śmigłowce W-3 Sokół i Mi-8."
+  },
+  {
+    "name": "49. Baza Lotnicza Pruszcz Gdański",
+    "type": "lotnisko_wojskowe",
+    "lat": 54.2397,
+    "lon": 18.6692,
+    "desc": "Baza śmigłowcowa w Pruszczu Gdańskim (JW 1300), śmigłowce Mi-24 i W-3 Sokół. Planowane przeniesienie do Malborka."
+  },
+  {
+    "name": "56. Baza Lotnicza Inowrocław (Latkowo)",
+    "type": "lotnisko_wojskowe",
+    "lat": 52.8294,
+    "lon": 18.3306,
+    "desc": "56. BLot w Latkowie k. Inowrocławia — pierwsza baza AH-64 Apache w Polsce. Śmigłowce Mi-24, W-3PL Głuszec, AH-64D/E."
+  },
+  {
+    "name": "2. Skrzydło Lotnictwa Taktycznego Poznań",
+    "type": "centrum",
+    "lat": 52.3317,
+    "lon": 16.9664,
+    "desc": "Dowództwo 2. Skrzydła Lotnictwa Taktycznego w Poznaniu-Krzesinach, nadzoruje 31. i 32. BLT."
+  },
+  {
+    "name": "3. Skrzydło Lotnictwa Transportowego Powidz",
+    "type": "centrum",
+    "lat": 52.3794,
+    "lon": 17.8539,
+    "desc": "Dowództwo 3. Skrzydła Lotnictwa Transportowego w Powidzu."
+  },
+  {
+    "name": "4. Skrzydło Lotnictwa Szkolnego Dęblin",
+    "type": "centrum",
+    "lat": 51.5514,
+    "lon": 21.8936,
+    "desc": "Dowództwo 4. Skrzydła Lotnictwa Szkolnego w Dęblinie, nadzoruje 41. i 42. BLS."
+  },
+  {
+    "name": "1. Brygada Lotnictwa Wojsk Lądowych Inowrocław",
+    "type": "brygada",
+    "lat": 52.8294,
+    "lon": 18.3306,
+    "desc": "Dowództwo 1. BLot WL w Inowrocławiu, nadrzędna dla 49. i 56. Bazy Lotniczej."
+  },
+  {
+    "name": "11. Wojskowy Oddział Gospodarczy Bydgoszcz",
+    "type": "jednostka",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "Wojskowy oddział gospodarczy w Bydgoszczy, zabezpieczenie logistyczne garnizonu."
+  },
+  {
+    "name": "13. Wojskowy Oddział Gospodarczy Grudziądz",
+    "type": "jednostka",
+    "lat": 53.4836,
+    "lon": 18.7536,
+    "desc": "Wojskowy oddział gospodarczy w Grudziądzu."
+  },
+  {
+    "name": "24. Wojskowy Oddział Gospodarczy Giżycko",
+    "type": "jednostka",
+    "lat": 54.0381,
+    "lon": 21.7692,
+    "desc": "Wojskowy oddział gospodarczy w Giżycku, zabezpieczenie garnizonu NATO eFP."
+  },
+  {
+    "name": "33. Wojskowy Oddział Gospodarczy Nowa Dęba",
+    "type": "jednostka",
+    "lat": 50.4283,
+    "lon": 21.7575,
+    "desc": "Wojskowy oddział gospodarczy w Nowej Dębie, zabezpieczenie poligonu."
+  },
+  {
+    "name": "1. Pułk Drogowo-Mostowy Chełmno",
+    "type": "pulk",
+    "lat": 53.3492,
+    "lon": 18.4236,
+    "desc": "Pułk drogowo-mostowy w Chełmnie, budowa mostów i przepraw."
+  },
+  {
+    "name": "15. Pułk Przeciwlotniczy Gołdap",
+    "type": "pulk",
+    "lat": 54.3103,
+    "lon": 22.3042,
+    "desc": "Pułk przeciwlotniczy w Gołdapi, obrona powietrzna wschodniej flanki."
+  },
+  {
+    "name": "1. Ośrodek Szkolenia Leopard Żagań",
+    "type": "centrum",
+    "lat": 51.6156,
+    "lon": 15.3178,
+    "desc": "Ośrodek szkolenia załóg czołgów Leopard 2 w Żaganiu."
+  },
+  {
+    "name": "Ośrodek Szkolenia Poligonowego Drawsko Pomorskie",
+    "type": "centrum",
+    "lat": 53.5256,
+    "lon": 15.76,
+    "desc": "Ośrodek szkolenia poligonowego na poligonie Drawsko Pomorskie."
+  },
+  {
+    "name": "Batalion Remontu Lotnisk Dęblin",
+    "type": "batalion",
+    "lat": 51.5514,
+    "lon": 21.8936,
+    "desc": "Batalion odpowiedzialny za remont i utrzymanie infrastruktury lotniskowej."
+  },
+  {
+    "name": "Grupa Poszukiwawczo-Ratownicza Świdwin",
+    "type": "jednostka",
+    "lat": 53.7906,
+    "lon": 15.8264,
+    "desc": "Lotnicza grupa poszukiwawczo-ratownicza (SAR) w Świdwinie."
+  },
+  {
+    "name": "Grupa Poszukiwawczo-Ratownicza Gdynia",
+    "type": "jednostka",
+    "lat": 54.5656,
+    "lon": 18.5117,
+    "desc": "Morska lotnicza grupa poszukiwawczo-ratownicza (SAR) w Gdyni-Babich Dołach."
+  },
+  {
+    "name": "Wojskowe Centrum Rekrutacji Warszawa",
+    "type": "centrum",
+    "lat": 52.2275,
+    "lon": 20.9842,
+    "desc": "Wojskowe Centrum Rekrutacji w Warszawie, rekrutacja do służby wojskowej."
+  },
+  {
+    "name": "36. Dywizjon Rakietowy Obrony Powietrznej Mrzeżyno",
+    "type": "dywizjon",
+    "lat": 54.1344,
+    "lon": 15.2786,
+    "desc": "Dywizjon rakietowy OP w Mrzeżynie, systemy S-200 i S-125 Newa-SC, obrona wybrzeża."
+  },
+  {
+    "name": "35. Dywizjon Rakietowy OP Skwierzyna",
+    "type": "dywizjon",
+    "lat": 52.595,
+    "lon": 15.5025,
+    "desc": "Dywizjon rakietowy OP w Skwierzynie."
+  },
+  {
+    "name": "34. Dywizjon Rakietowy OP Bytom",
+    "type": "dywizjon",
+    "lat": 50.3483,
+    "lon": 18.9194,
+    "desc": "Dywizjon rakietowy obrony powietrznej w Bytomiu, systemy przeciwlotnicze."
+  },
+  {
+    "name": "33. Dywizjon Rakietowy OP Gdynia",
+    "type": "dywizjon",
+    "lat": 54.5189,
+    "lon": 18.5489,
+    "desc": "Dywizjon rakietowy obrony powietrznej w Gdyni."
+  },
+  {
+    "name": "Garnizon Toruń",
+    "type": "jednostka",
+    "lat": 53.0138,
+    "lon": 18.5983,
+    "desc": "Garnizon wojskowy Toruń — centrum szkolenia artylerii, artyleryjskie tradycje."
+  },
+  {
+    "name": "Garnizon Łódź",
+    "type": "jednostka",
+    "lat": 51.7592,
+    "lon": 19.456,
+    "desc": "Garnizon wojskowy Łódź — dowództwa i jednostki wsparcia."
+  },
+  {
+    "name": "Garnizon Bydgoszcz",
+    "type": "jednostka",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "Garnizon wojskowy Bydgoszcz — NATO JFTC, Inspektorat Wsparcia, szkolenie."
+  },
+  {
+    "name": "7. Eskadra Działań Specjalnych Powidz",
+    "type": "jednostka",
+    "lat": 52.3794,
+    "lon": 17.8539,
+    "desc": "Eskadra śmigłowców wspierająca Wojska Specjalne, operacje nocne, CSAR."
+  },
+  {
+    "name": "Morski Oddział Rakietowy Siemirowice",
+    "type": "jednostka",
+    "lat": 54.4594,
+    "lon": 17.7472,
+    "desc": "Oddział rakiet naval strike missile (NSM), obrona wybrzeża."
+  },
+  {
+    "name": "1. Dywizjon Artylerii Rakietowej Orzysz",
+    "type": "dywizjon",
+    "lat": 53.8097,
+    "lon": 21.9547,
+    "desc": "Dywizjon wyrzutni HIMARS w rejonie Orzysza, artyleria rakietowa dalekiego zasięgu."
+  },
+  {
+    "name": "18. Dywizjon Artylerii Rakietowej Nowa Dęba",
+    "type": "dywizjon",
+    "lat": 50.4283,
+    "lon": 21.7575,
+    "desc": "Dywizjon wyrzutni HIMARS/K239 Chunmoo w Nowej Dębie."
   }
 ]
