@@ -2934,7 +2934,7 @@
     const covOtherCb = QS("#gsm_cov_other");
 
     // Build exclude list once from billing data
-    _otherBtsExclude = _buildExcludeList(geo);
+    _otherBtsExcludeSet = _buildExcludeSet(geo);
 
     if (layerSelect) {
       layerSelect.onchange = () => {
@@ -3790,8 +3790,8 @@
     return { radius: 0.1, limit: 80 };
   }
 
-  /** Build exclude string from billing locations (LAC:CID pairs) */
-  function _buildExcludeList(geo) {
+  /** Build exclude set from billing locations (LAC:CID pairs) for client-side filtering */
+  function _buildExcludeSet(geo) {
     const seen = new Set();
     if (geo && geo.geo_records) {
       for (const r of geo.geo_records) {
@@ -3800,12 +3800,12 @@
         }
       }
     }
-    return Array.from(seen).join(",");
+    return seen;
   }
 
   let _otherBtsDebounce = null;
   let _otherBtsEnabled = false;
-  let _otherBtsExclude = "";
+  let _otherBtsExcludeSet = new Set();
 
   /** Fetch and render nearby BTS stations on the map */
   async function _loadOtherBts() {
@@ -3818,12 +3818,16 @@
     const countEl = QS("#gsm_cov_other_count");
 
     try {
-      const url = `/api/gsm/bts/nearby?lat=${center.lat.toFixed(6)}&lon=${center.lng.toFixed(6)}&radius_deg=${params.radius}&limit=${params.limit}&exclude=${encodeURIComponent(_otherBtsExclude)}`;
+      const url = `/api/gsm/bts/nearby?lat=${center.lat.toFixed(6)}&lon=${center.lng.toFixed(6)}&radius_deg=${params.radius}&limit=${params.limit}`;
       const resp = await fetch(url);
       const data = await resp.json();
       if (data.status !== "ok" || !data.stations) {
         if (countEl) countEl.textContent = "";
         return;
+      }
+      // Filter out billing stations client-side
+      if (_otherBtsExcludeSet.size > 0) {
+        data.stations = data.stations.filter(s => !_otherBtsExcludeSet.has(`${s.lac}:${s.cid}`));
       }
 
       // Remove old layer

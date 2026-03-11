@@ -654,31 +654,13 @@ async def bts_nearby(
     lon: float = Query(...),
     radius_deg: float = Query(0.01),
     limit: int = Query(80, ge=1, le=200),
-    exclude: str = Query(""),
 ):
-    """Find BTS stations near given coordinates, excluding specified LAC:CID pairs."""
+    """Find BTS stations near given coordinates."""
     try:
         from backend.gsm.bts_db import get_bts_db
         db = get_bts_db(_data_dir())
-        stations = await run_in_threadpool(db.search_nearby, lat, lon, radius_deg, limit + len(exclude.split(",")) if exclude else limit)
-        # Build exclusion set from "lac:cid,lac:cid,..." string
-        exclude_set = set()
-        if exclude:
-            for pair in exclude.split(","):
-                parts = pair.strip().split(":")
-                if len(parts) == 2:
-                    try:
-                        exclude_set.add((int(parts[0]), int(parts[1])))
-                    except ValueError:
-                        pass
-        # Filter out excluded stations and apply limit
-        result = []
-        for s in stations:
-            if (s.lac, s.cid) in exclude_set:
-                continue
-            result.append(s.to_dict())
-            if len(result) >= limit:
-                break
+        stations = await run_in_threadpool(db.search_nearby, lat, lon, radius_deg, limit)
+        result = [s.to_dict() for s in stations[:limit]]
         return JSONResponse({"status": "ok", "stations": result})
     except Exception as e:
         return JSONResponse(
