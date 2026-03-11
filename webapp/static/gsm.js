@@ -5690,8 +5690,10 @@
     const mapEl = St.map.getContainer();
     mapEl.style.cursor = "crosshair";
 
-    // Disable overlay marker interactivity during area select (prevent event stealing)
+    // Disable ALL vector layer interactivity during area select
+    // (coverage polygons, path lines, overlay markers, etc. can steal mouse events)
     _setOverlayInteractive(false);
+    _setAllLayersInteractive(false);
 
     // Bind events
     St.map.on("mousedown", _areaMouseDown);
@@ -5722,8 +5724,9 @@
     const mapEl = St.map.getContainer();
     mapEl.style.cursor = "";
 
-    // Re-enable overlay marker interactivity
+    // Re-enable all layer interactivity
     _setOverlayInteractive(true);
+    _setAllLayersInteractive(true);
 
     // Unbind events
     St.map.off("mousedown", _areaMouseDown);
@@ -5742,6 +5745,17 @@
         if (el) el.style.pointerEvents = enabled ? "" : "none";
       });
     }
+  }
+
+  /** Enable/disable interactivity on ALL map vector layers (coverage, path, clusters, etc.)
+   *  so they don't steal mouse events during area selection drawing.
+   *  Works with both canvas and SVG renderer by disabling pointer-events on the
+   *  overlay pane and toggling Leaflet's internal interactive flag on each layer. */
+  function _setAllLayersInteractive(enabled) {
+    if (!St.map) return;
+    // Disable pointer-events on the overlay pane (canvas or SVG) to prevent hit detection
+    const pane = St.map.getPane("overlayPane");
+    if (pane) pane.style.pointerEvents = enabled ? "" : "none";
   }
 
   function _areaEscHandler(e) {
