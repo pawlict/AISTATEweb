@@ -52,6 +52,7 @@
     areaSelectLayer: null,    // temporary Leaflet shape while drawing
     areaSelectOrigin: null,   // L.LatLng — mousedown start point
     areaHighlights: null,     // L.layerGroup with highlighted markers
+    areaShape: null,          // persistent Leaflet shape (circle/rect) after selection
     areaLocations: [],        // cached uniqueLocations for selection queries
   };
 
@@ -3746,7 +3747,7 @@
   function _switchMapLayer(layer, geo) {
     if (!St.map) return;
     const map = St.map;
-    _clearAreaHighlights();
+    _clearAreaSelection();
     _exitAreaSelectMode();
 
     // Remove all custom layers
@@ -5422,7 +5423,7 @@
       );
     }
 
-    // Clean up drawing shape
+    // Remove temp drawing layer (will be replaced by persistent shape)
     if (St.areaSelectLayer) { St.map.removeLayer(St.areaSelectLayer); St.areaSelectLayer = null; }
     _exitAreaSelectMode();
 
@@ -5430,6 +5431,29 @@
       _addLog("info", `Zaznaczenie ${mode === "circle" ? "koła" : "prostokąta"}: brak punktów BTS w obszarze`);
       return;
     }
+
+    // Clear any previous selection
+    _clearAreaSelection();
+
+    // Create persistent shape on map (stays until user clicks it or clears filter)
+    const persistStyle = { color: "#a855f7", weight: 2, dashArray: "6 4", fillColor: "#a855f7", fillOpacity: 0.06, interactive: true };
+    if (mode === "circle") {
+      const radius = origin.distanceTo(endLatLng);
+      St.areaShape = L.circle(origin, { ...persistStyle, radius }).addTo(St.map);
+    } else {
+      const bounds = L.latLngBounds(origin, endLatLng);
+      St.areaShape = L.rectangle(bounds, persistStyle).addTo(St.map);
+    }
+    // Click on the shape = remove selection & clear filters
+    St.areaShape.on("click", (e) => {
+      L.DomEvent.stopPropagation(e);
+      _clearAreaSelection();
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    // Cursor hint on hover
+    St.areaShape.on("mouseover", () => { St.map.getContainer().style.cursor = "pointer"; });
+    St.areaShape.on("mouseout", () => { St.map.getContainer().style.cursor = ""; });
 
     // Highlight selected BTS markers
     _highlightBtsLocations(insideLocations);
@@ -5445,7 +5469,7 @@
     const label = mode === "circle" ? "Koło" : "Prostokąt";
     const filterText = `${label}: ${insideLocations.length} BTS — ${filtered.length} rek.`;
     _setRecordsFilter(filterText, () => {
-      _clearAreaHighlights();
+      _clearAreaSelection();
       _clearRecordsFilter();
       if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
     });
@@ -5479,6 +5503,15 @@
     if (St.areaHighlights && St.map) {
       St.map.removeLayer(St.areaHighlights);
       St.areaHighlights = null;
+    }
+  }
+
+  /** Remove persistent shape + highlights (full area selection cleanup) */
+  function _clearAreaSelection() {
+    _clearAreaHighlights();
+    if (St.areaShape && St.map) {
+      St.map.removeLayer(St.areaShape);
+      St.areaShape = null;
     }
   }
 
