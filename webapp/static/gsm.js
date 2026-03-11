@@ -52,7 +52,12 @@
     areaSelectLayer: null,    // temporary Leaflet shape while drawing
     areaSelectOrigin: null,   // L.LatLng — mousedown start point
     areaHighlights: null,     // L.layerGroup with highlighted markers
+    areaShape: null,          // persistent Leaflet shape (circle/rect) after selection
     areaLocations: [],        // cached uniqueLocations for selection queries
+    overlayMilitary: null,    // L.layerGroup — military overlay markers
+    overlayAirports: null,    // L.layerGroup — civilian airport overlay markers
+    overlayMilitaryData: null,// cached JSON data
+    overlayAirportsData: null,// cached JSON data
   };
 
   /* ── Column definitions ─────────────────────────────────── */
@@ -2990,6 +2995,12 @@
       };
     }
 
+    // ── Map overlay checkboxes (military / airports) ──
+    const milCb = QS("#gsm_overlay_military");
+    const airCb = QS("#gsm_overlay_airports");
+    if (milCb) milCb.onchange = () => _toggleOverlay("military", milCb.checked);
+    if (airCb) airCb.onchange = () => _toggleOverlay("airports", airCb.checked);
+
     // Reload other BTS on map move/zoom (debounced)
     if (St.map) {
       St.map.on("moveend", () => {
@@ -3746,7 +3757,7 @@
   function _switchMapLayer(layer, geo) {
     if (!St.map) return;
     const map = St.map;
-    _clearAreaHighlights();
+    _clearAreaSelection();
     _exitAreaSelectMode();
 
     // Remove all custom layers
@@ -5294,6 +5305,94 @@
     }
   }
 
+  /* ── Map overlays (military / airports) ─────────────── */
+
+  const _OVERLAY_TYPE_ICONS = {
+    // Military type → emoji
+    brygada: "⚔️", dywizja: "⚔️", pulk: "🎯", batalion: "🎯",
+    lotnisko_wojskowe: "✈️", baza_morska: "⚓", centrum: "🏛️",
+    poligon: "💥", jednostka: "🪖", baza: "🏗️", dywizjon: "🎯",
+  };
+  const _OVERLAY_TYPE_COLORS = {
+    brygada: "#b91c1c", dywizja: "#991b1b", pulk: "#dc2626",
+    batalion: "#ef4444", lotnisko_wojskowe: "#7c3aed",
+    baza_morska: "#0369a1", centrum: "#b45309", poligon: "#65a30d",
+    jednostka: "#e11d48", baza: "#be123c", dywizjon: "#f97316",
+  };
+
+  async function _toggleOverlay(which, show) {
+    if (!St.map) return;
+    const layerKey = which === "military" ? "overlayMilitary" : "overlayAirports";
+    const dataKey = which === "military" ? "overlayMilitaryData" : "overlayAirportsData";
+    const url = which === "military"
+      ? "/static/data/poland_military.json"
+      : "/static/data/poland_airports.json";
+
+    if (!show) {
+      if (St[layerKey]) { St.map.removeLayer(St[layerKey]); }
+      return;
+    }
+
+    // Load data if not cached
+    if (!St[dataKey]) {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        St[dataKey] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować danych: ${err.message}`);
+        const cb = QS(which === "military" ? "#gsm_overlay_military" : "#gsm_overlay_airports");
+        if (cb) cb.checked = false;
+        return;
+      }
+    }
+
+    // Build layer group if needed
+    if (!St[layerKey]) {
+      const group = L.layerGroup();
+      const data = St[dataKey];
+
+      if (which === "military") {
+        for (const item of data) {
+          const icon = _OVERLAY_TYPE_ICONS[item.type] || "🪖";
+          const color = _OVERLAY_TYPE_COLORS[item.type] || "#b91c1c";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          m.bindTooltip(`<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.addTo(group);
+        }
+      } else {
+        // Airports
+        for (const item of data) {
+          const label = item.iata ? `${item.iata}` : "";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">✈️</span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          const tooltipHtml = `<b style="color:#2563eb">${item.name}</b>`
+            + (label ? `<br><span class="small" style="color:#6b7280">${label} — ${item.city}</span>` : `<br><span class="small">${item.city}</span>`);
+          m.bindTooltip(tooltipHtml, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.addTo(group);
+        }
+      }
+      St[layerKey] = group;
+    }
+
+    St[layerKey].addTo(St.map);
+  }
+
   /* ── Area selection (circle / rectangle) ─────────────── */
 
   function _enterAreaSelectMode(mode) {
@@ -5422,7 +5521,7 @@
       );
     }
 
-    // Clean up drawing shape
+    // Remove temp drawing layer (will be replaced by persistent shape)
     if (St.areaSelectLayer) { St.map.removeLayer(St.areaSelectLayer); St.areaSelectLayer = null; }
     _exitAreaSelectMode();
 
@@ -5430,6 +5529,29 @@
       _addLog("info", `Zaznaczenie ${mode === "circle" ? "koła" : "prostokąta"}: brak punktów BTS w obszarze`);
       return;
     }
+
+    // Clear any previous selection
+    _clearAreaSelection();
+
+    // Create persistent shape on map (stays until user clicks it or clears filter)
+    const persistStyle = { color: "#a855f7", weight: 2, dashArray: "6 4", fillColor: "#a855f7", fillOpacity: 0.06, interactive: true };
+    if (mode === "circle") {
+      const radius = origin.distanceTo(endLatLng);
+      St.areaShape = L.circle(origin, { ...persistStyle, radius }).addTo(St.map);
+    } else {
+      const bounds = L.latLngBounds(origin, endLatLng);
+      St.areaShape = L.rectangle(bounds, persistStyle).addTo(St.map);
+    }
+    // Click on the shape = remove selection & clear filters
+    St.areaShape.on("click", (e) => {
+      L.DomEvent.stopPropagation(e);
+      _clearAreaSelection();
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    // Cursor hint on hover
+    St.areaShape.on("mouseover", () => { St.map.getContainer().style.cursor = "pointer"; });
+    St.areaShape.on("mouseout", () => { St.map.getContainer().style.cursor = ""; });
 
     // Highlight selected BTS markers
     _highlightBtsLocations(insideLocations);
@@ -5445,7 +5567,7 @@
     const label = mode === "circle" ? "Koło" : "Prostokąt";
     const filterText = `${label}: ${insideLocations.length} BTS — ${filtered.length} rek.`;
     _setRecordsFilter(filterText, () => {
-      _clearAreaHighlights();
+      _clearAreaSelection();
       _clearRecordsFilter();
       if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
     });
@@ -5479,6 +5601,15 @@
     if (St.areaHighlights && St.map) {
       St.map.removeLayer(St.areaHighlights);
       St.areaHighlights = null;
+    }
+  }
+
+  /** Remove persistent shape + highlights (full area selection cleanup) */
+  function _clearAreaSelection() {
+    _clearAreaHighlights();
+    if (St.areaShape && St.map) {
+      St.map.removeLayer(St.areaShape);
+      St.areaShape = null;
     }
   }
 
