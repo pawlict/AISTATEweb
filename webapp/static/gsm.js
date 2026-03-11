@@ -1117,18 +1117,18 @@
     const active = cards.length ? cards : _pinnedCards;
     if (!active.length || !St.lastResult) return;
 
-    // Collect all record datetimes from active cards
-    const dtSet = new Set();
+    // Collect all raw_row IDs from active cards
+    const rowSet = new Set();
     for (const entry of active) {
       if (entry.loc && entry.loc.records) {
         for (const r of entry.loc.records) {
-          if (r.datetime) dtSet.add(r.datetime);
+          if (r.raw_row != null) rowSet.add(r.raw_row);
         }
       }
     }
 
     const allRecs = St.lastResult.records || [];
-    const filtered = allRecs.filter(r => dtSet.has(r.datetime));
+    const filtered = allRecs.filter(r => rowSet.has(r.raw_row));
     const labels = active.map(c => c.loc.city || "BTS").join(" + ");
     const filterText = `📌 ${labels} — ${filtered.length} rek.`;
 
@@ -3375,9 +3375,9 @@
 
       // Double-click → filter Records by this BTS location
       marker.on("dblclick", () => {
-        const dtSet = new Set(loc.records.map(r => r.datetime));
+        const rowSet = new Set(loc.records.map(r => r.raw_row));
         const allRecs = St.lastResult ? St.lastResult.records : [];
-        const filtered = allRecs.filter(r => dtSet.has(r.datetime));
+        const filtered = allRecs.filter(r => rowSet.has(r.raw_row));
         const label = loc.city || "BTS";
         const filterText = `${label} — ${filtered.length} rek.`;
         _setRecordsFilter(filterText, () => {
@@ -5635,13 +5635,16 @@
     // Highlight selected BTS markers
     _highlightBtsLocations(insideLocations);
 
-    // Collect all records from selected locations and filter table
-    const dtSet = new Set();
+    // Collect all records from selected locations and filter table (match by raw_row for uniqueness)
+    const rowSet = new Set();
     for (const loc of insideLocations) {
-      for (const r of loc.records) dtSet.add(r.datetime);
+      for (const r of loc.records) rowSet.add(r.raw_row);
     }
     const allRecs = St.lastResult ? St.lastResult.records : [];
-    const filtered = allRecs.filter(r => dtSet.has(r.datetime));
+    const filtered = allRecs.filter(r => rowSet.has(r.raw_row));
+    console.log("[GSM Area] insideLocations:", insideLocations.length,
+      "geoRecords in area:", rowSet.size, "allRecs:", allRecs.length, "filtered:", filtered.length,
+      "sample rowSet:", [...rowSet].slice(0, 5), "sample allRecs raw_row:", allRecs.slice(0, 5).map(r => r.raw_row));
 
     const label = mode === "circle" ? "Koło" : "Prostokąt";
     const filterText = `${label}: ${insideLocations.length} BTS — ${filtered.length} rek.`;
