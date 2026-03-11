@@ -47,6 +47,12 @@
     columnHidden: {},        // { colKey: true } for hidden columns
     columnFilters: {},       // { colKey: { mode, value, ... } } active filters
     columnSort: null,        // { key, dir } — current sort column
+    /* Area selection state */
+    areaSelectMode: null,     // null | "circle" | "rect"
+    areaSelectLayer: null,    // temporary Leaflet shape while drawing
+    areaSelectOrigin: null,   // L.LatLng — mousedown start point
+    areaHighlights: null,     // L.layerGroup with highlighted markers
+    areaLocations: [],        // cached uniqueLocations for selection queries
   };
 
   /* ── Column definitions ─────────────────────────────────── */
@@ -2927,6 +2933,12 @@
     const screenshotBtn = QS("#gsm_map_screenshot_btn");
     if (screenshotBtn) screenshotBtn.onclick = () => _takeMapScreenshot();
 
+    // Area selection buttons (circle / rectangle)
+    const selectCircleBtn = QS("#gsm_select_circle_btn");
+    const selectRectBtn = QS("#gsm_select_rect_btn");
+    if (selectCircleBtn) selectCircleBtn.onclick = () => _enterAreaSelectMode("circle");
+    if (selectRectBtn) selectRectBtn.onclick = () => _enterAreaSelectMode("rect");
+
     // Layer switcher (descriptions are in title attributes — native tooltips)
     const layerSelect = QS("#gsm_map_layer_select");
     const coverageOpts = QS("#gsm_coverage_opts");
@@ -3304,6 +3316,7 @@
     }
 
     const uniqueLocations = Array.from(locationMap.values());
+    St.areaLocations = uniqueLocations;
     _addLog("info", `Mapa: ${points.length} rekordów → ${uniqueLocations.length} unikalnych lokalizacji BTS`);
 
     // ── Unique locations layer (main view) ──
@@ -3733,6 +3746,8 @@
   function _switchMapLayer(layer, geo) {
     if (!St.map) return;
     const map = St.map;
+    _clearAreaHighlights();
+    _exitAreaSelectMode();
 
     // Remove all custom layers
     Object.values(St.mapLayers).forEach(lg => {
@@ -5276,6 +5291,194 @@
           _heatmapFilter(St.hmActiveCell.hour, St.hmActiveCell.dow, true);
         }
       };
+    }
+  }
+
+  /* ── Area selection (circle / rectangle) ─────────────── */
+
+  function _enterAreaSelectMode(mode) {
+    if (!St.map) return;
+    // If same mode active, cancel it
+    if (St.areaSelectMode === mode) {
+      _exitAreaSelectMode();
+      return;
+    }
+    // Cancel any previous mode
+    _exitAreaSelectMode();
+    St.areaSelectMode = mode;
+
+    // Toggle button active state
+    const circleBtn = QS("#gsm_select_circle_btn");
+    const rectBtn = QS("#gsm_select_rect_btn");
+    if (circleBtn) circleBtn.classList.toggle("btn-active", mode === "circle");
+    if (rectBtn) rectBtn.classList.toggle("btn-active", mode === "rect");
+
+    // Disable map drag so drawing doesn't pan
+    St.map.dragging.disable();
+    // Change cursor
+    const mapEl = St.map.getContainer();
+    mapEl.style.cursor = "crosshair";
+
+    // Bind events
+    St.map.on("mousedown", _areaMouseDown);
+    document.addEventListener("keydown", _areaEscHandler);
+  }
+
+  function _exitAreaSelectMode() {
+    if (!St.map) return;
+    St.areaSelectMode = null;
+    St.areaSelectOrigin = null;
+
+    // Remove temp drawing layer
+    if (St.areaSelectLayer) {
+      St.map.removeLayer(St.areaSelectLayer);
+      St.areaSelectLayer = null;
+    }
+
+    // Reset buttons
+    const circleBtn = QS("#gsm_select_circle_btn");
+    const rectBtn = QS("#gsm_select_rect_btn");
+    if (circleBtn) circleBtn.classList.remove("btn-active");
+    if (rectBtn) rectBtn.classList.remove("btn-active");
+
+    // Re-enable map drag
+    St.map.dragging.enable();
+    const mapEl = St.map.getContainer();
+    mapEl.style.cursor = "";
+
+    // Unbind events
+    St.map.off("mousedown", _areaMouseDown);
+    St.map.off("mousemove", _areaMouseMove);
+    St.map.off("mouseup", _areaMouseUp);
+    document.removeEventListener("keydown", _areaEscHandler);
+  }
+
+  function _areaEscHandler(e) {
+    if (e.key === "Escape") _exitAreaSelectMode();
+  }
+
+  function _areaMouseDown(e) {
+    if (!St.areaSelectMode) return;
+    L.DomEvent.stopPropagation(e);
+    L.DomEvent.preventDefault(e);
+    St.areaSelectOrigin = e.latlng;
+
+    St.map.on("mousemove", _areaMouseMove);
+    St.map.on("mouseup", _areaMouseUp);
+  }
+
+  function _areaMouseMove(e) {
+    if (!St.areaSelectMode || !St.areaSelectOrigin) return;
+
+    // Remove previous temp shape
+    if (St.areaSelectLayer) {
+      St.map.removeLayer(St.areaSelectLayer);
+      St.areaSelectLayer = null;
+    }
+
+    const style = { color: "#a855f7", weight: 2, dashArray: "6 4", fillColor: "#a855f7", fillOpacity: 0.08 };
+
+    if (St.areaSelectMode === "circle") {
+      const radius = St.areaSelectOrigin.distanceTo(e.latlng);
+      St.areaSelectLayer = L.circle(St.areaSelectOrigin, { ...style, radius }).addTo(St.map);
+    } else {
+      const bounds = L.latLngBounds(St.areaSelectOrigin, e.latlng);
+      St.areaSelectLayer = L.rectangle(bounds, style).addTo(St.map);
+    }
+  }
+
+  function _areaMouseUp(e) {
+    if (!St.areaSelectMode || !St.areaSelectOrigin) return;
+    L.DomEvent.stopPropagation(e);
+
+    const endLatLng = e.latlng;
+    const mode = St.areaSelectMode;
+    const origin = St.areaSelectOrigin;
+
+    // Min drag threshold: 10px to avoid accidental clicks
+    const p1 = St.map.latLngToContainerPoint(origin);
+    const p2 = St.map.latLngToContainerPoint(endLatLng);
+    const dist = p1.distanceTo(p2);
+    if (dist < 10) {
+      // Too small — ignore, keep mode active for another try
+      if (St.areaSelectLayer) { St.map.removeLayer(St.areaSelectLayer); St.areaSelectLayer = null; }
+      St.areaSelectOrigin = null;
+      St.map.off("mousemove", _areaMouseMove);
+      St.map.off("mouseup", _areaMouseUp);
+      return;
+    }
+
+    // Find BTS locations inside the drawn shape
+    let insideLocations;
+    if (mode === "circle") {
+      const radius = origin.distanceTo(endLatLng);
+      insideLocations = St.areaLocations.filter(loc =>
+        origin.distanceTo(L.latLng(loc.lat, loc.lon)) <= radius
+      );
+    } else {
+      const bounds = L.latLngBounds(origin, endLatLng);
+      insideLocations = St.areaLocations.filter(loc =>
+        bounds.contains(L.latLng(loc.lat, loc.lon))
+      );
+    }
+
+    // Clean up drawing shape
+    if (St.areaSelectLayer) { St.map.removeLayer(St.areaSelectLayer); St.areaSelectLayer = null; }
+    _exitAreaSelectMode();
+
+    if (!insideLocations.length) {
+      _addLog("info", `Zaznaczenie ${mode === "circle" ? "koła" : "prostokąta"}: brak punktów BTS w obszarze`);
+      return;
+    }
+
+    // Highlight selected BTS markers
+    _highlightBtsLocations(insideLocations);
+
+    // Collect all records from selected locations and filter table
+    const dtSet = new Set();
+    for (const loc of insideLocations) {
+      for (const r of loc.records) dtSet.add(r.datetime);
+    }
+    const allRecs = St.lastResult ? St.lastResult.records : [];
+    const filtered = allRecs.filter(r => dtSet.has(r.datetime));
+
+    const label = mode === "circle" ? "Koło" : "Prostokąt";
+    const filterText = `${label}: ${insideLocations.length} BTS — ${filtered.length} rek.`;
+    _setRecordsFilter(filterText, () => {
+      _clearAreaHighlights();
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(filtered, false, filtered.length);
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    _addLog("info", `Zaznaczenie ${label.toLowerCase()}: ${insideLocations.length} lokalizacji BTS, ${filtered.length} rekordów`);
+  }
+
+  /** Add highlight rings around selected BTS markers */
+  function _highlightBtsLocations(locations) {
+    _clearAreaHighlights();
+    const group = L.layerGroup();
+    for (const loc of locations) {
+      L.circleMarker([loc.lat, loc.lon], {
+        radius: 18,
+        color: "#f59e0b",
+        weight: 2.5,
+        fillColor: "#f59e0b",
+        fillOpacity: 0.12,
+        dashArray: "4 3",
+      }).addTo(group);
+    }
+    St.areaHighlights = group;
+    if (St.map) group.addTo(St.map);
+  }
+
+  /** Remove area selection highlights */
+  function _clearAreaHighlights() {
+    if (St.areaHighlights && St.map) {
+      St.map.removeLayer(St.areaHighlights);
+      St.areaHighlights = null;
     }
   }
 
