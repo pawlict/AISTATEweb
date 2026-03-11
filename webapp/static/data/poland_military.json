@@ -273,13 +273,6 @@
     "desc": "Baza lotnictwa taktycznego w Malborku, rotacyjna obecność NATO."
   },
   {
-    "name": "41. Baza Lotnictwa Szkolnego Dęblin",
-    "type": "lotnisko_wojskowe",
-    "lat": 51.5514,
-    "lon": 21.8936,
-    "desc": "Baza szkoleniowa lotnictwa w Dęblinie."
-  },
-  {
     "name": "43. Baza Lotnictwa Morskiego Gdynia-Babie Doły",
     "type": "lotnisko_wojskowe",
     "lat": 54.5656,
@@ -658,27 +651,6 @@
     "desc": "Grupa przeciwlotnicza w Stargardzie."
   },
   {
-    "name": "Lotnisko wojskowe Radom-Sadków",
-    "type": "lotnisko_wojskowe",
-    "lat": 51.3892,
-    "lon": 21.2131,
-    "desc": "Lotnisko wojskowe w Radomiu-Sadkowie."
-  },
-  {
-    "name": "Lotnisko wojskowe Inowrocław",
-    "type": "lotnisko_wojskowe",
-    "lat": 52.8294,
-    "lon": 18.3306,
-    "desc": "56. Baza Lotnicza w Inowrocławiu, śmigłowce bojowe."
-  },
-  {
-    "name": "Lotnisko wojskowe Leźnica Wielka",
-    "type": "lotnisko_wojskowe",
-    "lat": 51.8861,
-    "lon": 19.18,
-    "desc": "Lotnisko wojskowe Leźnica Wielka k. Łodzi."
-  },
-  {
     "name": "Centrum Szkolenia Marynarki Wojennej Ustka",
     "type": "centrum",
     "lat": 54.5808,
@@ -712,13 +684,6 @@
     "lat": 52.425,
     "lon": 20.6472,
     "desc": "Historyczne lotnisko wojskowe w Modlinie, Twierdza Modlin."
-  },
-  {
-    "name": "Lotnisko wojskowe Łęczyca/Sieradz",
-    "type": "lotnisko_wojskowe",
-    "lat": 51.5944,
-    "lon": 18.7542,
-    "desc": "Zapasowe lotnisko wojskowe w rejonie Łęczycy."
   },
   {
     "name": "Lotniczy Oddział Specjalnego Przeznaczenia Powidz",
@@ -777,18 +742,11 @@
     "desc": "Bolesławiec — 23 PA"
   },
   {
-    "name": "21. Baza Lotnictwa Taktycznego — Świdwin",
-    "type": "lotnisko_wojskowe",
-    "lat": 53.7906,
-    "lon": 15.8265,
-    "desc": "21 BLT — samoloty szkolno-bojowe"
-  },
-  {
-    "name": "42. Baza Lotnictwa Szkolnego — Radom-Sadków",
+    "name": "42. Baza Lotnictwa Szkolnego Radom-Sadków",
     "type": "lotnisko_wojskowe",
     "lat": 51.3892,
     "lon": 21.2133,
-    "desc": "42 BLSz — szkolenie"
+    "desc": "Baza lotnictwa szkolnego w Radomiu-Sadkowie, szkolenie pilotów."
   },
   {
     "name": "Wyższa Szkoła Oficerska Sił Powietrznych — Dęblin",
@@ -859,5 +817,964 @@
     "lat": 53.4289,
     "lon": 14.553,
     "desc": "NATO MNC-NE — dowództwo wielonarodowe"
+  },
+  {
+    "name": "Lotnisko wojskowe Nowy Glinnik",
+    "type": "lotnisko_wojskowe",
+    "lat": 51.7825,
+    "lon": 20.2231,
+    "desc": "Lotnisko wojskowe w Nowym Glinniku k. Tomaszowa Mazowieckiego, baza 25. Brygady Kawalerii Powietrznej — śmigłowce Mi-24, W-3 Sokół, AW149."
+  },
+  {
+    "name": "Lotnisko wojskowe Cewice",
+    "type": "lotnisko_wojskowe",
+    "lat": 54.425,
+    "lon": 17.7667,
+    "desc": "Dawne sowieckie lotnisko wojskowe w Cewicach k. Lęborka, pas startowy 2500m, używane do ćwiczeń."
+  },
+  {
+    "name": "Lotnisko wojskowe Darłowo",
+    "type": "lotnisko_wojskowe",
+    "lat": 54.3944,
+    "lon": 16.3236,
+    "desc": "Lotnisko wojskowe w Darłowie, beton 2500m, rezerwa strategiczna Sił Powietrznych."
+  },
+  {
+    "name": "Lotnisko wojskowe Piła",
+    "type": "lotnisko_wojskowe",
+    "lat": 53.13,
+    "lon": 16.75,
+    "desc": "Dawne lotnisko wojskowe w Pile, infrastruktura lotnicza, teren MON."
+  },
+  {
+    "name": "Lotnisko wojskowe Biała Podlaska",
+    "type": "lotnisko_wojskowe",
+    "lat": 52.0008,
+    "lon": 23.0953,
+    "desc": "Lotnisko wojskowe w Białej Podlaskiej, dawna baza lotnictwa szturmowego, pas 2500m."
+  },
+  {
+    "name": "Lotnisko wojskowe Krzesininy (Nadarzyce)",
+    "type": "lotnisko_wojskowe",
+    "lat": 53.3833,
+    "lon": 16.4333,
+    "desc": "Dawne lotnisko wojskowe Nadarzyce-Krzesininy k. poligonu Drawsko, rezerwa."
+  },
+  {
+    "name": "Lotnisko wojskowe Bagicz",
+    "type": "lotnisko_wojskowe",
+    "lat": 54.0944,
+    "lon": 15.9042,
+    "desc": "Lotnisko wojskowe Bagicz k. Ustronia Morskiego, dawna baza lotnictwa morskiego."
+  },
+  {
+    "name": "Lotnisko wojskowe Babki (Poznań)",
+    "type": "lotnisko_wojskowe",
+    "lat": 52.325,
+    "lon": 17.0833,
+    "desc": "Dodatkowe lotnisko wojskowe w Babkach k. Poznania, zapasowy pas dla Krzesin."
+  },
+  {
+    "name": "5. Mazowiecka Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 52.8811,
+    "lon": 20.6119,
+    "desc": "Brygada OT w Ciechanowie, obrona terytorialna północnego Mazowsza."
+  },
+  {
+    "name": "6. Mazurska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 53.7784,
+    "lon": 20.4801,
+    "desc": "Brygada OT, komponent obronny województwa warmińsko-mazurskiego."
+  },
+  {
+    "name": "7. Pomorska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 54.352,
+    "lon": 18.6466,
+    "desc": "Brygada OT w Gdańsku, obrona terytorialna województwa pomorskiego."
+  },
+  {
+    "name": "8. Kujawsko-Pomorska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 53.0138,
+    "lon": 18.5983,
+    "desc": "Brygada OT w Toruniu, obrona terytorialna województwa kujawsko-pomorskiego."
+  },
+  {
+    "name": "9. Łódzka Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 51.7592,
+    "lon": 19.456,
+    "desc": "Brygada OT w Łodzi, obrona terytorialna województwa łódzkiego."
+  },
+  {
+    "name": "10. Świętokrzyska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 50.8661,
+    "lon": 20.6286,
+    "desc": "Brygada OT w Kielcach, obrona terytorialna województwa świętokrzyskiego."
+  },
+  {
+    "name": "11. Małopolska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 50.0647,
+    "lon": 19.945,
+    "desc": "Brygada OT w Krakowie, obrona terytorialna województwa małopolskiego."
+  },
+  {
+    "name": "12. Wielkopolska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 52.4064,
+    "lon": 16.9252,
+    "desc": "Brygada OT w Poznaniu, obrona terytorialna województwa wielkopolskiego."
+  },
+  {
+    "name": "13. Śląska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 50.2649,
+    "lon": 19.0238,
+    "desc": "Brygada OT w Katowicach, obrona terytorialna województwa śląskiego."
+  },
+  {
+    "name": "14. Zachodniopomorska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 53.4285,
+    "lon": 14.5528,
+    "desc": "Brygada OT w Szczecinie, obrona terytorialna województwa zachodniopomorskiego."
+  },
+  {
+    "name": "15. Lubuska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 51.9356,
+    "lon": 15.5062,
+    "desc": "Brygada OT w Zielonej Górze, obrona terytorialna województwa lubuskiego."
+  },
+  {
+    "name": "16. Dolnośląska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 51.1,
+    "lon": 17.0333,
+    "desc": "Brygada OT we Wrocławiu, obrona terytorialna województwa dolnośląskiego."
+  },
+  {
+    "name": "17. Wielkopolska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 52.4064,
+    "lon": 16.9252,
+    "desc": "Druga brygada OT w Wielkopolsce, wsparcie obrony terytorialnej regionu."
+  },
+  {
+    "name": "18. Opolska Brygada Obrony Terytorialnej",
+    "type": "brygada",
+    "lat": 50.6751,
+    "lon": 17.9213,
+    "desc": "Brygada OT w Opolu, obrona terytorialna województwa opolskiego."
+  },
+  {
+    "name": "1. Pułk Łączności Bydgoszcz",
+    "type": "pulk",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "Pułk łączności w Bydgoszczy, zapewnienie łączności dla SZ RP."
+  },
+  {
+    "name": "3. Pułk Drogowo-Mostowy Chełmno",
+    "type": "pulk",
+    "lat": 53.3492,
+    "lon": 18.4236,
+    "desc": "Pułk drogowo-mostowy w Chełmnie, budowa i odbudowa infrastruktury komunikacyjnej."
+  },
+  {
+    "name": "4. Pułk Łączności Bydgoszcz",
+    "type": "pulk",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "4. Pułk łączności w Bydgoszczy, telekomunikacja wojskowa."
+  },
+  {
+    "name": "100. Batalion Łączności Wałcz",
+    "type": "batalion",
+    "lat": 53.2703,
+    "lon": 16.4681,
+    "desc": "Batalion łączności NATO w Wałczu."
+  },
+  {
+    "name": "Centrum Rozpoznania i Wsparcia Walki Elektronicznej Grójec",
+    "type": "centrum",
+    "lat": 51.8611,
+    "lon": 20.8672,
+    "desc": "Centrum rozpoznania elektronicznego i walki radioelektronicznej w Grójcu."
+  },
+  {
+    "name": "Żandarmeria Wojskowa — Komenda Główna Warszawa",
+    "type": "jednostka",
+    "lat": 52.2275,
+    "lon": 20.9842,
+    "desc": "Komenda Główna Żandarmerii Wojskowej w Warszawie, policja wojskowa SZ RP."
+  },
+  {
+    "name": "Centrum Szkolenia Żandarmerii Wojskowej Mińsk Mazowiecki",
+    "type": "centrum",
+    "lat": 52.1953,
+    "lon": 21.5558,
+    "desc": "Centrum szkoleniowe żandarmerii wojskowej w Mińsku Mazowieckim."
+  },
+  {
+    "name": "Wojskowe Centrum Normalizacji, Jakości i Kodyfikacji Warszawa",
+    "type": "centrum",
+    "lat": 52.2275,
+    "lon": 20.9842,
+    "desc": "Centrum normalizacji i jakości uzbrojenia, wsparcie zakupów obronnych."
+  },
+  {
+    "name": "Centrum Szkolenia Wojsk Obrony Powietrznej Koszalin",
+    "type": "centrum",
+    "lat": 54.1944,
+    "lon": 16.1722,
+    "desc": "Centrum szkoleniowe obrony przeciwlotniczej w Koszalinie, szkolenie obsług zestawów rakietowych."
+  },
+  {
+    "name": "1. Regionalna Baza Logistyczna Wałcz",
+    "type": "baza",
+    "lat": 53.2703,
+    "lon": 16.4681,
+    "desc": "1. RBLog w Wałczu, zaopatrzenie logistyczne wojsk północno-zachodnich."
+  },
+  {
+    "name": "2. Regionalna Baza Logistyczna Warszawa",
+    "type": "baza",
+    "lat": 52.2875,
+    "lon": 21.1731,
+    "desc": "2. RBLog w Warszawie-Rembertowie, zaopatrzenie logistyczne wojsk centralnych."
+  },
+  {
+    "name": "3. Regionalna Baza Logistyczna Kraków",
+    "type": "baza",
+    "lat": 50.0647,
+    "lon": 19.945,
+    "desc": "3. RBLog w Krakowie, zaopatrzenie logistyczne wojsk południowych."
+  },
+  {
+    "name": "4. Regionalna Baza Logistyczna Wrocław",
+    "type": "baza",
+    "lat": 51.1,
+    "lon": 17.0333,
+    "desc": "4. RBLog we Wrocławiu, zaopatrzenie logistyczne wojsk zachodnich."
+  },
+  {
+    "name": "Wielonarodowy Korpus Północno-Wschodni (MNC-NE) Szczecin",
+    "type": "baza",
+    "lat": 53.4285,
+    "lon": 14.5528,
+    "desc": "Dowództwo Wielonarodowego Korpusu Północno-Wschodniego NATO w Szczecinie, korpus obejmujący siły 14 państw."
+  },
+  {
+    "name": "3. Batalion Łączności NATO Bydgoszcz",
+    "type": "batalion",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "3rd NATO Signal Battalion w Bydgoszczy, łączność dla struktur dowodzenia NATO."
+  },
+  {
+    "name": "3. Warszawska Brygada Rakietowa Obrony Powietrznej Sochaczew",
+    "type": "brygada",
+    "lat": 52.2319,
+    "lon": 20.2408,
+    "desc": "Brygada rakietowa OP w Sochaczewie, zestawy S-125 Newa-SC i NASAMS (w dostawie)."
+  },
+  {
+    "name": "Batalion Obrony Powietrznej Patriot Mrzeżyno",
+    "type": "batalion",
+    "lat": 54.1344,
+    "lon": 15.2786,
+    "desc": "Planowana baza zestawów Patriot w Mrzeżynie/Trzebiatowie, obrona powietrzna wybrzeża."
+  },
+  {
+    "name": "78. Pułk Rakietowy Obrony Powietrznej Mrzeżyno",
+    "type": "pulk",
+    "lat": 54.1344,
+    "lon": 15.2786,
+    "desc": "Pułk rakietowy w Mrzeżynie, obrona powietrzna polskiego wybrzeża."
+  },
+  {
+    "name": "Wojskowy Instytut Medyczny Warszawa",
+    "type": "centrum",
+    "lat": 52.255,
+    "lon": 20.99,
+    "desc": "Wojskowy Instytut Medyczny (Szpital Wojskowy) w Warszawie, główny szpital SZ RP."
+  },
+  {
+    "name": "10. Wojskowy Szpital Kliniczny Bydgoszcz",
+    "type": "centrum",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "10. Wojskowy Szpital Kliniczny z Polikliniką w Bydgoszczy."
+  },
+  {
+    "name": "Centrum Operacji Cybernetycznych Warszawa",
+    "type": "centrum",
+    "lat": 52.2275,
+    "lon": 20.9842,
+    "desc": "Wojskowe centrum operacji cyberbezpieczeństwa i walki w cyberprzestrzeni."
+  },
+  {
+    "name": "Służba Kontrwywiadu Wojskowego Warszawa",
+    "type": "jednostka",
+    "lat": 52.2275,
+    "lon": 20.9842,
+    "desc": "SKW — służba kontrwywiadu wojskowego, ochrona kontrwywiadowcza SZ RP."
+  },
+  {
+    "name": "Służba Wywiadu Wojskowego Warszawa",
+    "type": "jednostka",
+    "lat": 52.2275,
+    "lon": 20.9842,
+    "desc": "SWW — służba wywiadu wojskowego, rozpoznanie zagraniczne."
+  },
+  {
+    "name": "Poligon Bemowo Piskie",
+    "type": "poligon",
+    "lat": 53.9175,
+    "lon": 21.5419,
+    "desc": "Poligon wojskowy w Bemowie Piskim, NATO eFP Battle Group, strzelnice i place ćwiczeń."
+  },
+  {
+    "name": "Poligon Toruń",
+    "type": "poligon",
+    "lat": 53.05,
+    "lon": 18.55,
+    "desc": "Poligon wojskowy w Toruniu, ćwiczenia artylerii i piechoty."
+  },
+  {
+    "name": "Poligon Wicko Morskie",
+    "type": "poligon",
+    "lat": 54.75,
+    "lon": 17.7,
+    "desc": "Morski poligon rakietowy w Wicku Morskim, strzelania przeciwlotnicze i nad morzem."
+  },
+  {
+    "name": "Poligon Żurawica",
+    "type": "poligon",
+    "lat": 49.825,
+    "lon": 22.7167,
+    "desc": "Poligon wojskowy Żurawica k. Przemyśla, ćwiczenia strzeleckie."
+  },
+  {
+    "name": "Poligon Biedrusko",
+    "type": "poligon",
+    "lat": 52.5239,
+    "lon": 16.9217,
+    "desc": "Poligon wojskowy Biedrusko k. Poznania (12 600 ha), największy poligon szkoleniowy w zachodniej Polsce."
+  },
+  {
+    "name": "Inspektorat Uzbrojenia Warszawa",
+    "type": "centrum",
+    "lat": 52.2275,
+    "lon": 20.9842,
+    "desc": "Inspektorat Uzbrojenia MON, instytucja odpowiedzialna za zakupy sprzętu wojskowego."
+  },
+  {
+    "name": "Inspektorat Wsparcia SZ Bydgoszcz",
+    "type": "centrum",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "Inspektorat Wsparcia Sił Zbrojnych w Bydgoszczy, zaopatrzenie i logistyka."
+  },
+  {
+    "name": "Dowództwo Operacyjne RSZ Warszawa",
+    "type": "centrum",
+    "lat": 52.2275,
+    "lon": 20.9842,
+    "desc": "Dowództwo Operacyjne Rodzajów Sił Zbrojnych w Warszawie, dowodzenie operacjami bieżącymi."
+  },
+  {
+    "name": "Dowództwo Komponentu Wojsk Obrony Cyberprzestrzeni",
+    "type": "centrum",
+    "lat": 52.2275,
+    "lon": 20.9842,
+    "desc": "Dowództwo Wojsk Obrony Cyberprzestrzeni, szósty rodzaj sił zbrojnych od 2022."
+  },
+  {
+    "name": "1. Baza Lotnictwa Transportowego Warszawa-Okęcie",
+    "type": "lotnisko_wojskowe",
+    "lat": 52.1657,
+    "lon": 20.9671,
+    "desc": "1. BLTr na lotnisku Chopina — transport VIP: 3× Boeing 737-800 BBJ, 2× Gulfstream G550, śmigłowce W-3 Sokół i Mi-8."
+  },
+  {
+    "name": "49. Baza Lotnicza Pruszcz Gdański",
+    "type": "lotnisko_wojskowe",
+    "lat": 54.2397,
+    "lon": 18.6692,
+    "desc": "Baza śmigłowcowa w Pruszczu Gdańskim (JW 1300), śmigłowce Mi-24 i W-3 Sokół. Planowane przeniesienie do Malborka."
+  },
+  {
+    "name": "56. Baza Lotnicza Inowrocław (Latkowo)",
+    "type": "lotnisko_wojskowe",
+    "lat": 52.8294,
+    "lon": 18.3306,
+    "desc": "56. BLot w Latkowie k. Inowrocławia — pierwsza baza AH-64 Apache w Polsce. Śmigłowce Mi-24, W-3PL Głuszec, AH-64D/E."
+  },
+  {
+    "name": "2. Skrzydło Lotnictwa Taktycznego Poznań",
+    "type": "centrum",
+    "lat": 52.3317,
+    "lon": 16.9664,
+    "desc": "Dowództwo 2. Skrzydła Lotnictwa Taktycznego w Poznaniu-Krzesinach, nadzoruje 31. i 32. BLT."
+  },
+  {
+    "name": "3. Skrzydło Lotnictwa Transportowego Powidz",
+    "type": "centrum",
+    "lat": 52.3794,
+    "lon": 17.8539,
+    "desc": "Dowództwo 3. Skrzydła Lotnictwa Transportowego w Powidzu."
+  },
+  {
+    "name": "4. Skrzydło Lotnictwa Szkolnego Dęblin",
+    "type": "centrum",
+    "lat": 51.5514,
+    "lon": 21.8936,
+    "desc": "Dowództwo 4. Skrzydła Lotnictwa Szkolnego w Dęblinie, nadzoruje 41. i 42. BLS."
+  },
+  {
+    "name": "1. Brygada Lotnictwa Wojsk Lądowych Inowrocław",
+    "type": "brygada",
+    "lat": 52.8294,
+    "lon": 18.3306,
+    "desc": "Dowództwo 1. BLot WL w Inowrocławiu, nadrzędna dla 49. i 56. Bazy Lotniczej."
+  },
+  {
+    "name": "11. Wojskowy Oddział Gospodarczy Bydgoszcz",
+    "type": "jednostka",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "Wojskowy oddział gospodarczy w Bydgoszczy, zabezpieczenie logistyczne garnizonu."
+  },
+  {
+    "name": "13. Wojskowy Oddział Gospodarczy Grudziądz",
+    "type": "jednostka",
+    "lat": 53.4836,
+    "lon": 18.7536,
+    "desc": "Wojskowy oddział gospodarczy w Grudziądzu."
+  },
+  {
+    "name": "24. Wojskowy Oddział Gospodarczy Giżycko",
+    "type": "jednostka",
+    "lat": 54.0381,
+    "lon": 21.7692,
+    "desc": "Wojskowy oddział gospodarczy w Giżycku, zabezpieczenie garnizonu NATO eFP."
+  },
+  {
+    "name": "33. Wojskowy Oddział Gospodarczy Nowa Dęba",
+    "type": "jednostka",
+    "lat": 50.4283,
+    "lon": 21.7575,
+    "desc": "Wojskowy oddział gospodarczy w Nowej Dębie, zabezpieczenie poligonu."
+  },
+  {
+    "name": "1. Pułk Drogowo-Mostowy Chełmno",
+    "type": "pulk",
+    "lat": 53.3492,
+    "lon": 18.4236,
+    "desc": "Pułk drogowo-mostowy w Chełmnie, budowa mostów i przepraw."
+  },
+  {
+    "name": "15. Pułk Przeciwlotniczy Gołdap",
+    "type": "pulk",
+    "lat": 54.3103,
+    "lon": 22.3042,
+    "desc": "Pułk przeciwlotniczy w Gołdapi, obrona powietrzna wschodniej flanki."
+  },
+  {
+    "name": "1. Ośrodek Szkolenia Leopard Żagań",
+    "type": "centrum",
+    "lat": 51.6156,
+    "lon": 15.3178,
+    "desc": "Ośrodek szkolenia załóg czołgów Leopard 2 w Żaganiu."
+  },
+  {
+    "name": "Ośrodek Szkolenia Poligonowego Drawsko Pomorskie",
+    "type": "centrum",
+    "lat": 53.5256,
+    "lon": 15.76,
+    "desc": "Ośrodek szkolenia poligonowego na poligonie Drawsko Pomorskie."
+  },
+  {
+    "name": "Batalion Remontu Lotnisk Dęblin",
+    "type": "batalion",
+    "lat": 51.5514,
+    "lon": 21.8936,
+    "desc": "Batalion odpowiedzialny za remont i utrzymanie infrastruktury lotniskowej."
+  },
+  {
+    "name": "Grupa Poszukiwawczo-Ratownicza Świdwin",
+    "type": "jednostka",
+    "lat": 53.7906,
+    "lon": 15.8264,
+    "desc": "Lotnicza grupa poszukiwawczo-ratownicza (SAR) w Świdwinie."
+  },
+  {
+    "name": "Grupa Poszukiwawczo-Ratownicza Gdynia",
+    "type": "jednostka",
+    "lat": 54.5656,
+    "lon": 18.5117,
+    "desc": "Morska lotnicza grupa poszukiwawczo-ratownicza (SAR) w Gdyni-Babich Dołach."
+  },
+  {
+    "name": "Wojskowe Centrum Rekrutacji Warszawa",
+    "type": "centrum",
+    "lat": 52.2275,
+    "lon": 20.9842,
+    "desc": "Wojskowe Centrum Rekrutacji w Warszawie, rekrutacja do służby wojskowej."
+  },
+  {
+    "name": "36. Dywizjon Rakietowy Obrony Powietrznej Mrzeżyno",
+    "type": "dywizjon",
+    "lat": 54.1344,
+    "lon": 15.2786,
+    "desc": "Dywizjon rakietowy OP w Mrzeżynie, systemy S-200 i S-125 Newa-SC, obrona wybrzeża."
+  },
+  {
+    "name": "35. Dywizjon Rakietowy OP Skwierzyna",
+    "type": "dywizjon",
+    "lat": 52.595,
+    "lon": 15.5025,
+    "desc": "Dywizjon rakietowy OP w Skwierzynie."
+  },
+  {
+    "name": "34. Dywizjon Rakietowy OP Bytom",
+    "type": "dywizjon",
+    "lat": 50.3483,
+    "lon": 18.9194,
+    "desc": "Dywizjon rakietowy obrony powietrznej w Bytomiu, systemy przeciwlotnicze."
+  },
+  {
+    "name": "33. Dywizjon Rakietowy OP Gdynia",
+    "type": "dywizjon",
+    "lat": 54.5189,
+    "lon": 18.5489,
+    "desc": "Dywizjon rakietowy obrony powietrznej w Gdyni."
+  },
+  {
+    "name": "Garnizon Toruń",
+    "type": "jednostka",
+    "lat": 53.0138,
+    "lon": 18.5983,
+    "desc": "Garnizon wojskowy Toruń — centrum szkolenia artylerii, artyleryjskie tradycje."
+  },
+  {
+    "name": "Garnizon Łódź",
+    "type": "jednostka",
+    "lat": 51.7592,
+    "lon": 19.456,
+    "desc": "Garnizon wojskowy Łódź — dowództwa i jednostki wsparcia."
+  },
+  {
+    "name": "Garnizon Bydgoszcz",
+    "type": "jednostka",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "Garnizon wojskowy Bydgoszcz — NATO JFTC, Inspektorat Wsparcia, szkolenie."
+  },
+  {
+    "name": "7. Eskadra Działań Specjalnych Powidz",
+    "type": "jednostka",
+    "lat": 52.3794,
+    "lon": 17.8539,
+    "desc": "Eskadra śmigłowców wspierająca Wojska Specjalne, operacje nocne, CSAR."
+  },
+  {
+    "name": "Morski Oddział Rakietowy Siemirowice",
+    "type": "jednostka",
+    "lat": 54.4594,
+    "lon": 17.7472,
+    "desc": "Oddział rakiet naval strike missile (NSM), obrona wybrzeża."
+  },
+  {
+    "name": "1. Dywizjon Artylerii Rakietowej Orzysz",
+    "type": "dywizjon",
+    "lat": 53.8097,
+    "lon": 21.9547,
+    "desc": "Dywizjon wyrzutni HIMARS w rejonie Orzysza, artyleria rakietowa dalekiego zasięgu."
+  },
+  {
+    "name": "18. Dywizjon Artylerii Rakietowej Nowa Dęba",
+    "type": "dywizjon",
+    "lat": 50.4283,
+    "lon": 21.7575,
+    "desc": "Dywizjon wyrzutni HIMARS/K239 Chunmoo w Nowej Dębie."
+  },
+  {
+    "name": "Wielonarodowa Dywizja Północny-Wschód",
+    "type": "centrum",
+    "lat": 54.1561,
+    "lon": 19.4045,
+    "desc": "Dowództwo Wielonarodowej Dywizji Północny-Wschód NATO w Elblągu, koordynacja grup bojowych eFP na wschodniej flance."
+  },
+  {
+    "name": "Pułk Wsparcia Dowodzenia DWD Północny-Wschód",
+    "type": "pulk",
+    "lat": 54.1675,
+    "lon": 19.3925,
+    "desc": "Pułk Wsparcia Dowodzenia Wielonarodowej Dywizji Północny-Wschód w Elblągu, zabezpieczenie łączności i stanowisk dowodzenia."
+  },
+  {
+    "name": "Jednostka Działań w Cyberprzestrzeni A — Białobrzegi",
+    "type": "jednostka",
+    "lat": 51.6519,
+    "lon": 20.9494,
+    "desc": "Jednostka Działań w Cyberprzestrzeni A w Białobrzegach, operacje ofensywne i defensywne w cyberprzestrzeni."
+  },
+  {
+    "name": "Regionalne Centrum Informatyki Bydgoszcz",
+    "type": "centrum",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "RCI Bydgoszcz — utrzymanie systemów teleinformatycznych resortu obrony w północno-zachodniej Polsce."
+  },
+  {
+    "name": "Centrum Eksperckie Kontrwywiadu NATO Kraków",
+    "type": "centrum",
+    "lat": 50.0714,
+    "lon": 19.9461,
+    "desc": "NATO Counter Intelligence Centre of Excellence (CI COE) przy ul. Rakowickiej w Krakowie, szkolenia kontrwywiadowcze NATO."
+  },
+  {
+    "name": "NATO Military Police Centre of Excellence Bydgoszcz",
+    "type": "centrum",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "Centrum Eksperckie Żandarmerii Wojskowej NATO (MP COE) w Bydgoszczy, szkolenie policji wojskowej sojuszu."
+  },
+  {
+    "name": "NATO Force Integration Unit Poland Bydgoszcz",
+    "type": "centrum",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "Jednostka Integracyjna Sił NATO (NFIU) w Bydgoszczy, koordynacja wzmocnień sojuszniczych na wschodniej flance."
+  },
+  {
+    "name": "Mazowiecki Oddział Żandarmerii Wojskowej Warszawa",
+    "type": "jednostka",
+    "lat": 52.2297,
+    "lon": 21.0122,
+    "desc": "Mazowiecki Oddział Żandarmerii Wojskowej w Warszawie, policja wojskowa garnizonu stołecznego."
+  },
+  {
+    "name": "Oddział Żandarmerii Wojskowej Bydgoszcz",
+    "type": "jednostka",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "Oddział Żandarmerii Wojskowej w Bydgoszczy, policja wojskowa regionu kujawsko-pomorskiego."
+  },
+  {
+    "name": "Oddział Specjalny Żandarmerii Wojskowej Warszawa",
+    "type": "jednostka",
+    "lat": 52.2531,
+    "lon": 20.9842,
+    "desc": "Oddział Specjalny ŻW w Warszawie, jednostka kontrterrorystyczna i ochronna Żandarmerii Wojskowej."
+  },
+  {
+    "name": "37. Dywizjon Rakietowy Obrony Powietrznej Sochaczew",
+    "type": "dywizjon",
+    "lat": 52.2319,
+    "lon": 20.2408,
+    "desc": "37. Dywizjon Rakietowy OP w Sochaczewie, systemy Patriot PAC-3+ w ramach programu Wisła."
+  },
+  {
+    "name": "32. Dywizjon Rakietowy Obrony Powietrznej Olszewnica",
+    "type": "dywizjon",
+    "lat": 52.3975,
+    "lon": 20.7825,
+    "desc": "32. Dywizjon Rakietowy OP w Olszewnicy Starej, obrona powietrzna aglomeracji warszawskiej."
+  },
+  {
+    "name": "1. Wojskowy Szpital Kliniczny Lublin",
+    "type": "centrum",
+    "lat": 51.2498,
+    "lon": 22.5485,
+    "desc": "1. Wojskowy Szpital Kliniczny z Polikliniką w Lublinie, szpitalnictwo wojskowe regionu wschodniego."
+  },
+  {
+    "name": "4. Wojskowy Szpital Kliniczny Wrocław",
+    "type": "centrum",
+    "lat": 51.1103,
+    "lon": 17.0615,
+    "desc": "4. Wojskowy Szpital Kliniczny z Polikliniką we Wrocławiu przy ul. Weigla."
+  },
+  {
+    "name": "5. Wojskowy Szpital Kliniczny Kraków",
+    "type": "centrum",
+    "lat": 50.0714,
+    "lon": 19.9225,
+    "desc": "5. Wojskowy Szpital Kliniczny z Polikliniką w Krakowie przy ul. Wrocławskiej."
+  },
+  {
+    "name": "7. Szpital Marynarki Wojennej Gdańsk",
+    "type": "centrum",
+    "lat": 54.3886,
+    "lon": 18.5817,
+    "desc": "7. Szpital Marynarki Wojennej z Przychodnią w Gdańsku, opieka medyczna dla marynarzy i personelu MW."
+  },
+  {
+    "name": "109. Szpital Wojskowy Szczecin",
+    "type": "centrum",
+    "lat": 53.4285,
+    "lon": 14.5528,
+    "desc": "109. Szpital Wojskowy z Przychodnią w Szczecinie przy ul. Piotra Skargi."
+  },
+  {
+    "name": "105. Kresowy Szpital Wojskowy Żary",
+    "type": "centrum",
+    "lat": 51.6422,
+    "lon": 15.1358,
+    "desc": "105. Kresowy Szpital Wojskowy z Przychodnią w Żarach, zabezpieczenie medyczne garnizonu zachodniego."
+  },
+  {
+    "name": "107. Szpital Wojskowy Wałcz",
+    "type": "centrum",
+    "lat": 53.2703,
+    "lon": 16.4681,
+    "desc": "107. Szpital Wojskowy z Przychodnią w Wałczu przy ul. Kołobrzeskiej."
+  },
+  {
+    "name": "114. Szpital Wojskowy Przemyśl",
+    "type": "centrum",
+    "lat": 49.7842,
+    "lon": 22.7675,
+    "desc": "114. Szpital Wojskowy z Przychodnią w Przemyślu przy ul. Słowackiego."
+  },
+  {
+    "name": "116. Szpital Wojskowy Opole",
+    "type": "centrum",
+    "lat": 50.6751,
+    "lon": 17.9213,
+    "desc": "116. Szpital Wojskowy z Przychodnią w Opolu."
+  },
+  {
+    "name": "118. Szpital Wojskowy Ełk",
+    "type": "centrum",
+    "lat": 53.8283,
+    "lon": 22.3497,
+    "desc": "118. Szpital Wojskowy z Przychodnią w Ełku przy ul. Kościuszki."
+  },
+  {
+    "name": "2. Wojskowy Szpital Polowy Wrocław",
+    "type": "jednostka",
+    "lat": 51.1,
+    "lon": 17.0333,
+    "desc": "2. Wojskowy Szpital Polowy we Wrocławiu, mobilny szpital wojskowy do zabezpieczenia medycznego operacji."
+  },
+  {
+    "name": "2. Wojskowy Oddział Gospodarczy Wrocław",
+    "type": "jednostka",
+    "lat": 51.1,
+    "lon": 17.0333,
+    "desc": "2. WOG we Wrocławiu, zabezpieczenie finansowo-logistyczne garnizonu wrocławskiego."
+  },
+  {
+    "name": "4. Wojskowy Oddział Gospodarczy Gliwice",
+    "type": "jednostka",
+    "lat": 50.2945,
+    "lon": 18.6714,
+    "desc": "4. WOG w Gliwicach, zabezpieczenie finansowo-logistyczne garnizonów Górnego Śląska."
+  },
+  {
+    "name": "6. Wojskowy Oddział Gospodarczy Ustka",
+    "type": "jednostka",
+    "lat": 54.5808,
+    "lon": 16.8619,
+    "desc": "6. WOG w Ustce, zabezpieczenie garnizonów Ustka, Słupsk, Czarne, Lębork, Chojnice."
+  },
+  {
+    "name": "12. Wojskowy Oddział Gospodarczy Toruń",
+    "type": "jednostka",
+    "lat": 53.0138,
+    "lon": 18.5983,
+    "desc": "12. WOG w Toruniu, zabezpieczenie garnizonów Torunia i Inowrocławia."
+  },
+  {
+    "name": "14. Wojskowy Oddział Gospodarczy Poznań",
+    "type": "jednostka",
+    "lat": 52.4064,
+    "lon": 16.9252,
+    "desc": "14. WOG w Poznaniu, zabezpieczenie finansowo-logistyczne garnizonu poznańskiego."
+  },
+  {
+    "name": "15. Wojskowy Oddział Gospodarczy Szczecin",
+    "type": "jednostka",
+    "lat": 53.4285,
+    "lon": 14.5528,
+    "desc": "15. WOG w Szczecinie, zabezpieczenie garnizonów Szczecina, Stargardu i Choszczna."
+  },
+  {
+    "name": "16. Wojskowy Oddział Gospodarczy Drawsko Pomorskie",
+    "type": "jednostka",
+    "lat": 53.5256,
+    "lon": 15.76,
+    "desc": "16. WOG w Drawsku Pomorskim, zabezpieczenie logistyczne poligonu i garnizonu."
+  },
+  {
+    "name": "17. Wojskowy Oddział Gospodarczy Koszalin",
+    "type": "jednostka",
+    "lat": 54.1944,
+    "lon": 16.1722,
+    "desc": "17. WOG w Koszalinie, zabezpieczenie garnizonu koszalińskiego i jednostek SP."
+  },
+  {
+    "name": "21. Wojskowy Oddział Gospodarczy Elbląg",
+    "type": "jednostka",
+    "lat": 54.1561,
+    "lon": 19.4045,
+    "desc": "21. WOG w Elblągu, zabezpieczenie garnizonu elbląskiego i dywizji MND-NE."
+  },
+  {
+    "name": "22. Wojskowy Oddział Gospodarczy Olsztyn",
+    "type": "jednostka",
+    "lat": 53.7784,
+    "lon": 20.4801,
+    "desc": "22. WOG w Olsztynie, zabezpieczenie garnizonu olsztyńskiego."
+  },
+  {
+    "name": "25. Wojskowy Oddział Gospodarczy Białystok",
+    "type": "jednostka",
+    "lat": 53.1325,
+    "lon": 23.1688,
+    "desc": "25. WOG w Białymstoku, zabezpieczenie garnizonu białostockiego."
+  },
+  {
+    "name": "26. Wojskowy Oddział Gospodarczy Zegrze",
+    "type": "jednostka",
+    "lat": 52.4058,
+    "lon": 20.9981,
+    "desc": "26. WOG w Zegrzu, zabezpieczenie garnizonów północnego Mazowsza."
+  },
+  {
+    "name": "31. Wojskowy Oddział Gospodarczy Zgierz",
+    "type": "jednostka",
+    "lat": 51.8553,
+    "lon": 19.4069,
+    "desc": "31. WOG w Zgierzu, zabezpieczenie garnizonu łódzkiego."
+  },
+  {
+    "name": "32. Wojskowy Oddział Gospodarczy Zamość",
+    "type": "jednostka",
+    "lat": 50.7228,
+    "lon": 23.2525,
+    "desc": "32. WOG w Zamościu, zabezpieczenie garnizonów wschodniej Lubelszczyzny."
+  },
+  {
+    "name": "34. Wojskowy Oddział Gospodarczy Rzeszów",
+    "type": "jednostka",
+    "lat": 50.0412,
+    "lon": 21.9991,
+    "desc": "34. WOG w Rzeszowie, zabezpieczenie finansowo-logistyczne garnizonu rzeszowskiego."
+  },
+  {
+    "name": "35. Wojskowy Oddział Gospodarczy Kraków",
+    "type": "jednostka",
+    "lat": 50.0647,
+    "lon": 19.945,
+    "desc": "35. Krakowski WOG im. gen. Wieniawy-Długoszowskiego, zabezpieczenie garnizonu krakowskiego."
+  },
+  {
+    "name": "43. Wojskowy Oddział Gospodarczy Świętoszów",
+    "type": "jednostka",
+    "lat": 51.5667,
+    "lon": 15.3417,
+    "desc": "43. WOG w Świętoszowie, zabezpieczenie logistyczne poligonu i garnizonu pancernego."
+  },
+  {
+    "name": "44. Wojskowy Oddział Gospodarczy Krosno Odrzańskie",
+    "type": "jednostka",
+    "lat": 52.0553,
+    "lon": 15.0989,
+    "desc": "44. WOG w Krośnie Odrzańskim, zabezpieczenie garnizonów zachodnich."
+  },
+  {
+    "name": "45. Wojskowy Oddział Gospodarczy Wędrzyn",
+    "type": "jednostka",
+    "lat": 52.38,
+    "lon": 15.28,
+    "desc": "45. WOG im. ppłk M. Trojanowskiej w Wędrzynie, zabezpieczenie garnizonów Skwierzyna, Międzyrzecz, Wędrzyn."
+  },
+  {
+    "name": "6. Szpital Wojskowy Dęblin",
+    "type": "centrum",
+    "lat": 51.5514,
+    "lon": 21.8936,
+    "desc": "6. Szpital Wojskowy z Przychodnią w Dęblinie, zabezpieczenie medyczne personelu lotniczego."
+  },
+  {
+    "name": "115. Szpital Wojskowy Hel",
+    "type": "centrum",
+    "lat": 54.6081,
+    "lon": 18.8033,
+    "desc": "115. Szpital Wojskowy z Przychodnią na Helu, opieka medyczna dla garnizonu i bazy morskiej."
+  },
+  {
+    "name": "41. Baza Lotnictwa Szkolnego Dęblin",
+    "type": "lotnisko_wojskowe",
+    "lat": 51.5514,
+    "lon": 21.8936,
+    "desc": "41. Baza Lotnictwa Szkolnego w Dęblinie, szkolenie pilotów na samolotach M-346 Bielik."
+  },
+  {
+    "name": "6. Mazowiecka Brygada Obrony Terytorialnej Radom",
+    "type": "brygada",
+    "lat": 51.4028,
+    "lon": 21.1472,
+    "desc": "6. Mazowiecka BOT w Radomiu, obrona terytorialna południowego Mazowsza."
+  },
+  {
+    "name": "18. Stołeczna Brygada Obrony Terytorialnej Warszawa",
+    "type": "brygada",
+    "lat": 52.2297,
+    "lon": 21.0122,
+    "desc": "18. Stołeczna BOT im. gen. A. Chruściela Monter w Warszawie, obrona terytorialna stolicy."
+  },
+  {
+    "name": "Pułk Reprezentacyjny Wojska Polskiego Warszawa",
+    "type": "pulk",
+    "lat": 52.2297,
+    "lon": 21.0122,
+    "desc": "Pułk Reprezentacyjny WP w Warszawie, reprezentacja SZ RP na uroczystościach państwowych i wojskowych."
+  },
+  {
+    "name": "6. Batalion Dowodzenia Sił Powietrznych Śrem",
+    "type": "batalion",
+    "lat": 52.0886,
+    "lon": 17.0153,
+    "desc": "6. Batalion Dowodzenia Sił Powietrznych w Śremie, zabezpieczenie dowodzenia lotnictwem."
+  },
+  {
+    "name": "Batalion Dowodzenia Inspektoratu Wsparcia SZ Bydgoszcz",
+    "type": "batalion",
+    "lat": 53.1235,
+    "lon": 18.0084,
+    "desc": "Batalion Dowodzenia Inspektoratu Wsparcia SZ w Bydgoszczy, zabezpieczenie łączności i dowodzenia IWsp SZ."
+  },
+  {
+    "name": "Centrum Wsparcia Systemów Dowodzenia Radom",
+    "type": "centrum",
+    "lat": 51.4028,
+    "lon": 21.1472,
+    "desc": "Centrum Wsparcia Systemów Dowodzenia w Radomiu, utrzymanie systemów dowodzenia SZ RP."
+  },
+  {
+    "name": "Wojskowe Biuro Zarządzania Częstotliwościami Warszawa",
+    "type": "centrum",
+    "lat": 52.2531,
+    "lon": 20.9003,
+    "desc": "Wojskowe Biuro Zarządzania Częstotliwościami w Warszawie, koordynacja widma radiowego na potrzeby wojskowe."
+  },
+  {
+    "name": "14. Dywizjon Artylerii Samobieżnej Jarosław",
+    "type": "dywizjon",
+    "lat": 50.0161,
+    "lon": 22.6772,
+    "desc": "14. Dywizjon Artylerii Samobieżnej w Jarosławiu, wsparcie ogniowe 21. Brygady Strzelców Podhalańskich."
   }
 ]
