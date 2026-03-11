@@ -215,6 +215,19 @@
         Obsługiwane formaty: MBTiles z kafelkami PNG/JPG (raster) lub PBF (wektor).
       </div>
 
+      <!-- Map source selector -->
+      <div style="margin-bottom:14px">
+        <div class="label" style="margin-bottom:6px">Źródło mapy</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <select class="input" id="bts_map_source" style="padding:5px 10px;border-radius:10px;min-width:200px;max-width:320px">
+            <option value="auto">Automatycznie (offline jeśli dostępna)</option>
+            <option value="offline">Tylko mapa offline (MBTiles)</option>
+            <option value="online">Tylko mapa online (OpenStreetMap)</option>
+          </select>
+          <span class="small" id="bts_map_source_status" style="display:inline-flex;align-items:center;gap:5px"></span>
+        </div>
+      </div>
+
       <div class="bts-model-row">
         <div class="bts-model-left">
           <!-- Map status -->
