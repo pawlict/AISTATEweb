@@ -207,84 +207,84 @@
     "type": "lotnisko_wojskowe",
     "lat": 52.3317,
     "lon": 16.9664,
-    "desc": "Baza lotnictwa taktycznego z F-16 w Poznaniu-Krzesinach."
+    "desc": "Baza lotnictwa taktycznego z F-16 w Poznaniu-Krzesinach (ICAO: EPKS)."
   },
   {
     "name": "32. Baza Lotnictwa Taktycznego Łask",
     "type": "lotnisko_wojskowe",
     "lat": 51.5516,
     "lon": 19.1791,
-    "desc": "Baza lotnictwa taktycznego z F-16 w Łasku, stała obecność USAF."
+    "desc": "Baza lotnictwa taktycznego z F-16 w Łasku (ICAO: EPLK), stała obecność USAF."
   },
   {
     "name": "33. Baza Lotnictwa Transportowego Powidz",
     "type": "lotnisko_wojskowe",
     "lat": 52.3794,
     "lon": 17.8539,
-    "desc": "Największe lotnisko wojskowe w Polsce (pas 3,5 km), samoloty C-130E."
+    "desc": "Największe lotnisko wojskowe w Polsce (ICAO: EPPW), pas 3,5 km, samoloty C-130E Hercules."
   },
   {
     "name": "8. Baza Lotnictwa Transportowego Kraków-Balice",
     "type": "lotnisko_wojskowe",
     "lat": 50.0775,
     "lon": 19.7847,
-    "desc": "Baza lotnictwa transportowego w Krakowie, samoloty CASA C-295M."
+    "desc": "Baza lotnictwa transportowego w Krakowie-Balicach (ICAO: EPKK), samoloty CASA C-295M."
   },
   {
     "name": "8. Baza Lotnictwa Transportowego Wrocław",
     "type": "lotnisko_wojskowe",
     "lat": 51.1028,
     "lon": 16.8858,
-    "desc": "Oddział 8. BLTr we Wrocławiu-Strachowicach."
+    "desc": "Oddział 8. BLTr we Wrocławiu-Strachowicach (ICAO: EPWR)."
   },
   {
     "name": "1. Skrzydło Lotnictwa Taktycznego Świdwin",
     "type": "lotnisko_wojskowe",
     "lat": 53.7906,
     "lon": 15.8264,
-    "desc": "Dowództwo 1. Skrzydła Lotnictwa Taktycznego w Świdwinie."
+    "desc": "Dowództwo 1. Skrzydła Lotnictwa Taktycznego w Świdwinie (ICAO: EPSN), pas 2500m."
   },
   {
     "name": "12. Baza Bezzałogowych Statków Powietrznych Mirosławiec",
     "type": "lotnisko_wojskowe",
     "lat": 53.3958,
     "lon": 16.0828,
-    "desc": "Baza dronów wojskowych w Mirosławcu."
+    "desc": "Baza dronów wojskowych w Mirosławcu (ICAO: EPMI), pas 2500m."
   },
   {
     "name": "Lotnicza Akademia Wojskowa Dęblin",
     "type": "lotnisko_wojskowe",
     "lat": 51.5514,
     "lon": 21.8936,
-    "desc": "Szkoła Orląt - uczelnia lotnicza i lotnisko wojskowe w Dęblinie."
+    "desc": "Szkoła Orląt - uczelnia lotnicza i lotnisko wojskowe w Dęblinie (ICAO: EPDE)."
   },
   {
     "name": "23. Baza Lotnictwa Taktycznego Mińsk Mazowiecki",
     "type": "lotnisko_wojskowe",
     "lat": 52.1953,
     "lon": 21.6558,
-    "desc": "Baza lotnictwa taktycznego w Mińsku Mazowieckim."
+    "desc": "Baza lotnictwa taktycznego w Mińsku Mazowieckim (ICAO: EPMM), samoloty MiG-29."
   },
   {
     "name": "22. Baza Lotnictwa Taktycznego Malbork",
     "type": "lotnisko_wojskowe",
-    "lat": 54.0269,
-    "lon": 19.0694,
-    "desc": "Baza lotnictwa taktycznego w Malborku, rotacyjna obecność NATO."
+    "lat": 54.0266,
+    "lon": 19.1357,
+    "desc": "Baza lotnictwa taktycznego w Malborku (ICAO: EPMB), MiG-29, rotacyjna obecność NATO."
   },
   {
     "name": "43. Baza Lotnictwa Morskiego Gdynia-Babie Doły",
     "type": "lotnisko_wojskowe",
-    "lat": 54.5656,
-    "lon": 18.5117,
-    "desc": "Baza lotnictwa morskiego w Gdyni, śmigłowce morskie."
+    "lat": 54.5797,
+    "lon": 18.5172,
+    "desc": "Baza lotnictwa morskiego w Gdyni-Babich Dołach (ICAO: EPOK), śmigłowce morskie."
   },
   {
     "name": "44. Baza Lotnictwa Morskiego Siemirowice",
     "type": "lotnisko_wojskowe",
-    "lat": 54.4594,
-    "lon": 17.7472,
-    "desc": "Baza lotnictwa morskiego w Siemirowicach, samoloty patrolowe M-28."
+    "lat": 54.4165,
+    "lon": 17.7657,
+    "desc": "Baza lotnictwa morskiego w Siemirowicach (ICAO: EPCE), samoloty patrolowe M-28 Bryza."
   },
   {
     "name": "Baza Morska Gdynia-Oksywie",
@@ -681,9 +681,9 @@
   {
     "name": "Baza wojskowa Modlin (Nowy Dwór Mazowiecki)",
     "type": "lotnisko_wojskowe",
-    "lat": 52.425,
-    "lon": 20.6472,
-    "desc": "Historyczne lotnisko wojskowe w Modlinie, Twierdza Modlin."
+    "lat": 52.4511,
+    "lon": 20.6518,
+    "desc": "Historyczne lotnisko wojskowe w Modlinie (ICAO: EPMO), Twierdza Modlin, obecnie port lotniczy cywilny."
   },
   {
     "name": "Lotniczy Oddział Specjalnego Przeznaczenia Powidz",
@@ -746,7 +746,7 @@
     "type": "lotnisko_wojskowe",
     "lat": 51.3892,
     "lon": 21.2133,
-    "desc": "Baza lotnictwa szkolnego w Radomiu-Sadkowie, szkolenie pilotów."
+    "desc": "Baza lotnictwa szkolnego w Radomiu-Sadkowie (ICAO: EPRA), szkolenie pilotów, pas 2500m."
   },
   {
     "name": "Wyższa Szkoła Oficerska Sił Powietrznych — Dęblin",
@@ -763,11 +763,11 @@
     "desc": "IU MON"
   },
   {
-    "name": "Poligon Wicko Morskie",
+    "name": "Centralny Poligon Sił Powietrznych Ustka-Wicko Morskie",
     "type": "poligon",
-    "lat": 54.725,
-    "lon": 17.2167,
-    "desc": "Poligon rakietowy MW"
+    "lat": 54.5536,
+    "lon": 16.6181,
+    "desc": "Centralny Poligon Sił Powietrznych Ustka-Wicko Morskie (lotnisko ICAO: EPWI), poligon przeciwlotniczy i rakietowy na wybrzeżu Bałtyku."
   },
   {
     "name": "Poligon Bemowo Piskie",
@@ -821,51 +821,51 @@
   {
     "name": "Lotnisko wojskowe Nowy Glinnik",
     "type": "lotnisko_wojskowe",
-    "lat": 51.7825,
-    "lon": 20.2231,
-    "desc": "Lotnisko wojskowe w Nowym Glinniku k. Tomaszowa Mazowieckiego, baza 25. Brygady Kawalerii Powietrznej — śmigłowce Mi-24, W-3 Sokół, AW149."
+    "lat": 51.5844,
+    "lon": 20.0978,
+    "desc": "Lotnisko wojskowe w Nowym Glinniku k. Tomaszowa Mazowieckiego (ICAO: EPTM), baza 25. Brygady Kawalerii Powietrznej — śmigłowce Mi-24, W-3 Sokół, AW149."
   },
   {
     "name": "Lotnisko wojskowe Cewice",
     "type": "lotnisko_wojskowe",
-    "lat": 54.425,
-    "lon": 17.7667,
-    "desc": "Dawne sowieckie lotnisko wojskowe w Cewicach k. Lęborka, pas startowy 2500m, używane do ćwiczeń."
+    "lat": 54.4165,
+    "lon": 17.7657,
+    "desc": "Lotnisko wojskowe w Cewicach k. Lęborka (ICAO: EPCE), pas startowy 2518m, baza 44. BLM Siemirowice."
   },
   {
-    "name": "Lotnisko wojskowe Darłowo",
+    "name": "Lotnisko wojskowe Darłowo (Darłówek)",
     "type": "lotnisko_wojskowe",
-    "lat": 54.3944,
-    "lon": 16.3236,
-    "desc": "Lotnisko wojskowe w Darłowie, beton 2500m, rezerwa strategiczna Sił Powietrznych."
+    "lat": 54.4047,
+    "lon": 16.3531,
+    "desc": "Baza lotnictwa morskiego Darłówek (ICAO: EPDA), 29. eskadra MW, śmigłowce ZOP, pas 600m."
   },
   {
     "name": "Lotnisko wojskowe Piła",
     "type": "lotnisko_wojskowe",
-    "lat": 53.13,
-    "lon": 16.75,
-    "desc": "Dawne lotnisko wojskowe w Pile, infrastruktura lotnicza, teren MON."
+    "lat": 53.1701,
+    "lon": 16.7111,
+    "desc": "Dawne lotnisko wojskowe w Pile (ICAO: EPPI), pas 2500m, infrastruktura lotnicza, teren MON."
   },
   {
     "name": "Lotnisko wojskowe Biała Podlaska",
     "type": "lotnisko_wojskowe",
-    "lat": 52.0008,
-    "lon": 23.0953,
-    "desc": "Lotnisko wojskowe w Białej Podlaskiej, dawna baza lotnictwa szturmowego, pas 2500m."
+    "lat": 52.0058,
+    "lon": 23.1436,
+    "desc": "Lotnisko wojskowe w Białej Podlaskiej (ICAO: EPBP), dawna baza lotnictwa szturmowego, pas 3300m, teren MON."
   },
   {
-    "name": "Lotnisko wojskowe Krzesininy (Nadarzyce)",
+    "name": "Lotnisko wojskowe Nadarzyce",
     "type": "lotnisko_wojskowe",
-    "lat": 53.3833,
-    "lon": 16.4333,
-    "desc": "Dawne lotnisko wojskowe Nadarzyce-Krzesininy k. poligonu Drawsko, rezerwa."
+    "lat": 53.4549,
+    "lon": 16.4895,
+    "desc": "Dawne lotnisko wojskowe Nadarzyce (ICAO: EPNA) k. poligonu Drawsko, pas 16/34, rezerwa strategiczna."
   },
   {
-    "name": "Lotnisko wojskowe Bagicz",
+    "name": "Lotnisko wojskowe Bagicz (Kołobrzeg)",
     "type": "lotnisko_wojskowe",
-    "lat": 54.0944,
-    "lon": 15.9042,
-    "desc": "Lotnisko wojskowe Bagicz k. Ustronia Morskiego, dawna baza lotnictwa morskiego."
+    "lat": 54.2003,
+    "lon": 15.6842,
+    "desc": "Lotnisko wojskowe Kołobrzeg-Bagicz (ICAO: EPKG), dawna baza sowiecka, pas 2500m, obecnie aeroklub."
   },
   {
     "name": "Lotnisko wojskowe Babki (Poznań)",
@@ -1201,21 +1201,21 @@
     "type": "lotnisko_wojskowe",
     "lat": 52.1657,
     "lon": 20.9671,
-    "desc": "1. BLTr na lotnisku Chopina — transport VIP: 3× Boeing 737-800 BBJ, 2× Gulfstream G550, śmigłowce W-3 Sokół i Mi-8."
+    "desc": "1. BLTr na lotnisku Chopina (ICAO: EPWA) — transport VIP: 3× Boeing 737-800 BBJ, 2× Gulfstream G550, śmigłowce W-3 Sokół i Mi-8."
   },
   {
     "name": "49. Baza Lotnicza Pruszcz Gdański",
     "type": "lotnisko_wojskowe",
-    "lat": 54.2397,
-    "lon": 18.6692,
-    "desc": "Baza śmigłowcowa w Pruszczu Gdańskim (JW 1300), śmigłowce Mi-24 i W-3 Sokół. Planowane przeniesienie do Malborka."
+    "lat": 54.2481,
+    "lon": 18.6711,
+    "desc": "Baza śmigłowcowa w Pruszczu Gdańskim (ICAO: EPPR, JW 1300), śmigłowce Mi-24 i W-3 Sokół."
   },
   {
     "name": "56. Baza Lotnicza Inowrocław (Latkowo)",
     "type": "lotnisko_wojskowe",
     "lat": 52.8294,
     "lon": 18.3306,
-    "desc": "56. BLot w Latkowie k. Inowrocławia — pierwsza baza AH-64 Apache w Polsce. Śmigłowce Mi-24, W-3PL Głuszec, AH-64D/E."
+    "desc": "56. BLot w Latkowie k. Inowrocławia (ICAO: EPIR) — pierwsza baza AH-64 Apache w Polsce. Śmigłowce Mi-24, W-3PL Głuszec, AH-64D/E."
   },
   {
     "name": "2. Skrzydło Lotnictwa Taktycznego Poznań",
