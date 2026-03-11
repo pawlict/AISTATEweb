@@ -291,7 +291,7 @@ textarea{min-height:220px; resize:vertical}
 .gsm-overlay-marker{background:none!important;border:none!important}
 .gsm-overlay-tooltip{font-size:12px!important;padding:6px 10px!important;border-radius:8px!important;box-shadow:0 2px 8px rgba(0,0,0,.18)!important;max-width:320px!important;word-wrap:break-word!important;overflow-wrap:break-word!important;white-space:normal!important;line-height:1.4!important}
 /* ── Floating layer panel (left side) ── */
-.gsm-layer-panel{position:absolute;top:10px;left:10px;z-index:1000;background:var(--bg-card,#fff);border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.15);border:1px solid var(--border,#e2e8f0);width:220px;font-size:12px;transition:transform .2s ease,opacity .2s ease;max-height:calc(100% - 20px);overflow-y:auto}
+.gsm-layer-panel{position:absolute;top:80px;left:10px;z-index:1000;background:var(--bg-card,#fff);border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.15);border:1px solid var(--border,#e2e8f0);width:220px;font-size:12px;transition:transform .2s ease,opacity .2s ease;max-height:calc(100% - 90px);overflow-y:auto}
 .gsm-layer-panel.collapsed{transform:translateX(-190px);opacity:.85}
 .gsm-layer-panel.collapsed .gsm-lp-body{display:none}
 .gsm-layer-panel.collapsed .gsm-lp-toggle{transform:rotate(180deg)}
