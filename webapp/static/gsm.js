@@ -3115,44 +3115,109 @@
     return out;
   }
 
+  /**
+   * Compose a map screenshot directly from Leaflet internals.
+   * html2canvas cannot reliably capture cross-origin tile <img> elements,
+   * so we manually draw tiles, then overlay canvas/SVG layers on top.
+   */
   async function _takeMapScreenshot() {
     const container = QS("#gsm_map_container");
-    if (!container) return;
+    if (!container || !St.map) return;
     const btn = QS("#gsm_map_screenshot_btn");
     if (btn) btn.disabled = true;
 
-    const hiddenEls = [];
     try {
-      await _ensureHtml2Canvas();
+      const map = St.map;
+      const scale = 2;
+      const size = map.getSize();
+      const w = size.x * scale;
+      const h = size.y * scale;
 
-      // ── Hide UI overlays before capture ──
-      const _hideForScreenshot = [
-        ".gsm-layer-panel",
-        ".leaflet-control-attribution",
-        ".leaflet-control-zoom",
-        ".leaflet-top",
-        ".leaflet-bottom",
-        ".gsm-map-screenshot-btn",
-      ];
-      for (const sel of _hideForScreenshot) {
-        container.querySelectorAll(sel).forEach(el => {
-          hiddenEls.push({ el, prev: el.style.display });
-          el.style.display = "none";
-        });
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext("2d");
+
+      // ── 1. Fill background (matches container bg) ──
+      ctx.fillStyle = "#e8e8e8";
+      ctx.fillRect(0, 0, w, h);
+
+      // ── 2. Draw tile images ──
+      // Tiles may be cross-origin (e.g. OSM). We re-fetch each tile via fetch()
+      // which always gets a clean CORS response, avoiding tainted canvas issues
+      // from browser-cached tiles that were loaded without crossOrigin attribute.
+      const tilePane = map.getPane("tilePane");
+      if (tilePane) {
+        const tileTransform = _getLeafletPaneOffset(tilePane);
+        const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
+        const tilePromises = [];
+        for (const img of tileImgs) {
+          if (!img.complete || !img.naturalWidth || !img.src) continue;
+          const tileOffset = _getLeafletPaneOffset(img);
+          const x = (tileTransform.x + tileOffset.x) * scale;
+          const y = (tileTransform.y + tileOffset.y) * scale;
+          const tw = img.offsetWidth * scale;
+          const th = img.offsetHeight * scale;
+          tilePromises.push(
+            _fetchImageBitmap(img.src)
+              .then(bmp => ({ bmp, x, y, tw, th }))
+              .catch(() => null)
+          );
+        }
+        const tiles = await Promise.all(tilePromises);
+        for (const tile of tiles) {
+          if (!tile) continue;
+          ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
+          tile.bmp.close();
+        }
       }
 
-      // Small delay so the browser repaints without the overlays
-      await new Promise(r => setTimeout(r, 50));
+      // ── 3. Draw MapLibre GL canvas (for PBF vector tiles) ──
+      const maplibreCanvas = container.querySelector(".maplibregl-canvas, .mapboxgl-canvas");
+      if (maplibreCanvas) {
+        try { ctx.drawImage(maplibreCanvas, 0, 0, w, h); } catch (_) {}
+      }
 
-      const mapCanvas = await window.html2canvas(container, {
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: null,
-        scale: 2,
-        logging: false,
-      });
+      // ── 4. Draw Leaflet overlay pane canvases (circleMarkers, polylines, polygons) ──
+      const overlayPane = map.getPane("overlayPane");
+      if (overlayPane) {
+        const overlayTransform = _getLeafletPaneOffset(overlayPane);
+        const canvases = overlayPane.querySelectorAll("canvas");
+        for (const c of canvases) {
+          try {
+            const x = overlayTransform.x * scale;
+            const y = overlayTransform.y * scale;
+            ctx.drawImage(c, x, y, w, h);
+          } catch (_) {}
+        }
+        // Also draw any SVG overlays (polylines in SVG mode, etc.)
+        const svgs = overlayPane.querySelectorAll("svg");
+        for (const svg of svgs) {
+          try {
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+            const svgUrl = URL.createObjectURL(svgBlob);
+            const svgImg = new Image();
+            await new Promise((resolve) => {
+              svgImg.onload = resolve;
+              svgImg.onerror = resolve;
+              svgImg.src = svgUrl;
+            });
+            const sx = overlayTransform.x * scale;
+            const sy = overlayTransform.y * scale;
+            ctx.drawImage(svgImg, sx, sy, w, h);
+            URL.revokeObjectURL(svgUrl);
+          } catch (_) {}
+        }
+      }
 
-      // ── Draw watermark ──
+      // ── 5. Draw shadow pane (marker shadows) ──
+      _drawPaneMarkers(ctx, map, "shadowPane", scale);
+
+      // ── 6. Draw marker pane (HTML markers / icons) ──
+      _drawPaneMarkers(ctx, map, "markerPane", scale);
+
+      // ── 7. Draw watermark ──
       const activeRadio = QS('input[name="gsm_map_layer"]:checked');
       const activeItem = activeRadio ? activeRadio.closest(".gsm-lp-item") : null;
       const layerLabel = activeItem ? activeItem.textContent.trim() : "";
@@ -3160,11 +3225,11 @@
       if (layerLabel) extraParts.push(layerLabel);
       extraParts.push("© OpenStreetMap contributors");
 
-      const out = _drawWatermark(mapCanvas, extraParts);
+      const final = _drawWatermark(out, extraParts);
 
-      // Convert to blob and trigger download
+      // ── 8. Download ──
       const now = new Date();
-      out.toBlob((blob) => {
+      final.toBlob((blob) => {
         if (!blob) {
           _addLog("warn", "Nie udało się utworzyć zdjęcia mapy");
           return;
@@ -3187,11 +3252,46 @@
     } catch (e) {
       _addLog("error", `Błąd zdjęcia mapy: ${e.message}`);
     } finally {
-      // ── Always restore hidden elements ──
-      for (const { el, prev } of hiddenEls) {
-        el.style.display = prev;
-      }
       if (btn) btn.disabled = false;
+    }
+  }
+
+  /** Fetch an image URL via fetch() and return an ImageBitmap (CORS-safe) */
+  async function _fetchImageBitmap(url) {
+    const resp = await fetch(url, { mode: "cors" });
+    const blob = await resp.blob();
+    return createImageBitmap(blob);
+  }
+
+  /** Parse Leaflet's CSS transform (translate3d / translate) to {x, y} pixels */
+  function _getLeafletPaneOffset(el) {
+    const t = el.style.transform || window.getComputedStyle(el).transform;
+    if (!t || t === "none") return { x: 0, y: 0 };
+    // translate3d(Xpx, Ypx, 0px) or matrix(...)
+    const m3d = t.match(/translate3d\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/);
+    if (m3d) return { x: parseFloat(m3d[1]), y: parseFloat(m3d[2]) };
+    const mat = t.match(/matrix\(\s*[\d.e+-]+\s*,\s*[\d.e+-]+\s*,\s*[\d.e+-]+\s*,\s*[\d.e+-]+\s*,\s*(-?[\d.e+-]+)\s*,\s*(-?[\d.e+-]+)/);
+    if (mat) return { x: parseFloat(mat[1]), y: parseFloat(mat[2]) };
+    return { x: 0, y: 0 };
+  }
+
+  /** Draw simple HTML marker icons from a Leaflet pane onto a canvas */
+  function _drawPaneMarkers(ctx, map, paneName, scale) {
+    const pane = map.getPane(paneName);
+    if (!pane) return;
+    const paneOffset = _getLeafletPaneOffset(pane);
+    const imgs = pane.querySelectorAll("img");
+    for (const img of imgs) {
+      if (!img.complete || !img.naturalWidth) continue;
+      try {
+        const rect = img.getBoundingClientRect();
+        const containerRect = map.getContainer().getBoundingClientRect();
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+        const iw = rect.width * scale;
+        const ih = rect.height * scale;
+        ctx.drawImage(img, x, y, iw, ih);
+      } catch (_) {}
     }
   }
 
