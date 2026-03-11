@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -22,7 +23,7 @@ class TileServer:
 
     def __init__(self, mbtiles_path: Path):
         self.path = mbtiles_path
-        self._conn: Optional[sqlite3.Connection] = None
+        self._local = threading.local()
         self._metadata: Optional[Dict[str, str]] = None
 
     @property
@@ -30,17 +31,20 @@ class TileServer:
         return self.path.exists()
 
     def _get_conn(self) -> sqlite3.Connection:
-        if self._conn is None:
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
             if not self.path.exists():
                 raise FileNotFoundError(f"MBTiles file not found: {self.path}")
-            self._conn = sqlite3.connect(str(self.path), timeout=10)
-            self._conn.execute("PRAGMA journal_mode=WAL")
-        return self._conn
+            conn = sqlite3.connect(str(self.path), timeout=10)
+            conn.execute("PRAGMA journal_mode=WAL")
+            self._local.conn = conn
+        return conn
 
     def close(self):
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        conn = getattr(self._local, "conn", None)
+        if conn:
+            conn.close()
+            self._local.conn = None
 
     def get_metadata(self) -> Dict[str, str]:
         """Read MBTiles metadata table."""
