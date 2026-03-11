@@ -29,5 +29,15 @@
   {"name":"Lotnisko Krosno","iata":"","icao":"","lat":49.6997,"lon":21.7603,"city":"Krosno"},
   {"name":"Lotnisko Stalowa Wola-Turbia","iata":"","icao":"EPSW","lat":50.5917,"lon":21.7764,"city":"Stalowa Wola"},
   {"name":"Lotnisko Sochaczew","iata":"","icao":"","lat":52.2400,"lon":20.2600,"city":"Sochaczew"},
-  {"name":"Lotnisko Płock","iata":"","icao":"EPPL","lat":52.5736,"lon":19.7228,"city":"Płock"}
+  {"name":"Lotnisko Płock","iata":"","icao":"EPPL","lat":52.5736,"lon":19.7228,"city":"Płock"},
+  {"name":"Lotnisko Gdynia-Kosakowo","iata":"QYD","icao":"EPOK","lat":54.5797,"lon":18.5172,"city":"Gdynia"},
+  {"name":"Lotnisko Warszawa-Babice","iata":"","icao":"EPBC","lat":52.2692,"lon":20.9072,"city":"Warszawa"},
+  {"name":"Lotnisko Góraszka","iata":"","icao":"","lat":52.1844,"lon":21.2811,"city":"Sulejówek"},
+  {"name":"Lotnisko Świdnik","iata":"","icao":"","lat":51.2320,"lon":22.6903,"city":"Świdnik"},
+  {"name":"Lotnisko Kielce-Masłów","iata":"","icao":"","lat":50.8967,"lon":20.7317,"city":"Kielce"},
+  {"name":"Lotnisko Opole-Polska Nowa Wieś","iata":"","icao":"EPOP","lat":50.6332,"lon":17.7817,"city":"Opole"},
+  {"name":"Lotnisko Poznań-Kobylnica","iata":"","icao":"EPPK","lat":52.4339,"lon":17.0440,"city":"Poznań"},
+  {"name":"Lotnisko Pobiednik Wielki","iata":"","icao":"","lat":50.0864,"lon":20.2003,"city":"Pobiednik Wielki"},
+  {"name":"Lotnisko Grudziądz-Lisie Kąty","iata":"","icao":"EPGR","lat":53.5244,"lon":18.8492,"city":"Grudziądz"},
+  {"name":"Lotnisko Toruń (Aeroklub Pomorski)","iata":"","icao":"EPTO","lat":53.0292,"lon":18.5459,"city":"Toruń"}
 ]
