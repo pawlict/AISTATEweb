@@ -3104,6 +3104,7 @@ def api_get_settings() -> Any:
         "hf_token_present": bool(getattr(s, "hf_token", "")),
         "whisper_model": getattr(s, "whisper_model", "large-v3"),
         "opencellid_token": getattr(s, "opencellid_token", ""),
+        "map_source": getattr(s, "map_source", "auto"),
     }
 
 
@@ -3129,6 +3130,10 @@ def api_save_settings(payload: Dict[str, Any]) -> Any:
             s.password_policy = pp
     if "password_expiry_days" in payload:
         s.password_expiry_days = max(0, int(payload["password_expiry_days"]))
+    if "map_source" in payload:
+        ms = str(payload["map_source"])
+        if ms in ("auto", "offline", "online"):
+            s.map_source = ms
     save_settings(s)
     return {"ok": True}
 

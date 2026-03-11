@@ -134,6 +134,70 @@
     _hideProgress(2000);
   }
 
+  /* ── Map source selector ─────────────────────────────── */
+
+  async function loadMapSource() {
+    try {
+      const resp = await fetch("/api/settings");
+      const data = await resp.json();
+      const sel = QS("#bts_map_source");
+      if (sel && data.map_source) {
+        sel.value = data.map_source;
+      }
+      _updateMapSourceStatus(data.map_source || "auto");
+      return data;
+    } catch (e) {
+      console.warn("Failed to load map source:", e);
+      return {};
+    }
+  }
+
+  async function saveMapSource(value) {
+    try {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ map_source: value }),
+      });
+      _updateMapSourceStatus(value);
+    } catch (e) {
+      console.warn("Failed to save map source:", e);
+    }
+  }
+
+  async function _updateMapSourceStatus(mode) {
+    const statusEl = QS("#bts_map_source_status");
+    if (!statusEl) return;
+
+    // Check offline availability
+    let offlineAvailable = false;
+    let offlineFormat = "";
+    try {
+      const resp = await fetch("/api/gsm/tiles/info");
+      const info = await resp.json();
+      offlineAvailable = info.available;
+      offlineFormat = info.format || "";
+    } catch (e) { /* ignore */ }
+
+    let html = "";
+    if (mode === "auto") {
+      if (offlineAvailable) {
+        html = '<span style="color:#22c55e">&#9679;</span> <span class="small">Aktywna: mapa offline (' + offlineFormat.toUpperCase() + ')</span>';
+      } else {
+        html = '<span style="color:#3b82f6">&#9679;</span> <span class="small">Aktywna: OpenStreetMap online</span>';
+      }
+    } else if (mode === "offline") {
+      if (offlineAvailable) {
+        html = '<span style="color:#22c55e">&#9679;</span> <span class="small">Aktywna: mapa offline (' + offlineFormat.toUpperCase() + ')</span>';
+      } else {
+        html = '<span style="color:#f97316">&#9679;</span> <span class="small">Uwaga: brak pliku MBTiles — mapa nie będzie dostępna</span>';
+      }
+    } else {
+      html = '<span style="color:#3b82f6">&#9679;</span> <span class="small">Aktywna: OpenStreetMap online</span>';
+    }
+    statusEl.innerHTML = html;
+  }
+
   /* ── OpenCelliD token persistence ─────────────────────── */
 
   let _ocidTokenSaveTimer = null;
@@ -427,11 +491,16 @@
     // MBTiles remove
     const mbRemove = QS("#bts_mbtiles_remove_btn");
     if (mbRemove) mbRemove.onclick = removeMBTiles;
+
+    // Map source selector
+    const mapSrcSel = QS("#bts_map_source");
+    if (mapSrcSel) mapSrcSel.onchange = () => saveMapSource(mapSrcSel.value);
   }
 
   /* ── Init ─────────────────────────────────────────────── */
 
   bind();
+  loadMapSource();
   loadOcidToken();
   refreshStats();
   refreshTilesStatus();

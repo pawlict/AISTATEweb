@@ -24,3 +24,5 @@ class Settings:
     password_policy: str = "basic"
     # Security: password expiration (days, 0 = disabled)
     password_expiry_days: int = 0
+    # Map source: "auto" (offline if available, else online), "offline", "online"
+    map_source: str = "auto"

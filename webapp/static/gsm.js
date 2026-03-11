@@ -3267,31 +3267,229 @@
   }
 
   async function _addTileLayer(map) {
-    // Check for offline tiles
+    // Fetch user preference
+    let mapSource = "auto";
     try {
-      const resp = await fetch("/api/gsm/tiles/info");
-      const info = await resp.json();
-      if (info.available) {
-        const fmt = info.format || "pbf";
-        if (fmt === "png" || fmt === "jpg" || fmt === "jpeg") {
-          L.tileLayer("/api/gsm/tiles/{z}/{x}/{y}", {
-            maxZoom: parseInt(info.maxzoom) || 18,
-            minZoom: parseInt(info.minzoom) || 0,
-            attribution: "Offline map | OpenStreetMap",
-          }).addTo(map);
-          _addLog("info", "Używam mapy offline (MBTiles)");
-          return;
-        }
-      }
-    } catch (e) {
-      // Ignore — use online fallback
+      const sResp = await fetch("/api/settings");
+      const sData = await sResp.json();
+      mapSource = sData.map_source || "auto";
+    } catch (e) { /* default auto */ }
+
+    // Force online mode
+    if (mapSource === "online") {
+      _addOnlineTileLayer(map);
+      return;
     }
 
-    // Fallback: OpenStreetMap online tiles
+    // Check offline tiles availability
+    let info = null;
+    try {
+      const resp = await fetch("/api/gsm/tiles/info");
+      info = await resp.json();
+    } catch (e) { /* ignore */ }
+
+    const offlineAvailable = info && info.available;
+    const fmt = offlineAvailable ? (info.format || "pbf") : "";
+
+    // If forced offline but no tiles — show warning, add empty layer
+    if (mapSource === "offline" && !offlineAvailable) {
+      _addLog("warn", "Mapa offline wymuszona, ale brak pliku MBTiles — mapa będzie pusta");
+      _setMapBadge(map, "OFFLINE — brak MBTiles", "#f97316");
+      return;
+    }
+
+    // Use offline if available (auto or forced offline)
+    if (offlineAvailable) {
+      const isRaster = (fmt === "png" || fmt === "jpg" || fmt === "jpeg" || fmt === "webp");
+      if (isRaster) {
+        L.tileLayer("/api/gsm/tiles/{z}/{x}/{y}", {
+          maxZoom: parseInt(info.maxzoom) || 18,
+          minZoom: parseInt(info.minzoom) || 0,
+          attribution: "Offline map | OpenStreetMap",
+        }).addTo(map);
+        _addLog("info", "Używam mapy offline — raster (" + fmt.toUpperCase() + ")");
+        _setMapBadge(map, "OFFLINE — " + fmt.toUpperCase(), "#22c55e");
+        return;
+      }
+      if (fmt === "pbf") {
+        // Vector PBF tiles via maplibre-gl rendered to a Leaflet layer
+        await _addPbfVectorLayer(map, info);
+        return;
+      }
+    }
+
+    // Fallback: online
+    _addOnlineTileLayer(map);
+  }
+
+  function _addOnlineTileLayer(map) {
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
+    _addLog("info", "Używam mapy online (OpenStreetMap)");
+    _setMapBadge(map, "ONLINE", "#3b82f6");
+  }
+
+  /* ── MapLibre GL JS loader (for PBF vector tiles) ────── */
+
+  function _loadMapLibre() {
+    return new Promise((resolve) => {
+      if (window.maplibregl) { resolve(true); return; }
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css";
+      document.head.appendChild(css);
+      // Also add Leaflet-MapLibre plugin
+      const js1 = document.createElement("script");
+      js1.src = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";
+      js1.onload = () => {
+        const js2 = document.createElement("script");
+        js2.src = "https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js";
+        js2.onload = () => resolve(true);
+        js2.onerror = () => { console.warn("Leaflet-MapLibre plugin unavailable"); resolve(false); };
+        document.head.appendChild(js2);
+      };
+      js1.onerror = () => { console.warn("MapLibre GL JS CDN unavailable"); resolve(false); };
+      document.head.appendChild(js1);
+    });
+  }
+
+  async function _addPbfVectorLayer(map, info) {
+    const loaded = await _loadMapLibre();
+    if (!loaded || !window.maplibregl || !L.maplibreGL) {
+      _addLog("warn", "MapLibre GL JS niedostępne — fallback na mapę online");
+      _addOnlineTileLayer(map);
+      return;
+    }
+
+    const maxZoom = parseInt(info.maxzoom) || 14;
+    const minZoom = parseInt(info.minzoom) || 0;
+
+    // OSM Bright-like style for offline PBF tiles served from local API
+    const style = {
+      version: 8,
+      name: "Offline PBF",
+      sources: {
+        openmaptiles: {
+          type: "vector",
+          tiles: [window.location.origin + "/api/gsm/tiles/{z}/{x}/{y}"],
+          minzoom: minZoom,
+          maxzoom: maxZoom,
+        },
+      },
+      glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
+      layers: [
+        // Background
+        { id: "background", type: "background", paint: { "background-color": "#f8f4f0" } },
+        // Water
+        { id: "water", type: "fill", source: "openmaptiles", "source-layer": "water",
+          paint: { "fill-color": "#a0c8f0" } },
+        // Landcover
+        { id: "landcover-grass", type: "fill", source: "openmaptiles", "source-layer": "landcover",
+          filter: ["==", "class", "grass"],
+          paint: { "fill-color": "#d8e8c8", "fill-opacity": 0.6 } },
+        { id: "landcover-wood", type: "fill", source: "openmaptiles", "source-layer": "landcover",
+          filter: ["==", "class", "wood"],
+          paint: { "fill-color": "#aed1a0", "fill-opacity": 0.6 } },
+        // Landuse
+        { id: "landuse-residential", type: "fill", source: "openmaptiles", "source-layer": "landuse",
+          filter: ["==", "class", "residential"],
+          paint: { "fill-color": "#e8e0d8", "fill-opacity": 0.5 } },
+        { id: "landuse-commercial", type: "fill", source: "openmaptiles", "source-layer": "landuse",
+          filter: ["in", "class", "commercial", "retail"],
+          paint: { "fill-color": "#f2dad9", "fill-opacity": 0.4 } },
+        { id: "landuse-industrial", type: "fill", source: "openmaptiles", "source-layer": "landuse",
+          filter: ["==", "class", "industrial"],
+          paint: { "fill-color": "#ebdbe8", "fill-opacity": 0.4 } },
+        // Park
+        { id: "park", type: "fill", source: "openmaptiles", "source-layer": "park",
+          paint: { "fill-color": "#d8e8c8", "fill-opacity": 0.6 } },
+        // Buildings
+        { id: "building", type: "fill", source: "openmaptiles", "source-layer": "building",
+          minzoom: 13,
+          paint: { "fill-color": "#d9d0c9", "fill-outline-color": "#b9b0a9" } },
+        // Roads
+        { id: "road-motorway", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "motorway"],
+          paint: { "line-color": "#e892a2", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1, 14, 5] } },
+        { id: "road-trunk", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "trunk"],
+          paint: { "line-color": "#f9b29c", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 14, 4] } },
+        { id: "road-primary", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "primary"],
+          paint: { "line-color": "#fcd6a4", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 14, 3] } },
+        { id: "road-secondary", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "secondary"],
+          paint: { "line-color": "#f7fabf", "line-width": ["interpolate", ["linear"], ["zoom"], 7, 0.3, 14, 2.5] } },
+        { id: "road-minor", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["in", "class", "tertiary", "minor", "service", "path"],
+          minzoom: 10,
+          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 1.5] } },
+        // Railway
+        { id: "railway", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "rail"],
+          paint: { "line-color": "#bbb", "line-width": 1, "line-dasharray": [3, 3] } },
+        // Boundaries
+        { id: "boundary-country", type: "line", source: "openmaptiles", "source-layer": "boundary",
+          filter: ["==", "admin_level", 2],
+          paint: { "line-color": "#9e9cab", "line-width": 1.5 } },
+        // Place labels
+        { id: "place-city", type: "symbol", source: "openmaptiles", "source-layer": "place",
+          filter: ["==", "class", "city"],
+          layout: { "text-field": "{name:latin}", "text-size": 14, "text-font": ["Open Sans Bold"] },
+          paint: { "text-color": "#333", "text-halo-color": "#fff", "text-halo-width": 1.5 } },
+        { id: "place-town", type: "symbol", source: "openmaptiles", "source-layer": "place",
+          filter: ["==", "class", "town"],
+          layout: { "text-field": "{name:latin}", "text-size": 12, "text-font": ["Open Sans Regular"] },
+          paint: { "text-color": "#555", "text-halo-color": "#fff", "text-halo-width": 1 } },
+        { id: "place-village", type: "symbol", source: "openmaptiles", "source-layer": "place",
+          filter: ["==", "class", "village"],
+          minzoom: 10,
+          layout: { "text-field": "{name:latin}", "text-size": 10, "text-font": ["Open Sans Regular"] },
+          paint: { "text-color": "#666", "text-halo-color": "#fff", "text-halo-width": 1 } },
+        // Road labels
+        { id: "road-label", type: "symbol", source: "openmaptiles", "source-layer": "transportation_name",
+          minzoom: 12,
+          layout: {
+            "text-field": "{name:latin}",
+            "text-size": 10,
+            "text-font": ["Open Sans Regular"],
+            "symbol-placement": "line",
+          },
+          paint: { "text-color": "#666", "text-halo-color": "#fff", "text-halo-width": 1 } },
+      ],
+    };
+
+    try {
+      L.maplibreGL({ style: style, attribution: "Offline map (PBF) | OpenStreetMap" }).addTo(map);
+      _addLog("info", "Używam mapy offline — wektor (PBF) via MapLibre GL");
+      _setMapBadge(map, "OFFLINE — PBF", "#22c55e");
+    } catch (e) {
+      console.error("MapLibre GL layer error:", e);
+      _addLog("warn", "Błąd MapLibre GL — fallback na mapę online");
+      _addOnlineTileLayer(map);
+    }
+  }
+
+  /* ── Map badge (source indicator) ────────────────────── */
+
+  function _setMapBadge(map, text, color) {
+    if (!map || !map.getContainer) return;
+    const container = map.getContainer();
+    // Remove old badge
+    const old = container.querySelector(".gsm-map-badge");
+    if (old) old.remove();
+    // Create badge
+    const badge = document.createElement("div");
+    badge.className = "gsm-map-badge";
+    badge.style.cssText = "position:absolute;top:10px;right:10px;z-index:1000;" +
+      "padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;" +
+      "color:#fff;pointer-events:none;opacity:0.85;" +
+      "background:" + color + ";";
+    badge.textContent = text;
+    container.style.position = "relative";
+    container.appendChild(badge);
   }
 
   function _addAllPoints(map, geo) {
