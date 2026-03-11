@@ -5418,6 +5418,9 @@
     const mapEl = St.map.getContainer();
     mapEl.style.cursor = "crosshair";
 
+    // Disable overlay marker interactivity during area select (prevent event stealing)
+    _setOverlayInteractive(false);
+
     // Bind events
     St.map.on("mousedown", _areaMouseDown);
     document.addEventListener("keydown", _areaEscHandler);
@@ -5434,16 +5437,21 @@
       St.areaSelectLayer = null;
     }
 
-    // Reset buttons
-    const circleBtn = QS("#gsm_select_circle_btn");
-    const rectBtn = QS("#gsm_select_rect_btn");
-    if (circleBtn) circleBtn.classList.remove("btn-active");
-    if (rectBtn) rectBtn.classList.remove("btn-active");
+    // Reset buttons only if no active area filter (keep pressed while filter active)
+    if (!St.areaShape) {
+      const circleBtn = QS("#gsm_select_circle_btn");
+      const rectBtn = QS("#gsm_select_rect_btn");
+      if (circleBtn) circleBtn.classList.remove("btn-active");
+      if (rectBtn) rectBtn.classList.remove("btn-active");
+    }
 
     // Re-enable map drag
     St.map.dragging.enable();
     const mapEl = St.map.getContainer();
     mapEl.style.cursor = "";
+
+    // Re-enable overlay marker interactivity
+    _setOverlayInteractive(true);
 
     // Unbind events
     St.map.off("mousedown", _areaMouseDown);
@@ -5452,14 +5460,28 @@
     document.removeEventListener("keydown", _areaEscHandler);
   }
 
+  /** Enable/disable overlay markers during area select so they don't steal mouse events */
+  function _setOverlayInteractive(enabled) {
+    for (const key of ["overlayMilitary", "overlayAirports"]) {
+      const group = St[key];
+      if (!group) continue;
+      group.eachLayer(marker => {
+        const el = marker.getElement && marker.getElement();
+        if (el) el.style.pointerEvents = enabled ? "" : "none";
+      });
+    }
+  }
+
   function _areaEscHandler(e) {
     if (e.key === "Escape") _exitAreaSelectMode();
   }
 
   function _areaMouseDown(e) {
     if (!St.areaSelectMode) return;
-    L.DomEvent.stopPropagation(e);
-    L.DomEvent.preventDefault(e);
+    if (e.originalEvent) {
+      L.DomEvent.stopPropagation(e.originalEvent);
+      L.DomEvent.preventDefault(e.originalEvent);
+    }
     St.areaSelectOrigin = e.latlng;
 
     St.map.on("mousemove", _areaMouseMove);
@@ -5488,7 +5510,7 @@
 
   function _areaMouseUp(e) {
     if (!St.areaSelectMode || !St.areaSelectOrigin) return;
-    L.DomEvent.stopPropagation(e);
+    if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
 
     const endLatLng = e.latlng;
     const mode = St.areaSelectMode;
@@ -5542,9 +5564,15 @@
       const bounds = L.latLngBounds(origin, endLatLng);
       St.areaShape = L.rectangle(bounds, persistStyle).addTo(St.map);
     }
+    // Mark the used button as active (persistent indicator that filter is on)
+    const circleBtn = QS("#gsm_select_circle_btn");
+    const rectBtn = QS("#gsm_select_rect_btn");
+    if (circleBtn) circleBtn.classList.toggle("btn-active", mode === "circle");
+    if (rectBtn) rectBtn.classList.toggle("btn-active", mode === "rect");
+
     // Click on the shape = remove selection & clear filters
     St.areaShape.on("click", (e) => {
-      L.DomEvent.stopPropagation(e);
+      if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
       _clearAreaSelection();
       _clearRecordsFilter();
       if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
@@ -5611,6 +5639,11 @@
       St.map.removeLayer(St.areaShape);
       St.areaShape = null;
     }
+    // Reset button active state (filter cleared)
+    const circleBtn = QS("#gsm_select_circle_btn");
+    const rectBtn = QS("#gsm_select_rect_btn");
+    if (circleBtn) circleBtn.classList.remove("btn-active");
+    if (rectBtn) rectBtn.classList.remove("btn-active");
   }
 
   /* ── Records filter badge helpers ────────────────────── */
