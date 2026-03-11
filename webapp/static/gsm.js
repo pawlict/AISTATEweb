@@ -54,6 +54,10 @@
     areaHighlights: null,     // L.layerGroup with highlighted markers
     areaShape: null,          // persistent Leaflet shape (circle/rect) after selection
     areaLocations: [],        // cached uniqueLocations for selection queries
+    overlayMilitary: null,    // L.layerGroup — military overlay markers
+    overlayAirports: null,    // L.layerGroup — civilian airport overlay markers
+    overlayMilitaryData: null,// cached JSON data
+    overlayAirportsData: null,// cached JSON data
   };
 
   /* ── Column definitions ─────────────────────────────────── */
@@ -2991,6 +2995,12 @@
       };
     }
 
+    // ── Map overlay checkboxes (military / airports) ──
+    const milCb = QS("#gsm_overlay_military");
+    const airCb = QS("#gsm_overlay_airports");
+    if (milCb) milCb.onchange = () => _toggleOverlay("military", milCb.checked);
+    if (airCb) airCb.onchange = () => _toggleOverlay("airports", airCb.checked);
+
     // Reload other BTS on map move/zoom (debounced)
     if (St.map) {
       St.map.on("moveend", () => {
@@ -5293,6 +5303,94 @@
         }
       };
     }
+  }
+
+  /* ── Map overlays (military / airports) ─────────────── */
+
+  const _OVERLAY_TYPE_ICONS = {
+    // Military type → emoji
+    brygada: "⚔️", dywizja: "⚔️", pulk: "🎯", batalion: "🎯",
+    lotnisko_wojskowe: "✈️", baza_morska: "⚓", centrum: "🏛️",
+    poligon: "💥", jednostka: "🪖", baza: "🏗️", dywizjon: "🎯",
+  };
+  const _OVERLAY_TYPE_COLORS = {
+    brygada: "#b91c1c", dywizja: "#991b1b", pulk: "#dc2626",
+    batalion: "#ef4444", lotnisko_wojskowe: "#7c3aed",
+    baza_morska: "#0369a1", centrum: "#b45309", poligon: "#65a30d",
+    jednostka: "#e11d48", baza: "#be123c", dywizjon: "#f97316",
+  };
+
+  async function _toggleOverlay(which, show) {
+    if (!St.map) return;
+    const layerKey = which === "military" ? "overlayMilitary" : "overlayAirports";
+    const dataKey = which === "military" ? "overlayMilitaryData" : "overlayAirportsData";
+    const url = which === "military"
+      ? "/static/data/poland_military.json"
+      : "/static/data/poland_airports.json";
+
+    if (!show) {
+      if (St[layerKey]) { St.map.removeLayer(St[layerKey]); }
+      return;
+    }
+
+    // Load data if not cached
+    if (!St[dataKey]) {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        St[dataKey] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować danych: ${err.message}`);
+        const cb = QS(which === "military" ? "#gsm_overlay_military" : "#gsm_overlay_airports");
+        if (cb) cb.checked = false;
+        return;
+      }
+    }
+
+    // Build layer group if needed
+    if (!St[layerKey]) {
+      const group = L.layerGroup();
+      const data = St[dataKey];
+
+      if (which === "military") {
+        for (const item of data) {
+          const icon = _OVERLAY_TYPE_ICONS[item.type] || "🪖";
+          const color = _OVERLAY_TYPE_COLORS[item.type] || "#b91c1c";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          m.bindTooltip(`<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.addTo(group);
+        }
+      } else {
+        // Airports
+        for (const item of data) {
+          const label = item.iata ? `${item.iata}` : "";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">✈️</span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          const tooltipHtml = `<b style="color:#2563eb">${item.name}</b>`
+            + (label ? `<br><span class="small" style="color:#6b7280">${label} — ${item.city}</span>` : `<br><span class="small">${item.city}</span>`);
+          m.bindTooltip(tooltipHtml, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.addTo(group);
+        }
+      }
+      St[layerKey] = group;
+    }
+
+    St[layerKey].addTo(St.map);
   }
 
   /* ── Area selection (circle / rectangle) ─────────────── */
