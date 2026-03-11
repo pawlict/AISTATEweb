@@ -600,42 +600,67 @@
               <img src="/static/icons/akcje/select_rect.svg" alt="Zaznacz prostokąt" width="22" height="22" draggable="false">
             </button>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <select class="input" id="gsm_map_layer_select" style="padding:5px 8px;border-radius:10px;min-width:140px"
-                    title="Wybierz widok mapy">
-              <option value="all" title="Wszystkie unikalne lokalizacje BTS z bilingu. Rozmiar punktu zależy od liczby rekordów, kolor od dominującego typu (połączenie/SMS/dane). 2×klik filtruje tabelę.">Wszystkie punkty</option>
-              <option value="path" title="Trasa przemieszczania się — linia łącząca kolejne punkty BTS z filtrowaniem przemieszczeń >2km. Wizualizuje fizyczną drogę urządzenia w czasie.">Ścieżka</option>
-              <option value="clusters" title="Algorytm grupuje bliskie stacje BTS w „miejsca" (dom, praca, inne). Każdy klaster ma kółko z zasięgiem i etykietę z miastem. Pod mapą widać kafelki z mini-wykresem godzinowym.">Klastry</option>
-              <option value="trips" title="Podróże między klastrami — strzałki łączące klastry z informacją o kierunku, dystansie i trybie podróży (samochód/pociąg). Trasy rysowane po drogach (OSRM).">Podróże</option>
-              <option value="border" title="Przekroczenia granicy — linie z ostatniego punktu BTS w Polsce do centrum odwiedzanego kraju. Ikona trybu podróży (samolot/samochód/pieszo) na linii, daty wyjazdu i powrotu.">Granica</option>
-              <option value="coverage" title="Obszarowy zasięg BTS — sektory (kierunek azymutu) lub kółka (dookólne). Kolory wg technologii: GSM=czerwony, UMTS=pomarańczowy, LTE=niebieski, 5G=fioletowy. Promień z bazy BTS.">Zasięg BTS</option>
-              <option value="heatmap" title="Mapa cieplna — wizualizacja gęstości punktów BTS. Kolorowy gradient pokazuje gdzie urządzenie przebywało najczęściej.">Mapa cieplna</option>
-              <option value="timeline" title="Animowany odtwarzacz — chronologicznie odtwarza ruch urządzenia na mapie. Marker z emoji trybu podróży, kontrolki play/pauza/prędkość, suwak czasu.">Oś czasu</option>
-            </select>
-            <span class="small muted" id="gsm_map_stats"></span>
+          <span class="small muted" id="gsm_map_stats"></span>
+        </div>
+        <div id="gsm_map_container" style="height:500px;border-radius:12px;border:1px solid var(--border);margin-top:10px;background:#e8e8e8;position:relative">
+          <!-- Floating layer panel (left side) -->
+          <div class="gsm-layer-panel" id="gsm_layer_panel">
+            <div class="gsm-lp-header" id="gsm_lp_header_toggle">
+              <span>&#9776; Warstwy</span>
+              <span class="gsm-lp-toggle">&#9664;</span>
+            </div>
+            <div class="gsm-lp-body">
+              <!-- Main map view layers -->
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Widok mapy</div>
+                <label class="gsm-lp-item active" data-layer="all">
+                  <input type="radio" name="gsm_map_layer" value="all" checked> Wszystkie punkty
+                </label>
+                <label class="gsm-lp-item" data-layer="path">
+                  <input type="radio" name="gsm_map_layer" value="path"> Ścieżka
+                </label>
+                <label class="gsm-lp-item" data-layer="clusters">
+                  <input type="radio" name="gsm_map_layer" value="clusters"> Klastry
+                </label>
+                <label class="gsm-lp-item" data-layer="trips">
+                  <input type="radio" name="gsm_map_layer" value="trips"> Podróże
+                </label>
+                <label class="gsm-lp-item" data-layer="border">
+                  <input type="radio" name="gsm_map_layer" value="border"> Granica
+                </label>
+                <label class="gsm-lp-item" data-layer="coverage">
+                  <input type="radio" name="gsm_map_layer" value="coverage"> Zasięg BTS
+                </label>
+                <label class="gsm-lp-item" data-layer="heatmap">
+                  <input type="radio" name="gsm_map_layer" value="heatmap"> Mapa cieplna
+                </label>
+                <label class="gsm-lp-item" data-layer="timeline">
+                  <input type="radio" name="gsm_map_layer" value="timeline"> Oś czasu
+                </label>
+              </div>
+              <!-- Coverage sub-options -->
+              <div id="gsm_coverage_opts" class="gsm-lp-cov-opts" style="display:none">
+                <label><input type="checkbox" id="gsm_cov_billing" checked> Stacje BTS billing</label>
+                <label><input type="checkbox" id="gsm_cov_other"> Stacje BTS inne</label>
+                <span class="small muted" id="gsm_cov_other_count"></span>
+              </div>
+              <div class="gsm-lp-divider"></div>
+              <!-- Overlay layers -->
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Nakładki</div>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_overlay_military"> <span style="color:#b91c1c">&#9733;</span> Jednostki wojskowe
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_overlay_airports"> <span style="color:#2563eb">&#9992;</span> Lotniska cywilne
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_overlay_diplomacy"> <span style="color:#059669">&#9878;</span> Placówki dyplomatyczne
+                </label>
+              </div>
+            </div>
           </div>
         </div>
-        <!-- Coverage sub-options (visible only when layer=coverage) -->
-        <div id="gsm_coverage_opts" style="display:none;margin-top:6px;padding:6px 12px;background:var(--bg-muted,#f1f5f9);border-radius:8px;font-size:12px">
-          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;margin-right:14px">
-            <input type="checkbox" id="gsm_cov_billing" checked> Stacje BTS billing
-          </label>
-          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
-            <input type="checkbox" id="gsm_cov_other"> Stacje BTS inne
-          </label>
-          <span class="small muted" id="gsm_cov_other_count" style="margin-left:8px"></span>
-        </div>
-        <!-- Map overlay checkboxes (military / airports) -->
-        <div id="gsm_overlay_opts" style="margin-top:6px;padding:6px 12px;background:var(--bg-muted,#f1f5f9);border-radius:8px;font-size:12px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">
-          <span class="small" style="font-weight:600;opacity:.7">Warstwy:</span>
-          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
-            <input type="checkbox" id="gsm_overlay_military"> <span style="color:#b91c1c">&#9733;</span> Jednostki wojskowe
-          </label>
-          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
-            <input type="checkbox" id="gsm_overlay_airports"> <span style="color:#2563eb">&#9992;</span> Lotniska cywilne
-          </label>
-        </div>
-        <div id="gsm_map_container" style="height:500px;border-radius:12px;border:1px solid var(--border);margin-top:10px;background:#e8e8e8;position:relative"></div>
         <div class="gsm-graph-resize" id="gsm_map_resize" title="Przeciągnij aby zmienić rozmiar"></div>
         <!-- Timeline player v4 -->
         <div id="gsm_timeline_wrap" style="display:none;margin-top:8px">

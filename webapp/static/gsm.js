@@ -56,8 +56,10 @@
     areaLocations: [],        // cached uniqueLocations for selection queries
     overlayMilitary: null,    // L.layerGroup — military overlay markers
     overlayAirports: null,    // L.layerGroup — civilian airport overlay markers
+    overlayDiplomacy: null,   // L.layerGroup — diplomatic posts overlay
     overlayMilitaryData: null,// cached JSON data
     overlayAirportsData: null,// cached JSON data
+    overlayDiplomacyData: null,// cached JSON data
   };
 
   /* ── Column definitions ─────────────────────────────────── */
@@ -2944,8 +2946,7 @@
     if (selectCircleBtn) selectCircleBtn.onclick = () => _enterAreaSelectMode("circle");
     if (selectRectBtn) selectRectBtn.onclick = () => _enterAreaSelectMode("rect");
 
-    // Layer switcher (descriptions are in title attributes — native tooltips)
-    const layerSelect = QS("#gsm_map_layer_select");
+    // ── Floating layer panel ──
     const coverageOpts = QS("#gsm_coverage_opts");
     const covBillingCb = QS("#gsm_cov_billing");
     const covOtherCb = QS("#gsm_cov_other");
@@ -2953,11 +2954,25 @@
     // Build exclude list once from billing data
     _otherBtsExcludeSet = _buildExcludeSet(geo);
 
-    if (layerSelect) {
-      layerSelect.onchange = () => {
-        const layer = layerSelect.value;
+    // Panel collapse/expand toggle
+    const layerPanel = QS("#gsm_layer_panel");
+    const lpToggle = QS("#gsm_lp_header_toggle");
+    if (lpToggle && layerPanel) {
+      lpToggle.onclick = () => layerPanel.classList.toggle("collapsed");
+    }
+
+    // Layer radio buttons (replace old select)
+    const layerRadios = document.querySelectorAll('input[name="gsm_map_layer"]');
+    for (const radio of layerRadios) {
+      radio.onchange = () => {
+        if (!radio.checked) return;
+        const layer = radio.value;
         _closeAllPinnedCards();
         _switchMapLayer(layer, geo);
+        // Update active class on items
+        for (const item of document.querySelectorAll(".gsm-lp-item[data-layer]")) {
+          item.classList.toggle("active", item.dataset.layer === layer);
+        }
         // Show/hide coverage sub-options
         if (coverageOpts) coverageOpts.style.display = layer === "coverage" ? "" : "none";
         // Disable other BTS when switching away from coverage
@@ -2995,11 +3010,13 @@
       };
     }
 
-    // ── Map overlay checkboxes (military / airports) ──
+    // ── Map overlay checkboxes (military / airports / diplomacy) ──
     const milCb = QS("#gsm_overlay_military");
     const airCb = QS("#gsm_overlay_airports");
+    const dipCb = QS("#gsm_overlay_diplomacy");
     if (milCb) milCb.onchange = () => _toggleOverlay("military", milCb.checked);
     if (airCb) airCb.onchange = () => _toggleOverlay("airports", airCb.checked);
+    if (dipCb) dipCb.onchange = () => _toggleOverlay("diplomacy", dipCb.checked);
 
     // Reload other BTS on map move/zoom (debounced)
     if (St.map) {
@@ -3120,8 +3137,9 @@
       });
 
       // ── Draw watermark ──
-      const layerSelect = QS("#gsm_map_layer_select");
-      const layerLabel = layerSelect ? layerSelect.options[layerSelect.selectedIndex].text : "";
+      const activeRadio = QS('input[name="gsm_map_layer"]:checked');
+      const activeItem = activeRadio ? activeRadio.closest(".gsm-lp-item") : null;
+      const layerLabel = activeItem ? activeItem.textContent.trim() : "";
       const extraParts = [];
       if (layerLabel) extraParts.push(layerLabel);
       extraParts.push("© OpenStreetMap contributors");
@@ -5305,7 +5323,7 @@
     }
   }
 
-  /* ── Map overlays (military / airports) ─────────────── */
+  /* ── Map overlays (military / airports / diplomacy) ─────────────── */
 
   const _OVERLAY_TYPE_ICONS = {
     // Military type → emoji
@@ -5319,14 +5337,30 @@
     baza_morska: "#0369a1", centrum: "#b45309", poligon: "#65a30d",
     jednostka: "#e11d48", baza: "#be123c", dywizjon: "#f97316",
   };
+  const _DIPLOMACY_TYPE_ICONS = {
+    ambasada_rp: "🇵🇱", konsulat_rp: "🇵🇱", konsulat_honorowy_rp: "🇵🇱",
+    stale_przedstawicielstwo_rp: "🇵🇱", instytut_polski: "🇵🇱", biuro_ataszatu_rp: "🇵🇱",
+    ambasada_obca: "🏛️", konsulat_obcy: "🏛️",
+  };
+  const _DIPLOMACY_TYPE_COLORS = {
+    ambasada_rp: "#dc2626", konsulat_rp: "#ea580c", konsulat_honorowy_rp: "#d97706",
+    stale_przedstawicielstwo_rp: "#7c3aed", instytut_polski: "#0891b2", biuro_ataszatu_rp: "#be123c",
+    ambasada_obca: "#059669", konsulat_obcy: "#0d9488",
+  };
 
   async function _toggleOverlay(which, show) {
     if (!St.map) return;
-    const layerKey = which === "military" ? "overlayMilitary" : "overlayAirports";
-    const dataKey = which === "military" ? "overlayMilitaryData" : "overlayAirportsData";
-    const url = which === "military"
-      ? "/static/data/poland_military.json"
-      : "/static/data/poland_airports.json";
+    const keyMap = { military: "overlayMilitary", airports: "overlayAirports", diplomacy: "overlayDiplomacy" };
+    const dataMap = { military: "overlayMilitaryData", airports: "overlayAirportsData", diplomacy: "overlayDiplomacyData" };
+    const urlMap = {
+      military: "/static/data/poland_military.json",
+      airports: "/static/data/poland_airports.json",
+      diplomacy: "/static/data/poland_diplomacy.json",
+    };
+    const cbMap = { military: "#gsm_overlay_military", airports: "#gsm_overlay_airports", diplomacy: "#gsm_overlay_diplomacy" };
+    const layerKey = keyMap[which];
+    const dataKey = dataMap[which];
+    const url = urlMap[which];
 
     if (!show) {
       if (St[layerKey]) { St.map.removeLayer(St[layerKey]); }
@@ -5341,7 +5375,7 @@
         St[dataKey] = await resp.json();
       } catch (err) {
         _addLog("error", `Nie udało się załadować danych: ${err.message}`);
-        const cb = QS(which === "military" ? "#gsm_overlay_military" : "#gsm_overlay_airports");
+        const cb = QS(cbMap[which]);
         if (cb) cb.checked = false;
         return;
       }
@@ -5364,6 +5398,23 @@
           });
           const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
           m.bindTooltip(`<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.addTo(group);
+        }
+      } else if (which === "diplomacy") {
+        for (const item of data) {
+          const icon = _DIPLOMACY_TYPE_ICONS[item.type] || "🏛️";
+          const color = _DIPLOMACY_TYPE_COLORS[item.type] || "#059669";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          const countryTag = item.country ? ` <span class="small" style="color:#6b7280">(${item.country})</span>` : "";
+          m.bindTooltip(`<b style="color:${color}">${item.name}</b>${countryTag}<br><span class="small">${item.desc || ""}</span>`, {
             direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
           });
           m.addTo(group);
@@ -5462,7 +5513,7 @@
 
   /** Enable/disable overlay markers during area select so they don't steal mouse events */
   function _setOverlayInteractive(enabled) {
-    for (const key of ["overlayMilitary", "overlayAirports"]) {
+    for (const key of ["overlayMilitary", "overlayAirports", "overlayDiplomacy"]) {
       const group = St[key];
       if (!group) continue;
       group.eachLayer(marker => {
