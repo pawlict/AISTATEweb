@@ -3153,7 +3153,8 @@
           _addLog("warn", "Nie udało się utworzyć zdjęcia mapy");
           return;
         }
-        const layerName = layerSelect ? layerSelect.value : "mapa";
+        const activeR = QS('input[name="gsm_map_layer"]:checked');
+        const layerName = activeR ? activeR.value : "mapa";
         const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
         const filename = `BTS_${layerName}_${ts}.png`;
 
