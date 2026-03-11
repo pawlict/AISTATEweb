@@ -3121,8 +3121,28 @@
     const btn = QS("#gsm_map_screenshot_btn");
     if (btn) btn.disabled = true;
 
+    const hiddenEls = [];
     try {
       await _ensureHtml2Canvas();
+
+      // ── Hide UI overlays before capture ──
+      const _hideForScreenshot = [
+        ".gsm-layer-panel",
+        ".leaflet-control-attribution",
+        ".leaflet-control-zoom",
+        ".leaflet-top",
+        ".leaflet-bottom",
+        ".gsm-map-screenshot-btn",
+      ];
+      for (const sel of _hideForScreenshot) {
+        container.querySelectorAll(sel).forEach(el => {
+          hiddenEls.push({ el, prev: el.style.display });
+          el.style.display = "none";
+        });
+      }
+
+      // Small delay so the browser repaints without the overlays
+      await new Promise(r => setTimeout(r, 50));
 
       const mapCanvas = await window.html2canvas(container, {
         useCORS: true,
@@ -3130,10 +3150,6 @@
         backgroundColor: null,
         scale: 2,
         logging: false,
-        onclone: (doc) => {
-          const attr = doc.querySelector(".leaflet-control-attribution");
-          if (attr) attr.style.display = "none";
-        },
       });
 
       // ── Draw watermark ──
@@ -3171,6 +3187,10 @@
     } catch (e) {
       _addLog("error", `Błąd zdjęcia mapy: ${e.message}`);
     } finally {
+      // ── Always restore hidden elements ──
+      for (const { el, prev } of hiddenEls) {
+        el.style.display = prev;
+      }
       if (btn) btn.disabled = false;
     }
   }
@@ -3306,6 +3326,7 @@
         L.tileLayer("/api/gsm/tiles/{z}/{x}/{y}", {
           maxZoom: parseInt(info.maxzoom) || 18,
           minZoom: parseInt(info.minzoom) || 0,
+          crossOrigin: true,
           attribution: "Offline map | OpenStreetMap",
         }).addTo(map);
         _addLog("info", "Używam mapy offline — raster (" + fmt.toUpperCase() + ")");
@@ -3326,6 +3347,7 @@
   function _addOnlineTileLayer(map) {
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
+      crossOrigin: true,
       attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     _addLog("info", "Używam mapy online (OpenStreetMap)");
