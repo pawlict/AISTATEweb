@@ -1748,6 +1748,17 @@
       }
     }
 
+    // Icon paths
+    const _IC_EXPAND = "/static/icons/akcje/expand_down.svg";
+    const _IC_COLLAPSE = "/static/icons/akcje/collapse_up.svg";
+    const _IC_PLUS5 = "/static/icons/akcje/plus5.svg";
+    const _ICON_SZ = 20;
+    const _makeIcon = (src, title, cls) =>
+      `<img src="${src}" width="${_ICON_SZ}" height="${_ICON_SZ}" title="${title}" class="${cls}" style="cursor:pointer;opacity:.65;transition:opacity .15s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.65">`;
+
+    const VISIBLE = 5;
+    const SCROLL_THRESHOLD = 50;
+
     // Render ALL categories in canonical order
     let html = '<div style="display:flex;flex-direction:column;gap:10px">';
     for (const cat of _ANOMALY_CATS) {
@@ -1758,81 +1769,106 @@
       const sevColor = sev === "warning" ? "#f97316" : sev === "info" ? "#3b82f6" : "#22c55e";
       const sevIcon = sev === "warning" ? "\u26A0" : sev === "info" ? "\u2139" : "\u2713";
 
-      const clickable = hasItems ? ` data-anomaly-type="${cat.type}"` : '';
-      const clickStyle = hasItems ? ';cursor:pointer;transition:background .15s,box-shadow .15s' : '';
-      html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;border-left:3px solid ${sevColor}${clickStyle}"${clickable}${hasItems ? ' title="2×LPM → filtruj rekordy"' : ''}>`;
-      html += `<div style="display:flex;align-items:center;gap:6px">`;
-      html += `<span style="color:${sevColor};font-size:15px">${sevIcon}</span>`;
-      html += `<b>${cat.label}</b>`;
+      // ── Card container ──
+      html += `<div class="gsm-anomaly-card" data-anomaly-type="${cat.type}" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;border-left:3px solid ${sevColor};transition:background .15s,box-shadow .15s">`;
+
+      // ── Top bar: header row with name + count + action icons ──
+      html += `<div class="gsm-anomaly-bar" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(${sev === 'warning' ? '249,115,22' : sev === 'info' ? '59,130,246' : '34,197,94'},.04)">`;
+      html += `<span style="color:${sevColor};font-size:15px;flex-shrink:0">${sevIcon}</span>`;
+      html += `<div style="flex:1;min-width:0">`;
+      html += `<div style="display:flex;align-items:center;gap:5px"><b>${cat.label}</b>`;
       if (!hasItems) {
         html += ` <span class="muted">\u2014 brak</span>`;
       } else {
         html += ` <span class="muted">(${items.length})</span>`;
       }
       html += `</div>`;
-      html += `<div class="small muted" style="margin-top:2px;margin-bottom:${hasItems ? '6' : '0'}px">${cat.desc}</div>`;
+      html += `<div class="small muted" style="margin-top:1px;line-height:1.3">${cat.desc}</div>`;
+      html += `</div>`; // end text block
 
+      // ── Action icons (only if has data) ──
       if (hasItems) {
-        const VISIBLE = 5;
-        const SCROLL_THRESHOLD = 50;
+        html += `<div style="display:flex;align-items:center;gap:2px;flex-shrink:0;border-left:1px solid var(--border);padding-left:8px;margin-left:4px">`;
+        // Expand / collapse (only if >5 items)
+        if (items.length > VISIBLE) {
+          html += _makeIcon(_IC_EXPAND, "Rozwiń / zwiń listę", "gsm-anom-toggle") + " ";
+        }
+        // +5 context
+        html += _makeIcon(_IC_PLUS5, "+5 rekordów kontekstu", "gsm-anom-plus5");
+        html += `</div>`;
+      }
+      html += `</div>`; // end bar
+
+      // ── Items body ──
+      if (hasItems) {
         const rendered = isOldFormat
           ? _renderOldAnomalyItems(items)
           : _renderAnomalyItems(cat.type, items);
+        const uid = `anom_exp_${cat.type}`;
+        const collapsedH = VISIBLE * 22;
+        const useScroll = items.length > SCROLL_THRESHOLD;
+        const maxExpandH = useScroll ? '300px' : 'none';
+        const overflowY = useScroll ? 'auto' : 'visible';
+        const needCollapse = items.length > VISIBLE;
 
-        if (items.length <= VISIBLE) {
-          // Few items — show all, no expand
-          html += rendered;
-        } else {
-          // Many items — wrap in collapsible container
-          const uid = `anom_exp_${cat.type}`;
-          // Estimate line height ~22px; show first 5 lines collapsed
-          const collapsedH = VISIBLE * 22;
-          const useScroll = items.length > SCROLL_THRESHOLD;
-          const maxExpandH = useScroll ? '300px' : 'none';
-          const overflowY = useScroll ? 'auto' : 'visible';
-          html += `<div id="${uid}" style="max-height:${collapsedH}px;overflow:hidden;transition:max-height .25s ease">`;
-          html += rendered;
-          html += `</div>`;
-          html += `<div style="text-align:center;margin-top:4px">`;
-          html += `<button data-expand-target="${uid}" data-collapsed-h="${collapsedH}" data-max-h="${maxExpandH}" data-overflow="${overflowY}" `
-            + `style="background:none;border:1px solid var(--border);border-radius:6px;padding:2px 14px;font-size:12px;cursor:pointer;color:var(--text-muted)">`
-            + `Rozwiń (${items.length - VISIBLE} więcej) ▼</button>`;
-          html += `</div>`;
-        }
+        html += `<div id="${uid}" data-collapsed-h="${collapsedH}" data-max-h="${maxExpandH}" data-overflow="${overflowY}" `
+          + `style="padding:4px 12px 8px;${needCollapse ? 'max-height:' + collapsedH + 'px;overflow:hidden;' : ''}transition:max-height .25s ease">`;
+        html += rendered;
+        html += `</div>`;
       }
-      html += `</div>`;
+
+      html += `</div>`; // end card
     }
     html += '</div>';
     body.innerHTML = html;
 
-    // ── Expand / collapse buttons ──
-    body.querySelectorAll("[data-expand-target]").forEach(btn => {
-      btn.addEventListener("click", function(e) {
+    // ── Expand / collapse via icon ──
+    body.querySelectorAll(".gsm-anom-toggle").forEach(icon => {
+      icon.addEventListener("click", function(e) {
         e.stopPropagation();
-        const container = document.getElementById(this.dataset.expandTarget);
+        const card = this.closest(".gsm-anomaly-card");
+        if (!card) return;
+        const type = card.dataset.anomalyType;
+        const container = document.getElementById(`anom_exp_${type}`);
         if (!container) return;
         const isExpanded = container.dataset.expanded === "1";
         if (isExpanded) {
-          // Collapse
-          container.style.maxHeight = this.dataset.collapsedH + "px";
+          container.style.maxHeight = container.dataset.collapsedH + "px";
           container.style.overflowY = "hidden";
           container.dataset.expanded = "0";
-          this.textContent = this.textContent.replace("▲", "▼").replace("Zwiń", "Rozwiń");
+          this.src = _IC_EXPAND;
+          this.title = "Rozwiń listę";
         } else {
-          // Expand
-          const maxH = this.dataset.maxH;
+          const maxH = container.dataset.maxH;
           container.style.maxHeight = maxH === "none" ? container.scrollHeight + "px" : maxH;
-          container.style.overflowY = this.dataset.overflow;
+          container.style.overflowY = container.dataset.overflow;
           container.dataset.expanded = "1";
-          this.textContent = this.textContent.replace("▼", "▲").replace("Rozwiń", "Zwiń");
+          this.src = _IC_COLLAPSE;
+          this.title = "Zwiń listę";
         }
       });
     });
 
-    // ── Hover effect on anomaly categories with items ──
-    body.querySelectorAll("[data-anomaly-type]").forEach(div => {
+    // ── +5 context records via icon ──
+    body.querySelectorAll(".gsm-anom-plus5").forEach(icon => {
+      icon.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const card = this.closest(".gsm-anomaly-card");
+        if (!card) return;
+        const type = card.dataset.anomalyType;
+        const data = groupMap[type];
+        if (!data || !data.items.length) return;
+        _anomalyContextFilter(type, data.items);
+      });
+    });
+
+    // ── Hover effect on anomaly cards with items ──
+    body.querySelectorAll(".gsm-anomaly-card").forEach(div => {
+      const hasData = (groupMap[div.dataset.anomalyType] || {items:[]}).items.length > 0;
+      if (!hasData) return;
+      div.style.cursor = "pointer";
       div.addEventListener("mouseenter", () => {
-        div.style.background = "rgba(31,90,166,.08)";
+        div.style.background = "rgba(31,90,166,.04)";
         div.style.boxShadow = "0 2px 8px rgba(15,23,42,.06)";
       });
       div.addEventListener("mouseleave", () => {
@@ -1841,8 +1877,10 @@
       });
     });
 
-    // ── Double-click on anomaly category → filter Records ──
+    // ── Double-click on anomaly category → filter Records (unchanged) ──
     body.addEventListener("dblclick", function(e) {
+      // Ignore clicks on action icons
+      if (e.target.closest(".gsm-anom-toggle, .gsm-anom-plus5")) return;
       const div = e.target.closest("[data-anomaly-type]");
       if (!div) return;
       const type = div.dataset.anomalyType;
@@ -1854,6 +1892,7 @@
 
   /** Filter Records by anomaly group — invoked on double-click. */
   function _anomalyGroupFilter(type, items) {
+    St._anomalyHighlight = null;  // clear +5 highlighting
     const records = St.lastResult ? St.lastResult.records : [];
     let filtered = [];
     let filterText = "";
@@ -1953,6 +1992,146 @@
       if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
     });
     _renderRecords(filtered, false, filtered.length);
+
+    const recCard = QS("#gsm_records_card");
+    if (recCard) {
+      recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      recCard.style.transition = "box-shadow .2s";
+      recCard.style.boxShadow = "0 0 0 3px var(--brand-blue,#2563eb)";
+      setTimeout(() => { recCard.style.boxShadow = ""; }, 1200);
+    }
+  }
+
+  /**
+   * +5 context filter: show anomaly records plus 5 records before/after each,
+   * with color coding (red = anomaly, blue = context).
+   */
+  function _anomalyContextFilter(type, anomalyItems) {
+    const allRecords = St.lastResult ? St.lastResult.records : [];
+    if (!allRecords.length) return;
+
+    // Step 1: Get the filtered anomaly records using the same logic as _anomalyGroupFilter
+    const anomalySet = new Set();
+    let tempFiltered = [];
+
+    // Re-use same matching logic per type
+    switch (type) {
+      case "long_call":
+        tempFiltered = allRecords.filter(r => r.duration_seconds > 3600 && (r.record_type || "").includes("CALL"));
+        break;
+      case "late_night_calls":
+        tempFiltered = allRecords.filter(r => {
+          if (!r.time || !(r.record_type || "").includes("CALL")) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 0 && h < 5;
+        });
+        break;
+      case "night_activity":
+        tempFiltered = allRecords.filter(r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        });
+        break;
+      case "night_movement":
+        tempFiltered = allRecords.filter(r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        });
+        break;
+      case "burst_activity":
+        if (anomalyItems.length > 0) {
+          const b = anomalyItems[0];
+          tempFiltered = allRecords.filter(r => {
+            if (r.date !== b.date) return false;
+            if (!b.time || !r.time) return true;
+            try {
+              const bp = b.time.split(":"), rp = r.time.split(":");
+              const bm = parseInt(bp[0]) * 60 + parseInt(bp[1]);
+              const rm = parseInt(rp[0]) * 60 + parseInt(rp[1]);
+              return rm >= bm && rm <= bm + (b.window_min || 30);
+            } catch (_) { return false; }
+          });
+        }
+        break;
+      case "premium_number": {
+        const nums = new Set(anomalyItems.map(it => it.contact));
+        tempFiltered = allRecords.filter(r => nums.has(r.callee) || nums.has(r.caller));
+        break;
+      }
+      case "roaming":
+        tempFiltered = allRecords.filter(r => r.roaming);
+        if (!tempFiltered.length) {
+          tempFiltered = allRecords.filter(r => r.roaming || (r.network && !/orange|play|plus|t-mobile|polkomtel|p4|heyah/i.test(r.network)));
+        }
+        break;
+      case "one_time_contacts": {
+        const otNums = new Set(anomalyItems.map(it => it.contact));
+        tempFiltered = allRecords.filter(r => otNums.has(r.callee) || otNums.has(r.caller));
+        break;
+      }
+      case "satellite_numbers": {
+        const satNums = new Set(anomalyItems.map(it => it.contact));
+        tempFiltered = allRecords.filter(r => satNums.has(r.callee) || satNums.has(r.caller));
+        break;
+      }
+      case "social_media": {
+        const smPlatforms = anomalyItems.map(it => it.platform.toLowerCase());
+        tempFiltered = allRecords.filter(r => {
+          const txt = [r.callee, r.caller, r.network, r.raw_text || ""].join(" ").toLowerCase();
+          return smPlatforms.some(p => txt.includes(p));
+        });
+        break;
+      }
+      default:
+        tempFiltered = [];
+    }
+
+    // Build a set of anomaly record indices in allRecords
+    const anomalyIndices = new Set();
+    for (let i = 0; i < allRecords.length; i++) {
+      if (tempFiltered.includes(allRecords[i])) {
+        anomalyIndices.add(i);
+        anomalySet.add(allRecords[i]);
+      }
+    }
+
+    // Step 2: Collect context indices (+5 before, +5 after each anomaly record)
+    const contextIndices = new Set();
+    for (const idx of anomalyIndices) {
+      for (let d = 1; d <= 5; d++) {
+        if (idx - d >= 0 && !anomalyIndices.has(idx - d)) contextIndices.add(idx - d);
+        if (idx + d < allRecords.length && !anomalyIndices.has(idx + d)) contextIndices.add(idx + d);
+      }
+    }
+
+    // Step 3: Merge and sort by original index, tag each record
+    const resultIndices = new Set([...anomalyIndices, ...contextIndices]);
+    const sortedIndices = [...resultIndices].sort((a, b) => a - b);
+    const resultRecords = sortedIndices.map(i => allRecords[i]);
+
+    // Store highlighting info for the table renderer
+    St._anomalyHighlight = {
+      anomalySet: anomalySet,
+      contextSet: new Set(sortedIndices.filter(i => contextIndices.has(i)).map(i => allRecords[i])),
+    };
+
+    const anomCount = anomalyIndices.size;
+    const ctxCount = contextIndices.size;
+    const filterText = `+5 kontekst: ${anomCount} anomalii + ${ctxCount} kontekstu = ${resultRecords.length} rek.`;
+
+    // Clear heatmap filter state
+    St.hmActiveCell = null;
+    const hmBar = QS("#gsm_hm_filter_bar");
+    if (hmBar) hmBar.style.display = "none";
+
+    _setRecordsFilter(filterText, () => {
+      St._anomalyHighlight = null;
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(resultRecords, false, resultRecords.length);
 
     const recCard = QS("#gsm_records_card");
     if (recCard) {
@@ -2496,8 +2675,17 @@
     }
     html += `</tr></thead><tbody>`;
 
+    const hl = St._anomalyHighlight || null;
     for (const r of sorted) {
-      html += `<tr>`;
+      let rowStyle = "";
+      if (hl) {
+        if (hl.anomalySet && hl.anomalySet.has(r)) {
+          rowStyle = ' style="background:rgba(239,68,68,.10)"';  // light red
+        } else if (hl.contextSet && hl.contextSet.has(r)) {
+          rowStyle = ' style="background:rgba(59,130,246,.10)"';  // light blue
+        }
+      }
+      html += `<tr${rowStyle}>`;
       for (const col of cols) {
         html += `<td>${col.renderCell(r)}</td>`;
       }
@@ -6365,6 +6553,7 @@
 
   /** Reset the filter badge to "brak". */
   function _clearRecordsFilter() {
+    St._anomalyHighlight = null;  // clear +5 row coloring
     const badgeText = QS("#gsm_records_filter_text");
     const clearBtn = QS("#gsm_records_filter_clear");
     if (badgeText) {
