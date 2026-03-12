@@ -2681,16 +2681,26 @@
     const hl = St._anomalyHighlight || null;
     for (const r of sorted) {
       let rowStyle = "";
+      let rowBadge = "";
       if (hl) {
         if (hl.anomalyRecords && hl.anomalyRecords.has(r)) {
-          rowStyle = ' style="background:rgba(239,68,68,.12)"';  // light red — anomaly
+          rowStyle = ' style="background:rgba(239,68,68,.12)"';
+          rowBadge = '<span style="position:absolute;left:2px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;color:rgba(220,38,38,.45);letter-spacing:.5px;pointer-events:none;white-space:nowrap;text-transform:uppercase;z-index:1">ANOMALIA</span>';
         } else if (hl.contextRecords && hl.contextRecords.has(r)) {
-          rowStyle = ' style="background:rgba(59,130,246,.10)"';  // light blue — context
+          rowStyle = ' style="background:rgba(59,130,246,.10)"';
+          rowBadge = '<span style="position:absolute;left:2px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;color:rgba(37,99,235,.40);letter-spacing:.5px;pointer-events:none;white-space:nowrap;text-transform:uppercase;z-index:1">KONTEKST</span>';
         }
       }
       html += `<tr${rowStyle}>`;
+      let firstCell = true;
       for (const col of cols) {
-        html += `<td>${col.renderCell(r)}</td>`;
+        if (firstCell && rowBadge) {
+          html += `<td style="position:relative">${rowBadge}${col.renderCell(r)}</td>`;
+          firstCell = false;
+        } else {
+          html += `<td>${col.renderCell(r)}</td>`;
+          firstCell = false;
+        }
       }
       html += `</tr>`;
     }
