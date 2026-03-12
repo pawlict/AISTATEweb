@@ -77,6 +77,34 @@
    */
   const _COL_DEFS = [
     {
+      key: "context_label", label: "Kontekst", type: "categorical", defaultVisible: false,
+      getValue: r => {
+        const hl = St._anomalyHighlight;
+        if (!hl) return "";
+        if (hl.anomalyRecords && hl.anomalyRecords.has(r)) return "ANOMALIA";
+        if (hl.contextRecords && hl.contextRecords.has(r)) return "KONTEKST";
+        return "";
+      },
+      renderCell: r => {
+        const hl = St._anomalyHighlight;
+        if (!hl) return "";
+        if (hl.anomalyRecords && hl.anomalyRecords.has(r))
+          return '<span style="font-size:9px;font-weight:700;color:rgba(220,38,38,.7);letter-spacing:.5px;text-transform:uppercase">ANOMALIA</span>';
+        if (hl.contextRecords && hl.contextRecords.has(r))
+          return '<span style="font-size:9px;font-weight:700;color:rgba(37,99,235,.65);letter-spacing:.5px;text-transform:uppercase">KONTEKST</span>';
+        return "";
+      },
+      categoryValues: recs => {
+        const vals = ["ANOMALIA", "KONTEKST"];
+        return vals.map(v => ({ value: v, label: v, count: recs.filter(r => {
+          const hl = St._anomalyHighlight;
+          if (!hl) return false;
+          if (v === "ANOMALIA") return hl.anomalyRecords && hl.anomalyRecords.has(r);
+          return hl.contextRecords && hl.contextRecords.has(r);
+        }).length }));
+      },
+    },
+    {
       key: "datetime", label: "Data i czas", type: "text", defaultVisible: true,
       getValue: r => r.datetime || "",
       renderCell: r => r.datetime || "",
@@ -2120,6 +2148,13 @@
       contextRecords: contextRecords,
     };
 
+    // Auto-show context_label column
+    if (St.columnHidden) St.columnHidden["context_label"] = false;
+    // Ensure it's in the column order
+    if (St.columnOrder && !St.columnOrder.includes("context_label")) {
+      St.columnOrder.unshift("context_label");
+    }
+
     const anomCount = anomalyIndices.size;
     const ctxCount = contextIndices.size;
     const filterText = `+5 kontekst: ${anomCount} anomalii + ${ctxCount} kontekstu = ${resultRecords.length} rek.`;
@@ -2131,6 +2166,8 @@
 
     _setRecordsFilter(filterText, () => {
       St._anomalyHighlight = null;
+      // Auto-hide context_label column
+      if (St.columnHidden) St.columnHidden["context_label"] = true;
       _clearRecordsFilter();
       if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
     });
@@ -2681,23 +2718,16 @@
     const hl = St._anomalyHighlight || null;
     for (const r of sorted) {
       let rowStyle = "";
-      let rowBadge = "";
       if (hl) {
         if (hl.anomalyRecords && hl.anomalyRecords.has(r)) {
           rowStyle = ' style="background:rgba(239,68,68,.12)"';
-          rowBadge = '<span style="position:absolute;left:2px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;color:rgba(220,38,38,.45);letter-spacing:.5px;pointer-events:none;white-space:nowrap;text-transform:uppercase;z-index:1">ANOMALIA</span>';
         } else if (hl.contextRecords && hl.contextRecords.has(r)) {
           rowStyle = ' style="background:rgba(59,130,246,.10)"';
-          rowBadge = '<span style="position:absolute;left:2px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;color:rgba(37,99,235,.40);letter-spacing:.5px;pointer-events:none;white-space:nowrap;text-transform:uppercase;z-index:1">KONTEKST</span>';
         }
       }
       html += `<tr${rowStyle}>`;
-      for (let ci = 0; ci < cols.length; ci++) {
-        if (ci === 1 && rowBadge) {
-          html += `<td style="position:relative">${rowBadge}${cols[ci].renderCell(r)}</td>`;
-        } else {
-          html += `<td>${cols[ci].renderCell(r)}</td>`;
-        }
+      for (const col of cols) {
+        html += `<td>${col.renderCell(r)}</td>`;
       }
       html += `</tr>`;
     }
