@@ -590,8 +590,14 @@
       wrap.querySelectorAll('.lang-chip').forEach(function(b){ b.classList.toggle('active', b.dataset.lang === curLang); });
       wrap.querySelectorAll('.lang-chip').forEach(function(btn){
         btn.addEventListener('click', function(){
-          localStorage.setItem('aistate_ui_lang', btn.dataset.lang);
-          location.reload();
+          var lang = btn.dataset.lang;
+          localStorage.setItem('aistate_ui_lang', lang);
+          /* Also persist to backend settings so server-rendered pages use correct language */
+          fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ui_language: lang}),
+          }).finally(function(){ location.reload(); });
         });
       });
     })();
