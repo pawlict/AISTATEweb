@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="clu" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#a855f7" stroke-width="1" fill="none" opacity=".15"/>
+<!-- top bar -->
+<line x1="8" y1="8" x2="40" y2="8" stroke="url(#clu)" stroke-width="2.5"/>
+<!-- bottom bar -->
+<line x1="8" y1="40" x2="40" y2="40" stroke="url(#clu)" stroke-width="2.5"/>
+<!-- top arrow pointing down (toward center) -->
+<path d="M24 13v8" stroke="#a855f7" stroke-width="2.8"/>
+<path d="M19 17l5 5 5-5" stroke="#a855f7" stroke-width="2.8" fill="none"/>
+<!-- bottom arrow pointing up (toward center) -->
+<path d="M24 35v-8" stroke="#a855f7" stroke-width="2.8"/>
+<path d="M19 31l5-5 5 5" stroke="#a855f7" stroke-width="2.8" fill="none"/>
+</svg>
