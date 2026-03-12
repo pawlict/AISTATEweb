@@ -1719,6 +1719,7 @@
     { type: "premium_number",   label: "Numery premium / p\u0142atne",        desc: "Kontakty z numerami o podwy\u017Cszonej op\u0142acie (70x, 80x)" },
     { type: "roaming",          label: "Aktywno\u015B\u0107 w sieciach zagranicznych", desc: "Rekordy z flag\u0105 roamingu lub z sieci\u0105 zagraniczn\u0105. Szczeg\u00F3\u0142y wyjazd\u00F3w \u2014 patrz sekcja \u201EPrzekroczenia granic\u201D" },
     { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
+    { type: "satellite_numbers",label: "Numery satelitarne",              desc: "Po\u0142\u0105czenia z numerami telefon\u00F3w satelitarnych (Iridium, Inmarsat, Thuraya, Globalstar i in.)" },
   ];
 
   function _renderAnomalies(a) {
@@ -1873,6 +1874,12 @@
         filterText = `Jednorazowe kontakty — ${filtered.length} rek.`;
         break;
       }
+      case "satellite_numbers": {
+        const satNums = new Set(items.map(it => it.contact));
+        filtered = records.filter(r => satNums.has(r.callee) || satNums.has(r.caller));
+        filterText = `Numery satelitarne — ${filtered.length} rek.`;
+        break;
+      }
       default:
         filtered = records;
         filterText = `${type} — ${filtered.length} rek.`;
@@ -1947,6 +1954,12 @@
       for (const it of items) {
         const typeLabel = (it.record_type || "").replace(/_/g, " ");
         html += `<div><code>${it.contact}</code> — ${typeLabel} (${it.date})</div>`;
+      }
+    } else if (type === "satellite_numbers") {
+      for (const it of items) {
+        const confBadge = it.confidence === "high" ? "\u{1F7E2}" : it.confidence === "medium" ? "\u{1F7E1}" : "\u{1F534}";
+        const dates = it.dates && it.dates.length ? ` (${it.dates.join(", ")})` : "";
+        html += `<div>${confBadge} <code>${it.contact}</code> — <b>${it.operator || "?"}</b> [${it.confidence || "?"}] ${it.count}\u00D7${dates}</div>`;
       }
     } else {
       for (const it of items) {
