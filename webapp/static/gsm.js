@@ -3018,6 +3018,9 @@
     if (airCb) airCb.onchange = () => _toggleOverlay("airports", airCb.checked);
     if (dipCb) dipCb.onchange = () => _toggleOverlay("diplomacy", dipCb.checked);
 
+    // Load KML user overlays into layer panel
+    _loadKmlOverlayCheckboxes();
+
     // Reload other BTS on map move/zoom (debounced)
     if (St.map) {
       St.map.on("moveend", () => {
@@ -5775,6 +5778,100 @@
     }
 
     St[layerKey].addTo(St.map);
+  }
+
+  /* ── KML user overlays ─────────────────────────────────── */
+
+  // Store: { overlayId: L.layerGroup }
+  if (!St._kmlLayers) St._kmlLayers = {};
+  if (!St._kmlData) St._kmlData = {};
+
+  async function _loadKmlOverlayCheckboxes() {
+    const container = QS("#gsm_kml_overlays");
+    if (!container) return;
+
+    try {
+      const resp = await fetch("/api/gsm/overlays");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const items = (data && data.overlays) ? data.overlays : [];
+
+      if (!items.length) {
+        container.innerHTML = "";
+        return;
+      }
+
+      container.innerHTML = items.map(ov => {
+        const checked = St._kmlLayers[ov.id] && St.map && St.map.hasLayer(St._kmlLayers[ov.id]) ? " checked" : "";
+        const safeName = String(ov.name || ov.id).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return `<label class="gsm-lp-item">
+          <input type="checkbox" data-kml-id="${ov.id}"${checked}> <span style="color:#8b5cf6">&#9679;</span> ${safeName}
+        </label>`;
+      }).join("");
+
+      // Bind events
+      container.querySelectorAll("input[data-kml-id]").forEach(cb => {
+        cb.onchange = () => _toggleKmlOverlay(cb.dataset.kmlId, cb.checked);
+      });
+    } catch (e) {
+      // silent
+    }
+  }
+
+  async function _toggleKmlOverlay(overlayId, show) {
+    if (!St.map) return;
+
+    if (!show) {
+      if (St._kmlLayers[overlayId]) {
+        St.map.removeLayer(St._kmlLayers[overlayId]);
+      }
+      return;
+    }
+
+    // Load data if not cached
+    if (!St._kmlData[overlayId]) {
+      try {
+        const resp = await fetch(`/api/gsm/overlays/${overlayId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        St._kmlData[overlayId] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować warstwy KML: ${err.message}`);
+        const cb = QS(`input[data-kml-id="${overlayId}"]`);
+        if (cb) cb.checked = false;
+        return;
+      }
+    }
+
+    // Build layer group if needed
+    if (!St._kmlLayers[overlayId]) {
+      const group = L.layerGroup();
+      const data = St._kmlData[overlayId];
+      const points = data.points || [];
+      const layerName = data.name || overlayId;
+
+      for (const pt of points) {
+        if (pt.lat == null || pt.lon == null) continue;
+        const divIcon = L.divIcon({
+          className: "gsm-overlay-marker",
+          html: '<span style="font-size:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">📍</span>',
+          iconSize: [22, 22],
+          iconAnchor: [11, 22],
+        });
+        const m = L.marker([pt.lat, pt.lon], { icon: divIcon, interactive: true });
+        const safeName = String(pt.name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const safeDesc = String(pt.desc || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        m.bindTooltip(
+          `<b style="color:#8b5cf6">${safeName}</b>` +
+          (safeDesc ? `<br><span class="small">${safeDesc}</span>` : "") +
+          `<br><span class="small muted">${layerName}</span>`,
+          { direction: "top", offset: [0, -14], className: "gsm-overlay-tooltip" }
+        );
+        m.addTo(group);
+      }
+      St._kmlLayers[overlayId] = group;
+    }
+
+    St._kmlLayers[overlayId].addTo(St.map);
   }
 
   /* ── Area selection (circle / rectangle) ─────────────── */

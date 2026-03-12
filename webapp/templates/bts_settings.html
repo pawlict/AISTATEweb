@@ -281,6 +281,51 @@
         </div>
       </div>
 
+      <hr style="border-color:rgba(255,255,255,0.06);margin:24px 0 20px">
+
+      <!-- ───────────── KMZ / KML Overlays ───────────── -->
+      <div class="label" style="font-size:16px;margin-bottom:4px">Warstwy KMZ / KML</div>
+      <div class="small muted" style="margin-bottom:10px">
+        Wgraj pliki KMZ lub KML z punktami (Placemark). Każda warstwa pojawi się jako nakładka na mapie bilingów GSM.
+      </div>
+
+      <div class="bts-model-row">
+        <div class="bts-model-left">
+          <!-- Upload form -->
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+            <input class="input" id="kml_overlay_name" type="text" placeholder="Nazwa warstwy (opcjonalnie)" style="flex:1;min-width:160px;max-width:260px">
+            <button class="btn" id="kml_upload_btn">Wgraj KMZ / KML</button>
+            <input type="file" id="kml_upload_file" accept=".kmz,.kml" style="display:none">
+          </div>
+          <span class="small" id="kml_upload_status"></span>
+
+          <!-- Progress -->
+          <div class="an-progress" id="kml_upload_progress" style="display:none;margin-top:8px">
+            <div class="small">Upload: <b id="kml_upload_pct">0%</b></div>
+            <div class="progress"><div id="kml_upload_bar"></div></div>
+          </div>
+
+          <!-- Overlay list -->
+          <div id="kml_overlay_list" style="margin-top:14px"></div>
+          <div id="kml_overlay_empty" class="small muted" style="display:none;padding:10px 0;opacity:.6">Brak zapisanych warstw KMZ/KML.</div>
+        </div>
+        <div class="bts-model-right">
+          <div class="bts-info-box">
+            <div class="bts-info-title">KMZ / KML — warstwy punktowe</div>
+            <div class="bts-kv">
+              <span>Formaty</span> <span>KMZ (ZIP), KML (XML)</span>
+              <span>Obsługiwane</span> <span>Punkty (Placemark + Point)</span>
+              <span>Dane</span> <span>Nazwa, opis, współrzędne GPS</span>
+              <span>Zastosowanie</span> <span>POI, lokalizacje, oznaczenia</span>
+            </div>
+            <div class="small muted" style="margin-top:8px">
+              Pliki KMZ/KML można eksportować z Google Earth, Google Maps, QGIS i wielu innych narzędzi GIS.
+              Każda wgrana warstwa zostaje zapisana i pojawia się jako osobna nakładka w panelu warstw na mapie.
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 

@@ -1087,3 +1087,180 @@ async def tiles_remove():
         return JSONResponse({"status": "ok"})
     except Exception as e:
         return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# KMZ / KML overlay management
+# ---------------------------------------------------------------------------
+
+def _overlays_dir() -> Path:
+    d = _data_dir() / "gsm" / "overlays"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _parse_kml_bytes(kml_bytes: bytes) -> List[Dict[str, Any]]:
+    """Extract Placemarks (points) from KML XML bytes."""
+    import xml.etree.ElementTree as ET
+
+    ns = {"kml": "http://www.opengis.net/kml/2.2"}
+    root = ET.fromstring(kml_bytes)
+
+    # Try with namespace first, then without
+    placemarks = root.findall(".//kml:Placemark", ns)
+    if not placemarks:
+        placemarks = root.findall(".//{http://www.opengis.net/kml/2.2}Placemark")
+    if not placemarks:
+        # No namespace KML
+        placemarks = root.findall(".//Placemark")
+
+    points: List[Dict[str, Any]] = []
+    for pm in placemarks:
+        # Name
+        name_el = pm.find("kml:name", ns) or pm.find("{http://www.opengis.net/kml/2.2}name") or pm.find("name")
+        name = name_el.text.strip() if name_el is not None and name_el.text else ""
+
+        # Description
+        desc_el = pm.find("kml:description", ns) or pm.find("{http://www.opengis.net/kml/2.2}description") or pm.find("description")
+        desc = desc_el.text.strip() if desc_el is not None and desc_el.text else ""
+
+        # Coordinates — look in Point/coordinates
+        coord_el = (
+            pm.find(".//kml:Point/kml:coordinates", ns)
+            or pm.find(".//{http://www.opengis.net/kml/2.2}Point/{http://www.opengis.net/kml/2.2}coordinates")
+            or pm.find(".//Point/coordinates")
+        )
+        if coord_el is None or not coord_el.text:
+            continue
+
+        coord_text = coord_el.text.strip()
+        # KML coordinates: lon,lat,alt
+        parts = coord_text.split(",")
+        if len(parts) < 2:
+            continue
+        try:
+            lon = float(parts[0].strip())
+            lat = float(parts[1].strip())
+        except (ValueError, IndexError):
+            continue
+
+        points.append({"name": name, "desc": desc, "lat": lat, "lon": lon})
+
+    return points
+
+
+@router.post("/api/gsm/overlays/upload")
+async def overlay_upload(
+    file: UploadFile = File(...),
+    name: str = Form(""),
+):
+    """Upload a KMZ or KML file and store as a named overlay."""
+    if not file.filename:
+        return JSONResponse({"status": "error", "detail": "Brak pliku"}, status_code=400)
+
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in (".kmz", ".kml"):
+        return JSONResponse(
+            {"status": "error", "detail": f"Wymagany plik .kmz lub .kml, otrzymano: {suffix}"},
+            status_code=400,
+        )
+
+    content = await file.read()
+
+    # Parse KML from KMZ (ZIP) or raw KML
+    try:
+        if suffix == ".kmz":
+            import zipfile
+            import io
+            with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                kml_bytes = None
+                for zname in zf.namelist():
+                    if zname.lower().endswith(".kml"):
+                        kml_bytes = zf.read(zname)
+                        break
+                if not kml_bytes:
+                    return JSONResponse(
+                        {"status": "error", "detail": "Plik KMZ nie zawiera pliku .kml"},
+                        status_code=400,
+                    )
+        else:
+            kml_bytes = content
+
+        points = await run_in_threadpool(_parse_kml_bytes, kml_bytes)
+    except Exception as e:
+        log.exception("KML parse error: %s", e)
+        return JSONResponse(
+            {"status": "error", "detail": f"Błąd parsowania KML: {e}"},
+            status_code=400,
+        )
+
+    if not points:
+        return JSONResponse(
+            {"status": "error", "detail": "Nie znaleziono punktów (Placemark) w pliku KML."},
+            status_code=400,
+        )
+
+    # Generate overlay ID and save
+    overlay_id = uuid.uuid4().hex[:12]
+    overlay_name = name.strip() or Path(file.filename).stem
+    overlay_data = {
+        "id": overlay_id,
+        "name": overlay_name,
+        "filename": file.filename,
+        "point_count": len(points),
+        "points": points,
+    }
+
+    out_path = _overlays_dir() / f"{overlay_id}.json"
+    out_path.write_text(json.dumps(overlay_data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    _app_log(f"[GSM] KML overlay uploaded: {overlay_name} ({len(points)} points)")
+
+    return JSONResponse({
+        "status": "ok",
+        "id": overlay_id,
+        "name": overlay_name,
+        "point_count": len(points),
+    })
+
+
+@router.get("/api/gsm/overlays")
+async def overlay_list():
+    """List all saved KMZ/KML overlays (without point data)."""
+    overlays_dir = _overlays_dir()
+    items = []
+    for f in sorted(overlays_dir.glob("*.json")):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            items.append({
+                "id": data.get("id", f.stem),
+                "name": data.get("name", f.stem),
+                "filename": data.get("filename", ""),
+                "point_count": data.get("point_count", 0),
+            })
+        except Exception:
+            continue
+    return JSONResponse({"status": "ok", "overlays": items})
+
+
+@router.get("/api/gsm/overlays/{overlay_id}")
+async def overlay_get(overlay_id: str):
+    """Get a single overlay with all point data."""
+    fpath = _overlays_dir() / f"{overlay_id}.json"
+    if not fpath.exists():
+        return JSONResponse({"status": "error", "detail": "Nie znaleziono"}, status_code=404)
+    try:
+        data = json.loads(fpath.read_text(encoding="utf-8"))
+        return JSONResponse({"status": "ok", **data})
+    except Exception as e:
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+@router.delete("/api/gsm/overlays/{overlay_id}")
+async def overlay_delete(overlay_id: str):
+    """Delete a saved overlay."""
+    fpath = _overlays_dir() / f"{overlay_id}.json"
+    if fpath.exists():
+        fpath.unlink()
+        _app_log(f"[GSM] KML overlay deleted: {overlay_id}")
+    return JSONResponse({"status": "ok"})
