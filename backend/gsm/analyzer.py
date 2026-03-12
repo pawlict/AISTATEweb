@@ -1307,6 +1307,19 @@ def _detect_anomalies(
         "items": satellite_items,
     })
 
+    # ── 10. Social media / messenger platforms ──
+    social_media_items = _detect_social_media(records, own_numbers)
+    groups.append({
+        "type": "social_media",
+        "label": "Konta społecznościowe / komunikatory",
+        "description": (
+            "Nazwy komunikatorów i platform społecznościowych wykryte w polach "
+            "bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)"
+        ),
+        "severity": "info" if social_media_items else "ok",
+        "items": social_media_items,
+    })
+
     return groups
 
 
@@ -1549,6 +1562,113 @@ def _detect_satellite_numbers(
             "category": info["category"],
             "count": info["count"],
             "dates": sorted(info["dates"]),
+        })
+    items.sort(key=lambda x: x["count"], reverse=True)
+    return items
+
+
+def _load_social_media_rules() -> Dict[str, Any]:
+    """Load social media / messenger detection rules from JSON config (cached)."""
+    if not hasattr(_load_social_media_rules, "_cache"):
+        rules_path = Path(__file__).parent / "social_media_rules.json"
+        try:
+            _load_social_media_rules._cache = json.loads(rules_path.read_text(encoding="utf-8"))
+        except Exception:
+            _load_social_media_rules._cache = {}
+    return _load_social_media_rules._cache
+
+
+def _detect_social_media(
+    records: List[BillingRecord],
+    own_numbers: Set[str],
+) -> List[Dict[str, Any]]:
+    """Detect messenger / social media platform names in billing record fields.
+
+    Scans callee, caller, network, raw_text, and extra fields for known
+    platform names using regex patterns from social_media_rules.json.
+    """
+    rules_data = _load_social_media_rules()
+    if not rules_data:
+        return []
+
+    categories = rules_data.get("categories", {})
+
+    # Pre-compile all regexes grouped by platform
+    compiled: List[Tuple[re.Pattern, str, str, str]] = []  # (regex, platform_name, category_key, category_label)
+    for cat_key, cat_data in categories.items():
+        cat_label = cat_data.get("label", cat_key)
+        for platform in cat_data.get("platforms", []):
+            regex_str = platform.get("regex", "")
+            if not regex_str:
+                continue
+            try:
+                pat = re.compile(regex_str, re.IGNORECASE)
+                compiled.append((pat, platform["name"], cat_key, cat_label))
+            except re.error:
+                continue
+
+    if not compiled:
+        return []
+
+    # Scan records
+    platform_hits: Dict[str, Dict[str, Any]] = {}  # keyed by platform name
+
+    for r in records:
+        # Build searchable text from all relevant fields
+        parts = []
+        if r.callee:
+            parts.append(r.callee)
+        if r.caller:
+            parts.append(r.caller)
+        if r.network:
+            parts.append(r.network)
+        if r.raw_text:
+            parts.append(r.raw_text)
+        # Check extra dict fields
+        if r.extra:
+            for key in ("service", "description", "direction", "system"):
+                val = r.extra.get(key, "")
+                if val:
+                    parts.append(str(val))
+
+        if not parts:
+            continue
+
+        search_text = " ".join(parts).lower()
+
+        for pat, platform_name, cat_key, cat_label in compiled:
+            if pat.search(search_text):
+                if platform_name not in platform_hits:
+                    platform_hits[platform_name] = {
+                        "platform": platform_name,
+                        "category": cat_label,
+                        "category_key": cat_key,
+                        "count": 0,
+                        "dates": set(),
+                        "record_types": set(),
+                        "contacts": set(),
+                    }
+                info = platform_hits[platform_name]
+                info["count"] += 1
+                if r.date:
+                    info["dates"].add(r.date)
+                if r.record_type:
+                    info["record_types"].add(r.record_type)
+                contact = r.callee or r.caller
+                if contact and contact not in own_numbers:
+                    info["contacts"].add(contact)
+
+    # Convert to list
+    items = []
+    for info in platform_hits.values():
+        items.append({
+            "platform": info["platform"],
+            "category": info["category"],
+            "category_key": info["category_key"],
+            "count": info["count"],
+            "dates": sorted(info["dates"]),
+            "record_types": sorted(info["record_types"]),
+            "unique_contacts": len(info["contacts"]),
         })
     items.sort(key=lambda x: x["count"], reverse=True)
     return items

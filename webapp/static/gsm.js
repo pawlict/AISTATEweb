@@ -1720,6 +1720,7 @@
     { type: "roaming",          label: "Aktywno\u015B\u0107 w sieciach zagranicznych", desc: "Rekordy z flag\u0105 roamingu lub z sieci\u0105 zagraniczn\u0105. Szczeg\u00F3\u0142y wyjazd\u00F3w \u2014 patrz sekcja \u201EPrzekroczenia granic\u201D" },
     { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
     { type: "satellite_numbers",label: "Numery satelitarne",              desc: "Po\u0142\u0105czenia z numerami telefon\u00F3w satelitarnych (Iridium, Inmarsat, Thuraya, Globalstar i in.)" },
+    { type: "social_media",     label: "Konta spo\u0142eczno\u015Bciowe / komunikatory", desc: "Nazwy komunikator\u00F3w i platform spo\u0142eczno\u015Bciowych wykryte w polach bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)" },
   ];
 
   function _renderAnomalies(a) {
@@ -1880,6 +1881,16 @@
         filterText = `Numery satelitarne — ${filtered.length} rek.`;
         break;
       }
+      case "social_media": {
+        // Build a set of platform patterns to search in record fields
+        const smPlatforms = items.map(it => it.platform.toLowerCase());
+        filtered = records.filter(r => {
+          const txt = [r.callee, r.caller, r.network, r.raw_text || ""].join(" ").toLowerCase();
+          return smPlatforms.some(p => txt.includes(p));
+        });
+        filterText = `Konta społecznościowe — ${filtered.length} rek.`;
+        break;
+      }
       default:
         filtered = records;
         filterText = `${type} — ${filtered.length} rek.`;
@@ -1960,6 +1971,17 @@
         const confBadge = it.confidence === "high" ? "\u{1F7E2}" : it.confidence === "medium" ? "\u{1F7E1}" : "\u{1F534}";
         const dates = it.dates && it.dates.length ? ` (${it.dates.join(", ")})` : "";
         html += `<div>${confBadge} <code>${it.contact}</code> — <b>${it.operator || "?"}</b> [${it.confidence || "?"}] ${it.count}\u00D7${dates}</div>`;
+      }
+    } else if (type === "social_media") {
+      for (const it of items) {
+        const catShort = (it.category || "").replace(/\s*\/\s*/g, "/");
+        const dates = it.dates && it.dates.length > 0 ? it.dates.join(", ") : "";
+        const types = it.record_types && it.record_types.length ? it.record_types.map(t => t.replace(/_/g, " ")).join(", ") : "";
+        const contacts = it.unique_contacts > 0 ? `, ${it.unique_contacts} kontakt${it.unique_contacts === 1 ? "" : it.unique_contacts < 5 ? "y" : "\u00F3w"}` : "";
+        html += `<div><b>${it.platform}</b> <span class="muted">[${catShort}]</span> — ${it.count}\u00D7${contacts}`;
+        if (types) html += ` <span class="muted">(${types})</span>`;
+        if (dates) html += `<div class="small muted" style="margin-left:12px">${dates}</div>`;
+        html += `</div>`;
       }
     } else {
       for (const it of items) {
