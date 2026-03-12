@@ -1116,20 +1116,29 @@ def _parse_kml_bytes(kml_bytes: bytes) -> List[Dict[str, Any]]:
 
     points: List[Dict[str, Any]] = []
     for pm in placemarks:
-        # Name
-        name_el = pm.find("kml:name", ns) or pm.find("{http://www.opengis.net/kml/2.2}name") or pm.find("name")
+        # Name — Element with no children is falsy, so avoid 'or' chains
+        name_el = pm.find("kml:name", ns)
+        if name_el is None:
+            name_el = pm.find("{http://www.opengis.net/kml/2.2}name")
+        if name_el is None:
+            name_el = pm.find("name")
         name = name_el.text.strip() if name_el is not None and name_el.text else ""
 
         # Description
-        desc_el = pm.find("kml:description", ns) or pm.find("{http://www.opengis.net/kml/2.2}description") or pm.find("description")
+        desc_el = pm.find("kml:description", ns)
+        if desc_el is None:
+            desc_el = pm.find("{http://www.opengis.net/kml/2.2}description")
+        if desc_el is None:
+            desc_el = pm.find("description")
         desc = desc_el.text.strip() if desc_el is not None and desc_el.text else ""
 
         # Coordinates — look in Point/coordinates
-        coord_el = (
-            pm.find(".//kml:Point/kml:coordinates", ns)
-            or pm.find(".//{http://www.opengis.net/kml/2.2}Point/{http://www.opengis.net/kml/2.2}coordinates")
-            or pm.find(".//Point/coordinates")
-        )
+        # NOTE: Element with no children is falsy in ElementTree, so use 'is not None'
+        coord_el = pm.find(".//kml:Point/kml:coordinates", ns)
+        if coord_el is None:
+            coord_el = pm.find(".//{http://www.opengis.net/kml/2.2}Point/{http://www.opengis.net/kml/2.2}coordinates")
+        if coord_el is None:
+            coord_el = pm.find(".//Point/coordinates")
         if coord_el is None or not coord_el.text:
             continue
 
