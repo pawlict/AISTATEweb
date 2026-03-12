@@ -74,6 +74,57 @@ Source: https://www.ffmpeg.org/legal.html
 
 * * *
 
+### Leaflet (interactive maps)
+- Project: Leaflet
+- License: BSD-2-Clause
+- Version used: 1.9.4 (loaded from CDN)
+- Source: https://github.com/Leaflet/Leaflet
+- Website: https://leafletjs.com
+
+* * *
+
+### MapLibre GL JS (vector map rendering)
+- Project: MapLibre GL JS
+- License: BSD-3-Clause
+- Version used: 4.7.1 (loaded from CDN)
+- Source: https://github.com/maplibre/maplibre-gl-js
+- Website: https://maplibre.org
+
+* * *
+
+### Leaflet-MapLibre GL (Leaflet ↔ MapLibre bridge)
+- Project: @maplibre/maplibre-gl-leaflet
+- License: ISC
+- Version used: 0.0.22 (loaded from CDN)
+- Source: https://github.com/maplibre/maplibre-gl-leaflet
+
+* * *
+
+### OpenStreetMap (map tiles)
+- Online map tiles sourced from OpenStreetMap tile servers
+- License: Map data © OpenStreetMap contributors, **ODbL 1.0** (Open Database License)
+- Tile usage policy: https://operations.osmfoundation.org/policies/tiles/
+- Website: https://www.openstreetmap.org
+- **Attribution required** — "© OpenStreetMap contributors" must be displayed
+
+* * *
+
+### OpenMapTiles (offline PBF vector tile schema)
+- Project: OpenMapTiles
+- License: BSD-3-Clause (schema); map data under ODbL
+- Source: https://github.com/openmaptiles/openmaptiles
+- Website: https://openmaptiles.org
+
+* * *
+
+### html2canvas (DOM screenshots)
+- Project: html2canvas
+- License: MIT
+- Version used: 1.4.1 (loaded from CDN)
+- Source: https://github.com/niklasvh/html2canvas
+
+* * *
+
 ### Framework/server (if used in this repository)
 - FastAPI — MIT
 - Uvicorn — BSD-3-Clause

@@ -40,6 +40,33 @@ If you have any issues, suggestions, or feature requests, please contact me at: 
 - Transformation of raw speech and text into structured insights
 - Support for analytical reports and intelligence-oriented workflows
 
+### 📱 GSM / BTS Analysis (NEW)
+- Import and analysis of **GSM billing data** (CSV, XLSX, PDF)
+- Interactive **map visualization** of BTS locations (Leaflet + OpenStreetMap)
+- **Offline maps** support via MBTiles (raster PNG/JPG/WebP + vector PBF via MapLibre GL)
+- Multiple map views: all points, path, clusters, trips, BTS coverage, heatmap, timeline
+- **Area selection** (circle / rectangle) for spatial queries
+- **Overlay layers**: military bases, civilian airports, diplomatic posts (built-in data)
+- **KML/KMZ import** — custom overlay layers from Google Earth and other GIS tools
+- Map screenshots with watermark (online & offline maps + all overlay layers)
+- Contact graph, activity heatmap, top contacts analysis
+- Timeline player with month/day animation
+
+### 💰 AML — Financial Analysis (NEW)
+- **Anti-Money Laundering** analysis pipeline for bank statements
+- Automatic bank detection and PDF parsing for Polish banks:
+  PKO BP, ING, mBank, Pekao SA, Santander, Millennium, Revolut (+ generic fallback)
+- MT940 (SWIFT) statement format support
+- Transaction normalization, rule-based classification, and risk scoring
+- **Anomaly detection**: statistical baseline + ML-based (Isolation Forest)
+- **Graph analysis** — counterparty network visualization
+- Cross-account analysis for multi-account investigations
+- Entity resolution and counterparty memory (persistent labels/notes)
+- Spending analysis, behavioral patterns, merchant categorization
+- LLM-assisted analysis (prompt builder for Ollama models)
+- HTML report generation with charts
+- Data anonymization profiles for safe sharing
+
 ### ⚙️ GPU & Resource Management
 - Integrated **GPU Resource Manager**
 - Automatic task scheduling and prioritization (ASR, diarization, analysis)
@@ -53,8 +80,9 @@ If you have any issues, suggestions, or feature requests, please contact me at: 
 - Separation of user data and system processes
 
 ### 📄 Reporting & Export
-- Export results to **TXT**, **HTML**, and **DOC**
+- Export results to **TXT**, **HTML**, **DOC**, and **PDF**
 - Structured reports combining transcription, diarization, and analysis
+- AML financial reports with charts and risk indicators
 - Ready-to-use outputs for research, documentation, and investigations
 
 ### 🌐 Web-Based Interface
@@ -287,7 +315,19 @@ Open in browser: http://127.0.0.1:8000
 
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
-## beta 3.5.1/3 
+
+## beta 3.6
+- **GSM / BTS Analysis** — full GSM billing analysis module with interactive maps, timeline, clusters, trips, heatmap, contact graph
+- **AML Financial Analysis** — anti-money laundering pipeline: PDF parsing (7 Polish banks + MT940), rule-based + ML anomaly detection, graph analysis, risk scoring, LLM-assisted reports
+- **Map overlays** — military bases, airports, diplomatic posts + custom KML/KMZ import
+- **Offline maps** — MBTiles support (raster + PBF vector via MapLibre GL)
+- **Map screenshots** — full map capture including all tile layers, overlays, and KML markers
+- Fixed KML/KMZ parser (ElementTree falsy element bug)
+- Fixed MapLibre GL canvas screenshot (preserveDrawingBuffer)
+- Fixed info page language switching
+- Version bump to 3.6 beta
+
+## beta 3.5.1/3
 - Fixed project saving/assignment.
 - Improved parser for ING banking
 

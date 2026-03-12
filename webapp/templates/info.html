@@ -48,7 +48,7 @@
   (function(){
     try{
       const url = new URL(window.location.href);
-      const ls = (localStorage.getItem("ui_language") || localStorage.getItem("lang") || "").toLowerCase();
+      const ls = (localStorage.getItem("aistate_ui_lang") || localStorage.getItem("ui_language") || localStorage.getItem("lang") || "").toLowerCase();
       const wanted = ls.startsWith("en") ? "en" : ls.startsWith("pl") ? "pl" : "";
       if (!wanted) return;
       const current = (url.searchParams.get("lang") || "").toLowerCase();
