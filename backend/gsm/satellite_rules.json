@@ -1,0 +1,268 @@
+{
+  "version": "1.0",
+  "purpose": "Wykrywanie numerów satelitarnych, na które da się bezpośrednio dzwonić i które można rozpoznać po samym numerze w bilingu.",
+  "source": {
+    "type": "user_csv",
+    "file": "OperatorSystem-Krajbazowy-Kodytelefoniczne-Konstrukcjanumeru-Przykadnumeru-Zasiggeograficzny-Typsatelity-Uwagi.csv"
+  },
+  "assumptions": [
+    "Wykrywaj wyłącznie usługi satelitarne z rozpoznawalnym prefiksem numeracyjnym.",
+    "Pomijaj systemy tylko danych, M2M, IoT, VoIP bez własnego prefiksu PSTN oraz direct-to-cell/NTN używające zwykłych numerów krajowych.",
+    "Jeżeli numer nie ma dedykowanego prefiksu satelitarnego, nie da się go wiarygodnie odróżnić od zwykłego numeru po samym polu numeru w bilingu."
+  ],
+  "normalization": {
+    "target_format": "E.164",
+    "steps": [
+      "Usuń spacje, myślniki, nawiasy, kropki, ukośniki i inne separatory.",
+      "Jeżeli numer zaczyna się od 00, zamień początek 00 na +.",
+      "Zachowaj tylko jeden opcjonalny znak + na początku oraz cyfry.",
+      "Nie analizuj numerów wewnętrznych, short code, SIP URI ani nazw alfanumerycznych."
+    ],
+    "examples": [
+      {
+        "input": "+8816 12345678",
+        "output": "+881612345678"
+      },
+      {
+        "input": "00 870 123 456 789",
+        "output": "+870123456789"
+      },
+      {
+        "input": "(+88216) 8765 4321",
+        "output": "+8821687654321"
+      }
+    ]
+  },
+  "output_fields": [
+    {
+      "name": "is_satellite_callable",
+      "type": "boolean"
+    },
+    {
+      "name": "satellite_operator",
+      "type": ["string", "null"]
+    },
+    {
+      "name": "satellite_rule_id",
+      "type": ["string", "null"]
+    },
+    {
+      "name": "satellite_confidence",
+      "type": ["string", "null"],
+      "allowed": ["high", "medium", "low", null]
+    },
+    {
+      "name": "satellite_category",
+      "type": ["string", "null"],
+      "allowed": ["direct_dial_satellite", "historical", "heuristic", "skip", null]
+    }
+  ],
+  "rules": {
+    "active_high_confidence": [
+      {
+        "rule_id": "SAT-IRIDIUM-01",
+        "operator": "Iridium",
+        "callable": true,
+        "confidence": "high",
+        "category": "direct_dial_satellite",
+        "prefixes": ["+8816", "+8817"],
+        "regex_e164": "^\\+881(?:6|7)\\d{8}$",
+        "regex_digits": "^881(?:6|7)\\d{8}$",
+        "description": "Dedykowane numery satelitarne Iridium."
+      },
+      {
+        "rule_id": "SAT-INMARSAT-01",
+        "operator": "Inmarsat",
+        "callable": true,
+        "confidence": "high",
+        "category": "direct_dial_satellite",
+        "prefixes": ["+870"],
+        "regex_e164": "^\\+870\\d{9}$",
+        "regex_digits": "^870\\d{9}$",
+        "description": "Aktualny globalny prefiks SNAC dla Inmarsat."
+      },
+      {
+        "rule_id": "SAT-THURAYA-01",
+        "operator": "Thuraya",
+        "callable": true,
+        "confidence": "high",
+        "category": "direct_dial_satellite",
+        "prefixes": ["+88216"],
+        "regex_e164": "^\\+88216\\d{8}$",
+        "regex_digits": "^88216\\d{8}$",
+        "description": "Dedykowane numery Thuraya."
+      },
+      {
+        "rule_id": "SAT-GLOBALSTAR-01",
+        "operator": "Globalstar",
+        "callable": true,
+        "confidence": "high",
+        "category": "direct_dial_satellite",
+        "prefixes": ["+8810", "+8811", "+8812", "+88125", "+88168", "+88169"],
+        "regex_e164": "^\\+881(?:0\\d{7,8}|1\\d{7,8}|2\\d{7,8}|25\\d{7,8}|68\\d{7,8}|69\\d{7,8})$",
+        "regex_digits": "^881(?:0\\d{7,8}|1\\d{7,8}|2\\d{7,8}|25\\d{7,8}|68\\d{7,8}|69\\d{7,8})$",
+        "description": "Dedykowane prefiksy Globalstar z długością końcówki 7-8 cyfr.",
+        "note": "Jeżeli w Twoich danych billingowych długość jest zawsze stała, można zawęzić regex do konkretnej długości po walidacji historycznych rekordów."
+      },
+      {
+        "rule_id": "SAT-ICO-01",
+        "operator": "ICO Global",
+        "callable": true,
+        "confidence": "high",
+        "category": "direct_dial_satellite",
+        "prefixes": ["+88210", "+88211"],
+        "regex_e164": "^\\+8821(?:0|1)\\d{8,9}$",
+        "regex_digits": "^8821(?:0|1)\\d{8,9}$",
+        "description": "Międzynarodowe numery MSS z dedykowanymi prefiksami."
+      },
+      {
+        "rule_id": "SAT-GMSC-01",
+        "operator": "GMSC",
+        "callable": true,
+        "confidence": "high",
+        "category": "direct_dial_satellite",
+        "prefixes": ["+88213"],
+        "regex_e164": "^\\+88213\\d{8}$",
+        "regex_digits": "^88213\\d{8}$",
+        "description": "Global Mobile Satellite Communications."
+      }
+    ],
+    "optional_medium_low_confidence": [
+      {
+        "rule_id": "SAT-INMARSAT-HIST-01",
+        "operator": "Inmarsat",
+        "callable": true,
+        "confidence": "medium",
+        "category": "historical",
+        "prefixes": ["+871", "+872", "+873", "+874"],
+        "regex_e164": "^\\+87(?:1|2|3|4)\\d{6,12}$",
+        "regex_digits": "^87(?:1|2|3|4)\\d{6,12}$",
+        "description": "Historyczne prefiksy Inmarsat wskazane w źródłowej tabeli.",
+        "note": "Zakres długości celowo szeroki; używaj wyłącznie dla starych bilingów i najlepiej z dodatkową walidacją daty lub taryfy."
+      },
+      {
+        "rule_id": "SAT-MARITIME-COMM-PARTNER-01",
+        "operator": "Maritime Comm. Partner",
+        "callable": true,
+        "confidence": "medium",
+        "category": "heuristic",
+        "prefixes": ["+88232"],
+        "regex_e164": "^\\+88232\\d{6,10}$",
+        "regex_digits": "^88232\\d{6,10}$",
+        "description": "Specjalistyczny morski operator; w źródle wskazany jako numer wybieralny, ale bez precyzyjnej stałej długości.",
+        "note": "Po wdrożeniu warto sprawdzić realne długości na Twoich danych i zawęzić wzorzec."
+      },
+      {
+        "rule_id": "SAT-ECHOSTAR-HEUR-01",
+        "operator": "EchoStar Mobile",
+        "callable": "possible",
+        "confidence": "low",
+        "category": "heuristic",
+        "prefixes": ["+88252"],
+        "regex_e164": "^\\+88252\\d{5,10}$",
+        "regex_digits": "^88252\\d{5,10}$",
+        "description": "W tabeli podano regionalne bloki +882XX oraz przykład +88252.",
+        "note": "Nie traktować jako reguły twardej, dopóki nie potwierdzisz prefiksów na rzeczywistych bilingach lub w dokumentacji operatora."
+      }
+    ]
+  },
+  "skip_groups": [
+    {
+      "group_id": "ONLY-DATA-OR-NO-DEDICATED-PSTN",
+      "reason": "Brak klasycznych numerów wybieralnych lub brak dedykowanego prefiksu możliwego do jednoznacznego wykrycia w polu numeru.",
+      "operators": [
+        "ORBCOMM", "Viasat", "Hughes Network Systems", "Eutelsat",
+        "SES (o3b mPower)", "Intelsat", "Gilat Satellite Networks", "Kacific",
+        "Telesat Lightspeed", "Speedcast", "OneWeb", "Thales Alenia Space"
+      ]
+    },
+    {
+      "group_id": "STANDARD-LOCAL-NUMBERS",
+      "reason": "Usługi działają na standardowych numerach krajowych; po samym numerze nie odróżnisz ich od zwykłego GSM.",
+      "operators": [
+        "Starlink Direct-to-Cell", "AST SpaceMobile", "Lynk Global",
+        "BeiDou SMS", "Skylo Technologies"
+      ]
+    },
+    {
+      "group_id": "UNDERLYING-GSM-VOIP",
+      "reason": "Po samym numerze w bilingu nie da się wiarygodnie ustalić, czy połączenie było satelitarne, bo numer wygląda jak zwykły numer operatora krajowego albo numer partnera.",
+      "operators": [
+        "Gonets", "Yamal", "Express", "Ligado Networks",
+        "Qualcomm Snapdragon Satellite"
+      ]
+    }
+  ],
+  "engine_order": [
+    "Krok 1: znormalizuj numer.",
+    "Krok 2: sprawdź reguły active_high_confidence.",
+    "Krok 3: jeżeli brak trafienia, opcjonalnie sprawdź reguły optional_medium_low_confidence.",
+    "Krok 4: jeżeli dalej brak trafienia, ustaw is_satellite_callable=false i pola operator/rule_id/confidence na null.",
+    "Krok 5: nie oznaczaj operatorów z grup skip jako satelitarnych tylko dlatego, że operator jest związany z rynkiem satelitarnym."
+  ],
+  "quick_whitelist_regex": [
+    "^\\+881(?:6|7)\\d{8}$",
+    "^\\+870\\d{9}$",
+    "^\\+88216\\d{8}$",
+    "^\\+881(?:0\\d{7,8}|1\\d{7,8}|2\\d{7,8}|25\\d{7,8}|68\\d{7,8}|69\\d{7,8})$",
+    "^\\+8821(?:0|1)\\d{8,9}$",
+    "^\\+88213\\d{8}$"
+  ],
+  "optional_review_regex": [
+    "^\\+87(?:1|2|3|4)\\d{6,12}$",
+    "^\\+88232\\d{6,10}$",
+    "^\\+88252\\d{5,10}$"
+  ],
+  "decision_logic_example": [
+    {
+      "if_rule_matches": "SAT-IRIDIUM-01",
+      "return": { "classification": "satellite", "operator": "Iridium", "confidence": "high" }
+    },
+    {
+      "if_rule_matches": "SAT-INMARSAT-01",
+      "return": { "classification": "satellite", "operator": "Inmarsat", "confidence": "high" }
+    },
+    {
+      "if_rule_matches": "SAT-THURAYA-01",
+      "return": { "classification": "satellite", "operator": "Thuraya", "confidence": "high" }
+    },
+    {
+      "if_rule_matches": "SAT-GLOBALSTAR-01",
+      "return": { "classification": "satellite", "operator": "Globalstar", "confidence": "high" }
+    },
+    {
+      "if_rule_matches": "SAT-ICO-01",
+      "return": { "classification": "satellite", "operator": "ICO Global", "confidence": "high" }
+    },
+    {
+      "if_rule_matches": "SAT-GMSC-01",
+      "return": { "classification": "satellite", "operator": "GMSC", "confidence": "high" }
+    },
+    {
+      "if_rule_matches": "SAT-INMARSAT-HIST-01",
+      "return": { "classification": "satellite_historical", "operator": "Inmarsat", "confidence": "medium" }
+    },
+    {
+      "if_rule_matches": "SAT-MARITIME-COMM-PARTNER-01",
+      "return": { "classification": "satellite_heuristic", "operator": "Maritime Comm. Partner", "confidence": "medium" }
+    },
+    {
+      "if_rule_matches": "SAT-ECHOSTAR-HEUR-01",
+      "return": { "classification": "satellite_heuristic", "operator": "EchoStar Mobile", "confidence": "low" }
+    },
+    {
+      "else": { "classification": "not_classified_by_number", "operator": null, "confidence": null }
+    }
+  ],
+  "implementation_warnings": [
+    "Nie używaj ogólnej reguły typu ^\\+882.*$ ani ^\\+881.*$ bez whitelisty prefiksów, bo złapiesz także inne sieci międzynarodowe.",
+    "Direct-to-cell / NTN może wyglądać w bilingu jak zwykły numer krajowy. Tego nie wykryjesz samym numerem bez dodatkowych metadanych operatora, taryfy, typu roamingu lub informacji z CDR.",
+    "Jeżeli billing przechowuje numer bez +, używaj wariantu regex_digits albo najpierw dokonaj normalizacji.",
+    "Dla sekcji heurystycznej zalecane jest logowanie trafień do osobnej kolejki weryfikacyjnej."
+  ],
+  "production_recommendation": {
+    "enable_immediately": "active_high_confidence",
+    "mark_as_optional_review": "optional_medium_low_confidence",
+    "ignore_in_number_only_classification": "skip_groups"
+  }
+}

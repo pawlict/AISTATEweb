@@ -11,10 +11,12 @@ Provides analytical functions for parsed billing data:
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .parsers.base import BillingRecord, BillingParseResult, BillingSummary
@@ -1291,6 +1293,20 @@ def _detect_anomalies(
         "items": one_time_items,
     })
 
+    # ── 9. Satellite phone numbers ──
+    satellite_items = _detect_satellite_numbers(records, own_numbers)
+    groups.append({
+        "type": "satellite_numbers",
+        "label": "Numery satelitarne",
+        "description": (
+            "Połączenia z numerami telefonów satelitarnych (Iridium, Inmarsat, "
+            "Thuraya, Globalstar i in.) — rozpoznane na podstawie dedykowanych "
+            "prefiksów międzynarodowych (+881x, +870, +882x)"
+        ),
+        "severity": "warning" if satellite_items else "ok",
+        "items": satellite_items,
+    })
+
     return groups
 
 
@@ -1429,6 +1445,113 @@ def _detect_one_time_contacts(
     # Limit to 30 most recent
     items.sort(key=lambda x: x["date"], reverse=True)
     return items[:30]
+
+
+def _load_satellite_rules() -> Dict[str, Any]:
+    """Load satellite detection rules from JSON config (cached)."""
+    if not hasattr(_load_satellite_rules, "_cache"):
+        rules_path = Path(__file__).parent / "satellite_rules.json"
+        try:
+            _load_satellite_rules._cache = json.loads(rules_path.read_text(encoding="utf-8"))
+        except Exception:
+            _load_satellite_rules._cache = {}
+    return _load_satellite_rules._cache
+
+
+def _normalize_for_satellite(number: str) -> str:
+    """Normalize a phone number to E.164-like format for satellite matching.
+
+    Strips separators, converts 00 prefix to +, keeps only + and digits.
+    """
+    # Remove common separators
+    cleaned = re.sub(r"[\s\-\(\)\./]", "", number)
+    # Convert 00 prefix to +
+    if cleaned.startswith("00"):
+        cleaned = "+" + cleaned[2:]
+    # Keep only leading + and digits
+    if cleaned.startswith("+"):
+        cleaned = "+" + re.sub(r"[^\d]", "", cleaned[1:])
+    else:
+        cleaned = re.sub(r"[^\d]", "", cleaned)
+    return cleaned
+
+
+def _detect_satellite_numbers(
+    records: List[BillingRecord],
+    own_numbers: Set[str],
+) -> List[Dict[str, Any]]:
+    """Detect calls to/from satellite phone numbers based on prefix rules.
+
+    Uses rules from satellite_rules.json — checks active_high_confidence first,
+    then optional_medium_low_confidence.
+    """
+    rules_data = _load_satellite_rules()
+    if not rules_data:
+        return []
+
+    rules_section = rules_data.get("rules", {})
+    high_rules = rules_section.get("active_high_confidence", [])
+    optional_rules = rules_section.get("optional_medium_low_confidence", [])
+
+    # Compile regexes once
+    compiled_rules: List[Tuple[re.Pattern, re.Pattern, Dict[str, Any]]] = []
+    for rule in high_rules + optional_rules:
+        try:
+            pat_e164 = re.compile(rule["regex_e164"])
+            pat_digits = re.compile(rule["regex_digits"])
+            compiled_rules.append((pat_e164, pat_digits, rule))
+        except (KeyError, re.error):
+            continue
+
+    # Scan records
+    satellite_hits: Dict[str, Dict[str, Any]] = {}  # keyed by normalized number
+    for r in records:
+        contact = r.callee or r.caller
+        if not contact or contact in own_numbers:
+            continue
+
+        normalized = _normalize_for_satellite(contact)
+        if not normalized or len(normalized) < 6:
+            continue
+
+        # Already matched this number
+        if normalized in satellite_hits:
+            satellite_hits[normalized]["count"] += 1
+            satellite_hits[normalized]["dates"].add(r.date)
+            continue
+
+        # Try matching
+        for pat_e164, pat_digits, rule in compiled_rules:
+            digits_only = normalized.lstrip("+")
+            if pat_e164.match(normalized) or pat_digits.match(digits_only):
+                satellite_hits[normalized] = {
+                    "contact": contact,
+                    "normalized": normalized,
+                    "operator": rule.get("operator", "?"),
+                    "rule_id": rule.get("rule_id", ""),
+                    "confidence": rule.get("confidence", "?"),
+                    "category": rule.get("category", ""),
+                    "description": rule.get("description", ""),
+                    "count": 1,
+                    "dates": {r.date},
+                }
+                break
+
+    # Convert to list
+    items = []
+    for info in satellite_hits.values():
+        items.append({
+            "contact": info["contact"],
+            "normalized": info["normalized"],
+            "operator": info["operator"],
+            "rule_id": info["rule_id"],
+            "confidence": info["confidence"],
+            "category": info["category"],
+            "count": info["count"],
+            "dates": sorted(info["dates"]),
+        })
+    items.sort(key=lambda x: x["count"], reverse=True)
+    return items
 
 
 def _detect_burst_activity(
