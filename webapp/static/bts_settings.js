@@ -495,7 +495,120 @@
     // Map source selector
     const mapSrcSel = QS("#bts_map_source");
     if (mapSrcSel) mapSrcSel.onchange = () => saveMapSource(mapSrcSel.value);
+
+    // KML overlay upload
+    const kmlUpBtn = QS("#kml_upload_btn");
+    const kmlFile = QS("#kml_upload_file");
+    if (kmlUpBtn && kmlFile) {
+      kmlUpBtn.onclick = () => kmlFile.click();
+      kmlFile.onchange = () => {
+        if (kmlFile.files && kmlFile.files.length) {
+          uploadKmlOverlay(kmlFile.files[0]);
+          kmlFile.value = "";
+        }
+      };
+    }
   }
+
+  /* ── KML overlay management ────────────────────────────── */
+
+  async function uploadKmlOverlay(file) {
+    const statusEl = QS("#kml_upload_status");
+    const pctEl = QS("#kml_upload_pct");
+    const barEl = QS("#kml_upload_bar");
+    const progressWrap = QS("#kml_upload_progress");
+    const nameInput = QS("#kml_overlay_name");
+    const overlayName = (nameInput ? nameInput.value : "").trim();
+
+    if (progressWrap) progressWrap.style.display = "";
+    if (statusEl) statusEl.textContent = "Wgrywanie…";
+
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("name", overlayName);
+
+    try {
+      const xhr = new XMLHttpRequest();
+      await new Promise((resolve, reject) => {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            if (pctEl) pctEl.textContent = pct + "%";
+            if (barEl) barEl.style.width = pct + "%";
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(xhr.responseText);
+          } else {
+            let detail = "";
+            try { detail = JSON.parse(xhr.responseText).detail || xhr.responseText.slice(0, 200); } catch (e2) { detail = xhr.responseText.slice(0, 200); }
+            reject(new Error(detail || `HTTP ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Błąd sieci"));
+        xhr.open("POST", "/api/gsm/overlays/upload");
+        xhr.send(fd);
+      });
+
+      if (statusEl) statusEl.innerHTML = '<span style="color:#22c55e">Wgrano pomyślnie</span>';
+      if (nameInput) nameInput.value = "";
+      await refreshKmlOverlays();
+    } catch (e) {
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--danger)">${e.message}</span>`;
+    }
+
+    setTimeout(() => {
+      if (progressWrap) progressWrap.style.display = "none";
+    }, 3000);
+  }
+
+  async function refreshKmlOverlays() {
+    const listEl = QS("#kml_overlay_list");
+    const emptyEl = QS("#kml_overlay_empty");
+    if (!listEl) return;
+
+    try {
+      const resp = await fetch("/api/gsm/overlays");
+      const data = await resp.json();
+      const items = (data && data.overlays) ? data.overlays : [];
+
+      if (!items.length) {
+        listEl.innerHTML = "";
+        if (emptyEl) emptyEl.style.display = "";
+        return;
+      }
+      if (emptyEl) emptyEl.style.display = "none";
+
+      listEl.innerHTML = items.map(ov => {
+        const safeName = _escHtml(ov.name || ov.id);
+        const safeFile = _escHtml(ov.filename || "");
+        return `<div class="bts-source-status active ok" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span class="status-dot" style="background:#8b5cf6"></span>
+          <span style="font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safeName}</span>
+          <span class="small muted">${_fmt(ov.point_count)} pkt</span>
+          <span class="small muted" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${safeFile}">${safeFile}</span>
+          <button class="btn secondary" style="padding:2px 8px;font-size:11px;color:var(--danger,#b91c1c)" onclick="window._deleteKmlOverlay('${ov.id}')">Usuń</button>
+        </div>`;
+      }).join("");
+    } catch (e) {
+      console.warn("KML overlays list error:", e);
+    }
+  }
+
+  function _escHtml(s) {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  window._deleteKmlOverlay = async function (id) {
+    if (!confirm("Usunąć tę warstwę KML?")) return;
+    try {
+      await fetch(`/api/gsm/overlays/${id}`, { method: "DELETE" });
+      await refreshKmlOverlays();
+    } catch (e) {
+      console.warn("KML delete error:", e);
+    }
+  };
 
   /* ── Init ─────────────────────────────────────────────── */
 
@@ -504,4 +617,5 @@
   loadOcidToken();
   refreshStats();
   refreshTilesStatus();
+  refreshKmlOverlays();
 })();
