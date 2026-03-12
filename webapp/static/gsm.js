@@ -3182,21 +3182,42 @@
       // ── 3. Draw MapLibre GL canvas (for PBF vector tiles) ──
       // MapLibre renders to a WebGL canvas inside a .maplibregl-map container.
       // Requires preserveDrawingBuffer:true (set in _addPbfVectorLayer).
-      const maplibreContainer = container.querySelector(".maplibregl-map, .mapboxgl-map");
-      const maplibreCanvas = container.querySelector(".maplibregl-canvas, .mapboxgl-canvas");
-      if (maplibreCanvas) {
+      if (St._maplibreLayer) {
         try {
-          // MapLibre's canvas may be positioned within its own container div.
-          // Use CSS position of the canvas relative to the map container.
-          const mlRect = maplibreCanvas.getBoundingClientRect();
-          const cRect = map.getContainer().getBoundingClientRect();
-          const mlX = (mlRect.left - cRect.left) * scale;
-          const mlY = (mlRect.top - cRect.top) * scale;
-          const mlW = mlRect.width * scale;
-          const mlH = mlRect.height * scale;
-          ctx.drawImage(maplibreCanvas, mlX, mlY, mlW, mlH);
+          const glMap = St._maplibreLayer.getMaplibreMap();
+          if (glMap) {
+            // Force a synchronous repaint so the WebGL buffer contains current frame
+            glMap.triggerRepaint();
+            // Wait one animation frame for the repaint to complete
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+            const glCanvas = glMap.getCanvas();
+            if (glCanvas) {
+              const mlRect = glCanvas.getBoundingClientRect();
+              const cRect = map.getContainer().getBoundingClientRect();
+              const mlX = (mlRect.left - cRect.left) * scale;
+              const mlY = (mlRect.top - cRect.top) * scale;
+              const mlW = mlRect.width * scale;
+              const mlH = mlRect.height * scale;
+              ctx.drawImage(glCanvas, mlX, mlY, mlW, mlH);
+            }
+          }
         } catch (e) {
           _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
+        }
+      } else {
+        // Fallback: try to find any MapLibre canvas in the DOM
+        const maplibreCanvas = container.querySelector(".maplibregl-canvas, .mapboxgl-canvas");
+        if (maplibreCanvas) {
+          try {
+            const mlRect = maplibreCanvas.getBoundingClientRect();
+            const cRect = map.getContainer().getBoundingClientRect();
+            ctx.drawImage(maplibreCanvas,
+              (mlRect.left - cRect.left) * scale, (mlRect.top - cRect.top) * scale,
+              mlRect.width * scale, mlRect.height * scale);
+          } catch (e) {
+            _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
+          }
         }
       }
 
@@ -3474,6 +3495,7 @@
     if (St.map) {
       try { St.map.remove(); } catch(e) { /* ignore */ }
       St.map = null;
+      St._maplibreLayer = null;
     }
 
     const map = L.map(container, {
@@ -3688,12 +3710,17 @@
     };
 
     try {
-      L.maplibreGL({
+      const glLayer = L.maplibreGL({
         style: style,
         attribution: "Offline map (PBF) | OpenStreetMap",
-        // preserveDrawingBuffer is required for map screenshot (drawImage / toDataURL)
-        maplibreOptions: { preserveDrawingBuffer: true },
+        // preserveDrawingBuffer: required for map screenshot (canvas drawImage / toDataURL).
+        // Must be at top level — the plugin passes it through to the MapLibre GL Map constructor.
+        preserveDrawingBuffer: true,
+        // MapLibre GL JS v4+ may also need canvasContextAttributes
+        canvasContextAttributes: { preserveDrawingBuffer: true },
       }).addTo(map);
+      // Store reference for screenshot use (triggerRepaint + getCanvas)
+      St._maplibreLayer = glLayer;
       _addLog("info", "Używam mapy offline — wektor (PBF) via MapLibre GL");
       _setMapBadge(map, "OFFLINE — PBF", "#22c55e");
     } catch (e) {
@@ -6809,7 +6836,7 @@
         St.hmActiveCell = null;
         St.hmMonth = "all";
         St.hmType = "all";
-        if (St.map) { St.map.remove(); St.map = null; }
+        if (St.map) { St.map.remove(); St.map = null; St._maplibreLayer = null; }
         const results = QS("#gsm_results");
         const empty = QS("#gsm_empty_state");
         if (results) results.style.display = "none";
