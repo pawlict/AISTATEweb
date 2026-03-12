@@ -2003,6 +2003,72 @@
   }
 
   /**
+   * Build a predicate function that tests whether a record matches
+   * the given anomaly type. Returns a function(record) → boolean.
+   */
+  function _anomalyPredicate(type, anomalyItems) {
+    switch (type) {
+      case "long_call":
+        return r => r.duration_seconds > 3600 && (r.record_type || "").includes("CALL");
+      case "late_night_calls":
+        return r => {
+          if (!r.time || !(r.record_type || "").includes("CALL")) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 0 && h < 5;
+        };
+      case "night_activity":
+        return r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        };
+      case "night_movement":
+        return r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        };
+      case "burst_activity": {
+        if (!anomalyItems.length) return () => false;
+        const b = anomalyItems[0];
+        return r => {
+          if (r.date !== b.date) return false;
+          if (!b.time || !r.time) return true;
+          try {
+            const bp = b.time.split(":"), rp = r.time.split(":");
+            const bm = parseInt(bp[0]) * 60 + parseInt(bp[1]);
+            const rm = parseInt(rp[0]) * 60 + parseInt(rp[1]);
+            return rm >= bm && rm <= bm + (b.window_min || 30);
+          } catch (_) { return false; }
+        };
+      }
+      case "premium_number": {
+        const nums = new Set(anomalyItems.map(it => it.contact));
+        return r => nums.has(r.callee) || nums.has(r.caller);
+      }
+      case "roaming":
+        return r => r.roaming || (r.network && !/orange|play|plus|t-mobile|polkomtel|p4|heyah/i.test(r.network));
+      case "one_time_contacts": {
+        const otNums = new Set(anomalyItems.map(it => it.contact));
+        return r => otNums.has(r.callee) || otNums.has(r.caller);
+      }
+      case "satellite_numbers": {
+        const satNums = new Set(anomalyItems.map(it => it.contact));
+        return r => satNums.has(r.callee) || satNums.has(r.caller);
+      }
+      case "social_media": {
+        const smPlatforms = anomalyItems.map(it => it.platform.toLowerCase());
+        return r => {
+          const txt = [r.callee, r.caller, r.network, r.raw_text || ""].join(" ").toLowerCase();
+          return smPlatforms.some(p => txt.includes(p));
+        };
+      }
+      default:
+        return () => false;
+    }
+  }
+
+  /**
    * +5 context filter: show anomaly records plus 5 records before/after each,
    * with color coding (red = anomaly, blue = context).
    */
@@ -2010,111 +2076,48 @@
     const allRecords = St.lastResult ? St.lastResult.records : [];
     if (!allRecords.length) return;
 
-    // Step 1: Get the filtered anomaly records using the same logic as _anomalyGroupFilter
-    const anomalySet = new Set();
-    let tempFiltered = [];
+    const isAnomaly = _anomalyPredicate(type, anomalyItems);
 
-    // Re-use same matching logic per type
-    switch (type) {
-      case "long_call":
-        tempFiltered = allRecords.filter(r => r.duration_seconds > 3600 && (r.record_type || "").includes("CALL"));
-        break;
-      case "late_night_calls":
-        tempFiltered = allRecords.filter(r => {
-          if (!r.time || !(r.record_type || "").includes("CALL")) return false;
-          const h = parseInt(r.time.split(":")[0], 10);
-          return h >= 0 && h < 5;
-        });
-        break;
-      case "night_activity":
-        tempFiltered = allRecords.filter(r => {
-          if (!r.time) return false;
-          const h = parseInt(r.time.split(":")[0], 10);
-          return h >= 23 || h < 5;
-        });
-        break;
-      case "night_movement":
-        tempFiltered = allRecords.filter(r => {
-          if (!r.time) return false;
-          const h = parseInt(r.time.split(":")[0], 10);
-          return h >= 23 || h < 5;
-        });
-        break;
-      case "burst_activity":
-        if (anomalyItems.length > 0) {
-          const b = anomalyItems[0];
-          tempFiltered = allRecords.filter(r => {
-            if (r.date !== b.date) return false;
-            if (!b.time || !r.time) return true;
-            try {
-              const bp = b.time.split(":"), rp = r.time.split(":");
-              const bm = parseInt(bp[0]) * 60 + parseInt(bp[1]);
-              const rm = parseInt(rp[0]) * 60 + parseInt(rp[1]);
-              return rm >= bm && rm <= bm + (b.window_min || 30);
-            } catch (_) { return false; }
-          });
-        }
-        break;
-      case "premium_number": {
-        const nums = new Set(anomalyItems.map(it => it.contact));
-        tempFiltered = allRecords.filter(r => nums.has(r.callee) || nums.has(r.caller));
-        break;
-      }
-      case "roaming":
-        tempFiltered = allRecords.filter(r => r.roaming);
-        if (!tempFiltered.length) {
-          tempFiltered = allRecords.filter(r => r.roaming || (r.network && !/orange|play|plus|t-mobile|polkomtel|p4|heyah/i.test(r.network)));
-        }
-        break;
-      case "one_time_contacts": {
-        const otNums = new Set(anomalyItems.map(it => it.contact));
-        tempFiltered = allRecords.filter(r => otNums.has(r.callee) || otNums.has(r.caller));
-        break;
-      }
-      case "satellite_numbers": {
-        const satNums = new Set(anomalyItems.map(it => it.contact));
-        tempFiltered = allRecords.filter(r => satNums.has(r.callee) || satNums.has(r.caller));
-        break;
-      }
-      case "social_media": {
-        const smPlatforms = anomalyItems.map(it => it.platform.toLowerCase());
-        tempFiltered = allRecords.filter(r => {
-          const txt = [r.callee, r.caller, r.network, r.raw_text || ""].join(" ").toLowerCase();
-          return smPlatforms.some(p => txt.includes(p));
-        });
-        break;
-      }
-      default:
-        tempFiltered = [];
-    }
-
-    // Build a set of anomaly record indices in allRecords
+    // Step 1: Find anomaly indices by running predicate on every record
     const anomalyIndices = new Set();
     for (let i = 0; i < allRecords.length; i++) {
-      if (tempFiltered.includes(allRecords[i])) {
+      if (isAnomaly(allRecords[i])) {
         anomalyIndices.add(i);
-        anomalySet.add(allRecords[i]);
       }
     }
 
-    // Step 2: Collect context indices (+5 before, +5 after each anomaly record)
+    if (!anomalyIndices.size) return;
+
+    // Step 2: Collect context indices (+5 before, +5 after each anomaly)
     const contextIndices = new Set();
     for (const idx of anomalyIndices) {
       for (let d = 1; d <= 5; d++) {
-        if (idx - d >= 0 && !anomalyIndices.has(idx - d)) contextIndices.add(idx - d);
-        if (idx + d < allRecords.length && !anomalyIndices.has(idx + d)) contextIndices.add(idx + d);
+        const before = idx - d;
+        const after = idx + d;
+        if (before >= 0 && !anomalyIndices.has(before)) contextIndices.add(before);
+        if (after < allRecords.length && !anomalyIndices.has(after)) contextIndices.add(after);
       }
     }
 
-    // Step 3: Merge and sort by original index, tag each record
-    const resultIndices = new Set([...anomalyIndices, ...contextIndices]);
-    const sortedIndices = [...resultIndices].sort((a, b) => a - b);
-    const resultRecords = sortedIndices.map(i => allRecords[i]);
+    // Step 3: Merge, sort by original position, build result
+    const allIndices = [...anomalyIndices, ...contextIndices].sort((a, b) => a - b);
+    const resultRecords = allIndices.map(i => allRecords[i]);
 
-    // Store highlighting info for the table renderer
+    // Step 4: Build highlighting sets keyed by record object reference.
+    // .filter() and [...].sort() preserve object references, so WeakSet works.
+    const anomalyRecords = new Set();
+    const contextRecords = new Set();
+    for (const idx of allIndices) {
+      if (anomalyIndices.has(idx)) {
+        anomalyRecords.add(allRecords[idx]);
+      } else {
+        contextRecords.add(allRecords[idx]);
+      }
+    }
+
     St._anomalyHighlight = {
-      anomalySet: anomalySet,
-      contextSet: new Set(sortedIndices.filter(i => contextIndices.has(i)).map(i => allRecords[i])),
+      anomalyRecords: anomalyRecords,
+      contextRecords: contextRecords,
     };
 
     const anomCount = anomalyIndices.size;
@@ -2679,10 +2682,10 @@
     for (const r of sorted) {
       let rowStyle = "";
       if (hl) {
-        if (hl.anomalySet && hl.anomalySet.has(r)) {
-          rowStyle = ' style="background:rgba(239,68,68,.10)"';  // light red
-        } else if (hl.contextSet && hl.contextSet.has(r)) {
-          rowStyle = ' style="background:rgba(59,130,246,.10)"';  // light blue
+        if (hl.anomalyRecords && hl.anomalyRecords.has(r)) {
+          rowStyle = ' style="background:rgba(239,68,68,.12)"';  // light red — anomaly
+        } else if (hl.contextRecords && hl.contextRecords.has(r)) {
+          rowStyle = ' style="background:rgba(59,130,246,.10)"';  // light blue — context
         }
       }
       html += `<tr${rowStyle}>`;
