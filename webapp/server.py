@@ -2332,9 +2332,9 @@ def page_transcribe(request: Request) -> Any:
     return render_page(request, "transcription.html", "Transkrypcja", "transcription")
 
 
-@app.get("/new-project", response_class=HTMLResponse)
-def page_new_project(request: Request) -> Any:
-    return render_page(request, "new_project.html", "Nowy projekt", "new_project")
+@app.get("/new-project")
+def page_new_project_redirect(request: Request) -> Any:
+    return RedirectResponse(url="/projects", status_code=302)
 
 
 @app.get("/projects", response_class=HTMLResponse)

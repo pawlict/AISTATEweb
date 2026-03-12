@@ -419,8 +419,6 @@
   "np.redirect_hint": "Aby kontynuować, utwórz lub wybierz projekt dla modułu:",
   "page.diarization.title": "Diaryzacja",
   "page.logs.title": "Logi",
-  "page.new_project.subtitle": "Utwórz nowy projekt (plik audio opcjonalny)",
-  "page.new_project.title": "Nowy projekt",
   "page.transcription.title": "Transkrypcja",
   "placeholder.paste_text_simple_diarization": "Wklej tekst do prostej diaryzacji…",
   "placeholder.result_here": "Tutaj pojawi się wynik…",

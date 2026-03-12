@@ -53,7 +53,7 @@ AISTATEweb/
 │   │   ├── users.html         # User management panel
 │   │   ├── transcription.html, diarization.html, translation.html  # Core features
 │   │   ├── analysis.html, chat.html  # LLM features
-│   │   ├── new_project.html, save.html  # Project management
+│   │   ├── projects.html, save.html  # Project management
 │   │   ├── settings.html, llm_settings.html, asr_settings.html  # Settings pages
 │   │   ├── nllb_settings.html, tts_settings.html  # Model settings
 │   │   ├── admin.html, logs.html, info.html  # Admin/system pages

@@ -116,7 +116,7 @@
 
       <nav class="nav">
         {% if not multiuser or 'projects' in user_modules %}
-        <a href="/projects" data-icon="projects" class="{{ 'active' if active in ('new_project', 'projects') else '' }}" data-i18n-title="nav.new_project">
+        <a href="/projects" data-icon="projects" class="{{ 'active' if active == 'projects' else '' }}" data-i18n-title="nav.new_project">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <defs><linearGradient id="gp" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs>

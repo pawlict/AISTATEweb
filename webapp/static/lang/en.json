@@ -417,8 +417,6 @@
   "np.redirect_hint": "To continue, create or select a project for module:",
   "page.diarization.title": "Diarization",
   "page.logs.title": "Logs",
-  "page.new_project.subtitle": "Create a new project (audio file optional)",
-  "page.new_project.title": "New project",
   "page.transcription.title": "Transcription",
   "placeholder.paste_text_simple_diarization": "Paste text for simple diarization…",
   "placeholder.result_here": "Result will appear here…",
