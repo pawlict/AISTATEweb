@@ -2692,14 +2692,11 @@
         }
       }
       html += `<tr${rowStyle}>`;
-      let firstCell = true;
-      for (const col of cols) {
-        if (firstCell && rowBadge) {
-          html += `<td style="position:relative">${rowBadge}${col.renderCell(r)}</td>`;
-          firstCell = false;
+      for (let ci = 0; ci < cols.length; ci++) {
+        if (ci === 1 && rowBadge) {
+          html += `<td style="position:relative">${rowBadge}${cols[ci].renderCell(r)}</td>`;
         } else {
-          html += `<td>${col.renderCell(r)}</td>`;
-          firstCell = false;
+          html += `<td>${cols[ci].renderCell(r)}</td>`;
         }
       }
       html += `</tr>`;
