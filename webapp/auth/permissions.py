@@ -33,7 +33,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
         "api_keywords": ["ollama/models"],
     },
     "projects": {
-        "pages": ["/projects", "/new-project", "/save", "/nowy-projekt", "/zapis"],
+        "pages": ["/projects", "/save", "/nowy-projekt", "/zapis"],
         "api_prefixes": ["/api/projects", "/api/workspaces"],
         "api_keywords": [],
     },

@@ -665,7 +665,7 @@ class TestPermissions:
         from webapp.auth.permissions import is_route_allowed
         modules = ["projects", "transcription"]
         assert is_route_allowed("/transcription", modules)
-        assert is_route_allowed("/new-project", modules)
+        assert is_route_allowed("/projects", modules)
         assert not is_route_allowed("/chat", modules)
         assert not is_route_allowed("/translation", modules)
         assert is_route_allowed("/login", modules)  # public

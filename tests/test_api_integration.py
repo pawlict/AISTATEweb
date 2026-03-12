@@ -49,10 +49,11 @@ class TestPageRoutes:
         assert r.status_code == 200
         assert "transcription" in r.text.lower() or "transkrypcja" in r.text.lower() or "html" in r.text.lower()
 
-    def test_new_project_page(self, client):
-        """New project page should render."""
-        r = client.get("/new-project")
-        assert r.status_code == 200
+    def test_new_project_redirects(self, client):
+        """Old /new-project URL should redirect to /projects."""
+        r = client.get("/new-project", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/projects" in r.headers.get("location", "")
 
     def test_diarization_page(self, client):
         """Diarization page should render."""
