@@ -3136,6 +3136,9 @@
       const w = size.x * scale;
       const h = size.y * scale;
 
+      // ── 0. Wait for all visible tiles to load before capturing ──
+      await _waitForTilesToLoad(map, 3000);
+
       const out = document.createElement("canvas");
       out.width = w;
       out.height = h;
@@ -3155,12 +3158,13 @@
         const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
         const tilePromises = [];
         for (const img of tileImgs) {
-          if (!img.complete || !img.naturalWidth || !img.src) continue;
+          if (!img.src) continue;
+          // Include tiles even if not yet complete — we'll re-fetch them
           const tileOffset = _getLeafletPaneOffset(img);
           const x = (tileTransform.x + tileOffset.x) * scale;
           const y = (tileTransform.y + tileOffset.y) * scale;
-          const tw = img.offsetWidth * scale;
-          const th = img.offsetHeight * scale;
+          const tw = (img.offsetWidth || 256) * scale;
+          const th = (img.offsetHeight || 256) * scale;
           tilePromises.push(
             _fetchImageBitmap(img.src)
               .then(bmp => ({ bmp, x, y, tw, th }))
@@ -3178,11 +3182,19 @@
       // ── 3. Draw MapLibre GL canvas (for PBF vector tiles) ──
       // MapLibre renders to a WebGL canvas inside a .maplibregl-map container.
       // Requires preserveDrawingBuffer:true (set in _addPbfVectorLayer).
+      const maplibreContainer = container.querySelector(".maplibregl-map, .mapboxgl-map");
       const maplibreCanvas = container.querySelector(".maplibregl-canvas, .mapboxgl-canvas");
       if (maplibreCanvas) {
         try {
-          // The GL canvas uses its own devicePixelRatio scaling; draw to fill our output
-          ctx.drawImage(maplibreCanvas, 0, 0, w, h);
+          // MapLibre's canvas may be positioned within its own container div.
+          // Use CSS position of the canvas relative to the map container.
+          const mlRect = maplibreCanvas.getBoundingClientRect();
+          const cRect = map.getContainer().getBoundingClientRect();
+          const mlX = (mlRect.left - cRect.left) * scale;
+          const mlY = (mlRect.top - cRect.top) * scale;
+          const mlW = mlRect.width * scale;
+          const mlH = mlRect.height * scale;
+          ctx.drawImage(maplibreCanvas, mlX, mlY, mlW, mlH);
         } catch (e) {
           _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
         }
@@ -3266,11 +3278,56 @@
     }
   }
 
-  /** Fetch an image URL via fetch() and return an ImageBitmap (CORS-safe) */
+  /**
+   * Fetch an image URL via fetch() and return an ImageBitmap (CORS-safe).
+   * Falls back to loading via <img crossOrigin="anonymous"> if fetch fails.
+   */
   async function _fetchImageBitmap(url) {
-    const resp = await fetch(url, { mode: "cors" });
-    const blob = await resp.blob();
-    return createImageBitmap(blob);
+    // Try fetch first (best for CORS)
+    try {
+      const resp = await fetch(url, { mode: "cors" });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        return createImageBitmap(blob);
+      }
+    } catch (_) { /* fall through to img approach */ }
+
+    // Fallback: load via <img crossOrigin> — works for same-origin and CORS-enabled servers
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        createImageBitmap(img).then(resolve).catch(reject);
+      };
+      img.onerror = () => reject(new Error("img load failed"));
+      img.src = url;
+    });
+  }
+
+  /** Wait for all visible tile images to finish loading (with timeout) */
+  function _waitForTilesToLoad(map, timeoutMs) {
+    return new Promise((resolve) => {
+      const tilePane = map.getPane("tilePane");
+      if (!tilePane) { resolve(); return; }
+
+      const check = () => {
+        const imgs = tilePane.querySelectorAll("img.leaflet-tile");
+        for (const img of imgs) {
+          if (img.src && !img.complete) return false;
+        }
+        return true;
+      };
+
+      if (check()) { resolve(); return; }
+
+      const deadline = Date.now() + timeoutMs;
+      const interval = setInterval(() => {
+        if (check() || Date.now() > deadline) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+    });
   }
 
   /** Parse Leaflet's CSS transform (translate3d / translate) to {x, y} pixels */
@@ -3285,22 +3342,58 @@
     return { x: 0, y: 0 };
   }
 
-  /** Draw simple HTML marker icons from a Leaflet pane onto a canvas */
+  /**
+   * Draw marker images AND divIcon HTML markers from a Leaflet pane onto a canvas.
+   * L.divIcon markers render as <div> elements (often with emoji text content),
+   * while standard L.icon markers render as <img> elements.
+   */
   function _drawPaneMarkers(ctx, map, paneName, scale) {
     const pane = map.getPane(paneName);
     if (!pane) return;
-    const paneOffset = _getLeafletPaneOffset(pane);
+    const containerRect = map.getContainer().getBoundingClientRect();
+
+    // 1) Draw <img> based markers (standard L.icon)
     const imgs = pane.querySelectorAll("img");
     for (const img of imgs) {
       if (!img.complete || !img.naturalWidth) continue;
       try {
         const rect = img.getBoundingClientRect();
-        const containerRect = map.getContainer().getBoundingClientRect();
         const x = (rect.left - containerRect.left) * scale;
         const y = (rect.top - containerRect.top) * scale;
         const iw = rect.width * scale;
         const ih = rect.height * scale;
         ctx.drawImage(img, x, y, iw, ih);
+      } catch (_) {}
+    }
+
+    // 2) Draw L.divIcon markers (overlays, KML layers — rendered as <div> with emoji/text)
+    const divIcons = pane.querySelectorAll(".leaflet-marker-icon");
+    for (const div of divIcons) {
+      // Skip if it's an <img> element (already handled above)
+      if (div.tagName === "IMG") continue;
+      try {
+        const rect = div.getBoundingClientRect();
+        // Skip markers outside the visible map area
+        if (rect.width === 0 || rect.height === 0) continue;
+        if (rect.right < containerRect.left || rect.left > containerRect.right) continue;
+        if (rect.bottom < containerRect.top || rect.top > containerRect.bottom) continue;
+
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+
+        // Extract text content (emoji) from the divIcon
+        const span = div.querySelector("span");
+        const text = span ? span.textContent.trim() : div.textContent.trim();
+        if (!text) continue;
+
+        // Draw the emoji/text at the marker position
+        const fontSize = Math.round((span ? parseFloat(getComputedStyle(span).fontSize) : 16) * scale);
+        ctx.font = `${fontSize}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const cx = x + (rect.width * scale) / 2;
+        const cy = y + (rect.height * scale) / 2;
+        ctx.fillText(text, cx, cy);
       } catch (_) {}
     }
   }
