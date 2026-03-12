@@ -70,11 +70,48 @@ AISTATE web **nie** dołącza modeli do repozytorium. Modele są pobierane „na
 
 ---
 
-## 🔐 Prywatność i bezpieczeństwo
+## 🔐 Bezpieczeństwo i zarządzanie użytkownikami
 
-- Aplikacja jest projektowana pod pracę **lokalnie / self‑hosted**.
-- Tokeny (np. Hugging Face) traktuj jak hasła — **nigdy** nie commituj do GitHuba.
-- Pamiętaj o ograniczeniach prawnych i regulaminach dostawców modeli (HF/NGC/Meta/Google).
+AISTATE Web obsługuje dwa tryby pracy:
+
+- **Tryb jednego użytkownika** — uproszczony, bez logowania (do pracy lokalnej / self‑hosted).
+- **Tryb wieloużytkownikowy** — pełna autentykacja, autoryzacja i zarządzanie kontami (zaprojektowany na 50–100 użytkowników).
+
+### 👥 Role i uprawnienia
+
+**Role użytkowników** (dostęp do modułów):
+- Transkryptor, Lingwista, Analityk, Dialogista, Strateg, Mistrz Sesji
+
+**Role administracyjne:**
+- **Architekt Funkcji** — zarządzanie ustawieniami aplikacji
+- **Strażnik Dostępu** — zarządzanie kontami użytkowników (tworzenie, akceptacja, blokowanie, resetowanie haseł)
+- **Główny Opiekun (superadmin)** — pełny dostęp do wszystkich modułów i funkcji administracyjnych
+
+### 🔑 Mechanizmy bezpieczeństwa
+
+- **Hashowanie haseł**: PBKDF2‑HMAC‑SHA256 (260 000 iteracji)
+- **Polityka haseł**: konfiguralna (brak / podstawowa / średnia / silna); administratorzy zawsze wymagają silnego hasła (12+ znaków, wielkie/małe litery, cyfra, znak specjalny)
+- **Czarna lista haseł**: wbudowana + zarządzana przez administratora
+- **Wygasanie haseł**: konfigurowalne (wymuszenie zmiany po X dniach)
+- **Blokada konta**: po skonfigurowanej liczbie nieudanych prób logowania (domyślnie 5), automatyczne odblokowanie po 15 min
+- **Rate limiting**: ograniczenie prób logowania i rejestracji (5 na minutę na IP)
+- **Sesje**: bezpieczne tokeny (secrets), ciasteczka HTTPOnly + SameSite=Lax, konfigurowalny timeout (domyślnie 8h)
+- **Fraza odzyskiwania**: 12‑słowna fraza BIP‑39 (~132 bity entropii) do samodzielnego resetu hasła
+- **Banowanie użytkowników**: stałe lub czasowe, z podaniem powodu
+- **Nagłówki bezpieczeństwa**: X‑Content‑Type‑Options, X‑Frame‑Options, X‑XSS‑Protection, Referrer‑Policy
+
+### 📝 Audyt i logi
+
+- Pełny dziennik zdarzeń: logowanie, nieudane próby, zmiany haseł, tworzenie/usuwanie kont, banowanie, odblokowanie
+- Rejestracja adresów IP i fingerprint przeglądarki
+- Logi plikowe z rotacją godzinową + baza danych SQLite
+- Podgląd historii logowań przez użytkownika i pełny audyt dla administratorów
+
+### 📋 Rejestracja i zatwierdzanie
+
+- Samodzielna rejestracja z wymuszeniem zatwierdzenia przez administratora (rola Strażnik Dostępu)
+- Wymuszenie zmiany hasła przy pierwszym logowaniu
+- Fraza odzyskiwania generowana i wyświetlana jednorazowo
 
 ---
 

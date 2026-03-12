@@ -67,11 +67,48 @@ AISTATE web does **not** ship model weights in the repository. Models are downlo
 - **Ollama**: LLM models pulled by the Ollama service.
 ---
 
-## 🔐 Privacy & security
+## 🔐 Security & user management
 
-- Designed primarily for **local / self-hosted** workflows.
-- Treat tokens (e.g., Hugging Face) like passwords — **never** commit them to GitHub.
-- Respect legal requirements and model/provider terms (HF/NGC/Meta/Google).
+AISTATE Web supports two deployment modes:
+
+- **Single-user mode** — simplified, no login required (local / self-hosted).
+- **Multi-user mode** — full authentication, authorization, and account management (designed for 50–100 concurrent users).
+
+### 👥 Roles & permissions
+
+**User roles** (module access):
+- Transkryptor, Lingwista, Analityk, Dialogista, Strateg, Mistrz Sesji
+
+**Administrative roles:**
+- **Architekt Funkcji** — application settings management
+- **Strażnik Dostępu** — user account management (create, approve, ban, reset passwords)
+- **Główny Opiekun (superadmin)** — full access to all modules and admin functions
+
+### 🔑 Security mechanisms
+
+- **Password hashing**: PBKDF2-HMAC-SHA256 (260,000 iterations)
+- **Password policy**: configurable (none / basic / medium / strong); admins always require strong passwords (12+ chars, mixed case, digit, special char)
+- **Password blacklist**: built-in + admin-managed custom list
+- **Password expiry**: configurable (force change after X days)
+- **Account lockout**: after configurable failed attempts (default 5), auto-unlock after 15 min
+- **Rate limiting**: login and registration throttled (5 per minute per IP)
+- **Sessions**: secure tokens (secrets module), HTTPOnly + SameSite=Lax cookies, configurable timeout (default 8h)
+- **Recovery phrase**: 12-word BIP-39 mnemonic (~132 bits of entropy) for self-service password recovery
+- **User banning**: permanent or temporary, with reason
+- **Security headers**: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy
+
+### 📝 Audit & logging
+
+- Full event log: logins, failed attempts, password changes, account creation/deletion, bans, unlocks
+- IP address and browser fingerprint recording
+- File-based logs with hourly rotation + SQLite database
+- User login history + full audit trail for administrators
+
+### 📋 Registration & approval
+
+- Self-registration with mandatory admin approval (Strażnik Dostępu role)
+- Mandatory password change on first login
+- Recovery phrase generated and displayed once
 
 ---
 
