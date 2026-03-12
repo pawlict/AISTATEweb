@@ -1,18 +1,47 @@
 # AISTATE Web — Informacje
 
-**AISTATE Web** (*Artificial Intelligence Speech‑To‑Analysis‑Translation‑Engine*) to aplikacja WWW do transkrypcji, diarizacji, tłumaczeń.
+**AISTATE Web** (*Artificial Intelligence Speech‑To‑Analysis‑Translation‑Engine*) to aplikacja WWW do transkrypcji, diarizacji, tłumaczeń, analizy GSM/BTS oraz analizy finansowej AML.
 
 ---
 
 ## 🚀 Co potrafi
 
-- **Transkrypcja**  Audio → tekst (Whisper). 
-- **Diaryzacja** „kto mówi kiedy” + segmenty mówców. 
-- **Tłumaczenia** Tekst → inne języki (NLLB) 
-- **Analiza (LLM / Ollama)**  streszczenia, wnioski, raporty 
-- **Logi i postęp** podgląd zadań, diagnostyka 
+- **Transkrypcja** — Audio → tekst (Whisper, WhisperX, NeMo)
+- **Diaryzacja** — „kto mówi kiedy” + segmenty mówców (pyannote, NeMo)
+- **Tłumaczenia** — Tekst → inne języki (NLLB‑200, offline)
+- **Analiza (LLM / Ollama)** — streszczenia, wnioski, raporty
+- **Analiza GSM / BTS** — import billingów, mapa BTS, trasy, klastry, oś czasu
+- **Analiza finansowa (AML)** — parsing wyciągów bankowych, scoring ryzyka, detekcja anomalii
+- **Logi i postęp** — podgląd zadań, diagnostyka
 
 > **Tryb projektu**: AISTATE zapisuje wyniki i metadane tak, aby po ponownym otwarciu projektu widzieć co zostało zrobione (silnik, model, język, format raportu itp.).
+
+---
+
+## 🆕 Nowości w 3.6 beta
+
+### 📱 Analiza GSM / BTS
+- Import danych billingowych (CSV, XLSX, PDF)
+- Interaktywna **mapa BTS** z wieloma widokami: punkty, ścieżka, klastry, podróże, zasięg BTS, mapa cieplna, oś czasu
+- **Mapy offline** — obsługa MBTiles (raster PNG/JPG/WebP + wektor PBF przez MapLibre GL)
+- **Nakładki**: jednostki wojskowe, lotniska cywilne, placówki dyplomatyczne (dane wbudowane)
+- **Import KML/KMZ** — własne warstwy z Google Earth i innych narzędzi GIS
+- Selekcja obszarowa (koło / prostokąt) do zapytań przestrzennych
+- Graf kontaktów, heatmapa aktywności, top kontakty
+- Zrzuty ekranu mapy z watermarkiem (online + offline + nakładki)
+
+### 💰 Analiza finansowa (AML)
+- Pipeline **Anti‑Money Laundering** dla wyciągów bankowych
+- Automatyczne rozpoznawanie banku i parsowanie PDF: PKO BP, ING, mBank, Pekao SA, Santander, Millennium, Revolut (+ fallback generyczny)
+- Import formatów MT940 (SWIFT)
+- Normalizacja transakcji, klasyfikacja regułowa, scoring ryzyka
+- **Detekcja anomalii**: baseline statystyczny + ML (Isolation Forest)
+- **Analiza grafowa** — sieć kontrahentów
+- Analiza cross‑account dla śledztw wielorachunkowych
+- Analiza wydatków, wzorce behawioralne, kategoryzacja merchantów
+- Analiza wspomagana LLM (prompt builder dla Ollama)
+- Raporty HTML z wykresami
+- Profile anonimizacji danych
 
 ---
 
@@ -75,9 +104,17 @@ AISTATE web **nie** dołącza modeli do repozytorium. Modele są pobierane „na
   - **Mistral 7B**: **Apache 2.0**.  
   - **Google Gemma**: **Gemma Terms of Use** (warunki umowne + polityka użycia).
 
+### Mapy i dane geograficzne
+
+- **Leaflet** (silnik mapy): **BSD‑2‑Clause** — https://leafletjs.com
+- **MapLibre GL JS** (renderowanie wektorowe PBF): **BSD‑3‑Clause** — https://maplibre.org
+- **OpenStreetMap** (kafelki map online): dane map © OpenStreetMap contributors, **ODbL 1.0** — wymagana atrybucja
+- **OpenMapTiles** (schemat kafelków PBF): **BSD‑3‑Clause** (schemat); dane ODbL
+- **html2canvas** (zrzuty ekranu): **MIT**
+
 ### Ważne
 
-- Ta informacja to tylko skrót. W repozytorium są plik typu **THIRD_PARTY_NOTICES.md** z pełniejszym zestawieniem zależności.
+- Ta informacja to tylko skrót. W repozytorium jest plik **THIRD_PARTY_NOTICES.md** z pełniejszym zestawieniem zależności.
 - Jeśli używasz AISTATE w organizacji/komercyjnie: sprawdź szczególnie **NLLB (CC‑BY‑NC)** i licencje wybranych modeli LLM.
 
 ---
