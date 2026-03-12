@@ -3173,9 +3173,16 @@
       }
 
       // ── 3. Draw MapLibre GL canvas (for PBF vector tiles) ──
+      // MapLibre renders to a WebGL canvas inside a .maplibregl-map container.
+      // Requires preserveDrawingBuffer:true (set in _addPbfVectorLayer).
       const maplibreCanvas = container.querySelector(".maplibregl-canvas, .mapboxgl-canvas");
       if (maplibreCanvas) {
-        try { ctx.drawImage(maplibreCanvas, 0, 0, w, h); } catch (_) {}
+        try {
+          // The GL canvas uses its own devicePixelRatio scaling; draw to fill our output
+          ctx.drawImage(maplibreCanvas, 0, 0, w, h);
+        } catch (e) {
+          _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
+        }
       }
 
       // ── 4. Draw Leaflet overlay pane canvases (circleMarkers, polylines, polygons) ──
@@ -3585,7 +3592,12 @@
     };
 
     try {
-      L.maplibreGL({ style: style, attribution: "Offline map (PBF) | OpenStreetMap" }).addTo(map);
+      L.maplibreGL({
+        style: style,
+        attribution: "Offline map (PBF) | OpenStreetMap",
+        // preserveDrawingBuffer is required for map screenshot (drawImage / toDataURL)
+        maplibreOptions: { preserveDrawingBuffer: true },
+      }).addTo(map);
       _addLog("info", "Używam mapy offline — wektor (PBF) via MapLibre GL");
       _setMapBadge(map, "OFFLINE — PBF", "#22c55e");
     } catch (e) {
