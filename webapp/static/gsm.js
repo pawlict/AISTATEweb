@@ -1773,14 +1773,61 @@
       html += `<div class="small muted" style="margin-top:2px;margin-bottom:${hasItems ? '6' : '0'}px">${cat.desc}</div>`;
 
       if (hasItems) {
-        html += isOldFormat
+        const VISIBLE = 5;
+        const SCROLL_THRESHOLD = 50;
+        const rendered = isOldFormat
           ? _renderOldAnomalyItems(items)
           : _renderAnomalyItems(cat.type, items);
+
+        if (items.length <= VISIBLE) {
+          // Few items — show all, no expand
+          html += rendered;
+        } else {
+          // Many items — wrap in collapsible container
+          const uid = `anom_exp_${cat.type}`;
+          // Estimate line height ~22px; show first 5 lines collapsed
+          const collapsedH = VISIBLE * 22;
+          const useScroll = items.length > SCROLL_THRESHOLD;
+          const maxExpandH = useScroll ? '300px' : 'none';
+          const overflowY = useScroll ? 'auto' : 'visible';
+          html += `<div id="${uid}" style="max-height:${collapsedH}px;overflow:hidden;transition:max-height .25s ease">`;
+          html += rendered;
+          html += `</div>`;
+          html += `<div style="text-align:center;margin-top:4px">`;
+          html += `<button data-expand-target="${uid}" data-collapsed-h="${collapsedH}" data-max-h="${maxExpandH}" data-overflow="${overflowY}" `
+            + `style="background:none;border:1px solid var(--border);border-radius:6px;padding:2px 14px;font-size:12px;cursor:pointer;color:var(--text-muted)">`
+            + `Rozwiń (${items.length - VISIBLE} więcej) ▼</button>`;
+          html += `</div>`;
+        }
       }
       html += `</div>`;
     }
     html += '</div>';
     body.innerHTML = html;
+
+    // ── Expand / collapse buttons ──
+    body.querySelectorAll("[data-expand-target]").forEach(btn => {
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const container = document.getElementById(this.dataset.expandTarget);
+        if (!container) return;
+        const isExpanded = container.dataset.expanded === "1";
+        if (isExpanded) {
+          // Collapse
+          container.style.maxHeight = this.dataset.collapsedH + "px";
+          container.style.overflowY = "hidden";
+          container.dataset.expanded = "0";
+          this.textContent = this.textContent.replace("▲", "▼").replace("Zwiń", "Rozwiń");
+        } else {
+          // Expand
+          const maxH = this.dataset.maxH;
+          container.style.maxHeight = maxH === "none" ? container.scrollHeight + "px" : maxH;
+          container.style.overflowY = this.dataset.overflow;
+          container.dataset.expanded = "1";
+          this.textContent = this.textContent.replace("▼", "▲").replace("Rozwiń", "Zwiń");
+        }
+      });
+    });
 
     // ── Hover effect on anomaly categories with items ──
     body.querySelectorAll("[data-anomaly-type]").forEach(div => {
