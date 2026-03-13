@@ -4024,11 +4024,11 @@
       const glLayer = L.maplibreGL({
         style: style,
         attribution: "Offline map (PBF) | OpenStreetMap",
-        // preserveDrawingBuffer: required for map screenshot (canvas drawImage / toDataURL).
-        // Must be at top level — the plugin passes it through to the MapLibre GL Map constructor.
-        preserveDrawingBuffer: true,
-        // MapLibre GL JS v4+ may also need canvasContextAttributes
-        canvasContextAttributes: { preserveDrawingBuffer: true },
+        // preserveDrawingBuffer must be inside maplibreOptions — the plugin
+        // passes this object to the MapLibre GL Map constructor via Object.assign.
+        maplibreOptions: {
+          preserveDrawingBuffer: true,
+        },
       }).addTo(map);
       // Store reference for screenshot use (triggerRepaint + getCanvas)
       St._maplibreLayer = glLayer;
@@ -7401,6 +7401,21 @@
           if (!tile) continue;
           ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
           tile.bmp.close();
+        }
+      }
+
+      // Draw MapLibre GL canvas (for PBF vector tiles)
+      const smapContainer = QS("#gsm_smap_container");
+      const maplibreCanvas = smapContainer ? smapContainer.querySelector(".maplibregl-canvas, .mapboxgl-canvas") : null;
+      if (maplibreCanvas) {
+        try {
+          const mlRect = maplibreCanvas.getBoundingClientRect();
+          ctx.drawImage(maplibreCanvas,
+            (mlRect.left - containerRect.left) * scale,
+            (mlRect.top - containerRect.top) * scale,
+            mlRect.width * scale, mlRect.height * scale);
+        } catch (e) {
+          console.warn("[GSM] Standalone MapLibre canvas capture failed:", e);
         }
       }
 
