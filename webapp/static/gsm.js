@@ -3154,6 +3154,10 @@
       short_code: "Kod krótki",
       international: "Zagraniczny",
       info: "Informacja",
+      operator_sms: "SMS operatora",
+      commercial_sms: "SMS komercyjny",
+      alphanumeric: "ID alfanumeryczny",
+      ussd: "Kod sterujący",
     };
     const catCls = {
       voicemail: "gsm-sn-voicemail",
@@ -3164,6 +3168,10 @@
       short_code: "gsm-sn-short",
       international: "gsm-sn-intl",
       info: "gsm-sn-info",
+      operator_sms: "gsm-sn-operator",
+      commercial_sms: "gsm-sn-commercial",
+      alphanumeric: "gsm-sn-alpha",
+      ussd: "gsm-sn-ussd",
     };
 
     let html = `<table class="gsm-table"><thead><tr>
