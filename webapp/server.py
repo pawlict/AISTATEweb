@@ -2440,10 +2440,17 @@ def page_info(request: Request) -> Any:
         lang = "pl"
 
     static_root = ROOT / "webapp" / "static"
-    is_en = lang.startswith("en")
+
+    # --- Resolve language-specific info file suffix ---
+    if lang.startswith("en"):
+        _info_suffix = "en"
+    elif lang.startswith("ko"):
+        _info_suffix = "ko"
+    else:
+        _info_suffix = "pl"
 
     # --- Info tab ---
-    md_path = static_root / ("info_en.md" if is_en else "info_pl.md")
+    md_path = static_root / f"info_{_info_suffix}.md"
     if not md_path.exists():
         md_path = static_root / "info_pl.md"
 
@@ -2457,7 +2464,7 @@ def page_info(request: Request) -> Any:
         html = "<pre>" + text.replace("&", "&amp;").replace("<", "&lt;") + "</pre>"
 
     # --- Manual tab ---
-    manual_path = static_root / ("info_manual_en.md" if is_en else "info_manual_pl.md")
+    manual_path = static_root / f"info_manual_{_info_suffix}.md"
     if not manual_path.exists():
         manual_path = static_root / "info_manual_pl.md"
 
