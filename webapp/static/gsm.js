@@ -7568,6 +7568,14 @@
   let _smapActiveLayerId = null;  // currently selected user layer for editing
   let _smapEditingPoint = null;   // { layerId, pointIndex } — point being edited
 
+  /* ── Polygon drawing state ────────────────────────────── */
+  let _smapDrawingPolygon = false;
+  let _smapPolygonPoints = [];       // [{lat, lng}]
+  let _smapPolygonMarkers = [];      // L.circleMarker for each vertex
+  let _smapPolygonPolyline = null;   // L.polyline showing edges
+  let _smapPolygonGuideLine = null;  // L.polyline from last point to cursor
+  let _smapContextMenu = null;       // DOM element for context menu
+
   function _toggleSmapEditMode() {
     _smapEditMode = !_smapEditMode;
     const btn = QS("#gsm_smap_edit_btn");
@@ -7583,6 +7591,8 @@
       _smapInstance.on("click", _smapOnMapClick);
     } else if (_smapInstance) {
       _smapInstance.off("click", _smapOnMapClick);
+      _smapHideContextMenu();
+      if (_smapDrawingPolygon) _smapCancelPolygonDraw();
     }
   }
 
@@ -7592,16 +7602,189 @@
       _addLog("warn", "Wybierz lub utwórz warstwę użytkownika przed dodaniem punktu");
       return;
     }
-    _openPointDialog({
-      isNew: true,
-      layerId: _smapActiveLayerId,
-      lat: e.latlng.lat,
-      lon: e.latlng.lng,
-      name: "",
-      desc: "",
-      color: "#e63946",
-      icon: "",
-    });
+
+    // If currently drawing a polygon, add vertex
+    if (_smapDrawingPolygon) {
+      _smapPolygonAddVertex(e.latlng);
+      return;
+    }
+
+    // Show context menu with options
+    _smapShowContextMenu(e);
+  }
+
+  /* ── Context menu for edit mode ─────────────────────────── */
+
+  function _smapShowContextMenu(e) {
+    _smapHideContextMenu();
+    const containerPoint = e.containerPoint;
+    const latlng = e.latlng;
+    const menu = document.createElement("div");
+    menu.className = "gsm-edit-ctx-menu";
+    menu.style.cssText = `position:absolute;left:${containerPoint.x}px;top:${containerPoint.y}px;z-index:9100;background:var(--card-bg,#fff);border:1px solid var(--border,#ddd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px 0;min-width:160px;font-size:13px;cursor:default;`;
+    const items = [
+      { label: "Dodaj punkt", icon: "\ud83d\udccd", action: () => {
+        _smapHideContextMenu();
+        _openPointDialog({ isNew: true, layerId: _smapActiveLayerId, lat: latlng.lat, lon: latlng.lng, name: "", desc: "", color: "#e63946", icon: "" });
+      }},
+      { label: "Zr\u00f3b obrys", icon: "\u2b21", action: () => {
+        _smapHideContextMenu();
+        _smapStartPolygonDraw(latlng);
+      }},
+    ];
+    for (const item of items) {
+      const el = document.createElement("div");
+      el.style.cssText = "padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .1s";
+      el.innerHTML = `<span style="font-size:15px">${item.icon}</span><span>${item.label}</span>`;
+      el.onmouseenter = () => { el.style.background = "var(--bg-hover,rgba(0,0,0,.05))"; };
+      el.onmouseleave = () => { el.style.background = ""; };
+      el.onclick = (ev) => { ev.stopPropagation(); item.action(); };
+      menu.appendChild(el);
+    }
+    const container = QS("#gsm_smap_container");
+    if (container) { container.appendChild(menu); _smapContextMenu = menu; }
+    setTimeout(() => {
+      const closeHandler = (ev) => { if (menu.contains(ev.target)) return; _smapHideContextMenu(); document.removeEventListener("mousedown", closeHandler, true); };
+      document.addEventListener("mousedown", closeHandler, true);
+    }, 10);
+  }
+
+  function _smapHideContextMenu() {
+    if (_smapContextMenu) { _smapContextMenu.remove(); _smapContextMenu = null; }
+  }
+
+  /* ── Polygon drawing ─────────────────────────────────────── */
+
+  function _smapStartPolygonDraw(startLatLng) {
+    _smapDrawingPolygon = true;
+    _smapPolygonPoints = [];
+    _smapPolygonMarkers = [];
+    _smapPolygonPolyline = null;
+    _smapPolygonGuideLine = null;
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.textContent = "Rysowanie obrysu \u2014 kliknij aby doda\u0107 wierzcho\u0142ki, kliknij pierwszy punkt aby zamkn\u0105\u0107";
+    const container = QS("#gsm_smap_container");
+    if (container) container.style.cursor = "crosshair";
+    _smapPolygonGuideLine = L.polyline([], { color: "#4a6cf7", weight: 2, dashArray: "6,4", opacity: 0.7 }).addTo(_smapInstance);
+    _smapInstance.on("mousemove", _smapPolygonMouseMove);
+    document.addEventListener("keydown", _smapPolygonEscHandler);
+    _smapPolygonAddVertex(startLatLng);
+  }
+
+  function _smapPolygonMouseMove(e) {
+    if (!_smapDrawingPolygon || !_smapPolygonGuideLine || !_smapPolygonPoints.length) return;
+    const lastPt = _smapPolygonPoints[_smapPolygonPoints.length - 1];
+    _smapPolygonGuideLine.setLatLngs([[lastPt.lat, lastPt.lng], [e.latlng.lat, e.latlng.lng]]);
+  }
+
+  function _smapPolygonEscHandler(e) { if (e.key === "Escape") _smapCancelPolygonDraw(); }
+
+  function _smapPolygonAddVertex(latlng) {
+    if (_smapPolygonPoints.length >= 3) {
+      const firstPt = _smapPolygonPoints[0];
+      const firstPixel = _smapInstance.latLngToContainerPoint(L.latLng(firstPt.lat, firstPt.lng));
+      const clickPixel = _smapInstance.latLngToContainerPoint(latlng);
+      const dist = Math.sqrt(Math.pow(firstPixel.x - clickPixel.x, 2) + Math.pow(firstPixel.y - clickPixel.y, 2));
+      if (dist < 15) { _smapFinishPolygonDraw(); return; }
+    }
+    _smapPolygonPoints.push({ lat: latlng.lat, lng: latlng.lng });
+    const isFirst = _smapPolygonPoints.length === 1;
+    const marker = L.circleMarker([latlng.lat, latlng.lng], {
+      radius: isFirst ? 8 : 5, fillColor: isFirst ? "#22c55e" : "#4a6cf7",
+      color: "#fff", weight: 2, fillOpacity: 0.9, interactive: true,
+    }).addTo(_smapInstance);
+    if (isFirst) {
+      marker.bindTooltip("Kliknij tutaj aby zamkn\u0105\u0107 obrys", { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" });
+      marker.on("click", (e) => { L.DomEvent.stopPropagation(e); if (_smapPolygonPoints.length >= 3) _smapFinishPolygonDraw(); });
+    }
+    _smapPolygonMarkers.push(marker);
+    const latLngs = _smapPolygonPoints.map(p => [p.lat, p.lng]);
+    if (_smapPolygonPolyline) { _smapPolygonPolyline.setLatLngs(latLngs); }
+    else { _smapPolygonPolyline = L.polyline(latLngs, { color: "#4a6cf7", weight: 2, opacity: 0.8 }).addTo(_smapInstance); }
+  }
+
+  function _smapFinishPolygonDraw() {
+    _smapInstance.off("mousemove", _smapPolygonMouseMove);
+    document.removeEventListener("keydown", _smapPolygonEscHandler);
+    if (_smapPolygonGuideLine) { _smapInstance.removeLayer(_smapPolygonGuideLine); _smapPolygonGuideLine = null; }
+    if (_smapPolygonPolyline) { _smapInstance.removeLayer(_smapPolygonPolyline); _smapPolygonPolyline = null; }
+    for (const m of _smapPolygonMarkers) _smapInstance.removeLayer(m);
+    _smapPolygonMarkers = [];
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.textContent = "Tryb edycji";
+    const coords = _smapPolygonPoints.map(p => [p.lat, p.lng]);
+    _smapDrawingPolygon = false;
+    _openPolygonDialog({ isNew: true, layerId: _smapActiveLayerId, coords, name: "", desc: "", fillColor: "#4a6cf7" });
+  }
+
+  function _smapCancelPolygonDraw() {
+    _smapInstance.off("mousemove", _smapPolygonMouseMove);
+    document.removeEventListener("keydown", _smapPolygonEscHandler);
+    if (_smapPolygonGuideLine) { _smapInstance.removeLayer(_smapPolygonGuideLine); _smapPolygonGuideLine = null; }
+    if (_smapPolygonPolyline) { _smapInstance.removeLayer(_smapPolygonPolyline); _smapPolygonPolyline = null; }
+    for (const m of _smapPolygonMarkers) _smapInstance.removeLayer(m);
+    _smapPolygonMarkers = []; _smapPolygonPoints = []; _smapDrawingPolygon = false;
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.textContent = "Tryb edycji";
+    _addLog("info", "Anulowano rysowanie obrysu");
+  }
+
+  /* ── Polygon dialog ──────────────────────────────────────── */
+
+  function _openPolygonDialog(opts) {
+    const dialog = QS("#gsm_polygon_dialog");
+    if (!dialog) return;
+    const title = QS("#gsm_polygon_dialog_title");
+    const nameEl = QS("#gsm_polygon_name");
+    const descEl = QS("#gsm_polygon_desc");
+    const colorEl = QS("#gsm_polygon_fill_color");
+    const delBtn = QS("#gsm_polygon_delete_btn");
+    const vertexInfo = QS("#gsm_polygon_vertex_count");
+    if (title) title.textContent = opts.isNew ? "Nowy obrys" : "Edycja obrysu";
+    if (nameEl) nameEl.value = opts.name || "";
+    if (descEl) descEl.value = opts.desc || "";
+    if (colorEl) colorEl.value = opts.fillColor || "#4a6cf7";
+    if (delBtn) delBtn.style.display = opts.isNew ? "none" : "";
+    if (vertexInfo) vertexInfo.textContent = `${opts.coords.length} wierzcho\u0142k\u00f3w`;
+    const form = dialog.querySelector("form");
+    const submitHandler = (e) => {
+      e.preventDefault(); form.removeEventListener("submit", submitHandler);
+      const polygon = { name: nameEl ? nameEl.value.trim() : "", desc: descEl ? descEl.value.trim() : "", coords: opts.coords, fillColor: colorEl ? colorEl.value : "#4a6cf7" };
+      if (opts.isNew) _smapAddPolygon(opts.layerId, polygon);
+      else _smapUpdatePolygon(opts.layerId, opts.polygonIndex, polygon);
+      dialog.close();
+    };
+    form.addEventListener("submit", submitHandler);
+    const cancelBtn = QS("#gsm_polygon_cancel_btn");
+    const cancelHandler = () => { cancelBtn.removeEventListener("click", cancelHandler); form.removeEventListener("submit", submitHandler); dialog.close(); };
+    if (cancelBtn) cancelBtn.addEventListener("click", cancelHandler);
+    if (delBtn && !opts.isNew) {
+      const delHandler = () => { delBtn.removeEventListener("click", delHandler); form.removeEventListener("submit", submitHandler); _smapDeletePolygon(opts.layerId, opts.polygonIndex); dialog.close(); };
+      delBtn.addEventListener("click", delHandler);
+    }
+    dialog.showModal();
+  }
+
+  function _smapAddPolygon(layerId, polygon) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    if (!layer.data.polygons) layer.data.polygons = [];
+    layer.data.polygons.push(polygon);
+    _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
+  }
+
+  function _smapUpdatePolygon(layerId, idx, polygon) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer || !layer.data.polygons) return;
+    layer.data.polygons[idx] = polygon;
+    _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
+  }
+
+  function _smapDeletePolygon(layerId, idx) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer || !layer.data.polygons) return;
+    layer.data.polygons.splice(idx, 1);
+    _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
   }
 
   // --- Icon preview helper: handles both path-based and raw SVG icons ---
@@ -7938,6 +8121,23 @@
       layer.markers.push(marker);
     });
 
+    // Render polygons
+    const polygons = layer.data.polygons || [];
+    polygons.forEach((pg, idx) => {
+      const fillColor = pg.fillColor || "#4a6cf7";
+      const poly = L.polygon(pg.coords, { color: fillColor, fillColor, weight: 2, fillOpacity: 0.3, interactive: true });
+      poly.bindTooltip(
+        `<b style="color:${fillColor}">${pg.name || "Obrys"}</b>${pg.desc ? "<br><span class='small'>" + pg.desc + "</span>" : ""}`,
+        { direction: "center", className: "gsm-overlay-tooltip" }
+      );
+      poly.on("click", (e) => {
+        if (!_smapEditMode) return;
+        L.DomEvent.stopPropagation(e);
+        _openPolygonDialog({ isNew: false, layerId, polygonIndex: idx, coords: pg.coords, name: pg.name || "", desc: pg.desc || "", fillColor });
+      });
+      poly.addTo(group);
+    });
+
     group.addTo(_smapInstance);
     layer.leafletGroup = group;
 
@@ -7955,6 +8155,7 @@
         body: JSON.stringify({
           name: layer.data.name,
           points: layer.data.points,
+          polygons: layer.data.polygons || [],
         }),
       });
     } catch (e) {
@@ -7978,7 +8179,7 @@
           const d = await r.json();
           if (d.status === "ok") {
             _smapUserLayers[ov.id] = {
-              data: { name: d.name, points: d.points || [], user_layer: d.user_layer || false },
+              data: { name: d.name, points: d.points || [], polygons: d.polygons || [], user_layer: d.user_layer || false },
               leafletGroup: null,
               markers: [],
             };
@@ -8003,7 +8204,9 @@
 
     container.innerHTML = entries.map(([id, layer]) => {
       const isActive = _smapActiveLayerId === id;
-      const count = layer.data.points.length;
+      const ptCount = layer.data.points.length;
+      const pgCount = (layer.data.polygons || []).length;
+      const count = pgCount > 0 ? `${ptCount}p, ${pgCount}o` : ptCount;
       const isVisible = layer.leafletGroup && _smapInstance && _smapInstance.hasLayer(layer.leafletGroup);
       const safeName = String(layer.data.name).replace(/</g, "&lt;");
       return `<div class="gsm-lp-item" style="display:flex;align-items:center;gap:4px;padding:2px 0${isActive ? ";background:rgba(74,108,247,.08);border-radius:6px" : ""}">
@@ -8082,7 +8285,7 @@
         const data = await resp.json();
         if (data.status === "ok") {
           _smapUserLayers[data.id] = {
-            data: { name: data.name, points: [], user_layer: true },
+            data: { name: data.name, points: [], polygons: [], user_layer: true },
             leafletGroup: null,
             markers: [],
           };
