@@ -7617,11 +7617,14 @@
 
   function _smapShowContextMenu(e) {
     _smapHideContextMenu();
-    const containerPoint = e.containerPoint;
     const latlng = e.latlng;
+    const origEv = e.originalEvent;
     const menu = document.createElement("div");
     menu.className = "gsm-edit-ctx-menu";
-    menu.style.cssText = `position:absolute;left:${containerPoint.x}px;top:${containerPoint.y}px;z-index:9100;background:var(--card-bg,#fff);border:1px solid var(--border,#ddd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px 0;min-width:160px;font-size:13px;cursor:default;`;
+    // Use fixed positioning with viewport coordinates to avoid Leaflet container z-index/overflow issues
+    const mx = origEv ? origEv.clientX : 0;
+    const my = origEv ? origEv.clientY : 0;
+    menu.style.cssText = `position:fixed;left:${mx}px;top:${my}px;z-index:99999;background:var(--card-bg,#fff);color:var(--text,#222);border:1px solid var(--border,#ddd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px 0;min-width:160px;font-size:13px;cursor:default;`;
     const items = [
       { label: "Dodaj punkt", icon: "\ud83d\udccd", action: () => {
         _smapHideContextMenu();
@@ -7641,8 +7644,12 @@
       el.onclick = (ev) => { ev.stopPropagation(); item.action(); };
       menu.appendChild(el);
     }
-    const container = QS("#gsm_smap_container");
-    if (container) { container.appendChild(menu); _smapContextMenu = menu; }
+    document.body.appendChild(menu);
+    _smapContextMenu = menu;
+    // Adjust if menu overflows viewport
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = (mx - rect.width) + "px";
+    if (rect.bottom > window.innerHeight) menu.style.top = (my - rect.height) + "px";
     setTimeout(() => {
       const closeHandler = (ev) => { if (menu.contains(ev.target)) return; _smapHideContextMenu(); document.removeEventListener("mousedown", closeHandler, true); };
       document.addEventListener("mousedown", closeHandler, true);
