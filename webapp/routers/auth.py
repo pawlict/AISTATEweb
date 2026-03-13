@@ -393,7 +393,7 @@ async def set_language(request: Request) -> JSONResponse:
         return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
 
     lang = (body.get("language") or "pl").strip().lower()
-    if lang not in ("pl", "en"):
+    if lang not in ("pl", "en", "ko"):
         lang = "pl"
 
     _user_store.update_user(user.user_id, {"language": lang})
