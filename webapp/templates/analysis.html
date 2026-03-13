@@ -77,6 +77,8 @@
     <div class="analysis-toolbar-right" id="gsm_toolbar_items" style="display:none">
       <div class="toolbar-section">
         <button class="btn pill-icon" id="gsm_add_file_toolbar_btn" title="Wczytaj dane GSM (biling, identyfikacja, ZIP, folder)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj dane" draggable="false"></button>
+        <span class="toolbar-sep" style="height:22px;margin:0 6px"></span>
+        <button class="btn pill-icon" id="gsm_standalone_map_btn" title="Otwórz mapę (bez danych bilingowych)"><img src="/static/icons/inne/map.svg" alt="Mapa" width="20" height="20" draggable="false" style="opacity:.85"></button>
       </div>
     </div>
   </div>
@@ -592,33 +594,77 @@
             <button class="btn btn-icon gsm-map-screenshot-btn" id="gsm_map_screenshot_btn" title="Zrób zrzut">
               <i data-icon="camera" data-size="22"></i>
             </button>
+            <span class="toolbar-sep" style="height:22px;margin:0 4px"></span>
+            <button class="btn btn-icon" id="gsm_select_circle_btn" title="Zaznacz obszar koła — wybierz punkty BTS w okręgu">
+              <img src="/static/icons/akcje/select_circle.svg" alt="Zaznacz koło" width="22" height="22" draggable="false">
+            </button>
+            <button class="btn btn-icon" id="gsm_select_rect_btn" title="Zaznacz obszar prostokąta — wybierz punkty BTS w prostokącie">
+              <img src="/static/icons/akcje/select_rect.svg" alt="Zaznacz prostokąt" width="22" height="22" draggable="false">
+            </button>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <select class="input" id="gsm_map_layer_select" style="padding:5px 8px;border-radius:10px;min-width:140px"
-                    title="Wybierz widok mapy">
-              <option value="all" title="Wszystkie unikalne lokalizacje BTS z bilingu. Rozmiar punktu zależy od liczby rekordów, kolor od dominującego typu (połączenie/SMS/dane). 2×klik filtruje tabelę.">Wszystkie punkty</option>
-              <option value="path" title="Trasa przemieszczania się — linia łącząca kolejne punkty BTS z filtrowaniem przemieszczeń >2km. Wizualizuje fizyczną drogę urządzenia w czasie.">Ścieżka</option>
-              <option value="clusters" title="Algorytm grupuje bliskie stacje BTS w „miejsca" (dom, praca, inne). Każdy klaster ma kółko z zasięgiem i etykietę z miastem. Pod mapą widać kafelki z mini-wykresem godzinowym.">Klastry</option>
-              <option value="trips" title="Podróże między klastrami — strzałki łączące klastry z informacją o kierunku, dystansie i trybie podróży (samochód/pociąg). Trasy rysowane po drogach (OSRM).">Podróże</option>
-              <option value="border" title="Przekroczenia granicy — linie z ostatniego punktu BTS w Polsce do centrum odwiedzanego kraju. Ikona trybu podróży (samolot/samochód/pieszo) na linii, daty wyjazdu i powrotu.">Granica</option>
-              <option value="coverage" title="Obszarowy zasięg BTS — sektory (kierunek azymutu) lub kółka (dookólne). Kolory wg technologii: GSM=czerwony, UMTS=pomarańczowy, LTE=niebieski, 5G=fioletowy. Promień z bazy BTS.">Zasięg BTS</option>
-              <option value="heatmap" title="Mapa cieplna — wizualizacja gęstości punktów BTS. Kolorowy gradient pokazuje gdzie urządzenie przebywało najczęściej.">Mapa cieplna</option>
-              <option value="timeline" title="Animowany odtwarzacz — chronologicznie odtwarza ruch urządzenia na mapie. Marker z emoji trybu podróży, kontrolki play/pauza/prędkość, suwak czasu.">Oś czasu</option>
-            </select>
-            <span class="small muted" id="gsm_map_stats"></span>
+          <span class="small muted" id="gsm_map_stats"></span>
+        </div>
+        <div id="gsm_map_container" style="height:500px;border-radius:12px;border:1px solid var(--border);margin-top:10px;background:#e8e8e8;position:relative">
+          <!-- Floating layer panel (left side) -->
+          <div class="gsm-layer-panel" id="gsm_layer_panel">
+            <div class="gsm-lp-header" id="gsm_lp_header_toggle">
+              <span>&#9776; Warstwy</span>
+              <span class="gsm-lp-toggle">&#9664;</span>
+            </div>
+            <div class="gsm-lp-body">
+              <!-- Main map view layers -->
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Widok mapy</div>
+                <label class="gsm-lp-item active" data-layer="all">
+                  <input type="radio" name="gsm_map_layer" value="all" checked> Wszystkie punkty
+                </label>
+                <label class="gsm-lp-item" data-layer="path">
+                  <input type="radio" name="gsm_map_layer" value="path"> Ścieżka
+                </label>
+                <label class="gsm-lp-item" data-layer="clusters">
+                  <input type="radio" name="gsm_map_layer" value="clusters"> Klastry
+                </label>
+                <label class="gsm-lp-item" data-layer="trips">
+                  <input type="radio" name="gsm_map_layer" value="trips"> Podróże
+                </label>
+                <label class="gsm-lp-item" data-layer="border">
+                  <input type="radio" name="gsm_map_layer" value="border"> Granica
+                </label>
+                <label class="gsm-lp-item" data-layer="coverage">
+                  <input type="radio" name="gsm_map_layer" value="coverage"> Zasięg BTS
+                </label>
+                <label class="gsm-lp-item" data-layer="heatmap">
+                  <input type="radio" name="gsm_map_layer" value="heatmap"> Mapa cieplna
+                </label>
+                <label class="gsm-lp-item" data-layer="timeline">
+                  <input type="radio" name="gsm_map_layer" value="timeline"> Oś czasu
+                </label>
+              </div>
+              <!-- Coverage sub-options -->
+              <div id="gsm_coverage_opts" class="gsm-lp-cov-opts" style="display:none">
+                <label><input type="checkbox" id="gsm_cov_billing" checked> Stacje BTS billing</label>
+                <label><input type="checkbox" id="gsm_cov_other"> Stacje BTS inne</label>
+                <span class="small muted" id="gsm_cov_other_count"></span>
+              </div>
+              <div class="gsm-lp-divider"></div>
+              <!-- Overlay layers -->
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Nakładki</div>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_overlay_military"> <span style="color:#b91c1c">&#9733;</span> Jednostki wojskowe
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_overlay_airports"> <span style="color:#2563eb">&#9992;</span> Lotniska cywilne
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_overlay_diplomacy"> <span style="color:#059669">&#9878;</span> Placówki dyplomatyczne
+                </label>
+                <!-- KML user overlays (dynamically populated) -->
+                <div id="gsm_kml_overlays"></div>
+              </div>
+            </div>
           </div>
         </div>
-        <!-- Coverage sub-options (visible only when layer=coverage) -->
-        <div id="gsm_coverage_opts" style="display:none;margin-top:6px;padding:6px 12px;background:var(--bg-muted,#f1f5f9);border-radius:8px;font-size:12px">
-          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;margin-right:14px">
-            <input type="checkbox" id="gsm_cov_billing" checked> Stacje BTS billing
-          </label>
-          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
-            <input type="checkbox" id="gsm_cov_other"> Stacje BTS inne
-          </label>
-          <span class="small muted" id="gsm_cov_other_count" style="margin-left:8px"></span>
-        </div>
-        <div id="gsm_map_container" style="height:500px;border-radius:12px;border:1px solid var(--border);margin-top:10px;background:#e8e8e8;position:relative"></div>
         <div class="gsm-graph-resize" id="gsm_map_resize" title="Przeciągnij aby zmienić rozmiar"></div>
         <!-- Timeline player v4 -->
         <div id="gsm_timeline_wrap" style="display:none;margin-top:8px">
@@ -682,6 +728,171 @@
       </div>
       <div id="gsm_log_body" style="max-height:200px;overflow:auto;font-size:12px;font-family:monospace"></div>
     </div>
+
+    <!-- Standalone map overlay (no billing data) -->
+    <div id="gsm_standalone_map_overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)">
+      <div style="position:absolute;inset:12px;display:flex;flex-direction:column;background:var(--card-bg,#fff);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.25);overflow:hidden">
+        <!-- Header -->
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border)">
+          <i data-icon="map" data-size="18"></i>
+          <span class="h2" style="margin:0">Mapa</span>
+          <button class="btn btn-icon" id="gsm_smap_screenshot_btn" title="Zrób zrzut ekranu" style="margin-left:8px">
+            <i data-icon="camera" data-size="20"></i>
+          </button>
+          <span class="toolbar-sep" style="height:22px;margin:0 4px"></span>
+          <button class="btn btn-icon" id="gsm_smap_edit_btn" title="Edycja mapy — dodawanie i edycja punktów">
+            <img src="/static/icons/inne/map_edit.svg" alt="Edycja" width="20" height="20" draggable="false" style="opacity:.85">
+          </button>
+          <span id="gsm_smap_edit_indicator" class="small" style="display:none;color:var(--accent);font-weight:600">Tryb edycji</span>
+          <span style="flex:1"></span>
+          <button class="btn mini" id="gsm_smap_close_btn" title="Zamknij mapę" style="font-size:18px;line-height:1;padding:2px 8px">&times;</button>
+        </div>
+        <!-- Map container -->
+        <div id="gsm_smap_container" style="flex:1;position:relative;background:#e8e8e8">
+          <!-- Floating layer panel -->
+          <div class="gsm-layer-panel" id="gsm_smap_layer_panel">
+            <div class="gsm-lp-header" id="gsm_smap_lp_header_toggle">
+              <span>&#9776; Warstwy</span>
+              <span class="gsm-lp-toggle">&#9664;</span>
+            </div>
+            <div class="gsm-lp-body">
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Widok mapy</div>
+                <label class="gsm-lp-item active" data-layer="general">
+                  <input type="radio" name="gsm_smap_layer" value="general" checked> Ogólny
+                </label>
+                <label class="gsm-lp-item" data-layer="bts_coverage">
+                  <input type="radio" name="gsm_smap_layer" value="bts_coverage"> Zasięg BTS
+                </label>
+              </div>
+              <div class="gsm-lp-divider"></div>
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Nakładki</div>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_smap_overlay_military"> <span style="color:#b91c1c">&#9733;</span> Jednostki wojskowe
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_smap_overlay_airports"> <span style="color:#2563eb">&#9992;</span> Lotniska cywilne
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_smap_overlay_diplomacy"> <span style="color:#059669">&#9878;</span> Placówki dyplomatyczne
+                </label>
+                <div id="gsm_smap_kml_overlays"></div>
+              </div>
+              <div class="gsm-lp-divider"></div>
+              <!-- User layers (editable) -->
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title" style="display:flex;align-items:center;gap:4px">
+                  Warstwy użytkownika
+                  <button class="btn mini" id="gsm_smap_add_layer_btn" title="Nowa warstwa" style="margin-left:auto;font-size:11px;padding:1px 6px">+ Nowa</button>
+                </div>
+                <div id="gsm_smap_user_layers"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Point edit dialog (standalone map) -->
+    <dialog id="gsm_point_dialog" class="an-dialog" style="z-index:9500">
+      <form method="dialog" class="an-dialog-form" style="min-width:340px">
+        <div class="h2" id="gsm_point_dialog_title">Edycja punktu</div>
+        <div>
+          <div class="label">Nazwa</div>
+          <input class="input" id="gsm_point_name" placeholder="Np. Punkt obserwacyjny" required>
+        </div>
+        <div>
+          <div class="label">Opis</div>
+          <textarea class="input" id="gsm_point_desc" placeholder="Opis punktu..." style="min-height:60px"></textarea>
+        </div>
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div>
+            <div class="label">Szerokość (lat)</div>
+            <input class="input" id="gsm_point_lat" type="number" step="any" readonly>
+          </div>
+          <div>
+            <div class="label">Długość (lon)</div>
+            <input class="input" id="gsm_point_lon" type="number" step="any" readonly>
+          </div>
+        </div>
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div>
+            <div class="label">Kolor</div>
+            <input class="input" id="gsm_point_color" type="color" value="#e63946" style="height:36px;padding:2px">
+          </div>
+          <div>
+            <div class="label">Warstwa</div>
+            <select class="input" id="gsm_point_layer_select"></select>
+          </div>
+        </div>
+        <div>
+          <div class="label">Ikona <span class="muted small">(opcjonalnie)</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <div id="gsm_point_icon_preview" style="width:40px;height:40px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg,#f5f5f5);flex-shrink:0;overflow:hidden"></div>
+            <button type="button" class="btn mini" id="gsm_point_icon_pick_btn" style="white-space:nowrap">Wybierz ikonę</button>
+            <button type="button" class="btn mini" id="gsm_point_icon_upload_btn" style="white-space:nowrap">Wczytaj SVG</button>
+            <button type="button" class="btn mini secondary" id="gsm_point_icon_clear_btn" style="white-space:nowrap;display:none">Usuń</button>
+            <input type="file" id="gsm_point_icon_file" accept=".svg,image/svg+xml" style="display:none">
+          </div>
+          <div id="gsm_point_icon_picker" style="display:none;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:var(--bg,#f5f5f5)">
+            <div id="gsm_point_icon_picker_body"></div>
+          </div>
+          <input type="hidden" id="gsm_point_icon_data">
+        </div>
+        <div class="an-dialog-actions">
+          <button type="button" class="btn danger" id="gsm_point_delete_btn" style="margin-right:auto">Usuń punkt</button>
+          <button type="button" class="btn secondary" id="gsm_point_cancel_btn">Anuluj</button>
+          <button type="submit" class="btn">Zapisz</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Polygon edit dialog (standalone map) -->
+    <dialog id="gsm_polygon_dialog" class="an-dialog" style="z-index:9500">
+      <form method="dialog" class="an-dialog-form" style="min-width:340px">
+        <div class="h2" id="gsm_polygon_dialog_title">Nowy obrys</div>
+        <div>
+          <div class="label">Nazwa</div>
+          <input class="input" id="gsm_polygon_name" placeholder="Np. Strefa obserwacji">
+        </div>
+        <div>
+          <div class="label">Opis</div>
+          <textarea class="input" id="gsm_polygon_desc" placeholder="Opis obrysu..." style="min-height:60px"></textarea>
+        </div>
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div>
+            <div class="label">Kolor wypełnienia</div>
+            <input class="input" id="gsm_polygon_fill_color" type="color" value="#4a6cf7" style="height:36px;padding:2px">
+          </div>
+          <div>
+            <div class="label">Wierzchołki</div>
+            <span class="small muted" id="gsm_polygon_vertex_count" style="line-height:36px">0</span>
+          </div>
+        </div>
+        <p class="small muted" style="margin:4px 0 0">Wypełnienie zawsze ma 30% przezroczystości.</p>
+        <div class="an-dialog-actions">
+          <button type="button" class="btn danger" id="gsm_polygon_delete_btn" style="margin-right:auto;display:none">Usuń obrys</button>
+          <button type="button" class="btn secondary" id="gsm_polygon_cancel_btn">Anuluj</button>
+          <button type="submit" class="btn">Zapisz</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- New layer dialog -->
+    <dialog id="gsm_layer_dialog" class="an-dialog" style="z-index:9500">
+      <form method="dialog" class="an-dialog-form" style="min-width:300px">
+        <div class="h2">Nowa warstwa</div>
+        <div>
+          <div class="label">Nazwa warstwy</div>
+          <input class="input" id="gsm_layer_name" placeholder="Np. Moje punkty" required>
+        </div>
+        <div class="an-dialog-actions">
+          <button type="button" class="btn secondary" id="gsm_layer_cancel_btn">Anuluj</button>
+          <button type="submit" class="btn">Utwórz</button>
+        </div>
+      </form>
+    </dialog>
 
     <!-- Empty state (before upload) -->
     <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">

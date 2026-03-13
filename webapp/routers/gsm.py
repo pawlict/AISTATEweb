@@ -1087,3 +1087,504 @@ async def tiles_remove():
         return JSONResponse({"status": "ok"})
     except Exception as e:
         return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# KMZ / KML overlay management
+# ---------------------------------------------------------------------------
+
+def _overlays_dir() -> Path:
+    d = _data_dir() / "gsm" / "overlays"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _parse_kml_bytes(kml_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
+    """Extract Placemarks (points and polygons) from KML XML bytes.
+
+    Returns dict with 'points' and 'polygons' lists.
+    """
+    import xml.etree.ElementTree as ET
+
+    ns = {"kml": "http://www.opengis.net/kml/2.2"}
+    root = ET.fromstring(kml_bytes)
+
+    # Try with namespace first, then without
+    placemarks = root.findall(".//kml:Placemark", ns)
+    if not placemarks:
+        placemarks = root.findall(".//{http://www.opengis.net/kml/2.2}Placemark")
+    if not placemarks:
+        # No namespace KML
+        placemarks = root.findall(".//Placemark")
+
+    def _find_el(parent, tag):
+        """Find element trying multiple namespace strategies."""
+        el = parent.find(f"kml:{tag}", ns)
+        if el is None:
+            el = parent.find(f"{{http://www.opengis.net/kml/2.2}}{tag}")
+        if el is None:
+            el = parent.find(tag)
+        return el
+
+    def _kml_color_to_hex(kml_color: str) -> str:
+        """Convert KML aaBBGGRR to #RRGGBB."""
+        kml_color = kml_color.strip()
+        if len(kml_color) == 8:
+            return f"#{kml_color[6:8]}{kml_color[4:6]}{kml_color[2:4]}"
+        return "#4a6cf7"
+
+    points: List[Dict[str, Any]] = []
+    polygons: List[Dict[str, Any]] = []
+
+    for pm in placemarks:
+        # Name
+        name_el = _find_el(pm, "name")
+        name = name_el.text.strip() if name_el is not None and name_el.text else ""
+
+        # Description
+        desc_el = _find_el(pm, "description")
+        desc = desc_el.text.strip() if desc_el is not None and desc_el.text else ""
+
+        # Check for Polygon first
+        poly_el = pm.find(".//kml:Polygon", ns)
+        if poly_el is None:
+            poly_el = pm.find(".//{http://www.opengis.net/kml/2.2}Polygon")
+        if poly_el is None:
+            poly_el = pm.find(".//Polygon")
+
+        if poly_el is not None:
+            # Extract outer boundary coordinates
+            coord_el = poly_el.find(".//kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", ns)
+            if coord_el is None:
+                coord_el = poly_el.find(".//{http://www.opengis.net/kml/2.2}outerBoundaryIs/{http://www.opengis.net/kml/2.2}LinearRing/{http://www.opengis.net/kml/2.2}coordinates")
+            if coord_el is None:
+                coord_el = poly_el.find(".//outerBoundaryIs/LinearRing/coordinates")
+            if coord_el is not None and coord_el.text:
+                coord_text = coord_el.text.strip()
+                coords = []
+                for part in coord_text.split():
+                    try:
+                        c = part.strip().split(",")
+                        if len(c) >= 2:
+                            lon = float(c[0])
+                            lat = float(c[1])
+                            coords.append([lat, lon])
+                    except (ValueError, IndexError):
+                        continue
+                # Remove closing point if it duplicates the first
+                if len(coords) >= 4 and coords[0] == coords[-1]:
+                    coords = coords[:-1]
+                if len(coords) >= 3:
+                    # Try to extract fill color from style
+                    fill_color = "#4a6cf7"
+                    style_url = _find_el(pm, "styleUrl")
+                    if style_url is not None and style_url.text:
+                        sid = style_url.text.lstrip("#")
+                        style_el = root.find(f".//kml:Style[@id='{sid}']/kml:PolyStyle/kml:color", ns)
+                        if style_el is None:
+                            style_el = root.find(f".//Style[@id='{sid}']/PolyStyle/color")
+                        if style_el is not None and style_el.text:
+                            fill_color = _kml_color_to_hex(style_el.text)
+                    # Also check inline style
+                    inline_color = pm.find(".//kml:Style/kml:PolyStyle/kml:color", ns)
+                    if inline_color is None:
+                        inline_color = pm.find(".//Style/PolyStyle/color")
+                    if inline_color is not None and inline_color.text:
+                        fill_color = _kml_color_to_hex(inline_color.text)
+
+                    polygons.append({
+                        "name": name, "desc": desc,
+                        "coords": coords, "fillColor": fill_color,
+                    })
+            continue
+
+        # Coordinates — look in Point/coordinates
+        coord_el = pm.find(".//kml:Point/kml:coordinates", ns)
+        if coord_el is None:
+            coord_el = pm.find(".//{http://www.opengis.net/kml/2.2}Point/{http://www.opengis.net/kml/2.2}coordinates")
+        if coord_el is None:
+            coord_el = pm.find(".//Point/coordinates")
+        if coord_el is None or not coord_el.text:
+            continue
+
+        coord_text = coord_el.text.strip()
+        # KML coordinates: lon,lat,alt
+        parts = coord_text.split(",")
+        if len(parts) < 2:
+            continue
+        try:
+            lon = float(parts[0].strip())
+            lat = float(parts[1].strip())
+        except (ValueError, IndexError):
+            continue
+
+        points.append({"name": name, "desc": desc, "lat": lat, "lon": lon})
+
+    return {"points": points, "polygons": polygons}
+
+
+@router.post("/api/gsm/overlays/upload")
+async def overlay_upload(
+    file: UploadFile = File(...),
+    name: str = Form(""),
+):
+    """Upload a KMZ or KML file and store as a named overlay."""
+    if not file.filename:
+        return JSONResponse({"status": "error", "detail": "Brak pliku"}, status_code=400)
+
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in (".kmz", ".kml"):
+        return JSONResponse(
+            {"status": "error", "detail": f"Wymagany plik .kmz lub .kml, otrzymano: {suffix}"},
+            status_code=400,
+        )
+
+    content = await file.read()
+
+    # Parse KML from KMZ (ZIP) or raw KML
+    try:
+        if suffix == ".kmz":
+            import zipfile
+            import io
+            with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                kml_bytes = None
+                for zname in zf.namelist():
+                    if zname.lower().endswith(".kml"):
+                        kml_bytes = zf.read(zname)
+                        break
+                if not kml_bytes:
+                    return JSONResponse(
+                        {"status": "error", "detail": "Plik KMZ nie zawiera pliku .kml"},
+                        status_code=400,
+                    )
+        else:
+            kml_bytes = content
+
+        parsed = await run_in_threadpool(_parse_kml_bytes, kml_bytes)
+    except Exception as e:
+        log.exception("KML parse error: %s", e)
+        return JSONResponse(
+            {"status": "error", "detail": f"Błąd parsowania KML: {e}"},
+            status_code=400,
+        )
+
+    points = parsed.get("points", [])
+    polygons = parsed.get("polygons", [])
+
+    if not points and not polygons:
+        return JSONResponse(
+            {"status": "error", "detail": "Nie znaleziono elementów (Placemark) w pliku KML."},
+            status_code=400,
+        )
+
+    # Generate overlay ID and save
+    overlay_id = uuid.uuid4().hex[:12]
+    overlay_name = name.strip() or Path(file.filename).stem
+    overlay_data = {
+        "id": overlay_id,
+        "name": overlay_name,
+        "filename": file.filename,
+        "point_count": len(points),
+        "points": points,
+        "polygon_count": len(polygons),
+        "polygons": polygons,
+    }
+
+    out_path = _overlays_dir() / f"{overlay_id}.json"
+    out_path.write_text(json.dumps(overlay_data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    _app_log(f"[GSM] KML overlay uploaded: {overlay_name} ({len(points)} points, {len(polygons)} polygons)")
+
+    return JSONResponse({
+        "status": "ok",
+        "id": overlay_id,
+        "name": overlay_name,
+        "point_count": len(points),
+        "polygon_count": len(polygons),
+    })
+
+
+@router.get("/api/gsm/overlays")
+async def overlay_list():
+    """List all saved KMZ/KML overlays (without point data)."""
+    overlays_dir = _overlays_dir()
+    items = []
+    for f in sorted(overlays_dir.glob("*.json")):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            items.append({
+                "id": data.get("id", f.stem),
+                "name": data.get("name", f.stem),
+                "filename": data.get("filename", ""),
+                "point_count": data.get("point_count", 0),
+            })
+        except Exception:
+            continue
+    return JSONResponse({"status": "ok", "overlays": items})
+
+
+@router.get("/api/gsm/overlays/{overlay_id}")
+async def overlay_get(overlay_id: str):
+    """Get a single overlay with all point data."""
+    fpath = _overlays_dir() / f"{overlay_id}.json"
+    if not fpath.exists():
+        return JSONResponse({"status": "error", "detail": "Nie znaleziono"}, status_code=404)
+    try:
+        data = json.loads(fpath.read_text(encoding="utf-8"))
+        return JSONResponse({"status": "ok", **data})
+    except Exception as e:
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+@router.delete("/api/gsm/overlays/{overlay_id}")
+async def overlay_delete(overlay_id: str):
+    """Delete a saved overlay."""
+    fpath = _overlays_dir() / f"{overlay_id}.json"
+    if fpath.exists():
+        fpath.unlink()
+        _app_log(f"[GSM] KML overlay deleted: {overlay_id}")
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/api/gsm/overlays/create")
+async def overlay_create(request: Request):
+    """Create a new empty user overlay (no file upload)."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "detail": "Invalid JSON"}, status_code=400)
+
+    overlay_name = (body.get("name") or "").strip()
+    if not overlay_name:
+        return JSONResponse({"status": "error", "detail": "Nazwa jest wymagana"}, status_code=400)
+
+    overlay_id = uuid.uuid4().hex[:12]
+    overlay_data = {
+        "id": overlay_id,
+        "name": overlay_name,
+        "filename": "",
+        "user_layer": True,
+        "point_count": 0,
+        "points": [],
+        "polygon_count": 0,
+        "polygons": [],
+    }
+
+    out_path = _overlays_dir() / f"{overlay_id}.json"
+    out_path.write_text(json.dumps(overlay_data, ensure_ascii=False, indent=1), encoding="utf-8")
+    _app_log(f"[GSM] User overlay created: {overlay_name}")
+
+    return JSONResponse({"status": "ok", "id": overlay_id, "name": overlay_name})
+
+
+@router.put("/api/gsm/overlays/{overlay_id}")
+async def overlay_update(overlay_id: str, request: Request):
+    """Update overlay points (for user-editable layers)."""
+    fpath = _overlays_dir() / f"{overlay_id}.json"
+    if not fpath.exists():
+        return JSONResponse({"status": "error", "detail": "Nie znaleziono"}, status_code=404)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "detail": "Invalid JSON"}, status_code=400)
+
+    try:
+        data = json.loads(fpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+    # Update fields
+    if "name" in body:
+        data["name"] = str(body["name"]).strip()
+    if "points" in body:
+        pts = body["points"]
+        if not isinstance(pts, list):
+            return JSONResponse({"status": "error", "detail": "points must be a list"}, status_code=400)
+        # Validate point structure
+        clean = []
+        for p in pts:
+            try:
+                icon_raw = str(p.get("icon", ""))
+                # Basic SVG sanitization: strip scripts, limit size
+                if icon_raw:
+                    icon_raw = icon_raw[:50000]  # max ~50KB
+                    import re
+                    icon_raw = re.sub(r"<script[\s\S]*?</script>", "", icon_raw, flags=re.IGNORECASE)
+                    icon_raw = re.sub(r"\bon\w+\s*=", "data-x=", icon_raw)  # strip event handlers
+                clean.append({
+                    "name": str(p.get("name", "")),
+                    "desc": str(p.get("desc", "")),
+                    "lat": float(p["lat"]),
+                    "lon": float(p["lon"]),
+                    "color": str(p.get("color", "")),
+                    "icon": icon_raw,
+                })
+            except (KeyError, ValueError, TypeError):
+                continue
+        data["points"] = clean
+        data["point_count"] = len(clean)
+
+    if "polygons" in body:
+        pgns = body["polygons"]
+        if not isinstance(pgns, list):
+            return JSONResponse({"status": "error", "detail": "polygons must be a list"}, status_code=400)
+        clean_pgns = []
+        for pg in pgns:
+            try:
+                coords = pg.get("coords", [])
+                if not isinstance(coords, list) or len(coords) < 3:
+                    continue
+                clean_coords = []
+                for c in coords:
+                    if isinstance(c, (list, tuple)) and len(c) >= 2:
+                        clean_coords.append([float(c[0]), float(c[1])])
+                if len(clean_coords) < 3:
+                    continue
+                clean_pgns.append({
+                    "name": str(pg.get("name", "")),
+                    "desc": str(pg.get("desc", "")),
+                    "coords": clean_coords,
+                    "fillColor": str(pg.get("fillColor", "#4a6cf7")),
+                })
+            except (KeyError, ValueError, TypeError):
+                continue
+        data["polygons"] = clean_pgns
+        data["polygon_count"] = len(clean_pgns)
+
+    fpath.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return JSONResponse({"status": "ok", "point_count": data.get("point_count", 0), "polygon_count": data.get("polygon_count", 0)})
+
+
+@router.get("/api/gsm/overlays/{overlay_id}/export/kml")
+async def overlay_export_kml(overlay_id: str):
+    """Export overlay as KML file."""
+    fpath = _overlays_dir() / f"{overlay_id}.json"
+    if not fpath.exists():
+        return JSONResponse({"status": "error", "detail": "Nie znaleziono"}, status_code=404)
+
+    try:
+        data = json.loads(fpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+    overlay_name = data.get("name", overlay_id)
+    points = data.get("points", [])
+    polygons = data.get("polygons", [])
+
+    # Build KML XML
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<kml xmlns="http://www.opengis.net/kml/2.2">',
+        "<Document>",
+        f"  <name>{_kml_escape(overlay_name)}</name>",
+    ]
+    for pt in points:
+        lat = pt.get("lat", 0)
+        lon = pt.get("lon", 0)
+        name = pt.get("name", "")
+        desc = pt.get("desc", "")
+        lines.append("  <Placemark>")
+        if name:
+            lines.append(f"    <name>{_kml_escape(name)}</name>")
+        if desc:
+            lines.append(f"    <description>{_kml_escape(desc)}</description>")
+        lines.append("    <Point>")
+        lines.append(f"      <coordinates>{lon},{lat},0</coordinates>")
+        lines.append("    </Point>")
+        lines.append("  </Placemark>")
+
+    for pg in polygons:
+        coords = pg.get("coords", [])
+        if len(coords) < 3:
+            continue
+        name = pg.get("name", "")
+        desc = pg.get("desc", "")
+        fill_color = pg.get("fillColor", "#4a6cf7")
+        # Convert hex color (#RRGGBB) to KML format (aaBBGGRR) with 30% opacity (4D)
+        kml_color = _hex_to_kml_color(fill_color, alpha_hex="4D")
+        style_id = f"poly_{hash(str(coords)) % 100000}"
+        lines.append(f'  <Style id="{style_id}">')
+        lines.append("    <PolyStyle>")
+        lines.append(f"      <color>{kml_color}</color>")
+        lines.append("    </PolyStyle>")
+        lines.append("    <LineStyle>")
+        lines.append(f"      <color>{_hex_to_kml_color(fill_color, alpha_hex='FF')}</color>")
+        lines.append("      <width>2</width>")
+        lines.append("    </LineStyle>")
+        lines.append("  </Style>")
+        lines.append("  <Placemark>")
+        if name:
+            lines.append(f"    <name>{_kml_escape(name)}</name>")
+        if desc:
+            lines.append(f"    <description>{_kml_escape(desc)}</description>")
+        lines.append(f"    <styleUrl>#{style_id}</styleUrl>")
+        lines.append("    <Polygon>")
+        lines.append("      <outerBoundaryIs>")
+        lines.append("        <LinearRing>")
+        # coords are [lat, lng] — KML needs lon,lat,alt
+        coord_strs = [f"{c[1]},{c[0]},0" for c in coords]
+        # Close the ring by repeating the first point
+        coord_strs.append(coord_strs[0])
+        lines.append(f"          <coordinates>{' '.join(coord_strs)}</coordinates>")
+        lines.append("        </LinearRing>")
+        lines.append("      </outerBoundaryIs>")
+        lines.append("    </Polygon>")
+        lines.append("  </Placemark>")
+
+    lines.append("</Document>")
+    lines.append("</kml>")
+
+    kml_content = "\n".join(lines)
+    safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in overlay_name)
+
+    from starlette.responses import Response
+    return Response(
+        content=kml_content,
+        media_type="application/vnd.google-earth.kml+xml",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.kml"'},
+    )
+
+
+def _hex_to_kml_color(hex_color: str, alpha_hex: str = "FF") -> str:
+    """Convert #RRGGBB hex color to KML aaBBGGRR format."""
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) != 6:
+        hex_color = "4a6cf7"  # fallback
+    r = hex_color[0:2]
+    g = hex_color[2:4]
+    b = hex_color[4:6]
+    return f"{alpha_hex}{b}{g}{r}"
+
+
+def _kml_escape(text: str) -> str:
+    """Escape XML special characters for KML."""
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
+
+
+@router.get("/api/gsm/map-icons")
+async def map_icons_list():
+    """List available map icons from static/icons/maps/ grouped by category."""
+    icons_root = Path(__file__).resolve().parents[1] / "static" / "icons" / "maps"
+    if not icons_root.is_dir():
+        return JSONResponse({"status": "ok", "categories": []})
+
+    categories = []
+    for cat_dir in sorted(icons_root.iterdir()):
+        if not cat_dir.is_dir():
+            continue
+        icons = []
+        for svg in sorted(cat_dir.glob("*.svg")):
+            icons.append({
+                "name": svg.stem,
+                "path": f"/static/icons/maps/{cat_dir.name}/{svg.name}",
+            })
+        if icons:
+            categories.append({"category": cat_dir.name, "icons": icons})
+    return JSONResponse({"status": "ok", "categories": categories})
