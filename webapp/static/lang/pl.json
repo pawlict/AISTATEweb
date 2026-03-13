@@ -272,6 +272,7 @@
   "label.status": "Status",
   "label.whisper_model": "Model Whisper",
   "lang.en": "English",
+  "lang.ko": "Koreański",
   "lang.pl": "Polski",
   "llm_settings.page_title": "Ustawienia LLM",
   "logs.alert.clear_confirm": "Na pewno wyczyścić listę zadań na serwerze? (nie usuwa projektów)",
