@@ -827,12 +827,16 @@
           </div>
         </div>
         <div>
-          <div class="label">Ikona SVG <span class="muted small">(opcjonalnie)</span></div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div id="gsm_point_icon_preview" style="width:36px;height:36px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg,#f5f5f5);flex-shrink:0;overflow:hidden"></div>
+          <div class="label">Ikona <span class="muted small">(opcjonalnie)</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <div id="gsm_point_icon_preview" style="width:40px;height:40px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg,#f5f5f5);flex-shrink:0;overflow:hidden"></div>
+            <button type="button" class="btn mini" id="gsm_point_icon_pick_btn" style="white-space:nowrap">Wybierz ikonę</button>
             <button type="button" class="btn mini" id="gsm_point_icon_upload_btn" style="white-space:nowrap">Wczytaj SVG</button>
-            <button type="button" class="btn mini secondary" id="gsm_point_icon_clear_btn" style="white-space:nowrap;display:none">Usuń ikonę</button>
+            <button type="button" class="btn mini secondary" id="gsm_point_icon_clear_btn" style="white-space:nowrap;display:none">Usuń</button>
             <input type="file" id="gsm_point_icon_file" accept=".svg,image/svg+xml" style="display:none">
+          </div>
+          <div id="gsm_point_icon_picker" style="display:none;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:var(--bg,#f5f5f5)">
+            <div id="gsm_point_icon_picker_body"></div>
           </div>
           <input type="hidden" id="gsm_point_icon_data">
         </div>

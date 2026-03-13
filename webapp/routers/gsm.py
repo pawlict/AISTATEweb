@@ -1415,3 +1415,25 @@ def _kml_escape(text: str) -> str:
         .replace('"', "&quot;")
         .replace("'", "&apos;")
     )
+
+
+@router.get("/api/gsm/map-icons")
+async def map_icons_list():
+    """List available map icons from static/icons/maps/ grouped by category."""
+    icons_root = Path(__file__).resolve().parents[1] / "static" / "icons" / "maps"
+    if not icons_root.is_dir():
+        return JSONResponse({"status": "ok", "categories": []})
+
+    categories = []
+    for cat_dir in sorted(icons_root.iterdir()):
+        if not cat_dir.is_dir():
+            continue
+        icons = []
+        for svg in sorted(cat_dir.glob("*.svg")):
+            icons.append({
+                "name": svg.stem,
+                "path": f"/static/icons/maps/{cat_dir.name}/{svg.name}",
+            })
+        if icons:
+            categories.append({"category": cat_dir.name, "icons": icons})
+    return JSONResponse({"status": "ok", "categories": categories})

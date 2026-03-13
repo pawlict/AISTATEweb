@@ -7546,6 +7546,95 @@
     });
   }
 
+  // --- Icon preview helper: handles both path-based and raw SVG icons ---
+  function _smapUpdateIconPreview(iconValue) {
+    const preview = QS("#gsm_point_icon_preview");
+    if (!preview) return;
+    if (!iconValue) {
+      preview.innerHTML = '<span class="muted small">—</span>';
+      return;
+    }
+    if (iconValue.startsWith("/static/")) {
+      preview.innerHTML = `<img src="${iconValue}" style="width:32px;height:32px;object-fit:contain">`;
+    } else {
+      preview.innerHTML = iconValue;
+      const svg = preview.querySelector("svg");
+      if (svg) { svg.style.width = "28px"; svg.style.height = "28px"; }
+    }
+  }
+
+  // --- Category label translations ---
+  const _iconCategoryLabels = {
+    embassy: "Ambasada",
+    fire: "Straż pożarna",
+    intelligence: "Wywiad",
+    justice: "Wymiar sprawiedliwości",
+    medical: "Medyczny",
+    military: "Wojskowy",
+    national_security: "Bezpieczeństwo",
+    police: "Policja",
+  };
+
+  // --- Icon picker: fetch categories from API and render grid ---
+  let _mapIconsCache = null;
+  async function _smapLoadIconPicker() {
+    const body = QS("#gsm_point_icon_picker_body");
+    if (!body) return;
+    if (_mapIconsCache) {
+      _smapRenderIconPicker(_mapIconsCache);
+      return;
+    }
+    body.innerHTML = '<span class="muted small">Ładowanie ikon…</span>';
+    try {
+      const resp = await fetch("/api/gsm/map-icons");
+      const data = await resp.json();
+      if (data.status === "ok" && data.categories) {
+        _mapIconsCache = data.categories;
+        _smapRenderIconPicker(data.categories);
+      } else {
+        body.innerHTML = '<span class="muted small">Brak ikon</span>';
+      }
+    } catch (e) {
+      body.innerHTML = '<span class="muted small">Błąd ładowania ikon</span>';
+    }
+  }
+
+  function _smapRenderIconPicker(categories) {
+    const body = QS("#gsm_point_icon_picker_body");
+    if (!body) return;
+    body.innerHTML = "";
+    for (const cat of categories) {
+      const label = _iconCategoryLabels[cat.category] || cat.category;
+      const header = document.createElement("div");
+      header.style.cssText = "font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 3px;color:var(--text-secondary,#666)";
+      header.textContent = label;
+      body.appendChild(header);
+
+      const grid = document.createElement("div");
+      grid.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px";
+      for (const ic of cat.icons) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.title = ic.name.replace(/_/g, " ");
+        btn.style.cssText = "width:38px;height:38px;border:1px solid var(--border,#ddd);border-radius:6px;background:var(--bg-card,#fff);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:3px;transition:border-color .15s";
+        btn.innerHTML = `<img src="${ic.path}" style="width:28px;height:28px;object-fit:contain">`;
+        btn.onmouseenter = () => { btn.style.borderColor = "var(--primary,#4361ee)"; };
+        btn.onmouseleave = () => { btn.style.borderColor = "var(--border,#ddd)"; };
+        btn.onclick = () => {
+          const iconData = QS("#gsm_point_icon_data");
+          const iconClearBtn = QS("#gsm_point_icon_clear_btn");
+          const picker = QS("#gsm_point_icon_picker");
+          if (iconData) iconData.value = ic.path;
+          _smapUpdateIconPreview(ic.path);
+          if (iconClearBtn) iconClearBtn.style.display = "";
+          if (picker) picker.style.display = "none";
+        };
+        grid.appendChild(btn);
+      }
+      body.appendChild(grid);
+    }
+  }
+
   function _openPointDialog(opts) {
     const dialog = QS("#gsm_point_dialog");
     if (!dialog) return;
@@ -7564,6 +7653,9 @@
     const iconFile = QS("#gsm_point_icon_file");
     const iconUploadBtn = QS("#gsm_point_icon_upload_btn");
     const iconClearBtn = QS("#gsm_point_icon_clear_btn");
+    const iconPickBtn = QS("#gsm_point_icon_pick_btn");
+    const iconPicker = QS("#gsm_point_icon_picker");
+    const iconPickerBody = QS("#gsm_point_icon_picker_body");
 
     if (title) title.textContent = opts.isNew ? "Nowy punkt" : "Edycja punktu";
     if (nameEl) nameEl.value = opts.name || "";
@@ -7573,19 +7665,21 @@
     if (colorEl) colorEl.value = opts.color || "#e63946";
     if (delBtn) delBtn.style.display = opts.isNew ? "none" : "";
 
-    // SVG icon state
+    // Icon state — value is either a path (/static/icons/maps/...) or raw SVG
     if (iconData) iconData.value = opts.icon || "";
-    if (iconPreview) {
-      if (opts.icon) {
-        iconPreview.innerHTML = opts.icon;
-        // Scale SVG to fit preview
-        const svg = iconPreview.querySelector("svg");
-        if (svg) { svg.style.width = "28px"; svg.style.height = "28px"; }
-      } else {
-        iconPreview.innerHTML = '<span class="muted small">—</span>';
-      }
-    }
+    _smapUpdateIconPreview(opts.icon || "");
     if (iconClearBtn) iconClearBtn.style.display = opts.icon ? "" : "none";
+    if (iconPicker) iconPicker.style.display = "none";
+
+    // Icon picker toggle
+    if (iconPickBtn) {
+      iconPickBtn.onclick = async () => {
+        if (!iconPicker) return;
+        const wasOpen = iconPicker.style.display !== "none";
+        iconPicker.style.display = wasOpen ? "none" : "";
+        if (!wasOpen) await _smapLoadIconPicker();
+      };
+    }
 
     // SVG file upload handler
     if (iconUploadBtn && iconFile) {
@@ -7605,15 +7699,11 @@
         const reader = new FileReader();
         reader.onload = (ev) => {
           let svgText = ev.target.result;
-          // Basic sanitization: remove script tags
           svgText = svgText.replace(/<script[\s\S]*?<\/script>/gi, "");
           if (iconData) iconData.value = svgText;
-          if (iconPreview) {
-            iconPreview.innerHTML = svgText;
-            const svg = iconPreview.querySelector("svg");
-            if (svg) { svg.style.width = "28px"; svg.style.height = "28px"; }
-          }
+          _smapUpdateIconPreview(svgText);
           if (iconClearBtn) iconClearBtn.style.display = "";
+          if (iconPicker) iconPicker.style.display = "none";
         };
         reader.readAsText(file);
       };
@@ -7621,8 +7711,9 @@
     if (iconClearBtn) {
       iconClearBtn.onclick = () => {
         if (iconData) iconData.value = "";
-        if (iconPreview) iconPreview.innerHTML = '<span class="muted small">—</span>';
+        _smapUpdateIconPreview("");
         iconClearBtn.style.display = "none";
+        if (iconPicker) iconPicker.style.display = "none";
       };
     }
 
@@ -7737,12 +7828,17 @@
       let marker;
 
       if (pt.icon) {
-        // Custom SVG icon marker
-        const svgHtml = pt.icon.replace(/<svg/,
-          '<svg style="width:28px;height:28px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35))"');
+        // Icon marker — either a static path or raw SVG
+        let iconHtml;
+        if (pt.icon.startsWith("/static/")) {
+          iconHtml = `<img src="${pt.icon}" style="width:28px;height:28px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35));object-fit:contain">`;
+        } else {
+          iconHtml = pt.icon.replace(/<svg/,
+            '<svg style="width:28px;height:28px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35))"');
+        }
         const divIcon = L.divIcon({
           className: "gsm-user-point-icon",
-          html: svgHtml,
+          html: iconHtml,
           iconSize: [32, 32],
           iconAnchor: [16, 16],
         });
