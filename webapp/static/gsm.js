@@ -47,6 +47,19 @@
     columnHidden: {},        // { colKey: true } for hidden columns
     columnFilters: {},       // { colKey: { mode, value, ... } } active filters
     columnSort: null,        // { key, dir } — current sort column
+    /* Area selection state */
+    areaSelectMode: null,     // null | "circle" | "rect"
+    areaSelectLayer: null,    // temporary Leaflet shape while drawing
+    areaSelectOrigin: null,   // L.LatLng — mousedown start point
+    areaHighlights: null,     // L.layerGroup with highlighted markers
+    areaShape: null,          // persistent Leaflet shape (circle/rect) after selection
+    areaLocations: [],        // cached uniqueLocations for selection queries
+    overlayMilitary: null,    // L.layerGroup — military overlay markers
+    overlayAirports: null,    // L.layerGroup — civilian airport overlay markers
+    overlayDiplomacy: null,   // L.layerGroup — diplomatic posts overlay
+    overlayMilitaryData: null,// cached JSON data
+    overlayAirportsData: null,// cached JSON data
+    overlayDiplomacyData: null,// cached JSON data
   };
 
   /* ── Column definitions ─────────────────────────────────── */
@@ -63,6 +76,34 @@
    *  unit        — optional unit label for numeric columns
    */
   const _COL_DEFS = [
+    {
+      key: "context_label", label: "Kontekst", type: "categorical", defaultVisible: false,
+      getValue: r => {
+        const hl = St._anomalyHighlight;
+        if (!hl) return "";
+        if (hl.anomalyRecords && hl.anomalyRecords.has(r)) return "ANOMALIA";
+        if (hl.contextRecords && hl.contextRecords.has(r)) return "KONTEKST";
+        return "";
+      },
+      renderCell: r => {
+        const hl = St._anomalyHighlight;
+        if (!hl) return "";
+        if (hl.anomalyRecords && hl.anomalyRecords.has(r))
+          return '<span style="font-size:9px;font-weight:700;color:rgba(220,38,38,.7);letter-spacing:.5px;text-transform:uppercase">ANOMALIA</span>';
+        if (hl.contextRecords && hl.contextRecords.has(r))
+          return '<span style="font-size:9px;font-weight:700;color:rgba(37,99,235,.65);letter-spacing:.5px;text-transform:uppercase">KONTEKST</span>';
+        return "";
+      },
+      categoryValues: recs => {
+        const vals = ["ANOMALIA", "KONTEKST"];
+        return vals.map(v => ({ value: v, label: v, count: recs.filter(r => {
+          const hl = St._anomalyHighlight;
+          if (!hl) return false;
+          if (v === "ANOMALIA") return hl.anomalyRecords && hl.anomalyRecords.has(r);
+          return hl.contextRecords && hl.contextRecords.has(r);
+        }).length }));
+      },
+    },
     {
       key: "datetime", label: "Data i czas", type: "text", defaultVisible: true,
       getValue: r => r.datetime || "",
@@ -1104,18 +1145,18 @@
     const active = cards.length ? cards : _pinnedCards;
     if (!active.length || !St.lastResult) return;
 
-    // Collect all record datetimes from active cards
-    const dtSet = new Set();
+    // Collect all raw_row IDs from active cards
+    const rowSet = new Set();
     for (const entry of active) {
       if (entry.loc && entry.loc.records) {
         for (const r of entry.loc.records) {
-          if (r.datetime) dtSet.add(r.datetime);
+          if (r.raw_row != null) rowSet.add(r.raw_row);
         }
       }
     }
 
     const allRecs = St.lastResult.records || [];
-    const filtered = allRecs.filter(r => dtSet.has(r.datetime));
+    const filtered = allRecs.filter(r => rowSet.has(r.raw_row));
     const labels = active.map(c => c.loc.city || "BTS").join(" + ");
     const filterText = `📌 ${labels} — ${filtered.length} rek.`;
 
@@ -1706,6 +1747,8 @@
     { type: "premium_number",   label: "Numery premium / p\u0142atne",        desc: "Kontakty z numerami o podwy\u017Cszonej op\u0142acie (70x, 80x)" },
     { type: "roaming",          label: "Aktywno\u015B\u0107 w sieciach zagranicznych", desc: "Rekordy z flag\u0105 roamingu lub z sieci\u0105 zagraniczn\u0105. Szczeg\u00F3\u0142y wyjazd\u00F3w \u2014 patrz sekcja \u201EPrzekroczenia granic\u201D" },
     { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
+    { type: "satellite_numbers",label: "Numery satelitarne",              desc: "Po\u0142\u0105czenia z numerami telefon\u00F3w satelitarnych (Iridium, Inmarsat, Thuraya, Globalstar i in.)" },
+    { type: "social_media",     label: "Konta spo\u0142eczno\u015Bciowe / komunikatory", desc: "Nazwy komunikator\u00F3w i platform spo\u0142eczno\u015Bciowych wykryte w polach bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)" },
   ];
 
   function _renderAnomalies(a) {
@@ -1733,6 +1776,17 @@
       }
     }
 
+    // Icon paths
+    const _IC_EXPAND = "/static/icons/akcje/expand_down.svg";
+    const _IC_COLLAPSE = "/static/icons/akcje/collapse_up.svg";
+    const _IC_PLUS5 = "/static/icons/akcje/plus5.svg";
+    const _ICON_SZ = 20;
+    const _makeIcon = (src, title, cls) =>
+      `<img src="${src}" width="${_ICON_SZ}" height="${_ICON_SZ}" title="${title}" class="${cls}" style="cursor:pointer;opacity:.65;transition:opacity .15s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.65">`;
+
+    const VISIBLE = 5;
+    const SCROLL_THRESHOLD = 50;
+
     // Render ALL categories in canonical order
     let html = '<div style="display:flex;flex-direction:column;gap:10px">';
     for (const cat of _ANOMALY_CATS) {
@@ -1743,34 +1797,106 @@
       const sevColor = sev === "warning" ? "#f97316" : sev === "info" ? "#3b82f6" : "#22c55e";
       const sevIcon = sev === "warning" ? "\u26A0" : sev === "info" ? "\u2139" : "\u2713";
 
-      const clickable = hasItems ? ` data-anomaly-type="${cat.type}"` : '';
-      const clickStyle = hasItems ? ';cursor:pointer;transition:background .15s,box-shadow .15s' : '';
-      html += `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;border-left:3px solid ${sevColor}${clickStyle}"${clickable}${hasItems ? ' title="2×LPM → filtruj rekordy"' : ''}>`;
-      html += `<div style="display:flex;align-items:center;gap:6px">`;
-      html += `<span style="color:${sevColor};font-size:15px">${sevIcon}</span>`;
-      html += `<b>${cat.label}</b>`;
+      // ── Card container ──
+      html += `<div class="gsm-anomaly-card" data-anomaly-type="${cat.type}" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;border-left:3px solid ${sevColor};transition:background .15s,box-shadow .15s">`;
+
+      // ── Top bar: header row with name + count + action icons ──
+      html += `<div class="gsm-anomaly-bar" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(${sev === 'warning' ? '249,115,22' : sev === 'info' ? '59,130,246' : '34,197,94'},.04)">`;
+      html += `<span style="color:${sevColor};font-size:15px;flex-shrink:0">${sevIcon}</span>`;
+      html += `<div style="flex:1;min-width:0">`;
+      html += `<div style="display:flex;align-items:center;gap:5px"><b>${cat.label}</b>`;
       if (!hasItems) {
         html += ` <span class="muted">\u2014 brak</span>`;
       } else {
         html += ` <span class="muted">(${items.length})</span>`;
       }
       html += `</div>`;
-      html += `<div class="small muted" style="margin-top:2px;margin-bottom:${hasItems ? '6' : '0'}px">${cat.desc}</div>`;
+      html += `<div class="small muted" style="margin-top:1px;line-height:1.3">${cat.desc}</div>`;
+      html += `</div>`; // end text block
 
+      // ── Action icons (only if has data) ──
       if (hasItems) {
-        html += isOldFormat
+        html += `<div style="display:flex;align-items:center;gap:2px;flex-shrink:0;border-left:1px solid var(--border);padding-left:8px;margin-left:4px">`;
+        // Expand / collapse (only if >5 items)
+        if (items.length > VISIBLE) {
+          html += _makeIcon(_IC_EXPAND, "Rozwiń / zwiń listę", "gsm-anom-toggle") + " ";
+        }
+        // +5 context
+        html += _makeIcon(_IC_PLUS5, "+5 rekordów kontekstu", "gsm-anom-plus5");
+        html += `</div>`;
+      }
+      html += `</div>`; // end bar
+
+      // ── Items body ──
+      if (hasItems) {
+        const rendered = isOldFormat
           ? _renderOldAnomalyItems(items)
           : _renderAnomalyItems(cat.type, items);
+        const uid = `anom_exp_${cat.type}`;
+        const collapsedH = VISIBLE * 22;
+        const useScroll = items.length > SCROLL_THRESHOLD;
+        const maxExpandH = useScroll ? '300px' : 'none';
+        const overflowY = useScroll ? 'auto' : 'visible';
+        const needCollapse = items.length > VISIBLE;
+
+        html += `<div id="${uid}" data-collapsed-h="${collapsedH}" data-max-h="${maxExpandH}" data-overflow="${overflowY}" `
+          + `style="padding:4px 12px 8px;${needCollapse ? 'max-height:' + collapsedH + 'px;overflow:hidden;' : ''}transition:max-height .25s ease">`;
+        html += rendered;
+        html += `</div>`;
       }
-      html += `</div>`;
+
+      html += `</div>`; // end card
     }
     html += '</div>';
     body.innerHTML = html;
 
-    // ── Hover effect on anomaly categories with items ──
-    body.querySelectorAll("[data-anomaly-type]").forEach(div => {
+    // ── Expand / collapse via icon ──
+    body.querySelectorAll(".gsm-anom-toggle").forEach(icon => {
+      icon.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const card = this.closest(".gsm-anomaly-card");
+        if (!card) return;
+        const type = card.dataset.anomalyType;
+        const container = document.getElementById(`anom_exp_${type}`);
+        if (!container) return;
+        const isExpanded = container.dataset.expanded === "1";
+        if (isExpanded) {
+          container.style.maxHeight = container.dataset.collapsedH + "px";
+          container.style.overflowY = "hidden";
+          container.dataset.expanded = "0";
+          this.src = _IC_EXPAND;
+          this.title = "Rozwiń listę";
+        } else {
+          const maxH = container.dataset.maxH;
+          container.style.maxHeight = maxH === "none" ? container.scrollHeight + "px" : maxH;
+          container.style.overflowY = container.dataset.overflow;
+          container.dataset.expanded = "1";
+          this.src = _IC_COLLAPSE;
+          this.title = "Zwiń listę";
+        }
+      });
+    });
+
+    // ── +5 context records via icon ──
+    body.querySelectorAll(".gsm-anom-plus5").forEach(icon => {
+      icon.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const card = this.closest(".gsm-anomaly-card");
+        if (!card) return;
+        const type = card.dataset.anomalyType;
+        const data = groupMap[type];
+        if (!data || !data.items.length) return;
+        _anomalyContextFilter(type, data.items);
+      });
+    });
+
+    // ── Hover effect on anomaly cards with items ──
+    body.querySelectorAll(".gsm-anomaly-card").forEach(div => {
+      const hasData = (groupMap[div.dataset.anomalyType] || {items:[]}).items.length > 0;
+      if (!hasData) return;
+      div.style.cursor = "pointer";
       div.addEventListener("mouseenter", () => {
-        div.style.background = "rgba(31,90,166,.08)";
+        div.style.background = "rgba(31,90,166,.04)";
         div.style.boxShadow = "0 2px 8px rgba(15,23,42,.06)";
       });
       div.addEventListener("mouseleave", () => {
@@ -1779,8 +1905,10 @@
       });
     });
 
-    // ── Double-click on anomaly category → filter Records ──
+    // ── Double-click on anomaly category → filter Records (unchanged) ──
     body.addEventListener("dblclick", function(e) {
+      // Ignore clicks on action icons
+      if (e.target.closest(".gsm-anom-toggle, .gsm-anom-plus5")) return;
       const div = e.target.closest("[data-anomaly-type]");
       if (!div) return;
       const type = div.dataset.anomalyType;
@@ -1792,6 +1920,7 @@
 
   /** Filter Records by anomaly group — invoked on double-click. */
   function _anomalyGroupFilter(type, items) {
+    St._anomalyHighlight = null;  // clear +5 highlighting
     const records = St.lastResult ? St.lastResult.records : [];
     let filtered = [];
     let filterText = "";
@@ -1860,6 +1989,22 @@
         filterText = `Jednorazowe kontakty — ${filtered.length} rek.`;
         break;
       }
+      case "satellite_numbers": {
+        const satNums = new Set(items.map(it => it.contact));
+        filtered = records.filter(r => satNums.has(r.callee) || satNums.has(r.caller));
+        filterText = `Numery satelitarne — ${filtered.length} rek.`;
+        break;
+      }
+      case "social_media": {
+        // Build a set of platform patterns to search in record fields
+        const smPlatforms = items.map(it => it.platform.toLowerCase());
+        filtered = records.filter(r => {
+          const txt = [r.callee, r.caller, r.network, r.raw_text || ""].join(" ").toLowerCase();
+          return smPlatforms.some(p => txt.includes(p));
+        });
+        filterText = `Konta społecznościowe — ${filtered.length} rek.`;
+        break;
+      }
       default:
         filtered = records;
         filterText = `${type} — ${filtered.length} rek.`;
@@ -1875,6 +2020,158 @@
       if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
     });
     _renderRecords(filtered, false, filtered.length);
+
+    const recCard = QS("#gsm_records_card");
+    if (recCard) {
+      recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      recCard.style.transition = "box-shadow .2s";
+      recCard.style.boxShadow = "0 0 0 3px var(--brand-blue,#2563eb)";
+      setTimeout(() => { recCard.style.boxShadow = ""; }, 1200);
+    }
+  }
+
+  /**
+   * Build a predicate function that tests whether a record matches
+   * the given anomaly type. Returns a function(record) → boolean.
+   */
+  function _anomalyPredicate(type, anomalyItems) {
+    switch (type) {
+      case "long_call":
+        return r => r.duration_seconds > 3600 && (r.record_type || "").includes("CALL");
+      case "late_night_calls":
+        return r => {
+          if (!r.time || !(r.record_type || "").includes("CALL")) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 0 && h < 5;
+        };
+      case "night_activity":
+        return r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        };
+      case "night_movement":
+        return r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        };
+      case "burst_activity": {
+        if (!anomalyItems.length) return () => false;
+        const b = anomalyItems[0];
+        return r => {
+          if (r.date !== b.date) return false;
+          if (!b.time || !r.time) return true;
+          try {
+            const bp = b.time.split(":"), rp = r.time.split(":");
+            const bm = parseInt(bp[0]) * 60 + parseInt(bp[1]);
+            const rm = parseInt(rp[0]) * 60 + parseInt(rp[1]);
+            return rm >= bm && rm <= bm + (b.window_min || 30);
+          } catch (_) { return false; }
+        };
+      }
+      case "premium_number": {
+        const nums = new Set(anomalyItems.map(it => it.contact));
+        return r => nums.has(r.callee) || nums.has(r.caller);
+      }
+      case "roaming":
+        return r => r.roaming || (r.network && !/orange|play|plus|t-mobile|polkomtel|p4|heyah/i.test(r.network));
+      case "one_time_contacts": {
+        const otNums = new Set(anomalyItems.map(it => it.contact));
+        return r => otNums.has(r.callee) || otNums.has(r.caller);
+      }
+      case "satellite_numbers": {
+        const satNums = new Set(anomalyItems.map(it => it.contact));
+        return r => satNums.has(r.callee) || satNums.has(r.caller);
+      }
+      case "social_media": {
+        const smPlatforms = anomalyItems.map(it => it.platform.toLowerCase());
+        return r => {
+          const txt = [r.callee, r.caller, r.network, r.raw_text || ""].join(" ").toLowerCase();
+          return smPlatforms.some(p => txt.includes(p));
+        };
+      }
+      default:
+        return () => false;
+    }
+  }
+
+  /**
+   * +5 context filter: show anomaly records plus 5 records before/after each,
+   * with color coding (red = anomaly, blue = context).
+   */
+  function _anomalyContextFilter(type, anomalyItems) {
+    const allRecords = St.lastResult ? St.lastResult.records : [];
+    if (!allRecords.length) return;
+
+    const isAnomaly = _anomalyPredicate(type, anomalyItems);
+
+    // Step 1: Find anomaly indices by running predicate on every record
+    const anomalyIndices = new Set();
+    for (let i = 0; i < allRecords.length; i++) {
+      if (isAnomaly(allRecords[i])) {
+        anomalyIndices.add(i);
+      }
+    }
+
+    if (!anomalyIndices.size) return;
+
+    // Step 2: Collect context indices (+5 before, +5 after each anomaly)
+    const contextIndices = new Set();
+    for (const idx of anomalyIndices) {
+      for (let d = 1; d <= 5; d++) {
+        const before = idx - d;
+        const after = idx + d;
+        if (before >= 0 && !anomalyIndices.has(before)) contextIndices.add(before);
+        if (after < allRecords.length && !anomalyIndices.has(after)) contextIndices.add(after);
+      }
+    }
+
+    // Step 3: Merge, sort by original position, build result
+    const allIndices = [...anomalyIndices, ...contextIndices].sort((a, b) => a - b);
+    const resultRecords = allIndices.map(i => allRecords[i]);
+
+    // Step 4: Build highlighting sets keyed by record object reference.
+    // .filter() and [...].sort() preserve object references, so WeakSet works.
+    const anomalyRecords = new Set();
+    const contextRecords = new Set();
+    for (const idx of allIndices) {
+      if (anomalyIndices.has(idx)) {
+        anomalyRecords.add(allRecords[idx]);
+      } else {
+        contextRecords.add(allRecords[idx]);
+      }
+    }
+
+    St._anomalyHighlight = {
+      anomalyRecords: anomalyRecords,
+      contextRecords: contextRecords,
+    };
+
+    // Auto-show context_label column
+    if (St.columnHidden) St.columnHidden["context_label"] = false;
+    // Ensure it's in the column order
+    if (St.columnOrder && !St.columnOrder.includes("context_label")) {
+      St.columnOrder.unshift("context_label");
+    }
+
+    const anomCount = anomalyIndices.size;
+    const ctxCount = contextIndices.size;
+    const filterText = `+5 kontekst: ${anomCount} anomalii + ${ctxCount} kontekstu = ${resultRecords.length} rek.`;
+
+    // Clear heatmap filter state
+    St.hmActiveCell = null;
+    const hmBar = QS("#gsm_hm_filter_bar");
+    if (hmBar) hmBar.style.display = "none";
+
+    _setRecordsFilter(filterText, () => {
+      St._anomalyHighlight = null;
+      // Auto-hide context_label column
+      if (St.columnHidden) St.columnHidden["context_label"] = true;
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(resultRecords, false, resultRecords.length);
 
     const recCard = QS("#gsm_records_card");
     if (recCard) {
@@ -1934,6 +2231,23 @@
       for (const it of items) {
         const typeLabel = (it.record_type || "").replace(/_/g, " ");
         html += `<div><code>${it.contact}</code> — ${typeLabel} (${it.date})</div>`;
+      }
+    } else if (type === "satellite_numbers") {
+      for (const it of items) {
+        const confBadge = it.confidence === "high" ? "\u{1F7E2}" : it.confidence === "medium" ? "\u{1F7E1}" : "\u{1F534}";
+        const dates = it.dates && it.dates.length ? ` (${it.dates.join(", ")})` : "";
+        html += `<div>${confBadge} <code>${it.contact}</code> — <b>${it.operator || "?"}</b> [${it.confidence || "?"}] ${it.count}\u00D7${dates}</div>`;
+      }
+    } else if (type === "social_media") {
+      for (const it of items) {
+        const catShort = (it.category || "").replace(/\s*\/\s*/g, "/");
+        const dates = it.dates && it.dates.length > 0 ? it.dates.join(", ") : "";
+        const types = it.record_types && it.record_types.length ? it.record_types.map(t => t.replace(/_/g, " ")).join(", ") : "";
+        const contacts = it.unique_contacts > 0 ? `, ${it.unique_contacts} kontakt${it.unique_contacts === 1 ? "" : it.unique_contacts < 5 ? "y" : "\u00F3w"}` : "";
+        html += `<div><b>${it.platform}</b> <span class="muted">[${catShort}]</span> — ${it.count}\u00D7${contacts}`;
+        if (types) html += ` <span class="muted">(${types})</span>`;
+        if (dates) html += `<div class="small muted" style="margin-left:12px">${dates}</div>`;
+        html += `</div>`;
       }
     } else {
       for (const it of items) {
@@ -2401,8 +2715,17 @@
     }
     html += `</tr></thead><tbody>`;
 
+    const hl = St._anomalyHighlight || null;
     for (const r of sorted) {
-      html += `<tr>`;
+      let rowStyle = "";
+      if (hl) {
+        if (hl.anomalyRecords && hl.anomalyRecords.has(r)) {
+          rowStyle = ' style="background:rgba(239,68,68,.12)"';
+        } else if (hl.contextRecords && hl.contextRecords.has(r)) {
+          rowStyle = ' style="background:rgba(59,130,246,.10)"';
+        }
+      }
+      html += `<tr${rowStyle}>`;
       for (const col of cols) {
         html += `<td>${col.renderCell(r)}</td>`;
       }
@@ -2927,8 +3250,13 @@
     const screenshotBtn = QS("#gsm_map_screenshot_btn");
     if (screenshotBtn) screenshotBtn.onclick = () => _takeMapScreenshot();
 
-    // Layer switcher (descriptions are in title attributes — native tooltips)
-    const layerSelect = QS("#gsm_map_layer_select");
+    // Area selection buttons (circle / rectangle)
+    const selectCircleBtn = QS("#gsm_select_circle_btn");
+    const selectRectBtn = QS("#gsm_select_rect_btn");
+    if (selectCircleBtn) selectCircleBtn.onclick = () => _enterAreaSelectMode("circle");
+    if (selectRectBtn) selectRectBtn.onclick = () => _enterAreaSelectMode("rect");
+
+    // ── Floating layer panel ──
     const coverageOpts = QS("#gsm_coverage_opts");
     const covBillingCb = QS("#gsm_cov_billing");
     const covOtherCb = QS("#gsm_cov_other");
@@ -2936,11 +3264,25 @@
     // Build exclude list once from billing data
     _otherBtsExcludeSet = _buildExcludeSet(geo);
 
-    if (layerSelect) {
-      layerSelect.onchange = () => {
-        const layer = layerSelect.value;
+    // Panel collapse/expand toggle
+    const layerPanel = QS("#gsm_layer_panel");
+    const lpToggle = QS("#gsm_lp_header_toggle");
+    if (lpToggle && layerPanel) {
+      lpToggle.onclick = () => layerPanel.classList.toggle("collapsed");
+    }
+
+    // Layer radio buttons (replace old select)
+    const layerRadios = document.querySelectorAll('input[name="gsm_map_layer"]');
+    for (const radio of layerRadios) {
+      radio.onchange = () => {
+        if (!radio.checked) return;
+        const layer = radio.value;
         _closeAllPinnedCards();
         _switchMapLayer(layer, geo);
+        // Update active class on items
+        for (const item of document.querySelectorAll(".gsm-lp-item[data-layer]")) {
+          item.classList.toggle("active", item.dataset.layer === layer);
+        }
         // Show/hide coverage sub-options
         if (coverageOpts) coverageOpts.style.display = layer === "coverage" ? "" : "none";
         // Disable other BTS when switching away from coverage
@@ -2977,6 +3319,17 @@
         }
       };
     }
+
+    // ── Map overlay checkboxes (military / airports / diplomacy) ──
+    const milCb = QS("#gsm_overlay_military");
+    const airCb = QS("#gsm_overlay_airports");
+    const dipCb = QS("#gsm_overlay_diplomacy");
+    if (milCb) milCb.onchange = () => _toggleOverlay("military", milCb.checked);
+    if (airCb) airCb.onchange = () => _toggleOverlay("airports", airCb.checked);
+    if (dipCb) dipCb.onchange = () => _toggleOverlay("diplomacy", dipCb.checked);
+
+    // Load KML user overlays into layer panel
+    _loadKmlOverlayCheckboxes();
 
     // Reload other BTS on map move/zoom (debounced)
     if (St.map) {
@@ -3075,44 +3428,226 @@
     return out;
   }
 
+  /**
+   * Compose a map screenshot directly from Leaflet internals.
+   * html2canvas cannot reliably capture cross-origin tile <img> elements,
+   * so we manually draw tiles, then overlay canvas/SVG layers on top.
+   */
   async function _takeMapScreenshot() {
     const container = QS("#gsm_map_container");
-    if (!container) return;
+    if (!container || !St.map) return;
     const btn = QS("#gsm_map_screenshot_btn");
     if (btn) btn.disabled = true;
 
     try {
-      await _ensureHtml2Canvas();
+      const map = St.map;
+      const scale = 2;
+      const size = map.getSize();
+      const w = size.x * scale;
+      const h = size.y * scale;
 
-      const mapCanvas = await window.html2canvas(container, {
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: null,
-        scale: 2,
-        logging: false,
-        onclone: (doc) => {
-          const attr = doc.querySelector(".leaflet-control-attribution");
-          if (attr) attr.style.display = "none";
-        },
-      });
+      // ── 0. Wait for all visible tiles to load before capturing ──
+      await _waitForTilesToLoad(map, 3000);
 
-      // ── Draw watermark ──
-      const layerSelect = QS("#gsm_map_layer_select");
-      const layerLabel = layerSelect ? layerSelect.options[layerSelect.selectedIndex].text : "";
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext("2d");
+
+      // ── 1. Fill background (matches container bg) ──
+      ctx.fillStyle = "#e8e8e8";
+      ctx.fillRect(0, 0, w, h);
+
+      // ── 2. Draw tile images ──
+      // Use getBoundingClientRect for correct positioning — accounts for ALL
+      // nested transforms (tilePane → tile-container → tile img).
+      // Re-fetch tiles via fetch() to avoid tainted-canvas from cached tiles.
+      const containerRect = map.getContainer().getBoundingClientRect();
+      const tilePane = map.getPane("tilePane");
+      if (tilePane) {
+        const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
+        const tilePromises = [];
+        for (const img of tileImgs) {
+          if (!img.src) continue;
+          const rect = img.getBoundingClientRect();
+          const x = (rect.left - containerRect.left) * scale;
+          const y = (rect.top - containerRect.top) * scale;
+          const tw = rect.width * scale;
+          const th = rect.height * scale;
+          tilePromises.push(
+            _fetchImageBitmap(img.src)
+              .then(bmp => ({ bmp, x, y, tw, th }))
+              .catch(() => null)
+          );
+        }
+        const tiles = await Promise.all(tilePromises);
+        for (const tile of tiles) {
+          if (!tile) continue;
+          ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
+          tile.bmp.close();
+        }
+      }
+
+      // ── 3. Draw MapLibre GL canvas (for PBF vector tiles) ──
+      // MapLibre renders to a WebGL canvas inside a .maplibregl-map container.
+      // Requires preserveDrawingBuffer:true (set in _addPbfVectorLayer).
+      if (St._maplibreLayer) {
+        try {
+          const glMap = St._maplibreLayer.getMaplibreMap();
+          if (glMap) {
+            // Force a synchronous repaint so the WebGL buffer contains current frame
+            glMap.triggerRepaint();
+            // Wait one animation frame for the repaint to complete
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+            const glCanvas = glMap.getCanvas();
+            if (glCanvas) {
+              const mlRect = glCanvas.getBoundingClientRect();
+              const cRect = map.getContainer().getBoundingClientRect();
+              const mlX = (mlRect.left - cRect.left) * scale;
+              const mlY = (mlRect.top - cRect.top) * scale;
+              const mlW = mlRect.width * scale;
+              const mlH = mlRect.height * scale;
+              ctx.drawImage(glCanvas, mlX, mlY, mlW, mlH);
+            }
+          }
+        } catch (e) {
+          _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
+        }
+      } else {
+        // Fallback: try to find any MapLibre canvas in the DOM
+        const maplibreCanvas = container.querySelector(".maplibregl-canvas, .mapboxgl-canvas");
+        if (maplibreCanvas) {
+          try {
+            const mlRect = maplibreCanvas.getBoundingClientRect();
+            const cRect = map.getContainer().getBoundingClientRect();
+            ctx.drawImage(maplibreCanvas,
+              (mlRect.left - cRect.left) * scale, (mlRect.top - cRect.top) * scale,
+              mlRect.width * scale, mlRect.height * scale);
+          } catch (e) {
+            _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
+          }
+        }
+      }
+
+      // ── 4. Draw Leaflet overlay pane canvases (circleMarkers, polylines, polygons) ──
+      const overlayPane = map.getPane("overlayPane");
+      if (overlayPane) {
+        const canvases = overlayPane.querySelectorAll("canvas");
+        for (const c of canvases) {
+          try {
+            const cRect = c.getBoundingClientRect();
+            const cx = (cRect.left - containerRect.left) * scale;
+            const cy = (cRect.top - containerRect.top) * scale;
+            ctx.drawImage(c, cx, cy, cRect.width * scale, cRect.height * scale);
+          } catch (_) {}
+        }
+        // Also draw any SVG overlays (polylines in SVG mode, etc.)
+        const svgs = overlayPane.querySelectorAll("svg");
+        for (const svg of svgs) {
+          try {
+            const svgRect = svg.getBoundingClientRect();
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+            const svgUrl = URL.createObjectURL(svgBlob);
+            const svgImg = new Image();
+            await new Promise((resolve) => {
+              svgImg.onload = resolve;
+              svgImg.onerror = resolve;
+              svgImg.src = svgUrl;
+            });
+            ctx.drawImage(svgImg,
+              (svgRect.left - containerRect.left) * scale,
+              (svgRect.top - containerRect.top) * scale,
+              svgRect.width * scale, svgRect.height * scale);
+            URL.revokeObjectURL(svgUrl);
+          } catch (_) {}
+        }
+      }
+
+      // ── 5. Draw shadow pane (marker shadows) ──
+      _drawPaneMarkers(ctx, map, "shadowPane", scale);
+
+      // ── 6. Draw marker pane (HTML markers / icons) ──
+      _drawPaneMarkers(ctx, map, "markerPane", scale);
+
+      // ── 6b. Draw pinned BTS cards + tether lines ──
+      // Tether SVG lines
+      const tetherSvg = container.querySelector(".gsm-pinned-tether-svg");
+      if (tetherSvg) {
+        const lines = tetherSvg.querySelectorAll("line");
+        for (const ln of lines) {
+          const x1 = parseFloat(ln.getAttribute("x1")) * scale;
+          const y1 = parseFloat(ln.getAttribute("y1")) * scale;
+          const x2 = parseFloat(ln.getAttribute("x2")) * scale;
+          const y2 = parseFloat(ln.getAttribute("y2")) * scale;
+          ctx.save();
+          ctx.strokeStyle = ln.getAttribute("stroke") || "#64748b";
+          ctx.lineWidth = parseFloat(ln.getAttribute("stroke-width") || 1.5) * scale;
+          ctx.setLineDash([5 * scale, 4 * scale]);
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+      // Pinned cards and Leaflet popups (rendered via html2canvas)
+      const pinnedCardEls = container.querySelectorAll(".gsm-pinned-card");
+      const popupPane = map.getPane("popupPane");
+      const openPopups = popupPane ? popupPane.querySelectorAll(".leaflet-popup") : [];
+      if (pinnedCardEls.length > 0 || openPopups.length > 0) {
+        await _ensureHtml2Canvas();
+        for (const card of pinnedCardEls) {
+          try {
+            const cardCanvas = await window.html2canvas(card, {
+              scale: scale,
+              backgroundColor: null,
+              logging: false,
+              useCORS: true,
+            });
+            const cardLeft = parseFloat(card.style.left || 0) * scale;
+            const cardTop = parseFloat(card.style.top || 0) * scale;
+            ctx.drawImage(cardCanvas, cardLeft, cardTop);
+          } catch (e) {
+            _addLog("warn", "Nie udało się narysować karty BTS: " + e.message);
+          }
+        }
+        for (const popup of openPopups) {
+          try {
+            const popupCanvas = await window.html2canvas(popup, {
+              scale: scale,
+              backgroundColor: null,
+              logging: false,
+              useCORS: true,
+            });
+            const pRect = popup.getBoundingClientRect();
+            const px = (pRect.left - containerRect.left) * scale;
+            const py = (pRect.top - containerRect.top) * scale;
+            ctx.drawImage(popupCanvas, px, py);
+          } catch (_) {}
+        }
+      }
+
+      // ── 7. Draw watermark ──
+      const activeRadio = QS('input[name="gsm_map_layer"]:checked');
+      const activeItem = activeRadio ? activeRadio.closest(".gsm-lp-item") : null;
+      const layerLabel = activeItem ? activeItem.textContent.trim() : "";
       const extraParts = [];
       if (layerLabel) extraParts.push(layerLabel);
       extraParts.push("© OpenStreetMap contributors");
 
-      const out = _drawWatermark(mapCanvas, extraParts);
+      const final = _drawWatermark(out, extraParts);
 
-      // Convert to blob and trigger download
+      // ── 8. Download ──
       const now = new Date();
-      out.toBlob((blob) => {
+      final.toBlob((blob) => {
         if (!blob) {
           _addLog("warn", "Nie udało się utworzyć zdjęcia mapy");
           return;
         }
-        const layerName = layerSelect ? layerSelect.value : "mapa";
+        const activeR = QS('input[name="gsm_map_layer"]:checked');
+        const layerName = activeR ? activeR.value : "mapa";
         const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
         const filename = `BTS_${layerName}_${ts}.png`;
 
@@ -3130,6 +3665,126 @@
       _addLog("error", `Błąd zdjęcia mapy: ${e.message}`);
     } finally {
       if (btn) btn.disabled = false;
+    }
+  }
+
+  /**
+   * Fetch an image URL via fetch() and return an ImageBitmap (CORS-safe).
+   * Falls back to loading via <img crossOrigin="anonymous"> if fetch fails.
+   */
+  async function _fetchImageBitmap(url) {
+    // Try fetch first (best for CORS)
+    try {
+      const resp = await fetch(url, { mode: "cors" });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        return createImageBitmap(blob);
+      }
+    } catch (_) { /* fall through to img approach */ }
+
+    // Fallback: load via <img crossOrigin> — works for same-origin and CORS-enabled servers
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        createImageBitmap(img).then(resolve).catch(reject);
+      };
+      img.onerror = () => reject(new Error("img load failed"));
+      img.src = url;
+    });
+  }
+
+  /** Wait for all visible tile images to finish loading (with timeout) */
+  function _waitForTilesToLoad(map, timeoutMs) {
+    return new Promise((resolve) => {
+      const tilePane = map.getPane("tilePane");
+      if (!tilePane) { resolve(); return; }
+
+      const check = () => {
+        const imgs = tilePane.querySelectorAll("img.leaflet-tile");
+        for (const img of imgs) {
+          if (img.src && !img.complete) return false;
+        }
+        return true;
+      };
+
+      if (check()) { resolve(); return; }
+
+      const deadline = Date.now() + timeoutMs;
+      const interval = setInterval(() => {
+        if (check() || Date.now() > deadline) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+    });
+  }
+
+  /** Parse Leaflet's CSS transform (translate3d / translate) to {x, y} pixels */
+  function _getLeafletPaneOffset(el) {
+    const t = el.style.transform || window.getComputedStyle(el).transform;
+    if (!t || t === "none") return { x: 0, y: 0 };
+    // translate3d(Xpx, Ypx, 0px) or matrix(...)
+    const m3d = t.match(/translate3d\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/);
+    if (m3d) return { x: parseFloat(m3d[1]), y: parseFloat(m3d[2]) };
+    const mat = t.match(/matrix\(\s*[\d.e+-]+\s*,\s*[\d.e+-]+\s*,\s*[\d.e+-]+\s*,\s*[\d.e+-]+\s*,\s*(-?[\d.e+-]+)\s*,\s*(-?[\d.e+-]+)/);
+    if (mat) return { x: parseFloat(mat[1]), y: parseFloat(mat[2]) };
+    return { x: 0, y: 0 };
+  }
+
+  /**
+   * Draw marker images AND divIcon HTML markers from a Leaflet pane onto a canvas.
+   * L.divIcon markers render as <div> elements (often with emoji text content),
+   * while standard L.icon markers render as <img> elements.
+   */
+  function _drawPaneMarkers(ctx, map, paneName, scale) {
+    const pane = map.getPane(paneName);
+    if (!pane) return;
+    const containerRect = map.getContainer().getBoundingClientRect();
+
+    // 1) Draw <img> based markers (standard L.icon)
+    const imgs = pane.querySelectorAll("img");
+    for (const img of imgs) {
+      if (!img.complete || !img.naturalWidth) continue;
+      try {
+        const rect = img.getBoundingClientRect();
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+        const iw = rect.width * scale;
+        const ih = rect.height * scale;
+        ctx.drawImage(img, x, y, iw, ih);
+      } catch (_) {}
+    }
+
+    // 2) Draw L.divIcon markers (overlays, KML layers — rendered as <div> with emoji/text)
+    const divIcons = pane.querySelectorAll(".leaflet-marker-icon");
+    for (const div of divIcons) {
+      // Skip if it's an <img> element (already handled above)
+      if (div.tagName === "IMG") continue;
+      try {
+        const rect = div.getBoundingClientRect();
+        // Skip markers outside the visible map area
+        if (rect.width === 0 || rect.height === 0) continue;
+        if (rect.right < containerRect.left || rect.left > containerRect.right) continue;
+        if (rect.bottom < containerRect.top || rect.top > containerRect.bottom) continue;
+
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+
+        // Extract text content (emoji) from the divIcon
+        const span = div.querySelector("span");
+        const text = span ? span.textContent.trim() : div.textContent.trim();
+        if (!text) continue;
+
+        // Draw the emoji/text at the marker position
+        const fontSize = Math.round((span ? parseFloat(getComputedStyle(span).fontSize) : 16) * scale);
+        ctx.font = `${fontSize}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const cx = x + (rect.width * scale) / 2;
+        const cy = y + (rect.height * scale) / 2;
+        ctx.fillText(text, cx, cy);
+      } catch (_) {}
     }
   }
 
@@ -3209,6 +3864,7 @@
     if (St.map) {
       try { St.map.remove(); } catch(e) { /* ignore */ }
       St.map = null;
+      St._maplibreLayer = null;
     }
 
     const map = L.map(container, {
@@ -3226,31 +3882,241 @@
   }
 
   async function _addTileLayer(map) {
-    // Check for offline tiles
+    // Fetch user preference
+    let mapSource = "auto";
     try {
-      const resp = await fetch("/api/gsm/tiles/info");
-      const info = await resp.json();
-      if (info.available) {
-        const fmt = info.format || "pbf";
-        if (fmt === "png" || fmt === "jpg" || fmt === "jpeg") {
-          L.tileLayer("/api/gsm/tiles/{z}/{x}/{y}", {
-            maxZoom: parseInt(info.maxzoom) || 18,
-            minZoom: parseInt(info.minzoom) || 0,
-            attribution: "Offline map | OpenStreetMap",
-          }).addTo(map);
-          _addLog("info", "Używam mapy offline (MBTiles)");
-          return;
-        }
-      }
-    } catch (e) {
-      // Ignore — use online fallback
+      const sResp = await fetch("/api/settings");
+      const sData = await sResp.json();
+      mapSource = sData.map_source || "auto";
+    } catch (e) { /* default auto */ }
+
+    // Force online mode
+    if (mapSource === "online") {
+      _addOnlineTileLayer(map);
+      return;
     }
 
-    // Fallback: OpenStreetMap online tiles
+    // Check offline tiles availability
+    let info = null;
+    try {
+      const resp = await fetch("/api/gsm/tiles/info");
+      info = await resp.json();
+    } catch (e) { /* ignore */ }
+
+    const offlineAvailable = info && info.available;
+    const fmt = offlineAvailable ? (info.format || "pbf") : "";
+
+    // If forced offline but no tiles — show warning, add empty layer
+    if (mapSource === "offline" && !offlineAvailable) {
+      _addLog("warn", "Mapa offline wymuszona, ale brak pliku MBTiles — mapa będzie pusta");
+      _setMapBadge(map, "OFFLINE — brak MBTiles", "#f97316");
+      return;
+    }
+
+    // Use offline if available (auto or forced offline)
+    if (offlineAvailable) {
+      const isRaster = (fmt === "png" || fmt === "jpg" || fmt === "jpeg" || fmt === "webp");
+      if (isRaster) {
+        L.tileLayer("/api/gsm/tiles/{z}/{x}/{y}", {
+          maxZoom: parseInt(info.maxzoom) || 18,
+          minZoom: parseInt(info.minzoom) || 0,
+          crossOrigin: true,
+          attribution: "Offline map | OpenStreetMap",
+        }).addTo(map);
+        _addLog("info", "Używam mapy offline — raster (" + fmt.toUpperCase() + ")");
+        _setMapBadge(map, "OFFLINE — " + fmt.toUpperCase(), "#22c55e");
+        return;
+      }
+      if (fmt === "pbf") {
+        // Vector PBF tiles via maplibre-gl rendered to a Leaflet layer
+        await _addPbfVectorLayer(map, info);
+        return;
+      }
+    }
+
+    // Fallback: online
+    _addOnlineTileLayer(map);
+  }
+
+  function _addOnlineTileLayer(map) {
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
+      crossOrigin: true,
       attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
+    _addLog("info", "Używam mapy online (OpenStreetMap)");
+    _setMapBadge(map, "ONLINE", "#3b82f6");
+  }
+
+  /* ── MapLibre GL JS loader (for PBF vector tiles) ────── */
+
+  function _loadMapLibre() {
+    return new Promise((resolve) => {
+      if (window.maplibregl) { resolve(true); return; }
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css";
+      document.head.appendChild(css);
+      // Also add Leaflet-MapLibre plugin
+      const js1 = document.createElement("script");
+      js1.src = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";
+      js1.onload = () => {
+        const js2 = document.createElement("script");
+        js2.src = "https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js";
+        js2.onload = () => resolve(true);
+        js2.onerror = () => { console.warn("Leaflet-MapLibre plugin unavailable"); resolve(false); };
+        document.head.appendChild(js2);
+      };
+      js1.onerror = () => { console.warn("MapLibre GL JS CDN unavailable"); resolve(false); };
+      document.head.appendChild(js1);
+    });
+  }
+
+  async function _addPbfVectorLayer(map, info) {
+    const loaded = await _loadMapLibre();
+    if (!loaded || !window.maplibregl || !L.maplibreGL) {
+      _addLog("warn", "MapLibre GL JS niedostępne — fallback na mapę online");
+      _addOnlineTileLayer(map);
+      return;
+    }
+
+    const maxZoom = parseInt(info.maxzoom) || 14;
+    const minZoom = parseInt(info.minzoom) || 0;
+
+    // OSM Bright-like style for offline PBF tiles served from local API
+    const style = {
+      version: 8,
+      name: "Offline PBF",
+      sources: {
+        openmaptiles: {
+          type: "vector",
+          tiles: [window.location.origin + "/api/gsm/tiles/{z}/{x}/{y}"],
+          minzoom: minZoom,
+          maxzoom: maxZoom,
+        },
+      },
+      glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
+      layers: [
+        // Background
+        { id: "background", type: "background", paint: { "background-color": "#f8f4f0" } },
+        // Water
+        { id: "water", type: "fill", source: "openmaptiles", "source-layer": "water",
+          paint: { "fill-color": "#a0c8f0" } },
+        // Landcover
+        { id: "landcover-grass", type: "fill", source: "openmaptiles", "source-layer": "landcover",
+          filter: ["==", "class", "grass"],
+          paint: { "fill-color": "#d8e8c8", "fill-opacity": 0.6 } },
+        { id: "landcover-wood", type: "fill", source: "openmaptiles", "source-layer": "landcover",
+          filter: ["==", "class", "wood"],
+          paint: { "fill-color": "#aed1a0", "fill-opacity": 0.6 } },
+        // Landuse
+        { id: "landuse-residential", type: "fill", source: "openmaptiles", "source-layer": "landuse",
+          filter: ["==", "class", "residential"],
+          paint: { "fill-color": "#e8e0d8", "fill-opacity": 0.5 } },
+        { id: "landuse-commercial", type: "fill", source: "openmaptiles", "source-layer": "landuse",
+          filter: ["in", "class", "commercial", "retail"],
+          paint: { "fill-color": "#f2dad9", "fill-opacity": 0.4 } },
+        { id: "landuse-industrial", type: "fill", source: "openmaptiles", "source-layer": "landuse",
+          filter: ["==", "class", "industrial"],
+          paint: { "fill-color": "#ebdbe8", "fill-opacity": 0.4 } },
+        // Park
+        { id: "park", type: "fill", source: "openmaptiles", "source-layer": "park",
+          paint: { "fill-color": "#d8e8c8", "fill-opacity": 0.6 } },
+        // Buildings
+        { id: "building", type: "fill", source: "openmaptiles", "source-layer": "building",
+          minzoom: 13,
+          paint: { "fill-color": "#d9d0c9", "fill-outline-color": "#b9b0a9" } },
+        // Roads
+        { id: "road-motorway", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "motorway"],
+          paint: { "line-color": "#e892a2", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1, 14, 5] } },
+        { id: "road-trunk", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "trunk"],
+          paint: { "line-color": "#f9b29c", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 14, 4] } },
+        { id: "road-primary", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "primary"],
+          paint: { "line-color": "#fcd6a4", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 14, 3] } },
+        { id: "road-secondary", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "secondary"],
+          paint: { "line-color": "#f7fabf", "line-width": ["interpolate", ["linear"], ["zoom"], 7, 0.3, 14, 2.5] } },
+        { id: "road-minor", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["in", "class", "tertiary", "minor", "service", "path"],
+          minzoom: 10,
+          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 1.5] } },
+        // Railway
+        { id: "railway", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "rail"],
+          paint: { "line-color": "#bbb", "line-width": 1, "line-dasharray": [3, 3] } },
+        // Boundaries
+        { id: "boundary-country", type: "line", source: "openmaptiles", "source-layer": "boundary",
+          filter: ["==", "admin_level", 2],
+          paint: { "line-color": "#9e9cab", "line-width": 1.5 } },
+        // Place labels
+        { id: "place-city", type: "symbol", source: "openmaptiles", "source-layer": "place",
+          filter: ["==", "class", "city"],
+          layout: { "text-field": "{name:latin}", "text-size": 14, "text-font": ["Open Sans Bold"] },
+          paint: { "text-color": "#333", "text-halo-color": "#fff", "text-halo-width": 1.5 } },
+        { id: "place-town", type: "symbol", source: "openmaptiles", "source-layer": "place",
+          filter: ["==", "class", "town"],
+          layout: { "text-field": "{name:latin}", "text-size": 12, "text-font": ["Open Sans Regular"] },
+          paint: { "text-color": "#555", "text-halo-color": "#fff", "text-halo-width": 1 } },
+        { id: "place-village", type: "symbol", source: "openmaptiles", "source-layer": "place",
+          filter: ["==", "class", "village"],
+          minzoom: 10,
+          layout: { "text-field": "{name:latin}", "text-size": 10, "text-font": ["Open Sans Regular"] },
+          paint: { "text-color": "#666", "text-halo-color": "#fff", "text-halo-width": 1 } },
+        // Road labels
+        { id: "road-label", type: "symbol", source: "openmaptiles", "source-layer": "transportation_name",
+          minzoom: 12,
+          layout: {
+            "text-field": "{name:latin}",
+            "text-size": 10,
+            "text-font": ["Open Sans Regular"],
+            "symbol-placement": "line",
+          },
+          paint: { "text-color": "#666", "text-halo-color": "#fff", "text-halo-width": 1 } },
+      ],
+    };
+
+    try {
+      const glLayer = L.maplibreGL({
+        style: style,
+        attribution: "Offline map (PBF) | OpenStreetMap",
+        // preserveDrawingBuffer must be inside maplibreOptions — the plugin
+        // passes this object to the MapLibre GL Map constructor via Object.assign.
+        maplibreOptions: {
+          preserveDrawingBuffer: true,
+        },
+      }).addTo(map);
+      // Store reference for screenshot use (triggerRepaint + getCanvas)
+      St._maplibreLayer = glLayer;
+      _addLog("info", "Używam mapy offline — wektor (PBF) via MapLibre GL");
+      _setMapBadge(map, "OFFLINE — PBF", "#22c55e");
+    } catch (e) {
+      console.error("MapLibre GL layer error:", e);
+      _addLog("warn", "Błąd MapLibre GL — fallback na mapę online");
+      _addOnlineTileLayer(map);
+    }
+  }
+
+  /* ── Map badge (source indicator) ────────────────────── */
+
+  function _setMapBadge(map, text, color) {
+    if (!map || !map.getContainer) return;
+    const container = map.getContainer();
+    // Remove old badge
+    const old = container.querySelector(".gsm-map-badge");
+    if (old) old.remove();
+    // Create badge
+    const badge = document.createElement("div");
+    badge.className = "gsm-map-badge";
+    badge.style.cssText = "position:absolute;top:10px;right:10px;z-index:1000;" +
+      "padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;" +
+      "color:#fff;pointer-events:none;opacity:0.85;" +
+      "background:" + color + ";";
+    badge.textContent = text;
+    container.style.position = "relative";
+    container.appendChild(badge);
   }
 
   function _addAllPoints(map, geo) {
@@ -3304,6 +4170,7 @@
     }
 
     const uniqueLocations = Array.from(locationMap.values());
+    St.areaLocations = uniqueLocations;
     _addLog("info", `Mapa: ${points.length} rekordów → ${uniqueLocations.length} unikalnych lokalizacji BTS`);
 
     // ── Unique locations layer (main view) ──
@@ -3333,9 +4200,9 @@
 
       // Double-click → filter Records by this BTS location
       marker.on("dblclick", () => {
-        const dtSet = new Set(loc.records.map(r => r.datetime));
+        const rowSet = new Set(loc.records.map(r => r.raw_row));
         const allRecs = St.lastResult ? St.lastResult.records : [];
-        const filtered = allRecs.filter(r => dtSet.has(r.datetime));
+        const filtered = allRecs.filter(r => rowSet.has(r.raw_row));
         const label = loc.city || "BTS";
         const filterText = `${label} — ${filtered.length} rek.`;
         _setRecordsFilter(filterText, () => {
@@ -3733,6 +4600,8 @@
   function _switchMapLayer(layer, geo) {
     if (!St.map) return;
     const map = St.map;
+    _clearAreaSelection();
+    _exitAreaSelectMode();
 
     // Remove all custom layers
     Object.values(St.mapLayers).forEach(lg => {
@@ -5279,6 +6148,491 @@
     }
   }
 
+  /* ── Map overlays (military / airports / diplomacy) ─────────────── */
+
+  const _OVERLAY_TYPE_ICONS = {
+    // Military type → emoji
+    brygada: "⚔️", dywizja: "⚔️", pulk: "🎯", batalion: "🎯",
+    lotnisko_wojskowe: "✈️", baza_morska: "⚓", centrum: "🏛️",
+    poligon: "💥", jednostka: "🪖", baza: "🏗️", dywizjon: "🎯",
+  };
+  const _OVERLAY_TYPE_COLORS = {
+    brygada: "#b91c1c", dywizja: "#991b1b", pulk: "#dc2626",
+    batalion: "#ef4444", lotnisko_wojskowe: "#7c3aed",
+    baza_morska: "#0369a1", centrum: "#b45309", poligon: "#65a30d",
+    jednostka: "#e11d48", baza: "#be123c", dywizjon: "#f97316",
+  };
+  const _DIPLOMACY_TYPE_ICONS = {
+    ambasada_rp: "🇵🇱", konsulat_rp: "🇵🇱", konsulat_honorowy_rp: "🇵🇱",
+    stale_przedstawicielstwo_rp: "🇵🇱", instytut_polski: "🇵🇱", biuro_ataszatu_rp: "🇵🇱",
+    ambasada_obca: "🏛️", konsulat_obcy: "🏛️",
+  };
+  const _DIPLOMACY_TYPE_COLORS = {
+    ambasada_rp: "#dc2626", konsulat_rp: "#ea580c", konsulat_honorowy_rp: "#d97706",
+    stale_przedstawicielstwo_rp: "#7c3aed", instytut_polski: "#0891b2", biuro_ataszatu_rp: "#be123c",
+    ambasada_obca: "#059669", konsulat_obcy: "#0d9488",
+  };
+
+  async function _toggleOverlay(which, show) {
+    if (!St.map) return;
+    const keyMap = { military: "overlayMilitary", airports: "overlayAirports", diplomacy: "overlayDiplomacy" };
+    const dataMap = { military: "overlayMilitaryData", airports: "overlayAirportsData", diplomacy: "overlayDiplomacyData" };
+    const urlMap = {
+      military: "/static/data/poland_military.json",
+      airports: "/static/data/poland_airports.json",
+      diplomacy: "/static/data/poland_diplomacy.json",
+    };
+    const cbMap = { military: "#gsm_overlay_military", airports: "#gsm_overlay_airports", diplomacy: "#gsm_overlay_diplomacy" };
+    const layerKey = keyMap[which];
+    const dataKey = dataMap[which];
+    const url = urlMap[which];
+
+    if (!show) {
+      if (St[layerKey]) { St.map.removeLayer(St[layerKey]); }
+      return;
+    }
+
+    // Load data if not cached
+    if (!St[dataKey]) {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        St[dataKey] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować danych: ${err.message}`);
+        const cb = QS(cbMap[which]);
+        if (cb) cb.checked = false;
+        return;
+      }
+    }
+
+    // Build layer group if needed
+    if (!St[layerKey]) {
+      const group = L.layerGroup();
+      const data = St[dataKey];
+
+      if (which === "military") {
+        for (const item of data) {
+          const icon = _OVERLAY_TYPE_ICONS[item.type] || "🪖";
+          const color = _OVERLAY_TYPE_COLORS[item.type] || "#b91c1c";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          m.bindTooltip(`<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.addTo(group);
+        }
+      } else if (which === "diplomacy") {
+        for (const item of data) {
+          const icon = _DIPLOMACY_TYPE_ICONS[item.type] || "🏛️";
+          const color = _DIPLOMACY_TYPE_COLORS[item.type] || "#059669";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          const countryTag = item.country ? ` <span class="small" style="color:#6b7280">(${item.country})</span>` : "";
+          m.bindTooltip(`<b style="color:${color}">${item.name}</b>${countryTag}<br><span class="small">${item.desc || ""}</span>`, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.addTo(group);
+        }
+      } else {
+        // Airports
+        for (const item of data) {
+          const label = item.iata ? `${item.iata}` : "";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">✈️</span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          const tooltipHtml = `<b style="color:#2563eb">${item.name}</b>`
+            + (label ? `<br><span class="small" style="color:#6b7280">${label} — ${item.city}</span>` : `<br><span class="small">${item.city}</span>`);
+          m.bindTooltip(tooltipHtml, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.addTo(group);
+        }
+      }
+      St[layerKey] = group;
+    }
+
+    St[layerKey].addTo(St.map);
+  }
+
+  /* ── KML user overlays ─────────────────────────────────── */
+
+  // Store: { overlayId: L.layerGroup }
+  if (!St._kmlLayers) St._kmlLayers = {};
+  if (!St._kmlData) St._kmlData = {};
+
+  async function _loadKmlOverlayCheckboxes() {
+    const container = QS("#gsm_kml_overlays");
+    if (!container) return;
+
+    try {
+      const resp = await fetch("/api/gsm/overlays");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const items = (data && data.overlays) ? data.overlays : [];
+
+      if (!items.length) {
+        container.innerHTML = "";
+        return;
+      }
+
+      container.innerHTML = items.map(ov => {
+        const checked = St._kmlLayers[ov.id] && St.map && St.map.hasLayer(St._kmlLayers[ov.id]) ? " checked" : "";
+        const safeName = String(ov.name || ov.id).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return `<label class="gsm-lp-item">
+          <input type="checkbox" data-kml-id="${ov.id}"${checked}> <span style="color:#8b5cf6">&#9679;</span> ${safeName}
+        </label>`;
+      }).join("");
+
+      // Bind events
+      container.querySelectorAll("input[data-kml-id]").forEach(cb => {
+        cb.onchange = () => _toggleKmlOverlay(cb.dataset.kmlId, cb.checked);
+      });
+    } catch (e) {
+      // silent
+    }
+  }
+
+  async function _toggleKmlOverlay(overlayId, show) {
+    if (!St.map) return;
+
+    if (!show) {
+      if (St._kmlLayers[overlayId]) {
+        St.map.removeLayer(St._kmlLayers[overlayId]);
+      }
+      return;
+    }
+
+    // Load data if not cached
+    if (!St._kmlData[overlayId]) {
+      try {
+        const resp = await fetch(`/api/gsm/overlays/${overlayId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        St._kmlData[overlayId] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować warstwy KML: ${err.message}`);
+        const cb = QS(`input[data-kml-id="${overlayId}"]`);
+        if (cb) cb.checked = false;
+        return;
+      }
+    }
+
+    // Build layer group if needed
+    if (!St._kmlLayers[overlayId]) {
+      const group = L.layerGroup();
+      const data = St._kmlData[overlayId];
+      const points = data.points || [];
+      const layerName = data.name || overlayId;
+
+      for (const pt of points) {
+        if (pt.lat == null || pt.lon == null) continue;
+        const divIcon = L.divIcon({
+          className: "gsm-overlay-marker",
+          html: '<span style="font-size:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">📍</span>',
+          iconSize: [22, 22],
+          iconAnchor: [11, 22],
+        });
+        const m = L.marker([pt.lat, pt.lon], { icon: divIcon, interactive: true });
+        const safeName = String(pt.name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const safeDesc = String(pt.desc || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        m.bindTooltip(
+          `<b style="color:#8b5cf6">${safeName}</b>` +
+          (safeDesc ? `<br><span class="small">${safeDesc}</span>` : "") +
+          `<br><span class="small muted">${layerName}</span>`,
+          { direction: "top", offset: [0, -14], className: "gsm-overlay-tooltip" }
+        );
+        m.addTo(group);
+      }
+      St._kmlLayers[overlayId] = group;
+    }
+
+    St._kmlLayers[overlayId].addTo(St.map);
+  }
+
+  /* ── Area selection (circle / rectangle) ─────────────── */
+
+  function _enterAreaSelectMode(mode) {
+    if (!St.map) return;
+    // If same mode active, cancel it
+    if (St.areaSelectMode === mode) {
+      _exitAreaSelectMode();
+      return;
+    }
+    // Cancel any previous mode
+    _exitAreaSelectMode();
+    St.areaSelectMode = mode;
+
+    // Toggle button active state
+    const circleBtn = QS("#gsm_select_circle_btn");
+    const rectBtn = QS("#gsm_select_rect_btn");
+    if (circleBtn) circleBtn.classList.toggle("btn-active", mode === "circle");
+    if (rectBtn) rectBtn.classList.toggle("btn-active", mode === "rect");
+
+    // Disable map drag so drawing doesn't pan
+    St.map.dragging.disable();
+    // Change cursor
+    const mapEl = St.map.getContainer();
+    mapEl.style.cursor = "crosshair";
+
+    // Disable ALL vector layer interactivity during area select
+    // (coverage polygons, path lines, overlay markers, etc. can steal mouse events)
+    _setOverlayInteractive(false);
+    _setAllLayersInteractive(false);
+
+    // Bind events
+    St.map.on("mousedown", _areaMouseDown);
+    document.addEventListener("keydown", _areaEscHandler);
+  }
+
+  function _exitAreaSelectMode() {
+    if (!St.map) return;
+    St.areaSelectMode = null;
+    St.areaSelectOrigin = null;
+
+    // Remove temp drawing layer
+    if (St.areaSelectLayer) {
+      St.map.removeLayer(St.areaSelectLayer);
+      St.areaSelectLayer = null;
+    }
+
+    // Reset buttons only if no active area filter (keep pressed while filter active)
+    if (!St.areaShape) {
+      const circleBtn = QS("#gsm_select_circle_btn");
+      const rectBtn = QS("#gsm_select_rect_btn");
+      if (circleBtn) circleBtn.classList.remove("btn-active");
+      if (rectBtn) rectBtn.classList.remove("btn-active");
+    }
+
+    // Re-enable map drag
+    St.map.dragging.enable();
+    const mapEl = St.map.getContainer();
+    mapEl.style.cursor = "";
+
+    // Re-enable all layer interactivity
+    _setOverlayInteractive(true);
+    _setAllLayersInteractive(true);
+
+    // Unbind events
+    St.map.off("mousedown", _areaMouseDown);
+    St.map.off("mousemove", _areaMouseMove);
+    St.map.off("mouseup", _areaMouseUp);
+    document.removeEventListener("keydown", _areaEscHandler);
+  }
+
+  /** Enable/disable overlay markers during area select so they don't steal mouse events */
+  function _setOverlayInteractive(enabled) {
+    for (const key of ["overlayMilitary", "overlayAirports", "overlayDiplomacy"]) {
+      const group = St[key];
+      if (!group) continue;
+      group.eachLayer(marker => {
+        const el = marker.getElement && marker.getElement();
+        if (el) el.style.pointerEvents = enabled ? "" : "none";
+      });
+    }
+  }
+
+  /** Enable/disable interactivity on ALL map vector layers (coverage, path, clusters, etc.)
+   *  so they don't steal mouse events during area selection drawing.
+   *  Works with both canvas and SVG renderer by disabling pointer-events on the
+   *  overlay pane and toggling Leaflet's internal interactive flag on each layer. */
+  function _setAllLayersInteractive(enabled) {
+    if (!St.map) return;
+    // Disable pointer-events on the overlay pane (canvas or SVG) to prevent hit detection
+    const pane = St.map.getPane("overlayPane");
+    if (pane) pane.style.pointerEvents = enabled ? "" : "none";
+  }
+
+  function _areaEscHandler(e) {
+    if (e.key === "Escape") _exitAreaSelectMode();
+  }
+
+  function _areaMouseDown(e) {
+    if (!St.areaSelectMode) return;
+    if (e.originalEvent) {
+      L.DomEvent.stopPropagation(e.originalEvent);
+      L.DomEvent.preventDefault(e.originalEvent);
+    }
+    St.areaSelectOrigin = e.latlng;
+
+    St.map.on("mousemove", _areaMouseMove);
+    St.map.on("mouseup", _areaMouseUp);
+  }
+
+  function _areaMouseMove(e) {
+    if (!St.areaSelectMode || !St.areaSelectOrigin) return;
+
+    // Remove previous temp shape
+    if (St.areaSelectLayer) {
+      St.map.removeLayer(St.areaSelectLayer);
+      St.areaSelectLayer = null;
+    }
+
+    const style = { color: "#a855f7", weight: 2, dashArray: "6 4", fillColor: "#a855f7", fillOpacity: 0.08 };
+
+    if (St.areaSelectMode === "circle") {
+      const radius = St.areaSelectOrigin.distanceTo(e.latlng);
+      St.areaSelectLayer = L.circle(St.areaSelectOrigin, { ...style, radius }).addTo(St.map);
+    } else {
+      const bounds = L.latLngBounds(St.areaSelectOrigin, e.latlng);
+      St.areaSelectLayer = L.rectangle(bounds, style).addTo(St.map);
+    }
+  }
+
+  function _areaMouseUp(e) {
+    if (!St.areaSelectMode || !St.areaSelectOrigin) return;
+    if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
+
+    const endLatLng = e.latlng;
+    const mode = St.areaSelectMode;
+    const origin = St.areaSelectOrigin;
+
+    // Min drag threshold: 10px to avoid accidental clicks
+    const p1 = St.map.latLngToContainerPoint(origin);
+    const p2 = St.map.latLngToContainerPoint(endLatLng);
+    const dist = p1.distanceTo(p2);
+    if (dist < 10) {
+      // Too small — ignore, keep mode active for another try
+      if (St.areaSelectLayer) { St.map.removeLayer(St.areaSelectLayer); St.areaSelectLayer = null; }
+      St.areaSelectOrigin = null;
+      St.map.off("mousemove", _areaMouseMove);
+      St.map.off("mouseup", _areaMouseUp);
+      return;
+    }
+
+    // Find BTS locations inside the drawn shape
+    let insideLocations;
+    if (mode === "circle") {
+      const radius = origin.distanceTo(endLatLng);
+      insideLocations = St.areaLocations.filter(loc =>
+        origin.distanceTo(L.latLng(loc.lat, loc.lon)) <= radius
+      );
+    } else {
+      const bounds = L.latLngBounds(origin, endLatLng);
+      insideLocations = St.areaLocations.filter(loc =>
+        bounds.contains(L.latLng(loc.lat, loc.lon))
+      );
+    }
+
+    // Remove temp drawing layer (will be replaced by persistent shape)
+    if (St.areaSelectLayer) { St.map.removeLayer(St.areaSelectLayer); St.areaSelectLayer = null; }
+    _exitAreaSelectMode();
+
+    if (!insideLocations.length) {
+      _addLog("info", `Zaznaczenie ${mode === "circle" ? "koła" : "prostokąta"}: brak punktów BTS w obszarze`);
+      return;
+    }
+
+    // Clear any previous selection
+    _clearAreaSelection();
+
+    // Create persistent shape on map (stays until user clicks it or clears filter)
+    const persistStyle = { color: "#a855f7", weight: 2, dashArray: "6 4", fillColor: "#a855f7", fillOpacity: 0.06, interactive: true };
+    if (mode === "circle") {
+      const radius = origin.distanceTo(endLatLng);
+      St.areaShape = L.circle(origin, { ...persistStyle, radius }).addTo(St.map);
+    } else {
+      const bounds = L.latLngBounds(origin, endLatLng);
+      St.areaShape = L.rectangle(bounds, persistStyle).addTo(St.map);
+    }
+    // Mark the used button as active (persistent indicator that filter is on)
+    const circleBtn = QS("#gsm_select_circle_btn");
+    const rectBtn = QS("#gsm_select_rect_btn");
+    if (circleBtn) circleBtn.classList.toggle("btn-active", mode === "circle");
+    if (rectBtn) rectBtn.classList.toggle("btn-active", mode === "rect");
+
+    // Click on the shape = remove selection & clear filters
+    St.areaShape.on("click", (e) => {
+      if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
+      _clearAreaSelection();
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    // Cursor hint on hover
+    St.areaShape.on("mouseover", () => { St.map.getContainer().style.cursor = "pointer"; });
+    St.areaShape.on("mouseout", () => { St.map.getContainer().style.cursor = ""; });
+
+    // Highlight selected BTS markers
+    _highlightBtsLocations(insideLocations);
+
+    // Collect all records from selected locations and filter table (match by raw_row for uniqueness)
+    const rowSet = new Set();
+    for (const loc of insideLocations) {
+      for (const r of loc.records) rowSet.add(r.raw_row);
+    }
+    const allRecs = St.lastResult ? St.lastResult.records : [];
+    const filtered = allRecs.filter(r => rowSet.has(r.raw_row));
+    console.log("[GSM Area] insideLocations:", insideLocations.length,
+      "geoRecords in area:", rowSet.size, "allRecs:", allRecs.length, "filtered:", filtered.length,
+      "sample rowSet:", [...rowSet].slice(0, 5), "sample allRecs raw_row:", allRecs.slice(0, 5).map(r => r.raw_row));
+
+    const label = mode === "circle" ? "Koło" : "Prostokąt";
+    const filterText = `${label}: ${insideLocations.length} BTS — ${filtered.length} rek.`;
+    _setRecordsFilter(filterText, () => {
+      _clearAreaSelection();
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(filtered, false, filtered.length);
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    _addLog("info", `Zaznaczenie ${label.toLowerCase()}: ${insideLocations.length} lokalizacji BTS, ${filtered.length} rekordów`);
+  }
+
+  /** Add highlight rings around selected BTS markers */
+  function _highlightBtsLocations(locations) {
+    _clearAreaHighlights();
+    const group = L.layerGroup();
+    for (const loc of locations) {
+      L.circleMarker([loc.lat, loc.lon], {
+        radius: 18,
+        color: "#f59e0b",
+        weight: 2.5,
+        fillColor: "#f59e0b",
+        fillOpacity: 0.12,
+        dashArray: "4 3",
+      }).addTo(group);
+    }
+    St.areaHighlights = group;
+    if (St.map) group.addTo(St.map);
+  }
+
+  /** Remove area selection highlights */
+  function _clearAreaHighlights() {
+    if (St.areaHighlights && St.map) {
+      St.map.removeLayer(St.areaHighlights);
+      St.areaHighlights = null;
+    }
+  }
+
+  /** Remove persistent shape + highlights (full area selection cleanup) */
+  function _clearAreaSelection() {
+    _clearAreaHighlights();
+    if (St.areaShape && St.map) {
+      St.map.removeLayer(St.areaShape);
+      St.areaShape = null;
+    }
+    // Reset button active state (filter cleared)
+    const circleBtn = QS("#gsm_select_circle_btn");
+    const rectBtn = QS("#gsm_select_rect_btn");
+    if (circleBtn) circleBtn.classList.remove("btn-active");
+    if (rectBtn) rectBtn.classList.remove("btn-active");
+  }
+
   /* ── Records filter badge helpers ────────────────────── */
 
   /** Show an active filter in the Records header. */
@@ -5298,6 +6652,7 @@
 
   /** Reset the filter badge to "brak". */
   function _clearRecordsFilter() {
+    St._anomalyHighlight = null;  // clear +5 row coloring
     const badgeText = QS("#gsm_records_filter_text");
     const clearBtn = QS("#gsm_records_filter_clear");
     if (badgeText) {
@@ -5725,6 +7080,1369 @@
     }
   }
 
+  /* ── Standalone map (no billing data) ─────────────────── */
+
+  let _smapInstance = null;      // Leaflet map
+  let _smapBtsLayer = null;      // BTS layer group
+  let _smapBtsEnabled = false;
+  let _smapOverlays = {};        // { military: L.layerGroup, ... }
+  let _smapOverlayData = {};     // cached data
+  let _smapKmlLayers = {};
+  let _smapKmlData = {};
+  let _smapDebounce = null;
+
+  async function _openStandaloneMap() {
+    const overlay = QS("#gsm_standalone_map_overlay");
+    if (!overlay) return;
+    overlay.style.display = "";
+
+    await _loadLeaflet();
+    if (!window.L) { _addLog("error", "Nie udało się załadować Leaflet"); return; }
+
+    const container = QS("#gsm_smap_container");
+    if (!container) return;
+
+    // Destroy previous instance
+    if (_smapInstance) {
+      try { _smapInstance.remove(); } catch(e) {}
+      _smapInstance = null;
+      _smapBtsLayer = null;
+      _smapBtsEnabled = false;
+      _smapOverlays = {};
+      _smapKmlLayers = {};
+    }
+
+    const map = L.map(container, {
+      zoomControl: true,
+      attributionControl: true,
+      preferCanvas: true,
+    }).setView([52.0, 19.5], 7);  // Poland center
+
+    _smapInstance = map;
+
+    // Add tiles (reuse logic)
+    await _addTileLayer(map);
+
+    // Layer panel toggle
+    const lpHeader = QS("#gsm_smap_lp_header_toggle");
+    if (lpHeader) {
+      lpHeader.onclick = () => {
+        const panel = QS("#gsm_smap_layer_panel");
+        if (panel) panel.classList.toggle("collapsed");
+      };
+    }
+
+    // Layer radio buttons
+    const layerRadios = document.querySelectorAll('input[name="gsm_smap_layer"]');
+    layerRadios.forEach(r => {
+      r.onchange = () => {
+        // Update active class
+        document.querySelectorAll('#gsm_smap_layer_panel label[data-layer]').forEach(l => l.classList.remove("active"));
+        const parentLabel = r.closest("label");
+        if (parentLabel) parentLabel.classList.add("active");
+
+        if (r.value === "general") {
+          _smapBtsEnabled = false;
+          if (_smapBtsLayer) { map.removeLayer(_smapBtsLayer); _smapBtsLayer = null; }
+        } else if (r.value === "bts_coverage") {
+          _smapBtsEnabled = true;
+          _loadSmapBts();
+        }
+      };
+    });
+
+    // BTS loading on move/zoom
+    map.on("moveend", () => {
+      if (!_smapBtsEnabled) return;
+      clearTimeout(_smapDebounce);
+      _smapDebounce = setTimeout(() => _loadSmapBts(), 300);
+    });
+
+    // Overlay checkboxes
+    const ovMil = QS("#gsm_smap_overlay_military");
+    const ovAir = QS("#gsm_smap_overlay_airports");
+    const ovDip = QS("#gsm_smap_overlay_diplomacy");
+    if (ovMil) { ovMil.checked = false; ovMil.onchange = () => _toggleSmapOverlay("military", ovMil.checked); }
+    if (ovAir) { ovAir.checked = false; ovAir.onchange = () => _toggleSmapOverlay("airports", ovAir.checked); }
+    if (ovDip) { ovDip.checked = false; ovDip.onchange = () => _toggleSmapOverlay("diplomacy", ovDip.checked); }
+
+    // Load KML overlay checkboxes
+    _loadSmapKmlCheckboxes();
+
+    // Screenshot button
+    const ssBtn = QS("#gsm_smap_screenshot_btn");
+    if (ssBtn) {
+      ssBtn.onclick = () => _takeSmapScreenshot();
+    }
+
+    // Edit mode button
+    const editBtn = QS("#gsm_smap_edit_btn");
+    if (editBtn) {
+      editBtn.onclick = () => _toggleSmapEditMode();
+    }
+
+    // Add layer button
+    const addLayerBtn = QS("#gsm_smap_add_layer_btn");
+    if (addLayerBtn) {
+      addLayerBtn.onclick = () => _smapCreateLayer();
+    }
+
+    // Close button
+    const closeBtn = QS("#gsm_smap_close_btn");
+    if (closeBtn) {
+      closeBtn.onclick = () => _closeStandaloneMap();
+    }
+
+    // ESC key
+    overlay._escHandler = (e) => {
+      if (e.key === "Escape") {
+        // Close point dialog first if open
+        const ptDialog = QS("#gsm_point_dialog");
+        if (ptDialog && ptDialog.open) { ptDialog.close(); return; }
+        const lyDialog = QS("#gsm_layer_dialog");
+        if (lyDialog && lyDialog.open) { lyDialog.close(); return; }
+        _closeStandaloneMap();
+      }
+    };
+    document.addEventListener("keydown", overlay._escHandler);
+
+    // Load user layers
+    _smapLoadUserLayers();
+
+    // Force map to recalculate size after overlay is visible
+    setTimeout(() => map.invalidateSize(), 100);
+  }
+
+  function _closeStandaloneMap() {
+    const overlay = QS("#gsm_standalone_map_overlay");
+    if (overlay) {
+      overlay.style.display = "none";
+      if (overlay._escHandler) {
+        document.removeEventListener("keydown", overlay._escHandler);
+        overlay._escHandler = null;
+      }
+    }
+    // Reset edit mode
+    _smapEditMode = false;
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.style.display = "none";
+    const editBtn = QS("#gsm_smap_edit_btn");
+    if (editBtn) editBtn.style.background = "";
+    const container = QS("#gsm_smap_container");
+    if (container) container.style.cursor = "";
+
+    if (_smapInstance) {
+      try { _smapInstance.remove(); } catch(e) {}
+      _smapInstance = null;
+      _smapBtsLayer = null;
+      _smapBtsEnabled = false;
+      _smapOverlays = {};
+      _smapKmlLayers = {};
+    }
+    _smapUserLayers = {};
+    _smapActiveLayerId = null;
+    _smapEditingPoint = null;
+  }
+
+  /** Load nearby BTS for standalone map */
+  async function _loadSmapBts() {
+    if (!_smapInstance || !_smapBtsEnabled) return;
+    const map = _smapInstance;
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const params = _nearbyParams(zoom);
+
+    try {
+      const url = `/api/gsm/bts/nearby?lat=${center.lat.toFixed(6)}&lon=${center.lng.toFixed(6)}&radius_deg=${params.radius}&limit=${params.limit}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.status !== "ok" || !data.stations) return;
+
+      // Remove old layer
+      if (_smapBtsLayer) { map.removeLayer(_smapBtsLayer); }
+
+      const group = L.layerGroup();
+      const defaultRange = { "GSM": 5000, "UMTS": 3000, "LTE": 2000, "5G NR": 1000 };
+      const color = "#2563eb";
+
+      for (const s of data.stations) {
+        const range = s.range_m || defaultRange[s.radio] || 2000;
+        L.circleMarker([s.lat, s.lon], {
+          radius: 4,
+          fillColor: color,
+          color: "#fff",
+          weight: 1.2,
+          fillOpacity: 0.7,
+        }).bindPopup(
+          `<b>${s.city || "BTS"}${s.street ? ", " + s.street : ""}</b><br>` +
+          `${s.radio ? "Technologia: " + s.radio + "<br>" : ""}` +
+          `LAC: ${s.lac || "?"} / CID: ${s.cid || "?"}<br>` +
+          `Zasięg: ~${(range/1000).toFixed(1)} km`
+        ).addTo(group);
+      }
+      group.addTo(map);
+      _smapBtsLayer = group;
+    } catch (e) {
+      console.warn("[GSM] Standalone BTS load error:", e);
+    }
+  }
+
+  /** Toggle overlay on standalone map */
+  async function _toggleSmapOverlay(which, show) {
+    if (!_smapInstance) return;
+    const urlMap = {
+      military: "/static/data/poland_military.json",
+      airports: "/static/data/poland_airports.json",
+      diplomacy: "/static/data/poland_diplomacy.json",
+    };
+
+    if (!show) {
+      if (_smapOverlays[which]) { _smapInstance.removeLayer(_smapOverlays[which]); }
+      return;
+    }
+
+    // Load data if not cached
+    if (!_smapOverlayData[which]) {
+      try {
+        const resp = await fetch(urlMap[which]);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        _smapOverlayData[which] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować nakładki: ${err.message}`);
+        return;
+      }
+    }
+
+    // Build layer
+    if (!_smapOverlays[which]) {
+      const group = L.layerGroup();
+      const data = _smapOverlayData[which];
+
+      if (which === "military") {
+        for (const item of data) {
+          const icon = _OVERLAY_TYPE_ICONS[item.type] || "🪖";
+          const color = _OVERLAY_TYPE_COLORS[item.type] || "#b91c1c";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [24, 24], iconAnchor: [12, 12],
+          });
+          L.marker([item.lat, item.lon], { icon: divIcon }).bindTooltip(
+            `<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`,
+            { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
+          ).addTo(group);
+        }
+      } else if (which === "diplomacy") {
+        for (const item of data) {
+          const icon = _DIPLOMACY_TYPE_ICONS[item.type] || "🏛️";
+          const color = _DIPLOMACY_TYPE_COLORS[item.type] || "#059669";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [22, 22], iconAnchor: [11, 11],
+          });
+          L.marker([item.lat, item.lon], { icon: divIcon }).bindTooltip(
+            `<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`,
+            { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
+          ).addTo(group);
+        }
+      } else {
+        // Airports
+        for (const item of data) {
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">✈️</span>`,
+            iconSize: [24, 24], iconAnchor: [12, 12],
+          });
+          const label = item.iata ? `${item.iata}` : "";
+          L.marker([item.lat, item.lon], { icon: divIcon }).bindTooltip(
+            `<b style="color:#2563eb">${item.name}</b>` +
+            (label ? `<br><span class="small" style="color:#6b7280">${label} — ${item.city}</span>` : `<br><span class="small">${item.city}</span>`),
+            { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
+          ).addTo(group);
+        }
+      }
+      _smapOverlays[which] = group;
+    }
+
+    _smapOverlays[which].addTo(_smapInstance);
+  }
+
+  /** Load KML overlay checkboxes for standalone map */
+  async function _loadSmapKmlCheckboxes() {
+    const container = QS("#gsm_smap_kml_overlays");
+    if (!container) return;
+
+    try {
+      const resp = await fetch("/api/gsm/overlays");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const items = (data && data.overlays) ? data.overlays : [];
+      if (!items.length) { container.innerHTML = ""; return; }
+
+      container.innerHTML = items.map(ov => {
+        const safeName = String(ov.name || ov.id).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return `<label class="gsm-lp-item">
+          <input type="checkbox" data-smap-kml-id="${ov.id}"> <span style="color:#8b5cf6">&#9679;</span> ${safeName}
+        </label>`;
+      }).join("");
+
+      container.querySelectorAll("input[data-smap-kml-id]").forEach(cb => {
+        cb.onchange = () => _toggleSmapKml(cb.dataset.smapKmlId, cb.checked);
+      });
+    } catch (e) { /* silent */ }
+  }
+
+  /** Toggle KML overlay on standalone map */
+  async function _toggleSmapKml(overlayId, show) {
+    if (!_smapInstance) return;
+
+    if (!show) {
+      if (_smapKmlLayers[overlayId]) { _smapInstance.removeLayer(_smapKmlLayers[overlayId]); }
+      return;
+    }
+
+    if (!_smapKmlData[overlayId]) {
+      try {
+        const resp = await fetch(`/api/gsm/overlays/${overlayId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        _smapKmlData[overlayId] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować KML: ${err.message}`);
+        return;
+      }
+    }
+
+    if (!_smapKmlLayers[overlayId]) {
+      const group = L.layerGroup();
+      const data = _smapKmlData[overlayId];
+      const points = data.points || [];
+      const lines = data.lines || [];
+      const polygons = data.polygons || [];
+      const defaultColor = "#8b5cf6";
+
+      for (const pt of points) {
+        if (!pt.lat || !pt.lon) continue;
+        const c = pt.color || defaultColor;
+        L.circleMarker([pt.lat, pt.lon], {
+          radius: 5, fillColor: c, color: "#fff", weight: 1, fillOpacity: 0.8,
+        }).bindPopup(pt.name ? `<b>${pt.name}</b>${pt.desc ? "<br>" + pt.desc : ""}` : "").addTo(group);
+      }
+      for (const ln of lines) {
+        if (!ln.coords || !ln.coords.length) continue;
+        L.polyline(ln.coords.map(c => [c[1], c[0]]), {
+          color: ln.color || defaultColor, weight: 2, opacity: 0.8,
+        }).addTo(group);
+      }
+      for (const pg of polygons) {
+        if (!pg.coords || !pg.coords.length) continue;
+        L.polygon(pg.coords.map(c => [c[1], c[0]]), {
+          color: pg.color || defaultColor, fillColor: pg.color || defaultColor, weight: 1, fillOpacity: 0.2,
+        }).addTo(group);
+      }
+      _smapKmlLayers[overlayId] = group;
+    }
+
+    _smapKmlLayers[overlayId].addTo(_smapInstance);
+  }
+
+  /** Screenshot for standalone map (reuses existing helpers) */
+  async function _takeSmapScreenshot() {
+    if (!_smapInstance) return;
+    const btn = QS("#gsm_smap_screenshot_btn");
+    if (btn) btn.disabled = true;
+
+    try {
+      const map = _smapInstance;
+      const scale = 2;
+      const size = map.getSize();
+      const w = size.x * scale;
+      const h = size.y * scale;
+
+      await _waitForTilesToLoad(map, 3000);
+
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext("2d");
+
+      ctx.fillStyle = "#e8e8e8";
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw tile images (use getBoundingClientRect for correct positioning)
+      const containerRect = map.getContainer().getBoundingClientRect();
+      const tilePane = map.getPane("tilePane");
+      if (tilePane) {
+        const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
+        const tilePromises = [];
+        for (const img of tileImgs) {
+          if (!img.src) continue;
+          const rect = img.getBoundingClientRect();
+          const x = (rect.left - containerRect.left) * scale;
+          const y = (rect.top - containerRect.top) * scale;
+          const tw = rect.width * scale;
+          const th = rect.height * scale;
+          tilePromises.push(
+            _fetchImageBitmap(img.src)
+              .then(bmp => ({ bmp, x, y, tw, th }))
+              .catch(() => null)
+          );
+        }
+        const tiles = await Promise.all(tilePromises);
+        for (const tile of tiles) {
+          if (!tile) continue;
+          ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
+          tile.bmp.close();
+        }
+      }
+
+      // Draw MapLibre GL canvas (for PBF vector tiles)
+      const smapContainer = QS("#gsm_smap_container");
+      const maplibreCanvas = smapContainer ? smapContainer.querySelector(".maplibregl-canvas, .mapboxgl-canvas") : null;
+      if (maplibreCanvas) {
+        try {
+          const mlRect = maplibreCanvas.getBoundingClientRect();
+          ctx.drawImage(maplibreCanvas,
+            (mlRect.left - containerRect.left) * scale,
+            (mlRect.top - containerRect.top) * scale,
+            mlRect.width * scale, mlRect.height * scale);
+        } catch (e) {
+          console.warn("[GSM] Standalone MapLibre canvas capture failed:", e);
+        }
+      }
+
+      // Draw overlay pane canvases (circleMarkers, polylines)
+      const overlayPane = map.getPane("overlayPane");
+      if (overlayPane) {
+        const canvases = overlayPane.querySelectorAll("canvas");
+        for (const c of canvases) {
+          try {
+            const cRect = c.getBoundingClientRect();
+            ctx.drawImage(c,
+              (cRect.left - containerRect.left) * scale,
+              (cRect.top - containerRect.top) * scale,
+              cRect.width * scale, cRect.height * scale);
+          } catch (_) {}
+        }
+      }
+
+      // Draw marker panes
+      _drawPaneMarkers(ctx, map, "shadowPane", scale);
+      _drawPaneMarkers(ctx, map, "markerPane", scale);
+
+      // Watermark
+      const activeRadio = QS('input[name="gsm_smap_layer"]:checked');
+      const activeItem = activeRadio ? activeRadio.closest(".gsm-lp-item") : null;
+      const layerLabel = activeItem ? activeItem.textContent.trim() : "Mapa";
+      const extraParts = [layerLabel, "© OpenStreetMap contributors"];
+      const final = _drawWatermark(out, extraParts);
+
+      // Download
+      const now = new Date();
+      final.toBlob((blob) => {
+        if (!blob) return;
+        const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `mapa_${ts}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zrzut mapy: ${filename}`);
+      }, "image/png");
+    } catch (err) {
+      console.error("[GSM] Standalone map screenshot error:", err);
+      _addLog("error", "Nie udało się zrobić zrzutu mapy: " + err.message);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /* ── Map edit mode ─────────────────────────────────────── */
+
+  let _smapEditMode = false;
+  let _smapUserLayers = {};       // { overlayId: { data, leafletGroup, markers[] } }
+  let _smapActiveLayerId = null;  // currently selected user layer for editing
+  let _smapEditingPoint = null;   // { layerId, pointIndex } — point being edited
+
+  /* ── Polygon drawing state ────────────────────────────── */
+  let _smapDrawingPolygon = false;
+  let _smapPolygonPoints = [];       // [{lat, lng}]
+  let _smapPolygonMarkers = [];      // L.circleMarker for each vertex
+  let _smapPolygonPolyline = null;   // L.polyline showing edges
+  let _smapPolygonGuideLine = null;  // L.polyline from last point to cursor
+  let _smapContextMenu = null;       // DOM element for context menu
+
+  function _toggleSmapEditMode() {
+    _smapEditMode = !_smapEditMode;
+    const btn = QS("#gsm_smap_edit_btn");
+    const indicator = QS("#gsm_smap_edit_indicator");
+    const container = QS("#gsm_smap_container");
+
+    if (btn) btn.style.background = _smapEditMode ? "var(--accent,#4a6cf7)" : "";
+    if (btn) btn.style.borderRadius = _smapEditMode ? "8px" : "";
+    if (indicator) indicator.style.display = _smapEditMode ? "" : "none";
+    if (container) container.style.cursor = _smapEditMode ? "crosshair" : "";
+
+    if (_smapEditMode && _smapInstance) {
+      _smapInstance.on("click", _smapOnMapClick);
+    } else if (_smapInstance) {
+      _smapInstance.off("click", _smapOnMapClick);
+      _smapHideContextMenu();
+      if (_smapDrawingPolygon) _smapCancelPolygonDraw();
+    }
+  }
+
+  function _smapOnMapClick(e) {
+    if (!_smapEditMode || !_smapInstance) return;
+    if (!_smapActiveLayerId) {
+      _addLog("warn", "Wybierz lub utwórz warstwę użytkownika przed dodaniem punktu");
+      return;
+    }
+
+    // If currently drawing a polygon, add vertex
+    if (_smapDrawingPolygon) {
+      _smapPolygonAddVertex(e.latlng);
+      return;
+    }
+
+    // Show context menu with options
+    _smapShowContextMenu(e);
+  }
+
+  /* ── Context menu for edit mode ─────────────────────────── */
+
+  function _smapShowContextMenu(e) {
+    _smapHideContextMenu();
+
+    const containerPoint = e.containerPoint;
+    const latlng = e.latlng;
+
+    const menu = document.createElement("div");
+    menu.className = "gsm-edit-ctx-menu";
+    menu.style.cssText = `
+      position:absolute;left:${containerPoint.x}px;top:${containerPoint.y}px;z-index:9100;
+      background:var(--card-bg,#fff);border:1px solid var(--border,#ddd);border-radius:8px;
+      box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px 0;min-width:160px;
+      font-size:13px;cursor:default;
+    `;
+
+    const items = [
+      { label: "Dodaj punkt", icon: "📍", action: () => {
+        _smapHideContextMenu();
+        _openPointDialog({
+          isNew: true, layerId: _smapActiveLayerId,
+          lat: latlng.lat, lon: latlng.lng,
+          name: "", desc: "", color: "#e63946", icon: "",
+        });
+      }},
+      { label: "Zrób obrys", icon: "⬡", action: () => {
+        _smapHideContextMenu();
+        _smapStartPolygonDraw(latlng);
+      }},
+    ];
+
+    for (const item of items) {
+      const el = document.createElement("div");
+      el.style.cssText = "padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .1s";
+      el.innerHTML = `<span style="font-size:15px">${item.icon}</span><span>${item.label}</span>`;
+      el.onmouseenter = () => { el.style.background = "var(--bg-hover,rgba(0,0,0,.05))"; };
+      el.onmouseleave = () => { el.style.background = ""; };
+      el.onclick = (ev) => { ev.stopPropagation(); item.action(); };
+      menu.appendChild(el);
+    }
+
+    const container = QS("#gsm_smap_container");
+    if (container) {
+      container.appendChild(menu);
+      _smapContextMenu = menu;
+    }
+
+    // Close on next click outside
+    setTimeout(() => {
+      const closeHandler = (ev) => {
+        if (menu.contains(ev.target)) return;
+        _smapHideContextMenu();
+        document.removeEventListener("mousedown", closeHandler, true);
+      };
+      document.addEventListener("mousedown", closeHandler, true);
+    }, 10);
+  }
+
+  function _smapHideContextMenu() {
+    if (_smapContextMenu) {
+      _smapContextMenu.remove();
+      _smapContextMenu = null;
+    }
+  }
+
+  /* ── Polygon drawing ─────────────────────────────────────── */
+
+  function _smapStartPolygonDraw(startLatLng) {
+    _smapDrawingPolygon = true;
+    _smapPolygonPoints = [];
+    _smapPolygonMarkers = [];
+    _smapPolygonPolyline = null;
+    _smapPolygonGuideLine = null;
+
+    // Show indicator
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.textContent = "Rysowanie obrysu — kliknij aby dodać wierzchołki, kliknij pierwszy punkt aby zamknąć";
+
+    // Change cursor
+    const container = QS("#gsm_smap_container");
+    if (container) container.style.cursor = "crosshair";
+
+    // Add guide line that follows mouse
+    _smapPolygonGuideLine = L.polyline([], {
+      color: "#4a6cf7", weight: 2, dashArray: "6,4", opacity: 0.7,
+    }).addTo(_smapInstance);
+
+    // Track mouse movement for guide line
+    _smapInstance.on("mousemove", _smapPolygonMouseMove);
+
+    // Allow ESC to cancel
+    document.addEventListener("keydown", _smapPolygonEscHandler);
+
+    // Add first vertex
+    _smapPolygonAddVertex(startLatLng);
+  }
+
+  function _smapPolygonMouseMove(e) {
+    if (!_smapDrawingPolygon || !_smapPolygonGuideLine) return;
+    if (_smapPolygonPoints.length === 0) return;
+    const lastPt = _smapPolygonPoints[_smapPolygonPoints.length - 1];
+    _smapPolygonGuideLine.setLatLngs([[lastPt.lat, lastPt.lng], [e.latlng.lat, e.latlng.lng]]);
+  }
+
+  function _smapPolygonEscHandler(e) {
+    if (e.key === "Escape") {
+      _smapCancelPolygonDraw();
+    }
+  }
+
+  function _smapPolygonAddVertex(latlng) {
+    // Check if clicking near the first point to close the polygon
+    if (_smapPolygonPoints.length >= 3) {
+      const firstPt = _smapPolygonPoints[0];
+      const firstPixel = _smapInstance.latLngToContainerPoint(L.latLng(firstPt.lat, firstPt.lng));
+      const clickPixel = _smapInstance.latLngToContainerPoint(latlng);
+      const dist = Math.sqrt(Math.pow(firstPixel.x - clickPixel.x, 2) + Math.pow(firstPixel.y - clickPixel.y, 2));
+      if (dist < 15) {
+        _smapFinishPolygonDraw();
+        return;
+      }
+    }
+
+    _smapPolygonPoints.push({ lat: latlng.lat, lng: latlng.lng });
+
+    // Draw vertex marker
+    const isFirst = _smapPolygonPoints.length === 1;
+    const marker = L.circleMarker([latlng.lat, latlng.lng], {
+      radius: isFirst ? 8 : 5,
+      fillColor: isFirst ? "#22c55e" : "#4a6cf7",
+      color: "#fff",
+      weight: 2,
+      fillOpacity: 0.9,
+      interactive: true,
+    }).addTo(_smapInstance);
+
+    if (isFirst) {
+      marker.bindTooltip("Kliknij tutaj aby zamknąć obrys", { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" });
+      // Click on first marker to close
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (_smapPolygonPoints.length >= 3) {
+          _smapFinishPolygonDraw();
+        }
+      });
+    }
+
+    _smapPolygonMarkers.push(marker);
+
+    // Update polyline showing edges
+    const latLngs = _smapPolygonPoints.map(p => [p.lat, p.lng]);
+    if (_smapPolygonPolyline) {
+      _smapPolygonPolyline.setLatLngs(latLngs);
+    } else {
+      _smapPolygonPolyline = L.polyline(latLngs, {
+        color: "#4a6cf7", weight: 2, opacity: 0.8,
+      }).addTo(_smapInstance);
+    }
+  }
+
+  function _smapFinishPolygonDraw() {
+    // Clean up drawing artifacts
+    _smapInstance.off("mousemove", _smapPolygonMouseMove);
+    document.removeEventListener("keydown", _smapPolygonEscHandler);
+    if (_smapPolygonGuideLine) { _smapInstance.removeLayer(_smapPolygonGuideLine); _smapPolygonGuideLine = null; }
+    if (_smapPolygonPolyline) { _smapInstance.removeLayer(_smapPolygonPolyline); _smapPolygonPolyline = null; }
+    for (const m of _smapPolygonMarkers) { _smapInstance.removeLayer(m); }
+    _smapPolygonMarkers = [];
+
+    // Reset indicator
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.textContent = "Tryb edycji";
+
+    // Convert points to polygon coords
+    const coords = _smapPolygonPoints.map(p => [p.lat, p.lng]);
+    _smapDrawingPolygon = false;
+
+    // Open polygon dialog
+    _openPolygonDialog({
+      isNew: true,
+      layerId: _smapActiveLayerId,
+      coords: coords,
+      name: "",
+      desc: "",
+      fillColor: "#4a6cf7",
+    });
+  }
+
+  function _smapCancelPolygonDraw() {
+    _smapInstance.off("mousemove", _smapPolygonMouseMove);
+    document.removeEventListener("keydown", _smapPolygonEscHandler);
+    if (_smapPolygonGuideLine) { _smapInstance.removeLayer(_smapPolygonGuideLine); _smapPolygonGuideLine = null; }
+    if (_smapPolygonPolyline) { _smapInstance.removeLayer(_smapPolygonPolyline); _smapPolygonPolyline = null; }
+    for (const m of _smapPolygonMarkers) { _smapInstance.removeLayer(m); }
+    _smapPolygonMarkers = [];
+    _smapPolygonPoints = [];
+    _smapDrawingPolygon = false;
+
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.textContent = "Tryb edycji";
+    _addLog("info", "Anulowano rysowanie obrysu");
+  }
+
+  /* ── Polygon dialog ──────────────────────────────────────── */
+
+  function _openPolygonDialog(opts) {
+    const dialog = QS("#gsm_polygon_dialog");
+    if (!dialog) return;
+
+    const title = QS("#gsm_polygon_dialog_title");
+    const nameEl = QS("#gsm_polygon_name");
+    const descEl = QS("#gsm_polygon_desc");
+    const colorEl = QS("#gsm_polygon_fill_color");
+    const delBtn = QS("#gsm_polygon_delete_btn");
+    const vertexInfo = QS("#gsm_polygon_vertex_count");
+
+    if (title) title.textContent = opts.isNew ? "Nowy obrys" : "Edycja obrysu";
+    if (nameEl) nameEl.value = opts.name || "";
+    if (descEl) descEl.value = opts.desc || "";
+    if (colorEl) colorEl.value = opts.fillColor || "#4a6cf7";
+    if (delBtn) delBtn.style.display = opts.isNew ? "none" : "";
+    if (vertexInfo) vertexInfo.textContent = `${opts.coords.length} wierzchołków`;
+
+    const form = dialog.querySelector("form");
+    const submitHandler = (e) => {
+      e.preventDefault();
+      form.removeEventListener("submit", submitHandler);
+      const polygon = {
+        name: nameEl ? nameEl.value.trim() : "",
+        desc: descEl ? descEl.value.trim() : "",
+        coords: opts.coords,
+        fillColor: colorEl ? colorEl.value : "#4a6cf7",
+      };
+      if (opts.isNew) {
+        _smapAddPolygon(opts.layerId, polygon);
+      } else {
+        _smapUpdatePolygon(opts.layerId, opts.polygonIndex, polygon);
+      }
+      dialog.close();
+    };
+    form.addEventListener("submit", submitHandler);
+
+    const cancelBtn = QS("#gsm_polygon_cancel_btn");
+    const cancelHandler = () => {
+      cancelBtn.removeEventListener("click", cancelHandler);
+      form.removeEventListener("submit", submitHandler);
+      dialog.close();
+    };
+    if (cancelBtn) cancelBtn.addEventListener("click", cancelHandler);
+
+    if (delBtn && !opts.isNew) {
+      const delHandler = () => {
+        delBtn.removeEventListener("click", delHandler);
+        form.removeEventListener("submit", submitHandler);
+        _smapDeletePolygon(opts.layerId, opts.polygonIndex);
+        dialog.close();
+      };
+      delBtn.addEventListener("click", delHandler);
+    }
+
+    dialog.showModal();
+  }
+
+  function _smapAddPolygon(layerId, polygon) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    if (!layer.data.polygons) layer.data.polygons = [];
+    layer.data.polygons.push(polygon);
+    _smapRebuildLayerMarkers(layerId);
+    _smapSaveLayer(layerId);
+  }
+
+  function _smapUpdatePolygon(layerId, idx, polygon) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer || !layer.data.polygons) return;
+    layer.data.polygons[idx] = polygon;
+    _smapRebuildLayerMarkers(layerId);
+    _smapSaveLayer(layerId);
+  }
+
+  function _smapDeletePolygon(layerId, idx) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer || !layer.data.polygons) return;
+    layer.data.polygons.splice(idx, 1);
+    _smapRebuildLayerMarkers(layerId);
+    _smapSaveLayer(layerId);
+  }
+
+  // --- Icon preview helper: handles both path-based and raw SVG icons ---
+  function _smapUpdateIconPreview(iconValue) {
+    const preview = QS("#gsm_point_icon_preview");
+    if (!preview) return;
+    if (!iconValue) {
+      preview.innerHTML = '<span class="muted small">—</span>';
+      return;
+    }
+    if (iconValue.startsWith("/static/")) {
+      preview.innerHTML = `<img src="${iconValue}" style="width:32px;height:32px;object-fit:contain">`;
+    } else {
+      preview.innerHTML = iconValue;
+      const svg = preview.querySelector("svg");
+      if (svg) { svg.style.width = "28px"; svg.style.height = "28px"; }
+    }
+  }
+
+  // --- Category label translations ---
+  const _iconCategoryLabels = {
+    embassy: "Ambasada",
+    fire: "Straż pożarna",
+    intelligence: "Wywiad",
+    justice: "Wymiar sprawiedliwości",
+    medical: "Medyczny",
+    military: "Wojskowy",
+    national_security: "Bezpieczeństwo",
+    police: "Policja",
+  };
+
+  // --- Icon picker: fetch categories from API and render grid ---
+  let _mapIconsCache = null;
+  async function _smapLoadIconPicker() {
+    const body = QS("#gsm_point_icon_picker_body");
+    if (!body) return;
+    if (_mapIconsCache) {
+      _smapRenderIconPicker(_mapIconsCache);
+      return;
+    }
+    body.innerHTML = '<span class="muted small">Ładowanie ikon…</span>';
+    try {
+      const resp = await fetch("/api/gsm/map-icons");
+      const data = await resp.json();
+      if (data.status === "ok" && data.categories) {
+        _mapIconsCache = data.categories;
+        _smapRenderIconPicker(data.categories);
+      } else {
+        body.innerHTML = '<span class="muted small">Brak ikon</span>';
+      }
+    } catch (e) {
+      body.innerHTML = '<span class="muted small">Błąd ładowania ikon</span>';
+    }
+  }
+
+  function _smapRenderIconPicker(categories) {
+    const body = QS("#gsm_point_icon_picker_body");
+    if (!body) return;
+    body.innerHTML = "";
+    for (const cat of categories) {
+      const label = _iconCategoryLabels[cat.category] || cat.category;
+      const header = document.createElement("div");
+      header.style.cssText = "font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 3px;color:var(--text-secondary,#666)";
+      header.textContent = label;
+      body.appendChild(header);
+
+      const grid = document.createElement("div");
+      grid.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px";
+      for (const ic of cat.icons) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.title = ic.name.replace(/_/g, " ");
+        btn.style.cssText = "width:38px;height:38px;border:1px solid var(--border,#ddd);border-radius:6px;background:var(--bg-card,#fff);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:3px;transition:border-color .15s";
+        btn.innerHTML = `<img src="${ic.path}" style="width:28px;height:28px;object-fit:contain">`;
+        btn.onmouseenter = () => { btn.style.borderColor = "var(--primary,#4361ee)"; };
+        btn.onmouseleave = () => { btn.style.borderColor = "var(--border,#ddd)"; };
+        btn.onclick = () => {
+          const iconData = QS("#gsm_point_icon_data");
+          const iconClearBtn = QS("#gsm_point_icon_clear_btn");
+          const picker = QS("#gsm_point_icon_picker");
+          if (iconData) iconData.value = ic.path;
+          _smapUpdateIconPreview(ic.path);
+          if (iconClearBtn) iconClearBtn.style.display = "";
+          if (picker) picker.style.display = "none";
+        };
+        grid.appendChild(btn);
+      }
+      body.appendChild(grid);
+    }
+  }
+
+  function _openPointDialog(opts) {
+    const dialog = QS("#gsm_point_dialog");
+    if (!dialog) return;
+
+    const title = QS("#gsm_point_dialog_title");
+    const nameEl = QS("#gsm_point_name");
+    const descEl = QS("#gsm_point_desc");
+    const latEl = QS("#gsm_point_lat");
+    const lonEl = QS("#gsm_point_lon");
+    const colorEl = QS("#gsm_point_color");
+    const layerSel = QS("#gsm_point_layer_select");
+    const delBtn = QS("#gsm_point_delete_btn");
+
+    const iconPreview = QS("#gsm_point_icon_preview");
+    const iconData = QS("#gsm_point_icon_data");
+    const iconFile = QS("#gsm_point_icon_file");
+    const iconUploadBtn = QS("#gsm_point_icon_upload_btn");
+    const iconClearBtn = QS("#gsm_point_icon_clear_btn");
+    const iconPickBtn = QS("#gsm_point_icon_pick_btn");
+    const iconPicker = QS("#gsm_point_icon_picker");
+    const iconPickerBody = QS("#gsm_point_icon_picker_body");
+
+    if (title) title.textContent = opts.isNew ? "Nowy punkt" : "Edycja punktu";
+    if (nameEl) nameEl.value = opts.name || "";
+    if (descEl) descEl.value = opts.desc || "";
+    if (latEl) latEl.value = opts.lat.toFixed(6);
+    if (lonEl) lonEl.value = opts.lon.toFixed(6);
+    if (colorEl) colorEl.value = opts.color || "#e63946";
+    if (delBtn) delBtn.style.display = opts.isNew ? "none" : "";
+
+    // Icon state — value is either a path (/static/icons/maps/...) or raw SVG
+    if (iconData) iconData.value = opts.icon || "";
+    _smapUpdateIconPreview(opts.icon || "");
+    if (iconClearBtn) iconClearBtn.style.display = opts.icon ? "" : "none";
+    if (iconPicker) iconPicker.style.display = "none";
+
+    // Icon picker toggle
+    if (iconPickBtn) {
+      iconPickBtn.onclick = async () => {
+        if (!iconPicker) return;
+        const wasOpen = iconPicker.style.display !== "none";
+        iconPicker.style.display = wasOpen ? "none" : "";
+        if (!wasOpen) await _smapLoadIconPicker();
+      };
+    }
+
+    // SVG file upload handler
+    if (iconUploadBtn && iconFile) {
+      iconUploadBtn.onclick = () => iconFile.click();
+      iconFile.value = "";
+      iconFile.onchange = () => {
+        const file = iconFile.files && iconFile.files[0];
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith(".svg") && file.type !== "image/svg+xml") {
+          _addLog("warn", "Tylko pliki SVG są obsługiwane");
+          return;
+        }
+        if (file.size > 50000) {
+          _addLog("warn", "Plik SVG zbyt duży (max 50 KB)");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          let svgText = ev.target.result;
+          svgText = svgText.replace(/<script[\s\S]*?<\/script>/gi, "");
+          if (iconData) iconData.value = svgText;
+          _smapUpdateIconPreview(svgText);
+          if (iconClearBtn) iconClearBtn.style.display = "";
+          if (iconPicker) iconPicker.style.display = "none";
+        };
+        reader.readAsText(file);
+      };
+    }
+    if (iconClearBtn) {
+      iconClearBtn.onclick = () => {
+        if (iconData) iconData.value = "";
+        _smapUpdateIconPreview("");
+        iconClearBtn.style.display = "none";
+        if (iconPicker) iconPicker.style.display = "none";
+      };
+    }
+
+    // Populate layer dropdown
+    if (layerSel) {
+      layerSel.innerHTML = "";
+      for (const [id, layer] of Object.entries(_smapUserLayers)) {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = layer.data.name;
+        if (id === opts.layerId) opt.selected = true;
+        layerSel.appendChild(opt);
+      }
+    }
+
+    _smapEditingPoint = opts.isNew ? null : { layerId: opts.layerId, pointIndex: opts.pointIndex };
+
+    // Form submit handler
+    const form = dialog.querySelector("form");
+    const submitHandler = (e) => {
+      e.preventDefault();
+      form.removeEventListener("submit", submitHandler);
+      const point = {
+        name: nameEl ? nameEl.value.trim() : "",
+        desc: descEl ? descEl.value.trim() : "",
+        lat: parseFloat(latEl ? latEl.value : opts.lat),
+        lon: parseFloat(lonEl ? lonEl.value : opts.lon),
+        color: colorEl ? colorEl.value : "#e63946",
+        icon: iconData ? iconData.value.trim() : "",
+      };
+      const targetLayer = layerSel ? layerSel.value : opts.layerId;
+
+      if (opts.isNew) {
+        _smapAddPoint(targetLayer, point);
+      } else {
+        _smapUpdatePoint(opts.layerId, opts.pointIndex, point, targetLayer);
+      }
+      dialog.close();
+    };
+    form.addEventListener("submit", submitHandler);
+
+    // Cancel
+    const cancelBtn = QS("#gsm_point_cancel_btn");
+    const cancelHandler = () => {
+      cancelBtn.removeEventListener("click", cancelHandler);
+      form.removeEventListener("submit", submitHandler);
+      dialog.close();
+    };
+    if (cancelBtn) cancelBtn.addEventListener("click", cancelHandler);
+
+    // Delete
+    if (delBtn && !opts.isNew) {
+      const delHandler = () => {
+        delBtn.removeEventListener("click", delHandler);
+        form.removeEventListener("submit", submitHandler);
+        _smapDeletePoint(opts.layerId, opts.pointIndex);
+        dialog.close();
+      };
+      delBtn.addEventListener("click", delHandler);
+    }
+
+    dialog.showModal();
+  }
+
+  function _smapAddPoint(layerId, point) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    layer.data.points.push(point);
+    _smapRebuildLayerMarkers(layerId);
+    _smapSaveLayer(layerId);
+  }
+
+  function _smapUpdatePoint(layerId, idx, point, targetLayerId) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+
+    if (targetLayerId !== layerId) {
+      // Move to different layer
+      layer.data.points.splice(idx, 1);
+      _smapRebuildLayerMarkers(layerId);
+      _smapSaveLayer(layerId);
+      _smapAddPoint(targetLayerId, point);
+    } else {
+      layer.data.points[idx] = point;
+      _smapRebuildLayerMarkers(layerId);
+      _smapSaveLayer(layerId);
+    }
+  }
+
+  function _smapDeletePoint(layerId, idx) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    layer.data.points.splice(idx, 1);
+    _smapRebuildLayerMarkers(layerId);
+    _smapSaveLayer(layerId);
+  }
+
+  function _smapRebuildLayerMarkers(layerId) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer || !_smapInstance) return;
+
+    // Remove old group
+    if (layer.leafletGroup) {
+      _smapInstance.removeLayer(layer.leafletGroup);
+    }
+
+    const group = L.layerGroup();
+    layer.markers = [];
+
+    layer.data.points.forEach((pt, idx) => {
+      const color = pt.color || "#e63946";
+      let marker;
+
+      if (pt.icon) {
+        // Icon marker — either a static path or raw SVG, shown on white circle with border
+        let innerHtml;
+        if (pt.icon.startsWith("/static/")) {
+          innerHtml = `<img src="${pt.icon}" style="width:22px;height:22px;object-fit:contain">`;
+        } else {
+          innerHtml = pt.icon.replace(/<svg/,
+            '<svg style="width:22px;height:22px"');
+        }
+        const iconHtml = `<div style="width:32px;height:32px;background:#fff;border:2px solid ${pt.color || '#555'};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.3)">${innerHtml}</div>`;
+        const divIcon = L.divIcon({
+          className: "gsm-user-point-icon",
+          html: iconHtml,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        });
+        marker = L.marker([pt.lat, pt.lon], { icon: divIcon, interactive: true });
+      } else {
+        // Default circle marker
+        marker = L.circleMarker([pt.lat, pt.lon], {
+          radius: 7,
+          fillColor: color,
+          color: "#fff",
+          weight: 2,
+          fillOpacity: 0.9,
+        });
+      }
+
+      marker.bindTooltip(
+        `<b style="color:${color}">${pt.name || "Punkt"}</b>${pt.desc ? "<br><span class='small'>" + pt.desc + "</span>" : ""}`,
+        { direction: "top", offset: [0, pt.icon ? -16 : -8], className: "gsm-overlay-tooltip" }
+      );
+
+      marker.on("click", (e) => {
+        if (!_smapEditMode) return;
+        L.DomEvent.stopPropagation(e);
+        _openPointDialog({
+          isNew: false,
+          layerId: layerId,
+          pointIndex: idx,
+          lat: pt.lat,
+          lon: pt.lon,
+          name: pt.name,
+          desc: pt.desc,
+          color: pt.color || "#e63946",
+          icon: pt.icon || "",
+        });
+      });
+
+      marker.addTo(group);
+      layer.markers.push(marker);
+    });
+
+    // Render polygons
+    const polygons = layer.data.polygons || [];
+    polygons.forEach((pg, idx) => {
+      const fillColor = pg.fillColor || "#4a6cf7";
+      const poly = L.polygon(pg.coords, {
+        color: fillColor,
+        fillColor: fillColor,
+        weight: 2,
+        fillOpacity: 0.3,
+        interactive: true,
+      });
+
+      poly.bindTooltip(
+        `<b style="color:${fillColor}">${pg.name || "Obrys"}</b>${pg.desc ? "<br><span class='small'>" + pg.desc + "</span>" : ""}`,
+        { direction: "center", className: "gsm-overlay-tooltip" }
+      );
+
+      poly.on("click", (e) => {
+        if (!_smapEditMode) return;
+        L.DomEvent.stopPropagation(e);
+        _openPolygonDialog({
+          isNew: false,
+          layerId: layerId,
+          polygonIndex: idx,
+          coords: pg.coords,
+          name: pg.name || "",
+          desc: pg.desc || "",
+          fillColor: fillColor,
+        });
+      });
+
+      poly.addTo(group);
+    });
+
+    group.addTo(_smapInstance);
+    layer.leafletGroup = group;
+
+    // Update layer panel count
+    _smapRefreshUserLayersList();
+  }
+
+  async function _smapSaveLayer(layerId) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    try {
+      await fetch(`/api/gsm/overlays/${layerId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: layer.data.name,
+          points: layer.data.points,
+          polygons: layer.data.polygons || [],
+        }),
+      });
+    } catch (e) {
+      _addLog("error", "Nie udało się zapisać warstwy: " + e.message);
+    }
+  }
+
+  /** Load user layers list and render checkboxes */
+  async function _smapLoadUserLayers() {
+    try {
+      const resp = await fetch("/api/gsm/overlays");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const items = (data && data.overlays) ? data.overlays : [];
+
+      // Load full data for user layers (or all KML layers that can be shown)
+      for (const ov of items) {
+        if (_smapUserLayers[ov.id]) continue; // already loaded
+        try {
+          const r = await fetch(`/api/gsm/overlays/${ov.id}`);
+          const d = await r.json();
+          if (d.status === "ok") {
+            _smapUserLayers[ov.id] = {
+              data: { name: d.name, points: d.points || [], polygons: d.polygons || [], user_layer: d.user_layer || false },
+              leafletGroup: null,
+              markers: [],
+            };
+          }
+        } catch (_) {}
+      }
+      _smapRefreshUserLayersList();
+    } catch (e) {
+      console.warn("[GSM] Failed to load user layers:", e);
+    }
+  }
+
+  function _smapRefreshUserLayersList() {
+    const container = QS("#gsm_smap_user_layers");
+    if (!container) return;
+
+    const entries = Object.entries(_smapUserLayers);
+    if (!entries.length) {
+      container.innerHTML = '<span class="small muted" style="padding:4px 0;display:block">Brak warstw. Kliknij "+ Nowa".</span>';
+      return;
+    }
+
+    container.innerHTML = entries.map(([id, layer]) => {
+      const isActive = _smapActiveLayerId === id;
+      const ptCount = layer.data.points.length;
+      const pgCount = (layer.data.polygons || []).length;
+      const countLabel = pgCount > 0 ? `${ptCount}p, ${pgCount}o` : `${ptCount}`;
+      const isVisible = layer.leafletGroup && _smapInstance && _smapInstance.hasLayer(layer.leafletGroup);
+      const safeName = String(layer.data.name).replace(/</g, "&lt;");
+      return `<div class="gsm-lp-item" style="display:flex;align-items:center;gap:4px;padding:2px 0${isActive ? ";background:rgba(74,108,247,.08);border-radius:6px" : ""}">
+        <input type="checkbox" data-user-layer-id="${id}"${isVisible ? " checked" : ""} style="margin:0">
+        <span class="small" style="flex:1;cursor:pointer;font-weight:${isActive ? 600 : 400}" data-select-layer="${id}">${safeName} <span class="muted">(${countLabel})</span></span>
+        <button class="btn mini" data-export-layer="${id}" title="Eksport KML" style="font-size:10px;padding:0 4px">KML</button>
+        <button class="btn mini danger" data-delete-layer="${id}" title="Usuń warstwę" style="font-size:10px;padding:0 4px">&times;</button>
+      </div>`;
+    }).join("");
+
+    // Bind events
+    container.querySelectorAll("input[data-user-layer-id]").forEach(cb => {
+      cb.onchange = () => {
+        const id = cb.dataset.userLayerId;
+        if (cb.checked) {
+          _smapRebuildLayerMarkers(id);
+        } else {
+          const layer = _smapUserLayers[id];
+          if (layer && layer.leafletGroup && _smapInstance) {
+            _smapInstance.removeLayer(layer.leafletGroup);
+          }
+        }
+      };
+    });
+
+    container.querySelectorAll("[data-select-layer]").forEach(el => {
+      el.onclick = () => {
+        _smapActiveLayerId = el.dataset.selectLayer;
+        _smapRefreshUserLayersList();
+      };
+    });
+
+    container.querySelectorAll("[data-export-layer]").forEach(el => {
+      el.onclick = () => {
+        const id = el.dataset.exportLayer;
+        window.open(`/api/gsm/overlays/${id}/export/kml`, "_blank");
+      };
+    });
+
+    container.querySelectorAll("[data-delete-layer]").forEach(el => {
+      el.onclick = async () => {
+        const id = el.dataset.deleteLayer;
+        if (!confirm("Usunąć warstwę?")) return;
+        const layer = _smapUserLayers[id];
+        if (layer && layer.leafletGroup && _smapInstance) {
+          _smapInstance.removeLayer(layer.leafletGroup);
+        }
+        delete _smapUserLayers[id];
+        if (_smapActiveLayerId === id) _smapActiveLayerId = null;
+        try { await fetch(`/api/gsm/overlays/${id}`, { method: "DELETE" }); } catch (_) {}
+        _smapRefreshUserLayersList();
+      };
+    });
+  }
+
+  async function _smapCreateLayer() {
+    const dialog = QS("#gsm_layer_dialog");
+    if (!dialog) return;
+
+    const nameInput = QS("#gsm_layer_name");
+    if (nameInput) nameInput.value = "";
+
+    const form = dialog.querySelector("form");
+    const submitHandler = async (e) => {
+      e.preventDefault();
+      form.removeEventListener("submit", submitHandler);
+      const name = nameInput ? nameInput.value.trim() : "";
+      if (!name) { dialog.close(); return; }
+
+      try {
+        const resp = await fetch("/api/gsm/overlays/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        const data = await resp.json();
+        if (data.status === "ok") {
+          _smapUserLayers[data.id] = {
+            data: { name: data.name, points: [], polygons: [], user_layer: true },
+            leafletGroup: null,
+            markers: [],
+          };
+          _smapActiveLayerId = data.id;
+          _smapRefreshUserLayersList();
+          _addLog("info", `Utworzono warstwę: ${data.name}`);
+        }
+      } catch (err) {
+        _addLog("error", "Nie udało się utworzyć warstwy: " + err.message);
+      }
+      dialog.close();
+    };
+    form.addEventListener("submit", submitHandler);
+
+    const cancelBtn = QS("#gsm_layer_cancel_btn");
+    const cancelHandler = () => {
+      cancelBtn.removeEventListener("click", cancelHandler);
+      form.removeEventListener("submit", submitHandler);
+      dialog.close();
+    };
+    if (cancelBtn) cancelBtn.addEventListener("click", cancelHandler);
+
+    dialog.showModal();
+  }
+
   /* ── bindings ───────────────────────────────────────────── */
   function _bind() {
     const fileInput = QS("#gsm_file_input");
@@ -5732,6 +8450,12 @@
 
     if (uploadBtn) {
       uploadBtn.onclick = () => { if (fileInput) fileInput.click(); };
+    }
+
+    // Standalone map button
+    const smapBtn = QS("#gsm_standalone_map_btn");
+    if (smapBtn) {
+      smapBtn.onclick = () => _openStandaloneMap();
     }
     if (fileInput) {
       fileInput.onchange = () => {
@@ -5851,7 +8575,7 @@
         St.hmActiveCell = null;
         St.hmMonth = "all";
         St.hmType = "all";
-        if (St.map) { St.map.remove(); St.map = null; }
+        if (St.map) { St.map.remove(); St.map = null; St._maplibreLayer = null; }
         const results = QS("#gsm_results");
         const empty = QS("#gsm_empty_state");
         if (results) results.style.display = "none";
