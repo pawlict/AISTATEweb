@@ -3174,7 +3174,7 @@
       ussd: "gsm-sn-ussd",
     };
 
-    let html = `<table class="gsm-table"><thead><tr>
+    let tbl = `<table class="gsm-table"><thead><tr>
       <th>Numer</th><th>Kategoria</th><th>Opis</th><th>Interakcje</th><th>Czas rozmów</th><th>Okres</th>
     </tr></thead><tbody>`;
 
@@ -3184,7 +3184,7 @@
       const period = s.first_date
         ? (s.first_date === s.last_date ? s.first_date : `${s.first_date} – ${s.last_date}`)
         : "—";
-      html += `<tr>
+      tbl += `<tr>
         <td><code>${s.number}</code></td>
         <td><span class="gsm-sn-badge ${cls}">${cat}</span></td>
         <td>${s.label || "—"}</td>
@@ -3193,7 +3193,10 @@
         <td>${period}</td>
       </tr>`;
     }
-    html += "</tbody></table>";
+    tbl += "</tbody></table>";
+
+    let html = `<div class="gsm-sn-count">Łącznie: ${specials.length} numerów specjalnych</div>`;
+    html += `<div class="gsm-sn-container">${tbl}</div>`;
     el.innerHTML = html;
   }
 
