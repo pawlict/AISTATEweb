@@ -7117,6 +7117,18 @@
       ssBtn.onclick = () => _takeSmapScreenshot();
     }
 
+    // Edit mode button
+    const editBtn = QS("#gsm_smap_edit_btn");
+    if (editBtn) {
+      editBtn.onclick = () => _toggleSmapEditMode();
+    }
+
+    // Add layer button
+    const addLayerBtn = QS("#gsm_smap_add_layer_btn");
+    if (addLayerBtn) {
+      addLayerBtn.onclick = () => _smapCreateLayer();
+    }
+
     // Close button
     const closeBtn = QS("#gsm_smap_close_btn");
     if (closeBtn) {
@@ -7125,9 +7137,19 @@
 
     // ESC key
     overlay._escHandler = (e) => {
-      if (e.key === "Escape") _closeStandaloneMap();
+      if (e.key === "Escape") {
+        // Close point dialog first if open
+        const ptDialog = QS("#gsm_point_dialog");
+        if (ptDialog && ptDialog.open) { ptDialog.close(); return; }
+        const lyDialog = QS("#gsm_layer_dialog");
+        if (lyDialog && lyDialog.open) { lyDialog.close(); return; }
+        _closeStandaloneMap();
+      }
     };
     document.addEventListener("keydown", overlay._escHandler);
+
+    // Load user layers
+    _smapLoadUserLayers();
 
     // Force map to recalculate size after overlay is visible
     setTimeout(() => map.invalidateSize(), 100);
@@ -7142,6 +7164,15 @@
         overlay._escHandler = null;
       }
     }
+    // Reset edit mode
+    _smapEditMode = false;
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.style.display = "none";
+    const editBtn = QS("#gsm_smap_edit_btn");
+    if (editBtn) editBtn.style.background = "";
+    const container = QS("#gsm_smap_container");
+    if (container) container.style.cursor = "";
+
     if (_smapInstance) {
       try { _smapInstance.remove(); } catch(e) {}
       _smapInstance = null;
@@ -7150,6 +7181,9 @@
       _smapOverlays = {};
       _smapKmlLayers = {};
     }
+    _smapUserLayers = {};
+    _smapActiveLayerId = null;
+    _smapEditingPoint = null;
   }
 
   /** Load nearby BTS for standalone map */
@@ -7467,6 +7501,379 @@
     } finally {
       if (btn) btn.disabled = false;
     }
+  }
+
+  /* ── Map edit mode ─────────────────────────────────────── */
+
+  let _smapEditMode = false;
+  let _smapUserLayers = {};       // { overlayId: { data, leafletGroup, markers[] } }
+  let _smapActiveLayerId = null;  // currently selected user layer for editing
+  let _smapEditingPoint = null;   // { layerId, pointIndex } — point being edited
+
+  function _toggleSmapEditMode() {
+    _smapEditMode = !_smapEditMode;
+    const btn = QS("#gsm_smap_edit_btn");
+    const indicator = QS("#gsm_smap_edit_indicator");
+    const container = QS("#gsm_smap_container");
+
+    if (btn) btn.style.background = _smapEditMode ? "var(--accent,#4a6cf7)" : "";
+    if (btn) btn.style.borderRadius = _smapEditMode ? "8px" : "";
+    if (indicator) indicator.style.display = _smapEditMode ? "" : "none";
+    if (container) container.style.cursor = _smapEditMode ? "crosshair" : "";
+
+    if (_smapEditMode && _smapInstance) {
+      _smapInstance.on("click", _smapOnMapClick);
+    } else if (_smapInstance) {
+      _smapInstance.off("click", _smapOnMapClick);
+    }
+  }
+
+  function _smapOnMapClick(e) {
+    if (!_smapEditMode || !_smapInstance) return;
+    if (!_smapActiveLayerId) {
+      _addLog("warn", "Wybierz lub utwórz warstwę użytkownika przed dodaniem punktu");
+      return;
+    }
+    _openPointDialog({
+      isNew: true,
+      layerId: _smapActiveLayerId,
+      lat: e.latlng.lat,
+      lon: e.latlng.lng,
+      name: "",
+      desc: "",
+      color: "#e63946",
+    });
+  }
+
+  function _openPointDialog(opts) {
+    const dialog = QS("#gsm_point_dialog");
+    if (!dialog) return;
+
+    const title = QS("#gsm_point_dialog_title");
+    const nameEl = QS("#gsm_point_name");
+    const descEl = QS("#gsm_point_desc");
+    const latEl = QS("#gsm_point_lat");
+    const lonEl = QS("#gsm_point_lon");
+    const colorEl = QS("#gsm_point_color");
+    const layerSel = QS("#gsm_point_layer_select");
+    const delBtn = QS("#gsm_point_delete_btn");
+
+    if (title) title.textContent = opts.isNew ? "Nowy punkt" : "Edycja punktu";
+    if (nameEl) nameEl.value = opts.name || "";
+    if (descEl) descEl.value = opts.desc || "";
+    if (latEl) latEl.value = opts.lat.toFixed(6);
+    if (lonEl) lonEl.value = opts.lon.toFixed(6);
+    if (colorEl) colorEl.value = opts.color || "#e63946";
+    if (delBtn) delBtn.style.display = opts.isNew ? "none" : "";
+
+    // Populate layer dropdown
+    if (layerSel) {
+      layerSel.innerHTML = "";
+      for (const [id, layer] of Object.entries(_smapUserLayers)) {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = layer.data.name;
+        if (id === opts.layerId) opt.selected = true;
+        layerSel.appendChild(opt);
+      }
+    }
+
+    _smapEditingPoint = opts.isNew ? null : { layerId: opts.layerId, pointIndex: opts.pointIndex };
+
+    // Form submit handler
+    const form = dialog.querySelector("form");
+    const submitHandler = (e) => {
+      e.preventDefault();
+      form.removeEventListener("submit", submitHandler);
+      const point = {
+        name: nameEl ? nameEl.value.trim() : "",
+        desc: descEl ? descEl.value.trim() : "",
+        lat: parseFloat(latEl ? latEl.value : opts.lat),
+        lon: parseFloat(lonEl ? lonEl.value : opts.lon),
+        color: colorEl ? colorEl.value : "#e63946",
+      };
+      const targetLayer = layerSel ? layerSel.value : opts.layerId;
+
+      if (opts.isNew) {
+        _smapAddPoint(targetLayer, point);
+      } else {
+        _smapUpdatePoint(opts.layerId, opts.pointIndex, point, targetLayer);
+      }
+      dialog.close();
+    };
+    form.addEventListener("submit", submitHandler);
+
+    // Cancel
+    const cancelBtn = QS("#gsm_point_cancel_btn");
+    const cancelHandler = () => {
+      cancelBtn.removeEventListener("click", cancelHandler);
+      form.removeEventListener("submit", submitHandler);
+      dialog.close();
+    };
+    if (cancelBtn) cancelBtn.addEventListener("click", cancelHandler);
+
+    // Delete
+    if (delBtn && !opts.isNew) {
+      const delHandler = () => {
+        delBtn.removeEventListener("click", delHandler);
+        form.removeEventListener("submit", submitHandler);
+        _smapDeletePoint(opts.layerId, opts.pointIndex);
+        dialog.close();
+      };
+      delBtn.addEventListener("click", delHandler);
+    }
+
+    dialog.showModal();
+  }
+
+  function _smapAddPoint(layerId, point) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    layer.data.points.push(point);
+    _smapRebuildLayerMarkers(layerId);
+    _smapSaveLayer(layerId);
+  }
+
+  function _smapUpdatePoint(layerId, idx, point, targetLayerId) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+
+    if (targetLayerId !== layerId) {
+      // Move to different layer
+      layer.data.points.splice(idx, 1);
+      _smapRebuildLayerMarkers(layerId);
+      _smapSaveLayer(layerId);
+      _smapAddPoint(targetLayerId, point);
+    } else {
+      layer.data.points[idx] = point;
+      _smapRebuildLayerMarkers(layerId);
+      _smapSaveLayer(layerId);
+    }
+  }
+
+  function _smapDeletePoint(layerId, idx) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    layer.data.points.splice(idx, 1);
+    _smapRebuildLayerMarkers(layerId);
+    _smapSaveLayer(layerId);
+  }
+
+  function _smapRebuildLayerMarkers(layerId) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer || !_smapInstance) return;
+
+    // Remove old group
+    if (layer.leafletGroup) {
+      _smapInstance.removeLayer(layer.leafletGroup);
+    }
+
+    const group = L.layerGroup();
+    layer.markers = [];
+
+    layer.data.points.forEach((pt, idx) => {
+      const color = pt.color || "#e63946";
+      const marker = L.circleMarker([pt.lat, pt.lon], {
+        radius: 7,
+        fillColor: color,
+        color: "#fff",
+        weight: 2,
+        fillOpacity: 0.9,
+        draggable: false,
+      });
+
+      marker.bindTooltip(
+        `<b style="color:${color}">${pt.name || "Punkt"}</b>${pt.desc ? "<br><span class='small'>" + pt.desc + "</span>" : ""}`,
+        { direction: "top", offset: [0, -8], className: "gsm-overlay-tooltip" }
+      );
+
+      marker.on("click", (e) => {
+        if (!_smapEditMode) return;
+        L.DomEvent.stopPropagation(e);
+        _openPointDialog({
+          isNew: false,
+          layerId: layerId,
+          pointIndex: idx,
+          lat: pt.lat,
+          lon: pt.lon,
+          name: pt.name,
+          desc: pt.desc,
+          color: pt.color || "#e63946",
+        });
+      });
+
+      marker.addTo(group);
+      layer.markers.push(marker);
+    });
+
+    group.addTo(_smapInstance);
+    layer.leafletGroup = group;
+
+    // Update layer panel count
+    _smapRefreshUserLayersList();
+  }
+
+  async function _smapSaveLayer(layerId) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    try {
+      await fetch(`/api/gsm/overlays/${layerId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: layer.data.name,
+          points: layer.data.points,
+        }),
+      });
+    } catch (e) {
+      _addLog("error", "Nie udało się zapisać warstwy: " + e.message);
+    }
+  }
+
+  /** Load user layers list and render checkboxes */
+  async function _smapLoadUserLayers() {
+    try {
+      const resp = await fetch("/api/gsm/overlays");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const items = (data && data.overlays) ? data.overlays : [];
+
+      // Load full data for user layers (or all KML layers that can be shown)
+      for (const ov of items) {
+        if (_smapUserLayers[ov.id]) continue; // already loaded
+        try {
+          const r = await fetch(`/api/gsm/overlays/${ov.id}`);
+          const d = await r.json();
+          if (d.status === "ok") {
+            _smapUserLayers[ov.id] = {
+              data: { name: d.name, points: d.points || [], user_layer: d.user_layer || false },
+              leafletGroup: null,
+              markers: [],
+            };
+          }
+        } catch (_) {}
+      }
+      _smapRefreshUserLayersList();
+    } catch (e) {
+      console.warn("[GSM] Failed to load user layers:", e);
+    }
+  }
+
+  function _smapRefreshUserLayersList() {
+    const container = QS("#gsm_smap_user_layers");
+    if (!container) return;
+
+    const entries = Object.entries(_smapUserLayers);
+    if (!entries.length) {
+      container.innerHTML = '<span class="small muted" style="padding:4px 0;display:block">Brak warstw. Kliknij "+ Nowa".</span>';
+      return;
+    }
+
+    container.innerHTML = entries.map(([id, layer]) => {
+      const isActive = _smapActiveLayerId === id;
+      const count = layer.data.points.length;
+      const isVisible = layer.leafletGroup && _smapInstance && _smapInstance.hasLayer(layer.leafletGroup);
+      const safeName = String(layer.data.name).replace(/</g, "&lt;");
+      return `<div class="gsm-lp-item" style="display:flex;align-items:center;gap:4px;padding:2px 0${isActive ? ";background:rgba(74,108,247,.08);border-radius:6px" : ""}">
+        <input type="checkbox" data-user-layer-id="${id}"${isVisible ? " checked" : ""} style="margin:0">
+        <span class="small" style="flex:1;cursor:pointer;font-weight:${isActive ? 600 : 400}" data-select-layer="${id}">${safeName} <span class="muted">(${count})</span></span>
+        <button class="btn mini" data-export-layer="${id}" title="Eksport KML" style="font-size:10px;padding:0 4px">KML</button>
+        <button class="btn mini danger" data-delete-layer="${id}" title="Usuń warstwę" style="font-size:10px;padding:0 4px">&times;</button>
+      </div>`;
+    }).join("");
+
+    // Bind events
+    container.querySelectorAll("input[data-user-layer-id]").forEach(cb => {
+      cb.onchange = () => {
+        const id = cb.dataset.userLayerId;
+        if (cb.checked) {
+          _smapRebuildLayerMarkers(id);
+        } else {
+          const layer = _smapUserLayers[id];
+          if (layer && layer.leafletGroup && _smapInstance) {
+            _smapInstance.removeLayer(layer.leafletGroup);
+          }
+        }
+      };
+    });
+
+    container.querySelectorAll("[data-select-layer]").forEach(el => {
+      el.onclick = () => {
+        _smapActiveLayerId = el.dataset.selectLayer;
+        _smapRefreshUserLayersList();
+      };
+    });
+
+    container.querySelectorAll("[data-export-layer]").forEach(el => {
+      el.onclick = () => {
+        const id = el.dataset.exportLayer;
+        window.open(`/api/gsm/overlays/${id}/export/kml`, "_blank");
+      };
+    });
+
+    container.querySelectorAll("[data-delete-layer]").forEach(el => {
+      el.onclick = async () => {
+        const id = el.dataset.deleteLayer;
+        if (!confirm("Usunąć warstwę?")) return;
+        const layer = _smapUserLayers[id];
+        if (layer && layer.leafletGroup && _smapInstance) {
+          _smapInstance.removeLayer(layer.leafletGroup);
+        }
+        delete _smapUserLayers[id];
+        if (_smapActiveLayerId === id) _smapActiveLayerId = null;
+        try { await fetch(`/api/gsm/overlays/${id}`, { method: "DELETE" }); } catch (_) {}
+        _smapRefreshUserLayersList();
+      };
+    });
+  }
+
+  async function _smapCreateLayer() {
+    const dialog = QS("#gsm_layer_dialog");
+    if (!dialog) return;
+
+    const nameInput = QS("#gsm_layer_name");
+    if (nameInput) nameInput.value = "";
+
+    const form = dialog.querySelector("form");
+    const submitHandler = async (e) => {
+      e.preventDefault();
+      form.removeEventListener("submit", submitHandler);
+      const name = nameInput ? nameInput.value.trim() : "";
+      if (!name) { dialog.close(); return; }
+
+      try {
+        const resp = await fetch("/api/gsm/overlays/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        const data = await resp.json();
+        if (data.status === "ok") {
+          _smapUserLayers[data.id] = {
+            data: { name: data.name, points: [], user_layer: true },
+            leafletGroup: null,
+            markers: [],
+          };
+          _smapActiveLayerId = data.id;
+          _smapRefreshUserLayersList();
+          _addLog("info", `Utworzono warstwę: ${data.name}`);
+        }
+      } catch (err) {
+        _addLog("error", "Nie udało się utworzyć warstwy: " + err.message);
+      }
+      dialog.close();
+    };
+    form.addEventListener("submit", submitHandler);
+
+    const cancelBtn = QS("#gsm_layer_cancel_btn");
+    const cancelHandler = () => {
+      cancelBtn.removeEventListener("click", cancelHandler);
+      form.removeEventListener("submit", submitHandler);
+      dialog.close();
+    };
+    if (cancelBtn) cancelBtn.addEventListener("click", cancelHandler);
+
+    dialog.showModal();
   }
 
   /* ── bindings ───────────────────────────────────────────── */
