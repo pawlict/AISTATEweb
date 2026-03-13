@@ -207,7 +207,12 @@ def _analyze_contacts(
     own_numbers: Set[str],
     top_n: int,
 ) -> List[ContactProfile]:
-    """Build contact profiles for all interacted numbers."""
+    """Build contact profiles for all interacted numbers.
+
+    Special numbers (short codes, operator IDs, service SMSes, APNs, etc.)
+    are excluded from top contacts — they are shown separately in the
+    "Numery specjalne" section.
+    """
     profiles: Dict[str, ContactProfile] = {}
 
     for r in records:
@@ -219,6 +224,10 @@ def _analyze_contacts(
             contact = r.caller
 
         if not contact:
+            continue
+
+        # Skip special numbers — they belong in the special numbers section
+        if _classify_special_number(contact) is not None:
             continue
 
         if contact not in profiles:
@@ -640,9 +649,158 @@ _SPECIAL_NUMBER_DB: Dict[str, Dict[str, str]] = {
     "19116": {"category": "info", "label": "Informacja PKP"},
 }
 
+# Known alphanumeric sender IDs — Polish operators, stores, banks, services.
+# These appear as text identifiers (not phone numbers) in billing records,
+# typically as SMS senders. Matched case-insensitively.
+_ALPHANUMERIC_SENDERS: Dict[str, Dict[str, str]] = {
+    # --- Operatorzy / sieci telekomunikacyjne ---
+    "orange": {"category": "operator_sms", "label": "Orange Polska"},
+    "orange flex": {"category": "operator_sms", "label": "Orange Flex"},
+    "orangeflex": {"category": "operator_sms", "label": "Orange Flex"},
+    "orange pl": {"category": "operator_sms", "label": "Orange Polska"},
+    "nju mobile": {"category": "operator_sms", "label": "nju mobile (Orange MVNO)"},
+    "nju": {"category": "operator_sms", "label": "nju mobile"},
+    "t-mobile": {"category": "operator_sms", "label": "T-Mobile Polska"},
+    "tmobile": {"category": "operator_sms", "label": "T-Mobile Polska"},
+    "t-mobile pl": {"category": "operator_sms", "label": "T-Mobile Polska"},
+    "heyah": {"category": "operator_sms", "label": "Heyah (T-Mobile MVNO)"},
+    "play": {"category": "operator_sms", "label": "Play"},
+    "play pl": {"category": "operator_sms", "label": "Play"},
+    "virgin": {"category": "operator_sms", "label": "Virgin Mobile (Play MVNO)"},
+    "red bull mob": {"category": "operator_sms", "label": "Red Bull Mobile (Play MVNO)"},
+    "plus": {"category": "operator_sms", "label": "Plus (Polkomtel)"},
+    "plus gsm": {"category": "operator_sms", "label": "Plus GSM"},
+    "plush": {"category": "operator_sms", "label": "Plush (Plus MVNO)"},
+    "lycamobile": {"category": "operator_sms", "label": "Lycamobile"},
+    "lajt mobile": {"category": "operator_sms", "label": "Lajt Mobile"},
+    "vectra": {"category": "operator_sms", "label": "Vectra Mobile"},
+    "premium mob": {"category": "operator_sms", "label": "Premium Mobile"},
+    # --- Dyskonty i sieci handlowe ---
+    "biedronka": {"category": "commercial_sms", "label": "Biedronka"},
+    "lidl": {"category": "commercial_sms", "label": "Lidl"},
+    "lidl plus": {"category": "commercial_sms", "label": "Lidl Plus"},
+    "kaufland": {"category": "commercial_sms", "label": "Kaufland"},
+    "aldi": {"category": "commercial_sms", "label": "Aldi"},
+    "netto": {"category": "commercial_sms", "label": "Netto"},
+    "zabka": {"category": "commercial_sms", "label": "Żabka"},
+    "żabka": {"category": "commercial_sms", "label": "Żabka"},
+    "zappka": {"category": "commercial_sms", "label": "Żabka (Żappka)"},
+    "rossmann": {"category": "commercial_sms", "label": "Rossmann"},
+    "hebe": {"category": "commercial_sms", "label": "Hebe"},
+    "pepco": {"category": "commercial_sms", "label": "Pepco"},
+    "action": {"category": "commercial_sms", "label": "Action"},
+    "dino": {"category": "commercial_sms", "label": "Dino"},
+    "stokrotka": {"category": "commercial_sms", "label": "Stokrotka"},
+    "polomarket": {"category": "commercial_sms", "label": "Polomarket"},
+    "intermarche": {"category": "commercial_sms", "label": "Intermarché"},
+    "carrefour": {"category": "commercial_sms", "label": "Carrefour"},
+    "auchan": {"category": "commercial_sms", "label": "Auchan"},
+    "leroy": {"category": "commercial_sms", "label": "Leroy Merlin"},
+    "leroymerlin": {"category": "commercial_sms", "label": "Leroy Merlin"},
+    "castorama": {"category": "commercial_sms", "label": "Castorama"},
+    "ikea": {"category": "commercial_sms", "label": "IKEA"},
+    "obi": {"category": "commercial_sms", "label": "OBI"},
+    "decathlon": {"category": "commercial_sms", "label": "Decathlon"},
+    "mediamarkt": {"category": "commercial_sms", "label": "MediaMarkt"},
+    "media expert": {"category": "commercial_sms", "label": "Media Expert"},
+    "rtv euro": {"category": "commercial_sms", "label": "RTV Euro AGD"},
+    "euro agd": {"category": "commercial_sms", "label": "RTV Euro AGD"},
+    "empik": {"category": "commercial_sms", "label": "Empik"},
+    "reserved": {"category": "commercial_sms", "label": "Reserved (LPP)"},
+    "mohito": {"category": "commercial_sms", "label": "Mohito (LPP)"},
+    "sinsay": {"category": "commercial_sms", "label": "Sinsay (LPP)"},
+    "cropp": {"category": "commercial_sms", "label": "Cropp (LPP)"},
+    "house": {"category": "commercial_sms", "label": "House (LPP)"},
+    "ccc": {"category": "commercial_sms", "label": "CCC"},
+    "halfprice": {"category": "commercial_sms", "label": "HalfPrice (CCC)"},
+    "deichmann": {"category": "commercial_sms", "label": "Deichmann"},
+    "smyk": {"category": "commercial_sms", "label": "Smyk"},
+    "apart": {"category": "commercial_sms", "label": "Apart"},
+    "douglas": {"category": "commercial_sms", "label": "Douglas"},
+    "sephora": {"category": "commercial_sms", "label": "Sephora"},
+    "zara": {"category": "commercial_sms", "label": "Zara"},
+    "h&m": {"category": "commercial_sms", "label": "H&M"},
+    "hm": {"category": "commercial_sms", "label": "H&M"},
+    "primark": {"category": "commercial_sms", "label": "Primark"},
+    "tk maxx": {"category": "commercial_sms", "label": "TK Maxx"},
+    "jysk": {"category": "commercial_sms", "label": "Jysk"},
+    "orlen": {"category": "commercial_sms", "label": "PKN Orlen"},
+    "bp": {"category": "commercial_sms", "label": "BP"},
+    "lotos": {"category": "commercial_sms", "label": "Lotos"},
+    "circle k": {"category": "commercial_sms", "label": "Circle K"},
+    # --- E-commerce / kurier ---
+    "allegro": {"category": "commercial_sms", "label": "Allegro"},
+    "olx": {"category": "commercial_sms", "label": "OLX"},
+    "amazon": {"category": "commercial_sms", "label": "Amazon"},
+    "aliexpress": {"category": "commercial_sms", "label": "AliExpress"},
+    "temu": {"category": "commercial_sms", "label": "Temu"},
+    "shein": {"category": "commercial_sms", "label": "Shein"},
+    "zalando": {"category": "commercial_sms", "label": "Zalando"},
+    "modivo": {"category": "commercial_sms", "label": "Modivo"},
+    "modivoclub": {"category": "commercial_sms", "label": "Modivo Club"},
+    "eobuwie": {"category": "commercial_sms", "label": "eobuwie.pl"},
+    "inpost": {"category": "commercial_sms", "label": "InPost"},
+    "dpd": {"category": "commercial_sms", "label": "DPD"},
+    "dhl": {"category": "commercial_sms", "label": "DHL"},
+    "gls": {"category": "commercial_sms", "label": "GLS"},
+    "gls poland": {"category": "commercial_sms", "label": "GLS Poland"},
+    "ups": {"category": "commercial_sms", "label": "UPS"},
+    "fedex": {"category": "commercial_sms", "label": "FedEx"},
+    "poczta pol": {"category": "commercial_sms", "label": "Poczta Polska"},
+    "pocztapol": {"category": "commercial_sms", "label": "Poczta Polska"},
+    # --- Banki ---
+    "mbank": {"category": "commercial_sms", "label": "mBank"},
+    "pkobp": {"category": "commercial_sms", "label": "PKO BP"},
+    "pko bp": {"category": "commercial_sms", "label": "PKO BP"},
+    "ing": {"category": "commercial_sms", "label": "ING Bank Śląski"},
+    "ingbank": {"category": "commercial_sms", "label": "ING Bank Śląski"},
+    "santander": {"category": "commercial_sms", "label": "Santander Bank"},
+    "bnp paribas": {"category": "commercial_sms", "label": "BNP Paribas"},
+    "millennium": {"category": "commercial_sms", "label": "Bank Millennium"},
+    "pekao": {"category": "commercial_sms", "label": "Bank Pekao SA"},
+    "alior": {"category": "commercial_sms", "label": "Alior Bank"},
+    "credit agr": {"category": "commercial_sms", "label": "Credit Agricole"},
+    "citi": {"category": "commercial_sms", "label": "Citi Handlowy"},
+    "nest bank": {"category": "commercial_sms", "label": "Nest Bank"},
+    "velo bank": {"category": "commercial_sms", "label": "VeloBank"},
+    "velobank": {"category": "commercial_sms", "label": "VeloBank"},
+    "blik": {"category": "commercial_sms", "label": "BLIK"},
+    # --- Inne usługi ---
+    "uber": {"category": "commercial_sms", "label": "Uber"},
+    "bolt": {"category": "commercial_sms", "label": "Bolt"},
+    "glovo": {"category": "commercial_sms", "label": "Glovo"},
+    "wolt": {"category": "commercial_sms", "label": "Wolt"},
+    "pyszne.pl": {"category": "commercial_sms", "label": "Pyszne.pl"},
+    "netflix": {"category": "commercial_sms", "label": "Netflix"},
+    "spotify": {"category": "commercial_sms", "label": "Spotify"},
+    "disney+": {"category": "commercial_sms", "label": "Disney+"},
+    "hbo max": {"category": "commercial_sms", "label": "HBO Max"},
+    "canal+": {"category": "commercial_sms", "label": "Canal+"},
+    "polsat box": {"category": "commercial_sms", "label": "Polsat Box"},
+    "google": {"category": "commercial_sms", "label": "Google"},
+    "microsoft": {"category": "commercial_sms", "label": "Microsoft"},
+    "apple": {"category": "commercial_sms", "label": "Apple"},
+    "facebook": {"category": "commercial_sms", "label": "Facebook (Meta)"},
+    "meta": {"category": "commercial_sms", "label": "Meta"},
+    "whatsapp": {"category": "commercial_sms", "label": "WhatsApp"},
+    "instagram": {"category": "commercial_sms", "label": "Instagram"},
+    "twitter": {"category": "commercial_sms", "label": "Twitter/X"},
+    "linkedin": {"category": "commercial_sms", "label": "LinkedIn"},
+    "tiktok": {"category": "commercial_sms", "label": "TikTok"},
+    "signal": {"category": "commercial_sms", "label": "Signal"},
+    "telegram": {"category": "commercial_sms", "label": "Telegram"},
+    "ibcorp": {"category": "commercial_sms", "label": "IBcorp"},
+    "zus": {"category": "commercial_sms", "label": "ZUS"},
+    "epuap": {"category": "commercial_sms", "label": "ePUAP"},
+    "gov.pl": {"category": "commercial_sms", "label": "Gov.pl"},
+}
+
 # Patterns for number classification
 _SPECIAL_PATTERNS: List[Tuple[str, str, str]] = [
     # (regex_pattern, category, label_prefix)
+    # USSD / control codes — contain * or #
+    (r"^[*#]", "ussd", "Kod sterujący"),
+    (r".*[*#]", "ussd", "Kod sterujący"),
     # Toll-free must be checked before premium (800/801 are toll-free, not premium)
     (r"^\+?48800\d{6}$", "toll_free", "Numer bezpłatny 800"),
     (r"^\+?48801\d{6}$", "toll_free", "Numer bezpłatny 801"),
@@ -653,10 +811,51 @@ _SPECIAL_PATTERNS: List[Tuple[str, str, str]] = [
 ]
 
 
-def _classify_special_number(number: str) -> Optional[Dict[str, str]]:
-    """Check if a number is 'special' (non-standard mobile number).
+def _is_standard_phone(number: str) -> bool:
+    """Check if number is a standard domestic or international phone number.
 
-    Returns dict with category/label or None if it's a regular mobile number.
+    Standard Polish numbers: +48 + 9 digits (or bare 9 digits).
+    International numbers: + followed by country code + number (>8 digits total).
+    Bare international: 7-15 digits without + (e.g. from billing records).
+    """
+    if not number:
+        return False
+    # If it contains any letters → definitely not a standard phone number
+    if re.search(r"[a-zA-Z]", number):
+        return False
+    digits = re.sub(r"[^\d+]", "", number)
+    # Standard Polish: +48NNNNNNNNN or 48NNNNNNNNN or NNNNNNNNN
+    if re.match(r"^\+?48\d{9}$", digits):
+        return True
+    # Bare 9-digit Polish number
+    if re.match(r"^\d{9}$", digits):
+        return True
+    # International: + then 7-15 digits
+    if re.match(r"^\+\d{7,15}$", digits):
+        return True
+    # International without +: 00 + country code + number
+    if re.match(r"^00\d{8,15}$", digits):
+        return True
+    # Bare international number: 10-15 digits (e.g. 375295434940 = Belarus)
+    # These often appear in billing records without + prefix
+    if re.match(r"^\d{10,15}$", digits):
+        return True
+    return False
+
+
+def _classify_special_number(number: str) -> Optional[Dict[str, str]]:
+    """Check if a number is 'special' (non-standard phone number).
+
+    GLOBAL RULE: any identifier that is NOT a standard domestic or international
+    phone number is classified as special. This includes:
+    - Known operator/service/store/bank alphanumeric sender IDs
+    - USSD codes (containing * or #)
+    - Short codes (≤6 digits)
+    - Premium / toll-free numbers (700/800/801/300 prefixes)
+    - Internet APN names (e.g. "internetipv6")
+    - Any other text-based identifier
+
+    Returns dict with category/label or None if it's a regular phone number.
     """
     if not number:
         return None
@@ -674,14 +873,39 @@ def _classify_special_number(number: str) -> Optional[Dict[str, str]]:
         if bare == db_bare:
             return dict(info)
 
+    # Check known alphanumeric senders (case-insensitive)
+    num_lower = number.lower().strip()
+    if num_lower in _ALPHANUMERIC_SENDERS:
+        return dict(_ALPHANUMERIC_SENDERS[num_lower])
+    # Partial match: check if a known sender name (≥4 chars) is contained
+    # in the number as a word boundary, or if the number matches a sender.
+    # Short names (≤3 chars like "ing", "bp") require exact match only
+    # to avoid false positives (e.g. "ing" matching "roaming").
+    for sender, info in _ALPHANUMERIC_SENDERS.items():
+        if len(sender) >= 4 and sender in num_lower:
+            return dict(info)
+        if num_lower in sender and len(num_lower) >= 4:
+            return dict(info)
+
     # Pattern-based
     for pat, cat, label in _SPECIAL_PATTERNS:
         if re.match(pat, number):
             return {"category": cat, "label": f"{label} ({number})"}
 
-    # Foreign numbers (non-Polish, non-short)
+    # Foreign numbers (non-Polish, non-short) — classified but still "special"
     if number.startswith("+") and not number.startswith("+48") and len(number) > 8:
         return {"category": "international", "label": f"Numer zagraniczny ({number[:4]}…)"}
+
+    # GLOBAL CATCH-ALL: if not a standard phone number → special
+    if not _is_standard_phone(number):
+        # Determine sub-category for non-phone identifiers
+        has_alpha = bool(re.search(r"[a-zA-Z]", number))
+        if has_alpha:
+            # Text-based identifier (operator name, store, service, APN, etc.)
+            return {"category": "alphanumeric", "label": f"ID alfanumeryczny ({number})"}
+        else:
+            # Numeric but non-standard (7-8 digits, or other non-phone format)
+            return {"category": "short_code", "label": f"Kod krótki ({number})"}
 
     return None
 
