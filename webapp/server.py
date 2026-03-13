@@ -2427,9 +2427,14 @@ def page_save(request: Request) -> Any:
 @app.get("/info", response_class=HTMLResponse)
 def page_info(request: Request) -> Any:
     # language priority:
-    # 1) explicit ?lang=en|pl
-    # 2) UI language from settings
+    # 1) explicit ?lang=en|pl|ko
+    # 2) logged-in user's language preference (multi-user mode)
+    # 3) UI language from global settings (single-user mode)
     lang = (request.query_params.get("lang") or "").lower().strip()
+    if not lang:
+        user = getattr(request.state, "user", None)
+        if user and getattr(user, "language", ""):
+            lang = user.language.lower().strip()
     if not lang:
         try:
             s = load_settings()

@@ -3459,22 +3459,21 @@
       ctx.fillRect(0, 0, w, h);
 
       // ── 2. Draw tile images ──
-      // Tiles may be cross-origin (e.g. OSM). We re-fetch each tile via fetch()
-      // which always gets a clean CORS response, avoiding tainted canvas issues
-      // from browser-cached tiles that were loaded without crossOrigin attribute.
+      // Use getBoundingClientRect for correct positioning — accounts for ALL
+      // nested transforms (tilePane → tile-container → tile img).
+      // Re-fetch tiles via fetch() to avoid tainted-canvas from cached tiles.
+      const containerRect = map.getContainer().getBoundingClientRect();
       const tilePane = map.getPane("tilePane");
       if (tilePane) {
-        const tileTransform = _getLeafletPaneOffset(tilePane);
         const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
         const tilePromises = [];
         for (const img of tileImgs) {
           if (!img.src) continue;
-          // Include tiles even if not yet complete — we'll re-fetch them
-          const tileOffset = _getLeafletPaneOffset(img);
-          const x = (tileTransform.x + tileOffset.x) * scale;
-          const y = (tileTransform.y + tileOffset.y) * scale;
-          const tw = (img.offsetWidth || 256) * scale;
-          const th = (img.offsetHeight || 256) * scale;
+          const rect = img.getBoundingClientRect();
+          const x = (rect.left - containerRect.left) * scale;
+          const y = (rect.top - containerRect.top) * scale;
+          const tw = rect.width * scale;
+          const th = rect.height * scale;
           tilePromises.push(
             _fetchImageBitmap(img.src)
               .then(bmp => ({ bmp, x, y, tw, th }))
@@ -3534,19 +3533,20 @@
       // ── 4. Draw Leaflet overlay pane canvases (circleMarkers, polylines, polygons) ──
       const overlayPane = map.getPane("overlayPane");
       if (overlayPane) {
-        const overlayTransform = _getLeafletPaneOffset(overlayPane);
         const canvases = overlayPane.querySelectorAll("canvas");
         for (const c of canvases) {
           try {
-            const x = overlayTransform.x * scale;
-            const y = overlayTransform.y * scale;
-            ctx.drawImage(c, x, y, w, h);
+            const cRect = c.getBoundingClientRect();
+            const cx = (cRect.left - containerRect.left) * scale;
+            const cy = (cRect.top - containerRect.top) * scale;
+            ctx.drawImage(c, cx, cy, cRect.width * scale, cRect.height * scale);
           } catch (_) {}
         }
         // Also draw any SVG overlays (polylines in SVG mode, etc.)
         const svgs = overlayPane.querySelectorAll("svg");
         for (const svg of svgs) {
           try {
+            const svgRect = svg.getBoundingClientRect();
             const svgData = new XMLSerializer().serializeToString(svg);
             const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
             const svgUrl = URL.createObjectURL(svgBlob);
@@ -3556,9 +3556,10 @@
               svgImg.onerror = resolve;
               svgImg.src = svgUrl;
             });
-            const sx = overlayTransform.x * scale;
-            const sy = overlayTransform.y * scale;
-            ctx.drawImage(svgImg, sx, sy, w, h);
+            ctx.drawImage(svgImg,
+              (svgRect.left - containerRect.left) * scale,
+              (svgRect.top - containerRect.top) * scale,
+              svgRect.width * scale, svgRect.height * scale);
             URL.revokeObjectURL(svgUrl);
           } catch (_) {}
         }
@@ -7376,19 +7377,19 @@
       ctx.fillStyle = "#e8e8e8";
       ctx.fillRect(0, 0, w, h);
 
-      // Draw tile images
+      // Draw tile images (use getBoundingClientRect for correct positioning)
+      const containerRect = map.getContainer().getBoundingClientRect();
       const tilePane = map.getPane("tilePane");
       if (tilePane) {
-        const tileTransform = _getLeafletPaneOffset(tilePane);
         const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
         const tilePromises = [];
         for (const img of tileImgs) {
           if (!img.src) continue;
-          const tileOffset = _getLeafletPaneOffset(img);
-          const x = (tileTransform.x + tileOffset.x) * scale;
-          const y = (tileTransform.y + tileOffset.y) * scale;
-          const tw = (img.offsetWidth || 256) * scale;
-          const th = (img.offsetHeight || 256) * scale;
+          const rect = img.getBoundingClientRect();
+          const x = (rect.left - containerRect.left) * scale;
+          const y = (rect.top - containerRect.top) * scale;
+          const tw = rect.width * scale;
+          const th = rect.height * scale;
           tilePromises.push(
             _fetchImageBitmap(img.src)
               .then(bmp => ({ bmp, x, y, tw, th }))
@@ -7406,11 +7407,14 @@
       // Draw overlay pane canvases (circleMarkers, polylines)
       const overlayPane = map.getPane("overlayPane");
       if (overlayPane) {
-        const overlayTransform = _getLeafletPaneOffset(overlayPane);
         const canvases = overlayPane.querySelectorAll("canvas");
         for (const c of canvases) {
           try {
-            ctx.drawImage(c, overlayTransform.x * scale, overlayTransform.y * scale, w, h);
+            const cRect = c.getBoundingClientRect();
+            ctx.drawImage(c,
+              (cRect.left - containerRect.left) * scale,
+              (cRect.top - containerRect.top) * scale,
+              cRect.width * scale, cRect.height * scale);
           } catch (_) {}
         }
       }
