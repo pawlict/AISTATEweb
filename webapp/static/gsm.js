@@ -7542,6 +7542,7 @@
       name: "",
       desc: "",
       color: "#e63946",
+      icon: "",
     });
   }
 
@@ -7558,6 +7559,12 @@
     const layerSel = QS("#gsm_point_layer_select");
     const delBtn = QS("#gsm_point_delete_btn");
 
+    const iconPreview = QS("#gsm_point_icon_preview");
+    const iconData = QS("#gsm_point_icon_data");
+    const iconFile = QS("#gsm_point_icon_file");
+    const iconUploadBtn = QS("#gsm_point_icon_upload_btn");
+    const iconClearBtn = QS("#gsm_point_icon_clear_btn");
+
     if (title) title.textContent = opts.isNew ? "Nowy punkt" : "Edycja punktu";
     if (nameEl) nameEl.value = opts.name || "";
     if (descEl) descEl.value = opts.desc || "";
@@ -7565,6 +7572,59 @@
     if (lonEl) lonEl.value = opts.lon.toFixed(6);
     if (colorEl) colorEl.value = opts.color || "#e63946";
     if (delBtn) delBtn.style.display = opts.isNew ? "none" : "";
+
+    // SVG icon state
+    if (iconData) iconData.value = opts.icon || "";
+    if (iconPreview) {
+      if (opts.icon) {
+        iconPreview.innerHTML = opts.icon;
+        // Scale SVG to fit preview
+        const svg = iconPreview.querySelector("svg");
+        if (svg) { svg.style.width = "28px"; svg.style.height = "28px"; }
+      } else {
+        iconPreview.innerHTML = '<span class="muted small">—</span>';
+      }
+    }
+    if (iconClearBtn) iconClearBtn.style.display = opts.icon ? "" : "none";
+
+    // SVG file upload handler
+    if (iconUploadBtn && iconFile) {
+      iconUploadBtn.onclick = () => iconFile.click();
+      iconFile.value = "";
+      iconFile.onchange = () => {
+        const file = iconFile.files && iconFile.files[0];
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith(".svg") && file.type !== "image/svg+xml") {
+          _addLog("warn", "Tylko pliki SVG są obsługiwane");
+          return;
+        }
+        if (file.size > 50000) {
+          _addLog("warn", "Plik SVG zbyt duży (max 50 KB)");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          let svgText = ev.target.result;
+          // Basic sanitization: remove script tags
+          svgText = svgText.replace(/<script[\s\S]*?<\/script>/gi, "");
+          if (iconData) iconData.value = svgText;
+          if (iconPreview) {
+            iconPreview.innerHTML = svgText;
+            const svg = iconPreview.querySelector("svg");
+            if (svg) { svg.style.width = "28px"; svg.style.height = "28px"; }
+          }
+          if (iconClearBtn) iconClearBtn.style.display = "";
+        };
+        reader.readAsText(file);
+      };
+    }
+    if (iconClearBtn) {
+      iconClearBtn.onclick = () => {
+        if (iconData) iconData.value = "";
+        if (iconPreview) iconPreview.innerHTML = '<span class="muted small">—</span>';
+        iconClearBtn.style.display = "none";
+      };
+    }
 
     // Populate layer dropdown
     if (layerSel) {
@@ -7591,6 +7651,7 @@
         lat: parseFloat(latEl ? latEl.value : opts.lat),
         lon: parseFloat(lonEl ? lonEl.value : opts.lon),
         color: colorEl ? colorEl.value : "#e63946",
+        icon: iconData ? iconData.value.trim() : "",
       };
       const targetLayer = layerSel ? layerSel.value : opts.layerId;
 
@@ -7673,18 +7734,33 @@
 
     layer.data.points.forEach((pt, idx) => {
       const color = pt.color || "#e63946";
-      const marker = L.circleMarker([pt.lat, pt.lon], {
-        radius: 7,
-        fillColor: color,
-        color: "#fff",
-        weight: 2,
-        fillOpacity: 0.9,
-        draggable: false,
-      });
+      let marker;
+
+      if (pt.icon) {
+        // Custom SVG icon marker
+        const svgHtml = pt.icon.replace(/<svg/,
+          '<svg style="width:28px;height:28px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35))"');
+        const divIcon = L.divIcon({
+          className: "gsm-user-point-icon",
+          html: svgHtml,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        });
+        marker = L.marker([pt.lat, pt.lon], { icon: divIcon, interactive: true });
+      } else {
+        // Default circle marker
+        marker = L.circleMarker([pt.lat, pt.lon], {
+          radius: 7,
+          fillColor: color,
+          color: "#fff",
+          weight: 2,
+          fillOpacity: 0.9,
+        });
+      }
 
       marker.bindTooltip(
         `<b style="color:${color}">${pt.name || "Punkt"}</b>${pt.desc ? "<br><span class='small'>" + pt.desc + "</span>" : ""}`,
-        { direction: "top", offset: [0, -8], className: "gsm-overlay-tooltip" }
+        { direction: "top", offset: [0, pt.icon ? -16 : -8], className: "gsm-overlay-tooltip" }
       );
 
       marker.on("click", (e) => {
@@ -7699,6 +7775,7 @@
           name: pt.name,
           desc: pt.desc,
           color: pt.color || "#e63946",
+          icon: pt.icon || "",
         });
       });
 

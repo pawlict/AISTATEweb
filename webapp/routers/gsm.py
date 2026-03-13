@@ -1332,12 +1332,20 @@ async def overlay_update(overlay_id: str, request: Request):
         clean = []
         for p in pts:
             try:
+                icon_raw = str(p.get("icon", ""))
+                # Basic SVG sanitization: strip scripts, limit size
+                if icon_raw:
+                    icon_raw = icon_raw[:50000]  # max ~50KB
+                    import re
+                    icon_raw = re.sub(r"<script[\s\S]*?</script>", "", icon_raw, flags=re.IGNORECASE)
+                    icon_raw = re.sub(r"\bon\w+\s*=", "data-x=", icon_raw)  # strip event handlers
                 clean.append({
                     "name": str(p.get("name", "")),
                     "desc": str(p.get("desc", "")),
                     "lat": float(p["lat"]),
                     "lon": float(p["lon"]),
                     "color": str(p.get("color", "")),
+                    "icon": icon_raw,
                 })
             except (KeyError, ValueError, TypeError):
                 continue
