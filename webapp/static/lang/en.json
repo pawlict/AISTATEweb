@@ -272,6 +272,7 @@
   "label.status": "Status",
   "label.whisper_model": "Whisper model",
   "lang.en": "English",
+  "lang.ko": "Korean",
   "lang.pl": "Polish",
   "llm_settings.page_title": "LLM Settings",
   "logs.alert.clear_confirm": "Clear task list on the server? (projects are not deleted)",
