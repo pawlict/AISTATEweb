@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="mp" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ef4444"/><stop offset="100%" stop-color="#f97316"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#ef4444" stroke-width="1" fill="none" opacity="0.15"/>
+<path d="M24 4L6 12v14c0 10 8 16 18 18 10-2 18-8 18-18V12z" stroke="url(#mp)" stroke-width="2.2" fill="none"/>
+<text x="24" y="30" text-anchor="middle" font-size="14" fill="#ef4444" font-weight="900" font-family="sans-serif" opacity=".6">MP</text>
+
+</svg>

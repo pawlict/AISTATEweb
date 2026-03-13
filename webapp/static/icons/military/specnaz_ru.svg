@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="ru" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e3a8a"/><stop offset="100%" stop-color="#ef4444"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#1e3a8a" stroke-width="1" fill="none" opacity="0.15"/>
+<!-- shield -->
+<path d="M24 4L8 12v14c0 10 7 14 16 16 9-2 16-6 16-16V12z" stroke="url(#ru)" stroke-width="2.2" fill="none"/>
+<!-- flag stripes: white, blue, red -->
+<line x1="14" y1="14" x2="34" y2="14" stroke="#e2e8f0" stroke-width="3" opacity=".3"/>
+<line x1="14" y1="20" x2="34" y2="20" stroke="#1e3a8a" stroke-width="3" opacity=".4"/>
+<line x1="14" y1="26" x2="34" y2="26" stroke="#ef4444" stroke-width="3" opacity=".35"/>
+<!-- star -->
+<path d="M24 30l1.8 3.6 4 .6-2.9 2.8.7 4-3.6-1.9-3.6 1.9.7-4-2.9-2.8 4-.6z" stroke="#ef4444" stroke-width="1.2" fill="#ef4444" fill-opacity=".15"/>
+<!-- crosshair accents -->
+<line x1="24" y1="6" x2="24" y2="9" stroke="#e2e8f0" stroke-width="1" opacity=".3"/>
+
+</svg>
