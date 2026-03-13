@@ -77,6 +77,8 @@
     <div class="analysis-toolbar-right" id="gsm_toolbar_items" style="display:none">
       <div class="toolbar-section">
         <button class="btn pill-icon" id="gsm_add_file_toolbar_btn" title="Wczytaj dane GSM (biling, identyfikacja, ZIP, folder)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj dane" draggable="false"></button>
+        <span class="toolbar-sep" style="height:22px;margin:0 6px"></span>
+        <button class="btn pill-icon" id="gsm_standalone_map_btn" title="Otwórz mapę (bez danych bilingowych)"><img src="/static/icons/inne/map.svg" alt="Mapa" width="20" height="20" draggable="false" style="opacity:.85"></button>
       </div>
     </div>
   </div>
@@ -725,6 +727,57 @@
         <button class="btn mini" id="gsm_log_clear" title="Wyczyść logi">Wyczyść</button>
       </div>
       <div id="gsm_log_body" style="max-height:200px;overflow:auto;font-size:12px;font-family:monospace"></div>
+    </div>
+
+    <!-- Standalone map overlay (no billing data) -->
+    <div id="gsm_standalone_map_overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)">
+      <div style="position:absolute;inset:12px;display:flex;flex-direction:column;background:var(--card-bg,#fff);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.25);overflow:hidden">
+        <!-- Header -->
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border)">
+          <i data-icon="map" data-size="18"></i>
+          <span class="h2" style="margin:0">Mapa</span>
+          <button class="btn btn-icon" id="gsm_smap_screenshot_btn" title="Zrób zrzut ekranu" style="margin-left:8px">
+            <i data-icon="camera" data-size="20"></i>
+          </button>
+          <span style="flex:1"></span>
+          <button class="btn mini" id="gsm_smap_close_btn" title="Zamknij mapę" style="font-size:18px;line-height:1;padding:2px 8px">&times;</button>
+        </div>
+        <!-- Map container -->
+        <div id="gsm_smap_container" style="flex:1;position:relative;background:#e8e8e8">
+          <!-- Floating layer panel -->
+          <div class="gsm-layer-panel" id="gsm_smap_layer_panel">
+            <div class="gsm-lp-header" id="gsm_smap_lp_header_toggle">
+              <span>&#9776; Warstwy</span>
+              <span class="gsm-lp-toggle">&#9664;</span>
+            </div>
+            <div class="gsm-lp-body">
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Widok mapy</div>
+                <label class="gsm-lp-item active" data-layer="general">
+                  <input type="radio" name="gsm_smap_layer" value="general" checked> Ogólny
+                </label>
+                <label class="gsm-lp-item" data-layer="bts_coverage">
+                  <input type="radio" name="gsm_smap_layer" value="bts_coverage"> Zasięg BTS
+                </label>
+              </div>
+              <div class="gsm-lp-divider"></div>
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Nakładki</div>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_smap_overlay_military"> <span style="color:#b91c1c">&#9733;</span> Jednostki wojskowe
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_smap_overlay_airports"> <span style="color:#2563eb">&#9992;</span> Lotniska cywilne
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_smap_overlay_diplomacy"> <span style="color:#059669">&#9878;</span> Placówki dyplomatyczne
+                </label>
+                <div id="gsm_smap_kml_overlays"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Empty state (before upload) -->
