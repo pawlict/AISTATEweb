@@ -7578,6 +7578,7 @@
 
   function _toggleSmapEditMode() {
     _smapEditMode = !_smapEditMode;
+    console.log("[GSM] Edit mode toggled:", _smapEditMode, "mapInstance:", !!_smapInstance);
     const btn = QS("#gsm_smap_edit_btn");
     const indicator = QS("#gsm_smap_edit_indicator");
     const container = QS("#gsm_smap_container");
@@ -7589,6 +7590,7 @@
 
     if (_smapEditMode && _smapInstance) {
       _smapInstance.on("click", _smapOnMapClick);
+      console.log("[GSM] Click handler registered on map");
     } else if (_smapInstance) {
       _smapInstance.off("click", _smapOnMapClick);
       _smapHideContextMenu();
@@ -7597,6 +7599,7 @@
   }
 
   function _smapOnMapClick(e) {
+    console.log("[GSM] _smapOnMapClick fired", {editMode: _smapEditMode, instance: !!_smapInstance, activeLayer: _smapActiveLayerId, drawing: _smapDrawingPolygon});
     if (!_smapEditMode || !_smapInstance) return;
     if (!_smapActiveLayerId) {
       _addLog("warn", "Wybierz lub utwórz warstwę użytkownika przed dodaniem punktu");
@@ -7610,54 +7613,64 @@
     }
 
     // Show context menu with options
-    _smapShowContextMenu(e);
+    try {
+      _smapShowContextMenu(e);
+    } catch (err) {
+      console.error("[GSM] _smapShowContextMenu error:", err);
+      // Fallback: open point dialog directly if context menu fails
+      _openPointDialog({ isNew: true, layerId: _smapActiveLayerId, lat: e.latlng.lat, lon: e.latlng.lng, name: "", desc: "", color: "#e63946", icon: "" });
+    }
   }
 
-  /* ── Context menu for edit mode ─────────────────────────── */
+  /* ── Context menu for edit mode (Leaflet popup) ──────────── */
 
   function _smapShowContextMenu(e) {
     _smapHideContextMenu();
     const latlng = e.latlng;
-    const origEv = e.originalEvent;
-    const menu = document.createElement("div");
-    menu.className = "gsm-edit-ctx-menu";
-    // Use fixed positioning with viewport coordinates to avoid Leaflet container z-index/overflow issues
-    const mx = origEv ? origEv.clientX : 0;
-    const my = origEv ? origEv.clientY : 0;
-    menu.style.cssText = `position:fixed;left:${mx}px;top:${my}px;z-index:99999;background:var(--card-bg,#fff);color:var(--text,#222);border:1px solid var(--border,#ddd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px 0;min-width:160px;font-size:13px;cursor:default;`;
-    const items = [
-      { label: "Dodaj punkt", icon: "\ud83d\udccd", action: () => {
-        _smapHideContextMenu();
-        _openPointDialog({ isNew: true, layerId: _smapActiveLayerId, lat: latlng.lat, lon: latlng.lng, name: "", desc: "", color: "#e63946", icon: "" });
-      }},
-      { label: "Zr\u00f3b obrys", icon: "\u2b21", action: () => {
-        _smapHideContextMenu();
-        _smapStartPolygonDraw(latlng);
-      }},
-    ];
-    for (const item of items) {
-      const el = document.createElement("div");
-      el.style.cssText = "padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .1s";
-      el.innerHTML = `<span style="font-size:15px">${item.icon}</span><span>${item.label}</span>`;
-      el.onmouseenter = () => { el.style.background = "var(--bg-hover,rgba(0,0,0,.05))"; };
-      el.onmouseleave = () => { el.style.background = ""; };
-      el.onclick = (ev) => { ev.stopPropagation(); item.action(); };
-      menu.appendChild(el);
-    }
-    document.body.appendChild(menu);
-    _smapContextMenu = menu;
-    // Adjust if menu overflows viewport
-    const rect = menu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) menu.style.left = (mx - rect.width) + "px";
-    if (rect.bottom > window.innerHeight) menu.style.top = (my - rect.height) + "px";
+
+    const html = `<div style="min-width:140px;margin:-4px -8px;font-size:13px">
+      <div class="gsm-ctx-item" data-action="point" style="padding:7px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;border-radius:6px 6px 0 0">
+        <span style="font-size:15px">\ud83d\udccd</span><span>Dodaj punkt</span>
+      </div>
+      <div class="gsm-ctx-item" data-action="polygon" style="padding:7px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;border-radius:0 0 6px 6px">
+        <span style="font-size:15px">\u2b21</span><span>Zr\u00f3b obrys</span>
+      </div>
+    </div>`;
+
+    const popup = L.popup({ closeButton: false, className: "gsm-edit-ctx-popup", offset: [0, 0], autoPan: false })
+      .setLatLng(latlng)
+      .setContent(html)
+      .openOn(_smapInstance);
+
+    _smapContextMenu = popup;
+
+    // Bind actions after popup opens
     setTimeout(() => {
-      const closeHandler = (ev) => { if (menu.contains(ev.target)) return; _smapHideContextMenu(); document.removeEventListener("mousedown", closeHandler, true); };
-      document.addEventListener("mousedown", closeHandler, true);
-    }, 10);
+      const popupEl = popup.getElement();
+      if (!popupEl) return;
+      popupEl.querySelectorAll(".gsm-ctx-item").forEach(el => {
+        el.onmouseenter = () => { el.style.background = "rgba(74,108,247,.1)"; };
+        el.onmouseleave = () => { el.style.background = ""; };
+        el.onclick = (ev) => {
+          ev.stopPropagation();
+          L.DomEvent.stopPropagation(ev);
+          const action = el.getAttribute("data-action");
+          _smapHideContextMenu();
+          if (action === "point") {
+            _openPointDialog({ isNew: true, layerId: _smapActiveLayerId, lat: latlng.lat, lon: latlng.lng, name: "", desc: "", color: "#e63946", icon: "" });
+          } else if (action === "polygon") {
+            _smapStartPolygonDraw(latlng);
+          }
+        };
+      });
+    }, 50);
   }
 
   function _smapHideContextMenu() {
-    if (_smapContextMenu) { _smapContextMenu.remove(); _smapContextMenu = null; }
+    if (_smapContextMenu) {
+      try { _smapInstance.closePopup(_smapContextMenu); } catch (_) {}
+      _smapContextMenu = null;
+    }
   }
 
   /* ── Polygon drawing ─────────────────────────────────────── */
