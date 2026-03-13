@@ -7021,6 +7021,435 @@
     }
   }
 
+  /* ── Standalone map (no billing data) ─────────────────── */
+
+  let _smapInstance = null;      // Leaflet map
+  let _smapBtsLayer = null;      // BTS layer group
+  let _smapBtsEnabled = false;
+  let _smapOverlays = {};        // { military: L.layerGroup, ... }
+  let _smapOverlayData = {};     // cached data
+  let _smapKmlLayers = {};
+  let _smapKmlData = {};
+  let _smapDebounce = null;
+
+  async function _openStandaloneMap() {
+    const overlay = QS("#gsm_standalone_map_overlay");
+    if (!overlay) return;
+    overlay.style.display = "";
+
+    await _loadLeaflet();
+    if (!window.L) { _addLog("error", "Nie udało się załadować Leaflet"); return; }
+
+    const container = QS("#gsm_smap_container");
+    if (!container) return;
+
+    // Destroy previous instance
+    if (_smapInstance) {
+      try { _smapInstance.remove(); } catch(e) {}
+      _smapInstance = null;
+      _smapBtsLayer = null;
+      _smapBtsEnabled = false;
+      _smapOverlays = {};
+      _smapKmlLayers = {};
+    }
+
+    const map = L.map(container, {
+      zoomControl: true,
+      attributionControl: true,
+      preferCanvas: true,
+    }).setView([52.0, 19.5], 7);  // Poland center
+
+    _smapInstance = map;
+
+    // Add tiles (reuse logic)
+    await _addTileLayer(map);
+
+    // Layer panel toggle
+    const lpHeader = QS("#gsm_smap_lp_header_toggle");
+    if (lpHeader) {
+      lpHeader.onclick = () => {
+        const panel = QS("#gsm_smap_layer_panel");
+        if (panel) panel.classList.toggle("collapsed");
+      };
+    }
+
+    // Layer radio buttons
+    const layerRadios = document.querySelectorAll('input[name="gsm_smap_layer"]');
+    layerRadios.forEach(r => {
+      r.onchange = () => {
+        // Update active class
+        document.querySelectorAll('#gsm_smap_layer_panel label[data-layer]').forEach(l => l.classList.remove("active"));
+        const parentLabel = r.closest("label");
+        if (parentLabel) parentLabel.classList.add("active");
+
+        if (r.value === "general") {
+          _smapBtsEnabled = false;
+          if (_smapBtsLayer) { map.removeLayer(_smapBtsLayer); _smapBtsLayer = null; }
+        } else if (r.value === "bts_coverage") {
+          _smapBtsEnabled = true;
+          _loadSmapBts();
+        }
+      };
+    });
+
+    // BTS loading on move/zoom
+    map.on("moveend", () => {
+      if (!_smapBtsEnabled) return;
+      clearTimeout(_smapDebounce);
+      _smapDebounce = setTimeout(() => _loadSmapBts(), 300);
+    });
+
+    // Overlay checkboxes
+    const ovMil = QS("#gsm_smap_overlay_military");
+    const ovAir = QS("#gsm_smap_overlay_airports");
+    const ovDip = QS("#gsm_smap_overlay_diplomacy");
+    if (ovMil) { ovMil.checked = false; ovMil.onchange = () => _toggleSmapOverlay("military", ovMil.checked); }
+    if (ovAir) { ovAir.checked = false; ovAir.onchange = () => _toggleSmapOverlay("airports", ovAir.checked); }
+    if (ovDip) { ovDip.checked = false; ovDip.onchange = () => _toggleSmapOverlay("diplomacy", ovDip.checked); }
+
+    // Load KML overlay checkboxes
+    _loadSmapKmlCheckboxes();
+
+    // Screenshot button
+    const ssBtn = QS("#gsm_smap_screenshot_btn");
+    if (ssBtn) {
+      ssBtn.onclick = () => _takeSmapScreenshot();
+    }
+
+    // Close button
+    const closeBtn = QS("#gsm_smap_close_btn");
+    if (closeBtn) {
+      closeBtn.onclick = () => _closeStandaloneMap();
+    }
+
+    // ESC key
+    overlay._escHandler = (e) => {
+      if (e.key === "Escape") _closeStandaloneMap();
+    };
+    document.addEventListener("keydown", overlay._escHandler);
+
+    // Force map to recalculate size after overlay is visible
+    setTimeout(() => map.invalidateSize(), 100);
+  }
+
+  function _closeStandaloneMap() {
+    const overlay = QS("#gsm_standalone_map_overlay");
+    if (overlay) {
+      overlay.style.display = "none";
+      if (overlay._escHandler) {
+        document.removeEventListener("keydown", overlay._escHandler);
+        overlay._escHandler = null;
+      }
+    }
+    if (_smapInstance) {
+      try { _smapInstance.remove(); } catch(e) {}
+      _smapInstance = null;
+      _smapBtsLayer = null;
+      _smapBtsEnabled = false;
+      _smapOverlays = {};
+      _smapKmlLayers = {};
+    }
+  }
+
+  /** Load nearby BTS for standalone map */
+  async function _loadSmapBts() {
+    if (!_smapInstance || !_smapBtsEnabled) return;
+    const map = _smapInstance;
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const params = _nearbyParams(zoom);
+
+    try {
+      const url = `/api/gsm/bts/nearby?lat=${center.lat.toFixed(6)}&lon=${center.lng.toFixed(6)}&radius_deg=${params.radius}&limit=${params.limit}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.status !== "ok" || !data.stations) return;
+
+      // Remove old layer
+      if (_smapBtsLayer) { map.removeLayer(_smapBtsLayer); }
+
+      const group = L.layerGroup();
+      const defaultRange = { "GSM": 5000, "UMTS": 3000, "LTE": 2000, "5G NR": 1000 };
+      const color = "#2563eb";
+
+      for (const s of data.stations) {
+        const range = s.range_m || defaultRange[s.radio] || 2000;
+        L.circleMarker([s.lat, s.lon], {
+          radius: 4,
+          fillColor: color,
+          color: "#fff",
+          weight: 1.2,
+          fillOpacity: 0.7,
+        }).bindPopup(
+          `<b>${s.city || "BTS"}${s.street ? ", " + s.street : ""}</b><br>` +
+          `${s.radio ? "Technologia: " + s.radio + "<br>" : ""}` +
+          `LAC: ${s.lac || "?"} / CID: ${s.cid || "?"}<br>` +
+          `Zasięg: ~${(range/1000).toFixed(1)} km`
+        ).addTo(group);
+      }
+      group.addTo(map);
+      _smapBtsLayer = group;
+    } catch (e) {
+      console.warn("[GSM] Standalone BTS load error:", e);
+    }
+  }
+
+  /** Toggle overlay on standalone map */
+  async function _toggleSmapOverlay(which, show) {
+    if (!_smapInstance) return;
+    const urlMap = {
+      military: "/static/data/poland_military.json",
+      airports: "/static/data/poland_airports.json",
+      diplomacy: "/static/data/poland_diplomacy.json",
+    };
+
+    if (!show) {
+      if (_smapOverlays[which]) { _smapInstance.removeLayer(_smapOverlays[which]); }
+      return;
+    }
+
+    // Load data if not cached
+    if (!_smapOverlayData[which]) {
+      try {
+        const resp = await fetch(urlMap[which]);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        _smapOverlayData[which] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować nakładki: ${err.message}`);
+        return;
+      }
+    }
+
+    // Build layer
+    if (!_smapOverlays[which]) {
+      const group = L.layerGroup();
+      const data = _smapOverlayData[which];
+
+      if (which === "military") {
+        for (const item of data) {
+          const icon = _OVERLAY_TYPE_ICONS[item.type] || "🪖";
+          const color = _OVERLAY_TYPE_COLORS[item.type] || "#b91c1c";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [24, 24], iconAnchor: [12, 12],
+          });
+          L.marker([item.lat, item.lon], { icon: divIcon }).bindTooltip(
+            `<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`,
+            { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
+          ).addTo(group);
+        }
+      } else if (which === "diplomacy") {
+        for (const item of data) {
+          const icon = _DIPLOMACY_TYPE_ICONS[item.type] || "🏛️";
+          const color = _DIPLOMACY_TYPE_COLORS[item.type] || "#059669";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [22, 22], iconAnchor: [11, 11],
+          });
+          L.marker([item.lat, item.lon], { icon: divIcon }).bindTooltip(
+            `<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`,
+            { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
+          ).addTo(group);
+        }
+      } else {
+        // Airports
+        for (const item of data) {
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">✈️</span>`,
+            iconSize: [24, 24], iconAnchor: [12, 12],
+          });
+          const label = item.iata ? `${item.iata}` : "";
+          L.marker([item.lat, item.lon], { icon: divIcon }).bindTooltip(
+            `<b style="color:#2563eb">${item.name}</b>` +
+            (label ? `<br><span class="small" style="color:#6b7280">${label} — ${item.city}</span>` : `<br><span class="small">${item.city}</span>`),
+            { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
+          ).addTo(group);
+        }
+      }
+      _smapOverlays[which] = group;
+    }
+
+    _smapOverlays[which].addTo(_smapInstance);
+  }
+
+  /** Load KML overlay checkboxes for standalone map */
+  async function _loadSmapKmlCheckboxes() {
+    const container = QS("#gsm_smap_kml_overlays");
+    if (!container) return;
+
+    try {
+      const resp = await fetch("/api/gsm/overlays");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const items = (data && data.overlays) ? data.overlays : [];
+      if (!items.length) { container.innerHTML = ""; return; }
+
+      container.innerHTML = items.map(ov => {
+        const safeName = String(ov.name || ov.id).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return `<label class="gsm-lp-item">
+          <input type="checkbox" data-smap-kml-id="${ov.id}"> <span style="color:#8b5cf6">&#9679;</span> ${safeName}
+        </label>`;
+      }).join("");
+
+      container.querySelectorAll("input[data-smap-kml-id]").forEach(cb => {
+        cb.onchange = () => _toggleSmapKml(cb.dataset.smapKmlId, cb.checked);
+      });
+    } catch (e) { /* silent */ }
+  }
+
+  /** Toggle KML overlay on standalone map */
+  async function _toggleSmapKml(overlayId, show) {
+    if (!_smapInstance) return;
+
+    if (!show) {
+      if (_smapKmlLayers[overlayId]) { _smapInstance.removeLayer(_smapKmlLayers[overlayId]); }
+      return;
+    }
+
+    if (!_smapKmlData[overlayId]) {
+      try {
+        const resp = await fetch(`/api/gsm/overlays/${overlayId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        _smapKmlData[overlayId] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować KML: ${err.message}`);
+        return;
+      }
+    }
+
+    if (!_smapKmlLayers[overlayId]) {
+      const group = L.layerGroup();
+      const data = _smapKmlData[overlayId];
+      const points = data.points || [];
+      const lines = data.lines || [];
+      const polygons = data.polygons || [];
+      const defaultColor = "#8b5cf6";
+
+      for (const pt of points) {
+        if (!pt.lat || !pt.lon) continue;
+        const c = pt.color || defaultColor;
+        L.circleMarker([pt.lat, pt.lon], {
+          radius: 5, fillColor: c, color: "#fff", weight: 1, fillOpacity: 0.8,
+        }).bindPopup(pt.name ? `<b>${pt.name}</b>${pt.desc ? "<br>" + pt.desc : ""}` : "").addTo(group);
+      }
+      for (const ln of lines) {
+        if (!ln.coords || !ln.coords.length) continue;
+        L.polyline(ln.coords.map(c => [c[1], c[0]]), {
+          color: ln.color || defaultColor, weight: 2, opacity: 0.8,
+        }).addTo(group);
+      }
+      for (const pg of polygons) {
+        if (!pg.coords || !pg.coords.length) continue;
+        L.polygon(pg.coords.map(c => [c[1], c[0]]), {
+          color: pg.color || defaultColor, fillColor: pg.color || defaultColor, weight: 1, fillOpacity: 0.2,
+        }).addTo(group);
+      }
+      _smapKmlLayers[overlayId] = group;
+    }
+
+    _smapKmlLayers[overlayId].addTo(_smapInstance);
+  }
+
+  /** Screenshot for standalone map (reuses existing helpers) */
+  async function _takeSmapScreenshot() {
+    if (!_smapInstance) return;
+    const btn = QS("#gsm_smap_screenshot_btn");
+    if (btn) btn.disabled = true;
+
+    try {
+      const map = _smapInstance;
+      const scale = 2;
+      const size = map.getSize();
+      const w = size.x * scale;
+      const h = size.y * scale;
+
+      await _waitForTilesToLoad(map, 3000);
+
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext("2d");
+
+      ctx.fillStyle = "#e8e8e8";
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw tile images
+      const tilePane = map.getPane("tilePane");
+      if (tilePane) {
+        const tileTransform = _getLeafletPaneOffset(tilePane);
+        const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
+        const tilePromises = [];
+        for (const img of tileImgs) {
+          if (!img.src) continue;
+          const tileOffset = _getLeafletPaneOffset(img);
+          const x = (tileTransform.x + tileOffset.x) * scale;
+          const y = (tileTransform.y + tileOffset.y) * scale;
+          const tw = (img.offsetWidth || 256) * scale;
+          const th = (img.offsetHeight || 256) * scale;
+          tilePromises.push(
+            _fetchImageBitmap(img.src)
+              .then(bmp => ({ bmp, x, y, tw, th }))
+              .catch(() => null)
+          );
+        }
+        const tiles = await Promise.all(tilePromises);
+        for (const tile of tiles) {
+          if (!tile) continue;
+          ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
+          tile.bmp.close();
+        }
+      }
+
+      // Draw overlay pane canvases (circleMarkers, polylines)
+      const overlayPane = map.getPane("overlayPane");
+      if (overlayPane) {
+        const overlayTransform = _getLeafletPaneOffset(overlayPane);
+        const canvases = overlayPane.querySelectorAll("canvas");
+        for (const c of canvases) {
+          try {
+            ctx.drawImage(c, overlayTransform.x * scale, overlayTransform.y * scale, w, h);
+          } catch (_) {}
+        }
+      }
+
+      // Draw marker panes
+      _drawPaneMarkers(ctx, map, "shadowPane", scale);
+      _drawPaneMarkers(ctx, map, "markerPane", scale);
+
+      // Watermark
+      const activeRadio = QS('input[name="gsm_smap_layer"]:checked');
+      const activeItem = activeRadio ? activeRadio.closest(".gsm-lp-item") : null;
+      const layerLabel = activeItem ? activeItem.textContent.trim() : "Mapa";
+      const extraParts = [layerLabel, "© OpenStreetMap contributors"];
+      const final = _drawWatermark(out, extraParts);
+
+      // Download
+      const now = new Date();
+      final.toBlob((blob) => {
+        if (!blob) return;
+        const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `mapa_${ts}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zrzut mapy: ${filename}`);
+      }, "image/png");
+    } catch (err) {
+      console.error("[GSM] Standalone map screenshot error:", err);
+      _addLog("error", "Nie udało się zrobić zrzutu mapy: " + err.message);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   /* ── bindings ───────────────────────────────────────────── */
   function _bind() {
     const fileInput = QS("#gsm_file_input");
@@ -7028,6 +7457,12 @@
 
     if (uploadBtn) {
       uploadBtn.onclick = () => { if (fileInput) fileInput.click(); };
+    }
+
+    // Standalone map button
+    const smapBtn = QS("#gsm_standalone_map_btn");
+    if (smapBtn) {
+      smapBtn.onclick = () => _openStandaloneMap();
     }
     if (fileInput) {
       fileInput.onchange = () => {
