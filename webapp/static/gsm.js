@@ -1103,14 +1103,15 @@
     entry.card.remove();
     entry.tetherLine.remove();
 
-    // Remove map listener
-    if (St.map) St.map.off("move", entry._onMapMove);
+    // Remove map listener — use stored map ref or fall back to St.map
+    const mapRef = entry._mapRef || St.map;
+    if (mapRef) mapRef.off("move", entry._onMapMove);
 
     _pinnedCards.splice(idx, 1);
 
-    // Clean up tether SVG if no more cards
+    // Clean up tether SVG if no more cards on this map container
     if (!_pinnedCards.length) {
-      const svg = St.map && St.map.getContainer().querySelector(".gsm-pinned-tether-svg");
+      const svg = mapRef && mapRef.getContainer().querySelector(".gsm-pinned-tether-svg");
       if (svg) svg.remove();
     }
 
@@ -1195,6 +1196,209 @@
     }
 
     _openPinnedCard(latlng, loc);
+  }
+
+  /**
+   * Open a pinned card for an overlay marker click (military, airports, diplomacy, KML, user points).
+   * Uses the same pinned-card infrastructure as BTS cards.
+   *
+   * @param {L.LatLng|{lat,lon}} latlng  Marker coordinates
+   * @param {Object} info                Overlay data: { name, desc, type, color, icon, layer, lat, lon, extra }
+   * @param {L.Map} [mapInst]            Map instance (defaults to St.map)
+   */
+  function _openOverlayPinnedCard(latlng, info, mapInst) {
+    const map = mapInst || St.map;
+    if (!map) return;
+    const container = map.getContainer();
+    const id = ++_pinnedCardIdCounter;
+
+    const ll = latlng.lat !== undefined && latlng.lng !== undefined
+      ? latlng : L.latLng(latlng.lat, latlng.lon || latlng.lng);
+
+    // ── Build card DOM ──
+    const card = document.createElement("div");
+    card.className = "gsm-pinned-card";
+    card.dataset.pcId = id;
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "gsm-pinned-card-header";
+
+    const title = document.createElement("span");
+    title.className = "gsm-pinned-card-title";
+    title.textContent = info.name || "Lokalizacja";
+    if (info.color) title.style.color = info.color;
+
+    const pinBtn = document.createElement("button");
+    pinBtn.className = "gsm-pinned-card-btn";
+    pinBtn.innerHTML = _PIN_SVG;
+    pinBtn.title = "Przypnij kartę";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "gsm-pinned-card-btn";
+    closeBtn.innerHTML = _CLOSE_SVG;
+    closeBtn.title = "Zamknij";
+
+    header.appendChild(title);
+    header.appendChild(pinBtn);
+    header.appendChild(closeBtn);
+
+    // Body
+    const body = document.createElement("div");
+    body.className = "gsm-pinned-card-body";
+
+    let html = '<div class="gsm-pc-summary">';
+    if (info.type) html += `<span class="gsm-type" style="display:inline-block;margin-bottom:4px">${info.type}</span><br>`;
+    if (info.desc) html += `<span>${info.desc}</span><br>`;
+    html += `<span class="small muted">${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}</span>`;
+    if (info.layer) html += `<br><span class="small muted">Warstwa: ${info.layer}</span>`;
+    if (info.extra) html += `<br>${info.extra}`;
+    html += '</div>';
+
+    body.innerHTML = html;
+
+    // Resize handle
+    const resizeHandle = document.createElement("div");
+    resizeHandle.className = "gsm-pinned-card-resize";
+
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(resizeHandle);
+
+    // Position
+    const point = map.latLngToContainerPoint(ll);
+    let cardX = point.x + 18;
+    let cardY = point.y - 40;
+    const cRect = container.getBoundingClientRect();
+    if (cardX + 260 > cRect.width) cardX = point.x - 270;
+    if (cardY < 10) cardY = 10;
+    card.style.left = cardX + "px";
+    card.style.top = cardY + "px";
+    card.style.width = "280px";
+    card.style.maxHeight = "300px";
+
+    let _cardOffsetX = cardX - point.x;
+    let _cardOffsetY = cardY - point.y;
+
+    container.appendChild(card);
+
+    // ── Tether line ──
+    let tetherSvg = container.querySelector(".gsm-pinned-tether-svg");
+    if (!tetherSvg) {
+      tetherSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      tetherSvg.classList.add("gsm-pinned-tether-svg");
+      tetherSvg.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;overflow:visible";
+      container.appendChild(tetherSvg);
+    }
+    const tetherLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    tetherLine.setAttribute("stroke", info.color || "#64748b");
+    tetherLine.setAttribute("stroke-width", "1.5");
+    tetherLine.setAttribute("stroke-dasharray", "5 4");
+    tetherLine.dataset.pcId = id;
+    tetherSvg.appendChild(tetherLine);
+
+    function _updateTether() {
+      const pt = map.latLngToContainerPoint(ll);
+      const cx = parseFloat(card.style.left) + card.offsetWidth / 2;
+      const cy = parseFloat(card.style.top) + card.offsetHeight / 2;
+      tetherLine.setAttribute("x1", pt.x);
+      tetherLine.setAttribute("y1", pt.y);
+      tetherLine.setAttribute("x2", cx);
+      tetherLine.setAttribute("y2", cy);
+    }
+    _updateTether();
+
+    const _onMapMove = () => {
+      const pt = map.latLngToContainerPoint(ll);
+      card.style.left = (pt.x + _cardOffsetX) + "px";
+      card.style.top = (pt.y + _cardOffsetY) + "px";
+      _updateTether();
+    };
+    map.on("move", _onMapMove);
+
+    // ── Card state ──
+    const entry = {
+      id, card, tetherLine, latlng: ll,
+      loc: { city: info.name || "Lokalizacja" },  // for _syncPinnedFilter label
+      pinned: false, _onMapMove, _isOverlay: true, _mapRef: map,
+    };
+    _pinnedCards.push(entry);
+
+    function _updatePinVisual() {
+      pinBtn.classList.toggle("active", entry.pinned);
+      pinBtn.title = entry.pinned ? "Odepnij kartę" : "Przypnij kartę";
+    }
+    _updatePinVisual();
+
+    pinBtn.onclick = (e) => { e.stopPropagation(); entry.pinned = !entry.pinned; _updatePinVisual(); };
+    closeBtn.onclick = (e) => { e.stopPropagation(); _closePinnedCard(id); };
+
+    // Drag
+    let dragOx, dragOy;
+    header.addEventListener("mousedown", (e) => {
+      if (e.target.closest(".gsm-pinned-card-btn")) return;
+      e.preventDefault(); e.stopPropagation();
+      dragOx = e.clientX - parseFloat(card.style.left);
+      dragOy = e.clientY - parseFloat(card.style.top);
+      function onMove(ev) {
+        card.style.left = (ev.clientX - dragOx) + "px";
+        card.style.top = (ev.clientY - dragOy) + "px";
+        _updateTether();
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        const pt = map.latLngToContainerPoint(ll);
+        _cardOffsetX = parseFloat(card.style.left) - pt.x;
+        _cardOffsetY = parseFloat(card.style.top) - pt.y;
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+
+    // Resize
+    resizeHandle.addEventListener("mousedown", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const startW = card.offsetWidth, startH = card.offsetHeight;
+      const startX = e.clientX, startY = e.clientY;
+      function onMove(ev) {
+        card.style.width = Math.max(180, startW + ev.clientX - startX) + "px";
+        card.style.maxHeight = Math.max(60, startH + ev.clientY - startY) + "px";
+        _updateTether();
+      }
+      function onUp() { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+
+    card.addEventListener("mousedown", (e) => e.stopPropagation());
+    card.addEventListener("dblclick", (e) => e.stopPropagation());
+    card.addEventListener("wheel", (e) => e.stopPropagation());
+
+    return entry;
+  }
+
+  /**
+   * Handle overlay marker click — toggle pinned card (like BTS).
+   */
+  function _handleOverlayClick(latlng, info, mapInst) {
+    const ll = latlng.lat !== undefined && latlng.lng !== undefined
+      ? latlng : L.latLng(latlng.lat, latlng.lon || latlng.lng);
+
+    const existing = _pinnedCards.find(c =>
+      Math.abs(c.latlng.lat - ll.lat) < 0.00001 &&
+      Math.abs(c.latlng.lng - ll.lng) < 0.00001
+    );
+    if (existing) {
+      _closePinnedCard(existing.id);
+      return;
+    }
+
+    // Close unpinned overlay cards before opening a new one
+    const unpinned = _pinnedCards.filter(c => !c.pinned && c._isOverlay);
+    for (const u of unpinned) _closePinnedCard(u.id);
+
+    _openOverlayPinnedCard(latlng, info, mapInst);
   }
 
   /* ── log panel ──────────────────────────────────────────── */
@@ -6225,6 +6429,10 @@
           m.bindTooltip(`<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`, {
             direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
           });
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.desc || "", type: item.type || "", color }
+          ));
           m.addTo(group);
         }
       } else if (which === "diplomacy") {
@@ -6242,6 +6450,10 @@
           m.bindTooltip(`<b style="color:${color}">${item.name}</b>${countryTag}<br><span class="small">${item.desc || ""}</span>`, {
             direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
           });
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.desc || "", type: item.type || "", color, extra: countryTag ? `<span class="small muted">Kraj: ${item.country}</span>` : "" }
+          ));
           m.addTo(group);
         }
       } else {
@@ -6260,6 +6472,10 @@
           m.bindTooltip(tooltipHtml, {
             direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
           });
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.city || "", type: label ? `✈️ ${label}` : "Lotnisko", color: "#2563eb" }
+          ));
           m.addTo(group);
         }
       }
@@ -6355,6 +6571,10 @@
           `<br><span class="small muted">${layerName}</span>`,
           { direction: "top", offset: [0, -14], className: "gsm-overlay-tooltip" }
         );
+        m.on("click", () => _handleOverlayClick(
+          { lat: pt.lat, lon: pt.lon },
+          { name: pt.name || "", desc: pt.desc || "", color: "#8b5cf6", layer: layerName }
+        ));
         m.addTo(group);
       }
       St._kmlLayers[overlayId] = group;
@@ -7327,10 +7547,17 @@
             html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
             iconSize: [24, 24], iconAnchor: [12, 12],
           });
-          L.marker([item.lat, item.lon], { icon: divIcon }).bindTooltip(
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          m.bindTooltip(
             `<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`,
             { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
-          ).addTo(group);
+          );
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.desc || "", type: item.type || "", color },
+            _smapInstance
+          ));
+          m.addTo(group);
         }
       } else if (which === "diplomacy") {
         for (const item of data) {
@@ -7341,10 +7568,18 @@
             html: `<span style="font-size:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
             iconSize: [22, 22], iconAnchor: [11, 11],
           });
-          L.marker([item.lat, item.lon], { icon: divIcon }).bindTooltip(
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          m.bindTooltip(
             `<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`,
             { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
-          ).addTo(group);
+          );
+          const countryTag = item.country ? `<span class="small muted">Kraj: ${item.country}</span>` : "";
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.desc || "", type: item.type || "", color, extra: countryTag },
+            _smapInstance
+          ));
+          m.addTo(group);
         }
       } else {
         // Airports
@@ -7355,11 +7590,18 @@
             iconSize: [24, 24], iconAnchor: [12, 12],
           });
           const label = item.iata ? `${item.iata}` : "";
-          L.marker([item.lat, item.lon], { icon: divIcon }).bindTooltip(
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          m.bindTooltip(
             `<b style="color:#2563eb">${item.name}</b>` +
             (label ? `<br><span class="small" style="color:#6b7280">${label} — ${item.city}</span>` : `<br><span class="small">${item.city}</span>`),
             { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
-          ).addTo(group);
+          );
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.city || "", type: label ? `✈️ ${label}` : "Lotnisko", color: "#2563eb" },
+            _smapInstance
+          ));
+          m.addTo(group);
         }
       }
       _smapOverlays[which] = group;
@@ -8173,16 +8415,23 @@
       );
 
       marker.on("click", (e) => {
-        if (!_smapEditMode) return;
         L.DomEvent.stopPropagation(e);
-        _openLocationDialog({
-          type: "point", isNew: false,
-          layerId: layerId, pointIndex: idx,
-          lat: pt.lat, lon: pt.lon,
-          name: pt.name, desc: pt.desc,
-          color: pt.color || "#e63946",
-          icon: pt.icon || "",
-        });
+        if (_smapEditMode) {
+          _openLocationDialog({
+            type: "point", isNew: false,
+            layerId: layerId, pointIndex: idx,
+            lat: pt.lat, lon: pt.lon,
+            name: pt.name, desc: pt.desc,
+            color: pt.color || "#e63946",
+            icon: pt.icon || "",
+          });
+        } else {
+          _handleOverlayClick(
+            { lat: pt.lat, lon: pt.lon },
+            { name: pt.name || "Punkt", desc: pt.desc || "", color, layer: layer.data.name || layerId },
+            _smapInstance
+          );
+        }
       });
 
       marker.addTo(group);
@@ -8199,9 +8448,17 @@
         { direction: "center", className: "gsm-overlay-tooltip" }
       );
       poly.on("click", (e) => {
-        if (!_smapEditMode) return;
         L.DomEvent.stopPropagation(e);
-        _openLocationDialog({ type: "polygon", isNew: false, layerId, polygonIndex: idx, coords: pg.coords, name: pg.name || "", desc: pg.desc || "", fillColor, icon: pg.icon || "" });
+        if (_smapEditMode) {
+          _openLocationDialog({ type: "polygon", isNew: false, layerId, polygonIndex: idx, coords: pg.coords, name: pg.name || "", desc: pg.desc || "", fillColor, icon: pg.icon || "" });
+        } else {
+          const center = poly.getBounds().getCenter();
+          _handleOverlayClick(
+            { lat: center.lat, lon: center.lng },
+            { name: pg.name || "Obrys", desc: pg.desc || "", color: fillColor, layer: layer.data.name || layerId, extra: `<span class="small muted">Wierzchołki: ${pg.coords.length}</span>` },
+            _smapInstance
+          );
+        }
       });
       poly.addTo(group);
     });
