@@ -7578,7 +7578,6 @@
 
   function _toggleSmapEditMode() {
     _smapEditMode = !_smapEditMode;
-    console.log("[GSM] Edit mode toggled:", _smapEditMode, "mapInstance:", !!_smapInstance);
     const btn = QS("#gsm_smap_edit_btn");
     const indicator = QS("#gsm_smap_edit_indicator");
     const container = QS("#gsm_smap_container");
@@ -7590,7 +7589,6 @@
 
     if (_smapEditMode && _smapInstance) {
       _smapInstance.on("click", _smapOnMapClick);
-      console.log("[GSM] Click handler registered on map");
     } else if (_smapInstance) {
       _smapInstance.off("click", _smapOnMapClick);
       _smapHideContextMenu();
@@ -7599,11 +7597,20 @@
   }
 
   function _smapOnMapClick(e) {
-    console.log("[GSM] _smapOnMapClick fired", {editMode: _smapEditMode, instance: !!_smapInstance, activeLayer: _smapActiveLayerId, drawing: _smapDrawingPolygon});
     if (!_smapEditMode || !_smapInstance) return;
     if (!_smapActiveLayerId) {
-      _addLog("warn", "Wybierz lub utwórz warstwę użytkownika przed dodaniem punktu");
-      return;
+      // Auto-select the only user layer, or auto-create one
+      const userLayerIds = Object.keys(_smapUserLayers);
+      if (userLayerIds.length === 1) {
+        _smapActiveLayerId = userLayerIds[0];
+        _smapRefreshUserLayersList();
+      } else if (userLayerIds.length === 0) {
+        _smapAutoCreateLayerThenClick(e);
+        return;
+      } else {
+        _smapShowToast("Wybierz warstwę w panelu po lewej przed dodaniem elementów");
+        return;
+      }
     }
 
     // If currently drawing a polygon, add vertex
@@ -7613,13 +7620,7 @@
     }
 
     // Show context menu with options
-    try {
-      _smapShowContextMenu(e);
-    } catch (err) {
-      console.error("[GSM] _smapShowContextMenu error:", err);
-      // Fallback: open point dialog directly if context menu fails
-      _openPointDialog({ isNew: true, layerId: _smapActiveLayerId, lat: e.latlng.lat, lon: e.latlng.lng, name: "", desc: "", color: "#e63946", icon: "" });
-    }
+    _smapShowContextMenu(e);
   }
 
   /* ── Context menu for edit mode (Leaflet popup) ──────────── */
@@ -7671,6 +7672,47 @@
       try { _smapInstance.closePopup(_smapContextMenu); } catch (_) {}
       _smapContextMenu = null;
     }
+  }
+
+  /** Auto-create a default layer then re-fire the click */
+  async function _smapAutoCreateLayerThenClick(originalEvent) {
+    try {
+      const resp = await fetch("/api/gsm/overlays/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Moja warstwa" }),
+      });
+      const data = await resp.json();
+      if (data.status === "ok") {
+        _smapUserLayers[data.id] = {
+          data: { name: data.name, points: [], polygons: [], user_layer: true },
+          leafletGroup: null, markers: [],
+        };
+        _smapActiveLayerId = data.id;
+        _smapRefreshUserLayersList();
+        _smapShowToast("Utworzono warstwę: " + data.name);
+        // Re-process the original click now that a layer is active
+        _smapOnMapClick(originalEvent);
+      }
+    } catch (err) {
+      _smapShowToast("Nie udało się utworzyć warstwy");
+    }
+  }
+
+  /** Show a brief toast message on the map */
+  function _smapShowToast(msg) {
+    const container = QS("#gsm_smap_container");
+    if (!container) return;
+    // Remove existing toast
+    const old = container.querySelector(".gsm-smap-toast");
+    if (old) old.remove();
+    const toast = document.createElement("div");
+    toast.className = "gsm-smap-toast";
+    toast.textContent = msg;
+    toast.style.cssText = "position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:9200;background:var(--card-bg,#fff);color:var(--text,#222);border:1px solid var(--border,#ddd);border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.15);padding:8px 18px;font-size:13px;font-weight:500;pointer-events:none;opacity:1;transition:opacity .4s";
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = "0"; }, 2500);
+    setTimeout(() => { toast.remove(); }, 3000);
   }
 
   /* ── Polygon drawing ─────────────────────────────────────── */
