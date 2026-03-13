@@ -7828,14 +7828,15 @@
       let marker;
 
       if (pt.icon) {
-        // Icon marker — either a static path or raw SVG
-        let iconHtml;
+        // Icon marker — either a static path or raw SVG, shown on white circle with border
+        let innerHtml;
         if (pt.icon.startsWith("/static/")) {
-          iconHtml = `<img src="${pt.icon}" style="width:28px;height:28px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35));object-fit:contain">`;
+          innerHtml = `<img src="${pt.icon}" style="width:22px;height:22px;object-fit:contain">`;
         } else {
-          iconHtml = pt.icon.replace(/<svg/,
-            '<svg style="width:28px;height:28px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35))"');
+          innerHtml = pt.icon.replace(/<svg/,
+            '<svg style="width:22px;height:22px"');
         }
+        const iconHtml = `<div style="width:32px;height:32px;background:#fff;border:2px solid ${pt.color || '#555'};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.3)">${innerHtml}</div>`;
         const divIcon = L.divIcon({
           className: "gsm-user-point-icon",
           html: iconHtml,

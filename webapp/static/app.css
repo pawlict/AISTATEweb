@@ -1691,6 +1691,10 @@ button.pill-icon:hover{
   background: none !important;
   border: none !important;
 }
+.gsm-user-point-icon{
+  background: none !important;
+  border: none !important;
+}
 .gsm-tl-marker{
   font-size: 28px;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
