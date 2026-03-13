@@ -3571,6 +3571,64 @@
       // ── 6. Draw marker pane (HTML markers / icons) ──
       _drawPaneMarkers(ctx, map, "markerPane", scale);
 
+      // ── 6b. Draw pinned BTS cards + tether lines ──
+      // Tether SVG lines
+      const tetherSvg = container.querySelector(".gsm-pinned-tether-svg");
+      if (tetherSvg) {
+        const lines = tetherSvg.querySelectorAll("line");
+        for (const ln of lines) {
+          const x1 = parseFloat(ln.getAttribute("x1")) * scale;
+          const y1 = parseFloat(ln.getAttribute("y1")) * scale;
+          const x2 = parseFloat(ln.getAttribute("x2")) * scale;
+          const y2 = parseFloat(ln.getAttribute("y2")) * scale;
+          ctx.save();
+          ctx.strokeStyle = ln.getAttribute("stroke") || "#64748b";
+          ctx.lineWidth = parseFloat(ln.getAttribute("stroke-width") || 1.5) * scale;
+          ctx.setLineDash([5 * scale, 4 * scale]);
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+      // Pinned cards and Leaflet popups (rendered via html2canvas)
+      const pinnedCardEls = container.querySelectorAll(".gsm-pinned-card");
+      const popupPane = map.getPane("popupPane");
+      const openPopups = popupPane ? popupPane.querySelectorAll(".leaflet-popup") : [];
+      if (pinnedCardEls.length > 0 || openPopups.length > 0) {
+        await _ensureHtml2Canvas();
+        for (const card of pinnedCardEls) {
+          try {
+            const cardCanvas = await window.html2canvas(card, {
+              scale: scale,
+              backgroundColor: null,
+              logging: false,
+              useCORS: true,
+            });
+            const cardLeft = parseFloat(card.style.left || 0) * scale;
+            const cardTop = parseFloat(card.style.top || 0) * scale;
+            ctx.drawImage(cardCanvas, cardLeft, cardTop);
+          } catch (e) {
+            _addLog("warn", "Nie udało się narysować karty BTS: " + e.message);
+          }
+        }
+        for (const popup of openPopups) {
+          try {
+            const popupCanvas = await window.html2canvas(popup, {
+              scale: scale,
+              backgroundColor: null,
+              logging: false,
+              useCORS: true,
+            });
+            const pRect = popup.getBoundingClientRect();
+            const px = (pRect.left - containerRect.left) * scale;
+            const py = (pRect.top - containerRect.top) * scale;
+            ctx.drawImage(popupCanvas, px, py);
+          } catch (_) {}
+        }
+      }
+
       // ── 7. Draw watermark ──
       const activeRadio = QS('input[name="gsm_map_layer"]:checked');
       const activeItem = activeRadio ? activeRadio.closest(".gsm-lp-item") : null;
@@ -7828,14 +7886,15 @@
       let marker;
 
       if (pt.icon) {
-        // Icon marker — either a static path or raw SVG
-        let iconHtml;
+        // Icon marker — either a static path or raw SVG, shown on white circle with border
+        let innerHtml;
         if (pt.icon.startsWith("/static/")) {
-          iconHtml = `<img src="${pt.icon}" style="width:28px;height:28px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35));object-fit:contain">`;
+          innerHtml = `<img src="${pt.icon}" style="width:22px;height:22px;object-fit:contain">`;
         } else {
-          iconHtml = pt.icon.replace(/<svg/,
-            '<svg style="width:28px;height:28px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35))"');
+          innerHtml = pt.icon.replace(/<svg/,
+            '<svg style="width:22px;height:22px"');
         }
+        const iconHtml = `<div style="width:32px;height:32px;background:#fff;border:2px solid ${pt.color || '#555'};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.3)">${innerHtml}</div>`;
         const divIcon = L.divIcon({
           className: "gsm-user-point-icon",
           html: iconHtml,
