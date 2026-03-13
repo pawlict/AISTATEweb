@@ -7196,9 +7196,9 @@
     // ESC key
     overlay._escHandler = (e) => {
       if (e.key === "Escape") {
-        // Close point dialog first if open
-        const ptDialog = QS("#gsm_point_dialog");
-        if (ptDialog && ptDialog.open) { ptDialog.close(); return; }
+        // Close location dialog first if open
+        const locDialog = QS("#gsm_location_dialog");
+        if (locDialog && locDialog.open) { locDialog.close(); return; }
         const lyDialog = QS("#gsm_layer_dialog");
         if (lyDialog && lyDialog.open) { lyDialog.close(); return; }
         _closeStandaloneMap();
@@ -7658,7 +7658,7 @@
           const action = el.getAttribute("data-action");
           _smapHideContextMenu();
           if (action === "point") {
-            _openPointDialog({ isNew: true, layerId: _smapActiveLayerId, lat: latlng.lat, lon: latlng.lng, name: "", desc: "", color: "#e63946", icon: "" });
+            _openLocationDialog({ type: "point", isNew: true, layerId: _smapActiveLayerId, lat: latlng.lat, lon: latlng.lng, name: "", desc: "", color: "#e63946", icon: "" });
           } else if (action === "polygon") {
             _smapStartPolygonDraw(latlng);
           }
@@ -7776,7 +7776,7 @@
     if (indicator) indicator.textContent = "Tryb edycji";
     const coords = _smapPolygonPoints.map(p => [p.lat, p.lng]);
     _smapDrawingPolygon = false;
-    _openPolygonDialog({ isNew: true, layerId: _smapActiveLayerId, coords, name: "", desc: "", fillColor: "#4a6cf7" });
+    _openLocationDialog({ type: "polygon", isNew: true, layerId: _smapActiveLayerId, coords, name: "", desc: "", fillColor: "#4a6cf7", icon: "" });
   }
 
   function _smapCancelPolygonDraw() {
@@ -7791,41 +7791,7 @@
     _addLog("info", "Anulowano rysowanie obrysu");
   }
 
-  /* ── Polygon dialog ──────────────────────────────────────── */
-
-  function _openPolygonDialog(opts) {
-    const dialog = QS("#gsm_polygon_dialog");
-    if (!dialog) return;
-    const title = QS("#gsm_polygon_dialog_title");
-    const nameEl = QS("#gsm_polygon_name");
-    const descEl = QS("#gsm_polygon_desc");
-    const colorEl = QS("#gsm_polygon_fill_color");
-    const delBtn = QS("#gsm_polygon_delete_btn");
-    const vertexInfo = QS("#gsm_polygon_vertex_count");
-    if (title) title.textContent = opts.isNew ? "Nowy obrys" : "Edycja obrysu";
-    if (nameEl) nameEl.value = opts.name || "";
-    if (descEl) descEl.value = opts.desc || "";
-    if (colorEl) colorEl.value = opts.fillColor || "#4a6cf7";
-    if (delBtn) delBtn.style.display = opts.isNew ? "none" : "";
-    if (vertexInfo) vertexInfo.textContent = `${opts.coords.length} wierzcho\u0142k\u00f3w`;
-    const form = dialog.querySelector("form");
-    const submitHandler = (e) => {
-      e.preventDefault(); form.removeEventListener("submit", submitHandler);
-      const polygon = { name: nameEl ? nameEl.value.trim() : "", desc: descEl ? descEl.value.trim() : "", coords: opts.coords, fillColor: colorEl ? colorEl.value : "#4a6cf7" };
-      if (opts.isNew) _smapAddPolygon(opts.layerId, polygon);
-      else _smapUpdatePolygon(opts.layerId, opts.polygonIndex, polygon);
-      dialog.close();
-    };
-    form.addEventListener("submit", submitHandler);
-    const cancelBtn = QS("#gsm_polygon_cancel_btn");
-    const cancelHandler = () => { cancelBtn.removeEventListener("click", cancelHandler); form.removeEventListener("submit", submitHandler); dialog.close(); };
-    if (cancelBtn) cancelBtn.addEventListener("click", cancelHandler);
-    if (delBtn && !opts.isNew) {
-      const delHandler = () => { delBtn.removeEventListener("click", delHandler); form.removeEventListener("submit", submitHandler); _smapDeletePolygon(opts.layerId, opts.polygonIndex); dialog.close(); };
-      delBtn.addEventListener("click", delHandler);
-    }
-    dialog.showModal();
-  }
+  /* ── Polygon CRUD ────────────────────────────────────────── */
 
   function _smapAddPolygon(layerId, polygon) {
     const layer = _smapUserLayers[layerId];
@@ -7835,11 +7801,17 @@
     _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
   }
 
-  function _smapUpdatePolygon(layerId, idx, polygon) {
+  function _smapUpdatePolygon(layerId, idx, polygon, targetLayerId) {
     const layer = _smapUserLayers[layerId];
     if (!layer || !layer.data.polygons) return;
-    layer.data.polygons[idx] = polygon;
-    _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
+    if (targetLayerId && targetLayerId !== layerId) {
+      layer.data.polygons.splice(idx, 1);
+      _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
+      _smapAddPolygon(targetLayerId, polygon);
+    } else {
+      layer.data.polygons[idx] = polygon;
+      _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
+    }
   }
 
   function _smapDeletePolygon(layerId, idx) {
@@ -7851,7 +7823,7 @@
 
   // --- Icon preview helper: handles both path-based and raw SVG icons ---
   function _smapUpdateIconPreview(iconValue) {
-    const preview = QS("#gsm_point_icon_preview");
+    const preview = QS("#gsm_loc_icon_preview");
     if (!preview) return;
     if (!iconValue) {
       preview.innerHTML = '<span class="muted small">—</span>';
@@ -7881,7 +7853,7 @@
   // --- Icon picker: fetch categories from API and render grid ---
   let _mapIconsCache = null;
   async function _smapLoadIconPicker() {
-    const body = QS("#gsm_point_icon_picker_body");
+    const body = QS("#gsm_loc_icon_picker_body");
     if (!body) return;
     if (_mapIconsCache) {
       _smapRenderIconPicker(_mapIconsCache);
@@ -7903,7 +7875,7 @@
   }
 
   function _smapRenderIconPicker(categories) {
-    const body = QS("#gsm_point_icon_picker_body");
+    const body = QS("#gsm_loc_icon_picker_body");
     if (!body) return;
     body.innerHTML = "";
     for (const cat of categories) {
@@ -7924,9 +7896,9 @@
         btn.onmouseenter = () => { btn.style.borderColor = "var(--primary,#4361ee)"; };
         btn.onmouseleave = () => { btn.style.borderColor = "var(--border,#ddd)"; };
         btn.onclick = () => {
-          const iconData = QS("#gsm_point_icon_data");
-          const iconClearBtn = QS("#gsm_point_icon_clear_btn");
-          const picker = QS("#gsm_point_icon_picker");
+          const iconData = QS("#gsm_loc_icon_data");
+          const iconClearBtn = QS("#gsm_loc_icon_clear_btn");
+          const picker = QS("#gsm_loc_icon_picker");
           if (iconData) iconData.value = ic.path;
           _smapUpdateIconPreview(ic.path);
           if (iconClearBtn) iconClearBtn.style.display = "";
@@ -7938,43 +7910,72 @@
     }
   }
 
-  function _openPointDialog(opts) {
-    const dialog = QS("#gsm_point_dialog");
+  /* ── Unified location dialog (point & polygon) ──────────── */
+  function _openLocationDialog(opts) {
+    const dialog = QS("#gsm_location_dialog");
     if (!dialog) return;
 
-    const title = QS("#gsm_point_dialog_title");
-    const nameEl = QS("#gsm_point_name");
-    const descEl = QS("#gsm_point_desc");
-    const latEl = QS("#gsm_point_lat");
-    const lonEl = QS("#gsm_point_lon");
-    const colorEl = QS("#gsm_point_color");
-    const layerSel = QS("#gsm_point_layer_select");
-    const delBtn = QS("#gsm_point_delete_btn");
+    const isPoint = opts.type === "point";
 
-    const iconPreview = QS("#gsm_point_icon_preview");
-    const iconData = QS("#gsm_point_icon_data");
-    const iconFile = QS("#gsm_point_icon_file");
-    const iconUploadBtn = QS("#gsm_point_icon_upload_btn");
-    const iconClearBtn = QS("#gsm_point_icon_clear_btn");
-    const iconPickBtn = QS("#gsm_point_icon_pick_btn");
-    const iconPicker = QS("#gsm_point_icon_picker");
-    const iconPickerBody = QS("#gsm_point_icon_picker_body");
+    // --- Element refs ---
+    const title = QS("#gsm_loc_title");
+    const typeLabel = QS("#gsm_loc_type_label");
+    const nameEl = QS("#gsm_loc_name");
+    const descEl = QS("#gsm_loc_desc");
+    const latEl = QS("#gsm_loc_lat");
+    const lonEl = QS("#gsm_loc_lon");
+    const pointSection = QS("#gsm_loc_point_section");
+    const polygonSection = QS("#gsm_loc_polygon_section");
+    const vertexInfo = QS("#gsm_loc_vertex_count");
+    const colorEl = QS("#gsm_loc_color");
+    const colorLabel = QS("#gsm_loc_color_label");
+    const layerSel = QS("#gsm_loc_layer_select");
+    const delBtn = QS("#gsm_loc_delete_btn");
+    const iconData = QS("#gsm_loc_icon_data");
+    const iconFile = QS("#gsm_loc_icon_file");
+    const iconUploadBtn = QS("#gsm_loc_icon_upload_btn");
+    const iconClearBtn = QS("#gsm_loc_icon_clear_btn");
+    const iconPickBtn = QS("#gsm_loc_icon_pick_btn");
+    const iconPicker = QS("#gsm_loc_icon_picker");
 
-    if (title) title.textContent = opts.isNew ? "Nowy punkt" : "Edycja punktu";
+    // --- Title & type badge ---
+    if (title) title.textContent = opts.isNew ? "Nowa Lokalizacja" : "Edycja Lokalizacji";
+    if (typeLabel) {
+      typeLabel.textContent = isPoint ? "Punkt" : "Obrys";
+      typeLabel.style.background = isPoint ? "var(--accent,#4a6cf7)" : "#059669";
+    }
+
+    // --- Show/hide type-specific sections ---
+    if (pointSection) pointSection.style.display = isPoint ? "" : "none";
+    if (polygonSection) polygonSection.style.display = isPoint ? "none" : "";
+    if (colorLabel) colorLabel.textContent = isPoint ? "Kolor" : "Kolor wypełnienia";
+
+    // --- Populate common fields ---
     if (nameEl) nameEl.value = opts.name || "";
     if (descEl) descEl.value = opts.desc || "";
-    if (latEl) latEl.value = opts.lat.toFixed(6);
-    if (lonEl) lonEl.value = opts.lon.toFixed(6);
-    if (colorEl) colorEl.value = opts.color || "#e63946";
-    if (delBtn) delBtn.style.display = opts.isNew ? "none" : "";
+    const currentColor = opts.fillColor || opts.color || (isPoint ? "#e63946" : "#4a6cf7");
+    if (colorEl) colorEl.value = currentColor;
 
-    // Icon state — value is either a path (/static/icons/maps/...) or raw SVG
-    if (iconData) iconData.value = opts.icon || "";
-    _smapUpdateIconPreview(opts.icon || "");
-    if (iconClearBtn) iconClearBtn.style.display = opts.icon ? "" : "none";
+    if (isPoint) {
+      if (latEl) latEl.value = (opts.lat != null) ? opts.lat.toFixed(6) : "";
+      if (lonEl) lonEl.value = (opts.lon != null) ? opts.lon.toFixed(6) : "";
+    }
+    if (!isPoint && vertexInfo) {
+      vertexInfo.textContent = `${(opts.coords || []).length} wierzchołków`;
+    }
+
+    if (delBtn) {
+      delBtn.style.display = opts.isNew ? "none" : "";
+      delBtn.textContent = isPoint ? "Usuń punkt" : "Usuń obrys";
+    }
+
+    // --- Icon state ---
+    const iconVal = opts.icon || "";
+    if (iconData) iconData.value = iconVal;
+    _smapUpdateIconPreview(iconVal);
+    if (iconClearBtn) iconClearBtn.style.display = iconVal ? "" : "none";
     if (iconPicker) iconPicker.style.display = "none";
 
-    // Icon picker toggle
     if (iconPickBtn) {
       iconPickBtn.onclick = async () => {
         if (!iconPicker) return;
@@ -7984,7 +7985,6 @@
       };
     }
 
-    // SVG file upload handler
     if (iconUploadBtn && iconFile) {
       iconUploadBtn.onclick = () => iconFile.click();
       iconFile.value = "";
@@ -7992,12 +7992,10 @@
         const file = iconFile.files && iconFile.files[0];
         if (!file) return;
         if (!file.name.toLowerCase().endsWith(".svg") && file.type !== "image/svg+xml") {
-          _addLog("warn", "Tylko pliki SVG są obsługiwane");
-          return;
+          _addLog("warn", "Tylko pliki SVG są obsługiwane"); return;
         }
         if (file.size > 50000) {
-          _addLog("warn", "Plik SVG zbyt duży (max 50 KB)");
-          return;
+          _addLog("warn", "Plik SVG zbyt duży (max 50 KB)"); return;
         }
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -8020,7 +8018,7 @@
       };
     }
 
-    // Populate layer dropdown
+    // --- Layer dropdown ---
     if (layerSel) {
       layerSel.innerHTML = "";
       for (const [id, layer] of Object.entries(_smapUserLayers)) {
@@ -8032,34 +8030,45 @@
       }
     }
 
-    _smapEditingPoint = opts.isNew ? null : { layerId: opts.layerId, pointIndex: opts.pointIndex };
+    if (isPoint) {
+      _smapEditingPoint = opts.isNew ? null : { layerId: opts.layerId, pointIndex: opts.pointIndex };
+    }
 
-    // Form submit handler
+    // --- Submit ---
     const form = dialog.querySelector("form");
     const submitHandler = (e) => {
       e.preventDefault();
       form.removeEventListener("submit", submitHandler);
-      const point = {
-        name: nameEl ? nameEl.value.trim() : "",
-        desc: descEl ? descEl.value.trim() : "",
-        lat: parseFloat(latEl ? latEl.value : opts.lat),
-        lon: parseFloat(lonEl ? lonEl.value : opts.lon),
-        color: colorEl ? colorEl.value : "#e63946",
-        icon: iconData ? iconData.value.trim() : "",
-      };
+      const iconValue = iconData ? iconData.value.trim() : "";
       const targetLayer = layerSel ? layerSel.value : opts.layerId;
 
-      if (opts.isNew) {
-        _smapAddPoint(targetLayer, point);
+      if (isPoint) {
+        const point = {
+          name: nameEl ? nameEl.value.trim() : "",
+          desc: descEl ? descEl.value.trim() : "",
+          lat: parseFloat(latEl ? latEl.value : opts.lat),
+          lon: parseFloat(lonEl ? lonEl.value : opts.lon),
+          color: colorEl ? colorEl.value : "#e63946",
+          icon: iconValue,
+        };
+        if (opts.isNew) _smapAddPoint(targetLayer, point);
+        else _smapUpdatePoint(opts.layerId, opts.pointIndex, point, targetLayer);
       } else {
-        _smapUpdatePoint(opts.layerId, opts.pointIndex, point, targetLayer);
+        const polygon = {
+          name: nameEl ? nameEl.value.trim() : "",
+          desc: descEl ? descEl.value.trim() : "",
+          coords: opts.coords,
+          fillColor: colorEl ? colorEl.value : "#4a6cf7",
+          icon: iconValue,
+        };
+        if (opts.isNew) _smapAddPolygon(targetLayer, polygon);
+        else _smapUpdatePolygon(opts.layerId, opts.polygonIndex, polygon, targetLayer);
       }
       dialog.close();
     };
     form.addEventListener("submit", submitHandler);
 
-    // Cancel
-    const cancelBtn = QS("#gsm_point_cancel_btn");
+    const cancelBtn = QS("#gsm_loc_cancel_btn");
     const cancelHandler = () => {
       cancelBtn.removeEventListener("click", cancelHandler);
       form.removeEventListener("submit", submitHandler);
@@ -8067,12 +8076,12 @@
     };
     if (cancelBtn) cancelBtn.addEventListener("click", cancelHandler);
 
-    // Delete
     if (delBtn && !opts.isNew) {
       const delHandler = () => {
         delBtn.removeEventListener("click", delHandler);
         form.removeEventListener("submit", submitHandler);
-        _smapDeletePoint(opts.layerId, opts.pointIndex);
+        if (isPoint) _smapDeletePoint(opts.layerId, opts.pointIndex);
+        else _smapDeletePolygon(opts.layerId, opts.polygonIndex);
         dialog.close();
       };
       delBtn.addEventListener("click", delHandler);
@@ -8166,14 +8175,11 @@
       marker.on("click", (e) => {
         if (!_smapEditMode) return;
         L.DomEvent.stopPropagation(e);
-        _openPointDialog({
-          isNew: false,
-          layerId: layerId,
-          pointIndex: idx,
-          lat: pt.lat,
-          lon: pt.lon,
-          name: pt.name,
-          desc: pt.desc,
+        _openLocationDialog({
+          type: "point", isNew: false,
+          layerId: layerId, pointIndex: idx,
+          lat: pt.lat, lon: pt.lon,
+          name: pt.name, desc: pt.desc,
           color: pt.color || "#e63946",
           icon: pt.icon || "",
         });
@@ -8195,7 +8201,7 @@
       poly.on("click", (e) => {
         if (!_smapEditMode) return;
         L.DomEvent.stopPropagation(e);
-        _openPolygonDialog({ isNew: false, layerId, polygonIndex: idx, coords: pg.coords, name: pg.name || "", desc: pg.desc || "", fillColor });
+        _openLocationDialog({ type: "polygon", isNew: false, layerId, polygonIndex: idx, coords: pg.coords, name: pg.name || "", desc: pg.desc || "", fillColor, icon: pg.icon || "" });
       });
       poly.addTo(group);
     });

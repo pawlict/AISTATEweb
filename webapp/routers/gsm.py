@@ -1422,6 +1422,7 @@ async def overlay_update(overlay_id: str, request: Request):
                     "desc": str(pg.get("desc", "")),
                     "coords": clean_coords,
                     "fillColor": str(pg.get("fillColor", "#4a6cf7")),
+                    "icon": str(pg.get("icon", "")),
                 })
             except (KeyError, ValueError, TypeError):
                 continue
