@@ -3653,6 +3653,11 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-log-error{background:#fef2f2;color:#dc2626}
 .gsm-log-warn{background:#fffbeb;color:#92400e}
 .gsm-log-info{color:var(--text,#334155)}
+/* Special numbers — resizable container */
+.gsm-sn-container{max-height:420px;min-height:60px;min-width:200px;overflow:auto;resize:both;border:1px solid var(--border,#e2e8f0);border-radius:8px;position:relative}
+.gsm-sn-container .gsm-table{margin:0;border:none}
+.gsm-sn-container .gsm-table thead th{position:sticky;top:0;z-index:1;background:var(--bg-secondary,#f8fafc)}
+.gsm-sn-count{font-size:12px;color:var(--text-muted,#94a3b8);margin-bottom:6px}
 /* Special numbers badges */
 .gsm-sn-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap}
 .gsm-sn-voicemail{background:#e0e7ff;color:#3730a3}
