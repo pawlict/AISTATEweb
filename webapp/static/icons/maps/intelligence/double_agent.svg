@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="da" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#ef4444"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#a855f7" stroke-width="1" fill="none" opacity="0.15"/>
+<!-- left face (light) -->
+<path d="M24 4c-8 0-14 8-14 16v4h14" stroke="#00d4ff" stroke-width="2" fill="none"/>
+<circle cx="16" cy="18" r="2" fill="#00d4ff" opacity=".4"/>
+<path d="M14 24c2 1 5 1 8 0" stroke="#00d4ff" stroke-width="1.2" opacity=".4"/>
+<!-- right face (dark) -->
+<path d="M24 4c8 0 14 8 14 16v4H24" stroke="#ef4444" stroke-width="2" fill="none"/>
+<circle cx="32" cy="18" r="2" fill="#ef4444" opacity=".4"/>
+<path d="M26 24c2-1 5-1 8 0" stroke="#ef4444" stroke-width="1.2" opacity=".4"/>
+<!-- divider -->
+<line x1="24" y1="4" x2="24" y2="24" stroke="url(#da)" stroke-width="1.5" stroke-dasharray="3 2"/>
+<!-- body split -->
+<path d="M10 42v-8c0-4 4-8 14-8s14 4 14 8v8" stroke="url(#da)" stroke-width="2" fill="none"/>
+<line x1="24" y1="26" x2="24" y2="42" stroke="url(#da)" stroke-width="1" stroke-dasharray="3 2" opacity=".3"/>
+<!-- masks -->
+<text x="14" y="38" font-size="7" fill="#00d4ff" opacity=".3">✓</text>
+<text x="30" y="38" font-size="7" fill="#ef4444" opacity=".3">✗</text>
+
+</svg>

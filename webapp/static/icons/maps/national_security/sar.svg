@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="sar" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f97316"/><stop offset="100%" stop-color="#ef4444"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#f97316" stroke-width="1" fill="none" opacity="0.15"/>
+<ellipse cx="24" cy="24" rx="10" ry="6" stroke="url(#sar)" stroke-width="2" fill="none"/>
+<path d="M34 24l8 2v4l-8 2" stroke="url(#sar)" stroke-width="1.5" fill="none"/>
+<line x1="24" y1="18" x2="24" y2="12" stroke="url(#sar)" stroke-width="2"/>
+<line x1="8" y1="12" x2="40" y2="12" stroke="url(#sar)" stroke-width="2.5"/>
+<line x1="20" y1="30" x2="18" y2="38" stroke="url(#sar)" stroke-width="2"/>
+<line x1="28" y1="30" x2="30" y2="38" stroke="url(#sar)" stroke-width="2"/>
+<line x1="14" y1="38" x2="34" y2="38" stroke="url(#sar)" stroke-width="1.5" opacity=".4"/>
+<path d="M18 22h12" stroke="#ef4444" stroke-width="2"/>
+<path d="M22 22v4h4v-4" stroke="#ef4444" stroke-width="1.2" opacity=".4"/>
+
+</svg>

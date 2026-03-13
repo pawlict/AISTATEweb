@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="haz" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#eab308"/><stop offset="100%" stop-color="#f97316"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#eab308" stroke-width="1" fill="none" opacity="0.15"/>
+<circle cx="24" cy="24" r="18" stroke="url(#haz)" stroke-width="2" fill="none"/>
+<circle cx="24" cy="24" r="4" stroke="#eab308" stroke-width="1.5" fill="none"/>
+<circle cx="24" cy="14" r="6" stroke="#eab308" stroke-width="1.8" fill="#eab308" fill-opacity=".06"/>
+<circle cx="16" cy="30" r="6" stroke="#eab308" stroke-width="1.8" fill="#eab308" fill-opacity=".06"/>
+<circle cx="32" cy="30" r="6" stroke="#eab308" stroke-width="1.8" fill="#eab308" fill-opacity=".06"/>
+
+</svg>

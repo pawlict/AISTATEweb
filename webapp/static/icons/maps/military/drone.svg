@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="dr" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#64748b"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#00d4ff" stroke-width="1" fill="none" opacity="0.15"/>
+<!-- body -->
+<ellipse cx="24" cy="24" rx="6" ry="3" stroke="url(#dr)" stroke-width="2" fill="url(#dr)" fill-opacity=".06"/>
+<!-- arms -->
+<line x1="18" y1="22" x2="8" y2="12" stroke="url(#dr)" stroke-width="2"/>
+<line x1="30" y1="22" x2="40" y2="12" stroke="url(#dr)" stroke-width="2"/>
+<line x1="18" y1="26" x2="8" y2="36" stroke="url(#dr)" stroke-width="2"/>
+<line x1="30" y1="26" x2="40" y2="36" stroke="url(#dr)" stroke-width="2"/>
+<!-- rotors -->
+<ellipse cx="8" cy="12" rx="6" ry="2" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".06"/>
+<ellipse cx="40" cy="12" rx="6" ry="2" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".06"/>
+<ellipse cx="8" cy="36" rx="6" ry="2" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".06"/>
+<ellipse cx="40" cy="36" rx="6" ry="2" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".06"/>
+<!-- rotor centers -->
+<circle cx="8" cy="12" r="1.5" fill="#00d4ff" opacity=".3"/>
+<circle cx="40" cy="12" r="1.5" fill="#00d4ff" opacity=".3"/>
+<circle cx="8" cy="36" r="1.5" fill="#00d4ff" opacity=".3"/>
+<circle cx="40" cy="36" r="1.5" fill="#00d4ff" opacity=".3"/>
+<!-- camera -->
+<circle cx="24" cy="24" r="2" stroke="#00d4ff" stroke-width="1" fill="#00d4ff" fill-opacity=".15"/>
+
+</svg>

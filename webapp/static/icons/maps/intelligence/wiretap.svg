@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="wt" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#a855f7" stroke-width="1" fill="none" opacity="0.15"/>
+<!-- headphone band -->
+<path d="M8 24c0-10 7-18 16-18s16 8 16 18" stroke="url(#wt)" stroke-width="2.2" fill="none"/>
+<!-- ear cups -->
+<rect x="4" y="22" width="8" height="14" rx="3" stroke="url(#wt)" stroke-width="2" fill="url(#wt)" fill-opacity=".05"/>
+<rect x="36" y="22" width="8" height="14" rx="3" stroke="url(#wt)" stroke-width="2" fill="url(#wt)" fill-opacity=".05"/>
+<!-- signal waves from wire -->
+<path d="M24 42c-2 0-4-2-4-4v-6" stroke="url(#wt)" stroke-width="1.5" fill="none"/>
+<path d="M28 38c2 1 4 0 4-2" stroke="#00d4ff" stroke-width="1.2" opacity=".4"/>
+<path d="M30 34c3 1 5 0 6-2" stroke="#00d4ff" stroke-width="1" opacity=".3"/>
+<path d="M32 30c3 1 5-1 6-3" stroke="#00d4ff" stroke-width="1" opacity=".2"/>
+
+</svg>

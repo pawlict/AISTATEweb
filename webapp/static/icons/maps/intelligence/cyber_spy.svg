@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="cs" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#00d4ff" stroke-width="1" fill="none" opacity="0.15"/>
+<!-- hood -->
+<path d="M12 22c0-10 5-16 12-16s12 6 12 16" stroke="url(#cs)" stroke-width="2" fill="url(#cs)" fill-opacity=".03"/>
+<!-- face dark -->
+<circle cx="24" cy="18" r="5" stroke="none" fill="#0a0a12" fill-opacity=".5"/>
+<!-- glowing eyes -->
+<circle cx="21" cy="17" r="1.5" fill="#00d4ff" opacity=".7"/>
+<circle cx="27" cy="17" r="1.5" fill="#00d4ff" opacity=".7"/>
+<!-- body -->
+<path d="M12 22v20h24V22" stroke="url(#cs)" stroke-width="2" fill="none"/>
+<!-- screen glow on face -->
+<line x1="16" y1="28" x2="22" y2="28" stroke="#00d4ff" stroke-width="1" opacity=".4"/>
+<line x1="18" y1="32" x2="26" y2="32" stroke="#a855f7" stroke-width="1" opacity=".3"/>
+<line x1="16" y1="36" x2="24" y2="36" stroke="#00d4ff" stroke-width="1" opacity=".25"/>
+<!-- binary -->
+<text x="32" y="30" font-size="5" fill="#00d4ff" font-family="monospace" opacity=".35">01</text>
+<text x="30" y="36" font-size="5" fill="#a855f7" font-family="monospace" opacity=".25">10</text>
+
+</svg>
