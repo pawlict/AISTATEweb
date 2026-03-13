@@ -1273,3 +1273,137 @@ async def overlay_delete(overlay_id: str):
         fpath.unlink()
         _app_log(f"[GSM] KML overlay deleted: {overlay_id}")
     return JSONResponse({"status": "ok"})
+
+
+@router.post("/api/gsm/overlays/create")
+async def overlay_create(request: Request):
+    """Create a new empty user overlay (no file upload)."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "detail": "Invalid JSON"}, status_code=400)
+
+    overlay_name = (body.get("name") or "").strip()
+    if not overlay_name:
+        return JSONResponse({"status": "error", "detail": "Nazwa jest wymagana"}, status_code=400)
+
+    overlay_id = uuid.uuid4().hex[:12]
+    overlay_data = {
+        "id": overlay_id,
+        "name": overlay_name,
+        "filename": "",
+        "user_layer": True,
+        "point_count": 0,
+        "points": [],
+    }
+
+    out_path = _overlays_dir() / f"{overlay_id}.json"
+    out_path.write_text(json.dumps(overlay_data, ensure_ascii=False, indent=1), encoding="utf-8")
+    _app_log(f"[GSM] User overlay created: {overlay_name}")
+
+    return JSONResponse({"status": "ok", "id": overlay_id, "name": overlay_name})
+
+
+@router.put("/api/gsm/overlays/{overlay_id}")
+async def overlay_update(overlay_id: str, request: Request):
+    """Update overlay points (for user-editable layers)."""
+    fpath = _overlays_dir() / f"{overlay_id}.json"
+    if not fpath.exists():
+        return JSONResponse({"status": "error", "detail": "Nie znaleziono"}, status_code=404)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "detail": "Invalid JSON"}, status_code=400)
+
+    try:
+        data = json.loads(fpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+    # Update fields
+    if "name" in body:
+        data["name"] = str(body["name"]).strip()
+    if "points" in body:
+        pts = body["points"]
+        if not isinstance(pts, list):
+            return JSONResponse({"status": "error", "detail": "points must be a list"}, status_code=400)
+        # Validate point structure
+        clean = []
+        for p in pts:
+            try:
+                clean.append({
+                    "name": str(p.get("name", "")),
+                    "desc": str(p.get("desc", "")),
+                    "lat": float(p["lat"]),
+                    "lon": float(p["lon"]),
+                    "color": str(p.get("color", "")),
+                })
+            except (KeyError, ValueError, TypeError):
+                continue
+        data["points"] = clean
+        data["point_count"] = len(clean)
+
+    fpath.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return JSONResponse({"status": "ok", "point_count": data["point_count"]})
+
+
+@router.get("/api/gsm/overlays/{overlay_id}/export/kml")
+async def overlay_export_kml(overlay_id: str):
+    """Export overlay as KML file."""
+    fpath = _overlays_dir() / f"{overlay_id}.json"
+    if not fpath.exists():
+        return JSONResponse({"status": "error", "detail": "Nie znaleziono"}, status_code=404)
+
+    try:
+        data = json.loads(fpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+    overlay_name = data.get("name", overlay_id)
+    points = data.get("points", [])
+
+    # Build KML XML
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<kml xmlns="http://www.opengis.net/kml/2.2">',
+        "<Document>",
+        f"  <name>{_kml_escape(overlay_name)}</name>",
+    ]
+    for pt in points:
+        lat = pt.get("lat", 0)
+        lon = pt.get("lon", 0)
+        name = pt.get("name", "")
+        desc = pt.get("desc", "")
+        lines.append("  <Placemark>")
+        if name:
+            lines.append(f"    <name>{_kml_escape(name)}</name>")
+        if desc:
+            lines.append(f"    <description>{_kml_escape(desc)}</description>")
+        lines.append("    <Point>")
+        lines.append(f"      <coordinates>{lon},{lat},0</coordinates>")
+        lines.append("    </Point>")
+        lines.append("  </Placemark>")
+    lines.append("</Document>")
+    lines.append("</kml>")
+
+    kml_content = "\n".join(lines)
+    safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in overlay_name)
+
+    from starlette.responses import Response
+    return Response(
+        content=kml_content,
+        media_type="application/vnd.google-earth.kml+xml",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.kml"'},
+    )
+
+
+def _kml_escape(text: str) -> str:
+    """Escape XML special characters for KML."""
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
