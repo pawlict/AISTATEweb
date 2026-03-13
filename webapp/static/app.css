@@ -289,7 +289,7 @@ textarea{min-height:220px; resize:vertical}
 .gsm-map-screenshot-btn{padding:3px 7px;border-radius:10px;display:inline-flex;align-items:center;line-height:1}
 .gsm-map-screenshot-btn:hover{background:rgba(37,99,235,.10)!important;border-color:rgba(37,99,235,.18)!important;color:var(--brand-blue,#2563eb)}
 .gsm-overlay-marker{background:none!important;border:none!important}
-.gsm-overlay-tooltip{font-size:12px!important;padding:6px 10px!important;border-radius:8px!important;box-shadow:0 2px 8px rgba(0,0,0,.18)!important;max-width:320px!important;word-wrap:break-word!important;overflow-wrap:break-word!important;white-space:normal!important;line-height:1.4!important}
+.gsm-overlay-tooltip{font-size:13px!important;padding:7px 14px!important;border-radius:8px!important;box-shadow:0 2px 8px rgba(0,0,0,.18)!important;min-width:120px!important;max-width:320px!important;width:max-content!important;word-wrap:break-word!important;overflow-wrap:break-word!important;white-space:normal!important;line-height:1.45!important}
 /* Context menu popup for edit mode — strip Leaflet popup chrome */
 .gsm-edit-ctx-popup .leaflet-popup-content-wrapper{border-radius:10px!important;padding:4px 0!important;box-shadow:0 4px 16px rgba(0,0,0,.18)!important}
 .gsm-edit-ctx-popup .leaflet-popup-content{margin:0!important}
