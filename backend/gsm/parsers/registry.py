@@ -12,10 +12,12 @@ def _get_all_parsers() -> List[Type[BillingParser]]:
     from .play import PlayParser
     from .tmobile import TMobileParser
     from .orange import OrangeParser
+    from .orange_retencja import OrangeRetencjaParser
     from .plus import PlusParser
     from .generic import GenericBillingParser
 
     return [
+        OrangeRetencjaParser,  # before OrangeParser (more specific format)
         TMobileParser,
         PlayParser,
         OrangeParser,
