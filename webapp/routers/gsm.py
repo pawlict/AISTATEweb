@@ -134,6 +134,7 @@ def _do_parse(file_path: Path, filename: str) -> dict:
         "filename": filename,
         "operator": result.operator,
         "operator_id": result.operator_id,
+        "parser_version": result.parser_version,
         "subscriber": sub_dict,
         "summary": result.summary.to_dict(),
         "warnings": result.warnings,

@@ -197,7 +197,7 @@ def analyze_billing(
     analysis.weekend_activity = _compute_weekend_activity(records)
 
     # 10. Anomaly detection
-    analysis.anomalies = _detect_anomalies(records, analysis, own_numbers)
+    analysis.anomalies = _detect_anomalies(records, analysis, own_numbers, result.operator_id)
 
     return analysis
 
@@ -1633,6 +1633,7 @@ def _detect_anomalies(
     records: List[BillingRecord],
     analysis: AnalysisResult,
     own_numbers: Set[str],
+    operator_id: str = "",
 ) -> List[Dict[str, Any]]:
     """Detect anomalies and unusual patterns.
 
@@ -1640,7 +1641,7 @@ def _detect_anomalies(
       - type: category key
       - label: human-readable Polish category name
       - description: short explanation of what this category checks
-      - severity: info | warning
+      - severity: info | warning | critical
       - items: list of individual findings (empty list = "brak")
     """
     groups: List[Dict[str, Any]] = []
@@ -1784,6 +1785,22 @@ def _detect_anomalies(
         ),
         "severity": "critical" if foreign_critical else ("info" if foreign_items else "ok"),
         "items": foreign_items,
+    })
+
+    # ── 7c. Forwarded calls ──
+    forwarded_items = _detect_forwarded_calls(records, own_numbers, operator_id)
+    # Build supported operators note
+    _fwd_operators = "Plus, Play, T-Mobile"
+    groups.append({
+        "type": "forwarded_calls",
+        "label": "Przekierowania połączeń",
+        "description": (
+            "Połączenia przekierowane na inny numer. Dla każdego zdarzenia "
+            "podano datę, godzinę, numer kontaktowy i numer docelowy przekierowania. "
+            f"Obsługiwane parsery: {_fwd_operators}."
+        ),
+        "severity": "warning" if forwarded_items else "ok",
+        "items": forwarded_items,
     })
 
     # ── 8. One-time contacts ──
@@ -1999,6 +2016,78 @@ def _detect_foreign_contacts(
         })
 
     return items, is_critical
+
+
+# Parsers that support forwarding data (operator_id → field name in extra)
+_FORWARDING_SUPPORT: Dict[str, str] = {
+    "plus": "c_msisdn",           # Plus: C party MSISDN
+    "play": "forwarded_msisdn",   # Play: PRZEK_MSISDN column
+    "tmobile": "nr_powiazany",    # T-Mobile: Nr powiązany (may contain forwarded-to)
+}
+
+
+def _detect_forwarded_calls(
+    records: List[BillingRecord],
+    own_numbers: Set[str],
+    operator_id: str = "",
+) -> List[Dict[str, Any]]:
+    """Detect call forwarding events.
+
+    Looks for records with record_type == CALL_FORWARDED and extracts
+    forwarding details (forwarded-to number, date/time).
+
+    Forwarding data availability by operator:
+    - Plus (Polkomtel): FORW type code, C party (c_msisdn) = forwarded-to
+    - Play (P4): PRZEK_MSISDN column (forwarded_msisdn in extra)
+    - T-Mobile: direction "przekierowane", nr_powiazany may have target
+    - Orange: text-based detection via record_type label, no target number
+    - Orange Retencja: no forwarding support
+
+    Returns:
+        List of forwarding event dicts.
+    """
+    items: List[Dict[str, Any]] = []
+
+    # Determine which extra field holds forwarded-to number
+    fwd_field = _FORWARDING_SUPPORT.get(operator_id, "")
+
+    for r in records:
+        if r.record_type != "CALL_FORWARDED":
+            continue
+
+        # Determine the forwarded-to number
+        forwarded_to = ""
+        if fwd_field and r.extra.get(fwd_field):
+            forwarded_to = r.extra[fwd_field]
+        # Fallback: check all known fields
+        if not forwarded_to:
+            for f in ("c_msisdn", "forwarded_msisdn", "nr_powiazany"):
+                val = r.extra.get(f, "")
+                if val and val not in own_numbers:
+                    forwarded_to = val
+                    break
+
+        # Determine calling party (the other end)
+        contact = ""
+        if r.callee and r.callee not in own_numbers:
+            contact = r.callee
+        elif r.caller and r.caller not in own_numbers:
+            contact = r.caller
+
+        items.append({
+            "date": r.date,
+            "time": r.time,
+            "contact": contact,
+            "forwarded_to": forwarded_to,
+            "duration_seconds": r.duration_seconds,
+            "duration_min": round(r.duration_seconds / 60, 1) if r.duration_seconds else 0,
+            "location": r.location or "",
+        })
+
+    # Sort by date/time
+    items.sort(key=lambda x: f"{x['date']} {x['time']}")
+
+    return items
 
 
 def _detect_inactivity_gaps(

@@ -125,6 +125,7 @@ class GenericBillingParser(BillingParser):
 
     OPERATOR_NAME = "Nieznany operator"
     OPERATOR_ID = "generic"
+    PARSER_VERSION = "1.0"
     DETECT_HEADER_PATTERNS: List[str] = []
     DETECT_SHEET_PATTERNS: List[str] = []
 
@@ -136,6 +137,7 @@ class GenericBillingParser(BillingParser):
         result = BillingParseResult(
             operator=self.OPERATOR_NAME,
             operator_id=self.OPERATOR_ID,
+            parser_version=self.PARSER_VERSION,
             sheet_name=sheet_name,
         )
 

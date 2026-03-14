@@ -1672,9 +1672,12 @@
     const sub = data.subscriber || {};
     const meta = sub.extra || {};
 
+    // Parser version label
+    const parserVer = data.parser_version ? ` <span style="font-size:11px;opacity:.6">(parser v${data.parser_version})</span>` : "";
+
     const rows = [
       ["Plik", data.filename],
-      ["Operator", data.operator],
+      ["Operator", (data.operator || "") + parserVer],
       ["MSISDN", sub.msisdn || "—"],
     ];
     if (meta.signature) rows.push(["Sygnatura", meta.signature]);
@@ -1951,6 +1954,7 @@
     { type: "premium_number",   label: "Numery premium / p\u0142atne",        desc: "Kontakty z numerami o podwy\u017Cszonej op\u0142acie (70x, 80x)" },
     { type: "roaming",          label: "Aktywno\u015B\u0107 w sieciach zagranicznych", desc: "Rekordy z flag\u0105 roamingu lub z sieci\u0105 zagraniczn\u0105. Szczeg\u00F3\u0142y wyjazd\u00F3w \u2014 patrz sekcja \u201EPrzekroczenia granic\u201D" },
     { type: "foreign_contacts", label: "Interakcje z numerami zagranicznymi", desc: "Po\u0142\u0105czenia i SMS z numerami zagranicznymi (spoza Polski). Dla ka\u017Cdego kraju podano liczb\u0119 interakcji i numery." },
+    { type: "forwarded_calls",  label: "Przekierowania po\u0142\u0105cze\u0144",         desc: "Po\u0142\u0105czenia przekierowane na inny numer. Obsługiwane parsery: Plus, Play, T-Mobile." },
     { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
     { type: "satellite_numbers",label: "Numery satelitarne",              desc: "Po\u0142\u0105czenia z numerami telefon\u00F3w satelitarnych (Iridium, Inmarsat, Thuraya, Globalstar i in.)" },
     { type: "social_media",     label: "Konta spo\u0142eczno\u015Bciowe / komunikatory", desc: "Nazwy komunikator\u00F3w i platform spo\u0142eczno\u015Bciowych wykryte w polach bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)" },
@@ -2292,6 +2296,8 @@
         const fNums = new Set(anomalyItems.flatMap(it => it.numbers || []));
         return r => fNums.has(r.callee) || fNums.has(r.caller);
       }
+      case "forwarded_calls":
+        return r => r.record_type === "CALL_FORWARDED";
       case "one_time_contacts": {
         const otNums = new Set(anomalyItems.map(it => it.contact));
         return r => otNums.has(r.callee) || otNums.has(r.caller);
@@ -2458,6 +2464,13 @@
         html += ` (\u2191${it.outgoing} \u2193${it.incoming}), ${it.period}<br>`;
         html += `<span style="font-size:12px;opacity:.8">Numery: ${nums}${more}</span>`;
         html += `</div>`;
+      }
+    } else if (type === "forwarded_calls") {
+      for (const it of items) {
+        const fwdTo = it.forwarded_to ? ` \u2192 <code>${it.forwarded_to}</code>` : "";
+        const dur = it.duration_min ? `, ${it.duration_min} min` : "";
+        const loc = it.location ? ` <span class="muted">[${it.location}]</span>` : "";
+        html += `<div>${it.date} ${it.time} \u2014 <code>${it.contact || "?"}</code>${fwdTo}${dur}${loc}</div>`;
       }
     } else if (type === "one_time_contacts") {
       for (const it of items) {
