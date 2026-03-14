@@ -918,13 +918,23 @@ def _detect_special_numbers(
     seen: Dict[str, Dict[str, Any]] = {}
 
     for r in records:
-        contact = r.callee or r.caller
-        if not contact or contact in own_numbers:
+        # Determine the "other party" — check both callee and caller
+        contact = None
+        if r.callee and r.callee not in own_numbers:
+            contact = r.callee
+        elif r.caller and r.caller not in own_numbers:
+            contact = r.caller
+        if not contact:
             continue
 
         if contact in seen:
             seen[contact]["interactions"] += 1
             seen[contact]["total_duration_seconds"] += r.duration_seconds
+            if r.date:
+                if r.date < seen[contact]["first_date"]:
+                    seen[contact]["first_date"] = r.date
+                if r.date > seen[contact]["last_date"]:
+                    seen[contact]["last_date"] = r.date
             continue
 
         info = _classify_special_number(contact)
@@ -937,18 +947,9 @@ def _detect_special_numbers(
             "label": info["label"],
             "interactions": 1,
             "total_duration_seconds": r.duration_seconds,
-            "first_date": r.date,
-            "last_date": r.date,
+            "first_date": r.date or "",
+            "last_date": r.date or "",
         }
-
-    # Update date ranges
-    for r in records:
-        contact = r.callee or r.caller
-        if contact in seen and r.date:
-            if not seen[contact]["first_date"] or r.date < seen[contact]["first_date"]:
-                seen[contact]["first_date"] = r.date
-            if not seen[contact]["last_date"] or r.date > seen[contact]["last_date"]:
-                seen[contact]["last_date"] = r.date
 
     result = sorted(seen.values(), key=lambda x: -x["interactions"])
     return result
@@ -1544,6 +1545,19 @@ def _detect_anomalies(
         "items": social_media_items,
     })
 
+    # ── 11. Inactivity gaps (>12 hours without any activity) ──
+    inactivity_items = _detect_inactivity_gaps(records, min_hours=12)
+    groups.append({
+        "type": "inactivity_gap",
+        "label": "Brak aktywności >12 godzin",
+        "description": (
+            "Okresy powyżej 12 godzin bez żadnego zdarzenia (połączenia, SMS, dane). "
+            "Dla każdego okresu podano ostatni i pierwszy kontakt."
+        ),
+        "severity": "info" if inactivity_items else "ok",
+        "items": inactivity_items,
+    })
+
     return groups
 
 
@@ -1566,10 +1580,12 @@ def _detect_roaming_activity(records: List[BillingRecord]) -> List[Dict[str, Any
     for r in records:
         country = ""
         network = ""
+        mcc_mnc = ""
 
         if r.roaming and r.roaming_country:
             country = r.roaming_country
             network = r.network or ""
+            mcc_mnc = r.extra.get("roaming_mcc_mnc", "") if r.extra else ""
         elif r.network:
             # Check if the network is non-Polish
             net_lower = r.network.strip().lower()
@@ -1587,10 +1603,13 @@ def _detect_roaming_activity(records: List[BillingRecord]) -> List[Dict[str, Any
         key = country.upper()
         if key not in country_info:
             country_info[key] = {"country": country, "count": 0, "networks": set(),
+                                 "mcc_mnc_codes": set(),
                                  "first_date": r.date, "last_date": r.date}
         country_info[key]["count"] += 1
         if network:
             country_info[key]["networks"].add(network)
+        if mcc_mnc:
+            country_info[key]["mcc_mnc_codes"].add(mcc_mnc)
         if r.date < country_info[key]["first_date"]:
             country_info[key]["first_date"] = r.date
         if r.date > country_info[key]["last_date"]:
@@ -1601,12 +1620,74 @@ def _detect_roaming_activity(records: List[BillingRecord]) -> List[Dict[str, Any
         period = info["first_date"]
         if info["first_date"] != info["last_date"]:
             period = f"{info['first_date']} – {info['last_date']}"
-        items.append({
+        item: Dict[str, Any] = {
             "country": info["country"],
             "count": info["count"],
             "networks": sorted(info["networks"]),
             "period": period,
-        })
+        }
+        if info["mcc_mnc_codes"]:
+            item["mcc_mnc"] = sorted(info["mcc_mnc_codes"])
+        items.append(item)
+    return items
+
+
+def _detect_inactivity_gaps(
+    records: List[BillingRecord],
+    min_hours: float = 12,
+) -> List[Dict[str, Any]]:
+    """Detect gaps in activity longer than min_hours.
+
+    For each gap, reports:
+    - last record before the gap (date, time, contact, type)
+    - first record after the gap (date, time, contact, type)
+    - gap duration in hours
+    """
+    from datetime import datetime as dt_cls, timedelta
+
+    def _parse_dt(s: str) -> Optional[dt_cls]:
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                return dt_cls.strptime(s, fmt)
+            except (ValueError, TypeError):
+                continue
+        return None
+
+    # Parse and sort records by datetime
+    parsed: List[Tuple[dt_cls, BillingRecord]] = []
+    for r in records:
+        if r.datetime:
+            d = _parse_dt(r.datetime)
+            if d:
+                parsed.append((d, r))
+    parsed.sort(key=lambda x: x[0])
+
+    if len(parsed) < 2:
+        return []
+
+    items: List[Dict[str, Any]] = []
+    threshold = timedelta(hours=min_hours)
+
+    for i in range(1, len(parsed)):
+        prev_dt, prev = parsed[i - 1]
+        curr_dt, curr = parsed[i]
+        gap = curr_dt - prev_dt
+        if gap >= threshold:
+            gap_hours = round(gap.total_seconds() / 3600, 1)
+            items.append({
+                "gap_hours": gap_hours,
+                "last_date": prev.date,
+                "last_time": prev.time,
+                "last_contact": prev.callee or prev.caller or "\u2014",
+                "last_type": prev.record_type,
+                "first_date": curr.date,
+                "first_time": curr.time,
+                "first_contact": curr.callee or curr.caller or "\u2014",
+                "first_type": curr.record_type,
+            })
+
+    # Sort by gap duration (longest first)
+    items.sort(key=lambda x: -x["gap_hours"])
     return items
 
 

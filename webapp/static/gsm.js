@@ -1953,6 +1953,7 @@
     { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
     { type: "satellite_numbers",label: "Numery satelitarne",              desc: "Po\u0142\u0105czenia z numerami telefon\u00F3w satelitarnych (Iridium, Inmarsat, Thuraya, Globalstar i in.)" },
     { type: "social_media",     label: "Konta spo\u0142eczno\u015Bciowe / komunikatory", desc: "Nazwy komunikator\u00F3w i platform spo\u0142eczno\u015Bciowych wykryte w polach bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)" },
+    { type: "inactivity_gap",   label: "Brak aktywno\u015Bci >12 godzin", desc: "Okresy powy\u017Cej 12 godzin bez \u017Cadnego zdarzenia (po\u0142\u0105czenia, SMS, dane). Podano ostatni i pierwszy kontakt." },
   ];
 
   function _renderAnomalies(a) {
@@ -2429,7 +2430,11 @@
       for (const it of items) {
         const nets = it.networks && it.networks.length ? ` [${it.networks.join(", ")}]` : "";
         const name = _countryName(it.country) || it.country;
-        html += `<div><b>${name}</b> — ${it.count} rekordów, ${it.period}${nets}</div>`;
+        // Show country name; if country code differs from displayed name, show raw code
+        const raw = (it.country && it.country !== name) ? ` <span class="muted">(${it.country})</span>` : "";
+        // Show MCC:MNC codes if available
+        const mcc = it.mcc_mnc && it.mcc_mnc.length ? ` <span class="muted">MCC:MNC ${it.mcc_mnc.join(", ")}</span>` : "";
+        html += `<div><b>${name}</b>${raw} \u2014 ${it.count} rekord\u00F3w, ${it.period}${nets}${mcc}</div>`;
       }
     } else if (type === "one_time_contacts") {
       for (const it of items) {
@@ -2451,6 +2456,16 @@
         html += `<div><b>${it.platform}</b> <span class="muted">[${catShort}]</span> — ${it.count}\u00D7${contacts}`;
         if (types) html += ` <span class="muted">(${types})</span>`;
         if (dates) html += `<div class="small muted" style="margin-left:12px">${dates}</div>`;
+        html += `</div>`;
+      }
+    } else if (type === "inactivity_gap") {
+      for (const it of items) {
+        const lastType = (it.last_type || "").replace(/_/g, " ");
+        const firstType = (it.first_type || "").replace(/_/g, " ");
+        html += `<div style="margin-bottom:4px">`;
+        html += `<b>${it.gap_hours}h</b> przerwy: `;
+        html += `ostatni \u2014 ${it.last_date} ${it.last_time} <code>${it.last_contact}</code> <span class="muted">(${lastType})</span>`;
+        html += ` \u2192 pierwszy \u2014 ${it.first_date} ${it.first_time} <code>${it.first_contact}</code> <span class="muted">(${firstType})</span>`;
         html += `</div>`;
       }
     } else {
@@ -3134,6 +3149,41 @@
   }
 
   /* ── special numbers ──────────────────────────────────── */
+
+  const _SN_CAT_LABELS = {
+    voicemail: "Poczta g\u0142osowa",
+    service: "Us\u0142uga operatora",
+    emergency: "Nr alarmowy",
+    premium: "Nr premium",
+    toll_free: "Nr bezp\u0142atny",
+    short_code: "Kod kr\u00F3tki",
+    international: "Zagraniczny",
+    info: "Informacja",
+    operator_sms: "SMS operatora",
+    commercial_sms: "SMS komercyjny",
+    alphanumeric: "ID alfanumeryczny",
+    ussd: "Kod steruj\u0105cy",
+  };
+  const _SN_CAT_CLS = {
+    voicemail: "gsm-sn-voicemail",
+    service: "gsm-sn-service",
+    emergency: "gsm-sn-emergency",
+    premium: "gsm-sn-premium",
+    toll_free: "gsm-sn-tollfree",
+    short_code: "gsm-sn-short",
+    international: "gsm-sn-intl",
+    info: "gsm-sn-info",
+    operator_sms: "gsm-sn-operator",
+    commercial_sms: "gsm-sn-commercial",
+    alphanumeric: "gsm-sn-alpha",
+    ussd: "gsm-sn-ussd",
+  };
+
+  // State for special numbers filtering
+  let _snAllData = [];
+  let _snFilterCat = "";  // "" = all
+  let _snFilterText = "";
+
   function _renderSpecialNumbers(specials) {
     const el = QS("#gsm_special_numbers_body");
     if (!el) return;
@@ -3145,59 +3195,89 @@
     }
     if (card) card.style.display = "";
 
-    const catLabels = {
-      voicemail: "Poczta głosowa",
-      service: "Usługa operatora",
-      emergency: "Nr alarmowy",
-      premium: "Nr premium",
-      toll_free: "Nr bezpłatny",
-      short_code: "Kod krótki",
-      international: "Zagraniczny",
-      info: "Informacja",
-      operator_sms: "SMS operatora",
-      commercial_sms: "SMS komercyjny",
-      alphanumeric: "ID alfanumeryczny",
-      ussd: "Kod sterujący",
-    };
-    const catCls = {
-      voicemail: "gsm-sn-voicemail",
-      service: "gsm-sn-service",
-      emergency: "gsm-sn-emergency",
-      premium: "gsm-sn-premium",
-      toll_free: "gsm-sn-tollfree",
-      short_code: "gsm-sn-short",
-      international: "gsm-sn-intl",
-      info: "gsm-sn-info",
-      operator_sms: "gsm-sn-operator",
-      commercial_sms: "gsm-sn-commercial",
-      alphanumeric: "gsm-sn-alpha",
-      ussd: "gsm-sn-ussd",
-    };
+    _snAllData = specials;
+    _snFilterCat = "";
+    _snFilterText = "";
+
+    // Collect unique categories present in data
+    const cats = [...new Set(specials.map(s => s.category))].sort();
+
+    // Build filter bar
+    let filterHtml = `<div class="gsm-sn-filters" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">`;
+    filterHtml += `<select id="gsm_sn_cat_filter" style="font-size:12px;padding:4px 8px;border:1px solid var(--border,#e2e8f0);border-radius:6px;background:var(--bg-secondary,#f8fafc);color:var(--text,#334155);cursor:pointer">`;
+    filterHtml += `<option value="">Wszystkie kategorie (${specials.length})</option>`;
+    for (const c of cats) {
+      const cnt = specials.filter(s => s.category === c).length;
+      filterHtml += `<option value="${c}">${_SN_CAT_LABELS[c] || c} (${cnt})</option>`;
+    }
+    filterHtml += `</select>`;
+    filterHtml += `<input id="gsm_sn_text_filter" type="text" placeholder="Szukaj numeru lub opisu\u2026" style="font-size:12px;padding:4px 8px;border:1px solid var(--border,#e2e8f0);border-radius:6px;flex:1;min-width:140px;max-width:280px;background:var(--bg-secondary,#f8fafc);color:var(--text,#334155)">`;
+    filterHtml += `<span id="gsm_sn_count" class="gsm-sn-count" style="margin:0">\u0141\u0105cznie: ${specials.length}</span>`;
+    filterHtml += `</div>`;
+
+    el.innerHTML = filterHtml + `<div id="gsm_sn_table_wrap" class="gsm-sn-container"></div>`;
+
+    _snRebuildTable(specials);
+
+    // Wire up filter events
+    const catSel = QS("#gsm_sn_cat_filter");
+    const textInp = QS("#gsm_sn_text_filter");
+    if (catSel) catSel.addEventListener("change", _snApplyFilters);
+    if (textInp) textInp.addEventListener("input", _snApplyFilters);
+  }
+
+  function _snApplyFilters() {
+    const catSel = QS("#gsm_sn_cat_filter");
+    const textInp = QS("#gsm_sn_text_filter");
+    _snFilterCat = catSel ? catSel.value : "";
+    _snFilterText = textInp ? textInp.value.trim().toLowerCase() : "";
+
+    let filtered = _snAllData;
+    if (_snFilterCat) {
+      filtered = filtered.filter(s => s.category === _snFilterCat);
+    }
+    if (_snFilterText) {
+      filtered = filtered.filter(s =>
+        (s.number || "").toLowerCase().includes(_snFilterText) ||
+        (s.label || "").toLowerCase().includes(_snFilterText) ||
+        (_SN_CAT_LABELS[s.category] || "").toLowerCase().includes(_snFilterText)
+      );
+    }
+    const countEl = QS("#gsm_sn_count");
+    if (countEl) countEl.textContent = `Wynik: ${filtered.length} z ${_snAllData.length}`;
+    _snRebuildTable(filtered);
+  }
+
+  function _snRebuildTable(items) {
+    const wrap = QS("#gsm_sn_table_wrap");
+    if (!wrap) return;
+
+    if (!items.length) {
+      wrap.innerHTML = `<div style="padding:12px;color:var(--text-muted);font-size:13px">Brak wynik\u00F3w dla wybranych filtr\u00F3w</div>`;
+      return;
+    }
 
     let tbl = `<table class="gsm-table"><thead><tr>
-      <th>Numer</th><th>Kategoria</th><th>Opis</th><th>Interakcje</th><th>Czas rozmów</th><th>Okres</th>
+      <th>Numer</th><th>Kategoria</th><th>Opis</th><th>Interakcje</th><th>Czas rozm\u00F3w</th><th>Okres</th>
     </tr></thead><tbody>`;
 
-    for (const s of specials) {
-      const cat = catLabels[s.category] || s.category;
-      const cls = catCls[s.category] || "";
+    for (const s of items) {
+      const cat = _SN_CAT_LABELS[s.category] || s.category;
+      const cls = _SN_CAT_CLS[s.category] || "";
       const period = s.first_date
-        ? (s.first_date === s.last_date ? s.first_date : `${s.first_date} – ${s.last_date}`)
-        : "—";
+        ? (s.first_date === s.last_date ? s.first_date : `${s.first_date} \u2013 ${s.last_date}`)
+        : "\u2014";
       tbl += `<tr>
         <td><code>${s.number}</code></td>
         <td><span class="gsm-sn-badge ${cls}">${cat}</span></td>
-        <td>${s.label || "—"}</td>
+        <td>${s.label || "\u2014"}</td>
         <td>${_fmt(s.interactions)}</td>
         <td>${_dur(s.total_duration_seconds || 0)}</td>
         <td>${period}</td>
       </tr>`;
     }
     tbl += "</tbody></table>";
-
-    let html = `<div class="gsm-sn-count">Łącznie: ${specials.length} numerów specjalnych</div>`;
-    html += `<div class="gsm-sn-container">${tbl}</div>`;
-    el.innerHTML = html;
+    wrap.innerHTML = tbl;
   }
 
   /* ── activity charts — grouped bars (Rozmowy / SMS / Dane) ── */
