@@ -88,7 +88,10 @@ def _do_parse(file_path: Path, filename: str) -> dict:
         except Exception:
             _app_log("[GSM] BTS database: unavailable or empty")
 
-        geo = geolocate_records(result.records, bts_db)
+        geo = geolocate_records(
+            result.records, bts_db,
+            data_dir=_data_dir() / "gsm",
+        )
 
         # Log geolocation summary
         if geo:
@@ -97,6 +100,7 @@ def _do_parse(file_path: Path, filename: str) -> dict:
                 f"[GSM] Geolocation: {geo.geolocated_records}/{geo.total_records} resolved "
                 f"(billing_coords={dbg.get('resolved_billing', 0)}, "
                 f"bts_db={dbg.get('resolved_bts_db', 0)}, "
+                f"geocoded={dbg.get('resolved_geocoded', 0)}, "
                 f"lac_cid_miss={dbg.get('lookup_miss', 0)}, "
                 f"no_data={dbg.get('no_location_data', 0)})"
             )
