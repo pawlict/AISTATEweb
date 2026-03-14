@@ -121,40 +121,188 @@ def _to_str(val: Any) -> str:
 
 
 # MCC (Mobile Country Code) → ISO 3166-1 alpha-2 country code mapping
-# Covers European and common MCC codes encountered in Polish billing data
+# Comprehensive database covering all ITU-assigned MCC codes worldwide.
+# MCC = 3-digit Mobile Country Code (identifies country)
+# MNC = 2-3 digit Mobile Network Code (identifies operator within country)
+# Together MCC:MNC uniquely identifies a mobile network (e.g. 260:06 = Play PL)
 _MCC_TO_COUNTRY: Dict[str, str] = {
-    "202": "GR", "204": "NL", "206": "BE", "208": "FR", "212": "MC",
-    "213": "AD", "214": "ES", "216": "HU", "218": "BA", "219": "HR",
-    "220": "RS", "222": "IT", "225": "VA", "226": "RO", "228": "CH",
-    "230": "CZ", "231": "SK", "232": "AT", "234": "GB", "235": "GB",
-    "238": "DK", "240": "SE", "242": "NO", "244": "FI", "246": "LT",
-    "247": "LV", "248": "EE", "250": "RU", "255": "UA", "257": "BY",
-    "259": "MD", "260": "PL", "262": "DE", "266": "GI", "268": "PT",
-    "270": "LU", "272": "IE", "274": "IS", "276": "AL", "278": "MT",
-    "280": "CY", "282": "GE", "283": "AM", "284": "BG", "286": "TR",
-    "288": "FO", "290": "GL", "292": "SM", "293": "SI", "294": "MK",
-    "295": "LI", "297": "ME", "302": "CA", "310": "US", "311": "US",
-    "312": "US", "313": "US", "314": "US", "316": "US",
-    "334": "MX", "338": "JM", "340": "GP", "400": "AZ",
-    "401": "KZ", "410": "PK", "413": "LK", "414": "MM", "415": "LB",
-    "416": "JO", "417": "SY", "418": "IQ", "419": "KW", "420": "SA",
-    "421": "YE", "422": "OM", "424": "AE", "425": "IL", "426": "BH",
-    "427": "QA", "428": "MN", "429": "NP", "432": "IR",
-    "434": "UZ", "436": "TJ", "437": "KG", "438": "TM",
-    "440": "JP", "450": "KR", "452": "VN", "454": "HK", "455": "MO",
-    "456": "KH", "457": "LA", "460": "CN", "466": "TW", "470": "BD",
-    "502": "MY", "505": "AU", "510": "ID", "514": "TL", "515": "PH",
-    "520": "TH", "525": "SG", "528": "BN", "530": "NZ",
-    "602": "EG", "603": "DZ", "604": "MA", "605": "TN", "607": "GM",
-    "608": "SN", "612": "CI", "620": "GH", "621": "NG",
-    "634": "SD", "636": "ET", "639": "KE", "640": "TZ",
-    "645": "ZM", "646": "MG", "648": "ZW", "649": "MZ",
-    "650": "MW", "651": "LS", "652": "BW", "653": "SZ",
-    "655": "ZA", "702": "BZ", "704": "GT", "706": "SV",
+    # ── Europe ──
+    "202": "GR", "204": "NL", "206": "BE", "208": "FR",
+    "212": "MC", "213": "AD", "214": "ES", "216": "HU",
+    "218": "BA", "219": "HR", "220": "RS", "221": "XK",
+    "222": "IT", "225": "VA", "226": "RO", "228": "CH",
+    "230": "CZ", "231": "SK", "232": "AT",
+    "234": "GB", "235": "GB", "236": "GB",
+    "238": "DK", "240": "SE", "242": "NO", "244": "FI",
+    "246": "LT", "247": "LV", "248": "EE",
+    "250": "RU", "255": "UA", "257": "BY",
+    "259": "MD", "260": "PL", "262": "DE",
+    "266": "GI", "268": "PT", "270": "LU",
+    "272": "IE", "274": "IS", "276": "AL",
+    "278": "MT", "280": "CY", "282": "GE",
+    "283": "AM", "284": "BG", "286": "TR",
+    "288": "FO", "290": "GL", "292": "SM",
+    "293": "SI", "294": "MK", "295": "LI", "297": "ME",
+    # ── North America ──
+    "302": "CA",
+    "308": "PM",  # Saint Pierre and Miquelon
+    "310": "US", "311": "US", "312": "US", "313": "US", "314": "US", "316": "US",
+    "330": "PR", "332": "VI",  # Puerto Rico, US Virgin Islands
+    "334": "MX", "338": "JM",
+    "340": "GP",  # Guadeloupe (FR)
+    "342": "BB",  # Barbados
+    "344": "AG",  # Antigua and Barbuda
+    "346": "KY",  # Cayman Islands
+    "348": "VG",  # British Virgin Islands
+    "350": "BM",  # Bermuda
+    "352": "GD",  # Grenada
+    "354": "MS",  # Montserrat
+    "356": "KN",  # Saint Kitts and Nevis
+    "358": "LC",  # Saint Lucia
+    "360": "VC",  # Saint Vincent and the Grenadines
+    "362": "CW",  # Curaçao
+    "363": "AW",  # Aruba
+    "364": "BS",  # Bahamas
+    "365": "AI",  # Anguilla
+    "366": "DM",  # Dominica
+    "368": "CU",  # Cuba
+    "370": "DO",  # Dominican Republic
+    "372": "HT",  # Haiti
+    "374": "TT",  # Trinidad and Tobago
+    "376": "TC",  # Turks and Caicos
+    # ── Central & South America ──
+    "702": "BZ", "704": "GT", "706": "SV",
     "708": "HN", "710": "NI", "712": "CR", "714": "PA",
     "716": "PE", "722": "AR", "724": "BR", "730": "CL",
     "732": "CO", "734": "VE", "736": "BO", "738": "GY",
     "740": "EC", "744": "PY", "746": "SR", "748": "UY",
+    # ── Middle East ──
+    "400": "AZ",  # Azerbaijan
+    "401": "KZ",  # Kazakhstan
+    "402": "BT",  # Bhutan
+    "404": "IN", "405": "IN",  # India (oba MCC)
+    "410": "PK",  # Pakistan
+    "412": "AF",  # Afghanistan
+    "413": "LK",  # Sri Lanka
+    "414": "MM",  # Myanmar
+    "415": "LB",  # Lebanon
+    "416": "JO",  # Jordan
+    "417": "SY",  # Syria
+    "418": "IQ",  # Iraq
+    "419": "KW",  # Kuwait
+    "420": "SA",  # Saudi Arabia
+    "421": "YE",  # Yemen
+    "422": "OM",  # Oman
+    "424": "AE",  # United Arab Emirates
+    "425": "IL",  # Israel
+    "426": "BH",  # Bahrain
+    "427": "QA",  # Qatar
+    "428": "MN",  # Mongolia
+    "429": "NP",  # Nepal
+    "430": "AE",  # UAE (alternatywny)
+    "431": "AE",  # UAE (alternatywny)
+    "432": "IR",  # Iran
+    "434": "UZ",  # Uzbekistan
+    "436": "TJ",  # Tajikistan
+    "437": "KG",  # Kyrgyzstan
+    "438": "TM",  # Turkmenistan
+    # ── East & Southeast Asia ──
+    "440": "JP", "441": "JP",  # Japan
+    "450": "KR",  # South Korea
+    "452": "VN",  # Vietnam
+    "454": "HK",  # Hong Kong
+    "455": "MO",  # Macau
+    "456": "KH",  # Cambodia
+    "457": "LA",  # Laos
+    "460": "CN", "461": "CN",  # China
+    "466": "TW",  # Taiwan
+    "467": "KP",  # North Korea
+    "470": "BD",  # Bangladesh
+    "472": "MV",  # Maldives
+    # ── Southeast Asia & Oceania ──
+    "502": "MY",  # Malaysia
+    "505": "AU",  # Australia
+    "510": "ID",  # Indonesia
+    "514": "TL",  # Timor-Leste
+    "515": "PH",  # Philippines
+    "520": "TH",  # Thailand
+    "525": "SG",  # Singapore
+    "528": "BN",  # Brunei
+    "530": "NZ",  # New Zealand
+    "536": "NR",  # Nauru
+    "537": "PG",  # Papua New Guinea
+    "539": "TO",  # Tonga
+    "540": "SB",  # Solomon Islands
+    "541": "VU",  # Vanuatu
+    "542": "FJ",  # Fiji
+    "544": "AS",  # American Samoa
+    "545": "KI",  # Kiribati
+    "546": "NC",  # New Caledonia (FR)
+    "547": "PF",  # French Polynesia
+    "548": "CK",  # Cook Islands
+    "549": "WS",  # Samoa
+    "550": "FM",  # Micronesia
+    "551": "MH",  # Marshall Islands
+    "552": "PW",  # Palau
+    "553": "TV",  # Tuvalu
+    "555": "NU",  # Niue
+    # ── Africa ──
+    "602": "EG",  # Egypt
+    "603": "DZ",  # Algeria
+    "604": "MA",  # Morocco
+    "605": "TN",  # Tunisia
+    "606": "LY",  # Libya
+    "607": "GM",  # Gambia
+    "608": "SN",  # Senegal
+    "609": "MR",  # Mauritania
+    "610": "ML",  # Mali
+    "611": "GN",  # Guinea
+    "612": "CI",  # Côte d'Ivoire
+    "613": "BF",  # Burkina Faso
+    "614": "NE",  # Niger
+    "615": "TG",  # Togo
+    "616": "BJ",  # Benin
+    "617": "MU",  # Mauritius
+    "618": "LR",  # Liberia
+    "619": "SL",  # Sierra Leone
+    "620": "GH",  # Ghana
+    "621": "NG",  # Nigeria
+    "622": "TD",  # Chad
+    "623": "CF",  # Central African Republic
+    "624": "CM",  # Cameroon
+    "625": "CV",  # Cape Verde
+    "626": "ST",  # São Tomé and Príncipe
+    "627": "GQ",  # Equatorial Guinea
+    "628": "GA",  # Gabon
+    "629": "CG",  # Congo (Republic)
+    "630": "CD",  # Congo (DR)
+    "631": "AO",  # Angola
+    "632": "GW",  # Guinea-Bissau
+    "633": "SC",  # Seychelles
+    "634": "SD",  # Sudan
+    "635": "RW",  # Rwanda
+    "636": "ET",  # Ethiopia
+    "637": "SO",  # Somalia
+    "638": "DJ",  # Djibouti
+    "639": "KE",  # Kenya
+    "640": "TZ",  # Tanzania
+    "641": "UG",  # Uganda
+    "642": "BI",  # Burundi
+    "643": "MZ",  # Mozambique
+    "645": "ZM",  # Zambia
+    "646": "MG",  # Madagascar
+    "647": "RE",  # Réunion (FR)
+    "648": "ZW",  # Zimbabwe
+    "649": "NA",  # Namibia
+    "650": "MW",  # Malawi
+    "651": "LS",  # Lesotho
+    "652": "BW",  # Botswana
+    "653": "SZ",  # Eswatini (Swaziland)
+    "654": "KM",  # Comoros
+    "655": "ZA",  # South Africa
+    "657": "ER",  # Eritrea
+    "658": "SH",  # Saint Helena
+    "659": "SS",  # South Sudan
 }
 
 

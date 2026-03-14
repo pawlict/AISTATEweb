@@ -5431,15 +5431,55 @@
 
   /* ── Country code → full Polish name mapping ── */
   const _COUNTRY_NAMES = {
-    PL:"Polska",DE:"Niemcy",CZ:"Czechy",SK:"Słowacja",UA:"Ukraina",
-    BY:"Białoruś",LT:"Litwa",RU:"Rosja",AT:"Austria",CH:"Szwajcaria",
-    FR:"Francja",GB:"Wielka Brytania",IT:"Włochy",ES:"Hiszpania",
+    // Europa
+    PL:"Polska",DE:"Niemcy",CZ:"Czechy",SK:"S\u0142owacja",UA:"Ukraina",
+    BY:"Bia\u0142oru\u015B",LT:"Litwa",RU:"Rosja",AT:"Austria",CH:"Szwajcaria",
+    FR:"Francja",GB:"Wielka Brytania",IT:"W\u0142ochy",ES:"Hiszpania",
     NL:"Holandia",BE:"Belgia",DK:"Dania",SE:"Szwecja",NO:"Norwegia",
-    FI:"Finlandia",PT:"Portugalia",IE:"Irlandia",HU:"Węgry",RO:"Rumunia",
-    BG:"Bułgaria",HR:"Chorwacja",SI:"Słowenia",RS:"Serbia",BA:"Bośnia i Hercegowina",
-    ME:"Czarnogóra",MK:"Macedonia Północna",AL:"Albania",GR:"Grecja",TR:"Turcja",
-    EE:"Estonia",LV:"Łotwa",LU:"Luksemburg",MT:"Malta",CY:"Cypr",
-    IS:"Islandia",MD:"Mołdawia",XK:"Kosowo",US:"USA",CA:"Kanada",
+    FI:"Finlandia",PT:"Portugalia",IE:"Irlandia",HU:"W\u0119gry",RO:"Rumunia",
+    BG:"Bu\u0142garia",HR:"Chorwacja",SI:"S\u0142owenia",RS:"Serbia",BA:"Bo\u015Bnia i Hercegowina",
+    ME:"Czarnog\u00F3ra",MK:"Macedonia P\u00F3\u0142nocna",AL:"Albania",GR:"Grecja",TR:"Turcja",
+    EE:"Estonia",LV:"\u0141otwa",LU:"Luksemburg",MT:"Malta",CY:"Cypr",
+    IS:"Islandia",MD:"Mo\u0142dawia",XK:"Kosowo",MC:"Monako",AD:"Andora",
+    VA:"Watykan",SM:"San Marino",LI:"Liechtenstein",GI:"Gibraltar",
+    FO:"Wyspy Owcze",GL:"Grenlandia",GE:"Gruzja",AM:"Armenia",AZ:"Azerbejd\u017Can",
+    // Ameryka P\u00F3\u0142nocna i \u015Arodkowa
+    US:"USA",CA:"Kanada",MX:"Meksyk",PR:"Portoryko",JM:"Jamajka",
+    CU:"Kuba",HT:"Haiti",DO:"Rep. Dominika\u0144ska",TT:"Trynidad i Tobago",
+    BB:"Barbados",BS:"Bahamy",GT:"Gwatemala",SV:"Salwador",HN:"Honduras",
+    NI:"Nikaragua",CR:"Kostaryka",PA:"Panama",BZ:"Belize",
+    // Ameryka Po\u0142udniowa
+    BR:"Brazylia",AR:"Argentyna",CL:"Chile",CO:"Kolumbia",PE:"Peru",
+    VE:"Wenezuela",EC:"Ekwador",BO:"Boliwia",PY:"Paragwaj",UY:"Urugwaj",
+    GY:"Gujana",SR:"Surinam",
+    // Bliski Wsch\u00F3d
+    AE:"Zjedn. Emiraty Arabskie",SA:"Arabia Saudyjska",IL:"Izrael",
+    JO:"Jordania",LB:"Liban",SY:"Syria",IQ:"Irak",IR:"Iran",
+    KW:"Kuwejt",BH:"Bahrajn",QA:"Katar",OM:"Oman",YE:"Jemen",
+    // Azja
+    IN:"Indie",PK:"Pakistan",BD:"Bangladesz",LK:"Sri Lanka",NP:"Nepal",
+    AF:"Afganistan",MM:"Mjanma",KZ:"Kazachstan",UZ:"Uzbekistan",
+    TJ:"Tad\u017Cykistan",KG:"Kirgistan",TM:"Turkmenistan",MN:"Mongolia",
+    CN:"Chiny",JP:"Japonia",KR:"Korea Po\u0142udniowa",KP:"Korea P\u00F3\u0142nocna",
+    TW:"Tajwan",HK:"Hongkong",MO:"Makau",
+    VN:"Wietnam",TH:"Tajlandia",MY:"Malezja",SG:"Singapur",ID:"Indonezja",
+    PH:"Filipiny",KH:"Kambod\u017Ca",LA:"Laos",BN:"Brunei",TL:"Timor Wschodni",
+    BT:"Bhutan",MV:"Malediwy",
+    // Oceania
+    AU:"Australia",NZ:"Nowa Zelandia",FJ:"Fid\u017Ci",PG:"Papua-Nowa Gwinea",
+    WS:"Samoa",TO:"Tonga",
+    // Afryka
+    EG:"Egipt",MA:"Maroko",DZ:"Algieria",TN:"Tunezja",LY:"Libia",
+    ZA:"RPA",NG:"Nigeria",GH:"Ghana",KE:"Kenia",TZ:"Tanzania",
+    ET:"Etiopia",UG:"Uganda",RW:"Rwanda",SD:"Sudan",SS:"Sudan Po\u0142udniowy",
+    AO:"Angola",MZ:"Mozambik",ZW:"Zimbabwe",ZM:"Zambia",MW:"Malawi",
+    NA:"Namibia",BW:"Botswana",MG:"Madagaskar",SN:"Senegal",CI:"Wybrze\u017Ce Ko\u015Bci S\u0142oniowej",
+    CM:"Kamerun",CD:"Kongo (DR)",CG:"Kongo",GA:"Gabon",ML:"Mali",
+    BF:"Burkina Faso",NE:"Niger",TD:"Czad",SO:"Somalia",DJ:"D\u017Cibuti",
+    ER:"Erytrea",BI:"Burundi",LS:"Lesotho",SZ:"Eswatini",GM:"Gambia",
+    GN:"Gwinea",SL:"Sierra Leone",LR:"Liberia",TG:"Togo",BJ:"Benin",
+    MU:"Mauritius",MR:"Mauretania",SC:"Seszele",CV:"Republika Zielonego Przyl\u0105dka",
+    CF:"Rep. \u015Arodkowoafryka\u0144ska",GQ:"Gwinea R\u00F3wnikowa",
   };
 
   /* ── Country center coordinates (approx geographic center) ── */
@@ -5455,6 +5495,24 @@
     GR:[39.07,21.82],TR:[38.96,35.24],EE:[58.60,25.01],LV:[56.88,24.60],
     LU:[49.82,6.13],MT:[35.94,14.38],CY:[35.13,33.43],IS:[64.96,-19.02],
     MD:[47.41,28.37],XK:[42.60,20.90],US:[37.09,-95.71],CA:[56.13,-106.35],
+    MC:[43.73,7.42],AD:[42.55,1.57],VA:[41.90,12.45],SM:[43.94,12.46],
+    LI:[47.17,9.51],GI:[36.14,-5.35],FO:[62.01,-6.77],GL:[71.71,-42.60],
+    GE:[42.32,43.36],AM:[40.07,44.53],AZ:[40.14,47.58],
+    MX:[23.63,-102.55],JM:[18.11,-77.30],CU:[21.52,-77.78],
+    BR:[-14.24,-51.93],AR:[-38.42,-63.62],CL:[-35.68,-71.54],
+    CO:[4.57,-74.30],PE:[-9.19,-75.02],VE:[6.42,-66.59],
+    AE:[23.42,53.85],SA:[23.89,45.08],IL:[31.05,34.85],
+    JO:[30.59,36.24],LB:[33.85,35.86],IQ:[33.22,43.68],IR:[32.43,53.69],
+    KW:[29.31,47.48],QA:[25.35,51.18],OM:[21.47,55.98],BH:[26.07,50.56],
+    IN:[20.59,78.96],PK:[30.38,69.35],BD:[23.68,90.36],NP:[28.39,84.12],
+    KZ:[48.02,66.92],UZ:[41.38,64.59],MN:[46.86,103.85],
+    CN:[35.86,104.20],JP:[36.20,138.25],KR:[35.91,127.77],
+    TW:[23.70,121.00],HK:[22.40,114.11],
+    VN:[14.06,108.28],TH:[15.87,100.99],MY:[4.21,101.98],SG:[1.35,103.82],
+    ID:[-0.79,113.92],PH:[12.88,121.77],
+    AU:[-25.27,133.78],NZ:[-40.90,174.89],
+    EG:[26.82,30.80],MA:[31.79,-7.09],ZA:[-30.56,22.94],
+    NG:[9.08,8.68],KE:[-0.02,37.91],TZ:[-6.37,34.89],ET:[9.15,40.49],
   };
   function _countryName(code) {
     if (!code) return "";
