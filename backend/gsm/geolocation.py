@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
 from datetime import datetime as _dt
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 try:
@@ -307,15 +309,27 @@ def _detect_coord_order(
 # Core geolocation
 # ---------------------------------------------------------------------------
 
+def _default_data_dir() -> Path:
+    """Determine default data directory for geocode cache."""
+    data_dir = os.environ.get("AISTATEWEB_DATA_DIR", "")
+    if data_dir:
+        return Path(data_dir) / "gsm"
+    # Fallback: data_www/gsm relative to project root
+    return Path(__file__).resolve().parent.parent.parent / "data_www" / "gsm"
+
+
 def geolocate_records(
     records: List[BillingRecord],
     bts_db=None,
+    data_dir: Optional[Path] = None,
 ) -> GeoAnalysis:
     """Resolve billing records to geographic coordinates and analyze.
 
     Args:
         records: Parsed billing records.
         bts_db: Optional BTSDatabase instance for CID/LAC lookup.
+        data_dir: Optional data directory for geocode cache
+            (default: auto-detect from AISTATEWEB_DATA_DIR or data_www/gsm/).
 
     Returns:
         GeoAnalysis with geo_records, clusters, path, trips,
@@ -330,12 +344,36 @@ def geolocate_records(
     log.info("Geolocation: processing %d records, bts_db=%s",
              len(records), "available" if bts_db else "NONE")
 
+    # --- Batch pre-fetch: geocode text BTS addresses (Plus, etc.) ---
+    geocode_cache: Dict[str, Tuple[float, float]] = {}
+    addresses_to_geocode: List[str] = []
+    for r in records:
+        extra = r.extra or {}
+        has_bts_xy = bool(extra.get("bts_x") and extra.get("bts_y"))
+        has_lac = bool(r.location_lac)
+        has_cid = bool(r.location_cell_id)
+        if not has_bts_xy and not (has_lac and has_cid) and r.location:
+            addresses_to_geocode.append(r.location)
+
+    if addresses_to_geocode:
+        try:
+            from .geocoder import geocode_batch
+            cache_dir = data_dir or _default_data_dir()
+            geocode_cache = geocode_batch(
+                addresses_to_geocode, cache_dir,
+            )
+            log.info("Geocode pre-fetch: %d/%d addresses resolved",
+                     len(geocode_cache), len(set(addresses_to_geocode)))
+        except Exception as e:
+            log.warning("Geocode batch failed (continuing without): %s", e)
+
     # Debug counters
     has_direct_coords = 0
     has_lac_cid = 0
     no_location_data = 0
     resolved_billing = 0
     resolved_bts_db = 0
+    resolved_geocoded = 0
     lookup_miss = 0
     coord_rejected = 0  # coords outside valid range
     sample_lac_cid: List[str] = []
@@ -383,7 +421,7 @@ def geolocate_records(
         if not has_bts_xy and not (has_lac and has_cid):
             no_location_data += 1
 
-        point = _resolve_point(r, bts_db)
+        point = _resolve_point(r, bts_db, geocode_cache)
         if point and point.is_valid:
             gr.point = point
             analysis.geolocated_records += 1
@@ -391,6 +429,8 @@ def geolocate_records(
                 resolved_billing += 1
             elif point.source == "bts_db":
                 resolved_bts_db += 1
+            elif point.source == "geocoded":
+                resolved_geocoded += 1
             if point.lac and point.cid:
                 seen_cells.add((point.lac, point.cid))
         elif has_bts_xy:
@@ -408,9 +448,10 @@ def geolocate_records(
         log.info("Raw BTS X/Y samples: %s", "; ".join(sample_raw_bts))
     log.info(
         "Geolocation results: %d/%d resolved "
-        "(direct_coords=%d, bts_db=%d, no_data=%d, lookup_miss=%d, coord_rejected=%d)",
+        "(direct_coords=%d, bts_db=%d, geocoded=%d, no_data=%d, "
+        "lookup_miss=%d, coord_rejected=%d)",
         analysis.geolocated_records, len(records),
-        has_direct_coords, resolved_bts_db,
+        has_direct_coords, resolved_bts_db, resolved_geocoded,
         no_location_data, lookup_miss, coord_rejected,
     )
     if has_lac_cid and resolved_bts_db == 0 and has_direct_coords == 0:
@@ -438,6 +479,7 @@ def geolocate_records(
         "no_location_data": no_location_data,
         "resolved_billing": resolved_billing,
         "resolved_bts_db": resolved_bts_db,
+        "resolved_geocoded": resolved_geocoded,
         "lookup_miss": lookup_miss,
         "coord_rejected": coord_rejected,
         "sample_lac_cid": sample_lac_cid,
@@ -491,6 +533,7 @@ def geolocate_records(
 def _resolve_point(
     record: BillingRecord,
     bts_db=None,
+    geocode_cache: Optional[Dict[str, Tuple[float, float]]] = None,
 ) -> Optional[GeoPoint]:
     """Resolve a single billing record to a geographic point."""
     extra = record.extra or {}
@@ -566,6 +609,25 @@ def _resolve_point(
                 )
         except (ValueError, TypeError):
             pass
+
+    # 3. Geocoded text address (Plus BTS addresses, etc.)
+    if geocode_cache and record.location:
+        coords = geocode_cache.get(record.location)
+        if coords and _is_plausible_wgs84(coords[0], coords[1]):
+            # Extract city from parsed address
+            city = ""
+            try:
+                from .geocoder import parse_plus_bts_address
+                _, _, city = parse_plus_bts_address(record.location)
+            except ImportError:
+                pass
+            return GeoPoint(
+                lat=coords[0],
+                lon=coords[1],
+                accuracy_m=1000,  # street-level geocoding, less precise
+                source="geocoded",
+                city=city,
+            )
 
     return None
 
