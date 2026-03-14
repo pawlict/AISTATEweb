@@ -385,6 +385,18 @@ class PlusParser(BillingParser):
             if logical and logical not in col_map:
                 col_map[logical] = i
 
+        # Adaptive fallback: try fuzzy matching if critical columns missing
+        if "start" not in col_map or "type" not in col_map:
+            try:
+                from .adaptive_mapper import AdaptiveColumnMapper
+                mapper = AdaptiveColumnMapper()
+                col_map, validation = mapper.build_adaptive_col_map(
+                    "plus", "POL", header_lower, col_map,
+                )
+                result.warnings.extend(mapper.format_warnings(validation))
+            except Exception:
+                pass  # adaptive layer is optional — never block parsing
+
         if "start" not in col_map:
             result.warnings.append("Nie znaleziono kolumny 'Początek'")
             return result
@@ -604,6 +616,18 @@ class PlusParser(BillingParser):
             logical = _TD_COLUMNS.get(h)
             if logical and logical not in col_map:
                 col_map[logical] = i
+
+        # Adaptive fallback: try fuzzy matching if critical columns missing
+        if "start" not in col_map:
+            try:
+                from .adaptive_mapper import AdaptiveColumnMapper
+                mapper = AdaptiveColumnMapper()
+                col_map, validation = mapper.build_adaptive_col_map(
+                    "plus", "TD", header_lower, col_map,
+                )
+                result.warnings.extend(mapper.format_warnings(validation))
+            except Exception:
+                pass  # adaptive layer is optional — never block parsing
 
         if "start" not in col_map:
             result.warnings.append("Nie znaleziono kolumny 'Pocz\u0105tek'")

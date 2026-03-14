@@ -142,6 +142,7 @@ def _do_parse(file_path: Path, filename: str) -> dict:
         "record_count": len(result.records),
         "records": [r.to_dict() for r in result.records],
         "records_truncated": False,
+        "source_files": [{"filename": filename, "type": "billing", "operator": result.operator}],
     }
 
     # Add geolocation data
@@ -360,6 +361,9 @@ async def gsm_smart_import(
             "scan": scan_result.to_dict(),
         }
 
+        # --- Collect all source files for info display ---
+        all_source_files: list = []
+
         # --- Process billing files ---
         if scan_result.billing_files:
             # Use the first (or best confidence) billing file
@@ -370,6 +374,16 @@ async def gsm_smart_import(
                 _do_parse, best_billing.path, best_billing.filename
             )
             response["billing"] = billing_data
+
+            # Track all billing files (processed and extra)
+            for sf in scan_result.billing_files:
+                all_source_files.append({
+                    "filename": sf.filename,
+                    "type": "billing",
+                    "operator": sf.operator or "",
+                    "detail": sf.detail or "",
+                    "processed": sf is best_billing,
+                })
 
             # If there are more billing files, note them
             if len(scan_result.billing_files) > 1:
@@ -421,6 +435,20 @@ async def gsm_smart_import(
                 "files": id_file_results,
                 "lookup": lookup_map,
             }
+
+            # Track identification files as source files
+            for sf in scan_result.identification_files:
+                all_source_files.append({
+                    "filename": sf.filename,
+                    "type": "identification",
+                    "operator": sf.operator or "",
+                    "detail": sf.detail or "",
+                    "processed": True,
+                })
+
+        # Propagate source_files list to billing response for frontend display
+        if "billing" in response and response["billing"]:
+            response["billing"]["source_files"] = all_source_files
 
         _app_log(f"[GSM] Import complete")
         return JSONResponse(response)
@@ -1555,3 +1583,216 @@ async def map_icons_list():
         if icons:
             categories.append({"category": cat_dir.name, "icons": icons})
     return JSONResponse({"status": "ok", "categories": categories})
+
+
+# ---------------------------------------------------------------------------
+# Adaptive Parser Management: Schemas, Drift Reports, Backups
+# ---------------------------------------------------------------------------
+
+@router.get("/api/gsm/parsers/info")
+async def gsm_parsers_info():
+    """List all parsers with their versions and detection patterns."""
+    from backend.gsm.parsers.registry import _get_all_parsers
+    from backend.gsm.parsers.generic import GenericBillingParser
+
+    parsers = []
+    for cls in _get_all_parsers() + [GenericBillingParser]:
+        parsers.append({
+            "parser_id": cls.OPERATOR_ID,
+            "operator_name": cls.OPERATOR_NAME,
+            "version": cls.PARSER_VERSION,
+            "detect_header_patterns": cls.DETECT_HEADER_PATTERNS[:10],
+            "detect_sheet_patterns": cls.DETECT_SHEET_PATTERNS[:5],
+        })
+    return JSONResponse({"status": "ok", "parsers": parsers})
+
+
+@router.get("/api/gsm/parsers/schemas")
+async def gsm_parsers_schemas():
+    """List all registered parser schemas."""
+    from backend.gsm.parsers.schema_registry import SchemaRegistry
+    registry = SchemaRegistry()
+    schemas = registry.list_schemas()
+    return JSONResponse({
+        "status": "ok",
+        "schemas": [s.to_dict() for s in schemas],
+    })
+
+
+@router.post("/api/gsm/parsers/schemas/init")
+async def gsm_parsers_schemas_init():
+    """Auto-generate schemas from current parser definitions (bootstrap)."""
+    from backend.gsm.parsers.schema_registry import SchemaRegistry
+    registry = SchemaRegistry()
+    schemas = await run_in_threadpool(registry.bootstrap_all)
+    return JSONResponse({
+        "status": "ok",
+        "schemas_created": len(schemas),
+        "parsers": [s.parser_id + ("_" + s.format_variant if s.format_variant else "")
+                     for s in schemas],
+    })
+
+
+@router.get("/api/gsm/drift/reports")
+async def gsm_drift_reports(
+    parser_id: Optional[str] = None,
+    status: Optional[str] = None,
+):
+    """List schema drift reports, optionally filtered by parser_id and status."""
+    from backend.gsm.parsers.drift_reporter import DriftReporter
+    reporter = DriftReporter()
+    reports = reporter.list_reports(parser_id=parser_id, status=status)
+    return JSONResponse({
+        "status": "ok",
+        "reports": [r.to_dict() for r in reports],
+    })
+
+
+@router.get("/api/gsm/drift/reports/{report_id}")
+async def gsm_drift_report_detail(report_id: str):
+    """Get detailed drift report with matched/unmatched columns."""
+    from backend.gsm.parsers.drift_reporter import DriftReporter
+    reporter = DriftReporter()
+    report = reporter.get_report(report_id)
+    if report is None:
+        return JSONResponse(
+            {"status": "error", "detail": "Raport nie znaleziony"},
+            status_code=404,
+        )
+    return JSONResponse({"status": "ok", "report": report.to_dict()})
+
+
+@router.post("/api/gsm/drift/reports/{report_id}/approve")
+async def gsm_drift_approve(report_id: str, request: Request):
+    """Approve a drift report's column mappings and optionally apply to parser.
+
+    Body: {
+        "confirmed_mappings": {"logical_name": "new_header", ...},
+        "apply_to_parser": true/false
+    }
+    """
+    from backend.gsm.parsers.drift_reporter import DriftReporter
+    reporter = DriftReporter()
+
+    report = reporter.get_report(report_id)
+    if report is None:
+        return JSONResponse(
+            {"status": "error", "detail": "Raport nie znaleziony"},
+            status_code=404,
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"status": "error", "detail": "Invalid JSON"},
+            status_code=400,
+        )
+
+    confirmed = body.get("confirmed_mappings", {})
+    apply_to_parser = body.get("apply_to_parser", False)
+
+    result: dict = {"status": "ok", "report_id": report_id}
+
+    if apply_to_parser and confirmed:
+        from backend.gsm.parsers.parser_updater import ParserUpdater
+        updater = ParserUpdater()
+        apply_result = await run_in_threadpool(
+            updater.apply_column_updates,
+            report.parser_id, confirmed,
+            report.format_variant, report_id,
+        )
+        result["update"] = apply_result
+
+    reporter.update_status(report_id, "approved", applied_changes=confirmed)
+    result["report_status"] = "approved"
+    return JSONResponse(result)
+
+
+@router.post("/api/gsm/drift/reports/{report_id}/reject")
+async def gsm_drift_reject(report_id: str):
+    """Reject a drift report (mark as dismissed)."""
+    from backend.gsm.parsers.drift_reporter import DriftReporter
+    reporter = DriftReporter()
+    report = reporter.update_status(report_id, "rejected")
+    if report is None:
+        return JSONResponse(
+            {"status": "error", "detail": "Raport nie znaleziony"},
+            status_code=404,
+        )
+    return JSONResponse({"status": "ok", "report_id": report_id})
+
+
+@router.post("/api/gsm/parsers/{parser_id}/preview-update")
+async def gsm_parser_preview_update(parser_id: str, request: Request):
+    """Preview what code changes would be applied to a parser.
+
+    Body: { "column_updates": {"logical_name": "new_header_string", ...} }
+    """
+    from backend.gsm.parsers.parser_updater import ParserUpdater
+    updater = ParserUpdater()
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"status": "error", "detail": "Invalid JSON"},
+            status_code=400,
+        )
+
+    updates = body.get("column_updates", {})
+    variant = body.get("variant", "")
+    preview = updater.preview_changes(parser_id, updates, variant)
+    return JSONResponse({"status": "ok", **preview})
+
+
+@router.post("/api/gsm/parsers/{parser_id}/apply-update")
+async def gsm_parser_apply_update(parser_id: str, request: Request):
+    """Apply confirmed column mapping updates to parser source code.
+
+    Body: {
+        "column_updates": {"logical_name": "new_header_string", ...},
+        "variant": "",
+        "drift_report_id": ""
+    }
+    """
+    from backend.gsm.parsers.parser_updater import ParserUpdater
+    updater = ParserUpdater()
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"status": "error", "detail": "Invalid JSON"},
+            status_code=400,
+        )
+
+    updates = body.get("column_updates", {})
+    variant = body.get("variant", "")
+    drift_id = body.get("drift_report_id", "")
+
+    result = await run_in_threadpool(
+        updater.apply_column_updates, parser_id, updates, variant, drift_id
+    )
+    return JSONResponse({"status": "ok", **result})
+
+
+@router.get("/api/gsm/parsers/backups")
+async def gsm_parser_backups(parser_id: Optional[str] = None):
+    """List parser file backups."""
+    from backend.gsm.parsers.parser_updater import ParserUpdater
+    updater = ParserUpdater()
+    backups = updater.list_backups(parser_id)
+    return JSONResponse({
+        "status": "ok",
+        "backups": [b.to_dict() for b in backups],
+    })
+
+
+@router.post("/api/gsm/parsers/backups/{backup_id}/restore")
+async def gsm_parser_restore(backup_id: str):
+    """Restore a parser from backup."""
+    from backend.gsm.parsers.parser_updater import ParserUpdater
+    updater = ParserUpdater()
+    result = await run_in_threadpool(updater.restore_backup, backup_id)
+    return JSONResponse({"status": "ok", **result})

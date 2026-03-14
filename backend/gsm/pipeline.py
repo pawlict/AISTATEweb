@@ -149,6 +149,27 @@ def process_billing(
 
     log.info("Detected operator: %s (parser: %s)", parser.OPERATOR_NAME, parser.OPERATOR_ID)
 
+    # 2b. Schema validation (pre-parse drift detection)
+    try:
+        from .parsers.schema_registry import SchemaRegistry
+        from .parsers.schema_validator import SchemaValidator
+        registry = SchemaRegistry()
+        validator = SchemaValidator(registry)
+
+        # Auto-bootstrap schemas if none exist
+        if not registry.list_schemas():
+            registry.bootstrap_all()
+
+        validation = validator.validate(parser.OPERATOR_ID, headers)
+        if validation.match_type in ("drift", "partial", "failed"):
+            log.info(
+                "Schema validation: %s (match=%s, confidence=%.2f, missing=%s)",
+                parser.OPERATOR_ID, validation.match_type,
+                validation.confidence, validation.missing_columns,
+            )
+    except Exception as exc:
+        log.debug("Schema validation skipped: %s", exc)
+
     # 3. Parse billing
     result = parser.parse_workbook(sheets)
 

@@ -273,6 +273,19 @@ class PlayParser(BillingParser):
                     col_map[logical_name] = j
                     break
 
+        # Adaptive fallback: try fuzzy matching if critical columns missing
+        _required_play = {"datetime", "ui_msisdn", "uw_msisdn", "service_type"}
+        if _required_play - set(col_map.keys()):
+            try:
+                from .adaptive_mapper import AdaptiveColumnMapper
+                mapper = AdaptiveColumnMapper()
+                col_map, validation = mapper.build_adaptive_col_map(
+                    "play", "", header_lower, col_map,
+                )
+                result.warnings.extend(mapper.format_warnings(validation))
+            except Exception:
+                pass  # adaptive layer is optional — never block parsing
+
         if "datetime" not in col_map:
             result.warnings.append("Nie znaleziono kolumny DATA_I_GODZ_POLACZ")
             return result
