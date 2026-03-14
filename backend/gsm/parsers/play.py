@@ -214,6 +214,7 @@ class PlayParser(BillingParser):
 
     OPERATOR_NAME = "Play (P4)"
     OPERATOR_ID = "play"
+    PARSER_VERSION = "1.1"
 
     # CSV files don't have sheet names, but headers are distinctive
     DETECT_HEADER_PATTERNS = [
@@ -239,6 +240,7 @@ class PlayParser(BillingParser):
         result = BillingParseResult(
             operator=self.OPERATOR_NAME,
             operator_id=self.OPERATOR_ID,
+            parser_version=self.PARSER_VERSION,
             sheet_name=sheet_name or "CSV",
             parse_method="csv",
         )

@@ -296,6 +296,7 @@ class PlusParser(BillingParser):
 
     OPERATOR_NAME = "Plus (Polkomtel)"
     OPERATOR_ID = "plus"
+    PARSER_VERSION = "1.3"
 
     # Detection patterns for both POL and TD formats
     DETECT_HEADER_PATTERNS = [
@@ -323,6 +324,7 @@ class PlusParser(BillingParser):
         result = BillingParseResult(
             operator=self.OPERATOR_NAME,
             operator_id=self.OPERATOR_ID,
+            parser_version=self.PARSER_VERSION,
             sheet_name=sheet_name or "CSV",
             parse_method="csv",
         )

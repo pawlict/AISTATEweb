@@ -86,6 +86,7 @@ class OrangeParser(BillingParser):
 
     OPERATOR_NAME = "Orange Polska"
     OPERATOR_ID = "orange"
+    PARSER_VERSION = "1.0"
 
     DETECT_HEADER_PATTERNS = [
         r"orange",
@@ -109,6 +110,7 @@ class OrangeParser(BillingParser):
         result = BillingParseResult(
             operator=self.OPERATOR_NAME,
             operator_id=self.OPERATOR_ID,
+            parser_version=self.PARSER_VERSION,
             sheet_name=sheet_name,
         )
 

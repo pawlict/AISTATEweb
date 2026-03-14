@@ -100,6 +100,7 @@ class TMobileParser(BillingParser):
 
     OPERATOR_NAME = "T-Mobile Polska"
     OPERATOR_ID = "tmobile"
+    PARSER_VERSION = "1.1"
 
     # Detection: T-Mobile has distinctive columns like "Rozmówca", "Nr powiązany",
     # "System obsługujacy połaczenie", "BTS Miasto" etc.
@@ -178,6 +179,7 @@ class TMobileParser(BillingParser):
         result = BillingParseResult(
             operator=self.OPERATOR_NAME,
             operator_id=self.OPERATOR_ID,
+            parser_version=self.PARSER_VERSION,
             sheet_name=sheet_name,
         )
 

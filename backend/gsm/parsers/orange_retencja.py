@@ -345,6 +345,7 @@ class OrangeRetencjaParser(BillingParser):
 
     OPERATOR_NAME = "Orange Polska (retencja)"
     OPERATOR_ID = "orange_retencja"
+    PARSER_VERSION = "1.2"
 
     DETECT_HEADER_PATTERNS = [
         r"identyfikator\s*u[żz]ytkownika",
@@ -378,6 +379,7 @@ class OrangeRetencjaParser(BillingParser):
         result = BillingParseResult(
             operator=self.OPERATOR_NAME,
             operator_id=self.OPERATOR_ID,
+            parser_version=self.PARSER_VERSION,
         )
 
         # 1) Find sheets (case-insensitive)
@@ -627,6 +629,7 @@ class OrangeRetencjaParser(BillingParser):
         return BillingParseResult(
             operator=self.OPERATOR_NAME,
             operator_id=self.OPERATOR_ID,
+            parser_version=self.PARSER_VERSION,
             sheet_name=sheet_name,
             warnings=[
                 "OrangeRetencjaParser wymaga parse_workbook() zamiast parse_sheet()"

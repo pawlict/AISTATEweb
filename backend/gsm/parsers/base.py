@@ -106,6 +106,7 @@ class BillingParseResult:
 
     operator: str = ""
     operator_id: str = ""
+    parser_version: str = "1.0"   # parser version tag
     subscriber: SubscriberInfo = field(default_factory=SubscriberInfo)
     records: List[BillingRecord] = field(default_factory=list)
     summary: BillingSummary = field(default_factory=BillingSummary)
@@ -117,6 +118,7 @@ class BillingParseResult:
         return {
             "operator": self.operator,
             "operator_id": self.operator_id,
+            "parser_version": self.parser_version,
             "subscriber": self.subscriber.to_dict(),
             "records": [r.to_dict() for r in self.records],
             "summary": self.summary.to_dict(),
@@ -209,6 +211,7 @@ class BillingParser(ABC):
     # Subclass must set these
     OPERATOR_NAME: str = ""
     OPERATOR_ID: str = ""
+    PARSER_VERSION: str = "1.0"  # version tag: 1.<sequential>, increment on changes
 
     # Column header patterns for auto-detection (case-insensitive regex)
     # Matched against header row cells joined with '|'
@@ -302,6 +305,7 @@ class BillingParser(ABC):
         merged = BillingParseResult(
             operator=self.OPERATOR_NAME,
             operator_id=self.OPERATOR_ID,
+            parser_version=self.PARSER_VERSION,
             subscriber=subscriber,
             records=all_records,
             warnings=all_warnings,
