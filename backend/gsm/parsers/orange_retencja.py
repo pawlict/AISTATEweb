@@ -120,6 +120,56 @@ def _to_str(val: Any) -> str:
     return str(val).strip()
 
 
+# MCC (Mobile Country Code) → ISO 3166-1 alpha-2 country code mapping
+# Covers European and common MCC codes encountered in Polish billing data
+_MCC_TO_COUNTRY: Dict[str, str] = {
+    "202": "GR", "204": "NL", "206": "BE", "208": "FR", "212": "MC",
+    "213": "AD", "214": "ES", "216": "HU", "218": "BA", "219": "HR",
+    "220": "RS", "222": "IT", "225": "VA", "226": "RO", "228": "CH",
+    "230": "CZ", "231": "SK", "232": "AT", "234": "GB", "235": "GB",
+    "238": "DK", "240": "SE", "242": "NO", "244": "FI", "246": "LT",
+    "247": "LV", "248": "EE", "250": "RU", "255": "UA", "257": "BY",
+    "259": "MD", "260": "PL", "262": "DE", "266": "GI", "268": "PT",
+    "270": "LU", "272": "IE", "274": "IS", "276": "AL", "278": "MT",
+    "280": "CY", "282": "GE", "283": "AM", "284": "BG", "286": "TR",
+    "288": "FO", "290": "GL", "292": "SM", "293": "SI", "294": "MK",
+    "295": "LI", "297": "ME", "302": "CA", "310": "US", "311": "US",
+    "312": "US", "313": "US", "314": "US", "316": "US",
+    "334": "MX", "338": "JM", "340": "GP", "400": "AZ",
+    "401": "KZ", "410": "PK", "413": "LK", "414": "MM", "415": "LB",
+    "416": "JO", "417": "SY", "418": "IQ", "419": "KW", "420": "SA",
+    "421": "YE", "422": "OM", "424": "AE", "425": "IL", "426": "BH",
+    "427": "QA", "428": "MN", "429": "NP", "432": "IR",
+    "434": "UZ", "436": "TJ", "437": "KG", "438": "TM",
+    "440": "JP", "450": "KR", "452": "VN", "454": "HK", "455": "MO",
+    "456": "KH", "457": "LA", "460": "CN", "466": "TW", "470": "BD",
+    "502": "MY", "505": "AU", "510": "ID", "514": "TL", "515": "PH",
+    "520": "TH", "525": "SG", "528": "BN", "530": "NZ",
+    "602": "EG", "603": "DZ", "604": "MA", "605": "TN", "607": "GM",
+    "608": "SN", "612": "CI", "620": "GH", "621": "NG",
+    "634": "SD", "636": "ET", "639": "KE", "640": "TZ",
+    "645": "ZM", "646": "MG", "648": "ZW", "649": "MZ",
+    "650": "MW", "651": "LS", "652": "BW", "653": "SZ",
+    "655": "ZA", "702": "BZ", "704": "GT", "706": "SV",
+    "708": "HN", "710": "NI", "712": "CR", "714": "PA",
+    "716": "PE", "722": "AR", "724": "BR", "730": "CL",
+    "732": "CO", "734": "VE", "736": "BO", "738": "GY",
+    "740": "EC", "744": "PY", "746": "SR", "748": "UY",
+}
+
+
+def _mcc_to_country(bts_code: str) -> str:
+    """Convert MCC:MNC code to ISO country code.
+
+    Returns ISO 2-letter code or the raw bts_code if unknown.
+    """
+    m = re.match(r"^(\d{3}):(\d{1,3})$", bts_code.strip())
+    if not m:
+        return bts_code
+    mcc = m.group(1)
+    return _MCC_TO_COUNTRY.get(mcc, bts_code)
+
+
 def _is_roaming_bts(bts_code: str) -> bool:
     """Check if BTS code indicates roaming (MCC:MNC format, non-Polish).
 
@@ -358,9 +408,9 @@ class OrangeRetencjaParser(BillingParser):
                     elif bts_street:
                         location = bts_street
 
-            # Roaming detection
+            # Roaming detection — convert MCC:MNC to ISO country code
             roaming = _is_roaming_bts(sub_bts)
-            roaming_country = sub_bts if roaming else ""
+            roaming_country = _mcc_to_country(sub_bts) if roaming else ""
 
             # Direction label for frontend "Kierunek" column
             direction_label = "wychodzące" if is_outgoing else "przychodzące"
@@ -393,6 +443,7 @@ class OrangeRetencjaParser(BillingParser):
                     "imsi_b": imsi_b if imsi_b != "-" else "",
                     "rp_original": rp,
                     "direction": direction_label,
+                    "roaming_mcc_mnc": sub_bts if roaming else "",
                 },
             )
             result.records.append(record)
