@@ -336,8 +336,12 @@ class TestOperatorDetection:
         assert parser_cls.OPERATOR_ID == "tmobile"
 
     def test_detect_play(self):
-        headers = ["play mobile", "p4 sp", "numer b", "typ połączenia"]
-        parser_cls, score = detect_operator(headers, ["play biling", "połączenia"])
+        # Play CSV format uses distinctive column headers
+        headers = [
+            "data_i_godz_polacz", "czas_trwania", "rodzaj_uslugi",
+            "ui_msisdn", "ui_imei", "ui_imsi", "ui_lac", "ui_cid",
+        ]
+        parser_cls, score = detect_operator(headers, ["csv"])
         assert parser_cls is not None
         assert parser_cls.OPERATOR_ID == "play"
 
