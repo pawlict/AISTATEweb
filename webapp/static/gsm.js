@@ -1950,6 +1950,7 @@
     { type: "burst_activity",   label: "Nag\u0142y wzrost aktywno\u015Bci",         desc: "Co najmniej 20 rekord\u00F3w (po\u0142\u0105czenia/SMS) w ci\u0105gu 30 minut \u2014 mo\u017Ce wskazywa\u0107 na masowe wysy\u0142anie SMS, automatyczne systemy lub intensywn\u0105 komunikacj\u0119" },
     { type: "premium_number",   label: "Numery premium / p\u0142atne",        desc: "Kontakty z numerami o podwy\u017Cszonej op\u0142acie (70x, 80x)" },
     { type: "roaming",          label: "Aktywno\u015B\u0107 w sieciach zagranicznych", desc: "Rekordy z flag\u0105 roamingu lub z sieci\u0105 zagraniczn\u0105. Szczeg\u00F3\u0142y wyjazd\u00F3w \u2014 patrz sekcja \u201EPrzekroczenia granic\u201D" },
+    { type: "foreign_contacts", label: "Interakcje z numerami zagranicznymi", desc: "Po\u0142\u0105czenia i SMS z numerami zagranicznymi (spoza Polski). Dla ka\u017Cdego kraju podano liczb\u0119 interakcji i numery." },
     { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
     { type: "satellite_numbers",label: "Numery satelitarne",              desc: "Po\u0142\u0105czenia z numerami telefon\u00F3w satelitarnych (Iridium, Inmarsat, Thuraya, Globalstar i in.)" },
     { type: "social_media",     label: "Konta spo\u0142eczno\u015Bciowe / komunikatory", desc: "Nazwy komunikator\u00F3w i platform spo\u0142eczno\u015Bciowych wykryte w polach bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)" },
@@ -1999,14 +2000,14 @@
       const items = data.items;
       const hasItems = items.length > 0;
       const sev = hasItems ? (data.severity || "info") : "ok";
-      const sevColor = sev === "warning" ? "#f97316" : sev === "info" ? "#3b82f6" : "#22c55e";
-      const sevIcon = sev === "warning" ? "\u26A0" : sev === "info" ? "\u2139" : "\u2713";
+      const sevColor = sev === "critical" ? "#dc2626" : sev === "warning" ? "#f97316" : sev === "info" ? "#3b82f6" : "#22c55e";
+      const sevIcon = sev === "critical" ? "\u2757" : sev === "warning" ? "\u26A0" : sev === "info" ? "\u2139" : "\u2713";
 
       // ── Card container ──
       html += `<div class="gsm-anomaly-card" data-anomaly-type="${cat.type}" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;border-left:3px solid ${sevColor};transition:background .15s,box-shadow .15s">`;
 
       // ── Top bar: header row with name + count + action icons ──
-      html += `<div class="gsm-anomaly-bar" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(${sev === 'warning' ? '249,115,22' : sev === 'info' ? '59,130,246' : '34,197,94'},.04)">`;
+      html += `<div class="gsm-anomaly-bar" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(${sev === 'critical' ? '220,38,38' : sev === 'warning' ? '249,115,22' : sev === 'info' ? '59,130,246' : '34,197,94'},.04)">`;
       html += `<span style="color:${sevColor};font-size:15px;flex-shrink:0">${sevIcon}</span>`;
       html += `<div style="flex:1;min-width:0">`;
       html += `<div style="display:flex;align-items:center;gap:5px"><b>${cat.label}</b>`;
@@ -2188,6 +2189,12 @@
         }
         filterText = `Roaming — ${filtered.length} rek.`;
         break;
+      case "foreign_contacts": {
+        const foreignNums = new Set(items.flatMap(it => it.numbers || []));
+        filtered = records.filter(r => foreignNums.has(r.callee) || foreignNums.has(r.caller));
+        filterText = `Numery zagraniczne — ${filtered.length} rek.`;
+        break;
+      }
       case "one_time_contacts": {
         const otNums = new Set(items.map(it => it.contact));
         filtered = records.filter(r => otNums.has(r.callee) || otNums.has(r.caller));
@@ -2281,6 +2288,10 @@
       }
       case "roaming":
         return r => r.roaming || (r.network && !/orange|play|plus|t-mobile|polkomtel|p4|heyah/i.test(r.network));
+      case "foreign_contacts": {
+        const fNums = new Set(anomalyItems.flatMap(it => it.numbers || []));
+        return r => fNums.has(r.callee) || fNums.has(r.caller);
+      }
       case "one_time_contacts": {
         const otNums = new Set(anomalyItems.map(it => it.contact));
         return r => otNums.has(r.callee) || otNums.has(r.caller);
@@ -2435,6 +2446,18 @@
         // Show MCC:MNC codes if available
         const mcc = it.mcc_mnc && it.mcc_mnc.length ? ` <span class="muted">MCC:MNC ${it.mcc_mnc.join(", ")}</span>` : "";
         html += `<div><b>${name}</b>${raw} \u2014 ${it.count} rekord\u00F3w, ${it.period}${nets}${mcc}</div>`;
+      }
+    } else if (type === "foreign_contacts") {
+      for (const it of items) {
+        const flag = it.critical ? " \u26A0\uFE0F" : "";
+        const nums = (it.numbers || []).slice(0, 5).map(n => `<code>${n}</code>`).join(", ");
+        const more = (it.numbers || []).length > 5 ? ` (+${it.numbers.length - 5} wi\u0119cej)` : "";
+        const critStyle = it.critical ? "background:rgba(220,38,38,.06);padding:4px 6px;border-radius:4px;margin:2px 0" : "";
+        html += `<div style="${critStyle}">`;
+        html += `<b>${it.country}${flag}</b> (${it.country_code}) \u2014 ${it.count} interakcji`;
+        html += ` (\u2191${it.outgoing} \u2193${it.incoming}), ${it.period}<br>`;
+        html += `<span style="font-size:12px;opacity:.8">Numery: ${nums}${more}</span>`;
+        html += `</div>`;
       }
     } else if (type === "one_time_contacts") {
       for (const it of items) {
