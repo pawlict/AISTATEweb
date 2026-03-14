@@ -1675,17 +1675,32 @@
     // Parser version label
     const parserVer = data.parser_version ? ` <span style="font-size:11px;opacity:.6">(parser v${data.parser_version})</span>` : "";
 
+    // Source files list (all billing + identification files used)
+    const srcFiles = data.source_files || [];
+    let filesHtml;
+    if (srcFiles.length > 1) {
+      const items = srcFiles.map(sf => {
+        const icon = sf.type === "billing" ? "\uD83D\uDCCA" : sf.type === "identification" ? "\uD83D\uDD0D" : "\uD83D\uDCC1";
+        const op = sf.operator ? ` <span style="opacity:.6">(${sf.operator})</span>` : "";
+        const notProc = sf.processed === false ? ' <span style="color:#f97316;font-size:11px">[nie przetw.]</span>' : "";
+        return `<div style="font-size:13px;line-height:1.6">${icon} ${sf.filename}${op}${notProc}</div>`;
+      });
+      filesHtml = items.join("");
+    } else {
+      filesHtml = data.filename || "\u2014";
+    }
+
     const rows = [
-      ["Plik", data.filename],
+      ["Pliki \u017ar\u00f3d\u0142owe", filesHtml],
       ["Operator", (data.operator || "") + parserVer],
-      ["MSISDN", sub.msisdn || "—"],
+      ["MSISDN", sub.msisdn || "\u2014"],
     ];
     if (meta.signature) rows.push(["Sygnatura", meta.signature]);
     if (meta.order_id) rows.push(["Nr zlecenia", meta.order_id]);
     if (meta.query_name) rows.push(["Zapytanie", meta.query_name]);
 
     grid.innerHTML = rows
-      .map(([k, v]) => `<div class="gsm-info-label">${k}</div><div class="gsm-info-value">${v || "—"}</div>`)
+      .map(([k, v]) => `<div class="gsm-info-label">${k}</div><div class="gsm-info-value">${v || "\u2014"}</div>`)
       .join("");
   }
 
