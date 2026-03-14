@@ -1,6 +1,7 @@
 """GSM billing processing pipeline.
 
-Orchestrates: XLSX upload → operator detection → parse → normalize → analyze → store.
+Orchestrates: file upload → operator detection → parse → normalize → analyze → store.
+Supports both XLSX and CSV billing formats.
 """
 
 from __future__ import annotations
@@ -68,15 +69,50 @@ def _get_first_header(sheets: Dict[str, List[List[Any]]]) -> List[str]:
     return []
 
 
+def _load_billing_file(billing_path: Path) -> Dict[str, List[List[Any]]]:
+    """Load billing file (XLSX or CSV) into sheets dict format.
+
+    For XLSX: loads all sheets via openpyxl.
+    For CSV: checks if it's a Play CSV billing, loads via Play CSV loader.
+    """
+    suffix = billing_path.suffix.lower()
+
+    if suffix == ".csv":
+        # Check if it's a Play CSV billing
+        from .parsers.play import is_play_csv, load_play_csv
+        if is_play_csv(billing_path):
+            log.info("Detected Play CSV billing: %s", billing_path.name)
+            return load_play_csv(billing_path)
+        # Generic CSV fallback — load as single sheet
+        import csv as csv_mod
+        for encoding in ("cp1250", "utf-8-sig", "utf-8", "latin-1"):
+            try:
+                with open(billing_path, "r", encoding=encoding, errors="strict") as f:
+                    reader = csv_mod.reader(f, delimiter=";")
+                    rows: List[List[Any]] = []
+                    for i, row in enumerate(reader):
+                        if i >= 200_000:
+                            break
+                        rows.append(row)
+                    if rows:
+                        return {"CSV": rows}
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+        return {}
+
+    # Default: XLSX
+    return load_xlsx_sheets(billing_path)
+
+
 def process_billing(
     billing_path: Path,
     subscriber_path: Optional[Path] = None,
     own_numbers: Optional[Set[str]] = None,
 ) -> BillingParseResult:
-    """Full processing pipeline for a GSM billing XLSX file.
+    """Full processing pipeline for a GSM billing file (XLSX or CSV).
 
     Steps:
-    1. Load XLSX sheets
+    1. Load file (XLSX sheets or CSV rows)
     2. Auto-detect operator from headers/sheet names
     3. Parse billing records with operator-specific parser
     4. Optionally parse subscriber identification file
@@ -84,7 +120,7 @@ def process_billing(
     6. Compute summary statistics
 
     Args:
-        billing_path: Path to the billing XLSX file.
+        billing_path: Path to the billing XLSX/CSV file.
         subscriber_path: Optional path to subscriber identification XLSX.
         own_numbers: Optional set of own phone numbers for direction detection.
 
@@ -93,11 +129,11 @@ def process_billing(
     """
     log.info("Processing billing: %s", billing_path.name)
 
-    # 1. Load XLSX
-    sheets = load_xlsx_sheets(billing_path)
+    # 1. Load file (XLSX or CSV)
+    sheets = _load_billing_file(billing_path)
     if not sheets:
         return BillingParseResult(
-            warnings=["Nie udało się wczytać pliku XLSX (brak arkuszy)"]
+            warnings=["Nie udało się wczytać pliku (brak danych)"]
         )
 
     # 2. Detect operator

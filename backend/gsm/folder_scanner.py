@@ -174,9 +174,26 @@ def _classify_xlsx(file_path: Path) -> ScannedFile:
 
 
 def _classify_csv(file_path: Path) -> ScannedFile:
-    """Try to classify a CSV/TXT file as identification (billings are XLSX)."""
+    """Try to classify a CSV/TXT file as billing or identification."""
     filename = file_path.name
     size = file_path.stat().st_size
+
+    # --- Try as Play CSV billing first ---
+    try:
+        from .parsers.play import is_play_csv
+        if is_play_csv(file_path):
+            return ScannedFile(
+                filename=filename,
+                path=file_path,
+                file_type="billing",
+                operator="Play (P4)",
+                operator_id="play",
+                confidence=0.95,
+                detail="Biling Play (P4) — CSV",
+                size_bytes=size,
+            )
+    except Exception as e:
+        log.debug("CSV billing detection error for %s: %s", filename, e)
 
     # --- Try as identification ---
     try:

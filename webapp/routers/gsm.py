@@ -1,7 +1,7 @@
 """GSM billing analysis API router.
 
 Endpoints:
-- POST /api/gsm/parse           — upload XLSX billing file and parse it
+- POST /api/gsm/parse           — upload XLSX/CSV billing file and parse it
 - POST /api/gsm/import          — smart import: auto-detect billing/identification/ZIP
 - POST /api/gsm/identification  — upload identification file(s) (XLSX/CSV)
 - POST /api/gsm/geolocate       — geolocate parsed billing records
@@ -153,7 +153,7 @@ async def gsm_parse(
     request: Request,
     file: UploadFile = File(...),
 ):
-    """Upload an XLSX GSM billing file and parse it.
+    """Upload a GSM billing file (XLSX or CSV) and parse it.
 
     Returns parsed records, subscriber info, summary, analysis, and geolocation.
     """
@@ -164,10 +164,10 @@ async def gsm_parse(
         )
 
     suffix = Path(file.filename).suffix.lower()
-    if suffix not in (".xlsx", ".xls"):
-        _app_log(f"[GSM] Rejected file (not XLSX): {file.filename}")
+    if suffix not in (".xlsx", ".xls", ".csv"):
+        _app_log(f"[GSM] Rejected file (not XLSX/CSV): {file.filename}")
         return JSONResponse(
-            {"status": "error", "detail": f"Wymagany plik XLSX, otrzymano: {suffix}"},
+            {"status": "error", "detail": f"Wymagany plik XLSX lub CSV, otrzymano: {suffix}"},
             status_code=400,
         )
 
