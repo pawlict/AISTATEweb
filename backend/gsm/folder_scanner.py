@@ -178,7 +178,24 @@ def _classify_csv(file_path: Path) -> ScannedFile:
     filename = file_path.name
     size = file_path.stat().st_size
 
-    # --- Try as Play CSV billing first ---
+    # --- Try as Plus CSV billing first (custom quoting format) ---
+    try:
+        from .parsers.plus import is_plus_csv
+        if is_plus_csv(file_path):
+            return ScannedFile(
+                filename=filename,
+                path=file_path,
+                file_type="billing",
+                operator="Plus (Polkomtel)",
+                operator_id="plus",
+                confidence=0.95,
+                detail="Biling Plus (Polkomtel) — CSV",
+                size_bytes=size,
+            )
+    except Exception as e:
+        log.debug("CSV billing detection error for %s: %s", filename, e)
+
+    # --- Try as Play CSV billing ---
     try:
         from .parsers.play import is_play_csv
         if is_play_csv(file_path):

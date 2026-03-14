@@ -352,8 +352,15 @@ class TestOperatorDetection:
         assert parser_cls.OPERATOR_ID == "orange"
 
     def test_detect_plus(self):
-        headers = ["plus gsm", "polkomtel", "numer b", "typ połączenia"]
-        parser_cls, score = detect_operator(headers, ["plus biling", "połączenia"])
+        # Plus CSV POL format uses distinctive column headers
+        headers = [
+            "parametr", "usługa/typ", "a msisdn", "b msisdn", "c msisdn",
+            "a imei/a esn", "b imei/b esn", "c imei/c esn",
+            "a imsi", "b imsi", "c imsi",
+            "początek", "koniec",
+            "a bts address", "b bts address", "c bts address", "gcr",
+        ]
+        parser_cls, score = detect_operator(headers, ["csv"])
         assert parser_cls is not None
         assert parser_cls.OPERATOR_ID == "plus"
 

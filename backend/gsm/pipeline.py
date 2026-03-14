@@ -73,12 +73,18 @@ def _load_billing_file(billing_path: Path) -> Dict[str, List[List[Any]]]:
     """Load billing file (XLSX or CSV) into sheets dict format.
 
     For XLSX: loads all sheets via openpyxl.
-    For CSV: checks if it's a Play CSV billing, loads via Play CSV loader.
+    For CSV: checks for Plus CSV (custom quoting), Play CSV (semicolon),
+             or falls back to generic CSV loading.
     """
     suffix = billing_path.suffix.lower()
 
     if suffix == ".csv":
-        # Check if it's a Play CSV billing
+        # Check if it's a Plus CSV billing (custom quoting, comma-delimited)
+        from .parsers.plus import is_plus_csv, load_plus_csv
+        if is_plus_csv(billing_path):
+            log.info("Detected Plus CSV billing: %s", billing_path.name)
+            return load_plus_csv(billing_path)
+        # Check if it's a Play CSV billing (semicolon-delimited)
         from .parsers.play import is_play_csv, load_play_csv
         if is_play_csv(billing_path):
             log.info("Detected Play CSV billing: %s", billing_path.name)
