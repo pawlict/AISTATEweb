@@ -810,6 +810,276 @@ _SPECIAL_PATTERNS: List[Tuple[str, str, str]] = [
     (r"^\d{3,6}$", "short_code", "Kod krótki"),
 ]
 
+# ---------------------------------------------------------------------------
+# International phone prefix → country mapping (ITU-T E.164)
+# ---------------------------------------------------------------------------
+# Sorted by prefix length descending for longest-prefix-match.
+# Value: (ISO 3166-1 alpha-2, Polish country name)
+# CRITICAL countries (RU, UA, BY, CN) trigger elevated anomaly severity.
+
+_CRITICAL_COUNTRY_CODES = {"RU", "UA", "BY", "CN"}
+
+_PHONE_PREFIX_TO_COUNTRY: List[Tuple[str, str, str]] = [
+    # ── Longest prefixes first (4+ digits) ──
+    ("+1242", "BS", "Bahamy"),
+    ("+1246", "BB", "Barbados"),
+    ("+1264", "AI", "Anguilla"),
+    ("+1268", "AG", "Antigua i Barbuda"),
+    ("+1284", "VG", "Brytyjskie Wyspy Dziewicze"),
+    ("+1340", "VI", "Wyspy Dziewicze Stanów Zjednoczonych"),
+    ("+1345", "KY", "Kajmany"),
+    ("+1441", "BM", "Bermudy"),
+    ("+1473", "GD", "Grenada"),
+    ("+1649", "TC", "Turks i Caicos"),
+    ("+1658", "JM", "Jamajka"),
+    ("+1664", "MS", "Montserrat"),
+    ("+1670", "MP", "Mariany Północne"),
+    ("+1671", "GU", "Guam"),
+    ("+1684", "AS", "Samoa Amerykańskie"),
+    ("+1721", "SX", "Sint Maarten"),
+    ("+1758", "LC", "Saint Lucia"),
+    ("+1767", "DM", "Dominika"),
+    ("+1784", "VC", "Saint Vincent i Grenadyny"),
+    ("+1787", "PR", "Portoryko"),
+    ("+1809", "DO", "Dominikana"),
+    ("+1829", "DO", "Dominikana"),
+    ("+1849", "DO", "Dominikana"),
+    ("+1868", "TT", "Trynidad i Tobago"),
+    ("+1869", "KN", "Saint Kitts i Nevis"),
+    ("+1876", "JM", "Jamajka"),
+    ("+1939", "PR", "Portoryko"),
+    # ── 3-digit prefixes ──
+    ("+993", "TM", "Turkmenistan"),
+    ("+992", "TJ", "Tadżykistan"),
+    ("+998", "UZ", "Uzbekistan"),
+    ("+996", "KG", "Kirgistan"),
+    ("+995", "GE", "Gruzja"),
+    ("+994", "AZ", "Azerbejdżan"),
+    ("+977", "NP", "Nepal"),
+    ("+976", "MN", "Mongolia"),
+    ("+975", "BT", "Bhutan"),
+    ("+974", "QA", "Katar"),
+    ("+973", "BH", "Bahrajn"),
+    ("+972", "IL", "Izrael"),
+    ("+971", "AE", "Zjednoczone Emiraty Arabskie"),
+    ("+970", "PS", "Palestyna"),
+    ("+968", "OM", "Oman"),
+    ("+967", "YE", "Jemen"),
+    ("+966", "SA", "Arabia Saudyjska"),
+    ("+965", "KW", "Kuwejt"),
+    ("+964", "IQ", "Irak"),
+    ("+963", "SY", "Syria"),
+    ("+962", "JO", "Jordania"),
+    ("+961", "LB", "Liban"),
+    ("+960", "MV", "Malediwy"),
+    ("+886", "TW", "Tajwan"),
+    ("+880", "BD", "Bangladesz"),
+    ("+856", "LA", "Laos"),
+    ("+855", "KH", "Kambodża"),
+    ("+853", "MO", "Makau"),
+    ("+852", "HK", "Hongkong"),
+    ("+850", "KP", "Korea Północna"),
+    ("+692", "MH", "Wyspy Marshalla"),
+    ("+691", "FM", "Mikronezja"),
+    ("+690", "TK", "Tokelau"),
+    ("+689", "PF", "Polinezja Francuska"),
+    ("+688", "TV", "Tuvalu"),
+    ("+687", "NC", "Nowa Kaledonia"),
+    ("+686", "KI", "Kiribati"),
+    ("+685", "WS", "Samoa"),
+    ("+683", "NU", "Niue"),
+    ("+682", "CK", "Wyspy Cooka"),
+    ("+681", "WF", "Wallis i Futuna"),
+    ("+680", "PW", "Palau"),
+    ("+679", "FJ", "Fidżi"),
+    ("+678", "VU", "Vanuatu"),
+    ("+677", "SB", "Wyspy Salomona"),
+    ("+676", "TO", "Tonga"),
+    ("+675", "PG", "Papua-Nowa Gwinea"),
+    ("+674", "NR", "Nauru"),
+    ("+673", "BN", "Brunei"),
+    ("+672", "NF", "Norfolk"),
+    ("+670", "TL", "Timor Wschodni"),
+    ("+599", "CW", "Curaçao"),
+    ("+598", "UY", "Urugwaj"),
+    ("+597", "SR", "Surinam"),
+    ("+596", "MQ", "Martynika"),
+    ("+595", "PY", "Paragwaj"),
+    ("+594", "GF", "Gujana Francuska"),
+    ("+593", "EC", "Ekwador"),
+    ("+592", "GY", "Gujana"),
+    ("+591", "BO", "Boliwia"),
+    ("+590", "GP", "Gwadelupa"),
+    ("+509", "HT", "Haiti"),
+    ("+508", "PM", "Saint-Pierre i Miquelon"),
+    ("+507", "PA", "Panama"),
+    ("+506", "CR", "Kostaryka"),
+    ("+505", "NI", "Nikaragua"),
+    ("+504", "HN", "Honduras"),
+    ("+503", "SV", "Salwador"),
+    ("+502", "GT", "Gwatemala"),
+    ("+501", "BZ", "Belize"),
+    ("+500", "FK", "Falklandy"),
+    ("+423", "LI", "Liechtenstein"),
+    ("+421", "SK", "Słowacja"),
+    ("+420", "CZ", "Czechy"),
+    ("+389", "MK", "Macedonia Północna"),
+    ("+387", "BA", "Bośnia i Hercegowina"),
+    ("+386", "SI", "Słowenia"),
+    ("+385", "HR", "Chorwacja"),
+    ("+383", "XK", "Kosowo"),
+    ("+382", "ME", "Czarnogóra"),
+    ("+381", "RS", "Serbia"),
+    ("+380", "UA", "Ukraina"),
+    ("+378", "SM", "San Marino"),
+    ("+377", "MC", "Monako"),
+    ("+376", "AD", "Andora"),
+    ("+375", "BY", "Białoruś"),
+    ("+374", "AM", "Armenia"),
+    ("+373", "MD", "Mołdawia"),
+    ("+372", "EE", "Estonia"),
+    ("+371", "LV", "Łotwa"),
+    ("+370", "LT", "Litwa"),
+    ("+359", "BG", "Bułgaria"),
+    ("+358", "FI", "Finlandia"),
+    ("+357", "CY", "Cypr"),
+    ("+356", "MT", "Malta"),
+    ("+355", "AL", "Albania"),
+    ("+354", "IS", "Islandia"),
+    ("+353", "IE", "Irlandia"),
+    ("+352", "LU", "Luksemburg"),
+    ("+351", "PT", "Portugalia"),
+    ("+350", "GI", "Gibraltar"),
+    ("+299", "GL", "Grenlandia"),
+    ("+298", "FO", "Wyspy Owcze"),
+    ("+297", "AW", "Aruba"),
+    ("+291", "ER", "Erytrea"),
+    ("+269", "KM", "Komory"),
+    ("+268", "SZ", "Eswatini"),
+    ("+267", "BW", "Botswana"),
+    ("+266", "LS", "Lesotho"),
+    ("+265", "MW", "Malawi"),
+    ("+264", "NA", "Namibia"),
+    ("+263", "ZW", "Zimbabwe"),
+    ("+262", "RE", "Reunion"),
+    ("+261", "MG", "Madagaskar"),
+    ("+260", "ZM", "Zambia"),
+    ("+258", "MZ", "Mozambik"),
+    ("+257", "BI", "Burundi"),
+    ("+256", "UG", "Uganda"),
+    ("+255", "TZ", "Tanzania"),
+    ("+254", "KE", "Kenia"),
+    ("+253", "DJ", "Dżibuti"),
+    ("+252", "SO", "Somalia"),
+    ("+251", "ET", "Etiopia"),
+    ("+250", "RW", "Rwanda"),
+    ("+249", "SD", "Sudan"),
+    ("+248", "SC", "Seszele"),
+    ("+247", "SH", "Wyspa Wniebowstąpienia"),
+    ("+246", "IO", "Brytyjskie Terytorium Oceanu Indyjskiego"),
+    ("+245", "GW", "Gwinea Bissau"),
+    ("+244", "AO", "Angola"),
+    ("+243", "CD", "Demokratyczna Republika Konga"),
+    ("+242", "CG", "Kongo"),
+    ("+241", "GA", "Gabon"),
+    ("+240", "GQ", "Gwinea Równikowa"),
+    ("+239", "ST", "Wyspy Świętego Tomasza i Książęca"),
+    ("+238", "CV", "Republika Zielonego Przylądka"),
+    ("+237", "CM", "Kamerun"),
+    ("+236", "CF", "Republika Środkowoafrykańska"),
+    ("+235", "TD", "Czad"),
+    ("+234", "NG", "Nigeria"),
+    ("+233", "GH", "Ghana"),
+    ("+232", "SL", "Sierra Leone"),
+    ("+231", "LR", "Liberia"),
+    ("+230", "MU", "Mauritius"),
+    ("+229", "BJ", "Benin"),
+    ("+228", "TG", "Togo"),
+    ("+227", "NE", "Niger"),
+    ("+226", "BF", "Burkina Faso"),
+    ("+225", "CI", "Wybrzeże Kości Słoniowej"),
+    ("+224", "GN", "Gwinea"),
+    ("+223", "ML", "Mali"),
+    ("+222", "MR", "Mauretania"),
+    ("+221", "SN", "Senegal"),
+    ("+220", "GM", "Gambia"),
+    ("+218", "LY", "Libia"),
+    ("+216", "TN", "Tunezja"),
+    ("+213", "DZ", "Algieria"),
+    ("+212", "MA", "Maroko"),
+    ("+211", "SS", "Sudan Południowy"),
+    # ── 2-digit prefixes ──
+    ("+98", "IR", "Iran"),
+    ("+95", "MM", "Mjanma"),
+    ("+94", "LK", "Sri Lanka"),
+    ("+93", "AF", "Afganistan"),
+    ("+92", "PK", "Pakistan"),
+    ("+91", "IN", "Indie"),
+    ("+90", "TR", "Turcja"),
+    ("+86", "CN", "Chiny"),
+    ("+84", "VN", "Wietnam"),
+    ("+82", "KR", "Korea Południowa"),
+    ("+81", "JP", "Japonia"),
+    ("+66", "TH", "Tajlandia"),
+    ("+65", "SG", "Singapur"),
+    ("+64", "NZ", "Nowa Zelandia"),
+    ("+63", "PH", "Filipiny"),
+    ("+62", "ID", "Indonezja"),
+    ("+61", "AU", "Australia"),
+    ("+60", "MY", "Malezja"),
+    ("+58", "VE", "Wenezuela"),
+    ("+57", "CO", "Kolumbia"),
+    ("+56", "CL", "Chile"),
+    ("+55", "BR", "Brazylia"),
+    ("+54", "AR", "Argentyna"),
+    ("+53", "CU", "Kuba"),
+    ("+52", "MX", "Meksyk"),
+    ("+51", "PE", "Peru"),
+    ("+49", "DE", "Niemcy"),
+    # +48 = Polska — pomijamy (krajowe)
+    ("+47", "NO", "Norwegia"),
+    ("+46", "SE", "Szwecja"),
+    ("+45", "DK", "Dania"),
+    ("+44", "GB", "Wielka Brytania"),
+    ("+43", "AT", "Austria"),
+    ("+41", "CH", "Szwajcaria"),
+    ("+40", "RO", "Rumunia"),
+    ("+39", "IT", "Włochy"),
+    ("+36", "HU", "Węgry"),
+    ("+34", "ES", "Hiszpania"),
+    ("+33", "FR", "Francja"),
+    ("+32", "BE", "Belgia"),
+    ("+31", "NL", "Holandia"),
+    ("+30", "GR", "Grecja"),
+    ("+27", "ZA", "Republika Południowej Afryki"),
+    ("+20", "EG", "Egipt"),
+    # ── 1-digit prefix ──
+    ("+1", "US", "USA / Kanada"),
+    # ── Special: +7 covers Russia AND Kazakhstan (+77) ──
+    ("+77", "KZ", "Kazachstan"),
+    ("+7", "RU", "Rosja"),
+]
+
+# Pre-sorted by prefix length (longest first) for matching
+_PHONE_PREFIX_TO_COUNTRY.sort(key=lambda x: -len(x[0]))
+
+
+def _identify_country_by_prefix(number: str) -> Optional[Tuple[str, str]]:
+    """Identify country by phone number prefix (longest prefix match).
+
+    Args:
+        number: Phone number starting with '+' (e.g. '+79031234567').
+
+    Returns:
+        (iso_code, country_name_pl) or None if not matched.
+    """
+    if not number or not number.startswith("+"):
+        return None
+    for prefix, iso, name in _PHONE_PREFIX_TO_COUNTRY:
+        if number.startswith(prefix):
+            return (iso, name)
+    return None
+
 
 def _is_standard_phone(number: str) -> bool:
     """Check if number is a standard domestic or international phone number.
@@ -892,9 +1162,8 @@ def _classify_special_number(number: str) -> Optional[Dict[str, str]]:
         if re.match(pat, number):
             return {"category": cat, "label": f"{label} ({number})"}
 
-    # Foreign numbers (non-Polish, non-short) — classified but still "special"
-    if number.startswith("+") and not number.startswith("+48") and len(number) > 8:
-        return {"category": "international", "label": f"Numer zagraniczny ({number[:4]}…)"}
+    # Foreign numbers are now handled by anomaly "foreign_contacts"
+    # — not classified as special numbers anymore.
 
     # GLOBAL CATCH-ALL: if not a standard phone number → special
     if not _is_standard_phone(number):
@@ -1504,6 +1773,19 @@ def _detect_anomalies(
         "items": roaming_items,
     })
 
+    # ── 7b. Foreign contacts (interactions with foreign numbers) ──
+    foreign_items, foreign_critical = _detect_foreign_contacts(records, own_numbers)
+    groups.append({
+        "type": "foreign_contacts",
+        "label": "Interakcje z numerami zagranicznymi",
+        "description": (
+            "Połączenia i SMS z numerami zagranicznymi (spoza Polski). "
+            "Dla każdego kraju podano liczbę interakcji i numery kontaktowe."
+        ),
+        "severity": "critical" if foreign_critical else ("info" if foreign_items else "ok"),
+        "items": foreign_items,
+    })
+
     # ── 8. One-time contacts ──
     one_time_items = _detect_one_time_contacts(records, own_numbers)
     groups.append({
@@ -1630,6 +1912,93 @@ def _detect_roaming_activity(records: List[BillingRecord]) -> List[Dict[str, Any
             item["mcc_mnc"] = sorted(info["mcc_mnc_codes"])
         items.append(item)
     return items
+
+
+def _detect_foreign_contacts(
+    records: List[BillingRecord],
+    own_numbers: Set[str],
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """Detect interactions with foreign (non-Polish) phone numbers.
+
+    Groups by country with number lists, counts, and date ranges.
+    Marks as critical if Russia, Ukraine, Belarus, or China detected.
+
+    Returns:
+        (items, is_critical) — items grouped by country, is_critical=True
+        if RU/UA/BY/CN numbers found.
+    """
+    country_info: Dict[str, Dict[str, Any]] = {}
+
+    for r in records:
+        # Check both callee and caller
+        for contact, is_outgoing in [
+            (r.callee, True),
+            (r.caller, False),
+        ]:
+            if not contact or contact in own_numbers:
+                continue
+            if not contact.startswith("+") or contact.startswith("+48"):
+                continue
+            if len(contact) <= 8:
+                continue  # too short to be a real international number
+
+            result = _identify_country_by_prefix(contact)
+            if not result:
+                # Unknown prefix — group as "Nieznany"
+                iso, country_name = "??", f"Nieznany ({contact[:4]}...)"
+            else:
+                iso, country_name = result
+
+            key = iso
+            if key not in country_info:
+                country_info[key] = {
+                    "country": country_name,
+                    "country_code": iso,
+                    "numbers": set(),
+                    "count": 0,
+                    "outgoing": 0,
+                    "incoming": 0,
+                    "first_date": r.date or "",
+                    "last_date": r.date or "",
+                    "critical": iso in _CRITICAL_COUNTRY_CODES,
+                }
+
+            info = country_info[key]
+            info["numbers"].add(contact)
+            info["count"] += 1
+            if is_outgoing:
+                info["outgoing"] += 1
+            else:
+                info["incoming"] += 1
+            if r.date:
+                if not info["first_date"] or r.date < info["first_date"]:
+                    info["first_date"] = r.date
+                if not info["last_date"] or r.date > info["last_date"]:
+                    info["last_date"] = r.date
+
+    # Build items — critical countries first, then by count
+    is_critical = any(info["critical"] for info in country_info.values())
+
+    items = []
+    for key, info in sorted(
+        country_info.items(),
+        key=lambda kv: (not kv[1]["critical"], -kv[1]["count"]),
+    ):
+        period = info["first_date"]
+        if info["first_date"] != info["last_date"]:
+            period = f"{info['first_date']} \u2013 {info['last_date']}"
+        items.append({
+            "country": info["country"],
+            "country_code": info["country_code"],
+            "count": info["count"],
+            "numbers": sorted(info["numbers"]),
+            "period": period,
+            "outgoing": info["outgoing"],
+            "incoming": info["incoming"],
+            "critical": info["critical"],
+        })
+
+    return items, is_critical
 
 
 def _detect_inactivity_gaps(
