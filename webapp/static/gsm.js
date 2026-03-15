@@ -1459,6 +1459,167 @@
    * Smart import: upload file(s), auto-detect billing/identification/ZIP.
    * Replaces old _uploadAndParse + _uploadIdentification.
    */
+  /**
+   * Show subscriber conflict dialog when multi-subscriber detected.
+   * User picks one subscriber → re-submits import with selected_msisdn.
+   */
+  function _showSubscriberConflict(grouping, originalFiles) {
+    const subs = grouping.subscribers || {};
+    const undetected = grouping.undetected_files || [];
+    const msisdns = Object.keys(subs);
+
+    // Build dialog HTML
+    let html = `<div style="padding:16px">
+      <h3 style="margin:0 0 12px;color:#dc2626">
+        ⚠️ Wykryto bilingi ${msisdns.length} różnych abonentów
+      </h3>
+      <p style="margin:0 0 16px;color:#64748b;font-size:13px">
+        Przesłane pliki zawierają bilingi należące do różnych osób.
+        Wybierz abonenta do analizy:
+      </p>`;
+
+    for (const msisdn of msisdns) {
+      const files = subs[msisdn];
+      const fileList = files.map(f => {
+        const op = f.operator_id ? ` <span style="opacity:.6">(${f.operator_id})</span>` : "";
+        return `<div style="font-size:12px;line-height:1.5;padding-left:8px">📊 ${f.filename}${op}</div>`;
+      }).join("");
+
+      html += `<div class="card" style="margin:8px 0;cursor:pointer;border:2px solid var(--border);transition:border-color .15s"
+                    onmouseover="this.style.borderColor='var(--accent)'"
+                    onmouseout="this.style.borderColor='var(--border)'"
+                    data-msisdn="${msisdn}">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="font-size:28px">📱</div>
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:15px">${msisdn}</div>
+            <div style="color:#64748b;font-size:12px">${files.length} plik(ów)</div>
+          </div>
+          <button class="btn btn-primary btn-sm _sub_select_btn"
+                  data-msisdn="${msisdn}"
+                  style="white-space:nowrap">
+            Wybierz
+          </button>
+        </div>
+        ${fileList}
+      </div>`;
+    }
+
+    if (undetected.length) {
+      html += `<div style="margin-top:12px;padding:8px 12px;background:#fef3c7;border-radius:6px;font-size:12px;color:#92400e">
+        <strong>Pliki bez rozpoznanego abonenta (${undetected.length}):</strong>
+        ${undetected.map(f => `<div style="padding-left:8px">❓ ${f.filename}</div>`).join("")}
+        <div style="margin-top:4px;opacity:.7">Te pliki zostaną dołączone do wybranego abonenta.</div>
+      </div>`;
+    }
+
+    html += `</div>`;
+
+    // Show in results area
+    const results = QS("#gsm_results");
+    if (results) {
+      results.style.display = "";
+      results.innerHTML = html;
+    }
+
+    // Bind click handlers
+    results.querySelectorAll("._sub_select_btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const msisdn = btn.dataset.msisdn;
+        _addLog("info", `Wybrano abonenta: ${msisdn}`);
+        _reimportWithSubscriber(originalFiles, msisdn);
+      });
+    });
+
+    // Also allow clicking the card itself
+    results.querySelectorAll("[data-msisdn]").forEach(card => {
+      card.addEventListener("click", () => {
+        const msisdn = card.dataset.msisdn;
+        _addLog("info", `Wybrano abonenta: ${msisdn}`);
+        _reimportWithSubscriber(originalFiles, msisdn);
+      });
+    });
+  }
+
+  /**
+   * Re-submit import with a specific subscriber MSISDN selected.
+   */
+  async function _reimportWithSubscriber(files, selectedMsisdn) {
+    if (St.analyzing) return;
+    St.analyzing = true;
+
+    const progress = QS("#gsm_progress");
+    const status = QS("#gsm_status");
+    const bar = QS("#gsm_bar");
+    const results = QS("#gsm_results");
+
+    if (progress) progress.style.display = "";
+    if (status) status.textContent = `Przetwarzanie bilingu abonenta ${selectedMsisdn}…`;
+    if (bar) bar.style.width = "40%";
+    if (results) results.style.display = "none";
+
+    const fd = new FormData();
+    for (const f of files) {
+      fd.append("files", f);
+    }
+    fd.append("selected_msisdn", selectedMsisdn);
+
+    try {
+      const resp = await fetch("/api/gsm/import", { method: "POST", body: fd });
+      const data = await resp.json();
+
+      if (bar) bar.style.width = "100%";
+
+      if (data.status !== "ok") {
+        const detail = data.detail || data.error || data.message || JSON.stringify(data);
+        if (status) status.textContent = `Błąd: ${detail}`;
+        _addLog("error", detail);
+        St.analyzing = false;
+        return;
+      }
+
+      // Log scan results
+      const sc = data.scan || {};
+      _addLog("info", `Skanowanie (wybrany abonent): ${sc.billing_count || 0} bilingów`);
+
+      // Process identification
+      if (data.identification && data.identification.lookup) {
+        Object.assign(St.idMap, data.identification.lookup);
+      }
+
+      // Process billing
+      if (data.billing) {
+        const bd = data.billing;
+        if (bd.status === "ok") {
+          St.lastResult = bd;
+          St.filename = bd.filename || St.filename;
+          if (status) status.textContent = "Gotowe";
+          _addLog("info", `Biling: ${bd.record_count || 0} rekordów (${bd.operator || "?"})`);
+          await _renderResults(bd);
+        } else {
+          const detail = bd.detail || "Błąd parsowania bilingu";
+          _addLog("error", `Biling: ${detail}`);
+          if (status) status.textContent = `Błąd bilingu: ${detail}`;
+        }
+      }
+
+      if (data.extra_billings && data.extra_billings.length) {
+        _addLog("warn", `Dodatkowe bilingi (nie przetworzone): ${data.extra_billings.join(", ")}`);
+      }
+
+      setTimeout(() => { if (progress) progress.style.display = "none"; }, 800);
+      await _saveToProject();
+
+    } catch (e) {
+      console.error("GSM re-import error:", e);
+      if (status) status.textContent = `Błąd: ${e.message}`;
+      _addLog("error", e.message);
+    } finally {
+      St.analyzing = false;
+    }
+  }
+
   async function _smartImport(files) {
     if (St.analyzing || !files || !files.length) return;
     St.analyzing = true;
@@ -1505,6 +1666,22 @@
       }
 
       if (bar) bar.style.width = "100%";
+
+      // --- Multi-subscriber detection ---
+      if (data.status === "multi_subscriber") {
+        if (status) status.textContent = "Wykryto bilingi wielu abonentów";
+        _addLog("warn", "Przesłane pliki zawierają bilingi więcej niż jednego abonenta.");
+
+        // Process identification if returned
+        if (data.identification && data.identification.lookup) {
+          Object.assign(St.idMap, data.identification.lookup);
+        }
+
+        _showSubscriberConflict(data.subscriber_grouping, files);
+        St.analyzing = false;
+        if (progress) progress.style.display = "none";
+        return;
+      }
 
       if (data.status !== "ok") {
         const detail = data.detail || data.error || data.message || JSON.stringify(data);

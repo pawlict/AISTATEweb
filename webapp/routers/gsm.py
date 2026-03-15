@@ -315,6 +315,7 @@ async def gsm_identification(
 async def gsm_smart_import(
     request: Request,
     files: List[UploadFile] = File(...),
+    selected_msisdn: Optional[str] = Form(None),
 ):
     """Smart import: upload files (XLSX, CSV, ZIP) and auto-detect type.
 
@@ -360,6 +361,79 @@ async def gsm_smart_import(
             "status": "ok",
             "scan": scan_result.to_dict(),
         }
+
+        # --- Multi-subscriber detection ---
+        if len(scan_result.billing_files) > 1 and not selected_msisdn:
+            from backend.gsm.subscriber_prescan import group_by_subscriber
+            grouping = await run_in_threadpool(
+                group_by_subscriber, scan_result.billing_files
+            )
+            if not grouping.is_single_subscriber:
+                _app_log(
+                    f"[GSM] Multi-subscriber detected: "
+                    f"{len(grouping.subscribers)} abonentów"
+                )
+                multi_resp: dict = {
+                    "status": "multi_subscriber",
+                    "scan": scan_result.to_dict(),
+                    "subscriber_grouping": grouping.to_dict(),
+                }
+                # Still process identification files (subscriber-independent)
+                if scan_result.identification_files:
+                    from backend.gsm.identification import IdentificationStore
+                    store = IdentificationStore()
+                    id_file_results = []
+                    for sf in scan_result.identification_files:
+                        try:
+                            count = store.load_file(sf.path)
+                            id_file_results.append({
+                                "filename": sf.filename,
+                                "operator": sf.operator,
+                                "status": "ok",
+                                "records_loaded": count,
+                            })
+                        except Exception as e:
+                            id_file_results.append({
+                                "filename": sf.filename,
+                                "operator": sf.operator,
+                                "status": "error",
+                                "detail": str(e),
+                            })
+                    lookup_map = {}
+                    for msisdn, rec in store._records.items():
+                        lookup_map[msisdn] = {
+                            "label": rec.display_label,
+                            "type": rec.identification_type,
+                            "name": rec.name or "",
+                            "operator": rec.source_operator or "",
+                        }
+                    multi_resp["identification"] = {
+                        "total_records": store.count,
+                        "files": id_file_results,
+                        "lookup": lookup_map,
+                    }
+                return JSONResponse(multi_resp)
+
+        # --- Filter billing files if subscriber was selected ---
+        if selected_msisdn and len(scan_result.billing_files) > 1:
+            from backend.gsm.subscriber_prescan import (
+                is_same_subscriber,
+                prescan_subscriber,
+            )
+            filtered = []
+            for sf in scan_result.billing_files:
+                fsi = prescan_subscriber(sf.filename, sf.path, sf.operator_id or "")
+                if fsi.msisdn and is_same_subscriber(fsi.msisdn, selected_msisdn):
+                    filtered.append(sf)
+                elif not fsi.msisdn:
+                    # Include files where we couldn't detect subscriber
+                    filtered.append(sf)
+            if filtered:
+                scan_result.billing_files = filtered
+                _app_log(
+                    f"[GSM] Filtered to {len(filtered)} files for "
+                    f"subscriber {selected_msisdn}"
+                )
 
         # --- Collect all source files for info display ---
         all_source_files: list = []
