@@ -10,6 +10,14 @@
   const QS = (sel, root = document) => root.querySelector(sel);
   const QSA = (sel, root = document) => root.querySelectorAll(sel);
 
+  /** Safely extract an error detail string from an API response. */
+  function _detailStr(data) {
+    const raw = data.detail || data.error || data.message;
+    if (!raw) return JSON.stringify(data);
+    if (typeof raw === "string") return raw;
+    try { return JSON.stringify(raw); } catch (_) { return String(raw); }
+  }
+
   /* ── state ─────────────────────────────────────────────── */
   const St = {
     analyzing: false,
@@ -1401,17 +1409,13 @@
     _openOverlayPinnedCard(latlng, info, mapInst);
   }
 
-  /* ── log panel ──────────────────────────────────────────── */
+  /* ── log — redirect to browser console ──────────────────── */
   function _addLog(level, msg) {
-    const el = QS("#gsm_log_body");
-    if (!el) return;
-    const card = QS("#gsm_log_card");
-    if (card) card.style.display = "";
     const ts = new Date().toLocaleTimeString("pl-PL");
-    const cls = level === "error" ? "gsm-log-error" : level === "warn" ? "gsm-log-warn" : "gsm-log-info";
-    const div = _el("div", `gsm-log-line ${cls}`, `<span class="gsm-log-ts">${ts}</span> ${msg}`);
-    el.appendChild(div);
-    el.scrollTop = el.scrollHeight;
+    const prefix = `[GSM ${ts}]`;
+    if (level === "error") console.error(prefix, msg);
+    else if (level === "warn") console.warn(prefix, msg);
+    else console.log(prefix, msg);
   }
 
   /* ── OSRM road routing helper ─────────────────────────── */
@@ -1610,7 +1614,7 @@
       if (bar) bar.style.width = "100%";
 
       if (data.status !== "ok") {
-        const detail = data.detail || data.error || data.message || JSON.stringify(data);
+        const detail = _detailStr(data);
         if (status) status.textContent = `B\u0142\u0105d: ${detail}`;
         _addLog("error", detail);
         St.analyzing = false;
@@ -1726,7 +1730,7 @@
       }
 
       if (data.status !== "ok") {
-        const detail = data.detail || data.error || data.message || JSON.stringify(data);
+        const detail = _detailStr(data);
         console.error("GSM import error:", detail);
         if (status) status.textContent = `Błąd: ${detail}`;
         _addLog("error", detail);
@@ -9129,34 +9133,132 @@
     }
   }
 
-  function _gsmGenerate() {
+  let _gsmLlmRunning = false;
+
+  async function _gsmGenerate() {
     const modelSel = QS("#gsm_model_deep");
     const model = modelSel ? modelSel.value : "";
     if (!model) {
-      _log("warn", "Nie wybrano modelu LLM. Zainstaluj model w ustawieniach.");
+      _addLog("warn", "Nie wybrano modelu LLM. Zainstaluj model w ustawieniach.");
       return;
     }
     if (!St.lastResult) {
-      _log("warn", "Brak danych GSM do analizy. Wczytaj biling.");
+      _addLog("warn", "Brak danych GSM do analizy. Wczytaj biling.");
       return;
     }
-    // Placeholder — system raportowania będzie rozbudowany
-    _log("info", `Analiza GSM z modelem ${model} — funkcja w budowie.`);
+    if (_gsmLlmRunning) return;
+    _gsmLlmRunning = true;
+
+    const userPrompt = (QS("#gsm_user_prompt") || {}).value || "";
+    const statusEl = QS("#gsm_llm_status");
+    const progressWrap = QS("#gsm_llm_progress");
+    const progBar = QS("#gsm_llm_prog_bar");
+    const progText = QS("#gsm_llm_prog_text");
+    const resultWrap = QS("#gsm_llm_result");
+    const textEl = QS("#gsm_llm_text");
+    const genBtn = QS("#gsm_generate_btn");
+
+    // Show progress, hide previous result
+    if (statusEl) statusEl.style.display = "none";
+    if (progressWrap) progressWrap.style.display = "";
+    if (progBar) progBar.style.width = "5%";
+    if (progText) progText.textContent = "Łączenie z Ollama...";
+    if (resultWrap) resultWrap.style.display = "none";
+    if (textEl) textEl.innerHTML = "";
+    if (genBtn) genBtn.disabled = true;
+
+    // Ensure data is saved to project first
+    try { await _saveToProject(); } catch (_) {}
+
+    // Get project ID
+    const projectId = _getProjectId();
+
+    const params = new URLSearchParams({
+      model,
+      user_prompt: userPrompt,
+      project_id: projectId,
+    });
+
+    _addLog("info", `Generowanie analizy GSM z modelem: ${model}`);
+
+    try {
+      const resp = await fetch(`/api/gsm/llm-stream?${params}`);
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let chunks = 0;
+
+      if (resultWrap) resultWrap.style.display = "";
+      if (progText) progText.textContent = "Generowanie...";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        // Process SSE lines
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6));
+            if (ev.error) {
+              if (textEl) textEl.textContent = `Błąd: ${ev.error}`;
+              _addLog("error", `LLM: ${ev.error}`);
+              break;
+            }
+            if (ev.chunk) {
+              chunks++;
+              if (textEl) textEl.innerHTML += ev.chunk
+                .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                .replace(/\n/g, "<br>");
+              // Animate progress bar (logarithmic approach to 95%)
+              const pct = Math.min(95, 5 + 90 * (1 - 1 / (1 + chunks * 0.02)));
+              if (progBar) progBar.style.width = pct + "%";
+            }
+            if (ev.done) {
+              if (progBar) progBar.style.width = "100%";
+              if (progText) progText.textContent = "Gotowe";
+              _addLog("info", `Analiza GSM wygenerowana (${chunks} fragmentów)`);
+              setTimeout(() => {
+                if (progressWrap) progressWrap.style.display = "none";
+              }, 1500);
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      _addLog("error", `LLM GSM: ${e.message || e}`);
+      if (progText) progText.textContent = `Błąd: ${e.message || e}`;
+      if (textEl) textEl.textContent = `Nie udało się wygenerować analizy: ${e.message || e}`;
+      if (resultWrap) resultWrap.style.display = "";
+    } finally {
+      _gsmLlmRunning = false;
+      if (genBtn) genBtn.disabled = false;
+      if (!QS("#gsm_llm_result")?.style.display || QS("#gsm_llm_result")?.style.display === "none") {
+        if (statusEl) statusEl.style.display = "";
+      }
+    }
   }
 
   function _saveGsmReport() {
     const checked = QSA('input[name="gsm_report_fmt"]:checked');
     const formats = Array.from(checked).map(cb => cb.value);
     if (!formats.length) {
-      _log("warn", "Nie wybrano formatu raportu.");
+      _addLog("warn", "Nie wybrano formatu raportu.");
       return;
     }
     if (!St.lastResult) {
-      _log("warn", "Brak danych GSM do raportu. Wczytaj biling.");
+      _addLog("warn", "Brak danych GSM do raportu. Wczytaj biling.");
       return;
     }
     // Placeholder — system raportowania będzie rozbudowany
-    _log("info", `Zapis raportu GSM (${formats.join(", ")}) — funkcja w budowie.`);
+    _addLog("info", `Zapis raportu GSM (${formats.join(", ")}) — funkcja w budowie.`);
   }
 
   /* ── bindings ───────────────────────────────────────────── */
@@ -9179,17 +9281,6 @@
           _smartImport(fileInput.files);
           fileInput.value = "";
         }
-      };
-    }
-
-    // Clear log button
-    const clearLogBtn = QS("#gsm_log_clear");
-    if (clearLogBtn) {
-      clearLogBtn.onclick = () => {
-        const body = QS("#gsm_log_body");
-        if (body) body.innerHTML = "";
-        const card = QS("#gsm_log_card");
-        if (card) card.style.display = "none";
       };
     }
 
@@ -9279,25 +9370,6 @@
         document.addEventListener("mousemove", onMove);
         document.addEventListener("mouseup", onUp);
       });
-    }
-
-    // New analysis button
-    const newBtn = QS("#gsm_new_analysis");
-    if (newBtn) {
-      newBtn.onclick = () => {
-        St.lastResult = null;
-        St.idMap = {};
-        St.hmData = null;
-        St.hmActiveCell = null;
-        St.hmMonth = "all";
-        St.hmType = "all";
-        if (St.map) { St.map.remove(); St.map = null; St._maplibreLayer = null; }
-        const results = QS("#gsm_results");
-        const empty = QS("#gsm_empty_state");
-        if (results) results.style.display = "none";
-        if (empty) empty.style.display = "";
-        if (fileInput) fileInput.click();
-      };
     }
 
     // GSM toolbar: Analizuj + Raport

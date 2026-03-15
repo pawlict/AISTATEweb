@@ -2000,6 +2000,164 @@ async def gsm_parser_apply_update(parser_id: str, request: Request):
     return JSONResponse({"status": "ok", **result})
 
 
+# ---------------------------------------------------------------------------
+#  GSM LLM Narrative Analysis (streaming)
+# ---------------------------------------------------------------------------
+
+@router.get("/api/gsm/llm-stream")
+async def gsm_llm_stream(
+    model: str = Query(""),
+    user_prompt: str = Query(""),
+    project_id: str = Query(""),
+):
+    """SSE streaming LLM analysis for GSM billing data.
+
+    Builds a prompt from saved GSM analysis data and streams
+    the LLM response chunk by chunk.
+    """
+    from starlette.responses import StreamingResponse
+
+    # Load GSM data from project
+    gsm_data: dict = {}
+    if project_id:
+        try:
+            _, _, proj_path_fn, _, _ = _gsm_project_helpers()
+            gsm_path = proj_path_fn(project_id) / "analysis" / "gsm_latest.json"
+            if gsm_path.exists():
+                gsm_data = json.loads(gsm_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            log.warning("GSM LLM: failed to load project data: %s", e)
+
+    billing = gsm_data.get("billing", {})
+    if not billing:
+        async def err_gen():
+            yield f"data: {json.dumps({'error': 'Brak danych bilingowych do analizy', 'done': True})}\n\n"
+        return StreamingResponse(err_gen(), media_type="text/event-stream")
+
+    # Build analysis prompt from GSM data
+    prompt = _build_gsm_llm_prompt(billing, user_prompt)
+    chosen_model = model.strip()
+
+    async def generate():
+        try:
+            from backend.ollama_client import OllamaClient, stream_analyze
+            client = OllamaClient()
+            system_msg = (
+                "Jesteś ekspertem analityki telekomunikacyjnej i kryminalnej. "
+                "Analizujesz billingi GSM (rejestry połączeń, SMS, transmisji danych). "
+                "Odpowiadaj po polsku, profesjonalnym językiem, zwięźle i precyzyjnie. "
+                "Formatuj odpowiedź używając nagłówków markdown (##, ###)."
+            )
+            chunk_count = 0
+            async for chunk in stream_analyze(
+                client, prompt, model=chosen_model,
+                system=system_msg,
+                options={"temperature": 0.4, "num_ctx": 8192},
+            ):
+                chunk_count += 1
+                yield f"data: {json.dumps({'chunk': chunk, 'done': False}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'chunk': '', 'done': True, 'chunks': chunk_count})}\n\n"
+        except Exception as e:
+            log.exception("GSM LLM stream error")
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+def _build_gsm_llm_prompt(billing: dict, user_prompt: str = "") -> str:
+    """Build a structured prompt for GSM analysis from billing data."""
+    parts = ["## DANE BILINGOWE GSM\n"]
+
+    # Subscriber info
+    sub = billing.get("subscriber", {})
+    if sub:
+        parts.append(f"### Abonent")
+        if sub.get("msisdn"):
+            parts.append(f"- MSISDN: {sub['msisdn']}")
+        if sub.get("operator"):
+            parts.append(f"- Operator: {sub['operator']}")
+        if sub.get("imei"):
+            parts.append(f"- IMEI: {sub['imei']}")
+        parts.append("")
+
+    # Summary
+    summary = billing.get("summary", {})
+    if summary:
+        parts.append("### Podsumowanie statystyczne")
+        for k, v in summary.items():
+            if v and k not in ("_raw",):
+                parts.append(f"- {k}: {v}")
+        parts.append("")
+
+    # Analysis
+    analysis = billing.get("analysis", {})
+    if analysis:
+        # Top contacts
+        contacts = analysis.get("top_contacts", [])
+        if contacts:
+            parts.append("### Top kontakty (do 15)")
+            for c in contacts[:15]:
+                name = c.get("name", c.get("number", "?"))
+                out = c.get("calls_out", 0)
+                inc = c.get("calls_in", 0)
+                fwd = c.get("calls_fwd", 0)
+                parts.append(f"- {name}: OUT={out}, IN={inc}, FWD={fwd}")
+            parts.append("")
+
+        # Anomalies
+        anomalies = analysis.get("anomalies", [])
+        if anomalies:
+            parts.append("### Anomalie wykryte przez analizator")
+            for a in anomalies[:20]:
+                parts.append(f"- [{a.get('severity', '?')}] {a.get('description', a.get('type', '?'))}")
+            parts.append("")
+
+        # Activity patterns
+        activity = analysis.get("activity_hours", {})
+        if activity:
+            parts.append("### Rozkład aktywności (godziny)")
+            for h, cnt in sorted(activity.items(), key=lambda x: -x[1])[:10]:
+                parts.append(f"- Godz. {h}: {cnt} zdarzeń")
+            parts.append("")
+
+    # Warnings
+    warnings = billing.get("warnings", [])
+    if warnings:
+        parts.append("### Ostrzeżenia parsera")
+        for w in warnings[:10]:
+            parts.append(f"- {w}")
+        parts.append("")
+
+    # Record count
+    rc = billing.get("record_count", 0)
+    parts.append(f"### Statystyki ogólne")
+    parts.append(f"- Łączna liczba rekordów: {rc}")
+    parts.append(f"- Operator: {billing.get('operator', '?')}")
+    parts.append("")
+
+    # Task
+    parts.append("## ZADANIE")
+    parts.append(
+        "Na podstawie powyższych danych billingowych przygotuj profesjonalną "
+        "analizę narracyjną. Opisz:\n"
+        "1. Profil komunikacyjny abonenta (kto, kiedy, jak często)\n"
+        "2. Główne wzorce zachowań (aktywność nocna, weekendowa, regularna)\n"
+        "3. Kluczowe kontakty i relacje\n"
+        "4. Wykryte anomalie i ich znaczenie\n"
+        "5. Wnioski i rekomendacje\n"
+    )
+
+    # User prompt
+    if user_prompt and user_prompt.strip():
+        parts.append(
+            f"\n## PYTANIE / INSTRUKCJA UŻYTKOWNIKA\n\n"
+            f"{user_prompt.strip()}\n\n"
+            f"WAŻNE: Uwzględnij powyższe pytanie/instrukcję w swojej analizie."
+        )
+
+    return "\n".join(parts)
+
+
 @router.get("/api/gsm/parsers/backups")
 async def gsm_parser_backups(parser_id: Optional[str] = None):
     """List parser file backups."""
