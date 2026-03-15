@@ -9577,8 +9577,12 @@
     dlg.style.cssText = "max-width:700px;width:92vw;max-height:88vh;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:0;overflow:hidden;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
 
     // Model options HTML
+    const groupLabel = g => g === "deep" ? "Głęboka analiza" : g === "proofreading" ? "Korekta językowa" : g;
     const modelOptions = noteModels.length
-      ? noteModels.map(m => `<option value="${_escHtml(m.id)}">${_escHtml(m.display_name)}${m.vram ? " • " + _escHtml(m.vram) : ""} (${_escHtml(m.group)})</option>`).join("")
+      ? noteModels.map(m => {
+          const active = m.active ? " ★" : "";
+          return `<option value="${_escHtml(m.id)}">${_escHtml(m.display_name)}${m.vram ? " • " + _escHtml(m.vram) : ""} (${_escHtml(groupLabel(m.group))})${active}</option>`;
+        }).join("")
       : '<option value="">Brak zainstalowanych modeli</option>';
 
     dlg.innerHTML = `
