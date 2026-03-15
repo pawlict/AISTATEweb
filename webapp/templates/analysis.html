@@ -745,25 +745,38 @@
         <div id="gsm_overnight_list"></div>
       </div>
 
+      <!-- User prompt for LLM -->
+      <div class="card" id="gsm_user_prompt_card">
+        <div class="analysis-sidehdr">
+          <div class="h2"><i data-icon="edit" data-size="16"></i> Pytanie / instrukcja dla analizy</div>
+        </div>
+        <div class="small muted" style="margin:6px 0">Opcjonalnie wpisz pytanie lub instrukcję przed wygenerowaniem analizy GSM.</div>
+        <textarea class="input" id="gsm_user_prompt" style="min-height:80px;margin-top:6px" placeholder="Np. Przeanalizuj wzorce komunikacji nocnej, Kto jest najczęstszym kontaktem?, Czy widać nietypowe zachowania?"></textarea>
+      </div>
+
+      <!-- LLM Narrative Analysis -->
+      <div class="card" id="gsm_llm_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Analiza narracyjna (LLM)</div>
+        </div>
+        <div id="gsm_llm_status" class="small muted" style="margin:8px 0">Wybierz model LLM na pasku narzędzi i kliknij przycisk Generuj aby uzyskać analizę narracyjną (wymaga Ollama).</div>
+        <div id="gsm_llm_progress" style="display:none;margin:8px 0">
+          <div class="an-progress">
+            <div class="progress"><div id="gsm_llm_prog_bar" style="width:0%;transition:width 0.3s"></div></div>
+          </div>
+          <div class="small muted" id="gsm_llm_prog_text" style="margin-top:4px">Łączenie z Ollama...</div>
+        </div>
+        <div id="gsm_llm_result" style="display:none;margin-top:10px">
+          <div id="gsm_llm_text" class="aml-llm-text"></div>
+        </div>
+      </div>
+
       <!-- Warnings -->
       <div class="card" style="display:none">
         <div class="h2">Ostrzeżenia parsera</div>
         <div id="gsm_warnings_body"></div>
       </div>
 
-      <!-- Actions -->
-      <div class="analysis-actions">
-        <button class="btn secondary" id="gsm_new_analysis">Nowa analiza</button>
-      </div>
-    </div>
-
-    <!-- Log panel -->
-    <div class="card" id="gsm_log_card" style="display:none">
-      <div class="analysis-sidehdr">
-        <div class="h2">Logi</div>
-        <button class="btn mini" id="gsm_log_clear" title="Wyczyść logi">Wyczyść</button>
-      </div>
-      <div id="gsm_log_body" style="max-height:200px;overflow:auto;font-size:12px;font-family:monospace"></div>
     </div>
 
     <!-- Standalone map overlay (no billing data) -->
