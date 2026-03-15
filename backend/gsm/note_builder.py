@@ -342,11 +342,13 @@ def build_note_placeholders(
             "assessment": contacts_assessment,
         },
 
-        # Anomalies (section 6 — {{ anomalies.count }} etc.)
+        # Anomalies (section 6)
+        # NOTE: categories and top_findings are cleared — the old synthetic
+        # description is replaced by the programmatic anomaly intro + table.
         "anomalies": {
             "count": anomaly_count,
-            "categories": anomaly_categories_str,
-            "top_findings": anomaly_top_findings,
+            "categories": "",
+            "top_findings": "",
         },
         # Anomaly table rows for programmatic insertion (Kategoria/Opis/Dane)
         "_anomaly_table_rows": anomaly_table_rows,
@@ -526,7 +528,7 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             dir_str = f" ({direction})" if direction else ""
             parts.append(f"{date} {time} → {contact}, {dur} min{dir_str}")
 
-        elif anomaly_type == "high_night_activity":
+        elif anomaly_type in ("high_night_activity", "night_activity"):
             # Period-based: show stats
             period = item.get("period", item.get("week", ""))
             records = item.get("records", item.get("count", 0))
@@ -538,12 +540,12 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             loc_to = item.get("location_to", item.get("location_morning", "?"))
             parts.append(f"{date}: {loc_from} → {loc_to}")
 
-        elif anomaly_type == "activity_spike":
+        elif anomaly_type in ("activity_spike", "burst_activity"):
             date = item.get("date", "")
             count = item.get("count", item.get("records", 0))
-            parts.append(f"{date}: {count} zdarzeń")
+            parts.append(f"{date}: {count} zdarzenia")
 
-        elif anomaly_type in ("premium_numbers", "special_numbers"):
+        elif anomaly_type in ("premium_number", "premium_numbers", "special_numbers"):
             number = item.get("number", "?")
             cat = item.get("category", item.get("label", ""))
             interactions = item.get("interactions", item.get("count", 0))
@@ -574,12 +576,16 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             parts.append(f"{number} ({date})")
 
         elif anomaly_type == "inactivity_gap":
-            last_date = item.get("last_record_date", "")
-            first_date = item.get("first_record_date", "")
+            last_date = item.get("last_date", item.get("last_record_date", ""))
+            last_time = item.get("last_time", "")
+            first_date = item.get("first_date", item.get("first_record_date", ""))
+            first_time = item.get("first_time", "")
             gap_h = item.get("gap_hours", 0)
-            parts.append(f"{last_date} – {first_date}: {gap_h:.0f} h przerwy")
+            last_str = f"{last_date} {last_time}".strip()
+            first_str = f"{first_date} {first_time}".strip()
+            parts.append(f"{last_str} \u2013 {first_str}: {gap_h:.0f} h przerwy")
 
-        elif anomaly_type in ("satellite_numbers", "social_messaging"):
+        elif anomaly_type in ("satellite_numbers", "social_media", "social_messaging"):
             number = item.get("number", "?")
             label = item.get("label", item.get("category", ""))
             interactions = item.get("interactions", item.get("count", 0))

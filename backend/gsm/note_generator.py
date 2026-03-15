@@ -3,23 +3,35 @@ GSM Note DOCX Generator — fills the professional note template with data.
 
 Pipeline:
   1. docxtpl renders Jinja2 placeholders
-  2. python-docx inserts:
-     - data tables after section headings
-     - descriptive paragraphs (anomaly intro, contact graph text, etc.)
-     - chart images with captions after relevant sections
-     - dash-list items for locations and movement data
-
-Chart images are embedded programmatically (not via docxtpl InlineImage)
-to keep the template clean and allow watermarked screenshots.
+  2. python-docx post-processes:
+     - removes old anomaly synthetic description paragraphs
+     - inserts data tables after section headings
+     - inserts descriptive paragraphs (anomaly intro, contact graph text, etc.)
+     - inserts chart images with captions after relevant sections
+     - inserts bullet-list items for locations and movement data
+     - applies consistent formatting (justified, same font, orphan prevention)
+     - adds page numbers in footer (page/total, right-aligned)
 """
 from __future__ import annotations
 
 import io
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger("aistate.gsm.note_gen")
+
+# ─── Constants ───────────────────────────────────────────────────────────────
+
+FONT_NAME = "Calibri"
+FONT_SIZE_BODY = 10   # pt — body text
+FONT_SIZE_TABLE = 8   # pt — table cells
+FONT_SIZE_TABLE_SMALL = 7  # pt — small table cells (anomaly Dane)
+FONT_SIZE_CAPTION = 9  # pt — table/chart captions
+
+# Polish single-letter words that shouldn't be left at line end
+_ORPHAN_RE = re.compile(r'\b([AaIiOoUuWwZz]) ', re.UNICODE)
 
 
 # ─── Table definitions ──────────────────────────────────────────────────────
@@ -27,13 +39,13 @@ log = logging.getLogger("aistate.gsm.note_gen")
 TABLE_DEFS = {
     "stats": {
         "section_heading": "4.",
-        "caption": "Tabela: Statystyki aktywności telekomunikacyjnej",
-        "columns": ["Parametr", "Wartość"],
+        "caption": "Tabela: Statystyki aktywno\u015bci telekomunikacyjnej",
+        "columns": ["Parametr", "Warto\u015b\u0107"],
     },
     "contacts": {
         "section_heading": "5.",
-        "caption": "Tabela: Najczęstsze kontakty",
-        "columns": ["Numer", "Interakcje", "Poł. wych.", "Poł. przych."],
+        "caption": "Tabela: Najcz\u0119stsze kontakty",
+        "columns": ["Numer", "Interakcje", "Po\u0142. wych.", "Po\u0142. przych."],
     },
     "anomalies": {
         "section_heading": "6.",
@@ -43,59 +55,62 @@ TABLE_DEFS = {
     "locations": {
         "section_heading": "7.",
         "caption": "Tabela: Lokalizacje BTS",
-        "columns": ["Lokalizacja", "Liczba rekordów", "Udział %"],
+        "columns": ["Lokalizacja", "Liczba rekord\u00f3w", "Udzia\u0142 %"],
     },
 }
 
 # ─── Descriptive text blocks ────────────────────────────────────────────────
 
 ANOMALY_INTRO_TEXT = (
-    "W toku analizy materiału bilingowego zidentyfikowano zdarzenia oraz "
-    "sekwencje aktywności odbiegające od typowego profilu korzystania z numeru. "
-    "Za anomalie uznano zarówno pojedyncze incydenty o niestandardowych cechach, "
-    "jak i powtarzalne wzorce czasowe, kontaktowe lub lokalizacyjne, które mogą "
-    "wymagać pogłębionej weryfikacji analitycznej."
+    "W\u00a0toku analizy materia\u0142u bilingowego zidentyfikowano zdarzenia oraz "
+    "sekwencje aktywno\u015bci odbiegaj\u0105ce od typowego profilu korzystania "
+    "z\u00a0numeru. Za anomalie uznano zar\u00f3wno pojedyncze incydenty "
+    "o\u00a0niestandardowych cechach, jak i\u00a0powtarzalne wzorce czasowe, "
+    "kontaktowe lub lokalizacyjne, kt\u00f3re mog\u0105 wymaga\u0107 "
+    "pog\u0142\u0119bionej weryfikacji analitycznej."
 )
 
 CONTACTS_GRAPH_TEXT = (
-    "Graf \u201eNajczęstsze kontakty\u201d obrazuje strukturę relacji komunikacyjnych "
-    "analizowanego numeru, wskazując podmioty występujące najczęściej w ruchu "
-    "telekomunikacyjnym. Pozwala to określić krąg najaktywniejszych kontaktów, "
-    "uchwycić powtarzalność komunikacji oraz wskazać numery, które mogą odgrywać "
-    "istotną rolę w badanym modelu łączności."
+    "Graf \u201eNajcz\u0119stsze kontakty\u201d obrazuje struktur\u0119 relacji "
+    "komunikacyjnych analizowanego numeru, wskazuj\u0105c podmioty wyst\u0119puj\u0105ce "
+    "najcz\u0119\u015bciej w\u00a0ruchu telekomunikacyjnym. Pozwala to okre\u015bli\u0107 "
+    "kr\u0105g najaktywniejszych kontakt\u00f3w, uchwyci\u0107 powtarzalno\u015b\u0107 "
+    "komunikacji oraz wskaza\u0107 numery, kt\u00f3re mog\u0105 odgrywa\u0107 istotn\u0105 "
+    "rol\u0119 w\u00a0badanym modelu \u0142\u0105czno\u015bci."
 )
 
 ACTIVITY_DISTRIBUTION_TEXT = (
-    "Mapa rozkładu aktywności przedstawia intensywność zdarzeń telekomunikacyjnych "
-    "w zależności od dnia tygodnia i pory doby. Zestawienie to pozwala uchwycić "
-    "dominujące przedziały aktywności, wskazać powtarzalne schematy czasowe oraz "
-    "ocenić, czy komunikacja koncentrowała się w typowych godzinach dziennych, "
-    "czy również w porach nietypowych."
+    "Mapa rozk\u0142adu aktywno\u015bci przedstawia intensywno\u015b\u0107 zdarze\u0144 "
+    "telekomunikacyjnych w\u00a0zale\u017cno\u015bci od dnia tygodnia i\u00a0pory doby. "
+    "Zestawienie to pozwala uchwyci\u0107 dominuj\u0105ce przedzia\u0142y aktywno\u015bci, "
+    "wskaza\u0107 powtarzalne schematy czasowe oraz oceni\u0107, czy komunikacja "
+    "koncentrowa\u0142a si\u0119 w\u00a0typowych godzinach dziennych, czy r\u00f3wnie\u017c "
+    "w\u00a0porach nietypowych."
 )
 
-# Chart insertion order after section 5 (contacts)
+# Chart insertion order
 CHART_INSERTION_ORDER = [
     {
         "key": "top_contacts",
-        "caption": "Graf: Najczęstsze kontakty",
+        "caption": "Graf: Najcz\u0119stsze kontakty",
         "pre_text": CONTACTS_GRAPH_TEXT,
         "section_heading": "5.",
     },
     {
         "key": "activity",
-        "caption": "Rozkład aktywności",
+        "caption": "Rozk\u0142ad aktywno\u015bci",
         "pre_text": ACTIVITY_DISTRIBUTION_TEXT,
-        "sub_heading": "Rodzaj aktywności",
-        "section_heading": "5.",  # insert after contacts section
+        "sub_heading": "Rodzaj aktywno\u015bci",
+        "section_heading": "5.",
     },
     {
         "key": "night_activity",
-        "caption": "Aktywność nocna",
+        "caption": "Aktywno\u015b\u0107 nocna",
         "section_heading": "5.",
     },
     {
         "key": "weekend_activity",
-        "caption": "Aktywność weekendowa",
+        "caption": "Aktywno\u015b\u0107 weekendowa",
         "section_heading": "5.",
     },
     {
@@ -103,6 +118,14 @@ CHART_INSERTION_ORDER = [
         "caption": "Mapa lokalizacji BTS",
         "section_heading": "7.",
     },
+]
+
+# Texts to remove from the rendered DOCX (old anomaly synthetic description)
+_REMOVE_TEXT_MARKERS = [
+    "W raporcie wygenerowano",
+    "Ich syntetyczny opis obejmuje",
+    "Na szczeg\u00f3ln\u0105 uwag\u0119 zas\u0142uguj\u0105",
+    "Ujawnione wzorce mog\u0105 wskazywa\u0107",
 ]
 
 
@@ -118,23 +141,9 @@ def generate_note_docx(
     table_data: Optional[Dict[str, List[List[str]]]] = None,
     selected_tables: Optional[List[str]] = None,
 ) -> Path:
-    """Generate a professional analytical note DOCX from the template.
-
-    Args:
-        template_path: Path to the DOCX template (gsm_note_template.docx).
-        placeholders: Dict from note_builder.build_note_placeholders().
-        output_path: Where to save the generated DOCX.
-        chart_images: Optional dict of chart_name -> PNG bytes to embed.
-        llm_overrides: Optional dict from note_llm.generate_note_sections_llm().
-        table_data: Optional dict of table_name -> list of row data.
-        selected_tables: List of table names to include.
-
-    Returns:
-        Path to the generated DOCX file.
-    """
+    """Generate a professional analytical note DOCX from the template."""
     from docxtpl import DocxTemplate
 
-    # Merge LLM overrides into placeholders
     if llm_overrides:
         _apply_llm_overrides(placeholders, llm_overrides)
 
@@ -143,20 +152,14 @@ def generate_note_docx(
     location_areas_list = placeholders.pop("_location_areas_list", [])
     location_movement_list = placeholders.pop("_location_movement_list", [])
 
-    # Open template
     tpl = DocxTemplate(str(template_path))
-
-    # Build context — flatten nested dicts for docxtpl
     context = _flatten_for_template(placeholders)
-
-    # Render with docxtpl (step 1: placeholders only, no images)
     tpl.render(context)
 
-    # Save intermediate result
     output_path.parent.mkdir(parents=True, exist_ok=True)
     tpl.save(str(output_path))
 
-    # Step 2: Programmatic insertions using python-docx
+    # Post-processing with python-docx
     _post_process_docx(
         output_path,
         table_data=table_data,
@@ -171,7 +174,7 @@ def generate_note_docx(
     return output_path
 
 
-# ─── Post-processing (python-docx) ──────────────────────────────────────────
+# ─── Post-processing ────────────────────────────────────────────────────────
 
 def _post_process_docx(
     docx_path: Path,
@@ -183,11 +186,14 @@ def _post_process_docx(
     location_areas_list: Optional[List[str]] = None,
     location_movement_list: Optional[List[str]] = None,
 ) -> None:
-    """Insert tables, charts, descriptive texts, and dash-lists into DOCX."""
+    """Insert tables, charts, texts, lists; fix formatting; add page numbers."""
     from docx import Document
 
     doc = Document(str(docx_path))
     body = doc.element.body
+
+    # 0. Remove old anomaly synthetic description paragraphs
+    _remove_old_anomaly_text(body)
 
     # 1. Insert anomaly intro text + table with Kategoria/Opis/Dane
     if anomaly_table_rows:
@@ -199,17 +205,17 @@ def _post_process_docx(
         if tables_to_insert:
             _insert_tables(doc, body, table_data, tables_to_insert)
 
-    # 3. Insert location dash-lists
+    # 3. Insert location bullet-lists
     if location_areas_list:
-        _insert_dash_list_after_text(
+        _insert_bullet_list_after_text(
             doc, body,
-            search_text="koncentrowała się w rejonach",
+            search_text="koncentrowa\u0142a si\u0119 w rejonach",
             items=location_areas_list,
         )
     if location_movement_list:
-        _insert_dash_list_after_text(
+        _insert_bullet_list_after_text(
             doc, body,
-            search_text="przesłanki dotyczące przemieszczania",
+            search_text="przes\u0142anki dotycz\u0105ce przemieszczania",
             items=location_movement_list,
         )
 
@@ -217,7 +223,35 @@ def _post_process_docx(
     if chart_images:
         _insert_chart_images(doc, body, chart_images)
 
+    # 5. Fix formatting: consistent font, justified text, orphan prevention
+    _fix_formatting(doc)
+
+    # 6. Add page numbers in footer
+    _add_page_numbers(doc)
+
     doc.save(str(docx_path))
+
+
+# ─── Remove old anomaly text ────────────────────────────────────────────────
+
+def _remove_old_anomaly_text(body) -> None:
+    """Remove paragraphs containing the old anomaly synthetic description."""
+    from docx.oxml.ns import qn
+
+    to_remove = []
+    for child in body:
+        if child.tag == qn('w:p'):
+            full_text = ''.join(child.itertext()).strip()
+            if not full_text:
+                continue
+            for marker in _REMOVE_TEXT_MARKERS:
+                if marker in full_text:
+                    to_remove.append(child)
+                    break
+
+    for elem in to_remove:
+        body.remove(elem)
+        log.debug("Removed old anomaly text paragraph")
 
 
 # ─── Anomaly section ────────────────────────────────────────────────────────
@@ -226,79 +260,55 @@ def _insert_anomaly_section(doc, body, anomaly_rows: List[List[str]]) -> None:
     """Insert anomaly intro text and Kategoria/Opis/Dane table in section 6."""
     from docx.shared import Pt, RGBColor
     from docx.enum.table import WD_TABLE_ALIGNMENT
-    from docx.oxml.ns import qn
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-    # Find section 6 heading
     insert_after = _find_section_heading(body, "6.")
     if insert_after is None:
         log.warning("Section 6 heading not found, skipping anomaly section")
         return
 
-    # Insert intro text paragraph
-    intro_p = doc.add_paragraph()
-    body.remove(intro_p._element)
-    idx = _body_index(body, insert_after)
-    body.insert(idx + 1, intro_p._element)
-    run = intro_p.add_run(ANOMALY_INTRO_TEXT)
-    run.font.size = Pt(10)
-    run.font.color.rgb = RGBColor(0, 0, 0)
+    # Intro text
+    intro_p = _insert_paragraph_after(doc, body, insert_after)
+    run = intro_p.add_run(_fix_orphans(ANOMALY_INTRO_TEXT))
+    _style_run(run, FONT_SIZE_BODY)
+    intro_p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-    # Insert caption
-    caption_p = doc.add_paragraph()
-    body.remove(caption_p._element)
-    idx = _body_index(body, intro_p._element)
-    body.insert(idx + 1, caption_p._element)
+    # Caption
+    caption_p = _insert_paragraph_after(doc, body, intro_p._element)
     run = caption_p.add_run("Tabela: Wykryte anomalie")
-    run.bold = True
-    run.font.size = Pt(9)
-    run.font.color.rgb = RGBColor(0, 0, 0)
+    _style_run(run, FONT_SIZE_CAPTION, bold=True)
 
-    # Create table: Kategoria | Opis | Dane
-    columns = ["Kategoria", "Opis", "Dane"]
-    n_rows = 1 + len(anomaly_rows)
-    table = doc.add_table(rows=n_rows, cols=3)
+    # Table
+    table = doc.add_table(rows=1 + len(anomaly_rows), cols=3)
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
     body.remove(table._tbl)
     idx = _body_index(body, caption_p._element)
     body.insert(idx + 1, table._tbl)
 
-    # Header
+    columns = ["Kategoria", "Opis", "Dane"]
     for i, col_name in enumerate(columns):
         cell = table.rows[0].cells[i]
         cell.text = col_name
-        for p in cell.paragraphs:
-            for r in p.runs:
-                r.bold = True
-                r.font.size = Pt(8)
-                r.font.color.rgb = RGBColor(0, 0, 0)
+        _style_cell_runs(cell, FONT_SIZE_TABLE, bold=True)
 
-    # Data rows
     for row_idx, row_data in enumerate(anomaly_rows):
         row = table.rows[row_idx + 1]
         for col_idx, cell_text in enumerate(row_data):
             if col_idx < 3:
                 cell = row.cells[col_idx]
-                cell.text = str(cell_text)
-                for p in cell.paragraphs:
-                    for r in p.runs:
-                        r.font.size = Pt(7)
+                cell.text = _fix_orphans(str(cell_text))
+                size = FONT_SIZE_TABLE_SMALL if col_idx == 2 else FONT_SIZE_TABLE
+                _style_cell_runs(cell, size)
 
-    # Spacer
     _add_spacer(doc, body, table._tbl)
     log.debug("Inserted anomaly section with %d rows", len(anomaly_rows))
 
 
 # ─── Table insertion ─────────────────────────────────────────────────────────
 
-def _insert_tables(
-    doc, body,
-    table_data: Dict[str, List[List[str]]],
-    selected_tables: List[str],
-) -> None:
+def _insert_tables(doc, body, table_data, selected_tables) -> None:
     """Insert data tables into rendered DOCX at section positions."""
-    from docx.shared import Pt, RGBColor
     from docx.enum.table import WD_TABLE_ALIGNMENT
 
     for table_name in selected_tables:
@@ -307,54 +317,37 @@ def _insert_tables(
         if not tdef or not rows:
             continue
 
-        heading_prefix = tdef["section_heading"]
-        insert_after = _find_section_last_element(body, heading_prefix)
+        insert_after = _find_section_last_element(body, tdef["section_heading"])
         if insert_after is None:
-            log.warning("Section heading '%s' not found, skipping table '%s'",
-                        heading_prefix, table_name)
+            log.warning("Section '%s' not found, skipping table '%s'",
+                        tdef["section_heading"], table_name)
             continue
 
-        # Caption
-        caption_p = doc.add_paragraph()
-        body.remove(caption_p._element)
-        idx = _body_index(body, insert_after)
-        body.insert(idx + 1, caption_p._element)
+        caption_p = _insert_paragraph_after(doc, body, insert_after)
         run = caption_p.add_run(tdef["caption"])
-        run.bold = True
-        run.font.size = Pt(9)
-        run.font.color.rgb = RGBColor(0, 0, 0)
+        _style_run(run, FONT_SIZE_CAPTION, bold=True)
 
-        # Table
         columns = tdef["columns"]
         n_cols = len(columns)
         table = doc.add_table(rows=1 + len(rows), cols=n_cols)
         table.style = 'Table Grid'
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
         body.remove(table._tbl)
         idx = _body_index(body, caption_p._element)
         body.insert(idx + 1, table._tbl)
 
-        # Header
         for i, col_name in enumerate(columns):
             cell = table.rows[0].cells[i]
             cell.text = col_name
-            for p in cell.paragraphs:
-                for r in p.runs:
-                    r.bold = True
-                    r.font.size = Pt(8)
-                    r.font.color.rgb = RGBColor(0, 0, 0)
+            _style_cell_runs(cell, FONT_SIZE_TABLE, bold=True)
 
-        # Data
         for row_idx, row_data in enumerate(rows):
             row = table.rows[row_idx + 1]
             for col_idx, cell_text in enumerate(row_data):
                 if col_idx < n_cols:
                     cell = row.cells[col_idx]
                     cell.text = str(cell_text)
-                    for p in cell.paragraphs:
-                        for r in p.runs:
-                            r.font.size = Pt(8)
+                    _style_cell_runs(cell, FONT_SIZE_TABLE)
 
         _add_spacer(doc, body, table._tbl)
         log.debug("Inserted table '%s' with %d rows", table_name, len(rows))
@@ -364,14 +357,11 @@ def _insert_tables(
 
 def _insert_chart_images(doc, body, chart_images: Dict[str, bytes]) -> None:
     """Insert chart PNG images into DOCX after relevant sections."""
-    from docx.shared import Pt, Mm, RGBColor, Inches
+    from docx.shared import Mm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-    # Track last insertion point per section to chain multiple images
-    # Insert charts in defined order, all after section 5 except map_bts
     last_section5_elem = _find_section_last_element(body, "5.")
     last_section7_elem = _find_section_last_element(body, "7.")
-
-    # Current insertion cursor for section 5 content
     cursor_s5 = last_section5_elem
     cursor_s7 = last_section7_elem
 
@@ -381,82 +371,58 @@ def _insert_chart_images(doc, body, chart_images: Dict[str, bytes]) -> None:
         if not img_bytes:
             continue
 
-        # Determine insertion cursor
-        if chart_def["section_heading"] == "7.":
-            cursor = cursor_s7
-        else:
-            cursor = cursor_s5
-
+        cursor = cursor_s7 if chart_def["section_heading"] == "7." else cursor_s5
         if cursor is None:
             log.warning("No insertion point for chart '%s'", key)
             continue
 
-        # Optional sub-heading
+        # Sub-heading
         if chart_def.get("sub_heading"):
-            heading_p = doc.add_paragraph()
-            body.remove(heading_p._element)
-            idx = _body_index(body, cursor)
-            body.insert(idx + 1, heading_p._element)
+            heading_p = _insert_paragraph_after(doc, body, cursor)
             run = heading_p.add_run(chart_def["sub_heading"])
-            run.bold = True
-            run.font.size = Pt(11)
-            run.font.color.rgb = RGBColor(0, 0, 0)
+            _style_run(run, 11, bold=True)
             cursor = heading_p._element
 
-        # Optional pre-text
+        # Pre-text
         if chart_def.get("pre_text"):
-            text_p = doc.add_paragraph()
-            body.remove(text_p._element)
-            idx = _body_index(body, cursor)
-            body.insert(idx + 1, text_p._element)
-            run = text_p.add_run(chart_def["pre_text"])
-            run.font.size = Pt(10)
-            run.font.color.rgb = RGBColor(0, 0, 0)
+            text_p = _insert_paragraph_after(doc, body, cursor)
+            run = text_p.add_run(_fix_orphans(chart_def["pre_text"]))
+            _style_run(run, FONT_SIZE_BODY)
+            text_p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             cursor = text_p._element
 
-        # Insert image
+        # Image
         try:
             img_stream = io.BytesIO(img_bytes)
-            img_p = doc.add_paragraph()
-            body.remove(img_p._element)
-            idx = _body_index(body, cursor)
-            body.insert(idx + 1, img_p._element)
-
+            img_p = _insert_paragraph_after(doc, body, cursor)
             run = img_p.add_run()
             run.add_picture(img_stream, width=Mm(155))
+            img_p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
             cursor = img_p._element
 
-            # Caption under image
-            cap_p = doc.add_paragraph()
-            body.remove(cap_p._element)
-            idx = _body_index(body, cursor)
-            body.insert(idx + 1, cap_p._element)
+            # Caption
+            cap_p = _insert_paragraph_after(doc, body, cursor)
             run = cap_p.add_run(chart_def["caption"])
-            run.italic = True
-            run.font.size = Pt(8)
-            run.font.color.rgb = RGBColor(100, 100, 100)
+            _style_run(run, 8, italic=True, color=(100, 100, 100))
+            cap_p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
             cursor = cap_p._element
 
             log.debug("Inserted chart image '%s'", key)
         except Exception as e:
             log.warning("Failed to insert chart image '%s': %s", key, e)
 
-        # Update cursors
         if chart_def["section_heading"] == "7.":
             cursor_s7 = cursor
         else:
             cursor_s5 = cursor
 
 
-# ─── Dash-list insertion ─────────────────────────────────────────────────────
+# ─── Bullet-list insertion ───────────────────────────────────────────────────
 
-def _insert_dash_list_after_text(
-    doc, body,
-    search_text: str,
-    items: List[str],
-) -> None:
-    """Insert a dash-prefixed list after a paragraph containing search_text."""
-    from docx.shared import Pt, RGBColor
+def _insert_bullet_list_after_text(doc, body, search_text: str, items: List[str]) -> None:
+    """Insert bullet-point list (\u2022) after paragraph containing search_text."""
+    from docx.shared import Pt, Cm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.oxml.ns import qn
 
     target = None
@@ -468,29 +434,149 @@ def _insert_dash_list_after_text(
                 break
 
     if target is None:
-        log.debug("Text '%s' not found for dash-list insertion", search_text[:40])
+        log.debug("Text '%s' not found for bullet-list", search_text[:40])
         return
 
     cursor = target
     for item_text in items:
-        p = doc.add_paragraph()
-        body.remove(p._element)
-        idx = _body_index(body, cursor)
-        body.insert(idx + 1, p._element)
-        run = p.add_run(f"\u2013 {item_text}")  # en-dash
-        run.font.size = Pt(10)
-        run.font.color.rgb = RGBColor(0, 0, 0)
+        p = _insert_paragraph_after(doc, body, cursor)
+        run = p.add_run(f"\u2022  {_fix_orphans(item_text)}")
+        _style_run(run, FONT_SIZE_BODY)
+        p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p.paragraph_format.left_indent = Cm(0.8)
         cursor = p._element
 
-    log.debug("Inserted %d dash-list items after '%s'", len(items), search_text[:40])
+    log.debug("Inserted %d bullet items after '%s'", len(items), search_text[:40])
+
+
+# ─── Formatting fixes ───────────────────────────────────────────────────────
+
+def _fix_formatting(doc) -> None:
+    """Apply consistent formatting to all programmatically inserted paragraphs.
+
+    - Body text: Calibri, justified, same size
+    - Bullet lists: left-aligned
+    - Fix orphan single characters (Polish typography)
+    """
+    from docx.shared import Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    for para in doc.paragraphs:
+        # Apply font to all runs that don't have a font set
+        for run in para.runs:
+            if run.font.name is None:
+                run.font.name = FONT_NAME
+            # Fix orphans in text
+            if run.text:
+                fixed = _fix_orphans(run.text)
+                if fixed != run.text:
+                    run.text = fixed
+
+
+def _fix_orphans(text: str) -> str:
+    """Replace spaces after Polish single-letter words with non-breaking spaces.
+
+    Prevents 'w ', 'i ', 'z ', 'a ', 'o ', 'u ' from appearing at line ends.
+    """
+    if not text:
+        return text
+    return _ORPHAN_RE.sub(r'\1\u00a0', text)
+
+
+# ─── Page numbers ────────────────────────────────────────────────────────────
+
+def _add_page_numbers(doc) -> None:
+    """Add page numbers in footer: '<page>/<total>' right-aligned."""
+    from docx.shared import Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn, nsdecls
+    from docx.oxml import parse_xml
+
+    section = doc.sections[-1]
+
+    # Ensure footer exists
+    footer = section.footer
+    footer.is_linked_to_previous = False
+
+    # Clear existing footer content
+    for p in footer.paragraphs:
+        for r in p.runs:
+            r.text = ""
+
+    # Create or use first paragraph
+    if footer.paragraphs:
+        para = footer.paragraphs[0]
+    else:
+        para = footer.add_paragraph()
+
+    para.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # Add PAGE field
+    run1 = para.add_run()
+    run1.font.name = FONT_NAME
+    run1.font.size = Pt(8)
+
+    fld_page = parse_xml(
+        f'<w:fldSimple {nsdecls("w")} w:instr=" PAGE "/>'
+    )
+    run1._element.append(fld_page)
+
+    # Add separator
+    run2 = para.add_run("/")
+    run2.font.name = FONT_NAME
+    run2.font.size = Pt(8)
+
+    # Add NUMPAGES field
+    run3 = para.add_run()
+    run3.font.name = FONT_NAME
+    run3.font.size = Pt(8)
+
+    fld_total = parse_xml(
+        f'<w:fldSimple {nsdecls("w")} w:instr=" NUMPAGES "/>'
+    )
+    run3._element.append(fld_total)
+
+    log.debug("Added page numbers to footer")
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
+def _insert_paragraph_after(doc, body, after_elem):
+    """Create a new paragraph and insert it after the given element."""
+    p = doc.add_paragraph()
+    body.remove(p._element)
+    idx = _body_index(body, after_elem)
+    body.insert(idx + 1, p._element)
+    return p
+
+
+def _style_run(run, size_pt: int, *, bold=False, italic=False, color=None):
+    """Apply consistent styling to a run."""
+    from docx.shared import Pt, RGBColor
+    run.font.name = FONT_NAME
+    run.font.size = Pt(size_pt)
+    run.font.color.rgb = RGBColor(*(color or (0, 0, 0)))
+    if bold:
+        run.bold = True
+    if italic:
+        run.italic = True
+
+
+def _style_cell_runs(cell, size_pt: int, *, bold=False):
+    """Apply consistent styling to all runs in a table cell."""
+    from docx.shared import Pt, RGBColor
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.font.name = FONT_NAME
+            r.font.size = Pt(size_pt)
+            r.font.color.rgb = RGBColor(0, 0, 0)
+            if bold:
+                r.bold = True
+
+
 def _find_section_heading(body, heading_prefix: str):
     """Find the heading paragraph element for a section number."""
     from docx.oxml.ns import qn
-
     for child in body:
         if child.tag == qn('w:p'):
             pStyle = child.find(f'.//{qn("w:pStyle")}')
@@ -505,15 +591,12 @@ def _find_section_heading(body, heading_prefix: str):
 def _find_section_last_element(body, heading_prefix: str):
     """Find the last body element in a section (before next heading)."""
     from docx.oxml.ns import qn
-
     found_heading = False
     last_elem = None
-
     for child in body:
         if child.tag == qn('w:p'):
             pStyle = child.find(f'.//{qn("w:pStyle")}')
             is_heading = pStyle is not None and 'Heading' in pStyle.get(qn('w:val'), '')
-
             if is_heading:
                 full_text = ''.join(child.itertext()).strip()
                 if full_text.startswith(heading_prefix):
@@ -522,10 +605,8 @@ def _find_section_last_element(body, heading_prefix: str):
                     continue
                 elif found_heading:
                     break
-
         if found_heading:
             last_elem = child
-
     return last_elem
 
 
@@ -540,27 +621,20 @@ def _body_index(body, element) -> int:
 def _add_spacer(doc, body, after_elem) -> None:
     """Add a small spacer paragraph after an element."""
     from docx.shared import Pt
-    spacer = doc.add_paragraph()
-    body.remove(spacer._element)
-    idx = _body_index(body, after_elem)
-    body.insert(idx + 1, spacer._element)
+    spacer = _insert_paragraph_after(doc, body, after_elem)
     spacer.add_run("").font.size = Pt(6)
 
 
 # ─── Table data builders ───────────────────────────────────────────────────
 
 def build_table_data(gsm_data: dict, placeholders: Optional[Dict[str, Any]] = None) -> Dict[str, List[List[str]]]:
-    """Build table row data from gsm_latest.json for all table types.
-
-    Returns dict of table_name -> list of rows (each row is list of strings).
-    """
+    """Build table row data from gsm_latest.json for all table types."""
     billing = gsm_data.get("billing", {})
     summary = billing.get("summary", {})
     analysis = billing.get("analysis", {})
 
     tables: Dict[str, List[List[str]]] = {}
 
-    # Stats table
     calls_out = summary.get("calls_out", 0) or 0
     calls_in = summary.get("calls_in", 0) or 0
     sms_out = summary.get("sms_out", 0) or 0
@@ -571,36 +645,33 @@ def build_table_data(gsm_data: dict, placeholders: Optional[Dict[str, Any]] = No
     unique = summary.get("unique_contacts", 0) or 0
 
     tables["stats"] = [
-        ["Połączenia wychodzące", str(calls_out)],
-        ["Połączenia przychodzące", str(calls_in)],
-        ["SMS wychodzące", str(sms_out)],
-        ["SMS przychodzące", str(sms_in)],
+        ["Po\u0142\u0105czenia wychodz\u0105ce", str(calls_out)],
+        ["Po\u0142\u0105czenia przychodz\u0105ce", str(calls_in)],
+        ["SMS wychodz\u0105ce", str(sms_out)],
+        ["SMS przychodz\u0105ce", str(sms_in)],
         ["Sesje transmisji danych", str(data_sessions)],
-        ["Łączna liczba rekordów", str(total)],
-        ["Czas połączeń (s)", str(duration)],
+        ["\u0141\u0105czna liczba rekord\u00f3w", str(total)],
+        ["Czas po\u0142\u0105cze\u0144 (s)", str(duration)],
         ["Unikalne kontakty", str(unique)],
     ]
 
-    # Top contacts table
     top_contacts = analysis.get("top_contacts", [])
     tables["contacts"] = []
     for c in top_contacts[:10]:
-        number = c.get("number", "?")
-        interactions = str(c.get("total_interactions", 0))
-        c_out = str(c.get("calls_out", 0))
-        c_in = str(c.get("calls_in", 0))
-        tables["contacts"].append([number, interactions, c_out, c_in])
+        tables["contacts"].append([
+            c.get("number", "?"),
+            str(c.get("total_interactions", 0)),
+            str(c.get("calls_out", 0)),
+            str(c.get("calls_in", 0)),
+        ])
 
-    # Anomalies table — use pre-built rows from placeholders if available
     if placeholders and "_anomaly_table_rows" in placeholders:
         tables["anomalies"] = placeholders["_anomaly_table_rows"]
     else:
-        # Fallback: build from raw data with Kategoria/Opis/Dane
         from backend.gsm.note_builder import _build_anomaly_table_rows
         anomalies = analysis.get("anomalies", [])
         tables["anomalies"] = _build_anomaly_table_rows(anomalies)
 
-    # Locations table
     locations = analysis.get("locations", [])
     total_loc_records = sum(loc.get("record_count", 0) for loc in locations) or 1
     tables["locations"] = []
@@ -618,17 +689,15 @@ def build_table_data(gsm_data: dict, placeholders: Optional[Dict[str, Any]] = No
 def _flatten_for_template(placeholders: Dict[str, Any]) -> Dict[str, Any]:
     """Flatten nested dicts into dot-notation keys for docxtpl."""
     context: Dict[str, Any] = {}
-
     for key, value in placeholders.items():
         if key.startswith("_"):
-            continue  # Skip internal keys
+            continue
         if isinstance(value, dict):
             context[key] = value
             for sub_key, sub_value in value.items():
                 context[f"{key}_{sub_key}"] = sub_value
         else:
             context[key] = value
-
     return context
 
 
@@ -637,7 +706,6 @@ def _apply_llm_overrides(placeholders: Dict[str, Any], overrides: Dict[str, str]
     for key, value in overrides.items():
         if key.startswith("_"):
             continue
-
         parts = key.split(".", 1)
         if len(parts) == 2:
             parent, child = parts
