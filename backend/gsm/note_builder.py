@@ -565,9 +565,12 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
 
         elif anomaly_type in ("night_movement", "night_travel"):
             date = item.get("date", "")
-            loc_from = item.get("location_from", item.get("location_evening", "?"))
-            loc_to = item.get("location_to", item.get("location_morning", "?"))
-            parts.append(f"{date}: {loc_from} → {loc_to}")
+            time_from = item.get("time_from", "")
+            time_to = item.get("time_to", "")
+            loc_from = item.get("bts_from", item.get("location_from", item.get("location_evening", "?")))
+            loc_to = item.get("bts_to", item.get("location_to", item.get("location_morning", "?")))
+            time_str = f" {time_from}\u2013{time_to}" if time_from and time_to else ""
+            parts.append(f"{date}{time_str}: {loc_from} \u2192 {loc_to}")
 
         elif anomaly_type in ("activity_spike", "burst_activity"):
             date = item.get("date", "")
@@ -575,10 +578,14 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             parts.append(f"{date}: {count} zdarzenia")
 
         elif anomaly_type in ("premium_number", "premium_numbers", "special_numbers"):
-            number = item.get("number", "?")
-            cat = item.get("category", item.get("label", ""))
-            interactions = item.get("interactions", item.get("count", 0))
-            parts.append(f"{number} ({cat}) — {interactions} interakcji")
+            number = item.get("contact", item.get("number", "?"))
+            count = item.get("count", item.get("interactions", 0))
+            dates = item.get("dates", [])
+            dates_str = ", ".join(dates[:5]) if dates else ""
+            if dates_str:
+                parts.append(f"{number} ({count} int.); daty: {dates_str}")
+            else:
+                parts.append(f"{number} \u2014 {count} interakcji")
 
         elif anomaly_type in ("roaming", "foreign_roaming"):
             country = item.get("country", "?")
