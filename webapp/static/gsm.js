@@ -9681,19 +9681,19 @@
               Top kontakty (graf)
             </label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
-              <input type="checkbox" class="note-chart-cb" data-chart="activity">
+              <input type="checkbox" class="note-chart-cb" data-chart="activity" checked>
               Rozkład aktywności
             </label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
-              <input type="checkbox" class="note-chart-cb" data-chart="night_activity">
+              <input type="checkbox" class="note-chart-cb" data-chart="night_activity" checked>
               Aktywność nocna
             </label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
-              <input type="checkbox" class="note-chart-cb" data-chart="weekend_activity">
+              <input type="checkbox" class="note-chart-cb" data-chart="weekend_activity" checked>
               Aktywność weekendowa
             </label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
-              <input type="checkbox" class="note-chart-cb" data-chart="map_bts">
+              <input type="checkbox" class="note-chart-cb" data-chart="map_bts" checked>
               Mapa lokalizacji BTS
             </label>
             <div style="font-size:11px;color:var(--text-secondary,#666);margin-top:6px;">
@@ -9876,10 +9876,18 @@
   async function _captureChartScreenshot(chartName) {
     const selectorMap = {
       "top_contacts": "[data-chart-id='top_contacts']",
-      "activity": "[data-chart-id='hourly_distribution'], [data-chart-id='activity_timeline']",
+      "activity": "[data-chart-id='hourly_distribution'], [data-chart-id='activity_timeline'], [data-chart-id='heatmap']",
       "night_activity": "[data-chart-id='night_activity']",
       "weekend_activity": "[data-chart-id='weekend_activity']",
       "map_bts": "#gsm_map_container",
+    };
+
+    const chartLabels = {
+      "top_contacts": "Top kontakty",
+      "activity": "Rozkład aktywności",
+      "night_activity": "Aktywność nocna",
+      "weekend_activity": "Aktywność weekendowa",
+      "map_bts": "Mapa BTS",
     };
 
     const selectors = selectorMap[chartName];
@@ -9896,7 +9904,7 @@
       return null;
     }
 
-    // For maps, use the existing map screenshot mechanism
+    // For maps, use the existing map screenshot mechanism (already has watermark)
     if (chartName === "map_bts" && typeof _captureMapScreenshot === "function") {
       try {
         const blob = await _captureMapScreenshot();
@@ -9918,9 +9926,20 @@
         allowTaint: true,
         scale: 2,
         backgroundColor: getComputedStyle(document.body).getPropertyValue("--bg-primary") || "#ffffff",
+        logging: false,
+        onclone: (doc, clonedEl) => {
+          // Hide filter/select/resize elements in the clone
+          clonedEl.querySelectorAll(_SCREENSHOT_HIDE_SELECTORS).forEach(e => {
+            e.style.display = "none";
+          });
+        },
       });
 
-      return canvas.toDataURL("image/png").split(",")[1]; // base64 only
+      // Apply watermark (same as "Zrób zrzut" button)
+      const label = chartLabels[chartName] || chartName;
+      const watermarked = _drawWatermark(canvas, [label]);
+
+      return watermarked.toDataURL("image/png").split(",")[1]; // base64 only
     } catch (e) {
       console.warn(`[GSM] html2canvas failed for ${chartName}:`, e);
       return null;

@@ -209,6 +209,9 @@ def build_note_placeholders(
     anomaly_categories_str = ", ".join(anomaly_labels) if anomaly_labels else "brak"
     anomaly_top_findings = _top_anomaly_findings(anomalies)
 
+    # Anomaly table rows with "Dane" column (items from billing data)
+    anomaly_table_rows = _build_anomaly_table_rows(anomalies)
+
     # ── Locations details ──
     if locations:
         main_areas = ", ".join(loc.get("location", "?") for loc in locations[:3])
@@ -219,6 +222,9 @@ def build_note_placeholders(
         bts_count = "0"
         dominant_bts = "brak danych"
 
+    # Location dash-list for BTS areas (section 7)
+    location_areas_list = _build_location_areas_list(locations)
+
     # Overnight stays
     overnight_stays = analysis.get("overnight_stays", [])
     if overnight_stays:
@@ -227,6 +233,12 @@ def build_note_placeholders(
         overnights_summary = f"Wykryto {len(overnight_stays)} noclegów poza domem{home_str}"
     else:
         overnights_summary = "nie wykryto noclegów poza domem"
+
+    # Movement/overnight dash-list (section 7)
+    location_movement_list = _build_location_movement_list(
+        overnight_stays, analysis.get("overnight_stays_home", ""),
+        night_activity, locations
+    )
 
     # ── Assessment ──
     assessment_main = _build_main_characteristics(
@@ -336,6 +348,8 @@ def build_note_placeholders(
             "categories": anomaly_categories_str,
             "top_findings": anomaly_top_findings,
         },
+        # Anomaly table rows for programmatic insertion (Kategoria/Opis/Dane)
+        "_anomaly_table_rows": anomaly_table_rows,
 
         # Locations (section 7 — {{ locations.main_areas }} etc.)
         "locations": {
@@ -344,6 +358,9 @@ def build_note_placeholders(
             "dominant_bts": dominant_bts,
             "overnights_summary": overnights_summary,
         },
+        # Location dash-lists for programmatic insertion
+        "_location_areas_list": location_areas_list,
+        "_location_movement_list": location_movement_list,
 
         # Assessment (section 8)
         "assessment": {
@@ -467,6 +484,172 @@ def _build_main_characteristics(
         parts.append(f"występowaniem {n} kategorii anomalii")
 
     return ", ".join(parts)
+
+
+def _build_anomaly_table_rows(anomalies: list) -> List[List[str]]:
+    """Build anomaly table rows with Kategoria / Opis / Dane columns.
+
+    The 'Dane' column lists actual items from the billing data.
+    If an anomaly has no items, 'Dane' says 'Nie występuje'.
+    """
+    if not anomalies:
+        return []
+
+    rows = []
+    for a in anomalies:
+        label = a.get("label", a.get("type", "?"))
+        desc = a.get("description", a.get("explain", ""))
+        if len(desc) > 120:
+            desc = desc[:117] + "..."
+
+        items = a.get("items", [])
+        if not items:
+            dane = "Nie występuje"
+        else:
+            dane = _format_anomaly_items(a.get("type", ""), items)
+
+        rows.append([label, desc, dane])
+
+    return rows
+
+
+def _format_anomaly_items(anomaly_type: str, items: list) -> str:
+    """Format anomaly items into a readable string for the 'Dane' column."""
+    parts = []
+    for item in items[:8]:  # Limit to 8 items
+        if anomaly_type in ("long_call", "late_night_calls"):
+            contact = item.get("contact", "?")
+            date = item.get("date", "")
+            time = item.get("time", "")
+            dur = item.get("duration_min", 0)
+            direction = item.get("direction", "")
+            dir_str = f" ({direction})" if direction else ""
+            parts.append(f"{date} {time} → {contact}, {dur} min{dir_str}")
+
+        elif anomaly_type == "high_night_activity":
+            # Period-based: show stats
+            period = item.get("period", item.get("week", ""))
+            records = item.get("records", item.get("count", 0))
+            parts.append(f"{period}: {records} rek.")
+
+        elif anomaly_type in ("night_movement", "night_travel"):
+            date = item.get("date", "")
+            loc_from = item.get("location_from", item.get("location_evening", "?"))
+            loc_to = item.get("location_to", item.get("location_morning", "?"))
+            parts.append(f"{date}: {loc_from} → {loc_to}")
+
+        elif anomaly_type == "activity_spike":
+            date = item.get("date", "")
+            count = item.get("count", item.get("records", 0))
+            parts.append(f"{date}: {count} zdarzeń")
+
+        elif anomaly_type in ("premium_numbers", "special_numbers"):
+            number = item.get("number", "?")
+            cat = item.get("category", item.get("label", ""))
+            interactions = item.get("interactions", item.get("count", 0))
+            parts.append(f"{number} ({cat}) — {interactions} interakcji")
+
+        elif anomaly_type in ("roaming", "foreign_roaming"):
+            country = item.get("country", "?")
+            count = item.get("count", 0)
+            period = item.get("period", "")
+            parts.append(f"{country}: {count} rek. ({period})")
+
+        elif anomaly_type == "foreign_contacts":
+            country = item.get("country", "?")
+            count = item.get("count", 0)
+            numbers = item.get("numbers", [])
+            nums_str = ", ".join(numbers[:3])
+            parts.append(f"{country}: {count} int. [{nums_str}]")
+
+        elif anomaly_type == "forwarded_calls":
+            date = item.get("date", "")
+            contact = item.get("contact", "?")
+            fwd_to = item.get("forwarded_to", "?")
+            parts.append(f"{date}: {contact} → {fwd_to}")
+
+        elif anomaly_type == "one_time_contacts":
+            number = item.get("number", item.get("contact", "?"))
+            date = item.get("date", "")
+            parts.append(f"{number} ({date})")
+
+        elif anomaly_type == "inactivity_gap":
+            last_date = item.get("last_record_date", "")
+            first_date = item.get("first_record_date", "")
+            gap_h = item.get("gap_hours", 0)
+            parts.append(f"{last_date} – {first_date}: {gap_h:.0f} h przerwy")
+
+        elif anomaly_type in ("satellite_numbers", "social_messaging"):
+            number = item.get("number", "?")
+            label = item.get("label", item.get("category", ""))
+            interactions = item.get("interactions", item.get("count", 0))
+            parts.append(f"{number} ({label}) — {interactions}")
+
+        else:
+            # Generic fallback
+            contact = item.get("contact", item.get("number", ""))
+            date = item.get("date", "")
+            count = item.get("count", item.get("interactions", ""))
+            desc_parts = [p for p in [date, contact, str(count) if count else ""] if p]
+            parts.append(", ".join(desc_parts) if desc_parts else str(item)[:60])
+
+    result = "; ".join(parts)
+    if len(items) > 8:
+        result += f" (+ {len(items) - 8} więcej)"
+    return result if result else "Nie występuje"
+
+
+def _build_location_areas_list(locations: list) -> List[str]:
+    """Build dash-list of main BTS areas for section 7."""
+    if not locations:
+        return ["brak danych lokalizacyjnych"]
+    result = []
+    for loc in locations[:10]:
+        name = loc.get("location", loc.get("address", "?"))
+        count = loc.get("record_count", 0)
+        first = loc.get("first_seen", "")
+        last = loc.get("last_seen", "")
+        period_str = f", {first} – {last}" if first and last else ""
+        result.append(f"{name} ({count} rekordów{period_str})")
+    return result
+
+
+def _build_location_movement_list(
+    overnight_stays: list,
+    home_location: str,
+    night_activity: dict,
+    locations: list,
+) -> List[str]:
+    """Build dash-list of movement/overnight info for section 7."""
+    result = []
+
+    if home_location:
+        result.append(f"Dominujące miejsce noclegowe: {home_location}")
+
+    if overnight_stays:
+        for stay in overnight_stays[:5]:
+            locs = stay.get("locations", [])
+            nights = stay.get("nights", 0)
+            start = stay.get("start_date", "")
+            end = stay.get("end_date", "")
+            locs_str = ", ".join(locs[:3])
+            result.append(f"{start} – {end}: {nights} nocleg(ów) — {locs_str}")
+    else:
+        result.append("Nie odnotowano noclegów poza dominującym miejscem pobytu")
+
+    # Night movement from night_activity
+    na_records = night_activity.get("total_records", 0)
+    na_pct = night_activity.get("percentage", 0)
+    if na_records > 0:
+        na_calls = night_activity.get("calls", 0)
+        na_sms = night_activity.get("sms", 0)
+        na_data = night_activity.get("data", 0)
+        result.append(
+            f"Aktywność nocna (22:00–06:00): {na_records} rekordów ({na_pct:.1f}%) "
+            f"— połączenia: {na_calls}, SMS: {na_sms}, dane: {na_data}"
+        )
+
+    return result if result else ["brak danych o przemieszczaniu"]
 
 
 def _build_conclusions(
