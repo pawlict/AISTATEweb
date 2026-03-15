@@ -9646,6 +9646,32 @@
           </div>
         </details>
 
+        <!-- Table data selection -->
+        <details class="rpt-details" open style="margin-bottom:16px;">
+          <summary style="font-weight:600;font-size:14px;cursor:pointer;padding:6px 0;">Osadź tabele danych</summary>
+          <div style="padding:8px 0;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-table-cb" data-table="stats" checked>
+              Statystyki aktywności (połączenia, SMS, dane)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-table-cb" data-table="contacts" checked>
+              Najczęstsze kontakty (top 10)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-table-cb" data-table="anomalies" checked>
+              Wykryte anomalie
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-table-cb" data-table="locations">
+              Lokalizacje BTS (top 15)
+            </label>
+            <div style="font-size:11px;color:var(--text-secondary,#666);margin-top:6px;">
+              Zaznaczone tabele zostaną wstawione w odpowiednich sekcjach notatki.
+            </div>
+          </div>
+        </details>
+
         <!-- Chart screenshots selection -->
         <details class="rpt-details" style="margin-bottom:16px;">
           <summary style="font-weight:600;font-size:14px;cursor:pointer;padding:6px 0;">Osadź wykresy (zrzuty ekranowe)</summary>
@@ -9765,6 +9791,12 @@
           }
         }
 
+        // Collect selected tables
+        const selectedTables = [];
+        dlg.querySelectorAll(".note-table-cb:checked").forEach(cb => {
+          selectedTables.push(cb.dataset.table);
+        });
+
         if (progressText) progressText.textContent = variant === "llm" ? "Generowanie analizy LLM..." : "Generowanie notatki...";
         if (progressBar) progressBar.style.width = "30%";
 
@@ -9776,6 +9808,7 @@
           model: model,
           placeholders: phValues,
           chart_images: chartImages,
+          tables: selectedTables,
         };
 
         const resp = await fetch("/api/gsm/note/generate", {

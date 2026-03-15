@@ -2198,6 +2198,7 @@ async def gsm_note_generate(request: Request):
         placeholders: JSON string — user meta fields (sygnatura, analityk, etc.)
         charts: JSON string — list of chart names included as files
         chart_*: file uploads — PNG screenshots (chart_activity, chart_top_contacts, etc.)
+        tables: JSON string — list of selected table names (e.g., ["stats", "contacts"])
     """
     import time
     import base64 as _b64
@@ -2215,6 +2216,12 @@ async def gsm_note_generate(request: Request):
             user_placeholders = json.loads(placeholders_raw)
         except Exception:
             user_placeholders = {}
+
+        # Selected tables
+        try:
+            selected_tables = json.loads(str(form.get("tables", "[]")))
+        except Exception:
+            selected_tables = []
 
         # Collect chart images from form uploads
         chart_images: Dict[str, bytes] = {}
@@ -2236,6 +2243,7 @@ async def gsm_note_generate(request: Request):
         variant = payload.get("variant", "data")
         model = payload.get("model", "")
         user_placeholders = payload.get("placeholders", {})
+        selected_tables = payload.get("tables", [])
         chart_images = {}
 
         # Charts as base64 in JSON
@@ -2282,11 +2290,14 @@ async def gsm_note_generate(request: Request):
             return JSONResponse({"status": "error", "detail": f"Błąd generowania LLM: {e}"}, status_code=500)
 
     # Get template
-    from backend.gsm.note_generator import generate_note_docx, get_default_template_path
+    from backend.gsm.note_generator import generate_note_docx, get_default_template_path, build_table_data
     try:
         template_path = get_default_template_path()
     except FileNotFoundError as e:
         return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+    # Build table data if tables selected
+    table_data = build_table_data(gsm_data) if selected_tables else None
 
     # Generate DOCX
     reports_dir = project_dir / "analysis" / "reports"
@@ -2303,6 +2314,8 @@ async def gsm_note_generate(request: Request):
             output_path,
             chart_images=chart_images if chart_images else None,
             llm_overrides=llm_overrides,
+            table_data=table_data,
+            selected_tables=selected_tables if selected_tables else None,
         )
     except Exception as e:
         log.error("Note DOCX generation failed: %s", e, exc_info=True)
