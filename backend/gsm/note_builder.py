@@ -81,7 +81,7 @@ def build_note_placeholders(
 
     # IMEI changes
     imei_changes = analysis.get("imei_changes", [])
-    imei_change_count = str(len(imei_changes)) if imei_changes else "0"
+    imei_change_count = str(len(imei_changes)) if imei_changes else "Brak"
 
     # Device notes
     device_notes_parts = []
@@ -178,13 +178,37 @@ def build_note_placeholders(
     # ── Special numbers ──
     special_numbers = analysis.get("special_numbers", [])
     if special_numbers:
-        # category is the field name, not type
-        sn_categories = set(sn.get("category", sn.get("type", "")) for sn in special_numbers)
-        special_numbers_summary = ", ".join(sorted(c for c in sn_categories if c)) or f"{len(special_numbers)} numerów specjalnych"
+        sn_categories = sorted(set(
+            sn.get("category", sn.get("type", "")) for sn in special_numbers
+            if sn.get("category", sn.get("type", ""))
+        ))
+        special_numbers_summary = ", ".join(sn_categories) if sn_categories else f"{len(special_numbers)} numerów specjalnych"
     else:
         special_numbers_summary = "brak numerów specjalnych"
+        sn_categories = []
+
+    # Footnote definitions for special number categories
+    _SN_CATEGORY_FOOTNOTES = {
+        "alphanumeric": "numer alfanumeryczny (nazwa nadawcy zamiast numeru, np. usługi informacyjne)",
+        "commercial_sms": "komercyjny SMS (wiadomości reklamowe, marketingowe, powiadomienia handlowe)",
+        "operator_sms": "SMS operatorski (wiadomości systemowe od operatora sieci)",
+        "short_code": "numer skrócony (usługi premium, głosowania, subskrypcje — numery 4-6 cyfrowe)",
+        "toll_free": "numer bezpłatny (infolinie 0-800, linie obsługi klienta)",
+        "premium": "numer premium/płatny (usługi o podwyższonej opłacie, np. 0-700, 0-300)",
+        "emergency": "numer alarmowy (służby ratunkowe: 112, 997, 998, 999)",
+        "voicemail": "poczta głosowa (usługa operatorska — odbiór wiadomości głosowych)",
+        "international": "numer zagraniczny (kontakt z numerami spoza Polski)",
+        "satellite": "numer satelitarny (Iridium, Inmarsat, Thuraya — komunikacja satelitarna)",
+        "social_media": "platforma komunikacyjna (WhatsApp, Telegram, Viber, Signal itp.)",
+    }
+    # Build footnote text for categories found in this data
+    special_numbers_footnotes = []
+    for cat in sn_categories:
+        footnote = _SN_CATEGORY_FOOTNOTES.get(cat, f"kategoria: {cat}")
+        special_numbers_footnotes.append(f"{cat} — {footnote}")
 
     # ── Contacts details ──
+    # contacts_top_list is used in template; _contacts_bullet_list for programmatic insertion
     if top_contacts:
         top_list_parts = []
         for c in top_contacts[:5]:
@@ -194,6 +218,7 @@ def build_note_placeholders(
         contacts_top_list = "; ".join(top_list_parts)
     else:
         contacts_top_list = "brak danych"
+        top_list_parts = []
 
     contacts_assessment = _build_contacts_assessment(top_contacts, unique_contacts)
 
@@ -257,7 +282,7 @@ def build_note_placeholders(
         main_areas
     )
 
-    # ── Data raportu HTML ──
+    # ── Data sporządzenia (metadata table) ──
     data_raportu_html = datetime.datetime.now().strftime("%d.%m.%Y, %H:%M")
 
     # ── Parametr główny ──
@@ -360,9 +385,13 @@ def build_note_placeholders(
             "dominant_bts": dominant_bts,
             "overnights_summary": overnights_summary,
         },
-        # Location dash-lists for programmatic insertion
+        # Location bullet-lists for programmatic insertion
         "_location_areas_list": location_areas_list,
         "_location_movement_list": location_movement_list,
+        # Contact bullet-list for programmatic insertion
+        "_contacts_bullet_list": top_list_parts,
+        # Special numbers footnotes for programmatic insertion
+        "_special_numbers_footnotes": special_numbers_footnotes,
 
         # Assessment (section 8)
         "assessment": {
@@ -599,25 +628,68 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             desc_parts = [p for p in [date, contact, str(count) if count else ""] if p]
             parts.append(", ".join(desc_parts) if desc_parts else str(item)[:60])
 
-    result = "; ".join(parts)
+    # Each item ends with ";" and is separated by newline for table display
+    result = ";\n".join(parts)
+    if result and not result.endswith(";"):
+        result += ";"
     if len(items) > 8:
-        result += f" (+ {len(items) - 8} więcej)"
+        result += f"\n(+ {len(items) - 8} więcej)"
     return result if result else "Nie występuje"
 
 
 def _build_location_areas_list(locations: list) -> List[str]:
-    """Build dash-list of main BTS areas for section 7."""
+    """Build bullet-list of main BTS areas for section 7.
+
+    Uses area/region names (city, district) not precise street addresses.
+    """
     if not locations:
         return ["brak danych lokalizacyjnych"]
-    result = []
-    for loc in locations[:10]:
+
+    # Group by area (city/district) to avoid listing individual streets
+    area_map: Dict[str, int] = {}
+    for loc in locations:
         name = loc.get("location", loc.get("address", "?"))
-        count = loc.get("record_count", 0)
-        first = loc.get("first_seen", "")
-        last = loc.get("last_seen", "")
-        period_str = f", {first} – {last}" if first and last else ""
-        result.append(f"{name} ({count} rekordów{period_str})")
+        count = loc.get("record_count", 0) or 0
+        # Extract area name: take city/district part (before comma or first line)
+        area = _extract_area_name(name)
+        area_map[area] = area_map.get(area, 0) + count
+
+    result = []
+    for area, count in sorted(area_map.items(), key=lambda x: -x[1])[:10]:
+        result.append(f"{area} ({count} rekordów)")
     return result
+
+
+def _extract_area_name(location: str) -> str:
+    """Extract area/city name from a BTS location string.
+
+    Examples:
+      'Warszawa, ul. Marszałkowska 12' -> 'Warszawa'
+      'Kraków-Podgórze' -> 'Kraków-Podgórze'
+      '52.2297, 21.0122 (Warszawa)' -> 'Warszawa'
+    """
+    if not location:
+        return "nieznana lokalizacja"
+
+    # If location has parenthesized city name (coords format)
+    import re
+    paren = re.search(r'\(([^)]+)\)', location)
+    if paren:
+        return paren.group(1).strip()
+
+    # If comma-separated, take first part (city)
+    if ',' in location:
+        return location.split(',')[0].strip()
+
+    # If "ul." or "al." present, take part before it
+    for marker in ('ul.', 'al.', 'pl.', 'os.'):
+        if marker in location.lower():
+            idx = location.lower().index(marker)
+            prefix = location[:idx].strip().rstrip(',').rstrip('-').strip()
+            if prefix:
+                return prefix
+
+    return location.strip()
 
 
 def _build_location_movement_list(

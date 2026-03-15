@@ -48,12 +48,12 @@ TABLE_DEFS = {
         "columns": ["Numer", "Interakcje", "Po\u0142. wych.", "Po\u0142. przych."],
     },
     "anomalies": {
-        "section_heading": "6.",
+        "section_heading": "7.",  # was 6, now 7 after "Rodzaj aktywności" inserted as 6
         "caption": "Tabela: Wykryte anomalie",
         "columns": ["Kategoria", "Opis", "Dane"],
     },
     "locations": {
-        "section_heading": "7.",
+        "section_heading": "8.",  # was 7, now 8
         "caption": "Tabela: Lokalizacje BTS",
         "columns": ["Lokalizacja", "Liczba rekord\u00f3w", "Udzia\u0142 %"],
     },
@@ -100,13 +100,13 @@ CHART_INSERTION_ORDER = [
         "key": "activity",
         "caption": "Rozk\u0142ad aktywno\u015bci",
         "pre_text": ACTIVITY_DISTRIBUTION_TEXT,
-        "sub_heading": "Rodzaj aktywno\u015bci",
+        "new_section_heading": "6. Rodzaj aktywno\u015bci",
         "section_heading": "5.",
     },
     {
         "key": "night_activity",
         "caption": "Aktywno\u015b\u0107 nocna",
-        "section_heading": "5.",
+        "section_heading": "5.",  # inserted after contacts, before anomalies
     },
     {
         "key": "weekend_activity",
@@ -116,7 +116,7 @@ CHART_INSERTION_ORDER = [
     {
         "key": "map_bts",
         "caption": "Mapa lokalizacji BTS",
-        "section_heading": "7.",
+        "section_heading": "8.",  # was 7, now 8 after renumbering
     },
 ]
 
@@ -151,6 +151,8 @@ def generate_note_docx(
     anomaly_table_rows = placeholders.pop("_anomaly_table_rows", [])
     location_areas_list = placeholders.pop("_location_areas_list", [])
     location_movement_list = placeholders.pop("_location_movement_list", [])
+    contacts_bullet_list = placeholders.pop("_contacts_bullet_list", [])
+    special_numbers_footnotes = placeholders.pop("_special_numbers_footnotes", [])
 
     tpl = DocxTemplate(str(template_path))
     context = _flatten_for_template(placeholders)
@@ -168,6 +170,8 @@ def generate_note_docx(
         chart_images=chart_images,
         location_areas_list=location_areas_list,
         location_movement_list=location_movement_list,
+        contacts_bullet_list=contacts_bullet_list,
+        special_numbers_footnotes=special_numbers_footnotes,
     )
 
     log.info("Generated GSM note: %s (%d bytes)", output_path.name, output_path.stat().st_size)
@@ -185,6 +189,8 @@ def _post_process_docx(
     chart_images: Optional[Dict[str, bytes]] = None,
     location_areas_list: Optional[List[str]] = None,
     location_movement_list: Optional[List[str]] = None,
+    contacts_bullet_list: Optional[List[str]] = None,
+    special_numbers_footnotes: Optional[List[str]] = None,
 ) -> None:
     """Insert tables, charts, texts, lists; fix formatting; add page numbers."""
     from docx import Document
@@ -192,8 +198,17 @@ def _post_process_docx(
     doc = Document(str(docx_path))
     body = doc.element.body
 
-    # 0. Remove old anomaly synthetic description paragraphs
+    # 0a. Renumber sections 6→7, 7→8, 8→9, 9→10, 10→11 (to make room for "6. Rodzaj aktywności")
+    _renumber_sections(body)
+
+    # 0b. Remove old anomaly synthetic description paragraphs
     _remove_old_anomaly_text(body)
+
+    # 0b. Fix "za okres od" — move to new line
+    _fix_za_okres_newline(body)
+
+    # 0c. Replace "Data raportu HTML" with "Data sporz\u0105dzenia"
+    _replace_text_in_tables(doc, "Data raportu HTML", "Data sporz\u0105dzenia")
 
     # 1. Insert anomaly intro text + table with Kategoria/Opis/Dane
     if anomaly_table_rows:
@@ -205,7 +220,7 @@ def _post_process_docx(
         if tables_to_insert:
             _insert_tables(doc, body, table_data, tables_to_insert)
 
-    # 3. Insert location bullet-lists
+    # 3. Insert location bullet-lists (all items end with ";")
     if location_areas_list:
         _insert_bullet_list_after_text(
             doc, body,
@@ -218,6 +233,25 @@ def _post_process_docx(
             search_text="przes\u0142anki dotycz\u0105ce przemieszczania",
             items=location_movement_list,
         )
+
+    # 3b. Insert contacts bullet-list after "Najcz\u0119\u015bciej wyst\u0119puj\u0105ce kontakty"
+    if contacts_bullet_list:
+        _insert_bullet_list_after_text(
+            doc, body,
+            search_text="Najcz\u0119\u015bciej wyst\u0119puj\u0105ce kontakty",
+            items=contacts_bullet_list,
+        )
+
+    # 3c. Insert special numbers footnotes
+    if special_numbers_footnotes:
+        _insert_footnotes_after_text(
+            doc, body,
+            search_text="numer\u00f3w specjalnych odnotowano",
+            footnotes=special_numbers_footnotes,
+        )
+
+    # 3d. Insert BTS count + dominant activity sentence after location lists
+    _insert_bts_summary_sentence(doc, body, location_areas_list)
 
     # 4. Insert chart images
     if chart_images:
@@ -233,6 +267,42 @@ def _post_process_docx(
 
 
 # ─── Remove old anomaly text ────────────────────────────────────────────────
+
+def _renumber_sections(body) -> None:
+    """Renumber sections 6→7, 7→8, 8→9, 9→10, 10→11 in headings.
+
+    This makes room for the new '6. Rodzaj aktywności' section.
+    Must be called before other post-processing that looks for section numbers.
+    """
+    from docx.oxml.ns import qn
+
+    # Process in reverse order so we don't double-renumber (10→11 first, then 9→10, etc.)
+    renumber_map = [
+        ("10.", "11."),
+        ("9.", "10."),
+        ("8.", "9."),
+        ("7.", "8."),
+        ("6.", "7."),
+    ]
+
+    for child in body:
+        if child.tag == qn('w:p'):
+            pStyle = child.find(f'.//{qn("w:pStyle")}')
+            is_heading = pStyle is not None and 'Heading' in pStyle.get(qn('w:val'), '')
+            if not is_heading:
+                continue
+
+            full_text = ''.join(child.itertext()).strip()
+            for old_prefix, new_prefix in renumber_map:
+                if full_text.startswith(old_prefix):
+                    # Find the text element and replace prefix
+                    for t_el in child.iter(qn('w:t')):
+                        if t_el.text and t_el.text.strip().startswith(old_prefix):
+                            t_el.text = t_el.text.replace(old_prefix, new_prefix, 1)
+                            log.debug("Renumbered section '%s' → '%s'", old_prefix, new_prefix)
+                            break
+                    break
+
 
 def _remove_old_anomaly_text(body) -> None:
     """Remove paragraphs containing the old anomaly synthetic description."""
@@ -254,6 +324,111 @@ def _remove_old_anomaly_text(body) -> None:
         log.debug("Removed old anomaly text paragraph")
 
 
+def _fix_za_okres_newline(body) -> None:
+    """Move 'za okres od' to a new line by inserting a line break before it."""
+    from docx.oxml.ns import qn
+    from lxml import etree
+
+    for child in body:
+        if child.tag == qn('w:p'):
+            for run_el in child.findall(f'.//{qn("w:r")}'):
+                for t_el in run_el.findall(qn('w:t')):
+                    if t_el.text and 'za okres od' in t_el.text:
+                        # Split text at "za okres od" and insert line break
+                        parts = t_el.text.split('za okres od', 1)
+                        t_el.text = parts[0].rstrip()
+                        # Create break element
+                        br = etree.SubElement(run_el, qn('w:br'))
+                        # Create new text element after break
+                        new_t = etree.SubElement(run_el, qn('w:t'))
+                        new_t.text = 'za okres od' + parts[1]
+                        new_t.set(qn('xml:space'), 'preserve')
+                        log.debug("Inserted line break before 'za okres od'")
+                        return
+
+
+def _replace_text_in_tables(doc, old_text: str, new_text: str) -> None:
+    """Replace text in all table cells."""
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        if old_text in run.text:
+                            run.text = run.text.replace(old_text, new_text)
+                            log.debug("Replaced '%s' with '%s'", old_text, new_text)
+
+
+def _insert_footnotes_after_text(doc, body, search_text: str, footnotes: List[str]) -> None:
+    """Insert footnote-style explanations as small text after a paragraph."""
+    from docx.shared import Pt, Cm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+
+    target = None
+    for child in body:
+        if child.tag == qn('w:p'):
+            full_text = ''.join(child.itertext()).strip()
+            if search_text in full_text:
+                target = child
+                break
+
+    if target is None:
+        log.debug("Text '%s' not found for footnotes", search_text[:40])
+        return
+
+    # Insert footnote paragraph
+    fn_p = _insert_paragraph_after(doc, body, target)
+    fn_p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    fn_p.paragraph_format.left_indent = Cm(0.5)
+    for i, fn_text in enumerate(footnotes):
+        if i > 0:
+            fn_p.add_run("\n")
+        superscript_run = fn_p.add_run(f"{i + 1}) ")
+        _style_run(superscript_run, 7, italic=True, color=(80, 80, 80))
+        text_run = fn_p.add_run(_fix_orphans(fn_text))
+        _style_run(text_run, 7, italic=True, color=(80, 80, 80))
+
+    log.debug("Inserted %d footnotes after '%s'", len(footnotes), search_text[:40])
+
+
+def _insert_bts_summary_sentence(doc, body, location_areas_list: Optional[List[str]]) -> None:
+    """Insert 'Łączna liczba unikalnych lokalizacji BTS...' after location bullet-list."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+
+    if not location_areas_list:
+        return
+
+    bts_count = len(location_areas_list)
+    dominant = location_areas_list[0] if location_areas_list else "brak danych"
+    # Strip record count from dominant location name
+    if " (" in dominant:
+        dominant = dominant.split(" (")[0]
+
+    # Find the last bullet-list item inserted after "koncentrowała się w rejonach"
+    target = None
+    for child in body:
+        if child.tag == qn('w:p'):
+            full_text = ''.join(child.itertext()).strip()
+            if full_text.startswith("\u2022") and full_text.endswith(";"):
+                target = child  # keep updating — last bullet wins
+
+    if target is None:
+        log.debug("No bullet-list items found for BTS summary")
+        return
+
+    p = _insert_paragraph_after(doc, body, target)
+    text = _fix_orphans(
+        f"\u0141\u0105czna liczba unikalnych lokalizacji BTS wynios\u0142a {bts_count}, "
+        f"za\u015b dominuj\u0105ce punkty aktywno\u015bci opisano jako: {dominant}."
+    )
+    run = p.add_run(text)
+    _style_run(run, FONT_SIZE_BODY)
+    p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    log.debug("Inserted BTS summary sentence")
+
+
 # ─── Anomaly section ────────────────────────────────────────────────────────
 
 def _insert_anomaly_section(doc, body, anomaly_rows: List[List[str]]) -> None:
@@ -262,9 +437,9 @@ def _insert_anomaly_section(doc, body, anomaly_rows: List[List[str]]) -> None:
     from docx.enum.table import WD_TABLE_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-    insert_after = _find_section_heading(body, "6.")
+    insert_after = _find_section_heading(body, "7.")
     if insert_after is None:
-        log.warning("Section 6 heading not found, skipping anomaly section")
+        log.warning("Section 7 heading not found, skipping anomaly section")
         return
 
     # Intro text
@@ -376,8 +551,19 @@ def _insert_chart_images(doc, body, chart_images: Dict[str, bytes]) -> None:
             log.warning("No insertion point for chart '%s'", key)
             continue
 
-        # Sub-heading
-        if chart_def.get("sub_heading"):
+        # Section heading (numbered, e.g. "6. Rodzaj aktywności")
+        if chart_def.get("new_section_heading"):
+            heading_p = _insert_paragraph_after(doc, body, cursor)
+            run = heading_p.add_run(chart_def["new_section_heading"])
+            _style_run(run, 13, bold=True)
+            # Apply heading style if possible
+            try:
+                heading_p.style = doc.styles['Heading 2']
+            except Exception:
+                pass  # fallback to bold formatting
+            cursor = heading_p._element
+        # Sub-heading (no number)
+        elif chart_def.get("sub_heading"):
             heading_p = _insert_paragraph_after(doc, body, cursor)
             run = heading_p.add_run(chart_def["sub_heading"])
             _style_run(run, 11, bold=True)
@@ -439,8 +625,10 @@ def _insert_bullet_list_after_text(doc, body, search_text: str, items: List[str]
 
     cursor = target
     for item_text in items:
+        # Ensure each bullet item ends with ";"
+        text = _fix_orphans(item_text.rstrip(";").rstrip()) + ";"
         p = _insert_paragraph_after(doc, body, cursor)
-        run = p.add_run(f"\u2022  {_fix_orphans(item_text)}")
+        run = p.add_run(f"\u2022  {text}")
         _style_run(run, FONT_SIZE_BODY)
         p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
         p.paragraph_format.left_indent = Cm(0.8)
