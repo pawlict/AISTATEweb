@@ -1,6 +1,6 @@
 """
-GSM Note Builder — maps AnalysisResult / gsm_latest.json data to the
-placeholder dict expected by the professional DOCX note template.
+GSM Note Builder — maps gsm_latest.json data to the placeholder dict
+expected by the professional DOCX note template.
 
 Two variants:
   1) Variant "data"  — pure data, no LLM, template text stays as-is
@@ -8,6 +8,16 @@ Two variants:
 
 This module handles variant 1 (data extraction).  For variant 2,
 see note_llm.py which produces overrides for text-heavy placeholders.
+
+Data structure reference (gsm_latest.json):
+  billing.subscriber: {msisdn, imsi, imei, operator, owner_name, ...}
+  billing.summary: {total_records, calls_out, calls_in, sms_out, sms_in,
+                    data_sessions, period_from, period_to, unique_contacts,
+                    total_duration_seconds, call_duration_seconds, ...}
+  billing.analysis: {top_contacts[], temporal{}, locations[], anomalies[],
+                     devices[], dual_imei{}, imei_changes[], special_numbers[],
+                     night_activity{}, weekend_activity{}, overnight_stays[],
+                     avg_call_duration, median_call_duration, ...}
 """
 from __future__ import annotations
 
@@ -22,7 +32,7 @@ def build_note_placeholders(
     *,
     user_placeholders: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
-    """Extract all 54 template placeholders from gsm_latest.json.
+    """Extract all template placeholders from gsm_latest.json.
 
     Args:
         gsm_data: Full gsm_latest.json (has "billing", "identification", etc.)
@@ -37,27 +47,35 @@ def build_note_placeholders(
     subscriber = billing.get("subscriber", {})
     summary = billing.get("summary", {})
     analysis = billing.get("analysis", {})
-    period = summary.get("period", {})
-    by_type = summary.get("by_type", {})
 
     # ── Basic subscriber / meta ──
     msisdn = subscriber.get("msisdn", "N/A")
-    operator = subscriber.get("operator_name") or billing.get("operator", "N/A")
+    # operator can be in subscriber.operator, subscriber.operator_name, or billing.operator
+    operator = (
+        subscriber.get("operator_name")
+        or subscriber.get("operator")
+        or billing.get("operator", "N/A")
+    )
     imsi = subscriber.get("imsi", "")
-    imsi_list = _list_unique(analysis.get("devices", []), "imsi") or imsi or "N/A"
-    imsi_primary = imsi or imsi_list.split(",")[0].strip() if imsi_list else "N/A"
 
-    # IMEI
+    # IMEI from devices list
     devices = analysis.get("devices", [])
     imei_list_items = [d.get("imei", "") for d in devices if d.get("imei")]
     imei_list = ", ".join(imei_list_items) if imei_list_items else subscriber.get("imei", "N/A")
+    imsi_primary = imsi or "N/A"
+    imsi_list_str = imsi or "N/A"
 
-    # Dual-IMEI
+    # Dual-IMEI — detected if dict exists and has voice_imei
     dual_imei = analysis.get("dual_imei") or {}
-    dual_detected = bool(dual_imei and dual_imei.get("detected", False))
+    dual_detected = bool(dual_imei and dual_imei.get("voice_imei"))
     dual_imei_present = "TAK" if dual_detected else "NIE"
     if dual_detected:
-        dual_imei_value = f"Voice: {dual_imei.get('voice_imei', '?')} / Data: {dual_imei.get('data_imei', '?')}"
+        dual_imei_value = (
+            f"Voice: {dual_imei.get('voice_imei', '?')} "
+            f"({dual_imei.get('voice_records', 0)} rek.) / "
+            f"Data: {dual_imei.get('data_imei', '?')} "
+            f"({dual_imei.get('data_records', 0)} rek.)"
+        )
     else:
         dual_imei_value = "brak"
 
@@ -72,31 +90,51 @@ def build_note_placeholders(
             f"Urządzenie dual-modem: IMEI głosowy {dual_imei.get('voice_imei', '?')}, "
             f"IMEI danych {dual_imei.get('data_imei', '?')}"
         )
+        if dual_imei.get("same_tac"):
+            device_notes_parts.append("TAC obu IMEI identyczny (to samo urządzenie)")
     if imei_changes:
         device_notes_parts.append(f"Wykryto {len(imei_changes)} zmian IMEI w badanym okresie")
+    # Add device brand/model info
+    for dev in devices:
+        dn = dev.get("display_name", "")
+        if dn and dn != "Unknown":
+            device_notes_parts.append(f"{dev.get('imei', '?')}: {dn}")
     device_identification_notes = ". ".join(device_notes_parts) if device_notes_parts else "Brak uwag"
 
-    # ── Period ──
-    period_from = period.get("start", "N/A")
-    period_to = period.get("end", "N/A")
+    # ── Period — directly in summary as period_from / period_to ──
+    period_from = summary.get("period_from", "N/A")
+    period_to = summary.get("period_to", "N/A")
 
-    # ── Statistics ──
-    total_records = billing.get("record_count", 0)
-    outgoing_calls = by_type.get("Połączenie wychodzące", by_type.get("outgoing_call", 0))
-    incoming_calls = by_type.get("Połączenie przychodzące", by_type.get("incoming_call", 0))
-    sms_out = by_type.get("SMS wychodzący", by_type.get("sms_out", 0))
-    sms_in = by_type.get("SMS przychodzący", by_type.get("sms_in", 0))
-    data_sessions = by_type.get("Transmisja danych", by_type.get("data", 0))
+    # ── Statistics — directly in summary, NOT in by_type ──
+    total_records = summary.get("total_records", billing.get("record_count", 0))
+    calls_out = summary.get("calls_out", 0) or 0
+    calls_in = summary.get("calls_in", 0) or 0
+    sms_out = summary.get("sms_out", 0) or 0
+    sms_in = summary.get("sms_in", 0) or 0
+    mms_out = summary.get("mms_out", 0) or 0
+    mms_in = summary.get("mms_in", 0) or 0
+    data_sessions = summary.get("data_sessions", 0) or 0
+    unique_contacts = summary.get("unique_contacts", 0) or 0
+    call_duration_seconds = summary.get("call_duration_seconds", 0) or 0
+    total_duration_seconds = summary.get("total_duration_seconds", 0) or 0
+    roaming_records = summary.get("roaming_records", 0) or 0
+
+    # Forwarded calls — count from records if available
+    records = billing.get("records", [])
+    fwd_count = sum(1 for r in records if r.get("record_type") == "CALL_FORWARDED") if records else 0
 
     # ── Source descriptions ──
-    source_calls = f"{outgoing_calls + incoming_calls} rekordów połączeń głosowych" if (outgoing_calls + incoming_calls) else "brak danych o połączeniach"
-    source_sms = f"{sms_out + sms_in} rekordów SMS/MMS" if (sms_out + sms_in) else "brak danych SMS"
+    voice_total = calls_out + calls_in + fwd_count
+    sms_total = sms_out + sms_in + mms_out + mms_in
+    source_calls = f"{voice_total} rekordów połączeń głosowych" if voice_total else "brak danych o połączeniach"
+    source_sms = f"{sms_total} rekordów SMS/MMS" if sms_total else "brak danych SMS"
     source_data = f"{data_sessions} sesji transmisji danych" if data_sessions else "brak danych transmisji"
     source_identifiers = f"{len(imei_list_items)} identyfikatorów IMEI" if imei_list_items else "dane identyfikacyjne"
 
     # Contacts
     top_contacts = analysis.get("top_contacts", [])
-    unique_contacts = summary.get("unique_contacts", len(top_contacts))
+    if not unique_contacts:
+        unique_contacts = len(top_contacts)
     source_contacts = f"{unique_contacts} unikalnych kontaktów" if unique_contacts else "brak danych kontaktowych"
 
     # Locations
@@ -112,22 +150,37 @@ def build_note_placeholders(
     night_activity = analysis.get("night_activity", {})
     weekend_activity = analysis.get("weekend_activity", {})
 
-    # Hourly pattern description
+    # Hourly pattern
     peak_hour = temporal.get("peak_hour")
-    hourly_pattern = f"szczytową aktywność w godzinie {peak_hour}:00" if peak_hour is not None else "brak danych o rozkładzie godzinowym"
+    hourly_pattern = (
+        f"szczytową aktywność w godzinie {peak_hour}:00"
+        if peak_hour is not None
+        else "brak danych o rozkładzie godzinowym"
+    )
 
-    night_ratio = temporal.get("night_activity_ratio", 0)
-    night_share = f"{night_ratio:.1%}" if night_ratio else "brak danych"
+    # Night share — use night_activity.percentage or temporal.night_activity_ratio
+    night_pct = night_activity.get("percentage")
+    if night_pct is not None:
+        night_share = f"{night_pct:.1f}%"
+    else:
+        night_ratio = temporal.get("night_activity_ratio", 0)
+        night_share = f"{night_ratio:.1%}" if night_ratio else "brak danych"
 
-    weekend_total = weekend_activity.get("total_events", 0)
-    all_total = total_records if total_records else 1
-    weekend_share = f"{weekend_total / all_total:.1%}" if weekend_total else "brak danych"
+    # Weekend share — use weekend_activity.percentage
+    weekend_pct = weekend_activity.get("percentage")
+    if weekend_pct is not None:
+        weekend_share = f"{weekend_pct:.1f}%"
+    else:
+        weekend_total = weekend_activity.get("total_records", 0)
+        all_total = total_records if total_records else 1
+        weekend_share = f"{weekend_total / all_total:.1%}" if weekend_total else "brak danych"
 
     # ── Special numbers ──
     special_numbers = analysis.get("special_numbers", [])
     if special_numbers:
-        sn_types = set(sn.get("type", "") for sn in special_numbers)
-        special_numbers_summary = ", ".join(sorted(t for t in sn_types if t)) or "numery specjalne wykryte"
+        # category is the field name, not type
+        sn_categories = set(sn.get("category", sn.get("type", "")) for sn in special_numbers)
+        special_numbers_summary = ", ".join(sorted(c for c in sn_categories if c)) or f"{len(special_numbers)} numerów specjalnych"
     else:
         special_numbers_summary = "brak numerów specjalnych"
 
@@ -142,19 +195,25 @@ def build_note_placeholders(
     else:
         contacts_top_list = "brak danych"
 
-    contacts_assessment = _build_contacts_assessment(top_contacts)
+    contacts_assessment = _build_contacts_assessment(top_contacts, unique_contacts)
 
     # ── Anomalies details ──
     anomaly_categories = _categorize_anomalies(anomalies)
     anomaly_count = str(len(anomaly_categories))
-    anomaly_categories_str = ", ".join(anomaly_categories) if anomaly_categories else "brak"
+    # Use label if available, else type
+    anomaly_labels = []
+    for a in anomalies:
+        lbl = a.get("label", a.get("type", ""))
+        if lbl and lbl not in anomaly_labels:
+            anomaly_labels.append(lbl)
+    anomaly_categories_str = ", ".join(anomaly_labels) if anomaly_labels else "brak"
     anomaly_top_findings = _top_anomaly_findings(anomalies)
 
     # ── Locations details ──
     if locations:
         main_areas = ", ".join(loc.get("location", "?") for loc in locations[:3])
         bts_count = str(len(locations))
-        dominant_bts = locations[0].get("location", "?") if locations else "brak danych"
+        dominant_bts = locations[0].get("location", "?")
     else:
         main_areas = "brak danych lokalizacyjnych"
         bts_count = "0"
@@ -163,21 +222,23 @@ def build_note_placeholders(
     # Overnight stays
     overnight_stays = analysis.get("overnight_stays", [])
     if overnight_stays:
-        overnights_summary = f"Wykryto {len(overnight_stays)} noclegów poza domem"
+        home = analysis.get("overnight_stays_home", "")
+        home_str = f" (dom: {home})" if home else ""
+        overnights_summary = f"Wykryto {len(overnight_stays)} noclegów poza domem{home_str}"
     else:
         overnights_summary = "nie wykryto noclegów poza domem"
 
-    # ── Assessment (variant "data" — descriptive, non-interpretive) ──
+    # ── Assessment ──
     assessment_main = _build_main_characteristics(
-        total_records, outgoing_calls, incoming_calls, sms_out, sms_in,
-        data_sessions, anomalies, dual_detected
+        total_records, calls_out, calls_in, sms_out, sms_in,
+        data_sessions, anomalies, dual_detected, fwd_count
     )
     assessment_working = (
         "Dane bilingowe dostarczają informacji o aktywności telekomunikacyjnej, "
         "które mogą stanowić podstawę do dalszych ustaleń analitycznych"
     )
 
-    # ── Conclusions (template variant — generic) ──
+    # ── Conclusions ──
     conclusions = _build_conclusions(
         msisdn, period_from, period_to, total_records, len(imei_list_items),
         dual_detected, len(anomaly_categories), unique_contacts, top_contacts,
@@ -192,14 +253,16 @@ def build_note_placeholders(
 
     # ── Źródła danych ──
     zrodla = []
-    if outgoing_calls + incoming_calls > 0:
+    if voice_total > 0:
         zrodla.append("połączenia głosowe")
-    if sms_out + sms_in > 0:
-        zrodla.append("SMS")
+    if sms_total > 0:
+        zrodla.append("SMS/MMS")
     if data_sessions > 0:
         zrodla.append("transmisja danych")
     if locations:
-        zrodla.append("BTS")
+        zrodla.append("dane BTS")
+    if roaming_records > 0:
+        zrodla.append("roaming")
     zrodla_danych = ", ".join(zrodla) if zrodla else "biling telekomunikacyjny"
 
     # ── Build final dict ──
@@ -219,7 +282,7 @@ def build_note_placeholders(
         "period_to": period_to,
         "total_records": str(total_records),
         "parametr_glowny": parametr_glowny,
-        "imsi_list": imsi_list,
+        "imsi_list": imsi_list_str,
         "imsi_primary": imsi_primary,
         "imei_list": imei_list,
         "unique_imei_count": str(len(imei_list_items)) if imei_list_items else "1",
@@ -232,16 +295,16 @@ def build_note_placeholders(
         "data_raportu_html": data_raportu_html,
         "zrodla_danych": zrodla_danych,
 
-        # Stats
+        # Stats (section 4 — {{ stats.outgoing_calls }} etc.)
         "stats": {
-            "outgoing_calls": str(outgoing_calls),
-            "incoming_calls": str(incoming_calls),
+            "outgoing_calls": str(calls_out),
+            "incoming_calls": str(calls_in),
             "sms_out": str(sms_out),
             "sms_in": str(sms_in),
             "data_sessions": str(data_sessions),
         },
 
-        # Sources (section 2)
+        # Sources (section 2 — {{ source.calls }} etc.)
         "source": {
             "calls": source_calls,
             "sms": source_sms,
@@ -252,7 +315,7 @@ def build_note_placeholders(
             "anomalies": source_anomalies,
         },
 
-        # Activity (section 4)
+        # Activity (section 4 — {{ activity.hourly_pattern }} etc.)
         "activity": {
             "hourly_pattern": hourly_pattern,
             "night_share": night_share,
@@ -260,21 +323,21 @@ def build_note_placeholders(
         },
         "special_numbers_summary": special_numbers_summary,
 
-        # Contacts (section 5)
+        # Contacts (section 5 — {{ contacts.unique_count }} etc.)
         "contacts": {
             "unique_count": str(unique_contacts),
             "top_list": contacts_top_list,
             "assessment": contacts_assessment,
         },
 
-        # Anomalies (section 6)
+        # Anomalies (section 6 — {{ anomalies.count }} etc.)
         "anomalies": {
             "count": anomaly_count,
             "categories": anomaly_categories_str,
             "top_findings": anomaly_top_findings,
         },
 
-        # Locations (section 7)
+        # Locations (section 7 — {{ locations.main_areas }} etc.)
         "locations": {
             "main_areas": main_areas,
             "bts_count": bts_count,
@@ -319,12 +382,11 @@ def _fmt_duration(seconds: float) -> str:
     return f"{h} h {m} min {sec} s"
 
 
-def _build_contacts_assessment(top_contacts: list) -> str:
+def _build_contacts_assessment(top_contacts: list, unique_contacts: int) -> str:
     """Build a short textual assessment of contact patterns."""
-    if not top_contacts:
+    n = unique_contacts or len(top_contacts)
+    if not n:
         return "brak danych do oceny relacji kontaktowych"
-
-    n = len(top_contacts)
     if n <= 5:
         return f"wąska grupa {n} kontaktów, co sugeruje ograniczoną sieć komunikacyjną"
     elif n <= 20:
@@ -354,9 +416,8 @@ def _top_anomaly_findings(anomalies: list) -> str:
     sorted_a = sorted(anomalies, key=lambda a: _severity_score(a.get("severity", "")), reverse=True)
     findings = []
     for a in sorted_a[:3]:
-        desc = a.get("description", a.get("explain", str(a.get("type", ""))))
+        desc = a.get("description", a.get("explain", a.get("label", str(a.get("type", "")))))
         if desc:
-            # Trim to reasonable length
             if len(desc) > 120:
                 desc = desc[:117] + "..."
             findings.append(desc)
@@ -366,24 +427,23 @@ def _top_anomaly_findings(anomalies: list) -> str:
 
 def _severity_score(severity: str) -> int:
     s = (severity or "").lower()
-    if "critical" in s or "wysok" in s:
+    if "critical" in s or "wysok" in s or "high" in s:
         return 3
-    if "warning" in s or "średni" in s:
+    if "warning" in s or "średni" in s or "medium" in s:
         return 2
-    if "info" in s or "nisk" in s:
+    if "info" in s or "nisk" in s or "low" in s:
         return 1
     return 0
 
 
 def _build_main_characteristics(
     total_records, calls_out, calls_in, sms_out, sms_in,
-    data_sessions, anomalies, dual_detected
+    data_sessions, anomalies, dual_detected, fwd_count=0
 ) -> str:
     """Build descriptive assessment string for section 8."""
     parts = []
 
-    # Communication profile
-    voice = calls_out + calls_in
+    voice = calls_out + calls_in + fwd_count
     sms = sms_out + sms_in
     data = data_sessions
 
@@ -398,6 +458,9 @@ def _build_main_characteristics(
 
     if dual_detected:
         parts.append("konfiguracją urządzeniową typu dual-IMEI")
+
+    if fwd_count > 0:
+        parts.append(f"obecnością przekierowań połączeń ({fwd_count})")
 
     if anomalies:
         n = len(set(a.get("type", "") for a in anomalies))
@@ -414,13 +477,11 @@ def _build_conclusions(
     """Build 4 conclusion points for section 9."""
     conclusions = []
 
-    # Point 1: activity period
     conclusions.append(
         f"Analizowany numer {msisdn} był aktywny w okresie {period_from} – {period_to} "
         f"i wygenerował {total_records} rekordów telekomunikacyjnych."
     )
 
-    # Point 2: devices
     if dual_detected:
         dev_info = "konfigurację dual-IMEI"
     elif imei_count > 1:
@@ -429,13 +490,16 @@ def _build_conclusions(
         dev_info = "1 identyfikator IMEI (brak zmian urządzenia)"
     conclusions.append(f"W materiale ujawniono {dev_info}.")
 
-    # Point 3: anomalies + contacts
+    top_short = ""
+    if top_contacts:
+        top_short = " Relacje dominujące: " + ", ".join(
+            c.get("number", "?") for c in top_contacts[:3]
+        ) + "."
     conclusions.append(
         f"Stwierdzono {anomaly_categories_count} kategorii anomalii wymagających odnotowania. "
-        f"Wyodrębniono {unique_contacts} unikalnych kontaktów."
+        f"Wyodrębniono {unique_contacts} unikalnych kontaktów.{top_short}"
     )
 
-    # Point 4: locations + recommendation
     conclusions.append(
         f"Aktywność lokalizacyjna koncentrowała się w rejonach: {main_areas}. "
         f"Dalsza interpretacja materiału wymaga konfrontacji z dodatkowymi źródłami danych."
