@@ -1794,7 +1794,7 @@
         if (status) status.textContent = "Załadowano identyfikację (brak bilingu)";
         // Re-render if we already had billing loaded
         if (St.lastResult) {
-          _renderDevices(St.lastResult.analysis ? St.lastResult.analysis.devices : [], St.lastResult.analysis ? St.lastResult.analysis.imei_changes : [], St.lastResult.records, St.lastResult.subscriber);
+          _renderDevices(St.lastResult.analysis, St.lastResult.records, St.lastResult.subscriber);
           _renderAnalysis(St.lastResult.analysis);
           _renderAnomalies(St.lastResult.analysis);
           _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
@@ -1881,7 +1881,7 @@
 
     _renderInfo(data);
     _renderSummary(data.summary);
-    _renderDevices(data.analysis ? data.analysis.devices : [], data.analysis ? data.analysis.imei_changes : [], data.records, data.subscriber);
+    _renderDevices(data.analysis, data.records, data.subscriber);
     _renderAnalysis(data.analysis);
     _renderAnomalies(data.analysis);
     _renderRecords(data.records, data.records_truncated, data.record_count);
@@ -1995,13 +1995,16 @@
 
   /* ── Devices card (IMEI / IMSI analysis) ────────────────── */
 
-  function _renderDevices(devices, imeiChanges, records, subscriber) {
+  function _renderDevices(analysis, records, subscriber) {
     const card = QS("#gsm_devices_card");
     const el   = QS("#gsm_devices_body");
     if (!el) return;
 
     const sub = subscriber || {};
-    const devList = devices || [];
+    const an = analysis || {};
+    const devList = an.devices || [];
+    const imeiChanges = an.imei_changes || [];
+    const dualImei = an.dual_imei || null;
 
     // ── Build IMEI ↔ IMSI map from individual records ──
     const imeiImsiMap = {};   // imei → Set of imsi
@@ -2035,13 +2038,33 @@
     }
     if (card) card.style.display = "";
 
+    // Set of IMEI values that are part of the dual-IMEI device (voice + data)
+    const dualImeiSet = new Set();
+    if (dualImei) {
+      dualImeiSet.add(dualImei.voice_imei);
+      dualImeiSet.add(dualImei.data_imei);
+    }
+
     const typeMap = { smartphone: "Smartfon", tablet: "Tablet", modem: "Modem", feature_phone: "Telefon", smartwatch: "Smartwatch" };
     let html = "";
+
+    // ── Dual-IMEI detection info box ──
+    if (dualImei) {
+      html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:12px;border-left:3px solid #2563eb">
+        <strong>📱 Wykryto urządzenie z dwoma modemami</strong> (dual-modem / eSIM)<br>
+        <span style="font-size:12px">Połączenia i SMS używają innego IMEI niż transmisja danych.
+        To normalne zachowanie współczesnych telefonów — <strong>nie jest to zmiana urządzenia</strong>.</span>
+        <div style="margin-top:6px;font-size:12px;display:flex;gap:16px;flex-wrap:wrap">
+          <span>📞 Głos/SMS: <code>${dualImei.voice_imei}</code> <span class="muted">(${_fmt(dualImei.voice_records)} rek.)</span></span>
+          <span>📡 Dane: <code>${dualImei.data_imei}</code> <span class="muted">(${_fmt(dualImei.data_records)} rek.)</span></span>
+        </div>
+      </div>`;
+    }
 
     // ── Devices table (if we have device analysis data) ──
     if (devList.length) {
       html += `<table class="gsm-table"><thead><tr>
-        <th>IMEI</th><th>IMSI</th><th>Urządzenie</th><th>Typ</th><th>Rekordy</th><th>Okres</th>
+        <th>IMEI</th><th>IMSI</th><th>Urządzenie</th><th>Typ</th><th>Domena</th><th>Rekordy</th><th>Okres</th>
       </tr></thead><tbody>`;
       for (const d of devList) {
         const name = d.display_name || '<span class="muted">nieznane</span>';
@@ -2049,11 +2072,16 @@
         const period = d.first_seen ? (d.first_seen === d.last_seen ? d.first_seen : `${d.first_seen} – ${d.last_seen}`) : "—";
         const imsis = imeiImsiMap[d.imei];
         const imsiStr = imsis && imsis.size ? [...imsis].map(s => `<code>${s}</code>`).join(", ") : (sub.imsi ? `<code>${sub.imsi}</code>` : '<span class="muted">—</span>');
+        // Indicate voice/data domain if dual-IMEI
+        let domain = "—";
+        if (dualImei && d.imei === dualImei.voice_imei) domain = "📞 Głos/SMS";
+        else if (dualImei && d.imei === dualImei.data_imei) domain = "📡 Dane";
         html += `<tr>
           <td><code>${d.imei || "?"}</code></td>
           <td>${imsiStr}</td>
           <td>${d.known ? `<strong>${name}</strong>` : name}</td>
           <td>${typeName}</td>
+          <td style="font-size:12px">${domain}</td>
           <td>${_fmt(d.record_count)}</td>
           <td>${period}</td>
         </tr>`;
@@ -2081,8 +2109,9 @@
         const ch = imeiChanges[i];
         const oldDev = ch.old_device ? ` (${ch.old_device})` : "";
         const newDev = ch.new_device ? ` (${ch.new_device})` : "";
+        const grp = ch.group === "data" ? " [dane]" : ch.group === "voice" ? " [głos]" : "";
         const hide = i >= IMEI_INIT ? ' style="display:none"' : "";
-        html += `<div class="gsm-anomaly gsm-anomaly-medium _imei_ch"${hide}>${ch.date || ""}: ${ch.old_imei || "?"}${oldDev} → ${ch.new_imei || "?"}${newDev}</div>`;
+        html += `<div class="gsm-anomaly gsm-anomaly-medium _imei_ch"${hide}>${ch.date || ""}${grp}: ${ch.old_imei || "?"}${oldDev} → ${ch.new_imei || "?"}${newDev}</div>`;
       }
       if (total > IMEI_INIT) {
         html += `<div style="margin-top:8px;display:flex;align-items:center;gap:10px;font-size:12px">
@@ -2101,26 +2130,40 @@
     const findings = [];
 
     // Multiple IMEIs for one IMSI → phone changes (same SIM, different phones)
+    // BUT skip if both IMEIs belong to dual-IMEI device (same device, different modems)
     for (const [imsi, imeis] of Object.entries(imsiImeiMap)) {
       if (imeis.size > 1) {
-        findings.push({
-          type: "phone_change",
-          msg: `IMSI <code>${imsi}</code> — wykryto <strong>${imeis.size} różnych IMEI</strong> (${[...imeis].map(i => `<code>${i}</code>`).join(", ")}). Abonent zmieniał telefony korzystając z tej samej karty SIM.`
-        });
+        const imeiArr = [...imeis];
+        const allDual = dualImei && imeiArr.every(i => dualImeiSet.has(i));
+        if (!allDual) {
+          const nonDual = dualImei ? imeiArr.filter(i => !dualImeiSet.has(i)) : imeiArr;
+          if (nonDual.length > 1 || !dualImei) {
+            findings.push({
+              type: "phone_change",
+              msg: `IMSI <code>${imsi}</code> — wykryto <strong>${imeis.size} różnych IMEI</strong> (${imeiArr.map(i => `<code>${i}</code>`).join(", ")}). Abonent zmieniał telefony korzystając z tej samej karty SIM.`
+            });
+          }
+        }
       }
     }
     // One IMEI with multiple IMSIs → SIM changes (same phone, different SIMs)
+    // BUT skip if both are from the same dual-IMEI device (voice IMSI ≠ data IMSI is normal)
     for (const [imei, imsis] of Object.entries(imeiImsiMap)) {
       if (imsis.size > 1) {
-        findings.push({
-          type: "sim_change",
-          msg: `IMEI <code>${imei}</code> — wykryto <strong>${imsis.size} różnych IMSI</strong> (${[...imsis].map(s => `<code>${s}</code>`).join(", ")}). W tym urządzeniu zmieniano karty SIM.`
-        });
+        const isDualDevice = dualImeiSet.has(imei);
+        if (!isDualDevice) {
+          findings.push({
+            type: "sim_change",
+            msg: `IMEI <code>${imei}</code> — wykryto <strong>${imsis.size} różnych IMSI</strong> (${[...imsis].map(s => `<code>${s}</code>`).join(", ")}). W tym urządzeniu zmieniano karty SIM.`
+          });
+        }
       }
     }
 
     html += `<div style="margin-top:12px"><div class="h3" style="margin-bottom:6px">Analiza IMEI / IMSI</div>`;
-    html += `<div style="margin-bottom:8px;font-size:13px">Unikalne IMEI: <strong>${nImei}</strong> &nbsp;|&nbsp; Unikalne IMSI: <strong>${nImsi}</strong></div>`;
+    // Count "logical" devices — if dual-IMEI, count those 2 IMEIs as 1 device
+    const logicalDevices = dualImei ? nImei - 1 : nImei;
+    html += `<div style="margin-bottom:8px;font-size:13px">Unikalne IMEI: <strong>${nImei}</strong>${dualImei ? ` (${logicalDevices} urz. fizyczne — 2 IMEI = 1 dual-modem)` : ""} &nbsp;|&nbsp; Unikalne IMSI: <strong>${nImsi}</strong></div>`;
 
     if (findings.length) {
       for (const f of findings) {
@@ -2128,7 +2171,7 @@
         html += `<div class="gsm-anomaly ${cls}" style="margin-bottom:4px">${f.msg}</div>`;
       }
     } else {
-      html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:4px">Brak zmian — w całym okresie używano ${nImei === 1 ? "jednego urządzenia" : nImei + " urządzeń"} z ${nImsi === 1 ? "jedną kartą SIM" : nImsi + " kartami SIM"}. Nie wykryto zmian telefonów ani kart SIM.</div>`;
+      html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:4px">Brak zmian — w całym okresie używano ${logicalDevices === 1 ? "jednego urządzenia" : logicalDevices + " urządzeń"}${dualImei ? " (dual-modem)" : ""} z ${nImsi === 1 ? "jedną kartą SIM" : nImsi + " kartami SIM"}. Nie wykryto zmian telefonów ani kart SIM.</div>`;
     }
     html += "</div>";
 
