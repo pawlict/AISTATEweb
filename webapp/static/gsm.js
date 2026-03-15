@@ -2072,13 +2072,25 @@
       html += `</div>`;
     }
 
-    // ── IMEI changes timeline ──
+    // ── IMEI changes timeline (limited with slider) ──
     if (imeiChanges && imeiChanges.length) {
-      html += `<div style="margin-top:12px"><div class="h3" style="margin-bottom:6px">Zmiany IMEI</div>`;
-      for (const ch of imeiChanges) {
+      const IMEI_INIT = 5;
+      const total = imeiChanges.length;
+      html += `<div style="margin-top:12px"><div class="h3" style="margin-bottom:6px">Zmiany IMEI <span class="muted" style="font-weight:400;font-size:12px">(${total})</span></div>`;
+      for (let i = 0; i < total; i++) {
+        const ch = imeiChanges[i];
         const oldDev = ch.old_device ? ` (${ch.old_device})` : "";
         const newDev = ch.new_device ? ` (${ch.new_device})` : "";
-        html += `<div class="gsm-anomaly gsm-anomaly-medium">${ch.date || ""}: ${ch.old_imei || "?"}${oldDev} → ${ch.new_imei || "?"}${newDev}</div>`;
+        const hide = i >= IMEI_INIT ? ' style="display:none"' : "";
+        html += `<div class="gsm-anomaly gsm-anomaly-medium _imei_ch"${hide}>${ch.date || ""}: ${ch.old_imei || "?"}${oldDev} → ${ch.new_imei || "?"}${newDev}</div>`;
+      }
+      if (total > IMEI_INIT) {
+        html += `<div style="margin-top:8px;display:flex;align-items:center;gap:10px;font-size:12px">
+          <span class="muted">Widoczne:</span>
+          <input type="range" id="_imei_slider" min="${IMEI_INIT}" max="${total}" value="${IMEI_INIT}"
+            style="flex:1;max-width:220px;accent-color:#2563eb">
+          <span id="_imei_slider_val">${IMEI_INIT} / ${total}</span>
+        </div>`;
       }
       html += "</div>";
     }
@@ -2121,6 +2133,18 @@
     html += "</div>";
 
     el.innerHTML = html;
+
+    // Bind IMEI changes slider
+    const slider = el.querySelector("#_imei_slider");
+    if (slider) {
+      const valSpan = el.querySelector("#_imei_slider_val");
+      const items = el.querySelectorAll("._imei_ch");
+      slider.addEventListener("input", () => {
+        const show = parseInt(slider.value, 10);
+        items.forEach((it, idx) => { it.style.display = idx < show ? "" : "none"; });
+        if (valSpan) valSpan.textContent = `${show} / ${items.length}`;
+      });
+    }
   }
 
   function _renderAnalysis(a) {
