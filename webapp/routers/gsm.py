@@ -2000,6 +2000,187 @@ async def gsm_parser_apply_update(parser_id: str, request: Request):
     return JSONResponse({"status": "ok", **result})
 
 
+# ─── GSM Report Generation ───────────────────────────────────────────────────
+
+@router.get("/api/gsm/report/sections")
+async def gsm_report_sections():
+    """Return available report sections and placeholders for the content dialog."""
+    from backend.gsm.report_sections import get_sections_for_api
+    return JSONResponse({"status": "ok", **get_sections_for_api()})
+
+
+@router.post("/api/gsm/report/generate")
+async def gsm_report_generate(request: Request):
+    """Generate GSM report(s) in selected formats.
+
+    Payload:
+    {
+        "project_id": "xxx",
+        "formats": ["docx", "html", "txt"],
+        "sections": ["subscriber", "summary", ...],
+        "placeholders": {"INSTYTUCJA": "...", "SYGNATURA": "...", ...},
+        "profile_id": "optional-uuid",
+        "llm_narrative": "optional LLM text"
+    }
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "detail": "Invalid JSON."}, status_code=400)
+
+    project_id = payload.get("project_id", "")
+    formats = payload.get("formats", ["docx"])
+    sections = payload.get("sections", [])
+    placeholders = payload.get("placeholders", {})
+    profile_id = payload.get("profile_id", "")
+    llm_narrative = payload.get("llm_narrative", "")
+
+    if not project_id:
+        return JSONResponse({"status": "error", "detail": "project_id is required."}, status_code=400)
+    if not sections:
+        return JSONResponse({"status": "error", "detail": "At least one section must be selected."}, status_code=400)
+
+    # Load GSM data
+    data_dir = _data_dir()
+    project_dir = data_dir / "projects" / project_id
+    gsm_path = project_dir / "analysis" / "gsm_latest.json"
+    if not gsm_path.exists():
+        return JSONResponse({"status": "error", "detail": "Brak danych GSM. Najpierw zaimportuj biling."}, status_code=404)
+
+    try:
+        gsm_data = json.loads(gsm_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return JSONResponse({"status": "error", "detail": f"Błąd odczytu danych: {e}"}, status_code=500)
+
+    # Build report data model
+    from backend.gsm.report_builder import build_report_data
+    report_data = build_report_data(gsm_data, sections, llm_narrative=llm_narrative or None)
+
+    # Get template path from profile
+    from backend.report_profiles import ReportProfileManager
+    mgr = ReportProfileManager(data_dir)
+    template_path = None
+    if profile_id:
+        template_path = mgr.get_template_path(profile_id, "gsm")
+
+    # Ensure default template exists
+    if template_path is None or not template_path.exists():
+        from backend.report_template_generator import generate_gsm_template
+        template_bytes = generate_gsm_template(placeholders)
+        mgr.save_default_template("gsm", template_bytes)
+        template_path = mgr.get_template_path("_default", "gsm")
+
+    # Output directory
+    reports_dir = project_dir / "analysis" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    import time
+    timestamp = time.strftime("%Y-%m-%d_%H%M%S")
+    reports_out = []
+
+    for fmt in formats:
+        fmt = fmt.lower().strip()
+        try:
+            if fmt == "docx":
+                from backend.docx_report_generator import generate_docx_report
+                out_path = reports_dir / f"{timestamp}_gsm_report.docx"
+                await run_in_threadpool(
+                    generate_docx_report,
+                    template_path, report_data, placeholders, out_path, "gsm"
+                )
+
+            elif fmt == "html":
+                from backend.html_report_generator import generate_html_report
+                out_path = reports_dir / f"{timestamp}_gsm_report.html"
+                await run_in_threadpool(
+                    generate_html_report,
+                    report_data, placeholders, out_path, "gsm"
+                )
+
+            elif fmt == "txt":
+                from backend.txt_report_generator import generate_txt_report
+                out_path = reports_dir / f"{timestamp}_gsm_report.txt"
+                await run_in_threadpool(
+                    generate_txt_report,
+                    report_data, placeholders, out_path, "gsm"
+                )
+            else:
+                continue
+
+            if out_path.exists():
+                reports_out.append({
+                    "format": fmt,
+                    "filename": out_path.name,
+                    "size_bytes": out_path.stat().st_size,
+                    "download_url": f"/api/gsm/report/download/{project_id}/{out_path.name}",
+                })
+
+        except Exception as e:
+            log.error("Report generation failed for format %s: %s", fmt, e, exc_info=True)
+            reports_out.append({
+                "format": fmt,
+                "error": str(e),
+            })
+
+    # Save placeholders to profile
+    if profile_id:
+        mgr.update_profile(profile_id, placeholders=placeholders)
+
+    return JSONResponse({"status": "ok", "reports": reports_out})
+
+
+@router.get("/api/gsm/report/download/{project_id}/{filename}")
+async def gsm_report_download(project_id: str, filename: str):
+    """Download a generated GSM report file."""
+    from fastapi.responses import FileResponse
+
+    data_dir = _data_dir()
+    reports_dir = data_dir / "projects" / project_id / "analysis" / "reports"
+
+    # Security: prevent directory traversal
+    safe_name = Path(filename).name
+    file_path = reports_dir / safe_name
+    if not file_path.exists() or not file_path.is_file():
+        return JSONResponse({"status": "error", "detail": "Plik nie istnieje."}, status_code=404)
+
+    # Determine MIME type
+    mime_map = {
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".html": "text/html",
+        ".txt": "text/plain",
+    }
+    mime = mime_map.get(file_path.suffix.lower(), "application/octet-stream")
+
+    return FileResponse(str(file_path), filename=safe_name, media_type=mime)
+
+
+@router.get("/api/gsm/report/list/{project_id}")
+async def gsm_report_list(project_id: str):
+    """List generated GSM reports for a project."""
+    import time as _time
+    data_dir = _data_dir()
+    reports_dir = data_dir / "projects" / project_id / "analysis" / "reports"
+
+    items = []
+    if reports_dir.exists():
+        for fp in sorted(reports_dir.glob("*gsm_report*"), key=lambda p: p.stat().st_mtime, reverse=True):
+            if not fp.is_file() or fp.name.endswith(".meta.json"):
+                continue
+            try:
+                st = fp.stat()
+                items.append({
+                    "filename": fp.name,
+                    "format": fp.suffix.lstrip(".").lower(),
+                    "size_bytes": st.st_size,
+                    "modified_at": _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(st.st_mtime)),
+                    "download_url": f"/api/gsm/report/download/{project_id}/{fp.name}",
+                })
+            except Exception:
+                continue
+
+    return JSONResponse({"status": "ok", "reports": items})
+
+
 # ---------------------------------------------------------------------------
 #  GSM LLM Narrative Analysis (streaming)
 # ---------------------------------------------------------------------------

@@ -9334,8 +9334,228 @@
       _addLog("warn", "Brak danych GSM do raportu. Wczytaj biling.");
       return;
     }
-    // Placeholder — system raportowania będzie rozbudowany
-    _addLog("info", `Zapis raportu GSM (${formats.join(", ")}) — funkcja w budowie.`);
+    _showReportContentDialog(formats);
+  }
+
+  /**
+   * Show report content selection dialog.
+   * Loads section definitions from API, shows grouped checkboxes + placeholder fields.
+   */
+  async function _showReportContentDialog(formats) {
+    // Load section definitions from backend
+    let sectionsData;
+    try {
+      const resp = await fetch("/api/gsm/report/sections");
+      const json = await resp.json();
+      if (json.status !== "ok") throw new Error(json.detail || "Błąd");
+      sectionsData = json;
+    } catch (e) {
+      _addLog("error", "Nie udało się załadować sekcji raportu: " + e.message);
+      return;
+    }
+
+    const groups = sectionsData.groups || [];
+    const placeholderDefs = sectionsData.placeholders || [];
+
+    // Load saved values from localStorage
+    const savedPlaceholders = JSON.parse(localStorage.getItem("gsm_report_placeholders") || "{}");
+    const savedSections = JSON.parse(localStorage.getItem("gsm_report_sections") || "null");
+    const savedProfileId = localStorage.getItem("report_profile_id") || "";
+
+    // Determine primary format label
+    const fmtPriority = ["docx", "html", "txt"];
+    const primaryFmt = fmtPriority.find(f => formats.includes(f)) || formats[0];
+    const fmtLabel = primaryFmt.toUpperCase();
+
+    // Build dialog HTML
+    const dlg = document.createElement("dialog");
+    dlg.className = "gsm-report-dialog";
+    dlg.style.cssText = "max-width:680px;width:90vw;max-height:85vh;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:0;overflow:hidden;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
+
+    let placeholderHtml = "";
+    if (formats.includes("docx")) {
+      placeholderHtml = `
+        <details class="rpt-details" open>
+          <summary class="rpt-summary">Dane nagłówka dokumentu (DOCX)</summary>
+          <div class="rpt-placeholders" style="display:grid;grid-template-columns:140px 1fr;gap:8px;padding:12px;">
+            ${placeholderDefs.map(p => `
+              <label style="font-size:13px;align-self:center;">${_escHtml(p.label)}:</label>
+              ${p.type === "date"
+                ? `<input type="date" class="input rpt-ph" data-key="${_escHtml(p.key)}" value="${_escHtml(savedPlaceholders[p.key] || p.default || new Date().toISOString().slice(0,10))}" style="font-size:13px;padding:4px 8px;">`
+                : `<input type="text" class="input rpt-ph" data-key="${_escHtml(p.key)}" value="${_escHtml(savedPlaceholders[p.key] || p.default || "")}" placeholder="${_escHtml(p.label)}" style="font-size:13px;padding:4px 8px;">`
+              }
+            `).join("")}
+          </div>
+        </details>
+      `;
+    }
+
+    let sectionsHtml = "";
+    for (const group of groups) {
+      const groupId = "rptg_" + group.name.replace(/\s/g, "_");
+      const sectionCheckboxes = group.sections.map(s => {
+        const isChecked = savedSections ? savedSections.includes(s.key) : s.checked;
+        return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0 2px 20px;">
+          <input type="checkbox" class="rpt-sec" data-key="${_escHtml(s.key)}" ${isChecked ? "checked" : ""}>
+          ${_escHtml(s.label)}
+        </label>`;
+      }).join("");
+
+      sectionsHtml += `
+        <div class="rpt-group" style="margin-bottom:6px;">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;padding:4px 0;cursor:pointer;">
+            <input type="checkbox" class="rpt-grp-cb" data-group="${groupId}" checked
+              onchange="this.closest('.rpt-group').querySelectorAll('.rpt-sec').forEach(c=>c.checked=this.checked)">
+            ${_escHtml(group.name)}
+          </label>
+          <div class="rpt-group-items">${sectionCheckboxes}</div>
+        </div>
+      `;
+    }
+
+    dlg.innerHTML = `
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border-color,#ddd);display:flex;align-items:center;justify-content:space-between;">
+        <h3 style="margin:0;font-size:16px;">Generuj raport GSM — ${fmtLabel}${formats.length > 1 ? " + " + (formats.length - 1) + " inne" : ""}</h3>
+        <button class="btn" id="rpt_close_x" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;" title="Zamknij">&times;</button>
+      </div>
+      <div style="overflow-y:auto;max-height:calc(85vh - 120px);padding:16px 20px;">
+        ${placeholderHtml}
+        <details class="rpt-details" open>
+          <summary class="rpt-summary">Wybierz sekcje raportu</summary>
+          <div style="padding:8px 0;">
+            ${sectionsHtml}
+          </div>
+        </details>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid var(--border-color,#ddd);display:flex;gap:8px;justify-content:space-between;align-items:center;">
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm" id="rpt_select_all">Zaznacz wszystko</button>
+          <button class="btn btn-sm" id="rpt_deselect_all">Odznacz</button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" id="rpt_cancel" style="min-width:80px;">Anuluj</button>
+          <button class="btn btn-primary" id="rpt_generate" style="min-width:120px;">Generuj raport</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dlg);
+    dlg.showModal();
+
+    // Close handlers
+    dlg.querySelector("#rpt_close_x").onclick = () => { dlg.close(); dlg.remove(); };
+    dlg.querySelector("#rpt_cancel").onclick = () => { dlg.close(); dlg.remove(); };
+
+    // Select all / deselect
+    dlg.querySelector("#rpt_select_all").onclick = () => {
+      dlg.querySelectorAll(".rpt-sec, .rpt-grp-cb").forEach(c => c.checked = true);
+    };
+    dlg.querySelector("#rpt_deselect_all").onclick = () => {
+      dlg.querySelectorAll(".rpt-sec, .rpt-grp-cb").forEach(c => c.checked = false);
+    };
+
+    // Generate button
+    dlg.querySelector("#rpt_generate").onclick = async () => {
+      // Collect selected sections
+      const selectedSections = [];
+      dlg.querySelectorAll(".rpt-sec:checked").forEach(cb => {
+        selectedSections.push(cb.dataset.key);
+      });
+      if (!selectedSections.length) {
+        alert("Wybierz co najmniej jedną sekcję.");
+        return;
+      }
+
+      // Collect placeholders
+      const phValues = {};
+      dlg.querySelectorAll(".rpt-ph").forEach(inp => {
+        phValues[inp.dataset.key] = inp.value;
+      });
+
+      // Save to localStorage
+      localStorage.setItem("gsm_report_placeholders", JSON.stringify(phValues));
+      localStorage.setItem("gsm_report_sections", JSON.stringify(selectedSections));
+
+      // Get LLM narrative if available
+      const llmTextEl = QS("#gsm_llm_text");
+      const llmNarrative = llmTextEl ? llmTextEl.textContent.trim() : "";
+
+      // Disable button and show progress
+      const genBtn = dlg.querySelector("#rpt_generate");
+      genBtn.disabled = true;
+      genBtn.textContent = "Generowanie...";
+
+      try {
+        const projectId = _getProjectId();
+        const resp = await fetch("/api/gsm/report/generate", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            project_id: projectId,
+            formats: formats,
+            sections: selectedSections,
+            placeholders: phValues,
+            profile_id: savedProfileId,
+            llm_narrative: llmNarrative,
+          }),
+        });
+        const json = await resp.json();
+        if (json.status !== "ok") {
+          throw new Error(_detailStr(json));
+        }
+
+        // Show download links
+        const reports = json.reports || [];
+        dlg.close();
+        dlg.remove();
+
+        if (reports.length) {
+          _showReportDownloads(reports);
+        }
+        _addLog("info", `Wygenerowano ${reports.length} raport(ów) GSM.`);
+
+      } catch (e) {
+        _addLog("error", "Błąd generowania raportu: " + e.message);
+        genBtn.disabled = false;
+        genBtn.textContent = "Generuj raport";
+      }
+    };
+  }
+
+  /**
+   * Show download links for generated reports.
+   */
+  function _showReportDownloads(reports) {
+    const dlg = document.createElement("dialog");
+    dlg.style.cssText = "max-width:500px;width:90vw;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:20px;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
+
+    const links = reports.filter(r => r.download_url).map(r => {
+      const sizeKb = r.size_bytes ? ` (${(r.size_bytes / 1024).toFixed(1)} KB)` : "";
+      return `<a href="${_escHtml(r.download_url)}" download class="btn" style="display:inline-flex;align-items:center;gap:6px;margin:4px;padding:8px 16px;text-decoration:none;">
+        ${_escHtml(r.format.toUpperCase())}${sizeKb}
+      </a>`;
+    }).join("");
+
+    const errors = reports.filter(r => r.error).map(r =>
+      `<div style="color:var(--danger,#dc2626);font-size:13px;">${_escHtml(r.format)}: ${_escHtml(r.error)}</div>`
+    ).join("");
+
+    dlg.innerHTML = `
+      <h3 style="margin:0 0 12px;">Raporty wygenerowane</h3>
+      <div style="margin-bottom:12px;">${links}</div>
+      ${errors}
+      <div style="text-align:right;margin-top:16px;">
+        <button class="btn" onclick="this.closest('dialog').close();this.closest('dialog').remove();">Zamknij</button>
+      </div>
+    `;
+
+    document.body.appendChild(dlg);
+    dlg.showModal();
+  }
+
+  function _escHtml(str) {
+    if (!str) return "";
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
   /* ── bindings ───────────────────────────────────────────── */
