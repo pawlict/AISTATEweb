@@ -1477,18 +1477,6 @@
     const undetected = grouping.undetected_files || [];
     const reason = grouping.confirmation_reason || "";
     const msisdns = Object.keys(subs);
-    const isSingle = grouping.is_single_subscriber;
-
-    // Collect all billing files with metadata
-    const allFiles = [];
-    for (const msisdn of msisdns) {
-      for (const f of subs[msisdn]) {
-        allFiles.push({ ...f, msisdn, checked: true });
-      }
-    }
-    for (const f of undetected) {
-      allFiles.push({ ...f, msisdn: "", checked: true });
-    }
 
     // Build dialog HTML
     let title, desc;
@@ -1496,28 +1484,27 @@
       title = `\u26A0\uFE0F Wykryto bilingi ${msisdns.length} r\u00F3\u017Cnych abonent\u00F3w`;
       desc = `Przes\u0142ane pliki zawieraj\u0105 bilingi r\u00F3\u017Cnych os\u00F3b. Mo\u017Cesz wybra\u0107 konkretnego abonenta lub zatwierdzić wszystkie pliki.`;
     } else if (reason === "complementary_files") {
-      title = `\uD83D\uDCC2 Wykryto ${allFiles.length} uzupe\u0142niaj\u0105cych si\u0119 plik\u00F3w`;
+      const cnt = Object.values(subs).reduce((a, b) => a + b.length, 0) + undetected.length;
+      title = `\uD83D\uDCC2 Wykryto ${cnt} uzupe\u0142niaj\u0105cych si\u0119 plik\u00F3w`;
       desc = `Pliki nale\u017C\u0105 do tego samego abonenta i uzupe\u0142niaj\u0105 si\u0119 (np. po\u0142\u0105czenia + transmisja danych). Zatwierd\u017A lub odrzuć poszczeg\u00F3lne pliki:`;
     } else {
       title = `\u2753 Potwierdzenie plik\u00F3w do analizy`;
       desc = `Wybierz pliki, kt\u00F3re maj\u0105 zosta\u0107 uwzgl\u0119dnione w analizie:`;
     }
 
-    let html = `<div style="padding:16px">
-      <h3 style="margin:0 0 8px;color:${reason === 'multi_subscriber' ? '#dc2626' : '#2563eb'}">${title}</h3>
-      <p style="margin:0 0 16px;color:#64748b;font-size:13px">${desc}</p>`;
+    let body = "";
 
     // Group files by subscriber for display
     for (const msisdn of msisdns) {
       const files = subs[msisdn];
       if (msisdns.length > 1) {
-        html += `<div style="margin:8px 0 4px;font-weight:600;font-size:13px;color:var(--text)">
+        body += `<div style="margin:8px 0 4px;font-weight:600;font-size:13px;color:var(--text)">
           \uD83D\uDCF1 ${msisdn}</div>`;
       }
       for (const f of files) {
         const subtype = f.file_subtype ? ` \u2014 ${f.file_subtype === 'pol' ? 'Po\u0142\u0105czenia/SMS' : f.file_subtype === 'td' ? 'Transmisja danych' : f.file_subtype}` : "";
         const conf = f.confidence >= 0.8 ? '\u2705' : f.confidence > 0 ? '\u26A0\uFE0F' : '\u2753';
-        html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
+        body += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
           background:var(--bg-card,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:6px;cursor:pointer;
           transition:background .1s" onmouseover="this.style.background='var(--bg-hover,#f1f5f9)'"
           onmouseout="this.style.background='var(--bg-card,#f8fafc)'">
@@ -1533,7 +1520,7 @@
 
     // Undetected files
     for (const f of undetected) {
-      html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
+      body += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
         background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;cursor:pointer">
         <input type="checkbox" class="_fc_file" data-filename="${f.filename}" data-msisdn="" checked
           style="width:16px;height:16px;accent-color:#d97706">
@@ -1544,25 +1531,29 @@
       </label>`;
     }
 
-    html += `<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
-      <button class="btn btn-sm" id="_fc_cancel" style="color:#64748b">Anuluj</button>
-      <button class="btn btn-primary btn-sm" id="_fc_confirm">\u2705 Zatwierd\u017A i analizuj</button>
-    </div>`;
-    html += `</div>`;
-
-    // Show in results area
-    const results = QS("#gsm_results");
-    if (results) {
-      results.style.display = "";
-      results.innerHTML = html;
-    }
+    // Use native <dialog> so #gsm_results DOM is never destroyed
+    let dlg = QS("#_fc_dialog");
+    if (dlg) dlg.remove();
+    dlg = document.createElement("dialog");
+    dlg.id = "_fc_dialog";
+    dlg.style.cssText = "max-width:520px;width:92vw;border-radius:12px;border:1px solid var(--border,#e2e8f0);padding:0;box-shadow:0 8px 32px rgba(0,0,0,.18)";
+    dlg.innerHTML = `<form method="dialog" style="padding:16px">
+      <h3 style="margin:0 0 8px;color:${reason === 'multi_subscriber' ? '#dc2626' : '#2563eb'}">${title}</h3>
+      <p style="margin:0 0 16px;color:#64748b;font-size:13px">${desc}</p>
+      ${body}
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button type="button" class="btn btn-sm" id="_fc_cancel" style="color:#64748b">Anuluj</button>
+        <button type="button" class="btn btn-primary btn-sm" id="_fc_confirm">\u2705 Zatwierd\u017A i analizuj</button>
+      </div>
+    </form>`;
+    document.body.appendChild(dlg);
 
     // Bind confirm button
-    const confirmBtn = QS("#_fc_confirm");
+    const confirmBtn = dlg.querySelector("#_fc_confirm");
     if (confirmBtn) {
       confirmBtn.addEventListener("click", () => {
         const checked = [];
-        results.querySelectorAll("._fc_file:checked").forEach(cb => {
+        dlg.querySelectorAll("._fc_file:checked").forEach(cb => {
           checked.push(cb.dataset.filename);
         });
         if (!checked.length) {
@@ -1570,18 +1561,23 @@
           return;
         }
         _addLog("info", `Zatwierdzone pliki: ${checked.join(", ")}`);
+        dlg.close();
+        dlg.remove();
         _reimportWithConfirmedFiles(originalFiles, checked);
       });
     }
 
     // Bind cancel
-    const cancelBtn = QS("#_fc_cancel");
+    const cancelBtn = dlg.querySelector("#_fc_cancel");
     if (cancelBtn) {
       cancelBtn.addEventListener("click", () => {
-        if (results) results.style.display = "none";
+        dlg.close();
+        dlg.remove();
         _addLog("info", "Anulowano import.");
       });
     }
+
+    dlg.showModal();
   }
 
   /**
