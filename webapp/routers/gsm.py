@@ -2334,19 +2334,60 @@ async def gsm_note_generate(request: Request):
 
 @router.get("/api/gsm/note/models")
 async def gsm_note_models():
-    """Return available models for note generation (deep + proofreading)."""
+    """Return available models for note generation (deep + proofreading).
+
+    Combines:
+    1. Catalog models from MODELS_GROUPS["deep"] and ["proofreading"]
+    2. User-selected active models from settings (the top-bar models)
+    All checked against actually installed Ollama models.
+    """
     try:
-        from backend.models_info import MODELS_GROUPS, MODELS_INFO
+        from backend.models_info import MODELS_GROUPS, MODELS_INFO, DEFAULT_MODELS
         from backend.ollama_client import OllamaClient
 
         client = OllamaClient()
         st = await client.status()
-        installed_lower = {m.lower() for m in (st.models or [])} if st.status == "online" else set()
+        installed_raw = list(st.models or []) if st.status == "online" else []
+        installed_lower = {m.lower() for m in installed_raw}
+        # Also match without :latest suffix
+        installed_base = set()
+        for m in installed_raw:
+            installed_base.add(m.lower())
+            if ":" in m:
+                installed_base.add(m.rsplit(":", 1)[0].lower())
+            else:
+                installed_base.add((m + ":latest").lower())
+
+        def _is_installed(mid: str) -> bool:
+            ml = mid.lower()
+            return ml in installed_base or (ml + ":latest") in installed_base
 
         models = []
         seen = set()
 
-        # Combine deep + proofreading groups
+        # 1. Get user-selected active models from settings (top-bar)
+        try:
+            from webapp.server import _get_model_settings
+            user_models = _get_model_settings()
+        except Exception:
+            user_models = {}
+
+        # Add active deep model from settings
+        for group in ["deep", "proofreading"]:
+            active = user_models.get(group, "")
+            if active and active not in seen:
+                seen.add(active)
+                info = MODELS_INFO.get(active, {})
+                models.append({
+                    "id": active,
+                    "display_name": info.get("display_name", active),
+                    "installed": _is_installed(active),
+                    "group": group,
+                    "vram": str((info.get("hardware") or {}).get("vram", "")),
+                    "active": True,  # currently selected in settings
+                })
+
+        # 2. Catalog models from both groups
         for group in ["deep", "proofreading"]:
             for mid in MODELS_GROUPS.get(group, []):
                 if mid in seen:
@@ -2356,9 +2397,10 @@ async def gsm_note_models():
                 models.append({
                     "id": mid,
                     "display_name": info.get("display_name", mid),
-                    "installed": mid.lower() in installed_lower,
+                    "installed": _is_installed(mid),
                     "group": group,
                     "vram": str((info.get("hardware") or {}).get("vram", "")),
+                    "active": False,
                 })
 
         return JSONResponse({
