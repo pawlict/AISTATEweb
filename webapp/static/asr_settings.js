@@ -757,7 +757,7 @@ function infoFor(engine, id){
     : (e === "sound_detection") ? "Sound Detection"
     : "Whisper";
   return {
-    name: `${namePrefix} — ${key || "—"}`
+    name: key ? `${namePrefix} — ${key}` : `${namePrefix} — informacje ogólne`
     , rich: specific.rich || null,
     functionality: pickTxt(specific.functionality || base.functionality),
     accuracy: pickTxt(specific.accuracy || base.accuracy),

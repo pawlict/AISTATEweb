@@ -9094,6 +9094,71 @@
     dialog.showModal();
   }
 
+  /* ── GSM Toolbar: model loading, generate, report ──────── */
+
+  let _gsmModelsLoaded = false;
+
+  async function _loadGsmModels() {
+    if (_gsmModelsLoaded) return;
+    try {
+      const resp = await fetch("/api/models/list");
+      if (!resp.ok) return;
+      const list = await resp.json();
+      const deep = Array.isArray(list && list.deep) ? list.deep.filter(m => m && m.installed) : [];
+      const sel = QS("#gsm_model_deep");
+      if (!sel) return;
+      sel.innerHTML = "";
+      if (!deep.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "Brak zainstalowanych modeli";
+        sel.appendChild(opt);
+        sel.disabled = true;
+        return;
+      }
+      deep.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m.id;
+        opt.textContent = (m.display_name || m.id) + (m.vram ? ` • ${m.vram}` : "");
+        sel.appendChild(opt);
+      });
+      sel.disabled = false;
+      _gsmModelsLoaded = true;
+    } catch (e) {
+      console.warn("[GSM] Failed to load models:", e);
+    }
+  }
+
+  function _gsmGenerate() {
+    const modelSel = QS("#gsm_model_deep");
+    const model = modelSel ? modelSel.value : "";
+    if (!model) {
+      _log("warn", "Nie wybrano modelu LLM. Zainstaluj model w ustawieniach.");
+      return;
+    }
+    if (!St.lastResult) {
+      _log("warn", "Brak danych GSM do analizy. Wczytaj biling.");
+      return;
+    }
+    // Placeholder — system raportowania będzie rozbudowany
+    _log("info", `Analiza GSM z modelem ${model} — funkcja w budowie.`);
+  }
+
+  function _saveGsmReport() {
+    const checked = QSA('input[name="gsm_report_fmt"]:checked');
+    const formats = Array.from(checked).map(cb => cb.value);
+    if (!formats.length) {
+      _log("warn", "Nie wybrano formatu raportu.");
+      return;
+    }
+    if (!St.lastResult) {
+      _log("warn", "Brak danych GSM do raportu. Wczytaj biling.");
+      return;
+    }
+    // Placeholder — system raportowania będzie rozbudowany
+    _log("info", `Zapis raportu GSM (${formats.join(", ")}) — funkcja w budowie.`);
+  }
+
   /* ── bindings ───────────────────────────────────────────── */
   function _bind() {
     const fileInput = QS("#gsm_file_input");
@@ -9235,6 +9300,14 @@
       };
     }
 
+    // GSM toolbar: Analizuj + Raport
+    const gsmGenBtn = QS("#gsm_generate_btn");
+    if (gsmGenBtn) gsmGenBtn.onclick = _gsmGenerate;
+    const gsmSaveBtn = QS("#gsm_report_save_btn");
+    if (gsmSaveBtn) gsmSaveBtn.onclick = _saveGsmReport;
+
+    // Lazy-load models for GSM toolbar
+    _loadGsmModels();
   }
 
   /* ── public manager ─────────────────────────────────────── */
