@@ -1477,18 +1477,6 @@
     const undetected = grouping.undetected_files || [];
     const reason = grouping.confirmation_reason || "";
     const msisdns = Object.keys(subs);
-    const isSingle = grouping.is_single_subscriber;
-
-    // Collect all billing files with metadata
-    const allFiles = [];
-    for (const msisdn of msisdns) {
-      for (const f of subs[msisdn]) {
-        allFiles.push({ ...f, msisdn, checked: true });
-      }
-    }
-    for (const f of undetected) {
-      allFiles.push({ ...f, msisdn: "", checked: true });
-    }
 
     // Build dialog HTML
     let title, desc;
@@ -1496,28 +1484,27 @@
       title = `\u26A0\uFE0F Wykryto bilingi ${msisdns.length} r\u00F3\u017Cnych abonent\u00F3w`;
       desc = `Przes\u0142ane pliki zawieraj\u0105 bilingi r\u00F3\u017Cnych os\u00F3b. Mo\u017Cesz wybra\u0107 konkretnego abonenta lub zatwierdzić wszystkie pliki.`;
     } else if (reason === "complementary_files") {
-      title = `\uD83D\uDCC2 Wykryto ${allFiles.length} uzupe\u0142niaj\u0105cych si\u0119 plik\u00F3w`;
+      const cnt = Object.values(subs).reduce((a, b) => a + b.length, 0) + undetected.length;
+      title = `\uD83D\uDCC2 Wykryto ${cnt} uzupe\u0142niaj\u0105cych si\u0119 plik\u00F3w`;
       desc = `Pliki nale\u017C\u0105 do tego samego abonenta i uzupe\u0142niaj\u0105 si\u0119 (np. po\u0142\u0105czenia + transmisja danych). Zatwierd\u017A lub odrzuć poszczeg\u00F3lne pliki:`;
     } else {
       title = `\u2753 Potwierdzenie plik\u00F3w do analizy`;
       desc = `Wybierz pliki, kt\u00F3re maj\u0105 zosta\u0107 uwzgl\u0119dnione w analizie:`;
     }
 
-    let html = `<div style="padding:16px">
-      <h3 style="margin:0 0 8px;color:${reason === 'multi_subscriber' ? '#dc2626' : '#2563eb'}">${title}</h3>
-      <p style="margin:0 0 16px;color:#64748b;font-size:13px">${desc}</p>`;
+    let body = "";
 
     // Group files by subscriber for display
     for (const msisdn of msisdns) {
       const files = subs[msisdn];
       if (msisdns.length > 1) {
-        html += `<div style="margin:8px 0 4px;font-weight:600;font-size:13px;color:var(--text)">
+        body += `<div style="margin:8px 0 4px;font-weight:600;font-size:13px;color:var(--text)">
           \uD83D\uDCF1 ${msisdn}</div>`;
       }
       for (const f of files) {
         const subtype = f.file_subtype ? ` \u2014 ${f.file_subtype === 'pol' ? 'Po\u0142\u0105czenia/SMS' : f.file_subtype === 'td' ? 'Transmisja danych' : f.file_subtype}` : "";
         const conf = f.confidence >= 0.8 ? '\u2705' : f.confidence > 0 ? '\u26A0\uFE0F' : '\u2753';
-        html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
+        body += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
           background:var(--bg-card,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:6px;cursor:pointer;
           transition:background .1s" onmouseover="this.style.background='var(--bg-hover,#f1f5f9)'"
           onmouseout="this.style.background='var(--bg-card,#f8fafc)'">
@@ -1533,7 +1520,7 @@
 
     // Undetected files
     for (const f of undetected) {
-      html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
+      body += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
         background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;cursor:pointer">
         <input type="checkbox" class="_fc_file" data-filename="${f.filename}" data-msisdn="" checked
           style="width:16px;height:16px;accent-color:#d97706">
@@ -1544,25 +1531,29 @@
       </label>`;
     }
 
-    html += `<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
-      <button class="btn btn-sm" id="_fc_cancel" style="color:#64748b">Anuluj</button>
-      <button class="btn btn-primary btn-sm" id="_fc_confirm">\u2705 Zatwierd\u017A i analizuj</button>
-    </div>`;
-    html += `</div>`;
-
-    // Show in results area
-    const results = QS("#gsm_results");
-    if (results) {
-      results.style.display = "";
-      results.innerHTML = html;
-    }
+    // Use native <dialog> so #gsm_results DOM is never destroyed
+    let dlg = QS("#_fc_dialog");
+    if (dlg) dlg.remove();
+    dlg = document.createElement("dialog");
+    dlg.id = "_fc_dialog";
+    dlg.style.cssText = "max-width:520px;width:92vw;border-radius:12px;border:1px solid var(--border,#e2e8f0);padding:0;box-shadow:0 8px 32px rgba(0,0,0,.18)";
+    dlg.innerHTML = `<form method="dialog" style="padding:16px">
+      <h3 style="margin:0 0 8px;color:${reason === 'multi_subscriber' ? '#dc2626' : '#2563eb'}">${title}</h3>
+      <p style="margin:0 0 16px;color:#64748b;font-size:13px">${desc}</p>
+      ${body}
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button type="button" class="btn btn-sm" id="_fc_cancel" style="color:#64748b">Anuluj</button>
+        <button type="button" class="btn btn-primary btn-sm" id="_fc_confirm">\u2705 Zatwierd\u017A i analizuj</button>
+      </div>
+    </form>`;
+    document.body.appendChild(dlg);
 
     // Bind confirm button
-    const confirmBtn = QS("#_fc_confirm");
+    const confirmBtn = dlg.querySelector("#_fc_confirm");
     if (confirmBtn) {
       confirmBtn.addEventListener("click", () => {
         const checked = [];
-        results.querySelectorAll("._fc_file:checked").forEach(cb => {
+        dlg.querySelectorAll("._fc_file:checked").forEach(cb => {
           checked.push(cb.dataset.filename);
         });
         if (!checked.length) {
@@ -1570,18 +1561,23 @@
           return;
         }
         _addLog("info", `Zatwierdzone pliki: ${checked.join(", ")}`);
+        dlg.close();
+        dlg.remove();
         _reimportWithConfirmedFiles(originalFiles, checked);
       });
     }
 
     // Bind cancel
-    const cancelBtn = QS("#_fc_cancel");
+    const cancelBtn = dlg.querySelector("#_fc_cancel");
     if (cancelBtn) {
       cancelBtn.addEventListener("click", () => {
-        if (results) results.style.display = "none";
+        dlg.close();
+        dlg.remove();
         _addLog("info", "Anulowano import.");
       });
     }
+
+    dlg.showModal();
   }
 
   /**
@@ -1798,7 +1794,7 @@
         if (status) status.textContent = "Załadowano identyfikację (brak bilingu)";
         // Re-render if we already had billing loaded
         if (St.lastResult) {
-          _renderDevices(St.lastResult.analysis ? St.lastResult.analysis.devices : [], St.lastResult.analysis ? St.lastResult.analysis.imei_changes : [], St.lastResult.records, St.lastResult.subscriber);
+          _renderDevices(St.lastResult.analysis, St.lastResult.records, St.lastResult.subscriber);
           _renderAnalysis(St.lastResult.analysis);
           _renderAnomalies(St.lastResult.analysis);
           _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
@@ -1885,7 +1881,7 @@
 
     _renderInfo(data);
     _renderSummary(data.summary);
-    _renderDevices(data.analysis ? data.analysis.devices : [], data.analysis ? data.analysis.imei_changes : [], data.records, data.subscriber);
+    _renderDevices(data.analysis, data.records, data.subscriber);
     _renderAnalysis(data.analysis);
     _renderAnomalies(data.analysis);
     _renderRecords(data.records, data.records_truncated, data.record_count);
@@ -1999,13 +1995,16 @@
 
   /* ── Devices card (IMEI / IMSI analysis) ────────────────── */
 
-  function _renderDevices(devices, imeiChanges, records, subscriber) {
+  function _renderDevices(analysis, records, subscriber) {
     const card = QS("#gsm_devices_card");
     const el   = QS("#gsm_devices_body");
     if (!el) return;
 
     const sub = subscriber || {};
-    const devList = devices || [];
+    const an = analysis || {};
+    const devList = an.devices || [];
+    const imeiChanges = an.imei_changes || [];
+    const dualImei = an.dual_imei || null;
 
     // ── Build IMEI ↔ IMSI map from individual records ──
     const imeiImsiMap = {};   // imei → Set of imsi
@@ -2039,13 +2038,33 @@
     }
     if (card) card.style.display = "";
 
+    // Set of IMEI values that are part of the dual-IMEI device (voice + data)
+    const dualImeiSet = new Set();
+    if (dualImei) {
+      dualImeiSet.add(dualImei.voice_imei);
+      dualImeiSet.add(dualImei.data_imei);
+    }
+
     const typeMap = { smartphone: "Smartfon", tablet: "Tablet", modem: "Modem", feature_phone: "Telefon", smartwatch: "Smartwatch" };
     let html = "";
+
+    // ── Dual-IMEI detection info box ──
+    if (dualImei) {
+      html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:12px;border-left:3px solid #2563eb">
+        <strong>📱 Wykryto urządzenie z dwoma modemami</strong> (dual-modem / eSIM)<br>
+        <span style="font-size:12px">Połączenia i SMS używają innego IMEI niż transmisja danych.
+        To normalne zachowanie współczesnych telefonów — <strong>nie jest to zmiana urządzenia</strong>.</span>
+        <div style="margin-top:6px;font-size:12px;display:flex;gap:16px;flex-wrap:wrap">
+          <span>📞 Głos/SMS: <code>${dualImei.voice_imei}</code> <span class="muted">(${_fmt(dualImei.voice_records)} rek.)</span></span>
+          <span>📡 Dane: <code>${dualImei.data_imei}</code> <span class="muted">(${_fmt(dualImei.data_records)} rek.)</span></span>
+        </div>
+      </div>`;
+    }
 
     // ── Devices table (if we have device analysis data) ──
     if (devList.length) {
       html += `<table class="gsm-table"><thead><tr>
-        <th>IMEI</th><th>IMSI</th><th>Urządzenie</th><th>Typ</th><th>Rekordy</th><th>Okres</th>
+        <th>IMEI</th><th>IMSI</th><th>Urządzenie</th><th>Typ</th><th>Domena</th><th>Rekordy</th><th>Okres</th>
       </tr></thead><tbody>`;
       for (const d of devList) {
         const name = d.display_name || '<span class="muted">nieznane</span>';
@@ -2053,11 +2072,16 @@
         const period = d.first_seen ? (d.first_seen === d.last_seen ? d.first_seen : `${d.first_seen} – ${d.last_seen}`) : "—";
         const imsis = imeiImsiMap[d.imei];
         const imsiStr = imsis && imsis.size ? [...imsis].map(s => `<code>${s}</code>`).join(", ") : (sub.imsi ? `<code>${sub.imsi}</code>` : '<span class="muted">—</span>');
+        // Indicate voice/data domain if dual-IMEI
+        let domain = "—";
+        if (dualImei && d.imei === dualImei.voice_imei) domain = "📞 Głos/SMS";
+        else if (dualImei && d.imei === dualImei.data_imei) domain = "📡 Dane";
         html += `<tr>
           <td><code>${d.imei || "?"}</code></td>
           <td>${imsiStr}</td>
           <td>${d.known ? `<strong>${name}</strong>` : name}</td>
           <td>${typeName}</td>
+          <td style="font-size:12px">${domain}</td>
           <td>${_fmt(d.record_count)}</td>
           <td>${period}</td>
         </tr>`;
@@ -2076,13 +2100,26 @@
       html += `</div>`;
     }
 
-    // ── IMEI changes timeline ──
+    // ── IMEI changes timeline (limited with slider) ──
     if (imeiChanges && imeiChanges.length) {
-      html += `<div style="margin-top:12px"><div class="h3" style="margin-bottom:6px">Zmiany IMEI</div>`;
-      for (const ch of imeiChanges) {
+      const IMEI_INIT = 5;
+      const total = imeiChanges.length;
+      html += `<div style="margin-top:12px"><div class="h3" style="margin-bottom:6px">Zmiany IMEI <span class="muted" style="font-weight:400;font-size:12px">(${total})</span></div>`;
+      for (let i = 0; i < total; i++) {
+        const ch = imeiChanges[i];
         const oldDev = ch.old_device ? ` (${ch.old_device})` : "";
         const newDev = ch.new_device ? ` (${ch.new_device})` : "";
-        html += `<div class="gsm-anomaly gsm-anomaly-medium">${ch.date || ""}: ${ch.old_imei || "?"}${oldDev} → ${ch.new_imei || "?"}${newDev}</div>`;
+        const grp = ch.group === "data" ? " [dane]" : ch.group === "voice" ? " [głos]" : "";
+        const hide = i >= IMEI_INIT ? ' style="display:none"' : "";
+        html += `<div class="gsm-anomaly gsm-anomaly-medium _imei_ch"${hide}>${ch.date || ""}${grp}: ${ch.old_imei || "?"}${oldDev} → ${ch.new_imei || "?"}${newDev}</div>`;
+      }
+      if (total > IMEI_INIT) {
+        html += `<div style="margin-top:8px;display:flex;align-items:center;gap:10px;font-size:12px">
+          <span class="muted">Widoczne:</span>
+          <input type="range" id="_imei_slider" min="${IMEI_INIT}" max="${total}" value="${IMEI_INIT}"
+            style="flex:1;max-width:220px;accent-color:#2563eb">
+          <span id="_imei_slider_val">${IMEI_INIT} / ${total}</span>
+        </div>`;
       }
       html += "</div>";
     }
@@ -2093,26 +2130,40 @@
     const findings = [];
 
     // Multiple IMEIs for one IMSI → phone changes (same SIM, different phones)
+    // BUT skip if both IMEIs belong to dual-IMEI device (same device, different modems)
     for (const [imsi, imeis] of Object.entries(imsiImeiMap)) {
       if (imeis.size > 1) {
-        findings.push({
-          type: "phone_change",
-          msg: `IMSI <code>${imsi}</code> — wykryto <strong>${imeis.size} różnych IMEI</strong> (${[...imeis].map(i => `<code>${i}</code>`).join(", ")}). Abonent zmieniał telefony korzystając z tej samej karty SIM.`
-        });
+        const imeiArr = [...imeis];
+        const allDual = dualImei && imeiArr.every(i => dualImeiSet.has(i));
+        if (!allDual) {
+          const nonDual = dualImei ? imeiArr.filter(i => !dualImeiSet.has(i)) : imeiArr;
+          if (nonDual.length > 1 || !dualImei) {
+            findings.push({
+              type: "phone_change",
+              msg: `IMSI <code>${imsi}</code> — wykryto <strong>${imeis.size} różnych IMEI</strong> (${imeiArr.map(i => `<code>${i}</code>`).join(", ")}). Abonent zmieniał telefony korzystając z tej samej karty SIM.`
+            });
+          }
+        }
       }
     }
     // One IMEI with multiple IMSIs → SIM changes (same phone, different SIMs)
+    // BUT skip if both are from the same dual-IMEI device (voice IMSI ≠ data IMSI is normal)
     for (const [imei, imsis] of Object.entries(imeiImsiMap)) {
       if (imsis.size > 1) {
-        findings.push({
-          type: "sim_change",
-          msg: `IMEI <code>${imei}</code> — wykryto <strong>${imsis.size} różnych IMSI</strong> (${[...imsis].map(s => `<code>${s}</code>`).join(", ")}). W tym urządzeniu zmieniano karty SIM.`
-        });
+        const isDualDevice = dualImeiSet.has(imei);
+        if (!isDualDevice) {
+          findings.push({
+            type: "sim_change",
+            msg: `IMEI <code>${imei}</code> — wykryto <strong>${imsis.size} różnych IMSI</strong> (${[...imsis].map(s => `<code>${s}</code>`).join(", ")}). W tym urządzeniu zmieniano karty SIM.`
+          });
+        }
       }
     }
 
     html += `<div style="margin-top:12px"><div class="h3" style="margin-bottom:6px">Analiza IMEI / IMSI</div>`;
-    html += `<div style="margin-bottom:8px;font-size:13px">Unikalne IMEI: <strong>${nImei}</strong> &nbsp;|&nbsp; Unikalne IMSI: <strong>${nImsi}</strong></div>`;
+    // Count "logical" devices — if dual-IMEI, count those 2 IMEIs as 1 device
+    const logicalDevices = dualImei ? nImei - 1 : nImei;
+    html += `<div style="margin-bottom:8px;font-size:13px">Unikalne IMEI: <strong>${nImei}</strong>${dualImei ? ` (${logicalDevices} urz. fizyczne — 2 IMEI = 1 dual-modem)` : ""} &nbsp;|&nbsp; Unikalne IMSI: <strong>${nImsi}</strong></div>`;
 
     if (findings.length) {
       for (const f of findings) {
@@ -2120,11 +2171,23 @@
         html += `<div class="gsm-anomaly ${cls}" style="margin-bottom:4px">${f.msg}</div>`;
       }
     } else {
-      html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:4px">Brak zmian — w całym okresie używano ${nImei === 1 ? "jednego urządzenia" : nImei + " urządzeń"} z ${nImsi === 1 ? "jedną kartą SIM" : nImsi + " kartami SIM"}. Nie wykryto zmian telefonów ani kart SIM.</div>`;
+      html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:4px">Brak zmian — w całym okresie używano ${logicalDevices === 1 ? "jednego urządzenia" : logicalDevices + " urządzeń"}${dualImei ? " (dual-modem)" : ""} z ${nImsi === 1 ? "jedną kartą SIM" : nImsi + " kartami SIM"}. Nie wykryto zmian telefonów ani kart SIM.</div>`;
     }
     html += "</div>";
 
     el.innerHTML = html;
+
+    // Bind IMEI changes slider
+    const slider = el.querySelector("#_imei_slider");
+    if (slider) {
+      const valSpan = el.querySelector("#_imei_slider_val");
+      const items = el.querySelectorAll("._imei_ch");
+      slider.addEventListener("input", () => {
+        const show = parseInt(slider.value, 10);
+        items.forEach((it, idx) => { it.style.display = idx < show ? "" : "none"; });
+        if (valSpan) valSpan.textContent = `${show} / ${items.length}`;
+      });
+    }
   }
 
   function _renderAnalysis(a) {

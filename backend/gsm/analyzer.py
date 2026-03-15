@@ -96,6 +96,8 @@ class AnalysisResult:
     busiest_date_count: int = 0
     # IMEI tracking
     imei_changes: List[Dict[str, str]] = field(default_factory=list)
+    # Dual-IMEI detection (voice vs data use different stable IMEI)
+    dual_imei: Optional[Dict[str, Any]] = None
     # Device identification (IMEI → brand/model)
     devices: List[Dict[str, Any]] = field(default_factory=list)
     # Special numbers (non-standard: voicemail, services, premium, short codes)
@@ -121,6 +123,7 @@ class AnalysisResult:
             "busiest_date": self.busiest_date,
             "busiest_date_count": self.busiest_date_count,
             "imei_changes": self.imei_changes,
+            "dual_imei": self.dual_imei,
             "devices": self.devices,
             "special_numbers": self.special_numbers,
             "night_activity": self.night_activity,
@@ -176,8 +179,11 @@ def analyze_billing(
     # 5. Busiest date
     _analyze_busiest_date(records, analysis)
 
-    # 6. IMEI changes
+    # 6. IMEI changes (per domain group: voice vs data)
     analysis.imei_changes = _detect_imei_changes(records)
+
+    # 6b. Dual-IMEI detection (voice ≠ data IMEI = same device, different modems)
+    analysis.dual_imei = _detect_dual_imei(records)
 
     # 7. Device identification (IMEI → brand/model)
     analysis.devices = _identify_devices(records, result.subscriber)
@@ -591,22 +597,95 @@ def _identify_devices(
     return devices
 
 
+def _classify_record_group(record_type: str) -> str:
+    """Classify a record_type into a domain group for IMEI tracking.
+
+    Voice/SMS and DATA use separate modem domains in many handsets,
+    so IMEI may legitimately differ between them without indicating
+    a real device change.
+    """
+    if record_type == "DATA":
+        return "data"
+    return "voice"  # CALL_OUT, CALL_IN, SMS_OUT, SMS_IN, etc.
+
+
 def _detect_imei_changes(records: List[BillingRecord]) -> List[Dict[str, str]]:
-    """Detect IMEI changes over time (device changes)."""
+    """Detect real IMEI changes over time (device changes).
+
+    Changes are tracked **per domain group** (voice vs data) to avoid
+    false positives when merging complementary billing files where voice
+    and data sessions report different IMEI (dual-modem / eSIM devices).
+    """
     changes: List[Dict[str, str]] = []
-    last_imei = ""
+    last_imei_by_group: Dict[str, str] = {}  # group → last seen IMEI
 
     for r in sorted(records, key=lambda r: r.datetime):
-        if r.imei and r.imei != last_imei:
-            if last_imei:
+        if not r.imei:
+            continue
+        group = _classify_record_group(r.record_type)
+        last = last_imei_by_group.get(group, "")
+        if r.imei != last:
+            if last:
                 changes.append({
                     "date": r.date,
-                    "old_imei": last_imei,
+                    "old_imei": last,
                     "new_imei": r.imei,
+                    "group": group,
                 })
-            last_imei = r.imei
+            last_imei_by_group[group] = r.imei
 
     return changes
+
+
+def _detect_dual_imei(records: List[BillingRecord]) -> Optional[Dict[str, Any]]:
+    """Detect if the subscriber uses different stable IMEI for voice vs data.
+
+    This is common in:
+    - Dual-modem devices (separate CS/PS modems)
+    - Devices with eSIM + physical SIM
+    - Merged billing files (POL + TD) for the same subscriber
+
+    Returns None if not a dual-IMEI situation, otherwise a dict with details.
+    """
+    voice_imeis: Dict[str, int] = {}
+    data_imeis: Dict[str, int] = {}
+
+    for r in records:
+        if not r.imei:
+            continue
+        if r.record_type == "DATA":
+            data_imeis[r.imei] = data_imeis.get(r.imei, 0) + 1
+        else:
+            voice_imeis[r.imei] = voice_imeis.get(r.imei, 0) + 1
+
+    if not voice_imeis or not data_imeis:
+        return None
+
+    # Dominant IMEI per group
+    voice_main = max(voice_imeis, key=voice_imeis.get)
+    data_main = max(data_imeis, key=data_imeis.get)
+
+    if voice_main == data_main:
+        return None  # Same IMEI for both — no dual-modem
+
+    # Check stability: dominant IMEI should cover ≥80% of records in its group
+    voice_total = sum(voice_imeis.values())
+    data_total = sum(data_imeis.values())
+    voice_pct = voice_imeis[voice_main] / voice_total if voice_total else 0
+    data_pct = data_imeis[data_main] / data_total if data_total else 0
+
+    if voice_pct < 0.8 or data_pct < 0.8:
+        return None  # Not stable enough — real device changes likely
+
+    return {
+        "voice_imei": voice_main,
+        "voice_records": voice_imeis[voice_main],
+        "voice_total": voice_total,
+        "data_imei": data_main,
+        "data_records": data_imeis[data_main],
+        "data_total": data_total,
+        "same_tac": voice_main[:8] == data_main[:8] if len(voice_main) >= 8 and len(data_main) >= 8 else False,
+    }
 
 
 # ---------------------------------------------------------------------------
