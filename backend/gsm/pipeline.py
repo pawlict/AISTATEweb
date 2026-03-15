@@ -290,15 +290,19 @@ def merge_billing_results(results: List[BillingParseResult]) -> BillingParseResu
     s.total_records = len(merged.records)
     dates = []
     for rec in merged.records:
+        dur = rec.duration_seconds or 0
+        cost = rec.cost or 0
+        cost_g = rec.cost_gross or 0
+
         if rec.record_type == "CALL_OUT":
             s.calls_out += 1
-            s.call_duration_seconds += rec.duration_seconds
+            s.call_duration_seconds += dur
         elif rec.record_type == "CALL_IN":
             s.calls_in += 1
-            s.call_duration_seconds += rec.duration_seconds
+            s.call_duration_seconds += dur
         elif rec.record_type == "CALL_FORWARDED":
             s.calls_out += 1  # count in calls
-            s.call_duration_seconds += rec.duration_seconds
+            s.call_duration_seconds += dur
         elif rec.record_type == "SMS_OUT":
             s.sms_out += 1
         elif rec.record_type == "SMS_IN":
@@ -310,9 +314,9 @@ def merge_billing_results(results: List[BillingParseResult]) -> BillingParseResu
         elif rec.record_type == "DATA":
             s.data_sessions += 1
 
-        s.total_duration_seconds += rec.duration_seconds
-        s.total_cost += rec.cost
-        s.total_cost_gross += rec.cost_gross
+        s.total_duration_seconds += dur
+        s.total_cost += cost
+        s.total_cost_gross += cost_g
 
         if rec.date:
             dates.append(rec.date)
