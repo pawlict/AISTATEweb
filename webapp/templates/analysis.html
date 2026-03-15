@@ -80,6 +80,42 @@
         <span class="toolbar-sep" style="height:22px;margin:0 6px"></span>
         <button class="btn pill-icon" id="gsm_standalone_map_btn" title="Otwórz mapę (bez danych bilingowych)"><img src="/static/icons/inne/map.svg" alt="Mapa" width="20" height="20" draggable="false" style="opacity:.85"></button>
       </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Analizuj -->
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="gsm_generate_btn" title="Generuj analizę GSM" data-i18n-title="gsm.generate_tooltip"><img src="/static/icons/akcje/generate_ai.svg" alt="Analizuj" draggable="false"></button>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Model LLM (deep) -->
+      <div class="toolbar-section">
+        <div class="analysis-models">
+          <div class="analysis-model">
+            <label class="small" for="gsm_model_deep">Model LLM</label>
+            <select class="input mini-select" id="gsm_model_deep" disabled>
+              <option data-i18n="analysis.models_loading">Ładowanie…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Raport -->
+      <div class="toolbar-section">
+        <div class="toolbar-group" id="gsm_report_formats">
+          <label class="toolbar-group-label" data-i18n="analysis.report"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="gsm_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="gsm_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="gsm_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+            <button class="btn pill-icon" id="gsm_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
