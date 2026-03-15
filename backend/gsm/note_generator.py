@@ -480,7 +480,7 @@ def _fix_orphans(text: str) -> str:
     """
     if not text:
         return text
-    return _ORPHAN_RE.sub(r'\1\u00a0', text)
+    return _ORPHAN_RE.sub('\\1\u00a0', text)
 
 
 # ─── Page numbers ────────────────────────────────────────────────────────────
