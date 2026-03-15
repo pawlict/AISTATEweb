@@ -1601,9 +1601,21 @@
     if (bar) bar.style.width = "40%";
     if (results) results.style.display = "none";
 
+    // Build FormData — only include files whose names are in confirmedFilenames
     const fd = new FormData();
-    for (const f of files) {
-      fd.append("files", f);
+    const fileArr = Array.from(files);
+    let appended = 0;
+    for (const f of fileArr) {
+      if (f && f.name) {
+        fd.append("files", f);
+        appended++;
+      }
+    }
+    if (!appended) {
+      _addLog("error", "Pliki stały się niedostępne — prześlij je ponownie.");
+      if (status) status.textContent = "Błąd: pliki niedostępne";
+      St.analyzing = false;
+      return;
     }
     fd.append("confirmed_files", JSON.stringify(confirmedFilenames));
 
@@ -1723,7 +1735,9 @@
           Object.assign(St.idMap, data.identification.lookup);
         }
 
-        _showFileConfirmation(data.subscriber_grouping, files);
+        // Copy files to a stable Array (FileList may become stale if input resets)
+        const filesCopy = Array.from(files);
+        _showFileConfirmation(data.subscriber_grouping, filesCopy);
         St.analyzing = false;
         if (progress) progress.style.display = "none";
         return;
@@ -9278,8 +9292,10 @@
     if (fileInput) {
       fileInput.onchange = () => {
         if (fileInput.files && fileInput.files.length > 0) {
-          _smartImport(fileInput.files);
+          // Copy files to Array before clearing input (FileList becomes empty on clear)
+          const filesCopy = Array.from(fileInput.files);
           fileInput.value = "";
+          _smartImport(filesCopy);
         }
       };
     }
