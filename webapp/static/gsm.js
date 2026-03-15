@@ -9875,10 +9875,10 @@
    */
   async function _captureChartScreenshot(chartName) {
     const selectorMap = {
-      "top_contacts": "[data-chart-id='top_contacts']",
-      "activity": "[data-chart-id='hourly_distribution'], [data-chart-id='activity_timeline'], [data-chart-id='heatmap']",
-      "night_activity": "[data-chart-id='night_activity']",
-      "weekend_activity": "[data-chart-id='weekend_activity']",
+      "top_contacts": "#gsm_graph_card",
+      "activity": "#gsm_heatmap_card",
+      "night_activity": "[data-chart-id='night']",
+      "weekend_activity": "[data-chart-id='weekend']",
       "map_bts": "#gsm_map_container",
     };
 
