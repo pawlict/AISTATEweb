@@ -1463,56 +1463,87 @@
    * Show subscriber conflict dialog when multi-subscriber detected.
    * User picks one subscriber → re-submits import with selected_msisdn.
    */
-  function _showSubscriberConflict(grouping, originalFiles) {
+  /**
+   * Show file confirmation dialog — lets user approve/reject individual
+   * billing files before analysis. Handles both same-subscriber
+   * complementary files (POL+TD) and multi-subscriber scenarios.
+   */
+  function _showFileConfirmation(grouping, originalFiles) {
     const subs = grouping.subscribers || {};
     const undetected = grouping.undetected_files || [];
+    const reason = grouping.confirmation_reason || "";
     const msisdns = Object.keys(subs);
+    const isSingle = grouping.is_single_subscriber;
+
+    // Collect all billing files with metadata
+    const allFiles = [];
+    for (const msisdn of msisdns) {
+      for (const f of subs[msisdn]) {
+        allFiles.push({ ...f, msisdn, checked: true });
+      }
+    }
+    for (const f of undetected) {
+      allFiles.push({ ...f, msisdn: "", checked: true });
+    }
 
     // Build dialog HTML
-    let html = `<div style="padding:16px">
-      <h3 style="margin:0 0 12px;color:#dc2626">
-        ⚠️ Wykryto bilingi ${msisdns.length} różnych abonentów
-      </h3>
-      <p style="margin:0 0 16px;color:#64748b;font-size:13px">
-        Przesłane pliki zawierają bilingi należące do różnych osób.
-        Wybierz abonenta do analizy:
-      </p>`;
+    let title, desc;
+    if (reason === "multi_subscriber") {
+      title = `\u26A0\uFE0F Wykryto bilingi ${msisdns.length} r\u00F3\u017Cnych abonent\u00F3w`;
+      desc = `Przes\u0142ane pliki zawieraj\u0105 bilingi r\u00F3\u017Cnych os\u00F3b. Mo\u017Cesz wybra\u0107 konkretnego abonenta lub zatwierdzić wszystkie pliki.`;
+    } else if (reason === "complementary_files") {
+      title = `\uD83D\uDCC2 Wykryto ${allFiles.length} uzupe\u0142niaj\u0105cych si\u0119 plik\u00F3w`;
+      desc = `Pliki nale\u017C\u0105 do tego samego abonenta i uzupe\u0142niaj\u0105 si\u0119 (np. po\u0142\u0105czenia + transmisja danych). Zatwierd\u017A lub odrzuć poszczeg\u00F3lne pliki:`;
+    } else {
+      title = `\u2753 Potwierdzenie plik\u00F3w do analizy`;
+      desc = `Wybierz pliki, kt\u00F3re maj\u0105 zosta\u0107 uwzgl\u0119dnione w analizie:`;
+    }
 
+    let html = `<div style="padding:16px">
+      <h3 style="margin:0 0 8px;color:${reason === 'multi_subscriber' ? '#dc2626' : '#2563eb'}">${title}</h3>
+      <p style="margin:0 0 16px;color:#64748b;font-size:13px">${desc}</p>`;
+
+    // Group files by subscriber for display
     for (const msisdn of msisdns) {
       const files = subs[msisdn];
-      const fileList = files.map(f => {
-        const op = f.operator_id ? ` <span style="opacity:.6">(${f.operator_id})</span>` : "";
-        return `<div style="font-size:12px;line-height:1.5;padding-left:8px">📊 ${f.filename}${op}</div>`;
-      }).join("");
-
-      html += `<div class="card" style="margin:8px 0;cursor:pointer;border:2px solid var(--border);transition:border-color .15s"
-                    onmouseover="this.style.borderColor='var(--accent)'"
-                    onmouseout="this.style.borderColor='var(--border)'"
-                    data-msisdn="${msisdn}">
-        <div style="display:flex;align-items:center;gap:12px">
-          <div style="font-size:28px">📱</div>
+      if (msisdns.length > 1) {
+        html += `<div style="margin:8px 0 4px;font-weight:600;font-size:13px;color:var(--text)">
+          \uD83D\uDCF1 ${msisdn}</div>`;
+      }
+      for (const f of files) {
+        const subtype = f.file_subtype ? ` \u2014 ${f.file_subtype === 'pol' ? 'Po\u0142\u0105czenia/SMS' : f.file_subtype === 'td' ? 'Transmisja danych' : f.file_subtype}` : "";
+        const conf = f.confidence >= 0.8 ? '\u2705' : f.confidence > 0 ? '\u26A0\uFE0F' : '\u2753';
+        html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
+          background:var(--bg-card,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:6px;cursor:pointer;
+          transition:background .1s" onmouseover="this.style.background='var(--bg-hover,#f1f5f9)'"
+          onmouseout="this.style.background='var(--bg-card,#f8fafc)'">
+          <input type="checkbox" class="_fc_file" data-filename="${f.filename}" data-msisdn="${msisdn}" checked
+            style="width:16px;height:16px;accent-color:#2563eb">
           <div style="flex:1">
-            <div style="font-weight:600;font-size:15px">${msisdn}</div>
-            <div style="color:#64748b;font-size:12px">${files.length} plik(ów)</div>
+            <div style="font-size:13px;font-weight:500">${conf} ${f.filename}${subtype}</div>
+            <div style="font-size:11px;color:#64748b">${f.detail || f.operator_id || ''}</div>
           </div>
-          <button class="btn btn-primary btn-sm _sub_select_btn"
-                  data-msisdn="${msisdn}"
-                  style="white-space:nowrap">
-            Wybierz
-          </button>
+        </label>`;
+      }
+    }
+
+    // Undetected files
+    for (const f of undetected) {
+      html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
+        background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;cursor:pointer">
+        <input type="checkbox" class="_fc_file" data-filename="${f.filename}" data-msisdn="" checked
+          style="width:16px;height:16px;accent-color:#d97706">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500">\u2753 ${f.filename}</div>
+          <div style="font-size:11px;color:#92400e">${f.detail || 'Nie rozpoznano abonenta'}</div>
         </div>
-        ${fileList}
-      </div>`;
+      </label>`;
     }
 
-    if (undetected.length) {
-      html += `<div style="margin-top:12px;padding:8px 12px;background:#fef3c7;border-radius:6px;font-size:12px;color:#92400e">
-        <strong>Pliki bez rozpoznanego abonenta (${undetected.length}):</strong>
-        ${undetected.map(f => `<div style="padding-left:8px">❓ ${f.filename}</div>`).join("")}
-        <div style="margin-top:4px;opacity:.7">Te pliki zostaną dołączone do wybranego abonenta.</div>
-      </div>`;
-    }
-
+    html += `<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-sm" id="_fc_cancel" style="color:#64748b">Anuluj</button>
+      <button class="btn btn-primary btn-sm" id="_fc_confirm">\u2705 Zatwierd\u017A i analizuj</button>
+    </div>`;
     html += `</div>`;
 
     // Show in results area
@@ -1522,30 +1553,37 @@
       results.innerHTML = html;
     }
 
-    // Bind click handlers
-    results.querySelectorAll("._sub_select_btn").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const msisdn = btn.dataset.msisdn;
-        _addLog("info", `Wybrano abonenta: ${msisdn}`);
-        _reimportWithSubscriber(originalFiles, msisdn);
+    // Bind confirm button
+    const confirmBtn = QS("#_fc_confirm");
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", () => {
+        const checked = [];
+        results.querySelectorAll("._fc_file:checked").forEach(cb => {
+          checked.push(cb.dataset.filename);
+        });
+        if (!checked.length) {
+          _addLog("error", "Nie wybrano \u017Cadnego pliku.");
+          return;
+        }
+        _addLog("info", `Zatwierdzone pliki: ${checked.join(", ")}`);
+        _reimportWithConfirmedFiles(originalFiles, checked);
       });
-    });
+    }
 
-    // Also allow clicking the card itself
-    results.querySelectorAll("[data-msisdn]").forEach(card => {
-      card.addEventListener("click", () => {
-        const msisdn = card.dataset.msisdn;
-        _addLog("info", `Wybrano abonenta: ${msisdn}`);
-        _reimportWithSubscriber(originalFiles, msisdn);
+    // Bind cancel
+    const cancelBtn = QS("#_fc_cancel");
+    if (cancelBtn) {
+      cancelBtn.addEventListener("click", () => {
+        if (results) results.style.display = "none";
+        _addLog("info", "Anulowano import.");
       });
-    });
+    }
   }
 
   /**
-   * Re-submit import with a specific subscriber MSISDN selected.
+   * Re-submit import with user-confirmed file list.
    */
-  async function _reimportWithSubscriber(files, selectedMsisdn) {
+  async function _reimportWithConfirmedFiles(files, confirmedFilenames) {
     if (St.analyzing) return;
     St.analyzing = true;
 
@@ -1555,7 +1593,7 @@
     const results = QS("#gsm_results");
 
     if (progress) progress.style.display = "";
-    if (status) status.textContent = `Przetwarzanie bilingu abonenta ${selectedMsisdn}…`;
+    if (status) status.textContent = `Przetwarzanie ${confirmedFilenames.length} plik\u00F3w\u2026`;
     if (bar) bar.style.width = "40%";
     if (results) results.style.display = "none";
 
@@ -1563,7 +1601,7 @@
     for (const f of files) {
       fd.append("files", f);
     }
-    fd.append("selected_msisdn", selectedMsisdn);
+    fd.append("confirmed_files", JSON.stringify(confirmedFilenames));
 
     try {
       const resp = await fetch("/api/gsm/import", { method: "POST", body: fd });
@@ -1573,7 +1611,7 @@
 
       if (data.status !== "ok") {
         const detail = data.detail || data.error || data.message || JSON.stringify(data);
-        if (status) status.textContent = `Błąd: ${detail}`;
+        if (status) status.textContent = `B\u0142\u0105d: ${detail}`;
         _addLog("error", detail);
         St.analyzing = false;
         return;
@@ -1581,7 +1619,7 @@
 
       // Log scan results
       const sc = data.scan || {};
-      _addLog("info", `Skanowanie (wybrany abonent): ${sc.billing_count || 0} bilingów`);
+      _addLog("info", `Skanowanie: ${sc.billing_count || 0} biling\u00F3w`);
 
       // Process identification
       if (data.identification && data.identification.lookup) {
@@ -1595,17 +1633,14 @@
           St.lastResult = bd;
           St.filename = bd.filename || St.filename;
           if (status) status.textContent = "Gotowe";
-          _addLog("info", `Biling: ${bd.record_count || 0} rekordów (${bd.operator || "?"})`);
+          const merged = bd.merged_files ? ` (scalono: ${bd.merged_files.join(" + ")})` : "";
+          _addLog("info", `Biling: ${bd.record_count || 0} rekord\u00F3w (${bd.operator || "?"})${merged}`);
           await _renderResults(bd);
         } else {
-          const detail = bd.detail || "Błąd parsowania bilingu";
+          const detail = bd.detail || "B\u0142\u0105d parsowania bilingu";
           _addLog("error", `Biling: ${detail}`);
-          if (status) status.textContent = `Błąd bilingu: ${detail}`;
+          if (status) status.textContent = `B\u0142\u0105d bilingu: ${detail}`;
         }
-      }
-
-      if (data.extra_billings && data.extra_billings.length) {
-        _addLog("warn", `Dodatkowe bilingi (nie przetworzone): ${data.extra_billings.join(", ")}`);
       }
 
       setTimeout(() => { if (progress) progress.style.display = "none"; }, 800);
@@ -1613,7 +1648,7 @@
 
     } catch (e) {
       console.error("GSM re-import error:", e);
-      if (status) status.textContent = `Błąd: ${e.message}`;
+      if (status) status.textContent = `B\u0142\u0105d: ${e.message}`;
       _addLog("error", e.message);
     } finally {
       St.analyzing = false;
@@ -1667,17 +1702,24 @@
 
       if (bar) bar.style.width = "100%";
 
-      // --- Multi-subscriber detection ---
-      if (data.status === "multi_subscriber") {
-        if (status) status.textContent = "Wykryto bilingi wielu abonentów";
-        _addLog("warn", "Przesłane pliki zawierają bilingi więcej niż jednego abonenta.");
+      // --- File confirmation dialog (multi-file, multi-subscriber, uncertainty) ---
+      if (data.status === "confirm_files") {
+        if (status) status.textContent = "Wymagane potwierdzenie plików";
+        const reason = (data.subscriber_grouping || {}).confirmation_reason || "";
+        if (reason === "multi_subscriber") {
+          _addLog("warn", "Przesłane pliki zawierają bilingi więcej niż jednego abonenta.");
+        } else if (reason === "complementary_files") {
+          _addLog("info", "Wykryto uzupełniające się pliki billingowe tego samego abonenta.");
+        } else {
+          _addLog("warn", "Wymagane potwierdzenie plików do analizy.");
+        }
 
         // Process identification if returned
         if (data.identification && data.identification.lookup) {
           Object.assign(St.idMap, data.identification.lookup);
         }
 
-        _showSubscriberConflict(data.subscriber_grouping, files);
+        _showFileConfirmation(data.subscriber_grouping, files);
         St.analyzing = false;
         if (progress) progress.style.display = "none";
         return;

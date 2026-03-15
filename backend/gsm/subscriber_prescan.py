@@ -40,6 +40,7 @@ class FileSubscriberInfo:
     msisdn: str = ""  # normalised MSISDN or "" if undetectable
     confidence: float = 0.0  # 0.0 = unknown, 1.0 = certain
     detail: str = ""  # human-readable note, e.g. "Parametr column row 3"
+    file_subtype: str = ""  # "pol", "td", "" — distinguishes complementary billing files
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -48,6 +49,7 @@ class FileSubscriberInfo:
             "msisdn": self.msisdn,
             "confidence": round(self.confidence, 2),
             "detail": self.detail,
+            "file_subtype": self.file_subtype,
         }
 
 
@@ -56,12 +58,16 @@ class SubscriberGrouping:
     """Result of grouping billing files by subscriber MSISDN."""
 
     is_single_subscriber: bool = True
+    needs_confirmation: bool = False  # True when user should review file selection
+    confirmation_reason: str = ""     # e.g. "complementary_files", "low_confidence", "multi_subscriber"
     subscribers: Dict[str, List[FileSubscriberInfo]] = field(default_factory=dict)
     undetected_files: List[FileSubscriberInfo] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "is_single_subscriber": self.is_single_subscriber,
+            "needs_confirmation": self.needs_confirmation,
+            "confirmation_reason": self.confirmation_reason,
             "subscribers": {
                 msisdn: [f.to_dict() for f in files]
                 for msisdn, files in self.subscribers.items()
@@ -123,6 +129,29 @@ def _canonical(msisdn: str) -> str:
 # ---------------------------------------------------------------------------
 # Per-operator quick extractors
 # ---------------------------------------------------------------------------
+
+def _detect_plus_subtype(path: Path) -> str:
+    """Detect whether a Plus CSV is POL (calls/SMS) or TD (data sessions).
+
+    Returns "pol", "td", or "" if unknown.
+    """
+    raw = path.read_bytes()
+    for enc in ("cp1250", "utf-8", "latin-1"):
+        try:
+            text = raw.decode(enc)
+            break
+        except (UnicodeDecodeError, ValueError):
+            continue
+    else:
+        return ""
+
+    first_line = text.split("\n", 1)[0].lower()
+    if "uga/typ" in first_line:
+        return "pol"
+    if "czas trwania" in first_line:
+        return "td"
+    return ""
+
 
 def _prescan_plus_pol(path: Path) -> Optional[str]:
     """Extract subscriber MSISDN from Plus POL CSV (Parametr column).
@@ -368,14 +397,17 @@ def prescan_subscriber(
         suffix = path.suffix.lower()
 
         if operator_id == "plus":
+            # Detect subtype (POL=calls/SMS, TD=data) from header
+            _subtype = _detect_plus_subtype(path)
+            info.file_subtype = _subtype
             # Try POL first, then TD
             msisdn = _prescan_plus_pol(path)
             if msisdn:
-                info.detail = "Parametr column (POL format)"
+                info.detail = f"Parametr column ({_subtype.upper() or 'POL'} format)"
             else:
                 msisdn = _prescan_plus_td(path)
                 if msisdn:
-                    info.detail = "MSISDN column (TD format)"
+                    info.detail = f"MSISDN column ({_subtype.upper() or 'TD'} format)"
 
         elif operator_id == "play":
             msisdn = _prescan_play(path)
@@ -472,8 +504,34 @@ def group_by_subscriber(
     unique_subscribers = len(groups)
     is_single = unique_subscribers <= 1
 
+    # Determine if confirmation is needed
+    needs_confirm = False
+    confirm_reason = ""
+
+    if unique_subscribers > 1:
+        # Multiple different subscribers — user must choose
+        needs_confirm = True
+        confirm_reason = "multi_subscriber"
+    elif unique_subscribers == 1:
+        files_in_group = list(groups.values())[0]
+        if len(files_in_group) > 1:
+            # Same subscriber, multiple files — complementary (e.g. POL + TD)
+            # Ask user to confirm which files to include
+            needs_confirm = True
+            confirm_reason = "complementary_files"
+        if undetected:
+            # Some files couldn't be identified — uncertain
+            needs_confirm = True
+            confirm_reason = "undetected_files"
+    elif unique_subscribers == 0 and len(undetected) > 1:
+        # No subscriber detected in any file — very uncertain
+        needs_confirm = True
+        confirm_reason = "all_undetected"
+
     return SubscriberGrouping(
         is_single_subscriber=is_single,
+        needs_confirmation=needs_confirm,
+        confirmation_reason=confirm_reason,
         subscribers=groups,
         undetected_files=undetected,
     )

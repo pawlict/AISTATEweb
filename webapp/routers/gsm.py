@@ -154,6 +154,120 @@ def _do_parse(file_path: Path, filename: str) -> dict:
     return response
 
 
+def _do_parse_and_merge(file_list: list) -> dict:
+    """Parse multiple billing files and merge their records (runs in threadpool).
+
+    Used when complementary billing files (e.g. Plus POL + TD) are loaded
+    together for the same subscriber.
+
+    Args:
+        file_list: List of (path, filename) tuples.
+    """
+    from backend.gsm.pipeline import process_billing, merge_billing_results
+    from backend.gsm.analyzer import analyze_billing
+    from backend.gsm.imei_db import lookup_imei
+
+    results = []
+    filenames = []
+    for fpath, fname in file_list:
+        _app_log(f"[GSM] Parsing billing: {fname}")
+        r = process_billing(fpath)
+        _app_log(
+            f"[GSM] Parsed {len(r.records)} records from {fname}, "
+            f"operator={r.operator}, subscriber={r.subscriber.msisdn or '?'}"
+        )
+        # Store original filename for reference
+        r.sheet_name = fname
+        results.append(r)
+        filenames.append(fname)
+
+    # Merge all results into one
+    result = merge_billing_results(results)
+    combined_name = " + ".join(filenames)
+    _app_log(
+        f"[GSM] Merged {len(results)} files → {len(result.records)} total records, "
+        f"subscriber={result.subscriber.msisdn or '?'}"
+    )
+
+    # Analyse merged result
+    analysis = analyze_billing(result)
+
+    # Enrich subscriber
+    sub_dict = result.subscriber.to_dict()
+    if result.subscriber.imei:
+        dev = lookup_imei(result.subscriber.imei)
+        if dev:
+            sub_dict["device"] = dev.to_dict()
+
+    # Geolocate
+    geo = None
+    try:
+        from backend.gsm.geolocation import geolocate_records
+        from backend.gsm.bts_db import get_bts_db
+        bts_db = get_bts_db(_data_dir())
+
+        try:
+            stats = bts_db.get_stats()
+            _app_log(f"[GSM] BTS database: {stats.get('total_stations', 0)} stations")
+        except Exception:
+            pass
+
+        geo = geolocate_records(
+            result.records, bts_db,
+            data_dir=_data_dir() / "gsm",
+        )
+        if geo:
+            dbg = geo.debug or {}
+            _app_log(
+                f"[GSM] Geolocation: {geo.geolocated_records}/{geo.total_records} resolved"
+            )
+
+        cleaned = bts_db.cleanup_bad_coords()
+        if cleaned:
+            _app_log(f"[GSM] Cleaned {cleaned} bad entries from BTS database")
+
+        _sentinel = {"-1", "0", "", "UNKNOWN"}
+        records_with_coords = [
+            r.to_dict() for r in result.records
+            if r.extra.get("bts_x") and r.extra.get("bts_y")
+            and str(r.extra.get("bts_x")) not in _sentinel
+            and str(r.extra.get("bts_y")) not in _sentinel
+        ]
+        if records_with_coords:
+            count = bts_db.import_from_billing_records(records_with_coords)
+            _app_log(f"[GSM] Auto-imported {count} BTS stations from billing")
+    except Exception as e:
+        log.warning("Geolocation error: %s", e, exc_info=True)
+        _app_log(f"[GSM] Geolocation ERROR: {type(e).__name__}: {e}")
+
+    response = {
+        "status": "ok",
+        "id": str(uuid.uuid4()),
+        "filename": combined_name,
+        "operator": result.operator,
+        "operator_id": result.operator_id,
+        "parser_version": result.parser_version,
+        "subscriber": sub_dict,
+        "summary": result.summary.to_dict(),
+        "warnings": result.warnings,
+        "analysis": analysis.to_dict() if hasattr(analysis, "to_dict") else analysis,
+        "record_count": len(result.records),
+        "records": [r.to_dict() for r in result.records],
+        "records_truncated": False,
+        "source_files": [
+            {"filename": fn, "type": "billing", "operator": result.operator}
+            for fn in filenames
+        ],
+        "merged_files": filenames,
+    }
+
+    if geo:
+        response["geolocation"] = geo.to_dict()
+
+    _app_log(f"[GSM] Done merge: {combined_name} — {len(result.records)} records")
+    return response
+
+
 @router.post("/api/gsm/parse")
 async def gsm_parse(
     request: Request,
@@ -316,6 +430,7 @@ async def gsm_smart_import(
     request: Request,
     files: List[UploadFile] = File(...),
     selected_msisdn: Optional[str] = Form(None),
+    confirmed_files: Optional[str] = Form(None),  # JSON list of filenames to include
 ):
     """Smart import: upload files (XLSX, CSV, ZIP) and auto-detect type.
 
@@ -362,19 +477,23 @@ async def gsm_smart_import(
             "scan": scan_result.to_dict(),
         }
 
-        # --- Multi-subscriber detection ---
-        if len(scan_result.billing_files) > 1 and not selected_msisdn:
+        # --- Multi-file / multi-subscriber detection & confirmation ---
+        _files_confirmed = bool(confirmed_files) or bool(selected_msisdn)
+
+        if len(scan_result.billing_files) > 1 and not _files_confirmed:
             from backend.gsm.subscriber_prescan import group_by_subscriber
             grouping = await run_in_threadpool(
                 group_by_subscriber, scan_result.billing_files
             )
-            if not grouping.is_single_subscriber:
+
+            if grouping.needs_confirmation:
                 _app_log(
-                    f"[GSM] Multi-subscriber detected: "
-                    f"{len(grouping.subscribers)} abonentów"
+                    f"[GSM] File confirmation needed: reason={grouping.confirmation_reason}, "
+                    f"{len(grouping.subscribers)} subscriber(s), "
+                    f"{len(grouping.undetected_files)} undetected"
                 )
-                multi_resp: dict = {
-                    "status": "multi_subscriber",
+                confirm_resp: dict = {
+                    "status": "confirm_files",
                     "scan": scan_result.to_dict(),
                     "subscriber_grouping": grouping.to_dict(),
                 }
@@ -407,14 +526,32 @@ async def gsm_smart_import(
                             "name": rec.name or "",
                             "operator": rec.source_operator or "",
                         }
-                    multi_resp["identification"] = {
+                    confirm_resp["identification"] = {
                         "total_records": store.count,
                         "files": id_file_results,
                         "lookup": lookup_map,
                     }
-                return JSONResponse(multi_resp)
+                return JSONResponse(confirm_resp)
 
-        # --- Filter billing files if subscriber was selected ---
+        # --- Filter billing files if user confirmed a specific file set ---
+        if confirmed_files:
+            import json as _json
+            try:
+                _confirmed_list = _json.loads(confirmed_files)
+            except (ValueError, TypeError):
+                _confirmed_list = []
+            if _confirmed_list:
+                _before = len(scan_result.billing_files)
+                scan_result.billing_files = [
+                    sf for sf in scan_result.billing_files
+                    if sf.filename in _confirmed_list
+                ]
+                _app_log(
+                    f"[GSM] User confirmed {len(scan_result.billing_files)}/{_before} "
+                    f"billing files: {_confirmed_list}"
+                )
+
+        # --- Legacy: filter by selected_msisdn (multi-subscriber selection) ---
         if selected_msisdn and len(scan_result.billing_files) > 1:
             from backend.gsm.subscriber_prescan import (
                 is_same_subscriber,
@@ -426,7 +563,6 @@ async def gsm_smart_import(
                 if fsi.msisdn and is_same_subscriber(fsi.msisdn, selected_msisdn):
                     filtered.append(sf)
                 elif not fsi.msisdn:
-                    # Include files where we couldn't detect subscriber
                     filtered.append(sf)
             if filtered:
                 scan_result.billing_files = filtered
@@ -438,32 +574,45 @@ async def gsm_smart_import(
         # --- Collect all source files for info display ---
         all_source_files: list = []
 
-        # --- Process billing files ---
+        # --- Process billing files (merge if multiple) ---
         if scan_result.billing_files:
-            # Use the first (or best confidence) billing file
-            best_billing = max(scan_result.billing_files, key=lambda f: f.confidence)
-            _app_log(f"[GSM] Processing billing: {best_billing.filename} ({best_billing.operator})")
+            if len(scan_result.billing_files) == 1:
+                # Single file — parse directly
+                best_billing = scan_result.billing_files[0]
+                _app_log(f"[GSM] Processing billing: {best_billing.filename} ({best_billing.operator})")
+                billing_data = await run_in_threadpool(
+                    _do_parse, best_billing.path, best_billing.filename
+                )
+                response["billing"] = billing_data
 
-            billing_data = await run_in_threadpool(
-                _do_parse, best_billing.path, best_billing.filename
-            )
-            response["billing"] = billing_data
+                for sf in scan_result.billing_files:
+                    all_source_files.append({
+                        "filename": sf.filename,
+                        "type": "billing",
+                        "operator": sf.operator or "",
+                        "detail": sf.detail or "",
+                        "processed": True,
+                    })
+            else:
+                # Multiple files — parse each, then merge records
+                _app_log(
+                    f"[GSM] Merging {len(scan_result.billing_files)} billing files: "
+                    f"{[sf.filename for sf in scan_result.billing_files]}"
+                )
+                billing_data = await run_in_threadpool(
+                    _do_parse_and_merge,
+                    [(sf.path, sf.filename) for sf in scan_result.billing_files],
+                )
+                response["billing"] = billing_data
 
-            # Track all billing files (processed and extra)
-            for sf in scan_result.billing_files:
-                all_source_files.append({
-                    "filename": sf.filename,
-                    "type": "billing",
-                    "operator": sf.operator or "",
-                    "detail": sf.detail or "",
-                    "processed": sf is best_billing,
-                })
-
-            # If there are more billing files, note them
-            if len(scan_result.billing_files) > 1:
-                extra = [f.filename for f in scan_result.billing_files if f is not best_billing]
-                response["extra_billings"] = extra
-                _app_log(f"[GSM] Additional billing files (not processed): {extra}")
+                for sf in scan_result.billing_files:
+                    all_source_files.append({
+                        "filename": sf.filename,
+                        "type": "billing",
+                        "operator": sf.operator or "",
+                        "detail": sf.detail or "",
+                        "processed": True,
+                    })
 
         # --- Process identification files ---
         if scan_result.identification_files:

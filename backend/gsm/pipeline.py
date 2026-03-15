@@ -231,6 +231,113 @@ def process_billing(
     return result
 
 
+def merge_billing_results(results: List[BillingParseResult]) -> BillingParseResult:
+    """Merge multiple BillingParseResult objects into one.
+
+    Used when complementary billing files (e.g. Plus POL for calls/SMS
+    and Plus TD for data sessions) belong to the same subscriber and need
+    to be analysed together.
+
+    The first result with a non-empty subscriber serves as the base; records
+    from all results are concatenated, and warnings are combined.
+    """
+    if not results:
+        return BillingParseResult()
+    if len(results) == 1:
+        return results[0]
+
+    # Pick the "primary" result — prefer the one with more records / subscriber info
+    primary = max(results, key=lambda r: (
+        1 if r.subscriber.msisdn else 0,
+        len(r.records),
+    ))
+
+    merged = BillingParseResult(
+        operator=primary.operator,
+        operator_id=primary.operator_id,
+        parser_version=primary.parser_version,
+        subscriber=primary.subscriber,
+        records=list(primary.records),
+        summary=primary.summary,
+        warnings=list(primary.warnings),
+        sheet_name=primary.sheet_name,
+        parse_method=primary.parse_method,
+    )
+
+    # Merge records from other results
+    source_files = [primary.sheet_name or "primary"]
+    for r in results:
+        if r is primary:
+            continue
+        merged.records.extend(r.records)
+        merged.warnings.extend(r.warnings)
+        source_files.append(r.sheet_name or r.operator or "other")
+
+        # Fill in missing subscriber fields from secondary results
+        sub = r.subscriber
+        if sub.msisdn and not merged.subscriber.msisdn:
+            merged.subscriber.msisdn = sub.msisdn
+        if sub.imsi and not merged.subscriber.imsi:
+            merged.subscriber.imsi = sub.imsi
+        if sub.imei and not merged.subscriber.imei:
+            merged.subscriber.imei = sub.imei
+        if sub.owner_name and not merged.subscriber.owner_name:
+            merged.subscriber.owner_name = sub.owner_name
+
+    # Recalculate summary
+    from .parsers.base import BillingSummary
+    s = BillingSummary()
+    s.total_records = len(merged.records)
+    dates = []
+    for rec in merged.records:
+        if rec.record_type == "CALL_OUT":
+            s.calls_out += 1
+            s.call_duration_seconds += rec.duration_seconds
+        elif rec.record_type == "CALL_IN":
+            s.calls_in += 1
+            s.call_duration_seconds += rec.duration_seconds
+        elif rec.record_type == "CALL_FORWARDED":
+            s.calls_out += 1  # count in calls
+            s.call_duration_seconds += rec.duration_seconds
+        elif rec.record_type == "SMS_OUT":
+            s.sms_out += 1
+        elif rec.record_type == "SMS_IN":
+            s.sms_in += 1
+        elif rec.record_type == "MMS_OUT":
+            s.mms_out += 1
+        elif rec.record_type == "MMS_IN":
+            s.mms_in += 1
+        elif rec.record_type == "DATA":
+            s.data_sessions += 1
+
+        s.total_duration_seconds += rec.duration_seconds
+        s.total_cost += rec.cost
+        s.total_cost_gross += rec.cost_gross
+
+        if rec.date:
+            dates.append(rec.date)
+
+    if dates:
+        s.period_from = min(dates)
+        s.period_to = max(dates)
+
+    contacts = set()
+    for rec in merged.records:
+        if rec.caller:
+            contacts.add(rec.caller)
+        if rec.callee:
+            contacts.add(rec.callee)
+    own = {merged.subscriber.msisdn} if merged.subscriber.msisdn else set()
+    s.unique_contacts = len(contacts - own)
+    merged.summary = s
+
+    merged.warnings.insert(0, f"Scalono {len(results)} plików bilingowych: {', '.join(source_files)}")
+
+    log.info("Merged %d billing results → %d total records", len(results), len(merged.records))
+
+    return merged
+
+
 def process_billing_batch(
     billing_paths: List[Path],
     subscriber_paths: Optional[List[Path]] = None,
