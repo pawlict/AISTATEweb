@@ -9558,6 +9558,351 @@
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
+  /* ── Analytical Note Generation ─────────────────────────── */
+
+  async function _showNoteDialog() {
+    if (!St.lastResult) {
+      _addLog("warn", "Brak danych GSM. Wczytaj biling przed generowaniem notatki.");
+      return;
+    }
+
+    // Load available models for LLM variant
+    let noteModels = [];
+    try {
+      const resp = await fetch("/api/gsm/note/models");
+      const json = await resp.json();
+      if (json.status === "ok") noteModels = (json.models || []).filter(m => m.installed);
+    } catch (e) {
+      console.warn("[GSM] Failed to load note models:", e);
+    }
+
+    // Load saved values
+    const savedNote = JSON.parse(localStorage.getItem("gsm_note_placeholders") || "{}");
+
+    const dlg = document.createElement("dialog");
+    dlg.className = "gsm-note-dialog";
+    dlg.style.cssText = "max-width:700px;width:92vw;max-height:88vh;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:0;overflow:hidden;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
+
+    // Model options HTML
+    const modelOptions = noteModels.length
+      ? noteModels.map(m => `<option value="${_escHtml(m.id)}">${_escHtml(m.display_name)}${m.vram ? " • " + _escHtml(m.vram) : ""} (${_escHtml(m.group)})</option>`).join("")
+      : '<option value="">Brak zainstalowanych modeli</option>';
+
+    dlg.innerHTML = `
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border-color,#ddd);display:flex;align-items:center;justify-content:space-between;">
+        <h3 style="margin:0;font-size:16px;">📋 Generuj notatkę analityczną GSM</h3>
+        <button class="btn" id="note_close_x" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;" title="Zamknij">&times;</button>
+      </div>
+      <div style="overflow-y:auto;max-height:calc(88vh - 120px);padding:16px 20px;">
+
+        <!-- Variant selection -->
+        <div style="margin-bottom:16px;">
+          <label style="font-weight:600;font-size:14px;display:block;margin-bottom:8px;">Wariant notatki:</label>
+          <div style="display:flex;gap:12px;">
+            <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;border:2px solid var(--border-color,#ccc);border-radius:8px;cursor:pointer;flex:1;transition:border-color .15s;" class="note-variant-label">
+              <input type="radio" name="note_variant" value="data" checked class="note-variant-radio">
+              <div>
+                <div style="font-weight:600;font-size:13px;">Notatka danych</div>
+                <div style="font-size:11px;color:var(--text-secondary,#666);">Tylko dane liczbowe, bez LLM (~1s)</div>
+              </div>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;border:2px solid var(--border-color,#ccc);border-radius:8px;cursor:pointer;flex:1;transition:border-color .15s;" class="note-variant-label">
+              <input type="radio" name="note_variant" value="llm" class="note-variant-radio">
+              <div>
+                <div style="font-weight:600;font-size:13px;">Notatka analityczna (LLM)</div>
+                <div style="font-size:11px;color:var(--text-secondary,#666);">Wnioskowanie behawioralne (~30-60s)</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- LLM Model selector (hidden by default) -->
+        <div id="note_llm_section" style="display:none;margin-bottom:16px;padding:12px;background:var(--bg-secondary,#f8f9fa);border-radius:8px;">
+          <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">Model LLM:</label>
+          <select class="input" id="note_llm_model" style="width:100%;font-size:13px;" ${noteModels.length ? "" : "disabled"}>
+            ${modelOptions}
+          </select>
+          ${!noteModels.length ? '<div style="color:var(--danger,#dc2626);font-size:12px;margin-top:4px;">Zainstaluj model w ustawieniach (Głęboka analiza lub Korekta językowa).</div>' : ''}
+        </div>
+
+        <!-- User metadata fields -->
+        <details class="rpt-details" open style="margin-bottom:16px;">
+          <summary style="font-weight:600;font-size:14px;cursor:pointer;padding:6px 0;">Dane nagłówkowe</summary>
+          <div style="display:grid;grid-template-columns:140px 1fr;gap:8px;padding:12px 0;">
+            <label style="font-size:13px;align-self:center;">Miejscowość:</label>
+            <input type="text" class="input note-ph" data-key="miejscowosc" value="${_escHtml(savedNote.miejscowosc || "")}" placeholder="np. Białystok" style="font-size:13px;padding:4px 8px;">
+
+            <label style="font-size:13px;align-self:center;">Data sporządzenia:</label>
+            <input type="text" class="input note-ph" data-key="data_sporzadzenia" value="${_escHtml(savedNote.data_sporzadzenia || new Date().toLocaleDateString("pl-PL"))}" style="font-size:13px;padding:4px 8px;">
+
+            <label style="font-size:13px;align-self:center;">Sygnatura sprawy:</label>
+            <input type="text" class="input note-ph" data-key="sygnatura_sprawy" value="${_escHtml(savedNote.sygnatura_sprawy || "")}" placeholder="np. RSD-1234/2025" style="font-size:13px;padding:4px 8px;">
+
+            <label style="font-size:13px;align-self:center;">Analityk:</label>
+            <input type="text" class="input note-ph" data-key="analityk" value="${_escHtml(savedNote.analityk || "")}" placeholder="Imię i nazwisko" style="font-size:13px;padding:4px 8px;">
+
+            <label style="font-size:13px;align-self:center;">Podpis:</label>
+            <input type="text" class="input note-ph" data-key="podpis" value="${_escHtml(savedNote.podpis || "")}" placeholder="Podpis / stopień" style="font-size:13px;padding:4px 8px;">
+          </div>
+        </details>
+
+        <!-- Chart screenshots selection -->
+        <details class="rpt-details" style="margin-bottom:16px;">
+          <summary style="font-weight:600;font-size:14px;cursor:pointer;padding:6px 0;">Osadź wykresy (zrzuty ekranowe)</summary>
+          <div style="padding:8px 0;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="top_contacts" checked>
+              Top kontakty (graf)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="activity">
+              Rozkład aktywności
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="night_activity">
+              Aktywność nocna
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="weekend_activity">
+              Aktywność weekendowa
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="map_bts">
+              Mapa lokalizacji BTS
+            </label>
+            <div style="font-size:11px;color:var(--text-secondary,#666);margin-top:6px;">
+              Zaznaczone wykresy zostaną przechwycone jako zrzuty ekranowe i osadzone w notatce DOCX.
+            </div>
+          </div>
+        </details>
+
+        <!-- Progress indicator (hidden) -->
+        <div id="note_progress" style="display:none;padding:12px;background:var(--bg-secondary,#f8f9fa);border-radius:8px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="spinner" style="width:16px;height:16px;border:2px solid var(--border-color);border-top-color:var(--accent,#2563eb);border-radius:50%;animation:spin 1s linear infinite;"></div>
+            <span id="note_progress_text" style="font-size:13px;">Generowanie notatki...</span>
+          </div>
+          <div style="margin-top:8px;height:4px;background:var(--border-color,#ddd);border-radius:2px;overflow:hidden;">
+            <div id="note_progress_bar" style="height:100%;background:var(--accent,#2563eb);width:0%;transition:width .3s;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid var(--border-color,#ddd);display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn" id="note_cancel" style="min-width:80px;">Anuluj</button>
+        <button class="btn btn-primary" id="note_generate" style="min-width:140px;">Generuj notatkę</button>
+      </div>
+      <style>
+        .note-variant-label:has(.note-variant-radio:checked) {
+          border-color: var(--accent, #2563eb) !important;
+          background: color-mix(in srgb, var(--accent, #2563eb) 6%, transparent);
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      </style>
+    `;
+
+    document.body.appendChild(dlg);
+    dlg.showModal();
+
+    // Close handlers
+    dlg.querySelector("#note_close_x").onclick = () => { dlg.close(); dlg.remove(); };
+    dlg.querySelector("#note_cancel").onclick = () => { dlg.close(); dlg.remove(); };
+
+    // Variant toggle — show/hide LLM section
+    dlg.querySelectorAll('.note-variant-radio').forEach(radio => {
+      radio.onchange = () => {
+        const llmSection = dlg.querySelector("#note_llm_section");
+        if (llmSection) llmSection.style.display = radio.value === "llm" && radio.checked ? "" : "none";
+      };
+    });
+
+    // Generate button
+    dlg.querySelector("#note_generate").onclick = async () => {
+      const variant = dlg.querySelector('input[name="note_variant"]:checked')?.value || "data";
+      const model = dlg.querySelector("#note_llm_model")?.value || "";
+
+      if (variant === "llm" && !model) {
+        alert("Wybierz model LLM dla wariantu analitycznego.");
+        return;
+      }
+
+      // Collect user placeholders
+      const phValues = {};
+      dlg.querySelectorAll(".note-ph").forEach(inp => {
+        phValues[inp.dataset.key] = inp.value;
+      });
+
+      // Save to localStorage
+      localStorage.setItem("gsm_note_placeholders", JSON.stringify(phValues));
+
+      // Show progress
+      const genBtn = dlg.querySelector("#note_generate");
+      const progressEl = dlg.querySelector("#note_progress");
+      const progressText = dlg.querySelector("#note_progress_text");
+      const progressBar = dlg.querySelector("#note_progress_bar");
+      genBtn.disabled = true;
+      genBtn.textContent = "Generowanie...";
+      if (progressEl) progressEl.style.display = "";
+
+      try {
+        // Capture chart screenshots
+        const chartImages = {};
+        const selectedCharts = [];
+        dlg.querySelectorAll(".note-chart-cb:checked").forEach(cb => {
+          selectedCharts.push(cb.dataset.chart);
+        });
+
+        if (selectedCharts.length > 0) {
+          if (progressText) progressText.textContent = "Przechwytywanie wykresów...";
+          if (progressBar) progressBar.style.width = "10%";
+
+          for (const chartName of selectedCharts) {
+            try {
+              const b64 = await _captureChartScreenshot(chartName);
+              if (b64) chartImages[chartName] = b64;
+            } catch (e) {
+              console.warn(`[GSM] Chart capture failed for ${chartName}:`, e);
+            }
+          }
+        }
+
+        if (progressText) progressText.textContent = variant === "llm" ? "Generowanie analizy LLM..." : "Generowanie notatki...";
+        if (progressBar) progressBar.style.width = "30%";
+
+        // Build request
+        const projectId = _getProjectId();
+        const payload = {
+          project_id: projectId,
+          variant: variant,
+          model: model,
+          placeholders: phValues,
+          chart_images: chartImages,
+        };
+
+        const resp = await fetch("/api/gsm/note/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (progressBar) progressBar.style.width = "90%";
+
+        const json = await resp.json();
+        if (json.status !== "ok") {
+          throw new Error(json.detail || "Błąd generowania notatki");
+        }
+
+        if (progressBar) progressBar.style.width = "100%";
+
+        dlg.close();
+        dlg.remove();
+
+        // Show download link
+        const note = json.note;
+        if (note && note.download_url) {
+          _showNoteDownload(note);
+        }
+
+        const variantLabel = variant === "llm" ? "analityczną (LLM)" : "danych";
+        _addLog("info", `Wygenerowano notatkę ${variantLabel}: ${note.filename}`);
+
+      } catch (e) {
+        _addLog("error", "Błąd generowania notatki: " + e.message);
+        genBtn.disabled = false;
+        genBtn.textContent = "Generuj notatkę";
+        if (progressEl) progressEl.style.display = "none";
+      }
+    };
+  }
+
+  function _showNoteDownload(note) {
+    const dlg = document.createElement("dialog");
+    dlg.style.cssText = "max-width:450px;width:90vw;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:20px;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
+
+    const sizeKb = note.size_bytes ? ` (${(note.size_bytes / 1024).toFixed(1)} KB)` : "";
+    const variantLabel = note.variant === "llm" ? "Notatka analityczna (LLM)" : "Notatka danych";
+
+    dlg.innerHTML = `
+      <h3 style="margin:0 0 12px;">📋 ${_escHtml(variantLabel)}</h3>
+      <p style="font-size:13px;margin:0 0 16px;color:var(--text-secondary,#666);">Notatka została wygenerowana pomyślnie.</p>
+      <a href="${_escHtml(note.download_url)}" download class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;padding:10px 20px;text-decoration:none;">
+        Pobierz DOCX${sizeKb}
+      </a>
+      <div style="text-align:right;margin-top:16px;">
+        <button class="btn" onclick="this.closest('dialog').close();this.closest('dialog').remove();">Zamknij</button>
+      </div>
+    `;
+
+    document.body.appendChild(dlg);
+    dlg.showModal();
+  }
+
+  /**
+   * Capture a chart/card screenshot as base64 PNG string.
+   * Maps chart names to DOM selectors.
+   */
+  async function _captureChartScreenshot(chartName) {
+    const selectorMap = {
+      "top_contacts": "[data-chart-id='top_contacts']",
+      "activity": "[data-chart-id='hourly_distribution'], [data-chart-id='activity_timeline']",
+      "night_activity": "[data-chart-id='night_activity']",
+      "weekend_activity": "[data-chart-id='weekend_activity']",
+      "map_bts": "#gsm_map_container",
+    };
+
+    const selectors = selectorMap[chartName];
+    if (!selectors) return null;
+
+    // Try each selector (some charts may have alternate selectors)
+    let el = null;
+    for (const sel of selectors.split(",")) {
+      el = document.querySelector(sel.trim());
+      if (el) break;
+    }
+    if (!el) {
+      console.warn(`[GSM] Chart element not found for ${chartName}: ${selectors}`);
+      return null;
+    }
+
+    // For maps, use the existing map screenshot mechanism
+    if (chartName === "map_bts" && typeof _captureMapScreenshot === "function") {
+      try {
+        const blob = await _captureMapScreenshot();
+        if (blob) {
+          return await _blobToBase64(blob);
+        }
+      } catch (e) {
+        console.warn("[GSM] Map screenshot fallback to html2canvas:", e);
+      }
+    }
+
+    // Use html2canvas
+    await _ensureHtml2Canvas();
+    if (!window.html2canvas) return null;
+
+    try {
+      const canvas = await window.html2canvas(el, {
+        useCORS: true,
+        allowTaint: true,
+        scale: 2,
+        backgroundColor: getComputedStyle(document.body).getPropertyValue("--bg-primary") || "#ffffff",
+      });
+
+      return canvas.toDataURL("image/png").split(",")[1]; // base64 only
+    } catch (e) {
+      console.warn(`[GSM] html2canvas failed for ${chartName}:`, e);
+      return null;
+    }
+  }
+
+  function _blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
   /* ── bindings ───────────────────────────────────────────── */
   function _bind() {
     const fileInput = QS("#gsm_file_input");
@@ -9676,6 +10021,8 @@
     if (gsmGenBtn) gsmGenBtn.onclick = _gsmGenerate;
     const gsmSaveBtn = QS("#gsm_report_save_btn");
     if (gsmSaveBtn) gsmSaveBtn.onclick = _saveGsmReport;
+    const gsmNoteBtn = QS("#gsm_note_btn");
+    if (gsmNoteBtn) gsmNoteBtn.onclick = _showNoteDialog;
 
     // Lazy-load models for GSM toolbar
     _loadGsmModels();

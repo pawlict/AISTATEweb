@@ -2182,6 +2182,182 @@ async def gsm_report_list(project_id: str):
 
 
 # ---------------------------------------------------------------------------
+#  GSM Analytical Note Generation
+# ---------------------------------------------------------------------------
+
+@router.post("/api/gsm/note/generate")
+async def gsm_note_generate(request: Request):
+    """Generate a professional analytical note (DOCX) for GSM billing data.
+
+    Supports multipart form data with optional chart screenshots.
+
+    Form fields:
+        project_id: str — required
+        variant: "data" | "llm" — default "data"
+        model: str — LLM model name (required for variant "llm")
+        placeholders: JSON string — user meta fields (sygnatura, analityk, etc.)
+        charts: JSON string — list of chart names included as files
+        chart_*: file uploads — PNG screenshots (chart_activity, chart_top_contacts, etc.)
+    """
+    import time
+    import base64 as _b64
+
+    content_type = request.headers.get("content-type", "")
+
+    # Parse as multipart or JSON
+    if "multipart" in content_type:
+        form = await request.form()
+        project_id = str(form.get("project_id", ""))
+        variant = str(form.get("variant", "data"))
+        model = str(form.get("model", ""))
+        try:
+            placeholders_raw = str(form.get("placeholders", "{}"))
+            user_placeholders = json.loads(placeholders_raw)
+        except Exception:
+            user_placeholders = {}
+
+        # Collect chart images from form uploads
+        chart_images: Dict[str, bytes] = {}
+        for key in form:
+            if key.startswith("chart_") and hasattr(form[key], "read"):
+                try:
+                    img_data = await form[key].read()
+                    chart_name = key.replace("chart_", "")
+                    chart_images[chart_name] = img_data
+                except Exception:
+                    pass
+    else:
+        try:
+            payload = await request.json()
+        except Exception:
+            return JSONResponse({"status": "error", "detail": "Invalid request."}, status_code=400)
+
+        project_id = payload.get("project_id", "")
+        variant = payload.get("variant", "data")
+        model = payload.get("model", "")
+        user_placeholders = payload.get("placeholders", {})
+        chart_images = {}
+
+        # Charts as base64 in JSON
+        charts_b64 = payload.get("chart_images", {})
+        for name, b64str in charts_b64.items():
+            if b64str:
+                try:
+                    chart_images[name] = _b64.b64decode(b64str)
+                except Exception:
+                    pass
+
+    if not project_id:
+        return JSONResponse({"status": "error", "detail": "project_id is required."}, status_code=400)
+
+    # Load GSM data
+    data_dir = _data_dir()
+    project_dir = data_dir / "projects" / project_id
+    gsm_path = project_dir / "analysis" / "gsm_latest.json"
+    if not gsm_path.exists():
+        return JSONResponse({"status": "error", "detail": "Brak danych GSM. Najpierw zaimportuj biling."}, status_code=404)
+
+    try:
+        gsm_data = json.loads(gsm_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return JSONResponse({"status": "error", "detail": f"Błąd odczytu danych: {e}"}, status_code=500)
+
+    # Build placeholders from data
+    from backend.gsm.note_builder import build_note_placeholders
+    placeholders = build_note_placeholders(gsm_data, user_placeholders=user_placeholders)
+
+    # Variant 3: LLM analytical inference
+    llm_overrides = None
+    if variant == "llm":
+        if not model:
+            return JSONResponse({"status": "error", "detail": "Model LLM jest wymagany dla wariantu analitycznego."}, status_code=400)
+
+        try:
+            from backend.gsm.note_llm import generate_note_sections_llm
+            from backend.ollama_client import OllamaClient
+            client = OllamaClient()
+            llm_overrides = await generate_note_sections_llm(gsm_data, model, ollama_client=client)
+        except Exception as e:
+            log.error("LLM note generation failed: %s", e, exc_info=True)
+            return JSONResponse({"status": "error", "detail": f"Błąd generowania LLM: {e}"}, status_code=500)
+
+    # Get template
+    from backend.gsm.note_generator import generate_note_docx, get_default_template_path
+    try:
+        template_path = get_default_template_path()
+    except FileNotFoundError as e:
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+    # Generate DOCX
+    reports_dir = project_dir / "analysis" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = time.strftime("%Y-%m-%d_%H%M%S")
+    variant_suffix = "analityczna" if variant == "llm" else "danych"
+    output_path = reports_dir / f"{timestamp}_notatka_{variant_suffix}.docx"
+
+    try:
+        await run_in_threadpool(
+            generate_note_docx,
+            template_path,
+            placeholders,
+            output_path,
+            chart_images=chart_images if chart_images else None,
+            llm_overrides=llm_overrides,
+        )
+    except Exception as e:
+        log.error("Note DOCX generation failed: %s", e, exc_info=True)
+        return JSONResponse({"status": "error", "detail": f"Błąd generowania DOCX: {e}"}, status_code=500)
+
+    return JSONResponse({
+        "status": "ok",
+        "note": {
+            "variant": variant,
+            "filename": output_path.name,
+            "size_bytes": output_path.stat().st_size,
+            "download_url": f"/api/gsm/report/download/{project_id}/{output_path.name}",
+        },
+    })
+
+
+@router.get("/api/gsm/note/models")
+async def gsm_note_models():
+    """Return available models for note generation (deep + proofreading)."""
+    try:
+        from backend.models_info import MODELS_GROUPS, MODELS_INFO
+        from backend.ollama_client import OllamaClient
+
+        client = OllamaClient()
+        st = await client.status()
+        installed_lower = {m.lower() for m in (st.models or [])} if st.status == "online" else set()
+
+        models = []
+        seen = set()
+
+        # Combine deep + proofreading groups
+        for group in ["deep", "proofreading"]:
+            for mid in MODELS_GROUPS.get(group, []):
+                if mid in seen:
+                    continue
+                seen.add(mid)
+                info = MODELS_INFO.get(mid, {})
+                models.append({
+                    "id": mid,
+                    "display_name": info.get("display_name", mid),
+                    "installed": mid.lower() in installed_lower,
+                    "group": group,
+                    "vram": str((info.get("hardware") or {}).get("vram", "")),
+                })
+
+        return JSONResponse({
+            "status": "ok",
+            "models": models,
+        })
+    except Exception as e:
+        log.error("Failed to list note models: %s", e, exc_info=True)
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
 #  GSM LLM Narrative Analysis (streaming)
 # ---------------------------------------------------------------------------
 
