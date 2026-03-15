@@ -2297,7 +2297,7 @@ async def gsm_note_generate(request: Request):
         return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
 
     # Build table data if tables selected
-    table_data = build_table_data(gsm_data) if selected_tables else None
+    table_data = build_table_data(gsm_data, placeholders=placeholders) if selected_tables else None
 
     # Generate DOCX
     reports_dir = project_dir / "analysis" / "reports"
