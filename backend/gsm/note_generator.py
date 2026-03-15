@@ -48,12 +48,12 @@ TABLE_DEFS = {
         "columns": ["Numer", "Interakcje", "Po\u0142. wych.", "Po\u0142. przych."],
     },
     "anomalies": {
-        "section_heading": "6.",
+        "section_heading": "7.",  # was 6, now 7 after "Rodzaj aktywności" inserted as 6
         "caption": "Tabela: Wykryte anomalie",
         "columns": ["Kategoria", "Opis", "Dane"],
     },
     "locations": {
-        "section_heading": "7.",
+        "section_heading": "8.",  # was 7, now 8
         "caption": "Tabela: Lokalizacje BTS",
         "columns": ["Lokalizacja", "Liczba rekord\u00f3w", "Udzia\u0142 %"],
     },
@@ -100,13 +100,13 @@ CHART_INSERTION_ORDER = [
         "key": "activity",
         "caption": "Rozk\u0142ad aktywno\u015bci",
         "pre_text": ACTIVITY_DISTRIBUTION_TEXT,
-        "sub_heading": "Rodzaj aktywno\u015bci",
+        "new_section_heading": "6. Rodzaj aktywno\u015bci",
         "section_heading": "5.",
     },
     {
         "key": "night_activity",
         "caption": "Aktywno\u015b\u0107 nocna",
-        "section_heading": "5.",
+        "section_heading": "5.",  # inserted after contacts, before anomalies
     },
     {
         "key": "weekend_activity",
@@ -116,7 +116,7 @@ CHART_INSERTION_ORDER = [
     {
         "key": "map_bts",
         "caption": "Mapa lokalizacji BTS",
-        "section_heading": "7.",
+        "section_heading": "8.",  # was 7, now 8 after renumbering
     },
 ]
 
@@ -198,7 +198,10 @@ def _post_process_docx(
     doc = Document(str(docx_path))
     body = doc.element.body
 
-    # 0a. Remove old anomaly synthetic description paragraphs
+    # 0a. Renumber sections 6→7, 7→8, 8→9, 9→10, 10→11 (to make room for "6. Rodzaj aktywności")
+    _renumber_sections(body)
+
+    # 0b. Remove old anomaly synthetic description paragraphs
     _remove_old_anomaly_text(body)
 
     # 0b. Fix "za okres od" — move to new line
@@ -264,6 +267,42 @@ def _post_process_docx(
 
 
 # ─── Remove old anomaly text ────────────────────────────────────────────────
+
+def _renumber_sections(body) -> None:
+    """Renumber sections 6→7, 7→8, 8→9, 9→10, 10→11 in headings.
+
+    This makes room for the new '6. Rodzaj aktywności' section.
+    Must be called before other post-processing that looks for section numbers.
+    """
+    from docx.oxml.ns import qn
+
+    # Process in reverse order so we don't double-renumber (10→11 first, then 9→10, etc.)
+    renumber_map = [
+        ("10.", "11."),
+        ("9.", "10."),
+        ("8.", "9."),
+        ("7.", "8."),
+        ("6.", "7."),
+    ]
+
+    for child in body:
+        if child.tag == qn('w:p'):
+            pStyle = child.find(f'.//{qn("w:pStyle")}')
+            is_heading = pStyle is not None and 'Heading' in pStyle.get(qn('w:val'), '')
+            if not is_heading:
+                continue
+
+            full_text = ''.join(child.itertext()).strip()
+            for old_prefix, new_prefix in renumber_map:
+                if full_text.startswith(old_prefix):
+                    # Find the text element and replace prefix
+                    for t_el in child.iter(qn('w:t')):
+                        if t_el.text and t_el.text.strip().startswith(old_prefix):
+                            t_el.text = t_el.text.replace(old_prefix, new_prefix, 1)
+                            log.debug("Renumbered section '%s' → '%s'", old_prefix, new_prefix)
+                            break
+                    break
+
 
 def _remove_old_anomaly_text(body) -> None:
     """Remove paragraphs containing the old anomaly synthetic description."""
@@ -398,9 +437,9 @@ def _insert_anomaly_section(doc, body, anomaly_rows: List[List[str]]) -> None:
     from docx.enum.table import WD_TABLE_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-    insert_after = _find_section_heading(body, "6.")
+    insert_after = _find_section_heading(body, "7.")
     if insert_after is None:
-        log.warning("Section 6 heading not found, skipping anomaly section")
+        log.warning("Section 7 heading not found, skipping anomaly section")
         return
 
     # Intro text
@@ -512,8 +551,19 @@ def _insert_chart_images(doc, body, chart_images: Dict[str, bytes]) -> None:
             log.warning("No insertion point for chart '%s'", key)
             continue
 
-        # Sub-heading
-        if chart_def.get("sub_heading"):
+        # Section heading (numbered, e.g. "6. Rodzaj aktywności")
+        if chart_def.get("new_section_heading"):
+            heading_p = _insert_paragraph_after(doc, body, cursor)
+            run = heading_p.add_run(chart_def["new_section_heading"])
+            _style_run(run, 13, bold=True)
+            # Apply heading style if possible
+            try:
+                heading_p.style = doc.styles['Heading 2']
+            except Exception:
+                pass  # fallback to bold formatting
+            cursor = heading_p._element
+        # Sub-heading (no number)
+        elif chart_def.get("sub_heading"):
             heading_p = _insert_paragraph_after(doc, body, cursor)
             run = heading_p.add_run(chart_def["sub_heading"])
             _style_run(run, 11, bold=True)
