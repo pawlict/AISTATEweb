@@ -31,6 +31,7 @@ class ContactProfile:
     total_interactions: int = 0
     calls_out: int = 0
     calls_in: int = 0
+    calls_fwd: int = 0
     sms_out: int = 0
     sms_in: int = 0
     total_duration_seconds: int = 0
@@ -236,7 +237,17 @@ def _analyze_contacts(
         p = profiles[contact]
         p.total_interactions += 1
 
-        if r.record_type == "CALL_OUT":
+        # Check if this record has forwarding data (even if record_type is not CALL_FORWARDED)
+        _has_fwd_extra = False
+        for _ff in ("c_msisdn", "forwarded_msisdn", "nr_powiazany"):
+            _fv = r.extra.get(_ff, "")
+            if _fv and _fv not in own_numbers:
+                _has_fwd_extra = True
+                break
+
+        if r.record_type == "CALL_FORWARDED" or _has_fwd_extra:
+            p.calls_fwd += 1
+        elif r.record_type == "CALL_OUT":
             p.calls_out += 1
         elif r.record_type == "CALL_IN":
             p.calls_in += 1
@@ -2052,20 +2063,40 @@ def _detect_forwarded_calls(
     fwd_field = _FORWARDING_SUPPORT.get(operator_id, "")
 
     for r in records:
-        if r.record_type != "CALL_FORWARDED":
+        # Detect forwarding: explicit CALL_FORWARDED record_type OR
+        # non-empty forwarding extra field (c_msisdn, forwarded_msisdn, nr_powiazany)
+        # even when record_type is CALL_OUT/CALL_IN (Plus may use MOC/MTC with c_msisdn)
+        is_fwd = r.record_type == "CALL_FORWARDED"
+        forwarded_to = ""
+
+        if not is_fwd:
+            # Check extra fields for forwarding indicators
+            if fwd_field and r.extra.get(fwd_field):
+                val = r.extra[fwd_field]
+                if val not in own_numbers:
+                    is_fwd = True
+                    forwarded_to = val
+            if not forwarded_to:
+                for f in ("c_msisdn", "forwarded_msisdn", "nr_powiazany"):
+                    val = r.extra.get(f, "")
+                    if val and val not in own_numbers:
+                        is_fwd = True
+                        forwarded_to = val
+                        break
+
+        if not is_fwd:
             continue
 
-        # Determine the forwarded-to number
-        forwarded_to = ""
-        if fwd_field and r.extra.get(fwd_field):
-            forwarded_to = r.extra[fwd_field]
-        # Fallback: check all known fields
+        # Determine the forwarded-to number (for explicit CALL_FORWARDED records)
         if not forwarded_to:
-            for f in ("c_msisdn", "forwarded_msisdn", "nr_powiazany"):
-                val = r.extra.get(f, "")
-                if val and val not in own_numbers:
-                    forwarded_to = val
-                    break
+            if fwd_field and r.extra.get(fwd_field):
+                forwarded_to = r.extra[fwd_field]
+            if not forwarded_to:
+                for f in ("c_msisdn", "forwarded_msisdn", "nr_powiazany"):
+                    val = r.extra.get(f, "")
+                    if val and val not in own_numbers:
+                        forwarded_to = val
+                        break
 
         # Determine calling party (the other end)
         contact = ""

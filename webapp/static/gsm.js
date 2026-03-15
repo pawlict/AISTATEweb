@@ -2719,7 +2719,7 @@
     const topN = Math.ceil(N / 2);
     const botN = N - topN;
     const maxPerRow = Math.max(topN, botN);
-    const CW = 115, CH = 82, CGAP = 10;
+    const CW = 115, CH = 96, CGAP = 10;
     const W = Math.max(maxPerRow * (CW + CGAP) - CGAP + 30, 460);
 
     // Auto-scale card width — capped at 1/3 of Records card width
@@ -2762,6 +2762,9 @@
       <marker id="gsm_arrow_in" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="userSpaceOnUse">
         <path d="M0.5,0.5 L6,2.5 L0.5,4.5" fill="#ff4d4f" stroke="none"/>
       </marker>
+      <marker id="gsm_arrow_fwd" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0.5,0.5 L6,2.5 L0.5,4.5" fill="#f59e0b" stroke="none"/>
+      </marker>
       <filter id="gsm_card_shadow" x="-4%" y="-4%" width="108%" height="116%">
         <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.07"/>
       </filter>
@@ -2773,6 +2776,8 @@
     <text x="${legX + 23}" y="13" font-size="7.5" fill="var(--text-muted,#64748b)">Wychodz\u0105ce</text>
     <line x1="${legX + 82}" y1="10" x2="${legX + 100}" y2="10" stroke="#ff4d4f" stroke-width="1.5" stroke-linecap="round" marker-end="url(#gsm_arrow_in)"/>
     <text x="${legX + 105}" y="13" font-size="7.5" fill="var(--text-muted,#64748b)">Przychodz\u0105ce</text>`;
+    svg += `<line x1="${legX}" y1="22" x2="${legX + 18}" y2="22" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" marker-end="url(#gsm_arrow_fwd)"/>
+    <text x="${legX + 23}" y="25" font-size="7.5" fill="var(--text-muted,#64748b)">Przekierowane</text>`;
 
     // Card positions helper
     const cardPositions = (count, y) => {
@@ -2786,19 +2791,21 @@
                       ...botCards.map((p, j) => ({ ...p, i: topN + j, c: contacts[topN + j], isTop: false }))];
 
     // ── Subscriber card dimensions (rectangular, wider than contact cards) ──
-    const SUB_W = 180, SUB_H = 82;
+    const SUB_W = 180, SUB_H = 98;
     const SUB_X = CX - SUB_W / 2;
     // Compute total OUT/IN across all displayed contacts
-    let subTotalOut = 0, subTotalIn = 0;
-    let subCallsOut = 0, subCallsIn = 0, subSmsOut = 0, subSmsIn = 0;
+    let subTotalOut = 0, subTotalIn = 0, subTotalFwd = 0;
+    let subCallsOut = 0, subCallsIn = 0, subSmsOut = 0, subSmsIn = 0, subFwd = 0;
     for (const card of allCards) {
       subCallsOut += card.c.calls_out || 0;
       subSmsOut   += card.c.sms_out   || 0;
       subCallsIn  += card.c.calls_in  || 0;
       subSmsIn    += card.c.sms_in    || 0;
+      subFwd      += card.c.calls_fwd || 0;
     }
     subTotalOut = subCallsOut + subSmsOut;
     subTotalIn  = subCallsIn  + subSmsIn;
+    subTotalFwd = subFwd;
 
     // ── Straight-line arrows — behind cards ──
     const EDGE_GAP = 6;
@@ -2812,6 +2819,7 @@
       const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
       const inAll = (c.calls_in || 0) + (c.sms_in || 0);
       const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
+      const fwdAll = c.calls_fwd || 0;
 
       // Direction from subscriber to card & perpendicular
       const dx = cardCX - CX, dy = cardEdgeY - SUB_Y;
@@ -2842,7 +2850,7 @@
           x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
           stroke="#34c759" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
           marker-end="url(#gsm_arrow_out)"
-          data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"/>`;
+          data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}" data-fwd="0"/>`;
       }
       // IN: B→A shifted −perp (red, arrow at subscriber end)
       if (inAll > 0) {
@@ -2852,7 +2860,17 @@
           x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
           stroke="#ff4d4f" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
           marker-end="url(#gsm_arrow_in)"
-          data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"/>`;
+          data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}" data-fwd="0"/>`;
+      }
+      // FWD: A→B shifted +2*perp (orange, arrow at card end)
+      if (fwdAll > 0) {
+        const x1 = ax + perpX * SEP * 2.5, y1 = ay + perpY * SEP * 2.5;
+        const x2 = bx + perpX * SEP * 2.5, y2 = by + perpY * SEP * 2.5;
+        svg += `<line class="gsm-graph-edge" data-edge="fwd" data-idx="${idx}" data-number="${c.number}"
+          x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+          stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
+          marker-end="url(#gsm_arrow_fwd)"
+          data-all="${fwdAll}" data-calls="${fwdAll}" data-sms="0" data-fwd="${fwdAll}"/>`;
       }
     }
 
@@ -2868,6 +2886,7 @@
       const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
       const inAll = (c.calls_in || 0) + (c.sms_in || 0);
       const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
+      const fwdAll2 = c.calls_fwd || 0;
       const bw = CW - 8;
       const icx = card.x + CW / 2;
 
@@ -2887,7 +2906,7 @@
       }
       // OUT badge
       const by1 = card.y + 46;
-      svg += `<g data-elabel="out" data-idx="${idx}" data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}"
+      svg += `<g data-elabel="out" data-idx="${idx}" data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}" data-fwd="0"
         ${outAll === 0 ? 'style="display:none"' : ""}>
         <rect x="${card.x + 4}" y="${by1}" width="${bw}" height="12" rx="3" fill="#dcfce7"/>
         <text x="${card.x + 9}" y="${by1 + 9}" font-size="6.5" font-weight="700" fill="#16a34a">OUT</text>
@@ -2895,11 +2914,19 @@
       </g>`;
       // IN badge
       const by2 = card.y + 60;
-      svg += `<g data-elabel="in" data-idx="${idx}" data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}"
+      svg += `<g data-elabel="in" data-idx="${idx}" data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}" data-fwd="0"
         ${inAll === 0 ? 'style="display:none"' : ""}>
         <rect x="${card.x + 4}" y="${by2}" width="${bw}" height="12" rx="3" fill="#fee2e2"/>
         <text x="${card.x + 9}" y="${by2 + 9}" font-size="6.5" font-weight="700" fill="#dc2626">IN</text>
         <text x="${card.x + CW - 6}" y="${by2 + 9}" font-size="7.5" font-weight="600" fill="#dc2626" text-anchor="end">${inAll}</text>
+      </g>`;
+      // FWD badge (orange)
+      const by3 = card.y + 74;
+      svg += `<g data-elabel="fwd" data-idx="${idx}" data-all="${fwdAll2}" data-calls="${fwdAll2}" data-sms="0" data-fwd="${fwdAll2}"
+        ${fwdAll2 === 0 ? 'style="display:none"' : ""}>
+        <rect x="${card.x + 4}" y="${by3}" width="${bw}" height="12" rx="3" fill="#fed7aa"/>
+        <text x="${card.x + 9}" y="${by3 + 9}" font-size="6.5" font-weight="700" fill="#d97706">FWD</text>
+        <text x="${card.x + CW - 6}" y="${by3 + 9}" font-size="7.5" font-weight="600" fill="#d97706" text-anchor="end">${fwdAll2}</text>
       </g>`;
       svg += `</g>`;
     }
@@ -2928,17 +2955,25 @@
     }
     // OUT badge
     const sby1 = SUB_Y - SUB_H / 2 + 32;
-    svg += `<g data-sub-label="out" data-all="${subTotalOut}" data-calls="${subCallsOut}" data-sms="${subSmsOut}">
+    svg += `<g data-sub-label="out" data-all="${subTotalOut}" data-calls="${subCallsOut}" data-sms="${subSmsOut}" data-fwd="0">
       <rect x="${SUB_X + 5}" y="${sby1}" width="${subBw}" height="14" rx="3" fill="#dcfce7"/>
       <text x="${SUB_X + 10}" y="${sby1 + 10}" font-size="7" font-weight="700" fill="#16a34a">OUT</text>
       <text x="${SUB_X + SUB_W - 8}" y="${sby1 + 10}" font-size="8" font-weight="600" fill="#16a34a" text-anchor="end">${subTotalOut}</text>
     </g>`;
     // IN badge
     const sby2 = SUB_Y - SUB_H / 2 + 48;
-    svg += `<g data-sub-label="in" data-all="${subTotalIn}" data-calls="${subCallsIn}" data-sms="${subSmsIn}">
+    svg += `<g data-sub-label="in" data-all="${subTotalIn}" data-calls="${subCallsIn}" data-sms="${subSmsIn}" data-fwd="0">
       <rect x="${SUB_X + 5}" y="${sby2}" width="${subBw}" height="14" rx="3" fill="#fee2e2"/>
       <text x="${SUB_X + 10}" y="${sby2 + 10}" font-size="7" font-weight="700" fill="#dc2626">IN</text>
       <text x="${SUB_X + SUB_W - 8}" y="${sby2 + 10}" font-size="8" font-weight="600" fill="#dc2626" text-anchor="end">${subTotalIn}</text>
+    </g>`;
+    // FWD badge (orange)
+    const sby3 = SUB_Y - SUB_H / 2 + 64;
+    svg += `<g data-sub-label="fwd" data-all="${subTotalFwd}" data-calls="${subTotalFwd}" data-sms="0" data-fwd="${subTotalFwd}"
+      ${subTotalFwd === 0 ? 'style="display:none"' : ""}>
+      <rect x="${SUB_X + 5}" y="${sby3}" width="${subBw}" height="14" rx="3" fill="#fed7aa"/>
+      <text x="${SUB_X + 10}" y="${sby3 + 10}" font-size="7" font-weight="700" fill="#d97706">FWD</text>
+      <text x="${SUB_X + SUB_W - 8}" y="${sby3 + 10}" font-size="8" font-weight="600" fill="#d97706" text-anchor="end">${subTotalFwd}</text>
     </g>`;
     svg += `</g>`;
 
