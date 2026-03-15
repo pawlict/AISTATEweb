@@ -363,7 +363,7 @@ def build_note_placeholders(
         # Contacts (section 5 — {{ contacts.unique_count }} etc.)
         "contacts": {
             "unique_count": str(unique_contacts),
-            "top_list": contacts_top_list,
+            "top_list": "",  # cleared — contacts are listed as bullet points below
             "assessment": contacts_assessment,
         },
 

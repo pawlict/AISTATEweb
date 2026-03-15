@@ -4118,6 +4118,192 @@
    * html2canvas cannot reliably capture cross-origin tile <img> elements,
    * so we manually draw tiles, then overlay canvas/SVG layers on top.
    */
+  /**
+   * Render the Leaflet map (tiles + overlays + markers + watermark) to a Canvas.
+   * Reusable by both "Zrób zrzut" button and note chart capture.
+   * @returns {Promise<HTMLCanvasElement>} watermarked canvas
+   */
+  async function _renderMapToCanvas() {
+    const container = QS("#gsm_map_container");
+    if (!container || !St.map) return null;
+
+    const map = St.map;
+    const scale = 2;
+    const size = map.getSize();
+    const w = size.x * scale;
+    const h = size.y * scale;
+
+    await _waitForTilesToLoad(map, 3000);
+
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext("2d");
+
+    // 1. Background
+    ctx.fillStyle = "#e8e8e8";
+    ctx.fillRect(0, 0, w, h);
+
+    // 2. Tile images
+    const containerRect = map.getContainer().getBoundingClientRect();
+    const tilePane = map.getPane("tilePane");
+    if (tilePane) {
+      const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
+      const tilePromises = [];
+      for (const img of tileImgs) {
+        if (!img.src) continue;
+        const rect = img.getBoundingClientRect();
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+        const tw = rect.width * scale;
+        const th = rect.height * scale;
+        tilePromises.push(
+          _fetchImageBitmap(img.src)
+            .then(bmp => ({ bmp, x, y, tw, th }))
+            .catch(() => null)
+        );
+      }
+      const tiles = await Promise.all(tilePromises);
+      for (const tile of tiles) {
+        if (!tile) continue;
+        ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
+        tile.bmp.close();
+      }
+    }
+
+    // 3. MapLibre GL canvas
+    if (St._maplibreLayer) {
+      try {
+        const glMap = St._maplibreLayer.getMaplibreMap();
+        if (glMap) {
+          glMap.triggerRepaint();
+          await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const glCanvas = glMap.getCanvas();
+          if (glCanvas) {
+            const mlRect = glCanvas.getBoundingClientRect();
+            const cRect = map.getContainer().getBoundingClientRect();
+            ctx.drawImage(glCanvas,
+              (mlRect.left - cRect.left) * scale, (mlRect.top - cRect.top) * scale,
+              mlRect.width * scale, mlRect.height * scale);
+          }
+        }
+      } catch (e) {
+        _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
+      }
+    } else {
+      const maplibreCanvas = container.querySelector(".maplibregl-canvas, .mapboxgl-canvas");
+      if (maplibreCanvas) {
+        try {
+          const mlRect = maplibreCanvas.getBoundingClientRect();
+          const cRect = map.getContainer().getBoundingClientRect();
+          ctx.drawImage(maplibreCanvas,
+            (mlRect.left - cRect.left) * scale, (mlRect.top - cRect.top) * scale,
+            mlRect.width * scale, mlRect.height * scale);
+        } catch (e) {
+          _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
+        }
+      }
+    }
+
+    // 4. Overlay pane (circles, polylines, polygons)
+    const overlayPane = map.getPane("overlayPane");
+    if (overlayPane) {
+      const canvases = overlayPane.querySelectorAll("canvas");
+      for (const c of canvases) {
+        try {
+          const cRect = c.getBoundingClientRect();
+          ctx.drawImage(c,
+            (cRect.left - containerRect.left) * scale, (cRect.top - containerRect.top) * scale,
+            cRect.width * scale, cRect.height * scale);
+        } catch (_) {}
+      }
+      const svgs = overlayPane.querySelectorAll("svg");
+      for (const svg of svgs) {
+        try {
+          const svgRect = svg.getBoundingClientRect();
+          const svgData = new XMLSerializer().serializeToString(svg);
+          const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+          const svgUrl = URL.createObjectURL(svgBlob);
+          const svgImg = new Image();
+          await new Promise((resolve) => {
+            svgImg.onload = resolve;
+            svgImg.onerror = resolve;
+            svgImg.src = svgUrl;
+          });
+          ctx.drawImage(svgImg,
+            (svgRect.left - containerRect.left) * scale, (svgRect.top - containerRect.top) * scale,
+            svgRect.width * scale, svgRect.height * scale);
+          URL.revokeObjectURL(svgUrl);
+        } catch (_) {}
+      }
+    }
+
+    // 5. Shadow pane
+    _drawPaneMarkers(ctx, map, "shadowPane", scale);
+
+    // 6. Marker pane
+    _drawPaneMarkers(ctx, map, "markerPane", scale);
+
+    // 6b. Pinned BTS cards + tether lines
+    const tetherSvg = container.querySelector(".gsm-pinned-tether-svg");
+    if (tetherSvg) {
+      const lines = tetherSvg.querySelectorAll("line");
+      for (const ln of lines) {
+        const x1 = parseFloat(ln.getAttribute("x1")) * scale;
+        const y1 = parseFloat(ln.getAttribute("y1")) * scale;
+        const x2 = parseFloat(ln.getAttribute("x2")) * scale;
+        const y2 = parseFloat(ln.getAttribute("y2")) * scale;
+        ctx.save();
+        ctx.strokeStyle = ln.getAttribute("stroke") || "#64748b";
+        ctx.lineWidth = parseFloat(ln.getAttribute("stroke-width") || 1.5) * scale;
+        ctx.setLineDash([5 * scale, 4 * scale]);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    const pinnedCardEls = container.querySelectorAll(".gsm-pinned-card");
+    const popupPane = map.getPane("popupPane");
+    const openPopups = popupPane ? popupPane.querySelectorAll(".leaflet-popup") : [];
+    if (pinnedCardEls.length > 0 || openPopups.length > 0) {
+      await _ensureHtml2Canvas();
+      for (const card of pinnedCardEls) {
+        try {
+          const cardCanvas = await window.html2canvas(card, {
+            scale: scale, backgroundColor: null, logging: false, useCORS: true,
+          });
+          const cardLeft = parseFloat(card.style.left || 0) * scale;
+          const cardTop = parseFloat(card.style.top || 0) * scale;
+          ctx.drawImage(cardCanvas, cardLeft, cardTop);
+        } catch (e) {
+          _addLog("warn", "Nie udało się narysować karty BTS: " + e.message);
+        }
+      }
+      for (const popup of openPopups) {
+        try {
+          const popupCanvas = await window.html2canvas(popup, {
+            scale: scale, backgroundColor: null, logging: false, useCORS: true,
+          });
+          const pRect = popup.getBoundingClientRect();
+          ctx.drawImage(popupCanvas,
+            (pRect.left - containerRect.left) * scale, (pRect.top - containerRect.top) * scale);
+        } catch (_) {}
+      }
+    }
+
+    // 7. Watermark
+    const activeRadio = QS('input[name="gsm_map_layer"]:checked');
+    const activeItem = activeRadio ? activeRadio.closest(".gsm-lp-item") : null;
+    const layerLabel = activeItem ? activeItem.textContent.trim() : "";
+    const extraParts = [];
+    if (layerLabel) extraParts.push(layerLabel);
+    extraParts.push("© OpenStreetMap contributors");
+
+    return _drawWatermark(out, extraParts);
+  }
+
   async function _takeMapScreenshot() {
     const container = QS("#gsm_map_container");
     if (!container || !St.map) return;
@@ -4125,206 +4311,13 @@
     if (btn) btn.disabled = true;
 
     try {
-      const map = St.map;
-      const scale = 2;
-      const size = map.getSize();
-      const w = size.x * scale;
-      const h = size.y * scale;
-
-      // ── 0. Wait for all visible tiles to load before capturing ──
-      await _waitForTilesToLoad(map, 3000);
-
-      const out = document.createElement("canvas");
-      out.width = w;
-      out.height = h;
-      const ctx = out.getContext("2d");
-
-      // ── 1. Fill background (matches container bg) ──
-      ctx.fillStyle = "#e8e8e8";
-      ctx.fillRect(0, 0, w, h);
-
-      // ── 2. Draw tile images ──
-      // Use getBoundingClientRect for correct positioning — accounts for ALL
-      // nested transforms (tilePane → tile-container → tile img).
-      // Re-fetch tiles via fetch() to avoid tainted-canvas from cached tiles.
-      const containerRect = map.getContainer().getBoundingClientRect();
-      const tilePane = map.getPane("tilePane");
-      if (tilePane) {
-        const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
-        const tilePromises = [];
-        for (const img of tileImgs) {
-          if (!img.src) continue;
-          const rect = img.getBoundingClientRect();
-          const x = (rect.left - containerRect.left) * scale;
-          const y = (rect.top - containerRect.top) * scale;
-          const tw = rect.width * scale;
-          const th = rect.height * scale;
-          tilePromises.push(
-            _fetchImageBitmap(img.src)
-              .then(bmp => ({ bmp, x, y, tw, th }))
-              .catch(() => null)
-          );
-        }
-        const tiles = await Promise.all(tilePromises);
-        for (const tile of tiles) {
-          if (!tile) continue;
-          ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
-          tile.bmp.close();
-        }
+      const final = await _renderMapToCanvas();
+      if (!final) {
+        _addLog("warn", "Nie udało się wyrenderować mapy");
+        return;
       }
 
-      // ── 3. Draw MapLibre GL canvas (for PBF vector tiles) ──
-      // MapLibre renders to a WebGL canvas inside a .maplibregl-map container.
-      // Requires preserveDrawingBuffer:true (set in _addPbfVectorLayer).
-      if (St._maplibreLayer) {
-        try {
-          const glMap = St._maplibreLayer.getMaplibreMap();
-          if (glMap) {
-            // Force a synchronous repaint so the WebGL buffer contains current frame
-            glMap.triggerRepaint();
-            // Wait one animation frame for the repaint to complete
-            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-            const glCanvas = glMap.getCanvas();
-            if (glCanvas) {
-              const mlRect = glCanvas.getBoundingClientRect();
-              const cRect = map.getContainer().getBoundingClientRect();
-              const mlX = (mlRect.left - cRect.left) * scale;
-              const mlY = (mlRect.top - cRect.top) * scale;
-              const mlW = mlRect.width * scale;
-              const mlH = mlRect.height * scale;
-              ctx.drawImage(glCanvas, mlX, mlY, mlW, mlH);
-            }
-          }
-        } catch (e) {
-          _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
-        }
-      } else {
-        // Fallback: try to find any MapLibre canvas in the DOM
-        const maplibreCanvas = container.querySelector(".maplibregl-canvas, .mapboxgl-canvas");
-        if (maplibreCanvas) {
-          try {
-            const mlRect = maplibreCanvas.getBoundingClientRect();
-            const cRect = map.getContainer().getBoundingClientRect();
-            ctx.drawImage(maplibreCanvas,
-              (mlRect.left - cRect.left) * scale, (mlRect.top - cRect.top) * scale,
-              mlRect.width * scale, mlRect.height * scale);
-          } catch (e) {
-            _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
-          }
-        }
-      }
-
-      // ── 4. Draw Leaflet overlay pane canvases (circleMarkers, polylines, polygons) ──
-      const overlayPane = map.getPane("overlayPane");
-      if (overlayPane) {
-        const canvases = overlayPane.querySelectorAll("canvas");
-        for (const c of canvases) {
-          try {
-            const cRect = c.getBoundingClientRect();
-            const cx = (cRect.left - containerRect.left) * scale;
-            const cy = (cRect.top - containerRect.top) * scale;
-            ctx.drawImage(c, cx, cy, cRect.width * scale, cRect.height * scale);
-          } catch (_) {}
-        }
-        // Also draw any SVG overlays (polylines in SVG mode, etc.)
-        const svgs = overlayPane.querySelectorAll("svg");
-        for (const svg of svgs) {
-          try {
-            const svgRect = svg.getBoundingClientRect();
-            const svgData = new XMLSerializer().serializeToString(svg);
-            const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
-            const svgUrl = URL.createObjectURL(svgBlob);
-            const svgImg = new Image();
-            await new Promise((resolve) => {
-              svgImg.onload = resolve;
-              svgImg.onerror = resolve;
-              svgImg.src = svgUrl;
-            });
-            ctx.drawImage(svgImg,
-              (svgRect.left - containerRect.left) * scale,
-              (svgRect.top - containerRect.top) * scale,
-              svgRect.width * scale, svgRect.height * scale);
-            URL.revokeObjectURL(svgUrl);
-          } catch (_) {}
-        }
-      }
-
-      // ── 5. Draw shadow pane (marker shadows) ──
-      _drawPaneMarkers(ctx, map, "shadowPane", scale);
-
-      // ── 6. Draw marker pane (HTML markers / icons) ──
-      _drawPaneMarkers(ctx, map, "markerPane", scale);
-
-      // ── 6b. Draw pinned BTS cards + tether lines ──
-      // Tether SVG lines
-      const tetherSvg = container.querySelector(".gsm-pinned-tether-svg");
-      if (tetherSvg) {
-        const lines = tetherSvg.querySelectorAll("line");
-        for (const ln of lines) {
-          const x1 = parseFloat(ln.getAttribute("x1")) * scale;
-          const y1 = parseFloat(ln.getAttribute("y1")) * scale;
-          const x2 = parseFloat(ln.getAttribute("x2")) * scale;
-          const y2 = parseFloat(ln.getAttribute("y2")) * scale;
-          ctx.save();
-          ctx.strokeStyle = ln.getAttribute("stroke") || "#64748b";
-          ctx.lineWidth = parseFloat(ln.getAttribute("stroke-width") || 1.5) * scale;
-          ctx.setLineDash([5 * scale, 4 * scale]);
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
-          ctx.restore();
-        }
-      }
-      // Pinned cards and Leaflet popups (rendered via html2canvas)
-      const pinnedCardEls = container.querySelectorAll(".gsm-pinned-card");
-      const popupPane = map.getPane("popupPane");
-      const openPopups = popupPane ? popupPane.querySelectorAll(".leaflet-popup") : [];
-      if (pinnedCardEls.length > 0 || openPopups.length > 0) {
-        await _ensureHtml2Canvas();
-        for (const card of pinnedCardEls) {
-          try {
-            const cardCanvas = await window.html2canvas(card, {
-              scale: scale,
-              backgroundColor: null,
-              logging: false,
-              useCORS: true,
-            });
-            const cardLeft = parseFloat(card.style.left || 0) * scale;
-            const cardTop = parseFloat(card.style.top || 0) * scale;
-            ctx.drawImage(cardCanvas, cardLeft, cardTop);
-          } catch (e) {
-            _addLog("warn", "Nie udało się narysować karty BTS: " + e.message);
-          }
-        }
-        for (const popup of openPopups) {
-          try {
-            const popupCanvas = await window.html2canvas(popup, {
-              scale: scale,
-              backgroundColor: null,
-              logging: false,
-              useCORS: true,
-            });
-            const pRect = popup.getBoundingClientRect();
-            const px = (pRect.left - containerRect.left) * scale;
-            const py = (pRect.top - containerRect.top) * scale;
-            ctx.drawImage(popupCanvas, px, py);
-          } catch (_) {}
-        }
-      }
-
-      // ── 7. Draw watermark ──
-      const activeRadio = QS('input[name="gsm_map_layer"]:checked');
-      const activeItem = activeRadio ? activeRadio.closest(".gsm-lp-item") : null;
-      const layerLabel = activeItem ? activeItem.textContent.trim() : "";
-      const extraParts = [];
-      if (layerLabel) extraParts.push(layerLabel);
-      extraParts.push("© OpenStreetMap contributors");
-
-      const final = _drawWatermark(out, extraParts);
-
-      // ── 8. Download ──
+      // Download
       const now = new Date();
       final.toBlob((blob) => {
         if (!blob) {
@@ -9904,15 +9897,15 @@
       return null;
     }
 
-    // For maps, use the existing map screenshot mechanism (already has watermark)
-    if (chartName === "map_bts" && typeof _captureMapScreenshot === "function") {
+    // For maps, use the full map rendering pipeline (tiles, overlays, markers, watermark)
+    if (chartName === "map_bts") {
       try {
-        const blob = await _captureMapScreenshot();
-        if (blob) {
-          return await _blobToBase64(blob);
+        const mapCanvas = await _renderMapToCanvas();
+        if (mapCanvas) {
+          return mapCanvas.toDataURL("image/png").split(",")[1]; // base64 only
         }
       } catch (e) {
-        console.warn("[GSM] Map screenshot fallback to html2canvas:", e);
+        console.warn("[GSM] Map rendering failed, fallback to html2canvas:", e);
       }
     }
 
