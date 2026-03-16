@@ -4021,6 +4021,10 @@
       legitimate: "#22c55e",
       suspicious: "#ef4444",
       monitoring: "#eab308",
+      custom1: "#8b5cf6",
+      custom2: "#0d9488",
+      custom3: "#ec4899",
+      custom4: "#6366f1",
     };
     return map[tag] || "";
   }
@@ -4321,6 +4325,17 @@
     return _escHtml(before) + "<mark>" + _escHtml(match) + "</mark>" + _escHtml(after);
   }
 
+  // Global tooltip element (appended to body, escapes all overflow clipping)
+  let _searchTooltipEl = null;
+  function _getSearchTooltip() {
+    if (!_searchTooltipEl) {
+      _searchTooltipEl = document.createElement("div");
+      _searchTooltipEl.className = "analyst-search-tooltip";
+      document.body.appendChild(_searchTooltipEl);
+    }
+    return _searchTooltipEl;
+  }
+
   function _renderPanelSearchResults(container, results, query) {
     if (!results.length) {
       container.style.display = "";
@@ -4331,18 +4346,18 @@
     let html = `<div class="analyst-search-header"><span>Łącznie: ${results.length} wyników</span></div>`;
     for (const r of results) {
       const tip = r.tooltip || r.text;
-      html += `<div class="analyst-search-item" data-action='${_escAttr(JSON.stringify({ action: r.action, index: r.index, raw_row: r.raw_row, number: r.number, imei: r.imei, type: r.type, noteId: r.noteId, ref: r.ref }))}'>`;
+      html += `<div class="analyst-search-item" data-tip="${_escAttr(tip)}" data-action='${_escAttr(JSON.stringify({ action: r.action, index: r.index, raw_row: r.raw_row, number: r.number, imei: r.imei, type: r.type, noteId: r.noteId, ref: r.ref }))}'>`;
       html += `<img class="analyst-search-icon" src="${r.icon}" alt="" width="16" height="16" draggable="false" onerror="this.style.display='none'">`;
       html += `<div class="analyst-search-text-wrap">`;
       html += `<span class="analyst-search-text">${_highlightMatch(r.text, query)}</span>`;
       html += `<span class="analyst-search-loc">${_escHtml(r.loc)}</span>`;
       html += `</div>`;
-      html += `<div class="analyst-search-tooltip">${_escHtml(tip)}</div>`;
       html += `</div>`;
     }
     container.innerHTML = html;
 
     // Bind clicks + tooltip hover
+    const tipEl = _getSearchTooltip();
     container.querySelectorAll(".analyst-search-item").forEach(el => {
       el.addEventListener("click", () => {
         try {
@@ -4350,27 +4365,27 @@
           _navigateToSearchResult(data);
         } catch (e) { /* ignore */ }
       });
-      const tip = el.querySelector(".analyst-search-tooltip");
-      if (tip) {
-        el.addEventListener("mouseenter", () => {
-          const rect = el.getBoundingClientRect();
-          // Try placing to the right of the panel
-          let left = rect.right + 6;
-          let top = rect.top;
-          // If it overflows right edge, place to the left
-          if (left + 300 > window.innerWidth) {
-            left = rect.left - 306;
-            if (left < 0) left = 8;
-          }
-          // Keep within viewport vertically
-          if (top + 120 > window.innerHeight) top = window.innerHeight - 130;
-          if (top < 4) top = 4;
-          tip.style.left = left + "px";
-          tip.style.top = top + "px";
-          tip.style.display = "block";
-        });
-        el.addEventListener("mouseleave", () => { tip.style.display = "none"; });
-      }
+      el.addEventListener("mouseenter", () => {
+        const tipText = el.dataset.tip;
+        if (!tipText) return;
+        tipEl.textContent = tipText;
+        const rect = el.getBoundingClientRect();
+        // Try placing to the right of the panel
+        let left = rect.right + 8;
+        let top = rect.top;
+        // If it overflows right edge, place to the left
+        if (left + 300 > window.innerWidth) {
+          left = rect.left - 310;
+          if (left < 0) left = 8;
+        }
+        // Keep within viewport vertically
+        if (top + 120 > window.innerHeight) top = window.innerHeight - 130;
+        if (top < 4) top = 4;
+        tipEl.style.left = left + "px";
+        tipEl.style.top = top + "px";
+        tipEl.style.display = "block";
+      });
+      el.addEventListener("mouseleave", () => { tipEl.style.display = "none"; });
     });
   }
 
@@ -4902,6 +4917,28 @@
         }
       };
     }
+
+    // Coverage mode radio buttons — switch between full/flat/outline
+    document.querySelectorAll('input[name="gsm_cov_mode"]').forEach(radio => {
+      radio.onchange = () => {
+        if (!St.map || !St._covLocations) return;
+        const mode = radio.value;
+        // Remove old coverage layer
+        if (St.mapLayers.coverage) {
+          St.map.removeLayer(St.mapLayers.coverage);
+        }
+        // Clean up flat pane opacity if switching away from flat
+        const flatPane = St.map.getPane("coverageFlat");
+        if (flatPane) flatPane.style.opacity = "";
+        // Build new layer
+        St.mapLayers.coverage = _buildCoverageLayer(St._covLocations, mode);
+        // Add to map if billing checkbox is checked
+        const billingCb = QS("#gsm_cov_billing");
+        if (!billingCb || billingCb.checked) {
+          St.mapLayers.coverage.addTo(St.map);
+        }
+      };
+    });
 
     // ── Map overlay checkboxes (military / airports / diplomacy) ──
     const milCb = QS("#gsm_overlay_military");
@@ -5861,57 +5898,10 @@
     St.mapLayers.clusters = clusterGroup;
 
     // ── Coverage layer (BTS sector / circle coverage areas) ──
-    const coverageGroup = L.layerGroup();
-    const _defaultRange = { "GSM": 5000, "UMTS": 3000, "LTE": 2000, "5G NR": 1000 };
-    for (const loc of uniqueLocations) {
-      const range = loc.range_m || _defaultRange[loc.radio] || 2000;
-      const count = loc.records.length;
-      // Color by radio technology
-      const radioColors = { "GSM": "#ef4444", "UMTS": "#f97316", "LTE": "#3b82f6", "5G NR": "#8b5cf6" };
-      const color = radioColors[loc.radio] || "#6b7280";
-      const opacity = Math.min(0.55, 0.20 + Math.log2(count + 1) * 0.06);
-
-      if (loc.azimuth != null) {
-        // Omnidirectional circle (full range, visible behind sector)
-        L.circle([loc.lat, loc.lon], {
-          radius: range,
-          fillColor: color,
-          color: color,
-          weight: 1,
-          fillOpacity: opacity * 0.25,
-          dashArray: "4 5",
-        }).addTo(coverageGroup);
-
-        // Draw sector (pie-slice) for directional antenna
-        const beamWidth = loc.radio === "5G NR" ? 30 : loc.radio === "LTE" ? 45 : 60;
-        const startAngle = loc.azimuth - beamWidth / 2;
-        const endAngle = loc.azimuth + beamWidth / 2;
-        const sectorCoords = _buildSectorCoords(loc.lat, loc.lon, range, startAngle, endAngle, 24);
-        L.polygon(sectorCoords, {
-          fillColor: color,
-          color: color,
-          weight: 1.5,
-          fillOpacity: opacity,
-        }).on("click", ((covLoc) => (e) => {
-          L.DomEvent.stopPropagation(e);
-          _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
-        })(loc)).addTo(coverageGroup);
-      } else {
-        // Draw circle for omnidirectional / unknown azimuth
-        L.circle([loc.lat, loc.lon], {
-          radius: range,
-          fillColor: color,
-          color: color,
-          weight: 1.5,
-          fillOpacity: opacity * 0.8,
-        }).on("click", ((covLoc) => (e) => {
-          L.DomEvent.stopPropagation(e);
-          _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
-        })(loc)
-        ).addTo(coverageGroup);
-      }
-    }
-    St.mapLayers.coverage = coverageGroup;
+    St._covLocations = uniqueLocations; // cache for mode switching
+    const covModeRadio = QS('input[name="gsm_cov_mode"]:checked');
+    const covMode = covModeRadio ? covModeRadio.value : "full";
+    St.mapLayers.coverage = _buildCoverageLayer(uniqueLocations, covMode);
 
     // ── Trips layer (OSRM-routed roads between clusters) ──
     const tripsGroup = L.layerGroup();
@@ -6708,6 +6698,116 @@
     }
     coords.push([lat, lon]); // close polygon
     return coords;
+  }
+
+  /**
+   * Build the BTS coverage layer group in the specified mode.
+   * @param {Array} locations - uniqueLocations from geo data
+   * @param {string} mode - "full" | "flat" | "outline"
+   * @returns {L.LayerGroup}
+   */
+  function _buildCoverageLayer(locations, mode) {
+    const coverageGroup = L.layerGroup();
+    const _defaultRange = { "GSM": 5000, "UMTS": 3000, "LTE": 2000, "5G NR": 1000 };
+    const radioColors = { "GSM": "#ef4444", "UMTS": "#f97316", "LTE": "#3b82f6", "5G NR": "#8b5cf6" };
+
+    // For "flat" mode: create a custom pane with CSS opacity so overlapping
+    // shapes don't accumulate darkness. Shapes are drawn opaque (fillOpacity=1)
+    // but the entire pane gets a single global opacity.
+    let flatPane = null;
+    if (mode === "flat" && St.map) {
+      const paneName = "coverageFlat";
+      if (!St.map.getPane(paneName)) {
+        St.map.createPane(paneName);
+      }
+      flatPane = St.map.getPane(paneName);
+      flatPane.style.opacity = "0.25";
+      flatPane.style.zIndex = "350"; // below markers (400) above tiles (200)
+    }
+    const flatOpts = flatPane ? { pane: "coverageFlat" } : {};
+
+    for (const loc of locations) {
+      const range = loc.range_m || _defaultRange[loc.radio] || 2000;
+      const count = loc.records.length;
+      const color = radioColors[loc.radio] || "#6b7280";
+      const baseOpacity = Math.min(0.55, 0.20 + Math.log2(count + 1) * 0.06);
+
+      if (mode === "outline") {
+        // Outline only — no fill
+        if (loc.azimuth != null) {
+          L.circle([loc.lat, loc.lon], {
+            radius: range, fill: false, color: color, weight: 1, dashArray: "4 5",
+          }).addTo(coverageGroup);
+          const beamWidth = loc.radio === "5G NR" ? 30 : loc.radio === "LTE" ? 45 : 60;
+          const sectorCoords = _buildSectorCoords(loc.lat, loc.lon, range,
+            loc.azimuth - beamWidth / 2, loc.azimuth + beamWidth / 2, 24);
+          L.polygon(sectorCoords, {
+            fill: false, color: color, weight: 1.5,
+          }).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        } else {
+          L.circle([loc.lat, loc.lon], {
+            radius: range, fill: false, color: color, weight: 1.5,
+          }).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        }
+      } else if (mode === "flat") {
+        // Flat mode — shapes drawn opaque, pane has global opacity
+        if (loc.azimuth != null) {
+          L.circle([loc.lat, loc.lon], Object.assign({
+            radius: range, fillColor: color, color: color,
+            weight: 1, fillOpacity: 0.35, dashArray: "4 5",
+          }, flatOpts)).addTo(coverageGroup);
+          const beamWidth = loc.radio === "5G NR" ? 30 : loc.radio === "LTE" ? 45 : 60;
+          const sectorCoords = _buildSectorCoords(loc.lat, loc.lon, range,
+            loc.azimuth - beamWidth / 2, loc.azimuth + beamWidth / 2, 24);
+          L.polygon(sectorCoords, Object.assign({
+            fillColor: color, color: color, weight: 1.5, fillOpacity: 0.8,
+          }, flatOpts)).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        } else {
+          L.circle([loc.lat, loc.lon], Object.assign({
+            radius: range, fillColor: color, color: color,
+            weight: 1.5, fillOpacity: 0.7,
+          }, flatOpts)).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        }
+      } else {
+        // Full mode — original behavior (opacity per shape, stacking)
+        if (loc.azimuth != null) {
+          L.circle([loc.lat, loc.lon], {
+            radius: range, fillColor: color, color: color,
+            weight: 1, fillOpacity: baseOpacity * 0.25, dashArray: "4 5",
+          }).addTo(coverageGroup);
+          const beamWidth = loc.radio === "5G NR" ? 30 : loc.radio === "LTE" ? 45 : 60;
+          const sectorCoords = _buildSectorCoords(loc.lat, loc.lon, range,
+            loc.azimuth - beamWidth / 2, loc.azimuth + beamWidth / 2, 24);
+          L.polygon(sectorCoords, {
+            fillColor: color, color: color, weight: 1.5, fillOpacity: baseOpacity,
+          }).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        } else {
+          L.circle([loc.lat, loc.lon], {
+            radius: range, fillColor: color, color: color,
+            weight: 1.5, fillOpacity: baseOpacity * 0.8,
+          }).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        }
+      }
+    }
+    return coverageGroup;
   }
 
   /* ── Country code → full Polish name mapping ── */
