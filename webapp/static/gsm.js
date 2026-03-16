@@ -4005,11 +4005,19 @@
   function _buildActivityContacts(chartId, typeFilter, slotLabel) {
     const contacts = _extractActivityContacts(chartId, typeFilter, slotLabel);
     if (!contacts.length) return '<div class="gsm-chart-no-contacts small muted" style="padding:8px 0">Brak kontaktów w tym okresie</div>';
+    const totalNums = contacts.length;
+    const singleCount = contacts.filter(c => c.total === 1).length;
     let html = '';
     // Slot filter indicator
     if (slotLabel) {
-      html += `<div class="gsm-slot-filter-bar"><span class="small">Filtr: <b>${_escHtml(slotLabel)}</b> — ${contacts.length} numerów</span><button class="gsm-slot-filter-clear" title="Wyczyść filtr przedziału">✕</button></div>`;
+      html += `<div class="gsm-slot-filter-bar"><span class="small">Filtr: <b>${_escHtml(slotLabel)}</b> — ${totalNums} numerów</span><button class="gsm-slot-filter-clear" title="Wyczyść filtr przedziału">✕</button></div>`;
     }
+    // Header like heatmap unique numbers
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">`;
+    html += `<span class="h3" style="margin:0;font-size:13px">Unikatowe numery</span>`;
+    html += `<span class="small muted">${totalNums} ${totalNums === 1 ? "numer" : (totalNums < 5 ? "numery" : "numerów")}`;
+    if (singleCount > 0) html += ` · <b>${singleCount}</b> pojedynczych (1×)`;
+    html += `</span></div>`;
     html += '<div class="gsm-chart-contacts">';
     for (const c of contacts) {
       const parts = [];
