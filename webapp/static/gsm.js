@@ -4180,9 +4180,11 @@
       const fields = [r.callee, r.caller, r.record_type, r.date, r.time, r.location, r.network, r.imei].filter(Boolean);
       const match = fields.find(f => String(f).toLowerCase().includes(q));
       if (match) {
+        const tipParts = [r.callee, r.caller, r.record_type, r.date, r.time, r.duration, r.location, r.network, r.imei].filter(Boolean);
         results.push({
           icon: "/static/icons/komunikacja/phone.svg",
           text: `${r.callee || "—"} · ${r.record_type || ""} · ${r.date || ""} ${r.time || ""}`,
+          tooltip: tipParts.join(" · "),
           loc: `Rekord #${r.raw_row != null ? r.raw_row : i}`,
           action: "record",
           index: i,
@@ -4200,9 +4202,11 @@
         const idInfo = _idLookup(c.number);
         const fields = [c.number, idInfo ? idInfo.label : ""];
         if (fields.some(f => f.toLowerCase().includes(q))) {
+          const tipC = [`Numer: ${c.number}`, idInfo ? `Opis: ${idInfo.label}` : "", `Interakcje: ${c.total_interactions || 0}`, c.calls != null ? `Połączenia: ${c.calls}` : "", c.sms != null ? `SMS: ${c.sms}` : ""].filter(Boolean).join(" · ");
           results.push({
             icon: "/static/icons/uzytkownicy/user.svg",
             text: `${c.number}${idInfo ? " · " + idInfo.label : ""} · ${c.total_interactions || 0} interakcji`,
+            tooltip: tipC,
             loc: "Top kontakty",
             action: "contact",
             number: c.number,
@@ -4218,9 +4222,11 @@
         if (results.length >= MAX) break;
         const fields = [d.imei, d.imsi, d.device_name, d.device_type].filter(Boolean);
         if (fields.some(f => String(f).toLowerCase().includes(q))) {
+          const tipD = [d.imei ? `IMEI: ${d.imei}` : "", d.imsi ? `IMSI: ${d.imsi}` : "", d.device_name ? `Urządzenie: ${d.device_name}` : "", d.device_type ? `Typ: ${d.device_type}` : ""].filter(Boolean).join(" · ");
           results.push({
             icon: "/static/icons/komunikacja/phone.svg",
             text: `IMEI: ${d.imei || "—"} · ${d.device_name || ""}`,
+            tooltip: tipD,
             loc: "Urządzenia",
             action: "device",
             imei: d.imei,
@@ -4240,6 +4246,7 @@
           results.push({
             icon: "/static/icons/status/warning.svg",
             text: desc.slice(0, 80),
+            tooltip: desc,
             loc: "Anomalia",
             action: "anomaly",
             type: a.type,
@@ -4259,6 +4266,7 @@
           results.push({
             icon: "/static/icons/komunikacja/phone.svg",
             text: `${s.number} · ${s.label || ""} · ${_SN_CAT_LABELS[s.category] || s.category}`,
+            tooltip: `Numer: ${s.number} · Opis: ${s.label || "—"} · Kategoria: ${_SN_CAT_LABELS[s.category] || s.category}`,
             loc: "Nr specjalny",
             action: "special",
             number: s.number,
@@ -4278,6 +4286,7 @@
           results.push({
             icon: "/static/icons/dokumenty/notes.svg",
             text: `${note.label || "Notatka"}: ${(note.text || "").slice(0, 60)}`,
+            tooltip: `${note.label || "Notatka"}: ${note.text || ""}${note.tag ? " [" + note.tag + "]" : ""}`,
             loc: "Notatka",
             action: "note",
             noteId: note.id,
@@ -4321,15 +4330,19 @@
     container.style.display = "";
     let html = `<div class="analyst-search-header"><span>Łącznie: ${results.length} wyników</span></div>`;
     for (const r of results) {
+      const tip = r.tooltip || r.text;
       html += `<div class="analyst-search-item" data-action='${_escAttr(JSON.stringify({ action: r.action, index: r.index, raw_row: r.raw_row, number: r.number, imei: r.imei, type: r.type, noteId: r.noteId, ref: r.ref }))}'>`;
       html += `<img class="analyst-search-icon" src="${r.icon}" alt="" width="16" height="16" draggable="false" onerror="this.style.display='none'">`;
+      html += `<div class="analyst-search-text-wrap">`;
       html += `<span class="analyst-search-text">${_highlightMatch(r.text, query)}</span>`;
       html += `<span class="analyst-search-loc">${_escHtml(r.loc)}</span>`;
+      html += `</div>`;
+      html += `<div class="analyst-search-tooltip">${_escHtml(tip)}</div>`;
       html += `</div>`;
     }
     container.innerHTML = html;
 
-    // Bind clicks
+    // Bind clicks + tooltip hover
     container.querySelectorAll(".analyst-search-item").forEach(el => {
       el.addEventListener("click", () => {
         try {
@@ -4337,6 +4350,27 @@
           _navigateToSearchResult(data);
         } catch (e) { /* ignore */ }
       });
+      const tip = el.querySelector(".analyst-search-tooltip");
+      if (tip) {
+        el.addEventListener("mouseenter", () => {
+          const rect = el.getBoundingClientRect();
+          // Try placing to the right of the panel
+          let left = rect.right + 6;
+          let top = rect.top;
+          // If it overflows right edge, place to the left
+          if (left + 300 > window.innerWidth) {
+            left = rect.left - 306;
+            if (left < 0) left = 8;
+          }
+          // Keep within viewport vertically
+          if (top + 120 > window.innerHeight) top = window.innerHeight - 130;
+          if (top < 4) top = 4;
+          tip.style.left = left + "px";
+          tip.style.top = top + "px";
+          tip.style.display = "block";
+        });
+        el.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+      }
     });
   }
 
