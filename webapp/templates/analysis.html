@@ -262,6 +262,63 @@
 
   <!-- AML Analysis content -->
   <div class="analysis-tab-content" id="aml_content" style="display:none">
+  <div class="analyst-panel-layout">
+
+    <!-- Panel analityczny (collapsible left sidebar) -->
+    <aside class="analyst-panel collapsed" id="aml_analyst_panel">
+      <button class="analyst-panel-toggle" id="aml_panel_toggle" title="Panel analityczny">
+        <img src="/static/icons/akcje/sidebar_expand.svg" alt="" width="18" height="18" draggable="false">
+      </button>
+      <div class="analyst-panel-body">
+        <div class="analyst-panel-header">
+          <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
+            <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+            <span data-i18n="analyst_panel.title">Panel analityczny</span>
+          </div>
+          <button class="analyst-panel-toggle-inner" id="aml_panel_collapse" title="Zwiń panel">
+            <img src="/static/icons/akcje/sidebar_collapse.svg" alt="" width="16" height="16" draggable="false">
+          </button>
+        </div>
+
+        <!-- Global note -->
+        <div class="analyst-panel-section">
+          <div class="analyst-panel-label">
+            <img src="/static/icons/inne/pin.svg" alt="" width="14" height="14" draggable="false">
+            <span data-i18n="analyst_panel.global_note">Notatka globalna</span>
+          </div>
+          <textarea class="analyst-panel-global-ta input" id="aml_analyst_global_note" data-i18n-placeholder="analyst_panel.global_placeholder" placeholder="Notatka do całej analizy AML..."></textarea>
+        </div>
+
+        <div class="analyst-panel-divider"></div>
+
+        <!-- Item notes -->
+        <div class="analyst-panel-section analyst-panel-items-section">
+          <div class="analyst-panel-label" style="display:flex;align-items:center;justify-content:space-between">
+            <span style="display:flex;align-items:center;gap:5px">
+              <img src="/static/icons/projekty/project_tag.svg" alt="" width="14" height="14" draggable="false">
+              <span data-i18n="analyst_panel.item_notes">Notatki do elementów</span>
+            </span>
+            <span class="analyst-panel-count" id="aml_notes_count">0</span>
+          </div>
+          <!-- Tag filter -->
+          <div class="analyst-panel-tag-filter" id="aml_tag_filter">
+            <select class="input mini-select" id="aml_tag_filter_select" style="font-size:12px">
+              <option value="" data-i18n="analyst_panel.all_tags">Wszystkie</option>
+              <option value="neutral">Neutralny</option>
+              <option value="legitimate">Poprawny</option>
+              <option value="suspicious">Podejrzany</option>
+              <option value="monitoring">Obserwacja</option>
+            </select>
+          </div>
+          <div class="analyst-panel-items" id="aml_notes_list">
+            <div class="analyst-panel-empty" data-i18n="analyst_panel.no_notes">Brak notatek. Użyj Ctrl+M aby dodać.</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- AML main content -->
+    <div class="analyst-panel-main">
 
     <!-- Progress bar (like transcription) -->
     <div class="an-progress" id="aml_progress">
@@ -497,10 +554,69 @@
       <div id="aml_history_list" style="margin-top:10px"></div>
     </div>
 
+    </div><!-- /analyst-panel-main (AML) -->
+  </div><!-- /analyst-panel-layout (AML) -->
   </div><!-- /aml_content -->
 
   <!-- GSM Analysis content -->
   <div class="analysis-tab-content" id="gsm_content" style="display:none">
+  <div class="analyst-panel-layout">
+
+    <!-- Panel analityczny (collapsible left sidebar) -->
+    <aside class="analyst-panel collapsed" id="gsm_analyst_panel">
+      <button class="analyst-panel-toggle" id="gsm_panel_toggle" title="Panel analityczny">
+        <img src="/static/icons/akcje/sidebar_expand.svg" alt="" width="18" height="18" draggable="false">
+      </button>
+      <div class="analyst-panel-body">
+        <div class="analyst-panel-header">
+          <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
+            <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+            <span data-i18n="analyst_panel.title">Panel analityczny</span>
+          </div>
+          <button class="analyst-panel-toggle-inner" id="gsm_panel_collapse" title="Zwiń panel">
+            <img src="/static/icons/akcje/sidebar_collapse.svg" alt="" width="16" height="16" draggable="false">
+          </button>
+        </div>
+
+        <!-- Global note -->
+        <div class="analyst-panel-section">
+          <div class="analyst-panel-label">
+            <img src="/static/icons/inne/pin.svg" alt="" width="14" height="14" draggable="false">
+            <span data-i18n="analyst_panel.global_note">Notatka globalna</span>
+          </div>
+          <textarea class="analyst-panel-global-ta input" id="gsm_analyst_global_note" data-i18n-placeholder="analyst_panel.global_placeholder" placeholder="Notatka do całej analizy GSM..."></textarea>
+        </div>
+
+        <div class="analyst-panel-divider"></div>
+
+        <!-- Item notes -->
+        <div class="analyst-panel-section analyst-panel-items-section">
+          <div class="analyst-panel-label" style="display:flex;align-items:center;justify-content:space-between">
+            <span style="display:flex;align-items:center;gap:5px">
+              <img src="/static/icons/projekty/project_tag.svg" alt="" width="14" height="14" draggable="false">
+              <span data-i18n="analyst_panel.item_notes">Notatki do elementów</span>
+            </span>
+            <span class="analyst-panel-count" id="gsm_notes_count">0</span>
+          </div>
+          <!-- Tag filter -->
+          <div class="analyst-panel-tag-filter" id="gsm_tag_filter">
+            <select class="input mini-select" id="gsm_tag_filter_select" style="font-size:12px">
+              <option value="" data-i18n="analyst_panel.all_tags">Wszystkie</option>
+              <option value="neutral">Neutralny</option>
+              <option value="legitimate">Poprawny</option>
+              <option value="suspicious">Podejrzany</option>
+              <option value="monitoring">Obserwacja</option>
+            </select>
+          </div>
+          <div class="analyst-panel-items" id="gsm_notes_list">
+            <div class="analyst-panel-empty" data-i18n="analyst_panel.no_notes">Brak notatek. Użyj Ctrl+M aby dodać.</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- GSM main content -->
+    <div class="analyst-panel-main">
 
     <!-- Progress bar -->
     <div class="an-progress" id="gsm_progress" style="display:none">
@@ -941,7 +1057,42 @@
       <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
     </div>
 
+    </div><!-- /analyst-panel-main (GSM) -->
+  </div><!-- /analyst-panel-layout (GSM) -->
   </div><!-- /gsm_content -->
+
+  <!-- Note editor modal (shared by GSM and AML) -->
+  <div class="analyst-note-overlay" id="analyst_note_overlay" style="display:none">
+    <div class="analyst-note-modal">
+      <div class="analyst-note-header">
+        <h3 id="analyst_note_modal_title">Nowa notatka</h3>
+        <button class="note-editor-close" id="analyst_note_close">&times;</button>
+      </div>
+      <div class="analyst-note-body">
+        <div class="analyst-note-element-label" id="analyst_note_element_label"></div>
+        <div class="analyst-note-field">
+          <div class="label" data-i18n="analyst_panel.note_text">Notatka</div>
+          <textarea class="input" id="analyst_note_text" style="min-height:100px" placeholder=""></textarea>
+        </div>
+        <div class="analyst-note-field">
+          <div class="label" data-i18n="analyst_panel.tags">Tagi</div>
+          <div class="analyst-note-tags" id="analyst_note_tags">
+            <button type="button" class="analyst-tag-btn" data-tag="neutral"><span class="analyst-tag-dot" style="background:#60a5fa"></span> Neutralny</button>
+            <button type="button" class="analyst-tag-btn" data-tag="legitimate"><span class="analyst-tag-dot" style="background:#15803d"></span> Poprawny</button>
+            <button type="button" class="analyst-tag-btn" data-tag="suspicious"><span class="analyst-tag-dot" style="background:#dc2626"></span> Podejrzany</button>
+            <button type="button" class="analyst-tag-btn" data-tag="monitoring"><span class="analyst-tag-dot" style="background:#ea580c"></span> Obserwacja</button>
+          </div>
+        </div>
+        <div class="note-editor-hint">Ctrl+Enter = zapisz</div>
+      </div>
+      <div class="note-editor-footer">
+        <button class="note-btn note-btn-danger" id="analyst_note_delete" style="display:none">Usuń</button>
+        <span style="flex:1"></span>
+        <button class="note-btn" id="analyst_note_cancel">Anuluj</button>
+        <button class="note-btn note-btn-primary" id="analyst_note_save">Zapisz</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Hidden file inputs -->
   <input type="file" id="docs_file_input" style="display:none" multiple>
@@ -991,6 +1142,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/analyst_notes.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/analysis.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/aml.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/review.js?v={{ app_version }}&_={{ static_ts }}"></script>

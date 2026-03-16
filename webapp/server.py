@@ -6015,6 +6015,132 @@ def api_get_notes_diarization(project_id: str) -> Any:
     return notes
 
 
+# ---------- API: analysis notes (GSM / AML) — global + items with tags ----------
+
+_VALID_NOTE_TAGS = {"neutral", "legitimate", "suspicious", "monitoring"}
+
+
+def _clean_analysis_note_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Validate and clean a single analysis note item."""
+    if not isinstance(item, dict):
+        return None
+    note_id = item.get("id", "")
+    if not isinstance(note_id, str) or not note_id.strip():
+        return None
+    label = item.get("label", "")
+    if not isinstance(label, str):
+        label = ""
+    text = item.get("text", "")
+    if not isinstance(text, str):
+        text = ""
+    icon = item.get("icon", "")
+    if not isinstance(icon, str):
+        icon = ""
+    # Tags: only allow predefined values
+    raw_tags = item.get("tags", [])
+    if not isinstance(raw_tags, list):
+        raw_tags = []
+    tags = [t for t in raw_tags if isinstance(t, str) and t in _VALID_NOTE_TAGS]
+    # Ref: must be dict with type
+    ref = item.get("ref", {})
+    if not isinstance(ref, dict) or not ref.get("type"):
+        ref = {}
+    created = item.get("created", "")
+    if not isinstance(created, str):
+        created = now_iso()
+    modified = item.get("modified", "")
+    if not isinstance(modified, str):
+        modified = now_iso()
+    # At least text or tags must exist
+    if not text.strip() and not tags:
+        return None
+    return {
+        "id": note_id.strip(),
+        "label": label.strip(),
+        "icon": icon.strip(),
+        "text": text.strip(),
+        "tags": tags,
+        "ref": ref,
+        "created": created,
+        "modified": modified,
+    }
+
+
+def _save_analysis_notes(project_id: str, key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Common helper: save analysis notes (global + items) under given key."""
+    notes = payload.get("notes") or payload
+
+    if not isinstance(notes, dict):
+        raise HTTPException(status_code=400, detail="notes must be a JSON object (dict).")
+
+    global_note = notes.get("global", "")
+    if not isinstance(global_note, str):
+        global_note = ""
+
+    raw_items = notes.get("items", [])
+    if not isinstance(raw_items, list):
+        raw_items = []
+
+    clean_items = []
+    for it in raw_items:
+        cleaned = _clean_analysis_note_item(it)
+        if cleaned:
+            clean_items.append(cleaned)
+
+    clean_notes = {
+        "global": global_note.strip(),
+        "items": clean_items,
+    }
+
+    meta = read_project_meta(project_id)
+    meta[key] = clean_notes
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+
+    app_log(f"Project save {key}: project_id={project_id}, global_len={len(global_note)}, items={len(clean_items)}")
+
+    return {"ok": True, "notes": clean_notes, "items_count": len(clean_items)}
+
+
+def _get_analysis_notes(project_id: str, key: str) -> Dict[str, Any]:
+    """Common helper: get analysis notes under given key."""
+    meta = read_project_meta(project_id)
+    notes = meta.get(key, {})
+    if not isinstance(notes, dict):
+        notes = {"global": "", "items": []}
+    notes.setdefault("global", "")
+    notes.setdefault("items", [])
+    return notes
+
+
+@app.post("/api/projects/{project_id}/notes/gsm")
+def api_save_notes_gsm(project_id: str, request: Request) -> Any:
+    """Save GSM analysis notes (global + items with tags/refs)."""
+    import asyncio
+    payload = asyncio.run(request.json())
+    return _save_analysis_notes(project_id, "notes_gsm", payload)
+
+
+@app.get("/api/projects/{project_id}/notes/gsm")
+def api_get_notes_gsm(project_id: str) -> Any:
+    """Get GSM analysis notes."""
+    return _get_analysis_notes(project_id, "notes_gsm")
+
+
+@app.post("/api/projects/{project_id}/notes/aml")
+def api_save_notes_aml(project_id: str, request: Request) -> Any:
+    """Save AML analysis notes (global + items with tags/refs)."""
+    import asyncio
+    payload = asyncio.run(request.json())
+    return _save_analysis_notes(project_id, "notes_aml", payload)
+
+
+@app.get("/api/projects/{project_id}/notes/aml")
+def api_get_notes_aml(project_id: str) -> Any:
+    """Get AML analysis notes."""
+    return _get_analysis_notes(project_id, "notes_aml")
+
+
 # Dodaj endpoint do zapisu transkrypcji (text/plain)
 # Ten endpoint pozwala na wysyłanie zwykłego tekstu zamiast JSON
 @app.post("/api/projects/{project_id}/save/transcript")

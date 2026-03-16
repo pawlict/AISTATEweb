@@ -4513,6 +4513,48 @@
     }
   }
 
+  /* ── Analyst notes helpers ──────────────────────────── */
+
+  function _amlGetNoteContext(){
+    // Try to find hovered/focused transaction row in review table
+    const row = document.querySelector("#rv_table_wrap tr:hover[data-txid], #rv_table_wrap tr.selected[data-txid]");
+    if(row){
+      const txId = row.getAttribute("data-txid");
+      const amountEl = row.querySelector("td:nth-child(3)");
+      const cpEl = row.querySelector("td:nth-child(4)");
+      const dateEl = row.querySelector("td:nth-child(2)");
+      const amount = amountEl ? amountEl.textContent.trim() : "";
+      const cp = cpEl ? cpEl.textContent.trim() : "";
+      const date = dateEl ? dateEl.textContent.trim() : "";
+      const label = (amount ? amount + " " : "") + (cp ? "\u2192 " + cp : "") + (date ? " (" + date + ")" : "");
+      return {
+        label: label || "Transakcja",
+        icon: "finance",
+        ref: { type: "aml_transaction", transaction_id: txId, snapshot: { amount, counterparty: cp, date } },
+      };
+    }
+    return null;
+  }
+
+  function _amlNavigateToRef(ref){
+    if(!ref) return;
+    if(ref.type === "aml_transaction" && ref.transaction_id){
+      const row = document.querySelector(`#rv_table_wrap tr[data-txid="${ref.transaction_id}"]`);
+      if(row){
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        row.style.transition = "background .2s";
+        row.style.background = "rgba(74,108,247,.15)";
+        setTimeout(() => { row.style.background = ""; }, 2000);
+      }
+    } else if(ref.type === "aml_account"){
+      const accSection = document.getElementById("aml_accounts_card");
+      if(accSection) accSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if(ref.type === "aml_alert"){
+      const alertSection = document.getElementById("aml_alerts_card");
+      if(alertSection) alertSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
   const AmlManager = {
     _initialized: false,
 
@@ -4523,6 +4565,18 @@
       _bindUpload();
       _bindActions();
       await _loadHistory();
+
+      // Initialize analyst notes panel
+      const _notesPid = (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) || "";
+      if(_notesPid && window.AnalystNotesManager){
+        window._amlNotesMgr = new AnalystNotesManager({
+          mode: "aml",
+          projectId: _notesPid,
+          onNavigate: _amlNavigateToRef,
+          getContext: _amlGetNoteContext,
+        });
+        await window._amlNotesMgr.init();
+      }
 
       // Auto-restore last viewed analysis (from localStorage or first in history)
       const savedSid = localStorage.getItem("aistate_aml_statement_id") || "";
