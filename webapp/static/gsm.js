@@ -4321,6 +4321,17 @@
     return _escHtml(before) + "<mark>" + _escHtml(match) + "</mark>" + _escHtml(after);
   }
 
+  // Global tooltip element (appended to body, escapes all overflow clipping)
+  let _searchTooltipEl = null;
+  function _getSearchTooltip() {
+    if (!_searchTooltipEl) {
+      _searchTooltipEl = document.createElement("div");
+      _searchTooltipEl.className = "analyst-search-tooltip";
+      document.body.appendChild(_searchTooltipEl);
+    }
+    return _searchTooltipEl;
+  }
+
   function _renderPanelSearchResults(container, results, query) {
     if (!results.length) {
       container.style.display = "";
@@ -4331,18 +4342,18 @@
     let html = `<div class="analyst-search-header"><span>Łącznie: ${results.length} wyników</span></div>`;
     for (const r of results) {
       const tip = r.tooltip || r.text;
-      html += `<div class="analyst-search-item" data-action='${_escAttr(JSON.stringify({ action: r.action, index: r.index, raw_row: r.raw_row, number: r.number, imei: r.imei, type: r.type, noteId: r.noteId, ref: r.ref }))}'>`;
+      html += `<div class="analyst-search-item" data-tip="${_escAttr(tip)}" data-action='${_escAttr(JSON.stringify({ action: r.action, index: r.index, raw_row: r.raw_row, number: r.number, imei: r.imei, type: r.type, noteId: r.noteId, ref: r.ref }))}'>`;
       html += `<img class="analyst-search-icon" src="${r.icon}" alt="" width="16" height="16" draggable="false" onerror="this.style.display='none'">`;
       html += `<div class="analyst-search-text-wrap">`;
       html += `<span class="analyst-search-text">${_highlightMatch(r.text, query)}</span>`;
       html += `<span class="analyst-search-loc">${_escHtml(r.loc)}</span>`;
       html += `</div>`;
-      html += `<div class="analyst-search-tooltip">${_escHtml(tip)}</div>`;
       html += `</div>`;
     }
     container.innerHTML = html;
 
     // Bind clicks + tooltip hover
+    const tipEl = _getSearchTooltip();
     container.querySelectorAll(".analyst-search-item").forEach(el => {
       el.addEventListener("click", () => {
         try {
@@ -4350,27 +4361,27 @@
           _navigateToSearchResult(data);
         } catch (e) { /* ignore */ }
       });
-      const tip = el.querySelector(".analyst-search-tooltip");
-      if (tip) {
-        el.addEventListener("mouseenter", () => {
-          const rect = el.getBoundingClientRect();
-          // Try placing to the right of the panel
-          let left = rect.right + 6;
-          let top = rect.top;
-          // If it overflows right edge, place to the left
-          if (left + 300 > window.innerWidth) {
-            left = rect.left - 306;
-            if (left < 0) left = 8;
-          }
-          // Keep within viewport vertically
-          if (top + 120 > window.innerHeight) top = window.innerHeight - 130;
-          if (top < 4) top = 4;
-          tip.style.left = left + "px";
-          tip.style.top = top + "px";
-          tip.style.display = "block";
-        });
-        el.addEventListener("mouseleave", () => { tip.style.display = "none"; });
-      }
+      el.addEventListener("mouseenter", () => {
+        const tipText = el.dataset.tip;
+        if (!tipText) return;
+        tipEl.textContent = tipText;
+        const rect = el.getBoundingClientRect();
+        // Try placing to the right of the panel
+        let left = rect.right + 8;
+        let top = rect.top;
+        // If it overflows right edge, place to the left
+        if (left + 300 > window.innerWidth) {
+          left = rect.left - 310;
+          if (left < 0) left = 8;
+        }
+        // Keep within viewport vertically
+        if (top + 120 > window.innerHeight) top = window.innerHeight - 130;
+        if (top < 4) top = 4;
+        tipEl.style.left = left + "px";
+        tipEl.style.top = top + "px";
+        tipEl.style.display = "block";
+      });
+      el.addEventListener("mouseleave", () => { tipEl.style.display = "none"; });
     });
   }
 
