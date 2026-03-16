@@ -47,6 +47,86 @@ MARKER_CATALOGUE: List[Dict[str, str]] = [
 
 VALID_MARKER_KEYS = {m["key"] for m in MARKER_CATALOGUE}
 
+# ── Field (placeholder) catalogue ─────────────────────────────────────────
+# Every {{ placeholder }} that can be used in template text blocks.
+# Grouped by category for the frontend dropdown picker.
+
+FIELD_CATALOGUE: List[Dict[str, Any]] = [
+    # ── Dane podstawowe ──
+    {"key": "msisdn",           "group": "Dane podstawowe",       "label": "MSISDN",              "desc": "Numer telefonu analizowanego abonenta"},
+    {"key": "operator",         "group": "Dane podstawowe",       "label": "Operator",             "desc": "Nazwa operatora sieci"},
+    {"key": "period_from",      "group": "Dane podstawowe",       "label": "Okres od",             "desc": "Data początku analizowanego okresu"},
+    {"key": "period_to",        "group": "Dane podstawowe",       "label": "Okres do",             "desc": "Data końca analizowanego okresu"},
+    {"key": "total_records",    "group": "Dane podstawowe",       "label": "Łącznie rekordów",     "desc": "Łączna liczba rekordów w bilingu"},
+    {"key": "parametr_glowny",  "group": "Dane podstawowe",       "label": "Parametr główny",      "desc": "Główny parametr zapytania (MSISDN)"},
+    {"key": "sygnatura_sprawy", "group": "Dane podstawowe",       "label": "Sygnatura sprawy",     "desc": "Sygnatura sprawy (edytowalna)"},
+
+    # ── Abonent / urządzenia ──
+    {"key": "imsi_primary",               "group": "Abonent / urządzenia", "label": "IMSI (główny)",     "desc": "Główny identyfikator IMSI"},
+    {"key": "imsi_list",                  "group": "Abonent / urządzenia", "label": "Lista IMSI",        "desc": "Wszystkie identyfikatory IMSI"},
+    {"key": "imei_list",                  "group": "Abonent / urządzenia", "label": "Lista IMEI",        "desc": "Wszystkie identyfikatory IMEI"},
+    {"key": "unique_imei_count",          "group": "Abonent / urządzenia", "label": "Liczba IMEI",       "desc": "Liczba unikalnych urządzeń (IMEI)"},
+    {"key": "dual_imei_present",          "group": "Abonent / urządzenia", "label": "Dual-IMEI?",        "desc": "Czy wykryto urządzenie dual-modem (TAK/NIE)"},
+    {"key": "dual_imei_value",            "group": "Abonent / urządzenia", "label": "Dual-IMEI opis",    "desc": "Szczegóły dual-IMEI (voice/data)"},
+    {"key": "imei_change_count",          "group": "Abonent / urządzenia", "label": "Zmiany IMEI",       "desc": "Liczba zmian IMEI w badanym okresie"},
+    {"key": "device_identification_notes","group": "Abonent / urządzenia", "label": "Uwagi o urządzeniu","desc": "Identyfikacja marki/modelu urządzenia"},
+
+    # ── Statystyki ──
+    {"key": "stats.outgoing_calls", "group": "Statystyki", "label": "Połączenia wych.",  "desc": "Liczba połączeń wychodzących"},
+    {"key": "stats.incoming_calls", "group": "Statystyki", "label": "Połączenia przych.", "desc": "Liczba połączeń przychodzących"},
+    {"key": "stats.sms_out",        "group": "Statystyki", "label": "SMS wych.",          "desc": "Liczba SMS wychodzących"},
+    {"key": "stats.sms_in",         "group": "Statystyki", "label": "SMS przych.",        "desc": "Liczba SMS przychodzących"},
+    {"key": "stats.data_sessions",  "group": "Statystyki", "label": "Sesje danych",       "desc": "Liczba sesji transmisji danych"},
+
+    # ── Źródła danych ──
+    {"key": "source.calls",       "group": "Źródła danych", "label": "Połączenia",     "desc": "Opis źródła: połączenia głosowe (liczba rekordów)"},
+    {"key": "source.sms",         "group": "Źródła danych", "label": "SMS/MMS",        "desc": "Opis źródła: SMS/MMS (liczba rekordów)"},
+    {"key": "source.data",        "group": "Źródła danych", "label": "Transmisja",     "desc": "Opis źródła: transmisja danych (liczba sesji)"},
+    {"key": "source.identifiers", "group": "Źródła danych", "label": "Identyfikatory", "desc": "Opis źródła: identyfikatory IMEI"},
+    {"key": "source.contacts",    "group": "Źródła danych", "label": "Kontakty",       "desc": "Opis źródła: unikalne kontakty (liczba)"},
+    {"key": "source.locations",   "group": "Źródła danych", "label": "Lokalizacje",    "desc": "Opis źródła: lokalizacje BTS (liczba)"},
+    {"key": "source.anomalies",   "group": "Źródła danych", "label": "Anomalie",       "desc": "Opis źródła: kategorie anomalii"},
+
+    # ── Aktywność ──
+    {"key": "activity.hourly_pattern",  "group": "Aktywność", "label": "Wzorzec godzinowy", "desc": "Opis szczytu aktywności godzinowej"},
+    {"key": "activity.night_share",     "group": "Aktywność", "label": "Aktywność nocna %", "desc": "Procent aktywności nocnej"},
+    {"key": "activity.weekend_share",   "group": "Aktywność", "label": "Aktywność week. %", "desc": "Procent aktywności weekendowej"},
+    {"key": "special_numbers_summary",  "group": "Aktywność", "label": "Numery specjalne",  "desc": "Kategorie wykrytych numerów specjalnych"},
+
+    # ── Kontakty ──
+    {"key": "contacts.unique_count", "group": "Kontakty", "label": "Unikalne kontakty", "desc": "Liczba unikalnych kontaktów"},
+    {"key": "contacts.top_list",     "group": "Kontakty", "label": "Top kontakty",      "desc": "Lista najczęstszych kontaktów"},
+    {"key": "contacts.assessment",   "group": "Kontakty", "label": "Ocena kontaktów",   "desc": "Ocena struktury kontaktowej"},
+
+    # ── Anomalie ──
+    {"key": "anomalies.count",        "group": "Anomalie", "label": "Liczba kategorii", "desc": "Liczba kategorii wykrytych anomalii"},
+    {"key": "anomalies.categories",   "group": "Anomalie", "label": "Kategorie",        "desc": "Nazwy kategorii anomalii"},
+    {"key": "anomalies.top_findings", "group": "Anomalie", "label": "Top ustalenia",    "desc": "Najważniejsze ustalenia anomalii"},
+
+    # ── Lokalizacje ──
+    {"key": "locations.main_areas",        "group": "Lokalizacje", "label": "Główne rejony",  "desc": "Top 3 rejony aktywności BTS"},
+    {"key": "locations.bts_count",         "group": "Lokalizacje", "label": "Liczba BTS",     "desc": "Łączna liczba unikalnych lokalizacji BTS"},
+    {"key": "locations.dominant_bts",      "group": "Lokalizacje", "label": "Dominujący BTS", "desc": "Najczęściej używany rejon BTS"},
+    {"key": "locations.overnights_summary","group": "Lokalizacje", "label": "Noclegi",        "desc": "Podsumowanie noclegów poza domem"},
+
+    # ── Ocena / wnioski ──
+    {"key": "assessment.main_characteristics", "group": "Ocena / wnioski", "label": "Cechy dominujące", "desc": "Główne cechy aktywności"},
+    {"key": "assessment.working_assessment",   "group": "Ocena / wnioski", "label": "Ocena robocza",    "desc": "Robocza ocena analityczna"},
+    {"key": "conclusions.point_1",             "group": "Ocena / wnioski", "label": "Wniosek 1",        "desc": "Pierwszy punkt wniosków"},
+    {"key": "conclusions.point_2",             "group": "Ocena / wnioski", "label": "Wniosek 2",        "desc": "Drugi punkt wniosków"},
+    {"key": "conclusions.point_3",             "group": "Ocena / wnioski", "label": "Wniosek 3",        "desc": "Trzeci punkt wniosków"},
+    {"key": "conclusions.point_4",             "group": "Ocena / wnioski", "label": "Wniosek 4",        "desc": "Czwarty punkt wniosków"},
+
+    # ── Meta / dokument ──
+    {"key": "data_sporzadzenia", "group": "Meta / dokument", "label": "Data sporządzenia", "desc": "Data sporządzenia notatki (DD.MM.YYYY)"},
+    {"key": "analityk",          "group": "Meta / dokument", "label": "Analityk",           "desc": "Imię i nazwisko analityka"},
+    {"key": "podpis",            "group": "Meta / dokument", "label": "Podpis",             "desc": "Podpis pod notatką"},
+    {"key": "akceptacja",        "group": "Meta / dokument", "label": "Akceptacja",         "desc": "Osoba akceptująca notatkę"},
+    {"key": "miejscowosc",       "group": "Meta / dokument", "label": "Miejscowość",        "desc": "Miejscowość sporządzenia notatki"},
+    {"key": "data_raportu_html", "group": "Meta / dokument", "label": "Data raportu HTML",  "desc": "Data i godzina wygenerowania raportu"},
+    {"key": "zrodla_danych",     "group": "Meta / dokument", "label": "Źródła danych",      "desc": "Lista typów danych (połączenia, SMS, dane, BTS)"},
+]
+
 # ── Built-in (default) template ────────────────────────────────────────────
 # Matches the current hard-coded order in note_generator._post_process_docx().
 # Text blocks use the same constants defined in note_generator.py so that a

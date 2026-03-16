@@ -2626,20 +2626,21 @@ async def gsm_note_templates_list():
 @router.get("/api/gsm/note/templates/builtin")
 async def gsm_note_templates_builtin():
     """Return the full built-in template (with sections)."""
-    from backend.gsm.note_templates import get_builtin_template, MARKER_CATALOGUE
+    from backend.gsm.note_templates import get_builtin_template, MARKER_CATALOGUE, FIELD_CATALOGUE
 
     tpl = get_builtin_template()
     return JSONResponse({
         "status": "ok",
         "template": tpl,
         "marker_catalogue": MARKER_CATALOGUE,
+        "field_catalogue": FIELD_CATALOGUE,
     })
 
 
 @router.get("/api/gsm/note/templates/{tpl_id}")
 async def gsm_note_template_get(tpl_id: str):
     """Get a single template with full sections."""
-    from backend.gsm.note_templates import get_template, MARKER_CATALOGUE
+    from backend.gsm.note_templates import get_template, MARKER_CATALOGUE, FIELD_CATALOGUE
 
     tpl = get_template(str(_data_dir()), _TPL_USER_ID, tpl_id)
     if tpl is None:
@@ -2648,6 +2649,7 @@ async def gsm_note_template_get(tpl_id: str):
         "status": "ok",
         "template": tpl,
         "marker_catalogue": MARKER_CATALOGUE,
+        "field_catalogue": FIELD_CATALOGUE,
     })
 
 
