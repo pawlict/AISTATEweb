@@ -1,0 +1,123 @@
+Temat: Prezentacja możliwości systemu AISTATEweb — narzędzie do analizy audio, tekstu i danych finansowych
+
+
+Szanowny Panie Dyrektorze,
+
+zwracam się z uprzejmą prośbą o możliwość zaprezentowania systemu AISTATEweb (wersja 3.6 beta) — autorskiego narzędzia, które opracowałem z myślą o kompleksowej analizie danych multimedialnych, tekstowych i finansowych. Poniżej przedstawiam kluczowe możliwości programu.
+
+
+1. TRANSKRYPCJA AUDIO (Speech-to-Text)
+
+System wykorzystuje modele Whisper (OpenAI) do automatycznej zamiany mowy na tekst.
+Obsługiwane są liczne języki, w tym język polski. Modele działają lokalnie — po
+pobraniu nie wymagają połączenia z internetem. Użytkownik może wybrać wielkość modelu
+w zależności od dostępnych zasobów sprzętowych (od „tiny" do „large-v3").
+
+
+2. DIARYZACJA MÓWCÓW
+
+Dzięki integracji z biblioteką pyannote.audio system potrafi automatycznie rozpoznać
+i przypisać fragmenty wypowiedzi do poszczególnych mówców. Pozwala to na generowanie
+protokołów ze spotkań, przesłuchań czy nagrań wieloosobowych z oznaczeniem, kto
+i kiedy zabierał głos.
+
+
+3. TŁUMACZENIE MASZYNOWE
+
+Wbudowany moduł tłumaczeniowy oparty na modelu NLLB-200 (Meta) obsługuje ponad 200
+języków. Tłumaczenie odbywa się lokalnie, bez przesyłania danych na zewnętrzne
+serwery, co gwarantuje poufność przetwarzanych materiałów.
+
+
+4. ANALIZA TEKSTU Z WYKORZYSTANIEM LLM (Duże Modele Językowe)
+
+System integruje się z platformą Ollama, umożliwiając uruchamianie dużych modeli
+językowych (np. Llama, Mistral, Gemma) w pełni lokalnie. Dostępne funkcje obejmują:
+  - czat z asystentem AI na temat załadowanych dokumentów,
+  - analizę szybką i pogłębioną transkrypcji,
+  - automatyczne generowanie podsumowań i raportów,
+  - korektę i redakcję tekstów (proofreading).
+
+
+5. SYNTEZA MOWY (Text-to-Speech)
+
+Moduł TTS obsługuje trzy silniki: Piper, MMS (Meta) oraz Kokoro, umożliwiając
+zamianę tekstu na naturalnie brzmiącą mowę w wielu językach. Przydatne m.in.
+do odsłuchowego weryfikowania transkrypcji lub generowania materiałów audio.
+
+
+6. DETEKCJA ZDARZEŃ DŹWIĘKOWYCH
+
+System oferuje klasyfikację dźwięków pozamownych przy użyciu modeli YAMNet, PANNs
+oraz BEATs (łącznie ponad 500 kategorii). Pozwala to na automatyczne wykrywanie
+np. strzałów, syren, odgłosów rozbicia szyby, krzyków czy innych istotnych zdarzeń
+akustycznych w nagraniach.
+
+
+7. PRZETWARZANIE DOKUMENTÓW
+
+Wbudowany procesor dokumentów obsługuje formaty: TXT, PDF, DOCX, XLSX, PPTX oraz
+obrazy (OCR). Umożliwia to załadowanie materiałów uzupełniających do analizy LLM
+lub tłumaczenia.
+
+
+8. ANALIZA FINANSOWA I AML (Anti-Money Laundering)
+
+System zawiera zaawansowany moduł do analizy danych finansowych, obejmujący:
+  - parsowanie wyciągów bankowych (w tym format MT940),
+  - wykrywanie podejrzanych transakcji i wzorców (AML),
+  - klasyfikację transakcji i analizę wydatków,
+  - wykrywanie anomalii z użyciem algorytmów ML,
+  - analizę powiązań między kontami (cross-account),
+  - generowanie raportów zgodności z przepisami.
+
+
+9. GEOLOKALIZACJA GSM/BTS
+
+Moduł GSM umożliwia wizualizację danych lokalizacyjnych z sieci komórkowych
+(stacje bazowe BTS) na mapach — zarówno online, jak i offline. Przydatne
+do analizy logów telekomunikacyjnych i śledzenia lokalizacji.
+
+
+10. GENEROWANIE RAPORTÓW
+
+System eksportuje wyniki pracy w formatach: HTML, TXT, DOCX i PDF. Raporty
+mogą zawierać transkrypcje, wyniki diaryzacji, tłumaczenia, analizy LLM
+oraz dane finansowe. Dostępne są konfigurowalne profile raportów.
+
+
+11. ZARZĄDZANIE PROJEKTAMI I UŻYTKOWNIKAMI
+
+  - System projektów z przestrzeniami roboczymi (workspaces),
+  - Udostępnianie projektów między użytkownikami,
+  - Panel administracyjny z zarządzaniem kontami,
+  - Polityki bezpieczeństwa haseł i blokowanie kont,
+  - Import/eksport projektów (format .aistate i .zip).
+
+
+12. BEZPIECZEŃSTWO I PRYWATNOŚĆ
+
+  - Wszystkie modele AI działają lokalnie — dane nie opuszczają infrastruktury,
+  - Brak zależności od chmurowych API (po pobraniu modeli),
+  - System zarządzania zasobami GPU zapobiega przeciążeniu sprzętu,
+  - Interfejs dostępny w języku polskim, angielskim i koreańskim.
+
+
+WYMAGANIA TECHNICZNE
+
+  - Python 3.11+ / serwer z systemem Linux lub Windows,
+  - Opcjonalnie: karta graficzna NVIDIA z obsługą CUDA (znacząco przyspiesza
+    transkrypcję i analizę),
+  - Aplikacja webowa — dostępna przez przeglądarkę, bez instalacji na stacjach
+    roboczych użytkowników.
+
+
+Będę wdzięczny za możliwość umówienia krótkiej prezentacji, podczas której mógłbym
+zademonstrować działanie systemu na żywo i odpowiedzieć na ewentualne pytania.
+
+Pozostaję do dyspozycji.
+
+Z poważaniem,
+[Imię i Nazwisko]
+[Stanowisko]
+[Dane kontaktowe]
