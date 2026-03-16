@@ -28,15 +28,17 @@ const ANALYST_TAGS = {
 
 // ────────── Ref-type → icon mapping ──────────
 const _REF_ICONS = {
-  gsm_record:      "/static/icons/komunikacja/phone.svg",
-  gsm_heatmap:     "/static/icons/wizualizacja/chart_bar.svg",
-  gsm_bts:         "/static/icons/inne/pin.svg",
-  gsm_contact:     "/static/icons/uzytkownicy/user.svg",
-  gsm_anomaly:     "/static/icons/status/warning.svg",
-  aml_transaction: "/static/icons/dokumenty/doc_txt.svg",
-  aml_account:     "/static/icons/bezpieczenstwo/shield.svg",
-  aml_alert:       "/static/icons/status/warning.svg",
-  aml_graph_node:  "/static/icons/wizualizacja/chart_bar.svg",
+  gsm_record:         "/static/icons/komunikacja/phone.svg",
+  gsm_heatmap:        "/static/icons/wizualizacja/chart_bar.svg",
+  gsm_bts:            "/static/icons/inne/pin.svg",
+  gsm_contact:        "/static/icons/uzytkownicy/user.svg",
+  gsm_anomaly:        "/static/icons/status/warning.svg",
+  gsm_device:         "/static/icons/komunikacja/phone.svg",
+  gsm_special_number: "/static/icons/komunikacja/phone.svg",
+  aml_transaction:    "/static/icons/dokumenty/doc_txt.svg",
+  aml_account:        "/static/icons/bezpieczenstwo/shield.svg",
+  aml_alert:          "/static/icons/status/warning.svg",
+  aml_graph_node:     "/static/icons/wizualizacja/chart_bar.svg",
 };
 
 // ────────── Helper: short unique ID ──────────

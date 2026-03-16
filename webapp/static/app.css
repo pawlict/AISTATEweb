@@ -2579,6 +2579,7 @@ button.pill-icon:hover{
   gap:0;
   min-height:calc(100vh - 220px);
   position:relative;
+  overflow:hidden;
 }
 .analyst-panel{
   position:relative;
@@ -2586,14 +2587,25 @@ button.pill-icon:hover{
   width:320px;
   display:flex;
   flex-direction:column;
-  transition:width .2s ease;
   z-index:10;
+  transition:width .28s cubic-bezier(.4,0,.2,1);
+  will-change:width;
+  overflow:hidden;
 }
 .analyst-panel.collapsed{
   width:42px;
 }
+.analyst-panel-body{
+  opacity:1;
+  transform:translateX(0);
+  transition:opacity .2s ease .06s, transform .25s cubic-bezier(.4,0,.2,1);
+  min-width:300px;
+}
 .analyst-panel.collapsed .analyst-panel-body{
-  display:none;
+  opacity:0;
+  transform:translateX(-16px);
+  pointer-events:none;
+  transition:opacity .12s ease, transform .15s ease;
 }
 .analyst-panel.collapsed .analyst-panel-toggle{
   display:flex;

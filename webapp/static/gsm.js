@@ -2062,9 +2062,10 @@
     }
 
     // ── Devices table (if we have device analysis data) ──
+    const _devNotesMgr = window._gsmNotesMgr || null;
     if (devList.length) {
       html += `<table class="gsm-table"><thead><tr>
-        <th>IMEI</th><th>IMSI</th><th>Urządzenie</th><th>Typ</th><th>Domena</th><th>Rekordy</th><th>Okres</th>
+        <th style="width:24px;padding:0"></th><th>IMEI</th><th>IMSI</th><th>Urządzenie</th><th>Typ</th><th>Domena</th><th>Rekordy</th><th>Okres</th>
       </tr></thead><tbody>`;
       for (const d of devList) {
         const name = d.display_name || '<span class="muted">nieznane</span>';
@@ -2076,7 +2077,9 @@
         let domain = "—";
         if (dualImei && d.imei === dualImei.voice_imei) domain = "📞 Głos/SMS";
         else if (dualImei && d.imei === dualImei.data_imei) domain = "📡 Dane";
+        const _devHasNote = _devNotesMgr && _devNotesMgr.hasNote("gsm_device", "imei", d.imei);
         html += `<tr>
+          <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_devHasNote ? " has-note" : ""}" data-note-imei="${d.imei || ""}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>
           <td><code>${d.imei || "?"}</code></td>
           <td>${imsiStr}</td>
           <td>${d.known ? `<strong>${name}</strong>` : name}</td>
@@ -2188,6 +2191,22 @@
         if (valSpan) valSpan.textContent = `${show} / ${items.length}`;
       });
     }
+
+    // Bind device note markers
+    if (_devNotesMgr) {
+      el.querySelectorAll(".analyst-note-marker[data-note-imei]").forEach(marker => {
+        marker.addEventListener("click", function(e) {
+          e.stopPropagation();
+          const imei = this.getAttribute("data-note-imei");
+          if (!imei) return;
+          const dev = devList.find(d => d.imei === imei);
+          const devName = dev && dev.display_name ? dev.display_name : "nieznane";
+          const label = "Urządzenie: IMEI " + imei.slice(-6) + " (" + devName + ")";
+          const ref = { type: "gsm_device", imei: imei, snapshot: { display_name: devName } };
+          _devNotesMgr.openNoteForElement(label, "phone", ref);
+        });
+      });
+    }
   }
 
   function _renderAnalysis(a) {
@@ -2197,12 +2216,15 @@
     let html = "";
 
     // Top contacts
+    const _tcNm = window._gsmNotesMgr || null;
     if (a.top_contacts && a.top_contacts.length) {
       html += `<div class="gsm-section"><div class="h3">Top kontakty</div><table class="gsm-table"><thead><tr>
-        <th>Numer</th><th>Identyfikacja</th><th>Interakcje</th><th>Rozmowy ↑</th><th>Rozmowy ↓</th><th>SMS ↑</th><th>SMS ↓</th><th>Czas rozmów</th><th>Aktywne dni</th>
+        <th style="width:24px;padding:0"></th><th>Numer</th><th>Identyfikacja</th><th>Interakcje</th><th>Rozmowy ↑</th><th>Rozmowy ↓</th><th>SMS ↑</th><th>SMS ↓</th><th>Czas rozmów</th><th>Aktywne dni</th>
       </tr></thead><tbody>`;
       for (const c of a.top_contacts.slice(0, 20)) {
+        const _tcHn = _tcNm && _tcNm.hasNote("gsm_contact", "number", c.number);
         html += `<tr>
+          <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_tcHn ? " has-note" : ""}" data-note-contact="${c.number}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>
           <td><code>${c.number}</code></td>
           <td>${_idCell(c.number)}</td>
           <td>${_fmt(c.total_interactions)}</td>
@@ -2227,6 +2249,21 @@
     }
 
     el.innerHTML = html || '<div class="small muted">Brak danych do analizy.</div>';
+
+    // Bind contact note markers
+    if (_tcNm) {
+      el.querySelectorAll(".analyst-note-marker[data-note-contact]").forEach(marker => {
+        marker.addEventListener("click", function(e) {
+          e.stopPropagation();
+          const num = this.getAttribute("data-note-contact");
+          if (!num) return;
+          const info = _idLookup(num);
+          const label = "Kontakt: " + (info && info.label ? info.label + " (" + num + ")" : num);
+          const ref = { type: "gsm_contact", number: num };
+          _tcNm.openNoteForElement(label, "user", ref);
+        });
+      });
+    }
 
     // Render contact relationship graph (SVG) — separate card
     const graphCard = QS("#gsm_graph_card");
@@ -2339,15 +2376,21 @@
       html += `<div class="small muted" style="margin-top:1px;line-height:1.3">${cat.desc}</div>`;
       html += `</div>`; // end text block
 
-      // ── Action icons (only if has data) ──
-      if (hasItems) {
+      // ── Action icons ──
+      {
         html += `<div style="display:flex;align-items:center;gap:2px;flex-shrink:0;border-left:1px solid var(--border);padding-left:8px;margin-left:4px">`;
-        // Expand / collapse (only if >5 items)
-        if (items.length > VISIBLE) {
-          html += _makeIcon(_IC_EXPAND, "Rozwiń / zwiń listę", "gsm-anom-toggle") + " ";
+        // Note marker
+        const _nm = window._gsmNotesMgr;
+        const _hn = _nm && _nm.hasNote("gsm_anomaly", "anomaly_type", cat.type);
+        html += `<span class="analyst-note-marker${_hn ? " has-note" : ""}" data-note-anomaly="${cat.type}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false"></span>`;
+        if (hasItems) {
+          // Expand / collapse (only if >5 items)
+          if (items.length > VISIBLE) {
+            html += _makeIcon(_IC_EXPAND, "Rozwiń / zwiń listę", "gsm-anom-toggle") + " ";
+          }
+          // +5 context
+          html += _makeIcon(_IC_PLUS5, "+5 rekordów kontekstu", "gsm-anom-plus5");
         }
-        // +5 context
-        html += _makeIcon(_IC_PLUS5, "+5 rekordów kontekstu", "gsm-anom-plus5");
         html += `</div>`;
       }
       html += `</div>`; // end bar
@@ -2427,6 +2470,20 @@
       div.addEventListener("mouseleave", () => {
         div.style.background = "";
         div.style.boxShadow = "";
+      });
+    });
+
+    // ── Note markers on anomaly cards ──
+    body.querySelectorAll(".analyst-note-marker[data-note-anomaly]").forEach(marker => {
+      marker.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const type = this.getAttribute("data-note-anomaly");
+        if (!type) return;
+        const catDef = _ANOMALY_CATS.find(c => c.type === type);
+        const label = catDef ? "Anomalia: " + catDef.label : "Anomalia: " + type;
+        const ref = { type: "gsm_anomaly", anomaly_type: type };
+        const mgr = window._gsmNotesMgr;
+        if (mgr) mgr.openNoteForElement(label, "warning", ref);
       });
     });
 
@@ -3051,6 +3108,17 @@
         <text x="${card.x + 9}" y="${by3 + 9}" font-size="6.5" font-weight="700" fill="#d97706">FWD</text>
         <text x="${card.x + CW - 6}" y="${by3 + 9}" font-size="7.5" font-weight="600" fill="#d97706" text-anchor="end">${fwdAll2}</text>
       </g>`;
+      // Note marker (small circle in top-right corner)
+      {
+        const _gnm = window._gsmNotesMgr;
+        const _ghn = _gnm && _gnm.hasNote("gsm_contact", "number", c.number);
+        const _nColor = _ghn ? "#2563eb" : "var(--text-muted,#cbd5e1)";
+        const _nOpacity = _ghn ? "1" : "0";
+        svg += `<g class="gsm-graph-note-marker" data-number="${c.number}" style="cursor:pointer;opacity:${_nOpacity}">
+          <circle cx="${card.x + CW - 6}" cy="${card.y + 6}" r="4" fill="${_nColor}" opacity=".85"/>
+          <text x="${card.x + CW - 6}" y="${card.y + 8.5}" text-anchor="middle" font-size="5.5" fill="#fff" font-weight="700">N</text>
+        </g>`;
+      }
       svg += `</g>`;
     }
 
@@ -3199,6 +3267,31 @@
       });
       input.addEventListener("blur", () => setTimeout(save, 80));
     }
+
+    // ── Note markers on graph nodes ──
+    wrap.querySelectorAll(".gsm-graph-node").forEach(g => {
+      const noteMarker = g.querySelector(".gsm-graph-note-marker");
+      if (!noteMarker) return;
+      // Show on hover
+      g.addEventListener("mouseenter", () => { noteMarker.style.opacity = "1"; });
+      g.addEventListener("mouseleave", () => {
+        const _gnm2 = window._gsmNotesMgr;
+        const hasN = _gnm2 && _gnm2.hasNote("gsm_contact", "number", g.dataset.number);
+        noteMarker.style.opacity = hasN ? "1" : "0";
+      });
+      // Click on note marker
+      noteMarker.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const num = g.dataset.number;
+        if (!num) return;
+        const _gnm3 = window._gsmNotesMgr;
+        if (!_gnm3) return;
+        const info = _idLookup(num);
+        const label = "Kontakt (graf): " + (info && info.label ? info.label + " (" + num + ")" : num);
+        const ref = { type: "gsm_contact", number: num };
+        _gnm3.openNoteForElement(label, "user", ref);
+      });
+    });
 
     // ── Click on contact label (empty or existing) → inline edit ──
     wrap.querySelectorAll(".gsm-graph-id-empty, .gsm-graph-id-edit").forEach(txt => {
@@ -3671,8 +3764,9 @@
       return;
     }
 
+    const _snNm = window._gsmNotesMgr || null;
     let tbl = `<table class="gsm-table"><thead><tr>
-      <th>Numer</th><th>Kategoria</th><th>Opis</th><th>Interakcje</th><th>Czas rozm\u00F3w</th><th>Okres</th>
+      <th style="width:24px;padding:0"></th><th>Numer</th><th>Kategoria</th><th>Opis</th><th>Interakcje</th><th>Czas rozm\u00F3w</th><th>Okres</th>
     </tr></thead><tbody>`;
 
     for (const s of items) {
@@ -3681,7 +3775,9 @@
       const period = s.first_date
         ? (s.first_date === s.last_date ? s.first_date : `${s.first_date} \u2013 ${s.last_date}`)
         : "\u2014";
+      const _snHn = _snNm && _snNm.hasNote("gsm_special_number", "number", s.number);
       tbl += `<tr>
+        <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_snHn ? " has-note" : ""}" data-note-special="${s.number}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>
         <td><code>${s.number}</code></td>
         <td><span class="gsm-sn-badge ${cls}">${cat}</span></td>
         <td>${s.label || "\u2014"}</td>
@@ -3692,6 +3788,21 @@
     }
     tbl += "</tbody></table>";
     wrap.innerHTML = tbl;
+
+    // Bind special number note markers
+    if (_snNm) {
+      wrap.querySelectorAll(".analyst-note-marker[data-note-special]").forEach(marker => {
+        marker.addEventListener("click", function(e) {
+          e.stopPropagation();
+          const num = this.getAttribute("data-note-special");
+          if (!num) return;
+          const sn = items.find(x => x.number === num);
+          const label = "Nr specjalny: " + num + (sn && sn.label ? " (" + sn.label.slice(0, 30) + ")" : "");
+          const ref = { type: "gsm_special_number", number: num, snapshot: { category: sn ? sn.category : "", label: sn ? sn.label : "" } };
+          _snNm.openNoteForElement(label, "phone", ref);
+        });
+      });
+    }
   }
 
   /* ── activity charts — grouped bars (Rozmowy / SMS / Dane) ── */
@@ -10642,6 +10753,38 @@
         row.style.transition = "background .2s";
         row.style.background = "rgba(74,108,247,.15)";
         setTimeout(() => { row.style.background = ""; }, 2000);
+      }
+    } else if (ref.type === "gsm_anomaly" && ref.anomaly_type) {
+      const card = document.querySelector(`.gsm-anomaly-card[data-anomaly-type="${ref.anomaly_type}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.style.transition = "box-shadow .2s";
+        card.style.boxShadow = "0 0 0 2px rgba(74,108,247,.4)";
+        setTimeout(() => { card.style.boxShadow = ""; }, 2000);
+      }
+    } else if (ref.type === "gsm_device" && ref.imei) {
+      const devCard = QS("#gsm_devices_card");
+      if (devCard) devCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (ref.type === "gsm_contact" && ref.number) {
+      // Try graph first
+      const graphNode = document.querySelector(`.gsm-graph-node[data-number="${ref.number}"]`);
+      if (graphNode) {
+        const graphCard = QS("#gsm_graph_card");
+        if (graphCard) graphCard.scrollIntoView({ behavior: "smooth", block: "center" });
+        const bg = graphNode.querySelector(".gsm-graph-node-bg");
+        if (bg) {
+          bg.setAttribute("stroke", "#2563eb"); bg.setAttribute("stroke-width", "2.5");
+          setTimeout(() => { bg.setAttribute("stroke", "var(--border,#e2e8f0)"); bg.setAttribute("stroke-width", "0.8"); }, 2000);
+        }
+      } else {
+        const analysisBody = QS("#gsm_analysis_body");
+        if (analysisBody) analysisBody.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    } else if (ref.type === "gsm_special_number") {
+      const snBody = QS("#gsm_special_numbers_body");
+      if (snBody) {
+        const card = snBody.closest(".card");
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }
   }
