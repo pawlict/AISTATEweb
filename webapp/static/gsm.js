@@ -4542,22 +4542,55 @@
         }
         const num = el.dataset.number;
         const chartId = el.dataset.chart;
-        _filterRecordsByContact(num, chartId);
+        // Get current slot and type filter from the parent card
+        const card = el.closest("[data-chart-id]");
+        const slotLabel = card ? card._activeSlot || null : null;
+        const typeSel = card ? card.querySelector(".gsm-type-select") : null;
+        const typeFilter = typeSel ? typeSel.value : "all";
+        _filterRecordsByContact(num, chartId, slotLabel, typeFilter);
       });
     });
   }
 
-  function _filterRecordsByContact(number, chartId) {
+  function _filterRecordsByContact(number, chartId, slotLabel, typeFilter) {
     const records = St.lastResult ? St.lastResult.records : [];
-    let pred;
-    if (chartId === "night") pred = _isNightRecord;
-    else if (chartId === "weekend") pred = _isWeekendRecord;
-    else pred = () => true; // heatmap context — filter all records
-    const filtered = records.filter(r => pred(r) && (r.callee === number || r.caller === number));
+    const tf = typeFilter || "all";
+    const filtered = records.filter(r => {
+      // Number match
+      if (r.callee !== number && r.caller !== number) return false;
+      // Period filter
+      if (chartId === "night") {
+        if (!_isNightRecord(r)) return false;
+        // Slot filter for night
+        if (slotLabel && _NIGHT_SLOTS[slotLabel]) {
+          const h = parseInt(r.time.split(":")[0], 10);
+          if (!_NIGHT_SLOTS[slotLabel].includes(h)) return false;
+        }
+      } else if (chartId === "weekend") {
+        if (!_isWeekendRecord(r)) return false;
+        // Slot filter for weekend
+        if (slotLabel) {
+          const pred = _weekendSlotPredicate(slotLabel);
+          if (pred) {
+            const dt = new Date((r.datetime || "").replace(" ", "T"));
+            if (isNaN(dt.getTime()) || !pred(dt)) return false;
+          }
+        }
+      }
+      // Type filter
+      if (tf !== "all") {
+        const cat = _hmCategory(r.record_type);
+        if (cat !== tf) return false;
+      }
+      return true;
+    });
     const chartLabels = { night: "nocna", weekend: "weekendowa" };
     const chartLabel = chartLabels[chartId] || "";
-    const prefix = chartLabel ? `Akt. ${chartLabel}: ` : "Nr: ";
-    const filterText = `${prefix}${number} — ${filtered.length} rek.`;
+    const prefix = chartLabel ? `Akt. ${chartLabel}` : "Nr";
+    const slotInfo = slotLabel ? ` [${slotLabel}]` : "";
+    const typeLabels = { calls: "poł.", sms: "SMS", data: "dane" };
+    const typeInfo = tf !== "all" && typeLabels[tf] ? ` (${typeLabels[tf]})` : "";
+    const filterText = `${prefix}${slotInfo}: ${number}${typeInfo} — ${filtered.length} rek.`;
     _setRecordsFilter(filterText, () => {
       _clearRecordsFilter();
       if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
