@@ -2322,8 +2322,54 @@
     { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
     { type: "satellite_numbers",label: "Numery satelitarne",              desc: "Po\u0142\u0105czenia z numerami telefon\u00F3w satelitarnych (Iridium, Inmarsat, Thuraya, Globalstar i in.)" },
     { type: "social_media",     label: "Konta spo\u0142eczno\u015Bciowe / komunikatory", desc: "Nazwy komunikator\u00F3w i platform spo\u0142eczno\u015Bciowych wykryte w polach bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)" },
-    { type: "inactivity_gap",   label: "Brak aktywno\u015Bci >12 godzin", desc: "Okresy powy\u017Cej 12 godzin bez \u017Cadnego zdarzenia (po\u0142\u0105czenia, SMS, dane). Podano ostatni i pierwszy kontakt." },
+    { type: "inactivity_gap",   label: "Brak aktywno\u015Bci", desc: "Okresy bez \u017Cadnego zdarzenia (po\u0142\u0105czenia, SMS, dane). Podano ostatni i pierwszy kontakt.", configurable: true },
   ];
+
+  // ── Inactivity gap: configurable threshold (default 12h) ──
+  let _inactivityThresholdH = 12;
+
+  /**
+   * Detect inactivity gaps from records on the frontend.
+   * Same logic as backend _detect_inactivity_gaps but in JS.
+   */
+  function _detectInactivityGaps(minHours) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!records.length) return [];
+
+    // Parse datetime and sort
+    const parsed = [];
+    for (const r of records) {
+      if (!r.datetime && (!r.date || !r.time)) continue;
+      const dtStr = r.datetime || (r.date + " " + r.time);
+      const dt = new Date(dtStr.replace(" ", "T"));
+      if (isNaN(dt.getTime())) continue;
+      parsed.push({ dt, r });
+    }
+    if (parsed.length < 2) return [];
+    parsed.sort((a, b) => a.dt - b.dt);
+
+    const thresholdMs = minHours * 3600 * 1000;
+    const items = [];
+    for (let i = 1; i < parsed.length; i++) {
+      const prev = parsed[i - 1];
+      const curr = parsed[i];
+      const gapMs = curr.dt - prev.dt;
+      if (gapMs >= thresholdMs) {
+        items.push({
+          gap_hours: Math.round(gapMs / 3600000 * 10) / 10,
+          last_date: prev.r.date || "",
+          last_time: prev.r.time || "",
+          last_contact: prev.r.callee || prev.r.caller || "\u2014",
+          last_type: prev.r.record_type || "",
+          first_date: curr.r.date || "",
+          first_time: curr.r.time || "",
+          first_contact: curr.r.callee || curr.r.caller || "\u2014",
+          first_type: curr.r.record_type || "",
+        });
+      }
+    }
+    return items;
+  }
 
   function _renderAnomalies(a) {
     const card = QS("#gsm_anomalies_card");
@@ -2348,6 +2394,15 @@
       for (const g of raw) {
         groupMap[g.type] = { items: g.items || [], severity: g.severity || "ok" };
       }
+    }
+
+    // Override inactivity_gap with frontend-computed results (respects custom threshold)
+    {
+      const igItems = _detectInactivityGaps(_inactivityThresholdH);
+      groupMap["inactivity_gap"] = {
+        items: igItems,
+        severity: igItems.length ? "info" : "ok",
+      };
     }
 
     // Icon paths
@@ -2378,11 +2433,17 @@
       html += `<div class="gsm-anomaly-bar" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(${sev === 'critical' ? '220,38,38' : sev === 'warning' ? '249,115,22' : sev === 'info' ? '59,130,246' : '34,197,94'},.04)">`;
       html += `<span style="color:${sevColor};font-size:15px;flex-shrink:0">${sevIcon}</span>`;
       html += `<div style="flex:1;min-width:0">`;
-      html += `<div style="display:flex;align-items:center;gap:5px"><b>${cat.label}</b>`;
+      html += `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><b>${cat.label}</b>`;
+      if (cat.type === "inactivity_gap") {
+        html += ` <span style="display:inline-flex;align-items:center;gap:3px;font-size:12px">>`
+          + `<input type="number" class="gsm-inactivity-threshold" value="${_inactivityThresholdH}" min="1" max="999" step="1"`
+          + ` style="width:48px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--card-bg,#fff);color:var(--text)">`
+          + ` godz.</span>`;
+      }
       if (!hasItems) {
         html += ` <span class="muted">\u2014 brak</span>`;
       } else {
-        html += ` <span class="muted">(${items.length})</span>`;
+        html += ` <span class="muted gsm-inactivity-count">(${items.length})</span>`;
       }
       html += `</div>`;
       html += `<div class="small muted" style="margin-top:1px;line-height:1.3">${cat.desc}</div>`;
@@ -2498,6 +2559,69 @@
         if (mgr) mgr.openNoteForElement(label, "warning", ref);
       });
     });
+
+    // ── Inactivity threshold input ──
+    const thresholdInput = body.querySelector(".gsm-inactivity-threshold");
+    if (thresholdInput) {
+      // Prevent card click/dblclick when interacting with input
+      thresholdInput.addEventListener("click", e => e.stopPropagation());
+      thresholdInput.addEventListener("dblclick", e => e.stopPropagation());
+
+      let _igTimer = null;
+      thresholdInput.addEventListener("input", () => {
+        clearTimeout(_igTimer);
+        _igTimer = setTimeout(() => {
+          const val = parseInt(thresholdInput.value, 10);
+          if (!val || val < 1) return;
+          _inactivityThresholdH = val;
+
+          // Recalculate
+          const newItems = _detectInactivityGaps(val);
+          groupMap["inactivity_gap"] = { items: newItems, severity: newItems.length ? "info" : "ok" };
+
+          // Update count label
+          const card = thresholdInput.closest(".gsm-anomaly-card");
+          if (!card) return;
+          const countEl = card.querySelector(".gsm-inactivity-count");
+          if (countEl) {
+            countEl.textContent = newItems.length ? `(${newItems.length})` : "\u2014 brak";
+            countEl.className = newItems.length ? "muted gsm-inactivity-count" : "muted gsm-inactivity-count";
+          }
+
+          // Re-render items body
+          const container = card.querySelector("[id^='anom_exp_']");
+          if (container) {
+            if (!newItems.length) {
+              container.innerHTML = "";
+              container.style.display = "none";
+            } else {
+              container.style.display = "";
+              container.innerHTML = _renderAnomalyItems("inactivity_gap", newItems);
+              // Reset expand state
+              const collapsedH = 5 * 22;
+              if (newItems.length > 5) {
+                container.style.maxHeight = collapsedH + "px";
+                container.style.overflowY = "hidden";
+                container.dataset.expanded = "0";
+              } else {
+                container.style.maxHeight = "none";
+                container.style.overflowY = "visible";
+              }
+            }
+          }
+
+          // Update severity color on card
+          const sev = newItems.length ? "info" : "ok";
+          const sevColor = sev === "info" ? "#3b82f6" : "#22c55e";
+          card.style.borderLeftColor = sevColor;
+          const sevSpan = card.querySelector(".gsm-anomaly-bar > span");
+          if (sevSpan) {
+            sevSpan.style.color = sevColor;
+            sevSpan.textContent = sev === "info" ? "\u2139" : "\u2713";
+          }
+        }, 300);
+      });
+    }
 
     // ── Double-click on anomaly category → filter Records (unchanged) ──
     body.addEventListener("dblclick", function(e) {
