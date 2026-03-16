@@ -333,16 +333,28 @@
     }
   }
 
-  /** Apply all active column filters to records. Returns filtered array. */
+  /** Apply all active column filters + global search to records. Returns filtered array. */
   function _applyColumnFilters(records) {
     const keys = Object.keys(St.columnFilters);
-    if (!keys.length) return records;
+    const searchTerm = (St._recordsSearch || "").toLowerCase();
+    if (!keys.length && !searchTerm) return records;
+    const visCols = _visibleColumns();
     return records.filter(r => {
+      // Column filters
       for (const k of keys) {
         const colDef = _COL_MAP[k];
         if (!colDef) continue;
         const val = colDef.getValue(r);
         if (!_testFilter(val, St.columnFilters[k], colDef)) return false;
+      }
+      // Global search across all visible columns
+      if (searchTerm) {
+        let found = false;
+        for (const col of visCols) {
+          const val = String(col.getValue(r) || "").toLowerCase();
+          if (val.includes(searchTerm)) { found = true; break; }
+        }
+        if (!found) return false;
       }
       return true;
     });
@@ -3354,6 +3366,12 @@
     _currentSourceTruncated = truncated;
     _currentSourceTotal = totalCount;
 
+    // Show search input when records exist
+    const searchInput = QS("#gsm_records_search");
+    if (searchInput) {
+      searchInput.style.display = (records && records.length) ? "" : "none";
+    }
+
     const filtered = _applyColumnFilters(records || []);
     _renderFilterChips();
     _renderRecordsTable(filtered, truncated && !Object.keys(St.columnFilters).length, Object.keys(St.columnFilters).length ? filtered.length : totalCount);
@@ -3366,17 +3384,21 @@
     const el = QS("#gsm_records_body");
     if (!el) return;
 
+    const hasColFilter = _activeFilterCount() > 0;
+    const hasSearch = !!(St._recordsSearch);
+
     if (!records || !records.length) {
       el.innerHTML = '<div class="small muted">Brak rekordów.</div>';
       const countLabel = QS("#gsm_records_count");
-      if (countLabel) countLabel.textContent = _activeFilterCount() ? "0 (filtr)" : "";
+      if (countLabel) countLabel.textContent = (hasColFilter || hasSearch) ? "0 (filtr)" : "";
       return;
     }
 
     const countLabel = QS("#gsm_records_count");
     if (countLabel) {
-      if (_activeFilterCount()) {
-        countLabel.textContent = `${_fmt(records.length)} (filtr kolumn)`;
+      if (hasColFilter || hasSearch) {
+        const suffix = hasSearch && hasColFilter ? "szukaj + filtr" : hasSearch ? "szukaj" : "filtr kolumn";
+        countLabel.textContent = `${_fmt(records.length)} (${suffix})`;
       } else {
         countLabel.textContent = truncated ? `${records.length} z ${_fmt(totalCount)}` : _fmt(totalCount);
       }
@@ -10973,6 +10995,15 @@
     const colsBtn = QS("#gsm_columns_btn");
     if (colsBtn) {
       colsBtn.onclick = () => _openColumnsPanel(colsBtn);
+    }
+
+    // Records global search input
+    const recSearch = QS("#gsm_records_search");
+    if (recSearch) {
+      recSearch.addEventListener("input", () => {
+        St._recordsSearch = recSearch.value.trim();
+        _refilterRecords();
+      });
     }
 
     // Records panel resize handle
