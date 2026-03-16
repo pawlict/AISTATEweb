@@ -545,20 +545,23 @@ def _build_anomaly_table_rows(anomalies: list) -> List[List[str]]:
 
 
 def _format_anomaly_items(anomaly_type: str, items: list) -> str:
-    """Format anomaly items into a readable string for the 'Dane' column."""
+    """Format ALL anomaly items into a readable string for the 'Dane' column.
+
+    Each item starts with a date (where applicable) and ends with ";".
+    NO limit on number of items — all are included.
+    """
     parts = []
-    for item in items[:8]:  # Limit to 8 items
+    for item in items:  # ALL items — no limit
         if anomaly_type in ("long_call", "late_night_calls"):
             contact = item.get("contact", "?")
             date = item.get("date", "")
-            time = item.get("time", "")
+            time_v = item.get("time", "")
             dur = item.get("duration_min", 0)
             direction = item.get("direction", "")
             dir_str = f" ({direction})" if direction else ""
-            parts.append(f"{date} {time} → {contact}, {dur} min{dir_str}")
+            parts.append(f"{date} {time_v} \u2192 {contact}, {dur} min{dir_str}")
 
         elif anomaly_type in ("high_night_activity", "night_activity"):
-            # Period-based: show stats
             period = item.get("period", item.get("week", ""))
             records = item.get("records", item.get("count", 0))
             parts.append(f"{period}: {records} rek.")
@@ -567,25 +570,26 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             date = item.get("date", "")
             time_from = item.get("time_from", "")
             time_to = item.get("time_to", "")
-            loc_from = item.get("bts_from", item.get("location_from", item.get("location_evening", "?")))
-            loc_to = item.get("bts_to", item.get("location_to", item.get("location_morning", "?")))
+            loc_from = item.get("bts_from", item.get("location_from", ""))
+            loc_to = item.get("bts_to", item.get("location_to", ""))
+            # Show locations; if empty show "brak BTS"
+            loc_from = loc_from if loc_from else "brak BTS"
+            loc_to = loc_to if loc_to else "brak BTS"
             time_str = f" {time_from}\u2013{time_to}" if time_from and time_to else ""
             parts.append(f"{date}{time_str}: {loc_from} \u2192 {loc_to}")
 
         elif anomaly_type in ("activity_spike", "burst_activity"):
             date = item.get("date", "")
             count = item.get("count", item.get("records", 0))
-            parts.append(f"{date}: {count} zdarzenia")
+            parts.append(f"{date}: {count} zdarze\u0144")
 
         elif anomaly_type in ("premium_number", "premium_numbers", "special_numbers"):
-            number = item.get("contact", item.get("number", "?"))
+            number = item.get("contact", item.get("number", ""))
             count = item.get("count", item.get("interactions", 0))
-            dates = item.get("dates", [])
-            dates_str = ", ".join(dates[:5]) if dates else ""
-            if dates_str:
-                parts.append(f"{number} ({count} int.); daty: {dates_str}")
-            else:
+            if number:
                 parts.append(f"{number} \u2014 {count} interakcji")
+            else:
+                parts.append(f"numer nieznany \u2014 {count} interakcji")
 
         elif anomaly_type in ("roaming", "foreign_roaming"):
             country = item.get("country", "?")
@@ -597,14 +601,16 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             country = item.get("country", "?")
             count = item.get("count", 0)
             numbers = item.get("numbers", [])
-            nums_str = ", ".join(numbers[:3])
+            nums_str = ", ".join(numbers) if numbers else "brak danych"
             parts.append(f"{country}: {count} int. [{nums_str}]")
 
         elif anomaly_type == "forwarded_calls":
             date = item.get("date", "")
+            time_v = item.get("time", "")
             contact = item.get("contact", "?")
             fwd_to = item.get("forwarded_to", "?")
-            parts.append(f"{date}: {contact} → {fwd_to}")
+            dt_str = f"{date} {time_v}".strip()
+            parts.append(f"{dt_str}: {contact} \u2192 {fwd_to}")
 
         elif anomaly_type == "one_time_contacts":
             number = item.get("number", item.get("contact", "?"))
@@ -625,7 +631,7 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             number = item.get("number", "?")
             label = item.get("label", item.get("category", ""))
             interactions = item.get("interactions", item.get("count", 0))
-            parts.append(f"{number} ({label}) — {interactions}")
+            parts.append(f"{number} ({label}) \u2014 {interactions}")
 
         else:
             # Generic fallback
@@ -635,13 +641,11 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             desc_parts = [p for p in [date, contact, str(count) if count else ""] if p]
             parts.append(", ".join(desc_parts) if desc_parts else str(item)[:60])
 
-    # Each item ends with ";" and is separated by newline for table display
+    # Each item on its own line, ending with ";"
     result = ";\n".join(parts)
     if result and not result.endswith(";"):
         result += ";"
-    if len(items) > 8:
-        result += f"\n(+ {len(items) - 8} więcej)"
-    return result if result else "Nie występuje"
+    return result if result else "Nie wyst\u0119puje"
 
 
 def _build_location_areas_list(locations: list) -> List[str]:
