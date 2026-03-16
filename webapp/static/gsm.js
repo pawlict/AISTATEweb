@@ -4130,11 +4130,12 @@
     const totalNums = contacts.length;
     const singleCount = contacts.filter(c => c.total === 1).length;
     let html = '';
-    // Slot filter indicator
+    // Slot filter bar — separate block above the unique numbers panel
     if (slotLabel) {
-      html += `<div class="gsm-slot-filter-bar"><span class="small">Filtr: <b>${_escHtml(slotLabel)}</b> — ${totalNums} numerów</span><button class="gsm-slot-filter-clear" title="Wyczyść filtr przedziału">✕</button></div>`;
+      html += `<div class="gsm-slot-filter-bar" style="margin-bottom:6px"><span class="small">Filtr: <b>${_escHtml(slotLabel)}</b> — ${totalNums} numerów</span><button class="gsm-slot-filter-clear" title="Wyczyść filtr przedziału">✕</button></div>`;
     }
-    // Header like heatmap unique numbers
+    // Unique numbers panel — separate visual block
+    html += `<div class="gsm-contacts-panel">`;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">`;
     html += `<span class="h3" style="margin:0;font-size:13px">Unikatowe numery</span>`;
     html += `<span class="small muted">${totalNums} ${totalNums === 1 ? "numer" : (totalNums < 5 ? "numery" : "numerów")}`;
@@ -4148,8 +4149,30 @@
       if (c.data) parts.push(`${c.data} dane`);
       html += _buildContactChip(c.number, c.total, chartId, parts.join(", "));
     }
-    html += '</div>';
+    html += '</div></div>';
     return html;
+  }
+
+  /** Re-bind all interactive elements inside a card's contacts wrap. */
+  function _rebindCardContacts(card) {
+    if (!card) return;
+    _bindContactChipClicks(card);
+    // Slot filter clear button (re-bound after every innerHTML update)
+    card.querySelectorAll(".gsm-slot-filter-clear").forEach(btn => {
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        card._activeSlot = null;
+        const chartId = card.dataset.chartId;
+        const typeSel = card.querySelector(".gsm-type-select");
+        const tf = typeSel ? typeSel.value : "calls";
+        const contactsWrap = QS(`[data-contacts="${chartId}"]`, card);
+        if (contactsWrap) {
+          contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, null);
+          _rebindCardContacts(card);
+        }
+        card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.remove("gsm-bar-active"));
+      });
+    });
   }
 
   function _bindActivityContactClicks(card) {
@@ -4168,36 +4191,19 @@
         if (card._activeSlot === slot) {
           card._activeSlot = null;
           contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, null);
-          _bindContactChipClicks(card);
-          // Remove active bar highlight
+          _rebindCardContacts(card);
           card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.remove("gsm-bar-active"));
           return;
         }
         card._activeSlot = slot;
         contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, slot);
-        _bindContactChipClicks(card);
+        _rebindCardContacts(card);
         // Highlight active bar
         card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.toggle("gsm-bar-active", b.dataset.slot === slot));
       });
     });
-    // Slot filter clear button
-    card.querySelectorAll(".gsm-slot-filter-clear").forEach(btn => {
-      btn.addEventListener("click", function(e) {
-        e.stopPropagation();
-        card._activeSlot = null;
-        const chartId = card.dataset.chartId;
-        const typeSel = card.querySelector(".gsm-type-select");
-        const tf = typeSel ? typeSel.value : "calls";
-        const contactsWrap = QS(`[data-contacts="${chartId}"]`, card);
-        if (contactsWrap) {
-          contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, null);
-          _bindContactChipClicks(card);
-        }
-        card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.remove("gsm-bar-active"));
-      });
-    });
-    // Contact chip clicks
-    _bindContactChipClicks(card);
+    // Initial binding
+    _rebindCardContacts(card);
   }
 
   /** Bind click events on normalized contact chips. */
