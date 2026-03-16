@@ -53,14 +53,132 @@ VALID_MARKER_KEYS = {m["key"] for m in MARKER_CATALOGUE}
 # user who has never edited a template gets the exact same output as before.
 
 _BUILTIN_SECTIONS: List[Dict[str, Any]] = [
-    # --- Section 4: Stats ---
-    {"id": "b01", "type": "marker", "key": "table_stats"},
-
-    # --- Section 5: Contacts ---
-    {"id": "b02", "type": "marker", "key": "table_contacts"},
-    {"id": "b03", "type": "marker", "key": "list_contacts"},
+    # ─── Section 1: Wstęp ───────────────────────────────────────────────────
     {
-        "id": "b04", "type": "text",
+        "id": "b01", "type": "text", "section": 1, "para_idx": 5,
+        "content": (
+            "W ramach czynności analitycznych przeprowadzono analizę materiału "
+            "telekomunikacyjnego dotyczącego numeru {{ msisdn }} funkcjonującego "
+            "w\u00a0sieci {{ operator }}. Analiza obejmuje okres od {{ period_from }} "
+            "do {{ period_to }} i\u00a0została oparta na danych pochodzących z\u00a0raportu "
+            "HTML oraz materiałów źródłowych w\u00a0postaci rekordów ruchu "
+            "telekomunikacyjnego, danych identyfikacyjnych urządzeń, zestawień "
+            "kontaktów, informacji lokalizacyjnych BTS oraz wykrytych anomalii."
+        ),
+    },
+    {
+        "id": "b02", "type": "text", "section": 1, "para_idx": 6,
+        "content": (
+            "Celem notatki jest syntetyczne przedstawienie ustaleń wynikających "
+            "z\u00a0analizy, z\u00a0rozdzieleniem informacji o\u00a0charakterze potwierdzonym "
+            "od ocen i\u00a0hipotez operacyjnych. Wnioski sformułowano wyłącznie "
+            "w\u00a0granicach informacji wynikających z\u00a0materiału źródłowego, "
+            "z\u00a0uwzględnieniem ograniczeń interpretacyjnych typowych dla danych "
+            "bilingowych jednego numeru."
+        ),
+    },
+
+    # ─── Section 2: Zakres materiału i metodologia ──────────────────────────
+    {
+        "id": "b03", "type": "text", "section": 2, "para_idx": 8,
+        "content": "Do analizy wykorzystano w\u00a0szczególności:",
+    },
+    # Bullet items 9-15 are rendered from {{ source.* }} — not editable text
+    {
+        "id": "b04", "type": "text", "section": 2, "para_idx": 16,
+        "content": (
+            "W toku analizy zastosowano porównanie chronologiczne, ocenę "
+            "intensywności aktywności, identyfikację wzorców kontaktowych, "
+            "przegląd zmian urządzeń oraz korelację aktywności z\u00a0danymi "
+            "lokalizacyjnymi. W\u00a0przypadku anomalii przyjęto ostrożne podejście "
+            "analityczne, zgodnie z\u00a0którym nie formułuje się tez kategorycznych "
+            "w\u00a0sytuacji, gdy materiał wskazuje wyłącznie na przesłanki lub "
+            "wzorzec wymagający dalszej weryfikacji."
+        ),
+    },
+
+    # ─── Section 3: Identyfikacja numeru i urządzenia ───────────────────────
+    {
+        "id": "b05", "type": "text", "section": 3, "para_idx": 18,
+        "content": (
+            "Analizowany materiał dotyczy numeru {{ msisdn }}, związanego "
+            "z\u00a0parametrem głównym {{ parametr_glowny }}. W\u00a0badanym okresie "
+            "zidentyfikowano następujące identyfikatory abonenta i\u00a0urządzeń: "
+            "IMSI {{ imsi_list }}, IMEI {{ imei_list }}."
+        ),
+    },
+    {
+        "id": "b06", "type": "text", "section": 3, "para_idx": 19,
+        "content": (
+            "W raporcie odnotowano liczbę unikalnych urządzeń równą "
+            "{{ unique_imei_count }}, przy czym układ dual-IMEI został oznaczony "
+            "jako {{ dual_imei_present }}. Zmiany urządzenia lub zmiany aktywnego "
+            "identyfikatora należy interpretować w\u00a0zestawieniu z\u00a0osią czasu "
+            "aktywności i\u00a0charakterem ruchu, bez automatycznego przypisywania im "
+            "znaczenia operacyjnego bez dodatkowych danych potwierdzających."
+        ),
+    },
+
+    # ─── Section 4: Charakterystyka aktywności telekomunikacyjnej ───────────
+    {
+        "id": "b07", "type": "text", "section": 4, "para_idx": 22,
+        "content": (
+            "W analizowanym okresie odnotowano łącznie {{ total_records }} "
+            "rekordów, w\u00a0tym połączenia przychodzące i\u00a0wychodzące, wiadomości, "
+            "przekierowania oraz zdarzenia transmisji danych. Kluczowe statystyki "
+            "przedstawiają się następująco: połączenia przychodzące "
+            "{{ stats.incoming_calls }}, połączenia wychodzące "
+            "{{ stats.outgoing_calls }}, SMS przychodzące {{ stats.sms_in }}, "
+            "SMS wychodzące {{ stats.sms_out }}, transmisja danych "
+            "{{ stats.data_sessions }}."
+        ),
+    },
+    {"id": "b08", "type": "marker", "key": "table_stats"},
+    {
+        "id": "b09", "type": "text", "section": 4, "para_idx": 23,
+        "content": (
+            "Rozkład aktywności godzinowej i\u00a0tygodniowej wskazuje na "
+            "{{ activity.hourly_pattern }}, przy czym aktywność nocna została "
+            "oszacowana na {{ activity.night_share }}, a\u00a0aktywność weekendowa "
+            "na {{ activity.weekend_share }}. W\u00a0przypadku istotnych odchyleń "
+            "od typowego profilu użytkownika należy je rozpatrywać łącznie "
+            "z\u00a0kontaktami, lokalizacją i\u00a0anomaliami czasowymi."
+        ),
+    },
+    {
+        "id": "b10", "type": "text", "section": 4, "para_idx": 24,
+        "content": (
+            "W zakresie numerów specjalnych odnotowano: "
+            "{{ special_numbers_summary }}. Informacja ta może mieć znaczenie "
+            "uzupełniające przy ocenie charakteru aktywności, jednak powinna "
+            "być odnoszona do pełnego kontekstu sprawy."
+        ),
+    },
+
+    # ─── Section 5: Charakterystyka kontaktów ───────────────────────────────
+    {
+        "id": "b11", "type": "text", "section": 5, "para_idx": 38,
+        "content": (
+            "Analiza relacji kontaktowych wskazuje, że numer {{ msisdn }} "
+            "pozostawał w\u00a0relacji z\u00a0{{ contacts.unique_count }} unikalnymi "
+            "numerami. Najczęściej występujące kontakty to: {{ contacts.top_list }}."
+        ),
+    },
+    {"id": "b12", "type": "marker", "key": "table_contacts"},
+    {"id": "b13", "type": "marker", "key": "list_contacts"},
+    {
+        "id": "b14", "type": "text", "section": 5, "para_idx": 39,
+        "content": (
+            "W odniesieniu do kontaktów należy odnotować ich strukturę "
+            "kierunkową, częstotliwość i\u00a0trwałość relacji. Na uwagę zasługują "
+            "w\u00a0szczególności kontakty o\u00a0zwiększonej intensywności, kontakty "
+            "krótkotrwałe pojawiające się wyłącznie incydentalnie oraz kontakty "
+            "o\u00a0potencjalnym znaczeniu operacyjnym, opisane w\u00a0raporcie jako "
+            "{{ contacts.assessment }}."
+        ),
+    },
+    {
+        "id": "b15", "type": "text", "section": 5,
         "content": (
             "Graf \u201eNajczęstsze kontakty\u201d obrazuje strukturę relacji "
             "komunikacyjnych analizowanego numeru, wskazując podmioty występujące "
@@ -70,12 +188,12 @@ _BUILTIN_SECTIONS: List[Dict[str, Any]] = [
             "rolę w\u00a0badanym modelu łączności."
         ),
     },
-    {"id": "b05", "type": "marker", "key": "chart_top_contacts"},
-    {"id": "b06", "type": "marker", "key": "footnotes_special"},
+    {"id": "b16", "type": "marker", "key": "chart_top_contacts"},
+    {"id": "b17", "type": "marker", "key": "footnotes_special"},
 
-    # --- Section 6: Activity type (auto-inserted heading) ---
+    # ─── Section 6: Rodzaj aktywności (auto-inserted heading) ───────────────
     {
-        "id": "b07", "type": "text",
+        "id": "b18", "type": "text", "section": 6,
         "content": (
             "Mapa rozkładu aktywności przedstawia intensywność zdarzeń "
             "telekomunikacyjnych w\u00a0zależności od dnia tygodnia i\u00a0pory doby. "
@@ -85,13 +203,13 @@ _BUILTIN_SECTIONS: List[Dict[str, Any]] = [
             "w\u00a0porach nietypowych."
         ),
     },
-    {"id": "b08", "type": "marker", "key": "chart_activity"},
-    {"id": "b09", "type": "marker", "key": "chart_night"},
-    {"id": "b10", "type": "marker", "key": "chart_weekend"},
+    {"id": "b19", "type": "marker", "key": "chart_activity"},
+    {"id": "b20", "type": "marker", "key": "chart_night"},
+    {"id": "b21", "type": "marker", "key": "chart_weekend"},
 
-    # --- Section 7: Anomalies ---
+    # ─── Section 7: Anomalie i wzorce nietypowe ─────────────────────────────
     {
-        "id": "b11", "type": "text",
+        "id": "b22", "type": "text", "section": 7,
         "content": (
             "W\u00a0toku analizy materiału bilingowego zidentyfikowano zdarzenia oraz "
             "sekwencje aktywności odbiegające od typowego profilu korzystania "
@@ -101,14 +219,80 @@ _BUILTIN_SECTIONS: List[Dict[str, Any]] = [
             "pogłębionej weryfikacji analitycznej."
         ),
     },
-    {"id": "b12", "type": "marker", "key": "table_anomalies"},
+    {"id": "b23", "type": "marker", "key": "table_anomalies"},
 
-    # --- Section 8: Locations ---
-    {"id": "b13", "type": "marker", "key": "table_locations"},
-    {"id": "b14", "type": "marker", "key": "list_locations"},
-    {"id": "b15", "type": "marker", "key": "bts_summary"},
-    {"id": "b16", "type": "marker", "key": "list_movement"},
-    {"id": "b17", "type": "marker", "key": "chart_map_bts"},
+    # ─── Section 8: Dane lokalizacyjne i mobilność ──────────────────────────
+    {
+        "id": "b24", "type": "text", "section": 8, "para_idx": 48,
+        "content": (
+            "Na podstawie danych BTS i\u00a0geolokalizacyjnych ustalono, że "
+            "aktywność numeru koncentrowała się w\u00a0rejonach: "
+            "{{ locations.main_areas }}. Łączna liczba unikalnych lokalizacji BTS "
+            "wyniosła {{ locations.bts_count }}, zaś dominujące punkty aktywności "
+            "opisano jako {{ locations.dominant_bts }}."
+        ),
+    },
+    {"id": "b25", "type": "marker", "key": "table_locations"},
+    {"id": "b26", "type": "marker", "key": "list_locations"},
+    {"id": "b27", "type": "marker", "key": "bts_summary"},
+    {
+        "id": "b28", "type": "text", "section": 8, "para_idx": 49,
+        "content": (
+            "W materiale odnotowano również następujące przesłanki dotyczące "
+            "przemieszczania się i\u00a0miejsc noclegowych: "
+            "{{ locations.overnights_summary }}. W\u00a0przypadku danych lokalizacyjnych "
+            "należy pamiętać, że ich interpretacja ma charakter przybliżony "
+            "i\u00a0zależy od gęstości sieci oraz sposobu logowania urządzenia "
+            "do stacji bazowych."
+        ),
+    },
+    {"id": "b29", "type": "marker", "key": "list_movement"},
+    {"id": "b30", "type": "marker", "key": "chart_map_bts"},
+
+    # ─── Section 9: Ocena sytuacji analitycznej ─────────────────────────────
+    {
+        "id": "b31", "type": "text", "section": 9, "para_idx": 55,
+        "content": (
+            "Całościowa ocena materiału wskazuje, że aktywność numeru "
+            "{{ msisdn }} charakteryzuje się następującymi cechami dominującymi: "
+            "{{ assessment.main_characteristics }}."
+        ),
+    },
+    {
+        "id": "b32", "type": "text", "section": 9, "para_idx": 56,
+        "content": (
+            "W świetle zgromadzonych danych można sformułować następującą ocenę "
+            "roboczą: {{ assessment.working_assessment }}. W\u00a0przypadku "
+            "występowania anomalii lub zmian urządzeń ich znaczenie powinno być "
+            "odnoszone do szerszego kontekstu sprawy, a\u00a0nie interpretowane "
+            "samoistnie."
+        ),
+    },
+
+    # ─── Section 10: Wnioski ────────────────────────────────────────────────
+    # Conclusions (points 1-4) are {{ conclusions.point_N }} — not editable text
+    {
+        "id": "b33", "type": "text", "section": 10, "para_idx": 62,
+        "content": (
+            "W razie potrzeby dalszych ustaleń rekomenduje się konfrontację "
+            "powyższych wniosków z\u00a0dodatkowymi materiałami, w\u00a0szczególności "
+            "z\u00a0pełnymi rekordami operatorskimi, danymi z\u00a0innych numerów, "
+            "informacjami o\u00a0urządzeniach końcowych oraz materiałem "
+            "pozatelekomunikacyjnym."
+        ),
+    },
+
+    # ─── Section 11: Uwagi końcowe ─────────────────────────────────────────
+    {
+        "id": "b34", "type": "text", "section": 11, "para_idx": 64,
+        "content": (
+            "Niniejsza notatka ma charakter analityczny i\u00a0służy uporządkowaniu "
+            "ustaleń wynikających z\u00a0raportu HTML. Miejsca oznaczone "
+            "placeholderami należy uzupełnić automatycznie lub redakcyjnie, "
+            "z\u00a0zachowaniem spójności z\u00a0materiałem źródłowym i\u00a0bez "
+            "wprowadzania twierdzeń niewynikających z\u00a0danych."
+        ),
+    },
 ]
 
 

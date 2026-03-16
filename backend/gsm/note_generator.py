@@ -213,8 +213,12 @@ def _post_process_docx(
     # 0b. Fix "za okres od" — move to new line
     _fix_za_okres_newline(body)
 
-    # 0c. Replace "Data raportu HTML" with "Data sporz\u0105dzenia"
-    _replace_text_in_tables(doc, "Data raportu HTML", "Data sporz\u0105dzenia")
+    # 0c. Replace "Data raportu HTML" with "Data sporządzenia"
+    _replace_text_in_tables(doc, "Data raportu HTML", "Data sporządzenia")
+
+    # 0d. Apply paragraph text overrides from custom template
+    if tpl_texts:
+        _apply_paragraph_overrides(doc, tpl_texts)
 
     # 1. Insert anomaly intro text + table with Kategoria/Opis/Dane
     if anomaly_table_rows:
@@ -352,6 +356,80 @@ def _fix_za_okres_newline(body) -> None:
                         new_t.set(qn('xml:space'), 'preserve')
                         log.debug("Inserted line break before 'za okres od'")
                         return
+
+
+def _apply_paragraph_overrides(doc, tpl_texts: Dict[str, str]) -> None:
+    """Replace paragraph text in the rendered DOCX using 'para_N' overrides.
+
+    After docxtpl has rendered all Jinja2 placeholders, the DOCX paragraphs
+    have their final text.  This function replaces ENTIRE paragraph text for
+    paragraphs whose index matched (``para_5``, ``para_16``, etc.).
+
+    Note: paragraph indices refer to the ORIGINAL template positions, but after
+    rendering, some conditional blocks ({%p if ... %}) may have been removed.
+    We therefore match by text similarity rather than exact index when the
+    exact-index paragraph doesn't match expectations.
+    """
+    from docx.shared import Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    # Collect para_N overrides
+    overrides: Dict[int, str] = {}
+    for key, text in tpl_texts.items():
+        if key.startswith("para_"):
+            try:
+                idx = int(key[5:])
+                overrides[idx] = text
+            except ValueError:
+                pass
+
+    if not overrides:
+        return
+
+    paragraphs = doc.paragraphs
+    for target_idx, new_text in overrides.items():
+        if target_idx >= len(paragraphs):
+            log.debug("Para override idx %d out of range (%d paragraphs)", target_idx, len(paragraphs))
+            continue
+
+        para = paragraphs[target_idx]
+        old_text = para.text.strip()
+
+        # Only replace if paragraph has rendered content (not empty, not heading)
+        if not old_text or (para.style and 'Heading' in (para.style.name or '')):
+            # Try nearby paragraphs (±3) as fallback for shifted indices
+            found = False
+            for offset in range(-3, 4):
+                adj = target_idx + offset
+                if 0 <= adj < len(paragraphs) and adj != target_idx:
+                    adj_para = paragraphs[adj]
+                    adj_text = adj_para.text.strip()
+                    if adj_text and 'Heading' not in (adj_para.style.name or ''):
+                        para = adj_para
+                        found = True
+                        break
+            if not found:
+                continue
+
+        # Replace: clear all runs, add single new run inheriting first run style
+        if para.runs:
+            font_name = para.runs[0].font.name
+            font_size = para.runs[0].font.size
+        else:
+            font_name = FONT_NAME
+            font_size = Pt(FONT_SIZE_BODY)
+
+        for run in para.runs:
+            run.text = ""
+        if para.runs:
+            para.runs[0].text = _fix_orphans(new_text)
+        else:
+            run = para.add_run(_fix_orphans(new_text))
+            run.font.name = font_name or FONT_NAME
+            if font_size:
+                run.font.size = font_size
+
+        log.debug("Replaced paragraph %d text", target_idx)
 
 
 def _replace_text_in_tables(doc, old_text: str, new_text: str) -> None:
@@ -905,20 +983,22 @@ def _flatten_for_template(placeholders: Dict[str, Any]) -> Dict[str, Any]:
 def _extract_template_texts(custom_template: Dict[str, Any]) -> Dict[str, str]:
     """Extract user-edited text blocks from a custom template.
 
-    Maps text sections to named overrides based on their position relative
-    to marker sections in the template.
+    Two kinds of overrides are produced:
 
-    Returns a dict like:
-      {
-        "anomaly_intro": "...",
-        "contacts_graph": "...",
-        "activity_distribution": "...",
-      }
+    1. **DOCX paragraph overrides** (keyed ``"para_5"``, ``"para_16"``, …)
+       – these replace the corresponding paragraph in the rendered DOCX template
+       by ``para_idx`` (the paragraph number in the template file).
+
+    2. **Post-processing text overrides** (keyed ``"anomaly_intro"``,
+       ``"contacts_graph"``, ``"activity_distribution"``) – these replace
+       the programmatic text blocks injected by ``_post_process_docx``.
+
+    All HTML tags from contenteditable are stripped; only plain text reaches
+    the DOCX.
     """
     texts: Dict[str, str] = {}
     sections = custom_template.get("sections", [])
 
-    # Build mapping: text block ID → preceding/following marker keys
     for i, sec in enumerate(sections):
         if sec.get("type") != "text":
             continue
@@ -927,27 +1007,25 @@ def _extract_template_texts(custom_template: Dict[str, Any]) -> Dict[str, str]:
         if not content:
             continue
 
-        # Strip HTML tags for the DOCX (we get contenteditable HTML)
-        import re
-        clean = re.sub(r'<[^>]+>', '', content).strip()
+        # Strip HTML tags (contenteditable may produce <b>, <i>, <br>, etc.)
+        clean = re.sub(r'<br\s*/?>', '\n', content)
+        clean = re.sub(r'<[^>]+>', '', clean).strip()
         if not clean:
             continue
 
-        # Identify text block purpose by looking at surrounding markers
+        # 1. DOCX paragraph override (by para_idx)
+        para_idx = sec.get("para_idx")
+        if para_idx is not None:
+            texts[f"para_{para_idx}"] = clean
+
+        # 2. Post-processing text overrides (by surrounding markers)
         next_marker = None
         for j in range(i + 1, len(sections)):
             if sections[j].get("type") == "marker":
                 next_marker = sections[j].get("key", "")
                 break
 
-        prev_marker = None
-        for j in range(i - 1, -1, -1):
-            if sections[j].get("type") == "marker":
-                prev_marker = sections[j].get("key", "")
-                break
-
-        # Map to known text override keys
-        if next_marker == "table_anomalies" or prev_marker == "table_anomalies":
+        if next_marker == "table_anomalies":
             texts["anomaly_intro"] = clean
         elif next_marker == "chart_top_contacts":
             texts["contacts_graph"] = clean
