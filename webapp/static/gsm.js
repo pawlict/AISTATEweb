@@ -9569,6 +9569,16 @@
       console.warn("[GSM] Failed to load note models:", e);
     }
 
+    // Load available templates
+    let noteTemplates = [];
+    try {
+      const tResp = await fetch("/api/gsm/note/templates");
+      const tJson = await tResp.json();
+      if (tJson.status === "ok") noteTemplates = tJson.templates || [];
+    } catch (e) {
+      console.warn("[GSM] Failed to load note templates:", e);
+    }
+
     // Load saved values
     const savedNote = JSON.parse(localStorage.getItem("gsm_note_placeholders") || "{}");
 
@@ -9591,6 +9601,17 @@
         <button class="btn" id="note_close_x" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;" title="Zamknij">&times;</button>
       </div>
       <div style="overflow-y:auto;max-height:calc(88vh - 120px);padding:16px 20px;">
+
+        <!-- Template selection -->
+        <div style="margin-bottom:16px;">
+          <label style="font-weight:600;font-size:14px;display:block;margin-bottom:8px;">Szablon notatki:</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select class="input" id="note_template_select" style="flex:1;font-size:13px;padding:5px 8px;">
+              <option value="__builtin__">Wbudowany (domyślny)</option>
+            </select>
+            <button class="btn" id="note_edit_template" style="font-size:12px;white-space:nowrap;padding:5px 12px;" title="Edytuj szablon">✏️ Edytuj szablon</button>
+          </div>
+        </div>
 
         <!-- Variant selection -->
         <div style="margin-bottom:16px;">
@@ -9726,6 +9747,27 @@
     document.body.appendChild(dlg);
     dlg.showModal();
 
+    // Populate template selector
+    const tplSelect = dlg.querySelector("#note_template_select");
+    if (tplSelect && noteTemplates.length) {
+      tplSelect.innerHTML = "";
+      const savedTplId = localStorage.getItem("gsm_note_template_id") || "";
+      for (const t of noteTemplates) {
+        const opt = document.createElement("option");
+        opt.value = t.id;
+        opt.textContent = t.name + (t.default ? " ★" : "") + (t.builtin ? "" : ` (${t.section_count} bloków)`);
+        if (t.id === savedTplId || (!savedTplId && t.default)) opt.selected = true;
+        tplSelect.appendChild(opt);
+      }
+    }
+
+    // Edit template button
+    dlg.querySelector("#note_edit_template").onclick = async () => {
+      const selectedId = tplSelect ? tplSelect.value : "__builtin__";
+      dlg.close(); dlg.remove();
+      await _showTemplateEditor(selectedId);
+    };
+
     // Close handlers
     dlg.querySelector("#note_close_x").onclick = () => { dlg.close(); dlg.remove(); };
     dlg.querySelector("#note_cancel").onclick = () => { dlg.close(); dlg.remove(); };
@@ -9799,6 +9841,8 @@
 
         // Build request
         const projectId = _getProjectId();
+        const templateId = tplSelect ? tplSelect.value : "__builtin__";
+        localStorage.setItem("gsm_note_template_id", templateId);
         const payload = {
           project_id: projectId,
           variant: variant,
@@ -9806,6 +9850,7 @@
           placeholders: phValues,
           chart_images: chartImages,
           tables: selectedTables,
+          template_id: templateId,
         };
 
         const resp = await fetch("/api/gsm/note/generate", {
@@ -9842,6 +9887,335 @@
         if (progressEl) progressEl.style.display = "none";
       }
     };
+  }
+
+  /* ── Template Editor ──────────────────────────────────────── */
+
+  async function _showTemplateEditor(initialTplId) {
+    // Load full template + marker catalogue
+    let tpl = null;
+    let markerCatalogue = [];
+    const tplId = initialTplId || "__builtin__";
+
+    try {
+      const endpoint = tplId === "__builtin__"
+        ? "/api/gsm/note/templates/builtin"
+        : `/api/gsm/note/templates/${encodeURIComponent(tplId)}`;
+      const resp = await fetch(endpoint);
+      const json = await resp.json();
+      if (json.status === "ok") {
+        tpl = json.template;
+        markerCatalogue = json.marker_catalogue || [];
+      }
+    } catch (e) {
+      console.warn("[GSM] Failed to load template:", e);
+    }
+
+    if (!tpl) {
+      _addLog("error", "Nie udało się załadować szablonu.");
+      return;
+    }
+
+    // Load template list for the selector
+    let allTemplates = [];
+    try {
+      const r = await fetch("/api/gsm/note/templates");
+      const j = await r.json();
+      if (j.status === "ok") allTemplates = j.templates || [];
+    } catch (e) {}
+
+    // Deep-copy sections for editing
+    let sections = JSON.parse(JSON.stringify(tpl.sections || []));
+    let currentTplId = tpl.id;
+    let currentTplName = tpl.name || "Wbudowany";
+    let currentIsDefault = tpl.default || false;
+    let isBuiltin = tpl.builtin || false;
+
+    const dlg = document.createElement("dialog");
+    dlg.style.cssText = "max-width:800px;width:95vw;max-height:92vh;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:0;overflow:hidden;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
+
+    function _renderEditor() {
+      const tplCount = allTemplates.filter(t => !t.builtin).length;
+      const tplOptions = allTemplates.map(t =>
+        `<option value="${_escHtml(t.id)}" ${t.id === currentTplId ? "selected" : ""}>${_escHtml(t.name)}${t.default ? " ★" : ""}${t.builtin ? " (wbudowany)" : ""}</option>`
+      ).join("");
+
+      dlg.innerHTML = `
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border-color,#ddd);display:flex;align-items:center;justify-content:space-between;">
+          <h3 style="margin:0;font-size:15px;">✏️ Edytor szablonu notatki</h3>
+          <button id="tpled_close_x" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;" title="Zamknij">&times;</button>
+        </div>
+        <div class="note-tpl-editor" style="padding:12px 20px;">
+          <div class="note-tpl-header">
+            <select class="note-tpl-select" id="tpled_select">${tplOptions}</select>
+            <input type="text" class="note-tpl-name" id="tpled_name" value="${_escHtml(currentTplName)}" placeholder="Nazwa szablonu" ${isBuiltin ? "disabled" : ""}>
+            <span class="note-tpl-star ${currentIsDefault ? "active" : ""}" id="tpled_star" title="Ustaw jako domyślny">★</span>
+            <span class="note-tpl-counter">${tplCount}/${5} szablonów</span>
+          </div>
+          <div class="note-tpl-toolbar">
+            <button data-cmd="bold" title="Pogrubienie"><b>B</b></button>
+            <button data-cmd="italic" title="Kursywa"><i>I</i></button>
+          </div>
+          <div class="note-tpl-body" id="tpled_body"></div>
+          <div class="note-tpl-add-bar" id="tpled_add_bar">
+            <button data-add="text" title="Dodaj blok tekstowy">+ Tekst</button>
+          </div>
+          <div class="note-tpl-footer">
+            <div class="btn-group">
+              <button class="btn" id="tpled_cancel">Anuluj</button>
+              ${!isBuiltin ? `<button class="btn btn-danger" id="tpled_delete" style="font-size:12px;">Usuń</button>` : ""}
+            </div>
+            <div class="btn-group">
+              <button class="btn" id="tpled_save_as" style="font-size:12px;">Zapisz jako nowy...</button>
+              <button class="btn btn-primary" id="tpled_save" ${isBuiltin ? "disabled" : ""}>Zapisz</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Populate sections
+      _renderSections();
+
+      // Populate add-bar with markers not yet in the template
+      _renderAddBar();
+
+      // -- Events --
+      dlg.querySelector("#tpled_close_x").onclick = () => { dlg.close(); dlg.remove(); _showNoteDialog(); };
+      dlg.querySelector("#tpled_cancel").onclick = () => { dlg.close(); dlg.remove(); _showNoteDialog(); };
+
+      // Toolbar
+      dlg.querySelectorAll(".note-tpl-toolbar button[data-cmd]").forEach(btn => {
+        btn.onmousedown = (e) => {
+          e.preventDefault();
+          document.execCommand(btn.dataset.cmd, false, null);
+        };
+      });
+
+      // Star (default toggle)
+      dlg.querySelector("#tpled_star").onclick = async () => {
+        currentIsDefault = !currentIsDefault;
+        dlg.querySelector("#tpled_star").classList.toggle("active", currentIsDefault);
+        if (currentIsDefault && currentTplId && currentTplId !== "__builtin__") {
+          try { await fetch("/api/gsm/note/templates/default", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ template_id: currentTplId }) }); } catch (e) {}
+        }
+      };
+
+      // Template selector
+      dlg.querySelector("#tpled_select").onchange = async (e) => {
+        const newId = e.target.value;
+        dlg.close(); dlg.remove();
+        await _showTemplateEditor(newId);
+      };
+
+      // Save
+      const saveBtn = dlg.querySelector("#tpled_save");
+      if (saveBtn) saveBtn.onclick = () => _doSave(false);
+
+      // Save As
+      dlg.querySelector("#tpled_save_as").onclick = () => _doSave(true);
+
+      // Delete
+      const delBtn = dlg.querySelector("#tpled_delete");
+      if (delBtn) delBtn.onclick = async () => {
+        if (!confirm("Usunąć szablon \"" + currentTplName + "\"?")) return;
+        try {
+          await fetch(`/api/gsm/note/templates/${encodeURIComponent(currentTplId)}`, { method: "DELETE" });
+          _addLog("info", `Usunięto szablon: ${currentTplName}`);
+          dlg.close(); dlg.remove();
+          await _showTemplateEditor("__builtin__");
+        } catch (e) {
+          _addLog("error", "Błąd usuwania szablonu: " + e.message);
+        }
+      };
+    }
+
+    function _collectSections() {
+      const bodyEl = dlg.querySelector("#tpled_body");
+      if (!bodyEl) return sections;
+      const newSections = [];
+      bodyEl.querySelectorAll(".note-tpl-section").forEach(sec => {
+        const sType = sec.dataset.stype;
+        const sId = sec.dataset.sid;
+        if (sType === "text") {
+          const contentEl = sec.querySelector(".note-tpl-text");
+          newSections.push({ id: sId, type: "text", content: contentEl ? contentEl.innerHTML : "" });
+        } else if (sType === "marker") {
+          newSections.push({ id: sId, type: "marker", key: sec.dataset.key });
+        }
+      });
+      sections = newSections;
+      return newSections;
+    }
+
+    async function _doSave(saveAsNew) {
+      _collectSections();
+      const name = dlg.querySelector("#tpled_name")?.value || "Nowy szablon";
+
+      let tplData;
+      if (saveAsNew || isBuiltin) {
+        const newName = saveAsNew ? prompt("Nazwa nowego szablonu:", name) : name;
+        if (!newName) return;
+        tplData = {
+          id: "",
+          name: newName,
+          default: currentIsDefault,
+          sections: sections,
+        };
+      } else {
+        tplData = {
+          id: currentTplId,
+          name: name,
+          default: currentIsDefault,
+          sections: sections,
+        };
+      }
+
+      try {
+        const resp = await fetch("/api/gsm/note/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ template: tplData }),
+        });
+        const json = await resp.json();
+        if (json.status !== "ok") throw new Error(json.message || "Błąd zapisu");
+        const saved = json.template;
+        _addLog("info", `Zapisano szablon: ${saved.name}`);
+        dlg.close(); dlg.remove();
+        await _showTemplateEditor(saved.id);
+      } catch (e) {
+        _addLog("error", "Błąd zapisu szablonu: " + e.message);
+        alert("Błąd: " + e.message);
+      }
+    }
+
+    function _renderSections() {
+      const bodyEl = dlg.querySelector("#tpled_body");
+      if (!bodyEl) return;
+      bodyEl.innerHTML = "";
+
+      sections.forEach((sec, idx) => {
+        const div = document.createElement("div");
+        div.className = "note-tpl-section";
+        div.dataset.stype = sec.type;
+        div.dataset.sid = sec.id || `s_${idx}`;
+        div.draggable = true;
+
+        if (sec.type === "marker") {
+          const mInfo = markerCatalogue.find(m => m.key === sec.key) || {};
+          div.dataset.key = sec.key;
+          div.innerHTML = `
+            <span class="note-tpl-section-handle">⠿</span>
+            <div class="note-tpl-section-content">
+              <span class="note-tpl-marker" data-mtype="${_escHtml(mInfo.type || "data")}">${_escHtml(mInfo.label || sec.key)}</span>
+            </div>
+            <div class="note-tpl-section-actions"><button data-action="remove" title="Usuń blok">✕</button></div>
+          `;
+        } else {
+          div.innerHTML = `
+            <span class="note-tpl-section-handle">⠿</span>
+            <div class="note-tpl-section-content">
+              <div class="note-tpl-text" contenteditable="true" data-placeholder="Wpisz tekst...">${sec.content || ""}</div>
+            </div>
+            <div class="note-tpl-section-actions"><button data-action="remove" title="Usuń blok">✕</button></div>
+          `;
+        }
+
+        // Remove button
+        div.querySelector("[data-action='remove']").onclick = () => {
+          _collectSections();
+          sections = sections.filter(s => s.id !== div.dataset.sid);
+          _renderSections();
+          _renderAddBar();
+        };
+
+        // Drag & drop
+        div.addEventListener("dragstart", (e) => {
+          div.classList.add("dragging");
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", div.dataset.sid);
+        });
+        div.addEventListener("dragend", () => {
+          div.classList.remove("dragging");
+          bodyEl.querySelectorAll(".note-tpl-section").forEach(s => {
+            s.classList.remove("drag-over-top", "drag-over-bottom");
+          });
+        });
+        div.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          const rect = div.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          const isTop = e.clientY < mid;
+          div.classList.toggle("drag-over-top", isTop);
+          div.classList.toggle("drag-over-bottom", !isTop);
+        });
+        div.addEventListener("dragleave", () => {
+          div.classList.remove("drag-over-top", "drag-over-bottom");
+        });
+        div.addEventListener("drop", (e) => {
+          e.preventDefault();
+          div.classList.remove("drag-over-top", "drag-over-bottom");
+          const draggedId = e.dataTransfer.getData("text/plain");
+          if (!draggedId || draggedId === div.dataset.sid) return;
+          _collectSections();
+          const draggedIdx = sections.findIndex(s => s.id === draggedId);
+          const targetIdx = sections.findIndex(s => s.id === div.dataset.sid);
+          if (draggedIdx < 0 || targetIdx < 0) return;
+          const [dragged] = sections.splice(draggedIdx, 1);
+          const rect = div.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          const insertIdx = e.clientY < mid ? targetIdx : targetIdx + 1;
+          const adjustedIdx = draggedIdx < targetIdx ? insertIdx - 1 : insertIdx;
+          sections.splice(Math.max(0, adjustedIdx), 0, dragged);
+          _renderSections();
+        });
+
+        bodyEl.appendChild(div);
+      });
+    }
+
+    function _renderAddBar() {
+      const bar = dlg.querySelector("#tpled_add_bar");
+      if (!bar) return;
+      // Keep "Add text" button, add marker buttons for missing markers
+      const usedKeys = new Set(sections.filter(s => s.type === "marker").map(s => s.key));
+      bar.innerHTML = '<button data-add="text" title="Dodaj blok tekstowy">+ Tekst</button>';
+      for (const m of markerCatalogue) {
+        if (!usedKeys.has(m.key)) {
+          const btn = document.createElement("button");
+          btn.textContent = `+ ${m.label}`;
+          btn.title = `Dodaj: ${m.label}`;
+          btn.onclick = () => {
+            _collectSections();
+            sections.push({ id: `s_${Date.now()}`, type: "marker", key: m.key });
+            _renderSections();
+            _renderAddBar();
+            // Scroll to bottom
+            const bodyEl = dlg.querySelector("#tpled_body");
+            if (bodyEl) bodyEl.scrollTop = bodyEl.scrollHeight;
+          };
+          bar.appendChild(btn);
+        }
+      }
+      // Add text button
+      bar.querySelector("[data-add='text']").onclick = () => {
+        _collectSections();
+        sections.push({ id: `s_${Date.now()}`, type: "text", content: "" });
+        _renderSections();
+        // Focus last text block
+        const bodyEl = dlg.querySelector("#tpled_body");
+        if (bodyEl) {
+          bodyEl.scrollTop = bodyEl.scrollHeight;
+          const lastText = bodyEl.querySelector(".note-tpl-section:last-child .note-tpl-text");
+          if (lastText) lastText.focus();
+        }
+      };
+    }
+
+    // Render and show dialog
+    _renderEditor();
+    document.body.appendChild(dlg);
+    dlg.showModal();
   }
 
   function _showNoteDownload(note) {
