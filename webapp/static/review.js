@@ -894,6 +894,7 @@
 
     let html = `<table class="rv-tx-table">
       <thead><tr>
+        <th style="width:22px;min-width:22px;padding:0"></th>
         <th class="rv-col-date rv-col-frozen-l rv-resizable">Data</th>
         <th class="rv-col-date rv-resizable">Data wal.</th>
         <th class="rv-col-type rv-resizable">Typ</th>
@@ -973,7 +974,10 @@
         catSelVal = tx.category;
       }
 
+      const _notesMgr = window._amlNotesMgr || null;
+      const _hasNote = _notesMgr && _notesMgr.hasNote("aml_transaction", "transaction_id", tx.id);
       html += `<tr class="${rowClass}" data-txid="${_esc(tx.id)}">
+        <td style="padding:0 2px;text-align:center;width:22px"><span class="analyst-note-marker${_hasNote ? " has-note" : ""}" data-note-txid="${_esc(tx.id)}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="13" height="13" draggable="false"></span></td>
         <td class="rv-col-date rv-col-frozen-l">${_esc(tx.booking_date || "")}</td>
         <td class="rv-col-date">${_esc(tx.tx_date || "")}</td>
         <td class="rv-col-type">${_esc(tx.bank_category || "")}</td>
@@ -1067,6 +1071,25 @@
     });
 
     // Enable column resizing via drag on <th> borders
+    // Bind note marker clicks
+    const _notesMgr = window._amlNotesMgr || null;
+    if(_notesMgr){
+      QSA(".analyst-note-marker[data-note-txid]", wrap).forEach(marker => {
+        marker.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const txId = marker.getAttribute("data-note-txid");
+          if(!txId) return;
+          const tx = St.transactions.find(t => t.id === txId);
+          const amount = tx ? (tx.amount < 0 ? "-" : "+") + Math.abs(tx.amount || 0).toLocaleString("pl-PL",{minimumFractionDigits:2}) : "";
+          const cp = tx ? (tx.counterparty_raw || "").slice(0,30) : "";
+          const date = tx ? (tx.booking_date || "") : "";
+          const label = (amount ? amount + " " : "") + (cp ? "\u2192 " + cp : "") + (date ? " (" + date + ")" : "");
+          const ref = { type: "aml_transaction", transaction_id: txId, snapshot: { amount, counterparty: cp, date } };
+          _notesMgr.openNoteForElement(label || "Transakcja", "finance", ref);
+        });
+      });
+    }
+
     _initColumnResize(wrap);
   }
 

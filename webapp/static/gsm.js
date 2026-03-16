@@ -3310,7 +3310,12 @@
       }
     }
 
+    // Note marker: check if AnalystNotesManager is available
+    const _notesMgr = window._gsmNotesMgr || null;
+
     let html = `<table class="gsm-table gsm-table-adv"><thead><tr>`;
+    // Note column header (narrow)
+    html += `<th style="width:24px;min-width:24px;padding:0"></th>`;
     for (const col of cols) {
       const hasFilter = !!St.columnFilters[col.key];
       const sortDir = St.columnSort && St.columnSort.key === col.key ? St.columnSort.dir : null;
@@ -3334,7 +3339,10 @@
           rowStyle = ' style="background:rgba(59,130,246,.10)"';
         }
       }
-      html += `<tr${rowStyle}>`;
+      const rowIdx = r.raw_row != null ? r.raw_row : "";
+      const hasNote = _notesMgr && _notesMgr.hasNote("gsm_record", "record_idx", rowIdx);
+      html += `<tr data-row="${rowIdx}"${rowStyle}>`;
+      html += `<td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${hasNote ? " has-note" : ""}" data-note-row="${rowIdx}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>`;
       for (const col of cols) {
         html += `<td>${col.renderCell(r)}</td>`;
       }
@@ -3370,6 +3378,22 @@
 
     // Bind column drag-and-drop reordering on headers
     _bindColumnDragDrop(el);
+
+    // Bind note marker clicks
+    if (_notesMgr) {
+      el.querySelectorAll(".analyst-note-marker[data-note-row]").forEach(marker => {
+        marker.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const rowIdx = parseInt(marker.getAttribute("data-note-row"), 10);
+          if (isNaN(rowIdx)) return;
+          const rec = sorted.find(r => r.raw_row === rowIdx);
+          if (!rec) return;
+          const label = _buildRecordNoteLabel(rec);
+          const ref = { type: "gsm_record", record_idx: rowIdx, snapshot: { caller: rec.caller || "", callee: rec.callee || "", datetime: rec.datetime || "" } };
+          _notesMgr.openNoteForElement(label, "phone", ref);
+        });
+      });
+    }
   }
 
   /* ── Column drag & drop (custom mouse events) ────────── */
@@ -10562,6 +10586,66 @@
     _loadGsmModels();
   }
 
+  /* ── Note label builder ────────────────────────────── */
+
+  const _RECORD_TYPE_ICONS = {
+    CALL_OUT: "\u{1F4DE}", CALL_IN: "\u{1F4DE}",
+    SMS_OUT: "\u{1F4AC}", SMS_IN: "\u{1F4AC}",
+    MMS_OUT: "\u{1F4AC}", MMS_IN: "\u{1F4AC}",
+    DATA: "\u{1F4F6}", USSD: "\u2699",
+  };
+
+  function _buildRecordNoteLabel(rec) {
+    if (!rec) return "";
+    const icon = _RECORD_TYPE_ICONS[rec.record_type] || "";
+    const caller = (rec.caller || "").slice(-9);
+    const callee = (rec.callee || "").slice(-9);
+    const time = (rec.time || "").slice(0, 5);
+    const date = rec.date || "";
+    let label = icon ? icon + " " : "";
+    if (caller && callee) {
+      label += caller + " \u2192 " + callee;
+    } else if (caller || callee) {
+      label += caller || callee;
+    }
+    if (time) label += ", " + time;
+    if (date) label += " (" + date + ")";
+    return label;
+  }
+
+  function _gsmGetNoteContext() {
+    // Try to get context from focused/selected row in records table
+    const focused = document.querySelector("#gsm_records_body tr.gsm-row-selected, #gsm_records_body tr:hover");
+    if (focused) {
+      const rowIdx = parseInt(focused.getAttribute("data-row"), 10);
+      if (!isNaN(rowIdx) && St.lastResult) {
+        const allRecs = St.lastResult.records || [];
+        const rec = allRecs.find(r => r.raw_row === rowIdx);
+        if (rec) {
+          return {
+            label: _buildRecordNoteLabel(rec),
+            icon: "phone",
+            ref: { type: "gsm_record", record_idx: rowIdx, snapshot: { caller: rec.caller || "", callee: rec.callee || "", datetime: rec.datetime || "" } },
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  function _gsmNavigateToRef(ref) {
+    if (!ref) return;
+    if (ref.type === "gsm_record" && ref.record_idx != null) {
+      const row = document.querySelector(`#gsm_records_body tr[data-row="${ref.record_idx}"]`);
+      if (row) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        row.style.transition = "background .2s";
+        row.style.background = "rgba(74,108,247,.15)";
+        setTimeout(() => { row.style.background = ""; }, 2000);
+      }
+    }
+  }
+
   /* ── public manager ─────────────────────────────────────── */
   window.GsmManager = {
     _initialized: false,
@@ -10569,6 +10653,18 @@
       if (this._initialized) return;
       this._initialized = true;
       _bind();
+
+      // Initialize analyst notes panel
+      const pid = _getProjectId();
+      if (pid && window.AnalystNotesManager) {
+        window._gsmNotesMgr = new AnalystNotesManager({
+          mode: "gsm",
+          projectId: pid,
+          onNavigate: _gsmNavigateToRef,
+          getContext: _gsmGetNoteContext,
+        });
+        await window._gsmNotesMgr.init();
+      }
 
       // Auto-load saved GSM data from the current project
       try {
