@@ -4021,6 +4021,10 @@
       legitimate: "#22c55e",
       suspicious: "#ef4444",
       monitoring: "#eab308",
+      custom1: "#8b5cf6",
+      custom2: "#0d9488",
+      custom3: "#ec4899",
+      custom4: "#6366f1",
     };
     return map[tag] || "";
   }

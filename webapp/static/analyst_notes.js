@@ -24,6 +24,10 @@ const ANALYST_TAGS = {
   legitimate: { label: "Poprawny",   labelEn: "Legitimate", color: "#15803d", bg: "rgba(21,128,61,.10)" },
   suspicious: { label: "Podejrzany", labelEn: "Suspicious", color: "#dc2626", bg: "rgba(220,38,38,.10)" },
   monitoring: { label: "Obserwacja", labelEn: "Monitoring", color: "#ea580c", bg: "rgba(234,88,12,.10)" },
+  custom1:    { label: "Własny 1",   labelEn: "Custom 1",   color: "#8b5cf6", bg: "rgba(139,92,246,.12)", custom: true },
+  custom2:    { label: "Własny 2",   labelEn: "Custom 2",   color: "#0d9488", bg: "rgba(13,148,136,.12)", custom: true },
+  custom3:    { label: "Własny 3",   labelEn: "Custom 3",   color: "#ec4899", bg: "rgba(236,72,153,.12)", custom: true },
+  custom4:    { label: "Własny 4",   labelEn: "Custom 4",   color: "#6366f1", bg: "rgba(99,102,241,.12)", custom: true },
 };
 
 // ────────── Ref-type → icon mapping ──────────
@@ -77,7 +81,7 @@ class AnalystNotesManager {
     this.getContext = opts.getContext || null;
     this.onNoteChange = opts.onNoteChange || null;
 
-    this.notes = { global: "", items: [] };
+    this.notes = { global: "", items: [], customTagNames: {} };
     this._saveTimer = null;
     this._initialized = false;
 
@@ -176,6 +180,14 @@ class AnalystNotesManager {
         const data = await r.json();
         this.notes.global = data.global || "";
         this.notes.items = Array.isArray(data.items) ? data.items : [];
+        this.notes.customTagNames = data.customTagNames || {};
+        // Apply saved custom tag names to ANALYST_TAGS
+        for (const [key, name] of Object.entries(this.notes.customTagNames)) {
+          if (ANALYST_TAGS[key] && ANALYST_TAGS[key].custom) {
+            ANALYST_TAGS[key].label = name;
+          }
+        }
+        this._syncCustomTagUI();
       }
     } catch (e) {
       console.warn("AnalystNotes: load error", e);
@@ -230,7 +242,9 @@ class AnalystNotesManager {
       const iconSrc = _REF_ICONS[it.ref?.type] || "/static/icons/dokumenty/notes.svg";
       const tagsHtml = (it.tags || []).map(t => {
         const td = ANALYST_TAGS[t];
-        return td ? `<span class="analyst-tag-badge" data-tag="${t}">${_esc(td.label)}</span>` : "";
+        if (!td) return "";
+        const lbl = (td.custom && this.notes.customTagNames[t]) ? this.notes.customTagNames[t] : td.label;
+        return `<span class="analyst-tag-badge" data-tag="${t}">${_esc(lbl)}</span>`;
       }).join("");
 
       html += `<div class="analyst-note-item" data-note-id="${_esc(it.id)}">
@@ -269,6 +283,35 @@ class AnalystNotesManager {
         this._editNote(noteId);
       });
     });
+  }
+
+  // ────────── Custom tag name sync ──────────
+
+  /** Sync custom tag names to modal buttons & filter dropdowns */
+  _syncCustomTagUI() {
+    for (const [key, def] of Object.entries(ANALYST_TAGS)) {
+      if (!def.custom) continue;
+      const name = this.notes.customTagNames[key] || def.label;
+      // Update modal button label
+      const btn = document.querySelector(`#analyst_note_tags .analyst-tag-btn[data-tag="${key}"] .analyst-tag-label`);
+      if (btn) btn.textContent = name;
+      // Update filter dropdown options
+      document.querySelectorAll(`select option[value="${key}"]`).forEach(opt => {
+        opt.textContent = name;
+      });
+    }
+  }
+
+  /** Rename a custom tag and persist */
+  renameCustomTag(tagKey, newName) {
+    if (!ANALYST_TAGS[tagKey] || !ANALYST_TAGS[tagKey].custom) return;
+    newName = (newName || "").trim();
+    if (!newName) newName = ANALYST_TAGS[tagKey].labelEn || tagKey;
+    this.notes.customTagNames[tagKey] = newName;
+    ANALYST_TAGS[tagKey].label = newName;
+    this._syncCustomTagUI();
+    this._renderItems(); // re-render badges with new name
+    this._scheduleSave();
   }
 
   // ────────── Note CRUD ──────────
@@ -334,6 +377,9 @@ class AnalystNotesManager {
   openNoteModal(existingItem) {
     const overlay = document.getElementById("analyst_note_overlay");
     if (!overlay) return;
+
+    // Sync custom tag names in modal buttons
+    this._syncCustomTagUI();
 
     // Store current manager on overlay for modal events
     overlay._manager = this;
@@ -404,8 +450,48 @@ class AnalystNotesManager {
 
     // Tag toggle buttons
     document.querySelectorAll("#analyst_note_tags .analyst-tag-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (e) => {
+        // Don't toggle if clicking on edit input
+        if (e.target.classList.contains("analyst-tag-edit-input")) return;
         btn.classList.toggle("active");
+      });
+    });
+
+    // Inline custom tag name editing — double-click on label to rename
+    document.querySelectorAll("#analyst_note_tags .analyst-tag-label[data-editable]").forEach(lbl => {
+      lbl.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const tagKey = lbl.closest(".analyst-tag-btn").getAttribute("data-tag");
+        const currentName = lbl.textContent;
+        // Replace label with input
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "analyst-tag-edit-input";
+        input.value = currentName;
+        input.style.width = Math.max(60, currentName.length * 7 + 16) + "px";
+        lbl.style.display = "none";
+        lbl.parentNode.insertBefore(input, lbl.nextSibling);
+        input.focus();
+        input.select();
+
+        const commit = () => {
+          const val = input.value.trim();
+          if (val && val !== currentName) {
+            lbl.textContent = val;
+            // Find the active manager and rename
+            const overlay = document.getElementById("analyst_note_overlay");
+            const mgr = overlay?._manager;
+            if (mgr) mgr.renameCustomTag(tagKey, val);
+          }
+          lbl.style.display = "";
+          if (input.parentNode) input.remove();
+        };
+        input.addEventListener("blur", commit);
+        input.addEventListener("keydown", (ke) => {
+          if (ke.key === "Enter") { ke.preventDefault(); input.blur(); }
+          if (ke.key === "Escape") { input.value = currentName; input.blur(); }
+        });
       });
     });
 
@@ -524,7 +610,7 @@ class AnalystNotesManager {
 
   async setProject(projectId) {
     this.projectId = projectId;
-    this.notes = { global: "", items: [] };
+    this.notes = { global: "", items: [], customTagNames: {} };
     if (this._globalTa) this._globalTa.value = "";
     this._renderItems();
     if (projectId) {

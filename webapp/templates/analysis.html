@@ -320,6 +320,10 @@
               <option value="legitimate">Poprawny</option>
               <option value="suspicious">Podejrzany</option>
               <option value="monitoring">Obserwacja</option>
+              <option value="custom1">Własny 1</option>
+              <option value="custom2">Własny 2</option>
+              <option value="custom3">Własny 3</option>
+              <option value="custom4">Własny 4</option>
             </select>
           </div>
           <div class="analyst-panel-items" id="aml_notes_list">
@@ -630,6 +634,10 @@
               <option value="legitimate">Poprawny</option>
               <option value="suspicious">Podejrzany</option>
               <option value="monitoring">Obserwacja</option>
+              <option value="custom1">Własny 1</option>
+              <option value="custom2">Własny 2</option>
+              <option value="custom3">Własny 3</option>
+              <option value="custom4">Własny 4</option>
             </select>
           </div>
           <div class="analyst-panel-items" id="gsm_notes_list">
@@ -1110,11 +1118,16 @@
         <div class="analyst-note-field">
           <div class="label" data-i18n="analyst_panel.tags">Tagi</div>
           <div class="analyst-note-tags" id="analyst_note_tags">
-            <button type="button" class="analyst-tag-btn" data-tag="neutral"><span class="analyst-tag-dot" style="background:#60a5fa"></span> Neutralny</button>
-            <button type="button" class="analyst-tag-btn" data-tag="legitimate"><span class="analyst-tag-dot" style="background:#15803d"></span> Poprawny</button>
-            <button type="button" class="analyst-tag-btn" data-tag="suspicious"><span class="analyst-tag-dot" style="background:#dc2626"></span> Podejrzany</button>
-            <button type="button" class="analyst-tag-btn" data-tag="monitoring"><span class="analyst-tag-dot" style="background:#ea580c"></span> Obserwacja</button>
+            <button type="button" class="analyst-tag-btn" data-tag="neutral"><span class="analyst-tag-dot" style="background:#60a5fa"></span> <span class="analyst-tag-label">Neutralny</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="legitimate"><span class="analyst-tag-dot" style="background:#15803d"></span> <span class="analyst-tag-label">Poprawny</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="suspicious"><span class="analyst-tag-dot" style="background:#dc2626"></span> <span class="analyst-tag-label">Podejrzany</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="monitoring"><span class="analyst-tag-dot" style="background:#ea580c"></span> <span class="analyst-tag-label">Obserwacja</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom1"><span class="analyst-tag-dot" style="background:#8b5cf6"></span> <span class="analyst-tag-label" data-editable="1">Własny 1</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom2"><span class="analyst-tag-dot" style="background:#0d9488"></span> <span class="analyst-tag-label" data-editable="1">Własny 2</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom3"><span class="analyst-tag-dot" style="background:#ec4899"></span> <span class="analyst-tag-label" data-editable="1">Własny 3</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom4"><span class="analyst-tag-dot" style="background:#6366f1"></span> <span class="analyst-tag-label" data-editable="1">Własny 4</span></button>
           </div>
+          <div class="note-editor-hint" style="margin-top:2px;font-size:10px;color:var(--text-muted,#94a3b8)">Kliknij dwukrotnie nazwę własnego tagu aby zmienić</div>
         </div>
         <div class="note-editor-hint">Ctrl+Enter = zapisz</div>
       </div>
