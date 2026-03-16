@@ -3825,7 +3825,7 @@
       const showC = tf === "all" || tf === "calls";
       const showS = tf === "all" || tf === "sms";
       const showD = tf === "all" || tf === "data";
-      html += `<div class="gsm-bar-group">
+      html += `<div class="gsm-bar-group gsm-bar-clickable" data-slot="${_escAttr(g.label)}">
         <div class="gsm-bar-group-bars">
           ${showC ? `<div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-calls" style="height:${Math.max(pctC, 3)}%" title="${g.label} Rozmowy: ${c}"><span class="gsm-bar-val">${c || ''}</span></div></div>` : ''}
           ${showS ? `<div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-sms" style="height:${Math.max(pctS, 3)}%" title="${g.label} SMS/MMS: ${s}"><span class="gsm-bar-val">${s || ''}</span></div></div>` : ''}
@@ -3912,14 +3912,47 @@
     return false;
   }
 
-  function _extractActivityContacts(chartId, typeFilter) {
+  /** Night slot labels → hour ranges for filtering records */
+  const _NIGHT_SLOTS = {
+    "22:00": [22], "23:00": [23], "00:00": [0], "01:00": [1],
+    "02:00": [2], "03:00": [3], "04:00": [4], "05:00": [5],
+  };
+  /** Weekend slot labels → predicate fns */
+  function _weekendSlotPredicate(slotLabel) {
+    const map = {
+      "Pt wieczór": (dt) => dt.getDay() === 5 && dt.getHours() >= 20,
+      "Sobota": (dt) => dt.getDay() === 6,
+      "Niedziela": (dt) => dt.getDay() === 0,
+      "Pn rano": (dt) => dt.getDay() === 1 && dt.getHours() < 6,
+    };
+    return map[slotLabel] || null;
+  }
+
+  function _extractActivityContacts(chartId, typeFilter, slotLabel) {
     const records = St.lastResult ? St.lastResult.records : [];
     if (!records.length) return [];
-    const pred = chartId === "night" ? _isNightRecord : _isWeekendRecord;
     const tf = typeFilter || "all";
     const counts = {};
     for (const r of records) {
-      if (!pred(r)) continue;
+      // Base period filter
+      if (chartId === "night") {
+        if (!_isNightRecord(r)) continue;
+        // Slot filter for night
+        if (slotLabel && _NIGHT_SLOTS[slotLabel]) {
+          const h = parseInt(r.time.split(":")[0], 10);
+          if (!_NIGHT_SLOTS[slotLabel].includes(h)) continue;
+        }
+      } else {
+        if (!_isWeekendRecord(r)) continue;
+        // Slot filter for weekend
+        if (slotLabel) {
+          const pred = _weekendSlotPredicate(slotLabel);
+          if (pred) {
+            const dt = new Date(r.datetime.replace(" ", "T"));
+            if (isNaN(dt.getTime()) || !pred(dt)) continue;
+          }
+        }
+      }
       // Type filter
       const cat = _hmCategory(r.record_type);
       if (tf !== "all" && cat !== tf) continue;
@@ -3936,27 +3969,54 @@
       .sort((a, b) => b.total - a.total);
   }
 
-  function _buildActivityContacts(chartId, typeFilter) {
-    const contacts = _extractActivityContacts(chartId, typeFilter);
+  /** Build a normalized contact chip. Used by both activity charts and heatmap unique numbers. */
+  function _buildContactChip(num, count, chartId, parts) {
+    const idInfo = _idLookup(num);
+    const info = parts || "";
+    const label = idInfo ? `${num} (${idInfo.label})` : num;
+    // Check if contact has a tag via notes
+    const _nm = window._gsmNotesMgr;
+    const noteItem = _nm && _nm.getNoteForRef && _nm.getNoteForRef("gsm_contact", "number", num);
+    const hasNote = !!noteItem;
+    const tagColor = (noteItem && noteItem.tags && noteItem.tags.length) ? _noteTagColor(noteItem.tags[0]) : "";
+    const borderStyle = tagColor ? `border-color:${tagColor}` : "";
+
+    let html = `<span class="gsm-contact-chip" data-number="${_escAttr(num)}" data-chart="${chartId || ''}" title="${label}${info ? ': ' + info : ''}" ${borderStyle ? `style="${borderStyle}"` : ''}>`;
+    html += `<code>${num}</code>`;
+    if (idInfo) html += ` <span class="gsm-chip-id">${_escHtml(idInfo.label)}</span>`;
+    if (count > 1) html += ` <span class="gsm-chip-count">${count}×</span>`;
+    // Note marker — SVG icon, always visible (darker), filled when has note
+    html += `<span class="gsm-chip-note${hasNote ? ' has-note' : ''}" data-note-number="${_escAttr(num)}" title="Notatka"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span>`;
+    html += `</span>`;
+    return html;
+  }
+
+  /** Get color for note tag name. */
+  function _noteTagColor(tag) {
+    const map = {
+      neutral: "#64748b",
+      legitimate: "#22c55e",
+      suspicious: "#ef4444",
+      monitoring: "#eab308",
+    };
+    return map[tag] || "";
+  }
+
+  function _buildActivityContacts(chartId, typeFilter, slotLabel) {
+    const contacts = _extractActivityContacts(chartId, typeFilter, slotLabel);
     if (!contacts.length) return '<div class="gsm-chart-no-contacts small muted" style="padding:8px 0">Brak kontaktów w tym okresie</div>';
-    let html = '<div class="gsm-chart-contacts">';
+    let html = '';
+    // Slot filter indicator
+    if (slotLabel) {
+      html += `<div class="gsm-slot-filter-bar"><span class="small">Filtr: <b>${_escHtml(slotLabel)}</b> — ${contacts.length} numerów</span><button class="gsm-slot-filter-clear" title="Wyczyść filtr przedziału">✕</button></div>`;
+    }
+    html += '<div class="gsm-chart-contacts">';
     for (const c of contacts) {
       const parts = [];
       if (c.calls) parts.push(`${c.calls} rozm.`);
       if (c.sms) parts.push(`${c.sms} sms`);
       if (c.data) parts.push(`${c.data} dane`);
-      const info = parts.join(", ");
-      const idInfo = _idLookup(c.number);
-      const label = idInfo ? `${c.number} (${idInfo.label})` : c.number;
-      html += `<span class="gsm-activity-contact" data-number="${_escAttr(c.number)}" data-chart="${chartId}" title="${label}: ${info}">`;
-      html += `<code>${c.number}</code>`;
-      if (idInfo) html += ` <span class="gsm-ac-id">${_escHtml(idInfo.label)}</span>`;
-      html += ` <span class="gsm-ac-count">(${c.total})</span>`;
-      // Note marker
-      const _nm = window._gsmNotesMgr;
-      const hasNote = _nm && _nm.hasNote("gsm_contact", "number", c.number);
-      html += `<span class="analyst-note-marker gsm-ac-note${hasNote ? ' has-note' : ''}" data-note-number="${_escAttr(c.number)}" title="Dodaj notatkę">&#9998;</span>`;
-      html += `</span>`;
+      html += _buildContactChip(c.number, c.total, chartId, parts.join(", "));
     }
     html += '</div>';
     return html;
@@ -3964,10 +4024,59 @@
 
   function _bindActivityContactClicks(card) {
     if (!card) return;
-    card.querySelectorAll(".gsm-activity-contact").forEach(el => {
+    // Bar click → slot filter
+    card.querySelectorAll(".gsm-bar-clickable").forEach(el => {
+      el.style.cursor = "pointer";
+      el.addEventListener("click", function() {
+        const slot = el.dataset.slot;
+        const chartId = card.dataset.chartId;
+        const typeSel = card.querySelector(".gsm-type-select");
+        const tf = typeSel ? typeSel.value : "calls";
+        const contactsWrap = QS(`[data-contacts="${chartId}"]`, card);
+        if (!contactsWrap) return;
+        // Toggle: if same slot clicked again, clear
+        if (card._activeSlot === slot) {
+          card._activeSlot = null;
+          contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, null);
+          _bindContactChipClicks(card);
+          // Remove active bar highlight
+          card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.remove("gsm-bar-active"));
+          return;
+        }
+        card._activeSlot = slot;
+        contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, slot);
+        _bindContactChipClicks(card);
+        // Highlight active bar
+        card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.toggle("gsm-bar-active", b.dataset.slot === slot));
+      });
+    });
+    // Slot filter clear button
+    card.querySelectorAll(".gsm-slot-filter-clear").forEach(btn => {
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        card._activeSlot = null;
+        const chartId = card.dataset.chartId;
+        const typeSel = card.querySelector(".gsm-type-select");
+        const tf = typeSel ? typeSel.value : "calls";
+        const contactsWrap = QS(`[data-contacts="${chartId}"]`, card);
+        if (contactsWrap) {
+          contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, null);
+          _bindContactChipClicks(card);
+        }
+        card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.remove("gsm-bar-active"));
+      });
+    });
+    // Contact chip clicks
+    _bindContactChipClicks(card);
+  }
+
+  /** Bind click events on normalized contact chips. */
+  function _bindContactChipClicks(container) {
+    if (!container) return;
+    container.querySelectorAll(".gsm-contact-chip").forEach(el => {
       el.addEventListener("click", function(e) {
-        // If note marker clicked, open note instead
-        if (e.target.closest(".gsm-ac-note")) {
+        // Note marker click
+        if (e.target.closest(".gsm-chip-note")) {
           const num = el.dataset.number;
           const _nm = window._gsmNotesMgr;
           if (_nm) {
@@ -3978,17 +4087,23 @@
           return;
         }
         const num = el.dataset.number;
-        _filterRecordsByContact(num, el.dataset.chart);
+        const chartId = el.dataset.chart;
+        _filterRecordsByContact(num, chartId);
       });
     });
   }
 
   function _filterRecordsByContact(number, chartId) {
     const records = St.lastResult ? St.lastResult.records : [];
-    const pred = chartId === "night" ? _isNightRecord : _isWeekendRecord;
+    let pred;
+    if (chartId === "night") pred = _isNightRecord;
+    else if (chartId === "weekend") pred = _isWeekendRecord;
+    else pred = () => true; // heatmap context — filter all records
     const filtered = records.filter(r => pred(r) && (r.callee === number || r.caller === number));
-    const chartLabel = chartId === "night" ? "nocna" : "weekendowa";
-    const filterText = `Akt. ${chartLabel}: ${number} — ${filtered.length} rek.`;
+    const chartLabels = { night: "nocna", weekend: "weekendowa" };
+    const chartLabel = chartLabels[chartId] || "";
+    const prefix = chartLabel ? `Akt. ${chartLabel}: ` : "Nr: ";
+    const filterText = `${prefix}${number} — ${filtered.length} rek.`;
     _setRecordsFilter(filterText, () => {
       _clearRecordsFilter();
       if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
@@ -4137,9 +4252,13 @@
       }
     }
 
+    // Reset slot filter on type/period change
+    card._activeSlot = null;
+    card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.remove("gsm-bar-active"));
+
     // Update contacts section
     if (contactsWrap) {
-      contactsWrap.innerHTML = _buildActivityContacts(chartId, tf);
+      contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, null);
       _bindActivityContactClicks(card);
     }
   }
@@ -7899,61 +8018,19 @@
     if (noCallee > 0) html += ` · ${noCallee} bez numeru`;
     html += `</span></div>`;
 
-    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-
-    const colorMap = {
-      CALL_OUT: "#3b82f6", CALL_IN: "#22c55e",
-      SMS_OUT: "#a855f7", SMS_IN: "#ec4899",
-      MMS_OUT: "#a855f7", MMS_IN: "#ec4899",
-      DATA: "#f97316", VOICEMAIL: "#6b7280",
-    };
-
+    html += '<div class="gsm-chart-contacts">';
     for (const [num, count] of allNums) {
       const types = numberTypes[num] || {};
       const typeEntries = Object.entries(types);
       const typeTag = typeEntries.map(([t, n]) => `${_typeLabel(t)}: ${n}`).join(", ");
-      const domType = typeEntries.sort((a, b) => b[1] - a[1])[0]?.[0] || "";
-      const tagColor = colorMap[domType] || "#6b7280";
-      const isSingle = count === 1;
-
-      // Single-occurrence numbers get a highlighted border
-      const borderStyle = isSingle
-        ? `border:1.5px solid ${tagColor}`
-        : `border:1px solid var(--border)`;
-
-      html += `<div class="gsm-unique-num" data-num="${num}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;${borderStyle};border-radius:8px;font-size:12px;cursor:pointer;background:var(--card-bg,#fff)" title="${typeTag} · klik → filtruj rekordy">`;
-      html += `<span style="color:${tagColor};font-size:10px">●</span>`;
-      html += `<code style="font-size:11px">${num}</code>`;
-      if (count > 1) {
-        html += ` <span class="small muted" style="font-size:10px">${count}×</span>`;
-      }
-      // Identification label
-      const idInfo = _idLookup(num);
-      if (idInfo) {
-        html += ` <span class="small ${idInfo.css}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${idInfo.type}">${idInfo.label}</span>`;
-      }
-      html += `</div>`;
+      html += _buildContactChip(num, count, "heatmap", typeTag);
     }
     html += '</div>';
 
     container.innerHTML = html;
 
-    // Click on number → filter Records table to that number (all records, not just filtered)
-    container.querySelectorAll(".gsm-unique-num").forEach(el => {
-      el.addEventListener("click", () => {
-        const num = el.dataset.num;
-        const allRecs = St.lastResult ? St.lastResult.records : [];
-        const numFiltered = allRecs.filter(r => r.callee === num);
-        const filterText = `Nr: ${num} — ${numFiltered.length} rek.`;
-        _setRecordsFilter(filterText, () => {
-          _clearRecordsFilter();
-          if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
-        });
-        _renderRecords(numFiltered, false, numFiltered.length);
-        const recCard = QS("#gsm_records_card");
-        if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    });
+    // Bind clicks on normalized contact chips
+    _bindContactChipClicks(container);
   }
 
   /** Clear heatmap filter and restore original records. */

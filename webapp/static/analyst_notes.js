@@ -470,6 +470,12 @@ class AnalystNotesManager {
     );
   }
 
+  getNoteForRef(refType, refKey, refValue) {
+    return this.notes.items.find(it =>
+      it.ref?.type === refType && it.ref?.[refKey] === refValue
+    ) || null;
+  }
+
   // ────────── Public: open note for specific element ──────────
 
   openNoteForElement(label, icon, ref) {
