@@ -2934,6 +2934,24 @@ button.pill-icon:hover{
 .analyst-note-marker.has-note{opacity:1;filter:drop-shadow(0 0 2px rgba(234,179,8,.5))}
 .analyst-note-marker.has-note img{filter:saturate(2) brightness(1.15)}
 
+/* Panel search */
+.analyst-panel-search-input{width:100%;font-size:12px;padding:5px 8px;border-radius:6px;margin-top:4px}
+.analyst-panel-search-input:focus{outline:none;border-color:var(--brand-blue,#2563eb);box-shadow:0 0 0 2px rgba(37,99,235,.12)}
+.analyst-panel-search-results{margin-top:6px;max-height:320px;overflow-y:auto;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:var(--bg-secondary,#f8fafc)}
+.analyst-search-header{display:flex;align-items:center;justify-content:space-between;padding:5px 10px;font-size:11px;color:var(--text-muted,#64748b);border-bottom:1px solid var(--border,#e2e8f0);position:sticky;top:0;background:var(--bg-secondary,#f8fafc);z-index:1}
+.analyst-search-item{display:flex;align-items:center;gap:6px;padding:5px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border,#e2e8f0);transition:background .12s}
+.analyst-search-item:last-child{border-bottom:none}
+.analyst-search-item:hover{background:rgba(37,99,235,.06)}
+.analyst-search-icon{width:16px;height:16px;flex-shrink:0;opacity:.6}
+.analyst-search-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.analyst-search-text mark{background:rgba(234,179,8,.3);border-radius:2px;padding:0 1px}
+.analyst-search-loc{font-size:10px;color:var(--text-muted,#64748b);flex-shrink:0;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-theme="dark"] .analyst-panel-search-results{background:var(--bg-card,#0f172a);border-color:var(--border,#334155)}
+[data-theme="dark"] .analyst-search-header{background:var(--bg-card,#0f172a);border-color:var(--border,#334155)}
+[data-theme="dark"] .analyst-search-item{border-color:var(--border,#334155)}
+[data-theme="dark"] .analyst-search-item:hover{background:rgba(37,99,235,.12)}
+[data-theme="dark"] .analyst-search-text mark{background:rgba(234,179,8,.25)}
+
 /* Responsive */
 @media(max-width:900px){
   .analyst-panel-layout{flex-direction:column}
