@@ -3807,8 +3807,14 @@
 
   /* ── activity charts — grouped bars (Rozmowy / SMS / Dane) ── */
 
-  function _buildGroupedBars(groups) {
-    const allVals = groups.flatMap(g => [g.calls || 0, g.sms || 0, g.data || 0]);
+  function _buildGroupedBars(groups, typeFilter) {
+    const tf = typeFilter || "all";
+    const allVals = groups.flatMap(g => {
+      if (tf === "calls") return [g.calls || 0];
+      if (tf === "sms") return [g.sms || 0];
+      if (tf === "data") return [g.data || 0];
+      return [g.calls || 0, g.sms || 0, g.data || 0];
+    });
     const maxVal = Math.max(1, ...allVals);
     let html = '';
     for (const g of groups) {
@@ -3816,11 +3822,14 @@
       const pctC = Math.round((c / maxVal) * 100);
       const pctS = Math.round((s / maxVal) * 100);
       const pctD = Math.round((d / maxVal) * 100);
+      const showC = tf === "all" || tf === "calls";
+      const showS = tf === "all" || tf === "sms";
+      const showD = tf === "all" || tf === "data";
       html += `<div class="gsm-bar-group">
         <div class="gsm-bar-group-bars">
-          <div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-calls" style="height:${Math.max(pctC, 3)}%" title="${g.label} Rozmowy: ${c}"><span class="gsm-bar-val">${c || ''}</span></div></div>
-          <div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-sms" style="height:${Math.max(pctS, 3)}%" title="${g.label} SMS/MMS: ${s}"><span class="gsm-bar-val">${s || ''}</span></div></div>
-          <div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-data" style="height:${Math.max(pctD, 3)}%" title="${g.label} Dane: ${d}"><span class="gsm-bar-val">${d || ''}</span></div></div>
+          ${showC ? `<div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-calls" style="height:${Math.max(pctC, 3)}%" title="${g.label} Rozmowy: ${c}"><span class="gsm-bar-val">${c || ''}</span></div></div>` : ''}
+          ${showS ? `<div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-sms" style="height:${Math.max(pctS, 3)}%" title="${g.label} SMS/MMS: ${s}"><span class="gsm-bar-val">${s || ''}</span></div></div>` : ''}
+          ${showD ? `<div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-data" style="height:${Math.max(pctD, 3)}%" title="${g.label} Dane: ${d}"><span class="gsm-bar-val">${d || ''}</span></div></div>` : ''}
         </div>
         <div class="gsm-bar-label">${g.label}</div>
       </div>`;
@@ -3850,32 +3859,143 @@
     return html;
   }
 
-  function _nightTotalBars(d) {
+  function _nightTotalBars(d, typeFilter) {
     const hours = [22, 23, 0, 1, 2, 3, 4, 5];
     const hc = d.hourly_calls || {}, hs = d.hourly_sms || {}, hd = d.hourly_data || {};
     return _buildGroupedBars(hours.map(h => ({
       label: `${String(h).padStart(2, "0")}:00`,
       calls: hc[h] || 0, sms: hs[h] || 0, data: hd[h] || 0,
-    })));
+    })), typeFilter);
   }
 
-  function _weekendTotalBars(d) {
+  function _weekendTotalBars(d, typeFilter) {
     const sc = d.seg_calls || {}, ss = d.seg_sms || {}, sd = d.seg_data || {};
     return _buildGroupedBars([
       { label: "Pt wieczór", calls: sc.fri_evening || 0, sms: ss.fri_evening || 0, data: sd.fri_evening || 0 },
       { label: "Sobota",     calls: sc.saturday || 0,    sms: ss.saturday || 0,    data: sd.saturday || 0 },
       { label: "Niedziela",  calls: sc.sunday || 0,      sms: ss.sunday || 0,      data: sd.sunday || 0 },
       { label: "Pn rano",    calls: sc.mon_morning || 0, sms: ss.mon_morning || 0, data: sd.mon_morning || 0 },
-    ]);
+    ], typeFilter);
   }
 
-  function _bucketTypeBars(bucket) {
+  function _bucketTypeBars(bucket, typeFilter) {
     return _buildGroupedBars([{
       label: "Łącznie",
       calls: bucket.calls || 0,
       sms: bucket.sms || 0,
       data: bucket.data || 0,
-    }]);
+    }], typeFilter);
+  }
+
+  /* ── activity charts — extract contacts from records ── */
+
+  function _isNightRecord(r) {
+    if (!r.time) return false;
+    const h = parseInt(r.time.split(":")[0], 10);
+    return h >= 22 || h <= 5;
+  }
+
+  function _isWeekendRecord(r) {
+    if (!r.datetime) return false;
+    const dt = new Date(r.datetime.replace(" ", "T"));
+    if (isNaN(dt.getTime())) return false;
+    const jsDay = dt.getDay(); // 0=Sun..6=Sat
+    const h = dt.getHours();
+    // Friday evening (20:00+)
+    if (jsDay === 5 && h >= 20) return true;
+    // Saturday all day
+    if (jsDay === 6) return true;
+    // Sunday all day
+    if (jsDay === 0) return true;
+    // Monday morning (before 6:00)
+    if (jsDay === 1 && h < 6) return true;
+    return false;
+  }
+
+  function _extractActivityContacts(chartId, typeFilter) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!records.length) return [];
+    const pred = chartId === "night" ? _isNightRecord : _isWeekendRecord;
+    const tf = typeFilter || "all";
+    const counts = {};
+    for (const r of records) {
+      if (!pred(r)) continue;
+      // Type filter
+      const cat = _hmCategory(r.record_type);
+      if (tf !== "all" && cat !== tf) continue;
+      const num = r.callee || r.caller || "";
+      if (!num) continue;
+      if (!counts[num]) counts[num] = { calls: 0, sms: 0, data: 0, total: 0 };
+      counts[num].total++;
+      if (cat === "calls") counts[num].calls++;
+      else if (cat === "sms") counts[num].sms++;
+      else if (cat === "data") counts[num].data++;
+    }
+    return Object.entries(counts)
+      .map(([num, c]) => ({ number: num, ...c }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  function _buildActivityContacts(chartId, typeFilter) {
+    const contacts = _extractActivityContacts(chartId, typeFilter);
+    if (!contacts.length) return '<div class="gsm-chart-no-contacts small muted" style="padding:8px 0">Brak kontaktów w tym okresie</div>';
+    let html = '<div class="gsm-chart-contacts">';
+    for (const c of contacts) {
+      const parts = [];
+      if (c.calls) parts.push(`${c.calls} rozm.`);
+      if (c.sms) parts.push(`${c.sms} sms`);
+      if (c.data) parts.push(`${c.data} dane`);
+      const info = parts.join(", ");
+      const idInfo = _idLookup(c.number);
+      const label = idInfo ? `${c.number} (${idInfo.label})` : c.number;
+      html += `<span class="gsm-activity-contact" data-number="${_escAttr(c.number)}" data-chart="${chartId}" title="${label}: ${info}">`;
+      html += `<code>${c.number}</code>`;
+      if (idInfo) html += ` <span class="gsm-ac-id">${_escHtml(idInfo.label)}</span>`;
+      html += ` <span class="gsm-ac-count">(${c.total})</span>`;
+      // Note marker
+      const _nm = window._gsmNotesMgr;
+      const hasNote = _nm && _nm.hasNote("gsm_contact", "number", c.number);
+      html += `<span class="analyst-note-marker gsm-ac-note${hasNote ? ' has-note' : ''}" data-note-number="${_escAttr(c.number)}" title="Dodaj notatkę">&#9998;</span>`;
+      html += `</span>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function _bindActivityContactClicks(card) {
+    if (!card) return;
+    card.querySelectorAll(".gsm-activity-contact").forEach(el => {
+      el.addEventListener("click", function(e) {
+        // If note marker clicked, open note instead
+        if (e.target.closest(".gsm-ac-note")) {
+          const num = el.dataset.number;
+          const _nm = window._gsmNotesMgr;
+          if (_nm) {
+            const label = "Kontakt: " + num;
+            const ref = { type: "gsm_contact", number: num };
+            _nm.openNoteForElement(label, "phone", ref);
+          }
+          return;
+        }
+        const num = el.dataset.number;
+        _filterRecordsByContact(num, el.dataset.chart);
+      });
+    });
+  }
+
+  function _filterRecordsByContact(number, chartId) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    const pred = chartId === "night" ? _isNightRecord : _isWeekendRecord;
+    const filtered = records.filter(r => pred(r) && (r.callee === number || r.caller === number));
+    const chartLabel = chartId === "night" ? "nocna" : "weekendowa";
+    const filterText = `Akt. ${chartLabel}: ${number} — ${filtered.length} rek.`;
+    _setRecordsFilter(filterText, () => {
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(filtered, false, filtered.length);
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function _renderActivityCharts(analysis) {
@@ -3899,9 +4019,20 @@
         _renderOneChart("weekend", "Aktywność weekendowa", "Pt 20:00–Pn 6:00", weekend, _weekendTotalBars));
     }
 
-    // Wire period selectors (only for night/weekend, not heatmap selects)
-    row.querySelectorAll("[data-chart-id] .gsm-period-select").forEach(sel => {
-      sel.onchange = () => _onPeriodChange(sel, analysis);
+    // Wire period and type selectors
+    row.querySelectorAll("[data-chart-id] .gsm-period-select, [data-chart-id] .gsm-type-select").forEach(sel => {
+      sel.onchange = () => _onChartFilterChange(sel, analysis);
+    });
+
+    // Update legend to match default type filter (calls)
+    row.querySelectorAll("[data-chart-id]").forEach(card => {
+      const legend = card.querySelector(".gsm-chart-legend");
+      if (legend) {
+        legend.querySelectorAll(".gsm-legend-item").forEach((item, i) => {
+          item.style.display = i === 0 ? "" : "none"; // default = calls only
+        });
+      }
+      _bindActivityContactClicks(card);
     });
 
     _bindCardScreenshotButtons(row);
@@ -3919,8 +4050,15 @@
             ${camSvg}
           </button>
         </div>
-        <select class="gsm-period-select" data-chart="${id}">
-          <option value="total" selected>Łącznie</option>`;
+        <div class="gsm-chart-selects">
+          <select class="gsm-type-select" data-chart="${id}">
+            <option value="all">Wszystkie</option>
+            <option value="calls" selected>Połączenia</option>
+            <option value="sms">SMS/MMS</option>
+            <option value="data">Sesje danych</option>
+          </select>
+          <select class="gsm-period-select" data-chart="${id}">
+            <option value="total" selected>Łącznie</option>`;
     if (weeklyKeys.length > 1) {
       html += `<optgroup label="Tygodnie">`;
       for (const k of weeklyKeys) html += `<option value="week:${k}">Tyg. ${k} (${d.weekly[k].records})</option>`;
@@ -3931,7 +4069,7 @@
       for (const k of monthlyKeys) html += `<option value="month:${k}">${k} (${d.monthly[k].records})</option>`;
       html += `</optgroup>`;
     }
-    html += `</select></div>`;
+    html += `</select></div></div>`;
 
     html += `<div class="gsm-chart-legend">
       <span class="gsm-legend-item"><span class="gsm-legend-dot gsm-bar-calls"></span>Rozmowy</span>
@@ -3939,51 +4077,70 @@
       <span class="gsm-legend-item"><span class="gsm-legend-dot gsm-bar-data"></span>Dane</span>
     </div>`;
 
-    html += `<div class="gsm-bar-chart" data-bars="${id}">${buildTotalBars(d)}</div>`;
-    html += _buildAnomalies(d.anomalies);
+    html += `<div class="gsm-bar-chart" data-bars="${id}">${buildTotalBars(d, "calls")}</div>`;
+    html += `<div class="gsm-chart-contacts-wrap" data-contacts="${id}">${_buildActivityContacts(id, "calls")}</div>`;
     html += `</div>`;
     return html;
   }
 
-  function _onPeriodChange(selectEl, analysis) {
-    const chartId = selectEl.dataset.chart;
-    const val = selectEl.value;
+  function _onChartFilterChange(selectEl, analysis) {
     const card = selectEl.closest(".gsm-chart-card");
+    if (!card) return;
+    const chartId = card.dataset.chartId;
+    const periodSel = card.querySelector(".gsm-period-select");
+    const typeSel = card.querySelector(".gsm-type-select");
+    const val = periodSel ? periodSel.value : "total";
+    const tf = typeSel ? typeSel.value : "calls";
     const barContainer = QS(`[data-bars="${chartId}"]`, card);
+    const contactsWrap = QS(`[data-contacts="${chartId}"]`, card);
     if (!barContainer) return;
 
     const src = chartId === "night" ? analysis.night_activity : analysis.weekend_activity;
     if (!src) return;
 
-    if (val === "total") {
-      barContainer.innerHTML = chartId === "night" ? _nightTotalBars(src) : _weekendTotalBars(src);
-      return;
+    // Update legend visibility
+    const legend = card.querySelector(".gsm-chart-legend");
+    if (legend) {
+      legend.querySelectorAll(".gsm-legend-item").forEach((item, i) => {
+        const cats = ["calls", "sms", "data"];
+        item.style.display = (tf === "all" || tf === cats[i]) ? "" : "none";
+      });
     }
 
-    let bucket = null;
-    if (val.startsWith("week:")) bucket = (src.weekly || {})[val.slice(5)];
-    else if (val.startsWith("month:")) bucket = (src.monthly || {})[val.slice(6)];
-    if (!bucket) return;
-
-    if (chartId === "night" && bucket.hourly_calls) {
-      const hours = [22, 23, 0, 1, 2, 3, 4, 5];
-      const hc = bucket.hourly_calls || {}, hs = bucket.hourly_sms || {}, hd = bucket.hourly_data || {};
-      barContainer.innerHTML = _buildGroupedBars(hours.map(h => ({
-        label: `${String(h).padStart(2, "0")}:00`,
-        calls: hc[h] || hc[String(h)] || 0,
-        sms: hs[h] || hs[String(h)] || 0,
-        data: hd[h] || hd[String(h)] || 0,
-      })));
-    } else if (chartId === "weekend" && bucket.fri_evening != null) {
-      const sc = bucket.seg_calls || {}, ss = bucket.seg_sms || {}, sd = bucket.seg_data || {};
-      barContainer.innerHTML = _buildGroupedBars([
-        { label: "Pt wieczór", calls: sc.fri_evening || 0, sms: ss.fri_evening || 0, data: sd.fri_evening || 0 },
-        { label: "Sobota",     calls: sc.saturday || 0,    sms: ss.saturday || 0,    data: sd.saturday || 0 },
-        { label: "Niedziela",  calls: sc.sunday || 0,      sms: ss.sunday || 0,      data: sd.sunday || 0 },
-        { label: "Pn rano",    calls: sc.mon_morning || 0, sms: ss.mon_morning || 0, data: sd.mon_morning || 0 },
-      ]);
+    if (val === "total") {
+      barContainer.innerHTML = chartId === "night" ? _nightTotalBars(src, tf) : _weekendTotalBars(src, tf);
     } else {
-      barContainer.innerHTML = _bucketTypeBars(bucket);
+      let bucket = null;
+      if (val.startsWith("week:")) bucket = (src.weekly || {})[val.slice(5)];
+      else if (val.startsWith("month:")) bucket = (src.monthly || {})[val.slice(6)];
+      if (!bucket) return;
+
+      if (chartId === "night" && bucket.hourly_calls) {
+        const hours = [22, 23, 0, 1, 2, 3, 4, 5];
+        const hc = bucket.hourly_calls || {}, hs = bucket.hourly_sms || {}, hd = bucket.hourly_data || {};
+        barContainer.innerHTML = _buildGroupedBars(hours.map(h => ({
+          label: `${String(h).padStart(2, "0")}:00`,
+          calls: hc[h] || hc[String(h)] || 0,
+          sms: hs[h] || hs[String(h)] || 0,
+          data: hd[h] || hd[String(h)] || 0,
+        })), tf);
+      } else if (chartId === "weekend" && bucket.fri_evening != null) {
+        const sc = bucket.seg_calls || {}, ss = bucket.seg_sms || {}, sd = bucket.seg_data || {};
+        barContainer.innerHTML = _buildGroupedBars([
+          { label: "Pt wieczór", calls: sc.fri_evening || 0, sms: ss.fri_evening || 0, data: sd.fri_evening || 0 },
+          { label: "Sobota",     calls: sc.saturday || 0,    sms: ss.saturday || 0,    data: sd.saturday || 0 },
+          { label: "Niedziela",  calls: sc.sunday || 0,      sms: ss.sunday || 0,      data: sd.sunday || 0 },
+          { label: "Pn rano",    calls: sc.mon_morning || 0, sms: ss.mon_morning || 0, data: sd.mon_morning || 0 },
+        ], tf);
+      } else {
+        barContainer.innerHTML = _bucketTypeBars(bucket, tf);
+      }
+    }
+
+    // Update contacts section
+    if (contactsWrap) {
+      contactsWrap.innerHTML = _buildActivityContacts(chartId, tf);
+      _bindActivityContactClicks(card);
     }
   }
 
