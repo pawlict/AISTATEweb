@@ -2322,8 +2322,146 @@
     { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
     { type: "satellite_numbers",label: "Numery satelitarne",              desc: "Po\u0142\u0105czenia z numerami telefon\u00F3w satelitarnych (Iridium, Inmarsat, Thuraya, Globalstar i in.)" },
     { type: "social_media",     label: "Konta spo\u0142eczno\u015Bciowe / komunikatory", desc: "Nazwy komunikator\u00F3w i platform spo\u0142eczno\u015Bciowych wykryte w polach bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)" },
-    { type: "inactivity_gap",   label: "Brak aktywno\u015Bci >12 godzin", desc: "Okresy powy\u017Cej 12 godzin bez \u017Cadnego zdarzenia (po\u0142\u0105czenia, SMS, dane). Podano ostatni i pierwszy kontakt." },
+    { type: "inactivity_gap",   label: "Brak aktywno\u015Bci", desc: "Okresy bez \u017Cadnego zdarzenia (po\u0142\u0105czenia, SMS, dane). Podano ostatni i pierwszy kontakt.", configurable: true },
+    { type: "meeting_after_call", label: "Spotkanie po po\u0142\u0105czeniu", desc: "Po\u0142\u0105czenie przychodz\u0105ce, po kt\u00F3rym telefon pozostaje w tym samym BTS bez aktywno\u015Bci \u2014 mo\u017Cliwe spotkanie.", configurable: true },
   ];
+
+  // ── Inactivity gap: configurable threshold (default 12h) ──
+  let _inactivityThresholdH = 12;
+
+  /**
+   * Detect inactivity gaps from records on the frontend.
+   * Same logic as backend _detect_inactivity_gaps but in JS.
+   */
+  function _detectInactivityGaps(minHours) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!records.length) return [];
+
+    // Parse datetime and sort
+    const parsed = [];
+    for (const r of records) {
+      if (!r.datetime && (!r.date || !r.time)) continue;
+      const dtStr = r.datetime || (r.date + " " + r.time);
+      const dt = new Date(dtStr.replace(" ", "T"));
+      if (isNaN(dt.getTime())) continue;
+      parsed.push({ dt, r });
+    }
+    if (parsed.length < 2) return [];
+    parsed.sort((a, b) => a.dt - b.dt);
+
+    const thresholdMs = minHours * 3600 * 1000;
+    const items = [];
+    for (let i = 1; i < parsed.length; i++) {
+      const prev = parsed[i - 1];
+      const curr = parsed[i];
+      const gapMs = curr.dt - prev.dt;
+      if (gapMs >= thresholdMs) {
+        items.push({
+          gap_hours: Math.round(gapMs / 3600000 * 10) / 10,
+          last_date: prev.r.date || "",
+          last_time: prev.r.time || "",
+          last_contact: prev.r.callee || prev.r.caller || "\u2014",
+          last_type: prev.r.record_type || "",
+          first_date: curr.r.date || "",
+          first_time: curr.r.time || "",
+          first_contact: curr.r.callee || curr.r.caller || "\u2014",
+          first_type: curr.r.record_type || "",
+        });
+      }
+    }
+    return items;
+  }
+
+  // ── Meeting after call: configurable window (default 60 min) ──
+  let _meetingWindowMin = 60;
+
+  /**
+   * Detect "meeting after call" pattern:
+   * 1. Incoming call (any)
+   * 2. After the call, within windowMin minutes:
+   *    - max 1 other event (allows a single SMS notification)
+   *    - phone stays on same BTS (no cell_id / lac change)
+   * Returns list of detected meeting patterns.
+   */
+  function _detectMeetingAfterCall(windowMin) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!records.length) return [];
+
+    // Parse datetime and sort
+    const parsed = [];
+    for (const r of records) {
+      if (!r.datetime && (!r.date || !r.time)) continue;
+      const dtStr = r.datetime || (r.date + " " + r.time);
+      const dt = new Date(dtStr.replace(" ", "T"));
+      if (isNaN(dt.getTime())) continue;
+      parsed.push({ dt, r });
+    }
+    if (parsed.length < 2) return [];
+    parsed.sort((a, b) => a.dt - b.dt);
+
+    const windowMs = windowMin * 60 * 1000;
+    const items = [];
+
+    for (let i = 0; i < parsed.length; i++) {
+      const entry = parsed[i];
+      const rec = entry.r;
+
+      // Check if this is an incoming call
+      const rt = (rec.record_type || "").toUpperCase();
+      const isIncoming = rt.includes("INCOMING") || rt.includes("PRZYCHODZĄCE") || rt.includes("PRZYCHODZACE")
+        || (rt.includes("CALL") && (rec.direction || "").toUpperCase() === "IN")
+        || rt.includes("MT_CALL") || rt.includes("VOICE_MT");
+      if (!isIncoming) continue;
+
+      // Get BTS info from this record
+      const triggerBts = rec.cell_id || rec.lac || rec.bts_address || "";
+
+      // Look at records within the window after this call
+      const windowEnd = entry.dt.getTime() + windowMs;
+      let eventCount = 0;
+      let btsChanged = false;
+      let silenceEnd = null; // first record AFTER the window (or end of data)
+
+      for (let j = i + 1; j < parsed.length; j++) {
+        const next = parsed[j];
+        if (next.dt.getTime() > windowEnd) {
+          silenceEnd = next;
+          break;
+        }
+        eventCount++;
+        // Check BTS change
+        if (triggerBts) {
+          const nextBts = next.r.cell_id || next.r.lac || next.r.bts_address || "";
+          if (nextBts && nextBts !== triggerBts) {
+            btsChanged = true;
+            break;
+          }
+        }
+      }
+
+      // Conditions: max 1 event in window AND no BTS change
+      if (eventCount <= 1 && !btsChanged) {
+        const dur = rec.duration_seconds || rec.duration || 0;
+        const durStr = dur > 0 ? `${dur}s` : "0s (nieodebrane)";
+        const silenceMin = silenceEnd
+          ? Math.round((silenceEnd.dt - entry.dt) / 60000)
+          : Math.round((windowEnd - entry.dt.getTime()) / 60000);
+        items.push({
+          date: rec.date || "",
+          time: rec.time || "",
+          caller: rec.caller || rec.callee || "\u2014",
+          duration: durStr,
+          duration_s: typeof dur === "number" ? dur : 0,
+          bts: triggerBts || "\u2014",
+          silence_min: silenceMin,
+          events_in_window: eventCount,
+          next_date: silenceEnd ? (silenceEnd.r.date || "") : "",
+          next_time: silenceEnd ? (silenceEnd.r.time || "") : "",
+        });
+      }
+    }
+    return items;
+  }
 
   function _renderAnomalies(a) {
     const card = QS("#gsm_anomalies_card");
@@ -2348,6 +2486,24 @@
       for (const g of raw) {
         groupMap[g.type] = { items: g.items || [], severity: g.severity || "ok" };
       }
+    }
+
+    // Override inactivity_gap with frontend-computed results (respects custom threshold)
+    {
+      const igItems = _detectInactivityGaps(_inactivityThresholdH);
+      groupMap["inactivity_gap"] = {
+        items: igItems,
+        severity: igItems.length ? "info" : "ok",
+      };
+    }
+
+    // Compute meeting_after_call on frontend
+    {
+      const macItems = _detectMeetingAfterCall(_meetingWindowMin);
+      groupMap["meeting_after_call"] = {
+        items: macItems,
+        severity: macItems.length ? "warning" : "ok",
+      };
     }
 
     // Icon paths
@@ -2378,11 +2534,22 @@
       html += `<div class="gsm-anomaly-bar" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(${sev === 'critical' ? '220,38,38' : sev === 'warning' ? '249,115,22' : sev === 'info' ? '59,130,246' : '34,197,94'},.04)">`;
       html += `<span style="color:${sevColor};font-size:15px;flex-shrink:0">${sevIcon}</span>`;
       html += `<div style="flex:1;min-width:0">`;
-      html += `<div style="display:flex;align-items:center;gap:5px"><b>${cat.label}</b>`;
+      html += `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><b>${cat.label}</b>`;
+      if (cat.type === "inactivity_gap") {
+        html += ` <span style="display:inline-flex;align-items:center;gap:3px;font-size:12px">>`
+          + `<input type="number" class="gsm-inactivity-threshold" value="${_inactivityThresholdH}" min="1" max="999" step="1"`
+          + ` style="width:48px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--card-bg,#fff);color:var(--text)">`
+          + ` godz.</span>`;
+      } else if (cat.type === "meeting_after_call") {
+        html += ` <span style="display:inline-flex;align-items:center;gap:3px;font-size:12px">`
+          + `<input type="number" class="gsm-meeting-window" value="${_meetingWindowMin}" min="5" max="999" step="5"`
+          + ` style="width:48px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--card-bg,#fff);color:var(--text)">`
+          + ` min</span>`;
+      }
       if (!hasItems) {
-        html += ` <span class="muted">\u2014 brak</span>`;
+        html += ` <span class="muted gsm-anom-count">\u2014 brak</span>`;
       } else {
-        html += ` <span class="muted">(${items.length})</span>`;
+        html += ` <span class="muted gsm-anom-count">(${items.length})</span>`;
       }
       html += `</div>`;
       html += `<div class="small muted" style="margin-top:1px;line-height:1.3">${cat.desc}</div>`;
@@ -2499,6 +2666,125 @@
       });
     });
 
+    // ── Inactivity threshold input ──
+    const thresholdInput = body.querySelector(".gsm-inactivity-threshold");
+    if (thresholdInput) {
+      // Prevent card click/dblclick when interacting with input
+      thresholdInput.addEventListener("click", e => e.stopPropagation());
+      thresholdInput.addEventListener("dblclick", e => e.stopPropagation());
+
+      let _igTimer = null;
+      thresholdInput.addEventListener("input", () => {
+        clearTimeout(_igTimer);
+        _igTimer = setTimeout(() => {
+          const val = parseInt(thresholdInput.value, 10);
+          if (!val || val < 1) return;
+          _inactivityThresholdH = val;
+
+          // Recalculate
+          const newItems = _detectInactivityGaps(val);
+          groupMap["inactivity_gap"] = { items: newItems, severity: newItems.length ? "info" : "ok" };
+
+          // Update count label
+          const card = thresholdInput.closest(".gsm-anomaly-card");
+          if (!card) return;
+          const countEl = card.querySelector(".gsm-anom-count");
+          if (countEl) {
+            countEl.textContent = newItems.length ? `(${newItems.length})` : "\u2014 brak";
+            countEl.className = newItems.length ? "muted gsm-anom-count" : "muted gsm-anom-count";
+          }
+
+          // Re-render items body
+          const container = card.querySelector("[id^='anom_exp_']");
+          if (container) {
+            if (!newItems.length) {
+              container.innerHTML = "";
+              container.style.display = "none";
+            } else {
+              container.style.display = "";
+              container.innerHTML = _renderAnomalyItems("inactivity_gap", newItems);
+              // Reset expand state
+              const collapsedH = 5 * 22;
+              if (newItems.length > 5) {
+                container.style.maxHeight = collapsedH + "px";
+                container.style.overflowY = "hidden";
+                container.dataset.expanded = "0";
+              } else {
+                container.style.maxHeight = "none";
+                container.style.overflowY = "visible";
+              }
+            }
+          }
+
+          // Update severity color on card
+          const sev = newItems.length ? "info" : "ok";
+          const sevColor = sev === "info" ? "#3b82f6" : "#22c55e";
+          card.style.borderLeftColor = sevColor;
+          const sevSpan = card.querySelector(".gsm-anomaly-bar > span");
+          if (sevSpan) {
+            sevSpan.style.color = sevColor;
+            sevSpan.textContent = sev === "info" ? "\u2139" : "\u2713";
+          }
+        }, 300);
+      });
+    }
+
+    // ── Meeting window input ──
+    const meetingInput = body.querySelector(".gsm-meeting-window");
+    if (meetingInput) {
+      meetingInput.addEventListener("click", e => e.stopPropagation());
+      meetingInput.addEventListener("dblclick", e => e.stopPropagation());
+
+      let _macTimer = null;
+      meetingInput.addEventListener("input", () => {
+        clearTimeout(_macTimer);
+        _macTimer = setTimeout(() => {
+          const val = parseInt(meetingInput.value, 10);
+          if (!val || val < 5) return;
+          _meetingWindowMin = val;
+
+          const newItems = _detectMeetingAfterCall(val);
+          groupMap["meeting_after_call"] = { items: newItems, severity: newItems.length ? "warning" : "ok" };
+
+          const card = meetingInput.closest(".gsm-anomaly-card");
+          if (!card) return;
+          const countEl = card.querySelector(".gsm-anom-count");
+          if (countEl) {
+            countEl.textContent = newItems.length ? `(${newItems.length})` : "\u2014 brak";
+          }
+
+          const container = card.querySelector("[id^='anom_exp_']");
+          if (container) {
+            if (!newItems.length) {
+              container.innerHTML = "";
+              container.style.display = "none";
+            } else {
+              container.style.display = "";
+              container.innerHTML = _renderAnomalyItems("meeting_after_call", newItems);
+              const collapsedH = 5 * 22;
+              if (newItems.length > 5) {
+                container.style.maxHeight = collapsedH + "px";
+                container.style.overflowY = "hidden";
+                container.dataset.expanded = "0";
+              } else {
+                container.style.maxHeight = "none";
+                container.style.overflowY = "visible";
+              }
+            }
+          }
+
+          const sev = newItems.length ? "warning" : "ok";
+          const sevColor = sev === "warning" ? "#f97316" : "#22c55e";
+          card.style.borderLeftColor = sevColor;
+          const sevSpan = card.querySelector(".gsm-anomaly-bar > span");
+          if (sevSpan) {
+            sevSpan.style.color = sevColor;
+            sevSpan.textContent = sev === "warning" ? "\u26A0" : "\u2713";
+          }
+        }, 300);
+      });
+    }
+
     // ── Double-click on anomaly category → filter Records (unchanged) ──
     body.addEventListener("dblclick", function(e) {
       // Ignore clicks on action icons
@@ -2603,6 +2889,29 @@
           return smPlatforms.some(p => txt.includes(p));
         });
         filterText = `Konta społecznościowe — ${filtered.length} rek.`;
+        break;
+      }
+      case "meeting_after_call": {
+        // Build set of trigger records (incoming calls matching detected meetings)
+        const meetingDates = new Set(items.map(it => `${it.date}_${it.time}`));
+        filtered = records.filter(r => {
+          // Include the trigger call itself
+          if (meetingDates.has(`${r.date}_${r.time}`)) return true;
+          // Include records within the meeting window after each trigger
+          for (const it of items) {
+            if (r.date < it.date) continue;
+            const triggerStr = (it.date + " " + it.time).replace(" ", "T");
+            const triggerDt = new Date(triggerStr);
+            const recStr = ((r.datetime || r.date + " " + r.time) || "").replace(" ", "T");
+            const recDt = new Date(recStr);
+            if (!isNaN(triggerDt) && !isNaN(recDt)) {
+              const diff = recDt - triggerDt;
+              if (diff >= 0 && diff <= _meetingWindowMin * 60000) return true;
+            }
+          }
+          return false;
+        });
+        filterText = `Spotkanie po połączeniu — ${filtered.length} rek.`;
         break;
       }
       default:
@@ -2886,6 +3195,18 @@
         html += `<b>${it.gap_hours}h</b> przerwy: `;
         html += `ostatni \u2014 ${it.last_date} ${it.last_time} <code>${it.last_contact}</code> <span class="muted">(${lastType})</span>`;
         html += ` \u2192 pierwszy \u2014 ${it.first_date} ${it.first_time} <code>${it.first_contact}</code> <span class="muted">(${firstType})</span>`;
+        html += `</div>`;
+      }
+    } else if (type === "meeting_after_call") {
+      for (const it of items) {
+        const missed = it.duration_s === 0 ? ' <span style="color:#dc2626;font-weight:600">nieodebrane</span>' : ` (${it.duration})`;
+        html += `<div style="margin-bottom:4px">`;
+        html += `<b>${it.date} ${it.time}</b> \u2014 `;
+        html += `<code>${it.caller}</code>${missed}`;
+        html += ` \u2192 <b>${it.silence_min} min</b> ciszy`;
+        if (it.events_in_window > 0) html += ` (${it.events_in_window} zdarze\u0144 w oknie)`;
+        html += ` \u2014 BTS: <span class="muted">${it.bts}</span>`;
+        if (it.next_date) html += ` \u2192 nast\u0119pna aktywno\u015B\u0107: ${it.next_date} ${it.next_time}`;
         html += `</div>`;
       }
     } else {
