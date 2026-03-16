@@ -3108,15 +3108,16 @@
         <text x="${card.x + 9}" y="${by3 + 9}" font-size="6.5" font-weight="700" fill="#d97706">FWD</text>
         <text x="${card.x + CW - 6}" y="${by3 + 9}" font-size="7.5" font-weight="600" fill="#d97706" text-anchor="end">${fwdAll2}</text>
       </g>`;
-      // Note marker (small circle in top-right corner)
+      // Note marker (small notes icon in top-right corner)
       {
         const _gnm = window._gsmNotesMgr;
         const _ghn = _gnm && _gnm.hasNote("gsm_contact", "number", c.number);
-        const _nColor = _ghn ? "#2563eb" : "var(--text-muted,#cbd5e1)";
         const _nOpacity = _ghn ? "1" : "0";
+        const _nSize = 11;
+        const _nx = card.x + CW - _nSize - 1;
+        const _ny = card.y + 1;
         svg += `<g class="gsm-graph-note-marker" data-number="${c.number}" style="cursor:pointer;opacity:${_nOpacity}">
-          <circle cx="${card.x + CW - 6}" cy="${card.y + 6}" r="4" fill="${_nColor}" opacity=".85"/>
-          <text x="${card.x + CW - 6}" y="${card.y + 8.5}" text-anchor="middle" font-size="5.5" fill="#fff" font-weight="700">N</text>
+          <image href="/static/icons/dokumenty/notes.svg" x="${_nx}" y="${_ny}" width="${_nSize}" height="${_nSize}" />
         </g>`;
       }
       svg += `</g>`;
@@ -4000,6 +4001,127 @@
       monitoring: "#eab308",
     };
     return map[tag] || "";
+  }
+
+  /** Get tag color for a number from notes manager. Returns "" if none. */
+  function _getNumberTagColor(number) {
+    const nm = window._gsmNotesMgr;
+    if (!nm) return "";
+    const note = nm.getNoteForRef("gsm_contact", "number", number);
+    if (!note || !note.tags || !note.tags.length) return "";
+    return _noteTagColor(note.tags[0]);
+  }
+
+  /**
+   * Refresh tag borders & note markers across ALL visible GSM views.
+   * Called after a note is added/edited/deleted.
+   */
+  function _refreshTagBorders() {
+    const nm = window._gsmNotesMgr;
+    if (!nm) return;
+
+    // 1. Contact chips (heatmap unique numbers, night/weekend activity)
+    document.querySelectorAll(".gsm-contact-chip").forEach(chip => {
+      const num = chip.dataset.number;
+      if (!num) return;
+      const color = _getNumberTagColor(num);
+      chip.style.borderColor = color || "";
+      const noteIcon = chip.querySelector(".gsm-chip-note");
+      if (noteIcon) {
+        const hasNote = nm.hasNote("gsm_contact", "number", num);
+        noteIcon.classList.toggle("has-note", hasNote);
+      }
+    });
+
+    // 2. Records table — highlight rows where callee/caller has tag
+    document.querySelectorAll("#gsm_records_card .gsm-table tbody tr").forEach(row => {
+      const rowIdx = row.dataset.row;
+      // Find the callee number from the row's code element
+      const codeEl = row.querySelector("td code");
+      const num = codeEl ? codeEl.textContent.trim() : "";
+      const color = num ? _getNumberTagColor(num) : "";
+      if (color) {
+        row.style.outline = `2px solid ${color}`;
+        row.style.outlineOffset = "-1px";
+        row.style.borderRadius = "4px";
+      } else {
+        row.style.outline = "";
+        row.style.outlineOffset = "";
+        row.style.borderRadius = "";
+      }
+      // Update note marker
+      const marker = row.querySelector(".analyst-note-marker[data-note-row]");
+      if (marker && rowIdx != null) {
+        const rec = St.lastResult?.records?.[parseInt(rowIdx, 10)];
+        if (rec) {
+          const hasNote = nm.hasNote("gsm_record", "raw_row", rec.raw_row);
+          marker.classList.toggle("has-note", hasNote);
+        }
+      }
+    });
+
+    // 3. Top contacts table
+    document.querySelectorAll(".analyst-note-marker[data-note-contact]").forEach(marker => {
+      const num = marker.dataset.noteContact;
+      const hasNote = nm.hasNote("gsm_contact", "number", num);
+      marker.classList.toggle("has-note", hasNote);
+      // Highlight entire row
+      const row = marker.closest("tr");
+      if (row) {
+        const color = _getNumberTagColor(num);
+        if (color) {
+          row.style.outline = `2px solid ${color}`;
+          row.style.outlineOffset = "-1px";
+          row.style.borderRadius = "4px";
+        } else {
+          row.style.outline = "";
+          row.style.outlineOffset = "";
+          row.style.borderRadius = "";
+        }
+      }
+    });
+
+    // 4. Devices table
+    document.querySelectorAll(".analyst-note-marker[data-note-imei]").forEach(marker => {
+      const imei = marker.dataset.noteImei;
+      const hasNote = nm.hasNote("gsm_device", "imei", imei);
+      marker.classList.toggle("has-note", hasNote);
+    });
+
+    // 5. Anomalies
+    document.querySelectorAll(".analyst-note-marker[data-note-anomaly]").forEach(marker => {
+      const type = marker.dataset.noteAnomaly;
+      const hasNote = nm.hasNote("gsm_anomaly", "type", type);
+      marker.classList.toggle("has-note", hasNote);
+    });
+
+    // 6. Special numbers table
+    document.querySelectorAll(".analyst-note-marker[data-note-special]").forEach(marker => {
+      const num = marker.dataset.noteSpecial;
+      const hasNote = nm.hasNote("gsm_special_number", "number", num);
+      marker.classList.toggle("has-note", hasNote);
+      const row = marker.closest("tr");
+      if (row) {
+        const color = _getNumberTagColor(num);
+        if (color) {
+          row.style.outline = `2px solid ${color}`;
+          row.style.outlineOffset = "-1px";
+          row.style.borderRadius = "4px";
+        } else {
+          row.style.outline = "";
+          row.style.outlineOffset = "";
+          row.style.borderRadius = "";
+        }
+      }
+    });
+
+    // 7. Contact graph note markers
+    document.querySelectorAll(".gsm-graph-note-marker").forEach(marker => {
+      const num = marker.dataset.number;
+      if (!num) return;
+      const hasNote = nm.hasNote("gsm_contact", "number", num);
+      marker.style.opacity = hasNote ? "1" : "0";
+    });
   }
 
   function _buildActivityContacts(chartId, typeFilter, slotLabel) {
@@ -11047,6 +11169,7 @@
           projectId: pid,
           onNavigate: _gsmNavigateToRef,
           getContext: _gsmGetNoteContext,
+          onNoteChange: _refreshTagBorders,
         });
         await window._gsmNotesMgr.init();
       }

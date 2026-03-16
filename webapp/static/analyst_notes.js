@@ -75,6 +75,7 @@ class AnalystNotesManager {
     this.projectId = opts.projectId;
     this.onNavigate = opts.onNavigate || null;
     this.getContext = opts.getContext || null;
+    this.onNoteChange = opts.onNoteChange || null;
 
     this.notes = { global: "", items: [] };
     this._saveTimer = null;
@@ -286,6 +287,7 @@ class AnalystNotesManager {
     this.notes.items.push(item);
     this._renderItems();
     this._scheduleSave();
+    if (this.onNoteChange) this.onNoteChange(item);
     return item;
   }
 
@@ -297,12 +299,15 @@ class AnalystNotesManager {
     item.modified = new Date().toISOString();
     this._renderItems();
     this._scheduleSave();
+    if (this.onNoteChange) this.onNoteChange(item);
   }
 
   _deleteNote(noteId) {
+    const deleted = this.notes.items.find(it => it.id === noteId);
     this.notes.items = this.notes.items.filter(it => it.id !== noteId);
     this._renderItems();
     this._scheduleSave();
+    if (this.onNoteChange) this.onNoteChange(deleted || null);
   }
 
   _editNote(noteId) {
