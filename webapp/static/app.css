@@ -3837,3 +3837,65 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 [data-theme="dark"] .gsm-col-show-all,[data-theme="dark"] .gsm-col-defaults{background:var(--bg-secondary,#0f172a);border-color:var(--border,#334155);color:var(--text,#e2e8f0)}
 [data-theme="dark"] .gsm-th-filtered{background:rgba(37,99,235,.08)!important}
 [data-theme="dark"] .gsm-col-filter-btn{background:var(--bg-secondary,#1e293b);border-color:var(--border,#334155);color:var(--text-muted,#94a3b8)}
+
+/* ─── Note Template Editor ─────────────────────────────────────────────── */
+.note-tpl-editor{display:flex;flex-direction:column;gap:12px;max-height:65vh;overflow:hidden}
+.note-tpl-header{display:flex;align-items:center;gap:10px;padding:0 0 10px;border-bottom:1px solid var(--border,#e2e8f0)}
+.note-tpl-name{flex:1;padding:6px 10px;border:1px solid var(--border,#e2e8f0);border-radius:6px;font-size:14px;background:var(--bg-primary,#fff);color:var(--text,#1e293b)}
+.note-tpl-star{cursor:pointer;font-size:20px;color:#ccc;transition:color .2s}
+.note-tpl-star.active{color:#f59e0b}
+.note-tpl-star:hover{color:#f59e0b}
+.note-tpl-counter{font-size:12px;color:var(--text-muted,#94a3b8);white-space:nowrap}
+.note-tpl-select{padding:5px 8px;border:1px solid var(--border,#e2e8f0);border-radius:6px;font-size:13px;background:var(--bg-primary,#fff);color:var(--text,#1e293b);max-width:200px}
+
+.note-tpl-body{flex:1;overflow-y:auto;padding:4px 2px;display:flex;flex-direction:column;gap:6px;min-height:200px}
+.note-tpl-section{position:relative;border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:8px 10px;background:var(--bg-primary,#fff);cursor:grab;transition:opacity .2s,box-shadow .2s}
+.note-tpl-section:active{cursor:grabbing}
+.note-tpl-section.dragging{opacity:.35;box-shadow:none}
+.note-tpl-section.drag-over-top{border-top:3px solid #3b82f6}
+.note-tpl-section.drag-over-bottom{border-bottom:3px solid #3b82f6}
+
+.note-tpl-section-handle{position:absolute;left:2px;top:50%;transform:translateY(-50%);color:var(--text-muted,#94a3b8);font-size:14px;cursor:grab;user-select:none;padding:4px 2px}
+.note-tpl-section-content{margin-left:18px}
+
+.note-tpl-text{min-height:48px;padding:8px 10px;border:1px dashed var(--border,#cbd5e1);border-radius:6px;font-size:13px;line-height:1.55;color:var(--text,#1e293b);outline:none;white-space:pre-wrap;word-wrap:break-word}
+.note-tpl-text:focus{border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+.note-tpl-text:empty::before{content:attr(data-placeholder);color:var(--text-muted,#94a3b8);font-style:italic}
+
+.note-tpl-marker{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;letter-spacing:.2px;user-select:none;pointer-events:auto}
+.note-tpl-marker[data-mtype="table"]{background:#dbeafe;color:#1e40af;border:1px solid #93c5fd}
+.note-tpl-marker[data-mtype="chart"]{background:#dcfce7;color:#166534;border:1px solid #86efac}
+.note-tpl-marker[data-mtype="list"]{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+.note-tpl-marker[data-mtype="footnote"]{background:#f3e8ff;color:#6b21a8;border:1px solid #d8b4fe}
+.note-tpl-marker[data-mtype="data"]{background:#ffedd5;color:#9a3412;border:1px solid #fdba74}
+
+.note-tpl-section-actions{position:absolute;right:6px;top:6px;display:flex;gap:4px;opacity:0;transition:opacity .2s}
+.note-tpl-section:hover .note-tpl-section-actions{opacity:1}
+.note-tpl-section-actions button{border:none;background:transparent;color:var(--text-muted,#94a3b8);cursor:pointer;font-size:14px;padding:2px 4px;border-radius:4px}
+.note-tpl-section-actions button:hover{background:var(--bg-secondary,#f1f5f9);color:#ef4444}
+
+.note-tpl-toolbar{display:flex;gap:6px;padding:6px 0;border-bottom:1px solid var(--border,#e2e8f0)}
+.note-tpl-toolbar button{border:1px solid var(--border,#e2e8f0);background:var(--bg-primary,#fff);color:var(--text,#1e293b);padding:4px 10px;border-radius:5px;font-size:12px;cursor:pointer;transition:background .15s}
+.note-tpl-toolbar button:hover{background:var(--bg-secondary,#f1f5f9)}
+.note-tpl-toolbar button.active{background:#3b82f6;color:#fff;border-color:#3b82f6}
+
+.note-tpl-add-bar{display:flex;gap:6px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--border,#e2e8f0)}
+.note-tpl-add-bar button{font-size:12px;padding:4px 10px;border:1px dashed var(--border,#cbd5e1);border-radius:16px;background:transparent;color:var(--text-muted,#64748b);cursor:pointer;transition:all .15s}
+.note-tpl-add-bar button:hover{border-color:#3b82f6;color:#3b82f6;background:rgba(59,130,246,.05)}
+
+.note-tpl-footer{display:flex;justify-content:space-between;align-items:center;padding:10px 0 0;border-top:1px solid var(--border,#e2e8f0);gap:8px}
+.note-tpl-footer .btn-group{display:flex;gap:6px}
+
+/* Dark mode overrides */
+[data-theme="dark"] .note-tpl-name{background:var(--bg-secondary,#0f172a);border-color:var(--border,#334155);color:var(--text,#e2e8f0)}
+[data-theme="dark"] .note-tpl-select{background:var(--bg-secondary,#0f172a);border-color:var(--border,#334155);color:var(--text,#e2e8f0)}
+[data-theme="dark"] .note-tpl-section{background:var(--bg-secondary,#1e293b);border-color:var(--border,#334155)}
+[data-theme="dark"] .note-tpl-text{border-color:var(--border,#475569);color:var(--text,#e2e8f0)}
+[data-theme="dark"] .note-tpl-text:focus{border-color:#60a5fa}
+[data-theme="dark"] .note-tpl-marker[data-mtype="table"]{background:#1e3a5f;color:#93c5fd;border-color:#2563eb}
+[data-theme="dark"] .note-tpl-marker[data-mtype="chart"]{background:#14532d;color:#86efac;border-color:#22c55e}
+[data-theme="dark"] .note-tpl-marker[data-mtype="list"]{background:#451a03;color:#fcd34d;border-color:#f59e0b}
+[data-theme="dark"] .note-tpl-marker[data-mtype="footnote"]{background:#3b0764;color:#d8b4fe;border-color:#a855f7}
+[data-theme="dark"] .note-tpl-marker[data-mtype="data"]{background:#431407;color:#fdba74;border-color:#f97316}
+[data-theme="dark"] .note-tpl-toolbar button{background:var(--bg-secondary,#0f172a);border-color:var(--border,#334155);color:var(--text,#e2e8f0)}
+[data-theme="dark"] .note-tpl-section-actions button:hover{background:var(--bg-primary,#0f172a)}

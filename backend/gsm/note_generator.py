@@ -140,6 +140,7 @@ def generate_note_docx(
     llm_overrides: Optional[Dict[str, str]] = None,
     table_data: Optional[Dict[str, List[List[str]]]] = None,
     selected_tables: Optional[List[str]] = None,
+    custom_template: Optional[Dict[str, Any]] = None,
 ) -> Path:
     """Generate a professional analytical note DOCX from the template."""
     from docxtpl import DocxTemplate
@@ -161,6 +162,9 @@ def generate_note_docx(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     tpl.save(str(output_path))
 
+    # Extract custom text overrides from user template
+    tpl_texts = _extract_template_texts(custom_template) if custom_template else {}
+
     # Post-processing with python-docx
     _post_process_docx(
         output_path,
@@ -172,6 +176,7 @@ def generate_note_docx(
         location_movement_list=location_movement_list,
         contacts_bullet_list=contacts_bullet_list,
         special_numbers_footnotes=special_numbers_footnotes,
+        tpl_texts=tpl_texts,
     )
 
     log.info("Generated GSM note: %s (%d bytes)", output_path.name, output_path.stat().st_size)
@@ -191,6 +196,7 @@ def _post_process_docx(
     location_movement_list: Optional[List[str]] = None,
     contacts_bullet_list: Optional[List[str]] = None,
     special_numbers_footnotes: Optional[List[str]] = None,
+    tpl_texts: Optional[Dict[str, str]] = None,
 ) -> None:
     """Insert tables, charts, texts, lists; fix formatting; add page numbers."""
     from docx import Document
@@ -212,7 +218,8 @@ def _post_process_docx(
 
     # 1. Insert anomaly intro text + table with Kategoria/Opis/Dane
     if anomaly_table_rows:
-        _insert_anomaly_section(doc, body, anomaly_table_rows)
+        anomaly_intro = (tpl_texts or {}).get("anomaly_intro", ANOMALY_INTRO_TEXT)
+        _insert_anomaly_section(doc, body, anomaly_table_rows, intro_text=anomaly_intro)
 
     # 2. Insert standard tables (stats, contacts, locations)
     if selected_tables and table_data:
@@ -255,7 +262,7 @@ def _post_process_docx(
 
     # 4. Insert chart images
     if chart_images:
-        _insert_chart_images(doc, body, chart_images)
+        _insert_chart_images(doc, body, chart_images, tpl_texts=tpl_texts)
 
     # 5. Fix formatting: consistent font, justified text, orphan prevention
     _fix_formatting(doc)
@@ -431,7 +438,7 @@ def _insert_bts_summary_sentence(doc, body, location_areas_list: Optional[List[s
 
 # ─── Anomaly section ────────────────────────────────────────────────────────
 
-def _insert_anomaly_section(doc, body, anomaly_rows: List[List[str]]) -> None:
+def _insert_anomaly_section(doc, body, anomaly_rows: List[List[str]], *, intro_text: Optional[str] = None) -> None:
     """Insert anomaly intro text and Kategoria/Opis/Dane table in section 6."""
     from docx.shared import Pt, RGBColor
     from docx.enum.table import WD_TABLE_ALIGNMENT
@@ -444,7 +451,8 @@ def _insert_anomaly_section(doc, body, anomaly_rows: List[List[str]]) -> None:
 
     # Intro text
     intro_p = _insert_paragraph_after(doc, body, insert_after)
-    run = intro_p.add_run(_fix_orphans(ANOMALY_INTRO_TEXT))
+    text = intro_text if intro_text else ANOMALY_INTRO_TEXT
+    run = intro_p.add_run(_fix_orphans(text))
     _style_run(run, FONT_SIZE_BODY)
     intro_p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
@@ -530,7 +538,7 @@ def _insert_tables(doc, body, table_data, selected_tables) -> None:
 
 # ─── Chart image insertion ───────────────────────────────────────────────────
 
-def _insert_chart_images(doc, body, chart_images: Dict[str, bytes]) -> None:
+def _insert_chart_images(doc, body, chart_images: Dict[str, bytes], *, tpl_texts: Optional[Dict[str, str]] = None) -> None:
     """Insert chart PNG images into DOCX after relevant sections."""
     from docx.shared import Mm
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -569,10 +577,15 @@ def _insert_chart_images(doc, body, chart_images: Dict[str, bytes]) -> None:
             _style_run(run, 11, bold=True)
             cursor = heading_p._element
 
-        # Pre-text
-        if chart_def.get("pre_text"):
+        # Pre-text (may be overridden by user template)
+        pre_text = chart_def.get("pre_text", "")
+        if tpl_texts and key == "top_contacts" and "contacts_graph" in tpl_texts:
+            pre_text = tpl_texts["contacts_graph"]
+        elif tpl_texts and key == "activity" and "activity_distribution" in tpl_texts:
+            pre_text = tpl_texts["activity_distribution"]
+        if pre_text:
             text_p = _insert_paragraph_after(doc, body, cursor)
-            run = text_p.add_run(_fix_orphans(chart_def["pre_text"]))
+            run = text_p.add_run(_fix_orphans(pre_text))
             _style_run(run, FONT_SIZE_BODY)
             text_p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             cursor = text_p._element
@@ -887,6 +900,61 @@ def _flatten_for_template(placeholders: Dict[str, Any]) -> Dict[str, Any]:
         else:
             context[key] = value
     return context
+
+
+def _extract_template_texts(custom_template: Dict[str, Any]) -> Dict[str, str]:
+    """Extract user-edited text blocks from a custom template.
+
+    Maps text sections to named overrides based on their position relative
+    to marker sections in the template.
+
+    Returns a dict like:
+      {
+        "anomaly_intro": "...",
+        "contacts_graph": "...",
+        "activity_distribution": "...",
+      }
+    """
+    texts: Dict[str, str] = {}
+    sections = custom_template.get("sections", [])
+
+    # Build mapping: text block ID → preceding/following marker keys
+    for i, sec in enumerate(sections):
+        if sec.get("type") != "text":
+            continue
+
+        content = sec.get("content", "").strip()
+        if not content:
+            continue
+
+        # Strip HTML tags for the DOCX (we get contenteditable HTML)
+        import re
+        clean = re.sub(r'<[^>]+>', '', content).strip()
+        if not clean:
+            continue
+
+        # Identify text block purpose by looking at surrounding markers
+        next_marker = None
+        for j in range(i + 1, len(sections)):
+            if sections[j].get("type") == "marker":
+                next_marker = sections[j].get("key", "")
+                break
+
+        prev_marker = None
+        for j in range(i - 1, -1, -1):
+            if sections[j].get("type") == "marker":
+                prev_marker = sections[j].get("key", "")
+                break
+
+        # Map to known text override keys
+        if next_marker == "table_anomalies" or prev_marker == "table_anomalies":
+            texts["anomaly_intro"] = clean
+        elif next_marker == "chart_top_contacts":
+            texts["contacts_graph"] = clean
+        elif next_marker == "chart_activity":
+            texts["activity_distribution"] = clean
+
+    return texts
 
 
 def _apply_llm_overrides(placeholders: Dict[str, Any], overrides: Dict[str, str]) -> None:

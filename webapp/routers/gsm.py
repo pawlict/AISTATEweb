@@ -2223,6 +2223,8 @@ async def gsm_note_generate(request: Request):
         except Exception:
             selected_tables = []
 
+        template_id = str(form.get("template_id", ""))
+
         # Collect chart images from form uploads
         chart_images: Dict[str, bytes] = {}
         for key in form:
@@ -2244,6 +2246,7 @@ async def gsm_note_generate(request: Request):
         model = payload.get("model", "")
         user_placeholders = payload.get("placeholders", {})
         selected_tables = payload.get("tables", [])
+        template_id = payload.get("template_id", "")
         chart_images = {}
 
         # Charts as base64 in JSON
@@ -2296,6 +2299,12 @@ async def gsm_note_generate(request: Request):
     except FileNotFoundError as e:
         return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
 
+    # Resolve user custom template (if selected)
+    custom_template = None
+    if template_id and template_id != "__builtin__":
+        from backend.gsm.note_templates import get_template
+        custom_template = get_template(str(data_dir), _TPL_USER_ID, template_id)
+
     # Build table data if tables selected
     table_data = build_table_data(gsm_data, placeholders=placeholders) if selected_tables else None
 
@@ -2316,6 +2325,7 @@ async def gsm_note_generate(request: Request):
             llm_overrides=llm_overrides,
             table_data=table_data,
             selected_tables=selected_tables if selected_tables else None,
+            custom_template=custom_template,
         )
     except Exception as e:
         log.error("Note DOCX generation failed: %s", e, exc_info=True)
@@ -2589,3 +2599,97 @@ async def gsm_parser_restore(backup_id: str):
     updater = ParserUpdater()
     result = await run_in_threadpool(updater.restore_backup, backup_id)
     return JSONResponse({"status": "ok", **result})
+
+
+# ─── Note template endpoints ───────────────────────────────────────────────
+
+_TPL_USER_ID = "_default"  # single-user mode, no auth
+
+
+@router.get("/api/gsm/note/templates")
+async def gsm_note_templates_list():
+    """List user templates (summary) + built-in template."""
+    from backend.gsm.note_templates import list_templates, get_builtin_template
+
+    user_tpls = list_templates(str(_data_dir()), _TPL_USER_ID)
+    builtin = get_builtin_template()
+    builtin_summary = {
+        "id": builtin["id"],
+        "name": builtin["name"],
+        "builtin": True,
+        "default": not any(t.get("default") for t in user_tpls),
+        "section_count": len(builtin["sections"]),
+    }
+    return JSONResponse({"status": "ok", "templates": [builtin_summary] + user_tpls})
+
+
+@router.get("/api/gsm/note/templates/builtin")
+async def gsm_note_templates_builtin():
+    """Return the full built-in template (with sections)."""
+    from backend.gsm.note_templates import get_builtin_template, MARKER_CATALOGUE
+
+    tpl = get_builtin_template()
+    return JSONResponse({
+        "status": "ok",
+        "template": tpl,
+        "marker_catalogue": MARKER_CATALOGUE,
+    })
+
+
+@router.get("/api/gsm/note/templates/{tpl_id}")
+async def gsm_note_template_get(tpl_id: str):
+    """Get a single template with full sections."""
+    from backend.gsm.note_templates import get_template, MARKER_CATALOGUE
+
+    tpl = get_template(str(_data_dir()), _TPL_USER_ID, tpl_id)
+    if tpl is None:
+        return JSONResponse({"status": "error", "message": "Szablon nie znaleziony"}, status_code=404)
+    return JSONResponse({
+        "status": "ok",
+        "template": tpl,
+        "marker_catalogue": MARKER_CATALOGUE,
+    })
+
+
+@router.post("/api/gsm/note/templates")
+async def gsm_note_template_save(request: Request):
+    """Create or update a template."""
+    from backend.gsm.note_templates import save_template
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid JSON"}, status_code=400)
+
+    tpl_data = body.get("template", body)
+    try:
+        saved = save_template(str(_data_dir()), _TPL_USER_ID, tpl_data)
+        return JSONResponse({"status": "ok", "template": saved})
+    except ValueError as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=400)
+
+
+@router.delete("/api/gsm/note/templates/{tpl_id}")
+async def gsm_note_template_delete(tpl_id: str):
+    """Delete a user template."""
+    from backend.gsm.note_templates import delete_template
+
+    deleted = delete_template(str(_data_dir()), _TPL_USER_ID, tpl_id)
+    if not deleted:
+        return JSONResponse({"status": "error", "message": "Szablon nie znaleziony"}, status_code=404)
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/api/gsm/note/templates/default")
+async def gsm_note_template_set_default(request: Request):
+    """Set a template as default."""
+    from backend.gsm.note_templates import set_default
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid JSON"}, status_code=400)
+
+    tpl_id = body.get("template_id", "")
+    set_default(str(_data_dir()), _TPL_USER_ID, tpl_id)
+    return JSONResponse({"status": "ok"})
