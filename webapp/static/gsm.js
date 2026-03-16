@@ -3386,21 +3386,21 @@
 
     const hasColFilter = _activeFilterCount() > 0;
     const hasSearch = !!(St._recordsSearch);
+    const srcTotal = _currentSourceTotal || totalCount || 0;
 
     if (!records || !records.length) {
       el.innerHTML = '<div class="small muted">Brak rekordów.</div>';
       const countLabel = QS("#gsm_records_count");
-      if (countLabel) countLabel.textContent = (hasColFilter || hasSearch) ? "0 (filtr)" : "";
+      if (countLabel) countLabel.textContent = (hasColFilter || hasSearch) ? `Wynik: 0 z ${_fmt(srcTotal)}` : `Łącznie: 0`;
       return;
     }
 
     const countLabel = QS("#gsm_records_count");
     if (countLabel) {
       if (hasColFilter || hasSearch) {
-        const suffix = hasSearch && hasColFilter ? "szukaj + filtr" : hasSearch ? "szukaj" : "filtr kolumn";
-        countLabel.textContent = `${_fmt(records.length)} (${suffix})`;
+        countLabel.textContent = `Wynik: ${_fmt(records.length)} z ${_fmt(srcTotal)}`;
       } else {
-        countLabel.textContent = truncated ? `${records.length} z ${_fmt(totalCount)}` : _fmt(totalCount);
+        countLabel.textContent = truncated ? `Łącznie: ${records.length} z ${_fmt(totalCount)}` : `Łącznie: ${_fmt(totalCount)}`;
       }
     }
 
