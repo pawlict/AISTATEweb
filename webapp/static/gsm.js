@@ -9895,6 +9895,7 @@
     // Load full template + marker catalogue
     let tpl = null;
     let markerCatalogue = [];
+    let fieldCatalogue = [];
     const tplId = initialTplId || "__builtin__";
 
     try {
@@ -9906,6 +9907,7 @@
       if (json.status === "ok") {
         tpl = json.template;
         markerCatalogue = json.marker_catalogue || [];
+        fieldCatalogue = json.field_catalogue || [];
       }
     } catch (e) {
       console.warn("[GSM] Failed to load template:", e);
@@ -9955,6 +9957,11 @@
           <div class="note-tpl-toolbar">
             <button data-cmd="bold" title="Pogrubienie"><b>B</b></button>
             <button data-cmd="italic" title="Kursywa"><i>I</i></button>
+            <span style="width:1px;height:18px;background:var(--border-color,#ccc);margin:0 4px;"></span>
+            <span class="note-tpl-field-picker-wrap" style="position:relative;">
+              <button id="tpled_field_btn" class="note-tpl-field-btn" title="Wstaw pole danych do tekstu">{{ }} Wstaw pole ▾</button>
+              <div id="tpled_field_dropdown" class="note-tpl-field-dropdown" style="display:none;"></div>
+            </span>
           </div>
           <div class="note-tpl-body" id="tpled_body"></div>
           <div class="note-tpl-add-bar" id="tpled_add_bar">
@@ -9990,6 +9997,24 @@
           document.execCommand(btn.dataset.cmd, false, null);
         };
       });
+
+      // Field picker dropdown
+      const fieldBtn = dlg.querySelector("#tpled_field_btn");
+      const fieldDrop = dlg.querySelector("#tpled_field_dropdown");
+      if (fieldBtn && fieldDrop) {
+        _buildFieldDropdown(fieldDrop, fieldCatalogue);
+        fieldBtn.onclick = (e) => {
+          e.stopPropagation();
+          const open = fieldDrop.style.display !== "none";
+          fieldDrop.style.display = open ? "none" : "";
+        };
+        // Close on outside click
+        dlg.addEventListener("click", (e) => {
+          if (!e.target.closest(".note-tpl-field-picker-wrap")) {
+            fieldDrop.style.display = "none";
+          }
+        });
+      }
 
       // Star (default toggle)
       dlg.querySelector("#tpled_star").onclick = async () => {
@@ -10216,6 +10241,92 @@
     _renderEditor();
     document.body.appendChild(dlg);
     dlg.showModal();
+  }
+
+  /* ── Field picker: grouped dropdown for inserting {{ placeholders }} ────── */
+
+  function _buildFieldDropdown(container, catalogue) {
+    if (!catalogue || !catalogue.length) {
+      container.innerHTML = '<div style="padding:8px 12px;color:var(--text-secondary,#888);font-size:12px;">Brak pól</div>';
+      return;
+    }
+    // Group fields by category
+    const groups = [];
+    const groupMap = {};
+    for (const f of catalogue) {
+      const g = f.group || "Inne";
+      if (!groupMap[g]) {
+        groupMap[g] = [];
+        groups.push(g);
+      }
+      groupMap[g].push(f);
+    }
+
+    let html = '<div class="note-tpl-field-list">';
+    for (const gName of groups) {
+      html += `<div class="note-tpl-field-group-label">${_escHtml(gName)}</div>`;
+      for (const f of groupMap[gName]) {
+        html += `<button class="note-tpl-field-item" data-field="${_escHtml(f.key)}" title="${_escHtml(f.desc || "")}">`;
+        html += `<span class="note-tpl-field-item-label">${_escHtml(f.label)}</span>`;
+        html += `<code class="note-tpl-field-item-key">{{ ${_escHtml(f.key)} }}</code>`;
+        html += `</button>`;
+      }
+    }
+    html += '</div>';
+    container.innerHTML = html;
+
+    // Click handler: insert field at cursor in last focused text block
+    container.querySelectorAll(".note-tpl-field-item").forEach(btn => {
+      btn.onmousedown = (e) => {
+        e.preventDefault();  // keep focus in contenteditable
+      };
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const fieldKey = btn.dataset.field;
+        _insertFieldAtCursor(container.closest("dialog"), `{{ ${fieldKey} }}`);
+        container.style.display = "none";
+      };
+    });
+  }
+
+  function _insertFieldAtCursor(dlg, text) {
+    // Try to insert at current selection (if inside a contenteditable text block)
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const ancestor = range.commonAncestorContainer;
+      // Check if the cursor is inside a .note-tpl-text contenteditable
+      const textBlock = ancestor.nodeType === 1
+        ? ancestor.closest(".note-tpl-text")
+        : ancestor.parentElement?.closest(".note-tpl-text");
+      if (textBlock && dlg && dlg.contains(textBlock)) {
+        range.deleteContents();
+        range.insertNode(document.createTextNode(text));
+        // Move cursor after inserted text
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+    }
+
+    // Fallback: find the last text block in the editor and append there
+    if (dlg) {
+      const textBlocks = dlg.querySelectorAll(".note-tpl-text[contenteditable]");
+      if (textBlocks.length > 0) {
+        const last = textBlocks[textBlocks.length - 1];
+        last.focus();
+        // Append at end
+        last.innerHTML += text;
+        // Move cursor to end
+        const r = document.createRange();
+        r.selectNodeContents(last);
+        r.collapse(false);
+        const s = window.getSelection();
+        s.removeAllRanges();
+        s.addRange(r);
+      }
+    }
   }
 
   function _showNoteDownload(note) {
