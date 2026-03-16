@@ -3386,21 +3386,21 @@
 
     const hasColFilter = _activeFilterCount() > 0;
     const hasSearch = !!(St._recordsSearch);
+    const srcTotal = _currentSourceTotal || totalCount || 0;
 
     if (!records || !records.length) {
       el.innerHTML = '<div class="small muted">Brak rekordów.</div>';
       const countLabel = QS("#gsm_records_count");
-      if (countLabel) countLabel.textContent = (hasColFilter || hasSearch) ? "0 (filtr)" : "";
+      if (countLabel) countLabel.textContent = (hasColFilter || hasSearch) ? `Wynik: 0 z ${_fmt(srcTotal)}` : `Łącznie: 0`;
       return;
     }
 
     const countLabel = QS("#gsm_records_count");
     if (countLabel) {
       if (hasColFilter || hasSearch) {
-        const suffix = hasSearch && hasColFilter ? "szukaj + filtr" : hasSearch ? "szukaj" : "filtr kolumn";
-        countLabel.textContent = `${_fmt(records.length)} (${suffix})`;
+        countLabel.textContent = `Wynik: ${_fmt(records.length)} z ${_fmt(srcTotal)}`;
       } else {
-        countLabel.textContent = truncated ? `${records.length} z ${_fmt(totalCount)}` : _fmt(totalCount);
+        countLabel.textContent = truncated ? `Łącznie: ${records.length} z ${_fmt(totalCount)}` : `Łącznie: ${_fmt(totalCount)}`;
       }
     }
 
@@ -4144,6 +4144,268 @@
       const hasNote = nm.hasNote("gsm_contact", "number", num);
       marker.style.opacity = hasNote ? "1" : "0";
     });
+  }
+
+  /* ── Panel search — global project search ── */
+
+  let _panelSearchTimer = null;
+
+  function _initPanelSearch() {
+    const input = QS("#gsm_panel_search");
+    if (!input) return;
+    input.addEventListener("input", () => {
+      clearTimeout(_panelSearchTimer);
+      _panelSearchTimer = setTimeout(() => _doPanelSearch(input.value.trim()), 200);
+    });
+  }
+
+  function _doPanelSearch(query) {
+    const container = QS("#gsm_panel_search_results");
+    if (!container) return;
+
+    if (!query || query.length < 2) {
+      container.style.display = "none";
+      container.innerHTML = "";
+      return;
+    }
+
+    const q = query.toLowerCase();
+    const results = [];
+    const MAX = 100;
+
+    // 1. Records
+    const records = St.lastResult ? St.lastResult.records : [];
+    for (let i = 0; i < records.length && results.length < MAX; i++) {
+      const r = records[i];
+      const fields = [r.callee, r.caller, r.record_type, r.date, r.time, r.location, r.network, r.imei].filter(Boolean);
+      const match = fields.find(f => String(f).toLowerCase().includes(q));
+      if (match) {
+        results.push({
+          icon: "/static/icons/komunikacja/phone.svg",
+          text: `${r.callee || "—"} · ${r.record_type || ""} · ${r.date || ""} ${r.time || ""}`,
+          loc: `Rekord #${r.raw_row != null ? r.raw_row : i}`,
+          action: "record",
+          index: i,
+          raw_row: r.raw_row,
+          matchField: match,
+        });
+      }
+    }
+
+    // 2. Top contacts
+    const analysis = St.lastResult ? St.lastResult.analysis : null;
+    if (analysis && analysis.top_contacts) {
+      for (const c of analysis.top_contacts) {
+        if (results.length >= MAX) break;
+        const idInfo = _idLookup(c.number);
+        const fields = [c.number, idInfo ? idInfo.label : ""];
+        if (fields.some(f => f.toLowerCase().includes(q))) {
+          results.push({
+            icon: "/static/icons/uzytkownicy/user.svg",
+            text: `${c.number}${idInfo ? " · " + idInfo.label : ""} · ${c.total_interactions || 0} interakcji`,
+            loc: "Top kontakty",
+            action: "contact",
+            number: c.number,
+            matchField: c.number,
+          });
+        }
+      }
+    }
+
+    // 3. Devices
+    if (analysis && analysis.devices) {
+      for (const d of analysis.devices) {
+        if (results.length >= MAX) break;
+        const fields = [d.imei, d.imsi, d.device_name, d.device_type].filter(Boolean);
+        if (fields.some(f => String(f).toLowerCase().includes(q))) {
+          results.push({
+            icon: "/static/icons/komunikacja/phone.svg",
+            text: `IMEI: ${d.imei || "—"} · ${d.device_name || ""}`,
+            loc: "Urządzenia",
+            action: "device",
+            imei: d.imei,
+            matchField: fields.find(f => String(f).toLowerCase().includes(q)),
+          });
+        }
+      }
+    }
+
+    // 4. Anomalies
+    if (analysis && analysis.anomalies) {
+      for (const a of analysis.anomalies) {
+        if (results.length >= MAX) break;
+        const desc = a.description || "";
+        const type = a.type || "";
+        if (desc.toLowerCase().includes(q) || type.toLowerCase().includes(q)) {
+          results.push({
+            icon: "/static/icons/status/warning.svg",
+            text: desc.slice(0, 80),
+            loc: "Anomalia",
+            action: "anomaly",
+            type: a.type,
+            matchField: desc,
+          });
+        }
+      }
+    }
+
+    // 5. Special numbers
+    if (St._snAllData || window._snAllData) {
+      const specials = _snAllData || [];
+      for (const s of specials) {
+        if (results.length >= MAX) break;
+        const fields = [s.number, s.label, s.category].filter(Boolean);
+        if (fields.some(f => f.toLowerCase().includes(q))) {
+          results.push({
+            icon: "/static/icons/komunikacja/phone.svg",
+            text: `${s.number} · ${s.label || ""} · ${_SN_CAT_LABELS[s.category] || s.category}`,
+            loc: "Nr specjalny",
+            action: "special",
+            number: s.number,
+            matchField: fields.find(f => f.toLowerCase().includes(q)),
+          });
+        }
+      }
+    }
+
+    // 6. Notes
+    const nm = window._gsmNotesMgr;
+    if (nm && nm.notes && nm.notes.items) {
+      for (const note of nm.notes.items) {
+        if (results.length >= MAX) break;
+        const fields = [note.text, note.label].filter(Boolean);
+        if (fields.some(f => f.toLowerCase().includes(q))) {
+          results.push({
+            icon: "/static/icons/dokumenty/notes.svg",
+            text: `${note.label || "Notatka"}: ${(note.text || "").slice(0, 60)}`,
+            loc: "Notatka",
+            action: "note",
+            noteId: note.id,
+            ref: note.ref,
+            matchField: fields.find(f => f.toLowerCase().includes(q)),
+          });
+        }
+      }
+      // Also search global note
+      if (nm.notes.global && nm.notes.global.toLowerCase().includes(q)) {
+        results.push({
+          icon: "/static/icons/inne/pin.svg",
+          text: nm.notes.global.slice(0, 80),
+          loc: "Notatka globalna",
+          action: "global_note",
+          matchField: nm.notes.global,
+        });
+      }
+    }
+
+    // Render results
+    _renderPanelSearchResults(container, results, q);
+  }
+
+  function _highlightMatch(text, query) {
+    if (!text || !query) return _escHtml(text || "");
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx < 0) return _escHtml(text);
+    const before = text.slice(0, idx);
+    const match = text.slice(idx, idx + query.length);
+    const after = text.slice(idx + query.length);
+    return _escHtml(before) + "<mark>" + _escHtml(match) + "</mark>" + _escHtml(after);
+  }
+
+  function _renderPanelSearchResults(container, results, query) {
+    if (!results.length) {
+      container.style.display = "";
+      container.innerHTML = `<div class="analyst-search-header"><span>Brak wyników</span></div>`;
+      return;
+    }
+    container.style.display = "";
+    let html = `<div class="analyst-search-header"><span>Łącznie: ${results.length} wyników</span></div>`;
+    for (const r of results) {
+      html += `<div class="analyst-search-item" data-action='${_escAttr(JSON.stringify({ action: r.action, index: r.index, raw_row: r.raw_row, number: r.number, imei: r.imei, type: r.type, noteId: r.noteId, ref: r.ref }))}'>`;
+      html += `<img class="analyst-search-icon" src="${r.icon}" alt="" width="16" height="16" draggable="false" onerror="this.style.display='none'">`;
+      html += `<span class="analyst-search-text">${_highlightMatch(r.text, query)}</span>`;
+      html += `<span class="analyst-search-loc">${_escHtml(r.loc)}</span>`;
+      html += `</div>`;
+    }
+    container.innerHTML = html;
+
+    // Bind clicks
+    container.querySelectorAll(".analyst-search-item").forEach(el => {
+      el.addEventListener("click", () => {
+        try {
+          const data = JSON.parse(el.dataset.action);
+          _navigateToSearchResult(data);
+        } catch (e) { /* ignore */ }
+      });
+    });
+  }
+
+  function _navigateToSearchResult(data) {
+    switch (data.action) {
+      case "record": {
+        // Scroll to records card, highlight that record
+        const records = St.lastResult ? St.lastResult.records : [];
+        const idx = data.index;
+        if (idx != null && records[idx]) {
+          const rec = records[idx];
+          _setRecordsFilter(`Szukaj: rekord #${data.raw_row != null ? data.raw_row : idx}`, () => {
+            _clearRecordsFilter();
+            if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+          });
+          _renderRecords([rec], false, 1);
+        }
+        const recCard = QS("#gsm_records_card");
+        if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+      case "contact": {
+        // Filter records to this contact and scroll
+        const records = St.lastResult ? St.lastResult.records : [];
+        const filtered = records.filter(r => r.callee === data.number || r.caller === data.number);
+        _setRecordsFilter(`Szukaj: ${data.number} — ${filtered.length} rek.`, () => {
+          _clearRecordsFilter();
+          if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+        });
+        _renderRecords(filtered, false, filtered.length);
+        const recCard = QS("#gsm_records_card");
+        if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+      case "device": {
+        const analysisCard = QS("#gsm_analysis_card");
+        if (analysisCard) analysisCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+      case "anomaly": {
+        const anomCard = QS("#gsm_anomalies_card");
+        if (anomCard) anomCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+      case "special": {
+        const snCard = QS("#gsm_sn_card");
+        if (snCard) snCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        // Fill the search box in special numbers
+        const snInput = QS("#gsm_sn_text_filter");
+        if (snInput) {
+          snInput.value = data.number || "";
+          snInput.dispatchEvent(new Event("input"));
+        }
+        break;
+      }
+      case "note": {
+        // Navigate via notes manager if ref exists
+        if (data.ref && window._gsmNotesMgr && window._gsmNotesMgr.onNavigate) {
+          window._gsmNotesMgr.onNavigate(data.ref);
+        }
+        break;
+      }
+      case "global_note": {
+        // Focus global note textarea
+        const ta = QS("#gsm_analyst_global_note");
+        if (ta) ta.focus();
+        break;
+      }
+    }
   }
 
   function _buildActivityContacts(chartId, typeFilter, slotLabel) {
@@ -11210,6 +11472,9 @@
         });
         await window._gsmNotesMgr.init();
       }
+
+      // Initialize panel search
+      _initPanelSearch();
 
       // Auto-load saved GSM data from the current project
       try {
