@@ -2112,7 +2112,8 @@ function _trSyncSaveToOriginalBtn() {
     if (pill) pill.style.display = show ? '' : 'none';
     // Update icon and checkbox value to match the uploaded file type
     if (show && pill) {
-        var iconMap = {pptx: 'doc_pptx', docx: 'doc_docx', doc: 'doc_word', pdf: 'doc_pdf'};
+        // PDF and DOC are converted to DOCX — show DOCX icon for them
+        var iconMap = {pptx: 'doc_pptx', docx: 'doc_docx', doc: 'doc_docx', pdf: 'doc_docx'};
         var ico = _byId('save_to_original_icon');
         if (ico) {
             ico.src = '/static/icons/dokumenty/' + (iconMap[extLower] || 'doc_pptx') + '.svg';
