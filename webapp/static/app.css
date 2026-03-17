@@ -2231,8 +2231,35 @@ button.pill-icon:hover{
 .chat-input-card{padding:12px}
 .chat-input-row{display:flex; gap:8px; align-items:flex-end}
 .chat-input{
-  flex:1; min-height:42px; max-height:200px; resize:none;
+  flex:1; min-height:126px; max-height:500px; resize:none;
   border-radius:14px; padding:10px 14px;
+}
+/* File attachment area */
+.chat-attach-btn{
+  height:42px; min-width:42px; display:flex; align-items:center; justify-content:center;
+  border-radius:14px; cursor:pointer; font-size:20px; flex-shrink:0;
+}
+.chat-attach-preview{
+  display:flex; flex-wrap:wrap; gap:6px; padding:0 4px 8px;
+}
+.chat-attach-chip{
+  display:inline-flex; align-items:center; gap:4px;
+  background:var(--bg-2,#e2e8f0); color:var(--fg,#1e293b);
+  border-radius:8px; padding:4px 10px; font-size:12px; max-width:220px;
+}
+.chat-attach-chip img{
+  width:32px; height:32px; object-fit:cover; border-radius:4px;
+}
+.chat-attach-chip .chip-name{
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:140px;
+}
+.chat-attach-chip .chip-remove{
+  cursor:pointer; opacity:0.6; font-size:14px; margin-left:2px;
+}
+.chat-attach-chip .chip-remove:hover{opacity:1}
+.chat-input-card.drag-over{
+  outline:2px dashed var(--accent,#3b82f6); outline-offset:-2px;
+  background:rgba(59,130,246,0.06);
 }
 .chat-send-btn, .chat-stop-btn{
   height:42px; min-width:42px;

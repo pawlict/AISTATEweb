@@ -166,7 +166,7 @@ class OllamaClient:
 
         return {"status": "pulled", "model": model, "last": last}
 
-    async def chat(self, model: str, messages: List[Dict[str, str]], *, format: Optional[str] = None, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def chat(self, model: str, messages: List[Dict[str, Any]], *, format: Optional[str] = None, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"model": model, "messages": messages, "stream": False}
         if format:
             payload["format"] = format
@@ -174,7 +174,7 @@ class OllamaClient:
             payload["options"] = options
         return await self._request_json("POST", "/api/chat", payload, timeout=None)
 
-    async def stream_chat(self, model: str, messages: List[Dict[str, str]], *, options: Optional[Dict[str, Any]] = None) -> AsyncGenerator[str, None]:
+    async def stream_chat(self, model: str, messages: List[Dict[str, Any]], *, options: Optional[Dict[str, Any]] = None) -> AsyncGenerator[str, None]:
         payload: Dict[str, Any] = {"model": model, "messages": messages, "stream": True}
         if options:
             payload["options"] = options

@@ -60,9 +60,19 @@
         </div>
       </div>
 
-      <div class="card chat-input-card">
+      <div class="card chat-input-card" id="chat_input_card">
+        <div class="chat-attach-preview" id="chat_attach_preview" style="display:none"></div>
         <div class="chat-input-row">
-          <textarea class="input chat-input" id="chat_input" rows="2"
+          <button class="btn secondary chat-attach-btn" id="chat_attach_btn"
+                  title="Załącz plik" data-i18n-title="chat.attach_file">
+            <svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:middle">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"
+                    stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <input type="file" id="chat_file_input" multiple style="display:none"
+                 accept=".txt,.md,.pdf,.docx,.xlsx,.pptx,.csv,.json,.xml,.png,.jpg,.jpeg,.gif,.webp">
+          <textarea class="input chat-input" id="chat_input" rows="6"
                     placeholder="Napisz wiadomość…"
                     data-i18n-placeholder="chat.input_placeholder"></textarea>
           <button class="btn chat-send-btn" id="chat_send_btn" data-i18n-title="chat.send">

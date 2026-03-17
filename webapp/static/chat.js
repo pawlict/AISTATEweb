@@ -15,9 +15,15 @@
 
   // ---------- State ----------
   let _model = "";
-  let _messages = []; // {role, content}
+  let _messages = []; // {role, content} or {role, content, images}
   let _streaming = false;
   let _abortCtrl = null;
+
+  // File attachments pending send
+  let _attachedFiles = []; // [{file, type:'image'|'document', base64?, extractedText?}]
+  const _IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+  const _DOC_EXTS = [".txt", ".md", ".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".json", ".xml"];
+  const _MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
   // Conversation history (in-memory, persisted to localStorage)
   const STORAGE_KEY = "aistate_chat_history";
@@ -105,7 +111,7 @@
       // Auto-resize
       input.addEventListener("input", () => {
         input.style.height = "auto";
-        input.style.height = Math.min(input.scrollHeight, 200) + "px";
+        input.style.height = Math.min(input.scrollHeight, 500) + "px";
       });
     }
 
@@ -116,6 +122,150 @@
         tempVal.textContent = tempSlider.value;
       });
     }
+
+    // File attachment
+    const attachBtn = $id("chat_attach_btn");
+    const fileInput = $id("chat_file_input");
+    if (attachBtn && fileInput) {
+      attachBtn.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files) _addFiles(Array.from(fileInput.files));
+        fileInput.value = "";
+      });
+    }
+
+    // Drag-and-drop on input card
+    const inputCard = $id("chat_input_card");
+    if (inputCard) {
+      inputCard.addEventListener("dragover", (e) => { e.preventDefault(); inputCard.classList.add("drag-over"); });
+      inputCard.addEventListener("dragleave", () => inputCard.classList.remove("drag-over"));
+      inputCard.addEventListener("drop", (e) => {
+        e.preventDefault();
+        inputCard.classList.remove("drag-over");
+        if (e.dataTransfer && e.dataTransfer.files.length) {
+          _addFiles(Array.from(e.dataTransfer.files));
+        }
+      });
+    }
+  }
+
+  // ---------- File attachments ----------
+  function _getFileExt(name) {
+    var dot = name.lastIndexOf(".");
+    return dot >= 0 ? name.substring(dot).toLowerCase() : "";
+  }
+
+  function _addFiles(files) {
+    for (var f of files) {
+      if (f.size > _MAX_FILE_SIZE) {
+        showToast(_t("chat.file_too_large") + " (" + f.name + ")", "warning");
+        continue;
+      }
+      var ext = _getFileExt(f.name);
+      if (_IMAGE_EXTS.indexOf(ext) >= 0) {
+        _attachedFiles.push({ file: f, type: "image", base64: null });
+      } else if (_DOC_EXTS.indexOf(ext) >= 0) {
+        _attachedFiles.push({ file: f, type: "document", extractedText: null });
+      } else {
+        showToast(_t("chat.unsupported_file") + " (" + ext + ")", "warning");
+        continue;
+      }
+    }
+    _renderAttachPreview();
+  }
+
+  function _removeAttach(idx) {
+    _attachedFiles.splice(idx, 1);
+    _renderAttachPreview();
+  }
+
+  function _renderAttachPreview() {
+    var container = $id("chat_attach_preview");
+    if (!container) return;
+    if (_attachedFiles.length === 0) {
+      container.style.display = "none";
+      container.innerHTML = "";
+      return;
+    }
+    container.style.display = "";
+    container.innerHTML = "";
+    _attachedFiles.forEach(function (af, idx) {
+      var chip = document.createElement("div");
+      chip.className = "chat-attach-chip";
+
+      if (af.type === "image") {
+        var img = document.createElement("img");
+        img.src = URL.createObjectURL(af.file);
+        chip.appendChild(img);
+      } else {
+        var icon = document.createElement("span");
+        icon.textContent = "\uD83D\uDCC4"; // 📄
+        icon.style.fontSize = "18px";
+        chip.appendChild(icon);
+      }
+
+      var nameSpan = document.createElement("span");
+      nameSpan.className = "chip-name";
+      nameSpan.textContent = af.file.name;
+      nameSpan.title = af.file.name;
+      chip.appendChild(nameSpan);
+
+      var removeBtn = document.createElement("span");
+      removeBtn.className = "chip-remove";
+      removeBtn.textContent = "\u00D7";
+      removeBtn.addEventListener("click", function () { _removeAttach(idx); });
+      chip.appendChild(removeBtn);
+
+      container.appendChild(chip);
+    });
+  }
+
+  function _fileToBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        // result is "data:<mime>;base64,<data>" — extract just the base64 part
+        var result = reader.result || "";
+        var comma = result.indexOf(",");
+        resolve(comma >= 0 ? result.substring(comma + 1) : result);
+      };
+      reader.onerror = function () { reject(new Error("Failed to read file")); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function _extractDocText(file) {
+    var formData = new FormData();
+    formData.append("file", file);
+    var resp = await fetch("/api/chat/extract-file", { method: "POST", body: formData });
+    if (!resp.ok) {
+      var err = {};
+      try { err = await resp.json(); } catch (_) {}
+      throw new Error(err.detail || "Extract failed: HTTP " + resp.status);
+    }
+    var data = await resp.json();
+    return data.text || "";
+  }
+
+  /** Prepare attachments: convert images to base64, extract text from docs */
+  async function _prepareAttachments() {
+    var images = [];
+    var docTexts = [];
+
+    for (var af of _attachedFiles) {
+      if (af.type === "image") {
+        if (!af.base64) af.base64 = await _fileToBase64(af.file);
+        images.push(af.base64);
+      } else {
+        if (!af.extractedText) {
+          af.extractedText = await _extractDocText(af.file);
+        }
+        if (af.extractedText) {
+          docTexts.push("--- " + af.file.name + " ---\n" + af.extractedText);
+        }
+      }
+    }
+    return { images: images, docTexts: docTexts };
   }
 
   // ---------- Send message ----------
@@ -127,7 +277,8 @@
 
     const input = $id("chat_input");
     const text = (input ? input.value : "").trim();
-    if (!text) return;
+    const hasFiles = _attachedFiles.length > 0;
+    if (!text && !hasFiles) return;
 
     const sel = $id("chat_model");
     _model = sel ? sel.value : "";
@@ -136,13 +287,55 @@
       return;
     }
 
-    // Add user message
-    _messages.push({ role: "user", content: text });
-    _renderMessage("user", text);
+    // Prepare file attachments (images → base64, docs → extract text)
+    let fileImages = [];
+    let fileDocTexts = [];
+    if (hasFiles) {
+      try {
+        const prepared = await _prepareAttachments();
+        fileImages = prepared.images;
+        fileDocTexts = prepared.docTexts;
+      } catch (e) {
+        showToast(_t("chat.file_process_error") + ": " + (e.message || e), "error");
+        return;
+      }
+    }
+
+    // Build user content: merge typed text + extracted document text
+    let userContent = text;
+    if (fileDocTexts.length > 0) {
+      const docBlock = fileDocTexts.join("\n\n");
+      userContent = userContent
+        ? userContent + "\n\n" + docBlock
+        : docBlock;
+    }
+
+    if (!userContent && fileImages.length === 0) return;
+
+    // Build the message object
+    const userMsg = { role: "user", content: userContent };
+    if (fileImages.length > 0) {
+      userMsg.images = fileImages;
+    }
+
+    // Build display text showing file names
+    let displayText = text;
+    if (_attachedFiles.length > 0) {
+      const fileNames = _attachedFiles.map(function (af) { return af.file.name; });
+      const badge = "\uD83D\uDCCE " + fileNames.join(", ");
+      displayText = displayText ? badge + "\n\n" + displayText : badge;
+    }
+
+    _messages.push(userMsg);
+    _renderMessage("user", displayText);
+
+    // Clear input + attachments
     if (input) {
       input.value = "";
       input.style.height = "auto";
     }
+    _attachedFiles = [];
+    _renderAttachPreview();
 
     // Hide welcome
     const welcome = $id("chat_welcome");
@@ -602,6 +795,10 @@
       "chat.untitled": "Bez tytu\u0142u",
       "chat.delete": "Usu\u0144",
       "chat.queued": "\u23F3 W kolejce GPU\u2026",
+      "chat.file_too_large": "Plik zbyt du\u017cy (max 20 MB)",
+      "chat.unsupported_file": "Nieobs\u0142ugiwany format",
+      "chat.file_process_error": "B\u0142\u0105d przetwarzania pliku",
+      "chat.attach_file": "Za\u0142\u0105cz plik",
     };
     return defaults[key] || key;
   }
