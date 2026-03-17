@@ -22,7 +22,8 @@ let NLLB_INSTALLED = { fast: [], accurate: [] };
 // Whisper 2-letter language code → NLLB source_lang dropdown value
 const WHISPER_TO_NLLB = {
     pl: 'polish', en: 'english', ru: 'russian',
-    be: 'belarusian', uk: 'ukrainian', zh: 'chinese'
+    be: 'belarusian', uk: 'ukrainian', zh: 'chinese',
+    ko: 'korean'
 };
 
 function _byId(id){ return document.getElementById(id); }
@@ -1359,7 +1360,18 @@ async function _ttsSpeak(lang, source, triggerBtn) {
 
     const pick = _ttsPickVoice(lang);
     if (!pick) {
-        showToast(trFmt('translation.tts.no_engine',{lang},'TTS: brak zainstalowanego silnika dla języka „{lang}". Zainstaluj silnik w Ustawieniach TTS.'), 'warning');
+        // Distinguish: language not in voice map at all vs engines not installed
+        var langEntry = _ttsVoiceMap ? _ttsVoiceMap[lang] : null;
+        if (!langEntry) {
+            showToast(trFmt('translation.tts.lang_unsupported',{lang},
+                'TTS: język „{lang}" nie jest obsługiwany przez żaden silnik TTS.'), 'warning');
+        } else if (!_ttsHasAnyEngine()) {
+            showToast(trFmt('translation.tts.no_engine_installed',{},
+                'TTS: brak zainstalowanych silników. Zainstaluj silnik w Ustawieniach TTS.'), 'warning');
+        } else {
+            showToast(trFmt('translation.tts.engine_no_lang',{lang},
+                'TTS: zainstalowane silniki nie obsługują języka „{lang}". Sprawdź Ustawienia TTS.'), 'warning');
+        }
         return;
     }
 
@@ -1397,7 +1409,9 @@ async function _ttsSpeak(lang, source, triggerBtn) {
         });
 
         if (!res.ok) {
-            console.error('TTS error:', await res.text());
+            var errText = '';
+            try { var errJson = await res.json(); errText = errJson.detail || errJson.error || ''; } catch(_) { errText = await res.text().catch(function(){ return ''; }); }
+            showToast(tr('translation.tts.synth_error', 'TTS: błąd syntezatora') + (errText ? ' — ' + errText : ''), 'error');
             return;
         }
 
@@ -1424,7 +1438,7 @@ async function _ttsSpeak(lang, source, triggerBtn) {
                     return;
                 }
                 if (tsk.status === 'error') {
-                    console.error('TTS task failed');
+                    showToast(tr('translation.tts.synth_error', 'TTS: błąd syntezatora'), 'error');
                     return;
                 }
             }

@@ -22,6 +22,7 @@ LANG_CODE_MAP = {
     'uk': 'ukrainian',
     'zh-cn': 'chinese',
     'zh-tw': 'chinese',
+    'ko': 'korean',
 }
 
 
