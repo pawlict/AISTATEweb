@@ -25,14 +25,37 @@
     catch (_) { return ""; }
   }
 
+  function _fmtCrypto(val, token) {
+    if (val == null) return "\u2014";
+    const n = Number(val);
+    if (isNaN(n)) return String(val);
+    // Use up to 8 decimals for crypto, trim trailing zeros
+    const s = n.toFixed(8).replace(/\.?0+$/, "");
+    return s + (token ? " " + token : "");
+  }
+
   /* ------------------------------------------------------------------ */
   /*  State                                                             */
   /* ------------------------------------------------------------------ */
 
   let _lastResult = null;
   let _chartInstances = {};
+  let _smallChartInstances = {};
+  let _mainChartInstance = null;
   let _cyInstance = null;
   let _llmRunning = false;
+  let _txClassifications = {}; // tx_hash -> classification
+  let _chartZoom = { level: 1, activeKey: null };
+
+  /* Classification metadata */
+  const CLS_META = {
+    neutral:    { label: "Neutralny",  color: "#60a5fa", bg: "rgba(96,165,250,.08)" },
+    legitimate: { label: "Poprawny",   color: "#15803d", bg: "rgba(21,128,61,.08)" },
+    suspicious: { label: "Podejrzany", color: "#dc2626", bg: "rgba(220,38,38,.08)" },
+    monitoring: { label: "Obserwacja", color: "#ea580c", bg: "rgba(234,88,12,.08)" },
+  };
+
+  const RISK_COLORS = { critical: "#ef4444", high: "#f97316", medium: "#eab308", low: "#22c55e", unknown: "#94a3b8" };
 
   /* ------------------------------------------------------------------ */
   /*  Lazy-load external libraries                                      */
@@ -112,6 +135,7 @@
         if (bar) bar.style.width = "100%";
         _text("crypto_status", "Gotowe");
         _lastResult = data.result;
+        _txClassifications = {};
         _renderResults(data.result);
         setTimeout(() => _hide("crypto_progress"), 1500);
       } else {
@@ -137,6 +161,7 @@
       const data = await resp.json();
       if (data.status === "ok" && data.result) {
         _lastResult = data.result;
+        _txClassifications = {};
         _hide("crypto_empty_state");
         _renderResults(data.result);
       }
@@ -156,36 +181,55 @@
     _renderSummary(r);
     _renderRisk(r);
     _renderAlerts(r);
-    _renderWallets(r);
-    _renderTransactions(r);
+    _renderReviewTable(r);
     _renderCharts(r);
+    _renderSmallCharts(r);
     _renderGraph(r);
+    _renderWallets(r);
   }
 
-  /* -- Summary grid -------------------------------------------------- */
+  /* -- Summary (light fields like AML/GSM) ----------------------------- */
 
   function _renderSummary(r) {
-    const items = [
-      ["Źródło", r.source || "—"],
-      ["Blockchain", r.chain || "—"],
-      ["Plik", r.filename || "—"],
-      ["Transakcje", r.tx_count || 0],
-      ["Portfele", r.wallet_count || 0],
-      ["Kontrahenci", r.counterparty_count || 0],
-      ["Okres", (r.date_from || "?").slice(0, 10) + " — " + (r.date_to || "?").slice(0, 10)],
-      ["Wpłaty", (r.total_received || 0).toFixed(8) + " " + (Object.keys(r.tokens || {})[0] || "BTC")],
-      ["Wypłaty", (r.total_sent || 0).toFixed(8) + " " + (Object.keys(r.tokens || {})[0] || "BTC")],
-      ["Czas analizy", (r.elapsed_sec || 0).toFixed(1) + "s"],
-    ];
-    let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">';
-    for (const [label, val] of items) {
-      html += `<div style="padding:8px 12px;background:var(--bg-input,#0f172a);border-radius:6px">
-        <div class="small" style="color:var(--text-muted,#94a3b8)">${_esc(label)}</div>
-        <div style="font-weight:600">${_esc(String(val))}</div>
-      </div>`;
+    const token = Object.keys(r.tokens || {})[0] || "BTC";
+
+    // Info rows (like AML bank info)
+    const infoGrid = document.getElementById("crypto_info_grid");
+    if (infoGrid) {
+      let html = "";
+      if (r.source) html += `<div class="crypto-info-row"><b>Źródło:</b> ${_esc(r.source)}</div>`;
+      if (r.chain) html += `<div class="crypto-info-row"><b>Blockchain:</b> ${_esc(r.chain)}</div>`;
+      if (r.filename) html += `<div class="crypto-info-row"><b>Plik:</b> ${_esc(r.filename)}</div>`;
+      const dateFrom = (r.date_from || "").slice(0, 10);
+      const dateTo = (r.date_to || "").slice(0, 10);
+      if (dateFrom || dateTo) html += `<div class="crypto-info-row"><b>Okres:</b> ${_esc(dateFrom)} \u2014 ${_esc(dateTo)}</div>`;
+      html += '<div class="crypto-info-stats">';
+      if (r.total_received != null) html += `<span><b>Wpłaty:</b> ${_fmtCrypto(r.total_received, token)}</span>`;
+      if (r.total_sent != null) html += `<span><b>Wypłaty:</b> ${_fmtCrypto(r.total_sent, token)}</span>`;
+      html += '</div>';
+      if (r.elapsed_sec) html += `<div class="small muted" style="margin-top:4px">Czas analizy: ${r.elapsed_sec.toFixed(1)}s</div>`;
+      infoGrid.innerHTML = html;
     }
-    html += "</div>";
-    _html("crypto_summary_grid", html);
+
+    // Stat cards (like GSM)
+    const cards = [];
+    if (r.tx_count) cards.push(["Transakcje", r.tx_count]);
+    if (r.wallet_count) cards.push(["Portfele", r.wallet_count]);
+    if (r.counterparty_count) cards.push(["Kontrahenci", r.counterparty_count]);
+    const tokenCount = Object.keys(r.tokens || {}).length;
+    if (tokenCount) cards.push(["Tokeny", tokenCount]);
+
+    const grid = document.getElementById("crypto_summary_grid");
+    if (grid) {
+      let html = "";
+      for (const [label, val] of cards) {
+        html += `<div class="crypto-stat-card">
+          <div class="crypto-stat-value">${_esc(String(val))}</div>
+          <div class="crypto-stat-label">${_esc(label)}</div>
+        </div>`;
+      }
+      grid.innerHTML = html;
+    }
   }
 
   /* -- Risk assessment ----------------------------------------------- */
@@ -220,213 +264,442 @@
     if (!alerts.length) { _hide("crypto_alerts_card"); return; }
     _show("crypto_alerts_card");
 
-    const riskColors = { critical: "#ef4444", high: "#f97316", medium: "#eab308", low: "#22c55e" };
     let html = "";
     for (const a of alerts) {
-      const c = riskColors[a.risk] || "#94a3b8";
-      html += `<div style="padding:8px 12px;margin-bottom:6px;border-left:3px solid ${c};background:var(--bg-input,#0f172a);border-radius:4px">
+      const c = RISK_COLORS[a.risk] || "#94a3b8";
+      html += `<div style="padding:8px 12px;margin-bottom:6px;border-left:3px solid ${c};background:${a.risk === "critical" ? "rgba(239,68,68,.06)" : a.risk === "high" ? "rgba(249,115,22,.06)" : "var(--bg-secondary,#f1f5f9)"};border-radius:4px">
         <strong style="color:${c}">${_esc(a.pattern || "?")}</strong>: ${_esc(a.description || "")}
       </div>`;
     }
     _html("crypto_alerts_body", html);
   }
 
-  /* -- Wallets table ------------------------------------------------- */
+  /* ------------------------------------------------------------------ */
+  /*  Transaction Review & Classification                               */
+  /* ------------------------------------------------------------------ */
+
+  function _renderReviewTable(r) {
+    const txs = r.transactions || [];
+    const totalCount = r.transactions_total || txs.length;
+
+    _renderReviewStats(txs);
+    _filterAndRenderReview(txs);
+  }
+
+  function _renderReviewStats(txs) {
+    const counts = { neutral: 0, legitimate: 0, suspicious: 0, monitoring: 0, unclassified: 0 };
+    for (const tx of txs) {
+      const cls = _txClassifications[tx.hash || tx.id] || _autoClassify(tx);
+      if (counts[cls] != null) counts[cls]++;
+      else counts.unclassified++;
+    }
+    const total = txs.length || 1;
+
+    // Stats bar
+    const bar = document.getElementById("crypto_rv_stats_bar");
+    if (bar) {
+      let html = "";
+      for (const [key, meta] of Object.entries(CLS_META)) {
+        const pct = (counts[key] / total * 100).toFixed(1);
+        if (counts[key] > 0) {
+          html += `<div style="width:${pct}%;background:${meta.color};transition:width .3s" title="${meta.label}: ${counts[key]}"></div>`;
+        }
+      }
+      bar.innerHTML = html;
+    }
+
+    // Legend
+    const legend = document.getElementById("crypto_rv_stats_legend");
+    if (legend) {
+      let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px">';
+      for (const [key, meta] of Object.entries(CLS_META)) {
+        html += `<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${meta.color};margin-right:4px"></span>${meta.label}: ${counts[key]}</span>`;
+      }
+      html += '</div>';
+      legend.innerHTML = html;
+    }
+  }
+
+  function _autoClassify(tx) {
+    const tags = tx.risk_tags || [];
+    if (tags.includes("sanctioned") || tags.includes("mixer")) return "suspicious";
+    if (tags.includes("high_value") || tags.includes("privacy_coin")) return "monitoring";
+    const score = tx.risk_score || 0;
+    if (score >= 70) return "suspicious";
+    if (score >= 40) return "monitoring";
+    return "neutral";
+  }
+
+  function _filterAndRenderReview(txs) {
+    const search = (QS("#crypto_rv_search") || {}).value || "";
+    const filterCls = (QS("#crypto_rv_filter_class") || {}).value || "";
+    const filterRisk = (QS("#crypto_rv_filter_risk") || {}).value || "";
+    const searchLow = search.toLowerCase();
+
+    const filtered = txs.filter(tx => {
+      // Classification filter
+      const cls = _txClassifications[tx.hash || tx.id] || _autoClassify(tx);
+      if (filterCls && cls !== filterCls) return false;
+
+      // Risk filter
+      if (filterRisk) {
+        const tags = tx.risk_tags || [];
+        const score = tx.risk_score || 0;
+        let riskLevel = "low";
+        if (score >= 70 || tags.includes("sanctioned")) riskLevel = "critical";
+        else if (score >= 50 || tags.includes("mixer")) riskLevel = "high";
+        else if (score >= 25 || tags.includes("high_value")) riskLevel = "medium";
+        if (riskLevel !== filterRisk) return false;
+      }
+
+      // Text search
+      if (searchLow) {
+        const haystack = [tx.from, tx.to, tx.hash, tx.token, tx.tx_type, ...(tx.risk_tags || [])].join(" ").toLowerCase();
+        if (!haystack.includes(searchLow)) return false;
+      }
+
+      return true;
+    });
+
+    _text("crypto_rv_tx_count", `${filtered.length} z ${txs.length} transakcji`);
+
+    const wrap = document.getElementById("crypto_rv_table_wrap");
+    if (!wrap) return;
+
+    const show = filtered.slice(0, 200);
+    let html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+      "<th>Data</th><th>Od</th><th>Do</th><th>Kwota</th><th>Token</th><th>Typ</th><th>Ryzyko</th><th>Klasyfikacja</th>" +
+      "</tr></thead><tbody>";
+
+    for (const tx of show) {
+      const txId = tx.hash || tx.id || "";
+      const cls = _txClassifications[txId] || _autoClassify(tx);
+      const meta = CLS_META[cls] || CLS_META.neutral;
+      const tags = (tx.risk_tags || []).join(", ");
+      const tagColor = tags.includes("sanctioned") ? "#ef4444" :
+        tags.includes("mixer") ? "#f97316" :
+          tags.includes("high_value") ? "#eab308" : "";
+
+      html += `<tr style="background:${meta.bg}">
+        <td style="white-space:nowrap">${_esc((tx.timestamp || "").slice(0, 16))}</td>
+        <td style="font-family:monospace;font-size:10px" title="${_esc(tx.from || "")}">${_esc(_shorten(tx.from || "\u2014"))}</td>
+        <td style="font-family:monospace;font-size:10px" title="${_esc(tx.to || "")}">${_esc(_shorten(tx.to || "\u2014"))}</td>
+        <td style="text-align:right">${_fmtCrypto(tx.amount, "")}</td>
+        <td>${_esc(tx.token || "")}</td>
+        <td>${_esc(tx.tx_type || "")}</td>
+        <td style="color:${tagColor};font-size:11px">${_esc(tags || "\u2014")}</td>
+        <td style="white-space:nowrap">`;
+
+      // Classification buttons
+      for (const [key, m] of Object.entries(CLS_META)) {
+        const isActive = cls === key;
+        html += `<button class="crypto-rv-cls-btn${isActive ? " active" : ""}" data-tx="${_esc(txId)}" data-cls="${key}" style="color:${m.color};${isActive ? "background:" + m.bg : ""}" title="${m.label}">${m.label.charAt(0)}</button>`;
+      }
+
+      html += `</td></tr>`;
+    }
+
+    html += "</tbody></table>";
+    if (show.length < filtered.length) {
+      html += `<div class="small muted" style="margin-top:4px">Pokazano ${show.length} z ${filtered.length}</div>`;
+    }
+
+    wrap.innerHTML = html;
+
+    // Bind classification buttons
+    wrap.querySelectorAll(".crypto-rv-cls-btn").forEach(btn => {
+      btn.onclick = () => {
+        const txId = btn.dataset.tx;
+        const cls = btn.dataset.cls;
+        _txClassifications[txId] = cls;
+        _renderReviewTable(_lastResult);
+      };
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Charts — main (dropdown selector like AML)                        */
+  /* ------------------------------------------------------------------ */
+
+  async function _renderCharts(r) {
+    try { await _ensureChartJS(); } catch (e) { console.warn("[Crypto] Chart.js load failed:", e); return; }
+
+    // Render the currently selected chart
+    const chartKey = (QS("#crypto_chart_select") || {}).value || "balance_timeline";
+    _renderMainChart(r, chartKey);
+  }
+
+  function _renderMainChart(r, chartKey) {
+    const charts = r.charts || {};
+    const container = document.getElementById("crypto_chart_container");
+    if (!container) return;
+
+    // Destroy previous
+    if (_mainChartInstance) { try { _mainChartInstance.destroy(); } catch (_) {} _mainChartInstance = null; }
+
+    container.innerHTML = '<canvas id="crypto_chart_main"></canvas>';
+    const canvas = QS("#crypto_chart_main");
+    if (!canvas) return;
+
+    const data = charts[chartKey];
+    if (!data) {
+      container.innerHTML = '<div class="small muted" style="padding:20px">Brak danych wykresu</div>';
+      return;
+    }
+
+    const isTimeline = (chartKey === "balance_timeline");
+
+    // Zoom controls
+    const zoomBar = document.getElementById("crypto_chart_zoom_bar");
+    if (zoomBar) {
+      if (isTimeline && data.labels && data.labels.length > 30) {
+        zoomBar.style.display = "";
+      } else {
+        zoomBar.style.display = "none";
+      }
+    }
+
+    if (chartKey === "balance_timeline") {
+      _renderBalanceTimeline(canvas, data);
+    } else if (chartKey === "monthly_volume") {
+      _renderBarChart(canvas, data, ["rgba(34,197,94,0.7)", "rgba(239,68,68,0.7)"]);
+    } else if (chartKey === "daily_tx_count") {
+      _renderBarChart(canvas, data, ["rgba(139,92,246,0.7)"]);
+    } else if (chartKey === "top_counterparties") {
+      _renderCounterpartiesChart(canvas, data);
+    }
+  }
+
+  function _renderBalanceTimeline(canvas, data) {
+    if (!data || !data.labels || !data.labels.length) return;
+
+    const labels = data.labels;
+    _mainChartInstance = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: data.label || "Saldo",
+          data: data.data,
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59,130,246,0.1)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: labels.length > 50 ? 0 : 2,
+          pointHoverRadius: 6,
+          pointHitRadius: 10,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false, axis: "x" },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: function(items) {
+                return items[0] ? items[0].label : "";
+              },
+              label: function(ctx) {
+                return "Saldo: " + _fmtCrypto(ctx.parsed.y, "");
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: {
+              maxRotation: 45,
+              autoSkip: true,
+              maxTicksLimit: _adaptiveTickCount(labels.length),
+            },
+          },
+          y: { beginAtZero: false },
+        },
+        elements: {
+          point: { radius: labels.length > 50 ? 0 : 2, hoverRadius: 6, hitRadius: 10 },
+        },
+      },
+    });
+
+    _applyTimelineZoom();
+  }
+
+  function _renderBarChart(canvas, data, colors) {
+    if (!data || !data.labels) return;
+
+    const datasets = [];
+    if (data.received && data.sent) {
+      datasets.push({ label: "Otrzymane", data: data.received, backgroundColor: colors[0] || "rgba(34,197,94,0.7)" });
+      datasets.push({ label: "Wysłane", data: data.sent, backgroundColor: colors[1] || "rgba(239,68,68,0.7)" });
+    } else if (data.data) {
+      datasets.push({ label: data.label || "Wartość", data: data.data, backgroundColor: colors[0] || "rgba(139,92,246,0.7)" });
+    }
+
+    _mainChartInstance = new Chart(canvas, {
+      type: "bar",
+      data: { labels: data.labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: datasets.length > 1 } },
+        scales: {
+          x: { ticks: { maxRotation: 45 } },
+          y: { beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  function _renderCounterpartiesChart(canvas, data) {
+    if (!data || !data.labels) return;
+
+    _mainChartInstance = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: data.labels,
+        datasets: [{ label: "Wolumen", data: data.data, backgroundColor: "rgba(59,130,246,0.7)" }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: "y",
+        plugins: { legend: { display: false } },
+      },
+    });
+  }
+
+  function _adaptiveTickCount(labelCount) {
+    if (labelCount > 200) return 15;
+    if (labelCount > 100) return 20;
+    if (labelCount > 50) return 25;
+    return labelCount;
+  }
+
+  /* -- Zoom for balance timeline ------------------------------------- */
+
+  function _applyTimelineZoom() {
+    const container = document.getElementById("crypto_chart_container");
+    if (!container) return;
+    if (_chartZoom.level <= 1) {
+      container.style.width = "";
+      container.style.minWidth = "100%";
+    } else {
+      container.style.width = (_chartZoom.level * 100) + "%";
+      container.style.minWidth = (_chartZoom.level * 100) + "%";
+    }
+    if (_mainChartInstance) _mainChartInstance.resize();
+  }
+
+  function _chartZoomStep(delta) {
+    _chartZoom.level = Math.max(1, Math.min(10, _chartZoom.level + delta));
+    _applyTimelineZoom();
+  }
+
+  /* -- Small charts (3 side by side) --------------------------------- */
+
+  async function _renderSmallCharts(r) {
+    try { await _ensureChartJS(); } catch (e) { return; }
+
+    const charts = r.charts || {};
+
+    // Destroy old small charts
+    for (const key of Object.keys(_smallChartInstances)) {
+      try { _smallChartInstances[key].destroy(); } catch (_) {}
+    }
+    _smallChartInstances = {};
+
+    const smallOpts = {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: { legend: { display: false } },
+    };
+
+    // 1. TX type distribution (doughnut)
+    const types = charts.tx_type_distribution;
+    const typesCanvas = QS("#crypto_chart_types");
+    if (types && types.labels && types.labels.length && typesCanvas) {
+      const doughnutColors = ["#3b82f6", "#22c55e", "#f97316", "#ef4444", "#8b5cf6", "#06b6d4", "#eab308"];
+      _smallChartInstances.types = new Chart(typesCanvas, {
+        type: "doughnut",
+        data: {
+          labels: types.labels,
+          datasets: [{ data: types.data, backgroundColor: types.labels.map((_, i) => doughnutColors[i % doughnutColors.length]) }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } } },
+        },
+      });
+    }
+
+    // 2. Monthly volume (small bar)
+    const vol = charts.monthly_volume;
+    const volCanvas = QS("#crypto_chart_volume_small");
+    if (vol && vol.labels && vol.labels.length && volCanvas) {
+      const ds = [];
+      if (vol.received && vol.sent) {
+        ds.push({ label: "Otr.", data: vol.received, backgroundColor: "rgba(34,197,94,0.7)" });
+        ds.push({ label: "Wys.", data: vol.sent, backgroundColor: "rgba(239,68,68,0.7)" });
+      }
+      _smallChartInstances.volume = new Chart(volCanvas, {
+        type: "bar",
+        data: { labels: vol.labels, datasets: ds },
+        options: { ...smallOpts, scales: { x: { ticks: { maxRotation: 45, font: { size: 9 } } }, y: { beginAtZero: true } } },
+      });
+    }
+
+    // 3. Daily TX count (small bar)
+    const daily = charts.daily_tx_count;
+    const dailyCanvas = QS("#crypto_chart_daily_small");
+    if (daily && daily.labels && daily.labels.length && dailyCanvas) {
+      _smallChartInstances.daily = new Chart(dailyCanvas, {
+        type: "bar",
+        data: {
+          labels: daily.labels,
+          datasets: [{ label: "TX", data: daily.data, backgroundColor: "rgba(139,92,246,0.7)" }],
+        },
+        options: { ...smallOpts, scales: { x: { ticks: { maxRotation: 45, font: { size: 9 } } }, y: { beginAtZero: true } } },
+      });
+    }
+  }
+
+  function _destroyAllCharts() {
+    if (_mainChartInstance) { try { _mainChartInstance.destroy(); } catch (_) {} _mainChartInstance = null; }
+    for (const key of Object.keys(_smallChartInstances)) {
+      try { _smallChartInstances[key].destroy(); } catch (_) {}
+    }
+    _smallChartInstances = {};
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Wallets table                                                     */
+  /* ------------------------------------------------------------------ */
 
   function _renderWallets(r) {
     const wallets = r.wallets || [];
     if (!wallets.length) { _hide("crypto_wallets_card"); return; }
     _show("crypto_wallets_card");
 
-    const riskColors = { critical: "#ef4444", high: "#f97316", medium: "#eab308", low: "#22c55e", unknown: "#94a3b8" };
     let html = '<table class="data-table" style="width:100%;font-size:13px"><thead><tr>' +
       "<th>Adres</th><th>Etykieta</th><th>TX</th><th>Otrzymane</th><th>Wysłane</th><th>Ryzyko</th>" +
       "</tr></thead><tbody>";
     for (const w of wallets.slice(0, 50)) {
-      const rc = riskColors[w.risk_level] || "#94a3b8";
+      const rc = RISK_COLORS[w.risk_level] || "#94a3b8";
       html += `<tr>
         <td style="font-family:monospace;font-size:11px" title="${_esc(w.address)}">${_esc(_shorten(w.address))}</td>
-        <td>${_esc(w.label || "—")}</td>
+        <td>${_esc(w.label || "\u2014")}</td>
         <td>${w.tx_count}</td>
-        <td>${(w.total_received || 0).toFixed(8)}</td>
-        <td>${(w.total_sent || 0).toFixed(8)}</td>
+        <td>${_fmtCrypto(w.total_received, "")}</td>
+        <td>${_fmtCrypto(w.total_sent, "")}</td>
         <td style="color:${rc};font-weight:600">${_esc(w.risk_level)}</td>
       </tr>`;
     }
     html += "</tbody></table>";
     if (wallets.length > 50) html += `<div class="small" style="margin-top:4px;color:var(--text-muted)">Pokazano 50 z ${wallets.length}</div>`;
     _html("crypto_wallets_body", html);
-  }
-
-  /* -- Transactions table -------------------------------------------- */
-
-  function _renderTransactions(r) {
-    const txs = r.transactions || [];
-    const totalCount = r.transactions_total || txs.length;
-    _text("crypto_tx_count_label", `${totalCount} transakcji`);
-
-    if (!txs.length) { _hide("crypto_tx_card"); return; }
-    _show("crypto_tx_card");
-
-    let html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
-      "<th>Data</th><th>Od</th><th>Do</th><th>Kwota</th><th>Token</th><th>Typ</th><th>Ryzyko</th>" +
-      "</tr></thead><tbody>";
-    const show = txs.slice(0, 200);
-    for (const tx of show) {
-      const tags = (tx.risk_tags || []).join(", ");
-      const tagColor = tags.includes("sanctioned") ? "#ef4444" :
-        tags.includes("mixer") ? "#f97316" :
-          tags.includes("high_value") ? "#eab308" : "";
-      html += `<tr>
-        <td style="white-space:nowrap">${_esc((tx.timestamp || "").slice(0, 16))}</td>
-        <td style="font-family:monospace;font-size:10px" title="${_esc(tx.from || "")}">${_esc(_shorten(tx.from || "—"))}</td>
-        <td style="font-family:monospace;font-size:10px" title="${_esc(tx.to || "")}">${_esc(_shorten(tx.to || "—"))}</td>
-        <td style="text-align:right">${(tx.amount || 0).toFixed(8)}</td>
-        <td>${_esc(tx.token || "")}</td>
-        <td>${_esc(tx.tx_type || "")}</td>
-        <td style="color:${tagColor};font-size:11px">${_esc(tags || "—")}</td>
-      </tr>`;
-    }
-    html += "</tbody></table>";
-    const totalTx = r.transactions_total || txs.length;
-    if (show.length < totalTx) {
-      html += `<div class="small" style="margin-top:4px;color:var(--text-muted)">Pokazano ${show.length} z ${totalTx} transakcji</div>`;
-    }
-    _html("crypto_tx_body", html);
-  }
-
-  /* ------------------------------------------------------------------ */
-  /*  Charts (Chart.js)                                                 */
-  /* ------------------------------------------------------------------ */
-
-  async function _renderCharts(r) {
-    try {
-      await _ensureChartJS();
-    } catch (e) {
-      console.warn("[Crypto] Chart.js load failed:", e);
-      return;
-    }
-
-    const charts = r.charts || {};
-    _destroyCharts();
-
-    // Common dark theme
-    const gridColor = "rgba(148,163,184,0.15)";
-    const tickColor = "#94a3b8";
-
-    // 1. Balance timeline
-    const bal = charts.balance_timeline;
-    if (bal && bal.labels && bal.labels.length) {
-      _chartInstances.balance = new Chart(QS("#crypto_chart_balance"), {
-        type: "line",
-        data: {
-          labels: bal.labels,
-          datasets: [{
-            label: bal.label || "Saldo",
-            data: bal.data,
-            borderColor: "#3b82f6",
-            backgroundColor: "rgba(59,130,246,0.1)",
-            fill: true,
-            tension: 0.3,
-            pointRadius: bal.labels.length > 50 ? 0 : 3,
-          }],
-        },
-        options: _chartOpts(gridColor, tickColor),
-      });
-    }
-
-    // 2. Monthly volume
-    const vol = charts.monthly_volume;
-    if (vol && vol.labels && vol.labels.length) {
-      _chartInstances.volume = new Chart(QS("#crypto_chart_volume"), {
-        type: "bar",
-        data: {
-          labels: vol.labels,
-          datasets: [
-            { label: "Otrzymane", data: vol.received, backgroundColor: "rgba(34,197,94,0.7)" },
-            { label: "Wysłane", data: vol.sent, backgroundColor: "rgba(239,68,68,0.7)" },
-          ],
-        },
-        options: _chartOpts(gridColor, tickColor),
-      });
-    }
-
-    // 3. Daily tx count
-    const daily = charts.daily_tx_count;
-    if (daily && daily.labels && daily.labels.length) {
-      _chartInstances.daily = new Chart(QS("#crypto_chart_daily"), {
-        type: "bar",
-        data: {
-          labels: daily.labels,
-          datasets: [{
-            label: "Liczba TX",
-            data: daily.data,
-            backgroundColor: "rgba(139,92,246,0.7)",
-          }],
-        },
-        options: _chartOpts(gridColor, tickColor),
-      });
-    }
-
-    // 4. TX type distribution (doughnut)
-    const types = charts.tx_type_distribution;
-    if (types && types.labels && types.labels.length) {
-      const colors = ["#3b82f6", "#22c55e", "#f97316", "#ef4444", "#8b5cf6", "#06b6d4", "#eab308"];
-      _chartInstances.types = new Chart(QS("#crypto_chart_types"), {
-        type: "doughnut",
-        data: {
-          labels: types.labels,
-          datasets: [{
-            data: types.data,
-            backgroundColor: types.labels.map((_, i) => colors[i % colors.length]),
-          }],
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { position: "bottom", labels: { color: tickColor } } },
-        },
-      });
-    }
-
-    // 5. Top counterparties (horizontal bar)
-    const cp = charts.top_counterparties;
-    if (cp && cp.labels && cp.labels.length) {
-      _chartInstances.counterparties = new Chart(QS("#crypto_chart_counterparties"), {
-        type: "bar",
-        data: {
-          labels: cp.labels,
-          datasets: [{
-            label: "Wolumen",
-            data: cp.data,
-            backgroundColor: "rgba(59,130,246,0.7)",
-          }],
-        },
-        options: {
-          ..._chartOpts(gridColor, tickColor),
-          indexAxis: "y",
-        },
-      });
-    }
-  }
-
-  function _chartOpts(gridColor, tickColor) {
-    return {
-      responsive: true,
-      plugins: {
-        legend: { labels: { color: tickColor } },
-      },
-      scales: {
-        x: { ticks: { color: tickColor, maxRotation: 45 }, grid: { color: gridColor } },
-        y: { ticks: { color: tickColor }, grid: { color: gridColor } },
-      },
-    };
-  }
-
-  function _destroyCharts() {
-    for (const key of Object.keys(_chartInstances)) {
-      try { _chartInstances[key].destroy(); } catch (_) {}
-    }
-    _chartInstances = {};
   }
 
   /* ------------------------------------------------------------------ */
@@ -453,19 +726,12 @@
     const container = QS("#crypto_graph_container");
     if (!container) return;
 
-    const riskColors = {
-      critical: "#ef4444",
-      high: "#f97316",
-      medium: "#eab308",
-      low: "#22c55e",
-    };
-
     const elements = [];
 
     // Nodes
     for (const node of graphData.nodes) {
       const d = node.data;
-      const color = riskColors[d.risk_level] || "#64748b";
+      const color = RISK_COLORS[d.risk_level] || "#64748b";
       let shape = "ellipse";
       if (d.type === "mixer") shape = "diamond";
       else if (d.type === "exchange") shape = "round-rectangle";
@@ -490,7 +756,7 @@
         data: {
           source: d.source,
           target: d.target,
-          label: (d.amount || 0).toFixed(4) + " " + (d.token || ""),
+          label: _fmtCrypto(d.amount, d.token || ""),
           width: Math.max(1, Math.min(6, d.count || 1)),
           color: d.risk ? "#ef4444" : "#475569",
         },
@@ -623,7 +889,7 @@
   /* ------------------------------------------------------------------ */
 
   function _shorten(addr) {
-    if (!addr) return "—";
+    if (!addr) return "\u2014";
     if (addr.length > 18) return addr.slice(0, 8) + "\u2026" + addr.slice(-6);
     return addr;
   }
@@ -655,6 +921,34 @@
     if (genBtn) {
       genBtn.onclick = () => _generateLLM();
     }
+
+    // Chart selector (dropdown)
+    const chartSelect = QS("#crypto_chart_select");
+    if (chartSelect) {
+      chartSelect.onchange = () => {
+        if (_lastResult) {
+          _chartZoom.level = 1;
+          _renderMainChart(_lastResult, chartSelect.value);
+        }
+      };
+    }
+
+    // Zoom controls
+    const zoomIn = document.getElementById("crypto_chart_zoom_in");
+    const zoomOut = document.getElementById("crypto_chart_zoom_out");
+    const zoomReset = document.getElementById("crypto_chart_zoom_reset");
+    if (zoomIn) zoomIn.onclick = () => _chartZoomStep(0.5);
+    if (zoomOut) zoomOut.onclick = () => _chartZoomStep(-0.5);
+    if (zoomReset) zoomReset.onclick = () => { _chartZoom.level = 1; _applyTimelineZoom(); };
+
+    // Review filters
+    const rvSearch = QS("#crypto_rv_search");
+    const rvFilterCls = QS("#crypto_rv_filter_class");
+    const rvFilterRisk = QS("#crypto_rv_filter_risk");
+    const refilter = () => { if (_lastResult) _filterAndRenderReview(_lastResult.transactions || []); };
+    if (rvSearch) rvSearch.oninput = refilter;
+    if (rvFilterCls) rvFilterCls.onchange = refilter;
+    if (rvFilterRisk) rvFilterRisk.onchange = refilter;
   }
 
   /* ------------------------------------------------------------------ */
