@@ -13,6 +13,7 @@ from .pekao import PekaoParser
 from .millennium import MillenniumParser
 from .revolut import RevolutParser
 from .credit_agricole import CreditAgricoleParser
+from .bnp_paribas import BNPParibasParser
 from .generic import GenericParser
 
 
@@ -26,6 +27,7 @@ PARSERS: List[Type[BankParser]] = [
     MillenniumParser,
     RevolutParser,
     CreditAgricoleParser,
+    BNPParibasParser,
 ]
 
 
