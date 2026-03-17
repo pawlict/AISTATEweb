@@ -1,0 +1,219 @@
+{
+  "_meta": {
+    "description": "Obowiązek rejestracji kart prepaid SIM wg krajów (stan na 2025/2026)",
+    "format": "ISO 3166-1 alpha-2 → {status, note_pl}",
+    "statuses": {
+      "required": "Rejestracja karty prepaid obowiązkowa",
+      "not_required": "Brak obowiązku rejestracji — karta może być anonimowa",
+      "partial": "Częściowy obowiązek lub przepisy w trakcie wdrażania"
+    },
+    "last_updated": "2026-03-17",
+    "source": "GSMA, regulacje krajowe, stan prawny 2025/2026"
+  },
+
+  "GB": {
+    "status": "not_required",
+    "note_pl": "Wielka Brytania — brak obowiązku rejestracji prepaid"
+  },
+  "NL": {
+    "status": "not_required",
+    "note_pl": "Holandia — brak obowiązku rejestracji prepaid"
+  },
+  "IE": {
+    "status": "not_required",
+    "note_pl": "Irlandia — brak obowiązku rejestracji prepaid"
+  },
+  "RO": {
+    "status": "not_required",
+    "note_pl": "Rumunia — brak obowiązku rejestracji prepaid"
+  },
+  "LV": {
+    "status": "not_required",
+    "note_pl": "Łotwa — brak obowiązku rejestracji prepaid"
+  },
+  "EE": {
+    "status": "not_required",
+    "note_pl": "Estonia — brak obowiązku rejestracji prepaid (planowane zmiany)"
+  },
+  "UA": {
+    "status": "not_required",
+    "note_pl": "Ukraina — brak formalnego obowiązku rejestracji"
+  },
+  "IS": {
+    "status": "not_required",
+    "note_pl": "Islandia — brak obowiązku rejestracji prepaid"
+  },
+  "FI": {
+    "status": "partial",
+    "note_pl": "Finlandia — rejestracja wymagana ale z wyjątkami dla turystów"
+  },
+  "US": {
+    "status": "not_required",
+    "note_pl": "USA — brak federalnego obowiązku rejestracji prepaid"
+  },
+  "CA": {
+    "status": "not_required",
+    "note_pl": "Kanada — brak obowiązku rejestracji prepaid"
+  },
+  "MX": {
+    "status": "not_required",
+    "note_pl": "Meksyk — brak obowiązku rejestracji (próba wprowadzenia unieważniona)"
+  },
+  "RS": {
+    "status": "not_required",
+    "note_pl": "Serbia — brak obowiązku rejestracji prepaid"
+  },
+
+  "PL": {
+    "status": "required",
+    "note_pl": "Polska — rejestracja prepaid obowiązkowa od 2016"
+  },
+  "DE": {
+    "status": "required",
+    "note_pl": "Niemcy — rejestracja obowiązkowa od 2017"
+  },
+  "FR": {
+    "status": "required",
+    "note_pl": "Francja — rejestracja obowiązkowa"
+  },
+  "IT": {
+    "status": "required",
+    "note_pl": "Włochy — rejestracja obowiązkowa"
+  },
+  "ES": {
+    "status": "required",
+    "note_pl": "Hiszpania — rejestracja obowiązkowa"
+  },
+  "CZ": {
+    "status": "required",
+    "note_pl": "Czechy — rejestracja obowiązkowa od 2024"
+  },
+  "SK": {
+    "status": "required",
+    "note_pl": "Słowacja — rejestracja obowiązkowa"
+  },
+  "HU": {
+    "status": "required",
+    "note_pl": "Węgry — rejestracja obowiązkowa"
+  },
+  "AT": {
+    "status": "required",
+    "note_pl": "Austria — rejestracja obowiązkowa"
+  },
+  "CH": {
+    "status": "required",
+    "note_pl": "Szwajcaria — rejestracja obowiązkowa"
+  },
+  "BE": {
+    "status": "required",
+    "note_pl": "Belgia — rejestracja obowiązkowa od 2023"
+  },
+  "PT": {
+    "status": "required",
+    "note_pl": "Portugalia — rejestracja obowiązkowa"
+  },
+  "GR": {
+    "status": "required",
+    "note_pl": "Grecja — rejestracja obowiązkowa"
+  },
+  "BG": {
+    "status": "required",
+    "note_pl": "Bułgaria — rejestracja obowiązkowa"
+  },
+  "HR": {
+    "status": "required",
+    "note_pl": "Chorwacja — rejestracja obowiązkowa"
+  },
+  "SI": {
+    "status": "required",
+    "note_pl": "Słowenia — rejestracja obowiązkowa"
+  },
+  "LT": {
+    "status": "required",
+    "note_pl": "Litwa — rejestracja obowiązkowa"
+  },
+  "NO": {
+    "status": "required",
+    "note_pl": "Norwegia — rejestracja obowiązkowa od 2024"
+  },
+  "SE": {
+    "status": "required",
+    "note_pl": "Szwecja — rejestracja obowiązkowa od 2022"
+  },
+  "DK": {
+    "status": "required",
+    "note_pl": "Dania — rejestracja obowiązkowa"
+  },
+  "TR": {
+    "status": "required",
+    "note_pl": "Turcja — rejestracja obowiązkowa"
+  },
+  "RU": {
+    "status": "required",
+    "note_pl": "Rosja — rejestracja obowiązkowa"
+  },
+  "BY": {
+    "status": "required",
+    "note_pl": "Białoruś — rejestracja obowiązkowa"
+  },
+  "CN": {
+    "status": "required",
+    "note_pl": "Chiny — rejestracja obowiązkowa (z identyfikacją tożsamości)"
+  },
+  "IN": {
+    "status": "required",
+    "note_pl": "Indie — rejestracja obowiązkowa (Aadhaar)"
+  },
+  "AU": {
+    "status": "required",
+    "note_pl": "Australia — rejestracja obowiązkowa"
+  },
+  "JP": {
+    "status": "required",
+    "note_pl": "Japonia — rejestracja obowiązkowa"
+  },
+  "KR": {
+    "status": "required",
+    "note_pl": "Korea Południowa — rejestracja obowiązkowa"
+  },
+  "SA": {
+    "status": "required",
+    "note_pl": "Arabia Saudyjska — rejestracja obowiązkowa"
+  },
+  "AE": {
+    "status": "required",
+    "note_pl": "ZEA — rejestracja obowiązkowa (Emirates ID)"
+  },
+  "BR": {
+    "status": "required",
+    "note_pl": "Brazylia — rejestracja obowiązkowa (CPF)"
+  },
+  "MT": {
+    "status": "required",
+    "note_pl": "Malta — rejestracja obowiązkowa"
+  },
+  "AL": {
+    "status": "required",
+    "note_pl": "Albania — rejestracja obowiązkowa"
+  },
+  "BA": {
+    "status": "required",
+    "note_pl": "Bośnia i Hercegowina — rejestracja obowiązkowa"
+  },
+  "ME": {
+    "status": "required",
+    "note_pl": "Czarnogóra — rejestracja obowiązkowa"
+  },
+  "MK": {
+    "status": "required",
+    "note_pl": "Macedonia Północna — rejestracja obowiązkowa"
+  },
+  "XK": {
+    "status": "required",
+    "note_pl": "Kosowo — rejestracja obowiązkowa"
+  },
+  "MD": {
+    "status": "required",
+    "note_pl": "Mołdawia — rejestracja obowiązkowa"
+  }
+}
