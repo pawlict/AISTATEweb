@@ -61,12 +61,14 @@ async def crypto_analyze(
     """Upload a crypto CSV/JSON file and run the full analysis pipeline."""
     try:
         filename = file.filename or "upload.csv"
-        _app_log(f"[Crypto] Analyzing: {filename}")
+        content = await file.read()
+        file_size = len(content)
+        _app_log(f"[Crypto] Upload: {filename} ({file_size} bytes)")
+        log.info("Crypto analyze request: file=%s size=%d project=%s", filename, file_size, project_id or "(none)")
 
         # Save to temp file
         suffix = Path(filename).suffix or ".csv"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            content = await file.read()
             tmp.write(content)
             tmp_path = tmp.name
 
@@ -83,9 +85,12 @@ async def crypto_analyze(
             pass
 
         if not result.get("ok"):
+            errors = result.get("errors", ["Nieznany błąd parsowania"])
+            _app_log(f"[Crypto] Parse FAILED: {filename} — {'; '.join(errors)}")
+            log.warning("Crypto parse failed: file=%s errors=%s", filename, errors)
             return JSONResponse({
                 "status": "error",
-                "errors": result.get("errors", ["Nieznany błąd parsowania"]),
+                "errors": errors,
             }, status_code=400)
 
         # Save result to project
@@ -99,17 +104,33 @@ async def crypto_analyze(
                 _app_log(f"[Crypto] Saved analysis to {save_path.name}")
             except Exception as e:
                 log.warning("Failed to save crypto analysis: %s", e)
+                _app_log(f"[Crypto] Save ERROR: {e}")
+
+        tx_count = result.get('tx_count', 0)
+        risk = result.get('risk_score', 0)
+        elapsed = result.get('elapsed_sec', 0)
+        source = result.get('source', '?')
+        chain = result.get('chain', '?')
+        wallets = result.get('wallet_count', 0)
+        alerts_count = len(result.get('alerts', []))
 
         _app_log(
-            f"[Crypto] Done: {result.get('tx_count', 0)} txs, "
-            f"risk={result.get('risk_score', 0):.1f}/100, "
-            f"{result.get('elapsed_sec', 0):.1f}s"
+            f"[Crypto] Done: {filename} — {source}/{chain}, "
+            f"{tx_count} txs, {wallets} wallets, "
+            f"risk={risk:.1f}/100, alerts={alerts_count}, "
+            f"{elapsed:.1f}s"
+        )
+        log.info(
+            "Crypto analyze done: file=%s source=%s chain=%s txs=%d wallets=%d "
+            "risk=%.1f alerts=%d elapsed=%.2fs",
+            filename, source, chain, tx_count, wallets, risk, alerts_count, elapsed,
         )
 
         return JSONResponse({"status": "ok", "result": result})
 
     except Exception as e:
         log.exception("Crypto analyze error")
+        _app_log(f"[Crypto] ERROR: {type(e).__name__}: {e}")
         return JSONResponse({
             "status": "error",
             "errors": [str(e)],
@@ -128,12 +149,15 @@ async def crypto_detail(project_id: str = Query("")):
 
     save_path = _crypto_save_path(project_id)
     if not save_path.exists():
+        log.debug("Crypto detail: no saved analysis for project=%s", project_id)
         return JSONResponse({"status": "ok", "result": None})
 
     try:
         data = json.loads(save_path.read_text(encoding="utf-8"))
+        log.info("Crypto detail loaded: project=%s txs=%s", project_id, data.get("tx_count", "?"))
         return JSONResponse({"status": "ok", "result": data})
     except Exception as e:
+        log.error("Crypto detail load error: project=%s error=%s", project_id, e)
         return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
 
 
@@ -156,8 +180,8 @@ async def crypto_config_stats():
                 ofac_count = sum(len(v) if isinstance(v, list) else 1 for v in data.values())
             elif isinstance(data, list):
                 ofac_count = len(data)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("Failed to load sanctioned.json: %s", e)
     try:
         cont_path = config_dir / "known_contracts.json"
         if cont_path.exists():
@@ -166,8 +190,9 @@ async def crypto_config_stats():
                 contracts_count = sum(len(v) if isinstance(v, list) else 1 for v in data.values())
             elif isinstance(data, list):
                 contracts_count = len(data)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("Failed to load known_contracts.json: %s", e)
+    log.debug("Crypto config-stats: ofac=%d contracts=%d", ofac_count, contracts_count)
     return JSONResponse({
         "ofac_count": ofac_count,
         "contracts_count": contracts_count,
@@ -194,6 +219,8 @@ async def crypto_llm_stream(
 
     llm_prompt = crypto_data.get("llm_prompt", "")
     if not llm_prompt:
+        log.info("Crypto LLM: no data for project=%s", project_id)
+        _app_log(f"[Crypto] LLM: brak danych do analizy (project={project_id})")
         async def err_gen():
             yield f"data: {json.dumps({'error': 'Brak danych kryptowalutowych do analizy. Najpierw zaimportuj plik CSV.', 'done': True})}\n\n"
         return StreamingResponse(err_gen(), media_type="text/event-stream")
@@ -203,6 +230,8 @@ async def crypto_llm_stream(
         llm_prompt += f"\n\n## Dodatkowe polecenie użytkownika\n{user_prompt.strip()}"
 
     chosen_model = model.strip()
+    _app_log(f"[Crypto] LLM stream start: model={chosen_model or '(default)'}, project={project_id}")
+    log.info("Crypto LLM stream: model=%s project=%s prompt_len=%d", chosen_model or "(default)", project_id, len(llm_prompt))
 
     async def generate():
         try:
@@ -224,8 +253,11 @@ async def crypto_llm_stream(
                 chunk_count += 1
                 yield f"data: {json.dumps({'chunk': chunk, 'done': False}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'chunk': '', 'done': True, 'chunks': chunk_count})}\n\n"
+            _app_log(f"[Crypto] LLM stream done: {chunk_count} chunks")
+            log.info("Crypto LLM stream done: chunks=%d", chunk_count)
         except Exception as e:
             log.exception("Crypto LLM stream error")
+            _app_log(f"[Crypto] LLM ERROR: {type(e).__name__}: {e}")
             yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
