@@ -12,11 +12,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 import time
 import threading
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -54,13 +56,17 @@ def _get_ollama() -> Any:
 def _parse_messages(
     raw_messages: list,
     system_prompt: str = "",
-) -> List[Dict[str, str]]:
-    msgs: List[Dict[str, str]] = []
+) -> List[Dict[str, Any]]:
+    msgs: List[Dict[str, Any]] = []
     if system_prompt:
         msgs.append({"role": "system", "content": system_prompt})
     for m in raw_messages:
         if isinstance(m, dict) and "role" in m and "content" in m:
-            msgs.append({"role": str(m["role"]), "content": str(m["content"])})
+            msg: Dict[str, Any] = {"role": str(m["role"]), "content": str(m["content"])}
+            # Pass through base64 images for vision models (Ollama API)
+            if "images" in m and isinstance(m["images"], list) and m["images"]:
+                msg["images"] = [str(img) for img in m["images"]]
+            msgs.append(msg)
     return msgs
 
 
@@ -396,3 +402,57 @@ async def api_chat_complete(request: Request) -> Any:
             except Exception:
                 pass
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------- File text extraction for chat attachments ----------
+
+@router.post("/extract-file")
+async def api_chat_extract_file(file: UploadFile = File(...)) -> Any:
+    """Extract text from an uploaded document for use as chat context.
+
+    Supported: TXT, MD, PDF, DOCX, XLSX, PPTX, CSV, JSON, XML, PNG, JPG, JPEG.
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    ext = Path(file.filename).suffix.lower()
+    supported = {".txt", ".md", ".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".json", ".xml",
+                 ".png", ".jpg", ".jpeg"}
+    if ext not in supported:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+
+    # Save to temp file
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext, prefix="chat_attach_")
+    try:
+        content = await file.read()
+        tmp.write(content)
+        tmp.close()
+
+        from backend.document_processor import extract_text  # type: ignore
+
+        result = await run_in_threadpool(extract_text, tmp.name)
+        text = result.text if result else ""
+
+        if _app_log:
+            try:
+                _app_log(f"[chat] extract-file name={file.filename} ext={ext} len={len(text)}")
+            except Exception:
+                pass
+
+        return JSONResponse({"text": text, "filename": file.filename})
+    except HTTPException:
+        raise
+    except Exception as e:
+        if _app_log:
+            try:
+                _app_log(f"[chat] extract-file error: {e}")
+            except Exception:
+                pass
+        raise HTTPException(status_code=500, detail=f"Failed to extract text: {e}")
+    finally:
+        try:
+            Path(tmp.name).unlink(missing_ok=True)
+        except Exception:
+            pass
