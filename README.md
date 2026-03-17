@@ -345,7 +345,6 @@ Open in browser: http://127.0.0.1:8000
 - Fixed KML/KMZ parser (ElementTree falsy element bug)
 - Fixed MapLibre GL canvas screenshot (preserveDrawingBuffer)
 - Fixed info page language switching
-- Version bump to 3.6 beta
 
 ## beta 3.5.1/3
 - Fixed project saving/assignment.
