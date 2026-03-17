@@ -106,6 +106,7 @@
     // Show indeterminate animation on progress bar
     const progressDiv = QS("#aml_progress .progress");
     if(progressDiv) progressDiv.classList.add("indeterminate");
+    _hide("aml_empty_state");
     _hide("aml_results");
     _hide("aml_history_card");
     if(!St.batchMode) _hide("aml_batch_panel");
@@ -115,6 +116,7 @@
     _setAmlStatus("Zakończono", 100);
     const progressDiv = QS("#aml_progress .progress");
     if(progressDiv) progressDiv.classList.remove("indeterminate");
+    _hide("aml_empty_state");
     _show("aml_results");
     _hide("aml_history_card");
     _hide("aml_batch_panel");
