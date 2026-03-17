@@ -63,6 +63,7 @@ from webapp.routers import gsm as gsm_router
 from webapp.routers import report_profiles as report_profiles_router
 from webapp.routers import messages as messages_router
 from webapp.routers import workspaces as workspaces_router
+from webapp.routers import crypto as crypto_router
 
 try:
     from markdown import markdown as md_to_html  # type: ignore
@@ -1820,6 +1821,9 @@ app.include_router(aml_router.router)
 
 # GSM billing analysis router
 app.include_router(gsm_router.router)
+
+# Crypto analysis router
+app.include_router(crypto_router.router)
 
 # Report profiles router
 app.include_router(report_profiles_router.router)

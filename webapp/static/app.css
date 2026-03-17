@@ -4418,3 +4418,8 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 [data-theme="dark"] .note-tpl-field-dropdown{background:var(--bg-primary,#0f172a);border-color:var(--border,#334155);box-shadow:0 8px 24px rgba(0,0,0,.4)}
 [data-theme="dark"] .note-tpl-field-item:hover{background:var(--bg-secondary,#1e293b)}
 [data-theme="dark"] .note-tpl-field-item-key{background:var(--bg-secondary,#1e293b);color:var(--text-secondary,#64748b)}
+
+/* ======== Crypto Analysis ======== */
+.crypto-charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+@media(max-width:900px){.crypto-charts-grid{grid-template-columns:1fr}}
+.crypto-chart-box{background:var(--bg-input,#0f172a);border-radius:8px;padding:12px}
