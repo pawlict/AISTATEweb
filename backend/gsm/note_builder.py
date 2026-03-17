@@ -602,7 +602,10 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             count = item.get("count", 0)
             numbers = item.get("numbers", [])
             nums_str = ", ".join(numbers) if numbers else "brak danych"
-            parts.append(f"{country}: {count} int. [{nums_str}]")
+            sim_note = ""
+            if item.get("sim_registration") == "not_required":
+                sim_note = " [BRAK REJ. SIM]"
+            parts.append(f"{country}{sim_note}: {count} int. [{nums_str}]")
 
         elif anomaly_type == "forwarded_calls":
             date = item.get("date", "")

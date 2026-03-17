@@ -22,6 +22,27 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from .parsers.base import BillingRecord, BillingParseResult, BillingSummary
 from .imei_db import lookup_imei, DeviceInfo
 
+# ── SIM registration database (lazy-loaded) ──
+_sim_reg_cache: Optional[Dict[str, dict]] = None
+
+def _load_sim_registration() -> Dict[str, dict]:
+    """Load SIM registration requirements by country (cached)."""
+    global _sim_reg_cache
+    if _sim_reg_cache is not None:
+        return _sim_reg_cache
+    db_path = Path(__file__).resolve().parent / "sim_registration.json"
+    db: Dict[str, dict] = {}
+    if db_path.exists():
+        try:
+            raw = json.loads(db_path.read_text(encoding="utf-8"))
+            for k, v in raw.items():
+                if not k.startswith("_"):
+                    db[k] = v
+        except Exception:
+            pass
+    _sim_reg_cache = db
+    return db
+
 
 @dataclass
 class ContactProfile:
@@ -2091,6 +2112,7 @@ def _detect_foreign_contacts(
 
     # Build items — critical countries first, then by count
     is_critical = any(info["critical"] for info in country_info.values())
+    sim_reg_db = _load_sim_registration()
 
     items = []
     for key, info in sorted(
@@ -2100,6 +2122,11 @@ def _detect_foreign_contacts(
         period = info["first_date"]
         if info["first_date"] != info["last_date"]:
             period = f"{info['first_date']} \u2013 {info['last_date']}"
+        # SIM registration info
+        iso = info["country_code"]
+        sim_info = sim_reg_db.get(iso, {})
+        sim_status = sim_info.get("status", "")  # required / not_required / partial
+        sim_note = sim_info.get("note_pl", "")
         items.append({
             "country": info["country"],
             "country_code": info["country_code"],
@@ -2109,6 +2136,8 @@ def _detect_foreign_contacts(
             "outgoing": info["outgoing"],
             "incoming": info["incoming"],
             "critical": info["critical"],
+            "sim_registration": sim_status,
+            "sim_note": sim_note,
         })
 
     return items, is_critical

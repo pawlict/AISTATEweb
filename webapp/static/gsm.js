@@ -2361,6 +2361,7 @@
     { type: "social_media",     label: "Konta spo\u0142eczno\u015Bciowe / komunikatory", desc: "Nazwy komunikator\u00F3w i platform spo\u0142eczno\u015Bciowych wykryte w polach bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)" },
     { type: "inactivity_gap",   label: "Brak aktywno\u015Bci", desc: "Okresy bez \u017Cadnego zdarzenia (po\u0142\u0105czenia, SMS, dane). Podano ostatni i pierwszy kontakt.", configurable: true },
     { type: "meeting_after_call", label: "Spotkanie po po\u0142\u0105czeniu", desc: "Po\u0142\u0105czenie przychodz\u0105ce, po kt\u00F3rym telefon pozostaje w tym samym BTS bez aktywno\u015Bci \u2014 mo\u017Cliwe spotkanie.", configurable: true },
+    { type: "foreigners",       label: "Obcokrajowcy", desc: "Kontakty zidentyfikowane jako potencjalni obcokrajowcy \u2014 na podstawie numeru, danych identyfikacyjnych (PESEL, dokument) i heurystyki nazwiskowej." },
   ];
 
   // ── Inactivity gap: configurable threshold (default 12h) ──
@@ -2500,6 +2501,202 @@
     return items;
   }
 
+  // ── Foreigner detection (hybrid: number + ID data + name heuristics) ──
+
+  // Polish surname suffixes (common patterns)
+  const _PL_SURNAME_SUFFIXES = [
+    "owski", "owska", "ewski", "ewska", "inski", "inska", "ynski", "ynska",
+    "ski", "ska", "cki", "cka", "dzki", "dzka",
+    "wicz", "ewicz", "owicz", "icz",
+    "czyk", "czak", "czuk",
+    "iak", "iak", "niak", "wiak",
+    "orek", "urek", "arek",
+    "kowski", "kowska",
+    "owski", "owska",
+  ];
+
+  // Polish first names (top ~400, both male and female)
+  const _PL_FIRST_NAMES = new Set([
+    // Male
+    "adam", "adrian", "aleksander", "andrzej", "antoni", "arkadiusz", "artur",
+    "bartlomiej", "bartosz", "bogdan", "boguslaw", "borys", "bronislaw",
+    "cezary", "czeslaw", "damian", "daniel", "dariusz", "dawid", "dominik",
+    "edmund", "edward", "emil", "eugeniusz",
+    "filip", "franciszek", "fryderyk",
+    "gabriel", "grzegorz", "gustaw",
+    "henryk", "hubert",
+    "igor", "ireneusz",
+    "jacek", "jakub", "jan", "janusz", "jaroslaw", "jerzy", "jozef", "julian", "juliusz",
+    "kacper", "kajetan", "kamil", "karol", "kazimierz", "konrad", "krystian", "krzysztof",
+    "lech", "leon", "leszek", "lukasz",
+    "maciej", "marcin", "marek", "marian", "mariusz", "mateusz", "michal", "mieczyslaw", "milosz", "miroslaw",
+    "nikodem", "norbert",
+    "olaf", "olgierd", "oskar",
+    "patryk", "pawel", "piotr", "przemyslaw",
+    "radoslaw", "rafal", "remigiusz", "robert", "roman", "ryszard",
+    "sebastian", "seweryn", "slawomir", "stanislaw", "stefan", "sylwester", "szymon",
+    "tadeusz", "tomasz", "teodor",
+    "waldemar", "wiktor", "wieslaw", "witold", "wladyslaw", "wlodzimierz", "wojciech",
+    "zbigniew", "zdzislaw", "zenon", "zygmunt",
+    // Female
+    "agata", "agnieszka", "aleksandra", "alicja", "alina", "amelia", "anastazja", "anna", "antonina",
+    "barbara", "beata", "blanka", "bogumila", "bozena",
+    "cecylia", "celina",
+    "danuta", "daria", "diana", "dominika", "dorota",
+    "edyta", "elzbieta", "emilia", "ewa", "ewelina",
+    "gabriela", "grazyna",
+    "halina", "hanna", "helena",
+    "ilona", "inga", "irena", "iwona", "izabela",
+    "jadwiga", "janina", "joanna", "jolanta", "julia", "justyna",
+    "kalina", "kamila", "karolina", "katarzyna", "kazimiera", "kinga", "klaudia", "kornelia", "krystyna",
+    "laura", "lena", "lidia", "liliana", "lucyna", "ludmila",
+    "magdalena", "maja", "malgorzata", "maria", "mariola", "marlena", "marta", "martyna", "michalina", "milena", "miroslawa", "monika",
+    "natalia", "nadia", "nina", "natasza",
+    "olga", "oliwia",
+    "patrycja", "paulina",
+    "regina", "renata", "roksana", "roma", "rozalia",
+    "sandra", "sara", "stanislawa", "stefania", "sylwia",
+    "tamara", "tatiana", "teresa",
+    "urszula",
+    "wanda", "weronika", "wiktoria", "wieslawa", "wioletta",
+    "zofia", "zuzanna", "zyta",
+  ]);
+
+  // Non-Polish name patterns (foreign indicators)
+  const _FOREIGN_NAME_PATTERNS = [
+    // Arabic/Turkish
+    { re: /\b(mohammed|muhammad|ahmed|ali|hassan|hussein|ibrahim|mustafa|omar|yusuf|fatima|abdel|abd|bin|bint)\b/i, origin: "arabskie" },
+    // Ukrainian/Russian
+    { re: /\b(oleksandr|oleksiy|dmytro|volodymyr|sergiy|andriy|vasyl|mykola|oksana|tetyana|nataliya|svitlana)\b/i, origin: "ukrai\u0144skie" },
+    { re: /(enko|enko|chuk|yuk|ova|ov|ovich|ievna|ivna)$/i, origin: "wschodnie" },
+    // Vietnamese
+    { re: /\b(nguyen|tran|pham|hoang|huynh|vo|dang|bui|duong|ngo)\b/i, origin: "wietnamskie" },
+    // Chinese
+    { re: /\b(wang|zhang|chen|huang|zhou|yang|zhao|liu|xu|sun|wu|zhu|lin|hu|guo|ma|luo|he|tang|xiao|zheng|song|yu|cao|deng|han|peng|feng|xie|lu|wei|jiang|shen|han|ding|liang|pan|du|tian|fan|yan|qian|ren|gu|shi|dai|ye|cui|lv|su|cheng|dong|jia|xia|fu)\b/i, origin: "chi\u0144skie" },
+    // Indian
+    { re: /\b(singh|kumar|patel|sharma|gupta|chauhan|verma|yadav|mehta|joshi|agarwal|das|nair|reddy|rao|pillai|iyer|khan|bhat|malhotra|kapoor|srivastava|saxena|mishra|pandey|dubey|tiwari|bajaj|chopra|seth|gill)\b/i, origin: "indyjskie" },
+    // Georgian
+    { re: /(shvili|dze|adze|iani|uri)$/i, origin: "gruzi\u0144skie" },
+    // Armenian
+    { re: /(yan|ian|ants|ents|unts)$/i, origin: "ormia\u0144skie" },
+  ];
+
+  /**
+   * Detect potential foreigners from identification data (St.idMap) + billing records.
+   *
+   * Hybrid approach:
+   * Level 1: Foreign phone number (non-+48) with identification data
+   * Level 2: Identification data without PESEL or with foreign document
+   * Level 3: Name heuristics (non-Polish name patterns)
+   *
+   * Returns list of detected items with confidence levels.
+   */
+  function _detectForeigners() {
+    const idMap = St.idMap || {};
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!Object.keys(idMap).length) return [];
+
+    // Collect all unique foreign numbers from records
+    const foreignNumbers = new Set();
+    for (const r of records) {
+      for (const num of [r.callee, r.caller]) {
+        if (!num) continue;
+        if (num.startsWith("+") && !num.startsWith("+48") && num.length > 8) {
+          foreignNumbers.add(num);
+        }
+      }
+    }
+
+    const items = [];
+    const seen = new Set(); // avoid duplicates
+
+    for (const [msisdn, rec] of Object.entries(idMap)) {
+      if (!rec || !rec.name) continue;
+      const name = (rec.name || "").trim();
+      if (!name || name.length < 2) continue;
+
+      // Skip "not found" type entries
+      if (rec.type === "not_found" || rec.type === "other_operator") continue;
+
+      const key = msisdn;
+      if (seen.has(key)) continue;
+
+      const signals = [];
+      let confidence = 0;
+
+      // ── Level 1: Foreign number ──
+      const normNum = "+" + msisdn.replace(/^\+/, "");
+      const isForeignNum = !normNum.startsWith("+48") && normNum.startsWith("+") && normNum.length > 8;
+      if (isForeignNum || foreignNumbers.has(normNum)) {
+        signals.push("numer zagraniczny");
+        confidence += 40;
+      }
+
+      // ── Level 2: No PESEL or foreign document ──
+      const hasPesel = !!(rec.pesel && rec.pesel.length >= 11);
+      if (!hasPesel && !isForeignNum) {
+        // No PESEL for Polish number — might indicate foreigner
+        signals.push("brak PESEL");
+        confidence += 20;
+      }
+
+      // ── Level 3: Name heuristics ──
+      const nameLower = name.toLowerCase()
+        .replace(/\u0105/g, "a").replace(/\u0107/g, "c").replace(/\u0119/g, "e")
+        .replace(/\u0142/g, "l").replace(/\u0144/g, "n").replace(/\u00f3/g, "o")
+        .replace(/\u015b/g, "s").replace(/\u017a/g, "z").replace(/\u017c/g, "z");
+      const nameParts = nameLower.split(/\s+/);
+
+      // Check if first name is Polish
+      const firstName = nameParts[0] || "";
+      const isPolishFirstName = _PL_FIRST_NAMES.has(firstName);
+
+      // Check if surname has Polish suffix
+      const surname = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+      const hasPolishSuffix = _PL_SURNAME_SUFFIXES.some(suf => surname.endsWith(suf));
+
+      // Check for foreign patterns
+      let foreignOrigin = "";
+      for (const pat of _FOREIGN_NAME_PATTERNS) {
+        if (pat.re.test(nameLower)) {
+          foreignOrigin = pat.origin;
+          break;
+        }
+      }
+
+      if (foreignOrigin) {
+        signals.push(`wzorzec ${foreignOrigin}`);
+        confidence += 35;
+      } else if (!isPolishFirstName && !hasPolishSuffix && nameParts.length >= 2) {
+        // Neither Polish first name nor Polish surname suffix
+        signals.push("imi\u0119/nazwisko nie pasuje do polskich wzorców");
+        confidence += 15;
+      }
+
+      // Only report if confidence > 25 (at least one strong signal)
+      if (confidence > 25) {
+        seen.add(key);
+        const confLabel = confidence >= 60 ? "high" : confidence >= 35 ? "medium" : "low";
+        items.push({
+          number: normNum.startsWith("+") ? normNum : "+" + normNum,
+          name: name,
+          pesel: rec.pesel || "",
+          address: rec.address || "",
+          city: rec.city || "",
+          signals: signals,
+          confidence: confLabel,
+          confidence_score: confidence,
+          foreign_number: isForeignNum,
+          foreign_origin: foreignOrigin,
+        });
+      }
+    }
+
+    // Sort by confidence descending
+    items.sort((a, b) => b.confidence_score - a.confidence_score);
+    return items;
+  }
+
   function _renderAnomalies(a) {
     const card = QS("#gsm_anomalies_card");
     const body = QS("#gsm_anomalies_body");
@@ -2540,6 +2737,15 @@
       groupMap["meeting_after_call"] = {
         items: macItems,
         severity: macItems.length ? "warning" : "ok",
+      };
+    }
+
+    // Compute foreigners anomaly on frontend (requires identification data)
+    {
+      const fItems = _detectForeigners();
+      groupMap["foreigners"] = {
+        items: fItems,
+        severity: fItems.length ? (fItems.some(it => it.confidence === "high") ? "warning" : "info") : "ok",
       };
     }
 
@@ -2951,6 +3157,19 @@
         filterText = `Spotkanie po połączeniu — ${filtered.length} rek.`;
         break;
       }
+      case "foreigners": {
+        const fNums = new Set(items.map(it => {
+          const n = it.number.replace(/^\+/, "");
+          return n;
+        }));
+        filtered = records.filter(r => {
+          const callee = (r.callee || "").replace(/^\+/, "");
+          const caller = (r.caller || "").replace(/^\+/, "");
+          return fNums.has(callee) || fNums.has(caller);
+        });
+        filterText = `Obcokrajowcy — ${filtered.length} rek.`;
+        break;
+      }
       default:
         filtered = records;
         filterText = `${type} — ${filtered.length} rek.`;
@@ -3041,6 +3260,14 @@
         return r => {
           const txt = [r.callee, r.caller, r.network, r.raw_text || ""].join(" ").toLowerCase();
           return smPlatforms.some(p => txt.includes(p));
+        };
+      }
+      case "foreigners": {
+        const frNums = new Set(anomalyItems.map(it => (it.number || "").replace(/^\+/, "")));
+        return r => {
+          const callee = (r.callee || "").replace(/^\+/, "");
+          const caller = (r.caller || "").replace(/^\+/, "");
+          return frNums.has(callee) || frNums.has(caller);
         };
       }
       default:
@@ -3189,8 +3416,15 @@
         const nums = (it.numbers || []).slice(0, 5).map(n => `<code>${n}</code>`).join(", ");
         const more = (it.numbers || []).length > 5 ? ` (+${it.numbers.length - 5} wi\u0119cej)` : "";
         const critStyle = it.critical ? "background:rgba(220,38,38,.06);padding:4px 6px;border-radius:4px;margin:2px 0" : "";
+        // SIM registration badge
+        let simBadge = "";
+        if (it.sim_registration === "not_required") {
+          simBadge = ` <span style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:3px;padding:1px 5px;font-size:11px;font-weight:600" title="${it.sim_note || "Kraj bez rejestracji SIM"}">BRAK REJ. SIM</span>`;
+        } else if (it.sim_registration === "partial") {
+          simBadge = ` <span style="background:#e0f2fe;color:#0c4a6e;border:1px solid #7dd3fc;border-radius:3px;padding:1px 5px;font-size:11px" title="${it.sim_note || "Częściowy obowiązek rejestracji"}">cz\u0119\u015Bc. rej.</span>`;
+        }
         html += `<div style="${critStyle}">`;
-        html += `<b>${it.country}${flag}</b> (${it.country_code}) \u2014 ${it.count} interakcji`;
+        html += `<b>${it.country}${flag}</b> (${it.country_code})${simBadge} \u2014 ${it.count} interakcji`;
         html += ` (\u2191${it.outgoing} \u2193${it.incoming}), ${it.period}<br>`;
         html += `<span style="font-size:12px;opacity:.8">Numery: ${nums}${more}</span>`;
         html += `</div>`;
@@ -3244,6 +3478,22 @@
         if (it.events_in_window > 0) html += ` (${it.events_in_window} zdarze\u0144 w oknie)`;
         html += ` \u2014 BTS: <span class="muted">${it.bts}</span>`;
         if (it.next_date) html += ` \u2192 nast\u0119pna aktywno\u015B\u0107: ${it.next_date} ${it.next_time}`;
+        html += `</div>`;
+      }
+    } else if (type === "foreigners") {
+      for (const it of items) {
+        const confBadge = it.confidence === "high"
+          ? '<span style="background:#fecaca;color:#991b1b;border-radius:3px;padding:1px 5px;font-size:11px;font-weight:600">WYSOKI</span>'
+          : it.confidence === "medium"
+          ? '<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 5px;font-size:11px;font-weight:600">ŚREDNI</span>'
+          : '<span style="background:#e0f2fe;color:#0c4a6e;border-radius:3px;padding:1px 5px;font-size:11px">NISKI</span>';
+        const signalStr = it.signals.join(", ");
+        const peselInfo = it.pesel ? ` | PESEL: <code>${it.pesel}</code>` : " | <b>brak PESEL</b>";
+        const addrInfo = it.city ? ` | ${it.city}` : (it.address ? ` | ${it.address.substring(0, 40)}` : "");
+        const originBadge = it.foreign_origin ? ` <span class="muted">[${it.foreign_origin}]</span>` : "";
+        html += `<div style="margin-bottom:5px;padding:3px 6px;border-radius:4px;background:rgba(249,115,22,.04)">`;
+        html += `${confBadge} <code>${it.number}</code> \u2014 <b>${it.name}</b>${originBadge}`;
+        html += `<div style="font-size:11px;margin-top:2px"><span class="muted">Sygnały:</span> ${signalStr}${peselInfo}${addrInfo}</div>`;
         html += `</div>`;
       }
     } else {
