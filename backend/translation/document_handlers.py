@@ -792,12 +792,15 @@ class DOCHandler(DocumentHandler):
 
     @staticmethod
     def convert_doc_to_docx(doc_path: Path) -> Path:
-        """Convert .doc file to .docx using LibreOffice.  Returns path to the new .docx."""
+        """Convert .doc/.pdf to .docx using LibreOffice.  Returns path to the new .docx."""
         lo = DOCHandler._find_libreoffice()
+        src_ext = doc_path.suffix.lower()
         if not lo:
+            fmt_hint = "DOC" if src_ext == ".doc" else src_ext.lstrip(".").upper()
             raise RuntimeError(
-                "LibreOffice is required to process .doc files. "
-                "Please install LibreOffice or convert the file to .docx manually."
+                f"LibreOffice jest wymagany do konwersji plików {fmt_hint}. "
+                f"Zainstaluj LibreOffice (sudo apt install libreoffice) "
+                f"lub przekonwertuj plik na .docx ręcznie."
             )
 
         tmp_dir = tempfile.mkdtemp(prefix="aistate_doc_")
