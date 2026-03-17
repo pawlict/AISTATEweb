@@ -602,7 +602,11 @@ def synthesize_mms(text: str, model_id: str, output_path: str) -> bool:
         waveform = output.squeeze().cpu().float().numpy()
         rate = model.config.sampling_rate
 
-        scipy.io.wavfile.write(output_path, rate=rate, data=waveform)
+        # Normalize and convert to int16 for proper WAV output
+        import numpy as np
+        waveform = np.clip(waveform, -1.0, 1.0)
+        waveform_int16 = (waveform * 32767).astype(np.int16)
+        scipy.io.wavfile.write(output_path, rate=rate, data=waveform_int16)
 
         _progress(90)
         _log(f"Audio saved to {output_path} (rate={rate}Hz)")

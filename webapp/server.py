@@ -2599,6 +2599,16 @@ async def api_translation_upload(
         resp: dict = {"ok": True, "text": text, "filename": name, "ext": ext, "size": len(content)}
         if keep_original:
             resp["upload_id"] = upload_id
+
+        # Auto-detect source language from extracted text
+        try:
+            from backend.translation.language_detector import detect_language  # type: ignore
+            detected = await run_in_threadpool(detect_language, text)
+            if detected:
+                resp["detected_lang"] = detected
+        except Exception:
+            pass
+
         return resp
     except Exception as e:
         app_log(f"Translation upload error: {e}")
@@ -2610,6 +2620,21 @@ async def api_translation_upload(
                 tmp_path.unlink(missing_ok=True)  # type: ignore[arg-type]
             except Exception:
                 pass
+
+
+@app.post("/api/translation/detect-language")
+async def api_translation_detect_language(request: Request) -> Any:
+    """Detect the language of provided text."""
+    body = await request.json()
+    text = str(body.get("text", "")).strip()
+    if len(text) < 10:
+        return {"detected_lang": None}
+    try:
+        from backend.translation.language_detector import detect_language  # type: ignore
+        detected = await run_in_threadpool(detect_language, text[:2000])
+        return {"detected_lang": detected}
+    except Exception:
+        return {"detected_lang": None}
 
 
 @app.post("/api/translation/export-to-original")
@@ -3054,10 +3079,13 @@ async def api_translation_export(
     from pathlib import Path as _Path
     import tempfile as _tmpmod
 
+    from urllib.parse import quote as _url_quote
+
     fmt = str(format or "txt").lower().strip()
     if fmt == "doc":
         fmt = "docx"
     name = (str(filename or "translation").strip() or "translation").replace("/", "_")
+    _name_ascii = name.encode("ascii", "replace").decode("ascii")
 
     raw = (text or "").strip()
 
@@ -3071,7 +3099,7 @@ async def api_translation_export(
         return StreamingResponse(
             _io.BytesIO(data),
             media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{name}.txt"'},
+            headers={"Content-Disposition": f"attachment; filename=\"{_name_ascii}.txt\"; filename*=UTF-8''{_url_quote(name + '.txt')}"},
         )
 
     # ---- HTML: markdown → styled HTML document ----
@@ -3130,7 +3158,7 @@ async def api_translation_export(
         return StreamingResponse(
             _io.BytesIO(data),
             media_type="text/html; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename=\"{name}.html\""},
+            headers={"Content-Disposition": f"attachment; filename=\"{_name_ascii}.html\"; filename*=UTF-8''{_url_quote(name + '.html')}"},
         )
 
     # ---- DOCX: markdown → Word document ----
@@ -3152,7 +3180,7 @@ async def api_translation_export(
         return StreamingResponse(
             _io.BytesIO(docx_bytes),
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f"attachment; filename=\"{name}.docx\""},
+            headers={"Content-Disposition": f"attachment; filename=\"{_name_ascii}.docx\"; filename*=UTF-8''{_url_quote(name + '.docx')}"},
         )
 
     raise HTTPException(status_code=400, detail="Unsupported format")

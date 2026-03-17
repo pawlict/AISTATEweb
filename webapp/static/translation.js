@@ -5,6 +5,33 @@ let currentResults = {};
 let currentLanguages = [];
 let trProgressInterval = null;
 
+// Auto-detect language debounce
+var _detectLangTimer = null;
+function _trDebounceDetectLang() {
+    var srcEl = document.getElementById('source_lang');
+    // Only auto-detect when "auto" is selected
+    if (!srcEl || srcEl.value !== 'auto') return;
+    if (_detectLangTimer) clearTimeout(_detectLangTimer);
+    _detectLangTimer = setTimeout(function() {
+        var inEl = document.getElementById('input-text');
+        var text = inEl ? inEl.value.trim() : '';
+        if (text.length < 20) return;
+        fetch('/api/translation/detect-language', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text: text.substring(0, 2000)})
+        }).then(function(r){ return r.json(); }).then(function(data){
+            if (data.detected_lang && srcEl && srcEl.value === 'auto') {
+                srcEl.value = data.detected_lang;
+                var langName = getLangName(data.detected_lang) || data.detected_lang;
+                showToast(trFmt('translation.detected_lang', {lang: langName},
+                    'Wykryto język źródłowy: {lang}'), 'info');
+                _trScheduleSave('source_lang');
+            }
+        }).catch(function(){});
+    }, 1500);
+}
+
 // Upload state — kept for "save to original" feature (PPTX/DOCX/DOC/PDF)
 let _uploadId = null;
 let _uploadExt = null;
@@ -421,7 +448,12 @@ function _trHookDraftAutosave(){
 
     // Input text
     const inEl = _byId('input-text');
-    if(inEl) inEl.addEventListener('input', ()=>_trScheduleSave('input'));
+    if(inEl) {
+        inEl.addEventListener('input', ()=>_trScheduleSave('input'));
+        // Auto-detect language when text changes (debounced)
+        inEl.addEventListener('input', _trDebounceDetectLang);
+        inEl.addEventListener('paste', function(){ setTimeout(_trDebounceDetectLang, 100); });
+    }
 
     // Source lang
     const srcEl = _byId('source_lang');
@@ -649,10 +681,9 @@ function setupLanguageCheckboxes() {
 }
 
 function updateLanguageSelection() {
-    const supported = new Set(['polish','english','russian','ukrainian','belarusian','chinese']);
     const selected = Array.from(document.querySelectorAll('.lang-checkboxes input[type="checkbox"]:checked'))
         .map(cb => String(cb.value || '').trim())
-        .filter(v => supported.has(v));
+        .filter(v => v.length > 0);
 
     currentLanguages = selected;
 }
@@ -767,6 +798,16 @@ async function handleFile(file) {
         document.getElementById('input-text').value = data.text;
         estimateTranslationTime(data.text);
         _trScheduleSave('upload');
+
+        // Auto-detect language from uploaded content
+        var srcEl = document.getElementById('source_lang');
+        if (data.detected_lang && srcEl) {
+            srcEl.value = data.detected_lang;
+            var langName = getLangName(data.detected_lang) || data.detected_lang;
+            showToast(trFmt('translation.detected_lang', {lang: langName},
+                'Wykryto język źródłowy: {lang}'), 'info');
+            _trScheduleSave('source_lang');
+        }
         
     } catch (error) {
         console.error('Upload error:', error);
@@ -1028,12 +1069,20 @@ function switchLanguageTab(lang) {
 // Language utilities
 function getLangFlag(lang) {
     const flags = {
-        'polish': '🇵🇱',
-        'english': '🇬🇧',
-        'russian': '🇷🇺',
-        'belarusian': '🇧🇾',
-        'ukrainian': '🇺🇦',
-        'chinese': '🇨🇳'
+        'polish': '🇵🇱', 'english': '🇬🇧', 'russian': '🇷🇺',
+        'belarusian': '🇧🇾', 'ukrainian': '🇺🇦', 'chinese': '🇨🇳',
+        'korean': '🇰🇷', 'japanese': '🇯🇵', 'german': '🇩🇪',
+        'french': '🇫🇷', 'spanish': '🇪🇸', 'italian': '🇮🇹',
+        'portuguese': '🇵🇹', 'dutch': '🇳🇱', 'czech': '🇨🇿',
+        'swedish': '🇸🇪', 'turkish': '🇹🇷', 'arabic': '🇸🇦',
+        'hindi': '🇮🇳', 'thai': '🇹🇭', 'vietnamese': '🇻🇳',
+        'indonesian': '🇮🇩', 'hungarian': '🇭🇺', 'romanian': '🇷🇴',
+        'bulgarian': '🇧🇬', 'croatian': '🇭🇷', 'serbian': '🇷🇸',
+        'slovenian': '🇸🇮', 'greek': '🇬🇷', 'danish': '🇩🇰',
+        'norwegian': '🇳🇴', 'finnish': '🇫🇮', 'slovak': '🇸🇰',
+        'latvian': '🇱🇻', 'lithuanian': '🇱🇹', 'estonian': '🇪🇪',
+        'georgian': '🇬🇪', 'hebrew': '🇮🇱', 'persian': '🇮🇷',
+        'malay': '🇲🇾',
     };
     return flags[lang] || '';
 }
@@ -1048,12 +1097,20 @@ function getLangName(lang) {
         }
     }catch(e){}
     const names = {
-        'polish': 'Polski',
-        'english': 'English',
-        'russian': 'Русский',
-        'belarusian': 'Беларускі',
-        'ukrainian': 'Українська',
-        'chinese': '中文'
+        'polish': 'Polski', 'english': 'English', 'russian': 'Русский',
+        'belarusian': 'Беларускі', 'ukrainian': 'Українська', 'chinese': '中文',
+        'korean': '한국어', 'japanese': '日本語', 'german': 'Deutsch',
+        'french': 'Français', 'spanish': 'Español', 'italian': 'Italiano',
+        'portuguese': 'Português', 'dutch': 'Nederlands', 'czech': 'Čeština',
+        'swedish': 'Svenska', 'turkish': 'Türkçe', 'arabic': 'العربية',
+        'hindi': 'हिन्दी', 'thai': 'ไทย', 'vietnamese': 'Tiếng Việt',
+        'indonesian': 'Bahasa Indonesia', 'hungarian': 'Magyar', 'romanian': 'Română',
+        'bulgarian': 'Български', 'croatian': 'Hrvatski', 'serbian': 'Српски',
+        'slovenian': 'Slovenščina', 'greek': 'Ελληνικά', 'danish': 'Dansk',
+        'norwegian': 'Norsk', 'finnish': 'Suomi', 'slovak': 'Slovenčina',
+        'latvian': 'Latviešu', 'lithuanian': 'Lietuvių', 'estonian': 'Eesti',
+        'georgian': 'ქართული', 'hebrew': 'עברית', 'persian': 'فارسی',
+        'malay': 'Bahasa Melayu',
     };
     return names[lang] || lang;
 }
