@@ -1170,7 +1170,7 @@ async function exportSelectedReports() {
 
     for (const v of selected) {
         // eslint-disable-next-line no-await-in-loop
-        if (v === 'pptx' || v === 'pdf_original' || v === 'docx_original') {
+        if (v === 'pptx' || v === 'pdf_original' || v === 'docx_original' || v === 'doc_original') {
             await exportToOriginal();
         } else {
             await exportAs(mapFmt(v));
@@ -2103,20 +2103,20 @@ document.addEventListener('DOMContentLoaded', function() {
 function _trSyncSaveToOriginalBtn() {
     var proofActive = !!(_proofreadState && _proofreadState.lang);
     var extLower = !!_uploadExt ? _uploadExt.replace('.', '').toLowerCase() : '';
-    var canSaveToOriginal = (extLower === 'pptx' || extLower === 'docx' || extLower === 'pdf');
+    var canSaveToOriginal = (extLower === 'pptx' || extLower === 'docx' || extLower === 'doc' || extLower === 'pdf');
     var show = !proofActive && !!_uploadId && canSaveToOriginal;
     var pill = _byId('save_to_original_pill');
     if (pill) pill.style.display = show ? '' : 'none';
     // Update icon and checkbox value to match the uploaded file type
     if (show && pill) {
-        var iconMap = {pptx: 'doc_pptx', docx: 'doc_docx', pdf: 'doc_pdf'};
+        var iconMap = {pptx: 'doc_pptx', docx: 'doc_docx', doc: 'doc_word', pdf: 'doc_pdf'};
         var ico = _byId('save_to_original_icon');
         if (ico) {
             ico.src = '/static/icons/dokumenty/' + (iconMap[extLower] || 'doc_pptx') + '.svg';
             ico.alt = extLower.toUpperCase();
         }
         var cb = _byId('save_to_original_cb');
-        var valMap = {pdf: 'pdf_original', docx: 'docx_original', pptx: 'pptx'};
+        var valMap = {pdf: 'pdf_original', docx: 'docx_original', doc: 'doc_original', pptx: 'pptx'};
         if (cb) cb.value = valMap[extLower] || extLower;
     }
     // Uncheck when hidden so it doesn't interfere with export

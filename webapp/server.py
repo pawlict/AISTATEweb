@@ -2587,7 +2587,7 @@ async def api_translation_upload(
     ext = (Path(name).suffix or "").lower()
     upload_id = uuid.uuid4().hex
     tmp_path = (TRANSLATION_UPLOAD_DIR / f"{upload_id}{ext}").resolve()
-    keep_original = ext in (".pptx", ".docx", ".pdf")
+    keep_original = ext in (".pptx", ".docx", ".doc", ".pdf")
     try:
         content = await file.read()
         tmp_path.write_bytes(content)
@@ -2804,6 +2804,85 @@ async def api_translation_export_to_original(
                     if ftr and not ftr.is_linked_to_previous:
                         for p in ftr.paragraphs:
                             _replace_para(p)
+
+            buf = _io.BytesIO()
+            doc.save(buf)
+            buf.seek(0)
+            dl_name = original_path.stem.split("_", 1)[-1] if "_" in original_path.stem else "dokument"
+            return StreamingResponse(
+                buf,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                headers={"Content-Disposition": f'attachment; filename="translated_{dl_name}.docx"'},
+            )
+
+        elif ext == ".doc":
+            # Convert .doc → .docx via LibreOffice, then apply DOCX logic
+            from backend.translation.document_handlers import DOCHandler  # type: ignore
+
+            docx_path = await run_in_threadpool(DOCHandler.convert_doc_to_docx, original_path)
+            from docx import Document as _DocDocument  # type: ignore
+            from docx.oxml.ns import qn as _qn2  # type: ignore
+            from docx.table import Table as _DocxTable2  # type: ignore
+            from docx.text.paragraph import Paragraph as _DocxParagraph2  # type: ignore
+
+            doc = _DocDocument(str(docx_path))
+            translated_paras = [p for p in text.split("\n") if p.strip()]
+            ptr = 0
+
+            def _replace_para_doc(para):
+                nonlocal ptr
+                if not para.text.strip():
+                    return
+                if ptr >= len(translated_paras):
+                    return
+                new_text = translated_paras[ptr]
+                ptr += 1
+                if para.runs:
+                    para.runs[0].text = new_text
+                    for run in para.runs[1:]:
+                        run.text = ""
+                else:
+                    para.text = new_text
+
+            def _replace_table_doc(table):
+                nonlocal ptr
+                for row in table.rows:
+                    for cell in row.cells:
+                        if not cell.text.strip():
+                            continue
+                        if ptr >= len(translated_paras):
+                            return
+                        new_text = translated_paras[ptr]
+                        ptr += 1
+                        if cell.paragraphs:
+                            p0 = cell.paragraphs[0]
+                            if p0.runs:
+                                p0.runs[0].text = new_text
+                                for run in p0.runs[1:]:
+                                    run.text = ""
+                            else:
+                                p0.text = new_text
+                            for xp in cell.paragraphs[1:]:
+                                for r in xp.runs:
+                                    r.text = ""
+
+            for section in doc.sections:
+                for hdr in (section.header, section.first_page_header):
+                    if hdr and not hdr.is_linked_to_previous:
+                        for p in hdr.paragraphs:
+                            _replace_para_doc(p)
+
+            for child in doc.element.body:
+                if child.tag == _qn2("w:p"):
+                    _replace_para_doc(_DocxParagraph2(child, doc))
+                elif child.tag == _qn2("w:tbl"):
+                    _replace_table_doc(_DocxTable2(child, doc))
+
+            for section in doc.sections:
+                for ftr in (section.footer, section.first_page_footer):
+                    if ftr and not ftr.is_linked_to_previous:
+                        for p in ftr.paragraphs:
+                            _replace_para_doc(p)
 
             buf = _io.BytesIO()
             doc.save(buf)
