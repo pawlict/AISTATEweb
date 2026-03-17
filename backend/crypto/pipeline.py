@@ -154,8 +154,10 @@ def run_crypto_pipeline(
                 "risk_score": tx.risk_score,
                 "risk_tags": tx.risk_tags,
             }
-            for tx in txs
+            for tx in txs[:2000]  # limit for JSON response size
         ],
+        "transactions_truncated": len(txs) > 2000,
+        "transactions_total": len(txs),
         "llm_prompt": llm_prompt,
         "elapsed_sec": round(elapsed, 2),
     }

@@ -732,6 +732,7 @@
   "player.back5": "5초 뒤로",
   "player.fwd5": "5초 앞으로",
   "nav.bts_settings": "BTS 설정",
+  "nav.crypto_settings": "암호화폐 설정",
   "nav.tts_settings": "TTS 설정",
   "tts.page_title": "TTS 설정 (텍스트 음성 변환)",
   "tts.task_title": "작업 진행 상황",

@@ -141,6 +141,39 @@ async def crypto_detail(project_id: str = Query("")):
 #  LLM Narrative Analysis (SSE streaming)
 # ---------------------------------------------------------------------------
 
+@router.get("/api/crypto/config-stats")
+async def crypto_config_stats():
+    """Return counts of sanctioned addresses and known contracts."""
+    import json as _json
+    config_dir = Path(__file__).resolve().parent.parent.parent / "backend" / "crypto" / "config"
+    ofac_count = 0
+    contracts_count = 0
+    try:
+        sanc_path = config_dir / "sanctioned.json"
+        if sanc_path.exists():
+            data = _json.loads(sanc_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                ofac_count = sum(len(v) if isinstance(v, list) else 1 for v in data.values())
+            elif isinstance(data, list):
+                ofac_count = len(data)
+    except Exception:
+        pass
+    try:
+        cont_path = config_dir / "known_contracts.json"
+        if cont_path.exists():
+            data = _json.loads(cont_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                contracts_count = sum(len(v) if isinstance(v, list) else 1 for v in data.values())
+            elif isinstance(data, list):
+                contracts_count = len(data)
+    except Exception:
+        pass
+    return JSONResponse({
+        "ofac_count": ofac_count,
+        "contracts_count": contracts_count,
+    })
+
+
 @router.get("/api/crypto/llm-stream")
 async def crypto_llm_stream(
     model: str = Query(""),

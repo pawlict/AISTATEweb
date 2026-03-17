@@ -2417,6 +2417,11 @@ def page_bts_settings(request: Request) -> Any:
     return render_page(request, "bts_settings.html", "Ustawienia BTS", "bts_settings")
 
 
+@app.get("/crypto-settings", response_class=HTMLResponse)
+def page_crypto_settings(request: Request) -> Any:
+    return render_page(request, "crypto_settings.html", "Ustawienia Crypto", "crypto_settings")
+
+
 @app.get("/admin", response_class=HTMLResponse)
 def page_admin(request: Request) -> Any:
     return render_page(request, "admin.html", "Ustawienia GPU", "admin")
