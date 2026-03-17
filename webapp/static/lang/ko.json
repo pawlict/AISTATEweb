@@ -665,6 +665,7 @@
   "translation.btn.translate_title": "번역",
   "translation.save_to_original": "원본에 저장",
   "translation.save_to_original.done": "원본에 저장됨.",
+  "translation.save_to_original.done_count": "{count}개 파일이 원본에 저장됨.",
   "translation.save_to_original.no_original": "원본 없음 — 파일을 다시 업로드하세요.",
   "translation.save_to_original.no_text": "번역된 텍스트 없음.",
   "translation.btn.import_file": "문서 가져오기 (TXT, DOCX, PDF, SRT, PPTX)",

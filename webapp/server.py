@@ -2672,7 +2672,7 @@ async def api_translation_export_to_original(
     _tl = str(target_lang or "").strip().lower()
     # Map common NLLB language names to short codes
     _LANG_CODES = {
-        "polish": "PL", "english": "EN", "german": "DE", "french": "FR",
+        "polish": "PL", "english": "EN", "belarusian": "BY", "german": "DE", "french": "FR",
         "spanish": "ES", "italian": "IT", "portuguese": "PT", "dutch": "NL",
         "russian": "RU", "ukrainian": "UA", "czech": "CZ", "slovak": "SK",
         "swedish": "SV", "danish": "DA", "norwegian": "NO", "finnish": "FI",
@@ -2690,8 +2690,8 @@ async def api_translation_export_to_original(
     if _orig_fn:
         _base_stem = Path(_orig_fn).stem
     else:
-        # Fallback: extract name from upload_id-based filename
-        _base_stem = original_path.stem.split("_", 1)[-1] if "_" in original_path.stem else original_path.stem
+        # Fallback: use "translation" as default name (UUID-based names are not user-friendly)
+        _base_stem = "translation"
 
     try:
         if ext == ".pptx":

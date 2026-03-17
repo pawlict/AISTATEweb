@@ -676,6 +676,7 @@
   "translation.btn.translate_title": "Tłumacz",
   "translation.save_to_original": "Zapisz do oryginału",
   "translation.save_to_original.done": "Zapisano do oryginału.",
+  "translation.save_to_original.done_count": "Zapisano {count} plik(ów) do oryginału.",
   "translation.save_to_original.no_original": "Brak oryginału — wgraj ponownie plik.",
   "translation.save_to_original.no_text": "Brak przetłumaczonego tekstu.",
   "translation.btn.import_file": "Importuj dokument (TXT, DOCX, PDF, SRT, PPTX)",

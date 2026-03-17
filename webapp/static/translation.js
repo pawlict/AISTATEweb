@@ -230,7 +230,10 @@ function _trCollectDraftState(){
         results: (results && typeof results === 'object' && Object.keys(results).length) ? results : null,
         active_output_lang: activeLang || null,
         summary: summaryText || null,
-        output_visible: outputVisible
+        output_visible: outputVisible,
+        upload_id: _uploadId || null,
+        upload_ext: _uploadExt || null,
+        upload_filename: _uploadFilename || null
     };
 }
 
@@ -375,6 +378,11 @@ function _trApplyDraftState(state){
     document.querySelectorAll('input[name="tr_report_fmt"]').forEach(el => {
         el.checked = rf.includes(String(el.value));
     });
+    // Restore upload state for "save to original" feature
+    if(state.upload_id) _uploadId = state.upload_id;
+    if(state.upload_ext) _uploadExt = state.upload_ext;
+    if(state.upload_filename) _uploadFilename = state.upload_filename;
+
     // Sync PPTX pill visibility (hides & unchecks if no PPTX uploaded)
     _trSyncSaveToOriginalBtn();
 
@@ -1154,83 +1162,133 @@ async function resetOutput() {
 }
 
 // Export functions
-async function exportAs(format) {
-    let text = '';
-    let htmlContent = '';
+async function _exportAsSingle(format, text, baseName, htmlContent) {
+    const formData = new FormData();
+    formData.append('text', text);
+    formData.append('format', format);
+    formData.append('filename', baseName);
+    if (htmlContent) formData.append('html', htmlContent);
 
+    const response = await fetch('/api/translation/export', {
+        method: 'POST',
+        body: formData
+    });
+
+    if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${baseName}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        return true;
+    } else {
+        let detail = '';
+        try {
+            const errData = await response.json();
+            detail = errData.detail || errData.error || '';
+        } catch(_) {
+            detail = 'HTTP ' + response.status;
+        }
+        throw new Error(detail || 'Export failed');
+    }
+}
+
+async function exportAs(format) {
     // Determine active mode: proofreading is active only if lang is set AND there's actual content
     var proofActive = _proofreadState && _proofreadState.lang;
 
+    // Sync current textarea edits back first
+    try {
+        var activeLang = _trGetActiveOutputLang();
+        var outEl = _byId('output-text');
+        if (activeLang && outEl && currentResults) {
+            currentResults[String(activeLang)] = String(outEl.value || '');
+        }
+    } catch(_e) {}
+
     if (proofActive) {
-        // In proofreading mode — take text from proofread_result
+        // In proofreading mode — export only the proofread result
+        var text = '';
+        var htmlContent = '';
         var prEl = _byId('proofread_result');
         if (prEl && prEl.innerHTML.trim()) {
             text = _proofreadExtractText(prEl);
-            // Grab the rendered HTML for rich exports (HTML/DOCX)
             htmlContent = prEl.innerHTML || '';
         }
         if (!text) text = _proofreadState.corrected || '';
-    }
-
-    // Translation output (when NOT in proofread mode, or as fallback)
-    if (!text) {
-        // Sync current textarea edits back first
+        if (!text) {
+            showToast(tr('translation.alert.no_text_to_export','Brak tekstu do eksportu!'), 'warning');
+            return;
+        }
         try {
-            var activeLang = _trGetActiveOutputLang();
-            var outEl = _byId('output-text');
-            if (activeLang && outEl && currentResults) {
-                currentResults[String(activeLang)] = String(outEl.value || '');
-            }
-        } catch(_e) {}
-        text = (document.getElementById('output-text') || {}).value || '';
-    }
-
-    if (!text) {
-        showToast(tr('translation.alert.no_text_to_export','Brak tekstu do eksportu!'), 'warning');
+            await _exportAsSingle(format, text, 'korekta', htmlContent);
+        } catch (error) {
+            console.error('Export error:', error);
+            showToast(trFmt('translation.alert.export_error',{msg: error.message},'Błąd podczas eksportu: {msg}'), 'error');
+        }
         return;
     }
 
-    try {
-        // Choose filename based on mode
-        var baseName = proofActive ? 'korekta' : 'tlumaczenie';
-
-        const formData = new FormData();
-        formData.append('text', text);
-        formData.append('format', format);
-        formData.append('filename', baseName);
-        if (htmlContent) formData.append('html', htmlContent);
-
-        const response = await fetch('/api/translation/export', {
-            method: 'POST',
-            body: formData
-        });
-
-        if (response.ok) {
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${baseName}.${format}`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        } else {
-            // Try to extract error details from backend
-            let detail = '';
-            try {
-                const errData = await response.json();
-                detail = errData.detail || errData.error || '';
-            } catch(_) {
-                detail = 'HTTP ' + response.status;
+    // Multi-language: export each language as a separate file
+    var langs = (currentResults && typeof currentResults === 'object') ? Object.keys(currentResults) : [];
+    if (langs.length > 1) {
+        try {
+            for (var i = 0; i < langs.length; i++) {
+                var langText = String(currentResults[langs[i]] || '').trim();
+                if (!langText) continue;
+                var langCode = getLangFlag(langs[i]) ? langs[i] : langs[i];
+                var fileName = (_uploadFilename ? Path_stem(_uploadFilename) : 'tlumaczenie') + '_' + _langToCode(langs[i]);
+                await _exportAsSingle(format, langText, fileName, '');
             }
-            throw new Error(detail || 'Export failed');
+        } catch (error) {
+            console.error('Export error:', error);
+            showToast(trFmt('translation.alert.export_error',{msg: error.message},'Błąd podczas eksportu: {msg}'), 'error');
         }
+        return;
+    }
 
+    // Single language or fallback
+    var singleText = (document.getElementById('output-text') || {}).value || '';
+    if (!singleText) {
+        showToast(tr('translation.alert.no_text_to_export','Brak tekstu do eksportu!'), 'warning');
+        return;
+    }
+    try {
+        var singleName = (_uploadFilename ? Path_stem(_uploadFilename) : 'tlumaczenie');
+        if (langs.length === 1) singleName += '_' + _langToCode(langs[0]);
+        await _exportAsSingle(format, singleText, singleName, '');
     } catch (error) {
         console.error('Export error:', error);
         showToast(trFmt('translation.alert.export_error',{msg: error.message},'Błąd podczas eksportu: {msg}'), 'error');
     }
+}
+
+// Helper: extract filename stem (without extension)
+function Path_stem(filename) {
+    var name = String(filename || '');
+    var dot = name.lastIndexOf('.');
+    return dot > 0 ? name.substring(0, dot) : name;
+}
+
+// Helper: convert language name to short code for filenames
+function _langToCode(lang) {
+    var codes = {
+        'polish': 'PL', 'english': 'EN', 'russian': 'RU', 'ukrainian': 'UA',
+        'belarusian': 'BY', 'chinese': 'ZH', 'korean': 'KO', 'japanese': 'JA',
+        'german': 'DE', 'french': 'FR', 'spanish': 'ES', 'italian': 'IT',
+        'portuguese': 'PT', 'dutch': 'NL', 'czech': 'CZ', 'swedish': 'SV',
+        'turkish': 'TR', 'arabic': 'AR', 'hindi': 'HI', 'thai': 'TH',
+        'vietnamese': 'VI', 'indonesian': 'ID', 'hungarian': 'HU', 'romanian': 'RO',
+        'bulgarian': 'BG', 'croatian': 'HR', 'serbian': 'RS', 'slovenian': 'SI',
+        'greek': 'GR', 'danish': 'DK', 'norwegian': 'NO', 'finnish': 'FI',
+        'slovak': 'SK', 'latvian': 'LV', 'lithuanian': 'LT', 'estonian': 'EE',
+        'georgian': 'GE', 'hebrew': 'HE', 'persian': 'FA', 'malay': 'MY',
+    };
+    return codes[lang] || String(lang || '').substring(0, 3).toUpperCase();
 }
 
 // Export selected report formats from the toolbar (HTML / DOC / TXT)
@@ -2220,45 +2278,93 @@ function _trSyncSaveToOriginalBtn() {
 }
 
 /** Export translated text back into the original uploaded file */
+async function _exportToOriginalSingle(lang, text) {
+    var formData = new FormData();
+    formData.append('upload_id', _uploadId);
+    formData.append('translated_text', text);
+    if (_uploadFilename) formData.append('original_filename', _uploadFilename);
+    if (lang) formData.append('target_lang', lang);
+
+    var resp = await fetch('/api/translation/export-to-original', {
+        method: 'POST',
+        body: formData
+    });
+
+    if (resp.ok) {
+        var blob = await resp.blob();
+        var url = window.URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        var cd = resp.headers.get('Content-Disposition') || '';
+        var m = cd.match(/filename\*=UTF-8''([^\s;]+)/);
+        if (m) {
+            a.download = decodeURIComponent(m[1]);
+        } else {
+            m = cd.match(/filename="?([^"]+)"?/);
+            a.download = m ? m[1] : ('translated.' + (_uploadExt || '.pptx').replace('.', ''));
+        }
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        return true;
+    } else {
+        var errData = {};
+        try { errData = await resp.json(); } catch(_) {}
+        var detail = errData.detail || errData.error || ('HTTP ' + resp.status);
+        showToast(tr('translation.alert.error_prefix','Błąd') + ': ' + detail, 'error');
+        return false;
+    }
+}
+
 async function exportToOriginal() {
     if (!_uploadId) {
         showToast(tr('translation.save_to_original.no_original','Brak oryginału — wgraj ponownie plik.'), 'warning');
         return;
     }
 
-    // Gather translated text — prefer proofread result, then output textarea
-    var text = '';
+    // Sync current textarea edits back to currentResults
+    try {
+        var activeLang = _trGetActiveOutputLang();
+        var outEl = _byId('output-text');
+        if (activeLang && outEl && currentResults) {
+            currentResults[String(activeLang)] = String(outEl.value || '');
+        }
+    } catch(_e) {}
+
+    // Collect languages to export
+    var langsToExport = {};
+
+    // Proofreading mode — export only the proofread result
     if (_proofreadState && _proofreadState.lang) {
         var prEl = _byId('proofread_result');
-        if (prEl) text = _proofreadExtractText(prEl);
-        if (!text) text = _proofreadState.corrected || '';
-    }
-    if (!text) {
-        // Sync current textarea edits back to currentResults before reading
-        try {
-            var activeLang = _trGetActiveOutputLang();
-            var outEl = _byId('output-text');
-            if (activeLang && outEl && currentResults) {
-                currentResults[String(activeLang)] = String(outEl.value || '');
-            }
-        } catch(_e) {}
-        // Concatenate ALL language results (in case multi-lang translation)
-        var allTexts = [];
-        if (currentResults && typeof currentResults === 'object') {
-            var keys = Object.keys(currentResults);
-            if (keys.length > 1) {
-                // Multi-language — but for save-to-original use only the active tab
-                // (the user picks which language goes back into the PPTX)
-                text = (_byId('output-text') || {}).value || '';
-            } else if (keys.length === 1) {
-                text = String(currentResults[keys[0]] || '');
-            }
-        }
-        if (!text) {
-            text = (_byId('output-text') || {}).value || '';
+        var prText = prEl ? _proofreadExtractText(prEl) : '';
+        if (!prText) prText = _proofreadState.corrected || '';
+        if (prText) {
+            langsToExport[_proofreadState.lang] = prText;
         }
     }
-    if (!text) {
+
+    // Multi-language: export all languages from currentResults
+    if (Object.keys(langsToExport).length === 0 && currentResults && typeof currentResults === 'object') {
+        var keys = Object.keys(currentResults);
+        for (var i = 0; i < keys.length; i++) {
+            var t = String(currentResults[keys[i]] || '').trim();
+            if (t) langsToExport[keys[i]] = t;
+        }
+    }
+
+    // Fallback: export active tab text
+    if (Object.keys(langsToExport).length === 0) {
+        var fallbackText = (_byId('output-text') || {}).value || '';
+        if (fallbackText) {
+            var fallbackLang = '';
+            try { fallbackLang = _trGetActiveOutputLang() || ''; } catch(_e2) {}
+            langsToExport[fallbackLang] = fallbackText;
+        }
+    }
+
+    if (Object.keys(langsToExport).length === 0) {
         showToast(tr('translation.save_to_original.no_text','Brak przetłumaczonego tekstu.'), 'warning');
         return;
     }
@@ -2267,39 +2373,16 @@ async function exportToOriginal() {
     if (pill) { pill.style.opacity = '0.5'; pill.style.pointerEvents = 'none'; }
 
     try {
-        var formData = new FormData();
-        formData.append('upload_id', _uploadId);
-        formData.append('translated_text', text);
-        // Pass original filename and target language for proper naming
-        if (_uploadFilename) formData.append('original_filename', _uploadFilename);
-        var activeLang = '';
-        try { activeLang = _trGetActiveOutputLang() || ''; } catch(_e2) {}
-        if (activeLang) formData.append('target_lang', activeLang);
-
-        var resp = await fetch('/api/translation/export-to-original', {
-            method: 'POST',
-            body: formData
-        });
-
-        if (resp.ok) {
-            var blob = await resp.blob();
-            var url = window.URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = url;
-            // Extract filename from Content-Disposition or use default
-            var cd = resp.headers.get('Content-Disposition') || '';
-            var m = cd.match(/filename="?([^"]+)"?/);
-            a.download = m ? m[1] : ('translated.' + (_uploadExt || '.pptx').replace('.', ''));
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            showToast(tr('translation.save_to_original.done','Zapisano do oryginału.'), 'success');
-        } else {
-            var errData = {};
-            try { errData = await resp.json(); } catch(_) {}
-            var detail = errData.detail || errData.error || ('HTTP ' + resp.status);
-            showToast(tr('translation.alert.error_prefix','Błąd') + ': ' + detail, 'error');
+        var exported = 0;
+        var langs = Object.keys(langsToExport);
+        for (var j = 0; j < langs.length; j++) {
+            var ok = await _exportToOriginalSingle(langs[j], langsToExport[langs[j]]);
+            if (ok) exported++;
+        }
+        if (exported > 0) {
+            showToast(trFmt('translation.save_to_original.done_count',
+                {count: exported},
+                'Zapisano {count} plik(ów) do oryginału.'), 'success');
         }
     } catch(e) {
         console.error('Export to original error:', e);
