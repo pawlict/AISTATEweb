@@ -635,6 +635,15 @@ class TestImeiDb:
 
     def test_lookup_unknown_imei(self):
         result = lookup_imei("999999990000000")
+        # Now returns partial info (Reporting Body country) even for unknown TAC
+        assert result is not None
+        assert result.brand == ""
+        assert result.model == ""
+        assert result.country == "Chiny"  # prefix 99 → CECT
+
+    def test_lookup_truly_unknown_imei(self):
+        # Prefix 20 has no Reporting Body mapping → returns None
+        result = lookup_imei("200000000000000")
         assert result is None
 
     def test_lookup_samsung(self):
@@ -654,11 +663,15 @@ class TestImeiDb:
         results = lookup_imeis([
             "354236140123456",  # iPhone 14
             "353877230000000",  # Galaxy S23 Ultra
-            "999999990000000",  # unknown
+            "999999990000000",  # unknown TAC but known Reporting Body (CECT)
         ])
-        assert len(results) == 2
+        assert len(results) == 3
         assert "354236140123456" in results
-        assert "999999990000000" not in results
+        assert results["354236140123456"].brand == "Apple"
+        # Unknown TAC but CECT country info is returned
+        assert "999999990000000" in results
+        assert results["999999990000000"].brand == ""
+        assert results["999999990000000"].country == "Chiny"
 
     def test_db_stats(self):
         stats = get_db_stats()

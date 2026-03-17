@@ -588,7 +588,13 @@ def _identify_devices(
             "type": info.device_type if info else "",
             "tac": info.tac if info else "",
             "display_name": info.display_name if info else "",
-            "known": info is not None,
+            "known": info is not None and bool(info.model),
+            "country": info.country if info else "",
+            "region": info.region if info else "",
+            "reporting_body": info.reporting_body if info else "",
+            "brand_country": info.brand_country if info else "",
+            "luhn_computed": info.luhn_computed if info else False,
+            "original_length": info.original_length if info else 0,
         }
         devices.append(device)
 
