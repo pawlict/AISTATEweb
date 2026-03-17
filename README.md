@@ -1,6 +1,6 @@
-# AISTATEweb (3.6 beta)
+# AISTATEweb (3.7 beta)
 
-![Version](https://img.shields.io/badge/Version-3.6%20beta-orange)
+![Version](https://img.shields.io/badge/Version-3.7%20beta-orange)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Web-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -66,6 +66,17 @@ If you have any issues, suggestions, or feature requests, please contact me at: 
 - LLM-assisted analysis (prompt builder for Ollama models)
 - HTML report generation with charts
 - Data anonymization profiles for safe sharing
+
+### 🔗 Crypto — Blockchain Transaction Analysis *(experimental)*
+- Offline analysis of **BTC** and **ETH** cryptocurrency transactions
+- Import from **WalletExplorer.com** CSV and multiple exchange formats (Binance, Etherscan, Kraken, Coinbase, and more)
+- Automatic format detection from CSV column signatures
+- Risk scoring with pattern detection: peel chain, dust attack, round-trip, smurfing
+- OFAC sanctioned address database and known DeFi contract lookup
+- Interactive **transaction flow graph** (Cytoscape.js)
+- Charts: balance timeline, monthly volume, daily activity, counterparty ranking (Chart.js)
+- LLM-assisted narrative analysis via Ollama
+- *This module is currently in early testing phase — features and data formats may change*
 
 ### ⚙️ GPU & Resource Management
 - Integrated **GPU Resource Manager**
@@ -315,6 +326,15 @@ Open in browser: http://127.0.0.1:8000
 
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
+
+## beta 3.7
+- **Crypto Analysis** *(experimental)* — offline blockchain transaction analysis module (BTC/ETH), CSV import (WalletExplorer + 16 exchange formats), risk scoring, pattern detection, flow graph, Chart.js charts, LLM narrative — currently in deep testing phase
+- Auto-detect source language on file upload and text paste (translation module)
+- Multi-language export (all translated languages at once)
+- Fixed DOCX export filenames (underscores issue)
+- Fixed MMS TTS waveform synthesis error
+- Fixed Korean language missing from translation results
+- Version bump to 3.7 beta
 
 ## beta 3.6
 - **GSM / BTS Analysis** — full GSM billing analysis module with interactive maps, timeline, clusters, trips, heatmap, contact graph
