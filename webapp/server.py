@@ -2625,6 +2625,7 @@ async def api_translation_export_to_original(
     """
     import io as _io
     import re as _re
+    from urllib.parse import quote as _url_quote
 
     uid = str(upload_id or "").strip()
     if not _re.fullmatch(r"[a-f0-9]{32}", uid):
@@ -2755,10 +2756,11 @@ async def api_translation_export_to_original(
             prs.save(buf)
             buf.seek(0)
             _dl = f"{_base_stem}{_lang_suffix}.pptx"
+            _dl_ascii = _dl.encode("ascii", "replace").decode("ascii")
             return StreamingResponse(
                 buf,
                 media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                headers={"Content-Disposition": f'attachment; filename="{_dl}"'},
+                headers={"Content-Disposition": f"attachment; filename=\"{_dl_ascii}\"; filename*=UTF-8''{_url_quote(_dl)}"},
             )
 
         elif ext in (".docx", ".doc", ".pdf"):
@@ -2865,10 +2867,11 @@ async def api_translation_export_to_original(
             doc.save(buf)
             buf.seek(0)
             _dl = f"{_base_stem}{_lang_suffix}.docx"
+            _dl_ascii = _dl.encode("ascii", "replace").decode("ascii")
             return StreamingResponse(
                 buf,
                 media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                headers={"Content-Disposition": f'attachment; filename="{_dl}"'},
+                headers={"Content-Disposition": f"attachment; filename=\"{_dl_ascii}\"; filename*=UTF-8''{_url_quote(_dl)}"},
             )
 
         else:
