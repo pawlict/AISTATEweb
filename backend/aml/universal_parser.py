@@ -1822,6 +1822,233 @@ class _CreditAgricoleStatementParser(_BankParser):
 _register(_CreditAgricoleStatementParser())
 
 
+# ------------------------------------------------ Pekao SA parser
+# Format: "HISTORIA OPERACJI" header, DD.MM.YYYY date, multi-line type + details, amount "±X XXX,XX PLN"
+
+_PEKAO_DATE_RE = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
+_PEKAO_AMOUNT_RE = re.compile(r"^([+-]?\s*(?:\d{1,3}(?:\s\d{3})*|\d+),\d{2})\s+PLN$")
+_PEKAO_FOOTER_RE = re.compile(
+    r"^(Potwierdzenie wygenerowane|TelePekao|Infolinia|\+48\s|E-mail|pekao24@|Strona\s+\d+\s+z\s+\d+)"
+)
+
+
+class _PekaoStatementParser(_BankParser):
+    name = "pekao"
+
+    def can_parse(self, lines: List[str]) -> bool:
+        head = "\n".join(lines[:50]).lower()
+        return ("historia operacji" in head or "lista operacji" in head) and (
+            "pekao" in head or "1240" in head
+        )
+
+    def _is_footer(self, line: str) -> bool:
+        return bool(_PEKAO_FOOTER_RE.match(line.strip()))
+
+    def _parse_meta(self, lines: List[str]) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {
+            "bank": "Bank Pekao SA",
+            "currency": "PLN",
+        }
+        n = len(lines)
+        for i in range(min(n, 30)):
+            l = lines[i].strip()
+
+            if l == "Klient:" and i + 1 < n:
+                meta["holder_name"] = lines[i + 1].strip()
+
+            if l == "Numer rachunku:" and i + 1 < n:
+                acc = re.sub(r"\s+", "", lines[i + 1].strip())
+                meta["account_number"] = acc
+
+            if l == "Typ rachunku:" and i + 1 < n:
+                meta["account_type"] = lines[i + 1].strip()
+
+            # "LISTA OPERACJI ZA OKRES OD DD.MM.YYYY DO DD.MM.YYYY"
+            m = re.match(
+                r"LISTA OPERACJI ZA OKRES OD\s+(\d{2}\.\d{2}\.\d{4})\s+DO\s+(\d{2}\.\d{2}\.\d{4})",
+                l, re.I,
+            )
+            if m:
+                meta["period_from"] = self._convert_date(m.group(1))
+                meta["period_to"] = self._convert_date(m.group(2))
+
+        return meta
+
+    @staticmethod
+    def _convert_date(d: str) -> str:
+        """DD.MM.YYYY -> YYYY-MM-DD"""
+        parts = d.split(".")
+        if len(parts) == 3:
+            return f"{parts[2]}-{parts[1]}-{parts[0]}"
+        return d
+
+    @staticmethod
+    def _parse_amount(s: str) -> Optional[Decimal]:
+        s = s.strip().replace("\u00a0", " ")
+        s = re.sub(r"\s+", "", s)
+        s = s.replace(",", ".")
+        try:
+            return Decimal(s)
+        except Exception:
+            return None
+
+    def _parse_transactions(self, lines: List[str], meta: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        txs: List[Dict[str, Any]] = []
+        n = len(lines)
+        i = 0
+
+        # Skip header — find first date after the header table header "Data"
+        while i < n:
+            if lines[i].strip() == "Kwota":
+                i += 1
+                break
+            i += 1
+        if i >= n:
+            # Fallback: start from beginning and look for first date
+            i = 0
+
+        while i < n:
+            l = lines[i].strip()
+
+            # Skip footer lines
+            if self._is_footer(l):
+                i += 1
+                continue
+
+            # Transaction starts with a date
+            if not _PEKAO_DATE_RE.match(l):
+                i += 1
+                continue
+
+            book_date = self._convert_date(l)
+            i += 1
+
+            # Read type + body lines until amount line
+            body_lines: List[str] = []
+            amount = None
+            while i < n:
+                cl = lines[i].strip()
+                if self._is_footer(cl):
+                    i += 1
+                    continue
+                m = _PEKAO_AMOUNT_RE.match(cl)
+                if m:
+                    amount = self._parse_amount(m.group(1))
+                    i += 1
+                    break
+                # Next transaction date means we missed the amount
+                if _PEKAO_DATE_RE.match(cl) and body_lines:
+                    break
+                if cl:
+                    body_lines.append(cl)
+                i += 1
+
+            if amount is None:
+                continue
+
+            # Parse body: first line(s) = type, then details
+            tx_type = ""
+            counterparty = ""
+            title = ""
+            card_info = ""
+
+            # Known multi-line types
+            type_lines: List[str] = []
+            detail_lines: List[str] = []
+
+            known_types_start = (
+                "TRANSAKCJA KART", "PRZELEW", "PROWIZJE", "WYPŁATA KART",
+                "OPŁATA ZA", "ODSETKI OD", "PODATEK POBRANY", "WYPŁATA",
+                "KAPITALIZACJA", "ZLECENIE",
+            )
+            # Known type continuation words (second/third line of multi-line type)
+            _type_continuations = {
+                "PŁATNICZĄ", "MIĘDZYBANKOWY", "DEPOZYTU", "PROWADZENIE",
+                "RACHUNKU", "WEWNĘTRZNY", "ZEWNĘTRZNY", "AUT.",
+                "PRZYCHODZĄCY", "WYCHODZĄCY",
+            }
+            # Gather type lines — type can span 2-3 lines (e.g. "TRANSAKCJA KARTĄ" + "PŁATNICZĄ")
+            j = 0
+            while j < len(body_lines):
+                bl = body_lines[j]
+                bl_upper = bl.upper()
+                if j == 0 and any(bl_upper.startswith(t) for t in known_types_start):
+                    type_lines.append(bl)
+                elif j > 0 and j < 3 and type_lines and bl.strip() in _type_continuations:
+                    type_lines.append(bl)
+                else:
+                    detail_lines.append(bl)
+                j += 1
+
+            tx_type = " ".join(type_lines).strip()
+
+            # Parse detail_lines
+            for dl in detail_lines:
+                if dl.startswith("*") and len(dl) > 5:
+                    card_info = dl
+                elif not counterparty and not dl.startswith(("KRW ", "ODSETKI", "OPŁATA")):
+                    counterparty = dl
+                else:
+                    title = (title + " " + dl).strip() if title else dl
+
+            # For fee/tax transactions with no detail lines, use tx_type as title
+            if not title and not counterparty and tx_type:
+                title = tx_type
+
+            # Channel
+            channel = ""
+            tx_type_lower = tx_type.lower()
+            if "kart" in tx_type_lower:
+                channel = "TR.KART"
+            elif "przelew" in tx_type_lower:
+                channel = "PRZELEW"
+            elif "prowizj" in tx_type_lower or "opłata" in tx_type_lower:
+                channel = "FEE"
+            elif "odsetki" in tx_type_lower or "kapitalizacja" in tx_type_lower:
+                channel = "FEE"
+            elif "podatek" in tx_type_lower:
+                channel = "FEE"
+
+            details: Dict[str, Any] = {}
+            if card_info:
+                m2 = re.match(r"\*+(\d+)", card_info)
+                if m2:
+                    details["card_number_masked"] = card_info
+
+            raw = [f"Data ks: {book_date}", tx_type] + body_lines
+
+            txs.append({
+                "posting_date": book_date,
+                "transaction_date": book_date,  # Pekao "Historia operacji" only has booking date
+                "amount": float(amount),
+                "currency": (meta or {}).get("currency", "PLN"),
+                "balance_after": None,  # Not available in this format
+                "counterparty_name_address": counterparty,
+                "counterparty_account": "",
+                "title": title,
+                "channel": channel,
+                "tx_type": tx_type,
+                "details": details,
+                "body_raw_lines": raw,
+            })
+
+        return txs
+
+    def parse(self, lines: List[str], source_file: str) -> _Statement:
+        meta = self._parse_meta(lines)
+        txs = self._parse_transactions(lines, meta)
+
+        return _Statement(
+            meta=meta,
+            transactions=txs,
+            source_file=source_file,
+            parse_method="pymupdf_lines_pekao",
+        )
+
+
+_register(_PekaoStatementParser())
+
+
 # ------------------------------------------------ public API
 
 def parse_bank_statement(pdf_path: Path) -> ParseResult:
