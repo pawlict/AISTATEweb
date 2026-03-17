@@ -625,11 +625,11 @@ textarea{min-height:220px; resize:vertical}
 }
 .pill-icon img{
   width:28px; height:28px; display:block;
-  opacity:.3;
+  opacity:.55;
   transition: opacity .2s ease;
 }
 .pill-icon:hover img{
-  opacity:.55;
+  opacity:.75;
 }
 .pill-icon:has(input:checked) img{
   opacity:1;
