@@ -510,6 +510,9 @@ def geolocate_records(
     # Home/work detection
     _detect_home_work(analysis)
 
+    # Transit location detection (commute waypoints)
+    _detect_transit(analysis, geo_records)
+
     # Path reconstruction (fine-grained, within-cluster)
     analysis.path = _build_path(geo_records)
 
@@ -801,6 +804,136 @@ def _detect_home_work(analysis: GeoAnalysis) -> None:
     if best_work and best_work != best_home:
         best_work.label = "praca"
         analysis.work_cluster = best_work
+
+
+# ---------------------------------------------------------------------------
+# Transit location detection (commute waypoints)
+# ---------------------------------------------------------------------------
+
+_COMMUTE_HOURS = {6, 7, 8, 9, 16, 17, 18, 19}
+
+
+def _detect_transit(
+    analysis: "GeoAnalysis",
+    geo_records: List[GeoRecord],
+) -> None:
+    """Detect transit/commute locations and label them.
+
+    A cluster is marked as 'tranzyt' (transit) if it scores high enough
+    across four independent signals:
+
+    1. Short dwell time — median visit duration < 15 minutes.
+    2. Commute-hour concentration — >70% of records fall within 6-9 / 16-19.
+    3. On the line between home and work (±30° angular tolerance).
+    4. Low records per visit — average ≤ 1.5 records per unique day.
+
+    Each signal contributes a score (0-25).  Total ≥ 50 → 'tranzyt'.
+    Only unlabelled clusters (not 'dom' or 'praca') are considered.
+    """
+    clusters = analysis.clusters
+    if not clusters:
+        return
+
+    home = analysis.home_cluster
+    work = analysis.work_cluster
+
+    # Pre-compute per-cluster visit dwell times from geo_records
+    # Group records by (cluster_idx, date) → list of datetimes
+    from collections import defaultdict as _dd
+
+    cluster_visits: Dict[int, Dict[str, List[str]]] = _dd(lambda: _dd(list))
+
+    for gr in geo_records:
+        if not gr.point or not gr.point.is_valid or not gr.date:
+            continue
+        # Find nearest cluster
+        best_idx = -1
+        best_dist = float("inf")
+        for i, c in enumerate(clusters):
+            d = _haversine(gr.point.lat, gr.point.lon, c.lat, c.lon)
+            if d < best_dist:
+                best_dist = d
+                best_idx = i
+        if best_idx < 0 or best_dist > 2000:  # within 2km of cluster center
+            continue
+        time_str = gr.time or ""
+        if time_str:
+            cluster_visits[best_idx][gr.date].append(time_str)
+
+    for cluster in clusters:
+        # Skip already labelled clusters (home, work)
+        if cluster.label in ("dom", "praca"):
+            continue
+
+        score = 0
+        idx = cluster.cluster_idx
+
+        # ── Signal 1: Short dwell time ──
+        visit_durations: List[int] = []
+        for date, times in cluster_visits.get(idx, {}).items():
+            if len(times) < 1:
+                continue
+            sorted_times = sorted(times)
+            try:
+                t_first = sorted_times[0].split(":")
+                t_last = sorted_times[-1].split(":")
+                first_min = int(t_first[0]) * 60 + int(t_first[1])
+                last_min = int(t_last[0]) * 60 + int(t_last[1])
+                dwell = last_min - first_min
+                visit_durations.append(max(0, dwell))
+            except (ValueError, IndexError):
+                continue
+
+        if visit_durations:
+            visit_durations.sort()
+            median_dwell = visit_durations[len(visit_durations) // 2]
+            if median_dwell < 15:
+                score += 25
+
+        # ── Signal 2: Commute-hour concentration ──
+        total_records = sum(cluster.hour_counts.values())
+        if total_records > 0:
+            commute_records = sum(
+                cluster.hour_counts.get(h, 0) for h in _COMMUTE_HOURS
+            )
+            commute_ratio = commute_records / total_records
+            if commute_ratio > 0.70:
+                score += 25
+
+        # ── Signal 3: On the line between home and work ──
+        if home and work and home != work:
+            import math as _math
+
+            # Angle from home to work
+            hw_bearing = _math.atan2(
+                work.lon - home.lon, work.lat - home.lat
+            )
+            # Angle from home to this cluster
+            hc_bearing = _math.atan2(
+                cluster.lon - home.lon, cluster.lat - home.lat
+            )
+            angle_diff = abs(_math.degrees(hw_bearing - hc_bearing)) % 360
+            if angle_diff > 180:
+                angle_diff = 360 - angle_diff
+
+            # Check if cluster is between home and work (distance-wise)
+            hw_dist = _haversine(home.lat, home.lon, work.lat, work.lon)
+            hc_dist = _haversine(home.lat, home.lon, cluster.lat, cluster.lon)
+            cw_dist = _haversine(cluster.lat, cluster.lon, work.lat, work.lon)
+
+            # Within ±30° and distance doesn't exceed home-work distance by >30%
+            if angle_diff <= 30 and hc_dist < hw_dist * 1.3 and cw_dist < hw_dist * 1.3:
+                score += 25
+
+        # ── Signal 4: Low records per visit ──
+        if cluster.unique_days > 0:
+            records_per_day = cluster.record_count / cluster.unique_days
+            if records_per_day <= 1.5:
+                score += 25
+
+        # Threshold: ≥ 50 → transit
+        if score >= 50:
+            cluster.label = "tranzyt"
 
 
 # ---------------------------------------------------------------------------
