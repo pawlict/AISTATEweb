@@ -27,9 +27,10 @@ class HybridTranslator:
         'russian': 'rus_Cyrl',
         'belarusian': 'bel_Cyrl',
         'ukrainian': 'ukr_Cyrl',
-        'chinese': 'zho_Hans'
+        'chinese': 'zho_Hans',
+        'korean': 'kor_Hang',
     }
-    
+
     # Language names for Ollama prompts
     LANG_NAMES = {
         'polish': 'Polish',
@@ -37,7 +38,8 @@ class HybridTranslator:
         'russian': 'Russian',
         'belarusian': 'Belarusian',
         'ukrainian': 'Ukrainian',
-        'chinese': 'Chinese'
+        'chinese': 'Chinese',
+        'korean': 'Korean',
     }
     
     def __init__(
