@@ -2347,7 +2347,7 @@
 
   // Canonical category definitions — always shown, always in this order
   const _ANOMALY_CATS = [
-    { type: "long_call",        label: "D\u0142ugie po\u0142\u0105czenia",               desc: "Po\u0142\u0105czenia trwaj\u0105ce ponad 1 godzin\u0119" },
+    { type: "long_call",        label: "D\u0142ugie po\u0142\u0105czenia",               desc: "Po\u0142\u0105czenia trwaj\u0105ce ponad zadany pr\u00F3g czasowy", configurable: true },
     { type: "late_night_calls", label: "Po\u0142\u0105czenia g\u0142osowe w nocy",       desc: "Rozmowy telefoniczne mi\u0119dzy 00:00 a 05:00 (d\u0142u\u017Csze ni\u017C 10 sek.)" },
     { type: "night_activity",   label: "Wysoka aktywno\u015B\u0107 nocna",          desc: "Ponad 30% wszystkich zdarze\u0144 (po\u0142\u0105czenia, SMS, dane) przypada na godziny 23:00\u201305:00" },
     { type: "night_movement",   label: "Przemieszczanie nocne",           desc: "Zmiana stacji BTS mi\u0119dzy kolejnymi zdarzeniami nocnymi (23:00\u201305:00) \u2014 wskazuje na ruch urz\u0105dzenia w nocy" },
@@ -2355,17 +2355,43 @@
     { type: "premium_number",   label: "Numery premium / p\u0142atne",        desc: "Kontakty z numerami o podwy\u017Cszonej op\u0142acie (70x, 80x)" },
     { type: "roaming",          label: "Aktywno\u015B\u0107 w sieciach zagranicznych", desc: "Rekordy z flag\u0105 roamingu lub z sieci\u0105 zagraniczn\u0105. Szczeg\u00F3\u0142y wyjazd\u00F3w \u2014 patrz sekcja \u201EPrzekroczenia granic\u201D" },
     { type: "foreign_contacts", label: "Interakcje z numerami zagranicznymi", desc: "Po\u0142\u0105czenia i SMS z numerami zagranicznymi (spoza Polski). Dla ka\u017Cdego kraju podano liczb\u0119 interakcji i numery." },
+    { type: "foreigners",       label: "Obcokrajowcy", desc: "Kontakty zidentyfikowane jako potencjalni obcokrajowcy \u2014 na podstawie numeru, danych identyfikacyjnych (PESEL, dokument) i heurystyki nazwiskowej." },
     { type: "forwarded_calls",  label: "Przekierowania po\u0142\u0105cze\u0144",         desc: "Po\u0142\u0105czenia przekierowane na inny numer. Obsługiwane parsery: Plus, Play, T-Mobile." },
     { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
     { type: "satellite_numbers",label: "Numery satelitarne",              desc: "Po\u0142\u0105czenia z numerami telefon\u00F3w satelitarnych (Iridium, Inmarsat, Thuraya, Globalstar i in.)" },
     { type: "social_media",     label: "Konta spo\u0142eczno\u015Bciowe / komunikatory", desc: "Nazwy komunikator\u00F3w i platform spo\u0142eczno\u015Bciowych wykryte w polach bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)" },
     { type: "inactivity_gap",   label: "Brak aktywno\u015Bci", desc: "Okresy bez \u017Cadnego zdarzenia (po\u0142\u0105czenia, SMS, dane). Podano ostatni i pierwszy kontakt.", configurable: true },
     { type: "meeting_after_call", label: "Spotkanie po po\u0142\u0105czeniu", desc: "Po\u0142\u0105czenie przychodz\u0105ce, po kt\u00F3rym telefon pozostaje w tym samym BTS bez aktywno\u015Bci \u2014 mo\u017Cliwe spotkanie.", configurable: true },
-    { type: "foreigners",       label: "Obcokrajowcy", desc: "Kontakty zidentyfikowane jako potencjalni obcokrajowcy \u2014 na podstawie numeru, danych identyfikacyjnych (PESEL, dokument) i heurystyki nazwiskowej." },
   ];
 
   // ── Inactivity gap: configurable threshold (default 12h) ──
   let _inactivityThresholdH = 12;
+
+  // ── Long call: configurable threshold (default 1h = 60 min) ──
+  let _longCallThresholdMin = 60;
+
+  /**
+   * Detect long calls from records on the frontend.
+   * Overrides backend _detect_long_calls (respects custom threshold).
+   */
+  function _detectLongCalls(minMinutes) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!records.length) return [];
+    const thresholdSec = minMinutes * 60;
+    const items = [];
+    for (const r of records) {
+      if (!r.duration_seconds || r.duration_seconds <= thresholdSec) continue;
+      const rt = (r.record_type || "").toUpperCase();
+      if (!rt.includes("CALL") && !rt.includes("VOICE") && !rt.includes("ROZMOW") && !rt.includes("POŁ")) continue;
+      items.push({
+        contact: r.callee || r.caller || "nieznany",
+        duration_min: Math.round(r.duration_seconds / 60),
+        date: r.date || "",
+        time: r.time || "",
+      });
+    }
+    return items;
+  }
 
   /**
    * Detect inactivity gaps from records on the frontend.
@@ -2566,9 +2592,14 @@
   const _FOREIGN_NAME_PATTERNS = [
     // Arabic/Turkish
     { re: /\b(mohammed|muhammad|ahmed|ali|hassan|hussein|ibrahim|mustafa|omar|yusuf|fatima|abdel|abd|bin|bint)\b/i, origin: "arabskie" },
-    // Ukrainian/Russian
-    { re: /\b(oleksandr|oleksiy|dmytro|volodymyr|sergiy|andriy|vasyl|mykola|oksana|tetyana|nataliya|svitlana)\b/i, origin: "ukrai\u0144skie" },
-    { re: /(enko|enko|chuk|yuk|ova|ov|ovich|ievna|ivna)$/i, origin: "wschodnie" },
+    // Ukrainian
+    { re: /\b(oleksandr|oleksiy|dmytro|volodymyr|sergiy|andriy|vasyl|mykola|oksana|tetyana|nataliya|svitlana|yaroslav|bohdan|taras|zoryana|halyna|lyubov)\b/i, origin: "ukrai\u0144skie" },
+    // Belarusian
+    { re: /\b(aliaksandr|aliaksei|uladzimir|zmitser|ryhor|viktar|vasil|mikola|alena|natallia|sviatlana|tatsiana|yanka|kastus|ales|hanna|liudmila|veranika)\b/i, origin: "bia\u0142oruskie" },
+    // Russian
+    { re: /\b(aleksandr|aleksei|dmitriy|vladimir|sergei|andrei|nikolai|mikhail|ivan|boris|yuri|oleg|viktor|tatiana|natalya|svetlana|elena|olga|irina|anastasia|ekaterina)\b/i, origin: "rosyjskie" },
+    // Eastern European surname suffixes
+    { re: /(enko|chuk|yuk|ova|ov|ovich|evich|ievna|ivna|evna|sky|skaya)$/i, origin: "wschodnie" },
     // Vietnamese
     { re: /\b(nguyen|tran|pham|hoang|huynh|vo|dang|bui|duong|ngo)\b/i, origin: "wietnamskie" },
     // Chinese
@@ -2722,6 +2753,15 @@
       }
     }
 
+    // Override long_call with frontend-computed results (respects custom threshold)
+    {
+      const lcItems = _detectLongCalls(_longCallThresholdMin);
+      groupMap["long_call"] = {
+        items: lcItems,
+        severity: lcItems.length ? "info" : "ok",
+      };
+    }
+
     // Override inactivity_gap with frontend-computed results (respects custom threshold)
     {
       const igItems = _detectInactivityGaps(_inactivityThresholdH);
@@ -2778,7 +2818,12 @@
       html += `<span style="color:${sevColor};font-size:15px;flex-shrink:0">${sevIcon}</span>`;
       html += `<div style="flex:1;min-width:0">`;
       html += `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><b>${cat.label}</b>`;
-      if (cat.type === "inactivity_gap") {
+      if (cat.type === "long_call") {
+        html += ` <span style="display:inline-flex;align-items:center;gap:3px;font-size:12px">>`
+          + `<input type="number" class="gsm-longcall-threshold" value="${_longCallThresholdMin}" min="1" max="999" step="5"`
+          + ` style="width:48px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--card-bg,#fff);color:var(--text)">`
+          + ` min</span>`;
+      } else if (cat.type === "inactivity_gap") {
         html += ` <span style="display:inline-flex;align-items:center;gap:3px;font-size:12px">>`
           + `<input type="number" class="gsm-inactivity-threshold" value="${_inactivityThresholdH}" min="1" max="999" step="1"`
           + ` style="width:48px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--card-bg,#fff);color:var(--text)">`
@@ -2908,6 +2953,62 @@
         if (mgr) mgr.openNoteForElement(label, "warning", ref);
       });
     });
+
+    // ── Long call threshold input ──
+    const longCallInput = body.querySelector(".gsm-longcall-threshold");
+    if (longCallInput) {
+      longCallInput.addEventListener("click", e => e.stopPropagation());
+      longCallInput.addEventListener("dblclick", e => e.stopPropagation());
+
+      let _lcTimer = null;
+      longCallInput.addEventListener("input", () => {
+        clearTimeout(_lcTimer);
+        _lcTimer = setTimeout(() => {
+          const val = parseInt(longCallInput.value, 10);
+          if (!val || val < 1) return;
+          _longCallThresholdMin = val;
+
+          const newItems = _detectLongCalls(val);
+          groupMap["long_call"] = { items: newItems, severity: newItems.length ? "info" : "ok" };
+
+          const card = longCallInput.closest(".gsm-anomaly-card");
+          if (!card) return;
+          const countEl = card.querySelector(".gsm-anom-count");
+          if (countEl) {
+            countEl.textContent = newItems.length ? `(${newItems.length})` : "\u2014 brak";
+          }
+
+          const container = card.querySelector("[id^='anom_exp_']");
+          if (container) {
+            if (!newItems.length) {
+              container.innerHTML = "";
+              container.style.display = "none";
+            } else {
+              container.style.display = "";
+              container.innerHTML = _renderAnomalyItems("long_call", newItems);
+              const collapsedH = 5 * 22;
+              if (newItems.length > 5) {
+                container.style.maxHeight = collapsedH + "px";
+                container.style.overflowY = "hidden";
+                container.dataset.expanded = "0";
+              } else {
+                container.style.maxHeight = "none";
+                container.style.overflowY = "visible";
+              }
+            }
+          }
+
+          const sev = newItems.length ? "info" : "ok";
+          const sevColor = sev === "info" ? "#3b82f6" : "#22c55e";
+          card.style.borderLeftColor = sevColor;
+          const sevSpan = card.querySelector(".gsm-anomaly-bar > span");
+          if (sevSpan) {
+            sevSpan.style.color = sevColor;
+            sevSpan.textContent = sev === "info" ? "\u2139" : "\u2713";
+          }
+        }, 300);
+      });
+    }
 
     // ── Inactivity threshold input ──
     const thresholdInput = body.querySelector(".gsm-inactivity-threshold");
