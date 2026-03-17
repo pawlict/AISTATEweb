@@ -3,6 +3,9 @@ Document handlers for various file formats
 """
 
 import logging
+import subprocess
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -313,20 +316,52 @@ class PDFHandler(DocumentHandler):
         }
 
     @staticmethod
-    def _fit_fontsize(rect, text: str, start_size: float, min_size: float = 5.0) -> float:
-        """Estimate largest font size that makes *text* fit inside *rect*."""
+    def _fit_fontsize(rect, text: str, start_size: float, min_size: float = 4.0) -> float:
+        """Estimate largest font size that makes *text* fit inside *rect*.
+
+        Uses a more accurate character-width estimation (0.55 * font_size for
+        average glyph width) and accounts for line spacing (1.15x font size).
+        """
         w, h = rect.width, rect.height
         if w <= 0 or h <= 0:
             return min_size
-        for fs in (start_size, start_size * 0.85, start_size * 0.7,
-                   start_size * 0.55, start_size * 0.4, min_size):
-            fs = max(fs, min_size)
-            cpl = w / (fs * 0.52) if fs > 0 else 1          # chars per line (approx)
-            cpl = max(cpl, 1)
-            est_lines = sum(max(1, len(line) / cpl) for line in text.split("\n"))
-            if est_lines * fs * 1.2 <= h:
+        # Try progressively smaller sizes with finer granularity
+        steps = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.42, 0.35, 0.28]
+        for factor in steps:
+            fs = max(start_size * factor, min_size)
+            avg_char_w = fs * 0.55         # average character width
+            line_h = fs * 1.15             # line height with spacing
+            cpl = max(w / avg_char_w, 1)   # chars per line
+            est_lines = 0
+            for line in text.split("\n"):
+                est_lines += max(1, len(line) / cpl)
+            if est_lines * line_h <= h:
                 return fs
         return min_size
+
+    @staticmethod
+    def _match_dict_blocks(orig_blocks: list, dict_blocks: list) -> list:
+        """Match dict blocks to orig_blocks by overlapping bounding boxes.
+
+        Instead of matching by index (which breaks if block counts differ),
+        find the dict_block whose bbox overlaps most with each orig_block.
+        """
+        result: list[dict] = []
+        for ob in orig_blocks:
+            best_font = {"size": 11, "color": (0, 0, 0)}
+            best_overlap = 0
+            ob_rect = ob["rect"]
+            for db in dict_blocks:
+                db_rect = pymupdf.Rect(db["bbox"])
+                overlap = ob_rect & db_rect  # intersection
+                if overlap.is_empty:
+                    continue
+                area = overlap.width * overlap.height
+                if area > best_overlap:
+                    best_overlap = area
+                    best_font = PDFHandler._dominant_font(db)
+            result.append(best_font)
+        return result
 
     @staticmethod
     def inject_translated_text(original_path: Path, translated_text: str) -> bytes:
@@ -335,6 +370,12 @@ class PDFHandler(DocumentHandler):
         Works at **text-block** level (not individual spans) so that each
         paragraph gets a full-width rectangle with proper word-wrapping.
         Uses ``--- Strona N ---`` markers to split text across pages.
+
+        Improvements over v1:
+        - Dict-block matching by bounding-box overlap instead of index
+        - Expanded redaction rects with padding for cleaner coverage
+        - Finer font-size fitting with more granular steps
+        - Page-width expansion for blocks that overflow
         """
         if not PYMUPDF_AVAILABLE:
             raise RuntimeError("PyMuPDF (fitz) not available — cannot write PDF")
@@ -344,9 +385,6 @@ class PDFHandler(DocumentHandler):
         doc = pymupdf.open(str(original_path))
 
         # --- 1. Parse translated text into pages via markers ---------------
-        # Accept a broad pattern: "--- <word> N ---"  so that even if the
-        # marker keyword was partially mangled (e.g. translated to another
-        # language) we still pick it up as long as the number survives.
         marker_re = _re.compile(
             r"^-{2,}\s*\S+\s+(\d+)\s*-{2,}$",
             _re.IGNORECASE | _re.MULTILINE,
@@ -383,12 +421,17 @@ class PDFHandler(DocumentHandler):
                     lptr += n_lines
 
         # --- 2. Process each page ------------------------------------------
+        _ufont = PDFHandler._get_unicode_fontpath()
+
         for page_idx, page in enumerate(doc):
             if page_idx not in pages_text:
                 continue
             page_translated = pages_text[page_idx]
             if not page_translated:
                 continue
+
+            page_rect = page.rect
+            page_margin = 36  # ~0.5 inch margin for expanded blocks
 
             # 2a. Collect original text blocks (block-level bounding rects)
             raw_blocks = page.get_text("blocks")
@@ -405,21 +448,14 @@ class PDFHandler(DocumentHandler):
             if not orig_blocks:
                 continue
 
-            # 2b. Get dominant font info per block from dict representation
+            # 2b. Get dominant font info per block — match by bbox overlap
             dict_blocks = [
                 b for b in page.get_text("dict", flags=pymupdf.TEXT_PRESERVE_WHITESPACE).get("blocks", [])
                 if b.get("type", -1) == 0
             ]
-            block_fonts: list[dict] = []
-            for i, ob in enumerate(orig_blocks):
-                # Match dict_block by index (same order) or fall back
-                if i < len(dict_blocks):
-                    block_fonts.append(PDFHandler._dominant_font(dict_blocks[i]))
-                else:
-                    block_fonts.append({"size": 11, "color": (0, 0, 0)})
+            block_fonts = PDFHandler._match_dict_blocks(orig_blocks, dict_blocks)
 
             # 2c. Distribute translated text across blocks
-            #     Try double-newline split first (natural paragraph breaks)
             paras = [p.strip() for p in _re.split(r"\n\s*\n", page_translated) if p.strip()]
 
             if len(paras) == len(orig_blocks):
@@ -439,15 +475,20 @@ class PDFHandler(DocumentHandler):
                         chunks.append("\n".join(all_lines[lptr:lptr + n]))
                         lptr += n
 
-            # 2d. Redact all original text blocks (white-out)
+            # 2d. Redact all original text blocks (white-out with padding)
+            REDACT_PAD = 2  # small padding around redaction area
             for ob in orig_blocks:
-                page.add_redact_annot(ob["rect"], fill=(1, 1, 1))
+                r = ob["rect"]
+                padded = pymupdf.Rect(
+                    max(0, r.x0 - REDACT_PAD),
+                    max(0, r.y0 - REDACT_PAD),
+                    min(page_rect.width, r.x1 + REDACT_PAD),
+                    min(page_rect.height, r.y1 + REDACT_PAD),
+                )
+                page.add_redact_annot(padded, fill=(1, 1, 1))
             page.apply_redactions()
 
             # 2e. Insert translated text into block rectangles
-            # Use a Unicode font (DejaVu Sans / FreeSans) if available,
-            # so Cyrillic, Polish diacritics, etc. render correctly.
-            _ufont = PDFHandler._get_unicode_fontpath()
             for i, ob in enumerate(orig_blocks):
                 chunk = chunks[i].strip() if i < len(chunks) else ""
                 if not chunk:
@@ -456,6 +497,27 @@ class PDFHandler(DocumentHandler):
                 rect = ob["rect"]
                 fi = block_fonts[i] if i < len(block_fonts) else {"size": 11, "color": (0, 0, 0)}
                 fontsize = PDFHandler._fit_fontsize(rect, chunk, fi["size"])
+
+                # If text still doesn't fit at min font size, expand rect
+                # horizontally to page margins (common for translated text
+                # being longer than original)
+                avg_char_w = fontsize * 0.55
+                line_h = fontsize * 1.15
+                cpl = max(rect.width / avg_char_w, 1)
+                est_lines = sum(max(1, len(ln) / cpl) for ln in chunk.split("\n"))
+                if est_lines * line_h > rect.height * 1.1:
+                    # Try expanding width to page margins
+                    expanded = pymupdf.Rect(
+                        max(page_margin, rect.x0),
+                        rect.y0,
+                        min(page_rect.width - page_margin, max(rect.x1, page_rect.width - page_margin)),
+                        rect.y1,
+                    )
+                    # Also try increasing height slightly (up to 30%)
+                    max_y1 = min(rect.y1 + rect.height * 0.3, page_rect.height - 10)
+                    expanded.y1 = max_y1
+                    fontsize = PDFHandler._fit_fontsize(expanded, chunk, fi["size"])
+                    rect = expanded
 
                 tb_args: dict = dict(
                     rect=rect,
@@ -680,6 +742,98 @@ class PPTXHandler(DocumentHandler):
             raise
 
 
+class DOCHandler(DocumentHandler):
+    """Microsoft Word 97-2003 (.doc) handler — converts to .docx via LibreOffice, then delegates."""
+
+    _LIBREOFFICE_BIN: str | None = None
+    _lo_checked: bool = False
+
+    @classmethod
+    def _find_libreoffice(cls) -> str | None:
+        """Find LibreOffice binary on the system."""
+        if cls._lo_checked:
+            return cls._LIBREOFFICE_BIN
+        cls._lo_checked = True
+        for name in ("libreoffice", "soffice"):
+            path = shutil.which(name)
+            if path:
+                cls._LIBREOFFICE_BIN = path
+                logger.info(f"DOCHandler: using LibreOffice at {path}")
+                return path
+        logger.warning("DOCHandler: LibreOffice not found — .doc support unavailable")
+        return None
+
+    @staticmethod
+    def convert_doc_to_docx(doc_path: Path) -> Path:
+        """Convert .doc file to .docx using LibreOffice.  Returns path to the new .docx."""
+        lo = DOCHandler._find_libreoffice()
+        if not lo:
+            raise RuntimeError(
+                "LibreOffice is required to process .doc files. "
+                "Please install LibreOffice or convert the file to .docx manually."
+            )
+
+        tmp_dir = tempfile.mkdtemp(prefix="aistate_doc_")
+        try:
+            result = subprocess.run(
+                [
+                    lo,
+                    "--headless",
+                    "--convert-to", "docx",
+                    "--outdir", tmp_dir,
+                    str(doc_path),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"LibreOffice conversion failed: {result.stderr[:500]}")
+
+            # Find the converted file
+            docx_files = list(Path(tmp_dir).glob("*.docx"))
+            if not docx_files:
+                raise RuntimeError("LibreOffice did not produce a .docx file")
+
+            # Move the converted file next to the original
+            out_path = doc_path.with_suffix(".docx")
+            # Avoid overwriting if a .docx already exists at that path
+            if out_path.exists():
+                out_path = doc_path.parent / f"{doc_path.stem}_converted.docx"
+            shutil.move(str(docx_files[0]), str(out_path))
+            logger.info(f"Converted {doc_path.name} → {out_path.name}")
+            return out_path
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("LibreOffice conversion timed out (120s)")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def extract_text(self, file_path: Path) -> str:
+        """Extract text from .doc by converting to .docx first."""
+        docx_path = self.convert_doc_to_docx(file_path)
+        try:
+            docx_handler = DOCXHandler()
+            return docx_handler.extract_text(docx_path)
+        finally:
+            # Keep the converted .docx — it will be used for save_translated / export-to-original
+            pass
+
+    def save_translated(
+        self,
+        original_path: Path,
+        translated_text: str,
+        output_path: Path,
+        **kwargs,
+    ):
+        """Save translated .doc — converts to .docx, injects text, saves as .docx."""
+        docx_path = original_path.with_suffix(".docx")
+        if not docx_path.exists():
+            docx_path = self.convert_doc_to_docx(original_path)
+        docx_handler = DOCXHandler()
+        out = output_path.with_suffix(".docx")
+        docx_handler.save_translated(docx_path, translated_text, out, **kwargs)
+
+
 # Factory function
 def get_handler(file_extension: str) -> Optional[DocumentHandler]:
     """
@@ -693,6 +847,7 @@ def get_handler(file_extension: str) -> Optional[DocumentHandler]:
     """
     handlers = {
         '.txt': TXTHandler,
+        '.doc': DOCHandler,
         '.docx': DOCXHandler,
         '.pdf': PDFHandler,
         '.srt': SRTHandler,
