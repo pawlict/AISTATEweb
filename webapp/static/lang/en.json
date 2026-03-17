@@ -674,6 +674,7 @@
   "translation.btn.translate_title": "Translate",
   "translation.save_to_original": "Save to original",
   "translation.save_to_original.done": "Saved to original.",
+  "translation.save_to_original.done_count": "Saved {count} file(s) to original.",
   "translation.save_to_original.no_original": "No original — re-upload the file.",
   "translation.save_to_original.no_text": "No translated text.",
   "translation.btn.import_file": "Import document (TXT, DOCX, PDF, SRT, PPTX)",
