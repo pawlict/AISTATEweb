@@ -2768,15 +2768,22 @@ async def api_translation_export_to_original(
             from docx.text.paragraph import Paragraph as _DocxParagraph  # type: ignore
 
             # --- For .doc and .pdf: convert to .docx via LibreOffice first ---
+            _lo_convert_failed = False
             if ext in (".doc", ".pdf"):
                 from backend.translation.document_handlers import DOCHandler  # type: ignore
-                docx_path = await run_in_threadpool(
-                    DOCHandler.convert_doc_to_docx, original_path
-                )
+                try:
+                    docx_path = await run_in_threadpool(
+                        DOCHandler.convert_doc_to_docx, original_path
+                    )
+                except Exception as lo_err:
+                    if ext == ".pdf":
+                        # Fallback: build a fresh DOCX with translated text
+                        app_log(f"Export-to-original: LibreOffice PDF→DOCX failed ({lo_err}), using plain-DOCX fallback")
+                        _lo_convert_failed = True
+                    else:
+                        raise
             else:
                 docx_path = original_path
-
-            doc = Document(str(docx_path))
 
             # Strip page markers (--- Strona N ---) that come from PDF extraction
             _marker_re = _re.compile(r"^-{2,}\s*\S+\s+\d+\s*-{2,}$", _re.IGNORECASE)
@@ -2784,66 +2791,75 @@ async def api_translation_export_to_original(
                 p for p in text.split("\n")
                 if p.strip() and not _marker_re.match(p.strip())
             ]
-            ptr = 0
 
-            def _replace_para(para):
-                nonlocal ptr
-                if not para.text.strip():
-                    return
-                if ptr >= len(translated_paras):
-                    return
-                new_text = translated_paras[ptr]
-                ptr += 1
-                if para.runs:
-                    para.runs[0].text = new_text
-                    for run in para.runs[1:]:
-                        run.text = ""
-                else:
-                    para.text = new_text
+            if _lo_convert_failed:
+                # Fallback: create a clean DOCX containing just the translated text
+                doc = Document()
+                for para_text in translated_paras:
+                    doc.add_paragraph(para_text)
+            else:
+                doc = Document(str(docx_path))
 
-            def _replace_table(table):
-                nonlocal ptr
-                for row in table.rows:
-                    for cell in row.cells:
-                        if not cell.text.strip():
-                            continue
-                        if ptr >= len(translated_paras):
-                            return
-                        new_text = translated_paras[ptr]
-                        ptr += 1
-                        if cell.paragraphs:
-                            p0 = cell.paragraphs[0]
-                            if p0.runs:
-                                p0.runs[0].text = new_text
-                                for run in p0.runs[1:]:
-                                    run.text = ""
-                            else:
-                                p0.text = new_text
-                            for xp in cell.paragraphs[1:]:
-                                for r in xp.runs:
-                                    r.text = ""
+                ptr = 0
 
-            # --- Walk document in SAME order as extraction ---
-            # 1) Headers
-            for section in doc.sections:
-                for hdr in (section.header, section.first_page_header):
-                    if hdr and not hdr.is_linked_to_previous:
-                        for p in hdr.paragraphs:
-                            _replace_para(p)
+                def _replace_para(para):
+                    nonlocal ptr
+                    if not para.text.strip():
+                        return
+                    if ptr >= len(translated_paras):
+                        return
+                    new_text = translated_paras[ptr]
+                    ptr += 1
+                    if para.runs:
+                        para.runs[0].text = new_text
+                        for run in para.runs[1:]:
+                            run.text = ""
+                    else:
+                        para.text = new_text
 
-            # 2) Body: paragraphs + tables in document order
-            for child in doc.element.body:
-                if child.tag == _qn("w:p"):
-                    _replace_para(_DocxParagraph(child, doc))
-                elif child.tag == _qn("w:tbl"):
-                    _replace_table(_DocxTable(child, doc))
+                def _replace_table(table):
+                    nonlocal ptr
+                    for row in table.rows:
+                        for cell in row.cells:
+                            if not cell.text.strip():
+                                continue
+                            if ptr >= len(translated_paras):
+                                return
+                            new_text = translated_paras[ptr]
+                            ptr += 1
+                            if cell.paragraphs:
+                                p0 = cell.paragraphs[0]
+                                if p0.runs:
+                                    p0.runs[0].text = new_text
+                                    for run in p0.runs[1:]:
+                                        run.text = ""
+                                else:
+                                    p0.text = new_text
+                                for xp in cell.paragraphs[1:]:
+                                    for r in xp.runs:
+                                        r.text = ""
 
-            # 3) Footers
-            for section in doc.sections:
-                for ftr in (section.footer, section.first_page_footer):
-                    if ftr and not ftr.is_linked_to_previous:
-                        for p in ftr.paragraphs:
-                            _replace_para(p)
+                # --- Walk document in SAME order as extraction ---
+                # 1) Headers
+                for section in doc.sections:
+                    for hdr in (section.header, section.first_page_header):
+                        if hdr and not hdr.is_linked_to_previous:
+                            for p in hdr.paragraphs:
+                                _replace_para(p)
+
+                # 2) Body: paragraphs + tables in document order
+                for child in doc.element.body:
+                    if child.tag == _qn("w:p"):
+                        _replace_para(_DocxParagraph(child, doc))
+                    elif child.tag == _qn("w:tbl"):
+                        _replace_table(_DocxTable(child, doc))
+
+                # 3) Footers
+                for section in doc.sections:
+                    for ftr in (section.footer, section.first_page_footer):
+                        if ftr and not ftr.is_linked_to_previous:
+                            for p in ftr.paragraphs:
+                                _replace_para(p)
 
             buf = _io.BytesIO()
             doc.save(buf)

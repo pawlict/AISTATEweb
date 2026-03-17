@@ -831,12 +831,18 @@ class DOCHandler(DocumentHandler):
 
         tmp_dir = tempfile.mkdtemp(prefix="aistate_doc_")
         try:
+            # Dedicated user-install dir prevents profile lock collisions
+            # when multiple conversions run concurrently or a stale lock exists.
+            lo_profile = tempfile.mkdtemp(prefix="aistate_lo_profile_")
+            lo_env_flag = f"--env:UserInstallation=file://{lo_profile}"
+
             # Use explicit filter name — plain "docx" fails when
             # libreoffice-writer is not installed (only core present).
             result = subprocess.run(
                 [
                     lo,
                     "--headless",
+                    lo_env_flag,
                     "--convert-to", 'docx:"Office Open XML Text"',
                     "--outdir", tmp_dir,
                     str(doc_path),
@@ -852,6 +858,7 @@ class DOCHandler(DocumentHandler):
                     [
                         lo,
                         "--headless",
+                        lo_env_flag,
                         "--convert-to", "docx",
                         "--outdir", tmp_dir,
                         str(doc_path),
@@ -860,6 +867,9 @@ class DOCHandler(DocumentHandler):
                     text=True,
                     timeout=120,
                 )
+
+            # Clean up temporary LO profile
+            shutil.rmtree(lo_profile, ignore_errors=True)
 
             if result.returncode != 0:
                 stderr = (result.stderr or "").strip()
