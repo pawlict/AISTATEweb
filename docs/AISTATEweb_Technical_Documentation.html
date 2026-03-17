@@ -1,0 +1,1595 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AISTATEweb v3.6 — Dokumentacja Techniczna</title>
+<style>
+:root {
+  --bg: #fafbfc; --panel: #ffffff; --text: #1a1a2e; --accent: #2563eb;
+  --border: #e2e8f0; --muted: #64748b; --code-bg: #f1f5f9;
+  --navy: #0f172a; --success: #16a34a; --warning: #f59e0b; --danger: #dc2626;
+  --radius: 8px; --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.7; font-size: 15px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Layout */
+.layout { display: flex; min-height: 100vh; }
+.sidebar { width: 280px; background: var(--navy); color: #e2e8f0; position: fixed; top: 0; left: 0; bottom: 0; overflow-y: auto; padding: 20px 0; z-index: 100; }
+.sidebar h2 { color: #fff; font-size: 16px; padding: 0 20px 12px; border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 12px; }
+.sidebar .ver { font-size: 11px; color: #94a3b8; font-weight: normal; display: block; margin-top: 2px; }
+.sidebar a { display: block; padding: 5px 20px; color: #cbd5e1; font-size: 13px; border-left: 3px solid transparent; transition: all .15s; }
+.sidebar a:hover { background: rgba(255,255,255,.06); color: #fff; text-decoration: none; border-left-color: var(--accent); }
+.sidebar a.active { background: rgba(37,99,235,.15); color: #60a5fa; border-left-color: var(--accent); }
+.sidebar .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #64748b; padding: 16px 20px 4px; font-weight: 600; }
+.main { margin-left: 280px; padding: 32px 48px; max-width: 1200px; flex: 1; }
+
+/* Typography */
+h1 { font-size: 32px; color: var(--navy); margin-bottom: 8px; line-height: 1.3; }
+h1 .subtitle { font-size: 16px; color: var(--muted); font-weight: 400; display: block; }
+h2 { font-size: 24px; color: var(--navy); margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--accent); }
+h3 { font-size: 19px; color: var(--navy); margin: 32px 0 12px; }
+h4 { font-size: 16px; color: var(--text); margin: 24px 0 8px; }
+p, ul, ol { margin-bottom: 12px; }
+ul, ol { padding-left: 24px; }
+li { margin-bottom: 4px; }
+
+/* Code */
+code { font-family: var(--mono); background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #7c3aed; }
+pre { background: var(--navy); color: #e2e8f0; padding: 16px 20px; border-radius: var(--radius); overflow-x: auto; margin: 12px 0 16px; font-size: 13px; line-height: 1.6; }
+pre code { background: none; color: inherit; padding: 0; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px; }
+th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+th { background: var(--code-bg); font-weight: 600; color: var(--navy); white-space: nowrap; }
+tr:nth-child(even) { background: rgba(0,0,0,.015); }
+tr:hover { background: rgba(37,99,235,.03); }
+
+/* Cards */
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin: 16px 0; }
+.card.accent { border-left: 4px solid var(--accent); }
+.card.success { border-left: 4px solid var(--success); }
+.card.warning { border-left: 4px solid var(--warning); }
+.card.danger { border-left: 4px solid var(--danger); }
+.card h4 { margin-top: 0; }
+
+/* Tags */
+.tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+.tag.py { background: #dbeafe; color: #1e40af; }
+.tag.js { background: #fef3c7; color: #92400e; }
+.tag.html { background: #fce7f3; color: #9d174d; }
+.tag.css { background: #d1fae5; color: #065f46; }
+.tag.sql { background: #ede9fe; color: #5b21b6; }
+.tag.json { background: #e0e7ff; color: #3730a3; }
+
+/* Tree */
+.tree { font-family: var(--mono); font-size: 13px; line-height: 1.8; background: var(--code-bg); padding: 16px 20px; border-radius: var(--radius); margin: 12px 0; overflow-x: auto; white-space: pre; }
+.tree .dir { color: var(--accent); font-weight: 600; }
+.tree .file { color: var(--text); }
+.tree .desc { color: var(--muted); font-size: 12px; }
+
+/* Badges */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.badge.blue { background: #dbeafe; color: #1e40af; }
+.badge.green { background: #d1fae5; color: #065f46; }
+.badge.orange { background: #fed7aa; color: #9a3412; }
+.badge.red { background: #fecaca; color: #991b1b; }
+.badge.purple { background: #ede9fe; color: #5b21b6; }
+
+/* Print */
+@media print {
+  .sidebar { display: none; }
+  .main { margin-left: 0; padding: 20px; }
+  h2 { page-break-before: always; }
+  pre { white-space: pre-wrap; }
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .sidebar { width: 240px; }
+  .main { margin-left: 240px; padding: 20px 24px; }
+}
+
+/* TOC numbering */
+.section-num { color: var(--accent); font-weight: 700; margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+<!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
+<nav class="sidebar">
+  <h2>📖 AISTATEweb<span class="ver">Dokumentacja Techniczna v3.6</span></h2>
+
+  <div class="section-title">Przegląd</div>
+  <a href="#overview">1. Opis systemu</a>
+  <a href="#architecture">2. Architektura</a>
+  <a href="#tech-stack">3. Stos technologiczny</a>
+
+  <div class="section-title">Struktura projektu</div>
+  <a href="#dir-tree">4. Drzewo katalogów</a>
+  <a href="#files-backend">5. Pliki backend</a>
+  <a href="#files-frontend">6. Pliki frontend</a>
+
+  <div class="section-title">Moduły funkcjonalne</div>
+  <a href="#mod-transcription">7. Transkrypcja</a>
+  <a href="#mod-diarization">8. Diaryzacja</a>
+  <a href="#mod-translation">9. Tłumaczenie</a>
+  <a href="#mod-llm">10. Chat LLM</a>
+  <a href="#mod-tts">11. Synteza mowy</a>
+  <a href="#mod-gsm">12. Analiza GSM</a>
+  <a href="#mod-gsm-adaptive">12b. Adaptywny system parserów</a>
+  <a href="#mod-gsm-notes">12c. System notatek analitycznych</a>
+  <a href="#mod-gsm-tags">12d. System tagowania</a>
+  <a href="#mod-aml">13. Analiza AML</a>
+  <a href="#mod-finance">14. Analiza finansowa</a>
+
+  <div class="section-title">Bezpieczeństwo</div>
+  <a href="#sec-auth">15. Uwierzytelnianie</a>
+  <a href="#sec-passwords">15b. Przechowywanie haseł</a>
+  <a href="#sec-rbac">16. RBAC i role</a>
+  <a href="#sec-users">17. Zarządzanie użytkownikami</a>
+  <a href="#sec-features">18. Mechanizmy bezpieczeństwa</a>
+
+  <div class="section-title">Dane i infrastruktura</div>
+  <a href="#database">19. Baza danych</a>
+  <a href="#api">20. Struktura API</a>
+  <a href="#config">21. Konfiguracja</a>
+  <a href="#testing">22. Testowanie</a>
+</nav>
+
+<!-- ═══════════════════════ MAIN CONTENT ═══════════════════════ -->
+<div class="main">
+
+<!-- ────────────────────── 1. OVERVIEW ────────────────────── -->
+<h1 id="overview">AISTATEweb <span class="subtitle">Dokumentacja Techniczna — wersja 3.6 beta</span></h1>
+
+<div class="card accent">
+<p><strong>AISTATEweb</strong> to zintegrowana platforma analityczna oparta na sztucznej inteligencji, zaprojektowana do transkrypcji audio, diaryzacji mówców, tłumaczenia dokumentów, analizy bilingów GSM, wykrywania prania pieniędzy (AML) oraz interakcji z lokalnymi modelami LLM. System działa w pełni lokalnie — bez przesyłania danych do chmury.</p>
+</div>
+
+<h3>Kluczowe możliwości</h3>
+<ul>
+  <li><strong>Transkrypcja audio</strong> — Whisper (OpenAI), NeMo (NVIDIA), obsługa 99+ języków</li>
+  <li><strong>Diaryzacja głosów</strong> — pyannote.audio, automatyczne rozpoznawanie mówców</li>
+  <li><strong>Detekcja dźwięków</strong> — YAMNet, PANNs, BEATs (rozpoznawanie odgłosów otoczenia)</li>
+  <li><strong>Tłumaczenie</strong> — NLLB-200 (Meta, 200+ języków) + LLM hybrydowe</li>
+  <li><strong>Chat LLM</strong> — Ollama (lokalne modele AI), strumieniowanie SSE</li>
+  <li><strong>Analiza bilingów GSM</strong> — Plus, Play, T-Mobile, Orange, Orange Retencja</li>
+  <li><strong>AML</strong> — Analiza wyciągów bankowych, wykrywanie prania pieniędzy</li>
+  <li><strong>Analiza finansowa</strong> — 7 parserów bankowych, kategoryzacja, scoring</li>
+  <li><strong>Synteza mowy (TTS)</strong> — Piper, MMS, Kokoro</li>
+  <li><strong>Multi-user</strong> — System ról RBAC, workspace'y, audyt</li>
+</ul>
+
+
+<!-- ────────────────────── 2. ARCHITECTURE ────────────────────── -->
+<h2 id="architecture"><span class="section-num">2.</span> Architektura systemu</h2>
+
+<div class="card">
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│                      PRZEGLĄDARKA                           │
+│  ┌──────────┐ ┌──────────┐ ┌──────┐ ┌─────┐ ┌────────────┐│
+│  │ Leaflet  │ │Cytoscape │ │Chart │ │ SSE │ │ Web Audio  ││
+│  │  (Mapy)  │ │  (Grafy) │ │ .js  │ │     │ │    API     ││
+│  └──────────┘ └──────────┘ └──────┘ └─────┘ └────────────┘│
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │     Vanilla JavaScript (gsm.js, aml.js, app.js...)    │ │
+│  └────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                           ▲ HTTP / SSE
+                           │
+┌─────────────────────────────────────────────────────────────┐
+│                    FastAPI + Uvicorn                         │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  webapp/server.py (8800+ linii, 149 endpointów)     │   │
+│  │  webapp/routers/ (10 routerów, 158 endpointów)      │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐  │
+│  │ TaskManager │  │ GPUResource  │  │ Jinja2 Templates  │  │
+│  │ (kolejka)   │  │   Manager    │  │  (24 szablonów)   │  │
+│  └──────┬──────┘  └──────────────┘  └───────────────────┘  │
+│         │                                                   │
+│  ┌──────▼─────────────────────────────────────────────┐     │
+│  │              Backend Modules                        │     │
+│  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌─────────┐  │     │
+│  │  │ GSM  │ │ AML  │ │Finan │ │Trans │ │ Prompts │  │     │
+│  │  │      │ │      │ │  ce  │ │lation│ │         │  │     │
+│  │  └──────┘ └──────┘ └──────┘ └──────┘ └─────────┘  │     │
+│  └────────────────────────────────────────────────────┘     │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Workers (subprocessy): transcribe, diarize, TTS,   │   │
+│  │  translation, ASR download, sound detection, NLLB   │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                           │
+            ┌──────────────┼──────────────┐
+            ▼              ▼              ▼
+    ┌──────────────┐ ┌──────────┐ ┌──────────────┐
+    │   SQLite     │ │  JSON    │ │    Ollama    │
+    │   (WAL)      │ │  Files   │ │  (LLM API)  │
+    │  aistate.db  │ │ projekty │ │ localhost    │
+    └──────────────┘ └──────────┘ └──────────────┘
+</code></pre>
+</div>
+
+<h3>Przepływ danych</h3>
+<ol>
+  <li><strong>Interfejs webowy</strong> — przeglądarka wysyła żądania HTTP do FastAPI</li>
+  <li><strong>Router</strong> — serwer kieruje do odpowiedniego modułu backend</li>
+  <li><strong>TaskManager</strong> — ciężkie zadania ML (transkrypcja, tłumaczenie, TTS) uruchamiane jako subprocesy Python</li>
+  <li><strong>GPUResourceManager</strong> — kolejkuje zadania GPU z priorytetami, zapobiega wyczerpaniu VRAM</li>
+  <li><strong>Workers</strong> — raporują postęp przez <code>PROGRESS: N</code> na stderr, wyniki jako JSON na stdout</li>
+  <li><strong>Baza danych</strong> — SQLite w trybie WAL (współbieżne odczyty), 27 tabel, 47 indeksów</li>
+</ol>
+
+
+<!-- ────────────────────── 3. TECH STACK ────────────────────── -->
+<h2 id="tech-stack"><span class="section-num">3.</span> Stos technologiczny</h2>
+
+<table>
+<tr><th>Warstwa</th><th>Technologia</th><th>Wersja / Uwagi</th></tr>
+<tr><td>Język</td><td>Python</td><td>3.11+ z <code>from __future__ import annotations</code></td></tr>
+<tr><td>Framework web</td><td>FastAPI + Uvicorn</td><td>Async, ASGI</td></tr>
+<tr><td>Szablony</td><td>Jinja2</td><td>Server-side rendering</td></tr>
+<tr><td>Frontend</td><td>Vanilla JavaScript</td><td>Bez build stepu, bez npm</td></tr>
+<tr><td>Baza danych</td><td>SQLite</td><td>WAL mode, 27 tabel</td></tr>
+<tr><td>ASR</td><td>Whisper (OpenAI)</td><td>tiny/base/small/medium/large</td></tr>
+<tr><td>ASR alt</td><td>NeMo (NVIDIA)</td><td>Conformer CTC</td></tr>
+<tr><td>Diaryzacja</td><td>pyannote.audio</td><td>speaker-diarization-3.1</td></tr>
+<tr><td>Detekcja dźwięków</td><td>YAMNet / PANNs / BEATs</td><td>3 silniki</td></tr>
+<tr><td>Tłumaczenie</td><td>NLLB-200 (Meta)</td><td>200+ języków, CC-BY-NC 4.0</td></tr>
+<tr><td>LLM</td><td>Ollama</td><td>40+ modeli: Llama, Mistral, Gemma, Qwen, DeepSeek, Bielik, PLLuM, Aya, Command-R</td></tr>
+<tr><td>TTS</td><td>Piper / MMS / Kokoro</td><td>3 silniki syntezy mowy</td></tr>
+<tr><td>ML</td><td>scikit-learn</td><td>Isolation Forest (AML)</td></tr>
+<tr><td>Fuzzy matching</td><td>rapidfuzz</td><td>Dopasowywanie kontrahentów</td></tr>
+<tr><td>PDF</td><td>PyMuPDF (fitz)</td><td>Ekstrakcja tekstu z PDF</td></tr>
+<tr><td>Mapy</td><td>Leaflet.js</td><td>BTS geolokalizacja, offline tiles</td></tr>
+<tr><td>Grafy</td><td>Cytoscape.js</td><td>Wizualizacja przepływów AML</td></tr>
+<tr><td>Wykresy</td><td>Chart.js</td><td>Wykresy finansowe</td></tr>
+<tr><td>Geokodowanie</td><td>Nominatim / OpenStreetMap</td><td>Tłumaczenie adresów BTS na GPS</td></tr>
+<tr><td>Ikony</td><td>AISTATE Digital Brush</td><td>291 ikon SVG w 28 kategoriach</td></tr>
+</table>
+
+
+<!-- ────────────────────── 4. DIRECTORY TREE ────────────────────── -->
+<h2 id="dir-tree"><span class="section-num">4.</span> Drzewo katalogów</h2>
+
+<h3>4.1 Struktura główna</h3>
+<div class="tree">
+<span class="dir">AISTATEweb/</span>
+├── <span class="file">AISTATEweb.py</span>           <span class="desc">— punkt wejścia (uruchamia uvicorn)</span>
+├── <span class="file">CLAUDE.md</span>               <span class="desc">— instrukcje dla AI asystenta</span>
+├── <span class="file">README.md</span>               <span class="desc">— opis projektu</span>
+├── <span class="file">LICENSE</span>                  <span class="desc">— licencja MIT</span>
+├── <span class="file">THIRD_PARTY_NOTICES.md</span>  <span class="desc">— licencje zależności</span>
+├── <span class="file">requirements.txt</span>        <span class="desc">— zależności Python</span>
+├── <span class="file">pytest.ini</span>              <span class="desc">— konfiguracja testów</span>
+│
+├── <span class="dir">backend/</span>                 <span class="desc">— logika backendowa i workery ML</span>
+├── <span class="dir">webapp/</span>                  <span class="desc">— aplikacja FastAPI + frontend</span>
+├── <span class="dir">generators/</span>              <span class="desc">— generatory raportów</span>
+├── <span class="dir">tests/</span>                   <span class="desc">— testy Pytest</span>
+├── <span class="dir">scripts/</span>                 <span class="desc">— skrypty pomocnicze</span>
+└── <span class="dir">tools/</span>                   <span class="desc">— narzędzia standalone (HTML)</span>
+</div>
+
+<h3>4.2 Backend</h3>
+<div class="tree">
+<span class="dir">backend/</span>
+├── <span class="file">__init__.py</span>
+├── <span class="file">settings.py</span>             <span class="desc">— APP_NAME, APP_VERSION, Settings dataclass</span>
+├── <span class="file">settings_store.py</span>       <span class="desc">— persystencja ustawień (JSON)</span>
+├── <span class="file">legacy_adapter.py</span>       <span class="desc">— wrappery Whisper/NeMo/pyannote (~1800 linii)</span>
+├── <span class="file">ollama_client.py</span>        <span class="desc">— async klient HTTP Ollama</span>
+├── <span class="file">document_processor.py</span>   <span class="desc">— ekstrakcja tekstu (TXT/PDF/DOCX/XLSX/PPTX/OCR)</span>
+├── <span class="file">report_generator.py</span>     <span class="desc">— eksport raportów (HTML/TXT/DOCX)</span>
+├── <span class="file">models_info.py</span>          <span class="desc">— katalog modeli LLM</span>
+├── <span class="file">tasks.py</span>                <span class="desc">— infrastruktura zadań/kolejki</span>
+│
+├── <span class="file">transcribe_worker.py</span>    <span class="desc">— subprocess: transkrypcja</span>
+├── <span class="file">asr_worker.py</span>           <span class="desc">— subprocess: instalacja modeli ASR</span>
+├── <span class="file">translation_worker.py</span>   <span class="desc">— subprocess: tłumaczenie NLLB</span>
+├── <span class="file">nllb_worker.py</span>          <span class="desc">— subprocess: zarządzanie modelami NLLB</span>
+├── <span class="file">tts_worker.py</span>           <span class="desc">— subprocess: synteza mowy</span>
+├── <span class="file">voice_worker.py</span>         <span class="desc">— subprocess: diaryzacja</span>
+├── <span class="file">sound_detection_worker.py</span> <span class="desc">— subprocess: detekcja dźwięków</span>
+│
+├── <span class="dir">aml/</span>                    <span class="desc">— moduł Anti-Money Laundering (24 pliki)</span>
+│   ├── <span class="file">pipeline.py</span>         <span class="desc">— główny pipeline AML (orkiestrator)</span>
+│   ├── <span class="file">rules.py</span>            <span class="desc">— silnik reguł (regex, scoring 0-100)</span>
+│   ├── <span class="file">normalize.py</span>        <span class="desc">— normalizacja transakcji (NormalizedTransaction)</span>
+│   ├── <span class="file">baseline.py</span>         <span class="desc">— profil statystyczny (z-score, anomalie)</span>
+│   ├── <span class="file">ml_anomaly.py</span>       <span class="desc">— Isolation Forest / fallback statystyczny</span>
+│   ├── <span class="file">graph.py</span>            <span class="desc">— graf przepływów pieniężnych (Cytoscape)</span>
+│   ├── <span class="file">memory.py</span>           <span class="desc">— pamięć kontrahentów (SQL, fuzzy matching)</span>
+│   ├── <span class="file">review.py</span>           <span class="desc">— klasyfikacja recenzyjna transakcji</span>
+│   ├── <span class="file">cross_account.py</span>    <span class="desc">— analiza cross-account (IBAN matching)</span>
+│   ├── <span class="file">merchants.py</span>        <span class="desc">— kategoryzacja merchantów (~30 kat, 500+ wzorców)</span>
+│   ├── <span class="file">accounts.py</span>         <span class="desc">— identyfikacja kont (own/family/employer)</span>
+│   ├── <span class="file">cards.py</span>            <span class="desc">— analiza kart płatniczych (BIN → marka)</span>
+│   ├── <span class="file">enrich.py</span>           <span class="desc">— wzbogacanie transakcji metadanymi</span>
+│   ├── <span class="file">anonymize.py</span>        <span class="desc">— anonimizacja (IBAN, nazwy)</span>
+│   ├── <span class="file">charts.py</span>           <span class="desc">— generowanie wykresów Chart.js</span>
+│   ├── <span class="file">report.py</span>           <span class="desc">— raport HTML z grafem i wykresami</span>
+│   ├── <span class="file">llm_analysis.py</span>     <span class="desc">— narracja LLM po polsku (~67KB)</span>
+│   ├── <span class="file">column_mapper.py</span>    <span class="desc">— interaktywne mapowanie kolumn PDF</span>
+│   ├── <span class="file">spatial_parser.py</span>   <span class="desc">— parser przestrzenny PDF (~50KB)</span>
+│   ├── <span class="file">universal_parser.py</span> <span class="desc">— parser uniwersalny PDF (~52KB)</span>
+│   ├── <span class="file">mt940_parser.py</span>     <span class="desc">— parser MT940/SWIFT</span>
+│   ├── <span class="file">_payday_lenders.py</span>  <span class="desc">— baza ~475 firm chwilówkowych (KNF)</span>
+│   ├── <span class="file">_polish_banks.py</span>    <span class="desc">— prefiksy sortowe banków (~60)</span>
+│   ├── <span class="file">_polish_cities.py</span>   <span class="desc">— gazetteer miast (~960)</span>
+│   └── <span class="dir">config/</span>
+│       └── <span class="file">rules.yaml</span>      <span class="desc">— definicje reguł AML (YAML)</span>
+│
+├── <span class="dir">finance/</span>                <span class="desc">— moduł analizy finansowej (15 plików)</span>
+│   ├── <span class="file">pipeline.py</span>         <span class="desc">— orkiestrator analizy finansowej</span>
+│   ├── <span class="file">classifier.py</span>       <span class="desc">— klasyfikacja transakcji</span>
+│   ├── <span class="file">llm_classifier.py</span>   <span class="desc">— klasyfikacja przez LLM</span>
+│   ├── <span class="file">detector.py</span>         <span class="desc">— wykrywanie wzorców</span>
+│   ├── <span class="file">behavioral.py</span>       <span class="desc">— analiza behawioralna (trendy)</span>
+│   ├── <span class="file">spending_analysis.py</span> <span class="desc">— analiza wydatków</span>
+│   ├── <span class="file">scorer.py</span>           <span class="desc">— scoring zdrowia finansowego</span>
+│   ├── <span class="file">entity_memory.py</span>    <span class="desc">— śledzenie encji</span>
+│   ├── <span class="file">prompt_builder.py</span>   <span class="desc">— budowanie promptów LLM</span>
+│   ├── <span class="file">quick_extract.py</span>    <span class="desc">— szybka ekstrakcja danych</span>
+│   └── <span class="dir">parsers/</span>            <span class="desc">— parsery wyciągów bankowych</span>
+│       ├── <span class="file">registry.py</span>     <span class="desc">— rejestr + auto-detekcja banku</span>
+│       ├── <span class="file">base.py</span>         <span class="desc">— klasa bazowa parsera</span>
+│       ├── <span class="file">ing.py</span>          <span class="desc">— ING Bank Śląski</span>
+│       ├── <span class="file">pko.py</span>          <span class="desc">— PKO Bank Polski</span>
+│       ├── <span class="file">mbank.py</span>        <span class="desc">— mBank</span>
+│       ├── <span class="file">santander.py</span>    <span class="desc">— Santander Bank Polska</span>
+│       ├── <span class="file">pekao.py</span>        <span class="desc">— Bank Pekao SA</span>
+│       ├── <span class="file">millennium.py</span>   <span class="desc">— Bank Millennium</span>
+│       ├── <span class="file">revolut.py</span>      <span class="desc">— Revolut</span>
+│       └── <span class="file">generic.py</span>      <span class="desc">— fallback generyczny</span>
+│
+├── <span class="dir">gsm/</span>                    <span class="desc">— moduł analizy bilingów GSM (26 plików)</span>
+│   ├── <span class="file">pipeline.py</span>         <span class="desc">— orkiestrator analizy GSM</span>
+│   ├── <span class="file">analyzer.py</span>         <span class="desc">— analizy wzorców + 13 typów anomalii</span>
+│   ├── <span class="file">geolocation.py</span>      <span class="desc">— geolokalizacja BTS (3 fallbacki)</span>
+│   ├── <span class="file">geocoder.py</span>         <span class="desc">— geokodowanie Nominatim</span>
+│   ├── <span class="file">bts_db.py</span>           <span class="desc">— baza stacji bazowych</span>
+│   ├── <span class="file">imei_db.py</span>          <span class="desc">— baza IMEI/TAC → marka/model</span>
+│   ├── <span class="file">identification.py</span>   <span class="desc">— identyfikacja abonenta</span>
+│   ├── <span class="file">normalize.py</span>        <span class="desc">— normalizacja rekordów</span>
+│   ├── <span class="file">charts.py</span>           <span class="desc">— wykresy aktywności</span>
+│   ├── <span class="file">folder_scanner.py</span>   <span class="desc">— skanowanie folderów bilingów</span>
+│   ├── <span class="file">subscriber.py</span>       <span class="desc">— dane abonenta</span>
+│   ├── <span class="file">tile_server.py</span>      <span class="desc">— serwer kafelków map (offline)</span>
+│   ├── <span class="file">tac_database.json</span>   <span class="desc">— baza TAC (IMEI → urządzenie)</span>
+│   ├── <span class="file">note_generator.py</span>   <span class="desc">— generator notatek DOCX z obsługą szablonów</span>
+│   ├── <span class="file">note_templates.py</span>   <span class="desc">— model danych szablonów, CRUD, katalogi markerów/pól</span>
+│   ├── <span class="file">satellite_rules.json</span> <span class="desc">— reguły wykrywania numerów satelitarnych</span>
+│   ├── <span class="file">social_media_rules.json</span> <span class="desc">— reguły wykrywania social media</span>
+│   └── <span class="dir">parsers/</span>            <span class="desc">— parsery bilingów operatorów + system adaptywny</span>
+│       ├── <span class="file">registry.py</span>     <span class="desc">— auto-detekcja operatora</span>
+│       ├── <span class="file">base.py</span>         <span class="desc">— BillingRecord, BillingParser (klasa bazowa)</span>
+│       ├── <span class="file">plus.py</span>         <span class="desc">— Plus/Polkomtel CSV (v1.3) + adaptive fallback</span>
+│       ├── <span class="file">play.py</span>         <span class="desc">— Play/P4 CSV (v1.1) + adaptive fallback</span>
+│       ├── <span class="file">tmobile.py</span>      <span class="desc">— T-Mobile XLSX (v1.1)</span>
+│       ├── <span class="file">orange.py</span>       <span class="desc">— Orange XLSX (v1.0)</span>
+│       ├── <span class="file">orange_retencja.py</span> <span class="desc">— Orange Retencja XLSX (v1.2)</span>
+│       ├── <span class="file">generic.py</span>      <span class="desc">— fallback generyczny (v1.0)</span>
+│       ├── <span class="file">schema_registry.py</span> <span class="desc">— rejestr schematów kolumn (JSON)</span>
+│       ├── <span class="file">schema_validator.py</span> <span class="desc">— walidacja nagłówków (exact/regex/fuzzy)</span>
+│       ├── <span class="file">adaptive_mapper.py</span> <span class="desc">— fuzzy column mapper (fallback)</span>
+│       ├── <span class="file">drift_reporter.py</span> <span class="desc">— raportowanie zmian formatu</span>
+│       ├── <span class="file">parser_updater.py</span> <span class="desc">— modyfikacja kodu z backup</span>
+│       └── <span class="dir">schemas/</span>         <span class="desc">— pliki JSON ze schematami kolumn</span>
+│
+├── <span class="dir">db/</span>                     <span class="desc">— warstwa bazy danych</span>
+│   ├── <span class="file">engine.py</span>           <span class="desc">— silnik SQLite (WAL, init, migracje)</span>
+│   ├── <span class="file">schema.sql</span>          <span class="desc">— schemat 27 tabel, 47 indeksów (619 linii)</span>
+│   ├── <span class="file">backup.py</span>           <span class="desc">— backup/restore z rotacją (SQLite Online Backup API)</span>
+│   ├── <span class="file">migrate.py</span>          <span class="desc">— migracja z JSON na SQLite</span>
+│   └── <span class="file">projects.py</span>         <span class="desc">— CRUD projektów w DB</span>
+│
+├── <span class="dir">prompts/</span>                <span class="desc">— zarządzanie promptami LLM</span>
+│   ├── <span class="file">manager.py</span>          <span class="desc">— CRUD promptów (system + user)</span>
+│   └── <span class="file">templates.py</span>        <span class="desc">— wbudowane szablony promptów</span>
+│
+└── <span class="dir">translation/</span>            <span class="desc">— moduł tłumaczenia</span>
+    ├── <span class="file">hybrid_translator.py</span> <span class="desc">— translator NLLB + LLM</span>
+    ├── <span class="file">document_handlers.py</span> <span class="desc">— handlery formatów (TXT/DOCX/PPTX)</span>
+    ├── <span class="file">language_detector.py</span> <span class="desc">— detekcja języka</span>
+    ├── <span class="file">summarizer.py</span>       <span class="desc">— streszczanie tekstu</span>
+    ├── <span class="file">glossary_manager.py</span> <span class="desc">— glosariusze dziedzinowe</span>
+    └── <span class="dir">glossaries/</span>
+        └── <span class="file">default.json</span>    <span class="desc">— domyślny glosariusz</span>
+</div>
+
+<h3>4.3 Webapp</h3>
+<div class="tree">
+<span class="dir">webapp/</span>
+├── <span class="file">__init__.py</span>
+├── <span class="file">server.py</span>              <span class="desc">— główna aplikacja FastAPI (8800+ linii)</span>
+│
+├── <span class="dir">routers/</span>               <span class="desc">— routery API (10 plików, 158 endpointów)</span>
+│   ├── <span class="file">admin.py</span>           <span class="desc">— GPU Resource Manager (/api/admin)</span>
+│   ├── <span class="file">aml.py</span>             <span class="desc">— AML analiza (55 endpointów)</span>
+│   ├── <span class="file">auth.py</span>            <span class="desc">— uwierzytelnianie (17 endpointów)</span>
+│   ├── <span class="file">chat.py</span>            <span class="desc">— Chat LLM z SSE (6 endpointów)</span>
+│   ├── <span class="file">gsm.py</span>             <span class="desc">— GSM bilingi (40 endpointów)</span>
+│   ├── <span class="file">messages.py</span>        <span class="desc">— Call Center (5 endpointów)</span>
+│   ├── <span class="file">setup.py</span>           <span class="desc">— konfiguracja początkowa (7 endpointów)</span>
+│   ├── <span class="file">tasks.py</span>           <span class="desc">— zarządzanie zadaniami (3 endpointy)</span>
+│   ├── <span class="file">users.py</span>           <span class="desc">— zarządzanie użytkownikami (12 endpointów)</span>
+│   └── <span class="file">workspaces.py</span>      <span class="desc">— workspace'y i podprojekty (24 endpointy)</span>
+│
+├── <span class="dir">auth/</span>                  <span class="desc">— moduł uwierzytelniania (10 plików)</span>
+│   ├── <span class="file">permissions.py</span>     <span class="desc">— RBAC: 6 ról + 2 admin + superadmin</span>
+│   ├── <span class="file">user_store.py</span>      <span class="desc">— CRUD użytkowników (SQLite)</span>
+│   ├── <span class="file">session_store.py</span>   <span class="desc">— sesje (token, expiry, IP)</span>
+│   ├── <span class="file">passwords.py</span>       <span class="desc">— PBKDF2-SHA256, blacklist, polityki</span>
+│   ├── <span class="file">recovery_phrase.py</span> <span class="desc">— frazy odzyskiwania BIP-39 (12 słów)</span>
+│   ├── <span class="file">workspace_store.py</span> <span class="desc">— workspace'y, członkowie, zaproszenia</span>
+│   ├── <span class="file">audit_store.py</span>     <span class="desc">— log audytowy uwierzytelniania</span>
+│   ├── <span class="file">deployment_store.py</span> <span class="desc">— tryb wdrożenia (single/multi)</span>
+│   ├── <span class="file">message_store.py</span>   <span class="desc">— wiadomości Call Center</span>
+│   ├── <span class="file">builtin_passwords.txt</span> <span class="desc">— lista zabronionych haseł</span>
+│   └── <span class="file">bip39_english.txt</span>  <span class="desc">— słownik BIP-39 (2048 słów)</span>
+│
+├── <span class="dir">templates/</span>             <span class="desc">— szablony Jinja2 (24 pliki, ~12 790 linii)</span>
+│   ├── <span class="file">base.html</span>          <span class="desc">— master layout (716 linii)</span>
+│   ├── <span class="file">transcription.html</span> <span class="desc">— transkrypcja audio (2005 linii)</span>
+│   ├── <span class="file">diarization.html</span>   <span class="desc">— diaryzacja mówców (3057 linii)</span>
+│   ├── <span class="file">analysis.html</span>      <span class="desc">— analiza LLM + AML + GSM (1025 linii)</span>
+│   ├── <span class="file">translation.html</span>   <span class="desc">— tłumaczenie (925 linii)</span>
+│   ├── <span class="file">chat.html</span>          <span class="desc">— chat LLM (94 linie)</span>
+│   ├── <span class="file">projects.html</span>      <span class="desc">— dashboard projektów (238 linii)</span>
+│   ├── <span class="file">users.html</span>         <span class="desc">— zarządzanie użytkownikami (1154 linie)</span>
+│   ├── <span class="file">login.html</span>         <span class="desc">— logowanie (standalone, 510 linii)</span>
+│   ├── <span class="file">register.html</span>      <span class="desc">— rejestracja (233 linie)</span>
+│   ├── <span class="file">setup.html</span>         <span class="desc">— kreator pierwszego uruchomienia (457 linii)</span>
+│   ├── <span class="file">settings.html</span>      <span class="desc">— ustawienia ogólne</span>
+│   ├── <span class="file">admin.html</span>         <span class="desc">— panel GPU admin</span>
+│   ├── <span class="file">llm_settings.html</span>  <span class="desc">— ustawienia modeli LLM</span>
+│   ├── <span class="file">asr_settings.html</span>  <span class="desc">— ustawienia modeli ASR</span>
+│   ├── <span class="file">nllb_settings.html</span> <span class="desc">— ustawienia modeli NLLB</span>
+│   ├── <span class="file">tts_settings.html</span>  <span class="desc">— ustawienia TTS</span>
+│   ├── <span class="file">bts_settings.html</span>  <span class="desc">— baza stacji BTS</span>
+│   ├── <span class="file">logs.html</span>          <span class="desc">— przeglądarka logów admin</span>
+│   ├── <span class="file">info.html</span>          <span class="desc">— informacje o systemie</span>
+│   ├── <span class="file">save.html</span>          <span class="desc">— zapis/eksport projektów</span>
+│   ├── <span class="file">change_password.html</span> <span class="desc">— zmiana hasła</span>
+│   ├── <span class="file">pending.html</span>       <span class="desc">— oczekiwanie na zatwierdzenie</span>
+│   └── <span class="file">banned.html</span>        <span class="desc">— konto zablokowane</span>
+│
+└── <span class="dir">static/</span>                <span class="desc">— pliki statyczne</span>
+    ├── <span class="file">app.js</span>             <span class="desc">— framework JS: i18n, API, state (1549 linii)</span>
+    ├── <span class="file">app.css</span>            <span class="desc">— style globalne + dark mode (3839 linii)</span>
+    ├── <span class="file">gsm.js</span>             <span class="desc">— moduł GSM (8983 linie — największy)</span>
+    ├── <span class="file">aml.js</span>             <span class="desc">— moduł AML (4581 linii)</span>
+    ├── <span class="file">translation.js</span>     <span class="desc">— tłumaczenie (2235 linii)</span>
+    ├── <span class="file">users.js</span>           <span class="desc">— zarządzanie użytkownikami (2082 linie)</span>
+    ├── <span class="file">analysis.js</span>        <span class="desc">— analiza LLM (1512 linii)</span>
+    ├── <span class="file">review.js</span>          <span class="desc">— recenzja transakcji (1226 linii)</span>
+    ├── <span class="file">chat.js</span>            <span class="desc">— chat LLM (618 linii)</span>
+    ├── <span class="file">projects.js</span>        <span class="desc">— dashboard projektów (733 linie)</span>
+    ├── <span class="file">seg_tools.js</span>       <span class="desc">— edycja segmentów + waveform (878 linii)</span>
+    ├── <span class="file">audio_player.js</span>    <span class="desc">— odtwarzacz audio (355 linii)</span>
+    ├── <span class="file">icons.js</span>           <span class="desc">— biblioteka ikon SVG (650 linii)</span>
+    ├── <span class="file">ui.js</span>              <span class="desc">— toast, modal, walidacja (393 linie)</span>
+    ├── <span class="file">settings_models.js</span> <span class="desc">— ustawienia modeli LLM (632 linie)</span>
+    ├── <span class="file">bts_settings.js</span>    <span class="desc">— zarządzanie bazą BTS (621 linii)</span>
+    ├── <span class="file">asr_settings.js</span>    <span class="desc">— modele ASR (1028 linii)</span>
+    ├── <span class="file">analyst_notes.js</span>   <span class="desc">— panel analityka: notatki, tagi, tagowanie rekordów</span>
+    ├── <span class="file">admin_gpu.js</span>       <span class="desc">— panel GPU admin (404 linie)</span>
+    ├── <span class="file">nllb_settings.js</span>   <span class="desc">— modele NLLB (449 linii)</span>
+    ├── <span class="file">tts_settings.js</span>    <span class="desc">— ustawienia TTS (354 linie)</span>
+    ├── <span class="dir">icons/</span>             <span class="desc">— 291 ikon SVG w 28 kategoriach</span>
+    ├── <span class="dir">lang/</span>              <span class="desc">— i18n: pl.json, en.json, ko.json</span>
+    ├── <span class="dir">data/</span>              <span class="desc">— dane statyczne (bazy wojskowe, ambasady, lotniska)</span>
+    └── <span class="dir">fonts/</span>             <span class="desc">— DejaVu Sans/Mono (dla raportów PDF)</span>
+</div>
+
+<h3>4.4 Testy</h3>
+<div class="tree">
+<span class="dir">tests/</span>
+├── <span class="file">conftest.py</span>            <span class="desc">— fixtures: temp dirs, env overrides, sample files</span>
+├── <span class="file">test_gsm_parsers.py</span>    <span class="desc">— 74 testy parserów GSM i analizera</span>
+├── <span class="file">test_aml.py</span>            <span class="desc">— testy AML (normalize, rules, memory, graph, baseline)</span>
+├── <span class="file">test_api_integration.py</span> <span class="desc">— testy integracyjne FastAPI TestClient</span>
+├── <span class="file">test_document_processor.py</span> <span class="desc">— testy ekstrakcji dokumentów</span>
+├── <span class="file">test_settings.py</span>       <span class="desc">— testy persystencji ustawień</span>
+├── <span class="file">test_workspaces.py</span>     <span class="desc">— testy workspace'ów (CRUD, role, zaproszenia)</span>
+├── <span class="file">test_multiuser.py</span>      <span class="desc">— testy multi-user (auth, sesje, RBAC)</span>
+├── <span class="file">test_db.py</span>             <span class="desc">— testy bazy danych</span>
+├── <span class="file">test_ing_segmentation.py</span> <span class="desc">— testy segmentacji ING</span>
+├── <span class="file">test_audio_roles.py</span>    <span class="desc">— testy ról audio</span>
+├── <span class="file">test_routers_chat.py</span>   <span class="desc">— testy routera chat</span>
+└── <span class="file">test_proxmox.py</span>        <span class="desc">— testy Proxmox</span>
+</div>
+
+
+<!-- ────────────────────── 5-6. FILES (tables) ────────────────────── -->
+<h2 id="files-backend"><span class="section-num">5.</span> Pliki backend — szczegóły</h2>
+
+<table>
+<tr><th>Plik</th><th>Rozmiar</th><th>Opis</th></tr>
+<tr><td><code>backend/settings.py</code></td><td>~60 linii</td><td>Stałe APP_NAME/APP_VERSION, dataclass Settings z polami: hf_token, whisper_model, theme, ui_language, session_timeout, lockout, password_policy</td></tr>
+<tr><td><code>backend/settings_store.py</code></td><td>~110 linii</td><td>Persystencja JSON, migracja z legacy path, atomiczny zapis (.tmp → rename)</td></tr>
+<tr><td><code>backend/legacy_adapter.py</code></td><td>~1800 linii</td><td>Wrappery: WhisperAdapter, NemoAdapter, PyannoteAdapter. Zarządzanie modelami, sprawdzanie GPU, cache</td></tr>
+<tr><td><code>backend/ollama_client.py</code></td><td>~450 linii</td><td>Async HTTP client (httpx): list models, generate, chat, pull, delete. SSE streaming</td></tr>
+<tr><td><code>backend/document_processor.py</code></td><td>~500 linii</td><td>Ekstrakcja tekstu z: TXT, PDF (PyMuPDF), DOCX (python-docx), XLSX (openpyxl), PPTX, obrazów (OCR)</td></tr>
+<tr><td><code>backend/report_generator.py</code></td><td>~400 linii</td><td>Eksport raportów: HTML (self-contained), TXT (plain text), DOCX (python-docx)</td></tr>
+<tr><td><code>backend/models_info.py</code></td><td>~995 linii</td><td>Katalog 40+ modeli LLM (Llama, Mistral, Gemma, Qwen, DeepSeek, Bielik, PLLuM, Aya, Command-R) w 7 kategoriach z opisami, wymaganiami VRAM, tagami</td></tr>
+<tr><td><code>backend/tasks.py</code></td><td>~200 linii</td><td>TaskInfo dataclass, status tracking (pending/running/done/error), subprocess management</td></tr>
+<tr><td><code>backend/gsm/analyzer.py</code></td><td>~2500 linii</td><td>Pełna analiza bilingu: kontakty, wzorce czasowe, lokalizacje, noclegi, anomalie (14 typów), numery specjalne, baza prefiksów telefonicznych (~200 krajów)</td></tr>
+<tr><td><code>backend/gsm/geolocation.py</code></td><td>~400 linii</td><td>3-stopniowy fallback: 1) koordynaty BTS X/Y, 2) LAC/CID → DB, 3) geokodowanie adresu Nominatim</td></tr>
+<tr><td><code>backend/aml/pipeline.py</code></td><td>~800 linii</td><td>Orkiestrator: PDF upload → detekcja banku → parsing → normalizacja → reguły → baseline → ML → graf → scoring → LLM → raport</td></tr>
+<tr><td><code>backend/aml/rules.py</code></td><td>~600 linii</td><td>Silnik reguł: regex matching, kategorie (crypto, gambling, payday, mixer, mule, structuring), whitelist/blacklist, scoring 0-100</td></tr>
+<tr><td><code>backend/db/schema.sql</code></td><td>619 linii</td><td>27 tabel, 47 indeksów, foreign keys z CASCADE, partial indexes</td></tr>
+<tr><td><code>webapp/server.py</code></td><td>8800+ linii</td><td>Główna aplikacja: 149 endpointów, TaskManager, GPUResourceManager, middleware auth, 28 stron HTML</td></tr>
+</table>
+
+<h2 id="files-frontend"><span class="section-num">6.</span> Pliki frontend — szczegóły</h2>
+
+<table>
+<tr><th>Plik</th><th>Linie</th><th>Opis</th></tr>
+<tr><td><code>gsm.js</code></td><td>8 983</td><td>Analiza GSM: tabela z filtrami, mapa Leaflet z BTS, heatmap, timeline, overlaye (bazy wojskowe, ambasady), anomalie</td></tr>
+<tr><td><code>aml.js</code></td><td>4 581</td><td>Analiza AML: upload PDF, transakcje, graf Cytoscape.js, wykresy Chart.js, streaming LLM</td></tr>
+<tr><td><code>translation.js</code></td><td>2 235</td><td>Tłumaczenie: upload, wybór języków, progress SSE, eksport TXT/DOCX/PPTX</td></tr>
+<tr><td><code>users.js</code></td><td>2 082</td><td>Zarządzanie użytkownikami: CRUD, role, macierz uprawnień, ban/approve, Call Center</td></tr>
+<tr><td><code>analysis.js</code></td><td>1 512</td><td>Analiza LLM: quick/deep, streaming SSE, raporty, korekta tekstu (4 poziomy)</td></tr>
+<tr><td><code>app.js</code></td><td>1 549</td><td>Framework: i18n, fetch API helper, state management, sidebar, project banner</td></tr>
+<tr><td><code>review.js</code></td><td>1 226</td><td>Recenzja transakcji AML: klasyfikacja inline, kategorie (~150 słów kluczowych)</td></tr>
+<tr><td><code>asr_settings.js</code></td><td>1 028</td><td>Modele ASR: Whisper/NeMo/pyannote status, instalacja, YAMNet/PANNs/BEATs</td></tr>
+<tr><td><code>seg_tools.js</code></td><td>878</td><td>Edycja segmentów: wyszukiwanie, waveform (Web Audio API), merge/split</td></tr>
+<tr><td><code>app.css</code></td><td>3 839</td><td>Style globalne: light/dark theme, responsive, sidebar, karty, tabele, modale</td></tr>
+</table>
+
+<p><strong>Razem frontend:</strong> ~48 400 linii kodu (HTML + JS + CSS), 3 języki (PL/EN/KO), 291 ikon SVG.</p>
+
+
+<!-- ────────────────────── 7-14. MODULES ────────────────────── -->
+<h2 id="mod-transcription"><span class="section-num">7.</span> Moduł: Transkrypcja audio</h2>
+<div class="card accent">
+<h4>Opis</h4>
+<p>Automatyczna konwersja nagrań audio na tekst z wykorzystaniem modeli ASR (Automatic Speech Recognition).</p>
+<h4>Funkcjonalności</h4>
+<ul>
+  <li>Silniki: <strong>Whisper</strong> (OpenAI, 5 rozmiarów: tiny–large), <strong>NeMo</strong> (NVIDIA Conformer CTC)</li>
+  <li>Obsługa 99+ języków z automatyczną detekcją</li>
+  <li>Segmentacja z timestampami (YYYY-MM-DD HH:MM:SS)</li>
+  <li>Edycja segmentów inline (split, merge, text edit)</li>
+  <li>Wizualizacja waveform (Web Audio API)</li>
+  <li>Odtwarzacz audio z synchronizacją segmentów</li>
+  <li>Eksport: TXT, SRT (napisy), JSON</li>
+</ul>
+<h4>Pliki</h4>
+<p><code>backend/legacy_adapter.py</code>, <code>backend/transcribe_worker.py</code>, <code>backend/asr_worker.py</code>, <code>webapp/templates/transcription.html</code>, <code>webapp/static/seg_tools.js</code>, <code>webapp/static/audio_player.js</code></p>
+</div>
+
+<h2 id="mod-diarization"><span class="section-num">8.</span> Moduł: Diaryzacja mówców</h2>
+<div class="card accent">
+<h4>Opis</h4>
+<p>Rozpoznawanie i separacja głosów poszczególnych mówców w nagraniach audio.</p>
+<h4>Funkcjonalności</h4>
+<ul>
+  <li>Silnik: <strong>pyannote.audio</strong> (speaker-diarization-3.1)</li>
+  <li>Automatyczne wykrywanie liczby mówców</li>
+  <li>Przypisywanie etykiet mówców do segmentów</li>
+  <li>Detekcja dźwięków otoczenia: <strong>YAMNet</strong>, <strong>PANNs</strong>, <strong>BEATs</strong></li>
+  <li>Edycja segmentów: merge, split, reassign speaker, notatki</li>
+  <li>Mapa waveform z zaznaczonymi segmentami</li>
+</ul>
+<h4>Pliki</h4>
+<p><code>backend/voice_worker.py</code>, <code>backend/sound_detection_worker.py</code>, <code>webapp/templates/diarization.html</code> (3057 linii — największy szablon)</p>
+</div>
+
+<h2 id="mod-translation"><span class="section-num">9.</span> Moduł: Tłumaczenie dokumentów</h2>
+<div class="card accent">
+<h4>Funkcjonalności</h4>
+<ul>
+  <li>Model: <strong>NLLB-200</strong> (Meta) — 200+ języków, tryb hybrydowy z LLM</li>
+  <li>Formaty wejściowe: TXT, PDF, DOCX, XLSX, PPTX, obrazy (OCR)</li>
+  <li>Auto-detekcja języka źródłowego</li>
+  <li>Widok side-by-side (oryginał ↔ tłumaczenie)</li>
+  <li>Glosariusze dziedzinowe (spójność terminologii)</li>
+  <li>Eksport: TXT, DOCX, PPTX (zapis do oryginalnego formatu)</li>
+  <li>Draft persistence w localStorage</li>
+</ul>
+<h4>Pliki</h4>
+<p><code>backend/translation/</code> (6 plików), <code>backend/translation_worker.py</code>, <code>backend/nllb_worker.py</code>, <code>webapp/templates/translation.html</code>, <code>webapp/static/translation.js</code></p>
+</div>
+
+<h2 id="mod-llm"><span class="section-num">10.</span> Moduł: Chat LLM i analiza</h2>
+<div class="card accent">
+<h4>Funkcjonalności</h4>
+<ul>
+  <li>Integracja z <strong>Ollama</strong> — lokalne modele LLM, pełna prywatność (zero danych w chmurze)</li>
+  <li>Strumieniowanie odpowiedzi (SSE — Server-Sent Events)</li>
+  <li>Katalog <strong>7 kategorii</strong> modeli: quick, deep, vision, translation, financial, specialized, proofreading</li>
+  <li>Szablony promptów: systemowe + użytkownika (CRUD)</li>
+  <li>Analiza szybka (auto na transkrypcie) i głęboka (multi-dokument, custom prompt)</li>
+  <li>Korekta tekstu w 4 poziomach: light, standard, professional, academic (PL/EN)</li>
+  <li>Generowanie raportów: HTML, TXT, DOCX, PDF</li>
+  <li>Historia konwersacji w localStorage</li>
+  <li>Auto-pull modeli — automatyczne pobieranie, jeśli model nie jest zainstalowany lokalnie</li>
+</ul>
+</div>
+
+<h3>10.1 Katalog modeli LLM (40+ modeli)</h3>
+<p>System zawiera wbudowany katalog rekomendowanych modeli z opisami, wymaganiami sprzętowymi i przeznaczeniem. Wszystkie modele działają lokalnie przez <strong>Ollama</strong>.</p>
+
+<table>
+<tr><th>Kategoria</th><th>Modele</th><th>Przeznaczenie</th></tr>
+<tr><td><span class="badge blue">Quick</span></td>
+  <td><code>mistral:7b-instruct</code>, <code>gemma2:9b</code>, <code>llama3.2:3b</code>, <code>qwen2.5:7b</code></td>
+  <td>Szybka analiza, odpowiedzi w <5 sek.</td></tr>
+<tr><td><span class="badge purple">Deep</span></td>
+  <td><code>qwen2.5:14b/32b/72b</code>, <code>gemma2:27b</code>, <code>llama3.3:70b</code>, <code>llama3.1:405b</code>, <code>mistral-nemo:12b</code>, <code>aya:8b/35b</code>, <code>command-r:35b</code>, <code>deepseek-r1:70b</code></td>
+  <td>Pogłębiona analiza, reasoning, multi-krok</td></tr>
+<tr><td><span class="badge green">Vision</span></td>
+  <td><code>llama3.2-vision:11b</code>, <code>granite3.2-vision</code>, <code>llava:13b</code>, <code>minicpm-v</code></td>
+  <td>Analiza obrazów, OCR, dokumenty skanowane</td></tr>
+<tr><td><span class="badge orange">Translation</span></td>
+  <td><code>qwen2.5:14b</code>, <code>aya:8b/35b</code></td>
+  <td>Tłumaczenie hybrydowe NLLB + LLM</td></tr>
+<tr><td><span class="badge red">Financial</span></td>
+  <td><code>qwen2.5:32b</code>, <code>llama3.3:70b</code>, <code>mistral-nemo:12b</code></td>
+  <td>Analiza AML, klasyfikacja transakcji</td></tr>
+<tr><td><span class="badge purple">Specialized</span></td>
+  <td><code>command-r:35b</code>, <code>deepseek-r1:70b</code></td>
+  <td>RAG, długi kontekst (128K+), rozumowanie</td></tr>
+</table>
+
+<h3>10.2 Modele polskojęzyczne</h3>
+<div class="card success">
+<h4>Bielik (SpeakLeash) — polski ekspert językowy</h4>
+<p>Dedykowany model polski 11B z pełnym wsparciem fleksji, ortografii i stylistyki polskiej. Dostępne 4 warianty kwantyzacji:</p>
+<table>
+<tr><th>Model</th><th>Kwantyzacja</th><th>Rozmiar</th><th>VRAM</th></tr>
+<tr><td><code>SpeakLeash/bielik-11b-v2.3-instruct</code></td><td>Q4_K_M</td><td>6.7 GB</td><td>~8 GB</td></tr>
+<tr><td><code>SpeakLeash/bielik-11b-v2.3-instruct</code></td><td>Q5_K_M</td><td>7.9 GB</td><td>~10 GB</td></tr>
+<tr><td><code>SpeakLeash/bielik-11b-v2.3-instruct</code></td><td>Q6_K</td><td>9.2 GB</td><td>~11 GB</td></tr>
+<tr><td><code>SpeakLeash/bielik-11b-v2.3-instruct</code></td><td>Q8_0</td><td>12 GB</td><td>~14 GB</td></tr>
+</table>
+<p><strong>Zastosowania:</strong> korekta tekstu (proofreading), redakcja, streszczanie po polsku, analiza narracyjna.</p>
+
+<h4>PLLuM (PRIHLOP) — Polski Wielki Model Językowy</h4>
+<p>Drugi wspierany model polski, optymalizowany do zadań korekcji i generowania tekstu w języku polskim.</p>
+
+<h4>Qwen3 (Alibaba)</h4>
+<p>Modele <code>qwen3:8b</code> i <code>qwen3:14b</code> — doskonałe wsparcie dla języka polskiego, zalecaną alternatywą gdy Bielik niedostępny. Domyślny model proofreading: <code>qwen3:8b</code>.</p>
+</div>
+
+<h3>10.3 Domyślne przypisania modeli</h3>
+<table>
+<tr><th>Zadanie</th><th>Domyślny model</th><th>Alternatywy</th></tr>
+<tr><td>Szybka analiza</td><td><code>mistral:7b-instruct</code></td><td>gemma2:9b, qwen2.5:7b</td></tr>
+<tr><td>Pogłębiona analiza</td><td><code>qwen2.5:32b</code></td><td>llama3.3:70b, deepseek-r1:70b</td></tr>
+<tr><td>Wizja / OCR</td><td><code>llama3.2-vision:11b</code></td><td>granite3.2-vision, llava:13b</td></tr>
+<tr><td>Tłumaczenie</td><td><code>qwen2.5:14b</code></td><td>aya:8b, aya:35b</td></tr>
+<tr><td>Finanse / AML</td><td><code>qwen2.5:32b</code></td><td>llama3.3:70b</td></tr>
+<tr><td>Specjalistyczne</td><td><code>command-r:35b</code></td><td>deepseek-r1:70b</td></tr>
+<tr><td>Korekta PL</td><td><code>qwen3:8b</code></td><td>Bielik Q4_K_M, PLLuM, qwen3:14b</td></tr>
+</table>
+
+<h3>10.4 Zastosowania LLM w systemie</h3>
+<ul>
+  <li><strong>Chat interaktywny</strong> — konwersacja z kontekstem dokumentów i transkrypcji</li>
+  <li><strong>Analiza narracyjna AML</strong> — automatyczny raport z analizy wyciągu bankowego (po polsku)</li>
+  <li><strong>Klasyfikacja transakcji</strong> — LLM fallback dla nierozpoznanych merchantów</li>
+  <li><strong>Streszczanie</strong> — podsumowanie dokumentów i transkrypcji</li>
+  <li><strong>Korekta tekstu</strong> — 4 poziomy: light, standard, professional, academic</li>
+  <li><strong>Tłumaczenie hybrydowe</strong> — NLLB-200 + polerowanie przez LLM</li>
+</ul>
+
+<h4>Pliki</h4>
+<p><code>backend/ollama_client.py</code>, <code>backend/models_info.py</code>, <code>backend/prompts/</code>, <code>backend/aml/llm_analysis.py</code>, <code>backend/finance/llm_classifier.py</code>, <code>backend/translation/summarizer.py</code>, <code>webapp/routers/chat.py</code>, <code>webapp/templates/chat.html</code>, <code>webapp/static/chat.js</code>, <code>webapp/static/analysis.js</code>, <code>webapp/static/settings_models.js</code></p>
+
+<h2 id="mod-tts"><span class="section-num">11.</span> Moduł: Synteza mowy (TTS)</h2>
+<div class="card accent">
+<h4>Funkcjonalności</h4>
+<ul>
+  <li>3 silniki: <strong>Piper</strong> (VITS), <strong>MMS</strong> (Meta, 1100+ języków), <strong>Kokoro</strong></li>
+  <li>Zarządzanie głosami: download, delete, test playback</li>
+  <li>Konwersja tekstu na mowę z wyborem głosu i silnika</li>
+</ul>
+<h4>Pliki</h4>
+<p><code>backend/tts_worker.py</code>, <code>webapp/templates/tts_settings.html</code>, <code>webapp/static/tts_settings.js</code></p>
+</div>
+
+<h2 id="mod-gsm"><span class="section-num">12.</span> Moduł: Analiza bilingów GSM</h2>
+<div class="card accent">
+<h4>Opis</h4>
+<p>Kompleksowy moduł analizy retencyjnych i telekomunikacyjnych bilingów od polskich operatorów komórkowych.</p>
+</div>
+
+<h3>12.1 Obsługiwane formaty i operatorzy</h3>
+<table>
+<tr><th>Operator</th><th>Format</th><th>Wersja parsera</th><th>Przekierowania</th></tr>
+<tr><td>Plus (Polkomtel)</td><td>CSV (cp1250)</td><td>v1.3</td><td><span class="badge green">TAK</span> (c_msisdn)</td></tr>
+<tr><td>Play (P4)</td><td>CSV (cp1250)</td><td>v1.1</td><td><span class="badge green">TAK</span> (PRZEK_MSISDN)</td></tr>
+<tr><td>T-Mobile</td><td>XLSX</td><td>v1.1</td><td><span class="badge green">TAK</span> (nr_powiazany)</td></tr>
+<tr><td>Orange</td><td>XLSX</td><td>v1.0</td><td><span class="badge orange">Tekstowo</span></td></tr>
+<tr><td>Orange Retencja</td><td>XLSX (3 arkusze)</td><td>v1.2</td><td><span class="badge red">NIE</span></td></tr>
+<tr><td>Generyczny</td><td>XLSX/CSV</td><td>v1.0</td><td><span class="badge red">NIE</span></td></tr>
+</table>
+
+<h3>12.2 System anomalii (14 typów)</h3>
+<table>
+<tr><th>#</th><th>Typ</th><th>Severity</th><th>Opis</th></tr>
+<tr><td>1</td><td>long_call</td><td><span class="badge blue">info</span></td><td>Połączenia dłuższe niż 1 godzina</td></tr>
+<tr><td>2</td><td>late_night_calls</td><td><span class="badge orange">warning</span></td><td>Połączenia głosowe 00:00–05:00 (>10 sek.)</td></tr>
+<tr><td>3</td><td>night_activity</td><td><span class="badge orange">warning</span></td><td>Ponad 30% zdarzeń w godzinach 23:00–05:00</td></tr>
+<tr><td>4</td><td>night_movement</td><td><span class="badge orange">warning</span></td><td>Zmiana BTS między zdarzeniami nocnymi</td></tr>
+<tr><td>5</td><td>burst_activity</td><td><span class="badge orange">warning</span></td><td>20+ rekordów w 30 minut</td></tr>
+<tr><td>6</td><td>premium_number</td><td><span class="badge blue">info</span></td><td>Numery o podwyższonej opłacie (70x, 80x)</td></tr>
+<tr><td>7</td><td>roaming</td><td><span class="badge blue">info</span></td><td>Aktywność w sieciach zagranicznych</td></tr>
+<tr><td>7b</td><td>foreign_contacts</td><td><span class="badge red">critical</span></td><td>Interakcje z numerami zagranicznymi (krytyczne: RU, UA, BY, CN)</td></tr>
+<tr><td>7c</td><td>forwarded_calls</td><td><span class="badge orange">warning</span></td><td>Przekierowania połączeń na inny numer</td></tr>
+<tr><td>8</td><td>one_time_contacts</td><td><span class="badge blue">info</span></td><td>Numery z dokładnie jednym kontaktem</td></tr>
+<tr><td>9</td><td>satellite_numbers</td><td><span class="badge orange">warning</span></td><td>Numery satelitarne (Iridium, Inmarsat...)</td></tr>
+<tr><td>10</td><td>social_media</td><td><span class="badge blue">info</span></td><td>Komunikatory (WhatsApp, Telegram, Viber...)</td></tr>
+<tr><td>11</td><td>inactivity_gap</td><td><span class="badge blue">info</span></td><td>Przerwy w aktywności — <strong>konfigurowalny próg</strong> (domyślnie &gt;12 godzin)</td></tr>
+<tr><td>12</td><td>meeting_after_call</td><td><span class="badge orange">warning</span></td><td>Spotkanie po połączeniu przychodzącym — <strong>konfigurowalny</strong> (domyślnie 60 min.)</td></tr>
+</table>
+
+<h4>12.2.1 Konfigurowalne progi anomalii</h4>
+<div class="card accent">
+<p>Dwie anomalie posiadają konfigurowalne progi czasowe, edytowalne bezpośrednio w karcie anomalii (inline input w nagłówku):</p>
+<table>
+<tr><th>Anomalia</th><th>Parametr</th><th>Domyślnie</th><th>Min</th><th>Max</th><th>Krok</th></tr>
+<tr><td><code>inactivity_gap</code> (Brak aktywności)</td><td>Próg godzin nieaktywności</td><td>12 h</td><td>1 h</td><td>999 h</td><td>1 h</td></tr>
+<tr><td><code>meeting_after_call</code> (Spotkanie po połączeniu)</td><td>Okno czasowe po połączeniu</td><td>60 min</td><td>5 min</td><td>999 min</td><td>5 min</td></tr>
+</table>
+<p>Zmiana wartości odbywa się w czasie rzeczywistym — system przelicza anomalie po każdej edycji (debounce 100–300 ms). Przeliczenie wykonywane jest w przeglądarce (frontend-computed) bez ponownego wysyłania danych na serwer.</p>
+</div>
+
+<h4>12.2.2 Anomalia: Spotkanie po połączeniu (<code>meeting_after_call</code>)</h4>
+<div class="card warning">
+<h4>Algorytm detekcji</h4>
+<ol>
+  <li>Identyfikacja połączeń przychodzących (dowolnych)</li>
+  <li>Sprawdzenie aktywności w oknie czasowym po połączeniu (domyślnie 60 min)</li>
+  <li>Warunki wykrycia: max 1 zdarzenie w oknie, brak zmiany BTS (ten sam LAC/CellID), cisza aktywności</li>
+  <li>Wynik: lista wykrytych potencjalnych spotkań z informacją o rozmówcy, czasie trwania połączenia, czasie ciszy i liczbie zdarzeń w oknie</li>
+</ol>
+<p><strong>Interpretacja:</strong> Połączenie przychodzące po którym telefon pozostaje na tej samej stacji bazowej bez aktywności telekomunikacyjnej sugeruje spotkanie w lokalizacji BTS.</p>
+</div>
+
+<h3>12.3 Funkcje mapowe</h3>
+<ul>
+  <li><strong>Leaflet.js</strong> — mapa z markerami BTS, klastry, polyline tras</li>
+  <li><strong>Heat map</strong> — godzina × dzień tygodnia</li>
+  <li><strong>Timeline player</strong> — animowany ruch po BTS z efektem zanikającego śladu</li>
+  <li><strong>Overlaye</strong> — bazy wojskowe, ambasady, lotniska (z plików JSON)</li>
+  <li><strong>Narzędzia selekcji</strong> — okrąg, prostokąt (filtrowanie po obszarze)</li>
+  <li><strong>Offline tiles</strong> — serwer kafelków map (tile_server.py)</li>
+  <li><strong>Pokrycie BTS</strong> — wizualizacja zasięgu stacji bazowych w 3 trybach (patrz 12.3.1)</li>
+</ul>
+
+<h4>12.3.1 Tryby wizualizacji pokrycia BTS</h4>
+<div class="card accent">
+<p>Przełącznik radiowy (radio buttons) pozwala na wybór trybu wyświetlania zasięgu stacji bazowych na mapie:</p>
+<table>
+<tr><th>Tryb</th><th>Opis</th><th>Zastosowanie</th></tr>
+<tr><td><code>full</code></td><td>Kolorowe koła/sektory dla każdej technologii (GSM/UMTS/LTE/5G NR), pełna przezroczystość</td><td>Szczegółowa analiza pokrycia technologiami</td></tr>
+<tr><td><code>flat</code></td><td>Nakładające się koła z globalną przezroczystością warstwy (0.25), eliminacja akumulacji koloru w obszarach nakładania</td><td>Czytelna wizualizacja gęstości bez przesycenia kolorów</td></tr>
+<tr><td><code>outline</code></td><td>Tylko kontury (obrys bez wypełnienia)</td><td>Minimalistyczny widok granic zasięgu</td></tr>
+</table>
+<p><strong>Zasięgi domyślne:</strong> GSM 5000 m, UMTS 3000 m, LTE 2000 m, 5G NR 1000 m. Przełączanie trybu przebudowuje warstwę pokrycia w czasie rzeczywistym.</p>
+</div>
+
+<h3>12.4 Bazy danych GSM</h3>
+<ul>
+  <li><strong>Prefiksy telefoniczne ITU-T E.164</strong> — ~200 krajów, longest-prefix-match</li>
+  <li><strong>MCC → kraj</strong> — 232 kody MCC do wykrywania roamingu</li>
+  <li><strong>TAC → urządzenie</strong> — baza IMEI do identyfikacji marki/modelu telefonu</li>
+  <li><strong>Nadawcy alfanumeryczni SMS</strong> — ~130 wpisów (banki, urzędy, kurierzy)</li>
+  <li><strong>Numery satelitarne</strong> — reguły JSON (+881x, +870, +882x)</li>
+  <li><strong>Social media</strong> — reguły JSON (WhatsApp, Telegram, Viber, VKontakte...)</li>
+</ul>
+
+<h3>12.5 Pipeline przetwarzania bilingów</h3>
+<ol>
+  <li><strong>Wczytanie pliku</strong> — XLSX (openpyxl) lub CSV (auto-detekcja: Plus cp1250, Play cp1250 semicolon, generic)</li>
+  <li><strong>Detekcja operatora</strong> — regex na nagłówkach + nazwy arkuszy (<code>registry.py</code>)</li>
+  <li><strong>Walidacja schematu</strong> — porównanie nagłówków z zarejestrowanym schematem (exact → regex → fuzzy)</li>
+  <li><strong>Parsowanie</strong> — mapowanie kolumn → ekstrakcja <code>BillingRecord</code> per wiersz</li>
+  <li><strong>Adaptive fallback</strong> — fuzzy matching jeśli krytyczne kolumny nie znalezione (Plus, Play)</li>
+  <li><strong>Subscriber</strong> — opcjonalny plik identyfikacji abonenta (MSISDN, IMSI, IMEI, właściciel)</li>
+  <li><strong>Normalizacja</strong> — telefony E.164, deduplication, kierunek (IN/OUT/FORWARDED)</li>
+  <li><strong>Analiza</strong> — anomalie (14 typów, w tym 2 z konfigurowalnym progiem), kontakty, wzorce czasowe, geolokalizacja BTS</li>
+  <li><strong>Drift report</strong> — zapis raportu dryfu (jeśli wykryto zmiany formatu)</li>
+</ol>
+
+<h3>12.6 Śledzenie plików źródłowych</h3>
+<div class="card accent">
+<p>System śledzi <strong>wszystkie pliki</strong> użyte do analizy — nie tylko główny billing, ale też dodatkowe formaty (np. Plus: POL + TD) oraz pliki identyfikacji abonenta. Informacja wyświetlana jest w nagłówku wyników z ikonami:</p>
+<ul>
+  <li><strong>Bilingi</strong> — ikona wykresu, nazwa pliku, operator, status przetworzenia</li>
+  <li><strong>Pliki identyfikacji</strong> — ikona lupy, dane abonenta (MSISDN, właściciel, IMEI)</li>
+  <li>Pliki nieprzetworzone oznaczone kolorem ostrzegawczym <code>[nie przetw.]</code></li>
+</ul>
+</div>
+
+<h3>12.7 Endpointy API GSM (40 endpointów)</h3>
+<table>
+<tr><th>Endpoint</th><th>Metoda</th><th>Opis</th></tr>
+<tr><td><code>/api/gsm/parse</code></td><td>POST</td><td>Parsowanie bilingu (upload)</td></tr>
+<tr><td><code>/api/gsm/import</code></td><td>POST</td><td>Import wielu plików (bilingi + identyfikacja)</td></tr>
+<tr><td><code>/api/gsm/analyze</code></td><td>POST</td><td>Analiza wzorców i anomalii</td></tr>
+<tr><td><code>/api/gsm/parsers/info</code></td><td>GET</td><td>Lista parserów z wersjami i metadanymi</td></tr>
+<tr><td><code>/api/gsm/parsers/schemas</code></td><td>GET</td><td>Zarejestrowane schematy kolumn</td></tr>
+<tr><td><code>/api/gsm/parsers/schemas/init</code></td><td>POST</td><td>Bootstrap schematów z istniejących parserów</td></tr>
+<tr><td><code>/api/gsm/drift/reports</code></td><td>GET</td><td>Lista raportów dryfu formatu (?parser_id=, ?status=)</td></tr>
+<tr><td><code>/api/gsm/drift/reports/{id}</code></td><td>GET</td><td>Szczegóły raportu dryfu</td></tr>
+<tr><td><code>/api/gsm/drift/reports/{id}/approve</code></td><td>POST</td><td>Zatwierdzenie mapowań (opcjonalnie: apply do parsera)</td></tr>
+<tr><td><code>/api/gsm/drift/reports/{id}/reject</code></td><td>POST</td><td>Odrzucenie raportu dryfu</td></tr>
+<tr><td><code>/api/gsm/parsers/{id}/preview-update</code></td><td>POST</td><td>Podgląd zmian kodu (diff)</td></tr>
+<tr><td><code>/api/gsm/parsers/{id}/apply-update</code></td><td>POST</td><td>Zastosowanie zmian z backup</td></tr>
+<tr><td><code>/api/gsm/parsers/backups</code></td><td>GET</td><td>Lista kopii zapasowych parserów</td></tr>
+<tr><td><code>/api/gsm/parsers/backups/{id}/restore</code></td><td>POST</td><td>Przywrócenie parsera z kopii</td></tr>
+<tr><td><code>/api/gsm/note/templates</code></td><td>GET</td><td>Lista szablonów notatek użytkownika</td></tr>
+<tr><td><code>/api/gsm/note/templates/builtin</code></td><td>GET</td><td>Wbudowany szablon notatki + katalogi</td></tr>
+<tr><td><code>/api/gsm/note/templates/{id}</code></td><td>GET</td><td>Pobranie szablonu notatki</td></tr>
+<tr><td><code>/api/gsm/note/templates</code></td><td>POST</td><td>Utworzenie/aktualizacja szablonu notatki</td></tr>
+<tr><td><code>/api/gsm/note/templates/{id}</code></td><td>DELETE</td><td>Usunięcie szablonu notatki</td></tr>
+<tr><td><code>/api/gsm/note/templates/default</code></td><td>POST</td><td>Ustawienie domyślnego szablonu</td></tr>
+</table>
+
+
+<!-- ─── 12b. ADAPTIVE PARSER SYSTEM ─── -->
+<h2 id="mod-gsm-adaptive"><span class="section-num">12b.</span> Adaptywny system parserów GSM</h2>
+
+<div class="card warning">
+<h4>Problem</h4>
+<p>Operatorzy GSM (Plus, Play, T-Mobile, Orange) okresowo zmieniają formaty swoich bilingów — przenoszą kolumny, zmieniają ich nazwy, dodają nowe pola. Parsery oparte na dokładnym dopasowaniu nazw kolumn (Plus, Play) przestają działać poprawnie po takiej zmianie — operator jest rozpoznawany (detekcja regex działa), ale mapowanie kolumn nie trafia i użytkownik dostaje 0 rekordów.</p>
+</div>
+
+<h3>12b.1 Odporność parserów na zmiany formatów</h3>
+<table>
+<tr><th>Operator</th><th>Mechanizm mapowania</th><th>Odporność</th><th>Adaptive fallback</th></tr>
+<tr><td>Plus (Polkomtel)</td><td><code>_POL_COLUMNS.get(header_lower)</code> — dokładny dict lookup</td><td><span class="badge red">Kruchy</span></td><td><span class="badge green">TAK</span></td></tr>
+<tr><td>Play (P4)</td><td><code>h == csv_lower</code> — dokładne porównanie string</td><td><span class="badge red">Bardzo kruchy</span></td><td><span class="badge green">TAK</span></td></tr>
+<tr><td>T-Mobile</td><td><code>build_column_map()</code> z regex patterns</td><td><span class="badge green">Odporny</span></td><td>Nie potrzebny</td></tr>
+<tr><td>Orange</td><td><code>build_column_map()</code> z regex patterns</td><td><span class="badge green">Odporny</span></td><td>Nie potrzebny</td></tr>
+<tr><td>Orange Retencja</td><td><code>build_column_map()</code> z regex patterns</td><td><span class="badge green">Odporny</span></td><td>Nie potrzebny</td></tr>
+</table>
+
+<h3>12b.2 Architektura 5-warstwowa</h3>
+<div class="card accent">
+<pre><code>Warstwa 1: Schema Registry        — JSON z "known good" schematami kolumn
+Warstwa 2: Schema Validator        — porównanie nagłówków vs schemat (exact → regex → fuzzy)
+Warstwa 3: Adaptive Column Mapper  — fuzzy fallback gdy exact match fails
+Warstwa 4: Drift Reporter          — zapis/raportowanie wykrytych zmian formatu
+Warstwa 5: Parser Updater          — modyfikacja kodu parsera z backup + aprobata użytkownika</code></pre>
+<p>Każda warstwa jest niezależna. Istniejące parsery działają bez zmian — adaptywna warstwa opakowuje je i interweniuje <strong>wyłącznie</strong> gdy standardowa ścieżka mapowania nie trafia w krytyczne kolumny.</p>
+</div>
+
+<h3>12b.3 Warstwa 1: Schema Registry</h3>
+<p><code>backend/gsm/parsers/schema_registry.py</code></p>
+<ul>
+  <li><strong>ColumnSchema</strong> — dataclass: logical_name, expected_headers (list), regex_patterns (list), required (bool), data_type</li>
+  <li><strong>ParserSchema</strong> — dataclass: parser_id, parser_version, format_variant, columns (list), header_detection</li>
+  <li><strong>SchemaRegistry</strong> — zapis/odczyt schematów JSON w katalogu <code>schemas/</code></li>
+  <li><strong>Auto-bootstrapping</strong> — przy pierwszym użyciu generuje schematy automatycznie z istniejących <code>_COLUMNS</code> dict parserów (zero pracy ręcznej)</li>
+  <li>Obsługuje zarówno exact-match dict (Plus/Play) jak i regex-pattern dict (T-Mobile/Orange)</li>
+</ul>
+<p>Generowane schematy per parser/wariant: <code>plus_POL</code>, <code>plus_TD</code>, <code>play</code>, <code>tmobile</code>, <code>orange</code>, <code>orange_retencja</code>, <code>generic</code></p>
+
+<h3>12b.4 Warstwa 2: Schema Validator</h3>
+<p><code>backend/gsm/parsers/schema_validator.py</code></p>
+<p>Trójfazowa walidacja nagłówków pliku bilingowego:</p>
+<ol>
+  <li><strong>Exact match</strong> — porównanie z <code>expected_headers</code> (obecne zachowanie parserów)</li>
+  <li><strong>Regex match</strong> — użycie <code>regex_patterns</code> (jak <code>build_column_map()</code> w T-Mobile/Orange)</li>
+  <li><strong>Fuzzy match</strong> — 3 strategie dopasowania rozmytego:</li>
+</ol>
+
+<table>
+<tr><th>Strategia</th><th>Metoda</th><th>Przykład</th></tr>
+<tr><td>Normalizacja Unicode</td><td>Usunięcie polskich diakrytyków (ł→l, ą→a, ś→s...), zamiana <code>_</code> na spacje, zwinięcie whitespace</td><td><code>DATA_I_GODZ_POLACZ</code> ↔ <code>Data i godz. polacz.</code> → 1.0</td></tr>
+<tr><td>SequenceMatcher</td><td><code>difflib.SequenceMatcher.ratio()</code> ≥ 0.55</td><td><code>czas trwania</code> ↔ <code>czas_trwania</code> → 0.92</td></tr>
+<tr><td>Semantyczny</td><td>Słownik równoważników polskiej terminologii bilingowej (11 grup semantycznych)</td><td><code>data rozpoczecia</code> ↔ <code>datetime</code> → match via grupa "datetime"</td></tr>
+</table>
+
+<h4>Grupy semantyczne polskiej terminologii bilingowej</h4>
+<table>
+<tr><th>Grupa</th><th>Słowa kluczowe</th></tr>
+<tr><td>datetime</td><td>data, czas, godz, kiedy, termin, pocz, start</td></tr>
+<tr><td>phone_number</td><td>numer, msisdn, telefon, nr, abonent</td></tr>
+<tr><td>duration</td><td>czas trwania, dlugosc, czas polaczenia</td></tr>
+<tr><td>service_type</td><td>usluga, typ, rodzaj, kierunek</td></tr>
+<tr><td>location</td><td>lokalizacja, bts, stacja, adres</td></tr>
+<tr><td>cost</td><td>koszt, oplata, kwota, cena</td></tr>
+<tr><td>caller / callee</td><td>numer a, numer b, rozmowca, calling, called</td></tr>
+<tr><td>imei / imsi</td><td>imei, urzadzenie, terminal, imsi, sim</td></tr>
+<tr><td>data_volume</td><td>dane, transfer, mb, kb, wolumen, pobrane, wyslane</td></tr>
+</table>
+
+<p><strong>Wynik walidacji</strong> (<code>SchemaValidationResult</code>):</p>
+<ul>
+  <li><code>match_type</code>: <code>"exact"</code> | <code>"partial"</code> | <code>"drift"</code> | <code>"failed"</code></li>
+  <li><code>matched_columns</code>: Dict — zmapowane kolumny z indeksami</li>
+  <li><code>missing_columns</code>: List — brakujące wymagane kolumny</li>
+  <li><code>fuzzy_matches</code>: Dict — dopasowania rozmyte z confidence i metodą</li>
+  <li><code>confidence</code>: float — ogólna pewność dopasowania (0.0–1.0)</li>
+</ul>
+
+<h3>12b.5 Warstwa 3: Adaptive Column Mapper</h3>
+<p><code>backend/gsm/parsers/adaptive_mapper.py</code></p>
+<div class="card accent">
+<p>Punkt integracji z istniejącymi parserami. Aktywuje się <strong>wyłącznie</strong> gdy standardowe mapowanie nie trafia w krytyczne kolumny. Hooki w parserach:</p>
+<pre><code># Plus (plus.py) — po standardowym _POL_COLUMNS.get() loop:
+if "start" not in col_map or "type" not in col_map:
+    mapper = AdaptiveColumnMapper()
+    col_map, validation = mapper.build_adaptive_col_map(
+        "plus", "POL", header_lower, col_map
+    )
+
+# Play (play.py) — po standardowym h == csv_lower loop:
+if {"datetime","ui_msisdn","uw_msisdn","service_type"} - set(col_map.keys()):
+    mapper = AdaptiveColumnMapper()
+    col_map, validation = mapper.build_adaptive_col_map(
+        "play", "", header_lower, col_map
+    )</code></pre>
+<p><strong>Bezpieczeństwo:</strong> Cały adaptive hook opakowany w <code>try/except Exception: pass</code> — warstwa adaptywna <strong>nigdy</strong> nie blokuje parsowania. Jest czysto addytywna.</p>
+</div>
+
+<h3>12b.6 Warstwa 4: Drift Reporter</h3>
+<p><code>backend/gsm/parsers/drift_reporter.py</code></p>
+<ul>
+  <li><strong>DriftReport</strong> — dataclass z pełną informacją o zmianie formatu: nowe kolumny, usunięte kolumny, przemianowane kolumny (z confidence), faktyczne nagłówki</li>
+  <li>Zapis jako JSON: <code>data_www/gsm/drift_reports/{report_id}.json</code></li>
+  <li>Status lifecycle: <code>pending</code> → <code>approved</code> / <code>rejected</code> / <code>auto_applied</code></li>
+  <li>Filtrowanie po parser_id i statusie</li>
+</ul>
+
+<h3>12b.7 Warstwa 5: Parser Updater</h3>
+<p><code>backend/gsm/parsers/parser_updater.py</code></p>
+<div class="card warning">
+<h4>Modyfikacja kodu parserów (za zgodą użytkownika)</h4>
+<p>System może automatycznie zaktualizować kod parsera, dodając nowe mapowania kolumn. <strong>Zawsze</strong> tworzy kopię zapasową przed zmianą.</p>
+</div>
+
+<h4>Backup</h4>
+<pre><code>backups/parsers/
+  plus/
+    20260314_143022_3847_plus.py    — kopia kodu źródłowego
+    20260314_143022_3847_plus.json  — metadane (wersja przed/po, opis zmian)
+  play/
+    20260314_150500_1234_play.py
+    20260314_150500_1234_play.json</code></pre>
+
+<h4>Strategia modyfikacji per typ parsera</h4>
+<table>
+<tr><th>Typ</th><th>Parsery</th><th>Metoda</th></tr>
+<tr><td>Exact dict</td><td>Plus, Play</td><td>Dodanie nowych wpisów <code>"nowa nazwa": "logical_name"</code> do <code>_COLUMNS</code> dict (stare wpisy pozostają = backward compat)</td></tr>
+<tr><td>Regex patterns</td><td>T-Mobile, Orange</td><td>Dodanie nowego wzorca regex do istniejącej listy patterns</td></tr>
+</table>
+
+<h4>Bezpieczeństwo</h4>
+<ul>
+  <li><strong>Zapis atomowy</strong> — tmp file → rename (plik nigdy nie jest w połowie zmieniony)</li>
+  <li><strong>Backup przed zmianą</strong> — timestampowana kopia z metadanymi JSON</li>
+  <li><strong>Safety backup przed restore</strong> — przed przywróceniem tworzy dodatkową kopię aktualnego stanu</li>
+  <li><strong>Version bump</strong> — automatyczne zwiększenie <code>PARSER_VERSION</code> (np. 1.3 → 1.4)</li>
+  <li><strong>Mikrosekund w ID backup</strong> — zapobiega kolizjom nazw przy szybkich operacjach</li>
+</ul>
+
+<h3>12b.8 Flow użytkownika — przykład</h3>
+<div class="card success">
+<ol>
+  <li>Plus zmienia nazwy kolumn w nowym bilingu (np. <code>"DATA_I_GODZ_POLACZ"</code> → <code>"Data i godzina połączenia"</code>)</li>
+  <li>Użytkownik uploaduje plik → <code>/api/gsm/parse</code></li>
+  <li><strong>Detekcja:</strong> Plus rozpoznany (regex patterns nadal trafiają)</li>
+  <li><strong>Mapping:</strong> <code>_POL_COLUMNS.get()</code> nie trafia na 3 kolumny → col_map niekompletny</li>
+  <li><strong>Adaptive fallback:</strong> fuzzy matcher znajduje dopasowania:
+    <br><code>"typ uslugi"</code> → <code>type</code> (confidence 0.88, normalizacja)
+    <br><code>"data rozpoczecia"</code> → <code>start</code> (confidence 0.72, semantyczny)</li>
+  <li><strong>Parsowanie:</strong> kontynuuje z augmented col_map → rekordy sparsowane</li>
+  <li><strong>Drift report:</strong> zapisany z fuzzy_matches, status=<code>"pending"</code></li>
+  <li><strong>Odpowiedź API:</strong> zawiera ostrzeżenia o wykrytych zmianach formatu</li>
+  <li>Użytkownik przechodzi do panelu dryfu → widzi raport</li>
+  <li><strong>Zatwierdza</strong> mapowania → <code>POST .../approve</code> z <code>apply_to_parser: true</code></li>
+  <li>System robi <strong>backup</strong> <code>plus.py</code>, dodaje wpisy do <code>_POL_COLUMNS</code>, bumpuje wersję → 1.4</li>
+  <li><strong>Następny upload</strong> tego samego formatu → działa natychmiast bez adaptive (exact match)</li>
+</ol>
+</div>
+
+<h3>12b.9 Pliki adaptywnego systemu</h3>
+<table>
+<tr><th>Plik</th><th>Rozmiar</th><th>Opis</th></tr>
+<tr><td><code>schema_registry.py</code></td><td>~280 linii</td><td>ColumnSchema, ParserSchema, SchemaRegistry, auto-bootstrap z parserów</td></tr>
+<tr><td><code>schema_validator.py</code></td><td>~280 linii</td><td>SchemaValidationResult, 3 strategie fuzzy matching, 11 grup semantycznych</td></tr>
+<tr><td><code>adaptive_mapper.py</code></td><td>~150 linii</td><td>AdaptiveColumnMapper — integracja z parserami, format_warnings()</td></tr>
+<tr><td><code>drift_reporter.py</code></td><td>~150 linii</td><td>DriftReport, DriftReporter — zapis/odczyt raportów JSON</td></tr>
+<tr><td><code>parser_updater.py</code></td><td>~350 linii</td><td>ParserUpdater, ParserBackup — backup, preview, apply, restore</td></tr>
+<tr><td><code>schemas/</code></td><td>—</td><td>Katalog na auto-generowane pliki JSON ze schematami</td></tr>
+</table>
+
+<h3>12b.10 Testy adaptywnego systemu</h3>
+<p><code>tests/test_gsm_adaptive.py</code> — <strong>45 testów</strong> pokrywających wszystkie warstwy:</p>
+<table>
+<tr><th>Grupa</th><th>Testy</th><th>Zakres</th></tr>
+<tr><td>TestNormalization</td><td>4</td><td>Usuwanie diakrytyków, normalizacja nagłówków</td></tr>
+<tr><td>TestFuzzyStrategies</td><td>7</td><td>3 strategie fuzzy matching</td></tr>
+<tr><td>TestSchemaRegistry</td><td>8</td><td>Zapis/odczyt, lista, delete, bootstrap_all, serializacja</td></tr>
+<tr><td>TestSchemaValidator</td><td>7</td><td>Exact, case insensitive, regex, partial, drift, failed</td></tr>
+<tr><td>TestAdaptiveMapper</td><td>2</td><td>Augmentacja col_map, format warnings</td></tr>
+<tr><td>TestDriftReporter</td><td>5</td><td>Zapis/odczyt, filtrowanie, aktualizacja statusu</td></tr>
+<tr><td>TestParserUpdater</td><td>6</td><td>Backup, version bump, preview, apply, restore</td></tr>
+<tr><td>Plus/Play Integration</td><td>2+4</td><td>Regresja — standardowe nagłówki nadal działają</td></tr>
+</table>
+
+
+<!-- ─── 12c. NOTE TEMPLATE EDITOR ─── -->
+<h2 id="mod-gsm-notes"><span class="section-num">12c.</span> System notatek analitycznych GSM</h2>
+
+<div class="card accent">
+<h4>Opis</h4>
+<p>System generowania profesjonalnych notatek analitycznych w formacie DOCX z edytowalnymi szablonami. Umożliwia użytkownikowi dostosowanie treści statycznych, kolejności sekcji oraz wybór elementów wstawianych (tabel, wykresów, list) za pomocą wizualnego edytora drag-and-drop.</p>
+</div>
+
+<h3>12c.1 Architektura szablonu</h3>
+<p>Szablon notatki to <strong>uporządkowana lista bloków</strong> (JSON), gdzie każdy blok to:</p>
+<ul>
+  <li><strong><code>text</code></strong> — edytowalny tekst statyczny (paragraf HTML: <code>&lt;p&gt;</code>, <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>)</li>
+  <li><strong><code>marker</code></strong> — nieedytowalny znacznik elementu wstawianego (tabela, wykres, lista, dane placeholder)</li>
+</ul>
+<p>Szablon definiuje kolejność i treść elementów w notatce. Plik DOCX (<code>gsm_note_template.docx</code>) pozostaje bazowym szkieletem — nagłówek, stopka, tabele metadanych. Wbudowany szablon zawiera <strong>34 bloki</strong> (20 tekstowych + 14 markerów) pokrywające 11 sekcji notatki.</p>
+
+<h3>12c.2 Przechowywanie szablonów</h3>
+<table>
+<tr><th>Element</th><th>Opis</th></tr>
+<tr><td>Format</td><td>JSON — tablica szablonów</td></tr>
+<tr><td>Lokalizacja</td><td><code>data_www/users/{user_id}/gsm_note_templates.json</code></td></tr>
+<tr><td>Limit</td><td>Max <strong>5 szablonów</strong> na użytkownika</td></tr>
+<tr><td>Domyślny</td><td>Jeden szablon może być oznaczony gwiazdką jako domyślny</td></tr>
+<tr><td>Fallback</td><td>Jeśli brak szablonów użytkownika — stosowany wbudowany (<code>__builtin__</code>)</td></tr>
+<tr><td>Tryb single-user</td><td><code>user_id = "_default"</code></td></tr>
+</table>
+
+<h3>12c.3 Katalog markerów (MARKER_CATALOGUE)</h3>
+<p>14 typów elementów wstawialnych (non-editable, draggable):</p>
+<table>
+<tr><th>Klucz</th><th>Typ</th><th>Etykieta</th><th>Kolor chipu</th></tr>
+<tr><td><code>table_stats</code></td><td>tabela</td><td>Statystyki aktywności</td><td><span class="badge blue">niebieski</span></td></tr>
+<tr><td><code>table_contacts</code></td><td>tabela</td><td>Najczęstsze kontakty</td><td><span class="badge blue">niebieski</span></td></tr>
+<tr><td><code>table_anomalies</code></td><td>tabela</td><td>Wykryte anomalie</td><td><span class="badge blue">niebieski</span></td></tr>
+<tr><td><code>table_locations</code></td><td>tabela</td><td>Lokalizacje BTS</td><td><span class="badge blue">niebieski</span></td></tr>
+<tr><td><code>chart_top_contacts</code></td><td>wykres</td><td>Graf kontaktów</td><td><span class="badge green">zielony</span></td></tr>
+<tr><td><code>chart_activity</code></td><td>wykres</td><td>Rozkład aktywności (heatmapa)</td><td><span class="badge green">zielony</span></td></tr>
+<tr><td><code>chart_night</code></td><td>wykres</td><td>Aktywność nocna</td><td><span class="badge green">zielony</span></td></tr>
+<tr><td><code>chart_weekend</code></td><td>wykres</td><td>Aktywność weekendowa</td><td><span class="badge green">zielony</span></td></tr>
+<tr><td><code>chart_map_bts</code></td><td>wykres</td><td>Mapa lokalizacji BTS</td><td><span class="badge green">zielony</span></td></tr>
+<tr><td><code>list_locations</code></td><td>lista</td><td>Rejony BTS</td><td><span class="badge orange">żółty</span></td></tr>
+<tr><td><code>list_movement</code></td><td>lista</td><td>Przemieszczenia</td><td><span class="badge orange">żółty</span></td></tr>
+<tr><td><code>list_contacts</code></td><td>lista</td><td>Kontakty</td><td><span class="badge orange">żółty</span></td></tr>
+<tr><td><code>footnotes_special</code></td><td>przypis</td><td>Przypisy numerów specjalnych</td><td><span class="badge purple">fioletowy</span></td></tr>
+<tr><td><code>bts_summary</code></td><td>dane</td><td>Podsumowanie BTS</td><td><span class="badge orange">pomarańczowy</span></td></tr>
+</table>
+
+<h3>12c.4 Katalog pól (FIELD_CATALOGUE)</h3>
+<p>50+ placeholderów <code>{{ klucz }}</code> pogrupowanych w 10 kategorii, dostępnych w edytorze do wstawiania dynamicznych danych z bilingu:</p>
+<table>
+<tr><th>Kategoria</th><th>Liczba pól</th><th>Przykłady kluczy</th></tr>
+<tr><td>Dane podstawowe</td><td>5</td><td><code>msisdn</code>, <code>operator</code>, <code>okres_od</code>, <code>okres_do</code>, <code>liczba_rekordow</code></td></tr>
+<tr><td>Abonent / urządzenia</td><td>9</td><td><code>imsi</code>, <code>imei</code>, <code>marka_telefonu</code>, <code>model_telefonu</code></td></tr>
+<tr><td>Statystyki</td><td>5</td><td><code>liczba_polaczen</code>, <code>liczba_sms</code>, <code>czas_rozmow</code></td></tr>
+<tr><td>Źródła danych</td><td>7</td><td><code>lista_plikow</code>, <code>format_bilingu</code>, <code>wersja_parsera</code></td></tr>
+<tr><td>Aktywność</td><td>4</td><td><code>szczytowa_godzina</code>, <code>szczytowy_dzien</code></td></tr>
+<tr><td>Kontakty</td><td>3</td><td><code>top_kontakt</code>, <code>unikalne_numery</code></td></tr>
+<tr><td>Anomalie</td><td>3</td><td><code>liczba_anomalii</code>, <code>anomalie_krytyczne</code></td></tr>
+<tr><td>Lokalizacje</td><td>4</td><td><code>liczba_bts</code>, <code>glowna_lokalizacja</code></td></tr>
+<tr><td>Ocena / wnioski</td><td>7</td><td><code>ocena_ogolna</code>, <code>rekomendacje</code></td></tr>
+<tr><td>Meta / dokument</td><td>6</td><td><code>data_wygenerowania</code>, <code>analityk</code>, <code>sygnatura</code></td></tr>
+</table>
+
+<h3>12c.5 Edytor szablonów (frontend)</h3>
+<div class="card accent">
+<p>Modal edytora otwierany z dialogu generowania notatki przyciskiem „Edytuj szablon":</p>
+<ul>
+  <li><strong>Nagłówek:</strong> dropdown wyboru szablonu (do 5 + wbudowany), nazwa, gwiazdka (domyślny)</li>
+  <li><strong>Ciało:</strong> pionowa lista bloków — każdy blok to:
+    <ul>
+      <li><strong>Blok tekstowy:</strong> <code>contenteditable="true"</code> z paskiem narzędzi (bold, italic)</li>
+      <li><strong>Blok marker:</strong> kolorowy chip z ikoną i etykietą, nieedytowalny</li>
+    </ul>
+  </li>
+  <li><strong>Drag &amp; drop:</strong> HTML5 API, bloki przesuwane pionowo, wizualne wskaźniki pozycji upuszczenia (niebieska linia)</li>
+  <li><strong>Pasek dodawania:</strong> przyciski „+" dla brakujących markerów i nowych bloków tekstowych</li>
+  <li><strong>Stopka:</strong> [Zapisz] [Zapisz jako...] [Usuń] [Anuluj]</li>
+</ul>
+</div>
+
+<h3>12c.6 Integracja z generatorem DOCX</h3>
+<p>Parametr <code>custom_template</code> w <code>generate_note_docx()</code> aktywuje nadpisywanie treści:</p>
+<ul>
+  <li><strong>Nadpisywanie paragrafów:</strong> każdy blok tekstowy ma <code>para_idx</code> mapujący na numer paragrafu w szablonie DOCX — funkcja <code>_apply_paragraph_overrides()</code> zastępuje treść z tolerancją ±3 pozycji</li>
+  <li><strong>Nadpisywanie tekstów kontekstowych:</strong> rozpoznanie powiązań marker–tekst (np. tekst przed <code>table_anomalies</code> → <code>anomaly_intro</code>)</li>
+  <li><strong>Dynamiczna kolejność:</strong> kolejność bloków szablonu determinuje kolejność sekcji w DOCX</li>
+</ul>
+
+<h3>12c.7 Endpointy API szablonów (6 endpointów)</h3>
+<table>
+<tr><th>Metoda</th><th>Endpoint</th><th>Opis</th></tr>
+<tr><td>GET</td><td><code>/api/gsm/note/templates</code></td><td>Lista szablonów użytkownika + wbudowany (podsumowanie)</td></tr>
+<tr><td>GET</td><td><code>/api/gsm/note/templates/builtin</code></td><td>Pełny wbudowany szablon + katalog markerów/pól</td></tr>
+<tr><td>GET</td><td><code>/api/gsm/note/templates/{tpl_id}</code></td><td>Pojedynczy szablon z sekcjami i katalogami</td></tr>
+<tr><td>POST</td><td><code>/api/gsm/note/templates</code></td><td>Utwórz/aktualizuj szablon (max 5)</td></tr>
+<tr><td>DELETE</td><td><code>/api/gsm/note/templates/{tpl_id}</code></td><td>Usuń szablon użytkownika</td></tr>
+<tr><td>POST</td><td><code>/api/gsm/note/templates/default</code></td><td>Ustaw szablon domyślny</td></tr>
+</table>
+
+<h3>12c.8 Pliki</h3>
+<table>
+<tr><th>Plik</th><th>Opis</th></tr>
+<tr><td><code>backend/gsm/note_templates.py</code></td><td>Model danych, CRUD, wbudowany szablon (34 bloki), MARKER_CATALOGUE, FIELD_CATALOGUE</td></tr>
+<tr><td><code>backend/gsm/note_generator.py</code></td><td>Generator DOCX z parametrem <code>custom_template</code>, nadpisywanie paragrafów</td></tr>
+<tr><td><code>webapp/routers/gsm.py</code></td><td>6 endpointów API szablonów</td></tr>
+<tr><td><code>webapp/static/gsm.js</code></td><td><code>_showTemplateEditor()</code>, <code>_showNoteDialog()</code> z dropdownem szablonów</td></tr>
+<tr><td><code>webapp/static/app.css</code></td><td>Klasy <code>.note-tpl-*</code> dla edytora (light + dark mode)</td></tr>
+<tr><td><code>templates/gsm_note_template.docx</code></td><td>Bazowy szablon DOCX (nagłówek, stopka, tabele metadanych)</td></tr>
+</table>
+
+
+<!-- ─── 12d. TAGGING SYSTEM ─── -->
+<h2 id="mod-gsm-tags"><span class="section-num">12d.</span> System tagowania rekordów</h2>
+
+<div class="card accent">
+<h4>Opis</h4>
+<p>System przypisywania tagów (etykiet) do pojedynczych rekordów bilingowych i segmentów audio w panelu analityka. Tagi pomagają w kategoryzacji i filtrowaniu rekordów podczas analizy.</p>
+</div>
+
+<h3>12d.1 Wbudowane tagi</h3>
+<table>
+<tr><th>Tag</th><th>Kolor</th><th>Przeznaczenie</th></tr>
+<tr><td>Kluczowe</td><td><span style="color:#ef4444">czerwony</span></td><td>Istotne rekordy wymagające uwagi</td></tr>
+<tr><td>Podejrzane</td><td><span style="color:#f59e0b">pomarańczowy</span></td><td>Rekordy budząe podejrzenia</td></tr>
+<tr><td>Sprawdzone</td><td><span style="color:#22c55e">zielony</span></td><td>Zweryfikowane rekordy</td></tr>
+<tr><td>Do weryfikacji</td><td><span style="color:#3b82f6">niebieski</span></td><td>Rekordy oczekujące na sprawdzenie</td></tr>
+</table>
+
+<h3>12d.2 Tagi niestandardowe (Własny 1–4)</h3>
+<div class="card accent">
+<p>4 dodatkowe tagi z możliwością zmiany nazwy (inline editing):</p>
+<table>
+<tr><th>Tag</th><th>Domyślna nazwa</th><th>Kolor</th></tr>
+<tr><td><code>custom1</code></td><td>Własny 1</td><td><span style="color:#8b5cf6">fioletowy (#8b5cf6)</span></td></tr>
+<tr><td><code>custom2</code></td><td>Własny 2</td><td><span style="color:#0d9488">turkusowy (#0d9488)</span></td></tr>
+<tr><td><code>custom3</code></td><td>Własny 3</td><td><span style="color:#ec4899">różowy (#ec4899)</span></td></tr>
+<tr><td><code>custom4</code></td><td>Własny 4</td><td><span style="color:#6366f1">indygo (#6366f1)</span></td></tr>
+</table>
+
+<h4>Zmiana nazwy (inline editing)</h4>
+<ul>
+  <li>Podwójne kliknięcie na etykietę tagu w modalu otwiera pole edycji inline</li>
+  <li>Zatwierdzenie: Enter lub utrata fokusu (blur)</li>
+  <li>Anulowanie: Escape — przywraca poprzednią nazwę</li>
+  <li>Zmiana nazwy synchronizowana jest ze wszystkimi elementami UI (przyciski, filtry)</li>
+  <li>Nazwy zapisywane per projekt w obiekcie <code>customTagNames</code></li>
+</ul>
+</div>
+
+<h3>12d.3 Persystencja</h3>
+<ul>
+  <li><strong>Zapis:</strong> <code>POST /api/projects/{projectId}/notes/{mode}</code></li>
+  <li><strong>Format:</strong> JSON z mapą tagów per rekord + <code>customTagNames</code> (nazwy niestandardowe)</li>
+  <li><strong>Zakres:</strong> tagi przypisane per projekt (nie globalne)</li>
+</ul>
+
+<h3>12d.4 Pliki</h3>
+<p><code>webapp/static/analyst_notes.js</code> (definicje tagów, logika inline editing), <code>webapp/static/gsm.js</code> (integracja z tabelą GSM), <code>webapp/static/app.css</code> (style tagów)</p>
+
+
+<h2 id="mod-aml"><span class="section-num">13.</span> Moduł: Analiza AML</h2>
+<div class="card danger">
+<h4>Opis</h4>
+<p>Kompleksowy system wykrywania prania pieniędzy, analizy wyciągów bankowych i scoringu ryzyka finansowego.</p>
+</div>
+
+<h3>13.1 Pipeline AML</h3>
+<ol>
+  <li>Upload PDF wyciągu bankowego</li>
+  <li>Auto-detekcja banku (7 parserów dedykowanych + generyczny)</li>
+  <li>Ekstrakcja transakcji (text-layer → spatial → OCR)</li>
+  <li>Normalizacja (NormalizedTransaction, deduplikacja SHA-256)</li>
+  <li>Klasyfikacja reguł (regex: crypto, gambling, chwilówki, mixing, mule, structuring)</li>
+  <li>Profil bazowy (średnia, mediana, odchylenie std, percentyl 95)</li>
+  <li>Detekcja anomalii ML (Isolation Forest lub fallback statystyczny)</li>
+  <li>Graf przepływów pieniężnych (5 typów węzłów, 7 typów krawędzi)</li>
+  <li>Scoring ryzyka (0–100)</li>
+  <li>Generowanie wykresów (Chart.js — 6 typów)</li>
+  <li>Analiza narracyjna LLM (po polsku)</li>
+  <li>Raport HTML (self-contained z grafem Cytoscape.js)</li>
+  <li>Zapis do bazy danych</li>
+</ol>
+
+<h3>13.2 Kategorie ryzyka AML</h3>
+<table>
+<tr><th>Kategoria</th><th>Waga</th><th>Przykłady</th></tr>
+<tr><td>CRYPTO</td><td>25</td><td>Zonda, Bitbay, Binance, Coinbase, Kraken</td></tr>
+<tr><td>GAMBLING</td><td>30</td><td>STS, Fortuna, Betclic, Total Casino, Lotto</td></tr>
+<tr><td>PAYDAY_LOAN</td><td>30</td><td>~475 marek z rejestru KNF</td></tr>
+<tr><td>MIXER_SUSPECTED</td><td>40</td><td>Podejrzane usługi mieszania kryptowalut</td></tr>
+<tr><td>MONEY_MULE</td><td>35</td><td>Wzorce wskazujące na money mule</td></tr>
+<tr><td>STRUCTURING</td><td>30</td><td>Smurfing — rozbijanie transakcji</td></tr>
+</table>
+
+<h3>13.3 Obsługiwane banki</h3>
+<table>
+<tr><th>Bank</th><th>Parser</th><th>Format</th></tr>
+<tr><td>ING Bank Śląski</td><td>ing.py</td><td>PDF (spatial + universal)</td></tr>
+<tr><td>PKO Bank Polski</td><td>pko.py</td><td>PDF</td></tr>
+<tr><td>mBank</td><td>mbank.py</td><td>PDF</td></tr>
+<tr><td>Santander Bank Polska</td><td>santander.py</td><td>PDF</td></tr>
+<tr><td>Bank Pekao SA</td><td>pekao.py</td><td>PDF</td></tr>
+<tr><td>Bank Millennium</td><td>millennium.py</td><td>PDF</td></tr>
+<tr><td>Revolut</td><td>revolut.py</td><td>PDF</td></tr>
+<tr><td>MT940/SWIFT</td><td>mt940_parser.py</td><td>MT940/STA</td></tr>
+</table>
+
+<h2 id="mod-finance"><span class="section-num">14.</span> Moduł: Analiza finansowa</h2>
+<div class="card accent">
+<h4>Funkcjonalności</h4>
+<ul>
+  <li>Kategoryzacja merchantów: ~30 kategorii, 500+ wzorców (rynek polski)</li>
+  <li>Analiza behawioralna: trendy wielomiesięczne</li>
+  <li>Analiza wydatków: wzorce, anomalie, sezonowość</li>
+  <li>Scoring zdrowia finansowego</li>
+  <li>Klasyfikacja transakcji przez LLM</li>
+  <li>Pamięć encji (entity memory)</li>
+</ul>
+</div>
+
+
+<!-- ────────────────────── 15-18. SECURITY ────────────────────── -->
+<h2 id="sec-auth"><span class="section-num">15.</span> Uwierzytelnianie</h2>
+
+<h3>15.1 Tryby wdrożenia</h3>
+<table>
+<tr><th>Tryb</th><th>Opis</th></tr>
+<tr><td><code>single</code></td><td>Bez logowania — pełny dostęp dla jednego użytkownika</td></tr>
+<tr><td><code>multi</code></td><td>Pełne uwierzytelnianie, sesje, RBAC, audyt</td></tr>
+</table>
+
+<h3>15.2 Hashowanie haseł</h3>
+<div class="card">
+<p><strong>Algorytm:</strong> PBKDF2-HMAC-SHA256</p>
+<p><strong>Iteracje:</strong> 260 000</p>
+<p><strong>Sól:</strong> 16 bajtów losowych</p>
+<p><strong>Format:</strong> <code>pbkdf2:&lt;iterations&gt;:&lt;hex_salt&gt;:&lt;hex_hash&gt;</code></p>
+<p><strong>Porównanie:</strong> <code>hmac.compare_digest()</code> (timing-safe)</p>
+</div>
+
+<h3>15.3 Sesje</h3>
+<ul>
+  <li>Tokeny: <code>secrets.token_urlsafe(32)</code> — 256 bitów entropii</li>
+  <li>Przechowywanie: SQLite (<code>auth_sessions</code>)</li>
+  <li>Cookie: <code>aistate_session</code>, httponly, samesite=lax, secure (dynamicznie)</li>
+  <li>Timeout: 8h (konfigurowalny)</li>
+  <li>Walidacja: server-side na każdym request</li>
+</ul>
+
+<h3>15.4 Ochrona brute-force</h3>
+<ul>
+  <li><strong>Rate limiting IP:</strong> 5 prób / 60 sekund (in-memory)</li>
+  <li><strong>Account lockout:</strong> Po 5 nieudanych próbach → blokada na 15 minut (konfigurowane)</li>
+  <li><strong>Alert admin:</strong> Przy 10+ nieudanych próbach → wiadomość Call Center do adminów</li>
+</ul>
+
+<h3>15.5 Odzyskiwanie konta</h3>
+<ul>
+  <li><strong>Fraza odzyskiwania:</strong> 12 słów BIP-39 (~132 bity entropii)</li>
+  <li>Generowana przy rejestracji, wyświetlana raz, hashowana PBKDF2</li>
+  <li>Pozwala na reset hasła bez logowania</li>
+</ul>
+
+<h3>15.6 Polityki haseł</h3>
+<table>
+<tr><th>Polityka</th><th>Wymagania</th></tr>
+<tr><td><code>none</code></td><td>Tylko sprawdzenie blacklisty</td></tr>
+<tr><td><code>basic</code></td><td>Min. 8 znaków</td></tr>
+<tr><td><code>medium</code></td><td>Min. 8 znaków + małe + wielkie + cyfra</td></tr>
+<tr><td><code>strong</code></td><td>Min. 12 znaków + małe + wielkie + cyfra + znak specjalny</td></tr>
+</table>
+<p>Konta administratorów <strong>zawsze</strong> wymuszają politykę <code>strong</code>.</p>
+
+
+<!-- ─── 15b. PASSWORD STORAGE ─── -->
+<h2 id="sec-passwords"><span class="section-num">15b.</span> Przechowywanie haseł</h2>
+
+<div class="card danger">
+<h4>Gdzie przechowywane są hasła użytkowników?</h4>
+<p>Hasła <strong>nigdy nie są przechowywane w postaci jawnej</strong>. System zapisuje wyłącznie hash hasła.</p>
+<table>
+<tr><th>Element</th><th>Lokalizacja</th></tr>
+<tr><td>Hash hasła</td><td>Kolumna <code>password_hash</code> w tabeli <code>users</code> bazy SQLite (<code>data_www/aistate.db</code>)</td></tr>
+<tr><td>Hash frazy odzyskiwania</td><td>Kolumna <code>recovery_phrase_hash</code> w tabeli <code>users</code></td></tr>
+<tr><td>Blacklist haseł (wbudowana)</td><td><code>webapp/auth/builtin_passwords.txt</code></td></tr>
+<tr><td>Blacklist haseł (custom)</td><td><code>{config_dir}/password_blacklist.json</code> (domyślnie <code>backend/.aistate/</code>)</td></tr>
+</table>
+</div>
+
+<h3>15b.1 Algorytm hashowania</h3>
+<div class="card accent">
+<pre><code>Algorytm:    PBKDF2-HMAC-SHA256 (stdlib Python — hashlib.pbkdf2_hmac)
+Iteracje:    260 000 (standard NIST 2024+)
+Sól:         16 bajtów losowych (os.urandom) — unikalna per hasło
+Klucz:       32 bajty (256 bitów)
+Format:      pbkdf2:&lt;iterations&gt;:&lt;hex_salt&gt;:&lt;hex_hash&gt;
+Porównanie:  hmac.compare_digest() — timing-safe (odporność na ataki czasowe)</code></pre>
+<p><strong>Brak zewnętrznych zależności</strong> — cały moduł oparty na bibliotece standardowej Python (hashlib, hmac, os, secrets).</p>
+</div>
+
+<h3>15b.2 Blacklista haseł</h3>
+<ul>
+  <li><strong>Wbudowana:</strong> <code>builtin_passwords.txt</code> — lista najczęstszych haseł (case-insensitive matching)</li>
+  <li><strong>Custom:</strong> <code>password_blacklist.json</code> — tablica JSON zarządzana przez administratora</li>
+  <li><strong>API:</strong> Klasa <code>PasswordBlacklist</code> z metodami <code>is_blacklisted()</code>, <code>add()</code>, <code>remove()</code>, <code>add_bulk()</code></li>
+  <li><strong>Thread-safe:</strong> Dostęp chroniony <code>threading.Lock</code></li>
+</ul>
+
+<h3>15b.3 Polityka haseł i wymuszanie</h3>
+<table>
+<tr><th>Polityka</th><th>Wymagania</th><th>Zastosowanie</th></tr>
+<tr><td><code>none</code></td><td>Tylko sprawdzenie blacklisty</td><td>Tryb deweloperski</td></tr>
+<tr><td><code>basic</code></td><td>Min. 8 znaków</td><td>Podstawowe zabezpieczenie</td></tr>
+<tr><td><code>medium</code></td><td>8+ znaków + małe + wielkie + cyfra</td><td>Standardowe środowisko</td></tr>
+<tr><td><code>strong</code></td><td>12+ znaków + małe + wielkie + cyfra + znak specjalny</td><td><strong>Wymuszane dla administratorów</strong></td></tr>
+</table>
+<p><strong>Ważne:</strong> Konta z rolami administracyjnymi (Architekt Funkcji, Strażnik Dostępu, Główny Opiekun) <strong>zawsze</strong> wymuszają politykę <code>strong</code>, niezależnie od ustawienia globalnego.</p>
+
+<h3>15b.4 Ochrona konta</h3>
+<table>
+<tr><th>Mechanizm</th><th>Domyślne ustawienie</th><th>Konfiguracja</th></tr>
+<tr><td>Rate limiting IP</td><td>5 prób / 60 sekund</td><td>In-memory counter</td></tr>
+<tr><td>Account lockout</td><td>5 nieudanych prób → 15 min blokady</td><td><code>account_lockout_threshold</code>, <code>account_lockout_duration</code></td></tr>
+<tr><td>Alert administratora</td><td>10+ nieudanych prób → wiadomość Call Center</td><td>Automatyczny</td></tr>
+<tr><td>Wygasanie haseł</td><td>Wyłączone (<code>password_expiry_days: 0</code>)</td><td>Wymuszony redirect na <code>/change-password</code></td></tr>
+</table>
+
+<h3>15b.5 Fraza odzyskiwania</h3>
+<div class="card success">
+<p>Przy rejestracji generowana jest <strong>fraza odzyskiwania BIP-39</strong> — 12 losowych słów angielskich (~132 bity entropii). Fraza wyświetlana jest <strong>tylko raz</strong>, hashowana PBKDF2 i zapisywana w kolumnie <code>recovery_phrase_hash</code>. Pozwala na reset hasła bez logowania.</p>
+</div>
+
+<h3>15b.6 Pliki</h3>
+<table>
+<tr><th>Plik</th><th>Opis</th></tr>
+<tr><td><code>webapp/auth/passwords.py</code></td><td>Hashowanie, weryfikacja, blacklista, polityki haseł</td></tr>
+<tr><td><code>webapp/auth/user_store.py</code></td><td>CRUD użytkowników, zapis hash w SQLite</td></tr>
+<tr><td><code>webapp/auth/recovery_phrase.py</code></td><td>Generowanie i weryfikacja fraz BIP-39</td></tr>
+<tr><td><code>webapp/auth/builtin_passwords.txt</code></td><td>Wbudowana lista zabronionych haseł</td></tr>
+<tr><td><code>webapp/auth/bip39_english.txt</code></td><td>Słownik BIP-39 (2048 słów)</td></tr>
+<tr><td><code>backend/db/schema.sql</code></td><td>Schemat tabeli <code>users</code> z kolumnami auth</td></tr>
+</table>
+
+
+<h2 id="sec-rbac"><span class="section-num">16.</span> System RBAC</h2>
+
+<h3>16.1 Role użytkowników</h3>
+<table>
+<tr><th>Rola</th><th>Dostęp do modułów</th></tr>
+<tr><td>Transkryptor</td><td>projects, transcription, diarization</td></tr>
+<tr><td>Lingwista</td><td>projects, translation</td></tr>
+<tr><td>Analityk</td><td>projects, analysis</td></tr>
+<tr><td>Dialogista</td><td>projects, chat</td></tr>
+<tr><td>Strateg</td><td>projects, translation, analysis, chat</td></tr>
+<tr><td>Mistrz Sesji</td><td>projects, transcription, diarization, translation, analysis, chat</td></tr>
+</table>
+
+<h3>16.2 Role administracyjne</h3>
+<table>
+<tr><th>Rola</th><th>Uprawnienia</th></tr>
+<tr><td>Architekt Funkcji</td><td>admin_settings — konfiguracja systemu</td></tr>
+<tr><td>Strażnik Dostępu</td><td>user_mgmt — zarządzanie użytkownikami</td></tr>
+<tr><td>Główny Opiekun (superadmin)</td><td>Pełny dostęp do WSZYSTKICH modułów</td></tr>
+</table>
+
+<h3>16.3 Egzekucja uprawnień</h3>
+<p>Middleware w <code>webapp/server.py</code> (linie 2038-2048) sprawdza <code>get_user_modules()</code> i <code>is_route_allowed()</code> dla każdego żądania HTTP. Nieautoryzowane API → 403, nieautoryzowane strony → redirect do <code>/</code>.</p>
+
+
+<h2 id="sec-users"><span class="section-num">17.</span> Zarządzanie użytkownikami</h2>
+
+<h3>17.1 Cykl życia użytkownika</h3>
+<ol>
+  <li><strong>Rejestracja</strong> — użytkownik tworzy konto (<code>pending=True</code>)</li>
+  <li><strong>Zatwierdzenie</strong> — admin z rolą "Strażnik Dostępu" zatwierdza</li>
+  <li><strong>Aktywny</strong> — pełny dostęp zgodny z rolą</li>
+  <li><strong>Blokada</strong> — ban (tymczasowy lub stały) z powodem</li>
+  <li><strong>Usunięcie</strong> — kaskadowe usunięcie sesji i danych</li>
+</ol>
+
+<h3>17.2 Workspace'y</h3>
+<ul>
+  <li><strong>Workspace</strong> — kontener projektów z właścicielem, członkami, rolami</li>
+  <li><strong>Podprojekty</strong> — potomne elementy (transkrypcja, diaryzacja, analiza...)</li>
+  <li><strong>Role workspace</strong> — owner, manager, editor, commenter, viewer</li>
+  <li><strong>Zaproszenia</strong> — flow: pending → accepted/rejected/cancelled</li>
+  <li><strong>Log aktywności</strong> — audit trail akcji w workspace</li>
+</ul>
+
+
+<h2 id="sec-features"><span class="section-num">18.</span> Mechanizmy bezpieczeństwa</h2>
+
+<table>
+<tr><th>Mechanizm</th><th>Implementacja</th></tr>
+<tr><td>Nagłówki bezpieczeństwa</td><td><code>X-Content-Type-Options: nosniff</code>, <code>X-Frame-Options: SAMEORIGIN</code>, <code>X-XSS-Protection: 1; mode=block</code>, <code>Referrer-Policy: strict-origin-when-cross-origin</code></td></tr>
+<tr><td>SQL injection</td><td>Zapytania parametryzowane (<code>?</code>) we WSZYSTKICH modułach</td></tr>
+<tr><td>Sanityzacja plików</td><td><code>safe_filename()</code> — strip separatorów, whitelist znaków, truncate 180</td></tr>
+<tr><td>CORS</td><td>Brak middleware CORS — same-origin domyślnie</td></tr>
+<tr><td>Token HF</td><td>Nigdy w API response, redakcja w logach subprocess (<code>_redact_cmd()</code>)</td></tr>
+<tr><td>Blacklist haseł</td><td>Wbudowana lista + custom admin (JSON)</td></tr>
+<tr><td>Fingerprint</td><td>Sanityzacja: whitelisted keys, truncate 120 znaków</td></tr>
+<tr><td>Audit log</td><td>17 typów zdarzeń: login, logout, failed, locked, banned, password_changed...</td></tr>
+<tr><td>Wygasanie haseł</td><td>Konfigurowalne (<code>password_expiry_days</code>), wymuszony redirect na <code>/change-password</code></td></tr>
+<tr><td>Call Center</td><td>System wiadomości wewnętrznych — alerty do grup admin</td></tr>
+</table>
+
+
+<!-- ────────────────────── 19-22. DATA & INFRA ────────────────────── -->
+<h2 id="database"><span class="section-num">19.</span> Baza danych</h2>
+
+<h3>19.1 Konfiguracja</h3>
+<ul>
+  <li><strong>Silnik:</strong> SQLite z trybem WAL (Write-Ahead Logging)</li>
+  <li><strong>Lokalizacja:</strong> <code>data_www/aistate.db</code></li>
+  <li><strong>Timeout:</strong> 30 sekund, busy_timeout 5000ms</li>
+  <li><strong>Foreign keys:</strong> ON (z kaskadowym usuwaniem)</li>
+</ul>
+
+<h3>19.2 Schemat — 27 tabel</h3>
+<table>
+<tr><th>Tabela</th><th>Opis</th></tr>
+<tr><td><code>users</code></td><td>Konta użytkowników (26 pól: auth, role, status, security, recovery)</td></tr>
+<tr><td><code>auth_sessions</code></td><td>Sesje (token, user_id, expires_at, ip)</td></tr>
+<tr><td><code>auth_audit_log</code></td><td>Log zdarzeń auth (17 typów)</td></tr>
+<tr><td><code>deployment_config</code></td><td>Tryb wdrożenia (single/multi)</td></tr>
+<tr><td><code>system_config</code></td><td>Konfiguracja key-value</td></tr>
+<tr><td><code>projects</code></td><td>Projekty z właścicielem i statusem</td></tr>
+<tr><td><code>cases</code></td><td>Elementy projektów (type, data_dir, metadata JSON)</td></tr>
+<tr><td><code>case_files</code></td><td>Pliki w projektach (type, path, checksum SHA-256)</td></tr>
+<tr><td><code>statements</code></td><td>Wyciągi bankowe AML (account_id, period, balances, pdf_hash)</td></tr>
+<tr><td><code>transactions</code></td><td>Transakcje (amount, direction, channel, category, risk_score, tx_hash)</td></tr>
+<tr><td><code>counterparties</code></td><td>Pamięć kontrahentów (canonical_name, label, auto_category)</td></tr>
+<tr><td><code>counterparty_aliases</code></td><td>Aliasy kontrahentów</td></tr>
+<tr><td><code>risk_assessments</code></td><td>Oceny ryzyka AML (total_score 0-100, breakdown JSON)</td></tr>
+<tr><td><code>graph_nodes</code> / <code>graph_edges</code></td><td>Graf przepływów pieniężnych</td></tr>
+<tr><td><code>baselines</code></td><td>Profile anomalii statystycznych</td></tr>
+<tr><td><code>learning_queue</code></td><td>Encje do manualnej weryfikacji</td></tr>
+<tr><td><code>tx_classifications</code></td><td>Klasyfikacje recenzyjne transakcji</td></tr>
+<tr><td><code>account_profiles</code></td><td>Profile kont (anonimizacja)</td></tr>
+<tr><td><code>project_workspaces</code></td><td>Workspace'y (owner, name, color, status)</td></tr>
+<tr><td><code>project_members</code></td><td>Członkowie workspace'ów (role)</td></tr>
+<tr><td><code>project_invitations</code></td><td>Zaproszenia (status flow)</td></tr>
+<tr><td><code>project_activity</code></td><td>Log aktywności workspace</td></tr>
+<tr><td><code>subprojects</code> / <code>subproject_links</code></td><td>Podprojekty i relacje</td></tr>
+<tr><td><code>auth_messages</code> / <code>auth_message_reads</code></td><td>Wiadomości Call Center</td></tr>
+<tr><td><code>audit_log</code></td><td>Log audytowy AML</td></tr>
+<tr><td><code>field_rules</code> / <code>parse_templates</code></td><td>Reguły i szablony parserów</td></tr>
+</table>
+
+<h3>19.3 Backup i restore</h3>
+<ul>
+  <li><strong>Backup DB:</strong> SQLite Online Backup API (WAL-safe), opcjonalny gzip</li>
+  <li><strong>Full backup:</strong> DB + uploads + projekty + config + reguły AML + logi (7 dni)</li>
+  <li><strong>Manifest:</strong> <code>manifest.json</code> z checksumami</li>
+  <li><strong>Rotacja:</strong> Automatyczna, domyślnie 30 ostatnich backupów</li>
+  <li><strong>Integrity check:</strong> Weryfikacja integralności po backup i przed restore</li>
+</ul>
+
+
+<h2 id="api"><span class="section-num">20.</span> Struktura API</h2>
+
+<h3>20.1 Podsumowanie — 324 endpointy</h3>
+<table>
+<tr><th>Router</th><th>Prefix</th><th>Endpointy</th></tr>
+<tr><td><code>webapp/server.py</code></td><td>różne</td><td>149</td></tr>
+<tr><td><code>routers/aml.py</code></td><td>/api/aml</td><td>55</td></tr>
+<tr><td><code>routers/workspaces.py</code></td><td>/api/workspaces</td><td>24</td></tr>
+<tr><td><code>routers/gsm.py</code></td><td>/api/gsm</td><td>40</td></tr>
+<tr><td><code>routers/auth.py</code></td><td>/api/auth</td><td>17</td></tr>
+<tr><td><code>routers/users.py</code></td><td>/api/users</td><td>12</td></tr>
+<tr><td><code>routers/setup.py</code></td><td>/api/setup</td><td>7</td></tr>
+<tr><td><code>routers/admin.py</code></td><td>/api/admin</td><td>6</td></tr>
+<tr><td><code>routers/chat.py</code></td><td>/api/chat</td><td>6</td></tr>
+<tr><td><code>routers/messages.py</code></td><td>/api/messages</td><td>5</td></tr>
+<tr><td><code>routers/tasks.py</code></td><td>/api/tasks</td><td>3</td></tr>
+<tr><td colspan="2"><strong>RAZEM</strong></td><td><strong>324</strong></td></tr>
+</table>
+
+
+<h2 id="config"><span class="section-num">21.</span> Konfiguracja</h2>
+
+<h3>21.1 Zmienne środowiskowe</h3>
+<table>
+<tr><th>Zmienna</th><th>Opis</th><th>Domyślna wartość</th></tr>
+<tr><td><code>AISTATEWEB_HOST</code></td><td>Adres serwera</td><td>127.0.0.1</td></tr>
+<tr><td><code>AISTATEWEB_PORT</code></td><td>Port serwera</td><td>8000</td></tr>
+<tr><td><code>AISTATEWEB_DATA_DIR</code></td><td>Katalog danych + baza SQLite</td><td>ROOT/data_www</td></tr>
+<tr><td><code>AISTATE_CONFIG_DIR</code></td><td>Katalog ustawień</td><td>backend/.aistate/</td></tr>
+<tr><td><code>AISTATEWEB_ADMIN_LOG_DIR</code></td><td>Katalog logów</td><td>backend/logs/</td></tr>
+<tr><td><code>AISTATEWEB_BACKUP_DIR</code></td><td>Katalog backupów</td><td>ROOT/backups/</td></tr>
+<tr><td><code>HF_TOKEN</code> / <code>HF_HUB_TOKEN</code></td><td>Token HuggingFace</td><td>—</td></tr>
+<tr><td><code>OLLAMA_HOST</code></td><td>URL serwera Ollama</td><td>http://127.0.0.1:11434</td></tr>
+<tr><td><code>PYTHON</code></td><td>Interpreter Python</td><td>systemowy</td></tr>
+</table>
+
+<h3>21.2 Ustawienia aplikacji (Settings dataclass)</h3>
+<ul>
+  <li><code>hf_token</code> — token HuggingFace (nigdy w API response)</li>
+  <li><code>whisper_model</code> — model ASR (tiny/base/small/medium/large)</li>
+  <li><code>ui_language</code> — język UI (pl/en/ko)</li>
+  <li><code>theme</code> — motyw (light/dark)</li>
+  <li><code>session_timeout_hours</code> — timeout sesji (domyślnie 8h)</li>
+  <li><code>account_lockout_threshold</code> — próg lockoutu (domyślnie 5)</li>
+  <li><code>account_lockout_duration</code> — czas lockoutu w minutach (domyślnie 15)</li>
+  <li><code>password_policy</code> — polityka haseł (none/basic/medium/strong)</li>
+  <li><code>password_expiry_days</code> — wygasanie haseł (0 = wyłączone)</li>
+</ul>
+
+
+<h2 id="testing"><span class="section-num">22.</span> Testowanie</h2>
+
+<h3>22.1 Konfiguracja</h3>
+<pre><code># Uruchomienie testów
+pytest tests/ -v --tb=short
+
+# Testy modułu GSM
+pytest tests/ -v -k "gsm"
+
+# Testy z coverage
+pytest tests/ --cov=backend --cov-report=html</code></pre>
+
+<h3>22.2 Struktura testów</h3>
+<table>
+<tr><th>Plik</th><th>Testy</th><th>Zakres</th></tr>
+<tr><td><code>test_gsm_parsers.py</code></td><td>74</td><td>Parsery GSM, analizy, IMEI, normalizacja, serializacja</td></tr>
+<tr><td><code>test_gsm_adaptive.py</code></td><td>45</td><td>Adaptywny system parserów: schema registry, validator, fuzzy matching, drift, backup, restore</td></tr>
+<tr><td><code>test_aml.py</code></td><td>~30</td><td>Normalizacja, reguły, pamięć kontrahentów, graf, baseline, raport</td></tr>
+<tr><td><code>test_workspaces.py</code></td><td>~35</td><td>CRUD, role, zaproszenia, aktywność, migracja</td></tr>
+<tr><td><code>test_multiuser.py</code></td><td>~20</td><td>Auth, sesje, RBAC, lockout, ban</td></tr>
+<tr><td><code>test_document_processor.py</code></td><td>~15</td><td>Ekstrakcja tekstu z różnych formatów</td></tr>
+<tr><td><code>test_settings.py</code></td><td>~10</td><td>Persystencja ustawień, migracja</td></tr>
+<tr><td><code>test_db.py</code></td><td>~10</td><td>Silnik SQLite, schema, migracje</td></tr>
+<tr><td><code>test_api_integration.py</code></td><td>~20</td><td>FastAPI TestClient, endpointy</td></tr>
+<tr><td><code>conftest.py</code></td><td>—</td><td>Fixtures: temp dirs, env overrides, isolated DB</td></tr>
+</table>
+
+<p><strong>Izolacja:</strong> Testy nadpisują <code>AISTATEWEB_DATA_DIR</code>, <code>AISTATE_CONFIG_DIR</code>, <code>AISTATEWEB_ADMIN_LOG_DIR</code> na katalogi tymczasowe — nigdy nie dotykają danych produkcyjnych.</p>
+
+
+<!-- ────────────────────── FOOTER ────────────────────── -->
+<div style="margin-top:64px;padding:24px 0;border-top:2px solid var(--border);color:var(--muted);font-size:13px;text-align:center;">
+  <p>AISTATEweb v3.6 beta — Dokumentacja Techniczna</p>
+  <p>Wygenerowano: 16 marca 2026</p>
+  <p>Łączna liczba plików źródłowych: ~165 | Linii kodu: ~105 000+ | Endpointów API: 324 | Tabel DB: 27</p>
+</div>
+
+</div><!-- .main -->
+</div><!-- .layout -->
+
+<script>
+// Highlight active sidebar link on scroll
+const sections = document.querySelectorAll('h2[id], h1[id]');
+const navLinks = document.querySelectorAll('.sidebar a');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => {
+    if (window.scrollY >= s.offsetTop - 100) current = s.id;
+  });
+  navLinks.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+  });
+});
+</script>
+
+</body>
+</html>
