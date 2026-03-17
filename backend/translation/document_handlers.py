@@ -791,25 +791,53 @@ class DOCHandler(DocumentHandler):
         return None
 
     @staticmethod
+    def _try_open_as_docx(doc_path: Path) -> Path | None:
+        """Try opening a .doc file directly as .docx (some files are misnamed).
+
+        Returns the path to a renamed copy if successful, None otherwise.
+        """
+        try:
+            from docx import Document  # type: ignore
+            Document(str(doc_path))
+            # It opened fine — copy with .docx extension
+            out_path = doc_path.with_suffix(".docx")
+            if out_path.exists():
+                out_path = doc_path.parent / f"{doc_path.stem}_converted.docx"
+            shutil.copy2(str(doc_path), str(out_path))
+            logger.info(f"DOCHandler: {doc_path.name} is actually DOCX (misnamed), copied as {out_path.name}")
+            return out_path
+        except Exception:
+            return None
+
+    @staticmethod
     def convert_doc_to_docx(doc_path: Path) -> Path:
         """Convert .doc/.pdf to .docx using LibreOffice.  Returns path to the new .docx."""
         lo = DOCHandler._find_libreoffice()
         src_ext = doc_path.suffix.lower()
+
+        # For .doc files: try opening directly as .docx first (some are misnamed)
+        if src_ext == ".doc":
+            direct = DOCHandler._try_open_as_docx(doc_path)
+            if direct:
+                return direct
+
         if not lo:
             fmt_hint = "DOC" if src_ext == ".doc" else src_ext.lstrip(".").upper()
             raise RuntimeError(
                 f"LibreOffice jest wymagany do konwersji plików {fmt_hint}. "
-                f"Zainstaluj LibreOffice (sudo apt install libreoffice) "
+                f"Zainstaluj LibreOffice Writer (sudo apt install libreoffice-writer) "
                 f"lub przekonwertuj plik na .docx ręcznie."
             )
 
         tmp_dir = tempfile.mkdtemp(prefix="aistate_doc_")
         try:
+            # Use explicit filter name — plain "docx" fails when
+            # libreoffice-writer is not installed (only core present).
             result = subprocess.run(
                 [
                     lo,
                     "--headless",
-                    "--convert-to", "docx",
+                    "--convert-to", 'docx:"Office Open XML Text"',
                     "--outdir", tmp_dir,
                     str(doc_path),
                 ],
@@ -817,8 +845,30 @@ class DOCHandler(DocumentHandler):
                 text=True,
                 timeout=120,
             )
+            # Fallback: retry without explicit filter name (older LO versions)
+            if result.returncode != 0 and "no export filter" in (result.stderr or ""):
+                logger.info("DOCHandler: retrying with plain 'docx' filter name")
+                result = subprocess.run(
+                    [
+                        lo,
+                        "--headless",
+                        "--convert-to", "docx",
+                        "--outdir", tmp_dir,
+                        str(doc_path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+
             if result.returncode != 0:
-                raise RuntimeError(f"LibreOffice conversion failed: {result.stderr[:500]}")
+                stderr = (result.stderr or "").strip()
+                if "no export filter" in stderr:
+                    raise RuntimeError(
+                        "LibreOffice nie posiada filtra eksportu DOCX. "
+                        "Zainstaluj pełny pakiet Writer: sudo apt install libreoffice-writer"
+                    )
+                raise RuntimeError(f"LibreOffice conversion failed: {stderr[:500]}")
 
             # Find the converted file
             docx_files = list(Path(tmp_dir).glob("*.docx"))
