@@ -558,6 +558,7 @@
 
       const brandDisplay = brand || "";
       return `<div class="aml-card-item" data-brand="${brand}">
+        ${brandDisplay ? `<div class="aml-card-watermark">${brandDisplay}</div>` : ""}
         <div class="aml-card-top">
           <div class="aml-card-bank">${_esc(bankName)}</div>
           ${brandDisplay ? `<div class="aml-card-brand">${brandDisplay}</div>` : ""}

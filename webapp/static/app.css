@@ -972,6 +972,22 @@ button.pill-icon:hover{
   font-weight: 800;
   opacity: 0.9;
 }
+/* Watermark — large semi-transparent brand name as card background */
+.aml-card-watermark{
+  position: absolute;
+  right: 12px;
+  bottom: 48px;
+  font-size: 52px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  opacity: 0.08;
+  pointer-events: none;
+  user-select: none;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  font-family: 'Arial Black', 'Segoe UI', sans-serif;
+}
 .aml-card-number{
   padding: 8px 16px 4px;
   font-size: 17px;
