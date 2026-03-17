@@ -24,7 +24,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
     },
     "analysis": {
         "pages": ["/analysis", "/analiza"],
-        "api_prefixes": ["/api/analysis/", "/api/finance/", "/api/documents/", "/api/aml/", "/api/memory", "/api/db/", "/api/gsm/"],
+        "api_prefixes": ["/api/analysis/", "/api/finance/", "/api/documents/", "/api/aml/", "/api/memory", "/api/db/", "/api/gsm/", "/api/crypto/"],
         "api_keywords": ["ollama/status", "ollama/models", "settings/models", "settings/analysis", "models/list"],
     },
     "chat": {
@@ -41,6 +41,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
         "pages": [
             "/settings", "/llm-settings", "/asr-settings",
             "/nllb-settings", "/tts-settings", "/bts-settings",
+            "/crypto-settings",
             "/admin", "/logs",
             "/ustawienia", "/ustawienia-llm", "/logi",
         ],
@@ -49,6 +50,7 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
             "/api/tts/", "/api/admin/", "/api/ollama/",
             "/api/sound-detection/",
             "/api/models/",
+            "/api/crypto/",
         ],
         "api_keywords": [],
     },
