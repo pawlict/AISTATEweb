@@ -1163,6 +1163,12 @@
         <div id="crypto_alerts_body"></div>
       </div>
 
+      <!-- Exchange metadata (exchange only) -->
+      <div class="card" id="crypto_exchange_meta_card" style="display:none">
+        <div class="h2">Portfel tokenów</div>
+        <div style="overflow-x:auto" id="crypto_exchange_meta_body"></div>
+      </div>
+
       <!-- Charts -->
       <div class="card" id="crypto_charts_card">
         <div class="h2">Wykresy</div>
@@ -1186,11 +1192,26 @@
         </div>
       </div>
 
-      <!-- Top counterparties -->
+      <!-- Top counterparties / Fiat flow -->
       <div class="card" id="crypto_cp_card">
-        <div class="h2">Najważniejsi kontrahenci</div>
+        <div class="h2" id="crypto_chart_counterparties_title">Najważniejsi kontrahenci</div>
         <canvas id="crypto_chart_counterparties" height="300"></canvas>
       </div>
+
+      <!-- Token breakdown (exchange only) -->
+      <div class="card" id="crypto_chart_token_breakdown_card" style="display:none">
+        <div class="h2">Wolumen per token</div>
+        <canvas id="crypto_chart_token_breakdown" height="300"></canvas>
+      </div>
+
+      <!-- Operations breakdown (exchange only) -->
+      <div class="card" id="crypto_chart_operations_card" style="display:none">
+        <div class="h2">Rozkład operacji</div>
+        <canvas id="crypto_chart_operations" height="300"></canvas>
+      </div>
+
+      <!-- Token breakdown card placeholder (exchange only) -->
+      <div class="card" id="crypto_token_breakdown_card" style="display:none"></div>
 
       <!-- Transaction flow graph -->
       <div class="card" id="crypto_graph_card">

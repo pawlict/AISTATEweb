@@ -2,8 +2,12 @@
  * Crypto Analysis Module — CryptoManager
  *
  * Lazy-initialized when the Crypto tab is first clicked.
- * Handles CSV upload, results rendering, Chart.js charts,
+ * Handles CSV/PDF upload, results rendering, Chart.js charts,
  * Cytoscape.js flow graph, and LLM narrative streaming.
+ *
+ * Supports two display modes based on source_type:
+ *   - "exchange"   — exchange statements (Binance, Kraken, …)
+ *   - "blockchain" — on-chain data (WalletExplorer, Etherscan, …)
  */
 (function () {
   "use strict";
@@ -146,37 +150,68 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /*  Render results                                                    */
+  /*  Render results — dual mode                                        */
   /* ------------------------------------------------------------------ */
 
   function _renderResults(r) {
     _hide("crypto_empty_state");
     _show("crypto_results");
 
-    _renderSummary(r);
+    const isExchange = (r.source_type === "exchange");
+
+    _renderSummary(r, isExchange);
     _renderRisk(r);
     _renderAlerts(r);
-    _renderWallets(r);
-    _renderTransactions(r);
-    _renderCharts(r);
+
+    if (isExchange) {
+      _renderExchangeMeta(r);
+      _renderTokenBreakdown(r);
+      _hide("crypto_wallets_card");
+    } else {
+      _hide("crypto_exchange_meta_card");
+      _hide("crypto_token_breakdown_card");
+      _renderWallets(r);
+    }
+
+    _renderTransactions(r, isExchange);
+    _renderCharts(r, isExchange);
     _renderGraph(r);
   }
 
   /* -- Summary grid -------------------------------------------------- */
 
-  function _renderSummary(r) {
-    const items = [
-      ["Źródło", r.source || "—"],
-      ["Blockchain", r.chain || "—"],
-      ["Plik", r.filename || "—"],
-      ["Transakcje", r.tx_count || 0],
-      ["Portfele", r.wallet_count || 0],
-      ["Kontrahenci", r.counterparty_count || 0],
-      ["Okres", (r.date_from || "?").slice(0, 10) + " — " + (r.date_to || "?").slice(0, 10)],
-      ["Wpłaty", (r.total_received || 0).toFixed(8) + " " + (Object.keys(r.tokens || {})[0] || "BTC")],
-      ["Wypłaty", (r.total_sent || 0).toFixed(8) + " " + (Object.keys(r.tokens || {})[0] || "BTC")],
-      ["Czas analizy", (r.elapsed_sec || 0).toFixed(1) + "s"],
-    ];
+  function _renderSummary(r, isExchange) {
+    const items = [];
+
+    if (isExchange) {
+      const em = r.exchange_meta || {};
+      items.push(
+        ["Giełda", em.exchange_name || r.source || "—"],
+        ["Plik", r.filename || "—"],
+        ["Transakcje", r.tx_count || 0],
+        ["Okres", (r.date_from || "?").slice(0, 10) + " — " + (r.date_to || "?").slice(0, 10)],
+        ["Tokeny krypto", (em.crypto_tokens || []).join(", ") || "—"],
+        ["Waluty fiat", (em.fiat_tokens || []).join(", ") || "—"],
+        ["Konta", (em.account_types || []).join(", ") || "—"],
+        ["Wpłaty (dep.)", (r.total_received || 0).toFixed(4)],
+        ["Wypłaty (wd.)", (r.total_sent || 0).toFixed(4)],
+        ["Czas analizy", (r.elapsed_sec || 0).toFixed(1) + "s"],
+      );
+    } else {
+      items.push(
+        ["Źródło", r.source || "—"],
+        ["Blockchain", r.chain || "—"],
+        ["Plik", r.filename || "—"],
+        ["Transakcje", r.tx_count || 0],
+        ["Portfele", r.wallet_count || 0],
+        ["Kontrahenci", r.counterparty_count || 0],
+        ["Okres", (r.date_from || "?").slice(0, 10) + " — " + (r.date_to || "?").slice(0, 10)],
+        ["Wpłaty", (r.total_received || 0).toFixed(8) + " " + (Object.keys(r.tokens || {})[0] || "BTC")],
+        ["Wypłaty", (r.total_sent || 0).toFixed(8) + " " + (Object.keys(r.tokens || {})[0] || "BTC")],
+        ["Czas analizy", (r.elapsed_sec || 0).toFixed(1) + "s"],
+      );
+    }
+
     let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">';
     for (const [label, val] of items) {
       html += `<div style="padding:8px 12px;background:var(--bg-input,#0f172a);border-radius:6px">
@@ -186,6 +221,39 @@
     }
     html += "</div>";
     _html("crypto_summary_grid", html);
+  }
+
+  /* -- Exchange metadata ---------------------------------------------- */
+
+  function _renderExchangeMeta(r) {
+    const tokens = r.tokens || {};
+    if (!Object.keys(tokens).length) { _hide("crypto_exchange_meta_card"); return; }
+    _show("crypto_exchange_meta_card");
+
+    let html = '<table class="data-table" style="width:100%;font-size:13px"><thead><tr>' +
+      "<th>Token</th><th>Wpływy</th><th>Wypływy</th><th>Saldo netto</th><th>TX</th>" +
+      "</tr></thead><tbody>";
+    const sorted = Object.entries(tokens).sort((a, b) => b[1].count - a[1].count);
+    for (const [tok, s] of sorted) {
+      const net = (s.received || 0) - (s.sent || 0);
+      const netColor = net >= 0 ? "#22c55e" : "#ef4444";
+      html += `<tr>
+        <td style="font-weight:600">${_esc(tok)}</td>
+        <td style="text-align:right">${(s.received || 0).toFixed(4)}</td>
+        <td style="text-align:right">${(s.sent || 0).toFixed(4)}</td>
+        <td style="text-align:right;color:${netColor};font-weight:600">${net >= 0 ? "+" : ""}${net.toFixed(4)}</td>
+        <td style="text-align:center">${s.count}</td>
+      </tr>`;
+    }
+    html += "</tbody></table>";
+    _html("crypto_exchange_meta_body", html);
+  }
+
+  /* -- Token breakdown chart card ------------------------------------- */
+
+  function _renderTokenBreakdown(r) {
+    _show("crypto_token_breakdown_card");
+    // Actual chart is rendered in _renderCharts
   }
 
   /* -- Risk assessment ----------------------------------------------- */
@@ -231,7 +299,7 @@
     _html("crypto_alerts_body", html);
   }
 
-  /* -- Wallets table ------------------------------------------------- */
+  /* -- Wallets table (blockchain only) -------------------------------- */
 
   function _renderWallets(r) {
     const wallets = r.wallets || [];
@@ -260,7 +328,7 @@
 
   /* -- Transactions table -------------------------------------------- */
 
-  function _renderTransactions(r) {
+  function _renderTransactions(r, isExchange) {
     const txs = r.transactions || [];
     const totalCount = r.transactions_total || txs.length;
     _text("crypto_tx_count_label", `${totalCount} transakcji`);
@@ -268,25 +336,56 @@
     if (!txs.length) { _hide("crypto_tx_card"); return; }
     _show("crypto_tx_card");
 
-    let html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
-      "<th>Data</th><th>Od</th><th>Do</th><th>Kwota</th><th>Token</th><th>Typ</th><th>Ryzyko</th>" +
-      "</tr></thead><tbody>";
+    let html;
     const show = txs.slice(0, 200);
-    for (const tx of show) {
-      const tags = (tx.risk_tags || []).join(", ");
-      const tagColor = tags.includes("sanctioned") ? "#ef4444" :
-        tags.includes("mixer") ? "#f97316" :
-          tags.includes("high_value") ? "#eab308" : "";
-      html += `<tr>
-        <td style="white-space:nowrap">${_esc((tx.timestamp || "").slice(0, 16))}</td>
-        <td style="font-family:monospace;font-size:10px" title="${_esc(tx.from || "")}">${_esc(_shorten(tx.from || "—"))}</td>
-        <td style="font-family:monospace;font-size:10px" title="${_esc(tx.to || "")}">${_esc(_shorten(tx.to || "—"))}</td>
-        <td style="text-align:right">${(tx.amount || 0).toFixed(8)}</td>
-        <td>${_esc(tx.token || "")}</td>
-        <td>${_esc(tx.tx_type || "")}</td>
-        <td style="color:${tagColor};font-size:11px">${_esc(tags || "—")}</td>
-      </tr>`;
+
+    if (isExchange) {
+      html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+        "<th>Data</th><th>Konto</th><th>Operacja</th><th>Token</th><th>Kwota</th><th>Typ</th><th>Tagi</th>" +
+        "</tr></thead><tbody>";
+      for (const tx of show) {
+        const tags = (tx.risk_tags || []).join(", ");
+        const tagColor = tags.includes("privacy_coin") ? "#f97316" :
+          tags.includes("meme_coin") ? "#eab308" :
+            tags.includes("withdrawal") ? "#3b82f6" :
+              tags.includes("high_value_fiat") ? "#ef4444" : "";
+        const raw = tx.raw || {};
+        const amt = tx.amount || 0;
+        const rawChange = raw.change || "";
+        const isNeg = rawChange && String(rawChange).trim().startsWith("-");
+        const amtColor = isNeg ? "#ef4444" : "#22c55e";
+
+        html += `<tr>
+          <td style="white-space:nowrap">${_esc((tx.timestamp || "").slice(0, 16).replace("T", " "))}</td>
+          <td>${_esc(raw.account || "—")}</td>
+          <td>${_esc(tx.category || raw.operation || tx.tx_type || "—")}</td>
+          <td style="font-weight:600">${_esc(tx.token || "")}</td>
+          <td style="text-align:right;color:${amtColor};font-weight:500">${isNeg ? "-" : "+"}${amt.toFixed(4)}</td>
+          <td>${_esc(tx.tx_type || "")}</td>
+          <td style="color:${tagColor};font-size:11px">${_esc(tags || "—")}</td>
+        </tr>`;
+      }
+    } else {
+      html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+        "<th>Data</th><th>Od</th><th>Do</th><th>Kwota</th><th>Token</th><th>Typ</th><th>Ryzyko</th>" +
+        "</tr></thead><tbody>";
+      for (const tx of show) {
+        const tags = (tx.risk_tags || []).join(", ");
+        const tagColor = tags.includes("sanctioned") ? "#ef4444" :
+          tags.includes("mixer") ? "#f97316" :
+            tags.includes("high_value") ? "#eab308" : "";
+        html += `<tr>
+          <td style="white-space:nowrap">${_esc((tx.timestamp || "").slice(0, 16))}</td>
+          <td style="font-family:monospace;font-size:10px" title="${_esc(tx.from || "")}">${_esc(_shorten(tx.from || "—"))}</td>
+          <td style="font-family:monospace;font-size:10px" title="${_esc(tx.to || "")}">${_esc(_shorten(tx.to || "—"))}</td>
+          <td style="text-align:right">${(tx.amount || 0).toFixed(8)}</td>
+          <td>${_esc(tx.token || "")}</td>
+          <td>${_esc(tx.tx_type || "")}</td>
+          <td style="color:${tagColor};font-size:11px">${_esc(tags || "—")}</td>
+        </tr>`;
+      }
     }
+
     html += "</tbody></table>";
     const totalTx = r.transactions_total || txs.length;
     if (show.length < totalTx) {
@@ -296,10 +395,10 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /*  Charts (Chart.js)                                                 */
+  /*  Charts (Chart.js) — dual mode                                     */
   /* ------------------------------------------------------------------ */
 
-  async function _renderCharts(r) {
+  async function _renderCharts(r, isExchange) {
     try {
       await _ensureChartJS();
     } catch (e) {
@@ -313,26 +412,48 @@
     // Common dark theme
     const gridColor = "rgba(148,163,184,0.15)";
     const tickColor = "#94a3b8";
+    const palette = ["#3b82f6", "#22c55e", "#f97316", "#ef4444", "#8b5cf6", "#06b6d4", "#eab308",
+                     "#ec4899", "#14b8a6", "#a855f7", "#f43f5e", "#84cc16"];
 
     // 1. Balance timeline
     const bal = charts.balance_timeline;
-    if (bal && bal.labels && bal.labels.length) {
-      _chartInstances.balance = new Chart(QS("#crypto_chart_balance"), {
-        type: "line",
-        data: {
-          labels: bal.labels,
-          datasets: [{
-            label: bal.label || "Saldo",
-            data: bal.data,
-            borderColor: "#3b82f6",
-            backgroundColor: "rgba(59,130,246,0.1)",
-            fill: true,
-            tension: 0.3,
-            pointRadius: bal.labels.length > 50 ? 0 : 3,
-          }],
-        },
-        options: _chartOpts(gridColor, tickColor),
-      });
+    const balCanvas = QS("#crypto_chart_balance");
+    if (bal && balCanvas) {
+      if (bal.datasets && bal.datasets.length) {
+        // Exchange: multi-token balance lines
+        const datasets = bal.datasets.map((ds, i) => ({
+          label: ds.token,
+          data: ds.data,
+          borderColor: palette[i % palette.length],
+          backgroundColor: palette[i % palette.length] + "22",
+          fill: false,
+          tension: 0.3,
+          pointRadius: bal.labels.length > 50 ? 0 : 3,
+        }));
+        _chartInstances.balance = new Chart(balCanvas, {
+          type: "line",
+          data: { labels: bal.labels, datasets },
+          options: _chartOpts(gridColor, tickColor),
+        });
+      } else if (bal.labels && bal.labels.length) {
+        // Blockchain: single balance line
+        _chartInstances.balance = new Chart(balCanvas, {
+          type: "line",
+          data: {
+            labels: bal.labels,
+            datasets: [{
+              label: bal.label || "Saldo",
+              data: bal.data,
+              borderColor: "#3b82f6",
+              backgroundColor: "rgba(59,130,246,0.1)",
+              fill: true,
+              tension: 0.3,
+              pointRadius: bal.labels.length > 50 ? 0 : 3,
+            }],
+          },
+          options: _chartOpts(gridColor, tickColor),
+        });
+      }
     }
 
     // 2. Monthly volume
@@ -371,14 +492,13 @@
     // 4. TX type distribution (doughnut)
     const types = charts.tx_type_distribution;
     if (types && types.labels && types.labels.length) {
-      const colors = ["#3b82f6", "#22c55e", "#f97316", "#ef4444", "#8b5cf6", "#06b6d4", "#eab308"];
       _chartInstances.types = new Chart(QS("#crypto_chart_types"), {
         type: "doughnut",
         data: {
           labels: types.labels,
           datasets: [{
             data: types.data,
-            backgroundColor: types.labels.map((_, i) => colors[i % colors.length]),
+            backgroundColor: types.labels.map((_, i) => palette[i % palette.length]),
           }],
         },
         options: {
@@ -388,24 +508,97 @@
       });
     }
 
-    // 5. Top counterparties (horizontal bar)
-    const cp = charts.top_counterparties;
-    if (cp && cp.labels && cp.labels.length) {
-      _chartInstances.counterparties = new Chart(QS("#crypto_chart_counterparties"), {
-        type: "bar",
-        data: {
-          labels: cp.labels,
-          datasets: [{
-            label: "Wolumen",
-            data: cp.data,
-            backgroundColor: "rgba(59,130,246,0.7)",
-          }],
-        },
-        options: {
-          ..._chartOpts(gridColor, tickColor),
-          indexAxis: "y",
-        },
-      });
+    // 5a. Top counterparties (blockchain) or Fiat flow (exchange)
+    if (isExchange) {
+      // Fiat flow chart
+      const fiat = charts.fiat_flow;
+      const fiatCanvas = QS("#crypto_chart_counterparties");
+      if (fiat && fiat.labels && fiat.labels.length && fiatCanvas) {
+        _chartInstances.fiatFlow = new Chart(fiatCanvas, {
+          type: "bar",
+          data: {
+            labels: fiat.labels,
+            datasets: [
+              { label: "Wpłaty fiat", data: fiat.deposits, backgroundColor: "rgba(34,197,94,0.7)" },
+              { label: "Wypłaty fiat", data: fiat.withdrawals, backgroundColor: "rgba(239,68,68,0.7)" },
+            ],
+          },
+          options: _chartOpts(gridColor, tickColor),
+        });
+      }
+
+      // Token breakdown (extra chart for exchange)
+      const tokBr = charts.token_breakdown;
+      const tokCanvas = QS("#crypto_chart_token_breakdown");
+      if (tokBr && tokBr.labels && tokBr.labels.length && tokCanvas) {
+        _chartInstances.tokenBreakdown = new Chart(tokCanvas, {
+          type: "bar",
+          data: {
+            labels: tokBr.labels,
+            datasets: [{
+              label: "Wolumen",
+              data: tokBr.data,
+              backgroundColor: tokBr.labels.map((_, i) => palette[i % palette.length]),
+            }],
+          },
+          options: {
+            ..._chartOpts(gridColor, tickColor),
+            indexAxis: "y",
+          },
+        });
+      }
+
+      // Operations breakdown
+      const ops = charts.top_operations;
+      const opsCanvas = QS("#crypto_chart_operations");
+      if (ops && ops.labels && ops.labels.length && opsCanvas) {
+        _chartInstances.operations = new Chart(opsCanvas, {
+          type: "doughnut",
+          data: {
+            labels: ops.labels,
+            datasets: [{
+              data: ops.data,
+              backgroundColor: ops.labels.map((_, i) => palette[i % palette.length]),
+            }],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { position: "bottom", labels: { color: tickColor } } },
+          },
+        });
+      }
+    } else {
+      // Blockchain: top counterparties
+      const cp = charts.top_counterparties;
+      if (cp && cp.labels && cp.labels.length) {
+        _chartInstances.counterparties = new Chart(QS("#crypto_chart_counterparties"), {
+          type: "bar",
+          data: {
+            labels: cp.labels,
+            datasets: [{
+              label: "Wolumen",
+              data: cp.data,
+              backgroundColor: "rgba(59,130,246,0.7)",
+            }],
+          },
+          options: {
+            ..._chartOpts(gridColor, tickColor),
+            indexAxis: "y",
+          },
+        });
+      }
+    }
+
+    // Show/hide exchange-only chart cards
+    const exChartCards = ["crypto_chart_token_breakdown_card", "crypto_chart_operations_card"];
+    for (const cardId of exChartCards) {
+      if (isExchange) _show(cardId); else _hide(cardId);
+    }
+
+    // Relabel counterparties card for exchange
+    const cpTitle = QS("#crypto_chart_counterparties_title");
+    if (cpTitle) {
+      cpTitle.textContent = isExchange ? "Przepływy fiatowe" : "Top kontrahenci";
     }
   }
 
@@ -430,7 +623,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /*  Cytoscape.js flow graph                                           */
+  /*  Cytoscape.js flow graph (blockchain only)                         */
   /* ------------------------------------------------------------------ */
 
   async function _renderGraph(r) {

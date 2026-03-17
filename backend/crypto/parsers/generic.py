@@ -11,7 +11,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .base import CryptoTransaction, ParsedCryptoData, WalletInfo
+from .base import CryptoTransaction, ParsedCryptoData, WalletInfo, classify_source_type
 
 log = logging.getLogger("aistate.crypto.parser")
 
@@ -613,6 +613,7 @@ def parse_crypto_file(path: Path) -> ParsedCryptoData:
             if pdf_fmt == "binance_pdf":
                 txs, pdf_meta = _parse_binance_pdf(lines)
                 result.source = "binance_pdf"
+                result.source_type = classify_source_type("binance_pdf", txs)
                 result.raw_row_count = len(txs)
                 result.transactions = txs
                 result.chain = "binance"
@@ -676,6 +677,10 @@ def parse_crypto_file(path: Path) -> ParsedCryptoData:
     except Exception as e:
         log.error(f"Error parsing {path}: {e}")
         result.errors.append(f"Błąd parsowania: {e}")
+
+    # Classify source type (exchange vs blockchain)
+    if not result.source_type:
+        result.source_type = classify_source_type(result.source, result.transactions)
 
     return result
 
