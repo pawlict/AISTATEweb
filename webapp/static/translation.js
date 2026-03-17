@@ -923,7 +923,25 @@ async function monitorProgress() {
 // Display translation results
 function displayResults(data) {
     currentResults = data.results;
-    
+
+    // Update source_lang selector from detected language (auto-detect flow)
+    if (data.meta) {
+        var detSrc = data.meta.detected_source_lang || data.meta.source_lang;
+        if (detSrc) {
+            var srcEl = document.getElementById('source_lang');
+            if (srcEl) {
+                // Set detected language in the dropdown
+                srcEl.value = detSrc;
+                // If auto was selected, show toast with detected language
+                if (data.meta.detected_source_lang) {
+                    var langName = getLangName(detSrc) || detSrc;
+                    showToast(trFmt('translation.detected_lang', {lang: langName},
+                        'Wykryto język źródłowy: {lang}'), 'info');
+                }
+            }
+        }
+    }
+
     // Hide progress, show output
     document.getElementById('progress-container').classList.add('hidden');
     document.getElementById('output-container').classList.remove('hidden');
@@ -2244,6 +2262,11 @@ document.addEventListener('DOMContentLoaded', () => {
         srcBtn.addEventListener('click', () => {
             const srcLang = document.getElementById('source_lang');
             const lang = srcLang ? srcLang.value : 'english';
+            if (lang === 'auto') {
+                showToast(tr('translation.tts.auto_hint',
+                    'Wybierz język źródłowy lub przetłumacz tekst, aby automatycznie wykryć język.'), 'warning');
+                return;
+            }
             _ttsSpeak(lang, 'input', srcBtn);
         });
     }
