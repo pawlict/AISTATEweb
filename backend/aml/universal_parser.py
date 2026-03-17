@@ -1060,6 +1060,453 @@ class _MBankStatementParser(_BankParser):
 _register(_MBankStatementParser())
 
 
+# ----------------------------------------------- Santander parser
+
+# Regex: amount line like "2 000,00 PLN" or "-99,99 PLN" or "+124 246,69 PLN"
+_SAN_AMOUNT_RE = re.compile(
+    r"^([+-]?\s*(?:\d{1,3}(?:\s\d{3})*|\d+),\d{2})\s+PLN$"
+)
+_SAN_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_SAN_PAGE_HEADER_RE = re.compile(
+    r"^(Dokument jest wydrukiem|Santander Bank Polska S\.A\.|Rejonowym|0000008723|kapita)"
+)
+_SAN_PAGE_NUM_RE = re.compile(r"^Strona\s+\d+/\d+$")
+_SAN_ACCOUNT_RE = re.compile(r"^(\d{2}\s\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4})$")
+_SAN_IBAN_RE = re.compile(r"^(?:PL)?(\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4})$")
+
+_SAN_TX_TYPES = {
+    "TRANSAKCJA KARTĄ",
+    "UZNANIE",
+    "OBCIĄŻENIE",
+    "PRZELEW EXPRESS ELIXIR",
+    "PRZELEW NA RACHUNEK W SAN PL - ONLINE",
+    "SPŁATA",
+    "PRZELEW NA RACHUNEK",
+    "PRZELEW NATYCHMIASTOWY",
+    "PRZELEW PRZYCHODZĄCY",
+    "ZLECENIE STAŁE",
+    "OPŁATA",
+    "PROWIZJA",
+    "ODSETKI",
+    "KAPITALIZACJA ODSETEK",
+    "ZWROT",
+    "ZWROT TRANSAKCJI KARTĄ",
+    "WPŁATA GOTÓWKOWA",
+    "WYPŁATA GOTÓWKOWA",
+}
+
+
+def _san_parse_amount(s: str) -> Optional[Decimal]:
+    """Parse Santander amount: '2 000,00' or '-99,99' etc."""
+    s = s.strip().replace("\xa0", " ")
+    # Remove trailing PLN
+    s = re.sub(r"\s*PLN\s*$", "", s).strip()
+    s = s.replace(" ", "").replace(",", ".")
+    try:
+        return Decimal(s)
+    except InvalidOperation:
+        return None
+
+
+class _SantanderStatementParser(_BankParser):
+    name = "Santander Bank Polska"
+
+    def can_parse(self, lines: List[str]) -> bool:
+        head = " ".join(lines[:100]).lower()
+        return "santander bank" in head and (
+            "historia rachunku" in head
+            or "konto santander" in head
+            or "zestawienie operacji" in head
+        )
+
+    def _is_page_header(self, line: str) -> bool:
+        return bool(_SAN_PAGE_HEADER_RE.match(line) or _SAN_PAGE_NUM_RE.match(line))
+
+    def _parse_meta(self, lines: List[str]) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {}
+        meta["bank"] = "Santander Bank Polska"
+
+        # Track context for "Liczba operacji" — it appears under "Wpływy" then "Wydatki"
+        in_credits_section = False
+        in_debits_section = False
+
+        for i, l in enumerate(lines[:200]):
+            # Account number
+            m = _SAN_ACCOUNT_RE.match(l)
+            if m and "account_number" not in meta:
+                meta["account_number"] = m.group(1).replace(" ", "")
+                meta["nrb_normalized"] = meta["account_number"]
+
+            # Period: "od dnia" and "do dnia" may be on same line or followed by
+            # dates on subsequent lines.
+            # Pattern in PDF: "od dnia\ndo dnia\nYYYY-MM-DD\nYYYY-MM-DD"
+            if l == "od dnia" and i + 1 < len(lines) and lines[i + 1].strip() == "do dnia":
+                # Dates follow on lines i+2 and i+3
+                if i + 3 < len(lines):
+                    d1 = lines[i + 2].strip()
+                    d2 = lines[i + 3].strip()
+                    if _SAN_DATE_RE.match(d1):
+                        meta["period_from"] = d1
+                    if _SAN_DATE_RE.match(d2):
+                        meta["period_to"] = d2
+            elif l.startswith("od dnia") and "period_from" not in meta:
+                rest = l[len("od dnia"):].strip()
+                if _SAN_DATE_RE.match(rest):
+                    meta["period_from"] = rest
+
+            if l.startswith("do dnia") and l != "do dnia" and "period_to" not in meta:
+                rest = l[len("do dnia"):].strip()
+                if _SAN_DATE_RE.match(rest):
+                    meta["period_to"] = rest
+
+            # Section tracking for counts
+            if l.strip() == "Wpływy":
+                in_credits_section = True
+                in_debits_section = False
+            elif l.strip() == "Wydatki":
+                in_credits_section = False
+                in_debits_section = True
+            elif l.strip() in ("Łącznie:", "Zestawienie operacji"):
+                in_credits_section = False
+                in_debits_section = False
+
+            # Credits/debits count: "Liczba operacji:" on one line, count on next
+            if l.strip() == "Liczba operacji:" or l.startswith("Liczba operacji:"):
+                count_str = l.replace("Liczba operacji:", "").strip()
+                if not count_str and i + 1 < len(lines):
+                    count_str = lines[i + 1].strip()
+                try:
+                    count_val = int(count_str)
+                    if in_credits_section:
+                        meta["credits_count"] = count_val
+                    elif in_debits_section:
+                        meta["debits_count"] = count_val
+                except ValueError:
+                    pass
+
+            # Credits summary: "Suma wpływów:" on one line, amount on next
+            if l.strip().startswith("Suma wpływów"):
+                amt_str = l.replace("Suma wpływów:", "").strip()
+                if not amt_str and i + 1 < len(lines):
+                    amt_str = lines[i + 1].strip()
+                m2 = _SAN_AMOUNT_RE.match(amt_str)
+                if m2:
+                    amt = _san_parse_amount(m2.group(1))
+                    if amt is not None:
+                        meta["credits_total"] = float(abs(amt))
+
+            # Debits summary: "Suma wydatków:" on one line, amount on next
+            if l.strip().startswith("Suma wydatków"):
+                amt_str = l.replace("Suma wydatków:", "").strip()
+                if not amt_str and i + 1 < len(lines):
+                    amt_str = lines[i + 1].strip()
+                m2 = _SAN_AMOUNT_RE.match(amt_str)
+                if m2:
+                    amt = _san_parse_amount(m2.group(1))
+                    if amt is not None:
+                        meta["debits_total"] = float(abs(amt))
+
+            # Print date
+            if l.startswith("Data wydruku:"):
+                m2 = re.search(r"(\d{4}-\d{2}-\d{2})", l)
+                if m2:
+                    meta["statement_date"] = m2.group(1)
+
+            # Currency
+            meta.setdefault("currency", "PLN")
+
+        return meta
+
+    def _parse_transactions(self, lines: List[str], meta: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        txs: List[Dict[str, Any]] = []
+        i = 0
+        n = len(lines)
+
+        # Find "Zestawienie operacji" to start parsing
+        while i < n:
+            if lines[i].strip() == "Zestawienie operacji":
+                i += 1
+                # Skip header row labels
+                while i < n and lines[i].strip() in ("Data", "Opis", "Kwota"):
+                    i += 1
+                break
+            i += 1
+
+        while i < n:
+            # Skip page headers
+            if self._is_page_header(lines[i]):
+                i += 1
+                continue
+
+            # Look for "Data operacji"
+            if lines[i].strip() != "Data operacji":
+                i += 1
+                continue
+
+            i += 1  # skip "Data operacji" label
+
+            # Read operation date
+            if i >= n:
+                break
+            op_date = lines[i].strip()
+            if not _SAN_DATE_RE.match(op_date):
+                continue
+            i += 1
+
+            # Read "Data księgowania"
+            if i >= n:
+                break
+            if lines[i].strip() != "Data księgowania":
+                # Sometimes page header interrupts
+                while i < n and self._is_page_header(lines[i]):
+                    i += 1
+                if i < n and lines[i].strip() == "Data księgowania":
+                    i += 1
+                else:
+                    continue
+            else:
+                i += 1
+
+            # Read booking date
+            if i >= n:
+                break
+            book_date = lines[i].strip()
+            if not _SAN_DATE_RE.match(book_date):
+                continue
+            i += 1
+
+            # Read transaction type
+            while i < n and self._is_page_header(lines[i]):
+                i += 1
+            if i >= n:
+                break
+
+            tx_type = lines[i].strip()
+            # Check if it's a known type or assume it is if it's uppercase
+            is_known = tx_type in _SAN_TX_TYPES or tx_type.upper() == tx_type and len(tx_type) > 3
+            if not is_known:
+                # Maybe multi-word type spanning this line
+                tx_type = tx_type
+            i += 1
+
+            # Read body lines until amount
+            body_lines: List[str] = []
+            amount: Optional[Decimal] = None
+            currency = "PLN"
+
+            while i < n:
+                l = lines[i].strip()
+
+                # Skip page headers
+                if self._is_page_header(l):
+                    i += 1
+                    continue
+
+                # Check for amount line
+                m = _SAN_AMOUNT_RE.match(l)
+                if m:
+                    amount = _san_parse_amount(m.group(1))
+                    i += 1
+                    break
+
+                # Check if we hit the next transaction
+                if l == "Data operacji":
+                    break
+
+                body_lines.append(l)
+                i += 1
+
+            if amount is None:
+                continue
+
+            # Parse body lines into structured fields
+            from_account: Optional[str] = None
+            to_account: Optional[str] = None
+            from_name_lines: List[str] = []
+            to_name_lines: List[str] = []
+            card_number: Optional[str] = None
+            title_parts: List[str] = []
+            extra_info_parts: List[str] = []
+            in_title = False
+            in_extra = False
+            # Track which section we're in: "from", "to", or None
+            current_section: Optional[str] = None
+
+            for bl in body_lines:
+                bl_stripped = bl.strip()
+
+                if bl_stripped.startswith("Z rachunku:"):
+                    acc = bl_stripped[len("Z rachunku:"):].strip()
+                    m2 = _SAN_IBAN_RE.match(acc)
+                    if m2:
+                        from_account = m2.group(1).replace(" ", "")
+                    else:
+                        from_account = acc.replace(" ", "")
+                    current_section = "from"
+                    in_title = False
+                    in_extra = False
+                    continue
+
+                if bl_stripped.startswith("Na rachunek:"):
+                    acc = bl_stripped[len("Na rachunek:"):].strip()
+                    m2 = _SAN_IBAN_RE.match(acc)
+                    if m2:
+                        to_account = m2.group(1).replace(" ", "")
+                    else:
+                        to_account = acc.replace(" ", "")
+                    current_section = "to"
+                    in_title = False
+                    in_extra = False
+                    continue
+
+                if bl_stripped.startswith("Numer karty:"):
+                    card_number = bl_stripped[len("Numer karty:"):].strip()
+                    current_section = None
+                    in_title = False
+                    in_extra = False
+                    continue
+
+                if bl_stripped.startswith("Tytuł:"):
+                    title_parts.append(bl_stripped[len("Tytuł:"):].strip())
+                    current_section = None
+                    in_title = True
+                    in_extra = False
+                    continue
+
+                if bl_stripped.startswith("Dodatkowe informacje:"):
+                    extra_info_parts.append(bl_stripped[len("Dodatkowe informacje:"):].strip())
+                    current_section = None
+                    in_title = False
+                    in_extra = True
+                    continue
+
+                # Continuation of title or extra info
+                if in_extra:
+                    extra_info_parts.append(bl_stripped)
+                    continue
+                if in_title:
+                    title_parts.append(bl_stripped)
+                    continue
+
+                # Name lines after "Z rachunku:" or "Na rachunek:"
+                if current_section == "from":
+                    from_name_lines.append(bl_stripped)
+                elif current_section == "to":
+                    to_name_lines.append(bl_stripped)
+
+            # Determine own account vs counterparty
+            own_acc = (meta or {}).get("account_number", "")
+            from_acc_norm = (from_account or "").replace(" ", "")
+            to_acc_norm = (to_account or "").replace(" ", "")
+
+            cp_account: Optional[str] = None
+            cp_name = ""
+
+            if amount < 0:
+                # Outgoing: from=own, to=counterparty
+                cp_account = to_account
+                cp_name = " ".join(to_name_lines).strip()
+            else:
+                # Incoming: from=counterparty, to=own
+                cp_account = from_account
+                cp_name = " ".join(from_name_lines).strip()
+
+            # For card transactions with no explicit counterparty account,
+            # the holder name appears in name lines — clear it
+            if cp_name and own_acc and from_acc_norm == own_acc and to_acc_norm == own_acc:
+                cp_name = ""  # Both accounts are own — no external counterparty
+
+            title = " ".join(title_parts).strip()
+            extra_info = " ".join(extra_info_parts).strip()
+
+            # Build channel from tx_type
+            channel = ""
+            if "KARTĄ" in tx_type.upper():
+                channel = "TR.KART"
+            elif "BLIK" in title.upper() or "BLIK" in tx_type.upper():
+                channel = "TR.BLIK"
+            elif "PRZELEW" in tx_type.upper() or "UZNANIE" in tx_type.upper():
+                channel = "PRZELEW"
+            elif "SPŁATA" in tx_type.upper():
+                channel = "ST.ZLEC"
+            elif "OBCIĄŻENIE" in tx_type.upper():
+                if "BLIK" in title.upper():
+                    channel = "TR.BLIK"
+                else:
+                    channel = "PRZELEW"
+
+            # Build counterparty display name
+            cp_display = cp_name or ""
+            if not cp_display and cp_account:
+                cp_display = cp_account
+
+            # Details dict
+            details: Dict[str, Any] = {}
+            if card_number:
+                details["card_number_masked"] = card_number
+            if extra_info:
+                details["extra_info"] = extra_info
+
+            raw_text_lines = [f"Data op: {op_date}", f"Data ks: {book_date}", tx_type]
+            raw_text_lines.extend(body_lines)
+
+            txs.append({
+                "posting_date": book_date,
+                "transaction_date": op_date,
+                "amount": float(amount),
+                "currency": currency,
+                "balance_after": None,  # Santander "Historia Rachunku" has no balance column
+                "counterparty_name_address": cp_display,
+                "counterparty_account": cp_account,
+                "title": title,
+                "channel": channel,
+                "tx_type": tx_type,
+                "details": details,
+                "body_raw_lines": raw_text_lines,
+            })
+
+        return txs
+
+    def parse(self, lines: List[str], source_file: str) -> _Statement:
+        meta = self._parse_meta(lines)
+        txs = self._parse_transactions(lines, meta)
+
+        # Extract holder name from first outgoing transaction's "Z rachunku:" section
+        own_acc = meta.get("account_number", "")
+        if own_acc and "holder_name" not in meta:
+            for tx in txs:
+                if tx["amount"] < 0:
+                    # Find "Z rachunku: <own>" in raw body, next line is holder name
+                    body = tx.get("body_raw_lines", [])
+                    for j, bl in enumerate(body):
+                        if isinstance(bl, str) and bl.strip().startswith("Z rachunku:"):
+                            acc_part = bl.strip()[len("Z rachunku:"):].strip().replace(" ", "")
+                            if own_acc in acc_part or acc_part in own_acc:
+                                # Next line(s) are holder name
+                                if j + 1 < len(body):
+                                    candidate = body[j + 1].strip()
+                                    if (candidate
+                                            and not _SAN_ACCOUNT_RE.match(candidate)
+                                            and not self._is_page_header(candidate)
+                                            and not candidate.startswith("Na rachunek")
+                                            and not candidate.startswith("Tytuł")
+                                            and not candidate.startswith("Numer karty")):
+                                        meta["holder_name"] = candidate
+                                        break
+                    if "holder_name" in meta:
+                        break
+
+        return _Statement(
+            meta=meta,
+            transactions=txs,
+            source_file=source_file,
+            parse_method="pymupdf_lines_santander",
+        )
+
+
+_register(_SantanderStatementParser())
+
+
 # ------------------------------------------------ public API
 
 def parse_bank_statement(pdf_path: Path) -> ParseResult:
