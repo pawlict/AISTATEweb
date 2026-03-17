@@ -367,15 +367,10 @@ class PDFHandler(DocumentHandler):
     def inject_translated_text(original_path: Path, translated_text: str) -> bytes:
         """Replace text in original PDF with *translated_text* and return PDF bytes.
 
-        Works at **text-block** level (not individual spans) so that each
-        paragraph gets a full-width rectangle with proper word-wrapping.
-        Uses ``--- Strona N ---`` markers to split text across pages.
-
-        Improvements over v1:
-        - Dict-block matching by bounding-box overlap instead of index
-        - Expanded redaction rects with padding for cleaner coverage
-        - Finer font-size fitting with more granular steps
-        - Page-width expansion for blocks that overflow
+        Strategy: for each page, collect all text blocks (with bounding rects),
+        match translated paragraphs to blocks, then white-out originals and
+        insert translated text.  Uses ``--- Strona N ---`` markers to split
+        text across pages.
         """
         if not PYMUPDF_AVAILABLE:
             raise RuntimeError("PyMuPDF (fitz) not available — cannot write PDF")
@@ -391,15 +386,13 @@ class PDFHandler(DocumentHandler):
         )
         pages_text: dict[int, str] = {}
         parts = marker_re.split(translated_text)
-        # parts = [preamble, "1", text_page1, "2", text_page2, …]
         idx = 1
         while idx + 1 < len(parts):
-            page_num = int(parts[idx]) - 1          # 0-indexed
+            page_num = int(parts[idx]) - 1
             pages_text[page_num] = parts[idx + 1].strip()
             idx += 2
 
-        # Fallback: if no markers were found, distribute text across pages
-        # proportionally by original text length.
+        # Fallback: distribute proportionally if no markers found
         if not pages_text and translated_text.strip():
             logger.warning("PDF inject: no page markers found — distributing text across pages")
             all_lines = [ln for ln in translated_text.split("\n") if ln.strip()]
@@ -431,24 +424,23 @@ class PDFHandler(DocumentHandler):
                 continue
 
             page_rect = page.rect
-            page_margin = 36  # ~0.5 inch margin for expanded blocks
 
-            # 2a. Collect original text blocks (block-level bounding rects)
+            # 2a. Collect ALL original text blocks before any modification
             raw_blocks = page.get_text("blocks")
             orig_blocks: list[dict] = []
             for item in raw_blocks:
-                x0, y0, x1, y1, text = item[0], item[1], item[2], item[3], item[4]
+                x0, y0, x1, y1, blk_text = item[0], item[1], item[2], item[3], item[4]
                 btype = item[6] if len(item) > 6 else 0
-                if btype != 0 or not str(text).strip():
+                if btype != 0 or not str(blk_text).strip():
                     continue
                 orig_blocks.append({
                     "rect": pymupdf.Rect(x0, y0, x1, y1),
-                    "text": str(text).strip(),
+                    "text": str(blk_text).strip(),
                 })
             if not orig_blocks:
                 continue
 
-            # 2b. Get dominant font info per block — match by bbox overlap
+            # 2b. Get font info per block via bbox overlap matching
             dict_blocks = [
                 b for b in page.get_text("dict", flags=pymupdf.TEXT_PRESERVE_WHITESPACE).get("blocks", [])
                 if b.get("type", -1) == 0
@@ -457,11 +449,9 @@ class PDFHandler(DocumentHandler):
 
             # 2c. Distribute translated text across blocks
             paras = [p.strip() for p in _re.split(r"\n\s*\n", page_translated) if p.strip()]
-
             if len(paras) == len(orig_blocks):
                 chunks = paras
             else:
-                # Proportional line distribution by original char count
                 all_lines = [ln for ln in page_translated.split("\n") if ln.strip()]
                 total_chars = sum(len(ob["text"]) for ob in orig_blocks) or 1
                 chunks: list[str] = []
@@ -475,8 +465,9 @@ class PDFHandler(DocumentHandler):
                         chunks.append("\n".join(all_lines[lptr:lptr + n]))
                         lptr += n
 
-            # 2d. Redact all original text blocks (white-out with padding)
-            REDACT_PAD = 2  # small padding around redaction area
+            # 2d. White-out original text — use generous padding to cover
+            #     any rendering artifacts at block edges
+            REDACT_PAD = 3
             for ob in orig_blocks:
                 r = ob["rect"]
                 padded = pymupdf.Rect(
@@ -488,7 +479,7 @@ class PDFHandler(DocumentHandler):
                 page.add_redact_annot(padded, fill=(1, 1, 1))
             page.apply_redactions()
 
-            # 2e. Insert translated text into block rectangles
+            # 2e. Insert translated text block by block
             for i, ob in enumerate(orig_blocks):
                 chunk = chunks[i].strip() if i < len(chunks) else ""
                 if not chunk:
@@ -496,27 +487,34 @@ class PDFHandler(DocumentHandler):
 
                 rect = ob["rect"]
                 fi = block_fonts[i] if i < len(block_fonts) else {"size": 11, "color": (0, 0, 0)}
-                fontsize = PDFHandler._fit_fontsize(rect, chunk, fi["size"])
 
-                # If text still doesn't fit at min font size, expand rect
-                # horizontally to page margins (common for translated text
-                # being longer than original)
+                # Start with the original font size
+                orig_fs = fi["size"]
+                fontsize = PDFHandler._fit_fontsize(rect, chunk, orig_fs)
+
+                # If text overflows at current rect, try expanding the rect
+                # within reasonable page bounds before shrinking font further
                 avg_char_w = fontsize * 0.55
                 line_h = fontsize * 1.15
                 cpl = max(rect.width / avg_char_w, 1)
                 est_lines = sum(max(1, len(ln) / cpl) for ln in chunk.split("\n"))
-                if est_lines * line_h > rect.height * 1.1:
-                    # Try expanding width to page margins
-                    expanded = pymupdf.Rect(
-                        max(page_margin, rect.x0),
-                        rect.y0,
-                        min(page_rect.width - page_margin, max(rect.x1, page_rect.width - page_margin)),
-                        rect.y1,
-                    )
-                    # Also try increasing height slightly (up to 30%)
-                    max_y1 = min(rect.y1 + rect.height * 0.3, page_rect.height - 10)
-                    expanded.y1 = max_y1
-                    fontsize = PDFHandler._fit_fontsize(expanded, chunk, fi["size"])
+
+                if est_lines * line_h > rect.height:
+                    # Expand: keep x0, extend x1 to max of original right edge
+                    # or 85% of page width; extend y1 by up to 50% of block height
+                    # but never exceed the start of the NEXT block (to avoid overlap)
+                    max_x1 = min(page_rect.width - 20, max(rect.x1, page_rect.width * 0.85))
+                    # Find next block's top edge to limit vertical expansion
+                    next_y0 = page_rect.height - 10
+                    for j, ob2 in enumerate(orig_blocks):
+                        if j > i and ob2["rect"].y0 > rect.y0 + 5:
+                            next_y0 = ob2["rect"].y0 - 2
+                            break
+                    max_y1 = min(next_y0, rect.y1 + rect.height * 0.5)
+                    max_y1 = max(max_y1, rect.y1)  # never shrink
+
+                    expanded = pymupdf.Rect(rect.x0, rect.y0, max_x1, max_y1)
+                    fontsize = PDFHandler._fit_fontsize(expanded, chunk, orig_fs)
                     rect = expanded
 
                 tb_args: dict = dict(
@@ -530,7 +528,16 @@ class PDFHandler(DocumentHandler):
                     tb_args["fontfile"] = _ufont
                     tb_args["fontname"] = "ujfont"
 
-                page.insert_textbox(**tb_args)
+                rc = page.insert_textbox(**tb_args)
+                if rc < 0:
+                    # Text didn't fully fit — try with smaller font
+                    smaller = max(4.0, fontsize * 0.7)
+                    tb_args["fontsize"] = smaller
+                    page.insert_textbox(**tb_args)
+                    logger.debug(
+                        f"PDF page {page_idx + 1} block {i}: text overflow, "
+                        f"reduced font {fontsize:.1f}→{smaller:.1f}"
+                    )
 
         pdf_bytes = doc.tobytes()
         doc.close()

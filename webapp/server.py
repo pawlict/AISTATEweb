@@ -2616,13 +2616,12 @@ async def api_translation_upload(
 async def api_translation_export_to_original(
     upload_id: str = Form(...),
     translated_text: str = Form(...),
+    original_filename: str = Form(""),
+    target_lang: str = Form(""),
 ) -> Any:
-    """Inject translated text back into the original PPTX/DOCX, return the file.
+    """Inject translated text back into the original PPTX/DOCX/DOC/PDF, return the file.
 
-    For PPTX: counts text blocks per slide from the original file, strips any
-    marker lines from the translated text, then maps flat translated lines
-    back to slides by position counts — so it works even if the LLM
-    translated or removed the "--- Slajd N ---" markers.
+    File is named: <original_stem>_<LANG>.<ext>  (e.g. report_PL.pptx)
     """
     import io as _io
     import re as _re
@@ -2641,6 +2640,32 @@ async def api_translation_export_to_original(
     text = str(translated_text or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="Brak przetłumaczonego tekstu.")
+
+    # --- Build download filename: <original_stem>_<LANG>.<ext> ---
+    _lang_suffix = ""
+    _tl = str(target_lang or "").strip().lower()
+    # Map common NLLB language names to short codes
+    _LANG_CODES = {
+        "polish": "PL", "english": "EN", "german": "DE", "french": "FR",
+        "spanish": "ES", "italian": "IT", "portuguese": "PT", "dutch": "NL",
+        "russian": "RU", "ukrainian": "UA", "czech": "CZ", "slovak": "SK",
+        "swedish": "SV", "danish": "DA", "norwegian": "NO", "finnish": "FI",
+        "hungarian": "HU", "romanian": "RO", "bulgarian": "BG", "croatian": "HR",
+        "serbian": "SR", "slovenian": "SI", "greek": "EL", "turkish": "TR",
+        "arabic": "AR", "chinese": "ZH", "japanese": "JA", "korean": "KO",
+        "hindi": "HI", "thai": "TH", "vietnamese": "VI", "indonesian": "ID",
+        "malay": "MS", "hebrew": "HE", "persian": "FA", "latvian": "LV",
+        "lithuanian": "LT", "estonian": "ET", "georgian": "KA",
+    }
+    if _tl:
+        _lang_suffix = "_" + _LANG_CODES.get(_tl, _tl[:3].upper())
+
+    _orig_fn = str(original_filename or "").strip()
+    if _orig_fn:
+        _base_stem = Path(_orig_fn).stem
+    else:
+        # Fallback: extract name from upload_id-based filename
+        _base_stem = original_path.stem.split("_", 1)[-1] if "_" in original_path.stem else original_path.stem
 
     try:
         if ext == ".pptx":
@@ -2729,11 +2754,11 @@ async def api_translation_export_to_original(
             buf = _io.BytesIO()
             prs.save(buf)
             buf.seek(0)
-            dl_name = original_path.stem.split("_", 1)[-1] if "_" in original_path.stem else "prezentacja"
+            _dl = f"{_base_stem}{_lang_suffix}.pptx"
             return StreamingResponse(
                 buf,
                 media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                headers={"Content-Disposition": f'attachment; filename="translated_{dl_name}.pptx"'},
+                headers={"Content-Disposition": f'attachment; filename="{_dl}"'},
             )
 
         elif ext == ".docx":
@@ -2808,11 +2833,11 @@ async def api_translation_export_to_original(
             buf = _io.BytesIO()
             doc.save(buf)
             buf.seek(0)
-            dl_name = original_path.stem.split("_", 1)[-1] if "_" in original_path.stem else "dokument"
+            _dl = f"{_base_stem}{_lang_suffix}.docx"
             return StreamingResponse(
                 buf,
                 media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                headers={"Content-Disposition": f'attachment; filename="translated_{dl_name}.docx"'},
+                headers={"Content-Disposition": f'attachment; filename="{_dl}"'},
             )
 
         elif ext == ".doc":
@@ -2887,11 +2912,11 @@ async def api_translation_export_to_original(
             buf = _io.BytesIO()
             doc.save(buf)
             buf.seek(0)
-            dl_name = original_path.stem.split("_", 1)[-1] if "_" in original_path.stem else "dokument"
+            _dl = f"{_base_stem}{_lang_suffix}.docx"
             return StreamingResponse(
                 buf,
                 media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                headers={"Content-Disposition": f'attachment; filename="translated_{dl_name}.docx"'},
+                headers={"Content-Disposition": f'attachment; filename="{_dl}"'},
             )
 
         elif ext == ".pdf":
@@ -2900,11 +2925,11 @@ async def api_translation_export_to_original(
             pdf_bytes = PDFHandler.inject_translated_text(original_path, text)
             buf = _io.BytesIO(pdf_bytes)
             buf.seek(0)
-            dl_name = original_path.stem.split("_", 1)[-1] if "_" in original_path.stem else "dokument"
+            _dl = f"{_base_stem}{_lang_suffix}.pdf"
             return StreamingResponse(
                 buf,
                 media_type="application/pdf",
-                headers={"Content-Disposition": f'attachment; filename="translated_{dl_name}.pdf"'},
+                headers={"Content-Disposition": f'attachment; filename="{_dl}"'},
             )
 
         else:

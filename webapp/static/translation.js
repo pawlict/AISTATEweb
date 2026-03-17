@@ -5,9 +5,10 @@ let currentResults = {};
 let currentLanguages = [];
 let trProgressInterval = null;
 
-// Upload state — kept for "save to original" feature (PPTX/DOCX)
+// Upload state — kept for "save to original" feature (PPTX/DOCX/DOC/PDF)
 let _uploadId = null;
 let _uploadExt = null;
+let _uploadFilename = null;
 
 // Draft persistence
 let TR_RESTORING = false;
@@ -758,6 +759,7 @@ async function handleFile(file) {
         // Track upload_id for "save to original" feature
         _uploadId = data.upload_id || null;
         _uploadExt = data.ext || null;
+        _uploadFilename = data.filename || null;
         _trSyncSaveToOriginalBtn();
 
         // Display extracted text
@@ -1069,6 +1071,7 @@ async function resetOutput() {
         currentTaskId = null;
         _uploadId = null;
         _uploadExt = null;
+        _uploadFilename = null;
         _trSyncSaveToOriginalBtn();
         _trScheduleSave('reset_output');
     }
@@ -2177,6 +2180,11 @@ async function exportToOriginal() {
         var formData = new FormData();
         formData.append('upload_id', _uploadId);
         formData.append('translated_text', text);
+        // Pass original filename and target language for proper naming
+        if (_uploadFilename) formData.append('original_filename', _uploadFilename);
+        var activeLang = '';
+        try { activeLang = _trGetActiveOutputLang() || ''; } catch(_e2) {}
+        if (activeLang) formData.append('target_lang', activeLang);
 
         var resp = await fetch('/api/translation/export-to-original', {
             method: 'POST',
