@@ -123,6 +123,29 @@
         </div>
       </div>
     </div>
+
+    <!-- Crypto toolbar items (hidden by default, shown when Crypto tab active) -->
+    <div class="analysis-toolbar-right" id="crypto_toolbar_items" style="display:none">
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="crypto_add_file_toolbar_btn" title="Wczytaj dane Crypto (CSV, JSON)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj dane" draggable="false"></button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="crypto_generate_btn" title="Generuj analizę narracyjną"><img src="/static/icons/akcje/generate_ai.svg" alt="Analizuj" draggable="false"></button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-section">
+        <div class="analysis-models">
+          <div class="analysis-model">
+            <label class="small" for="crypto_model_deep">Model LLM</label>
+            <select class="input mini-select" id="crypto_model_deep" disabled>
+              <option data-i18n="analysis.models_loading">Ładowanie…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- Tab bar -->
@@ -135,6 +158,9 @@
     </button>
     <button class="analysis-tab" data-tab="gsm" id="tab_gsm">
       <span class="analysis-tab-icon"><i data-icon="phone" data-size="14"></i></span> Analiza GSM
+    </button>
+    <button class="analysis-tab" data-tab="crypto" id="tab_crypto">
+      <span class="analysis-tab-icon"><i data-icon="link" data-size="14"></i></span> Analiza Crypto
     </button>
   </div>
 
@@ -1107,6 +1133,108 @@
   </div><!-- /analyst-panel-layout (GSM) -->
   </div><!-- /gsm_content -->
 
+  <!-- Crypto Analysis content -->
+  <div class="analysis-tab-content" id="crypto_content" style="display:none">
+
+    <!-- Progress bar -->
+    <div class="an-progress" id="crypto_progress" style="display:none">
+      <div class="small">Status: <b id="crypto_status">—</b></div>
+      <div class="progress"><div id="crypto_bar"></div></div>
+    </div>
+
+    <!-- Results -->
+    <div id="crypto_results" style="display:none">
+
+      <!-- Summary card -->
+      <div class="card">
+        <div class="h2"><i data-icon="link" data-size="16"></i> Podsumowanie analizy</div>
+        <div class="crypto-summary-grid" id="crypto_summary_grid"></div>
+      </div>
+
+      <!-- Risk assessment -->
+      <div class="card" id="crypto_risk_card">
+        <div class="h2">Ocena ryzyka AML</div>
+        <div id="crypto_risk_body"></div>
+      </div>
+
+      <!-- Alerts -->
+      <div class="card" id="crypto_alerts_card" style="display:none">
+        <div class="h2">Wykryte wzorce podejrzane</div>
+        <div id="crypto_alerts_body"></div>
+      </div>
+
+      <!-- Charts -->
+      <div class="card" id="crypto_charts_card">
+        <div class="h2">Wykresy</div>
+        <div class="crypto-charts-grid" id="crypto_charts_grid">
+          <div class="crypto-chart-box">
+            <div class="h3">Saldo w czasie</div>
+            <canvas id="crypto_chart_balance" height="200"></canvas>
+          </div>
+          <div class="crypto-chart-box">
+            <div class="h3">Wolumen miesięczny</div>
+            <canvas id="crypto_chart_volume" height="200"></canvas>
+          </div>
+          <div class="crypto-chart-box">
+            <div class="h3">Aktywność dzienna</div>
+            <canvas id="crypto_chart_daily" height="200"></canvas>
+          </div>
+          <div class="crypto-chart-box">
+            <div class="h3">Typy transakcji</div>
+            <canvas id="crypto_chart_types" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top counterparties -->
+      <div class="card" id="crypto_cp_card">
+        <div class="h2">Najważniejsi kontrahenci</div>
+        <canvas id="crypto_chart_counterparties" height="300"></canvas>
+      </div>
+
+      <!-- Transaction flow graph -->
+      <div class="card" id="crypto_graph_card">
+        <div class="h2">Graf przepływu transakcji</div>
+        <div id="crypto_graph_container" style="width:100%;height:500px;border:1px solid var(--border, #334155);border-radius:8px;background:var(--bg-card, #1e293b)"></div>
+      </div>
+
+      <!-- Wallets table -->
+      <div class="card" id="crypto_wallets_card">
+        <div class="h2">Portfele</div>
+        <div style="overflow-x:auto" id="crypto_wallets_body"></div>
+      </div>
+
+      <!-- Transactions table -->
+      <div class="card" id="crypto_tx_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Transakcje</div>
+          <div class="small" id="crypto_tx_count_label"></div>
+        </div>
+        <div style="overflow-x:auto" id="crypto_tx_body"></div>
+      </div>
+
+      <!-- LLM narrative analysis -->
+      <div class="card" id="crypto_llm_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Analiza narracyjna LLM</div>
+          <div class="small" id="crypto_llm_status"></div>
+        </div>
+        <div class="an-progress" id="crypto_llm_progress" style="display:none">
+          <div class="small" id="crypto_llm_progress_text">Generowanie...</div>
+          <div class="progress"><div id="crypto_llm_bar"></div></div>
+        </div>
+        <div id="crypto_llm_text" class="analysis-result-text" style="white-space:pre-wrap;line-height:1.6"></div>
+      </div>
+
+    </div>
+
+    <!-- Empty state (before upload) -->
+    <div id="crypto_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+      <img src="/static/logo_crypto.png" alt="Moduł Crypto" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+    </div>
+
+  </div><!-- /crypto_content -->
+
   <!-- Note editor modal (shared by GSM and AML) -->
   <div class="analyst-note-overlay" id="analyst_note_overlay" style="display:none">
     <div class="analyst-note-modal">
@@ -1149,6 +1277,7 @@
   <input type="file" id="docs_file_input" style="display:none" multiple>
   <input type="file" id="aml_file_input" accept=".pdf" multiple style="display:none">
   <input type="file" id="gsm_file_input" accept=".xlsx,.xls,.csv,.txt,.zip" multiple style="display:none">
+  <input type="file" id="crypto_file_input" accept=".csv,.json,.txt" style="display:none">
   <input type="file" id="prompt_import_input" style="display:none" accept="application/json">
 
   <!-- Prompt dialog -->
@@ -1198,6 +1327,7 @@
 <script src="/static/aml.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/review.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/gsm.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/crypto.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script>
 (async()=>{
   try{
@@ -1206,13 +1336,15 @@
     const llmContent = document.getElementById('llm_content');
     const amlContent = document.getElementById('aml_content');
     const gsmContent = document.getElementById('gsm_content');
+    const cryptoContent = document.getElementById('crypto_content');
     const toolbar = document.getElementById('analysis_toolbar');
     const sidebarToggle = document.getElementById('analysis_sidebar_toggle');
 
-    const allContents = [llmContent, amlContent, gsmContent];
+    const allContents = [llmContent, amlContent, gsmContent, cryptoContent];
     const llmToolbar = ['analysis_models','analysis_report_formats','an_generate_btn','an_report_save_btn'];
     const amlToolbarEl = document.getElementById('aml_toolbar_items');
     const gsmToolbarEl = document.getElementById('gsm_toolbar_items');
+    const cryptoToolbarEl = document.getElementById('crypto_toolbar_items');
 
     tabs.forEach(tab => {
       tab.addEventListener('click', async () => {
@@ -1224,6 +1356,7 @@
         allContents.forEach(c => { if(c) c.style.display = 'none'; });
         if(amlToolbarEl) amlToolbarEl.style.display = 'none';
         if(gsmToolbarEl) gsmToolbarEl.style.display = 'none';
+        if(cryptoToolbarEl) cryptoToolbarEl.style.display = 'none';
 
         if(which === 'llm'){
           llmContent.style.display = '';
@@ -1244,6 +1377,12 @@
             if(gsmToolbarEl) gsmToolbarEl.style.display = '';
             if(window.GsmManager && !window.GsmManager._initialized){
               await GsmManager.init();
+            }
+          } else if(which === 'crypto'){
+            cryptoContent.style.display = '';
+            if(cryptoToolbarEl) cryptoToolbarEl.style.display = '';
+            if(window.CryptoManager && !window.CryptoManager._initialized){
+              await CryptoManager.init();
             }
           }
         }

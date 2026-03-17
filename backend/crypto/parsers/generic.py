@@ -36,6 +36,7 @@ _EXCHANGE_SIGNATURES: Dict[str, List[str]] = {
     "metamask": ["date", "status", "type", "from", "to", "amount", "token"],
     "ledger": ["operation date", "currency ticker", "operation type", "operation amount", "operation fees"],
     "trezor": ["date & time", "type", "transaction id", "fee", "address"],
+    "walletexplorer": ["date", "received from", "received amount", "sent amount", "sent to", "balance", "transaction"],
 }
 
 
@@ -288,6 +289,70 @@ def _parse_generic(rows: List[Dict[str, str]]) -> List[CryptoTransaction]:
 # Main entry point
 # ---------------------------------------------------------------------------
 
+def _parse_walletexplorer(rows: List[Dict[str, str]], wallet_id: str = "") -> List[CryptoTransaction]:
+    """Parse WalletExplorer.com CSV export.
+
+    Columns: date, received from, received amount, sent amount, sent to, balance, transaction
+    Each row is either a receive (received from + received amount) or a send (sent to + sent amount).
+    """
+    txs = []
+    for row in rows:
+        ts = row.get("date") or ""
+        recv_from = (row.get("received from") or "").strip()
+        recv_amount = _dec(row.get("received amount") or "0")
+        sent_amount = _dec(row.get("sent amount") or "0")
+        sent_to = (row.get("sent to") or "").strip()
+        balance = _dec(row.get("balance") or "0")
+        tx_hash = (row.get("transaction") or "").strip()
+
+        if recv_from and recv_amount > 0:
+            # Incoming transaction
+            # Check if sender is a known tagged wallet (e.g. "CoinJoinMess (xxx)")
+            counterparty = recv_from
+            risk_tags: List[str] = []
+            if "coinjoin" in recv_from.lower():
+                risk_tags.append("coinjoin")
+                risk_tags.append("mixer")
+
+            txs.append(CryptoTransaction(
+                tx_hash=tx_hash,
+                timestamp=_ts(ts),
+                from_address=recv_from,
+                to_address=wallet_id,
+                amount=recv_amount,
+                token="BTC",
+                chain="bitcoin",
+                tx_type="deposit",
+                counterparty=counterparty,
+                risk_tags=risk_tags,
+                raw=dict(row),
+            ))
+
+        if sent_to and sent_amount > 0:
+            # Outgoing transaction
+            counterparty = sent_to
+            risk_tags_out: List[str] = []
+            if "coinjoin" in sent_to.lower():
+                risk_tags_out.append("coinjoin")
+                risk_tags_out.append("mixer")
+
+            txs.append(CryptoTransaction(
+                tx_hash=tx_hash,
+                timestamp=_ts(ts),
+                from_address=wallet_id,
+                to_address=sent_to,
+                amount=sent_amount,
+                token="BTC",
+                chain="bitcoin",
+                tx_type="withdrawal",
+                counterparty=counterparty,
+                risk_tags=risk_tags_out,
+                raw=dict(row),
+            ))
+
+    return txs
+
+
 _PARSER_MAP = {
     "binance": _parse_binance,
     "binance_trade": _parse_binance,
@@ -296,15 +361,26 @@ _PARSER_MAP = {
     "etherscan_internal": _parse_etherscan,
     "kraken": _parse_kraken,
     "kraken_ledger": _parse_kraken,
+    "walletexplorer": None,  # handled specially (needs wallet_id from header)
 }
 
 
-def _read_csv(path: Path) -> Tuple[List[str], List[Dict[str, str]]]:
-    """Read CSV, auto-detect delimiter."""
+def _read_csv(path: Path) -> Tuple[List[str], List[Dict[str, str]], str]:
+    """Read CSV, auto-detect delimiter. Returns (headers, rows, metadata_line)."""
     text = path.read_text(encoding="utf-8", errors="replace")
     # Skip BOM
     if text.startswith("\ufeff"):
         text = text[1:]
+
+    # WalletExplorer and similar tools put a comment/metadata line before the header.
+    # Detect and strip it: lines starting with # or " that don't look like CSV headers.
+    metadata = ""
+    lines = text.split("\n", 2)
+    if lines and lines[0].strip().startswith(("#", '"#')):
+        metadata = lines[0].strip().strip('"').strip("#").strip()
+        # Rejoin without the first line
+        text = "\n".join(lines[1:]) if len(lines) > 1 else ""
+
     # Detect delimiter
     sample = text[:4096]
     sniffer = csv.Sniffer()
@@ -315,7 +391,7 @@ def _read_csv(path: Path) -> Tuple[List[str], List[Dict[str, str]]]:
     reader = csv.DictReader(io.StringIO(text), dialect=dialect)
     headers = reader.fieldnames or []
     rows = list(reader)
-    return headers, rows
+    return headers, rows, metadata
 
 
 def _read_json(path: Path) -> Tuple[str, List[Dict[str, str]]]:
@@ -337,13 +413,14 @@ def parse_crypto_file(path: Path) -> ParsedCryptoData:
     result = ParsedCryptoData()
     path = Path(path)
     ext = path.suffix.lower()
+    metadata = ""
 
     try:
         if ext == ".json":
             fmt, rows = _read_json(path)
             result.source = fmt
         elif ext in (".csv", ".tsv", ".txt"):
-            headers, rows = _read_csv(path)
+            headers, rows, metadata = _read_csv(path)
             fmt = detect_format(headers)
             result.source = fmt
         else:
@@ -356,9 +433,24 @@ def parse_crypto_file(path: Path) -> ParsedCryptoData:
             result.errors.append("Plik nie zawiera danych.")
             return result
 
-        # Pick parser
-        parser_fn = _PARSER_MAP.get(fmt, _parse_generic)
-        txs = parser_fn(rows)
+        # WalletExplorer: extract wallet ID from metadata line
+        if fmt == "walletexplorer":
+            wallet_id = ""
+            if metadata:
+                # "Wallet 0006d08ed79d30f3. Updated to block ..."
+                m = re.search(r"Wallet\s+([a-f0-9]+)", metadata)
+                if m:
+                    wallet_id = m.group(1)
+            txs = _parse_walletexplorer(rows, wallet_id=wallet_id)
+            result.source = "walletexplorer"
+            result.chain = "bitcoin"
+        else:
+            # Pick parser
+            parser_fn = _PARSER_MAP.get(fmt, _parse_generic)
+            if parser_fn is None:
+                parser_fn = _parse_generic
+            txs = parser_fn(rows)
+
         result.transactions = txs
 
         # Build wallet info from transactions
