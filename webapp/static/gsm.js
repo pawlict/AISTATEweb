@@ -7124,16 +7124,26 @@
 
     let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
     const maxTiles = 10;
-    const shownClusters = geo.clusters.slice(0, maxTiles);
+    // Sort: dom first, then praca, then other, then tranzyt last
+    const _labelOrder = { "dom": 0, "praca": 1, "": 2, "frequent": 2, "tranzyt": 3 };
+    const sortedClusters = [...geo.clusters].sort((a, b) => {
+      const oa = _labelOrder[a.label] ?? 2;
+      const ob = _labelOrder[b.label] ?? 2;
+      if (oa !== ob) return oa - ob;
+      return b.record_count - a.record_count;
+    });
+    const shownClusters = sortedClusters.slice(0, maxTiles);
 
     for (let ci = 0; ci < shownClusters.length; ci++) {
       const c = shownClusters[ci];
-      const color = c.label === "dom" ? "#22c55e" : c.label === "praca" ? "#3b82f6" : "#f97316";
+      const isTransit = c.label === "tranzyt";
+      const color = c.label === "dom" ? "#22c55e" : c.label === "praca" ? "#3b82f6" : isTransit ? "#9ca3af" : "#f97316";
       const cityTag = c.city ? ` (${c.city})` : "";
-      const label = c.label === "dom" ? `DOM${cityTag}` : c.label === "praca" ? `PRACA${cityTag}` : `Lokalizacja${cityTag}`;
+      const label = c.label === "dom" ? `DOM${cityTag}` : c.label === "praca" ? `PRACA${cityTag}` : isTransit ? `\u23F3 TRANZYT${cityTag}` : `Lokalizacja${cityTag}`;
       const streetStr = c.street || "";
 
-      html += `<div style="border:2px solid ${color};border-radius:12px;padding:10px 14px;min-width:180px;max-width:240px">
+      const transitStyle = isTransit ? "opacity:.65;border-style:dashed" : "";
+      html += `<div style="border:2px solid ${color};border-radius:12px;padding:10px 14px;min-width:180px;max-width:240px;${transitStyle}">
         <div style="color:${color};font-weight:bold;margin-bottom:4px">${label}</div>
         ${streetStr ? `<div class="small">${streetStr}</div>` : ""}
         <div class="small muted">${_fmt(c.record_count)} rekordów, ${c.unique_days} dni</div>
