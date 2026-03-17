@@ -468,16 +468,22 @@ class PDFHandler(DocumentHandler):
             # 2d. White-out original text — use generous padding to cover
             #     any rendering artifacts at block edges
             REDACT_PAD = 3
+            has_redactions = False
             for ob in orig_blocks:
                 r = ob["rect"]
+                if r.is_empty or r.width < 1 or r.height < 1:
+                    continue
                 padded = pymupdf.Rect(
                     max(0, r.x0 - REDACT_PAD),
                     max(0, r.y0 - REDACT_PAD),
                     min(page_rect.width, r.x1 + REDACT_PAD),
                     min(page_rect.height, r.y1 + REDACT_PAD),
                 )
-                page.add_redact_annot(padded, fill=(1, 1, 1))
-            page.apply_redactions()
+                if not padded.is_empty:
+                    page.add_redact_annot(padded, fill=(1, 1, 1))
+                    has_redactions = True
+            if has_redactions:
+                page.apply_redactions()
 
             # 2e. Insert translated text block by block
             for i, ob in enumerate(orig_blocks):
@@ -488,8 +494,13 @@ class PDFHandler(DocumentHandler):
                 rect = ob["rect"]
                 fi = block_fonts[i] if i < len(block_fonts) else {"size": 11, "color": (0, 0, 0)}
 
+                # Validate rect — skip degenerate ones
+                if rect.is_empty or rect.width < 5 or rect.height < 5:
+                    logger.debug(f"PDF page {page_idx+1} block {i}: skipping degenerate rect {rect}")
+                    continue
+
                 # Start with the original font size
-                orig_fs = fi["size"]
+                orig_fs = max(fi["size"], 5.0)
                 fontsize = PDFHandler._fit_fontsize(rect, chunk, orig_fs)
 
                 # If text overflows at current rect, try expanding the rect
@@ -500,9 +511,6 @@ class PDFHandler(DocumentHandler):
                 est_lines = sum(max(1, len(ln) / cpl) for ln in chunk.split("\n"))
 
                 if est_lines * line_h > rect.height:
-                    # Expand: keep x0, extend x1 to max of original right edge
-                    # or 85% of page width; extend y1 by up to 50% of block height
-                    # but never exceed the start of the NEXT block (to avoid overlap)
                     max_x1 = min(page_rect.width - 20, max(rect.x1, page_rect.width * 0.85))
                     # Find next block's top edge to limit vertical expansion
                     next_y0 = page_rect.height - 10
@@ -514,8 +522,14 @@ class PDFHandler(DocumentHandler):
                     max_y1 = max(max_y1, rect.y1)  # never shrink
 
                     expanded = pymupdf.Rect(rect.x0, rect.y0, max_x1, max_y1)
-                    fontsize = PDFHandler._fit_fontsize(expanded, chunk, orig_fs)
-                    rect = expanded
+                    if not expanded.is_empty and expanded.width >= 5 and expanded.height >= 5:
+                        fontsize = PDFHandler._fit_fontsize(expanded, chunk, orig_fs)
+                        rect = expanded
+
+                # Final safety: ensure rect is valid before insert
+                if rect.is_empty or rect.width < 2 or rect.height < 2:
+                    logger.warning(f"PDF page {page_idx+1} block {i}: rect too small after expansion, skipping")
+                    continue
 
                 tb_args: dict = dict(
                     rect=rect,
@@ -528,15 +542,21 @@ class PDFHandler(DocumentHandler):
                     tb_args["fontfile"] = _ufont
                     tb_args["fontname"] = "ujfont"
 
-                rc = page.insert_textbox(**tb_args)
-                if rc < 0:
-                    # Text didn't fully fit — try with smaller font
-                    smaller = max(4.0, fontsize * 0.7)
-                    tb_args["fontsize"] = smaller
-                    page.insert_textbox(**tb_args)
-                    logger.debug(
-                        f"PDF page {page_idx + 1} block {i}: text overflow, "
-                        f"reduced font {fontsize:.1f}→{smaller:.1f}"
+                try:
+                    rc = page.insert_textbox(**tb_args)
+                    if rc < 0:
+                        # Text didn't fully fit — try with smaller font
+                        smaller = max(4.0, fontsize * 0.7)
+                        tb_args["fontsize"] = smaller
+                        page.insert_textbox(**tb_args)
+                        logger.debug(
+                            f"PDF page {page_idx + 1} block {i}: text overflow, "
+                            f"reduced font {fontsize:.1f}→{smaller:.1f}"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"PDF page {page_idx+1} block {i}: insert_textbox failed "
+                        f"(rect={rect}, fontsize={fontsize:.1f}): {e}"
                     )
 
         pdf_bytes = doc.tobytes()
