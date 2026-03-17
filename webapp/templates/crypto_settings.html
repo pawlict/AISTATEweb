@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1 class="h1">Ustawienia Crypto (Blockchain)</h1>
+
+  <div class="grid">
+    <div class="subcard">
+
+      <style>
+        .cry-info-box{
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(0,0,0,0.08);
+          border-radius: 10px;
+          padding: 10px 12px;
+        }
+        .cry-info-title{ font-weight:600; margin-bottom:6px; }
+        .cry-kv{ display:grid; grid-template-columns: 160px 1fr; gap:4px 12px; }
+        .cry-kv .kv-h{ font-weight:600; opacity:.95; }
+        .cry-row{ display:grid; grid-template-columns: minmax(360px, 520px) 1fr; gap:14px; align-items:start; }
+        .cry-row-left{ min-width:0; }
+        .cry-row-right{ min-width:0; }
+        .cry-source-card{
+          border: 1px solid var(--border, rgba(255,255,255,0.10));
+          border-radius: 12px;
+          padding: 14px;
+          margin-bottom: 14px;
+        }
+        .cry-warn{
+          border: 1px solid rgba(234,179,8,0.3);
+          background: rgba(234,179,8,0.08);
+          border-radius: 10px;
+          padding: 8px 10px;
+          margin-top: 10px;
+          font-size: 12px;
+          color: var(--text);
+        }
+        .cry-status-banner{
+          border-radius: 8px;
+          padding: 8px 12px;
+          margin: 8px 0;
+          font-size: 13px;
+          display: none;
+          align-items: center;
+          gap: 8px;
+        }
+        .cry-status-banner.active{ display:flex; }
+        .cry-status-banner.ok{
+          border: 1px solid rgba(34,197,94,0.25);
+          background: rgba(34,197,94,0.08);
+        }
+        .cry-status-banner.empty{
+          border: 1px solid rgba(249,115,22,0.25);
+          background: rgba(249,115,22,0.06);
+        }
+        .cry-status-banner .status-dot{
+          width:8px; height:8px;
+          border-radius:50%;
+          flex-shrink:0;
+        }
+        .cry-status-banner.ok .status-dot{ background:#22c55e; }
+        .cry-status-banner.empty .status-dot{ background:#f97316; }
+        .cry-stats-row{ display:flex; gap:16px; flex-wrap:wrap; margin:10px 0; }
+        .cry-stats-row .cry-stat{ display:flex; gap:4px; align-items:center; }
+        .cry-stats-row .cry-stat b{ font-size:16px; }
+        @media (max-width: 980px){
+          .cry-row{ grid-template-columns: 1fr; }
+        }
+      </style>
+
+      <!-- ───────────── Info banner ───────────── -->
+      <div class="cry-warn" style="border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.08);margin-bottom:16px">
+        Moduł Crypto jest w fazie testów. Import i analiza danych blockchain (BTC/ETH) odbywa się
+        wyłącznie offline — żadne dane nie są wysyłane na zewnętrzne serwery.
+      </div>
+
+      <!-- ───────────── Sanctioned addresses ───────────── -->
+      <div class="label" style="font-size:16px;margin-bottom:10px">Bazy sankcyjne i znane kontrakty</div>
+
+      <div class="cry-stats-row" id="cry_stats_row">
+        <div class="cry-stat"><span>Adresy OFAC:</span> <b id="cry_ofac_count">—</b></div>
+        <div class="cry-stat"><span>Znane kontrakty DeFi:</span> <b id="cry_contracts_count">—</b></div>
+      </div>
+
+      <div class="cry-row">
+        <div class="cry-row-left">
+          <div class="cry-source-card">
+            <div class="h3">OFAC — Sanctioned Addresses</div>
+            <div class="small muted" style="margin-bottom:8px">
+              Lista adresów kryptowalutowych objętych sankcjami OFAC (US Treasury).
+              Używana do automatycznego tagowania transakcji z podmiotami na liście SDN.
+            </div>
+
+            <div class="cry-status-banner" id="cry_ofac_status">
+              <span class="status-dot"></span>
+              <span id="cry_ofac_status_text"></span>
+            </div>
+
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+              <button class="btn secondary" id="cry_ofac_refresh_btn" title="Odśwież statystyki">↻ Odśwież</button>
+            </div>
+          </div>
+
+          <div class="cry-source-card">
+            <div class="h3">Znane kontrakty (DeFi / DEX / Bridge)</div>
+            <div class="small muted" style="margin-bottom:8px">
+              Baza znanych adresów smart-kontraktów (Uniswap, Aave, Compound, Curve, 1inch, mostki).
+              Używana do automatycznego etykietowania interakcji z protokołami DeFi.
+            </div>
+
+            <div class="cry-status-banner" id="cry_contracts_status">
+              <span class="status-dot"></span>
+              <span id="cry_contracts_status_text"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cry-row-right">
+          <div class="cry-info-box">
+            <div class="cry-info-title">Konfiguracja danych referencyjnych</div>
+            <div class="cry-kv">
+              <span>Adresy OFAC</span> <span>Tornado Cash, Blender.io, inne</span>
+              <span>Kontrakty DeFi</span> <span>Uniswap, Aave, Compound, Curve, 1inch, 0x, mostki</span>
+              <span>Lokalizacja</span> <span><code>backend/crypto/config/</code></span>
+              <span>Format</span> <span>JSON (ręczna edycja lub automatyczna aktualizacja)</span>
+            </div>
+            <div class="cry-warn">
+              Dane referencyjne są przechowywane lokalnie w katalogu <code>backend/crypto/config/</code>.
+              Aby dodać własne adresy — edytuj pliki <code>sanctioned.json</code> lub <code>known_contracts.json</code>.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr style="border-color:rgba(255,255,255,0.06);margin:24px 0 20px">
+
+      <!-- ───────────── Supported formats ───────────── -->
+      <div class="label" style="font-size:16px;margin-bottom:10px">Obsługiwane formaty importu</div>
+
+      <div class="cry-row">
+        <div class="cry-row-left">
+          <div class="cry-source-card">
+            <div class="h3">Bitcoin</div>
+            <div class="small muted">
+              <ul style="margin:4px 0 0 16px;padding:0;line-height:1.6">
+                <li><b>WalletExplorer.com</b> — eksport CSV z portfela (automatyczne wykrycie)</li>
+                <li><b>Blockchair</b> — eksport transakcji CSV</li>
+                <li><b>Electrum</b> — historia transakcji CSV</li>
+                <li><b>Ledger / Trezor</b> — eksport CSV z portfela sprzętowego</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="cry-source-card">
+            <div class="h3">Ethereum / EVM</div>
+            <div class="small muted">
+              <ul style="margin:4px 0 0 16px;padding:0;line-height:1.6">
+                <li><b>Etherscan</b> — transakcje normalne, wewnętrzne i tokenowe CSV</li>
+                <li><b>MetaMask</b> — eksport CSV</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="cry-source-card">
+            <div class="h3">Giełdy (CEX)</div>
+            <div class="small muted">
+              <ul style="margin:4px 0 0 16px;padding:0;line-height:1.6">
+                <li><b>Binance</b> — historia transakcji i handlu (CSV)</li>
+                <li><b>Coinbase / Coinbase Pro</b> — eksport CSV</li>
+                <li><b>Kraken</b> — ledger i trade history (CSV)</li>
+                <li><b>Bybit, KuCoin</b> — eksport CSV</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="cry-row-right">
+          <div class="cry-info-box">
+            <div class="cry-info-title">Automatyczne wykrywanie formatu</div>
+            <div class="small" style="line-height:1.6">
+              System automatycznie rozpoznaje format pliku CSV na podstawie nagłówków kolumn.
+              Wystarczy wgrać plik w zakładce <b>Analiza → Crypto</b> — format zostanie wykryty automatycznie.
+            </div>
+            <div class="small muted" style="margin-top:8px">
+              Obsługiwane formaty: Binance, Coinbase, Coinbase Pro, Kraken, Bybit, KuCoin,
+              Etherscan (normal/token/internal), Blockchair, Electrum, MetaMask, Ledger, Trezor,
+              WalletExplorer, oraz format generyczny (best-effort).
+            </div>
+            <div class="cry-warn">
+              Jeśli plik nie zostanie rozpoznany automatycznie, system użyje parsera generycznego
+              który spróbuje dopasować typowe nazwy kolumn (hash, timestamp, from, to, amount, token).
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <span id="cry_settings_msg" class="small" style="margin-top:10px;display:inline-block"></span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  "use strict";
+
+  /* Load OFAC and known contracts stats */
+  async function loadStats() {
+    try {
+      const resp = await fetch("/api/crypto/config-stats");
+      if (!resp.ok) return;
+      const data = await resp.json();
+
+      const ofacEl = document.getElementById("cry_ofac_count");
+      const contractsEl = document.getElementById("cry_contracts_count");
+      const ofacStatus = document.getElementById("cry_ofac_status");
+      const ofacText = document.getElementById("cry_ofac_status_text");
+      const cStatus = document.getElementById("cry_contracts_status");
+      const cText = document.getElementById("cry_contracts_status_text");
+
+      if (ofacEl) ofacEl.textContent = data.ofac_count || 0;
+      if (contractsEl) contractsEl.textContent = data.contracts_count || 0;
+
+      if (ofacStatus) {
+        ofacStatus.classList.add("active");
+        if (data.ofac_count > 0) {
+          ofacStatus.classList.add("ok");
+          if (ofacText) ofacText.textContent = `Załadowano ${data.ofac_count} adresów sankcyjnych`;
+        } else {
+          ofacStatus.classList.add("empty");
+          if (ofacText) ofacText.textContent = "Brak adresów sankcyjnych — plik sanctioned.json pusty lub nie istnieje";
+        }
+      }
+      if (cStatus) {
+        cStatus.classList.add("active");
+        if (data.contracts_count > 0) {
+          cStatus.classList.add("ok");
+          if (cText) cText.textContent = `Załadowano ${data.contracts_count} znanych kontraktów`;
+        } else {
+          cStatus.classList.add("empty");
+          if (cText) cText.textContent = "Brak znanych kontraktów — plik known_contracts.json pusty lub nie istnieje";
+        }
+      }
+    } catch (e) {
+      console.warn("[CryptoSettings] Stats load failed:", e);
+    }
+  }
+
+  /* Refresh button */
+  const refreshBtn = document.getElementById("cry_ofac_refresh_btn");
+  if (refreshBtn) {
+    refreshBtn.onclick = () => loadStats();
+  }
+
+  loadStats();
+})();
+</script>
+{% endblock %}

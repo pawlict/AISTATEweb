@@ -262,7 +262,8 @@
 
   function _renderTransactions(r) {
     const txs = r.transactions || [];
-    _text("crypto_tx_count_label", `${txs.length} transakcji`);
+    const totalCount = r.transactions_total || txs.length;
+    _text("crypto_tx_count_label", `${totalCount} transakcji`);
 
     if (!txs.length) { _hide("crypto_tx_card"); return; }
     _show("crypto_tx_card");
@@ -287,7 +288,10 @@
       </tr>`;
     }
     html += "</tbody></table>";
-    if (txs.length > 200) html += `<div class="small" style="margin-top:4px;color:var(--text-muted)">Pokazano 200 z ${txs.length}</div>`;
+    const totalTx = r.transactions_total || txs.length;
+    if (show.length < totalTx) {
+      html += `<div class="small" style="margin-top:4px;color:var(--text-muted)">Pokazano ${show.length} z ${totalTx} transakcji</div>`;
+    }
     _html("crypto_tx_body", html);
   }
 
