@@ -2077,10 +2077,10 @@
     const _devNotesMgr = window._gsmNotesMgr || null;
     if (devList.length) {
       html += `<table class="gsm-table"><thead><tr>
-        <th style="width:24px;padding:0"></th><th>IMEI</th><th>IMSI</th><th>Urządzenie</th><th>Typ</th><th>Domena</th><th>Rekordy</th><th>Okres</th>
+        <th style="width:24px;padding:0"></th><th>IMEI</th><th>IMSI</th><th>Urządzenie</th><th>Typ</th><th>Producent</th><th>Alokacja TAC</th><th>Domena</th><th>Rekordy</th><th>Okres</th>
       </tr></thead><tbody>`;
       for (const d of devList) {
-        const name = d.display_name || '<span class="muted">nieznane</span>';
+        const name = d.display_name || (d.brand ? `<span class="muted">${d.brand} (model nieznany)</span>` : '<span class="muted">nieznane</span>');
         const typeName = typeMap[d.type] || d.type || "—";
         const period = d.first_seen ? (d.first_seen === d.last_seen ? d.first_seen : `${d.first_seen} – ${d.last_seen}`) : "—";
         const imsis = imeiImsiMap[d.imei];
@@ -2089,13 +2089,33 @@
         let domain = "—";
         if (dualImei && d.imei === dualImei.voice_imei) domain = "📞 Głos/SMS";
         else if (dualImei && d.imei === dualImei.data_imei) domain = "📡 Dane";
+        // IMEI display with Luhn check digit visualization
+        let imeiHtml = "?";
+        if (d.imei) {
+          if (d.luhn_computed && d.imei.length === 15) {
+            // Mark computed check digit with distinct style
+            imeiHtml = `<code>${d.imei.slice(0, 14)}</code><code style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:3px;padding:0 2px;margin-left:1px;font-weight:700" title="Cyfra kontrolna Luhn — wyliczona (oryginał: ${d.original_length} cyfr)">${d.imei[14]}</code>`;
+          } else {
+            imeiHtml = `<code>${d.imei}</code>`;
+          }
+        }
+        // Brand country / origin
+        const brandCountry = d.brand_country ? `<span class="muted" style="font-size:11px">${d.brand_country}</span>` : '<span class="muted">—</span>';
+        // TAC allocation country (Reporting Body)
+        let tacCountry = "—";
+        if (d.country) {
+          tacCountry = `${d.country}`;
+          if (d.reporting_body) tacCountry += ` <span class="muted" style="font-size:11px">(${d.reporting_body})</span>`;
+        }
         const _devHasNote = _devNotesMgr && _devNotesMgr.hasNote("gsm_device", "imei", d.imei);
         html += `<tr>
           <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_devHasNote ? " has-note" : ""}" data-note-imei="${d.imei || ""}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>
-          <td><code>${d.imei || "?"}</code></td>
+          <td>${imeiHtml}</td>
           <td>${imsiStr}</td>
           <td>${d.known ? `<strong>${name}</strong>` : name}</td>
           <td>${typeName}</td>
+          <td>${brandCountry}</td>
+          <td style="font-size:12px">${tacCountry}</td>
           <td style="font-size:12px">${domain}</td>
           <td>${_fmt(d.record_count)}</td>
           <td>${period}</td>
@@ -2106,8 +2126,25 @@
       // No device analysis — show subscriber-level IMEI/IMSI
       html += `<div class="gsm-info-grid" style="margin-bottom:8px">`;
       if (sub.imei) {
-        const devName = sub.device && sub.device.display_name ? ` <span class="gsm-device-badge">${sub.device.display_name}</span>` : "";
-        html += `<div class="gsm-info-label">IMEI</div><div class="gsm-info-value"><code>${sub.imei}</code>${devName}</div>`;
+        const dev = sub.device || {};
+        const devName = dev.display_name ? ` <span class="gsm-device-badge">${dev.display_name}</span>` : (dev.brand ? ` <span class="gsm-device-badge muted">${dev.brand} (model nieznany)</span>` : "");
+        // Luhn check digit visualization
+        let imeiDisplay;
+        if (dev.luhn_computed && sub.imei.length === 15) {
+          imeiDisplay = `<code>${sub.imei.slice(0, 14)}</code><code style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:3px;padding:0 2px;margin-left:1px;font-weight:700" title="Cyfra kontrolna Luhn — wyliczona (oryginał: ${dev.original_length} cyfr)">${sub.imei[14]}</code>`;
+        } else {
+          imeiDisplay = `<code>${sub.imei}</code>`;
+        }
+        let countryInfo = "";
+        if (dev.country) {
+          countryInfo += ` <span class="muted" style="font-size:11px">Alokacja: ${dev.country}`;
+          if (dev.reporting_body) countryInfo += ` (${dev.reporting_body})`;
+          countryInfo += `</span>`;
+        }
+        if (dev.brand_country) {
+          countryInfo += ` <span class="muted" style="font-size:11px">| Producent: ${dev.brand_country}</span>`;
+        }
+        html += `<div class="gsm-info-label">IMEI</div><div class="gsm-info-value">${imeiDisplay}${devName}${countryInfo}</div>`;
       }
       if (sub.imsi) {
         html += `<div class="gsm-info-label">IMSI</div><div class="gsm-info-value"><code>${sub.imsi}</code></div>`;
