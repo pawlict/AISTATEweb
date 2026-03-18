@@ -428,8 +428,32 @@
   function _renderReviewTable(r, isExchange) {
     const txs = r.transactions || [];
 
-    _renderReviewStats(txs);
-    _filterAndRenderReview(txs, isExchange);
+    // Load saved classifications from backend, then auto-classify unclassified
+    _loadSavedClassifications().then(() => {
+      _autoClassifyAll(txs);
+      _renderReviewStats(txs);
+      _filterAndRenderReview(txs, isExchange);
+    });
+  }
+
+  /** Load previously saved classifications from backend */
+  async function _loadSavedClassifications() {
+    const projectId = _currentProjectId();
+    if (!projectId) return;
+    try {
+      const resp = await fetch("/api/crypto/classifications?project_id=" + encodeURIComponent(projectId));
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.classifications) {
+          // Merge saved into current — saved takes priority (manual overrides)
+          for (const [txId, cls] of Object.entries(data.classifications)) {
+            _txClassifications[txId] = cls;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[Crypto] Failed to load saved classifications:", e);
+    }
   }
 
   function _renderReviewStats(txs) {
@@ -465,17 +489,70 @@
     }
   }
 
+  // Auto-classification mapping: tx_type / category → default classification
+  // Mirrors AML's _catAutoCls pattern
+  const _CRYPTO_AUTO_CLS = {
+    // Legitimate operations
+    staking_reward:  "legitimate",
+    airdrop:         "legitimate",
+    interest:        "legitimate",
+    cashback:        "legitimate",
+    referral_bonus:  "legitimate",
+    mining:          "legitimate",
+    earn:            "legitimate",
+    savings_interest:"legitimate",
+    dust:            "legitimate",
+    fee:             "legitimate",
+    commission:      "legitimate",
+    // Neutral / standard operations
+    deposit:         "neutral",
+    withdrawal:      "neutral",
+    buy:             "neutral",
+    sell:            "neutral",
+    swap:            "neutral",
+    trade:           "neutral",
+    transfer:        "neutral",
+    convert:         "neutral",
+    fiat_deposit:    "neutral",
+    fiat_withdrawal: "neutral",
+    send:            "neutral",
+    receive:         "neutral",
+    // Monitoring-worthy
+    bridge:          "monitoring",
+    cross_chain:     "monitoring",
+    wrap:            "monitoring",
+    unwrap:          "monitoring",
+    nft_purchase:    "monitoring",
+    nft_sale:        "monitoring",
+    contract_call:   "monitoring",
+    // Suspicious indicators
+    mixer:           "suspicious",
+    tumbler:         "suspicious",
+  };
+
   function _autoClassify(tx) {
     const tags = tx.risk_tags || [];
+    // Highest priority: sanctioned / mixer tags
     if (tags.includes("sanctioned") || tags.includes("mixer")) return "suspicious";
-    if (tags.includes("high_value") || tags.includes("privacy_coin")) return "monitoring";
+    if (tags.includes("privacy_coin")) return "monitoring";
+
+    // Risk score override
     const score = tx.risk_score || 0;
     if (score >= 70) return "suspicious";
-    if (score >= 40) return "monitoring";
+
+    // Category / tx_type mapping (like AML)
+    const txType = (tx.tx_type || "").toLowerCase().replace(/[\s-]/g, "_");
+    const category = (tx.category || "").toLowerCase().replace(/[\s-]/g, "_");
+    if (_CRYPTO_AUTO_CLS[txType]) return _CRYPTO_AUTO_CLS[txType];
+    if (_CRYPTO_AUTO_CLS[category]) return _CRYPTO_AUTO_CLS[category];
+
+    // Moderate risk → monitoring
+    if (score >= 40 || tags.includes("high_value")) return "monitoring";
+
     return "neutral";
   }
 
-  /** Classify a single transaction (DOM-only update, like AML review.js) */
+  /** Classify a single transaction — update DOM + save to backend (like AML review.js) */
   function _classifyTx(txId, classification) {
     if (!txId) return;
     _txClassifications[txId] = classification;
@@ -507,6 +584,53 @@
     if (_lastResult) {
       _renderReviewStats(_lastResult.transactions || []);
     }
+
+    // Save to backend (like AML pattern)
+    const projectId = _currentProjectId();
+    if (projectId) {
+      fetch("/api/crypto/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: projectId,
+          tx_id: txId,
+          classification: classification,
+        }),
+      }).catch(err => console.warn("[Crypto] classify save error:", err));
+    }
+  }
+
+  /** Bulk auto-classify all transactions and save to backend */
+  function _autoClassifyAll(txs) {
+    if (!txs || !txs.length) return;
+    const batch = {};
+    for (const tx of txs) {
+      const txId = tx.hash || tx.id || "";
+      if (!txId) continue;
+      // Don't override manual classifications
+      if (_txClassifications[txId]) continue;
+      const cls = _autoClassify(tx);
+      _txClassifications[txId] = cls;
+      batch[txId] = cls;
+    }
+
+    // Bulk save to backend
+    const projectId = _currentProjectId();
+    if (projectId && Object.keys(batch).length > 0) {
+      fetch("/api/crypto/classify-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: projectId,
+          classifications: batch,
+        }),
+      }).catch(err => console.warn("[Crypto] batch classify save error:", err));
+    }
+  }
+
+  /** Get current project ID from page context (reuses existing _getProjectId) */
+  function _currentProjectId() {
+    return _getProjectId();
   }
 
   function _filterAndRenderReview(txs, isExchange) {
@@ -1257,10 +1381,13 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: { mode: "index", intersect: false, axis: "x" },
+        interaction: { mode: "nearest", intersect: true, axis: "xy" },
         plugins: {
           legend: { display: datasets.length > 1 },
           tooltip: {
+            // Dynamic mode: hovering on x-axis area → show all tokens; hovering on a line → single token
+            mode: datasets.length > 1 ? "nearest" : "index",
+            intersect: datasets.length > 1,
             callbacks: {
               title: function(items) { return items[0] ? items[0].label : ""; },
               label: function(ctx) {
@@ -1274,8 +1401,31 @@
                 return (ds.label || "Saldo") + ": " + _fmtCrypto(ctx.parsed.y, "");
               },
             },
+            // For multi-token charts: when user hovers near x-axis, show all
+            filter: function(tooltipItem, data) { return true; },
           },
         },
+        onHover: datasets.length > 1 ? function(evt, elements, chart) {
+          // When hovering near x-axis (bottom 40px of chart area), switch to "index" mode to show all
+          const chartArea = chart.chartArea;
+          if (!chartArea) return;
+          const yPos = evt.y || (evt.native && evt.native.offsetY) || 0;
+          const nearAxis = yPos > (chartArea.bottom - 30);
+          const ttOpts = chart.options.plugins.tooltip;
+          if (nearAxis) {
+            if (ttOpts.mode !== "index") {
+              ttOpts.mode = "index";
+              ttOpts.intersect = false;
+              chart.update("none");
+            }
+          } else {
+            if (ttOpts.mode !== "nearest") {
+              ttOpts.mode = "nearest";
+              ttOpts.intersect = true;
+              chart.update("none");
+            }
+          }
+        } : undefined,
         scales,
       },
     });

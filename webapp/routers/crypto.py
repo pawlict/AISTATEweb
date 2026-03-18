@@ -335,6 +335,102 @@ async def crypto_ofac_clear():
 
 
 # ---------------------------------------------------------------------------
+#  Transaction classifications (save/load per project)
+# ---------------------------------------------------------------------------
+
+def _classifications_path(project_id: str) -> Path:
+    p = _project_path(project_id) / "analysis"
+    p.mkdir(parents=True, exist_ok=True)
+    return p / "crypto_classifications.json"
+
+
+def _load_classifications(project_id: str) -> Dict[str, str]:
+    path = _classifications_path(project_id)
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_classifications(project_id: str, cls_map: Dict[str, str]) -> None:
+    path = _classifications_path(project_id)
+    path.write_text(
+        json.dumps(cls_map, ensure_ascii=False, indent=1),
+        encoding="utf-8",
+    )
+
+
+@router.get("/api/crypto/classifications")
+async def crypto_get_classifications(project_id: str = Query("")):
+    """Load saved transaction classifications for a project."""
+    if not project_id:
+        return JSONResponse({"classifications": {}})
+    try:
+        cls_map = _load_classifications(project_id)
+        return JSONResponse({"classifications": cls_map})
+    except Exception as e:
+        log.warning("Failed to load crypto classifications: %s", e)
+        return JSONResponse({"classifications": {}})
+
+
+@router.post("/api/crypto/classify")
+async def crypto_classify(request: Request):
+    """Save a single transaction classification."""
+    try:
+        body = await request.json()
+        project_id = body.get("project_id", "")
+        tx_id = body.get("tx_id", "")
+        classification = body.get("classification", "")
+
+        if not project_id or not tx_id or not classification:
+            return JSONResponse(
+                {"status": "error", "detail": "project_id, tx_id, classification required"},
+                status_code=400,
+            )
+
+        cls_map = _load_classifications(project_id)
+        cls_map[tx_id] = classification
+        await run_in_threadpool(_save_classifications, project_id, cls_map)
+
+        log.debug("Crypto classify: project=%s tx=%s cls=%s", project_id, tx_id[:16], classification)
+        return JSONResponse({"status": "ok"})
+    except Exception as e:
+        log.exception("Crypto classify error")
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+@router.post("/api/crypto/classify-batch")
+async def crypto_classify_batch(request: Request):
+    """Save multiple transaction classifications at once."""
+    try:
+        body = await request.json()
+        project_id = body.get("project_id", "")
+        classifications = body.get("classifications", {})
+
+        if not project_id or not classifications:
+            return JSONResponse(
+                {"status": "error", "detail": "project_id and classifications required"},
+                status_code=400,
+            )
+
+        cls_map = _load_classifications(project_id)
+        # Only add new classifications, don't override existing manual ones
+        for tx_id, cls in classifications.items():
+            if tx_id not in cls_map:
+                cls_map[tx_id] = cls
+        await run_in_threadpool(_save_classifications, project_id, cls_map)
+
+        log.info("Crypto classify-batch: project=%s count=%d total=%d",
+                 project_id, len(classifications), len(cls_map))
+        return JSONResponse({"status": "ok", "saved": len(cls_map)})
+    except Exception as e:
+        log.exception("Crypto classify-batch error")
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
 #  LLM Narrative Analysis (SSE streaming)
 # ---------------------------------------------------------------------------
 
