@@ -1148,7 +1148,8 @@
       <!-- Summary card -->
       <div class="card">
         <div class="h2"><i data-icon="link" data-size="16"></i> Podsumowanie analizy</div>
-        <div class="crypto-summary-grid" id="crypto_summary_grid"></div>
+        <div class="crypto-info-grid" id="crypto_info_grid"></div>
+        <div class="crypto-summary-grid" id="crypto_summary_grid" style="margin-top:12px"></div>
       </div>
 
       <!-- Risk assessment -->
@@ -1169,45 +1170,72 @@
         <div style="overflow-x:auto" id="crypto_exchange_meta_body"></div>
       </div>
 
-      <!-- Charts -->
+      <!-- Transaction Review & Classification -->
+      <div class="card" id="crypto_review_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Przegląd i klasyfikacja transakcji</div>
+          <div class="crypto-rv-stats-bar" id="crypto_rv_stats_bar" style="flex:1;margin-left:12px;min-width:100px"></div>
+        </div>
+        <div id="crypto_rv_stats_legend" style="margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+          <input class="input" id="crypto_rv_search" placeholder="Szukaj..." style="width:160px;padding:5px 10px;border-radius:10px">
+          <select class="input" id="crypto_rv_filter_class" style="padding:5px 8px;border-radius:10px;min-width:130px">
+            <option value="">Klasyfikacja: wszystkie</option>
+            <option value="neutral">Neutralne</option>
+            <option value="legitimate">Poprawne</option>
+            <option value="suspicious">Podejrzane</option>
+            <option value="monitoring">Obserwacja</option>
+          </select>
+          <select class="input" id="crypto_rv_filter_risk" style="padding:5px 8px;border-radius:10px;min-width:120px">
+            <option value="">Ryzyko: wszystkie</option>
+            <option value="critical">Krytyczne</option>
+            <option value="high">Wysokie</option>
+            <option value="medium">Średnie</option>
+            <option value="low">Niskie</option>
+          </select>
+          <span class="small muted" id="crypto_rv_tx_count">0</span>
+        </div>
+        <div id="crypto_rv_table_wrap" style="overflow-x:auto"></div>
+      </div>
+
+      <!-- Charts — main with dropdown selector -->
       <div class="card" id="crypto_charts_card">
-        <div class="h2">Wykresy</div>
-        <div class="crypto-charts-grid" id="crypto_charts_grid">
-          <div class="crypto-chart-box">
-            <div class="h3">Saldo w czasie</div>
-            <canvas id="crypto_chart_balance" height="200"></canvas>
-          </div>
-          <div class="crypto-chart-box">
-            <div class="h3">Wolumen miesięczny</div>
-            <canvas id="crypto_chart_volume" height="200"></canvas>
-          </div>
-          <div class="crypto-chart-box">
-            <div class="h3">Aktywność dzienna</div>
-            <canvas id="crypto_chart_daily" height="200"></canvas>
-          </div>
-          <div class="crypto-chart-box">
-            <div class="h3">Typy transakcji</div>
-            <canvas id="crypto_chart_types" height="200"></canvas>
+        <div class="analysis-sidehdr">
+          <div class="h2">Wykresy</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div id="crypto_chart_zoom_bar" class="crypto-chart-zoom-bar" style="display:none">
+              <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_out" title="Oddal">&minus;</button>
+              <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_reset" title="Resetuj zoom">1:1</button>
+              <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_in" title="Przybliż">+</button>
+            </div>
+            <select class="input" id="crypto_chart_select" style="padding:5px 8px;border-radius:10px;min-width:180px">
+              <option value="balance_timeline">Saldo w czasie</option>
+              <option value="monthly_volume">Wolumen miesięczny</option>
+              <option value="daily_tx_count">Aktywność dzienna</option>
+              <option value="top_counterparties">Top kontrahenci</option>
+            </select>
           </div>
         </div>
-      </div>
-
-      <!-- Top counterparties / Fiat flow -->
-      <div class="card" id="crypto_cp_card">
-        <div class="h2" id="crypto_chart_counterparties_title">Najważniejsi kontrahenci</div>
-        <canvas id="crypto_chart_counterparties" height="300"></canvas>
-      </div>
-
-      <!-- Token breakdown (exchange only) -->
-      <div class="card" id="crypto_chart_token_breakdown_card" style="display:none">
-        <div class="h2">Wolumen per token</div>
-        <canvas id="crypto_chart_token_breakdown" height="300"></canvas>
-      </div>
-
-      <!-- Operations breakdown (exchange only) -->
-      <div class="card" id="crypto_chart_operations_card" style="display:none">
-        <div class="h2">Rozkład operacji</div>
-        <canvas id="crypto_chart_operations" height="300"></canvas>
+        <div class="crypto-chart-scroll-wrap" id="crypto_chart_scroll_wrap">
+          <div class="crypto-chart-container" id="crypto_chart_container">
+            <canvas id="crypto_chart_main"></canvas>
+          </div>
+        </div>
+        <!-- Small charts row -->
+        <div class="crypto-charts-small-grid" id="crypto_charts_small_grid">
+          <div class="crypto-chart-small">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Typy transakcji</div>
+            <canvas id="crypto_chart_types"></canvas>
+          </div>
+          <div class="crypto-chart-small">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Wolumen miesięczny</div>
+            <canvas id="crypto_chart_volume_small"></canvas>
+          </div>
+          <div class="crypto-chart-small">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Aktywność dzienna</div>
+            <canvas id="crypto_chart_daily_small"></canvas>
+          </div>
+        </div>
       </div>
 
       <!-- Token breakdown card placeholder (exchange only) -->
@@ -1223,15 +1251,6 @@
       <div class="card" id="crypto_wallets_card">
         <div class="h2">Portfele</div>
         <div style="overflow-x:auto" id="crypto_wallets_body"></div>
-      </div>
-
-      <!-- Transactions table -->
-      <div class="card" id="crypto_tx_card">
-        <div class="analysis-sidehdr">
-          <div class="h2">Transakcje</div>
-          <div class="small" id="crypto_tx_count_label"></div>
-        </div>
-        <div style="overflow-x:auto" id="crypto_tx_body"></div>
       </div>
 
       <!-- LLM narrative analysis -->
