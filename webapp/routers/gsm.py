@@ -320,6 +320,50 @@ async def gsm_parse(
 # Identification file upload
 # ---------------------------------------------------------------------------
 
+def _build_identification_lookup(store) -> dict:
+    """Build enriched lookup map from IdentificationStore.
+
+    Returns: {msisdn: {label, type, name, first_name, last_name, pesel, ...}}
+    """
+    lookup_map = {}
+    for msisdn in store._records:
+        rec = store.lookup(msisdn)  # best record
+        if rec is None:
+            continue
+        lookup_map[msisdn] = {
+            "label": rec.display_label,
+            "type": rec.identification_type,
+            "name": rec.name or "",
+            "first_name": rec.first_name or "",
+            "last_name": rec.last_name or "",
+            "address": rec.address or "",
+            "city": rec.city or "",
+            "pesel": rec.pesel or "",
+            "nip": rec.nip or "",
+            "regon": rec.regon or "",
+            "document_number": rec.document_number or "",
+            "operator": rec.source_operator or "",
+            "contract_type": rec.contract_type or "",
+            "email": rec.email or "",
+            "activation_date": rec.activation_date or "",
+            "deactivation_date": rec.deactivation_date or "",
+            "service_type": rec.service_type or "",
+        }
+    return lookup_map
+
+
+def _build_crossref_response(store, main_msisdn: str = "") -> dict:
+    """Run cross-reference analysis and return serialisable result."""
+    try:
+        from backend.gsm.identification_crossref import CrossReferenceEngine
+        engine = CrossReferenceEngine(store)
+        xref = engine.analyse(main_msisdn=main_msisdn)
+        return xref.to_dict()
+    except Exception as e:
+        log.warning("Cross-reference analysis error: %s", e, exc_info=True)
+        return {}
+
+
 @router.post("/api/gsm/identification")
 async def gsm_identification(
     request: Request,
@@ -329,8 +373,8 @@ async def gsm_identification(
 
     Returns a mapping of normalised MSISDN → subscriber info for
     frontend lookup in Top Contacts and Records tables.
-    Supports Orange (XLSX), Play (CSV), Plus (CSV) formats with
-    auto-detection.
+    Supports Orange (XLSX), Play (CSV), Plus (CSV), T-Mobile (CSV/XLSX)
+    formats with auto-detection.
     """
     if not files:
         return JSONResponse(
@@ -382,22 +426,13 @@ async def gsm_identification(
                 log.warning("Identification parse error for %s: %s",
                             f.filename, e, exc_info=True)
 
-        # Build a compact lookup map: normalised_number → {label, type}
-        lookup_map = {}
-        for msisdn, rec in store._records.items():
-            lookup_map[msisdn] = {
-                "label": rec.display_label,
-                "type": rec.identification_type,
-                "name": rec.name or "",
-                "address": rec.address or "",
-                "city": rec.city or "",
-                "pesel": rec.pesel or "",
-                "nip": rec.nip or "",
-                "operator": rec.source_operator or "",
-            }
+        # Build enriched lookup map and cross-reference
+        lookup_map = _build_identification_lookup(store)
+        crossref = await run_in_threadpool(_build_crossref_response, store)
 
         _app_log(
-            f"[GSM] Identification done: {store.count} total records "
+            f"[GSM] Identification done: {store.count} MSISDNs, "
+            f"{store.total_records} total records "
             f"from {len(file_results)} file(s)"
         )
 
@@ -406,6 +441,7 @@ async def gsm_identification(
             "total_records": store.count,
             "files": file_results,
             "identification": lookup_map,
+            "crossref": crossref,
         })
 
     except Exception as e:
@@ -518,18 +554,13 @@ async def gsm_smart_import(
                                 "status": "error",
                                 "detail": str(e),
                             })
-                    lookup_map = {}
-                    for msisdn, rec in store._records.items():
-                        lookup_map[msisdn] = {
-                            "label": rec.display_label,
-                            "type": rec.identification_type,
-                            "name": rec.name or "",
-                            "operator": rec.source_operator or "",
-                        }
+                    lookup_map = _build_identification_lookup(store)
+                    crossref = _build_crossref_response(store)
                     confirm_resp["identification"] = {
                         "total_records": store.count,
                         "files": id_file_results,
                         "lookup": lookup_map,
+                        "crossref": crossref,
                     }
                 return JSONResponse(confirm_resp)
 
@@ -639,24 +670,25 @@ async def gsm_smart_import(
                     })
                     log.warning("ID parse error for %s: %s", sf.filename, e)
 
-            # Build lookup map
-            lookup_map = {}
-            for msisdn, rec in store._records.items():
-                lookup_map[msisdn] = {
-                    "label": rec.display_label,
-                    "type": rec.identification_type,
-                    "name": rec.name or "",
-                    "address": rec.address or "",
-                    "city": rec.city or "",
-                    "pesel": rec.pesel or "",
-                    "nip": rec.nip or "",
-                    "operator": rec.source_operator or "",
-                }
+            # Build enriched lookup map and cross-reference
+            lookup_map = _build_identification_lookup(store)
+
+            # Determine main MSISDN for cross-reference (from billing subscriber)
+            main_msisdn = ""
+            if "billing" in response and response["billing"]:
+                billing_data = response["billing"]
+                if isinstance(billing_data, dict):
+                    sub = billing_data.get("subscriber", {})
+                    if isinstance(sub, dict):
+                        main_msisdn = sub.get("msisdn", "")
+
+            crossref = _build_crossref_response(store, main_msisdn)
 
             response["identification"] = {
                 "total_records": store.count,
                 "files": id_file_results,
                 "lookup": lookup_map,
+                "crossref": crossref,
             }
 
             # Track identification files as source files
