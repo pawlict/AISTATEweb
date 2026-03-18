@@ -117,9 +117,9 @@ def _do_parse(file_path: Path, filename: str) -> dict:
         _sentinel = {"-1", "0", "", "UNKNOWN"}
         records_with_coords = [
             r.to_dict() for r in result.records
-            if r.extra.get("bts_x") and r.extra.get("bts_y")
-            and str(r.extra.get("bts_x")) not in _sentinel
-            and str(r.extra.get("bts_y")) not in _sentinel
+            if r.extra.get("bts_lat") or r.extra.get("bts_x") and r.extra.get("bts_lon") or r.extra.get("bts_y")
+            and str(r.extra.get("bts_lat") or r.extra.get("bts_x")) not in _sentinel
+            and str(r.extra.get("bts_lon") or r.extra.get("bts_y")) not in _sentinel
         ]
         if records_with_coords:
             count = bts_db.import_from_billing_records(records_with_coords)
@@ -229,9 +229,9 @@ def _do_parse_and_merge(file_list: list) -> dict:
         _sentinel = {"-1", "0", "", "UNKNOWN"}
         records_with_coords = [
             r.to_dict() for r in result.records
-            if r.extra.get("bts_x") and r.extra.get("bts_y")
-            and str(r.extra.get("bts_x")) not in _sentinel
-            and str(r.extra.get("bts_y")) not in _sentinel
+            if r.extra.get("bts_lat") or r.extra.get("bts_x") and r.extra.get("bts_lon") or r.extra.get("bts_y")
+            and str(r.extra.get("bts_lat") or r.extra.get("bts_x")) not in _sentinel
+            and str(r.extra.get("bts_lon") or r.extra.get("bts_y")) not in _sentinel
         ]
         if records_with_coords:
             count = bts_db.import_from_billing_records(records_with_coords)
@@ -394,7 +394,7 @@ async def gsm_identification(
                 continue
 
             suffix = Path(f.filename).suffix.lower()
-            if suffix not in (".xlsx", ".xls", ".csv", ".txt"):
+            if suffix not in (".xlsx", ".xls", ".csv", ".txt", ".zip"):
                 file_results.append({
                     "filename": f.filename,
                     "status": "skipped",
@@ -407,7 +407,8 @@ async def gsm_identification(
             tmp_path.write_bytes(content)
 
             try:
-                count = await run_in_threadpool(store.load_file, tmp_path)
+                # Use load_path for ZIP support (handles .zip, files, and dirs)
+                count = await run_in_threadpool(store.load_path, tmp_path)
                 file_results.append({
                     "filename": f.filename,
                     "status": "ok",

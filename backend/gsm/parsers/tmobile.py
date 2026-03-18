@@ -246,12 +246,16 @@ class TMobileParser(BillingParser):
             # Combine direction + service for record type classification
             record_type = self._classify_tmobile_record(direction_label, service_label)
 
+            # Determine direction for caller/callee assignment
+            d_lower = direction_label.lower().strip() if direction_label else ""
+            is_incoming = any(k in d_lower for k in ("przychod", "incoming", "odebran"))
+
             duration_str = self.get_cell(row, col_map.get("duration"))
             duration = self.parse_duration(duration_str)
 
-            # MSISDN is the subscriber's own number (column A)
+            # MSISDN is the subscriber's own number
             msisdn = self.get_cell(row, col_map.get("msisdn"))
-            callee = self.get_cell(row, col_map.get("callee"))  # "Rozmówca"
+            other_party = self.get_cell(row, col_map.get("callee"))  # "Rozmówca"
             related = self.get_cell(row, col_map.get("related_number"))  # "Nr powiązany"
 
             # Data volume from "Dane wysłane"
@@ -276,10 +280,18 @@ class TMobileParser(BillingParser):
 
             network = self.get_cell(row, col_map.get("operator"))
 
+            # Caller/callee: swap based on direction
+            if is_incoming:
+                caller_num = self.normalize_phone(other_party)
+                callee_num = self.normalize_phone(msisdn)
+            else:
+                caller_num = self.normalize_phone(msisdn)
+                callee_num = self.normalize_phone(other_party)
+
             record = BillingRecord(
                 datetime=dt,
-                caller=self.normalize_phone(msisdn),
-                callee=self.normalize_phone(callee),
+                caller=caller_num,
+                callee=callee_num,
                 record_type=record_type,
                 duration_seconds=duration,
                 data_volume_kb=data_vol or 0.0,
@@ -296,14 +308,18 @@ class TMobileParser(BillingParser):
                     "nr_powiazany": related,
                     "system": self.get_cell(row, col_map.get("system")),
                     "public_ip": self.get_cell(row, col_map.get("public_ip")),
-                    "bts_x": self.get_cell(row, col_map.get("bts_x")),
-                    "bts_y": self.get_cell(row, col_map.get("bts_y")),
+                    "bts_lat": self.get_cell(row, col_map.get("bts_x")),
+                    "bts_lon": self.get_cell(row, col_map.get("bts_y")),
                     "azimuth": self.get_cell(row, col_map.get("azimuth")),
                     "beam": self.get_cell(row, col_map.get("beam")),
                     "bts_r": self.get_cell(row, col_map.get("bts_r")),
                     "bts_code": self.get_cell(row, col_map.get("bts_code")),
+                    "bts_city": bts_city,
+                    "bts_street": bts_street,
+                    "range_km": "",
                     "service": service_label,
                     "direction": direction_label,
+                    "roaming_mcc_mnc": "",
                 },
             )
             result.records.append(record)

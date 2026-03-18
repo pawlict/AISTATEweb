@@ -438,7 +438,7 @@ class TestTMobileParser:
         assert r3.data_volume_kb == 1024.0
 
         # Check BTS extra fields
-        assert r0.extra.get("bts_x") == "21.0123"
+        assert r0.extra.get("bts_lat") == "21.0123"
         assert r0.extra.get("azimuth") == "120"
 
     def test_subscriber_from_data_rows(self):

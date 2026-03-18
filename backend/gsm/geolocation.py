@@ -349,7 +349,7 @@ def geolocate_records(
     addresses_to_geocode: List[str] = []
     for r in records:
         extra = r.extra or {}
-        has_bts_xy = bool(extra.get("bts_x") and extra.get("bts_y"))
+        has_bts_xy = bool((extra.get("bts_lat") or extra.get("bts_x")) and (extra.get("bts_lon") or extra.get("bts_y")))
         has_lac = bool(r.location_lac)
         has_cid = bool(r.location_cell_id)
         if not has_bts_xy and not (has_lac and has_cid) and r.location:
@@ -404,7 +404,7 @@ def geolocate_records(
 
         # Track what data each record has
         extra = r.extra or {}
-        has_bts_xy = bool(extra.get("bts_x") and extra.get("bts_y"))
+        has_bts_xy = bool((extra.get("bts_lat") or extra.get("bts_x")) and (extra.get("bts_lon") or extra.get("bts_y")))
         has_lac = bool(r.location_lac)
         has_cid = bool(r.location_cell_id)
 
@@ -412,7 +412,7 @@ def geolocate_records(
             has_direct_coords += 1
             if len(sample_raw_bts) < 3:
                 sample_raw_bts.append(
-                    f"BTS_X={extra.get('bts_x')},BTS_Y={extra.get('bts_y')}"
+                    f"BTS_LAT={extra.get('bts_lat') or extra.get('bts_x')},BTS_LON={extra.get('bts_lon') or extra.get('bts_y')}"
                 )
         if has_lac and has_cid:
             has_lac_cid += 1
@@ -545,8 +545,8 @@ def _resolve_point(
     #    T-Mobile Poland uses DDMMSS integer format:
     #    BTS X = 190813 → 19°08'13" = 19.1369° (longitude for Łask)
     #    BTS Y = 513507 → 51°35'07" = 51.5853° (latitude for Łask)
-    bts_x = extra.get("bts_x", "")
-    bts_y = extra.get("bts_y", "")
+    bts_x = extra.get("bts_lat", "") or extra.get("bts_x", "")
+    bts_y = extra.get("bts_lon", "") or extra.get("bts_y", "")
     if bts_x and bts_y:
         val_x = _parse_bts_value(bts_x)
         val_y = _parse_bts_value(bts_y)

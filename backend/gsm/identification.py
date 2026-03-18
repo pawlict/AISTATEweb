@@ -466,6 +466,14 @@ def _parse_play_csv(file_path: Path) -> List[SubscriberIdentification]:
         # Parse data row
         cells = [strip_eq(c) for c in row]
 
+        # Legend/footer detection — stop on summary/legend markers
+        first_cell = cells[0].upper().strip() if cells else ""
+        if first_cell and any(marker in first_cell for marker in (
+            "KONIEC", "LEGENDA", "UWAGI", "OBJAŚNIEN", "OBJASN",
+            "SUMMARY", "FOOTER",
+        )):
+            break
+
         def _col(name):
             """Get column value by header name (partial match)."""
             for i, h in enumerate(header):
@@ -616,6 +624,14 @@ def _parse_plus_csv(file_path: Path) -> List[SubscriberIdentification]:
                 continue
 
         cells = [c.strip() for c in row]
+
+        # Legend/footer detection
+        first_cell = cells[0].upper().strip() if cells else ""
+        if first_cell and any(marker in first_cell for marker in (
+            "KONIEC", "LEGENDA", "UWAGI", "OBJAŚNIEN", "OBJASN",
+            "SUMMARY", "FOOTER",
+        )):
+            break
 
         def _col(name):
             for i, h in enumerate(header):
@@ -842,6 +858,14 @@ def _parse_tmobile(file_path: Path) -> List[SubscriberIdentification]:
     for row in rows[header_idx + 1:]:
         if not row or all(not c.strip() for c in row):
             continue
+
+        # Legend/footer detection
+        first_cell = row[0].upper().strip() if row else ""
+        if first_cell and any(marker in first_cell for marker in (
+            "KONIEC", "LEGENDA", "UWAGI", "OBJAŚNIEN", "OBJASN",
+            "SUMMARY", "FOOTER",
+        )):
+            break
 
         msisdn_raw = _cell(row, "msisdn")
         if not msisdn_raw:
@@ -1161,6 +1185,71 @@ class IdentificationStore:
         for fp in file_paths:
             total += self.load_file(fp)
         return total
+
+    def load_path(self, path: Path) -> int:
+        """Load identification from a file, ZIP archive, or folder.
+
+        Supports:
+        - Single file (.csv, .xlsx, .xls)
+        - ZIP archive (.zip) — extracts and parses all supported files inside
+        - Directory — recursively finds and parses all supported files
+
+        Returns number of records loaded.
+        """
+        import tempfile
+        import zipfile
+
+        _ID_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+        path = Path(path)
+
+        if not path.exists():
+            log.error("Identification path does not exist: %s", path)
+            return 0
+
+        # Single file
+        if path.is_file() and path.suffix.lower() in _ID_EXTENSIONS:
+            return self.load_file(path)
+
+        # ZIP archive
+        if path.is_file() and path.suffix.lower() == ".zip":
+            total = 0
+            with tempfile.TemporaryDirectory(prefix="aistate_id_") as tmpdir:
+                try:
+                    with zipfile.ZipFile(path, "r") as zf:
+                        zf.extractall(tmpdir)
+                except (zipfile.BadZipFile, Exception) as e:
+                    log.error("Failed to extract ZIP %s: %s", path, e)
+                    return 0
+
+                tmp_path = Path(tmpdir)
+                for fp in sorted(tmp_path.rglob("*")):
+                    if fp.is_file() and fp.suffix.lower() in _ID_EXTENSIONS:
+                        # Skip hidden/macOS resource fork files
+                        if any(part.startswith(".") or part.startswith("__") for part in fp.parts):
+                            continue
+                        try:
+                            total += self.load_file(fp)
+                        except Exception as e:
+                            log.warning("Error loading %s from ZIP: %s", fp.name, e)
+            log.info("ZIP %s: loaded %d records total", path.name, total)
+            return total
+
+        # Directory
+        if path.is_dir():
+            total = 0
+            for fp in sorted(path.rglob("*")):
+                if fp.is_file() and fp.suffix.lower() in _ID_EXTENSIONS:
+                    if any(part.startswith(".") or part.startswith("__") for part in fp.parts):
+                        continue
+                    try:
+                        total += self.load_file(fp)
+                    except Exception as e:
+                        log.warning("Error loading %s: %s", fp.name, e)
+            log.info("Directory %s: loaded %d records total", path.name, total)
+            return total
+
+        log.warning("Unsupported identification path: %s", path)
+        return 0
 
     def lookup(self, number: str) -> Optional[SubscriberIdentification]:
         """Look up best identification by phone number.
