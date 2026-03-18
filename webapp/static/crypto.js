@@ -50,6 +50,9 @@
   let _llmRunning = false;
   let _txClassifications = {}; // tx_hash -> classification
   let _chartZoom = { level: 1, activeKey: null };
+  let _detectedAnomalies = {};   // type -> items[]  (kept for anomaly→review filter)
+  let _cryptoNotesMgr = null;    // AnalystNotesManager instance
+  let _anomalyFilterActive = null; // currently active anomaly filter type
 
   /* Classification metadata */
   const CLS_META = {
@@ -60,6 +63,85 @@
   };
 
   const RISK_COLORS = { critical: "#ef4444", high: "#f97316", medium: "#eab308", low: "#22c55e", unknown: "#94a3b8" };
+
+  /* ------------------------------------------------------------------ */
+  /*  Icon helpers (GSM-style expand/collapse/+5)                       */
+  /* ------------------------------------------------------------------ */
+
+  const _IC_EXPAND   = "/static/icons/akcje/expand_down.svg";
+  const _IC_COLLAPSE = "/static/icons/akcje/collapse_up.svg";
+  const _IC_PLUS5    = "/static/icons/akcje/plus5.svg";
+  const _ICON_SZ     = 20;
+  const _makeIcon    = (src, title, cls) =>
+    `<img src="${src}" width="${_ICON_SZ}" height="${_ICON_SZ}" title="${title}" class="${cls}" style="cursor:pointer;opacity:.65;transition:opacity .15s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.65">`;
+
+  /* ------------------------------------------------------------------ */
+  /*  Transaction type dictionary (tooltips for non-crypto users)       */
+  /* ------------------------------------------------------------------ */
+
+  const _TX_TYPE_INFO = {
+    // Exchange operations
+    "deposit":          "Wpłata środków na giełdę z zewnętrznego portfela lub konta bankowego",
+    "withdraw":         "Wypłata środków z giełdy na zewnętrzny portfel lub konto bankowe",
+    "withdrawal":       "Wypłata środków z giełdy na zewnętrzny portfel lub konto bankowe",
+    "buy":              "Zakup kryptowaluty za inną walutę (fiat lub krypto)",
+    "sell":             "Sprzedaż kryptowaluty za inną walutę (fiat lub krypto)",
+    "swap":             "Wymiana jednej kryptowaluty na inną bezpośrednio, bez pośrednictwa waluty fiat",
+    "trade":            "Transakcja handlowa — kupno lub sprzedaż na rynku giełdowym",
+    "transfer":         "Przeniesienie środków między własnymi kontami/portfelami na giełdzie",
+    "send":             "Wysłanie środków do innego użytkownika lub na zewnętrzny adres",
+    "receive":          "Otrzymanie środków od innego użytkownika lub z zewnętrznego adresu",
+    "staking":          "Zablokowanie kryptowaluty w celu uzyskania nagród (oprocentowanie)",
+    "staking_reward":   "Nagroda otrzymana za udział w stakingu (oprocentowanie krypto)",
+    "unstaking":        "Odblokowanie wcześniej zablokowanych środków ze stakingu",
+    "earn":             "Program oszczędnościowy/inwestycyjny — odsetki od zdeponowanych środków",
+    "distribution":     "Dystrybucja tokenów — airdrop, nagroda lub podział zysku",
+    "airdrop":          "Darmowe tokeny otrzymane w ramach promocji lub dystrybucji projektu",
+    "fee":              "Opłata transakcyjna pobrana przez giełdę lub sieć blockchain",
+    "commission":       "Prowizja pobrana przez giełdę za wykonanie transakcji",
+    "funding":          "Opłata za utrzymanie pozycji futures/margin (funding rate)",
+    "futures":          "Transakcja na kontrakcie terminowym (futures) — instrumenty pochodne",
+    "margin":           "Transakcja z dźwignią finansową (pożyczone środki)",
+    "liquidation":      "Przymusowe zamknięcie pozycji z powodu niewystarczającego zabezpieczenia",
+    "convert":          "Konwersja jednej kryptowaluty na inną po aktualnym kursie",
+    "p2p":              "Transakcja peer-to-peer — bezpośrednia wymiana między użytkownikami",
+    "otc":              "Transakcja OTC (Over-The-Counter) — poza rynkiem giełdowym, zwykle duże kwoty",
+    "nft":              "Transakcja związana z NFT (Non-Fungible Token) — unikalne tokeny cyfrowe",
+    "mint":             "Utworzenie nowego tokena lub NFT na blockchainie",
+    "burn":             "Trwałe zniszczenie/usunięcie tokenów z obiegu (zmniejszenie podaży)",
+    "bridge":           "Transfer kryptowaluty między różnymi blockchainami przez most (bridge)",
+    "wrap":             "Zamiana tokena na jego 'opakowaną' wersję kompatybilną z innym blockchainem (np. BTC→WBTC)",
+    "unwrap":           "Zamiana opakowanego tokena z powrotem na oryginał (np. WBTC→BTC)",
+    "loan":             "Pożyczka kryptowalutowa — wypożyczenie lub zaciągnięcie pożyczki",
+    "repayment":        "Spłata pożyczki kryptowalutowej",
+    "collateral":       "Środki zablokowane jako zabezpieczenie pożyczki lub pozycji margin",
+    "savings":          "Środki ulokowane w programie oszczędnościowym giełdy",
+    "launchpad":        "Udział w sprzedaży nowego tokena (IEO/IDO) na platformie giełdy",
+    "referral":         "Premia/nagroda za polecenie giełdy innym użytkownikom",
+    "cashback":         "Zwrot części opłaty transakcyjnej lub zakupu",
+    "dust_conversion":  "Zamiana niewielkich resztek tokenów (dust) na jedną kryptowalutę (np. BNB)",
+    // Blockchain-specific
+    "incoming":         "Transakcja przychodząca — środki otrzymane na portfel",
+    "outgoing":         "Transakcja wychodząca — środki wysłane z portfela",
+    "contract_call":    "Wywołanie smart kontraktu na blockchainie (np. interakcja z DeFi)",
+    "approval":         "Udzielenie zgody smart kontraktowi na zarządzanie tokenami",
+    "self_transfer":    "Transfer do samego siebie — przeniesienie między własnymi adresami",
+  };
+
+  /** Get tooltip HTML for a tx_type string */
+  function _txTypeTooltip(txType) {
+    if (!txType) return "";
+    const key = txType.toLowerCase().replace(/[\s\-]+/g, "_");
+    // Try exact match, then partial
+    let info = _TX_TYPE_INFO[key];
+    if (!info) {
+      for (const [k, v] of Object.entries(_TX_TYPE_INFO)) {
+        if (key.includes(k) || k.includes(key)) { info = v; break; }
+      }
+    }
+    if (!info) return _esc(txType);
+    return `<span class="crypto-tx-type-hint" title="${_esc(info)}" style="border-bottom:1px dotted var(--text-muted,#94a3b8);cursor:help">${_esc(txType)}</span>`;
+  }
 
   /* ------------------------------------------------------------------ */
   /*  Lazy-load external libraries                                      */
@@ -485,10 +567,10 @@
         html += `<tr style="background:${meta.bg}" data-txid="${_esc(txId)}">
           <td style="white-space:nowrap">${_esc((tx.timestamp || "").slice(0, 16).replace("T", " "))}</td>
           <td>${_esc(raw.account || "\u2014")}</td>
-          <td>${_esc(tx.category || raw.operation || tx.tx_type || "\u2014")}</td>
+          <td>${_txTypeTooltip(tx.category || raw.operation || tx.tx_type || "\u2014")}</td>
           <td style="font-weight:600">${_esc(tx.token || "")}</td>
           <td style="text-align:right;color:${amtColor};font-weight:500">${isNeg ? "-" : "+"}${amt.toFixed(4)}</td>
-          <td>${_esc(tx.tx_type || "")}</td>
+          <td>${_txTypeTooltip(tx.tx_type || "")}</td>
           <td style="color:${tagColor};font-size:11px">${_esc(tags || "\u2014")}</td>
           <td style="white-space:nowrap">
             <div class="crypto-rv-cls-btns" data-txid="${_esc(txId)}">`;
@@ -519,7 +601,7 @@
           <td style="font-family:monospace;font-size:10px" title="${_esc(tx.to || "")}">${_esc(_shorten(tx.to || "\u2014"))}</td>
           <td style="text-align:right">${_fmtCrypto(tx.amount, "")}</td>
           <td>${_esc(tx.token || "")}</td>
-          <td>${_esc(tx.tx_type || "")}</td>
+          <td>${_txTypeTooltip(tx.tx_type || "")}</td>
           <td style="color:${tagColor};font-size:11px">${_esc(tags || "\u2014")}</td>
           <td style="white-space:nowrap">
             <div class="crypto-rv-cls-btns" data-txid="${_esc(txId)}">`;
@@ -559,9 +641,7 @@
     { type: "deposits_withdrawals",  label: "Wpłaty i wypłaty środków",         desc: "Wpłaty na giełdę / z zewnątrz i wypłaty na zewnątrz giełdy — chronologicznie" },
     { type: "high_value_tx",         label: "Transakcje dużej wartości",         desc: "Pojedyncze transakcje przekraczające istotny próg wartości" },
     { type: "rapid_movement",        label: "Szybkie przerzuty środków",         desc: "Wpłata + wypłata w krótkim czasie — potencjalne pranie pieniędzy" },
-    { type: "round_amounts",         label: "Okrągłe kwoty",                     desc: "Transakcje na równe, okrągłe kwoty (100, 1000, 5000 itd.)" },
     { type: "privacy_coins",         label: "Privacy coins / mikser",            desc: "Transakcje z użyciem Monero (XMR), Zcash (ZEC), Tornado Cash lub podejrzanych adresów" },
-    { type: "inactivity_gap",        label: "Brak aktywności",                    desc: "Okresy bez żadnej transakcji (przerwy w aktywności)" },
     { type: "burst_activity",        label: "Nagły wzrost aktywności",            desc: "Nietypowo duża liczba transakcji w krótkim oknie czasowym" },
     { type: "new_token",             label: "Nowe / nieznane tokeny",             desc: "Transakcje z tokenami pojawiającymi się po raz pierwszy lub tokenami niskiej kapitalizacji" },
     { type: "cross_chain",           label: "Transfery cross-chain / bridge",     desc: "Operacje pomiędzy różnymi blockchainami lub przez mosty kryptowalutowe" },
@@ -577,10 +657,12 @@
     if (!txs.length) { card.style.display = "none"; return; }
     card.style.display = "";
 
-    // Detect anomalies from transaction data
+    // Detect anomalies and cache for filter
     const detected = _detectCryptoAnomalies(r, txs, isExchange);
+    _detectedAnomalies = detected;
 
     const VISIBLE = 5;
+    const SCROLL_THRESHOLD = 50;
 
     let html = '<div style="display:flex;flex-direction:column;gap:10px">';
     for (const cat of _CRYPTO_ANOMALY_CATS) {
@@ -592,61 +674,257 @@
 
       html += `<div class="gsm-anomaly-card" data-anomaly-type="${cat.type}" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;border-left:3px solid ${sevColor};transition:background .15s,box-shadow .15s">`;
 
-      // Top bar
+      // ── Top bar: header + action icons ──
       html += `<div class="gsm-anomaly-bar" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(${sev === 'critical' ? '220,38,38' : sev === 'warning' ? '249,115,22' : sev === 'info' ? '59,130,246' : '34,197,94'},.04)">`;
       html += `<span style="color:${sevColor};font-size:15px;flex-shrink:0">${sevIcon}</span>`;
       html += `<div style="flex:1;min-width:0">`;
       html += `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><b>${cat.label}</b>`;
       if (!hasItems) {
-        html += ` <span class="muted">\u2014 brak</span>`;
+        html += ` <span class="muted gsm-anom-count">\u2014 brak</span>`;
       } else {
-        html += ` <span class="muted">(${items.length})</span>`;
+        html += ` <span class="muted gsm-anom-count">(${items.length})</span>`;
       }
       html += `</div>`;
       html += `<div class="small muted" style="margin-top:1px;line-height:1.3">${cat.desc}</div>`;
       html += `</div>`;
-      html += `</div>`;
 
-      // Items body
+      // ── Action icons (like GSM) ──
+      html += `<div style="display:flex;align-items:center;gap:2px;flex-shrink:0;border-left:1px solid var(--border);padding-left:8px;margin-left:4px">`;
+      // Note marker
+      const _hn = _cryptoNotesMgr && _cryptoNotesMgr.hasNote("crypto_anomaly", "anomaly_type", cat.type);
+      html += `<span class="analyst-note-marker${_hn ? " has-note" : ""}" data-note-anomaly="${cat.type}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false"></span>`;
       if (hasItems) {
-        const needCollapse = items.length > VISIBLE;
+        if (items.length > VISIBLE) {
+          html += _makeIcon(_IC_EXPAND, "Rozwiń / zwiń listę", "crypto-anom-toggle") + " ";
+        }
+        html += _makeIcon(_IC_PLUS5, "Filtruj transakcje tej anomalii", "crypto-anom-filter");
+      }
+      html += `</div>`;
+      html += `</div>`; // end bar
+
+      // ── Items body ──
+      if (hasItems) {
+        const uid = `crypto_anom_exp_${cat.type}`;
         const collapsedH = VISIBLE * 24;
-        html += `<div class="crypto-anom-items" data-type="${cat.type}" style="padding:4px 12px 8px;font-size:12px;line-height:1.8;${needCollapse ? 'max-height:' + collapsedH + 'px;overflow:hidden;' : ''}transition:max-height .25s ease">`;
+        const useScroll = items.length > SCROLL_THRESHOLD;
+        const maxExpandH = useScroll ? '300px' : 'none';
+        const overflowY = useScroll ? 'auto' : 'visible';
+        const needCollapse = items.length > VISIBLE;
+
+        html += `<div id="${uid}" data-collapsed-h="${collapsedH}" data-max-h="${maxExpandH}" data-overflow="${overflowY}" `
+          + `style="padding:4px 12px 8px;font-size:12px;line-height:1.8;${needCollapse ? 'max-height:' + collapsedH + 'px;overflow:hidden;' : ''}transition:max-height .25s ease">`;
         for (const item of items) {
           const ic = item.severity === "critical" ? "#dc2626" : item.severity === "warning" ? "#f97316" : "#3b82f6";
           html += `<div style="border-left:3px solid ${ic};padding:2px 8px;margin-bottom:2px;background:rgba(${item.severity === "critical" ? "220,38,38" : item.severity === "warning" ? "249,115,22" : "59,130,246"},.04);border-radius:4px">${item.html || _esc(item.text || "")}</div>`;
         }
         html += '</div>';
-        if (needCollapse) {
-          html += `<div style="text-align:center;padding:2px"><button class="crypto-anom-toggle small muted" data-type="${cat.type}" style="border:none;background:none;cursor:pointer;text-decoration:underline">Rozwiń (${items.length})</button></div>`;
-        }
       }
 
-      html += '</div>';
+      html += '</div>'; // end card
     }
     html += '</div>';
     body.innerHTML = html;
 
-    // Bind expand/collapse
-    body.querySelectorAll(".crypto-anom-toggle").forEach(btn => {
-      btn.onclick = () => {
-        const type = btn.dataset.type;
-        const container = body.querySelector(`.crypto-anom-items[data-type="${type}"]`);
+    // ── Expand / collapse via icon (GSM pattern) ──
+    body.querySelectorAll(".crypto-anom-toggle").forEach(icon => {
+      icon.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const card = this.closest(".gsm-anomaly-card");
+        if (!card) return;
+        const type = card.dataset.anomalyType;
+        const container = document.getElementById(`crypto_anom_exp_${type}`);
         if (!container) return;
         const isExpanded = container.dataset.expanded === "1";
         if (isExpanded) {
-          container.style.maxHeight = (VISIBLE * 24) + "px";
-          container.style.overflow = "hidden";
+          container.style.maxHeight = container.dataset.collapsedH + "px";
+          container.style.overflowY = "hidden";
           container.dataset.expanded = "0";
-          btn.textContent = `Rozwiń (${container.children.length})`;
+          this.src = _IC_EXPAND;
+          this.title = "Rozwiń listę";
         } else {
-          container.style.maxHeight = container.scrollHeight + "px";
-          container.style.overflow = "visible";
+          const maxH = container.dataset.maxH;
+          container.style.maxHeight = maxH === "none" ? container.scrollHeight + "px" : maxH;
+          container.style.overflowY = container.dataset.overflow;
           container.dataset.expanded = "1";
-          btn.textContent = "Zwiń";
+          this.src = _IC_COLLAPSE;
+          this.title = "Zwiń listę";
         }
-      };
+      });
     });
+
+    // ── Filter icon → filter review table by anomaly type ──
+    body.querySelectorAll(".crypto-anom-filter").forEach(icon => {
+      icon.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const card = this.closest(".gsm-anomaly-card");
+        if (!card) return;
+        const type = card.dataset.anomalyType;
+        const items = _detectedAnomalies[type];
+        if (!items || !items.length) return;
+        _cryptoAnomalyGroupFilter(type, items);
+      });
+    });
+
+    // ── Hover effect on cards with items ──
+    body.querySelectorAll(".gsm-anomaly-card").forEach(div => {
+      const hasData = (detected[div.dataset.anomalyType] || []).length > 0;
+      if (!hasData) return;
+      div.style.cursor = "pointer";
+      div.addEventListener("mouseenter", () => {
+        div.style.background = "rgba(31,90,166,.04)";
+        div.style.boxShadow = "0 2px 8px rgba(15,23,42,.06)";
+      });
+      div.addEventListener("mouseleave", () => {
+        div.style.background = "";
+        div.style.boxShadow = "";
+      });
+      // Double-click on card also filters
+      div.addEventListener("dblclick", (e) => {
+        const type = div.dataset.anomalyType;
+        const items = _detectedAnomalies[type];
+        if (items && items.length) _cryptoAnomalyGroupFilter(type, items);
+      });
+    });
+
+    // ── Note markers on anomaly cards ──
+    body.querySelectorAll(".analyst-note-marker[data-note-anomaly]").forEach(marker => {
+      marker.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const type = this.getAttribute("data-note-anomaly");
+        if (!type) return;
+        const catDef = _CRYPTO_ANOMALY_CATS.find(c => c.type === type);
+        const label = catDef ? "Anomalia: " + catDef.label : "Anomalia: " + type;
+        const ref = { type: "crypto_anomaly", anomaly_type: type };
+        if (_cryptoNotesMgr) _cryptoNotesMgr.openNoteForElement(label, "warning", ref);
+      });
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Anomaly → Review filter (like GSM _anomalyGroupFilter)            */
+  /* ------------------------------------------------------------------ */
+
+  function _cryptoAnomalyGroupFilter(type, items) {
+    if (!_lastResult) return;
+    const txs = _lastResult.transactions || [];
+    const isExchange = _lastResult.source_type === "exchange";
+
+    // Build predicate: which transactions match this anomaly?
+    const predicate = _cryptoAnomalyPredicate(type, items, txs);
+    const filtered = txs.filter(predicate);
+
+    if (_anomalyFilterActive === type) {
+      // Toggle off — show all
+      _anomalyFilterActive = null;
+      _filterAndRenderReview(txs, isExchange);
+      _hideAnomalyFilterBar();
+      return;
+    }
+
+    _anomalyFilterActive = type;
+    const catDef = _CRYPTO_ANOMALY_CATS.find(c => c.type === type);
+    const filterText = (catDef ? catDef.label : type) + ` — ${filtered.length} transakcji`;
+
+    _showAnomalyFilterBar(filterText, () => {
+      _anomalyFilterActive = null;
+      _filterAndRenderReview(txs, isExchange);
+      _hideAnomalyFilterBar();
+    });
+
+    _filterAndRenderReview(filtered, isExchange);
+
+    // Scroll to review card
+    const recCard = document.getElementById("crypto_review_card");
+    if (recCard) {
+      recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      recCard.style.transition = "box-shadow .2s";
+      recCard.style.boxShadow = "0 0 0 3px var(--brand-blue,#2563eb)";
+      setTimeout(() => { recCard.style.boxShadow = ""; }, 1200);
+    }
+  }
+
+  function _showAnomalyFilterBar(text, onClear) {
+    let bar = document.getElementById("crypto_anomaly_filter_bar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "crypto_anomaly_filter_bar";
+      bar.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 12px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.25);border-radius:8px;margin-bottom:8px;font-size:13px";
+      const wrap = document.getElementById("crypto_rv_table_wrap");
+      if (wrap) wrap.parentNode.insertBefore(bar, wrap);
+    }
+    bar.style.display = "flex";
+    bar.innerHTML = `<span style="flex:1"><b>Filtr anomalii:</b> ${_esc(text)}</span><button class="btn btn-sm" style="padding:2px 10px;font-size:12px">✕ Wyczyść filtr</button>`;
+    bar.querySelector("button").onclick = onClear;
+  }
+
+  function _hideAnomalyFilterBar() {
+    const bar = document.getElementById("crypto_anomaly_filter_bar");
+    if (bar) bar.style.display = "none";
+  }
+
+  /** Build a predicate for filtering transactions by anomaly type */
+  function _cryptoAnomalyPredicate(type, anomalyItems, txs) {
+    switch (type) {
+      case "deposits_withdrawals":
+        return tx => {
+          const t = (tx.tx_type || "").toLowerCase();
+          const c = (tx.category || "").toLowerCase();
+          return t.includes("deposit") || c.includes("deposit") || t === "receive" || t === "incoming"
+              || t.includes("withdraw") || c.includes("withdraw") || t === "send" || t === "outgoing";
+        };
+      case "high_value_tx": {
+        const amounts = txs.map(tx => Math.abs(tx.amount || 0)).filter(a => a > 0);
+        const mean = amounts.reduce((s, v) => s + v, 0) / (amounts.length || 1);
+        const threshold = Math.max(mean * 5, 1000);
+        return tx => Math.abs(tx.amount || 0) > threshold;
+      }
+      case "rapid_movement": {
+        // Collect tx hashes that appear in rapid movement items
+        const hashes = new Set();
+        for (const item of anomalyItems) {
+          if (item._txIds) item._txIds.forEach(id => hashes.add(id));
+        }
+        if (hashes.size) return tx => hashes.has(tx.hash || tx.id);
+        // Fallback: deposits+withdrawals
+        return tx => {
+          const t = (tx.tx_type || "").toLowerCase();
+          const c = (tx.category || "").toLowerCase();
+          return t.includes("deposit") || c.includes("deposit") || t.includes("withdraw") || c.includes("withdraw");
+        };
+      }
+      case "privacy_coins": {
+        const privacyTokens = new Set(["XMR", "ZEC", "DASH", "SCRT"]);
+        const mixerTags = ["mixer", "tornado", "privacy_coin"];
+        return tx => {
+          if (privacyTokens.has((tx.token || "").toUpperCase())) return true;
+          return (tx.risk_tags || []).some(t => mixerTags.includes(t));
+        };
+      }
+      case "burst_activity": {
+        // Collect hashes from anomaly items
+        const hashes = new Set();
+        for (const item of anomalyItems) {
+          if (item._txIds) item._txIds.forEach(id => hashes.add(id));
+        }
+        if (hashes.size) return tx => hashes.has(tx.hash || tx.id);
+        return () => false;
+      }
+      case "new_token": {
+        const knownTokens = new Set(["BTC", "ETH", "USDT", "USDC", "BNB", "XRP", "ADA", "SOL", "DOGE", "DOT", "MATIC", "AVAX", "LINK", "DAI", "BUSD", "EUR", "USD", "PLN", "GBP"]);
+        return tx => tx.token && !knownTokens.has(tx.token.toUpperCase());
+      }
+      case "cross_chain": {
+        const bridgeKeywords = ["bridge", "cross-chain", "swap", "wrap", "unwrap"];
+        return tx => {
+          const haystack = [tx.tx_type, tx.category, ...(tx.risk_tags || [])].join(" ").toLowerCase();
+          return bridgeKeywords.some(kw => haystack.includes(kw));
+        };
+      }
+      case "sanctioned_addr":
+        return tx => (tx.risk_tags || []).includes("sanctioned");
+      default:
+        return () => false;
+    }
   }
 
   function _anomalySeverity(type, items) {
@@ -717,6 +995,7 @@
             items.push({
               html: `Wpłata ${_fmtCrypto(tx.amount, tx.token)} → Wypłata ${_fmtCrypto(tx2.amount, tx2.token)} w ciągu <b>${Math.round(diffMin)} min</b> (${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))})`,
               severity: "warning",
+              _txIds: [tx.hash || tx.id, tx2.hash || tx2.id],
             });
           }
           if (diffMin > 30) break;
@@ -725,18 +1004,7 @@
       result.rapid_movement = items;
     }
 
-    // 4. Round amounts
-    {
-      result.round_amounts = txs.filter(tx => {
-        const a = Math.abs(tx.amount || 0);
-        return a >= 100 && a === Math.round(a) && (a % 100 === 0 || a % 50 === 0);
-      }).map(tx => ({
-        html: `${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))} — <b>${_fmtCrypto(tx.amount, tx.token || "")}</b> (${_esc(tx.tx_type || "")})`,
-        severity: "info",
-      }));
-    }
-
-    // 5. Privacy coins / mixer
+    // 4. Privacy coins / mixer
     {
       const privacyTokens = new Set(["XMR", "ZEC", "DASH", "SCRT"]);
       const mixerTags = ["mixer", "tornado", "privacy_coin"];
@@ -749,26 +1017,7 @@
       }));
     }
 
-    // 6. Inactivity gaps (>24h)
-    {
-      const sorted = [...txs].sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
-      const items = [];
-      for (let i = 1; i < sorted.length; i++) {
-        const prev = new Date((sorted[i - 1].timestamp || "").replace(" ", "T"));
-        const curr = new Date((sorted[i].timestamp || "").replace(" ", "T"));
-        if (isNaN(prev) || isNaN(curr)) continue;
-        const gapH = (curr - prev) / 3600000;
-        if (gapH >= 24) {
-          items.push({
-            html: `<b>${Math.round(gapH)}h</b> przerwy: ${_esc((sorted[i-1].timestamp||"").slice(0,16).replace("T"," "))} → ${_esc((sorted[i].timestamp||"").slice(0,16).replace("T"," "))}`,
-            severity: "info",
-          });
-        }
-      }
-      result.inactivity_gap = items;
-    }
-
-    // 7. Burst activity (>10 tx in 1h window)
+    // 5. Burst activity (>10 tx in 1h window)
     {
       const sorted = [...txs].sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
       const items = [];
@@ -782,9 +1031,14 @@
           count++;
         }
         if (count >= 10) {
+          const burstIds = [];
+          for (let k = i; k < i + count && k < sorted.length; k++) {
+            burstIds.push(sorted[k].hash || sorted[k].id);
+          }
           items.push({
             html: `<b>${count} transakcji</b> w ciągu 1h od ${_esc((sorted[i].timestamp||"").slice(0,16).replace("T"," "))}`,
             severity: "warning",
+            _txIds: burstIds,
           });
           i += count - 1; // skip ahead
         }
@@ -792,7 +1046,7 @@
       result.burst_activity = items;
     }
 
-    // 8. New / unknown tokens
+    // 6. New / unknown tokens
     {
       const knownTokens = new Set(["BTC", "ETH", "USDT", "USDC", "BNB", "XRP", "ADA", "SOL", "DOGE", "DOT", "MATIC", "AVAX", "LINK", "DAI", "BUSD", "EUR", "USD", "PLN", "GBP"]);
       const unknownTxs = txs.filter(tx => tx.token && !knownTokens.has(tx.token.toUpperCase()));
@@ -809,7 +1063,7 @@
       }));
     }
 
-    // 9. Cross-chain / bridge
+    // 7. Cross-chain / bridge
     {
       const bridgeKeywords = ["bridge", "cross-chain", "swap", "wrap", "unwrap"];
       result.cross_chain = txs.filter(tx => {
@@ -821,7 +1075,7 @@
       }));
     }
 
-    // 10. Sanctioned addresses
+    // 8. Sanctioned addresses
     {
       result.sanctioned_addr = txs.filter(tx => (tx.risk_tags || []).includes("sanctioned")).map(tx => ({
         html: `<b style="color:#dc2626">SANCTIONED</b> ${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))} — ${_esc(tx.from || "")} → ${_esc(tx.to || "")} — ${_fmtCrypto(tx.amount, tx.token || "")}`,
@@ -924,14 +1178,23 @@
       const needsNormalization = globalMax > 0 && globalMin > 0 && (globalMax / globalMin) > 50;
 
       if (needsNormalization) {
-        // Normalize each token to % of its own max for visibility
+        // Normalize each token using log-scale relative sizing for visual gradation
+        // This preserves proportional visibility while showing "virtual" size differences
+        const logMaxPerToken = maxPerToken.map(m => Math.log10(m + 1));
+        const logGlobalMax = Math.max(...logMaxPerToken);
+
         datasets = data.datasets.map((ds, i) => {
           const tokenMax = maxPerToken[i] || 1;
+          // Scale factor: log-based relative to global — gives visual gradation
+          const logScale = logMaxPerToken[i] / (logGlobalMax || 1);
+          // Map to 20–100% range so small tokens are still visible but proportionally smaller
+          const ceilingPct = 20 + logScale * 80;
           return {
-            label: ds.token + " (%)",
-            data: (ds.data || []).map(v => ((v || 0) / tokenMax) * 100),
+            label: ds.token + " (skala)",
+            data: (ds.data || []).map(v => ((v || 0) / tokenMax) * ceilingPct),
             _rawData: ds.data,
             _tokenMax: tokenMax,
+            _ceilingPct: ceilingPct,
             _token: ds.token,
             borderColor: PALETTE[i % PALETTE.length],
             backgroundColor: PALETTE[i % PALETTE.length] + "22",
@@ -940,6 +1203,7 @@
             pointRadius: labels.length > 50 ? 0 : 2,
             pointHoverRadius: 6,
             pointHitRadius: 10,
+            borderWidth: Math.max(1, Math.min(3, logScale * 3)),
           };
         });
         scales = {
@@ -947,8 +1211,8 @@
           y: {
             beginAtZero: true,
             max: 105,
-            title: { display: true, text: "% maksimum tokena" },
-            ticks: { callback: v => v + "%" },
+            title: { display: true, text: "Skala relatywna (log)" },
+            ticks: { callback: v => Math.round(v) + "%" },
           },
         };
       } else {
@@ -1001,10 +1265,11 @@
               title: function(items) { return items[0] ? items[0].label : ""; },
               label: function(ctx) {
                 const ds = ctx.dataset;
-                // If normalized, show real value in tooltip
+                // If normalized, show real value + scale info in tooltip
                 if (ds._rawData) {
                   const realVal = ds._rawData[ctx.dataIndex];
-                  return ds._token + ": " + _fmtCrypto(realVal, "") + " (" + ctx.parsed.y.toFixed(1) + "%)";
+                  const pctOfMax = ds._ceilingPct ? ((ctx.parsed.y / ds._ceilingPct) * 100).toFixed(0) : ctx.parsed.y.toFixed(0);
+                  return ds._token + ": " + _fmtCrypto(realVal, "") + " (" + pctOfMax + "% maks., real. wartość)";
                 }
                 return (ds.label || "Saldo") + ": " + _fmtCrypto(ctx.parsed.y, "");
               },
@@ -1502,6 +1767,45 @@
       this._initialized = true;
       _bind();
       _loadModels();
+
+      // Initialize analyst notes panel
+      if (window.AnalystNotesManager) {
+        const pid = _getProjectId();
+        _cryptoNotesMgr = new AnalystNotesManager({
+          mode: "crypto",
+          projectId: pid,
+          onNavigate: function(ref) {
+            if (!ref) return;
+            if (ref.type === "crypto_anomaly" && ref.anomaly_type) {
+              // Scroll to anomaly card
+              const card = document.querySelector(`.gsm-anomaly-card[data-anomaly-type="${ref.anomaly_type}"]`);
+              if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+            } else if (ref.type === "crypto_transaction" && ref.txId) {
+              // Scroll to transaction row
+              const row = document.querySelector(`tr[data-txid="${ref.txId}"]`);
+              if (row) {
+                row.scrollIntoView({ behavior: "smooth", block: "center" });
+                row.style.transition = "box-shadow .2s";
+                row.style.boxShadow = "inset 0 0 0 2px var(--brand-blue,#2563eb)";
+                setTimeout(() => { row.style.boxShadow = ""; }, 1500);
+              }
+            }
+          },
+          getContext: function() {
+            // Return context of currently selected/hovered element
+            return null; // basic — Ctrl+M opens empty modal
+          },
+          onNoteChange: function() {
+            // Re-render anomaly note markers
+            if (_lastResult) {
+              const isEx = _lastResult.source_type === "exchange";
+              _renderAnomalies(_lastResult, isEx);
+            }
+          },
+        });
+        window._cryptoNotesMgr = _cryptoNotesMgr;
+        await _cryptoNotesMgr.init();
+      }
 
       // Auto-load saved analysis
       try {
