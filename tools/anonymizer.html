@@ -533,6 +533,124 @@ class MappingEngine {
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
 // ═══════════════════════════════════════════════════════════
+//  POLISH DECLENSION — generate inflected forms
+// ═══════════════════════════════════════════════════════════
+
+function polishForms(base, type){
+  // Returns array of lowercase inflected forms for a given base word
+  const b=base, bl=b.toLowerCase();
+  const forms=new Set([bl]);
+
+  if(type==="lastNameM"){
+    // Male surnames: Kowalski -> Kowalskiego, Kowalskiemu, Kowalskim, Kowalskich
+    if(bl.endsWith("ski")||bl.endsWith("cki")||bl.endsWith("dzi")){
+      const stem=bl.slice(0,-1);
+      forms.add(stem+"ego"); forms.add(stem+"emu"); forms.add(stem+"m"); forms.add(stem+"ch");
+      // female variant: -ska/-cka
+      const fstem=bl.slice(0,-1);
+      forms.add(fstem+"a"); forms.add(fstem+"ej"); forms.add(fstem+"ą");
+    }
+    // -ek: Nowaczek -> Nowaczka, Nowaczkowi, Nowaczkiem
+    else if(bl.endsWith("ek")){
+      const stem=bl.slice(0,-2)+"k";
+      forms.add(stem+"a"); forms.add(stem+"owi"); forms.add(stem+"iem"); forms.add(stem+"u");
+      // sometimes -ka too (Dudek->Dudka)
+      forms.add(bl.slice(0,-2)+"ka"); forms.add(bl.slice(0,-2)+"kowi"); forms.add(bl.slice(0,-2)+"kiem");
+    }
+    // consonant ending: Nowak -> Nowaka, Nowakowi, Nowakiem
+    else if(!/[aeiouyąęó]$/i.test(bl)){
+      forms.add(bl+"a"); forms.add(bl+"owi"); forms.add(bl+"iem"); forms.add(bl+"em");
+      forms.add(bl+"u"); forms.add(bl+"ie");
+    }
+    // -a ending (male/female): Duda -> Dudy, Dudzie, Dudę, Dudą
+    else if(bl.endsWith("a")){
+      const stem=bl.slice(0,-1);
+      forms.add(stem+"y"); forms.add(stem+"zie"); forms.add(stem+"ę"); forms.add(stem+"ą");
+      forms.add(stem+"ie"); forms.add(stem+"ów");
+    }
+  }
+
+  if(type==="lastNameF"||type==="lastNameM"){
+    // Female -ska/-cka variants
+    if(bl.endsWith("ska")||bl.endsWith("cka")){
+      const stem=bl.slice(0,-1);
+      forms.add(stem+"ej"); forms.add(stem+"ą"); forms.add(stem+"ie");
+    }
+  }
+
+  if(type==="firstName"){
+    // Male first names
+    if(!bl.endsWith("a")){
+      forms.add(bl+"a"); forms.add(bl+"owi"); forms.add(bl+"em"); forms.add(bl+"ie"); forms.add(bl+"u");
+      // softened stems: Marek->Marka, Jacek->Jacka
+      if(bl.endsWith("ek")){
+        const stem=bl.slice(0,-2)+"k";
+        forms.add(stem+"a"); forms.add(stem+"owi"); forms.add(stem+"iem");
+      }
+    }
+    // Female first names ending in -a
+    else {
+      const stem=bl.slice(0,-1);
+      forms.add(stem+"y"); forms.add(stem+"i"); forms.add(stem+"ie"); forms.add(stem+"ę"); forms.add(stem+"ą");
+      forms.add(stem+"o"); // vocative: Anno, Ewo
+    }
+  }
+
+  if(type==="city"){
+    // Cities: Kraków->Krakowa,Krakowie; Warszawa->Warszawy,Warszawie,Warszawą
+    if(bl.endsWith("a")){
+      const stem=bl.slice(0,-1);
+      forms.add(stem+"y"); forms.add(stem+"ie"); forms.add(stem+"ę"); forms.add(stem+"ą");
+      forms.add(stem+"o");
+    } else if(bl.endsWith("ów")){
+      const stem=bl.slice(0,-2)+"ow";
+      forms.add(stem+"a"); forms.add(stem+"ie"); forms.add(stem+"em"); forms.add(stem+"u");
+    } else if(bl.endsWith("ów")){
+      // already covered
+    } else if(bl.endsWith("ń")){
+      const stem=bl.slice(0,-1)+"ni";
+      forms.add(stem+"a"); forms.add(stem+"e"); forms.add(stem+"em"); forms.add(stem+"u");
+    } else if(bl.endsWith("ce")||bl.endsWith("no")){
+      // Kielce->Kielc,Kielcach,Kielcami
+      forms.add(bl+"ach"); forms.add(bl+"ami");
+    } else {
+      forms.add(bl+"a"); forms.add(bl+"u"); forms.add(bl+"em"); forms.add(bl+"ie");
+      forms.add(bl+"owi");
+    }
+  }
+
+  if(type==="street"){
+    // Streets: Długa->Długiej; Kopernika stays; Grunwaldzka->Grunwaldzkiej
+    if(bl.endsWith("a")&&!bl.endsWith("ka")&&!bl.endsWith("ska")&&!bl.endsWith("cka")){
+      const stem=bl.slice(0,-1);
+      forms.add(stem+"ej"); forms.add(stem+"ą");
+    }
+    if(bl.endsWith("ska")||bl.endsWith("cka")||bl.endsWith("ka")){
+      const stem=bl.slice(0,-1);
+      forms.add(stem+"ej"); forms.add(stem+"ą"); forms.add(stem+"ie");
+    }
+    if(bl.endsWith("na")||bl.endsWith("wa")){
+      const stem=bl.slice(0,-1);
+      forms.add(stem+"ej"); forms.add(stem+"ą");
+    }
+    // -ego form for male-type streets (Kopernika, Mickiewicza already in base form of genitive)
+    // These are invariant — already covered in dictionary
+  }
+
+  return [...forms];
+}
+
+// Build inflection maps: inflectedForm -> baseForm
+function buildInflectionMap(words, type){
+  const map=new Map();
+  for(const w of words){
+    const forms=polishForms(w, type);
+    for(const f of forms) map.set(f, w.toLowerCase());
+  }
+  return map;
+}
+
+// ═══════════════════════════════════════════════════════════
 //  PII DETECTION
 // ═══════════════════════════════════════════════════════════
 
@@ -543,6 +661,12 @@ class PIIDetector {
     this._lnSet = new Set(LAST_NAMES.map(n=>n.toLowerCase()));
     this._citySet = new Set(CITIES.map(c=>c.toLowerCase()));
     this._streetSet = new Set(STREETS.map(s=>s.toLowerCase()));
+
+    // Inflection maps: inflected form -> base form
+    this._fnInflect = buildInflectionMap(ALL_FIRST_NAMES, "firstName");
+    this._lnInflect = buildInflectionMap(LAST_NAMES, "lastNameM");
+    this._cityInflect = buildInflectionMap(CITIES, "city");
+    this._streetInflect = buildInflectionMap(STREETS, "street");
   }
 
   _vPesel(d){
@@ -692,44 +816,71 @@ class PIIDetector {
       }
     }
 
-    // Names — dictionary-based, only capitalized words
+    // Names — dictionary-based with Polish declension, only capitalized words
     if(this.s.firstName||this.s.lastName){
       let wm; const wr=/[A-Za-zĄąĆćĘęŁłŃńÓóŚśŹźŻż]+/g;
       while((wm=wr.exec(text))!==null){
         const w=wm[0], wl=w.toLowerCase(), ws=wm.index, we=ws+w.length;
         if(!this._noOverlap(R,ws,we)) continue;
         if(w[0]!==w[0].toUpperCase()||w===w.toLowerCase()) continue;
-        if(this.s.firstName&&this._fnSet.has(wl))
-          R.push({type:"firstName",start:ws,end:we,matched:w,core:w});
-        else if(this.s.lastName&&this._lnSet.has(wl))
-          R.push({type:"lastName",start:ws,end:we,matched:w,core:w});
-      }
-    }
-
-    // Cities — dictionary
-    if(this.s.city){
-      for(const city of CITIES){
-        const esc=city.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-        const re=new RegExp("\\b"+esc+"\\b","gi");
-        let cm;
-        while((cm=re.exec(text))!==null){
-          if(this._noOverlap(R,cm.index,cm.index+cm[0].length))
-            R.push({type:"city",start:cm.index,end:cm.index+cm[0].length,matched:cm[0],core:cm[0]});
+        // Direct match or inflected form
+        if(this.s.firstName&&(this._fnSet.has(wl)||this._fnInflect.has(wl))){
+          const base=this._fnInflect.get(wl)||wl;
+          R.push({type:"firstName",start:ws,end:we,matched:w,core:base[0].toUpperCase()+base.slice(1)});
+        }
+        else if(this.s.lastName&&(this._lnSet.has(wl)||this._lnInflect.has(wl))){
+          const base=this._lnInflect.get(wl)||wl;
+          R.push({type:"lastName",start:ws,end:we,matched:w,core:base[0].toUpperCase()+base.slice(1)});
         }
       }
     }
 
-    // Streets — dictionary, optionally after ul./ulica/al./aleja
+    // Cities — dictionary with inflected forms
+    if(this.s.city){
+      // Collect all forms (base + inflected) grouped by base city
+      const cityForms=new Map();
+      for(const city of CITIES){
+        const forms=polishForms(city,"city");
+        for(const f of forms){
+          if(!cityForms.has(f)) cityForms.set(f,city);
+        }
+      }
+      // Sort by length descending to match longer forms first (e.g. "Dąbrowa Górnicza" before "Górnicza")
+      const allForms=[...cityForms.keys()].sort((a,b)=>b.length-a.length);
+      for(const form of allForms){
+        const esc=form.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+        const re=new RegExp("\\b"+esc+"\\b","gi");
+        let cm;
+        while((cm=re.exec(text))!==null){
+          if(this._noOverlap(R,cm.index,cm.index+cm[0].length)){
+            const baseCity=cityForms.get(form);
+            R.push({type:"city",start:cm.index,end:cm.index+cm[0].length,matched:cm[0],core:baseCity});
+          }
+        }
+      }
+    }
+
+    // Streets — dictionary with inflected forms, optionally after ul./ulica/al./aleja
     if(this.s.street){
+      // Collect all forms (base + inflected) grouped by base street
+      const streetForms=new Map();
       for(const st of STREETS){
-        const esc=st.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+        const forms=polishForms(st,"street");
+        for(const f of forms){
+          if(!streetForms.has(f)) streetForms.set(f,st);
+        }
+      }
+      const allForms=[...streetForms.keys()].sort((a,b)=>b.length-a.length);
+      for(const form of allForms){
+        const esc=form.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+        const baseSt=streetForms.get(form);
         // With prefix
         const re1=new RegExp("(?:ul\\.?\\s*|ulica\\s+|al(?:eja)?\\.?\\s*)("+esc+")\\b","gi");
         let sm;
         while((sm=re1.exec(text))!==null){
           const ss=sm.index+sm[0].indexOf(sm[1]), se=ss+sm[1].length;
           if(this._noOverlap(R,ss,se))
-            R.push({type:"street",start:ss,end:se,matched:sm[1],core:sm[1]});
+            R.push({type:"street",start:ss,end:se,matched:sm[1],core:baseSt});
         }
         // Standalone capitalized, avoid cities/names overlap
         const re2=new RegExp("\\b("+esc+")\\b","g");
@@ -738,10 +889,10 @@ class PIIDetector {
           if(sm2[1][0]===sm2[1][0].toUpperCase()){
             const ss=sm2.index, se=ss+sm2[0].length;
             if(this._noOverlap(R,ss,se)&&
-               !this._citySet.has(sm2[1].toLowerCase())&&
-               !this._fnSet.has(sm2[1].toLowerCase())&&
-               !this._lnSet.has(sm2[1].toLowerCase()))
-              R.push({type:"street",start:ss,end:se,matched:sm2[1],core:sm2[1]});
+               !this._citySet.has(sm2[1].toLowerCase())&&!this._cityInflect.has(sm2[1].toLowerCase())&&
+               !this._fnSet.has(sm2[1].toLowerCase())&&!this._fnInflect.has(sm2[1].toLowerCase())&&
+               !this._lnSet.has(sm2[1].toLowerCase())&&!this._lnInflect.has(sm2[1].toLowerCase()))
+              R.push({type:"street",start:ss,end:se,matched:sm2[1],core:baseSt});
           }
         }
       }
@@ -878,10 +1029,16 @@ class FileProcessor {
   }
 
   async _processCsv(entry){
-    let text;
-    if(entry.data instanceof ArrayBuffer) text=decodeText(entry.data);
-    else if(typeof entry.data==="string") text=entry.data;
-    else text=new TextDecoder("utf-8").decode(entry.data);
+    let text, srcEnc="utf-8";
+    if(entry.data instanceof ArrayBuffer){
+      const decoded=decodeText(entry.data);
+      text=decoded.text; srcEnc=decoded.enc;
+    } else if(typeof entry.data==="string") {
+      text=entry.data;
+    } else {
+      const decoded=decodeText(entry.data.buffer||entry.data);
+      text=decoded.text; srcEnc=decoded.enc;
+    }
 
     const delim=detectDelim(text);
     const lines=parseCsv(text,delim);
@@ -891,8 +1048,7 @@ class FileProcessor {
       return a;
     });
     const result=reconstructCsv(anonLines,delim);
-    const enc=new TextEncoder();
-    return {name:entry.name,data:enc.encode(result).buffer,text:result};
+    return {name:entry.name,data:encodeText(result,srcEnc),text:result};
   }
 
   async _processExcel(entry){
@@ -908,16 +1064,25 @@ class FileProcessor {
           const addr=XLSX.utils.encode_cell({r,c});
           const cell=sh[addr];
           if(!cell) continue;
+          let changed=false;
           if(cell.t==="s"&&cell.v){
-            cell.v=this.anon.anonymize(String(cell.v));
+            const orig=String(cell.v);
+            cell.v=this.anon.anonymize(orig);
+            if(cell.v!==orig) changed=true;
             if(cell.w) cell.w=cell.v;
             if(cell.r) delete cell.r;
           } else if(cell.t==="n"&&cell.v!==undefined){
             const sv=String(cell.v), av=this.anon.anonymize(sv);
             if(av!==sv){
+              changed=true;
               if(/^\d+$/.test(av)){cell.v=parseInt(av,10);if(cell.w)cell.w=av;}
               else{cell.t="s";cell.v=av;if(cell.w)cell.w=av;}
             }
+          }
+          // Mark changed cells with blue font color
+          if(changed){
+            if(!cell.s) cell.s={};
+            cell.s.font=Object.assign(cell.s.font||{},{color:{rgb:"0066CC"}});
           }
         }
       }
@@ -931,9 +1096,55 @@ class FileProcessor {
 
 // CSV helpers
 function decodeText(buf){
-  try{return new TextDecoder("utf-8",{fatal:true}).decode(buf);}
-  catch{try{return new TextDecoder("windows-1250").decode(buf);}
-  catch{return new TextDecoder("iso-8859-2").decode(buf);}}
+  const u8=new Uint8Array(buf);
+  // Detect BOM
+  if(u8.length>=3&&u8[0]===0xEF&&u8[1]===0xBB&&u8[2]===0xBF) return {text:new TextDecoder("utf-8").decode(buf),enc:"utf-8-bom"};
+  try{return {text:new TextDecoder("utf-8",{fatal:true}).decode(buf),enc:"utf-8"};}
+  catch{try{return {text:new TextDecoder("windows-1250").decode(buf),enc:"windows-1250"};}
+  catch{return {text:new TextDecoder("iso-8859-2").decode(buf),enc:"iso-8859-2"};}}
+}
+
+function encodeText(str, enc){
+  if(enc==="utf-8-bom"){
+    const bytes=new TextEncoder().encode(str);
+    const bom=new Uint8Array([0xEF,0xBB,0xBF]);
+    const result=new Uint8Array(bom.length+bytes.length);
+    result.set(bom); result.set(bytes,bom.length);
+    return result.buffer;
+  }
+  if(enc==="windows-1250"||enc==="iso-8859-2"){
+    // Encode back to the original legacy encoding
+    const cp1250=enc==="windows-1250"?buildCp1250Table():buildIso88592Table();
+    const out=new Uint8Array(str.length*2); let oi=0;
+    for(let i=0;i<str.length;i++){
+      const code=str.charCodeAt(i);
+      if(code<128){out[oi++]=code;}
+      else{const b=cp1250.get(code); out[oi++]=b!==undefined?b:0x3F;} // '?' for unmappable
+    }
+    return out.slice(0,oi).buffer;
+  }
+  return new TextEncoder().encode(str).buffer;
+}
+
+function buildCp1250Table(){
+  // Unicode->byte map for windows-1250
+  const m=new Map();
+  const dec=new TextDecoder("windows-1250");
+  for(let b=128;b<256;b++){
+    const ch=dec.decode(new Uint8Array([b]));
+    m.set(ch.charCodeAt(0),b);
+  }
+  return m;
+}
+
+function buildIso88592Table(){
+  const m=new Map();
+  const dec=new TextDecoder("iso-8859-2");
+  for(let b=128;b<256;b++){
+    const ch=dec.decode(new Uint8Array([b]));
+    m.set(ch.charCodeAt(0),b);
+  }
+  return m;
 }
 
 function detectDelim(text){
@@ -1140,7 +1351,7 @@ function showMappings(){
     const tr=document.createElement("tr");
     const td1=document.createElement("td"); td1.textContent=tl[r.type]||r.type;
     const td2=document.createElement("td"); td2.textContent=r.original;
-    const td3=document.createElement("td"); td3.textContent=r.replacement;
+    const td3=document.createElement("td"); td3.textContent=r.replacement; td3.style.color="#3b82f6"; td3.style.fontWeight="600";
     tr.append(td1,td2,td3); tbody.appendChild(tr);
   });
   sec.style.display="block";
