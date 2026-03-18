@@ -43,6 +43,10 @@ const _REF_ICONS = {
   aml_account:        "/static/icons/bezpieczenstwo/shield.svg",
   aml_alert:          "/static/icons/status/warning.svg",
   aml_graph_node:     "/static/icons/wizualizacja/chart_bar.svg",
+  crypto_transaction: "/static/icons/dokumenty/doc_txt.svg",
+  crypto_anomaly:     "/static/icons/status/warning.svg",
+  crypto_wallet:      "/static/icons/bezpieczenstwo/shield.svg",
+  crypto_token:       "/static/icons/inne/pin.svg",
 };
 
 // ────────── Helper: short unique ID ──────────

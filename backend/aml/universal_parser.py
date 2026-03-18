@@ -1507,6 +1507,858 @@ class _SantanderStatementParser(_BankParser):
 _register(_SantanderStatementParser())
 
 
+# ----------------------------------------- Credit Agricole parser
+
+_CA_AMOUNT_RE = re.compile(
+    r"^Kwota:\s*([+-]?\s*(?:\d{1,3}(?:\s\d{3})*|\d+),\d{2})\s+PLN$"
+)
+_CA_BALANCE_RE = re.compile(
+    r"^([+-]?\s*(?:\d{1,3}(?:\s\d{3})*|\d+),\d{2})\s+PLN$"
+)
+_CA_DATE_INLINE_RE = re.compile(r"^Data operacji:\s*(\S+)$")
+_CA_BOOK_INLINE_RE = re.compile(r"^Data księgowania:\s*(\S+)$")
+_CA_PAGE_FOOTER_RE = re.compile(
+    r"^(Identyfikator dokumentu:|HISTRA\d|Strona \d|DOKUMENT SPORZĄDZONY|Credit Agricole Bank|Rejestru|dla Wrocławia|1023607600)"
+)
+
+_CA_TX_TYPES = {
+    "Płatność kartą",
+    "Przelew zwykły",
+    "Przelew przychodzący",
+    "Przelew natychmiastowy",
+    "Zlecenie stałe",
+    "Prowizja",
+    "Odsetki",
+    "Wpłata na Rachunek Oszczędzam",
+    "Wypłata z bankomatu",
+    "Wpłata gotówkowa",
+    "Kapitalizacja odsetek",
+    "Opłata",
+    "Zwrot",
+}
+
+
+class _CreditAgricoleStatementParser(_BankParser):
+    name = "Credit Agricole Bank Polska"
+
+    def can_parse(self, lines: List[str]) -> bool:
+        head = " ".join(lines[:80]).lower()
+        return "credit agricole" in head and (
+            "historia transakcji" in head
+            or "ca24 ebank" in head
+            or "rachunek bieżący" in head
+        )
+
+    def _is_footer(self, line: str) -> bool:
+        return bool(_CA_PAGE_FOOTER_RE.match(line))
+
+    def _parse_meta(self, lines: List[str]) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {"bank": "Credit Agricole Bank Polska", "currency": "PLN"}
+
+        for i, l in enumerate(lines[:30]):
+            # Period: "Okres od YYYY-MM-DD do YYYY-MM-DD"
+            m = re.match(r"Okres\s+od\s+(\d{4}-\d{2}-\d{2})\s+do\s+(\d{4}-\d{2}-\d{2})", l)
+            if m:
+                meta["period_from"] = m.group(1)
+                meta["period_to"] = m.group(2)
+
+            # Account: "XX XXXX XXXX XXXX XXXX XXXX XXXX (PLN) Rachunek bieżący"
+            m = re.match(r"(\d{2}\s\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4}\s\d{4})\s*\((\w+)\)", l)
+            if m:
+                meta["account_number"] = m.group(1).replace(" ", "")
+                meta["nrb_normalized"] = meta["account_number"]
+                meta["currency"] = m.group(2)
+
+            # Print date
+            m = re.match(r"Data i godzina wydruku:\s*(\d{4}-\d{2}-\d{2})", l)
+            if m:
+                meta["statement_date"] = m.group(1)
+
+        return meta
+
+    def _parse_transactions(self, lines: List[str], meta: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        txs: List[Dict[str, Any]] = []
+        i = 0
+        n = len(lines)
+        own_acc = (meta or {}).get("account_number", "")
+
+        while i < n:
+            # Skip footer lines
+            if self._is_footer(lines[i]):
+                i += 1
+                continue
+
+            # Look for "Data operacji: YYYY-MM-DD" or "Data operacji: -"
+            m = _CA_DATE_INLINE_RE.match(lines[i])
+            if not m:
+                i += 1
+                continue
+
+            op_date_raw = m.group(1)
+            op_date = op_date_raw if re.match(r"\d{4}-\d{2}-\d{2}$", op_date_raw) else None
+            i += 1
+
+            # "Data księgowania: YYYY-MM-DD" — may be missing for compact page-break txs
+            while i < n and self._is_footer(lines[i]):
+                i += 1
+            if i >= n:
+                break
+            book_date: Optional[str] = None
+            m = _CA_BOOK_INLINE_RE.match(lines[i])
+            if m:
+                bd = m.group(1)
+                if re.match(r"\d{4}-\d{2}-\d{2}$", bd):
+                    book_date = bd
+                i += 1
+
+            # Transaction type
+            while i < n and self._is_footer(lines[i]):
+                i += 1
+            if i >= n:
+                break
+
+            tx_type = lines[i].strip()
+            i += 1
+
+            # If no booking date, use operation date as fallback
+            if not book_date:
+                book_date = op_date or ""
+
+            # Read body lines until "Kwota:" line
+            body_lines: List[str] = []
+            amount: Optional[Decimal] = None
+
+            while i < n:
+                l = lines[i].strip()
+
+                if self._is_footer(l):
+                    i += 1
+                    continue
+
+                m = _CA_AMOUNT_RE.match(l)
+                if m:
+                    amount = _san_parse_amount(m.group(1))  # reuse same parser
+                    i += 1
+                    break
+
+                # Check if we hit next transaction (missing Kwota — page break edge case)
+                if _CA_DATE_INLINE_RE.match(l):
+                    break
+
+                body_lines.append(l)
+                i += 1
+
+            if amount is None:
+                continue
+
+            # Read "Saldo po operacji:" + balance
+            balance_after: Optional[float] = None
+            if i < n and lines[i].strip() == "Saldo po operacji:":
+                i += 1
+                while i < n and self._is_footer(lines[i]):
+                    i += 1
+                if i < n:
+                    m = _CA_BALANCE_RE.match(lines[i].strip())
+                    if m:
+                        bal = _san_parse_amount(m.group(1))
+                        if bal is not None:
+                            balance_after = float(bal)
+                        i += 1
+
+            # Parse body lines
+            from_account: Optional[str] = None
+            to_account: Optional[str] = None
+            from_name_lines: List[str] = []
+            to_name_lines: List[str] = []
+            card_info: Optional[str] = None
+            title_parts: List[str] = []
+            current_section: Optional[str] = None
+            in_title = False
+
+            for bl in body_lines:
+                bl_s = bl.strip()
+
+                if bl_s.startswith("Tytuł:"):
+                    title_parts.append(bl_s[len("Tytuł:"):].strip())
+                    in_title = True
+                    current_section = None
+                    continue
+
+                if bl_s.startswith("Z rachunku:"):
+                    acc = bl_s[len("Z rachunku:"):].strip()
+                    from_account = re.sub(r"\s+", "", acc)
+                    current_section = "from"
+                    in_title = False
+                    continue
+
+                if bl_s.startswith("Na rachunek:"):
+                    acc = bl_s[len("Na rachunek:"):].strip()
+                    to_account = re.sub(r"\s+", "", acc)
+                    current_section = "to"
+                    in_title = False
+                    continue
+
+                if bl_s.startswith("Numer karty i miejsce:"):
+                    card_info = bl_s[len("Numer karty i miejsce:"):].strip()
+                    current_section = "card"
+                    in_title = False
+                    continue
+
+                # Continuation lines
+                if in_title:
+                    title_parts.append(bl_s)
+                    continue
+
+                if current_section == "from":
+                    from_name_lines.append(bl_s)
+                elif current_section == "to":
+                    to_name_lines.append(bl_s)
+                elif current_section == "card":
+                    # Card merchant continuation (CITY, PL etc.)
+                    if card_info:
+                        card_info += " " + bl_s
+
+            # Determine counterparty
+            cp_account: Optional[str] = None
+            cp_name = ""
+
+            if float(amount) < 0:
+                # Outgoing
+                cp_account = to_account
+                cp_name = " ".join(to_name_lines).strip()
+                # For card tx, counterparty is in card_info
+                if not cp_name and card_info:
+                    # "414071******3659, MERCHANT_NAME CITY, PL"
+                    parts = card_info.split(",", 1)
+                    if len(parts) > 1:
+                        cp_name = parts[1].strip()
+            else:
+                # Incoming
+                cp_account = from_account
+                cp_name = " ".join(from_name_lines).strip()
+
+            # If counterparty is own account holder, clear it
+            if cp_account and own_acc and cp_account == own_acc:
+                cp_name = " ".join(to_name_lines).strip() if float(amount) < 0 else ""
+
+            title = " ".join(title_parts).strip()
+
+            # Build channel
+            channel = ""
+            if "kartą" in tx_type.lower() or "bankomatu" in tx_type.lower():
+                channel = "TR.KART"
+            elif "przelew" in tx_type.lower() or "zlecenie" in tx_type.lower():
+                channel = "PRZELEW"
+            elif "prowizja" in tx_type.lower() or "opłata" in tx_type.lower():
+                channel = "FEE"
+            elif "odsetki" in tx_type.lower() or "kapitalizacja" in tx_type.lower():
+                channel = "FEE"
+
+            details: Dict[str, Any] = {}
+            if card_info:
+                # Extract card number
+                m2 = re.match(r"(\d{6}\*+\d+)", card_info)
+                if m2:
+                    details["card_number_masked"] = m2.group(1)
+
+            raw_lines = [f"Data op: {op_date or '-'}", f"Data ks: {book_date}", tx_type]
+            raw_lines.extend(body_lines)
+
+            txs.append({
+                "posting_date": book_date,
+                "transaction_date": op_date,
+                "amount": float(amount),
+                "currency": (meta or {}).get("currency", "PLN"),
+                "balance_after": balance_after,
+                "counterparty_name_address": cp_name,
+                "counterparty_account": cp_account,
+                "title": title,
+                "channel": channel,
+                "tx_type": tx_type,
+                "details": details,
+                "body_raw_lines": raw_lines,
+            })
+
+        return txs
+
+    def parse(self, lines: List[str], source_file: str) -> _Statement:
+        meta = self._parse_meta(lines)
+        txs = self._parse_transactions(lines, meta)
+
+        # Extract holder name from first outgoing transfer (not card)
+        own_acc = meta.get("account_number", "")
+        for tx in txs:
+            if tx["amount"] < 0 and tx.get("tx_type") == "Przelew zwykły":
+                body = tx.get("body_raw_lines", [])
+                for j, bl in enumerate(body):
+                    if isinstance(bl, str) and bl.strip().startswith("Z rachunku:"):
+                        acc = bl.strip()[len("Z rachunku:"):].strip().replace(" ", "")
+                        if own_acc and own_acc in acc:
+                            if j + 1 < len(body):
+                                candidate = body[j + 1].strip()
+                                if candidate and not candidate.startswith(("Na rachunek", "Tytuł", "Kwota", "Numer karty")):
+                                    meta["holder_name"] = candidate.rstrip(",").strip()
+                                    break
+                if "holder_name" in meta:
+                    break
+
+        # Derive opening/closing from first/last balance
+        if txs:
+            last_tx = txs[0]   # first in list = most recent
+            first_tx = txs[-1]  # last in list = oldest
+            if last_tx.get("balance_after") is not None:
+                meta["closing_balance"] = last_tx["balance_after"]
+            if first_tx.get("balance_after") is not None and first_tx.get("amount") is not None:
+                meta["opening_balance"] = first_tx["balance_after"] - first_tx["amount"]
+
+        return _Statement(
+            meta=meta,
+            transactions=txs,
+            source_file=source_file,
+            parse_method="pymupdf_lines_credit_agricole",
+        )
+
+
+_register(_CreditAgricoleStatementParser())
+
+
+# ------------------------------------------------ Pekao SA parser
+# Format: "HISTORIA OPERACJI" header, DD.MM.YYYY date, multi-line type + details, amount "±X XXX,XX PLN"
+
+_PEKAO_DATE_RE = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
+_PEKAO_AMOUNT_RE = re.compile(r"^([+-]?\s*(?:\d{1,3}(?:\s\d{3})*|\d+),\d{2})\s+PLN$")
+_PEKAO_FOOTER_RE = re.compile(
+    r"^(Potwierdzenie wygenerowane|TelePekao|Infolinia|\+48\s|E-mail|pekao24@|Strona\s+\d+\s+z\s+\d+)"
+)
+
+
+class _PekaoStatementParser(_BankParser):
+    name = "pekao"
+
+    def can_parse(self, lines: List[str]) -> bool:
+        head = "\n".join(lines[:50]).lower()
+        return ("historia operacji" in head or "lista operacji" in head) and (
+            "pekao" in head or "1240" in head
+        )
+
+    def _is_footer(self, line: str) -> bool:
+        return bool(_PEKAO_FOOTER_RE.match(line.strip()))
+
+    def _parse_meta(self, lines: List[str]) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {
+            "bank": "Bank Pekao SA",
+            "currency": "PLN",
+        }
+        n = len(lines)
+        for i in range(min(n, 30)):
+            l = lines[i].strip()
+
+            if l == "Klient:" and i + 1 < n:
+                meta["holder_name"] = lines[i + 1].strip()
+
+            if l == "Numer rachunku:" and i + 1 < n:
+                acc = re.sub(r"\s+", "", lines[i + 1].strip())
+                meta["account_number"] = acc
+
+            if l == "Typ rachunku:" and i + 1 < n:
+                meta["account_type"] = lines[i + 1].strip()
+
+            # "LISTA OPERACJI ZA OKRES OD DD.MM.YYYY DO DD.MM.YYYY"
+            m = re.match(
+                r"LISTA OPERACJI ZA OKRES OD\s+(\d{2}\.\d{2}\.\d{4})\s+DO\s+(\d{2}\.\d{2}\.\d{4})",
+                l, re.I,
+            )
+            if m:
+                meta["period_from"] = self._convert_date(m.group(1))
+                meta["period_to"] = self._convert_date(m.group(2))
+
+        return meta
+
+    @staticmethod
+    def _convert_date(d: str) -> str:
+        """DD.MM.YYYY -> YYYY-MM-DD"""
+        parts = d.split(".")
+        if len(parts) == 3:
+            return f"{parts[2]}-{parts[1]}-{parts[0]}"
+        return d
+
+    @staticmethod
+    def _parse_amount(s: str) -> Optional[Decimal]:
+        s = s.strip().replace("\u00a0", " ")
+        s = re.sub(r"\s+", "", s)
+        s = s.replace(",", ".")
+        try:
+            return Decimal(s)
+        except Exception:
+            return None
+
+    def _parse_transactions(self, lines: List[str], meta: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        txs: List[Dict[str, Any]] = []
+        n = len(lines)
+        i = 0
+
+        # Skip header — find first date after the header table header "Data"
+        while i < n:
+            if lines[i].strip() == "Kwota":
+                i += 1
+                break
+            i += 1
+        if i >= n:
+            # Fallback: start from beginning and look for first date
+            i = 0
+
+        while i < n:
+            l = lines[i].strip()
+
+            # Skip footer lines
+            if self._is_footer(l):
+                i += 1
+                continue
+
+            # Transaction starts with a date
+            if not _PEKAO_DATE_RE.match(l):
+                i += 1
+                continue
+
+            book_date = self._convert_date(l)
+            i += 1
+
+            # Read type + body lines until amount line
+            body_lines: List[str] = []
+            amount = None
+            while i < n:
+                cl = lines[i].strip()
+                if self._is_footer(cl):
+                    i += 1
+                    continue
+                m = _PEKAO_AMOUNT_RE.match(cl)
+                if m:
+                    amount = self._parse_amount(m.group(1))
+                    i += 1
+                    break
+                # Next transaction date means we missed the amount
+                if _PEKAO_DATE_RE.match(cl) and body_lines:
+                    break
+                if cl:
+                    body_lines.append(cl)
+                i += 1
+
+            if amount is None:
+                continue
+
+            # Parse body: first line(s) = type, then details
+            tx_type = ""
+            counterparty = ""
+            title = ""
+            card_info = ""
+
+            # Known multi-line types
+            type_lines: List[str] = []
+            detail_lines: List[str] = []
+
+            known_types_start = (
+                "TRANSAKCJA KART", "PRZELEW", "PROWIZJE", "WYPŁATA KART",
+                "OPŁATA ZA", "ODSETKI OD", "PODATEK POBRANY", "WYPŁATA",
+                "KAPITALIZACJA", "ZLECENIE",
+            )
+            # Known type continuation words (second/third line of multi-line type)
+            _type_continuations = {
+                "PŁATNICZĄ", "MIĘDZYBANKOWY", "DEPOZYTU", "PROWADZENIE",
+                "RACHUNKU", "WEWNĘTRZNY", "ZEWNĘTRZNY", "AUT.",
+                "PRZYCHODZĄCY", "WYCHODZĄCY",
+            }
+            # Gather type lines — type can span 2-3 lines (e.g. "TRANSAKCJA KARTĄ" + "PŁATNICZĄ")
+            j = 0
+            while j < len(body_lines):
+                bl = body_lines[j]
+                bl_upper = bl.upper()
+                if j == 0 and any(bl_upper.startswith(t) for t in known_types_start):
+                    type_lines.append(bl)
+                elif j > 0 and j < 3 and type_lines and bl.strip() in _type_continuations:
+                    type_lines.append(bl)
+                else:
+                    detail_lines.append(bl)
+                j += 1
+
+            tx_type = " ".join(type_lines).strip()
+
+            # Parse detail_lines
+            for dl in detail_lines:
+                if dl.startswith("*") and len(dl) > 5:
+                    card_info = dl
+                elif not counterparty and not dl.startswith(("KRW ", "ODSETKI", "OPŁATA")):
+                    counterparty = dl
+                else:
+                    title = (title + " " + dl).strip() if title else dl
+
+            # For fee/tax transactions with no detail lines, use tx_type as title
+            if not title and not counterparty and tx_type:
+                title = tx_type
+
+            # Channel
+            channel = ""
+            tx_type_lower = tx_type.lower()
+            if "kart" in tx_type_lower:
+                channel = "TR.KART"
+            elif "przelew" in tx_type_lower:
+                channel = "PRZELEW"
+            elif "prowizj" in tx_type_lower or "opłata" in tx_type_lower:
+                channel = "FEE"
+            elif "odsetki" in tx_type_lower or "kapitalizacja" in tx_type_lower:
+                channel = "FEE"
+            elif "podatek" in tx_type_lower:
+                channel = "FEE"
+
+            details: Dict[str, Any] = {}
+            if card_info:
+                m2 = re.match(r"\*+(\d+)", card_info)
+                if m2:
+                    details["card_number_masked"] = card_info
+
+            raw = [f"Data ks: {book_date}", tx_type] + body_lines
+
+            txs.append({
+                "posting_date": book_date,
+                "transaction_date": book_date,  # Pekao "Historia operacji" only has booking date
+                "amount": float(amount),
+                "currency": (meta or {}).get("currency", "PLN"),
+                "balance_after": None,  # Not available in this format
+                "counterparty_name_address": counterparty,
+                "counterparty_account": "",
+                "title": title,
+                "channel": channel,
+                "tx_type": tx_type,
+                "details": details,
+                "body_raw_lines": raw,
+            })
+
+        return txs
+
+    def parse(self, lines: List[str], source_file: str) -> _Statement:
+        meta = self._parse_meta(lines)
+        txs = self._parse_transactions(lines, meta)
+
+        return _Statement(
+            meta=meta,
+            transactions=txs,
+            source_file=source_file,
+            parse_method="pymupdf_lines_pekao",
+        )
+
+
+_register(_PekaoStatementParser())
+
+
+# ------------------------------------------------ BNP Paribas parser
+# Format: "Wyciąg bankowy" header, date_book, date_value, amount, balance, then description lines
+
+_BNP_DATE_RE = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
+_BNP_AMOUNT_RE = re.compile(r"^[+-]?\s*(?:\d{1,3}(?:\s\d{3})*|\d+),\d{2}$")
+_BNP_FOOTER_RE = re.compile(
+    r"^(Strona\s+\d+\s+z\s+\d+|BNP Paribas Bank|przez S.d Rejonowy|zak.adowy w wysoko)"
+)
+_BNP_HEADER_RE = re.compile(
+    r"^(Data$|ksi.gowania$|Data waluty$|Rodzaj oraz|Kwota$|operacji$|Saldo$|po operacji$)"
+)
+# Reference ID pattern (last line of a transaction)
+_BNP_REF_RE = re.compile(r"^(CEN|PSD|KUP|OPL|BOM)\d{10,}")
+
+
+class _BNPParibasStatementParser(_BankParser):
+    name = "bnp_paribas"
+
+    def can_parse(self, lines: List[str]) -> bool:
+        head = "\n".join(lines[:30]).lower()
+        return ("bnp paribas" in head or "1600" in head) and (
+            "wyciąg bankowy" in head or "wyci\u0105g bankowy" in head
+            or "wyci" in head and "bankowy" in head
+        )
+
+    def _is_footer(self, line: str) -> bool:
+        return bool(_BNP_FOOTER_RE.match(line.strip()))
+
+    def _is_page_header(self, line: str) -> bool:
+        return bool(_BNP_HEADER_RE.match(line.strip()))
+
+    @staticmethod
+    def _convert_date(d: str) -> str:
+        """DD.MM.YYYY -> YYYY-MM-DD"""
+        parts = d.split(".")
+        if len(parts) == 3:
+            return f"{parts[2]}-{parts[1]}-{parts[0]}"
+        return d
+
+    @staticmethod
+    def _parse_amount(s: str) -> Optional[Decimal]:
+        s = s.strip().replace("\u00a0", " ")
+        s = re.sub(r"\s+", "", s)
+        s = s.replace(",", ".")
+        try:
+            return Decimal(s)
+        except Exception:
+            return None
+
+    def _parse_meta(self, lines: List[str]) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {
+            "bank": "BNP Paribas Bank Polska",
+            "currency": "PLN",
+        }
+        n = len(lines)
+        for i in range(min(n, 30)):
+            l = lines[i].strip()
+
+            # "Wyciąg bankowy nr 00071-2025-1 z dnia 01.07.2025"
+            m = re.match(r"Wyci.g bankowy nr\s+(\S+)", l, re.I)
+            if m:
+                meta["statement_number"] = m.group(1)
+
+            # "Za okres" -> next line "DD.MM.YYYY - DD.MM.YYYY"
+            if l.lower() == "za okres" and i + 1 < n:
+                m = re.match(r"(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})", lines[i + 1].strip())
+                if m:
+                    meta["period_from"] = self._convert_date(m.group(1))
+                    meta["period_to"] = self._convert_date(m.group(2))
+
+            # Account: "NRB" line -> next line is account number
+            if l == "NRB" and i + 1 < n:
+                acc = re.sub(r"\s+", "", lines[i + 1].strip())
+                meta["account_number"] = acc
+
+            # Holder: "Państwo/Pan/Pani NAME"
+            m = re.match(r"Pa.stwo\s+(.+)", l)
+            if m:
+                meta["holder_name"] = m.group(1).strip()
+            if not meta.get("holder_name"):
+                m = re.match(r"Pan[i]?\s+(.+)", l)
+                if m:
+                    meta["holder_name"] = m.group(1).strip()
+
+        # Summary at end of document
+        for i in range(max(0, n - 30), n):
+            l = lines[i].strip()
+            if l.startswith("Obci") and "enia" in l:
+                # Next few lines: Uznania, Saldo otwarcia, Saldo zamknięcia, Kwota zablokowana, Saldo operacyjne
+                # Values follow in sequence
+                vals = []
+                j = i
+                while j < min(n, i + 12):
+                    vl = lines[j].strip()
+                    m = _BNP_AMOUNT_RE.match(vl)
+                    if m:
+                        vals.append(self._parse_amount(vl))
+                    j += 1
+                if len(vals) >= 4:
+                    meta["debits_total"] = abs(float(vals[0])) if vals[0] else None
+                    meta["credits_total"] = abs(float(vals[1])) if vals[1] else None
+                    meta["opening_balance"] = float(vals[2]) if vals[2] else None
+                    meta["closing_balance"] = float(vals[3]) if vals[3] else None
+                if len(vals) >= 5:
+                    meta["blocked_amount"] = float(vals[4]) if vals[4] else None
+                break
+
+        return meta
+
+    def _parse_transactions(self, lines: List[str], meta: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        txs: List[Dict[str, Any]] = []
+        n = len(lines)
+        i = 0
+
+        # Skip to first transaction (after header "Saldo po operacji")
+        while i < n:
+            if lines[i].strip() == "po operacji":
+                i += 1
+                break
+            i += 1
+        if i >= n:
+            i = 30  # fallback
+
+        while i < n - 3:
+            l = lines[i].strip()
+
+            # Skip footer/header lines
+            if self._is_footer(l) or self._is_page_header(l) or not l:
+                i += 1
+                continue
+
+            # Summary section at end
+            if l.startswith("Obci") and "enia" in l:
+                break
+
+            # Transaction starts with: date_book, date_value, amount, balance
+            if not _BNP_DATE_RE.match(l):
+                i += 1
+                continue
+
+            # Check next 3 lines
+            l1 = lines[i + 1].strip() if i + 1 < n else ""
+            l2 = lines[i + 2].strip() if i + 2 < n else ""
+            l3 = lines[i + 3].strip() if i + 3 < n else ""
+
+            if not _BNP_DATE_RE.match(l1) or not _BNP_AMOUNT_RE.match(l2) or not _BNP_AMOUNT_RE.match(l3):
+                i += 1
+                continue
+
+            book_date = self._convert_date(l)
+            value_date = self._convert_date(l1)
+            amount = self._parse_amount(l2)
+            balance_after = self._parse_amount(l3)
+            i += 4
+
+            if amount is None:
+                continue
+
+            # Read detail lines until next transaction or footer
+            detail_lines: List[str] = []
+            while i < n:
+                dl = lines[i].strip()
+
+                # Skip footer/header
+                if self._is_footer(dl) or self._is_page_header(dl) or not dl:
+                    i += 1
+                    continue
+
+                # Summary section
+                if dl.startswith("Obci") and "enia" in dl:
+                    break
+
+                # Check if next transaction (date, date, amount, balance pattern)
+                if _BNP_DATE_RE.match(dl) and i + 3 < n:
+                    nl1 = lines[i + 1].strip()
+                    nl2 = lines[i + 2].strip()
+                    nl3 = lines[i + 3].strip()
+                    if _BNP_DATE_RE.match(nl1) and _BNP_AMOUNT_RE.match(nl2) and _BNP_AMOUNT_RE.match(nl3):
+                        break
+
+                detail_lines.append(dl)
+                i += 1
+
+            if not detail_lines:
+                continue
+
+            # Parse detail: first line = type, rest = description
+            tx_type = detail_lines[0]
+            body = detail_lines[1:]
+
+            # Classify and extract fields based on type
+            counterparty = ""
+            title = ""
+            card_info = ""
+            ref_id = ""
+            counterparty_account = ""
+
+            # Separate structural lines from content
+            content_lines: List[str] = []
+            for bl in body:
+                if _BNP_REF_RE.match(bl):
+                    ref_id = bl
+                elif re.match(r"\d{6}-+\d{4}", bl):
+                    card_info = bl
+                elif re.match(r"\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}$", bl):
+                    counterparty_account = re.sub(r"\s+", "", bl)
+                elif re.match(r"[\d.,]+\s+PLN\s+\d{4}-\d{2}-\d{2}", bl):
+                    pass  # card original amount/date, skip
+                else:
+                    content_lines.append(bl)
+
+            tx_lower = tx_type.lower()
+            is_card = "kart" in tx_lower
+            is_blik = "blik" in tx_lower
+            is_transfer = "przelew" in tx_lower or "e-platn" in tx_lower
+
+            if is_card:
+                # Card: content = [cardholder+city, merchant+city, ...]
+                # Merchant is the counterparty (2nd content line)
+                if len(content_lines) >= 2:
+                    counterparty = content_lines[1]  # merchant
+                    title = " ".join(content_lines[2:]).strip()
+                elif content_lines:
+                    counterparty = content_lines[0]
+            elif is_transfer and float(amount) < 0:
+                # Outgoing transfer: content = [title, recipient_name, ...]
+                # After account number is extracted, content = [title_text, recipient_name, ...]
+                if counterparty_account and len(content_lines) >= 2:
+                    title = content_lines[0]
+                    counterparty = content_lines[1]
+                elif content_lines:
+                    counterparty = content_lines[0]
+                    title = " ".join(content_lines[1:]).strip()
+            elif is_transfer and float(amount) > 0:
+                # Incoming transfer: content = [sender_name, address..., title_text, ...]
+                # Account already extracted; first content line is sender
+                if content_lines:
+                    counterparty = content_lines[0]
+                    # Remaining: address lines then title
+                    rest = content_lines[1:]
+                    title = " ".join(rest).strip()
+            elif is_blik:
+                # BLIK: content = [merchant, address lines..., details...]
+                if content_lines:
+                    counterparty = content_lines[0]
+                    title = " ".join(content_lines[1:]).strip()
+            else:
+                # Fee, interest, etc.
+                if content_lines:
+                    counterparty = content_lines[0]
+                    title = " ".join(content_lines[1:]).strip()
+                if not counterparty:
+                    title = tx_type
+
+            # Channel
+            channel = ""
+            tx_lower = tx_type.lower()
+            if "kart" in tx_lower:
+                channel = "TR.KART"
+            elif "blik" in tx_lower:
+                channel = "BLIK"
+            elif "przelew" in tx_lower:
+                channel = "PRZELEW"
+            elif "e-platn" in tx_lower:
+                channel = "PRZELEW"
+            elif "prowiz" in tx_lower or "opłat" in tx_lower or "op\u0142at" in tx_lower.replace("\ufffd", "ł"):
+                channel = "FEE"
+            elif "odsetki" in tx_lower:
+                channel = "FEE"
+
+            details: Dict[str, Any] = {}
+            if card_info:
+                details["card_number_masked"] = card_info
+            if ref_id:
+                details["reference_id"] = ref_id
+
+            raw = [f"Data ks: {book_date}", f"Data wl: {value_date}", tx_type] + body
+
+            txs.append({
+                "posting_date": book_date,
+                "transaction_date": value_date,
+                "amount": float(amount),
+                "currency": (meta or {}).get("currency", "PLN"),
+                "balance_after": float(balance_after) if balance_after is not None else None,
+                "counterparty_name_address": counterparty,
+                "counterparty_account": counterparty_account,
+                "title": title,
+                "channel": channel,
+                "tx_type": tx_type,
+                "details": details,
+                "body_raw_lines": raw,
+            })
+
+        return txs
+
+    def parse(self, lines: List[str], source_file: str) -> _Statement:
+        meta = self._parse_meta(lines)
+        txs = self._parse_transactions(lines, meta)
+
+        return _Statement(
+            meta=meta,
+            transactions=txs,
+            source_file=source_file,
+            parse_method="pymupdf_lines_bnp_paribas",
+        )
+
+
+_register(_BNPParibasStatementParser())
+
+
 # ------------------------------------------------ public API
 
 def parse_bank_statement(pdf_path: Path) -> ParseResult:
