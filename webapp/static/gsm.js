@@ -3808,8 +3808,20 @@
     const CX = W / 2;
 
     // SVG icons (compact)
+    // Generic person (unknown gender — no PESEL)
     const personIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
       <path d="M-6.5 5 Q-6.5 0 0 -0.5 Q6.5 0 6.5 5" fill="none" stroke-width="1.2"/>`;
+    // Male icon — broader shoulders, shorter hair
+    const maleIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
+      <path d="M-7 5 Q-7 -0.5 0 -1 Q7 -0.5 7 5" fill="none" stroke-width="1.2"/>
+      <line x1="5" y1="-8" x2="8" y2="-11" stroke-width="1" stroke-linecap="round"/>
+      <line x1="6" y1="-11" x2="8" y2="-11" stroke-width="1" stroke-linecap="round"/>
+      <line x1="8" y1="-11" x2="8" y2="-9" stroke-width="1" stroke-linecap="round"/>`;
+    // Female icon — narrower shoulders, longer hair accent
+    const femaleIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
+      <path d="M-6 5 Q-6 0 0 -0.5 Q6 0 6 5" fill="none" stroke-width="1.2"/>
+      <line x1="5.5" y1="-7" x2="5.5" y2="-3" stroke-width="1" stroke-linecap="round"/>
+      <line x1="3.5" y1="-3" x2="7.5" y2="-3" stroke-width="1" stroke-linecap="round"/>`;
     const companyIcon = `<rect x="-5" y="-7" width="10" height="13" rx="1" fill="none" stroke-width="1.1"/>
       <line x1="-2.5" y1="-3" x2="-2.5" y2="-1" stroke-width="0.9"/>
       <line x1="0" y1="-3" x2="0" y2="-1" stroke-width="0.9"/>
@@ -3817,10 +3829,40 @@
       <line x1="-2.5" y1="1.5" x2="-2.5" y2="3.5" stroke-width="0.9"/>
       <line x1="0" y1="1.5" x2="0" y2="3.5" stroke-width="0.9"/>
       <line x1="2.5" y1="1.5" x2="2.5" y2="3.5" stroke-width="0.9"/>`;
+    // Subscriber icons (with phone symbol) — generic, male, female
     const subscriberIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
       <path d="M-9 6 Q-9 0 -3 -0.5 Q3 0 3 6" fill="none" stroke-width="1.4"/>
       <rect x="6" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
       <circle cx="8.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+    const subscriberMaleIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
+      <path d="M-9.5 6 Q-9.5 -0.5 -3 -1 Q3.5 -0.5 3.5 6" fill="none" stroke-width="1.4"/>
+      <line x1="2" y1="-8" x2="5" y2="-11" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="3" y1="-11" x2="5" y2="-11" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="5" y1="-11" x2="5" y2="-9" stroke-width="1.1" stroke-linecap="round"/>
+      <rect x="7" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
+      <circle cx="9.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+    const subscriberFemaleIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
+      <path d="M-8.5 6 Q-8.5 0 -3 -0.5 Q2.5 0 2.5 6" fill="none" stroke-width="1.4"/>
+      <line x1="2.5" y1="-7" x2="2.5" y2="-3" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="0.5" y1="-3" x2="4.5" y2="-3" stroke-width="1.1" stroke-linecap="round"/>
+      <rect x="7" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
+      <circle cx="9.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+
+    // Determine gender from PESEL: 10th digit (index 9) — odd=male, even=female
+    const _genderFromPesel = (pesel) => {
+      if (!pesel || pesel.length < 10) return "unknown";
+      const d = parseInt(pesel.charAt(9), 10);
+      if (isNaN(d)) return "unknown";
+      return d % 2 === 1 ? "male" : "female";
+    };
+    const _pickPersonIcon = (rec) => {
+      if (!rec || !rec.pesel) return personIcon;
+      return _genderFromPesel(rec.pesel) === "female" ? femaleIcon : maleIcon;
+    };
+    const _pickSubscriberIcon = (rec) => {
+      if (!rec || !rec.pesel) return subscriberIcon;
+      return _genderFromPesel(rec.pesel) === "female" ? subscriberFemaleIcon : subscriberMaleIcon;
+    };
 
     let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
       style="width:100%;height:auto;font-family:system-ui,-apple-system,sans-serif">`;
@@ -3949,10 +3991,11 @@
       const c = card.c, idx = card.i;
       const info = _idLookup(c.number);
       const isCompany = info && info.type === "company";
-      const icon = isCompany ? companyIcon : personIcon;
-      const color = isCompany ? "#7c3aed" : "#64748b";
-      // Build name + PESEL lines from identification record
       const rec = info && info.rec ? info.rec : null;
+      const icon = isCompany ? companyIcon : _pickPersonIcon(rec);
+      const gender = _genderFromPesel(rec && rec.pesel);
+      const color = isCompany ? "#7c3aed" : (gender === "female" ? "#d946ef" : gender === "male" ? "#2563eb" : "#64748b");
+      // Build name + PESEL lines from identification record
       let idNameLine = "";
       let idPeselLine = "";
       if (rec) {
@@ -4058,8 +4101,11 @@
     svg += `<rect x="${SUB_X}" y="${subTop}" width="${SUB_W}" height="${SUB_H}"
       rx="8" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="1.8" filter="url(#gsm_card_shadow)"/>`;
     // ── Left column: icon + number + name + PESEL ──
-    // Subscriber icon (vertically centered in left area)
-    svg += `<g transform="translate(${SUB_X + 16},${subTop + SUB_H / 2})" stroke="#2563eb" fill="none" color="#2563eb">${subscriberIcon}</g>`;
+    // Subscriber icon (gender-aware, vertically centered in left area)
+    const subGenderIcon = _pickSubscriberIcon(subRec);
+    const subGender = _genderFromPesel(subRec && subRec.pesel);
+    const subIconColor = subGender === "female" ? "#d946ef" : "#2563eb";
+    svg += `<g transform="translate(${SUB_X + 16},${subTop + SUB_H / 2})" stroke="${subIconColor}" fill="none" color="${subIconColor}">${subGenderIcon}</g>`;
     // Phone number
     svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 - (subPeselLine ? 8 : 4)}" font-size="8.5" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>`;
     // Identification: name line
@@ -4908,8 +4954,12 @@
   /** Build a normalized contact chip. Used by both activity charts and heatmap unique numbers. */
   function _buildContactChip(num, count, chartId, parts) {
     const idInfo = _idLookup(num);
+    const rec = idInfo && idInfo.rec ? idInfo.rec : null;
+    const shortLabel = rec ? _idShortLabel(rec) : "";
+    const tooltip = rec ? _idTooltipText(rec) : "";
+    const tooltipEsc = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
     const info = parts || "";
-    const label = idInfo ? `${num} (${idInfo.label})` : num;
+    const titleAttr = tooltip ? tooltipEsc : (idInfo ? `${num} (${idInfo.label})` : num);
     // Check if contact has a tag via notes
     const _nm = window._gsmNotesMgr;
     const noteItem = _nm && _nm.getNoteForRef && _nm.getNoteForRef("gsm_contact", "number", num);
@@ -4917,9 +4967,13 @@
     const tagColor = (noteItem && noteItem.tags && noteItem.tags.length) ? _noteTagColor(noteItem.tags[0]) : "";
     const borderStyle = tagColor ? `border-color:${tagColor}` : "";
 
-    let html = `<span class="gsm-contact-chip" data-number="${_escAttr(num)}" data-chart="${chartId || ''}" title="${label}${info ? ': ' + info : ''}" ${borderStyle ? `style="${borderStyle}"` : ''}>`;
+    let html = `<span class="gsm-contact-chip gsm-id-tip" data-number="${_escAttr(num)}" data-chart="${chartId || ''}" data-id-tip="${titleAttr}" ${borderStyle ? `style="${borderStyle}"` : ''}>`;
     html += `<code>${num}</code>`;
-    if (idInfo) html += ` <span class="gsm-chip-id">${_escHtml(idInfo.label)}</span>`;
+    if (shortLabel) {
+      html += ` <span class="gsm-chip-id">${_escHtml(shortLabel)}</span>`;
+    } else if (idInfo) {
+      html += ` <span class="gsm-chip-id">${_escHtml(idInfo.label)}</span>`;
+    }
     if (count > 1) html += ` <span class="gsm-chip-count">${count}×</span>`;
     // Note marker — SVG icon, always visible (darker), filled when has note
     html += `<span class="gsm-chip-note${hasNote ? ' has-note' : ''}" data-note-number="${_escAttr(num)}" title="Notatka"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span>`;
