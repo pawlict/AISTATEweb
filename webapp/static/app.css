@@ -4153,6 +4153,13 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-id-other{color:#92400e;font-style:italic}
 .gsm-id-notfound{color:var(--text-muted,#94a3b8);font-style:italic}
 .gsm-id-unknown{color:var(--text-muted,#94a3b8)}
+/* Identification tooltip (chmurka) */
+.gsm-id-tip{cursor:default;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle}
+.gsm-id-tooltip{position:absolute;z-index:9999;background:var(--bg-card,#fff);border:1px solid var(--border,#cbd5e1);border-radius:8px;padding:8px 12px;box-shadow:0 4px 16px rgba(0,0,0,.15);font-size:12px;line-height:1.5;max-width:380px;pointer-events:none}
+.gsm-id-tooltip-tbl{border-collapse:collapse;width:100%}
+.gsm-id-tooltip-tbl td{padding:1px 6px 1px 0;vertical-align:top;white-space:nowrap}
+.gsm-id-tooltip-key{font-weight:600;color:var(--text-muted,#64748b);white-space:nowrap;padding-right:8px}
+.gsm-id-tooltip-tbl td:last-child{white-space:normal;word-break:break-word}
 /* Activity charts — grouped bars */
 .gsm-charts-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:0}
 .gsm-chart-card{background:var(--bg-card,#fff);border:1px solid var(--border,#e2e8f0);border-radius:12px;padding:14px 14px}

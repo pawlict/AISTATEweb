@@ -348,6 +348,13 @@ def _build_identification_lookup(store) -> dict:
             "activation_date": rec.activation_date or "",
             "deactivation_date": rec.deactivation_date or "",
             "service_type": rec.service_type or "",
+            "correspondence_address": rec.correspondence_address or "",
+            "tariff": rec.tariff or "",
+            "status": rec.status or "",
+            "sim": rec.sim or "",
+            "imsi": rec.imsi or "",
+            "subscriber_type": rec.subscriber_type or "",
+            "notes": rec.notes or "",
         }
     return lookup_map
 
@@ -441,8 +448,11 @@ async def gsm_identification(
             "status": "ok",
             "total_records": store.count,
             "files": file_results,
-            "identification": lookup_map,
-            "crossref": crossref,
+            "identification": {
+                "total_records": store.count,
+                "lookup": lookup_map,
+                "crossref": crossref,
+            },
         })
 
     except Exception as e:
