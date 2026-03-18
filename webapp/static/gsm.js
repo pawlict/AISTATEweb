@@ -2396,6 +2396,79 @@
     }
     html += "</div>";
 
+    // ── Identyfikacja innych numerów abonenta ──
+    // Check if the subscriber's PESEL/NIP/name is associated with other phone numbers in idMap
+    {
+      const idMap = St.idMap || {};
+      const subMsisdn = St.lastResult && St.lastResult.subscriber ? (St.lastResult.subscriber.msisdn || "") : "";
+      const subNorm = _normMsisdn(subMsisdn);
+      // Get the subscriber's identification record
+      const subIdRec = subNorm && idMap[subNorm] ? idMap[subNorm] : null;
+      // Collect identifiers to match: PESEL, NIP, full name
+      const subPesel = subIdRec && subIdRec.pesel ? subIdRec.pesel : "";
+      const subNip = subIdRec && subIdRec.nip ? subIdRec.nip : "";
+      const subName = subIdRec ? (subIdRec.name || "").trim().toLowerCase() : "";
+
+      const otherNumbers = []; // { msisdn, rec, matchBy }
+      if (subPesel || subNip || subName) {
+        for (const [msisdn, rec] of Object.entries(idMap)) {
+          if (msisdn === subNorm) continue; // skip self
+          if (!rec) continue;
+          let matchBy = "";
+          if (subPesel && rec.pesel === subPesel) {
+            matchBy = "PESEL";
+          } else if (subNip && rec.nip === subNip) {
+            matchBy = "NIP";
+          } else if (subName && subName.length > 3 && (rec.name || "").trim().toLowerCase() === subName) {
+            matchBy = "nazwa";
+          }
+          if (matchBy) {
+            otherNumbers.push({ msisdn, rec, matchBy });
+          }
+        }
+      }
+
+      html += `<div style="margin-top:14px"><div class="h3" style="margin-bottom:6px">Identyfikacja innych numer\u00F3w abonenta</div>`;
+      if (otherNumbers.length > 0) {
+        html += `<div style="margin-bottom:6px;font-size:13px;color:#d97706"><strong>${otherNumbers.length}</strong> ${otherNumbers.length === 1 ? "inny numer" : "inne numery"} powiązane z tym abonentem w danych identyfikacyjnych</div>`;
+        html += `<table class="gsm-table" style="font-size:12px"><thead><tr>`;
+        html += `<th>Numer</th><th>Imi\u0119 Nazwisko / Firma</th><th>PESEL / NIP</th><th>Operator</th><th>Dopasowanie</th>`;
+        html += `</tr></thead><tbody>`;
+        for (const o of otherNumbers) {
+          const r = o.rec;
+          const isCompany = r.type === "company" || !!(r.nip && r.nip.length >= 10);
+          const nameParts = [];
+          if (r.first_name) nameParts.push(r.first_name);
+          if (r.last_name) nameParts.push(r.last_name);
+          const nameStr = nameParts.length ? nameParts.join(" ") : (r.name || "\u2014");
+          const idStr = isCompany
+            ? (r.nip ? `NIP: ${r.nip}` : (r.regon ? `REGON: ${r.regon}` : "\u2014"))
+            : (r.pesel || "\u2014");
+          const typeIcon = isCompany ? "\u{1F3E2} " : "";
+          const tooltip = _idTooltipText(r);
+          const tipEsc = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+          const matchBadge = `<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 6px;font-size:11px">${o.matchBy}</span>`;
+          html += `<tr>`;
+          html += `<td><code>+${o.msisdn}</code></td>`;
+          html += `<td class="gsm-id-tip" data-id-tip="${tipEsc}">${typeIcon}${_escHtml(nameStr)}</td>`;
+          html += `<td>${idStr}</td>`;
+          html += `<td>${_escHtml(r.operator || "\u2014")}</td>`;
+          html += `<td>${matchBadge}</td>`;
+          html += `</tr>`;
+        }
+        html += `</tbody></table>`;
+      } else {
+        html += `<div class="small muted" style="padding:4px 0">Nie znaleziono innych numer\u00F3w powiązanych z tym abonentem w danych identyfikacyjnych. `;
+        if (!subIdRec) {
+          html += `Brak danych identyfikacyjnych dla numeru abonenta.`;
+        } else if (!subPesel && !subNip) {
+          html += `Abonent nie posiada PESEL ani NIP w danych identyfikacyjnych — dopasowanie tylko po nazwie.`;
+        }
+        html += `</div>`;
+      }
+      html += "</div>";
+    }
+
     el.innerHTML = html;
 
     // Bind IMEI changes slider
@@ -3210,6 +3283,9 @@
     html += '</div>';
     body.innerHTML = html;
 
+    // Pre-initialize anomaly mini-map in background (so tiles load early)
+    _initAnomalyMapIfNeeded();
+
     // ── Expand / collapse via icon ──
     body.querySelectorAll(".gsm-anom-toggle").forEach(icon => {
       icon.addEventListener("click", function(e) {
@@ -3666,7 +3742,26 @@
   // ── Anomaly mini-map ──
   let _anomMapInstance = null;
   let _anomMapMarkers = null;
-  let _anomMapInitialized = false;
+  let _anomMapReady = false;
+
+  /** Pre-initialize anomaly map when anomalies card becomes visible.
+   *  Called once from _renderAnomalies so tiles load in background. */
+  async function _initAnomalyMapIfNeeded() {
+    if (_anomMapReady || _anomMapInstance) return;
+    const container = QS("#gsm_anomaly_map_container");
+    if (!container || !window.L) return;
+    _anomMapInstance = L.map(container, {
+      zoomControl: true,
+      attributionControl: false,
+      preferCanvas: true,
+    });
+    _anomMapInstance.setView([52.0, 19.5], 6);
+    // Reuse same tile layer as main map (online/offline with badge)
+    await _addTileLayer(_anomMapInstance);
+    _anomMapMarkers = L.layerGroup().addTo(_anomMapInstance);
+    _anomMapReady = true;
+    setTimeout(() => { _anomMapInstance.invalidateSize(); }, 200);
+  }
 
   async function _updateAnomalyMap(anomalyType, filteredRecords) {
     const container = QS("#gsm_anomaly_map_container");
@@ -3674,36 +3769,37 @@
     const statsEl = QS("#gsm_anomaly_map_stats");
     if (!container) return;
 
-    // Ensure Leaflet loaded
+    // Wait for Leaflet
     if (!window.L) {
-      await new Promise(resolve => {
-        if (St.leafletLoaded || window.L) { resolve(); return; }
-        const checkInt = setInterval(() => {
-          if (window.L) { clearInterval(checkInt); resolve(); }
-        }, 200);
-        setTimeout(() => { clearInterval(checkInt); resolve(); }, 5000);
-      });
+      if (!St.leafletLoaded) return;  // skip if Leaflet not loaded yet
     }
-    if (!window.L) return;
 
-    // Build a set of filtered record signatures for matching against geo_records
-    const filteredSigs = new Set();
+    // Ensure map is initialized
+    if (!_anomMapInstance) {
+      await _initAnomalyMapIfNeeded();
+    }
+    if (!_anomMapInstance) return;
+
+    // Build index of filtered records by raw_row for fast geo_record matching
+    const filteredRows = new Set();
+    const filteredDateTimes = new Set();
     for (const r of filteredRecords) {
-      // Unique key: date+time+caller+callee
-      const sig = `${r.date || ""}|${r.time || ""}|${r.caller || ""}|${r.callee || ""}`;
-      filteredSigs.add(sig);
+      if (r.raw_row != null) filteredRows.add(r.raw_row);
+      // Fallback signature: date+time+callee (matches GeoRecord fields)
+      filteredDateTimes.add(`${r.date || ""}|${r.time || ""}|${r.callee || ""}`);
     }
 
-    // Extract BTS points from geo_records (the geolocation-enriched data with lat/lon)
+    // Extract BTS points from geo_records — match by raw_row (primary) or date+time+callee (fallback)
     const geo = St.lastResult && St.lastResult.geolocation;
     const geoRecords = (geo && geo.geo_records) || [];
     const points = new Map(); // key = "lat,lon" → { lat, lon, count, dates, city, street }
 
     for (const gr of geoRecords) {
       if (!gr.point || (!gr.point.lat && !gr.point.lon)) continue;
-      // Match geo_record to filtered record
-      const sig = `${gr.date || ""}|${gr.time || ""}|${gr.caller || ""}|${gr.callee || ""}`;
-      if (!filteredSigs.has(sig)) continue;
+      // Match: primary by raw_row, fallback by date+time+callee
+      const matchByRow = gr.raw_row != null && filteredRows.has(gr.raw_row);
+      const matchBySig = !matchByRow && filteredDateTimes.has(`${gr.date || ""}|${gr.time || ""}|${gr.callee || ""}`);
+      if (!matchByRow && !matchBySig) continue;
 
       const lat = gr.point.lat;
       const lon = gr.point.lon;
@@ -3717,7 +3813,7 @@
       if (gr.date) p.dates.add(gr.date);
     }
 
-    // Fallback: try extracting from record extra fields (bts_lat/bts_lon)
+    // Second fallback: extract from record extra fields (bts_lat/bts_lon)
     if (points.size === 0) {
       for (const r of filteredRecords) {
         const ex = r.extra || {};
@@ -3740,29 +3836,15 @@
     if (titleEl) titleEl.textContent = `BTS: ${catLabel}`;
     if (statsEl) statsEl.textContent = `${points.size} lokalizacji · ${filteredRecords.length} rek.`;
 
-    // Initialize or reuse map — use same tile layer as main BTS map
-    if (!_anomMapInstance) {
-      _anomMapInstance = L.map(container, {
-        zoomControl: true,
-        attributionControl: false,
-        preferCanvas: true,
-      });
-      // Use the same tile layer logic as the main BTS map
-      await _addTileLayer(_anomMapInstance);
-      _anomMapInitialized = true;
-    }
-
     // Clear old markers
     if (_anomMapMarkers) {
       _anomMapMarkers.clearLayers();
-    } else {
-      _anomMapMarkers = L.layerGroup().addTo(_anomMapInstance);
     }
 
     if (points.size === 0) {
-      // No BTS data — show Poland center
       _anomMapInstance.setView([52.0, 19.5], 6);
       if (statsEl) statsEl.textContent = "Brak danych BTS dla tej anomalii";
+      setTimeout(() => { _anomMapInstance.invalidateSize(); }, 100);
       return;
     }
 
@@ -3789,8 +3871,7 @@
       _anomMapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
     }
 
-    // Force tile refresh (container might have been hidden)
-    setTimeout(() => { _anomMapInstance.invalidateSize(); }, 150);
+    setTimeout(() => { _anomMapInstance.invalidateSize(); }, 100);
   }
 
   /** Render identification table under anomaly map for anomaly-related numbers */
