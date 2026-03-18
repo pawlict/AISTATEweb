@@ -334,7 +334,6 @@ Open in browser: http://127.0.0.1:8000
 - Fixed DOCX export filenames (underscores issue)
 - Fixed MMS TTS waveform synthesis error
 - Fixed Korean language missing from translation results
-- Version bump to 3.7 beta
 
 ## beta 3.6
 - **GSM / BTS Analysis** — full GSM billing analysis module with interactive maps, timeline, clusters, trips, heatmap, contact graph
