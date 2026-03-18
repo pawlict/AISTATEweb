@@ -844,7 +844,8 @@ class FileProcessor {
     if(ext==="zip") return await this._processZip(entry);
     if(ext==="csv"||ext==="tsv") return [await this._processCsv(entry)];
     if(ext==="xls"||ext==="xlsx"||ext==="xlsm") return [await this._processExcel(entry)];
-    return [{name:entry.name,data:entry.data,unchanged:true}];
+    // Skip unsupported files (PDF, images, etc.) — they are NOT included in output
+    return [];
   }
 
   async _processZip(entry){
