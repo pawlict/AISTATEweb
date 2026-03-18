@@ -198,6 +198,7 @@
     }
 
     _renderReviewTable(r, isExchange);
+    _renderAnomalies(r, isExchange);
     _renderCharts(r, isExchange);
     _renderSmallCharts(r, isExchange);
     _renderGraph(r);
@@ -339,7 +340,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /*  Transaction Review & Classification                               */
+  /*  Transaction Review & Classification (per-record like AML)         */
   /* ------------------------------------------------------------------ */
 
   function _renderReviewTable(r, isExchange) {
@@ -350,11 +351,10 @@
   }
 
   function _renderReviewStats(txs) {
-    const counts = { neutral: 0, legitimate: 0, suspicious: 0, monitoring: 0, unclassified: 0 };
+    const counts = { neutral: 0, legitimate: 0, suspicious: 0, monitoring: 0 };
     for (const tx of txs) {
       const cls = _txClassifications[tx.hash || tx.id] || _autoClassify(tx);
       if (counts[cls] != null) counts[cls]++;
-      else counts.unclassified++;
     }
     const total = txs.length || 1;
 
@@ -393,6 +393,40 @@
     return "neutral";
   }
 
+  /** Classify a single transaction (DOM-only update, like AML review.js) */
+  function _classifyTx(txId, classification) {
+    if (!txId) return;
+    _txClassifications[txId] = classification;
+
+    // Update just this row's buttons (no re-render)
+    const btnsDiv = document.querySelector(`.crypto-rv-cls-btns[data-txid="${txId}"]`);
+    if (btnsDiv) {
+      btnsDiv.querySelectorAll(".crypto-rv-cls-btn").forEach(b => {
+        const k = b.dataset.cls;
+        const m = CLS_META[k];
+        if (k === classification) {
+          b.classList.add("active");
+          b.style.background = m ? m.bg : "";
+        } else {
+          b.classList.remove("active");
+          b.style.background = "";
+        }
+      });
+
+      // Update row background
+      const row = btnsDiv.closest("tr");
+      if (row) {
+        const m = CLS_META[classification];
+        row.style.background = m ? m.bg : "";
+      }
+    }
+
+    // Update stats bar (lightweight)
+    if (_lastResult) {
+      _renderReviewStats(_lastResult.transactions || []);
+    }
+  }
+
   function _filterAndRenderReview(txs, isExchange) {
     const search = (QS("#crypto_rv_search") || {}).value || "";
     const filterCls = (QS("#crypto_rv_filter_class") || {}).value || "";
@@ -400,11 +434,9 @@
     const searchLow = search.toLowerCase();
 
     const filtered = txs.filter(tx => {
-      // Classification filter
       const cls = _txClassifications[tx.hash || tx.id] || _autoClassify(tx);
       if (filterCls && cls !== filterCls) return false;
 
-      // Risk filter
       if (filterRisk) {
         const tags = tx.risk_tags || [];
         const score = tx.risk_score || 0;
@@ -415,7 +447,6 @@
         if (riskLevel !== filterRisk) return false;
       }
 
-      // Text search
       if (searchLow) {
         const haystack = [tx.from, tx.to, tx.hash, tx.token, tx.tx_type, tx.category, ...(tx.risk_tags || [])].join(" ").toLowerCase();
         if (!haystack.includes(searchLow)) return false;
@@ -451,7 +482,7 @@
         const isNeg = rawChange && String(rawChange).trim().startsWith("-");
         const amtColor = isNeg ? "#ef4444" : "#22c55e";
 
-        html += `<tr style="background:${meta.bg}">
+        html += `<tr style="background:${meta.bg}" data-txid="${_esc(txId)}">
           <td style="white-space:nowrap">${_esc((tx.timestamp || "").slice(0, 16).replace("T", " "))}</td>
           <td>${_esc(raw.account || "\u2014")}</td>
           <td>${_esc(tx.category || raw.operation || tx.tx_type || "\u2014")}</td>
@@ -459,15 +490,15 @@
           <td style="text-align:right;color:${amtColor};font-weight:500">${isNeg ? "-" : "+"}${amt.toFixed(4)}</td>
           <td>${_esc(tx.tx_type || "")}</td>
           <td style="color:${tagColor};font-size:11px">${_esc(tags || "\u2014")}</td>
-          <td style="white-space:nowrap">`;
+          <td style="white-space:nowrap">
+            <div class="crypto-rv-cls-btns" data-txid="${_esc(txId)}">`;
 
-        // Classification buttons
         for (const [key, m] of Object.entries(CLS_META)) {
           const isActive = cls === key;
-          html += `<button class="crypto-rv-cls-btn${isActive ? " active" : ""}" data-tx="${_esc(txId)}" data-cls="${key}" style="color:${m.color};${isActive ? "background:" + m.bg : ""}" title="${m.label}">${m.label.charAt(0)}</button>`;
+          html += `<button class="crypto-rv-cls-btn${isActive ? " active" : ""}" data-cls="${key}" style="color:${m.color};${isActive ? "background:" + m.bg : ""}" title="${m.label}">${m.label.charAt(0)}</button>`;
         }
 
-        html += `</td></tr>`;
+        html += `</div></td></tr>`;
       }
     } else {
       html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
@@ -482,7 +513,7 @@
           tags.includes("mixer") ? "#f97316" :
             tags.includes("high_value") ? "#eab308" : "";
 
-        html += `<tr style="background:${meta.bg}">
+        html += `<tr style="background:${meta.bg}" data-txid="${_esc(txId)}">
           <td style="white-space:nowrap">${_esc((tx.timestamp || "").slice(0, 16))}</td>
           <td style="font-family:monospace;font-size:10px" title="${_esc(tx.from || "")}">${_esc(_shorten(tx.from || "\u2014"))}</td>
           <td style="font-family:monospace;font-size:10px" title="${_esc(tx.to || "")}">${_esc(_shorten(tx.to || "\u2014"))}</td>
@@ -490,15 +521,15 @@
           <td>${_esc(tx.token || "")}</td>
           <td>${_esc(tx.tx_type || "")}</td>
           <td style="color:${tagColor};font-size:11px">${_esc(tags || "\u2014")}</td>
-          <td style="white-space:nowrap">`;
+          <td style="white-space:nowrap">
+            <div class="crypto-rv-cls-btns" data-txid="${_esc(txId)}">`;
 
-        // Classification buttons
         for (const [key, m] of Object.entries(CLS_META)) {
           const isActive = cls === key;
-          html += `<button class="crypto-rv-cls-btn${isActive ? " active" : ""}" data-tx="${_esc(txId)}" data-cls="${key}" style="color:${m.color};${isActive ? "background:" + m.bg : ""}" title="${m.label}">${m.label.charAt(0)}</button>`;
+          html += `<button class="crypto-rv-cls-btn${isActive ? " active" : ""}" data-cls="${key}" style="color:${m.color};${isActive ? "background:" + m.bg : ""}" title="${m.label}">${m.label.charAt(0)}</button>`;
         }
 
-        html += `</td></tr>`;
+        html += `</div></td></tr>`;
       }
     }
 
@@ -509,15 +540,296 @@
 
     wrap.innerHTML = html;
 
-    // Bind classification buttons
+    // Bind classification buttons — per-record DOM update (like AML)
     wrap.querySelectorAll(".crypto-rv-cls-btn").forEach(btn => {
-      btn.onclick = () => {
-        const txId = btn.dataset.tx;
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const txId = btn.closest(".crypto-rv-cls-btns").getAttribute("data-txid");
         const cls = btn.dataset.cls;
-        _txClassifications[txId] = cls;
-        _renderReviewTable(_lastResult, _lastResult && _lastResult.source_type === "exchange");
+        _classifyTx(txId, cls);
+      });
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Anomalies (like GSM, dedicated to crypto)                         */
+  /* ------------------------------------------------------------------ */
+
+  const _CRYPTO_ANOMALY_CATS = [
+    { type: "deposits_withdrawals",  label: "Wpłaty i wypłaty środków",         desc: "Wpłaty na giełdę / z zewnątrz i wypłaty na zewnątrz giełdy — chronologicznie" },
+    { type: "high_value_tx",         label: "Transakcje dużej wartości",         desc: "Pojedyncze transakcje przekraczające istotny próg wartości" },
+    { type: "rapid_movement",        label: "Szybkie przerzuty środków",         desc: "Wpłata + wypłata w krótkim czasie — potencjalne pranie pieniędzy" },
+    { type: "round_amounts",         label: "Okrągłe kwoty",                     desc: "Transakcje na równe, okrągłe kwoty (100, 1000, 5000 itd.)" },
+    { type: "privacy_coins",         label: "Privacy coins / mikser",            desc: "Transakcje z użyciem Monero (XMR), Zcash (ZEC), Tornado Cash lub podejrzanych adresów" },
+    { type: "inactivity_gap",        label: "Brak aktywności",                    desc: "Okresy bez żadnej transakcji (przerwy w aktywności)" },
+    { type: "burst_activity",        label: "Nagły wzrost aktywności",            desc: "Nietypowo duża liczba transakcji w krótkim oknie czasowym" },
+    { type: "new_token",             label: "Nowe / nieznane tokeny",             desc: "Transakcje z tokenami pojawiającymi się po raz pierwszy lub tokenami niskiej kapitalizacji" },
+    { type: "cross_chain",           label: "Transfery cross-chain / bridge",     desc: "Operacje pomiędzy różnymi blockchainami lub przez mosty kryptowalutowe" },
+    { type: "sanctioned_addr",       label: "Adresy sankcjonowane",               desc: "Interakcje z adresami znajdującymi się na listach sankcji (OFAC, EU)" },
+  ];
+
+  function _renderAnomalies(r, isExchange) {
+    const card = document.getElementById("crypto_anomalies_card");
+    const body = document.getElementById("crypto_anomalies_body");
+    if (!card || !body) return;
+
+    const txs = r.transactions || [];
+    if (!txs.length) { card.style.display = "none"; return; }
+    card.style.display = "";
+
+    // Detect anomalies from transaction data
+    const detected = _detectCryptoAnomalies(r, txs, isExchange);
+
+    const VISIBLE = 5;
+
+    let html = '<div style="display:flex;flex-direction:column;gap:10px">';
+    for (const cat of _CRYPTO_ANOMALY_CATS) {
+      const items = detected[cat.type] || [];
+      const hasItems = items.length > 0;
+      const sev = hasItems ? _anomalySeverity(cat.type, items) : "ok";
+      const sevColor = sev === "critical" ? "#dc2626" : sev === "warning" ? "#f97316" : sev === "info" ? "#3b82f6" : "#22c55e";
+      const sevIcon = sev === "critical" ? "\u2757" : sev === "warning" ? "\u26A0" : sev === "info" ? "\u2139" : "\u2713";
+
+      html += `<div class="gsm-anomaly-card" data-anomaly-type="${cat.type}" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;border-left:3px solid ${sevColor};transition:background .15s,box-shadow .15s">`;
+
+      // Top bar
+      html += `<div class="gsm-anomaly-bar" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(${sev === 'critical' ? '220,38,38' : sev === 'warning' ? '249,115,22' : sev === 'info' ? '59,130,246' : '34,197,94'},.04)">`;
+      html += `<span style="color:${sevColor};font-size:15px;flex-shrink:0">${sevIcon}</span>`;
+      html += `<div style="flex:1;min-width:0">`;
+      html += `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><b>${cat.label}</b>`;
+      if (!hasItems) {
+        html += ` <span class="muted">\u2014 brak</span>`;
+      } else {
+        html += ` <span class="muted">(${items.length})</span>`;
+      }
+      html += `</div>`;
+      html += `<div class="small muted" style="margin-top:1px;line-height:1.3">${cat.desc}</div>`;
+      html += `</div>`;
+      html += `</div>`;
+
+      // Items body
+      if (hasItems) {
+        const needCollapse = items.length > VISIBLE;
+        const collapsedH = VISIBLE * 24;
+        html += `<div class="crypto-anom-items" data-type="${cat.type}" style="padding:4px 12px 8px;font-size:12px;line-height:1.8;${needCollapse ? 'max-height:' + collapsedH + 'px;overflow:hidden;' : ''}transition:max-height .25s ease">`;
+        for (const item of items) {
+          const ic = item.severity === "critical" ? "#dc2626" : item.severity === "warning" ? "#f97316" : "#3b82f6";
+          html += `<div style="border-left:3px solid ${ic};padding:2px 8px;margin-bottom:2px;background:rgba(${item.severity === "critical" ? "220,38,38" : item.severity === "warning" ? "249,115,22" : "59,130,246"},.04);border-radius:4px">${item.html || _esc(item.text || "")}</div>`;
+        }
+        html += '</div>';
+        if (needCollapse) {
+          html += `<div style="text-align:center;padding:2px"><button class="crypto-anom-toggle small muted" data-type="${cat.type}" style="border:none;background:none;cursor:pointer;text-decoration:underline">Rozwiń (${items.length})</button></div>`;
+        }
+      }
+
+      html += '</div>';
+    }
+    html += '</div>';
+    body.innerHTML = html;
+
+    // Bind expand/collapse
+    body.querySelectorAll(".crypto-anom-toggle").forEach(btn => {
+      btn.onclick = () => {
+        const type = btn.dataset.type;
+        const container = body.querySelector(`.crypto-anom-items[data-type="${type}"]`);
+        if (!container) return;
+        const isExpanded = container.dataset.expanded === "1";
+        if (isExpanded) {
+          container.style.maxHeight = (VISIBLE * 24) + "px";
+          container.style.overflow = "hidden";
+          container.dataset.expanded = "0";
+          btn.textContent = `Rozwiń (${container.children.length})`;
+        } else {
+          container.style.maxHeight = container.scrollHeight + "px";
+          container.style.overflow = "visible";
+          container.dataset.expanded = "1";
+          btn.textContent = "Zwiń";
+        }
       };
     });
+  }
+
+  function _anomalySeverity(type, items) {
+    if (type === "sanctioned_addr" || type === "privacy_coins") return items.length ? "critical" : "ok";
+    if (type === "rapid_movement" || type === "high_value_tx") return items.length > 3 ? "warning" : items.length ? "info" : "ok";
+    return items.length ? "info" : "ok";
+  }
+
+  function _detectCryptoAnomalies(r, txs, isExchange) {
+    const result = {};
+
+    // 1. Deposits & Withdrawals (chronological in/out from/to exchange)
+    {
+      const items = [];
+      for (const tx of txs) {
+        const type = (tx.tx_type || "").toLowerCase();
+        const cat = (tx.category || "").toLowerCase();
+        const isDeposit = type.includes("deposit") || cat.includes("deposit") || type === "receive" || type === "incoming";
+        const isWithdraw = type.includes("withdraw") || cat.includes("withdraw") || type === "send" || type === "outgoing";
+        if (isDeposit || isWithdraw) {
+          const dir = isDeposit ? "\u2B07 Wpłata" : "\u2B06 Wypłata";
+          const color = isDeposit ? "#22c55e" : "#ef4444";
+          items.push({
+            text: `${(tx.timestamp || "").slice(0, 16)} | ${dir} | ${_fmtCrypto(tx.amount, tx.token || "")}${tx.to ? " → " + _shorten(tx.to) : ""}${tx.from ? " ← " + _shorten(tx.from) : ""}`,
+            html: `<span style="color:${color};font-weight:600">${dir}</span> ${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))} — <b>${_fmtCrypto(tx.amount, tx.token || "")}</b>${tx.to && !isDeposit ? ' → <code style="font-size:10px">' + _esc(_shorten(tx.to)) + '</code>' : ''}${tx.from && isDeposit ? ' ← <code style="font-size:10px">' + _esc(_shorten(tx.from)) + '</code>' : ''}`,
+            severity: "info",
+          });
+        }
+      }
+      result.deposits_withdrawals = items;
+    }
+
+    // 2. High value transactions
+    {
+      const amounts = txs.map(tx => Math.abs(tx.amount || 0)).filter(a => a > 0);
+      const mean = amounts.reduce((s, v) => s + v, 0) / (amounts.length || 1);
+      const threshold = Math.max(mean * 5, 1000);
+      result.high_value_tx = txs.filter(tx => Math.abs(tx.amount || 0) > threshold).map(tx => ({
+        text: `${(tx.timestamp || "").slice(0, 16)} | ${_fmtCrypto(tx.amount, tx.token)} | ${tx.tx_type || ""}`,
+        html: `${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))} — <b style="color:#ef4444">${_fmtCrypto(tx.amount, tx.token || "")}</b> (${_esc(tx.tx_type || "")})`,
+        severity: "warning",
+      }));
+    }
+
+    // 3. Rapid movement (deposit + withdrawal within 30min)
+    {
+      const items = [];
+      const sorted = [...txs].sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
+      for (let i = 0; i < sorted.length; i++) {
+        const tx = sorted[i];
+        const type = (tx.tx_type || "").toLowerCase();
+        const cat = (tx.category || "").toLowerCase();
+        const isDeposit = type.includes("deposit") || cat.includes("deposit") || type === "receive";
+        if (!isDeposit) continue;
+        const depositTime = new Date((tx.timestamp || "").replace(" ", "T"));
+        if (isNaN(depositTime)) continue;
+        // Look for withdrawal within 30min after
+        for (let j = i + 1; j < sorted.length; j++) {
+          const tx2 = sorted[j];
+          const type2 = (tx2.tx_type || "").toLowerCase();
+          const cat2 = (tx2.category || "").toLowerCase();
+          const isWd = type2.includes("withdraw") || cat2.includes("withdraw") || type2 === "send";
+          if (!isWd) continue;
+          const wdTime = new Date((tx2.timestamp || "").replace(" ", "T"));
+          if (isNaN(wdTime)) continue;
+          const diffMin = (wdTime - depositTime) / 60000;
+          if (diffMin > 0 && diffMin <= 30) {
+            items.push({
+              html: `Wpłata ${_fmtCrypto(tx.amount, tx.token)} → Wypłata ${_fmtCrypto(tx2.amount, tx2.token)} w ciągu <b>${Math.round(diffMin)} min</b> (${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))})`,
+              severity: "warning",
+            });
+          }
+          if (diffMin > 30) break;
+        }
+      }
+      result.rapid_movement = items;
+    }
+
+    // 4. Round amounts
+    {
+      result.round_amounts = txs.filter(tx => {
+        const a = Math.abs(tx.amount || 0);
+        return a >= 100 && a === Math.round(a) && (a % 100 === 0 || a % 50 === 0);
+      }).map(tx => ({
+        html: `${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))} — <b>${_fmtCrypto(tx.amount, tx.token || "")}</b> (${_esc(tx.tx_type || "")})`,
+        severity: "info",
+      }));
+    }
+
+    // 5. Privacy coins / mixer
+    {
+      const privacyTokens = new Set(["XMR", "ZEC", "DASH", "SCRT"]);
+      const mixerTags = ["mixer", "tornado", "privacy_coin"];
+      result.privacy_coins = txs.filter(tx => {
+        if (privacyTokens.has((tx.token || "").toUpperCase())) return true;
+        return (tx.risk_tags || []).some(t => mixerTags.includes(t));
+      }).map(tx => ({
+        html: `${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))} — <b style="color:#dc2626">${_esc(tx.token || "?")}</b> ${_fmtCrypto(tx.amount, "")} (${_esc(tx.tx_type || "")})`,
+        severity: "critical",
+      }));
+    }
+
+    // 6. Inactivity gaps (>24h)
+    {
+      const sorted = [...txs].sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
+      const items = [];
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = new Date((sorted[i - 1].timestamp || "").replace(" ", "T"));
+        const curr = new Date((sorted[i].timestamp || "").replace(" ", "T"));
+        if (isNaN(prev) || isNaN(curr)) continue;
+        const gapH = (curr - prev) / 3600000;
+        if (gapH >= 24) {
+          items.push({
+            html: `<b>${Math.round(gapH)}h</b> przerwy: ${_esc((sorted[i-1].timestamp||"").slice(0,16).replace("T"," "))} → ${_esc((sorted[i].timestamp||"").slice(0,16).replace("T"," "))}`,
+            severity: "info",
+          });
+        }
+      }
+      result.inactivity_gap = items;
+    }
+
+    // 7. Burst activity (>10 tx in 1h window)
+    {
+      const sorted = [...txs].sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
+      const items = [];
+      for (let i = 0; i < sorted.length; i++) {
+        const t0 = new Date((sorted[i].timestamp || "").replace(" ", "T"));
+        if (isNaN(t0)) continue;
+        let count = 1;
+        for (let j = i + 1; j < sorted.length; j++) {
+          const t1 = new Date((sorted[j].timestamp || "").replace(" ", "T"));
+          if (isNaN(t1) || (t1 - t0) > 3600000) break;
+          count++;
+        }
+        if (count >= 10) {
+          items.push({
+            html: `<b>${count} transakcji</b> w ciągu 1h od ${_esc((sorted[i].timestamp||"").slice(0,16).replace("T"," "))}`,
+            severity: "warning",
+          });
+          i += count - 1; // skip ahead
+        }
+      }
+      result.burst_activity = items;
+    }
+
+    // 8. New / unknown tokens
+    {
+      const knownTokens = new Set(["BTC", "ETH", "USDT", "USDC", "BNB", "XRP", "ADA", "SOL", "DOGE", "DOT", "MATIC", "AVAX", "LINK", "DAI", "BUSD", "EUR", "USD", "PLN", "GBP"]);
+      const unknownTxs = txs.filter(tx => tx.token && !knownTokens.has(tx.token.toUpperCase()));
+      const byToken = {};
+      for (const tx of unknownTxs) {
+        const tok = tx.token.toUpperCase();
+        if (!byToken[tok]) byToken[tok] = { count: 0, total: 0 };
+        byToken[tok].count++;
+        byToken[tok].total += Math.abs(tx.amount || 0);
+      }
+      result.new_token = Object.entries(byToken).map(([tok, d]) => ({
+        html: `Token <b>${_esc(tok)}</b>: ${d.count} transakcji, wolumen ${d.total.toFixed(4)}`,
+        severity: "info",
+      }));
+    }
+
+    // 9. Cross-chain / bridge
+    {
+      const bridgeKeywords = ["bridge", "cross-chain", "swap", "wrap", "unwrap"];
+      result.cross_chain = txs.filter(tx => {
+        const haystack = [tx.tx_type, tx.category, ...(tx.risk_tags || [])].join(" ").toLowerCase();
+        return bridgeKeywords.some(kw => haystack.includes(kw));
+      }).map(tx => ({
+        html: `${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))} — ${_esc(tx.tx_type || tx.category || "")} — ${_fmtCrypto(tx.amount, tx.token || "")}`,
+        severity: "info",
+      }));
+    }
+
+    // 10. Sanctioned addresses
+    {
+      result.sanctioned_addr = txs.filter(tx => (tx.risk_tags || []).includes("sanctioned")).map(tx => ({
+        html: `<b style="color:#dc2626">SANCTIONED</b> ${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))} — ${_esc(tx.from || "")} → ${_esc(tx.to || "")} — ${_fmtCrypto(tx.amount, tx.token || "")}`,
+        severity: "critical",
+      }));
+    }
+
+    return result;
   }
 
   /* ------------------------------------------------------------------ */
@@ -598,20 +910,64 @@
 
     const labels = data.labels;
     let datasets;
+    let scales = {};
 
     if (isExchange && data.datasets && data.datasets.length) {
       // Exchange: multi-token balance lines
-      datasets = data.datasets.map((ds, i) => ({
-        label: ds.token,
-        data: ds.data,
-        borderColor: PALETTE[i % PALETTE.length],
-        backgroundColor: PALETTE[i % PALETTE.length] + "22",
-        fill: false,
-        tension: 0.3,
-        pointRadius: labels.length > 50 ? 0 : 2,
-        pointHoverRadius: 6,
-        pointHitRadius: 10,
-      }));
+      // Detect if tokens have vastly different scales → use normalized % view
+      const maxPerToken = data.datasets.map(ds => {
+        const vals = (ds.data || []).map(v => Math.abs(v || 0));
+        return Math.max(...vals, 0.0001);
+      });
+      const globalMax = Math.max(...maxPerToken);
+      const globalMin = Math.min(...maxPerToken);
+      const needsNormalization = globalMax > 0 && globalMin > 0 && (globalMax / globalMin) > 50;
+
+      if (needsNormalization) {
+        // Normalize each token to % of its own max for visibility
+        datasets = data.datasets.map((ds, i) => {
+          const tokenMax = maxPerToken[i] || 1;
+          return {
+            label: ds.token + " (%)",
+            data: (ds.data || []).map(v => ((v || 0) / tokenMax) * 100),
+            _rawData: ds.data,
+            _tokenMax: tokenMax,
+            _token: ds.token,
+            borderColor: PALETTE[i % PALETTE.length],
+            backgroundColor: PALETTE[i % PALETTE.length] + "22",
+            fill: false,
+            tension: 0.3,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            pointHoverRadius: 6,
+            pointHitRadius: 10,
+          };
+        });
+        scales = {
+          x: { ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: _adaptiveTickCount(labels.length) } },
+          y: {
+            beginAtZero: true,
+            max: 105,
+            title: { display: true, text: "% maksimum tokena" },
+            ticks: { callback: v => v + "%" },
+          },
+        };
+      } else {
+        datasets = data.datasets.map((ds, i) => ({
+          label: ds.token,
+          data: ds.data,
+          borderColor: PALETTE[i % PALETTE.length],
+          backgroundColor: PALETTE[i % PALETTE.length] + "22",
+          fill: false,
+          tension: 0.3,
+          pointRadius: labels.length > 50 ? 0 : 2,
+          pointHoverRadius: 6,
+          pointHitRadius: 10,
+        }));
+        scales = {
+          x: { ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: _adaptiveTickCount(labels.length) } },
+          y: { beginAtZero: false },
+        };
+      }
     } else {
       // Blockchain: single balance line
       datasets = [{
@@ -625,6 +981,10 @@
         pointHoverRadius: 6,
         pointHitRadius: 10,
       }];
+      scales = {
+        x: { ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: _adaptiveTickCount(labels.length) } },
+        y: { beginAtZero: false },
+      };
     }
 
     _mainChartInstance = new Chart(canvas, {
@@ -639,14 +999,19 @@
           tooltip: {
             callbacks: {
               title: function(items) { return items[0] ? items[0].label : ""; },
-              label: function(ctx) { return (ctx.dataset.label || "Saldo") + ": " + _fmtCrypto(ctx.parsed.y, ""); },
+              label: function(ctx) {
+                const ds = ctx.dataset;
+                // If normalized, show real value in tooltip
+                if (ds._rawData) {
+                  const realVal = ds._rawData[ctx.dataIndex];
+                  return ds._token + ": " + _fmtCrypto(realVal, "") + " (" + ctx.parsed.y.toFixed(1) + "%)";
+                }
+                return (ds.label || "Saldo") + ": " + _fmtCrypto(ctx.parsed.y, "");
+              },
             },
           },
         },
-        scales: {
-          x: { ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: _adaptiveTickCount(labels.length) } },
-          y: { beginAtZero: false },
-        },
+        scales,
       },
     });
 
