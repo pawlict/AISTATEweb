@@ -679,8 +679,8 @@ class BTSDatabase:
 
         for r in records:
             extra = r.get("extra", {})
-            bts_x = extra.get("bts_x", "")
-            bts_y = extra.get("bts_y", "")
+            bts_x = extra.get("bts_lat", "") or extra.get("bts_x", "")
+            bts_y = extra.get("bts_lon", "") or extra.get("bts_y", "")
             ci = r.get("location_cell_id", "")
             lac = r.get("location_lac", "")
 

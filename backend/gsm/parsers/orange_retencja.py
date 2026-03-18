@@ -519,16 +519,18 @@ class OrangeRetencjaParser(BillingParser):
             # Record type classification
             record_type = self._classify_rp(rp, is_outgoing)
 
-            # Caller / callee
+            # Caller / callee — swap based on direction
             if is_outgoing:
+                # Subscriber initiated: ident=subscriber(A), number_b=other(B)
                 caller = self.normalize_phone(ident)
                 callee = self.normalize_phone(number_b)
                 sub_bts = bts_a
                 sub_imei = imei_a
                 sub_imsi = imsi_a
             else:
-                caller = self.normalize_phone(ident)
-                callee = self.normalize_phone(number_b)
+                # Subscriber received: ident=other(A), number_b=subscriber(B)
+                caller = self.normalize_phone(number_b)
+                callee = self.normalize_phone(ident)
                 sub_bts = bts_b
                 sub_imei = imei_b
                 sub_imsi = imsi_b
@@ -573,7 +575,7 @@ class OrangeRetencjaParser(BillingParser):
                 duration_seconds=duration,
                 location=location,
                 location_lac="",
-                location_cell_id="",
+                location_cell_id=sub_bts if sub_bts and sub_bts != "-" else "",
                 roaming=roaming,
                 roaming_country=roaming_country,
                 network="",
@@ -583,12 +585,13 @@ class OrangeRetencjaParser(BillingParser):
                 extra={
                     "bts_a": bts_a if bts_a != "-" else "",
                     "bts_b": bts_b if bts_b != "-" else "",
-                    "bts_x": bts_lat,
-                    "bts_y": bts_lon,
+                    "bts_lat": bts_lat,
+                    "bts_lon": bts_lon,
                     "azimuth": bts_azimuth,
                     "range_km": bts_range,
                     "bts_city": bts_city,
                     "bts_street": bts_street,
+                    "bts_code": sub_bts if sub_bts and sub_bts != "-" else "",
                     "imei_b": imei_b if imei_b != "-" else "",
                     "imsi_b": imsi_b if imsi_b != "-" else "",
                     "rp_original": rp,

@@ -170,6 +170,8 @@ class GenericBillingParser(BillingParser):
             f"Generyczny parser — rozpoznane kolumny: {list(col_map.keys())}"
         )
 
+        subscriber = SubscriberInfo(operator=self.OPERATOR_NAME)
+
         # Parse data rows
         for row_idx, row in enumerate(rows[header_idx + 1:], start=header_idx + 2):
             if not row or all(c is None or str(c).strip() == "" for c in row):
@@ -204,6 +206,9 @@ class GenericBillingParser(BillingParser):
 
             data_vol = self.get_cell_float(row, col_map.get("data_volume"))
 
+            imsi_val = self.get_cell(row, col_map.get("imsi"))
+            imei_val = self.get_cell(row, col_map.get("imei"))
+
             record = BillingRecord(
                 datetime=dt,
                 caller=self.normalize_phone(caller),
@@ -218,11 +223,29 @@ class GenericBillingParser(BillingParser):
                 location_cell_id=self.get_cell(row, col_map.get("cell_id")),
                 roaming=roaming,
                 network=network,
-                imsi=self.get_cell(row, col_map.get("imsi")),
-                imei=self.get_cell(row, col_map.get("imei")),
+                imsi=imsi_val,
+                imei=imei_val,
                 raw_row=row_idx,
+                extra={
+                    "bts_lat": "",
+                    "bts_lon": "",
+                    "bts_city": "",
+                    "bts_street": "",
+                    "azimuth": "",
+                    "bts_code": "",
+                    "range_km": "",
+                    "direction": "",
+                    "roaming_mcc_mnc": "",
+                },
             )
             result.records.append(record)
 
+            # Populate subscriber IMSI/IMEI from first data row
+            if not subscriber.imsi and imsi_val:
+                subscriber.imsi = imsi_val
+            if not subscriber.imei and imei_val:
+                subscriber.imei = imei_val
+
+        result.subscriber = subscriber
         result.summary = compute_summary(result.records)
         return result
