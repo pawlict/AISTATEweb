@@ -25,7 +25,11 @@
   const _esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
   function _getProjectId() {
-    try { return (new URLSearchParams(window.location.search)).get("project") || localStorage.getItem("aistate_current_project") || ""; }
+    try {
+      // Prefer AISTATE.projectId (set by projects page), fall back to URL param / localStorage
+      if (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) return String(AISTATE.projectId);
+      return (new URLSearchParams(window.location.search)).get("project") || localStorage.getItem("aistate_current_project") || "";
+    }
     catch (_) { return ""; }
   }
 
@@ -233,6 +237,9 @@
         _lastResult = data.result;
         _txClassifications = {};
         _renderResults(data.result);
+        // Remember active analysis tab for project auto-restore
+        const pid = _getProjectId();
+        if (pid) localStorage.setItem("aistate_analysis_tab_" + pid, "crypto");
         setTimeout(() => _hide("crypto_progress"), 1500);
       } else {
         _text("crypto_status", "Błąd: " + (data.errors || []).join("; "));
@@ -260,6 +267,8 @@
         _txClassifications = {};
         _hide("crypto_empty_state");
         _renderResults(data.result);
+        // Remember active analysis tab for project auto-restore
+        if (pid) localStorage.setItem("aistate_analysis_tab_" + pid, "crypto");
       }
     } catch (e) {
       console.warn("[Crypto] Auto-load failed:", e);
