@@ -199,6 +199,241 @@ async def crypto_config_stats():
     })
 
 
+# ---------------------------------------------------------------------------
+#  OFAC Sanctioned Addresses management
+# ---------------------------------------------------------------------------
+
+@router.get("/api/crypto/ofac/stats")
+async def crypto_ofac_stats():
+    """Get detailed OFAC sanctioned addresses statistics."""
+    try:
+        from backend.crypto.ofac_importer import get_ofac_stats
+        stats = await run_in_threadpool(get_ofac_stats)
+        return JSONResponse({"status": "ok", **stats})
+    except Exception as e:
+        log.exception("OFAC stats error")
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+@router.post("/api/crypto/ofac/download")
+async def crypto_ofac_download(request: Request):
+    """Download OFAC SDN_ADVANCED.XML and import sanctioned crypto addresses."""
+    try:
+        body: Dict[str, Any] = {}
+        try:
+            body = await request.json()
+        except Exception:
+            pass
+
+        url = body.get("url", "").strip()
+        replace = body.get("replace", True)
+
+        _app_log("[Crypto/OFAC] Starting online download...")
+        log.info("OFAC download: url=%s replace=%s", url or "(default)", replace)
+
+        from backend.crypto.ofac_importer import download_and_import, DEFAULT_SOURCE_URL
+        result = await run_in_threadpool(
+            download_and_import,
+            url=url or DEFAULT_SOURCE_URL,
+            replace=replace,
+        )
+
+        _app_log(
+            f"[Crypto/OFAC] Download done: {result.get('total_addresses', 0)} addresses, "
+            f"{result.get('entities', 0)} entities"
+        )
+        log.info("OFAC download done: %s", result)
+        return JSONResponse(result)
+
+    except Exception as e:
+        log.exception("OFAC download error")
+        _app_log(f"[Crypto/OFAC] Download ERROR: {type(e).__name__}: {e}")
+        return JSONResponse({
+            "status": "error",
+            "detail": str(e),
+        }, status_code=500)
+
+
+@router.post("/api/crypto/ofac/import")
+async def crypto_ofac_import(
+    file: UploadFile = File(...),
+):
+    """Import OFAC sanctioned addresses from an uploaded XML file."""
+    try:
+        filename = file.filename or "sdn_advanced.xml"
+        content = await file.read()
+        file_size = len(content)
+        _app_log(f"[Crypto/OFAC] Offline import: {filename} ({file_size} bytes)")
+        log.info("OFAC import: file=%s size=%d", filename, file_size)
+
+        # Save to temp
+        import tempfile as _tempfile
+        suffix = Path(filename).suffix or ".xml"
+        with _tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(content)
+            tmp_path = Path(tmp.name)
+
+        try:
+            from backend.crypto.ofac_importer import import_from_file
+            result = await run_in_threadpool(import_from_file, tmp_path, True)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+        _app_log(
+            f"[Crypto/OFAC] Import done: {result.get('total_addresses', 0)} addresses, "
+            f"{result.get('entities', 0)} entities"
+        )
+        log.info("OFAC import done: %s", result)
+        return JSONResponse(result)
+
+    except Exception as e:
+        log.exception("OFAC import error")
+        _app_log(f"[Crypto/OFAC] Import ERROR: {type(e).__name__}: {e}")
+        return JSONResponse({
+            "status": "error",
+            "detail": str(e),
+        }, status_code=500)
+
+
+@router.post("/api/crypto/ofac/clear")
+async def crypto_ofac_clear():
+    """Clear all OFAC-sourced addresses from sanctioned.json."""
+    try:
+        config_path = Path(__file__).resolve().parent.parent.parent / "backend" / "crypto" / "config" / "sanctioned.json"
+
+        if config_path.exists():
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+            # Remove OFAC-sourced addresses
+            addresses = data.get("addresses", {})
+            kept = {k: v for k, v in addresses.items()
+                    if not (isinstance(v, dict) and "OFAC" in str(v.get("reason", "")))}
+            data["addresses"] = kept
+            data["_ofac_records"] = 0
+            data["_last_update"] = None
+            config_path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            # Invalidate cache
+            try:
+                from backend.crypto.ofac_importer import _invalidate_cache
+                _invalidate_cache()
+            except Exception:
+                pass
+
+            removed = len(addresses) - len(kept)
+            _app_log(f"[Crypto/OFAC] Cleared {removed} OFAC addresses, kept {len(kept)} manual")
+            return JSONResponse({"status": "ok", "removed": removed, "kept": len(kept)})
+        else:
+            return JSONResponse({"status": "ok", "removed": 0, "kept": 0})
+    except Exception as e:
+        log.exception("OFAC clear error")
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+#  Transaction classifications (save/load per project)
+# ---------------------------------------------------------------------------
+
+def _classifications_path(project_id: str) -> Path:
+    p = _project_path(project_id) / "analysis"
+    p.mkdir(parents=True, exist_ok=True)
+    return p / "crypto_classifications.json"
+
+
+def _load_classifications(project_id: str) -> Dict[str, str]:
+    path = _classifications_path(project_id)
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_classifications(project_id: str, cls_map: Dict[str, str]) -> None:
+    path = _classifications_path(project_id)
+    path.write_text(
+        json.dumps(cls_map, ensure_ascii=False, indent=1),
+        encoding="utf-8",
+    )
+
+
+@router.get("/api/crypto/classifications")
+async def crypto_get_classifications(project_id: str = Query("")):
+    """Load saved transaction classifications for a project."""
+    if not project_id:
+        return JSONResponse({"classifications": {}})
+    try:
+        cls_map = _load_classifications(project_id)
+        return JSONResponse({"classifications": cls_map})
+    except Exception as e:
+        log.warning("Failed to load crypto classifications: %s", e)
+        return JSONResponse({"classifications": {}})
+
+
+@router.post("/api/crypto/classify")
+async def crypto_classify(request: Request):
+    """Save a single transaction classification."""
+    try:
+        body = await request.json()
+        project_id = body.get("project_id", "")
+        tx_id = body.get("tx_id", "")
+        classification = body.get("classification", "")
+
+        if not project_id or not tx_id or not classification:
+            return JSONResponse(
+                {"status": "error", "detail": "project_id, tx_id, classification required"},
+                status_code=400,
+            )
+
+        cls_map = _load_classifications(project_id)
+        cls_map[tx_id] = classification
+        await run_in_threadpool(_save_classifications, project_id, cls_map)
+
+        log.debug("Crypto classify: project=%s tx=%s cls=%s", project_id, tx_id[:16], classification)
+        return JSONResponse({"status": "ok"})
+    except Exception as e:
+        log.exception("Crypto classify error")
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+@router.post("/api/crypto/classify-batch")
+async def crypto_classify_batch(request: Request):
+    """Save multiple transaction classifications at once."""
+    try:
+        body = await request.json()
+        project_id = body.get("project_id", "")
+        classifications = body.get("classifications", {})
+
+        if not project_id or not classifications:
+            return JSONResponse(
+                {"status": "error", "detail": "project_id and classifications required"},
+                status_code=400,
+            )
+
+        cls_map = _load_classifications(project_id)
+        # Only add new classifications, don't override existing manual ones
+        for tx_id, cls in classifications.items():
+            if tx_id not in cls_map:
+                cls_map[tx_id] = cls
+        await run_in_threadpool(_save_classifications, project_id, cls_map)
+
+        log.info("Crypto classify-batch: project=%s count=%d total=%d",
+                 project_id, len(classifications), len(cls_map))
+        return JSONResponse({"status": "ok", "saved": len(cls_map)})
+    except Exception as e:
+        log.exception("Crypto classify-batch error")
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+#  LLM Narrative Analysis (SSE streaming)
+# ---------------------------------------------------------------------------
+
 @router.get("/api/crypto/llm-stream")
 async def crypto_llm_stream(
     model: str = Query(""),

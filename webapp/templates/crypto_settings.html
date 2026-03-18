@@ -78,6 +78,7 @@
 
       <div class="cry-stats-row" id="cry_stats_row">
         <div class="cry-stat"><span>Adresy OFAC:</span> <b id="cry_ofac_count">—</b></div>
+        <div class="cry-stat"><span>Podmioty sankcjonowane:</span> <b id="cry_ofac_entities">—</b></div>
         <div class="cry-stat"><span>Znane kontrakty DeFi:</span> <b id="cry_contracts_count">—</b></div>
       </div>
 
@@ -86,7 +87,7 @@
           <div class="cry-source-card">
             <div class="h3">OFAC — Sanctioned Addresses</div>
             <div class="small muted" style="margin-bottom:8px">
-              Lista adresów kryptowalutowych objętych sankcjami OFAC (US Treasury).
+              Lista adresów kryptowalutowych objętych sankcjami OFAC (US Treasury SDN List).
               Używana do automatycznego tagowania transakcji z podmiotami na liście SDN.
             </div>
 
@@ -95,8 +96,31 @@
               <span id="cry_ofac_status_text"></span>
             </div>
 
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+            <!-- Download online -->
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+              <button class="btn primary" id="cry_ofac_download_btn" title="Pobierz listę sankcyjną OFAC z internetu">
+                ⬇ Pobierz listę OFAC (online)
+              </button>
+              <button class="btn secondary" id="cry_ofac_upload_btn" title="Wgraj plik SDN_ADVANCED.XML z dysku">
+                📂 Importuj XML (offline)
+              </button>
+              <input type="file" id="cry_ofac_file_input" accept=".xml" style="display:none">
               <button class="btn secondary" id="cry_ofac_refresh_btn" title="Odśwież statystyki">↻ Odśwież</button>
+              <button class="btn secondary danger-text" id="cry_ofac_clear_btn" title="Wyczyść adresy OFAC" style="color:#ef4444">
+                ✕ Wyczyść OFAC
+              </button>
+            </div>
+
+            <!-- Progress -->
+            <div class="an-progress" id="cry_ofac_progress" style="display:none;margin-top:10px">
+              <div class="small" id="cry_ofac_progress_text">Pobieranie...</div>
+              <div class="progress"><div id="cry_ofac_bar" style="width:0%"></div></div>
+            </div>
+
+            <!-- Detailed stats -->
+            <div id="cry_ofac_details" style="display:none;margin-top:10px">
+              <div class="small muted" style="margin-bottom:4px">Rozkład per blockchain:</div>
+              <div id="cry_ofac_by_chain" class="cry-kv" style="font-size:12px"></div>
             </div>
           </div>
 
@@ -118,14 +142,20 @@
           <div class="cry-info-box">
             <div class="cry-info-title">Konfiguracja danych referencyjnych</div>
             <div class="cry-kv">
-              <span>Adresy OFAC</span> <span>Tornado Cash, Blender.io, inne</span>
-              <span>Kontrakty DeFi</span> <span>Uniswap, Aave, Compound, Curve, 1inch, 0x, mostki</span>
-              <span>Lokalizacja</span> <span><code>backend/crypto/config/</code></span>
-              <span>Format</span> <span>JSON (ręczna edycja lub automatyczna aktualizacja)</span>
+              <span class="kv-h">Źródło</span> <span>US Treasury OFAC SDN_ADVANCED.XML</span>
+              <span class="kv-h">Pokrycie</span> <span>Adresy BTC, ETH, XMR, ZEC, LTC, TRX, USDT i inne</span>
+              <span class="kv-h">Kontrakty DeFi</span> <span>Uniswap, Aave, Compound, Curve, 1inch, 0x, mostki</span>
+              <span class="kv-h">Lokalizacja</span> <span><code>backend/crypto/config/</code></span>
+              <span class="kv-h">Format</span> <span>JSON (automatyczne lub ręczne)</span>
+              <span class="kv-h">Rozmiar XML</span> <span>~200 MB (pobierany jednorazowo)</span>
+              <span class="kv-h">Aktualizacja</span> <span>Zalecana co 1–2 tygodnie</span>
             </div>
             <div class="cry-warn">
-              Dane referencyjne są przechowywane lokalnie w katalogu <code>backend/crypto/config/</code>.
-              Aby dodać własne adresy — edytuj pliki <code>sanctioned.json</code> lub <code>known_contracts.json</code>.
+              <b>Pobieranie online:</b> Łączy się z oficjalnym API OFAC
+              (<code>sanctionslistservice.ofac.treas.gov</code>). Plik XML jest przetwarzany
+              lokalnie — żadne dane użytkownika nie są wysyłane.<br>
+              <b>Import offline:</b> Pobierz plik <code>SDN_ADVANCED.XML</code> ręcznie
+              ze strony OFAC i wgraj go przyciskiem „Importuj XML".
             </div>
           </div>
         </div>
@@ -205,41 +235,98 @@
 (function() {
   "use strict";
 
-  /* Load OFAC and known contracts stats */
+  const QS = (sel) => document.querySelector(sel);
+  const _msg = (text, isErr) => {
+    const el = document.getElementById("cry_settings_msg");
+    if (el) {
+      el.textContent = text;
+      el.style.color = isErr ? "#ef4444" : "#22c55e";
+    }
+  };
+
+  function _showProgress(text) {
+    const p = document.getElementById("cry_ofac_progress");
+    const t = document.getElementById("cry_ofac_progress_text");
+    const b = document.getElementById("cry_ofac_bar");
+    if (p) p.style.display = "";
+    if (t) t.textContent = text || "Przetwarzanie...";
+    if (b) b.style.width = "20%";
+  }
+  function _hideProgress() {
+    const p = document.getElementById("cry_ofac_progress");
+    if (p) p.style.display = "none";
+  }
+  function _setProgress(pct, text) {
+    const b = document.getElementById("cry_ofac_bar");
+    const t = document.getElementById("cry_ofac_progress_text");
+    if (b) b.style.width = pct + "%";
+    if (t && text) t.textContent = text;
+  }
+
+  /* Load detailed OFAC stats */
   async function loadStats() {
     try {
-      const resp = await fetch("/api/crypto/config-stats");
-      if (!resp.ok) return;
-      const data = await resp.json();
+      // Load OFAC detailed stats
+      const resp = await fetch("/api/crypto/ofac/stats");
+      if (resp.ok) {
+        const data = await resp.json();
+        const ofacEl = document.getElementById("cry_ofac_count");
+        const entEl = document.getElementById("cry_ofac_entities");
+        const ofacStatus = document.getElementById("cry_ofac_status");
+        const ofacText = document.getElementById("cry_ofac_status_text");
 
-      const ofacEl = document.getElementById("cry_ofac_count");
-      const contractsEl = document.getElementById("cry_contracts_count");
-      const ofacStatus = document.getElementById("cry_ofac_status");
-      const ofacText = document.getElementById("cry_ofac_status_text");
-      const cStatus = document.getElementById("cry_contracts_status");
-      const cText = document.getElementById("cry_contracts_status_text");
+        if (ofacEl) ofacEl.textContent = data.address_count || 0;
+        if (entEl) entEl.textContent = data.entity_count || 0;
 
-      if (ofacEl) ofacEl.textContent = data.ofac_count || 0;
-      if (contractsEl) contractsEl.textContent = data.contracts_count || 0;
+        if (ofacStatus) {
+          ofacStatus.className = "cry-status-banner active";
+          if (data.address_count > 0) {
+            ofacStatus.classList.add("ok");
+            let statusMsg = `Załadowano ${data.address_count} adresów sankcyjnych`;
+            if (data.last_update) {
+              statusMsg += ` (ost. aktualizacja: ${data.last_update.slice(0,16).replace("T"," ")})`;
+            }
+            if (ofacText) ofacText.textContent = statusMsg;
 
-      if (ofacStatus) {
-        ofacStatus.classList.add("active");
-        if (data.ofac_count > 0) {
-          ofacStatus.classList.add("ok");
-          if (ofacText) ofacText.textContent = `Załadowano ${data.ofac_count} adresów sankcyjnych`;
-        } else {
-          ofacStatus.classList.add("empty");
-          if (ofacText) ofacText.textContent = "Brak adresów sankcyjnych — plik sanctioned.json pusty lub nie istnieje";
+            // Show chain breakdown
+            const detailsDiv = document.getElementById("cry_ofac_details");
+            const chainDiv = document.getElementById("cry_ofac_by_chain");
+            if (detailsDiv && chainDiv && data.by_asset) {
+              detailsDiv.style.display = "";
+              let html = "";
+              const sorted = Object.entries(data.by_asset).sort((a,b) => b[1] - a[1]);
+              for (const [asset, count] of sorted) {
+                html += `<span class="kv-h">${asset}</span><span>${count} adresów</span>`;
+              }
+              chainDiv.innerHTML = html;
+            }
+          } else {
+            ofacStatus.classList.add("empty");
+            if (ofacText) ofacText.textContent = "Brak adresów sankcyjnych — pobierz listę OFAC lub zaimportuj plik XML";
+            const detailsDiv = document.getElementById("cry_ofac_details");
+            if (detailsDiv) detailsDiv.style.display = "none";
+          }
         }
       }
-      if (cStatus) {
-        cStatus.classList.add("active");
-        if (data.contracts_count > 0) {
-          cStatus.classList.add("ok");
-          if (cText) cText.textContent = `Załadowano ${data.contracts_count} znanych kontraktów`;
-        } else {
-          cStatus.classList.add("empty");
-          if (cText) cText.textContent = "Brak znanych kontraktów — plik known_contracts.json pusty lub nie istnieje";
+
+      // Load contracts stats (existing endpoint)
+      const resp2 = await fetch("/api/crypto/config-stats");
+      if (resp2.ok) {
+        const data2 = await resp2.json();
+        const contractsEl = document.getElementById("cry_contracts_count");
+        const cStatus = document.getElementById("cry_contracts_status");
+        const cText = document.getElementById("cry_contracts_status_text");
+
+        if (contractsEl) contractsEl.textContent = data2.contracts_count || 0;
+        if (cStatus) {
+          cStatus.className = "cry-status-banner active";
+          if (data2.contracts_count > 0) {
+            cStatus.classList.add("ok");
+            if (cText) cText.textContent = `Załadowano ${data2.contracts_count} znanych kontraktów`;
+          } else {
+            cStatus.classList.add("empty");
+            if (cText) cText.textContent = "Brak znanych kontraktów";
+          }
         }
       }
     } catch (e) {
@@ -247,11 +334,106 @@
     }
   }
 
-  /* Refresh button */
-  const refreshBtn = document.getElementById("cry_ofac_refresh_btn");
-  if (refreshBtn) {
-    refreshBtn.onclick = () => loadStats();
+  /* Download OFAC online */
+  async function downloadOFAC() {
+    _showProgress("Pobieranie listy OFAC SDN_ADVANCED.XML (~200 MB)...");
+    _setProgress(10, "Pobieranie listy OFAC SDN_ADVANCED.XML (~200 MB)...");
+    _msg("", false);
+
+    try {
+      const resp = await fetch("/api/crypto/ofac/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ replace: true }),
+      });
+      const data = await resp.json();
+
+      if (data.status === "ok") {
+        _setProgress(100, "Gotowe!");
+        _msg(`Zaimportowano ${data.total_addresses} adresów (${data.entities} podmiotów)`, false);
+        setTimeout(_hideProgress, 2000);
+        loadStats();
+      } else {
+        _setProgress(0, "Błąd");
+        _msg("Błąd: " + (data.detail || "Nieznany błąd"), true);
+        setTimeout(_hideProgress, 3000);
+      }
+    } catch (e) {
+      _setProgress(0, "Błąd połączenia");
+      _msg("Błąd: " + e.message, true);
+      setTimeout(_hideProgress, 3000);
+    }
   }
+
+  /* Import OFAC from local XML file */
+  async function importOFACFile(file) {
+    _showProgress("Importowanie pliku " + file.name + "...");
+    _setProgress(30, "Parsowanie XML...");
+    _msg("", false);
+
+    const fd = new FormData();
+    fd.append("file", file);
+
+    try {
+      const resp = await fetch("/api/crypto/ofac/import", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await resp.json();
+
+      if (data.status === "ok") {
+        _setProgress(100, "Gotowe!");
+        _msg(`Zaimportowano ${data.total_addresses} adresów (${data.entities} podmiotów)`, false);
+        setTimeout(_hideProgress, 2000);
+        loadStats();
+      } else {
+        _setProgress(0, "Błąd");
+        _msg("Błąd: " + (data.detail || "Nieznany błąd"), true);
+        setTimeout(_hideProgress, 3000);
+      }
+    } catch (e) {
+      _setProgress(0, "Błąd");
+      _msg("Błąd: " + e.message, true);
+      setTimeout(_hideProgress, 3000);
+    }
+  }
+
+  /* Clear OFAC */
+  async function clearOFAC() {
+    if (!confirm("Czy na pewno chcesz usunąć wszystkie adresy OFAC? Ręcznie dodane adresy pozostaną.")) return;
+    try {
+      const resp = await fetch("/api/crypto/ofac/clear", { method: "POST" });
+      const data = await resp.json();
+      if (data.status === "ok") {
+        _msg(`Usunięto ${data.removed} adresów OFAC (zachowano ${data.kept} ręcznych)`, false);
+        loadStats();
+      } else {
+        _msg("Błąd: " + (data.detail || ""), true);
+      }
+    } catch (e) {
+      _msg("Błąd: " + e.message, true);
+    }
+  }
+
+  /* Bind buttons */
+  const downloadBtn = document.getElementById("cry_ofac_download_btn");
+  const uploadBtn = document.getElementById("cry_ofac_upload_btn");
+  const fileInput = document.getElementById("cry_ofac_file_input");
+  const refreshBtn = document.getElementById("cry_ofac_refresh_btn");
+  const clearBtn = document.getElementById("cry_ofac_clear_btn");
+
+  if (downloadBtn) downloadBtn.onclick = downloadOFAC;
+  if (uploadBtn) uploadBtn.onclick = () => { if (fileInput) fileInput.click(); };
+  if (fileInput) {
+    fileInput.onchange = () => {
+      if (fileInput.files && fileInput.files.length > 0) {
+        importOFACFile(fileInput.files[0]);
+        fileInput.value = "";
+      }
+    };
+  }
+  if (refreshBtn) refreshBtn.onclick = () => loadStats();
+  if (clearBtn) clearBtn.onclick = clearOFAC;
 
   loadStats();
 })();
