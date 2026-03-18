@@ -9408,6 +9408,9 @@
 
     if (!payload.billing && !payload.identification) return;
 
+    // Remember active analysis tab for project auto-restore
+    localStorage.setItem("aistate_analysis_tab_" + pid, "gsm");
+
     try {
       const resp = await fetch(`/api/gsm/${encodeURIComponent(pid)}/save`, {
         method: "POST",
@@ -9489,6 +9492,8 @@
         _showLoadingOverlay("Renderowanie wyników…");
         await _renderResults(data.billing);
         _hideLoadingOverlay();
+        // Remember active analysis tab for project auto-restore
+        if (pid) localStorage.setItem("aistate_analysis_tab_" + pid, "gsm");
         const idCount = Object.keys(St.idMap).length;
         _addLog("info",
           `Przywrócono dane GSM z projektu: ${data.billing.record_count || 0} rekordów`

@@ -106,7 +106,8 @@
     // Show indeterminate animation on progress bar
     const progressDiv = QS("#aml_progress .progress");
     if(progressDiv) progressDiv.classList.add("indeterminate");
-    _hide("aml_empty_state");
+    // Keep the logo visible during loading (e.g. restoring saved project)
+    _show("aml_empty_state");
     _hide("aml_results");
     _hide("aml_history_card");
     if(!St.batchMode) _hide("aml_batch_panel");
@@ -317,6 +318,8 @@
       const pid = (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) || "";
       localStorage.setItem("aistate_aml_statement_id", statementId);
       localStorage.setItem("aistate_aml_project_id", pid);
+      // Remember active analysis tab for project auto-restore
+      if(pid) localStorage.setItem("aistate_analysis_tab_" + pid, "aml");
     }
     return data;
   }
