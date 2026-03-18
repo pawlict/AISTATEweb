@@ -4,8 +4,8 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Anonimizer — Anonimizacja danych osobowych</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-M2W0AI0euSMpObm+GOENn2DLAQU2Fv/5MF6iAiSahACiiIvKSnNJx3qW3P5UN4LDB/vFJcfBEAnIIEGMNQ2HQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDFuGW4A8aCP9W73tSUBe5EIiGMN9QKIFBKK7SZLCw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 :root {
   --bg: #0f1117;
@@ -849,9 +849,16 @@ class FileProcessor {
 
   async _processZip(entry){
     const zip=await JSZip.loadAsync(entry.data);
-    const files=[];
-    zip.forEach((p,ze)=>{if(!ze.dir)files.push({path:p,ze});});
 
+    // Collect directories and files, preserving order
+    const dirs=[];
+    const files=[];
+    zip.forEach((path,ze)=>{
+      if(ze.dir) dirs.push(path);
+      else files.push({path,ze});
+    });
+
+    // Process each file (CSV/XLS/XLSX get anonymized, nested ZIPs recursed, others pass through)
     const processed=[];
     for(const f of files){
       const data=await f.ze.async("arraybuffer");
@@ -859,10 +866,13 @@ class FileProcessor {
       processed.push(...sub);
     }
 
-    // Re-pack
+    // Re-pack preserving full folder structure
     const nz=new JSZip();
+    // Re-create all original directories (including empty ones)
+    for(const d of dirs) nz.folder(d);
+    // Add processed files at their original paths
     for(const r of processed) nz.file(r.name, r.data);
-    const zdata=await nz.generateAsync({type:"arraybuffer"});
+    const zdata=await nz.generateAsync({type:"arraybuffer",compression:"DEFLATE",compressionOptions:{level:6}});
     return [{name:entry.name,data:zdata,isZip:true}];
   }
 
@@ -1023,7 +1033,7 @@ function init(){
     document.getElementById("mapping_section").style.display="none";
     document.getElementById("download_btn").style.display="none";
     document.getElementById("export_map_btn").style.display="none";
-    document.getElementById("log").innerHTML="";
+    document.getElementById("log").textContent="";
     document.getElementById("log").style.display="none";
     log("Sesja zresetowana.","ok");
   });
@@ -1042,21 +1052,21 @@ function addFiles(fl){
 function updateFileList(){
   const list=document.getElementById("file_list");
   const runBtn=document.getElementById("run_btn");
-  if(!files.length){list.innerHTML="";runBtn.disabled=true;return;}
+  list.textContent="";
+  if(!files.length){runBtn.disabled=true;return;}
   runBtn.disabled=false;
-  const icons={csv:"📄",tsv:"📄",xls:"📊",xlsx:"📊",xlsm:"📊",zip:"📦"};
-  list.innerHTML=files.map((f,i)=>{
+  const icons={csv:"\u{1F4C4}",tsv:"\u{1F4C4}",xls:"\u{1F4CA}",xlsx:"\u{1F4CA}",xlsm:"\u{1F4CA}",zip:"\u{1F4E6}"};
+  files.forEach((f,i)=>{
     const ext=f.name.split(".").pop().toLowerCase();
-    return `<div class="file-item">
-      <span class="icon">${icons[ext]||"📄"}</span>
-      <span class="name">${esc(f.name)}</span>
-      <span class="size">${fmtSize(f.size)}</span>
-      <button class="remove" data-idx="${i}" title="Usuń">&times;</button>
-    </div>`;
-  }).join("");
-  list.querySelectorAll(".remove").forEach(b=>b.addEventListener("click",()=>{
-    files.splice(parseInt(b.dataset.idx),1); updateFileList();
-  }));
+    const row=document.createElement("div"); row.className="file-item";
+    const ico=document.createElement("span"); ico.className="icon"; ico.textContent=icons[ext]||"\u{1F4C4}";
+    const nm=document.createElement("span"); nm.className="name"; nm.textContent=f.name;
+    const sz=document.createElement("span"); sz.className="size"; sz.textContent=fmtSize(f.size);
+    const btn=document.createElement("button"); btn.className="remove"; btn.title="Usuń"; btn.textContent="\u00D7";
+    btn.addEventListener("click",()=>{files.splice(i,1);updateFileList();});
+    row.append(ico,nm,sz,btn);
+    list.appendChild(row);
+  });
 }
 
 async function runAnonymization(){
@@ -1104,9 +1114,13 @@ function showStats(){
     firstName:"Imiona",lastName:"Nazwiska",email:"E-maile",
     sim:"Numery SIM",docNumber:"Nr dokumentów"
   };
-  grid.innerHTML=Object.entries(st).map(([k,v])=>
-    `<div class="stat-item"><span class="label">${labels[k]||k}</span><span class="count">${v}</span></div>`
-  ).join("");
+  grid.textContent="";
+  Object.entries(st).forEach(([k,v])=>{
+    const d=document.createElement("div"); d.className="stat-item";
+    const l=document.createElement("span"); l.className="label"; l.textContent=labels[k]||k;
+    const c=document.createElement("span"); c.className="count"; c.textContent=v;
+    d.append(l,c); grid.appendChild(d);
+  });
   el.style.display="block";
 }
 
@@ -1120,9 +1134,14 @@ function showMappings(){
     firstName:"Imię",lastName:"Nazwisko",email:"Email",
     sim:"SIM/ICCID",docNumber:"Nr dok."
   };
-  tbody.innerHTML=rows.map(r=>
-    `<tr><td>${tl[r.type]||r.type}</td><td>${esc(r.original)}</td><td>${esc(r.replacement)}</td></tr>`
-  ).join("");
+  tbody.textContent="";
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    const td1=document.createElement("td"); td1.textContent=tl[r.type]||r.type;
+    const td2=document.createElement("td"); td2.textContent=r.original;
+    const td3=document.createElement("td"); td3.textContent=r.replacement;
+    tr.append(td1,td2,td3); tbody.appendChild(tr);
+  });
   sec.style.display="block";
 }
 
@@ -1158,11 +1177,13 @@ function log(msg,type){
   el.style.display="block";
   const t=new Date().toLocaleTimeString("pl-PL");
   const cls=type==="ok"?"msg-ok":type==="err"?"msg-err":"";
-  el.innerHTML+=`<div><span class="time">[${t}]</span> <span class="${cls}">${esc(msg)}</span></div>`;
+  const row=document.createElement("div");
+  const ts=document.createElement("span"); ts.className="time"; ts.textContent="["+t+"] ";
+  const m=document.createElement("span"); if(cls) m.className=cls; m.textContent=msg;
+  row.append(ts,m);
+  el.appendChild(row);
   el.scrollTop=el.scrollHeight;
 }
-
-function esc(s){const d=document.createElement("div");d.textContent=s;return d.innerHTML;}
 function fmtSize(b){
   if(b<1024)return b+" B";
   if(b<1048576)return(b/1024).toFixed(1)+" KB";
