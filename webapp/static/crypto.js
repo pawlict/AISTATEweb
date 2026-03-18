@@ -147,15 +147,25 @@
   /*  Lazy-load external libraries                                      */
   /* ------------------------------------------------------------------ */
 
+  const _scriptPromises = {};
   function _loadScript(url) {
-    return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${url}"]`)) { resolve(); return; }
+    if (_scriptPromises[url]) return _scriptPromises[url];
+    _scriptPromises[url] = new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${url}"]`);
+      if (existing) {
+        // Script tag exists — wait for it to finish loading
+        if (existing._loaded) { resolve(); return; }
+        existing.addEventListener("load", () => { existing._loaded = true; resolve(); });
+        existing.addEventListener("error", reject);
+        return;
+      }
       const s = document.createElement("script");
       s.src = url;
-      s.onload = resolve;
+      s.onload = () => { s._loaded = true; resolve(); };
       s.onerror = reject;
       document.head.appendChild(s);
     });
+    return _scriptPromises[url];
   }
 
   async function _ensureChartJS() {
@@ -260,7 +270,7 @@
   /*  Render results — dual mode                                        */
   /* ------------------------------------------------------------------ */
 
-  function _renderResults(r) {
+  async function _renderResults(r) {
     _hide("crypto_empty_state");
     _show("crypto_results");
 
@@ -281,8 +291,12 @@
 
     _renderReviewTable(r, isExchange);
     _renderAnomalies(r, isExchange);
+
+    // Ensure Chart.js is loaded before rendering any charts
+    try { await _ensureChartJS(); } catch (e) { console.warn("[Crypto] Chart.js load failed:", e); }
     _renderCharts(r, isExchange);
     _renderSmallCharts(r, isExchange);
+
     _renderGraph(r);
     if (!isExchange) _renderWallets(r);
   }
@@ -669,9 +683,16 @@
     const show = filtered.slice(0, 200);
     let html;
 
+    // Note marker helper (like GSM/AML)
+    const notesMgr = _cryptoNotesMgr;
+    function _noteMarker(txId) {
+      const has = notesMgr && notesMgr.hasNote("crypto_transaction", "transaction_id", txId);
+      return `<td style="padding:0 2px;text-align:center;width:22px"><span class="analyst-note-marker${has ? " has-note" : ""}" data-note-txid="${_esc(txId)}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="13" height="13" draggable="false"></span></td>`;
+    }
+
     if (isExchange) {
       html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
-        "<th>Data</th><th>Konto</th><th>Operacja</th><th>Token</th><th>Kwota</th><th>Typ</th><th>Tagi</th><th>Klasyfikacja</th>" +
+        '<th style="width:22px"></th><th>Data</th><th>Konto</th><th>Operacja</th><th>Token</th><th>Kwota</th><th>Typ</th><th>Tagi</th><th>Klasyfikacja</th>' +
         "</tr></thead><tbody>";
       for (const tx of show) {
         const txId = tx.hash || tx.id || "";
@@ -689,6 +710,7 @@
         const amtColor = isNeg ? "#ef4444" : "#22c55e";
 
         html += `<tr style="background:${meta.bg}" data-txid="${_esc(txId)}">
+          ${_noteMarker(txId)}
           <td style="white-space:nowrap">${_esc((tx.timestamp || "").slice(0, 16).replace("T", " "))}</td>
           <td>${_esc(raw.account || "\u2014")}</td>
           <td>${_txTypeTooltip(tx.category || raw.operation || tx.tx_type || "\u2014")}</td>
@@ -708,7 +730,7 @@
       }
     } else {
       html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
-        "<th>Data</th><th>Od</th><th>Do</th><th>Kwota</th><th>Token</th><th>Typ</th><th>Ryzyko</th><th>Klasyfikacja</th>" +
+        '<th style="width:22px"></th><th>Data</th><th>Od</th><th>Do</th><th>Kwota</th><th>Token</th><th>Typ</th><th>Ryzyko</th><th>Klasyfikacja</th>' +
         "</tr></thead><tbody>";
       for (const tx of show) {
         const txId = tx.hash || tx.id || "";
@@ -720,6 +742,7 @@
             tags.includes("high_value") ? "#eab308" : "";
 
         html += `<tr style="background:${meta.bg}" data-txid="${_esc(txId)}">
+          ${_noteMarker(txId)}
           <td style="white-space:nowrap">${_esc((tx.timestamp || "").slice(0, 16))}</td>
           <td style="font-family:monospace;font-size:10px" title="${_esc(tx.from || "")}">${_esc(_shorten(tx.from || "\u2014"))}</td>
           <td style="font-family:monospace;font-size:10px" title="${_esc(tx.to || "")}">${_esc(_shorten(tx.to || "\u2014"))}</td>
@@ -755,6 +778,29 @@
         _classifyTx(txId, cls);
       });
     });
+
+    // Bind note markers — open analyst note panel (like GSM/AML)
+    if (notesMgr) {
+      wrap.querySelectorAll(".analyst-note-marker[data-note-txid]").forEach(marker => {
+        marker.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const txId = marker.getAttribute("data-note-txid");
+          if (!txId) return;
+          // Find the transaction for snapshot data
+          const tx = ((_lastResult || {}).transactions || []).find(t => (t.hash || t.id) === txId);
+          const amt = tx ? _fmtCrypto(tx.amount, tx.token || "") : "";
+          const typ = tx ? (tx.tx_type || tx.category || "") : "";
+          const date = tx ? (tx.timestamp || "").slice(0, 16).replace("T", " ") : "";
+          const label = (amt ? amt + " " : "") + (typ ? typ + " " : "") + (date ? "(" + date + ")" : "");
+          const ref = {
+            type: "crypto_transaction",
+            transaction_id: txId,
+            snapshot: { amount: amt, type: typ, date: date, token: tx ? tx.token : "" },
+          };
+          notesMgr.openNoteForElement(label || "Transakcja krypto", "finance", ref);
+        });
+      });
+    }
   }
 
   /* ------------------------------------------------------------------ */
