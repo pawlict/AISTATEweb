@@ -1242,6 +1242,11 @@
         return;
       }
       await _loadReviewBatch(statementIds);
+    },
+
+    /** Return total transaction count across all loaded statements. */
+    getTotalTransactionCount(){
+      return St.transactions ? St.transactions.length : 0;
     }
   };
 
