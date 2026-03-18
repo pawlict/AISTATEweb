@@ -714,7 +714,17 @@
       <!-- Anomalies -->
       <div class="card" id="gsm_anomalies_card" style="display:none">
         <div class="h2">Anomalie</div>
-        <div id="gsm_anomalies_body"></div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div id="gsm_anomalies_body" style="flex:0 0 33%;min-width:280px;max-height:700px;overflow-y:auto"></div>
+          <div id="gsm_anomaly_map_wrap" style="flex:1;min-height:400px;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#e8e8e8">
+            <div id="gsm_anomaly_map_header" style="padding:6px 12px;background:var(--card-bg,#fff);border-bottom:1px solid var(--border);font-size:13px;display:flex;align-items:center;gap:6px">
+              <i data-icon="map" data-size="14"></i>
+              <span id="gsm_anomaly_map_title" style="font-weight:600">Mapa BTS anomalii</span>
+              <span id="gsm_anomaly_map_stats" class="small muted" style="margin-left:auto"></span>
+            </div>
+            <div id="gsm_anomaly_map_container" style="flex:1;min-height:350px"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Analysis -->
