@@ -3951,7 +3951,21 @@
       const isCompany = info && info.type === "company";
       const icon = isCompany ? companyIcon : personIcon;
       const color = isCompany ? "#7c3aed" : "#64748b";
-      const idLabel = info && info.label ? trunc(info.label, 16) : "";
+      // Build name + PESEL lines from identification record
+      const rec = info && info.rec ? info.rec : null;
+      let idNameLine = "";
+      let idPeselLine = "";
+      if (rec) {
+        const parts = [];
+        if (rec.first_name) parts.push(rec.first_name);
+        if (rec.last_name) parts.push(rec.last_name);
+        if (parts.length === 0 && rec.name) parts.push(rec.name);
+        idNameLine = trunc(parts.join(" "), 18);
+        if (rec.pesel) idPeselLine = rec.pesel;
+        else if (rec.nip) idPeselLine = "NIP: " + rec.nip;
+      } else if (info && info.label) {
+        idNameLine = trunc(info.label, 18);
+      }
       const outAll = (c.calls_out || 0) + (c.sms_out || 0);
       const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
       const inAll = (c.calls_in || 0) + (c.sms_in || 0);
@@ -3968,9 +3982,13 @@
       svg += `<g transform="translate(${icx},${card.y + 13})" stroke="${color}" fill="none" color="${color}">${icon}</g>`;
       // Full phone number
       svg += `<text x="${icx}" y="${card.y + 30}" text-anchor="middle" font-size="7.5" font-weight="500" fill="var(--text,#334155)">${c.number}</text>`;
-      // Identification label (or editable placeholder)
-      if (idLabel) {
-        svg += `<text class="gsm-graph-id-label gsm-graph-id-edit" data-number="${c.number}" x="${icx}" y="${card.y + 39}" text-anchor="middle" font-size="6.5" fill="${isCompany ? '#7c3aed' : '#2563eb'}" font-style="italic" style="cursor:text">${idLabel}</text>`;
+      // Identification: name line + PESEL line (or editable placeholder)
+      if (idNameLine) {
+        const nameColor = isCompany ? '#7c3aed' : '#2563eb';
+        svg += `<text class="gsm-graph-id-label gsm-graph-id-edit" data-number="${c.number}" x="${icx}" y="${card.y + 38}" text-anchor="middle" font-size="6.5" fill="${nameColor}" font-style="italic" style="cursor:text">${idNameLine}</text>`;
+        if (idPeselLine) {
+          svg += `<text x="${icx}" y="${card.y + 46}" text-anchor="middle" font-size="5.8" fill="var(--text-muted,#64748b)">${idPeselLine}</text>`;
+        }
       } else {
         svg += `<text class="gsm-graph-id-label gsm-graph-id-empty" data-number="${c.number}" x="${icx}" y="${card.y + 39}" text-anchor="middle" font-size="6.5" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
       }
@@ -4016,7 +4034,21 @@
     // ── Subscriber node (two-column: left=icon+number+name, right=OUT/IN/FWD) ──
     const subLabel = msisdn || "Abonent";
     const subInfo = msisdn ? _idLookup(msisdn) : null;
-    const subIdLabel = subInfo && subInfo.label ? trunc(subInfo.label, 18) : "";
+    // Build subscriber name + PESEL from identification record
+    const subRec = subInfo && subInfo.rec ? subInfo.rec : null;
+    let subNameLine = "";
+    let subPeselLine = "";
+    if (subRec) {
+      const sp = [];
+      if (subRec.first_name) sp.push(subRec.first_name);
+      if (subRec.last_name) sp.push(subRec.last_name);
+      if (sp.length === 0 && subRec.name) sp.push(subRec.name);
+      subNameLine = trunc(sp.join(" "), 22);
+      if (subRec.pesel) subPeselLine = subRec.pesel;
+      else if (subRec.nip) subPeselLine = "NIP: " + subRec.nip;
+    } else if (subInfo && subInfo.label) {
+      subNameLine = trunc(subInfo.label, 22);
+    }
     const subTop = SUB_Y - SUB_H / 2;
     const badgeW = 72;  // badge width on right side
     const badgeX = SUB_X + SUB_W - badgeW - 6;  // right-aligned badges
@@ -4025,14 +4057,17 @@
     // Card background
     svg += `<rect x="${SUB_X}" y="${subTop}" width="${SUB_W}" height="${SUB_H}"
       rx="8" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="1.8" filter="url(#gsm_card_shadow)"/>`;
-    // ── Left column: icon + number + name ──
+    // ── Left column: icon + number + name + PESEL ──
     // Subscriber icon (vertically centered in left area)
     svg += `<g transform="translate(${SUB_X + 16},${subTop + SUB_H / 2})" stroke="#2563eb" fill="none" color="#2563eb">${subscriberIcon}</g>`;
     // Phone number
-    svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 - 4}" font-size="8.5" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>`;
-    // Identification label (name)
-    if (subIdLabel) {
-      svg += `<text class="gsm-graph-sub-id" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 8}" font-size="7" font-weight="500" fill="#2563eb" font-style="italic">${subIdLabel}</text>`;
+    svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 - (subPeselLine ? 8 : 4)}" font-size="8.5" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>`;
+    // Identification: name line
+    if (subNameLine) {
+      svg += `<text class="gsm-graph-sub-id" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + (subPeselLine ? 2 : 8)}" font-size="7" font-weight="500" fill="#2563eb" font-style="italic">${subNameLine}</text>`;
+      if (subPeselLine) {
+        svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 11}" font-size="6.5" fill="var(--text-muted,#64748b)">${subPeselLine}</text>`;
+      }
     } else if (msisdn) {
       svg += `<text class="gsm-graph-sub-id gsm-graph-sub-id-empty" data-number="${msisdn}" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 8}" font-size="7" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
     } else {
