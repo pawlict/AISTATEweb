@@ -2696,6 +2696,108 @@
     return items;
   }
 
+  // ── Phone prefix → country lookup (longest-match, sorted by prefix length desc) ──
+  const _PHONE_PREFIXES = [
+    ["+1242","BS","Bahamy"],["+1246","BB","Barbados"],["+1264","AI","Anguilla"],
+    ["+1268","AG","Antigua i Barbuda"],["+1284","VG","Bryt. Wyspy Dziewicze"],
+    ["+1340","VI","Wyspy Dziewicze USA"],["+1345","KY","Kajmany"],
+    ["+1441","BM","Bermudy"],["+1473","GD","Grenada"],["+1649","TC","Turks i Caicos"],
+    ["+1658","JM","Jamajka"],["+1664","MS","Montserrat"],["+1670","MP","Mariany Północne"],
+    ["+1671","GU","Guam"],["+1684","AS","Samoa Amerykańskie"],["+1721","SX","Sint Maarten"],
+    ["+1758","LC","Saint Lucia"],["+1767","DM","Dominika"],
+    ["+1784","VC","Saint Vincent"],["+1787","PR","Portoryko"],
+    ["+1809","DO","Dominikana"],["+1829","DO","Dominikana"],["+1849","DO","Dominikana"],
+    ["+1868","TT","Trynidad i Tobago"],["+1869","KN","Saint Kitts i Nevis"],
+    ["+1876","JM","Jamajka"],["+1939","PR","Portoryko"],
+    ["+993","TM","Turkmenistan"],["+992","TJ","Tadżykistan"],["+998","UZ","Uzbekistan"],
+    ["+996","KG","Kirgistan"],["+995","GE","Gruzja"],["+994","AZ","Azerbejdżan"],
+    ["+977","NP","Nepal"],["+976","MN","Mongolia"],["+975","BT","Bhutan"],
+    ["+974","QA","Katar"],["+973","BH","Bahrajn"],["+972","IL","Izrael"],
+    ["+971","AE","ZEA"],["+970","PS","Palestyna"],["+968","OM","Oman"],
+    ["+967","YE","Jemen"],["+966","SA","Arabia Saudyjska"],["+965","KW","Kuwejt"],
+    ["+964","IQ","Irak"],["+963","SY","Syria"],["+962","JO","Jordania"],
+    ["+961","LB","Liban"],["+960","MV","Malediwy"],
+    ["+886","TW","Tajwan"],["+880","BD","Bangladesz"],["+856","LA","Laos"],
+    ["+855","KH","Kambodża"],["+853","MO","Makau"],["+852","HK","Hongkong"],
+    ["+850","KP","Korea Północna"],
+    ["+692","MH","Wyspy Marshalla"],["+691","FM","Mikronezja"],["+690","TK","Tokelau"],
+    ["+689","PF","Polinezja Francuska"],["+688","TV","Tuvalu"],
+    ["+687","NC","Nowa Kaledonia"],["+686","KI","Kiribati"],["+685","WS","Samoa"],
+    ["+683","NU","Niue"],["+682","CK","Wyspy Cooka"],["+681","WF","Wallis i Futuna"],
+    ["+680","PW","Palau"],["+679","FJ","Fidżi"],["+678","VU","Vanuatu"],
+    ["+677","SB","Wyspy Salomona"],["+676","TO","Tonga"],["+675","PG","Papua-Nowa Gwinea"],
+    ["+674","NR","Nauru"],["+673","BN","Brunei"],["+672","NF","Norfolk"],
+    ["+670","TL","Timor Wschodni"],
+    ["+599","CW","Curaçao"],["+598","UY","Urugwaj"],["+597","SR","Surinam"],
+    ["+596","MQ","Martynika"],["+595","PY","Paragwaj"],["+594","GF","Gujana Francuska"],
+    ["+593","EC","Ekwador"],["+592","GY","Gujana"],["+591","BO","Boliwia"],
+    ["+590","GP","Gwadelupa"],
+    ["+509","HT","Haiti"],["+508","PM","Saint-Pierre i Miquelon"],["+507","PA","Panama"],
+    ["+506","CR","Kostaryka"],["+505","NI","Nikaragua"],["+504","HN","Honduras"],
+    ["+503","SV","Salwador"],["+502","GT","Gwatemala"],["+501","BZ","Belize"],
+    ["+500","FK","Falklandy"],
+    ["+423","LI","Liechtenstein"],["+421","SK","Słowacja"],["+420","CZ","Czechy"],
+    ["+389","MK","Macedonia Północna"],["+387","BA","Bośnia i Hercegowina"],
+    ["+386","SI","Słowenia"],["+385","HR","Chorwacja"],["+383","XK","Kosowo"],
+    ["+382","ME","Czarnogóra"],["+381","RS","Serbia"],["+380","UA","Ukraina"],
+    ["+378","SM","San Marino"],["+377","MC","Monako"],["+376","AD","Andora"],
+    ["+375","BY","Białoruś"],["+374","AM","Armenia"],["+373","MD","Mołdawia"],
+    ["+372","EE","Estonia"],["+371","LV","Łotwa"],["+370","LT","Litwa"],
+    ["+359","BG","Bułgaria"],["+358","FI","Finlandia"],["+357","CY","Cypr"],
+    ["+356","MT","Malta"],["+355","AL","Albania"],["+354","IS","Islandia"],
+    ["+353","IE","Irlandia"],["+352","LU","Luksemburg"],["+351","PT","Portugalia"],
+    ["+350","GI","Gibraltar"],
+    ["+299","GL","Grenlandia"],["+298","FO","Wyspy Owcze"],["+297","AW","Aruba"],
+    ["+291","ER","Erytrea"],
+    ["+269","KM","Komory"],["+268","SZ","Eswatini"],["+267","BW","Botswana"],
+    ["+266","LS","Lesotho"],["+265","MW","Malawi"],["+264","NA","Namibia"],
+    ["+263","ZW","Zimbabwe"],["+262","RE","Reunion"],["+261","MG","Madagaskar"],
+    ["+260","ZM","Zambia"],["+258","MZ","Mozambik"],["+257","BI","Burundi"],
+    ["+256","UG","Uganda"],["+255","TZ","Tanzania"],["+254","KE","Kenia"],
+    ["+253","DJ","Dżibuti"],["+252","SO","Somalia"],["+251","ET","Etiopia"],
+    ["+250","RW","Rwanda"],["+249","SD","Sudan"],["+248","SC","Seszele"],
+    ["+247","SH","Wniebowstąpienia"],["+246","IO","BIOT"],
+    ["+245","GW","Gwinea Bissau"],["+244","AO","Angola"],
+    ["+243","CD","DR Konga"],["+242","CG","Kongo"],["+241","GA","Gabon"],
+    ["+240","GQ","Gwinea Równikowa"],["+239","ST","Wyspy Świętego Tomasza"],
+    ["+238","CV","Republika Zielonego Przylądka"],["+237","CM","Kamerun"],
+    ["+236","CF","Rep. Środkowoafrykańska"],["+235","TD","Czad"],
+    ["+234","NG","Nigeria"],["+233","GH","Ghana"],["+232","SL","Sierra Leone"],
+    ["+231","LR","Liberia"],["+230","MU","Mauritius"],["+229","BJ","Benin"],
+    ["+228","TG","Togo"],["+227","NE","Niger"],["+226","BF","Burkina Faso"],
+    ["+225","CI","Wybrzeże Kości Słoniowej"],["+224","GN","Gwinea"],
+    ["+223","ML","Mali"],["+222","MR","Mauretania"],["+221","SN","Senegal"],
+    ["+220","GM","Gambia"],["+218","LY","Libia"],["+216","TN","Tunezja"],
+    ["+213","DZ","Algieria"],["+212","MA","Maroko"],["+211","SS","Sudan Południowy"],
+    ["+98","IR","Iran"],["+95","MM","Mjanma"],["+94","LK","Sri Lanka"],
+    ["+93","AF","Afganistan"],["+92","PK","Pakistan"],["+91","IN","Indie"],
+    ["+90","TR","Turcja"],["+86","CN","Chiny"],["+84","VN","Wietnam"],
+    ["+82","KR","Korea Południowa"],["+81","JP","Japonia"],
+    ["+66","TH","Tajlandia"],["+65","SG","Singapur"],["+64","NZ","Nowa Zelandia"],
+    ["+63","PH","Filipiny"],["+62","ID","Indonezja"],["+61","AU","Australia"],
+    ["+60","MY","Malezja"],["+58","VE","Wenezuela"],["+57","CO","Kolumbia"],
+    ["+56","CL","Chile"],["+55","BR","Brazylia"],["+54","AR","Argentyna"],
+    ["+53","CU","Kuba"],["+52","MX","Meksyk"],["+51","PE","Peru"],
+    ["+49","DE","Niemcy"],
+    ["+47","NO","Norwegia"],["+46","SE","Szwecja"],["+45","DK","Dania"],
+    ["+44","GB","Wielka Brytania"],["+43","AT","Austria"],["+41","CH","Szwajcaria"],
+    ["+40","RO","Rumunia"],["+39","IT","Włochy"],["+36","HU","Węgry"],
+    ["+34","ES","Hiszpania"],["+33","FR","Francja"],["+32","BE","Belgia"],
+    ["+31","NL","Holandia"],["+30","GR","Grecja"],
+    ["+27","ZA","RPA"],["+20","EG","Egipt"],
+    ["+77","KZ","Kazachstan"],["+7","RU","Rosja"],
+    ["+1","US","USA / Kanada"],
+  ];
+
+  /** Identify country by phone number prefix (longest match). Returns {iso, name} or null. */
+  function _countryByPrefix(number) {
+    if (!number || !number.startsWith("+")) return null;
+    for (const [pfx, iso, name] of _PHONE_PREFIXES) {
+      if (number.startsWith(pfx)) return { iso, name };
+    }
+    return null;
+  }
+
   // ── Foreigner detection (hybrid: number + ID data + name heuristics) ──
 
   // Polish surname suffixes (common patterns)
@@ -2821,23 +2923,64 @@
       const key = msisdn;
       if (seen.has(key)) continue;
 
+      // ── Identify if this is a company ──
+      const isCompany = rec.type === "company"
+        || !!(rec.nip && rec.nip.length >= 10)
+        || !!(rec.regon && rec.regon.length >= 9);
+
       const signals = [];
       let confidence = 0;
 
       // ── Level 1: Foreign number ──
       const normNum = "+" + msisdn.replace(/^\+/, "");
-      const isForeignNum = !normNum.startsWith("+48") && normNum.startsWith("+") && normNum.length > 8;
+      const isPolishNum = normNum.startsWith("+48") || (!normNum.startsWith("+") || normNum.length <= 8);
+      const isForeignNum = !isPolishNum;
+
+      // Country identification for foreign numbers
+      let countryInfo = null;
+      if (isForeignNum) {
+        countryInfo = _countryByPrefix(normNum);
+      }
+
       if (isForeignNum || foreignNumbers.has(normNum)) {
-        signals.push("numer zagraniczny");
+        const countryLabel = countryInfo ? countryInfo.name : null;
+        signals.push(countryLabel ? `numer zagraniczny (${countryLabel})` : "numer zagraniczny");
         confidence += 40;
       }
 
-      // ── Level 2: No PESEL or foreign document ──
+      // ── Skip companies with NIP/REGON + Polish number — not foreigners ──
+      if (isCompany && isPolishNum && (rec.nip || rec.regon)) {
+        continue; // Polish company — brak PESEL is expected, not a foreigner signal
+      }
+
+      // ── Level 2: No PESEL ──
       const hasPesel = !!(rec.pesel && rec.pesel.length >= 11);
       if (!hasPesel && !isForeignNum) {
-        // No PESEL for Polish number — might indicate foreigner
-        signals.push("brak PESEL");
-        confidence += 20;
+        if (isCompany) {
+          // Companies without PESEL but without NIP/REGON on Polish number — mild signal
+          if (!rec.nip && !rec.regon) {
+            signals.push("firma bez PESEL/NIP/REGON");
+            confidence += 10;
+          }
+          // else: company with NIP or REGON but foreign number — handled above
+        } else {
+          // Person without PESEL on Polish number
+          signals.push("brak PESEL");
+          confidence += 20;
+        }
+      }
+
+      // ── Verify number against known country prefixes ──
+      if (!isForeignNum && !isPolishNum) {
+        // Number doesn't start with + and isn't a standard 9-digit Polish number
+        // Check if it could be an unrecognized format
+        if (normNum.length > 9 && !normNum.startsWith("+48")) {
+          const prefixCheck = _countryByPrefix(normNum);
+          if (!prefixCheck) {
+            signals.push("numer nie pasuje do żadnego kierunkowego");
+            confidence += 15;
+          }
+        }
       }
 
       // ── Level 3: Name heuristics ──
@@ -2847,30 +2990,32 @@
         .replace(/\u015b/g, "s").replace(/\u017a/g, "z").replace(/\u017c/g, "z");
       const nameParts = nameLower.split(/\s+/);
 
-      // Check if first name is Polish
-      const firstName = nameParts[0] || "";
-      const isPolishFirstName = _PL_FIRST_NAMES.has(firstName);
+      // Skip name heuristics for companies
+      if (!isCompany) {
+        // Check if first name is Polish
+        const firstName = nameParts[0] || "";
+        const isPolishFirstName = _PL_FIRST_NAMES.has(firstName);
 
-      // Check if surname has Polish suffix
-      const surname = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
-      const hasPolishSuffix = _PL_SURNAME_SUFFIXES.some(suf => surname.endsWith(suf));
+        // Check if surname has Polish suffix
+        const surname = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+        const hasPolishSuffix = _PL_SURNAME_SUFFIXES.some(suf => surname.endsWith(suf));
 
-      // Check for foreign patterns
-      let foreignOrigin = "";
-      for (const pat of _FOREIGN_NAME_PATTERNS) {
-        if (pat.re.test(nameLower)) {
-          foreignOrigin = pat.origin;
-          break;
+        // Check for foreign patterns
+        let foreignOrigin = "";
+        for (const pat of _FOREIGN_NAME_PATTERNS) {
+          if (pat.re.test(nameLower)) {
+            foreignOrigin = pat.origin;
+            break;
+          }
         }
-      }
 
-      if (foreignOrigin) {
-        signals.push(`wzorzec ${foreignOrigin}`);
-        confidence += 35;
-      } else if (!isPolishFirstName && !hasPolishSuffix && nameParts.length >= 2) {
-        // Neither Polish first name nor Polish surname suffix
-        signals.push("imi\u0119/nazwisko nie pasuje do polskich wzorców");
-        confidence += 15;
+        if (foreignOrigin) {
+          signals.push(`wzorzec ${foreignOrigin}`);
+          confidence += 35;
+        } else if (!isPolishFirstName && !hasPolishSuffix && nameParts.length >= 2) {
+          signals.push("imi\u0119/nazwisko nie pasuje do polskich wzorców");
+          confidence += 15;
+        }
       }
 
       // Only report if confidence > 25 (at least one strong signal)
@@ -2881,14 +3026,25 @@
           number: normNum.startsWith("+") ? normNum : "+" + normNum,
           name: name,
           pesel: rec.pesel || "",
+          nip: rec.nip || "",
+          regon: rec.regon || "",
           address: rec.address || "",
           city: rec.city || "",
           signals: signals,
           confidence: confLabel,
           confidence_score: confidence,
           foreign_number: isForeignNum,
-          foreign_origin: foreignOrigin,
+          foreign_origin: "",
+          country: countryInfo ? countryInfo.name : "",
+          country_iso: countryInfo ? countryInfo.iso : "",
+          is_company: isCompany,
         });
+        // Backfill foreign_origin from name pattern signals
+        const lastItem = items[items.length - 1];
+        for (const s of signals) {
+          const m = s.match(/^wzorzec (.+)/);
+          if (m) { lastItem.foreign_origin = m[1]; break; }
+        }
       }
     }
 
@@ -3309,6 +3465,27 @@
       if (!data || !data.items.length) return;
       _anomalyGroupFilter(type, data.items);
     });
+
+    // Single-click on anomaly card → update mini-map with BTS for that anomaly type
+    body.addEventListener("click", function(e) {
+      if (e.target.closest(".gsm-anom-toggle, .gsm-anom-plus5, .analyst-note-marker, input")) return;
+      const div = e.target.closest("[data-anomaly-type]");
+      if (!div) return;
+      const type = div.dataset.anomalyType;
+      const data = groupMap[type];
+      if (!data || !data.items.length) return;
+
+      // Highlight selected card
+      body.querySelectorAll(".gsm-anomaly-card").forEach(c => c.style.outline = "");
+      div.style.outline = "2px solid var(--brand-blue,#2563eb)";
+      div.style.outlineOffset = "-1px";
+
+      // Compute filtered records for this anomaly type (same logic as dblclick)
+      const records = St.lastResult ? St.lastResult.records : [];
+      const pred = _anomalyPredicate(type, data.items);
+      const filtered = records.filter(pred);
+      _updateAnomalyMap(type, filtered);
+    });
   }
 
   /** Filter Records by anomaly group — invoked on double-click. */
@@ -3440,6 +3617,22 @@
         filterText = `Obcokrajowcy — ${filtered.length} rek.`;
         break;
       }
+      case "forwarded_calls":
+        filtered = records.filter(r => r.record_type === "CALL_FORWARDED");
+        filterText = `Przekierowania połączeń — ${filtered.length} rek.`;
+        break;
+      case "inactivity_gap":
+        // Show records around gaps: last record before gap + first record after gap
+        if (items.length > 0) {
+          const gapDates = new Set();
+          for (const it of items) {
+            if (it.last_date) gapDates.add(it.last_date);
+            if (it.next_date) gapDates.add(it.next_date);
+          }
+          filtered = records.filter(r => gapDates.has(r.date));
+          filterText = `Przerwy w aktywności — ${filtered.length} rek. (dni graniczne)`;
+        }
+        break;
       default:
         filtered = records;
         filterText = `${type} — ${filtered.length} rek.`;
@@ -3463,6 +3656,105 @@
       recCard.style.boxShadow = "0 0 0 3px var(--brand-blue,#2563eb)";
       setTimeout(() => { recCard.style.boxShadow = ""; }, 1200);
     }
+
+    // Update anomaly mini-map with BTS points from filtered records
+    _updateAnomalyMap(type, filtered);
+  }
+
+  // ── Anomaly mini-map ──
+  let _anomMapInstance = null;
+  let _anomMapMarkers = null;
+
+  async function _updateAnomalyMap(anomalyType, filteredRecords) {
+    const container = QS("#gsm_anomaly_map_container");
+    const titleEl = QS("#gsm_anomaly_map_title");
+    const statsEl = QS("#gsm_anomaly_map_stats");
+    if (!container) return;
+
+    // Ensure Leaflet loaded
+    if (!window.L) {
+      await new Promise(resolve => {
+        if (St.leafletLoaded || window.L) { resolve(); return; }
+        const checkInt = setInterval(() => {
+          if (window.L) { clearInterval(checkInt); resolve(); }
+        }, 200);
+        setTimeout(() => { clearInterval(checkInt); resolve(); }, 5000);
+      });
+    }
+    if (!window.L) return;
+
+    // Extract BTS points from filtered records
+    const points = new Map(); // key = "lat,lon" → { lat, lon, count, dates }
+    for (const r of filteredRecords) {
+      const ex = r.extra || {};
+      const lat = parseFloat(ex.bts_lat || ex.bts_x || "");
+      const lon = parseFloat(ex.bts_lon || ex.bts_y || "");
+      if (isNaN(lat) || isNaN(lon) || (lat === 0 && lon === 0)) continue;
+      const key = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+      if (!points.has(key)) {
+        points.set(key, { lat, lon, count: 0, dates: new Set(), city: ex.bts_city || "", street: ex.bts_street || "" });
+      }
+      const p = points.get(key);
+      p.count++;
+      if (r.date) p.dates.add(r.date);
+    }
+
+    // Update title and stats
+    const catLabel = (_ANOMALY_CATS.find(c => c.type === anomalyType) || {}).label || anomalyType;
+    if (titleEl) titleEl.textContent = `BTS: ${catLabel}`;
+    if (statsEl) statsEl.textContent = `${points.size} lokalizacji · ${filteredRecords.length} rek.`;
+
+    // Initialize or reuse map
+    if (!_anomMapInstance) {
+      _anomMapInstance = L.map(container, {
+        zoomControl: true,
+        attributionControl: false,
+        preferCanvas: true,
+      });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+      }).addTo(_anomMapInstance);
+    }
+
+    // Clear old markers
+    if (_anomMapMarkers) {
+      _anomMapMarkers.clearLayers();
+    } else {
+      _anomMapMarkers = L.layerGroup().addTo(_anomMapInstance);
+    }
+
+    if (points.size === 0) {
+      // No BTS data — show Poland center
+      _anomMapInstance.setView([52.0, 19.5], 6);
+      if (statsEl) statsEl.textContent = "Brak danych BTS dla tej anomalii";
+      return;
+    }
+
+    // Add markers
+    const bounds = L.latLngBounds([]);
+    for (const [, p] of points) {
+      const radius = Math.min(Math.max(4, Math.log2(p.count + 1) * 3), 14);
+      const dateStr = [...p.dates].sort().join(", ");
+      const locInfo = [p.city, p.street].filter(Boolean).join(", ");
+      const popup = `<b>${p.count}× rekordów</b>${locInfo ? "<br>" + locInfo : ""}<br><span class="muted">${dateStr}</span>`;
+      const marker = L.circleMarker([p.lat, p.lon], {
+        radius: radius,
+        color: "#2563eb",
+        fillColor: "#3b82f6",
+        fillOpacity: 0.6,
+        weight: 1.5,
+      }).bindPopup(popup, { maxWidth: 220 });
+      _anomMapMarkers.addLayer(marker);
+      bounds.extend([p.lat, p.lon]);
+    }
+
+    // Fit bounds
+    if (bounds.isValid()) {
+      _anomMapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+    }
+
+    // Force tile refresh (container might have been hidden)
+    setTimeout(() => { _anomMapInstance.invalidateSize(); }, 150);
   }
 
   /**
@@ -3539,6 +3831,14 @@
           const caller = (r.caller || "").replace(/^\+/, "");
           return frNums.has(callee) || frNums.has(caller);
         };
+      }
+      case "inactivity_gap": {
+        const gapDates = new Set();
+        for (const it of anomalyItems) {
+          if (it.last_date) gapDates.add(it.last_date);
+          if (it.next_date) gapDates.add(it.next_date);
+        }
+        return r => gapDates.has(r.date);
       }
       default:
         return () => false;
@@ -3758,12 +4058,25 @@
           ? '<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 5px;font-size:11px;font-weight:600">ŚREDNI</span>'
           : '<span style="background:#e0f2fe;color:#0c4a6e;border-radius:3px;padding:1px 5px;font-size:11px">NISKI</span>';
         const signalStr = it.signals.join(", ");
-        const peselInfo = it.pesel ? ` | PESEL: <code>${it.pesel}</code>` : " | <b>brak PESEL</b>";
+        // Identity details — PESEL / NIP / REGON
+        let idParts = [];
+        if (it.pesel) idParts.push(`PESEL: <code>${it.pesel}</code>`);
+        else idParts.push("<b>brak PESEL</b>");
+        if (it.nip) idParts.push(`NIP: <code>${it.nip}</code>`);
+        if (it.regon) idParts.push(`REGON: <code>${it.regon}</code>`);
+        const idInfo = idParts.join(" | ");
         const addrInfo = it.city ? ` | ${it.city}` : (it.address ? ` | ${it.address.substring(0, 40)}` : "");
+        // Country badge
+        const countryBadge = it.country
+          ? ` <span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 5px;font-size:10px">\u{1F30D} ${it.country}</span>`
+          : "";
+        // Origin badge (name heuristic)
         const originBadge = it.foreign_origin ? ` <span class="muted">[${it.foreign_origin}]</span>` : "";
+        // Company badge
+        const companyBadge = it.is_company ? ' <span style="background:#f3e8ff;color:#7c3aed;border-radius:3px;padding:1px 5px;font-size:10px">\u{1F3E2} firma</span>' : "";
         html += `<div style="margin-bottom:5px;padding:3px 6px;border-radius:4px;background:rgba(249,115,22,.04)">`;
-        html += `${confBadge} <code>${it.number}</code> \u2014 <b>${it.name}</b>${originBadge}`;
-        html += `<div style="font-size:11px;margin-top:2px"><span class="muted">Sygnały:</span> ${signalStr}${peselInfo}${addrInfo}</div>`;
+        html += `${confBadge} <code>${it.number}</code>${countryBadge}${companyBadge} \u2014 <b>${it.name}</b>${originBadge}`;
+        html += `<div style="font-size:11px;margin-top:2px"><span class="muted">Sygnały:</span> ${signalStr} | ${idInfo}${addrInfo}</div>`;
         html += `</div>`;
       }
     } else {
@@ -3808,8 +4121,20 @@
     const CX = W / 2;
 
     // SVG icons (compact)
+    // Generic person (unknown gender — no PESEL)
     const personIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
       <path d="M-6.5 5 Q-6.5 0 0 -0.5 Q6.5 0 6.5 5" fill="none" stroke-width="1.2"/>`;
+    // Male icon — broader shoulders, shorter hair
+    const maleIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
+      <path d="M-7 5 Q-7 -0.5 0 -1 Q7 -0.5 7 5" fill="none" stroke-width="1.2"/>
+      <line x1="5" y1="-8" x2="8" y2="-11" stroke-width="1" stroke-linecap="round"/>
+      <line x1="6" y1="-11" x2="8" y2="-11" stroke-width="1" stroke-linecap="round"/>
+      <line x1="8" y1="-11" x2="8" y2="-9" stroke-width="1" stroke-linecap="round"/>`;
+    // Female icon — narrower shoulders, longer hair accent
+    const femaleIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
+      <path d="M-6 5 Q-6 0 0 -0.5 Q6 0 6 5" fill="none" stroke-width="1.2"/>
+      <line x1="5.5" y1="-7" x2="5.5" y2="-3" stroke-width="1" stroke-linecap="round"/>
+      <line x1="3.5" y1="-3" x2="7.5" y2="-3" stroke-width="1" stroke-linecap="round"/>`;
     const companyIcon = `<rect x="-5" y="-7" width="10" height="13" rx="1" fill="none" stroke-width="1.1"/>
       <line x1="-2.5" y1="-3" x2="-2.5" y2="-1" stroke-width="0.9"/>
       <line x1="0" y1="-3" x2="0" y2="-1" stroke-width="0.9"/>
@@ -3817,10 +4142,40 @@
       <line x1="-2.5" y1="1.5" x2="-2.5" y2="3.5" stroke-width="0.9"/>
       <line x1="0" y1="1.5" x2="0" y2="3.5" stroke-width="0.9"/>
       <line x1="2.5" y1="1.5" x2="2.5" y2="3.5" stroke-width="0.9"/>`;
+    // Subscriber icons (with phone symbol) — generic, male, female
     const subscriberIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
       <path d="M-9 6 Q-9 0 -3 -0.5 Q3 0 3 6" fill="none" stroke-width="1.4"/>
       <rect x="6" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
       <circle cx="8.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+    const subscriberMaleIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
+      <path d="M-9.5 6 Q-9.5 -0.5 -3 -1 Q3.5 -0.5 3.5 6" fill="none" stroke-width="1.4"/>
+      <line x1="2" y1="-8" x2="5" y2="-11" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="3" y1="-11" x2="5" y2="-11" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="5" y1="-11" x2="5" y2="-9" stroke-width="1.1" stroke-linecap="round"/>
+      <rect x="7" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
+      <circle cx="9.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+    const subscriberFemaleIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
+      <path d="M-8.5 6 Q-8.5 0 -3 -0.5 Q2.5 0 2.5 6" fill="none" stroke-width="1.4"/>
+      <line x1="2.5" y1="-7" x2="2.5" y2="-3" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="0.5" y1="-3" x2="4.5" y2="-3" stroke-width="1.1" stroke-linecap="round"/>
+      <rect x="7" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
+      <circle cx="9.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+
+    // Determine gender from PESEL: 10th digit (index 9) — odd=male, even=female
+    const _genderFromPesel = (pesel) => {
+      if (!pesel || pesel.length < 10) return "unknown";
+      const d = parseInt(pesel.charAt(9), 10);
+      if (isNaN(d)) return "unknown";
+      return d % 2 === 1 ? "male" : "female";
+    };
+    const _pickPersonIcon = (rec) => {
+      if (!rec || !rec.pesel) return personIcon;
+      return _genderFromPesel(rec.pesel) === "female" ? femaleIcon : maleIcon;
+    };
+    const _pickSubscriberIcon = (rec) => {
+      if (!rec || !rec.pesel) return subscriberIcon;
+      return _genderFromPesel(rec.pesel) === "female" ? subscriberFemaleIcon : subscriberMaleIcon;
+    };
 
     let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
       style="width:100%;height:auto;font-family:system-ui,-apple-system,sans-serif">`;
@@ -3949,9 +4304,24 @@
       const c = card.c, idx = card.i;
       const info = _idLookup(c.number);
       const isCompany = info && info.type === "company";
-      const icon = isCompany ? companyIcon : personIcon;
-      const color = isCompany ? "#7c3aed" : "#64748b";
-      const idLabel = info && info.label ? trunc(info.label, 16) : "";
+      const rec = info && info.rec ? info.rec : null;
+      const icon = isCompany ? companyIcon : _pickPersonIcon(rec);
+      const gender = _genderFromPesel(rec && rec.pesel);
+      const color = isCompany ? "#7c3aed" : (gender === "female" ? "#d946ef" : gender === "male" ? "#2563eb" : "#64748b");
+      // Build name + PESEL lines from identification record
+      let idNameLine = "";
+      let idPeselLine = "";
+      if (rec) {
+        const parts = [];
+        if (rec.first_name) parts.push(rec.first_name);
+        if (rec.last_name) parts.push(rec.last_name);
+        if (parts.length === 0 && rec.name) parts.push(rec.name);
+        idNameLine = trunc(parts.join(" "), 18);
+        if (rec.pesel) idPeselLine = rec.pesel;
+        else if (rec.nip) idPeselLine = "NIP: " + rec.nip;
+      } else if (info && info.label) {
+        idNameLine = trunc(info.label, 18);
+      }
       const outAll = (c.calls_out || 0) + (c.sms_out || 0);
       const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
       const inAll = (c.calls_in || 0) + (c.sms_in || 0);
@@ -3968,9 +4338,13 @@
       svg += `<g transform="translate(${icx},${card.y + 13})" stroke="${color}" fill="none" color="${color}">${icon}</g>`;
       // Full phone number
       svg += `<text x="${icx}" y="${card.y + 30}" text-anchor="middle" font-size="7.5" font-weight="500" fill="var(--text,#334155)">${c.number}</text>`;
-      // Identification label (or editable placeholder)
-      if (idLabel) {
-        svg += `<text class="gsm-graph-id-label gsm-graph-id-edit" data-number="${c.number}" x="${icx}" y="${card.y + 39}" text-anchor="middle" font-size="6.5" fill="${isCompany ? '#7c3aed' : '#2563eb'}" font-style="italic" style="cursor:text">${idLabel}</text>`;
+      // Identification: name line + PESEL line (or editable placeholder)
+      if (idNameLine) {
+        const nameColor = isCompany ? '#7c3aed' : '#2563eb';
+        svg += `<text class="gsm-graph-id-label gsm-graph-id-edit" data-number="${c.number}" x="${icx}" y="${card.y + 38}" text-anchor="middle" font-size="6.5" fill="${nameColor}" font-style="italic" style="cursor:text">${idNameLine}</text>`;
+        if (idPeselLine) {
+          svg += `<text x="${icx}" y="${card.y + 46}" text-anchor="middle" font-size="5.8" fill="var(--text-muted,#64748b)">${idPeselLine}</text>`;
+        }
       } else {
         svg += `<text class="gsm-graph-id-label gsm-graph-id-empty" data-number="${c.number}" x="${icx}" y="${card.y + 39}" text-anchor="middle" font-size="6.5" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
       }
@@ -4016,7 +4390,21 @@
     // ── Subscriber node (two-column: left=icon+number+name, right=OUT/IN/FWD) ──
     const subLabel = msisdn || "Abonent";
     const subInfo = msisdn ? _idLookup(msisdn) : null;
-    const subIdLabel = subInfo && subInfo.label ? trunc(subInfo.label, 18) : "";
+    // Build subscriber name + PESEL from identification record
+    const subRec = subInfo && subInfo.rec ? subInfo.rec : null;
+    let subNameLine = "";
+    let subPeselLine = "";
+    if (subRec) {
+      const sp = [];
+      if (subRec.first_name) sp.push(subRec.first_name);
+      if (subRec.last_name) sp.push(subRec.last_name);
+      if (sp.length === 0 && subRec.name) sp.push(subRec.name);
+      subNameLine = trunc(sp.join(" "), 22);
+      if (subRec.pesel) subPeselLine = subRec.pesel;
+      else if (subRec.nip) subPeselLine = "NIP: " + subRec.nip;
+    } else if (subInfo && subInfo.label) {
+      subNameLine = trunc(subInfo.label, 22);
+    }
     const subTop = SUB_Y - SUB_H / 2;
     const badgeW = 72;  // badge width on right side
     const badgeX = SUB_X + SUB_W - badgeW - 6;  // right-aligned badges
@@ -4025,14 +4413,20 @@
     // Card background
     svg += `<rect x="${SUB_X}" y="${subTop}" width="${SUB_W}" height="${SUB_H}"
       rx="8" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="1.8" filter="url(#gsm_card_shadow)"/>`;
-    // ── Left column: icon + number + name ──
-    // Subscriber icon (vertically centered in left area)
-    svg += `<g transform="translate(${SUB_X + 16},${subTop + SUB_H / 2})" stroke="#2563eb" fill="none" color="#2563eb">${subscriberIcon}</g>`;
+    // ── Left column: icon + number + name + PESEL ──
+    // Subscriber icon (gender-aware, vertically centered in left area)
+    const subGenderIcon = _pickSubscriberIcon(subRec);
+    const subGender = _genderFromPesel(subRec && subRec.pesel);
+    const subIconColor = subGender === "female" ? "#d946ef" : "#2563eb";
+    svg += `<g transform="translate(${SUB_X + 16},${subTop + SUB_H / 2})" stroke="${subIconColor}" fill="none" color="${subIconColor}">${subGenderIcon}</g>`;
     // Phone number
-    svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 - 4}" font-size="8.5" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>`;
-    // Identification label (name)
-    if (subIdLabel) {
-      svg += `<text class="gsm-graph-sub-id" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 8}" font-size="7" font-weight="500" fill="#2563eb" font-style="italic">${subIdLabel}</text>`;
+    svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 - (subPeselLine ? 8 : 4)}" font-size="8.5" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>`;
+    // Identification: name line
+    if (subNameLine) {
+      svg += `<text class="gsm-graph-sub-id" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + (subPeselLine ? 2 : 8)}" font-size="7" font-weight="500" fill="#2563eb" font-style="italic">${subNameLine}</text>`;
+      if (subPeselLine) {
+        svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 11}" font-size="6.5" fill="var(--text-muted,#64748b)">${subPeselLine}</text>`;
+      }
     } else if (msisdn) {
       svg += `<text class="gsm-graph-sub-id gsm-graph-sub-id-empty" data-number="${msisdn}" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 8}" font-size="7" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
     } else {
@@ -4873,8 +5267,12 @@
   /** Build a normalized contact chip. Used by both activity charts and heatmap unique numbers. */
   function _buildContactChip(num, count, chartId, parts) {
     const idInfo = _idLookup(num);
+    const rec = idInfo && idInfo.rec ? idInfo.rec : null;
+    const shortLabel = rec ? _idShortLabel(rec) : "";
+    const tooltip = rec ? _idTooltipText(rec) : "";
+    const tooltipEsc = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
     const info = parts || "";
-    const label = idInfo ? `${num} (${idInfo.label})` : num;
+    const titleAttr = tooltip ? tooltipEsc : (idInfo ? `${num} (${idInfo.label})` : num);
     // Check if contact has a tag via notes
     const _nm = window._gsmNotesMgr;
     const noteItem = _nm && _nm.getNoteForRef && _nm.getNoteForRef("gsm_contact", "number", num);
@@ -4882,9 +5280,13 @@
     const tagColor = (noteItem && noteItem.tags && noteItem.tags.length) ? _noteTagColor(noteItem.tags[0]) : "";
     const borderStyle = tagColor ? `border-color:${tagColor}` : "";
 
-    let html = `<span class="gsm-contact-chip" data-number="${_escAttr(num)}" data-chart="${chartId || ''}" title="${label}${info ? ': ' + info : ''}" ${borderStyle ? `style="${borderStyle}"` : ''}>`;
+    let html = `<span class="gsm-contact-chip gsm-id-tip" data-number="${_escAttr(num)}" data-chart="${chartId || ''}" data-id-tip="${titleAttr}" ${borderStyle ? `style="${borderStyle}"` : ''}>`;
     html += `<code>${num}</code>`;
-    if (idInfo) html += ` <span class="gsm-chip-id">${_escHtml(idInfo.label)}</span>`;
+    if (shortLabel) {
+      html += ` <span class="gsm-chip-id">${_escHtml(shortLabel)}</span>`;
+    } else if (idInfo) {
+      html += ` <span class="gsm-chip-id">${_escHtml(idInfo.label)}</span>`;
+    }
     if (count > 1) html += ` <span class="gsm-chip-count">${count}×</span>`;
     // Note marker — SVG icon, always visible (darker), filled when has note
     html += `<span class="gsm-chip-note${hasNote ? ' has-note' : ''}" data-note-number="${_escAttr(num)}" title="Notatka"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span>`;
