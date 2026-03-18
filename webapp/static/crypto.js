@@ -147,15 +147,25 @@
   /*  Lazy-load external libraries                                      */
   /* ------------------------------------------------------------------ */
 
+  const _scriptPromises = {};
   function _loadScript(url) {
-    return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${url}"]`)) { resolve(); return; }
+    if (_scriptPromises[url]) return _scriptPromises[url];
+    _scriptPromises[url] = new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${url}"]`);
+      if (existing) {
+        // Script tag exists — wait for it to finish loading
+        if (existing._loaded) { resolve(); return; }
+        existing.addEventListener("load", () => { existing._loaded = true; resolve(); });
+        existing.addEventListener("error", reject);
+        return;
+      }
       const s = document.createElement("script");
       s.src = url;
-      s.onload = resolve;
+      s.onload = () => { s._loaded = true; resolve(); };
       s.onerror = reject;
       document.head.appendChild(s);
     });
+    return _scriptPromises[url];
   }
 
   async function _ensureChartJS() {
@@ -260,7 +270,7 @@
   /*  Render results — dual mode                                        */
   /* ------------------------------------------------------------------ */
 
-  function _renderResults(r) {
+  async function _renderResults(r) {
     _hide("crypto_empty_state");
     _show("crypto_results");
 
@@ -281,8 +291,12 @@
 
     _renderReviewTable(r, isExchange);
     _renderAnomalies(r, isExchange);
+
+    // Ensure Chart.js is loaded before rendering any charts
+    try { await _ensureChartJS(); } catch (e) { console.warn("[Crypto] Chart.js load failed:", e); }
     _renderCharts(r, isExchange);
     _renderSmallCharts(r, isExchange);
+
     _renderGraph(r);
     if (!isExchange) _renderWallets(r);
   }
