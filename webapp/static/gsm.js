@@ -225,16 +225,6 @@
       renderCell: r => r.imei ? `<code>${r.imei}</code>` : "—",
     },
     {
-      key: "cost", label: "Koszt netto", type: "numeric", defaultVisible: false, unit: "PLN",
-      getValue: r => r.cost != null ? r.cost : 0,
-      renderCell: r => r.cost != null ? r.cost.toFixed(2) + " zł" : "—",
-    },
-    {
-      key: "cost_gross", label: "Koszt brutto", type: "numeric", defaultVisible: false, unit: "PLN",
-      getValue: r => r.cost_gross != null ? r.cost_gross : 0,
-      renderCell: r => r.cost_gross != null ? r.cost_gross.toFixed(2) + " zł" : "—",
-    },
-    {
       key: "bts_lat", label: "BTS szerokość", type: "text", defaultVisible: false,
       getValue: r => (r.extra || {}).bts_lat || "",
       renderCell: r => (r.extra || {}).bts_lat || "—",
