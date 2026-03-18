@@ -3485,6 +3485,7 @@
       const pred = _anomalyPredicate(type, data.items);
       const filtered = records.filter(pred);
       _updateAnomalyMap(type, filtered);
+      _renderAnomalyIdTable(type, data.items);
     });
   }
 
@@ -3659,11 +3660,13 @@
 
     // Update anomaly mini-map with BTS points from filtered records
     _updateAnomalyMap(type, filtered);
+    _renderAnomalyIdTable(type, items);
   }
 
   // ── Anomaly mini-map ──
   let _anomMapInstance = null;
   let _anomMapMarkers = null;
+  let _anomMapInitialized = false;
 
   async function _updateAnomalyMap(anomalyType, filteredRecords) {
     const container = QS("#gsm_anomaly_map_container");
@@ -3683,20 +3686,53 @@
     }
     if (!window.L) return;
 
-    // Extract BTS points from filtered records
-    const points = new Map(); // key = "lat,lon" → { lat, lon, count, dates }
+    // Build a set of filtered record signatures for matching against geo_records
+    const filteredSigs = new Set();
     for (const r of filteredRecords) {
-      const ex = r.extra || {};
-      const lat = parseFloat(ex.bts_lat || ex.bts_x || "");
-      const lon = parseFloat(ex.bts_lon || ex.bts_y || "");
-      if (isNaN(lat) || isNaN(lon) || (lat === 0 && lon === 0)) continue;
-      const key = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+      // Unique key: date+time+caller+callee
+      const sig = `${r.date || ""}|${r.time || ""}|${r.caller || ""}|${r.callee || ""}`;
+      filteredSigs.add(sig);
+    }
+
+    // Extract BTS points from geo_records (the geolocation-enriched data with lat/lon)
+    const geo = St.lastResult && St.lastResult.geolocation;
+    const geoRecords = (geo && geo.geo_records) || [];
+    const points = new Map(); // key = "lat,lon" → { lat, lon, count, dates, city, street }
+
+    for (const gr of geoRecords) {
+      if (!gr.point || (!gr.point.lat && !gr.point.lon)) continue;
+      // Match geo_record to filtered record
+      const sig = `${gr.date || ""}|${gr.time || ""}|${gr.caller || ""}|${gr.callee || ""}`;
+      if (!filteredSigs.has(sig)) continue;
+
+      const lat = gr.point.lat;
+      const lon = gr.point.lon;
+      const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
       if (!points.has(key)) {
-        points.set(key, { lat, lon, count: 0, dates: new Set(), city: ex.bts_city || "", street: ex.bts_street || "" });
+        points.set(key, { lat, lon, count: 0, dates: new Set(),
+          city: gr.point.city || "", street: gr.point.street || "" });
       }
       const p = points.get(key);
       p.count++;
-      if (r.date) p.dates.add(r.date);
+      if (gr.date) p.dates.add(gr.date);
+    }
+
+    // Fallback: try extracting from record extra fields (bts_lat/bts_lon)
+    if (points.size === 0) {
+      for (const r of filteredRecords) {
+        const ex = r.extra || {};
+        const lat = parseFloat(ex.bts_lat || ex.bts_x || "");
+        const lon = parseFloat(ex.bts_lon || ex.bts_y || "");
+        if (isNaN(lat) || isNaN(lon) || (lat === 0 && lon === 0)) continue;
+        const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+        if (!points.has(key)) {
+          points.set(key, { lat, lon, count: 0, dates: new Set(),
+            city: ex.bts_city || "", street: ex.bts_street || "" });
+        }
+        const p = points.get(key);
+        p.count++;
+        if (r.date) p.dates.add(r.date);
+      }
     }
 
     // Update title and stats
@@ -3704,16 +3740,16 @@
     if (titleEl) titleEl.textContent = `BTS: ${catLabel}`;
     if (statsEl) statsEl.textContent = `${points.size} lokalizacji · ${filteredRecords.length} rek.`;
 
-    // Initialize or reuse map
+    // Initialize or reuse map — use same tile layer as main BTS map
     if (!_anomMapInstance) {
       _anomMapInstance = L.map(container, {
         zoomControl: true,
         attributionControl: false,
         preferCanvas: true,
       });
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 18,
-      }).addTo(_anomMapInstance);
+      // Use the same tile layer logic as the main BTS map
+      await _addTileLayer(_anomMapInstance);
+      _anomMapInitialized = true;
     }
 
     // Clear old markers
@@ -3755,6 +3791,61 @@
 
     // Force tile refresh (container might have been hidden)
     setTimeout(() => { _anomMapInstance.invalidateSize(); }, 150);
+  }
+
+  /** Render identification table under anomaly map for anomaly-related numbers */
+  function _renderAnomalyIdTable(anomalyType, items) {
+    const wrap = QS("#gsm_anomaly_id_table");
+    if (!wrap) return;
+    if (!items || !items.length) { wrap.innerHTML = ""; return; }
+
+    // Collect unique numbers from anomaly items
+    const numbers = new Set();
+    for (const it of items) {
+      if (it.number) numbers.add(it.number.replace(/^\+/, ""));
+      if (it.contact) numbers.add(it.contact);
+      if (it.numbers) it.numbers.forEach(n => numbers.add(n));
+    }
+
+    // Look up identification for each number
+    const rows = [];
+    for (const num of numbers) {
+      const info = _idLookup(num);
+      if (!info || !info.rec) continue;
+      const rec = info.rec;
+      const isCompany = rec.type === "company" || !!(rec.nip && rec.nip.length >= 10);
+      rows.push({ num, rec, isCompany });
+    }
+
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="small muted" style="padding:6px">Brak danych identyfikacyjnych dla numerów tej anomalii</div>';
+      return;
+    }
+
+    let html = '<table class="gsm-table" style="font-size:12px;margin-top:0"><thead><tr>';
+    html += '<th>Numer</th><th>Imię Nazwisko / Firma</th><th>PESEL / NIP</th>';
+    html += '</tr></thead><tbody>';
+    for (const r of rows) {
+      const rec = r.rec;
+      const nameParts = [];
+      if (rec.first_name) nameParts.push(rec.first_name);
+      if (rec.last_name) nameParts.push(rec.last_name);
+      const nameStr = nameParts.length ? nameParts.join(" ") : (rec.name || "—");
+      const idStr = r.isCompany
+        ? (rec.nip ? `NIP: ${rec.nip}` : (rec.regon ? `REGON: ${rec.regon}` : "—"))
+        : (rec.pesel || "—");
+      const typeIcon = r.isCompany ? "\u{1F3E2}" : "";
+      // Build tooltip
+      const tooltip = _idTooltipText(rec);
+      const tipEsc = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+      html += `<tr>`;
+      html += `<td><code>${r.num}</code></td>`;
+      html += `<td class="gsm-id-tip" data-id-tip="${tipEsc}">${typeIcon} ${_escHtml(nameStr)}</td>`;
+      html += `<td>${idStr}</td>`;
+      html += `</tr>`;
+    }
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
   }
 
   /**
@@ -4102,7 +4193,7 @@
     const topN = Math.ceil(N / 2);
     const botN = N - topN;
     const maxPerRow = Math.max(topN, botN);
-    const CW = 115, CH = 96, CGAP = 10;
+    const CW = 115, CH = 106, CGAP = 10;
     const W = Math.max(maxPerRow * (CW + CGAP) - CGAP + 30, 460);
 
     // Auto-scale card width — capped at 1/3 of Records card width
@@ -4349,7 +4440,7 @@
         svg += `<text class="gsm-graph-id-label gsm-graph-id-empty" data-number="${c.number}" x="${icx}" y="${card.y + 39}" text-anchor="middle" font-size="6.5" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
       }
       // OUT badge
-      const by1 = card.y + 46;
+      const by1 = card.y + 52;
       svg += `<g data-elabel="out" data-idx="${idx}" data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}" data-fwd="0"
         ${outAll === 0 ? 'style="display:none"' : ""}>
         <rect x="${card.x + 4}" y="${by1}" width="${bw}" height="12" rx="3" fill="#dcfce7"/>
@@ -4357,7 +4448,7 @@
         <text x="${card.x + CW - 6}" y="${by1 + 9}" font-size="7.5" font-weight="600" fill="#16a34a" text-anchor="end">${outAll}</text>
       </g>`;
       // IN badge
-      const by2 = card.y + 60;
+      const by2 = card.y + 66;
       svg += `<g data-elabel="in" data-idx="${idx}" data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}" data-fwd="0"
         ${inAll === 0 ? 'style="display:none"' : ""}>
         <rect x="${card.x + 4}" y="${by2}" width="${bw}" height="12" rx="3" fill="#fee2e2"/>
@@ -4365,7 +4456,7 @@
         <text x="${card.x + CW - 6}" y="${by2 + 9}" font-size="7.5" font-weight="600" fill="#dc2626" text-anchor="end">${inAll}</text>
       </g>`;
       // FWD badge (orange)
-      const by3 = card.y + 74;
+      const by3 = card.y + 80;
       svg += `<g data-elabel="fwd" data-idx="${idx}" data-all="${fwdAll2}" data-calls="${fwdAll2}" data-sms="0" data-fwd="${fwdAll2}"
         ${fwdAll2 === 0 ? 'style="display:none"' : ""}>
         <rect x="${card.x + 4}" y="${by3}" width="${bw}" height="12" rx="3" fill="#fed7aa"/>
