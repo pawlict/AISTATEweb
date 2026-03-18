@@ -76,7 +76,8 @@
     <!-- GSM toolbar items (hidden by default, shown when GSM tab active) -->
     <div class="analysis-toolbar-right" id="gsm_toolbar_items" style="display:none">
       <div class="toolbar-section">
-        <button class="btn pill-icon" id="gsm_add_file_toolbar_btn" title="Wczytaj dane GSM (biling, identyfikacja, ZIP, folder)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj dane" draggable="false"></button>
+        <button class="btn pill-icon" id="gsm_add_file_toolbar_btn" title="Wczytaj pliki GSM (biling, identyfikacja, ZIP)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj dane" draggable="false"></button>
+        <button class="btn pill-icon" id="gsm_add_folder_toolbar_btn" title="Wczytaj folder z danymi GSM"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></button>
         <span class="toolbar-sep" style="height:22px;margin:0 6px"></span>
         <button class="btn pill-icon" id="gsm_standalone_map_btn" title="Otwórz mapę (bez danych bilingowych)"><img src="/static/icons/inne/map.svg" alt="Mapa" width="20" height="20" draggable="false" style="opacity:.85"></button>
       </div>
@@ -1398,6 +1399,7 @@
   <input type="file" id="docs_file_input" style="display:none" multiple>
   <input type="file" id="aml_file_input" accept=".pdf" multiple style="display:none">
   <input type="file" id="gsm_file_input" accept=".xlsx,.xls,.csv,.txt,.zip" multiple style="display:none">
+  <input type="file" id="gsm_folder_input" webkitdirectory directory multiple style="display:none">
   <input type="file" id="crypto_file_input" accept=".csv,.json,.txt,.pdf" style="display:none">
   <input type="file" id="prompt_import_input" style="display:none" accept="application/json">
 

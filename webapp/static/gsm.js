@@ -224,6 +224,69 @@
       getValue: r => r.imei || "",
       renderCell: r => r.imei ? `<code>${r.imei}</code>` : "—",
     },
+    {
+      key: "bts_lat", label: "BTS szerokość", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_lat || "",
+      renderCell: r => (r.extra || {}).bts_lat || "—",
+    },
+    {
+      key: "bts_lon", label: "BTS długość", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_lon || "",
+      renderCell: r => (r.extra || {}).bts_lon || "—",
+    },
+    {
+      key: "bts_city", label: "BTS miasto", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_city || "",
+      renderCell: r => (r.extra || {}).bts_city || "—",
+    },
+    {
+      key: "bts_street", label: "BTS ulica", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_street || "",
+      renderCell: r => (r.extra || {}).bts_street || "—",
+    },
+    {
+      key: "azimuth", label: "Azymut", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).azimuth || "",
+      renderCell: r => (r.extra || {}).azimuth || "—",
+    },
+    {
+      key: "bts_code", label: "BTS kod", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_code || "",
+      renderCell: r => (r.extra || {}).bts_code || "—",
+    },
+    {
+      key: "range_km", label: "Zasięg (km)", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).range_km || "",
+      renderCell: r => (r.extra || {}).range_km || "—",
+    },
+    {
+      key: "service", label: "Usługa", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).service || "",
+      renderCell: r => (r.extra || {}).service || "—",
+    },
+    {
+      key: "nr_powiazany", label: "Nr powiązany", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).nr_powiazany || "",
+      renderCell: r => {
+        const v = (r.extra || {}).nr_powiazany || "";
+        return v ? `<code>${v}</code>` : "—";
+      },
+    },
+    {
+      key: "system", label: "System", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).system || "",
+      renderCell: r => (r.extra || {}).system || "—",
+    },
+    {
+      key: "public_ip", label: "Publiczne IP", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).public_ip || "",
+      renderCell: r => (r.extra || {}).public_ip || "—",
+    },
+    {
+      key: "roaming_mcc_mnc", label: "Roaming MCC/MNC", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).roaming_mcc_mnc || "",
+      renderCell: r => (r.extra || {}).roaming_mcc_mnc || "—",
+    },
   ];
 
   const _COL_MAP = {};
@@ -1869,17 +1932,123 @@
       label: rec.label || "",
       type: rec.type || "unknown",
       css: cssMap[rec.type] || "gsm-id-unknown",
+      rec: rec,
     };
   }
 
   /**
-   * Render an identification cell value.
+   * Build a rich tooltip text from all identification fields.
+   */
+  function _idTooltipText(rec) {
+    if (!rec) return "";
+    const lines = [];
+    const _f = (label, val) => { if (val) lines.push(`${label}: ${val}`); };
+    _f("Imię", rec.first_name);
+    _f("Nazwisko", rec.last_name);
+    _f("Nazwa", rec.name);
+    _f("PESEL", rec.pesel);
+    _f("NIP", rec.nip);
+    _f("REGON", rec.regon);
+    _f("Nr dokumentu", rec.document_number);
+    _f("Adres", rec.address);
+    _f("Miasto", rec.city);
+    _f("Adres korespond.", rec.correspondence_address);
+    _f("E-mail", rec.email);
+    _f("Operator", rec.operator);
+    _f("Typ umowy", rec.contract_type);
+    _f("Typ usługi", rec.service_type);
+    _f("Taryfa", rec.tariff);
+    _f("Status", rec.status);
+    _f("Aktywacja", rec.activation_date);
+    _f("Dezaktywacja", rec.deactivation_date);
+    _f("SIM", rec.sim);
+    _f("IMSI", rec.imsi);
+    _f("Typ abonenta", rec.subscriber_type);
+    _f("Uwagi", rec.notes);
+    return lines.join("\n");
+  }
+
+  /**
+   * Build a short display label: "Imię Nazwisko (PESEL)" or fallback to rec.label.
+   */
+  function _idShortLabel(rec) {
+    if (!rec) return "";
+    const parts = [];
+    if (rec.first_name) parts.push(rec.first_name);
+    if (rec.last_name) parts.push(rec.last_name);
+    if (parts.length === 0 && rec.name) parts.push(rec.name);
+    let label = parts.join(" ");
+    if (rec.pesel) label += ` (${rec.pesel})`;
+    return label || rec.label || "";
+  }
+
+  /**
+   * Render an identification cell value with rich hover tooltip (chmurka).
    */
   function _idCell(number) {
     const info = _idLookup(number);
     if (!info) return '<span class="muted">—</span>';
-    return `<span class="${info.css}" title="${info.type}">${info.label}</span>`;
+    const rec = info.rec;
+    const displayLabel = _idShortLabel(rec);
+    const tooltip = _idTooltipText(rec);
+    const escaped = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    return `<span class="${info.css} gsm-id-tip" data-id-tip="${escaped}">${displayLabel}</span>`;
   }
+
+  /* ── floating identification tooltip (chmurka) ─────────── */
+  let _idTipEl = null;
+  function _ensureIdTip() {
+    if (_idTipEl) return _idTipEl;
+    _idTipEl = document.createElement("div");
+    _idTipEl.className = "gsm-id-tooltip";
+    _idTipEl.style.display = "none";
+    document.body.appendChild(_idTipEl);
+    return _idTipEl;
+  }
+
+  document.addEventListener("mouseover", (e) => {
+    const span = e.target.closest(".gsm-id-tip[data-id-tip]");
+    if (!span) return;
+    const tip = _ensureIdTip();
+    const text = span.getAttribute("data-id-tip");
+    if (!text) return;
+    // Render as HTML table rows
+    const lines = text.split("\n").filter(Boolean);
+    let html = '<table class="gsm-id-tooltip-tbl">';
+    for (const line of lines) {
+      const idx = line.indexOf(": ");
+      if (idx > 0) {
+        html += `<tr><td class="gsm-id-tooltip-key">${line.slice(0, idx)}</td><td>${line.slice(idx + 2)}</td></tr>`;
+      } else {
+        html += `<tr><td colspan="2">${line}</td></tr>`;
+      }
+    }
+    html += "</table>";
+    tip.innerHTML = html;
+    tip.style.display = "block";
+    // Position near the element
+    const rect = span.getBoundingClientRect();
+    let left = rect.left + window.scrollX;
+    let top = rect.bottom + window.scrollY + 4;
+    // Keep within viewport
+    requestAnimationFrame(() => {
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+      if (left < 4) left = 4;
+      if (top + th > window.innerHeight + window.scrollY - 8) {
+        top = rect.top + window.scrollY - th - 4;
+      }
+      tip.style.left = left + "px";
+      tip.style.top = top + "px";
+    });
+  });
+
+  document.addEventListener("mouseout", (e) => {
+    const span = e.target.closest(".gsm-id-tip[data-id-tip]");
+    if (!span) return;
+    if (_idTipEl) _idTipEl.style.display = "none";
+  });
 
   /* ── render ─────────────────────────────────────────────── */
   async function _renderResults(data) {
@@ -12124,6 +12293,32 @@
 
     if (uploadBtn) {
       uploadBtn.onclick = () => { if (fileInput) fileInput.click(); };
+    }
+
+    // Folder input button
+    const folderInput = QS("#gsm_folder_input");
+    const folderBtn = QS("#gsm_add_folder_toolbar_btn");
+    if (folderBtn) {
+      folderBtn.onclick = () => { if (folderInput) folderInput.click(); };
+    }
+    if (folderInput) {
+      folderInput.onchange = () => {
+        if (folderInput.files && folderInput.files.length > 0) {
+          // Filter to supported file types from folder selection
+          const supported = [".xlsx", ".xls", ".csv", ".txt", ".zip"];
+          const filesCopy = Array.from(folderInput.files).filter(f => {
+            const ext = f.name.toLowerCase().replace(/^.*(\.\w+)$/, "$1");
+            return supported.includes(ext);
+          });
+          folderInput.value = "";
+          if (filesCopy.length > 0) {
+            _addLog("info", `Folder: znaleziono ${filesCopy.length} obsługiwanych plików`);
+            _smartImport(filesCopy);
+          } else {
+            _addLog("warn", "Folder: nie znaleziono obsługiwanych plików (.xlsx, .xls, .csv, .txt, .zip)");
+          }
+        }
+      };
     }
 
     // Standalone map button
