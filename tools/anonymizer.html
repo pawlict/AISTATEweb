@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Anonimizer — Anonimizacja danych osobowych</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-M2W0AI0euSMpObm+GOENn2DLAQU2Fv/5MF6iAiSahACiiIvKSnNJx3qW3P5UN4LDB/vFJcfBEAnIIEGMNQ2HQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDFuGW4A8aCP9W73tSUBe5EIiGMN9QKIFBKK7SZLCw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 :root {
@@ -746,7 +746,7 @@ class PIIDetector {
       const patterns=[
         // +48/0048/48 then 9 digits with optional separators
         /(?<!\d)(\+48|0048)[\s.-]?(\d{3})[\s.-]?(\d{3})[\s.-]?(\d{3})(?!\d)/g,
-        /(?<!\d)(48)(\d{3})[\s.-]?(\d{3})[\s.-]?(\d{3})(?!\d)/g,
+        /(?<!\d)(48)[\s.-]?(\d{3})[\s.-]?(\d{3})[\s.-]?(\d{3})(?!\d)/g,
         // International +XX or +XXX then 9 digits
         /(?<!\d)(\+\d{1,3})[\s.-]?(\d{3})[\s.-]?(\d{3})[\s.-]?(\d{3})(?!\d)/g,
         // 9 digits with separators (no country code)
@@ -923,8 +923,29 @@ class Anonymizer {
       switch(det.type){
         case "phone": {
           const anon9=this.m.get("phone",det.core);
-          const newDigits=det.cc?det.cc+anon9:anon9;
-          repl=this._reapplyPhoneFmt(det.matched,newDigits);
+          if(det.cc){
+            // Preserve country code portion exactly — only replace local 9 digits
+            const ccDigitCount=det.cc.replace(/\D/g,"").length;
+            let pos=0, dcount=0;
+            for(;pos<det.matched.length;pos++){
+              if(/\d/.test(det.matched[pos])) dcount++;
+              if(dcount>=ccDigitCount){pos++;break;}
+            }
+            // Skip separator between CC and local number
+            while(pos<det.matched.length&&/[\s.\-]/.test(det.matched[pos])) pos++;
+            const ccPart=det.matched.substring(0,pos);
+            const localPart=det.matched.substring(pos);
+            // Reformat only local digits, preserving separators
+            let lr="",di=0;
+            for(let j=0;j<localPart.length;j++){
+              if(/\d/.test(localPart[j])){if(di<anon9.length){lr+=anon9[di];di++;}}
+              else lr+=localPart[j];
+            }
+            while(di<anon9.length){lr+=anon9[di];di++;}
+            repl=ccPart+lr;
+          } else {
+            repl=this._reapplyPhoneFmt(det.matched,anon9);
+          }
           break;
         }
         case "nip":
@@ -960,6 +981,37 @@ class Anonymizer {
     return result;
   }
 
+  // Force-anonymize cell as a given type (for column-name-based detection)
+  // First tries normal detection; if nothing found, treats entire value as the given type
+  anonymizeForced(text, type) {
+    if(!text||typeof text!=="string"||!text.trim()) return text;
+    const normal=this.anonymize(text);
+    if(normal!==text) return normal; // already detected by standard rules
+
+    const trimmed=text.trim();
+    if(type==="lastName"){
+      // Handle double-barreled surnames: "Kowalski-Nowak"
+      const parts=trimmed.split(/\s*-\s*/);
+      const anon=parts.map(p=>{
+        if(!p.trim()) return p;
+        const r=this.m.get("lastName",p.trim());
+        if(p===p.toUpperCase()) return r.toUpperCase();
+        if(p[0]===p[0].toUpperCase()) return r[0].toUpperCase()+r.slice(1);
+        return r;
+      });
+      return anon.join("-");
+    }
+    if(type==="firstName"){
+      const r=this.m.get("firstName",trimmed);
+      if(trimmed===trimmed.toUpperCase()) return r.toUpperCase();
+      if(trimmed[0]===trimmed[0].toUpperCase()) return r[0].toUpperCase()+r.slice(1);
+      return r;
+    }
+    if(type==="city") return this.m.get("city",trimmed);
+    if(type==="street") return this.m.get("street",trimmed);
+    return text;
+  }
+
   _reapplyPhoneFmt(orig, newDigits) {
     let res="", di=0;
     for(let i=0;i<orig.length;i++){
@@ -979,6 +1031,27 @@ class Anonymizer {
 
 class FileProcessor {
   constructor(anon, onProgress){ this.anon=anon; this.onProgress=onProgress||(()=>{}); }
+
+  // Detect PII column types from header row
+  _detectColumnTypes(headerCells){
+    const types={};
+    const patterns={
+      lastName: /nazwisk|surname|last.?name|family.?name/i,
+      firstName: /imi[eę]|first.?name|given.?name/i,
+      city: /miasto|city|miejscowo[sś]/i,
+      street: /ulic[ae]|street/i,
+      phone: /telefon|phone|tel\.?$|nr.?tel|msisdn/i,
+      email: /e[\-.]?mail|poczta/i,
+    };
+    for(let i=0;i<headerCells.length;i++){
+      const h=(headerCells[i]||"").trim();
+      if(!h) continue;
+      for(const[type,re] of Object.entries(patterns)){
+        if(re.test(h)){types[i]=type;break;}
+      }
+    }
+    return types;
+  }
 
   async processFiles(entries){
     const results=[]; const total=entries.length;
@@ -1042,8 +1115,20 @@ class FileProcessor {
 
     const delim=detectDelim(text);
     const lines=parseCsv(text,delim);
-    const anonLines=lines.map(line=>{
-      const a=line.map(cell=>(!cell||!cell.trim())?cell:this.anon.anonymize(cell));
+
+    // Detect column types from header row
+    const colTypes=lines.length>0?this._detectColumnTypes(lines[0]):{};
+    const hasColTypes=Object.keys(colTypes).length>0;
+
+    const anonLines=lines.map((line,lineIdx)=>{
+      const a=line.map((cell,colIdx)=>{
+        if(!cell||!cell.trim()) return cell;
+        // Skip header row if we detected column types
+        if(hasColTypes&&lineIdx===0) return cell;
+        const ct=colTypes[colIdx];
+        if(ct) return this.anon.anonymizeForced(cell,ct);
+        return this.anon.anonymize(cell);
+      });
       a._quoted=line._quoted;
       return a;
     });
@@ -1059,27 +1144,43 @@ class FileProcessor {
       const sh=wb.Sheets[sn];
       if(!sh["!ref"]) continue;
       const range=XLSX.utils.decode_range(sh["!ref"]);
+
+      // Detect column types from header row (row 0)
+      const headerCells=[];
+      for(let c=range.s.c;c<=range.e.c;c++){
+        const hAddr=XLSX.utils.encode_cell({r:range.s.r,c});
+        const hCell=sh[hAddr];
+        headerCells.push(hCell&&hCell.v?String(hCell.v):"");
+      }
+      const colTypes=this._detectColumnTypes(headerCells);
+      const hasColTypes=Object.keys(colTypes).length>0;
+
       for(let r=range.s.r;r<=range.e.r;r++){
         for(let c=range.s.c;c<=range.e.c;c++){
           const addr=XLSX.utils.encode_cell({r,c});
           const cell=sh[addr];
           if(!cell) continue;
+          // Skip header row if column types detected
+          if(hasColTypes&&r===range.s.r) continue;
+          const colIdx=c-range.s.c;
+          const ct=colTypes[colIdx];
           let changed=false;
           if(cell.t==="s"&&cell.v){
             const orig=String(cell.v);
-            cell.v=this.anon.anonymize(orig);
+            cell.v=ct?this.anon.anonymizeForced(orig,ct):this.anon.anonymize(orig);
             if(cell.v!==orig) changed=true;
             if(cell.w) cell.w=cell.v;
             if(cell.r) delete cell.r;
           } else if(cell.t==="n"&&cell.v!==undefined){
-            const sv=String(cell.v), av=this.anon.anonymize(sv);
+            const sv=String(cell.v);
+            const av=ct?this.anon.anonymizeForced(sv,ct):this.anon.anonymize(sv);
             if(av!==sv){
               changed=true;
               if(/^\d+$/.test(av)){cell.v=parseInt(av,10);if(cell.w)cell.w=av;}
               else{cell.t="s";cell.v=av;if(cell.w)cell.w=av;}
             }
           }
-          // Mark changed cells with blue font color
+          // Mark changed cells with blue font color (requires xlsx-js-style)
           if(changed){
             if(!cell.s) cell.s={};
             cell.s.font=Object.assign(cell.s.font||{},{color:{rgb:"0066CC"}});
