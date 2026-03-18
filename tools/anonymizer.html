@@ -4,8 +4,8 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Anonimizer — Anonimizacja danych osobowych</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDFuGW4A8aCP9W73tSUBe5EIiGMN9QKIFBKK7SZLCw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 <style>
 :root {
   --bg: #0f1117;
@@ -239,7 +239,6 @@ details[open] > summary { color: var(--text); margin-bottom: 10px; }
 
   <div class="actions">
     <button class="btn btn-primary" id="run_btn" disabled>&#9654; Anonimizuj</button>
-    <button class="btn btn-secondary" id="download_btn" style="display:none">&#11015; Pobierz wyniki (ZIP)</button>
     <button class="btn btn-secondary" id="export_map_btn" style="display:none">&#128203; Eksportuj mapowanie</button>
     <button class="btn btn-secondary" id="import_map_btn">&#128194; Importuj mapowanie</button>
     <input type="file" id="import_map_input" accept=".json" style="display:none"/>
@@ -254,6 +253,14 @@ details[open] > summary { color: var(--text); margin-bottom: 10px; }
   <div class="card stats" id="stats">
     <h3>Statystyki anonimizacji</h3>
     <div class="stats-grid" id="stats_grid"></div>
+  </div>
+
+  <div class="card" id="results_section" style="display:none">
+    <h3 style="font-size:.95em;margin-bottom:10px;color:var(--text-muted)">Wynikowe pliki</h3>
+    <div class="file-list" id="results_list"></div>
+    <div class="actions" style="margin-top:12px">
+      <button class="btn btn-primary" id="download_all_btn">&#11015; Pobierz wszystko (ZIP)</button>
+    </div>
   </div>
 
   <div class="card mapping-section" id="mapping_section">
@@ -1307,7 +1314,6 @@ function init(){
   const dz=document.getElementById("dropzone");
   const fi=document.getElementById("file_input");
   const runBtn=document.getElementById("run_btn");
-  const dlBtn=document.getElementById("download_btn");
   const expBtn=document.getElementById("export_map_btn");
   const impBtn=document.getElementById("import_map_btn");
   const impInput=document.getElementById("import_map_input");
@@ -1325,7 +1331,7 @@ function init(){
   });
 
   runBtn.addEventListener("click",runAnonymization);
-  dlBtn.addEventListener("click",downloadAll);
+  document.getElementById("download_all_btn").addEventListener("click",downloadAll);
   expBtn.addEventListener("click",()=>{
     const blob=new Blob([mapping.exportJSON()],{type:"application/json"});
     dlBlob(blob,"mapowanie_anonimizacji.json");
@@ -1343,8 +1349,8 @@ function init(){
     files.length=0; results=[]; mapping=new MappingEngine();
     updateFileList();
     document.getElementById("stats").style.display="none";
+    document.getElementById("results_section").style.display="none";
     document.getElementById("mapping_section").style.display="none";
-    document.getElementById("download_btn").style.display="none";
     document.getElementById("export_map_btn").style.display="none";
     document.getElementById("log").textContent="";
     document.getElementById("log").style.display="none";
@@ -1405,8 +1411,7 @@ async function runAnonymization(){
       entries.push({name:f.name,data:ab});
     }
     results=await proc.processFiles(entries);
-    showStats(); showMappings();
-    document.getElementById("download_btn").style.display="";
+    showStats(); showResults(); showMappings();
     document.getElementById("export_map_btn").style.display="";
     log("Zakończono. Przetworzono "+results.length+" plik(ów).","ok");
   } catch(e){
@@ -1458,17 +1463,57 @@ function showMappings(){
   sec.style.display="block";
 }
 
+function showResults(){
+  const sec=document.getElementById("results_section");
+  const list=document.getElementById("results_list");
+  list.textContent="";
+  if(!results.length){sec.style.display="none";return;}
+
+  const icons={csv:"\u{1F4C4}",tsv:"\u{1F4C4}",xls:"\u{1F4CA}",xlsx:"\u{1F4CA}",xlsm:"\u{1F4CA}",zip:"\u{1F4E6}"};
+  results.forEach((r,i)=>{
+    const ext=r.name.split(".").pop().toLowerCase();
+    const fname=anonName(r.name);
+    const sz=r.data?r.data.byteLength||r.data.length||0:0;
+
+    const row=document.createElement("div"); row.className="file-item";
+    const ico=document.createElement("span"); ico.className="icon"; ico.textContent=icons[ext]||"\u{1F4C4}";
+    const nm=document.createElement("span"); nm.className="name"; nm.textContent=fname;
+    const szEl=document.createElement("span"); szEl.className="size"; szEl.textContent=fmtSize(sz);
+    const btn=document.createElement("button"); btn.className="btn btn-secondary";
+    btn.style.cssText="padding:5px 12px;font-size:.8em;margin-left:8px;white-space:nowrap;";
+    btn.textContent="\u2B07 Pobierz";
+    btn.addEventListener("click",()=>{
+      try{
+        dlBlob(new Blob([r.data]),fname);
+        log("Pobrano: "+fname,"ok");
+      }catch(e){log("Błąd pobierania "+fname+": "+e.message,"err");}
+    });
+    row.append(ico,nm,szEl,btn);
+    list.appendChild(row);
+  });
+  sec.style.display="";
+}
+
 async function downloadAll(){
-  if(!results.length) return;
-  if(results.length===1){
-    const r=results[0];
-    dlBlob(new Blob([r.data]),anonName(r.name));
-    return;
+  if(!results.length){log("Brak wyników do pobrania.","err");return;}
+  try{
+    if(results.length===1){
+      const r=results[0];
+      dlBlob(new Blob([r.data]),anonName(r.name));
+      log("Pobrano: "+anonName(r.name),"ok");
+      return;
+    }
+    log("Pakowanie plików do ZIP...","ok");
+    const zip=new JSZip();
+    for(const r of results) zip.file(anonName(r.name),r.data);
+    const blob=await zip.generateAsync({type:"blob"});
+    dlBlob(blob,"anonimizowane_pliki.zip");
+    log("Pobrano: anonimizowane_pliki.zip ("+fmtSize(blob.size)+")","ok");
+  }catch(e){
+    log("Błąd pakowania ZIP: "+e.message,"err");
+    console.error(e);
+    log("Spróbuj pobrać pliki pojedynczo przyciskami powyżej.","err");
   }
-  const zip=new JSZip();
-  for(const r of results) zip.file(anonName(r.name),r.data);
-  const blob=await zip.generateAsync({type:"blob"});
-  dlBlob(blob,"anonimizowane_pliki.zip");
 }
 
 function anonName(name){
@@ -1482,7 +1527,11 @@ function dlBlob(blob,name){
   const a=document.createElement("a");
   a.href=url;a.download=name;
   document.body.appendChild(a);a.click();
-  document.body.removeChild(a);URL.revokeObjectURL(url);
+  // Delay cleanup so browser has time to start download
+  setTimeout(()=>{
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },3000);
 }
 
 function log(msg,type){
@@ -1505,6 +1554,10 @@ function fmtSize(b){
 
 if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",init);
 else init();
+
+// Verify libraries loaded
+if(typeof XLSX==="undefined") console.error("XLSX library not loaded!");
+if(typeof JSZip==="undefined") console.error("JSZip library not loaded!");
 
 })();
 </script>
