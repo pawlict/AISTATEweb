@@ -362,11 +362,6 @@
     <!-- AML main content -->
     <div class="analyst-panel-main">
 
-    <!-- Empty state (before upload) -->
-    <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-      <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
-    </div>
-
     <!-- Progress bar (like transcription) -->
     <div class="an-progress" id="aml_progress">
       <div class="small">Status: <b id="aml_status">—</b> <span id="aml_pct"></span></div>
@@ -604,6 +599,12 @@
 
     </div><!-- /analyst-panel-main (AML) -->
   </div><!-- /analyst-panel-layout (AML) -->
+
+  <!-- Empty state (before upload) — outside layout so logo is centered -->
+  <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  </div>
+
   </div><!-- /aml_content -->
 
   <!-- GSM Analysis content -->
@@ -1125,13 +1126,14 @@
       </form>
     </dialog>
 
-    <!-- Empty state (before upload) -->
-    <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-      <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
-    </div>
-
     </div><!-- /analyst-panel-main (GSM) -->
   </div><!-- /analyst-panel-layout (GSM) -->
+
+  <!-- Empty state (before upload) — outside layout so logo is centered -->
+  <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  </div>
+
   </div><!-- /gsm_content -->
 
   <!-- Crypto Analysis content -->
@@ -1470,6 +1472,14 @@
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         const which = tab.getAttribute('data-tab');
+
+        // Save active tab per project so it restores on next open
+        const _pid = (typeof AISTATE !== 'undefined' && AISTATE && AISTATE.projectId) || '';
+        if(_pid && ['aml','gsm','crypto'].includes(which)){
+          localStorage.setItem('aistate_analysis_tab_' + _pid, which);
+        } else if(_pid && which === 'llm'){
+          localStorage.removeItem('aistate_analysis_tab_' + _pid);
+        }
 
         // Hide all content and extra toolbars
         allContents.forEach(c => { if(c) c.style.display = 'none'; });
