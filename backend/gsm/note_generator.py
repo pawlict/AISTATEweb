@@ -150,6 +150,8 @@ def generate_note_docx(
 
     # Extract internal data (prefixed with _) before flattening
     anomaly_table_rows = placeholders.pop("_anomaly_table_rows", [])
+    anomaly_id_rows = placeholders.pop("_anomaly_id_rows", [])
+    other_numbers_list = placeholders.pop("_other_numbers_list", [])
     location_areas_list = placeholders.pop("_location_areas_list", [])
     location_movement_list = placeholders.pop("_location_movement_list", [])
     contacts_bullet_list = placeholders.pop("_contacts_bullet_list", [])
@@ -171,6 +173,8 @@ def generate_note_docx(
         table_data=table_data,
         selected_tables=selected_tables,
         anomaly_table_rows=anomaly_table_rows,
+        anomaly_id_rows=anomaly_id_rows,
+        other_numbers_list=other_numbers_list,
         chart_images=chart_images,
         location_areas_list=location_areas_list,
         location_movement_list=location_movement_list,
@@ -191,6 +195,8 @@ def _post_process_docx(
     table_data: Optional[Dict[str, List[List[str]]]] = None,
     selected_tables: Optional[List[str]] = None,
     anomaly_table_rows: Optional[List[List[str]]] = None,
+    anomaly_id_rows: Optional[List[List[str]]] = None,
+    other_numbers_list: Optional[List[dict]] = None,
     chart_images: Optional[Dict[str, bytes]] = None,
     location_areas_list: Optional[List[str]] = None,
     location_movement_list: Optional[List[str]] = None,
@@ -224,6 +230,14 @@ def _post_process_docx(
     if anomaly_table_rows:
         anomaly_intro = (tpl_texts or {}).get("anomaly_intro", ANOMALY_INTRO_TEXT)
         _insert_anomaly_section(doc, body, anomaly_table_rows, intro_text=anomaly_intro)
+
+    # 1b. Insert anomaly identification table (numbers from anomalies + ID data)
+    if anomaly_id_rows:
+        _insert_anomaly_id_table(doc, body, anomaly_id_rows)
+
+    # 1c. Insert multi-number subscriber table (other numbers of same owner)
+    if other_numbers_list:
+        _insert_other_numbers_table(doc, body, other_numbers_list)
 
     # 2. Insert standard tables (stats, contacts, locations)
     if selected_tables and table_data:
@@ -564,6 +578,116 @@ def _insert_anomaly_section(doc, body, anomaly_rows: List[List[str]], *, intro_t
 
     _add_spacer(doc, body, table._tbl)
     log.debug("Inserted anomaly section with %d rows", len(anomaly_rows))
+
+
+def _insert_anomaly_id_table(doc, body, anomaly_id_rows: List[List[str]]) -> None:
+    """Insert identification table for numbers appearing in anomalies.
+
+    Columns: Numer | Imię Nazwisko / Firma | PESEL / NIP | Anomalia
+    Inserted after the anomaly table (section 7).
+    """
+    from docx.shared import Pt
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    # Find the last element in section 7 (after anomaly table)
+    insert_after = _find_section_last_element(body, "7.")
+    if insert_after is None:
+        log.warning("Section 7 not found, skipping anomaly ID table")
+        return
+
+    # Caption
+    caption_p = _insert_paragraph_after(doc, body, insert_after)
+    run = caption_p.add_run("Tabela: Identyfikacja numerów z anomalii")
+    _style_run(run, FONT_SIZE_CAPTION, bold=True)
+
+    # Table
+    columns = ["Numer", "Imię Nazwisko / Firma", "PESEL / NIP", "Anomalia"]
+    table = doc.add_table(rows=1 + len(anomaly_id_rows), cols=len(columns))
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    body.remove(table._tbl)
+    idx = _body_index(body, caption_p._element)
+    body.insert(idx + 1, table._tbl)
+
+    for i, col_name in enumerate(columns):
+        cell = table.rows[0].cells[i]
+        cell.text = col_name
+        _style_cell_runs(cell, FONT_SIZE_TABLE, bold=True)
+
+    for row_idx, row_data in enumerate(anomaly_id_rows):
+        row = table.rows[row_idx + 1]
+        for col_idx, cell_text in enumerate(row_data):
+            if col_idx < len(columns):
+                cell = row.cells[col_idx]
+                cell.text = _fix_orphans(str(cell_text))
+                _style_cell_runs(cell, FONT_SIZE_TABLE)
+
+    _add_spacer(doc, body, table._tbl)
+    log.debug("Inserted anomaly ID table with %d rows", len(anomaly_id_rows))
+
+
+def _insert_other_numbers_table(doc, body, other_numbers: List[dict]) -> None:
+    """Insert 'Identyfikacja innych numerów abonenta' table in section 3.
+
+    Columns: Numer | Imię Nazwisko / Firma | PESEL / NIP | Operator | Dopasowanie
+    """
+    from docx.shared import Pt
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    insert_after = _find_section_last_element(body, "3.")
+    if insert_after is None:
+        log.warning("Section 3 not found, skipping other-numbers table")
+        return
+
+    # Intro text
+    intro_p = _insert_paragraph_after(doc, body, insert_after)
+    intro_text = (
+        f"W\u00a0danych identyfikacyjnych wykryto {len(other_numbers)} "
+        f"{'inny numer powiązany' if len(other_numbers) == 1 else 'inne numery powiązane'} "
+        f"z\u00a0tym samym abonentem na podstawie PESEL, NIP lub nazwy."
+    )
+    run = intro_p.add_run(_fix_orphans(intro_text))
+    _style_run(run, FONT_SIZE_BODY)
+    intro_p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    # Caption
+    caption_p = _insert_paragraph_after(doc, body, intro_p._element)
+    run = caption_p.add_run("Tabela: Inne numery abonenta")
+    _style_run(run, FONT_SIZE_CAPTION, bold=True)
+
+    # Table
+    columns = ["Numer", "Imię Nazwisko / Firma", "PESEL / NIP", "Operator", "Dopasowanie"]
+    table = doc.add_table(rows=1 + len(other_numbers), cols=len(columns))
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    body.remove(table._tbl)
+    idx = _body_index(body, caption_p._element)
+    body.insert(idx + 1, table._tbl)
+
+    for i, col_name in enumerate(columns):
+        cell = table.rows[0].cells[i]
+        cell.text = col_name
+        _style_cell_runs(cell, FONT_SIZE_TABLE, bold=True)
+
+    for row_idx, item in enumerate(other_numbers):
+        row = table.rows[row_idx + 1]
+        msisdn = item.get("msisdn", "?")
+        display_num = f"+{msisdn}" if not msisdn.startswith("+") else msisdn
+        row.cells[0].text = display_num
+        _style_cell_runs(row.cells[0], FONT_SIZE_TABLE)
+        row.cells[1].text = item.get("name", "—")
+        _style_cell_runs(row.cells[1], FONT_SIZE_TABLE)
+        row.cells[2].text = item.get("id_value", "—")
+        _style_cell_runs(row.cells[2], FONT_SIZE_TABLE)
+        row.cells[3].text = item.get("operator", "—")
+        _style_cell_runs(row.cells[3], FONT_SIZE_TABLE)
+        row.cells[4].text = item.get("match_by", "—")
+        _style_cell_runs(row.cells[4], FONT_SIZE_TABLE)
+
+    _add_spacer(doc, body, table._tbl)
+    log.debug("Inserted other-numbers table with %d rows", len(other_numbers))
 
 
 # ─── Table insertion ─────────────────────────────────────────────────────────

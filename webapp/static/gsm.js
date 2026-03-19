@@ -2104,10 +2104,33 @@
       filesHtml = data.filename || "\u2014";
     }
 
+    // Subscriber identification info
+    const subNorm = _normMsisdn(sub.msisdn || "");
+    const subIdRec = subNorm && St.idMap && St.idMap[subNorm] ? St.idMap[subNorm] : null;
+    let subscriberHtml = "\u2014";
+    if (subIdRec) {
+      const fn = subIdRec.first_name || "";
+      const ln = subIdRec.last_name || "";
+      const name = (fn + " " + ln).trim() || subIdRec.name || "";
+      const isCo = subIdRec.type === "company" || !!(subIdRec.nip && subIdRec.nip.length >= 10);
+      const typeIcon = isCo ? "\u{1F3E2} " : "";
+      let idParts = [];
+      if (name) idParts.push(`<strong>${typeIcon}${_escHtml(name)}</strong>`);
+      if (subIdRec.pesel) idParts.push(`PESEL: <code>${subIdRec.pesel}</code>`);
+      if (subIdRec.nip) idParts.push(`NIP: <code>${subIdRec.nip}</code>`);
+      if (subIdRec.regon) idParts.push(`REGON: <code>${subIdRec.regon}</code>`);
+      if (subIdRec.address) idParts.push(_escHtml(subIdRec.address));
+      if (subIdRec.document_number) idParts.push(`Dok.: ${_escHtml(subIdRec.document_number)}`);
+      if (subIdRec.contract_type) idParts.push(subIdRec.contract_type);
+      if (subIdRec.tariff) idParts.push(subIdRec.tariff);
+      subscriberHtml = idParts.join(" &middot; ");
+    }
+
     const rows = [
       ["Pliki \u017ar\u00f3d\u0142owe", filesHtml],
       ["Operator", (data.operator || "") + parserVer],
       ["MSISDN", sub.msisdn || "\u2014"],
+      ["Abonent", subscriberHtml],
     ];
     if (meta.signature) rows.push(["Sygnatura", meta.signature]);
     if (meta.order_id) rows.push(["Nr zlecenia", meta.order_id]);
