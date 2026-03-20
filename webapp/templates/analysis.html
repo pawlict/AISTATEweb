@@ -716,14 +716,18 @@
         <div class="h2">Anomalie</div>
         <div style="display:flex;gap:12px;align-items:flex-start">
           <div id="gsm_anomalies_body" style="flex:0 0 33%;min-width:280px;max-height:700px;overflow-y:auto"></div>
-          <div id="gsm_anomaly_map_wrap" style="flex:1;min-height:400px;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#e8e8e8">
+          <div id="gsm_anomaly_map_wrap" style="flex:1;min-height:400px;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#e8e8e8;position:relative">
             <div id="gsm_anomaly_map_header" style="padding:6px 12px;background:var(--card-bg,#fff);border-bottom:1px solid var(--border);font-size:13px;display:flex;align-items:center;gap:6px">
               <i data-icon="map" data-size="14"></i>
               <span id="gsm_anomaly_map_title" style="font-weight:600">Mapa BTS anomalii</span>
               <span id="gsm_anomaly_map_stats" class="small muted" style="margin-left:auto"></span>
+              <button class="btn btn-icon gsm-card-screenshot-btn" id="gsm_anomaly_map_screenshot_btn" title="Zrób zrzut mapy anomalii" style="margin-left:4px">
+                <i data-icon="camera" data-size="18"></i>
+              </button>
             </div>
             <div id="gsm_anomaly_map_container" style="flex:1;min-height:350px"></div>
             <div id="gsm_anomaly_id_table" style="max-height:200px;overflow-y:auto;border-top:1px solid var(--border);background:var(--card-bg,#fff)"></div>
+            <div class="gsm-graph-resize" id="gsm_anomaly_map_resize" title="Przeciągnij aby zmienić rozmiar"></div>
           </div>
         </div>
       </div>

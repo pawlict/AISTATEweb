@@ -32,6 +32,8 @@ MARKER_CATALOGUE: List[Dict[str, str]] = [
     {"key": "table_stats",       "type": "table",  "label": "📊 Tabela: Statystyki"},
     {"key": "table_contacts",    "type": "table",  "label": "📊 Tabela: Najczęstsze kontakty"},
     {"key": "table_anomalies",   "type": "table",  "label": "📊 Tabela: Wykryte anomalie"},
+    {"key": "table_anomaly_id",  "type": "table",  "label": "📊 Tabela: Identyfikacja numerów z anomalii"},
+    {"key": "table_other_numbers","type": "table", "label": "📊 Tabela: Inne numery abonenta"},
     {"key": "table_locations",   "type": "table",  "label": "📊 Tabela: Lokalizacje BTS"},
     {"key": "chart_top_contacts","type": "chart",  "label": "📈 Graf: Najczęstsze kontakty"},
     {"key": "chart_activity",    "type": "chart",  "label": "📈 Rozkład aktywności"},
@@ -62,6 +64,16 @@ FIELD_CATALOGUE: List[Dict[str, Any]] = [
     {"key": "sygnatura_sprawy", "group": "Dane podstawowe",       "label": "Sygnatura sprawy",     "desc": "Sygnatura sprawy (edytowalna)"},
 
     # ── Abonent / urządzenia ──
+    {"key": "subscriber_name",            "group": "Abonent / urządzenia", "label": "Abonent (nazwa)",   "desc": "Imię i nazwisko / nazwa firmy właściciela numeru"},
+    {"key": "subscriber_first_name",      "group": "Abonent / urządzenia", "label": "Abonent (imię)",    "desc": "Imię abonenta z danych identyfikacyjnych"},
+    {"key": "subscriber_last_name",       "group": "Abonent / urządzenia", "label": "Abonent (nazwisko)","desc": "Nazwisko abonenta z danych identyfikacyjnych"},
+    {"key": "subscriber_pesel",           "group": "Abonent / urządzenia", "label": "PESEL abonenta",    "desc": "Numer PESEL abonenta"},
+    {"key": "subscriber_nip",             "group": "Abonent / urządzenia", "label": "NIP abonenta",      "desc": "NIP firmy abonenta"},
+    {"key": "subscriber_regon",           "group": "Abonent / urządzenia", "label": "REGON abonenta",    "desc": "REGON firmy abonenta"},
+    {"key": "subscriber_address",         "group": "Abonent / urządzenia", "label": "Adres abonenta",    "desc": "Adres zamieszkania / siedziby abonenta"},
+    {"key": "subscriber_document",        "group": "Abonent / urządzenia", "label": "Nr dokumentu",      "desc": "Numer dokumentu tożsamości abonenta"},
+    {"key": "subscriber_type",            "group": "Abonent / urządzenia", "label": "Typ abonenta",      "desc": "Typ abonenta (osoba/firma)"},
+    {"key": "subscriber_owner_label",     "group": "Abonent / urządzenia", "label": "Abonent (pełny)",   "desc": "Imię Nazwisko (PESEL) lub Firma (NIP) — pełny opis"},
     {"key": "imsi_primary",               "group": "Abonent / urządzenia", "label": "IMSI (główny)",     "desc": "Główny identyfikator IMSI"},
     {"key": "imsi_list",                  "group": "Abonent / urządzenia", "label": "Lista IMSI",        "desc": "Wszystkie identyfikatory IMSI"},
     {"key": "imei_list",                  "group": "Abonent / urządzenia", "label": "Lista IMEI",        "desc": "Wszystkie identyfikatory IMEI"},
@@ -182,7 +194,9 @@ _BUILTIN_SECTIONS: List[Dict[str, Any]] = [
         "id": "b05", "type": "text", "section": 3, "para_idx": 18,
         "content": (
             "Analizowany materiał dotyczy numeru {{ msisdn }}, związanego "
-            "z\u00a0parametrem głównym {{ parametr_glowny }}. W\u00a0badanym okresie "
+            "z\u00a0parametrem głównym {{ parametr_glowny }}. "
+            "Abonent: {{ subscriber_owner_label }}. "
+            "W\u00a0badanym okresie "
             "zidentyfikowano następujące identyfikatory abonenta i\u00a0urządzeń: "
             "IMSI {{ imsi_list }}, IMEI {{ imei_list }}."
         ),
@@ -198,6 +212,7 @@ _BUILTIN_SECTIONS: List[Dict[str, Any]] = [
             "znaczenia operacyjnego bez dodatkowych danych potwierdzających."
         ),
     },
+    {"id": "b06a", "type": "marker", "key": "table_other_numbers"},
 
     # ─── Section 4: Charakterystyka aktywności telekomunikacyjnej ───────────
     {
@@ -300,6 +315,7 @@ _BUILTIN_SECTIONS: List[Dict[str, Any]] = [
         ),
     },
     {"id": "b23", "type": "marker", "key": "table_anomalies"},
+    {"id": "b23a", "type": "marker", "key": "table_anomaly_id"},
 
     # ─── Section 8: Dane lokalizacyjne i mobilność ──────────────────────────
     {

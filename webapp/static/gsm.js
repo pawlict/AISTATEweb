@@ -2104,10 +2104,33 @@
       filesHtml = data.filename || "\u2014";
     }
 
+    // Subscriber identification info
+    const subNorm = _normMsisdn(sub.msisdn || "");
+    const subIdRec = subNorm && St.idMap && St.idMap[subNorm] ? St.idMap[subNorm] : null;
+    let subscriberHtml = "\u2014";
+    if (subIdRec) {
+      const fn = subIdRec.first_name || "";
+      const ln = subIdRec.last_name || "";
+      const name = (fn + " " + ln).trim() || subIdRec.name || "";
+      const isCo = subIdRec.type === "company" || !!(subIdRec.nip && subIdRec.nip.length >= 10);
+      const typeIcon = isCo ? "\u{1F3E2} " : "";
+      let idParts = [];
+      if (name) idParts.push(`<strong>${typeIcon}${_escHtml(name)}</strong>`);
+      if (subIdRec.pesel) idParts.push(`PESEL: <code>${subIdRec.pesel}</code>`);
+      if (subIdRec.nip) idParts.push(`NIP: <code>${subIdRec.nip}</code>`);
+      if (subIdRec.regon) idParts.push(`REGON: <code>${subIdRec.regon}</code>`);
+      if (subIdRec.address) idParts.push(_escHtml(subIdRec.address));
+      if (subIdRec.document_number) idParts.push(`Dok.: ${_escHtml(subIdRec.document_number)}`);
+      if (subIdRec.contract_type) idParts.push(subIdRec.contract_type);
+      if (subIdRec.tariff) idParts.push(subIdRec.tariff);
+      subscriberHtml = idParts.join(" &middot; ");
+    }
+
     const rows = [
       ["Pliki \u017ar\u00f3d\u0142owe", filesHtml],
       ["Operator", (data.operator || "") + parserVer],
       ["MSISDN", sub.msisdn || "\u2014"],
+      ["Abonent", subscriberHtml],
     ];
     if (meta.signature) rows.push(["Sygnatura", meta.signature]);
     if (meta.order_id) rows.push(["Nr zlecenia", meta.order_id]);
@@ -3927,6 +3950,62 @@
     }
     html += '</tbody></table>';
     wrap.innerHTML = html;
+  }
+
+  /** Take a screenshot of the anomaly map (map + ID table below) with watermark */
+  async function _takeAnomalyMapScreenshot() {
+    const wrap = QS("#gsm_anomaly_map_wrap");
+    if (!wrap) return;
+
+    const btn = QS("#gsm_anomaly_map_screenshot_btn");
+    if (btn) btn.disabled = true;
+
+    try {
+      // Use html2canvas to capture the entire anomaly map wrap (map + header + id table)
+      if (typeof html2canvas === "undefined") {
+        _addLog("warn", "Brak biblioteki html2canvas");
+        return;
+      }
+
+      // Hide screenshot button and resize handle during capture
+      const hideEls = wrap.querySelectorAll(".gsm-card-screenshot-btn, .gsm-graph-resize");
+      hideEls.forEach(el => el.style.display = "none");
+
+      const canvas = await html2canvas(wrap, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+
+      // Restore hidden elements
+      hideEls.forEach(el => el.style.display = "");
+
+      // Add watermark
+      const title = QS("#gsm_anomaly_map_title");
+      const titleText = title ? title.textContent : "Mapa anomalii";
+      const final = _drawWatermark(canvas, [titleText, "© OpenStreetMap"]);
+      if (!final) { _addLog("warn", "Nie udało się wyrenderować zrzutu"); return; }
+
+      // Download
+      final.toBlob((blob) => {
+        if (!blob) return;
+        const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `GSM_anomaly_map_${ts}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zrzut mapy anomalii: ${filename}`);
+      }, "image/png");
+    } catch (e) {
+      _addLog("error", `Błąd zrzutu mapy anomalii: ${e.message}`);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   /**
@@ -13002,6 +13081,44 @@
           document.removeEventListener("mousemove", onMove);
           document.removeEventListener("mouseup", onUp);
           if (St.map) St.map.invalidateSize();
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+
+    // Anomaly map screenshot button
+    const anomMapScreenBtn = QS("#gsm_anomaly_map_screenshot_btn");
+    if (anomMapScreenBtn) {
+      anomMapScreenBtn.onclick = (e) => { e.stopPropagation(); _takeAnomalyMapScreenshot(); };
+    }
+
+    // Anomaly map resize handle (bottom-right corner — changes width of the map wrap)
+    const anomMapResize = QS("#gsm_anomaly_map_resize");
+    if (anomMapResize) {
+      anomMapResize.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const wrap = QS("#gsm_anomaly_map_wrap");
+        const mapCont = QS("#gsm_anomaly_map_container");
+        if (!wrap) return;
+        const startX = e.clientX, startY = e.clientY;
+        const startW = wrap.offsetWidth, startH = wrap.offsetHeight;
+        const startMapH = mapCont ? mapCont.offsetHeight : 350;
+        const onMove = (ev) => {
+          const dx = ev.clientX - startX, dy = ev.clientY - startY;
+          const newW = Math.max(300, startW + dx);
+          const newH = Math.max(300, startH + dy);
+          const newMapH = Math.max(200, startMapH + dy);
+          wrap.style.width = newW + "px";
+          wrap.style.flex = "none";
+          wrap.style.height = newH + "px";
+          if (mapCont) mapCont.style.height = newMapH + "px";
+          if (_anomMapInstance) _anomMapInstance.invalidateSize();
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          if (_anomMapInstance) _anomMapInstance.invalidateSize();
         };
         document.addEventListener("mousemove", onMove);
         document.addEventListener("mouseup", onUp);
