@@ -675,6 +675,20 @@
             <div class="analyst-panel-empty" data-i18n="analyst_panel.no_notes">Brak notatek. Użyj Ctrl+M aby dodać.</div>
           </div>
         </div>
+
+        <div class="analyst-panel-divider"></div>
+
+        <!-- Section layout manager -->
+        <div class="analyst-panel-section">
+          <div class="analyst-panel-label" style="display:flex;align-items:center;gap:5px">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+            <span>Układ sekcji</span>
+          </div>
+          <button class="gsm-layout-btn" id="gsm_layout_btn" title="Dostosuj układ sekcji — przeciągnij aby zmienić kolejność" style="width:100%">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+            Dostosuj układ
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -689,14 +703,6 @@
 
     <!-- Results -->
     <div id="gsm_results" style="display:none">
-
-      <!-- Layout manager bar -->
-      <div class="gsm-layout-bar" id="gsm_layout_bar">
-        <button class="gsm-layout-btn" id="gsm_layout_btn" title="Dostosuj układ sekcji — przeciągnij aby zmienić kolejność">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
-          Układ sekcji
-        </button>
-      </div>
 
       <!-- Subscriber info -->
       <div class="card" data-section-id="info">
@@ -718,7 +724,11 @@
 
       <!-- Anomalies -->
       <div class="card" id="gsm_anomalies_card" data-section-id="anomalies" style="display:none">
-        <div class="h2">Anomalie</div>
+        <div class="h2" style="display:inline-flex;align-items:center;gap:6px">Anomalie
+          <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="#gsm_anomalies_card" data-name="anomalies" title="Zrób zrzut">
+            <i data-icon="camera" data-size="22"></i>
+          </button>
+        </div>
         <div id="gsm_anomalies_body"></div>
       </div>
 
