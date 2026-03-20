@@ -114,6 +114,11 @@ CHART_INSERTION_ORDER = [
         "section_heading": "5.",
     },
     {
+        "key": "anomaly_map",
+        "caption": "Mapa BTS anomalii",
+        "section_heading": "7.",  # anomalies section
+    },
+    {
         "key": "map_bts",
         "caption": "Mapa lokalizacji BTS",
         "section_heading": "8.",  # was 7, now 8 after renumbering

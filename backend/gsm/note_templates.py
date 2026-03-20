@@ -40,6 +40,7 @@ MARKER_CATALOGUE: List[Dict[str, str]] = [
     {"key": "chart_night",       "type": "chart",  "label": "📈 Aktywność nocna"},
     {"key": "chart_weekend",     "type": "chart",  "label": "📈 Aktywność weekendowa"},
     {"key": "chart_map_bts",     "type": "chart",  "label": "🗺️ Mapa lokalizacji BTS"},
+    {"key": "chart_anomaly_map", "type": "chart",  "label": "🗺️ Mapa anomalii BTS"},
     {"key": "list_locations",    "type": "list",   "label": "📋 Lista: Rejony BTS"},
     {"key": "list_movement",     "type": "list",   "label": "📋 Lista: Przemieszczenia"},
     {"key": "list_contacts",     "type": "list",   "label": "📋 Lista: Kontakty"},
@@ -316,6 +317,7 @@ _BUILTIN_SECTIONS: List[Dict[str, Any]] = [
     },
     {"id": "b23", "type": "marker", "key": "table_anomalies"},
     {"id": "b23a", "type": "marker", "key": "table_anomaly_id"},
+    {"id": "b23b", "type": "marker", "key": "chart_anomaly_map"},
 
     # ─── Section 8: Dane lokalizacyjne i mobilność ──────────────────────────
     {
