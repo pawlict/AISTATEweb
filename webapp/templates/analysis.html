@@ -690,32 +690,40 @@
     <!-- Results -->
     <div id="gsm_results" style="display:none">
 
+      <!-- Layout manager bar -->
+      <div class="gsm-layout-bar" id="gsm_layout_bar">
+        <button class="gsm-layout-btn" id="gsm_layout_btn" title="Dostosuj układ sekcji — przeciągnij aby zmienić kolejność">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+          Układ sekcji
+        </button>
+      </div>
+
       <!-- Subscriber info -->
-      <div class="card">
+      <div class="card" data-section-id="info">
         <div class="h2">Informacje o bilingu</div>
         <div class="gsm-info-grid" id="gsm_info_grid"></div>
       </div>
 
       <!-- Summary stats -->
-      <div class="card">
+      <div class="card" data-section-id="summary">
         <div class="h2">Podsumowanie</div>
         <div class="gsm-summary-grid" id="gsm_summary_grid"></div>
       </div>
 
       <!-- Devices (IMEI / IMSI) -->
-      <div class="card" id="gsm_devices_card" style="display:none">
+      <div class="card" id="gsm_devices_card" data-section-id="devices" style="display:none">
         <div class="h2">Urządzenia</div>
         <div id="gsm_devices_body"></div>
       </div>
 
       <!-- Anomalies -->
-      <div class="card" id="gsm_anomalies_card" style="display:none">
+      <div class="card" id="gsm_anomalies_card" data-section-id="anomalies" style="display:none">
         <div class="h2">Anomalie</div>
         <div id="gsm_anomalies_body"></div>
       </div>
 
       <!-- Analysis -->
-      <div class="card" id="gsm_analysis_card">
+      <div class="card" id="gsm_analysis_card" data-section-id="analysis">
         <div class="analysis-sidehdr">
           <div class="h2">Analiza</div>
         </div>
@@ -723,13 +731,13 @@
       </div>
 
       <!-- Special numbers -->
-      <div class="card" id="gsm_sn_card" style="display:none">
+      <div class="card" id="gsm_sn_card" data-section-id="special_numbers" style="display:none">
         <div class="h2">Numery specjalne</div>
         <div id="gsm_special_numbers_body"></div>
       </div>
 
       <!-- Contact relationship graph -->
-      <div class="card" id="gsm_graph_card" style="display:none">
+      <div class="card" id="gsm_graph_card" data-section-id="graph" style="display:none">
         <div class="gsm-chart-header">
           <span class="h3" style="margin:0;display:inline-flex;align-items:center;gap:6px">Top kontakty graf
             <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="#gsm_graph_card" data-name="kontakty_graf" title="Zrób zrzut">
@@ -756,7 +764,7 @@
       </div>
 
       <!-- Records table -->
-      <div class="card" id="gsm_records_card">
+      <div class="card" id="gsm_records_card" data-section-id="records">
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:10px">
           <div class="h2" style="margin:0">Rekordy</div>
           <div style="display:flex;align-items:center;gap:6px;font-size:13px">
@@ -778,7 +786,7 @@
       </div>
 
       <!-- Activity row: Heatmap + Night + Weekend (3-col grid) -->
-      <div id="gsm_activity_row" class="gsm-charts-row">
+      <div id="gsm_activity_row" class="gsm-charts-row" data-section-id="activity">
         <!-- Col 1: Heatmap -->
         <div class="gsm-chart-card" id="gsm_heatmap_card" style="display:none">
           <div class="gsm-chart-header" style="flex-wrap:wrap;gap:6px">
@@ -811,7 +819,7 @@
       </div>
 
       <!-- BTS Map -->
-      <div class="card" id="gsm_map_card" style="display:none">
+      <div class="card" id="gsm_map_card" data-section-id="map" style="display:none">
         <div class="analysis-sidehdr">
           <div class="h2" style="display:inline-flex;align-items:center;gap:6px"><i data-icon="map" data-size="16"></i> Mapa lokalizacji BTS
             <button class="btn btn-icon gsm-map-screenshot-btn" id="gsm_map_screenshot_btn" title="Zrób zrzut">
@@ -921,26 +929,26 @@
       </div>
 
       <!-- Cluster info — separate card -->
-      <div class="card" id="gsm_cluster_info" style="display:none">
+      <div class="card" id="gsm_cluster_info" data-section-id="clusters" style="display:none">
         <div class="h3">Wykryte lokalizacje</div>
         <div id="gsm_cluster_list"></div>
       </div>
 
       <!-- Border crossings — separate card -->
-      <div class="card" id="gsm_border_card" style="display:none">
+      <div class="card" id="gsm_border_card" data-section-id="border" style="display:none">
         <div class="h3">Przekroczenia granic / wyjazdy zagraniczne</div>
         <div id="gsm_border_list"></div>
       </div>
 
       <!-- Overnight stays — separate card -->
-      <div class="card" id="gsm_overnight_card" style="display:none">
+      <div class="card" id="gsm_overnight_card" data-section-id="overnight" style="display:none">
         <div class="h3">Nocowanie poza domem</div>
         <div id="gsm_overnight_header" class="small muted" style="margin-bottom:8px"></div>
         <div id="gsm_overnight_list"></div>
       </div>
 
       <!-- User prompt for LLM -->
-      <div class="card" id="gsm_user_prompt_card">
+      <div class="card" id="gsm_user_prompt_card" data-section-id="user_prompt">
         <div class="analysis-sidehdr">
           <div class="h2"><i data-icon="edit" data-size="16"></i> Pytanie / instrukcja dla analizy</div>
         </div>
@@ -949,7 +957,7 @@
       </div>
 
       <!-- LLM Narrative Analysis -->
-      <div class="card" id="gsm_llm_card">
+      <div class="card" id="gsm_llm_card" data-section-id="llm">
         <div class="analysis-sidehdr">
           <div class="h2">Analiza narracyjna (LLM)</div>
         </div>
