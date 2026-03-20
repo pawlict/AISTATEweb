@@ -48,6 +48,10 @@ def build_note_placeholders(
     summary = billing.get("summary", {})
     analysis = billing.get("analysis", {})
 
+    # ── Identification data ──
+    identification = gsm_data.get("identification", {})
+    id_lookup = identification.get("lookup", {})
+
     # ── Basic subscriber / meta ──
     msisdn = subscriber.get("msisdn", "N/A")
     # operator can be in subscriber.operator, subscriber.operator_name, or billing.operator
@@ -57,6 +61,76 @@ def build_note_placeholders(
         or billing.get("operator", "N/A")
     )
     imsi = subscriber.get("imsi", "")
+
+    # ── Subscriber owner info (from identification data) ──
+    _norm_msisdn = msisdn.lstrip("+").lstrip("0")
+    if _norm_msisdn.startswith("48") and len(_norm_msisdn) == 11:
+        _norm_key = _norm_msisdn
+    else:
+        _norm_key = _norm_msisdn
+    sub_id_rec = id_lookup.get(_norm_key, {})
+    # Also try with +48 prefix removed
+    if not sub_id_rec and msisdn.startswith("+48"):
+        sub_id_rec = id_lookup.get(msisdn[3:], {})
+    # Also try raw msisdn
+    if not sub_id_rec:
+        sub_id_rec = id_lookup.get(msisdn, {})
+
+    subscriber_first_name = sub_id_rec.get("first_name", "")
+    subscriber_last_name = sub_id_rec.get("last_name", "")
+    subscriber_name = sub_id_rec.get("name", "")
+    if not subscriber_name and (subscriber_first_name or subscriber_last_name):
+        subscriber_name = f"{subscriber_first_name} {subscriber_last_name}".strip()
+    subscriber_pesel = sub_id_rec.get("pesel", "")
+    subscriber_nip = sub_id_rec.get("nip", "")
+    subscriber_regon = sub_id_rec.get("regon", "")
+    subscriber_address = sub_id_rec.get("address", "")
+    subscriber_city = sub_id_rec.get("city", "")
+    subscriber_document = sub_id_rec.get("document_number", "")
+    subscriber_type = sub_id_rec.get("subscriber_type", sub_id_rec.get("type", ""))
+    subscriber_contract = sub_id_rec.get("contract_type", "")
+    subscriber_tariff = sub_id_rec.get("tariff", "")
+    subscriber_status = sub_id_rec.get("status", "")
+
+    # Owner label for notes
+    if subscriber_name:
+        subscriber_owner_label = subscriber_name
+        if subscriber_pesel:
+            subscriber_owner_label += f" (PESEL: {subscriber_pesel})"
+        elif subscriber_nip:
+            subscriber_owner_label += f" (NIP: {subscriber_nip})"
+    else:
+        subscriber_owner_label = subscriber.get("owner_name", "brak danych")
+
+    # ── Multi-number subscriber detection ──
+    other_numbers_list = []
+    if id_lookup and (subscriber_pesel or subscriber_nip or subscriber_name):
+        for id_msisdn, id_rec in id_lookup.items():
+            if id_msisdn == _norm_key:
+                continue
+            match_by = ""
+            if subscriber_pesel and id_rec.get("pesel") == subscriber_pesel:
+                match_by = "PESEL"
+            elif subscriber_nip and id_rec.get("nip") == subscriber_nip:
+                match_by = "NIP"
+            elif (subscriber_name and len(subscriber_name) > 3
+                  and (id_rec.get("name", "") or "").strip().lower() == subscriber_name.lower()):
+                match_by = "nazwa"
+            if match_by:
+                fn = id_rec.get("first_name", "")
+                ln = id_rec.get("last_name", "")
+                n = f"{fn} {ln}".strip() if (fn or ln) else id_rec.get("name", "")
+                is_co = id_rec.get("type") == "company" or bool(id_rec.get("nip"))
+                id_str = (id_rec.get("nip", "") if is_co else id_rec.get("pesel", "")) or "—"
+                op = id_rec.get("operator", "")
+                other_numbers_list.append({
+                    "msisdn": id_msisdn,
+                    "name": n or "—",
+                    "id_value": id_str,
+                    "operator": op,
+                    "match_by": match_by,
+                    "is_company": is_co,
+                })
 
     # IMEI from devices list
     devices = analysis.get("devices", [])
@@ -207,14 +281,35 @@ def build_note_placeholders(
         footnote = _SN_CATEGORY_FOOTNOTES.get(cat, f"kategoria: {cat}")
         special_numbers_footnotes.append(f"{cat} — {footnote}")
 
-    # ── Contacts details ──
-    # contacts_top_list is used in template; _contacts_bullet_list for programmatic insertion
+    # ── Contacts details (enriched with identification data) ──
     if top_contacts:
         top_list_parts = []
         for c in top_contacts[:5]:
             num = c.get("number", "?")
             total_int = c.get("total_interactions", 0)
-            top_list_parts.append(f"{num} ({total_int} interakcji)")
+            # Enrich with identification data (name + PESEL)
+            norm_num = num.lstrip("+").lstrip("0")
+            if norm_num.startswith("48") and len(norm_num) > 9:
+                id_rec = id_lookup.get(norm_num, {})
+            else:
+                id_rec = id_lookup.get(norm_num, {})
+            if not id_rec:
+                id_rec = id_lookup.get(num.lstrip("+"), {})
+            id_parts = []
+            fn = id_rec.get("first_name", "")
+            ln = id_rec.get("last_name", "")
+            if fn or ln:
+                id_parts.append(f"{fn} {ln}".strip())
+            elif id_rec.get("name"):
+                id_parts.append(id_rec["name"])
+            pesel = id_rec.get("pesel", "")
+            nip = id_rec.get("nip", "")
+            if pesel:
+                id_parts.append(f"PESEL: {pesel}")
+            elif nip:
+                id_parts.append(f"NIP: {nip}")
+            id_str = f" — {', '.join(id_parts)}" if id_parts else ""
+            top_list_parts.append(f"{num} ({total_int} interakcji){id_str}")
         contacts_top_list = "; ".join(top_list_parts)
     else:
         contacts_top_list = "brak danych"
@@ -236,6 +331,9 @@ def build_note_placeholders(
 
     # Anomaly table rows with "Dane" column (items from billing data)
     anomaly_table_rows = _build_anomaly_table_rows(anomalies)
+
+    # Build anomaly identification table (numbers from anomalies + their ID data)
+    anomaly_id_rows = _build_anomaly_id_rows(anomalies, id_lookup)
 
     # ── Locations details ──
     if locations:
@@ -315,6 +413,20 @@ def build_note_placeholders(
         # Subscriber / Identification
         "msisdn": msisdn,
         "operator": operator,
+        "subscriber_name": subscriber_name or "brak danych",
+        "subscriber_first_name": subscriber_first_name,
+        "subscriber_last_name": subscriber_last_name,
+        "subscriber_pesel": subscriber_pesel or "brak danych",
+        "subscriber_nip": subscriber_nip or "brak",
+        "subscriber_regon": subscriber_regon or "brak",
+        "subscriber_address": subscriber_address or "brak danych",
+        "subscriber_city": subscriber_city or "",
+        "subscriber_document": subscriber_document or "brak danych",
+        "subscriber_type": subscriber_type or "brak danych",
+        "subscriber_contract": subscriber_contract or "",
+        "subscriber_tariff": subscriber_tariff or "",
+        "subscriber_status": subscriber_status or "",
+        "subscriber_owner_label": subscriber_owner_label,
         "period_from": period_from,
         "period_to": period_to,
         "total_records": str(total_records),
@@ -363,7 +475,7 @@ def build_note_placeholders(
         # Contacts (section 5 — {{ contacts.unique_count }} etc.)
         "contacts": {
             "unique_count": str(unique_contacts),
-            "top_list": "",  # cleared — contacts are listed as bullet points below
+            "top_list": contacts_top_list,
             "assessment": contacts_assessment,
         },
 
@@ -392,6 +504,10 @@ def build_note_placeholders(
         "_contacts_bullet_list": top_list_parts,
         # Special numbers footnotes for programmatic insertion
         "_special_numbers_footnotes": special_numbers_footnotes,
+        # Anomaly identification table rows
+        "_anomaly_id_rows": anomaly_id_rows,
+        # Multi-number subscriber detection
+        "_other_numbers_list": other_numbers_list,
 
         # Assessment (section 8)
         "assessment": {
@@ -636,6 +752,34 @@ def _format_anomaly_items(anomaly_type: str, items: list) -> str:
             interactions = item.get("interactions", item.get("count", 0))
             parts.append(f"{number} ({label}) \u2014 {interactions}")
 
+        elif anomaly_type == "foreigners":
+            number = item.get("number", item.get("contact", "?"))
+            name = item.get("name", "")
+            country = item.get("country", "")
+            confidence = item.get("confidence", "")
+            pesel = item.get("pesel", "")
+            nip = item.get("nip", "")
+            country_str = f" [{country}]" if country else ""
+            name_str = f" — {name}" if name else ""
+            id_str = ""
+            if pesel:
+                id_str = f" (PESEL: {pesel})"
+            elif nip:
+                id_str = f" (NIP: {nip})"
+            conf_str = f" [{confidence}]" if confidence else ""
+            parts.append(f"{number}{country_str}{name_str}{id_str}{conf_str}")
+
+        elif anomaly_type == "meeting_after_call":
+            date = item.get("date", "")
+            time_v = item.get("time", "")
+            contact = item.get("contact", item.get("caller", "?"))
+            duration = item.get("duration_min", item.get("call_duration_min", 0))
+            silence = item.get("silence_min", item.get("silence_duration_min", 0))
+            bts = item.get("bts", item.get("location", ""))
+            dt_str = f"{date} {time_v}".strip()
+            bts_str = f" @ {bts}" if bts else ""
+            parts.append(f"{dt_str}: {contact}, rozm. {duration} min, cisza {silence} min{bts_str}")
+
         else:
             # Generic fallback
             contact = item.get("contact", item.get("number", ""))
@@ -781,3 +925,55 @@ def _build_conclusions(
     )
 
     return conclusions
+
+
+def _build_anomaly_id_rows(anomalies: list, id_lookup: dict) -> List[List[str]]:
+    """Build identification table rows for numbers appearing in anomalies.
+
+    Columns: Numer | Imię Nazwisko / Firma | PESEL / NIP | Anomalia
+    """
+    if not anomalies or not id_lookup:
+        return []
+
+    # Collect unique numbers from anomaly items → set of anomaly labels
+    num_anomaly_map: Dict[str, List[str]] = {}
+    for a in anomalies:
+        label = a.get("label", a.get("type", "?"))
+        for item in a.get("items", []):
+            for key in ("contact", "number", "numbers"):
+                val = item.get(key)
+                if not val:
+                    continue
+                nums = val if isinstance(val, list) else [val]
+                for num in nums:
+                    if not num or len(str(num)) < 4:
+                        continue
+                    norm = str(num).lstrip("+").lstrip("0")
+                    if norm.startswith("48") and len(norm) == 11:
+                        pass  # keep as-is
+                    if norm not in num_anomaly_map:
+                        num_anomaly_map[norm] = []
+                    if label not in num_anomaly_map[norm]:
+                        num_anomaly_map[norm].append(label)
+
+    rows = []
+    for norm_num, anom_labels in num_anomaly_map.items():
+        rec = id_lookup.get(norm_num, {})
+        if not rec:
+            # try with raw number
+            continue
+        fn = rec.get("first_name", "")
+        ln = rec.get("last_name", "")
+        name = f"{fn} {ln}".strip() if (fn or ln) else rec.get("name", "—")
+        is_company = rec.get("type") == "company" or bool(rec.get("nip"))
+        if is_company:
+            name = f"🏢 {name}"
+        pesel = rec.get("pesel", "")
+        nip = rec.get("nip", "")
+        regon = rec.get("regon", "")
+        id_str = pesel if pesel else (f"NIP: {nip}" if nip else (f"REGON: {regon}" if regon else "—"))
+        display_num = f"+{norm_num}" if not norm_num.startswith("+") else norm_num
+        anomaly_str = ", ".join(anom_labels)
+        rows.append([display_num, name, id_str, anomaly_str])
+
+    return rows

@@ -224,6 +224,69 @@
       getValue: r => r.imei || "",
       renderCell: r => r.imei ? `<code>${r.imei}</code>` : "—",
     },
+    {
+      key: "bts_lat", label: "BTS szerokość", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_lat || "",
+      renderCell: r => (r.extra || {}).bts_lat || "—",
+    },
+    {
+      key: "bts_lon", label: "BTS długość", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_lon || "",
+      renderCell: r => (r.extra || {}).bts_lon || "—",
+    },
+    {
+      key: "bts_city", label: "BTS miasto", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_city || "",
+      renderCell: r => (r.extra || {}).bts_city || "—",
+    },
+    {
+      key: "bts_street", label: "BTS ulica", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_street || "",
+      renderCell: r => (r.extra || {}).bts_street || "—",
+    },
+    {
+      key: "azimuth", label: "Azymut", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).azimuth || "",
+      renderCell: r => (r.extra || {}).azimuth || "—",
+    },
+    {
+      key: "bts_code", label: "BTS kod", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_code || "",
+      renderCell: r => (r.extra || {}).bts_code || "—",
+    },
+    {
+      key: "range_km", label: "Zasięg (km)", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).range_km || "",
+      renderCell: r => (r.extra || {}).range_km || "—",
+    },
+    {
+      key: "service", label: "Usługa", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).service || "",
+      renderCell: r => (r.extra || {}).service || "—",
+    },
+    {
+      key: "nr_powiazany", label: "Nr powiązany", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).nr_powiazany || "",
+      renderCell: r => {
+        const v = (r.extra || {}).nr_powiazany || "";
+        return v ? `<code>${v}</code>` : "—";
+      },
+    },
+    {
+      key: "system", label: "System", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).system || "",
+      renderCell: r => (r.extra || {}).system || "—",
+    },
+    {
+      key: "public_ip", label: "Publiczne IP", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).public_ip || "",
+      renderCell: r => (r.extra || {}).public_ip || "—",
+    },
+    {
+      key: "roaming_mcc_mnc", label: "Roaming MCC/MNC", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).roaming_mcc_mnc || "",
+      renderCell: r => (r.extra || {}).roaming_mcc_mnc || "—",
+    },
   ];
 
   const _COL_MAP = {};
@@ -1869,17 +1932,123 @@
       label: rec.label || "",
       type: rec.type || "unknown",
       css: cssMap[rec.type] || "gsm-id-unknown",
+      rec: rec,
     };
   }
 
   /**
-   * Render an identification cell value.
+   * Build a rich tooltip text from all identification fields.
+   */
+  function _idTooltipText(rec) {
+    if (!rec) return "";
+    const lines = [];
+    const _f = (label, val) => { if (val) lines.push(`${label}: ${val}`); };
+    _f("Imię", rec.first_name);
+    _f("Nazwisko", rec.last_name);
+    _f("Nazwa", rec.name);
+    _f("PESEL", rec.pesel);
+    _f("NIP", rec.nip);
+    _f("REGON", rec.regon);
+    _f("Nr dokumentu", rec.document_number);
+    _f("Adres", rec.address);
+    _f("Miasto", rec.city);
+    _f("Adres korespond.", rec.correspondence_address);
+    _f("E-mail", rec.email);
+    _f("Operator", rec.operator);
+    _f("Typ umowy", rec.contract_type);
+    _f("Typ usługi", rec.service_type);
+    _f("Taryfa", rec.tariff);
+    _f("Status", rec.status);
+    _f("Aktywacja", rec.activation_date);
+    _f("Dezaktywacja", rec.deactivation_date);
+    _f("SIM", rec.sim);
+    _f("IMSI", rec.imsi);
+    _f("Typ abonenta", rec.subscriber_type);
+    _f("Uwagi", rec.notes);
+    return lines.join("\n");
+  }
+
+  /**
+   * Build a short display label: "Imię Nazwisko (PESEL)" or fallback to rec.label.
+   */
+  function _idShortLabel(rec) {
+    if (!rec) return "";
+    const parts = [];
+    if (rec.first_name) parts.push(rec.first_name);
+    if (rec.last_name) parts.push(rec.last_name);
+    if (parts.length === 0 && rec.name) parts.push(rec.name);
+    let label = parts.join(" ");
+    if (rec.pesel) label += ` (${rec.pesel})`;
+    return label || rec.label || "";
+  }
+
+  /**
+   * Render an identification cell value with rich hover tooltip (chmurka).
    */
   function _idCell(number) {
     const info = _idLookup(number);
     if (!info) return '<span class="muted">—</span>';
-    return `<span class="${info.css}" title="${info.type}">${info.label}</span>`;
+    const rec = info.rec;
+    const displayLabel = _idShortLabel(rec);
+    const tooltip = _idTooltipText(rec);
+    const escaped = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    return `<span class="${info.css} gsm-id-tip" data-id-tip="${escaped}">${displayLabel}</span>`;
   }
+
+  /* ── floating identification tooltip (chmurka) ─────────── */
+  let _idTipEl = null;
+  function _ensureIdTip() {
+    if (_idTipEl) return _idTipEl;
+    _idTipEl = document.createElement("div");
+    _idTipEl.className = "gsm-id-tooltip";
+    _idTipEl.style.display = "none";
+    document.body.appendChild(_idTipEl);
+    return _idTipEl;
+  }
+
+  document.addEventListener("mouseover", (e) => {
+    const span = e.target.closest(".gsm-id-tip[data-id-tip]");
+    if (!span) return;
+    const tip = _ensureIdTip();
+    const text = span.getAttribute("data-id-tip");
+    if (!text) return;
+    // Render as HTML table rows
+    const lines = text.split("\n").filter(Boolean);
+    let html = '<table class="gsm-id-tooltip-tbl">';
+    for (const line of lines) {
+      const idx = line.indexOf(": ");
+      if (idx > 0) {
+        html += `<tr><td class="gsm-id-tooltip-key">${line.slice(0, idx)}</td><td>${line.slice(idx + 2)}</td></tr>`;
+      } else {
+        html += `<tr><td colspan="2">${line}</td></tr>`;
+      }
+    }
+    html += "</table>";
+    tip.innerHTML = html;
+    tip.style.display = "block";
+    // Position near the element
+    const rect = span.getBoundingClientRect();
+    let left = rect.left + window.scrollX;
+    let top = rect.bottom + window.scrollY + 4;
+    // Keep within viewport
+    requestAnimationFrame(() => {
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+      if (left < 4) left = 4;
+      if (top + th > window.innerHeight + window.scrollY - 8) {
+        top = rect.top + window.scrollY - th - 4;
+      }
+      tip.style.left = left + "px";
+      tip.style.top = top + "px";
+    });
+  });
+
+  document.addEventListener("mouseout", (e) => {
+    const span = e.target.closest(".gsm-id-tip[data-id-tip]");
+    if (!span) return;
+    if (_idTipEl) _idTipEl.style.display = "none";
+  });
 
   /* ── render ─────────────────────────────────────────────── */
   async function _renderResults(data) {
@@ -1937,10 +2106,33 @@
       filesHtml = data.filename || "\u2014";
     }
 
+    // Subscriber identification info
+    const subNorm = _normMsisdn(sub.msisdn || "");
+    const subIdRec = subNorm && St.idMap && St.idMap[subNorm] ? St.idMap[subNorm] : null;
+    let subscriberHtml = "\u2014";
+    if (subIdRec) {
+      const fn = subIdRec.first_name || "";
+      const ln = subIdRec.last_name || "";
+      const name = (fn + " " + ln).trim() || subIdRec.name || "";
+      const isCo = subIdRec.type === "company" || !!(subIdRec.nip && subIdRec.nip.length >= 10);
+      const typeIcon = isCo ? "\u{1F3E2} " : "";
+      let idParts = [];
+      if (name) idParts.push(`<strong>${typeIcon}${_escHtml(name)}</strong>`);
+      if (subIdRec.pesel) idParts.push(`PESEL: <code>${subIdRec.pesel}</code>`);
+      if (subIdRec.nip) idParts.push(`NIP: <code>${subIdRec.nip}</code>`);
+      if (subIdRec.regon) idParts.push(`REGON: <code>${subIdRec.regon}</code>`);
+      if (subIdRec.address) idParts.push(_escHtml(subIdRec.address));
+      if (subIdRec.document_number) idParts.push(`Dok.: ${_escHtml(subIdRec.document_number)}`);
+      if (subIdRec.contract_type) idParts.push(subIdRec.contract_type);
+      if (subIdRec.tariff) idParts.push(subIdRec.tariff);
+      subscriberHtml = idParts.join(" &middot; ");
+    }
+
     const rows = [
       ["Pliki \u017ar\u00f3d\u0142owe", filesHtml],
       ["Operator", (data.operator || "") + parserVer],
       ["MSISDN", sub.msisdn || "\u2014"],
+      ["Abonent", subscriberHtml],
     ];
     if (meta.signature) rows.push(["Sygnatura", meta.signature]);
     if (meta.order_id) rows.push(["Nr zlecenia", meta.order_id]);
@@ -2228,6 +2420,79 @@
       html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:4px">Brak zmian — w całym okresie używano ${logicalDevices === 1 ? "jednego urządzenia" : logicalDevices + " urządzeń"}${dualImei ? " (dual-modem)" : ""} z ${nImsi === 1 ? "jedną kartą SIM" : nImsi + " kartami SIM"}. Nie wykryto zmian telefonów ani kart SIM.</div>`;
     }
     html += "</div>";
+
+    // ── Identyfikacja innych numerów abonenta ──
+    // Check if the subscriber's PESEL/NIP/name is associated with other phone numbers in idMap
+    {
+      const idMap = St.idMap || {};
+      const subMsisdn = St.lastResult && St.lastResult.subscriber ? (St.lastResult.subscriber.msisdn || "") : "";
+      const subNorm = _normMsisdn(subMsisdn);
+      // Get the subscriber's identification record
+      const subIdRec = subNorm && idMap[subNorm] ? idMap[subNorm] : null;
+      // Collect identifiers to match: PESEL, NIP, full name
+      const subPesel = subIdRec && subIdRec.pesel ? subIdRec.pesel : "";
+      const subNip = subIdRec && subIdRec.nip ? subIdRec.nip : "";
+      const subName = subIdRec ? (subIdRec.name || "").trim().toLowerCase() : "";
+
+      const otherNumbers = []; // { msisdn, rec, matchBy }
+      if (subPesel || subNip || subName) {
+        for (const [msisdn, rec] of Object.entries(idMap)) {
+          if (msisdn === subNorm) continue; // skip self
+          if (!rec) continue;
+          let matchBy = "";
+          if (subPesel && rec.pesel === subPesel) {
+            matchBy = "PESEL";
+          } else if (subNip && rec.nip === subNip) {
+            matchBy = "NIP";
+          } else if (subName && subName.length > 3 && (rec.name || "").trim().toLowerCase() === subName) {
+            matchBy = "nazwa";
+          }
+          if (matchBy) {
+            otherNumbers.push({ msisdn, rec, matchBy });
+          }
+        }
+      }
+
+      html += `<div style="margin-top:14px"><div class="h3" style="margin-bottom:6px">Identyfikacja innych numer\u00F3w abonenta</div>`;
+      if (otherNumbers.length > 0) {
+        html += `<div style="margin-bottom:6px;font-size:13px;color:#d97706"><strong>${otherNumbers.length}</strong> ${otherNumbers.length === 1 ? "inny numer" : "inne numery"} powiązane z tym abonentem w danych identyfikacyjnych</div>`;
+        html += `<table class="gsm-table" style="font-size:12px"><thead><tr>`;
+        html += `<th>Numer</th><th>Imi\u0119 Nazwisko / Firma</th><th>PESEL / NIP</th><th>Operator</th><th>Dopasowanie</th>`;
+        html += `</tr></thead><tbody>`;
+        for (const o of otherNumbers) {
+          const r = o.rec;
+          const isCompany = r.type === "company" || !!(r.nip && r.nip.length >= 10);
+          const nameParts = [];
+          if (r.first_name) nameParts.push(r.first_name);
+          if (r.last_name) nameParts.push(r.last_name);
+          const nameStr = nameParts.length ? nameParts.join(" ") : (r.name || "\u2014");
+          const idStr = isCompany
+            ? (r.nip ? `NIP: ${r.nip}` : (r.regon ? `REGON: ${r.regon}` : "\u2014"))
+            : (r.pesel || "\u2014");
+          const typeIcon = isCompany ? "\u{1F3E2} " : "";
+          const tooltip = _idTooltipText(r);
+          const tipEsc = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+          const matchBadge = `<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 6px;font-size:11px">${o.matchBy}</span>`;
+          html += `<tr>`;
+          html += `<td><code>+${o.msisdn}</code></td>`;
+          html += `<td class="gsm-id-tip" data-id-tip="${tipEsc}">${typeIcon}${_escHtml(nameStr)}</td>`;
+          html += `<td>${idStr}</td>`;
+          html += `<td>${_escHtml(r.operator || "\u2014")}</td>`;
+          html += `<td>${matchBadge}</td>`;
+          html += `</tr>`;
+        }
+        html += `</tbody></table>`;
+      } else {
+        html += `<div class="small muted" style="padding:4px 0">Nie znaleziono innych numer\u00F3w powiązanych z tym abonentem w danych identyfikacyjnych. `;
+        if (!subIdRec) {
+          html += `Brak danych identyfikacyjnych dla numeru abonenta.`;
+        } else if (!subPesel && !subNip) {
+          html += `Abonent nie posiada PESEL ani NIP w danych identyfikacyjnych — dopasowanie tylko po nazwie.`;
+        }
+        html += `</div>`;
+      }
+      html += "</div>";
+    }
 
     el.innerHTML = html;
 
@@ -2529,6 +2794,108 @@
     return items;
   }
 
+  // ── Phone prefix → country lookup (longest-match, sorted by prefix length desc) ──
+  const _PHONE_PREFIXES = [
+    ["+1242","BS","Bahamy"],["+1246","BB","Barbados"],["+1264","AI","Anguilla"],
+    ["+1268","AG","Antigua i Barbuda"],["+1284","VG","Bryt. Wyspy Dziewicze"],
+    ["+1340","VI","Wyspy Dziewicze USA"],["+1345","KY","Kajmany"],
+    ["+1441","BM","Bermudy"],["+1473","GD","Grenada"],["+1649","TC","Turks i Caicos"],
+    ["+1658","JM","Jamajka"],["+1664","MS","Montserrat"],["+1670","MP","Mariany Północne"],
+    ["+1671","GU","Guam"],["+1684","AS","Samoa Amerykańskie"],["+1721","SX","Sint Maarten"],
+    ["+1758","LC","Saint Lucia"],["+1767","DM","Dominika"],
+    ["+1784","VC","Saint Vincent"],["+1787","PR","Portoryko"],
+    ["+1809","DO","Dominikana"],["+1829","DO","Dominikana"],["+1849","DO","Dominikana"],
+    ["+1868","TT","Trynidad i Tobago"],["+1869","KN","Saint Kitts i Nevis"],
+    ["+1876","JM","Jamajka"],["+1939","PR","Portoryko"],
+    ["+993","TM","Turkmenistan"],["+992","TJ","Tadżykistan"],["+998","UZ","Uzbekistan"],
+    ["+996","KG","Kirgistan"],["+995","GE","Gruzja"],["+994","AZ","Azerbejdżan"],
+    ["+977","NP","Nepal"],["+976","MN","Mongolia"],["+975","BT","Bhutan"],
+    ["+974","QA","Katar"],["+973","BH","Bahrajn"],["+972","IL","Izrael"],
+    ["+971","AE","ZEA"],["+970","PS","Palestyna"],["+968","OM","Oman"],
+    ["+967","YE","Jemen"],["+966","SA","Arabia Saudyjska"],["+965","KW","Kuwejt"],
+    ["+964","IQ","Irak"],["+963","SY","Syria"],["+962","JO","Jordania"],
+    ["+961","LB","Liban"],["+960","MV","Malediwy"],
+    ["+886","TW","Tajwan"],["+880","BD","Bangladesz"],["+856","LA","Laos"],
+    ["+855","KH","Kambodża"],["+853","MO","Makau"],["+852","HK","Hongkong"],
+    ["+850","KP","Korea Północna"],
+    ["+692","MH","Wyspy Marshalla"],["+691","FM","Mikronezja"],["+690","TK","Tokelau"],
+    ["+689","PF","Polinezja Francuska"],["+688","TV","Tuvalu"],
+    ["+687","NC","Nowa Kaledonia"],["+686","KI","Kiribati"],["+685","WS","Samoa"],
+    ["+683","NU","Niue"],["+682","CK","Wyspy Cooka"],["+681","WF","Wallis i Futuna"],
+    ["+680","PW","Palau"],["+679","FJ","Fidżi"],["+678","VU","Vanuatu"],
+    ["+677","SB","Wyspy Salomona"],["+676","TO","Tonga"],["+675","PG","Papua-Nowa Gwinea"],
+    ["+674","NR","Nauru"],["+673","BN","Brunei"],["+672","NF","Norfolk"],
+    ["+670","TL","Timor Wschodni"],
+    ["+599","CW","Curaçao"],["+598","UY","Urugwaj"],["+597","SR","Surinam"],
+    ["+596","MQ","Martynika"],["+595","PY","Paragwaj"],["+594","GF","Gujana Francuska"],
+    ["+593","EC","Ekwador"],["+592","GY","Gujana"],["+591","BO","Boliwia"],
+    ["+590","GP","Gwadelupa"],
+    ["+509","HT","Haiti"],["+508","PM","Saint-Pierre i Miquelon"],["+507","PA","Panama"],
+    ["+506","CR","Kostaryka"],["+505","NI","Nikaragua"],["+504","HN","Honduras"],
+    ["+503","SV","Salwador"],["+502","GT","Gwatemala"],["+501","BZ","Belize"],
+    ["+500","FK","Falklandy"],
+    ["+423","LI","Liechtenstein"],["+421","SK","Słowacja"],["+420","CZ","Czechy"],
+    ["+389","MK","Macedonia Północna"],["+387","BA","Bośnia i Hercegowina"],
+    ["+386","SI","Słowenia"],["+385","HR","Chorwacja"],["+383","XK","Kosowo"],
+    ["+382","ME","Czarnogóra"],["+381","RS","Serbia"],["+380","UA","Ukraina"],
+    ["+378","SM","San Marino"],["+377","MC","Monako"],["+376","AD","Andora"],
+    ["+375","BY","Białoruś"],["+374","AM","Armenia"],["+373","MD","Mołdawia"],
+    ["+372","EE","Estonia"],["+371","LV","Łotwa"],["+370","LT","Litwa"],
+    ["+359","BG","Bułgaria"],["+358","FI","Finlandia"],["+357","CY","Cypr"],
+    ["+356","MT","Malta"],["+355","AL","Albania"],["+354","IS","Islandia"],
+    ["+353","IE","Irlandia"],["+352","LU","Luksemburg"],["+351","PT","Portugalia"],
+    ["+350","GI","Gibraltar"],
+    ["+299","GL","Grenlandia"],["+298","FO","Wyspy Owcze"],["+297","AW","Aruba"],
+    ["+291","ER","Erytrea"],
+    ["+269","KM","Komory"],["+268","SZ","Eswatini"],["+267","BW","Botswana"],
+    ["+266","LS","Lesotho"],["+265","MW","Malawi"],["+264","NA","Namibia"],
+    ["+263","ZW","Zimbabwe"],["+262","RE","Reunion"],["+261","MG","Madagaskar"],
+    ["+260","ZM","Zambia"],["+258","MZ","Mozambik"],["+257","BI","Burundi"],
+    ["+256","UG","Uganda"],["+255","TZ","Tanzania"],["+254","KE","Kenia"],
+    ["+253","DJ","Dżibuti"],["+252","SO","Somalia"],["+251","ET","Etiopia"],
+    ["+250","RW","Rwanda"],["+249","SD","Sudan"],["+248","SC","Seszele"],
+    ["+247","SH","Wniebowstąpienia"],["+246","IO","BIOT"],
+    ["+245","GW","Gwinea Bissau"],["+244","AO","Angola"],
+    ["+243","CD","DR Konga"],["+242","CG","Kongo"],["+241","GA","Gabon"],
+    ["+240","GQ","Gwinea Równikowa"],["+239","ST","Wyspy Świętego Tomasza"],
+    ["+238","CV","Republika Zielonego Przylądka"],["+237","CM","Kamerun"],
+    ["+236","CF","Rep. Środkowoafrykańska"],["+235","TD","Czad"],
+    ["+234","NG","Nigeria"],["+233","GH","Ghana"],["+232","SL","Sierra Leone"],
+    ["+231","LR","Liberia"],["+230","MU","Mauritius"],["+229","BJ","Benin"],
+    ["+228","TG","Togo"],["+227","NE","Niger"],["+226","BF","Burkina Faso"],
+    ["+225","CI","Wybrzeże Kości Słoniowej"],["+224","GN","Gwinea"],
+    ["+223","ML","Mali"],["+222","MR","Mauretania"],["+221","SN","Senegal"],
+    ["+220","GM","Gambia"],["+218","LY","Libia"],["+216","TN","Tunezja"],
+    ["+213","DZ","Algieria"],["+212","MA","Maroko"],["+211","SS","Sudan Południowy"],
+    ["+98","IR","Iran"],["+95","MM","Mjanma"],["+94","LK","Sri Lanka"],
+    ["+93","AF","Afganistan"],["+92","PK","Pakistan"],["+91","IN","Indie"],
+    ["+90","TR","Turcja"],["+86","CN","Chiny"],["+84","VN","Wietnam"],
+    ["+82","KR","Korea Południowa"],["+81","JP","Japonia"],
+    ["+66","TH","Tajlandia"],["+65","SG","Singapur"],["+64","NZ","Nowa Zelandia"],
+    ["+63","PH","Filipiny"],["+62","ID","Indonezja"],["+61","AU","Australia"],
+    ["+60","MY","Malezja"],["+58","VE","Wenezuela"],["+57","CO","Kolumbia"],
+    ["+56","CL","Chile"],["+55","BR","Brazylia"],["+54","AR","Argentyna"],
+    ["+53","CU","Kuba"],["+52","MX","Meksyk"],["+51","PE","Peru"],
+    ["+49","DE","Niemcy"],
+    ["+47","NO","Norwegia"],["+46","SE","Szwecja"],["+45","DK","Dania"],
+    ["+44","GB","Wielka Brytania"],["+43","AT","Austria"],["+41","CH","Szwajcaria"],
+    ["+40","RO","Rumunia"],["+39","IT","Włochy"],["+36","HU","Węgry"],
+    ["+34","ES","Hiszpania"],["+33","FR","Francja"],["+32","BE","Belgia"],
+    ["+31","NL","Holandia"],["+30","GR","Grecja"],
+    ["+27","ZA","RPA"],["+20","EG","Egipt"],
+    ["+77","KZ","Kazachstan"],["+7","RU","Rosja"],
+    ["+1","US","USA / Kanada"],
+  ];
+
+  /** Identify country by phone number prefix (longest match). Returns {iso, name} or null. */
+  function _countryByPrefix(number) {
+    if (!number || !number.startsWith("+")) return null;
+    for (const [pfx, iso, name] of _PHONE_PREFIXES) {
+      if (number.startsWith(pfx)) return { iso, name };
+    }
+    return null;
+  }
+
   // ── Foreigner detection (hybrid: number + ID data + name heuristics) ──
 
   // Polish surname suffixes (common patterns)
@@ -2654,23 +3021,64 @@
       const key = msisdn;
       if (seen.has(key)) continue;
 
+      // ── Identify if this is a company ──
+      const isCompany = rec.type === "company"
+        || !!(rec.nip && rec.nip.length >= 10)
+        || !!(rec.regon && rec.regon.length >= 9);
+
       const signals = [];
       let confidence = 0;
 
       // ── Level 1: Foreign number ──
       const normNum = "+" + msisdn.replace(/^\+/, "");
-      const isForeignNum = !normNum.startsWith("+48") && normNum.startsWith("+") && normNum.length > 8;
+      const isPolishNum = normNum.startsWith("+48") || (!normNum.startsWith("+") || normNum.length <= 8);
+      const isForeignNum = !isPolishNum;
+
+      // Country identification for foreign numbers
+      let countryInfo = null;
+      if (isForeignNum) {
+        countryInfo = _countryByPrefix(normNum);
+      }
+
       if (isForeignNum || foreignNumbers.has(normNum)) {
-        signals.push("numer zagraniczny");
+        const countryLabel = countryInfo ? countryInfo.name : null;
+        signals.push(countryLabel ? `numer zagraniczny (${countryLabel})` : "numer zagraniczny");
         confidence += 40;
       }
 
-      // ── Level 2: No PESEL or foreign document ──
+      // ── Skip companies with NIP/REGON + Polish number — not foreigners ──
+      if (isCompany && isPolishNum && (rec.nip || rec.regon)) {
+        continue; // Polish company — brak PESEL is expected, not a foreigner signal
+      }
+
+      // ── Level 2: No PESEL ──
       const hasPesel = !!(rec.pesel && rec.pesel.length >= 11);
       if (!hasPesel && !isForeignNum) {
-        // No PESEL for Polish number — might indicate foreigner
-        signals.push("brak PESEL");
-        confidence += 20;
+        if (isCompany) {
+          // Companies without PESEL but without NIP/REGON on Polish number — mild signal
+          if (!rec.nip && !rec.regon) {
+            signals.push("firma bez PESEL/NIP/REGON");
+            confidence += 10;
+          }
+          // else: company with NIP or REGON but foreign number — handled above
+        } else {
+          // Person without PESEL on Polish number
+          signals.push("brak PESEL");
+          confidence += 20;
+        }
+      }
+
+      // ── Verify number against known country prefixes ──
+      if (!isForeignNum && !isPolishNum) {
+        // Number doesn't start with + and isn't a standard 9-digit Polish number
+        // Check if it could be an unrecognized format
+        if (normNum.length > 9 && !normNum.startsWith("+48")) {
+          const prefixCheck = _countryByPrefix(normNum);
+          if (!prefixCheck) {
+            signals.push("numer nie pasuje do żadnego kierunkowego");
+            confidence += 15;
+          }
+        }
       }
 
       // ── Level 3: Name heuristics ──
@@ -2680,30 +3088,32 @@
         .replace(/\u015b/g, "s").replace(/\u017a/g, "z").replace(/\u017c/g, "z");
       const nameParts = nameLower.split(/\s+/);
 
-      // Check if first name is Polish
-      const firstName = nameParts[0] || "";
-      const isPolishFirstName = _PL_FIRST_NAMES.has(firstName);
+      // Skip name heuristics for companies
+      if (!isCompany) {
+        // Check if first name is Polish
+        const firstName = nameParts[0] || "";
+        const isPolishFirstName = _PL_FIRST_NAMES.has(firstName);
 
-      // Check if surname has Polish suffix
-      const surname = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
-      const hasPolishSuffix = _PL_SURNAME_SUFFIXES.some(suf => surname.endsWith(suf));
+        // Check if surname has Polish suffix
+        const surname = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+        const hasPolishSuffix = _PL_SURNAME_SUFFIXES.some(suf => surname.endsWith(suf));
 
-      // Check for foreign patterns
-      let foreignOrigin = "";
-      for (const pat of _FOREIGN_NAME_PATTERNS) {
-        if (pat.re.test(nameLower)) {
-          foreignOrigin = pat.origin;
-          break;
+        // Check for foreign patterns
+        let foreignOrigin = "";
+        for (const pat of _FOREIGN_NAME_PATTERNS) {
+          if (pat.re.test(nameLower)) {
+            foreignOrigin = pat.origin;
+            break;
+          }
         }
-      }
 
-      if (foreignOrigin) {
-        signals.push(`wzorzec ${foreignOrigin}`);
-        confidence += 35;
-      } else if (!isPolishFirstName && !hasPolishSuffix && nameParts.length >= 2) {
-        // Neither Polish first name nor Polish surname suffix
-        signals.push("imi\u0119/nazwisko nie pasuje do polskich wzorców");
-        confidence += 15;
+        if (foreignOrigin) {
+          signals.push(`wzorzec ${foreignOrigin}`);
+          confidence += 35;
+        } else if (!isPolishFirstName && !hasPolishSuffix && nameParts.length >= 2) {
+          signals.push("imi\u0119/nazwisko nie pasuje do polskich wzorców");
+          confidence += 15;
+        }
       }
 
       // Only report if confidence > 25 (at least one strong signal)
@@ -2714,14 +3124,25 @@
           number: normNum.startsWith("+") ? normNum : "+" + normNum,
           name: name,
           pesel: rec.pesel || "",
+          nip: rec.nip || "",
+          regon: rec.regon || "",
           address: rec.address || "",
           city: rec.city || "",
           signals: signals,
           confidence: confLabel,
           confidence_score: confidence,
           foreign_number: isForeignNum,
-          foreign_origin: foreignOrigin,
+          foreign_origin: "",
+          country: countryInfo ? countryInfo.name : "",
+          country_iso: countryInfo ? countryInfo.iso : "",
+          is_company: isCompany,
         });
+        // Backfill foreign_origin from name pattern signals
+        const lastItem = items[items.length - 1];
+        for (const s of signals) {
+          const m = s.match(/^wzorzec (.+)/);
+          if (m) { lastItem.foreign_origin = m[1]; break; }
+        }
       }
     }
 
@@ -2886,6 +3307,9 @@
     }
     html += '</div>';
     body.innerHTML = html;
+
+    // Pre-initialize anomaly mini-map in background (so tiles load early)
+    _initAnomalyMapIfNeeded();
 
     // ── Expand / collapse via icon ──
     body.querySelectorAll(".gsm-anom-toggle").forEach(icon => {
@@ -3142,6 +3566,28 @@
       if (!data || !data.items.length) return;
       _anomalyGroupFilter(type, data.items);
     });
+
+    // Single-click on anomaly card → update mini-map with BTS for that anomaly type
+    body.addEventListener("click", function(e) {
+      if (e.target.closest(".gsm-anom-toggle, .gsm-anom-plus5, .analyst-note-marker, input")) return;
+      const div = e.target.closest("[data-anomaly-type]");
+      if (!div) return;
+      const type = div.dataset.anomalyType;
+      const data = groupMap[type];
+      if (!data || !data.items.length) return;
+
+      // Highlight selected card
+      body.querySelectorAll(".gsm-anomaly-card").forEach(c => c.style.outline = "");
+      div.style.outline = "2px solid var(--brand-blue,#2563eb)";
+      div.style.outlineOffset = "-1px";
+
+      // Compute filtered records for this anomaly type (same logic as dblclick)
+      const records = St.lastResult ? St.lastResult.records : [];
+      const pred = _anomalyPredicate(type, data.items);
+      const filtered = records.filter(pred);
+      _updateAnomalyMap(type, filtered);
+      _renderAnomalyIdTable(type, data.items);
+    });
   }
 
   /** Filter Records by anomaly group — invoked on double-click. */
@@ -3273,6 +3719,22 @@
         filterText = `Obcokrajowcy — ${filtered.length} rek.`;
         break;
       }
+      case "forwarded_calls":
+        filtered = records.filter(r => r.record_type === "CALL_FORWARDED");
+        filterText = `Przekierowania połączeń — ${filtered.length} rek.`;
+        break;
+      case "inactivity_gap":
+        // Show records around gaps: last record before gap + first record after gap
+        if (items.length > 0) {
+          const gapDates = new Set();
+          for (const it of items) {
+            if (it.last_date) gapDates.add(it.last_date);
+            if (it.next_date) gapDates.add(it.next_date);
+          }
+          filtered = records.filter(r => gapDates.has(r.date));
+          filterText = `Przerwy w aktywności — ${filtered.length} rek. (dni graniczne)`;
+        }
+        break;
       default:
         filtered = records;
         filterText = `${type} — ${filtered.length} rek.`;
@@ -3295,6 +3757,361 @@
       recCard.style.transition = "box-shadow .2s";
       recCard.style.boxShadow = "0 0 0 3px var(--brand-blue,#2563eb)";
       setTimeout(() => { recCard.style.boxShadow = ""; }, 1200);
+    }
+
+    // Update anomaly mini-map with BTS points from filtered records
+    _updateAnomalyMap(type, filtered);
+    _renderAnomalyIdTable(type, items);
+  }
+
+  // ── Anomaly mini-map ──
+  let _anomMapInstance = null;
+  let _anomMapMarkers = null;
+  let _anomMapReady = false;
+
+  /** Pre-initialize anomaly map when anomalies card becomes visible.
+   *  Called once from _renderAnomalies so tiles load in background. */
+  async function _initAnomalyMapIfNeeded() {
+    if (_anomMapReady || _anomMapInstance) return;
+    const container = QS("#gsm_anomaly_map_container");
+    if (!container || !window.L) return;
+    _anomMapInstance = L.map(container, {
+      zoomControl: true,
+      attributionControl: false,
+      preferCanvas: true,
+    });
+    _anomMapInstance.setView([52.0, 19.5], 6);
+    // Reuse same tile layer as main map (online/offline with badge)
+    await _addTileLayer(_anomMapInstance);
+    _anomMapMarkers = L.layerGroup().addTo(_anomMapInstance);
+    _anomMapReady = true;
+    setTimeout(() => { _anomMapInstance.invalidateSize(); }, 200);
+  }
+
+  async function _updateAnomalyMap(anomalyType, filteredRecords) {
+    const container = QS("#gsm_anomaly_map_container");
+    const titleEl = QS("#gsm_anomaly_map_title");
+    const statsEl = QS("#gsm_anomaly_map_stats");
+    if (!container) return;
+
+    // Wait for Leaflet
+    if (!window.L) {
+      if (!St.leafletLoaded) return;  // skip if Leaflet not loaded yet
+    }
+
+    // Ensure map is initialized
+    if (!_anomMapInstance) {
+      await _initAnomalyMapIfNeeded();
+    }
+    if (!_anomMapInstance) return;
+
+    // Build index of filtered records by raw_row for fast geo_record matching
+    const filteredRows = new Set();
+    const filteredDateTimes = new Set();
+    for (const r of filteredRecords) {
+      if (r.raw_row != null) filteredRows.add(r.raw_row);
+      // Fallback signature: date+time+callee (matches GeoRecord fields)
+      filteredDateTimes.add(`${r.date || ""}|${r.time || ""}|${r.callee || ""}`);
+    }
+
+    // Extract BTS points from geo_records — match by raw_row (primary) or date+time+callee (fallback)
+    const geo = St.lastResult && St.lastResult.geolocation;
+    const geoRecords = (geo && geo.geo_records) || [];
+    const points = new Map(); // key = "lat,lon" → { lat, lon, count, dates, city, street }
+
+    for (const gr of geoRecords) {
+      if (!gr.point || (!gr.point.lat && !gr.point.lon)) continue;
+      // Match: primary by raw_row, fallback by date+time+callee
+      const matchByRow = gr.raw_row != null && filteredRows.has(gr.raw_row);
+      const matchBySig = !matchByRow && filteredDateTimes.has(`${gr.date || ""}|${gr.time || ""}|${gr.callee || ""}`);
+      if (!matchByRow && !matchBySig) continue;
+
+      const lat = gr.point.lat;
+      const lon = gr.point.lon;
+      const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+      if (!points.has(key)) {
+        points.set(key, { lat, lon, count: 0, dates: new Set(),
+          city: gr.point.city || "", street: gr.point.street || "" });
+      }
+      const p = points.get(key);
+      p.count++;
+      if (gr.date) p.dates.add(gr.date);
+    }
+
+    // Second fallback: extract from record extra fields (bts_lat/bts_lon)
+    if (points.size === 0) {
+      for (const r of filteredRecords) {
+        const ex = r.extra || {};
+        const lat = parseFloat(ex.bts_lat || ex.bts_x || "");
+        const lon = parseFloat(ex.bts_lon || ex.bts_y || "");
+        if (isNaN(lat) || isNaN(lon) || (lat === 0 && lon === 0)) continue;
+        const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+        if (!points.has(key)) {
+          points.set(key, { lat, lon, count: 0, dates: new Set(),
+            city: ex.bts_city || "", street: ex.bts_street || "" });
+        }
+        const p = points.get(key);
+        p.count++;
+        if (r.date) p.dates.add(r.date);
+      }
+    }
+
+    // Update title and stats
+    const catLabel = (_ANOMALY_CATS.find(c => c.type === anomalyType) || {}).label || anomalyType;
+    if (titleEl) titleEl.textContent = `BTS: ${catLabel}`;
+    if (statsEl) statsEl.textContent = `${points.size} lokalizacji · ${filteredRecords.length} rek.`;
+
+    // Clear old markers
+    if (_anomMapMarkers) {
+      _anomMapMarkers.clearLayers();
+    }
+
+    if (points.size === 0) {
+      _anomMapInstance.setView([52.0, 19.5], 6);
+      if (statsEl) statsEl.textContent = "Brak danych BTS dla tej anomalii";
+      setTimeout(() => { _anomMapInstance.invalidateSize(); }, 100);
+      return;
+    }
+
+    // Add markers
+    const bounds = L.latLngBounds([]);
+    for (const [, p] of points) {
+      const radius = Math.min(Math.max(4, Math.log2(p.count + 1) * 3), 14);
+      const dateStr = [...p.dates].sort().join(", ");
+      const locInfo = [p.city, p.street].filter(Boolean).join(", ");
+      const popup = `<b>${p.count}× rekordów</b>${locInfo ? "<br>" + locInfo : ""}<br><span class="muted">${dateStr}</span>`;
+      const marker = L.circleMarker([p.lat, p.lon], {
+        radius: radius,
+        color: "#2563eb",
+        fillColor: "#3b82f6",
+        fillOpacity: 0.6,
+        weight: 1.5,
+      }).bindPopup(popup, { maxWidth: 220 });
+      _anomMapMarkers.addLayer(marker);
+      bounds.extend([p.lat, p.lon]);
+    }
+
+    // Fit bounds
+    if (bounds.isValid()) {
+      _anomMapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+    }
+
+    setTimeout(() => { _anomMapInstance.invalidateSize(); }, 100);
+  }
+
+  /** Render identification table under anomaly map for anomaly-related numbers */
+  function _renderAnomalyIdTable(anomalyType, items) {
+    const wrap = QS("#gsm_anomaly_id_table");
+    if (!wrap) return;
+    if (!items || !items.length) { wrap.innerHTML = ""; return; }
+
+    // Collect unique numbers from anomaly items
+    const numbers = new Set();
+    for (const it of items) {
+      if (it.number) numbers.add(it.number.replace(/^\+/, ""));
+      if (it.contact) numbers.add(it.contact);
+      if (it.numbers) it.numbers.forEach(n => numbers.add(n));
+    }
+
+    // Look up identification for each number
+    const rows = [];
+    for (const num of numbers) {
+      const info = _idLookup(num);
+      if (!info || !info.rec) continue;
+      const rec = info.rec;
+      const isCompany = rec.type === "company" || !!(rec.nip && rec.nip.length >= 10);
+      rows.push({ num, rec, isCompany });
+    }
+
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="small muted" style="padding:6px">Brak danych identyfikacyjnych dla numerów tej anomalii</div>';
+      return;
+    }
+
+    let html = '<table class="gsm-table" style="font-size:12px;margin-top:0"><thead><tr>';
+    html += '<th>Numer</th><th>Imię Nazwisko / Firma</th><th>PESEL / NIP</th>';
+    html += '</tr></thead><tbody>';
+    for (const r of rows) {
+      const rec = r.rec;
+      const nameParts = [];
+      if (rec.first_name) nameParts.push(rec.first_name);
+      if (rec.last_name) nameParts.push(rec.last_name);
+      const nameStr = nameParts.length ? nameParts.join(" ") : (rec.name || "—");
+      const idStr = r.isCompany
+        ? (rec.nip ? `NIP: ${rec.nip}` : (rec.regon ? `REGON: ${rec.regon}` : "—"))
+        : (rec.pesel || "—");
+      const typeIcon = r.isCompany ? "\u{1F3E2}" : "";
+      // Build tooltip
+      const tooltip = _idTooltipText(rec);
+      const tipEsc = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+      html += `<tr>`;
+      html += `<td><code>${r.num}</code></td>`;
+      html += `<td class="gsm-id-tip" data-id-tip="${tipEsc}">${typeIcon} ${_escHtml(nameStr)}</td>`;
+      html += `<td>${idStr}</td>`;
+      html += `</tr>`;
+    }
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  /** Render the anomaly Leaflet map to canvas (same approach as _renderMapToCanvas) */
+  async function _renderAnomalyMapToCanvas() {
+    if (!_anomMapInstance) return null;
+    const map = _anomMapInstance;
+    const container = QS("#gsm_anomaly_map_container");
+    if (!container) return null;
+
+    const scale = 2;
+    const size = map.getSize();
+    const w = size.x * scale;
+    const h = size.y * scale;
+
+    await _waitForTilesToLoad(map, 3000);
+
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext("2d");
+
+    // 1. Background
+    ctx.fillStyle = "#e8e8e8";
+    ctx.fillRect(0, 0, w, h);
+
+    // 2. Tile images
+    const containerRect = map.getContainer().getBoundingClientRect();
+    const tilePane = map.getPane("tilePane");
+    if (tilePane) {
+      const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
+      const tilePromises = [];
+      for (const img of tileImgs) {
+        if (!img.src) continue;
+        const rect = img.getBoundingClientRect();
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+        const tw = rect.width * scale;
+        const th = rect.height * scale;
+        tilePromises.push(
+          _fetchImageBitmap(img.src)
+            .then(bmp => ({ bmp, x, y, tw, th }))
+            .catch(() => null)
+        );
+      }
+      const tiles = await Promise.all(tilePromises);
+      for (const tile of tiles) {
+        if (!tile) continue;
+        ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
+        tile.bmp.close();
+      }
+    }
+
+    // 3. Overlay pane (circleMarkers)
+    const overlayPane = map.getPane("overlayPane");
+    if (overlayPane) {
+      const canvases = overlayPane.querySelectorAll("canvas");
+      for (const c of canvases) {
+        try {
+          const cRect = c.getBoundingClientRect();
+          ctx.drawImage(c,
+            (cRect.left - containerRect.left) * scale, (cRect.top - containerRect.top) * scale,
+            cRect.width * scale, cRect.height * scale);
+        } catch (_) {}
+      }
+    }
+
+    // 4. Marker pane
+    _drawPaneMarkers(ctx, map, "markerPane", scale);
+
+    return out;
+  }
+
+  /** Take a screenshot of the anomaly map (map + header + ID table) with watermark */
+  async function _takeAnomalyMapScreenshot() {
+    const wrap = QS("#gsm_anomaly_map_wrap");
+    if (!wrap || !_anomMapInstance) return;
+
+    const btn = QS("#gsm_anomaly_map_screenshot_btn");
+    if (btn) btn.disabled = true;
+
+    try {
+      // 1. Render the Leaflet map to canvas (tiles + markers)
+      const mapCanvas = await _renderAnomalyMapToCanvas();
+      if (!mapCanvas) {
+        _addLog("warn", "Nie udało się wyrenderować mapy anomalii");
+        return;
+      }
+
+      const scale = 2;
+
+      // 2. Render header via html2canvas
+      const header = QS("#gsm_anomaly_map_header");
+      let headerCanvas = null;
+      if (header) {
+        await _ensureHtml2Canvas();
+        // Hide screenshot button during capture
+        const hideEls = header.querySelectorAll(".gsm-card-screenshot-btn");
+        hideEls.forEach(el => el.style.display = "none");
+        headerCanvas = await html2canvas(header, { scale, backgroundColor: "#ffffff", logging: false });
+        hideEls.forEach(el => el.style.display = "");
+      }
+
+      // 3. Render ID table via html2canvas (if present)
+      const idTable = QS("#gsm_anomaly_id_table");
+      let tableCanvas = null;
+      if (idTable && idTable.innerHTML.trim()) {
+        await _ensureHtml2Canvas();
+        tableCanvas = await html2canvas(idTable, { scale, backgroundColor: "#ffffff", logging: false });
+      }
+
+      // 4. Compose: header + map + table
+      const headerH = headerCanvas ? headerCanvas.height : 0;
+      const tableH = tableCanvas ? tableCanvas.height : 0;
+      const totalW = mapCanvas.width;
+      const totalH = headerH + mapCanvas.height + tableH;
+
+      const composed = document.createElement("canvas");
+      composed.width = totalW;
+      composed.height = totalH;
+      const cctx = composed.getContext("2d");
+      cctx.fillStyle = "#ffffff";
+      cctx.fillRect(0, 0, totalW, totalH);
+
+      let yOff = 0;
+      if (headerCanvas) {
+        // Scale header to match map width
+        const hScaleX = totalW / headerCanvas.width;
+        cctx.drawImage(headerCanvas, 0, 0, totalW, headerCanvas.height * hScaleX);
+        yOff = Math.round(headerCanvas.height * hScaleX);
+      }
+      cctx.drawImage(mapCanvas, 0, yOff);
+      yOff += mapCanvas.height;
+      if (tableCanvas) {
+        const tScaleX = totalW / tableCanvas.width;
+        cctx.drawImage(tableCanvas, 0, yOff, totalW, tableCanvas.height * tScaleX);
+      }
+
+      // 5. Add watermark
+      const title = QS("#gsm_anomaly_map_title");
+      const titleText = title ? title.textContent : "Mapa anomalii";
+      const final = _drawWatermark(composed, [titleText, "© OpenStreetMap contributors"]);
+      if (!final) { _addLog("warn", "Nie udało się wyrenderować zrzutu"); return; }
+
+      // 6. Download
+      final.toBlob((blob) => {
+        if (!blob) return;
+        const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `GSM_anomaly_map_${ts}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zrzut mapy anomalii: ${filename}`);
+      }, "image/png");
+    } catch (e) {
+      _addLog("error", `Błąd zrzutu mapy anomalii: ${e.message}`);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -3372,6 +4189,14 @@
           const caller = (r.caller || "").replace(/^\+/, "");
           return frNums.has(callee) || frNums.has(caller);
         };
+      }
+      case "inactivity_gap": {
+        const gapDates = new Set();
+        for (const it of anomalyItems) {
+          if (it.last_date) gapDates.add(it.last_date);
+          if (it.next_date) gapDates.add(it.next_date);
+        }
+        return r => gapDates.has(r.date);
       }
       default:
         return () => false;
@@ -3591,12 +4416,25 @@
           ? '<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 5px;font-size:11px;font-weight:600">ŚREDNI</span>'
           : '<span style="background:#e0f2fe;color:#0c4a6e;border-radius:3px;padding:1px 5px;font-size:11px">NISKI</span>';
         const signalStr = it.signals.join(", ");
-        const peselInfo = it.pesel ? ` | PESEL: <code>${it.pesel}</code>` : " | <b>brak PESEL</b>";
+        // Identity details — PESEL / NIP / REGON
+        let idParts = [];
+        if (it.pesel) idParts.push(`PESEL: <code>${it.pesel}</code>`);
+        else idParts.push("<b>brak PESEL</b>");
+        if (it.nip) idParts.push(`NIP: <code>${it.nip}</code>`);
+        if (it.regon) idParts.push(`REGON: <code>${it.regon}</code>`);
+        const idInfo = idParts.join(" | ");
         const addrInfo = it.city ? ` | ${it.city}` : (it.address ? ` | ${it.address.substring(0, 40)}` : "");
+        // Country badge
+        const countryBadge = it.country
+          ? ` <span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 5px;font-size:10px">\u{1F30D} ${it.country}</span>`
+          : "";
+        // Origin badge (name heuristic)
         const originBadge = it.foreign_origin ? ` <span class="muted">[${it.foreign_origin}]</span>` : "";
+        // Company badge
+        const companyBadge = it.is_company ? ' <span style="background:#f3e8ff;color:#7c3aed;border-radius:3px;padding:1px 5px;font-size:10px">\u{1F3E2} firma</span>' : "";
         html += `<div style="margin-bottom:5px;padding:3px 6px;border-radius:4px;background:rgba(249,115,22,.04)">`;
-        html += `${confBadge} <code>${it.number}</code> \u2014 <b>${it.name}</b>${originBadge}`;
-        html += `<div style="font-size:11px;margin-top:2px"><span class="muted">Sygnały:</span> ${signalStr}${peselInfo}${addrInfo}</div>`;
+        html += `${confBadge} <code>${it.number}</code>${countryBadge}${companyBadge} \u2014 <b>${it.name}</b>${originBadge}`;
+        html += `<div style="font-size:11px;margin-top:2px"><span class="muted">Sygnały:</span> ${signalStr} | ${idInfo}${addrInfo}</div>`;
         html += `</div>`;
       }
     } else {
@@ -3622,7 +4460,7 @@
     const topN = Math.ceil(N / 2);
     const botN = N - topN;
     const maxPerRow = Math.max(topN, botN);
-    const CW = 115, CH = 96, CGAP = 10;
+    const CW = 115, CH = 106, CGAP = 10;
     const W = Math.max(maxPerRow * (CW + CGAP) - CGAP + 30, 460);
 
     // Auto-scale card width — capped at 1/3 of Records card width
@@ -3641,8 +4479,20 @@
     const CX = W / 2;
 
     // SVG icons (compact)
+    // Generic person (unknown gender — no PESEL)
     const personIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
       <path d="M-6.5 5 Q-6.5 0 0 -0.5 Q6.5 0 6.5 5" fill="none" stroke-width="1.2"/>`;
+    // Male icon — broader shoulders, shorter hair
+    const maleIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
+      <path d="M-7 5 Q-7 -0.5 0 -1 Q7 -0.5 7 5" fill="none" stroke-width="1.2"/>
+      <line x1="5" y1="-8" x2="8" y2="-11" stroke-width="1" stroke-linecap="round"/>
+      <line x1="6" y1="-11" x2="8" y2="-11" stroke-width="1" stroke-linecap="round"/>
+      <line x1="8" y1="-11" x2="8" y2="-9" stroke-width="1" stroke-linecap="round"/>`;
+    // Female icon — narrower shoulders, longer hair accent
+    const femaleIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
+      <path d="M-6 5 Q-6 0 0 -0.5 Q6 0 6 5" fill="none" stroke-width="1.2"/>
+      <line x1="5.5" y1="-7" x2="5.5" y2="-3" stroke-width="1" stroke-linecap="round"/>
+      <line x1="3.5" y1="-3" x2="7.5" y2="-3" stroke-width="1" stroke-linecap="round"/>`;
     const companyIcon = `<rect x="-5" y="-7" width="10" height="13" rx="1" fill="none" stroke-width="1.1"/>
       <line x1="-2.5" y1="-3" x2="-2.5" y2="-1" stroke-width="0.9"/>
       <line x1="0" y1="-3" x2="0" y2="-1" stroke-width="0.9"/>
@@ -3650,10 +4500,40 @@
       <line x1="-2.5" y1="1.5" x2="-2.5" y2="3.5" stroke-width="0.9"/>
       <line x1="0" y1="1.5" x2="0" y2="3.5" stroke-width="0.9"/>
       <line x1="2.5" y1="1.5" x2="2.5" y2="3.5" stroke-width="0.9"/>`;
+    // Subscriber icons (with phone symbol) — generic, male, female
     const subscriberIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
       <path d="M-9 6 Q-9 0 -3 -0.5 Q3 0 3 6" fill="none" stroke-width="1.4"/>
       <rect x="6" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
       <circle cx="8.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+    const subscriberMaleIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
+      <path d="M-9.5 6 Q-9.5 -0.5 -3 -1 Q3.5 -0.5 3.5 6" fill="none" stroke-width="1.4"/>
+      <line x1="2" y1="-8" x2="5" y2="-11" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="3" y1="-11" x2="5" y2="-11" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="5" y1="-11" x2="5" y2="-9" stroke-width="1.1" stroke-linecap="round"/>
+      <rect x="7" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
+      <circle cx="9.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+    const subscriberFemaleIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
+      <path d="M-8.5 6 Q-8.5 0 -3 -0.5 Q2.5 0 2.5 6" fill="none" stroke-width="1.4"/>
+      <line x1="2.5" y1="-7" x2="2.5" y2="-3" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="0.5" y1="-3" x2="4.5" y2="-3" stroke-width="1.1" stroke-linecap="round"/>
+      <rect x="7" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
+      <circle cx="9.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+
+    // Determine gender from PESEL: 10th digit (index 9) — odd=male, even=female
+    const _genderFromPesel = (pesel) => {
+      if (!pesel || pesel.length < 10) return "unknown";
+      const d = parseInt(pesel.charAt(9), 10);
+      if (isNaN(d)) return "unknown";
+      return d % 2 === 1 ? "male" : "female";
+    };
+    const _pickPersonIcon = (rec) => {
+      if (!rec || !rec.pesel) return personIcon;
+      return _genderFromPesel(rec.pesel) === "female" ? femaleIcon : maleIcon;
+    };
+    const _pickSubscriberIcon = (rec) => {
+      if (!rec || !rec.pesel) return subscriberIcon;
+      return _genderFromPesel(rec.pesel) === "female" ? subscriberFemaleIcon : subscriberMaleIcon;
+    };
 
     let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
       style="width:100%;height:auto;font-family:system-ui,-apple-system,sans-serif">`;
@@ -3782,9 +4662,24 @@
       const c = card.c, idx = card.i;
       const info = _idLookup(c.number);
       const isCompany = info && info.type === "company";
-      const icon = isCompany ? companyIcon : personIcon;
-      const color = isCompany ? "#7c3aed" : "#64748b";
-      const idLabel = info && info.label ? trunc(info.label, 16) : "";
+      const rec = info && info.rec ? info.rec : null;
+      const icon = isCompany ? companyIcon : _pickPersonIcon(rec);
+      const gender = _genderFromPesel(rec && rec.pesel);
+      const color = isCompany ? "#7c3aed" : (gender === "female" ? "#d946ef" : gender === "male" ? "#2563eb" : "#64748b");
+      // Build name + PESEL lines from identification record
+      let idNameLine = "";
+      let idPeselLine = "";
+      if (rec) {
+        const parts = [];
+        if (rec.first_name) parts.push(rec.first_name);
+        if (rec.last_name) parts.push(rec.last_name);
+        if (parts.length === 0 && rec.name) parts.push(rec.name);
+        idNameLine = trunc(parts.join(" "), 18);
+        if (rec.pesel) idPeselLine = rec.pesel;
+        else if (rec.nip) idPeselLine = "NIP: " + rec.nip;
+      } else if (info && info.label) {
+        idNameLine = trunc(info.label, 18);
+      }
       const outAll = (c.calls_out || 0) + (c.sms_out || 0);
       const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
       const inAll = (c.calls_in || 0) + (c.sms_in || 0);
@@ -3801,14 +4696,18 @@
       svg += `<g transform="translate(${icx},${card.y + 13})" stroke="${color}" fill="none" color="${color}">${icon}</g>`;
       // Full phone number
       svg += `<text x="${icx}" y="${card.y + 30}" text-anchor="middle" font-size="7.5" font-weight="500" fill="var(--text,#334155)">${c.number}</text>`;
-      // Identification label (or editable placeholder)
-      if (idLabel) {
-        svg += `<text class="gsm-graph-id-label gsm-graph-id-edit" data-number="${c.number}" x="${icx}" y="${card.y + 39}" text-anchor="middle" font-size="6.5" fill="${isCompany ? '#7c3aed' : '#2563eb'}" font-style="italic" style="cursor:text">${idLabel}</text>`;
+      // Identification: name line + PESEL line (or editable placeholder)
+      if (idNameLine) {
+        const nameColor = isCompany ? '#7c3aed' : '#2563eb';
+        svg += `<text class="gsm-graph-id-label gsm-graph-id-edit" data-number="${c.number}" x="${icx}" y="${card.y + 38}" text-anchor="middle" font-size="6.5" fill="${nameColor}" font-style="italic" style="cursor:text">${idNameLine}</text>`;
+        if (idPeselLine) {
+          svg += `<text x="${icx}" y="${card.y + 46}" text-anchor="middle" font-size="5.8" fill="var(--text-muted,#64748b)">${idPeselLine}</text>`;
+        }
       } else {
         svg += `<text class="gsm-graph-id-label gsm-graph-id-empty" data-number="${c.number}" x="${icx}" y="${card.y + 39}" text-anchor="middle" font-size="6.5" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
       }
       // OUT badge
-      const by1 = card.y + 46;
+      const by1 = card.y + 52;
       svg += `<g data-elabel="out" data-idx="${idx}" data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}" data-fwd="0"
         ${outAll === 0 ? 'style="display:none"' : ""}>
         <rect x="${card.x + 4}" y="${by1}" width="${bw}" height="12" rx="3" fill="#dcfce7"/>
@@ -3816,7 +4715,7 @@
         <text x="${card.x + CW - 6}" y="${by1 + 9}" font-size="7.5" font-weight="600" fill="#16a34a" text-anchor="end">${outAll}</text>
       </g>`;
       // IN badge
-      const by2 = card.y + 60;
+      const by2 = card.y + 66;
       svg += `<g data-elabel="in" data-idx="${idx}" data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}" data-fwd="0"
         ${inAll === 0 ? 'style="display:none"' : ""}>
         <rect x="${card.x + 4}" y="${by2}" width="${bw}" height="12" rx="3" fill="#fee2e2"/>
@@ -3824,7 +4723,7 @@
         <text x="${card.x + CW - 6}" y="${by2 + 9}" font-size="7.5" font-weight="600" fill="#dc2626" text-anchor="end">${inAll}</text>
       </g>`;
       // FWD badge (orange)
-      const by3 = card.y + 74;
+      const by3 = card.y + 80;
       svg += `<g data-elabel="fwd" data-idx="${idx}" data-all="${fwdAll2}" data-calls="${fwdAll2}" data-sms="0" data-fwd="${fwdAll2}"
         ${fwdAll2 === 0 ? 'style="display:none"' : ""}>
         <rect x="${card.x + 4}" y="${by3}" width="${bw}" height="12" rx="3" fill="#fed7aa"/>
@@ -3849,7 +4748,21 @@
     // ── Subscriber node (two-column: left=icon+number+name, right=OUT/IN/FWD) ──
     const subLabel = msisdn || "Abonent";
     const subInfo = msisdn ? _idLookup(msisdn) : null;
-    const subIdLabel = subInfo && subInfo.label ? trunc(subInfo.label, 18) : "";
+    // Build subscriber name + PESEL from identification record
+    const subRec = subInfo && subInfo.rec ? subInfo.rec : null;
+    let subNameLine = "";
+    let subPeselLine = "";
+    if (subRec) {
+      const sp = [];
+      if (subRec.first_name) sp.push(subRec.first_name);
+      if (subRec.last_name) sp.push(subRec.last_name);
+      if (sp.length === 0 && subRec.name) sp.push(subRec.name);
+      subNameLine = trunc(sp.join(" "), 22);
+      if (subRec.pesel) subPeselLine = subRec.pesel;
+      else if (subRec.nip) subPeselLine = "NIP: " + subRec.nip;
+    } else if (subInfo && subInfo.label) {
+      subNameLine = trunc(subInfo.label, 22);
+    }
     const subTop = SUB_Y - SUB_H / 2;
     const badgeW = 72;  // badge width on right side
     const badgeX = SUB_X + SUB_W - badgeW - 6;  // right-aligned badges
@@ -3858,14 +4771,20 @@
     // Card background
     svg += `<rect x="${SUB_X}" y="${subTop}" width="${SUB_W}" height="${SUB_H}"
       rx="8" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="1.8" filter="url(#gsm_card_shadow)"/>`;
-    // ── Left column: icon + number + name ──
-    // Subscriber icon (vertically centered in left area)
-    svg += `<g transform="translate(${SUB_X + 16},${subTop + SUB_H / 2})" stroke="#2563eb" fill="none" color="#2563eb">${subscriberIcon}</g>`;
+    // ── Left column: icon + number + name + PESEL ──
+    // Subscriber icon (gender-aware, vertically centered in left area)
+    const subGenderIcon = _pickSubscriberIcon(subRec);
+    const subGender = _genderFromPesel(subRec && subRec.pesel);
+    const subIconColor = subGender === "female" ? "#d946ef" : "#2563eb";
+    svg += `<g transform="translate(${SUB_X + 16},${subTop + SUB_H / 2})" stroke="${subIconColor}" fill="none" color="${subIconColor}">${subGenderIcon}</g>`;
     // Phone number
-    svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 - 4}" font-size="8.5" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>`;
-    // Identification label (name)
-    if (subIdLabel) {
-      svg += `<text class="gsm-graph-sub-id" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 8}" font-size="7" font-weight="500" fill="#2563eb" font-style="italic">${subIdLabel}</text>`;
+    svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 - (subPeselLine ? 8 : 4)}" font-size="8.5" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>`;
+    // Identification: name line
+    if (subNameLine) {
+      svg += `<text class="gsm-graph-sub-id" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + (subPeselLine ? 2 : 8)}" font-size="7" font-weight="500" fill="#2563eb" font-style="italic">${subNameLine}</text>`;
+      if (subPeselLine) {
+        svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 11}" font-size="6.5" fill="var(--text-muted,#64748b)">${subPeselLine}</text>`;
+      }
     } else if (msisdn) {
       svg += `<text class="gsm-graph-sub-id gsm-graph-sub-id-empty" data-number="${msisdn}" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 8}" font-size="7" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
     } else {
@@ -4706,8 +5625,12 @@
   /** Build a normalized contact chip. Used by both activity charts and heatmap unique numbers. */
   function _buildContactChip(num, count, chartId, parts) {
     const idInfo = _idLookup(num);
+    const rec = idInfo && idInfo.rec ? idInfo.rec : null;
+    const shortLabel = rec ? _idShortLabel(rec) : "";
+    const tooltip = rec ? _idTooltipText(rec) : "";
+    const tooltipEsc = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
     const info = parts || "";
-    const label = idInfo ? `${num} (${idInfo.label})` : num;
+    const titleAttr = tooltip ? tooltipEsc : (idInfo ? `${num} (${idInfo.label})` : num);
     // Check if contact has a tag via notes
     const _nm = window._gsmNotesMgr;
     const noteItem = _nm && _nm.getNoteForRef && _nm.getNoteForRef("gsm_contact", "number", num);
@@ -4715,9 +5638,13 @@
     const tagColor = (noteItem && noteItem.tags && noteItem.tags.length) ? _noteTagColor(noteItem.tags[0]) : "";
     const borderStyle = tagColor ? `border-color:${tagColor}` : "";
 
-    let html = `<span class="gsm-contact-chip" data-number="${_escAttr(num)}" data-chart="${chartId || ''}" title="${label}${info ? ': ' + info : ''}" ${borderStyle ? `style="${borderStyle}"` : ''}>`;
+    let html = `<span class="gsm-contact-chip gsm-id-tip" data-number="${_escAttr(num)}" data-chart="${chartId || ''}" data-id-tip="${titleAttr}" ${borderStyle ? `style="${borderStyle}"` : ''}>`;
     html += `<code>${num}</code>`;
-    if (idInfo) html += ` <span class="gsm-chip-id">${_escHtml(idInfo.label)}</span>`;
+    if (shortLabel) {
+      html += ` <span class="gsm-chip-id">${_escHtml(shortLabel)}</span>`;
+    } else if (idInfo) {
+      html += ` <span class="gsm-chip-id">${_escHtml(idInfo.label)}</span>`;
+    }
     if (count > 1) html += ` <span class="gsm-chip-count">${count}×</span>`;
     // Note marker — SVG icon, always visible (darker), filled when has note
     html += `<span class="gsm-chip-note${hasNote ? ' has-note' : ''}" data-note-number="${_escAttr(num)}" title="Notatka"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span>`;
@@ -9410,6 +10337,9 @@
 
     if (!payload.billing && !payload.identification) return;
 
+    // Remember active analysis tab for project auto-restore
+    localStorage.setItem("aistate_analysis_tab_" + pid, "gsm");
+
     try {
       const resp = await fetch(`/api/gsm/${encodeURIComponent(pid)}/save`, {
         method: "POST",
@@ -9491,6 +10421,8 @@
         _showLoadingOverlay("Renderowanie wyników…");
         await _renderResults(data.billing);
         _hideLoadingOverlay();
+        // Remember active analysis tab for project auto-restore
+        if (pid) localStorage.setItem("aistate_analysis_tab_" + pid, "gsm");
         const idCount = Object.keys(St.idMap).length;
         _addLog("info",
           `Przywrócono dane GSM z projektu: ${data.billing.record_count || 0} rekordów`
@@ -11388,6 +12320,10 @@
               Aktywność weekendowa
             </label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="anomaly_map" checked>
+              Mapa anomalii BTS
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
               <input type="checkbox" class="note-chart-cb" data-chart="map_bts" checked>
               Mapa lokalizacji BTS
             </label>
@@ -12039,6 +12975,7 @@
       "night_activity": "[data-chart-id='night']",
       "weekend_activity": "[data-chart-id='weekend']",
       "map_bts": "#gsm_map_container",
+      "anomaly_map": "#gsm_anomaly_map_wrap",
     };
 
     const chartLabels = {
@@ -12047,6 +12984,7 @@
       "night_activity": "Aktywność nocna",
       "weekend_activity": "Aktywność weekendowa",
       "map_bts": "Mapa BTS",
+      "anomaly_map": "Mapa anomalii BTS",
     };
 
     const selectors = selectorMap[chartName];
@@ -12060,6 +12998,20 @@
     }
     if (!el) {
       console.warn(`[GSM] Chart element not found for ${chartName}: ${selectors}`);
+      return null;
+    }
+
+    // For anomaly map, use the dedicated Leaflet rendering pipeline
+    if (chartName === "anomaly_map" && _anomMapInstance) {
+      try {
+        const mapCanvas = await _renderAnomalyMapToCanvas();
+        if (mapCanvas) {
+          const watermarked = _drawWatermark(mapCanvas, ["Mapa anomalii BTS", "© OpenStreetMap"]);
+          return watermarked.toDataURL("image/png").split(",")[1];
+        }
+      } catch (e) {
+        console.warn("[GSM] Anomaly map rendering failed:", e);
+      }
       return null;
     }
 
@@ -12359,6 +13311,32 @@
       uploadBtn.onclick = () => { if (fileInput) fileInput.click(); };
     }
 
+    // Folder input button
+    const folderInput = QS("#gsm_folder_input");
+    const folderBtn = QS("#gsm_add_folder_toolbar_btn");
+    if (folderBtn) {
+      folderBtn.onclick = () => { if (folderInput) folderInput.click(); };
+    }
+    if (folderInput) {
+      folderInput.onchange = () => {
+        if (folderInput.files && folderInput.files.length > 0) {
+          // Filter to supported file types from folder selection
+          const supported = [".xlsx", ".xls", ".csv", ".txt", ".zip"];
+          const filesCopy = Array.from(folderInput.files).filter(f => {
+            const ext = f.name.toLowerCase().replace(/^.*(\.\w+)$/, "$1");
+            return supported.includes(ext);
+          });
+          folderInput.value = "";
+          if (filesCopy.length > 0) {
+            _addLog("info", `Folder: znaleziono ${filesCopy.length} obsługiwanych plików`);
+            _smartImport(filesCopy);
+          } else {
+            _addLog("warn", "Folder: nie znaleziono obsługiwanych plików (.xlsx, .xls, .csv, .txt, .zip)");
+          }
+        }
+      };
+    }
+
     // Standalone map button
     const smapBtn = QS("#gsm_standalone_map_btn");
     if (smapBtn) {
@@ -12472,6 +13450,44 @@
           document.removeEventListener("mousemove", onMove);
           document.removeEventListener("mouseup", onUp);
           if (St.map) St.map.invalidateSize();
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+
+    // Anomaly map screenshot button
+    const anomMapScreenBtn = QS("#gsm_anomaly_map_screenshot_btn");
+    if (anomMapScreenBtn) {
+      anomMapScreenBtn.onclick = (e) => { e.stopPropagation(); _takeAnomalyMapScreenshot(); };
+    }
+
+    // Anomaly map resize handle (bottom-right corner — changes width of the map wrap)
+    const anomMapResize = QS("#gsm_anomaly_map_resize");
+    if (anomMapResize) {
+      anomMapResize.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const wrap = QS("#gsm_anomaly_map_wrap");
+        const mapCont = QS("#gsm_anomaly_map_container");
+        if (!wrap) return;
+        const startX = e.clientX, startY = e.clientY;
+        const startW = wrap.offsetWidth, startH = wrap.offsetHeight;
+        const startMapH = mapCont ? mapCont.offsetHeight : 350;
+        const onMove = (ev) => {
+          const dx = ev.clientX - startX, dy = ev.clientY - startY;
+          const newW = Math.max(300, startW + dx);
+          const newH = Math.max(300, startH + dy);
+          const newMapH = Math.max(200, startMapH + dy);
+          wrap.style.width = newW + "px";
+          wrap.style.flex = "none";
+          wrap.style.height = newH + "px";
+          if (mapCont) mapCont.style.height = newMapH + "px";
+          if (_anomMapInstance) _anomMapInstance.invalidateSize();
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          if (_anomMapInstance) _anomMapInstance.invalidateSize();
         };
         document.addEventListener("mousemove", onMove);
         document.addEventListener("mouseup", onUp);

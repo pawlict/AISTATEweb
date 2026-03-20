@@ -106,7 +106,8 @@
     // Show indeterminate animation on progress bar
     const progressDiv = QS("#aml_progress .progress");
     if(progressDiv) progressDiv.classList.add("indeterminate");
-    _hide("aml_empty_state");
+    // Keep the logo visible during loading (e.g. restoring saved project)
+    _show("aml_empty_state");
     _hide("aml_results");
     _hide("aml_history_card");
     if(!St.batchMode) _hide("aml_batch_panel");
@@ -247,6 +248,7 @@
             } else {
               await ReviewManager.loadForStatement(first);
             }
+            _updateInfoPanelTxCount();
           }
         } else {
           if(result.status === "duplicate"){
@@ -263,7 +265,8 @@
           _showResults();
 
           if(window.ReviewManager && result.statement_id){
-            ReviewManager.loadForStatement(result.statement_id);
+            await ReviewManager.loadForStatement(result.statement_id);
+            _updateInfoPanelTxCount();
           }
         }
       } else {
@@ -315,6 +318,8 @@
       const pid = (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId) || "";
       localStorage.setItem("aistate_aml_statement_id", statementId);
       localStorage.setItem("aistate_aml_project_id", pid);
+      // Remember active analysis tab for project auto-restore
+      if(pid) localStorage.setItem("aistate_analysis_tab_" + pid, "aml");
     }
     return data;
   }
@@ -490,7 +495,8 @@
     card.style.flex = "1";
 
     const src = stmt;
-    const txCount = (result.transaction_count || St.allTransactions.length) || 0;
+    // Use allTransactions (filled by ReviewManager for batch) for accurate count
+    const txCount = St.allTransactions.length || result.transaction_count || 0;
     card.innerHTML = `<div class="h2">Informacje o wyciagu</div><div class="aml-info-grid" id="aml_info_grid">${_bankInfoHtml(src, txCount, result.pipeline_time_s)}</div>`;
     wrap.appendChild(card);
   }
@@ -3162,6 +3168,7 @@
           } else {
             await ReviewManager.loadForStatement(sid);
           }
+          _updateInfoPanelTxCount();
         }
       });
     });
@@ -3203,6 +3210,7 @@
           } else {
             await ReviewManager.loadForStatement(sid);
           }
+          _updateInfoPanelTxCount();
         }
       });
     });
@@ -3477,28 +3485,12 @@
     _showBatchPanel();
     _renderBatchPanel();
 
-    // Run cross-validation if we have at least 2 statements
-    if(St.batchResults.length >= 2){
-      const valPanel = QS("#aml_batch_validation");
-      if(valPanel){
-        valPanel.style.display = "";
-        valPanel.innerHTML = '<div class="small muted">Walidacja krzyzowa...</div>';
-      }
-
-      try {
-        const result = await _api("/api/aml/validate-batch", {
-          method: "POST",
-          headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({statement_ids: St.batchResults}),
-        });
-
-        if(result && result.status === "ok"){
-          _renderBatchValidation(result);
-        }
-      } catch(e){
-        if(valPanel) valPanel.innerHTML = `<div class="small" style="color:var(--danger)">Blad walidacji: ${_esc(e.message || e)}</div>`;
-      }
-    }
+    // Cross-validation removed — it produced misleading errors when statements
+    // come from different accounts/banks (account_mismatch, balance chain breaks)
+    // which are expected in multi-account AML analysis.  The validation checks
+    // (date continuity, balance chain) assume a single account with sequential
+    // statements, so they incorrectly flag multi-bank or multi-currency uploads.
+    // After opening individual statements, the per-statement data is correct.
 
     // If we have any successful results, load the first one for St.detail
     if(St.batchResults.length > 0){
@@ -3506,8 +3498,8 @@
       await _loadDetail(firstStmtId);
     }
 
-    // Show "add more documents" dialog
-    _showAddMoreDialog();
+    // "Add more documents" dialog removed — users can add more via top menu "Dodaj wyciąg bankowy PDF"
+    // Results are shown directly with approve/cancel buttons in the batch panel.
   }
 
   /** Show dialog asking if user wants to add more documents (e.g. from another bank). */
@@ -3574,21 +3566,31 @@
   async function _batchViewAllResults(){
     if(!St.batchResults.length) return;
 
+    // Show progress while parsing/loading results
+    _setAmlStatus("Ładowanie wyników...", 10);
+    const progressDiv = QS("#aml_progress .progress");
+    if(progressDiv) progressDiv.classList.add("indeterminate");
+
     // Load detail for first statement (for risk/graph/charts)
     if(!St.detail){
+      _setAmlStatus("Wczytywanie wyciągów...", 20);
       await _loadDetail(St.batchResults[0]);
     }
 
     // Multi-account: merge balance timelines from all statements
     if(St.batchResults.length > 1){
+      _setAmlStatus("Łączenie danych z wielu kont...", 40);
       await _mergeMultiAccountCharts(St.batchResults);
       if(St.caseId){
+        _setAmlStatus("Analiza transferów między kontami...", 60);
         St._crossAccountData = await _safeApi("/api/aml/cross-account/" + encodeURIComponent(St.caseId));
         _injectTransferMarkers();
       }
+      _setAmlStatus("Ładowanie danych kont...", 75);
       await _loadRemovedAccounts();
     }
 
+    _setAmlStatus("Renderowanie wyników...", 90);
     _renderResults();
     _showResults();
     _hide("aml_batch_panel");
@@ -3599,6 +3601,25 @@
         await ReviewManager.loadForBatch(St.batchResults);
       } else {
         await ReviewManager.loadForStatement(St.batchResults[0]);
+      }
+      // After ReviewManager loads all transactions, update the info panel count
+      // to match the classification panel total
+      _updateInfoPanelTxCount();
+    }
+  }
+
+  /** Update transaction count in the info panel to reflect total from all loaded statements. */
+  function _updateInfoPanelTxCount(){
+    if(!window.ReviewManager || !ReviewManager.getTotalTransactionCount) return;
+    const totalTx = ReviewManager.getTotalTransactionCount();
+    if(totalTx <= 0) return;
+
+    // Only update single-card view (multi-account cards show per-account counts)
+    const singleCard = QS("#aml_info_card");
+    if(singleCard){
+      const muteDiv = singleCard.querySelector(".small.muted");
+      if(muteDiv){
+        muteDiv.textContent = muteDiv.textContent.replace(/Transakcje:\s*\d+/, "Transakcje: " + totalTx);
       }
     }
   }
@@ -4410,11 +4431,17 @@
     const _topBar = QS("#aml_bar");
     if(_topBar) _topBar.style.background = errs > 0 ? "#d97706" : "";
 
-    // If all done, show button to view results
+    // If all done, show icon buttons to approve or cancel
     if(done + errs === total && done > 0){
-      html += `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" id="aml_batch_view_results">Przegladaj wyniki (${done} wyciag${done > 1 ? "ow" : ""})</button>
-        <button class="btn btn-outline" id="aml_batch_new">Nowa analiza</button>
+      html += `<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn-icon" id="aml_batch_view_results" title="Zatwierdź" style="background:none;border:none;cursor:pointer;padding:4px;display:inline-flex;align-items:center;gap:6px">
+          <img src="/static/icons/akcje/accept.svg" alt="Zatwierdź" style="width:28px;height:28px">
+          <span class="small" style="font-weight:600;color:var(--ok,#10b981)">Zatwierdź (${done})</span>
+        </button>
+        <button class="btn-icon" id="aml_batch_cancel" title="Anuluj / wyczyść wczytane billingi" style="background:none;border:none;cursor:pointer;padding:4px;display:inline-flex;align-items:center;gap:6px">
+          <img src="/static/icons/akcje/cancel.svg" alt="Anuluj" style="width:28px;height:28px">
+          <span class="small" style="font-weight:600;color:var(--danger,#ef4444)">Anuluj</span>
+        </button>
       </div>`;
     }
 
@@ -4426,9 +4453,9 @@
       viewBtn.onclick = ()=> _batchViewAllResults();
     }
 
-    const newBtn = QS("#aml_batch_new");
-    if(newBtn){
-      newBtn.onclick = ()=>{
+    const cancelBtn = QS("#aml_batch_cancel");
+    if(cancelBtn){
+      cancelBtn.onclick = ()=>{
         _resetBatchState();
         _loadHistory();
         _showUpload();

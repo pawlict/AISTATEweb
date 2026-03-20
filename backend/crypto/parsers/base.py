@@ -6,6 +6,50 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 
+# ---------------------------------------------------------------------------
+# Source-type classification
+# ---------------------------------------------------------------------------
+
+_SOURCE_TYPE_MAP: Dict[str, str] = {
+    # Exchange / custodial account exports
+    "binance": "exchange",
+    "binance_trade": "exchange",
+    "binance_pdf": "exchange",
+    "coinbase": "exchange",
+    "coinbase_pro": "exchange",
+    "kraken": "exchange",
+    "kraken_ledger": "exchange",
+    "bybit": "exchange",
+    "kucoin": "exchange",
+    "ledger": "exchange",
+    # Blockchain / on-chain explorer exports
+    "etherscan": "blockchain",
+    "etherscan_token": "blockchain",
+    "etherscan_internal": "blockchain",
+    "blockchair": "blockchain",
+    "walletexplorer": "blockchain",
+    "electrum": "blockchain",
+    "metamask": "blockchain",
+    "trezor": "blockchain",
+}
+
+
+def classify_source_type(source: str, txs: List["CryptoTransaction"]) -> str:
+    """Determine source_type ('exchange' or 'blockchain') from format name.
+
+    Falls back to a heuristic: if >50% of transactions have from/to address
+    fields populated, treat as blockchain data.
+    """
+    mapped = _SOURCE_TYPE_MAP.get(source, "")
+    if mapped:
+        return mapped
+    # Heuristic for unknown / generic sources
+    if txs:
+        has_addr = sum(1 for tx in txs if tx.from_address or tx.to_address)
+        return "blockchain" if has_addr / len(txs) > 0.5 else "exchange"
+    return "exchange"
+
+
 @dataclass
 class CryptoTransaction:
     """Single normalized crypto transaction."""
@@ -28,6 +72,8 @@ class CryptoTransaction:
     exchange: Optional[str] = None      # source exchange name
     counterparty: str = ""              # resolved label for the other party
     category: str = ""                  # classified category
+    classification: str = ""            # neutral | legitimate | suspicious | monitoring
+    classification_note: str = ""
     risk_score: float = 0.0
     risk_tags: List[str] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)  # original row
@@ -70,6 +116,7 @@ class ParsedCryptoData:
     """Result of parsing a crypto file."""
 
     source: str = ""                    # "binance", "etherscan", "generic", etc.
+    source_type: str = ""               # "exchange" or "blockchain"
     chain: str = ""                     # detected chain
     wallets: List[WalletInfo] = field(default_factory=list)
     transactions: List[CryptoTransaction] = field(default_factory=list)

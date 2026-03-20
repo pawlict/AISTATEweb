@@ -76,7 +76,8 @@
     <!-- GSM toolbar items (hidden by default, shown when GSM tab active) -->
     <div class="analysis-toolbar-right" id="gsm_toolbar_items" style="display:none">
       <div class="toolbar-section">
-        <button class="btn pill-icon" id="gsm_add_file_toolbar_btn" title="Wczytaj dane GSM (biling, identyfikacja, ZIP, folder)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj dane" draggable="false"></button>
+        <button class="btn pill-icon" id="gsm_add_file_toolbar_btn" title="Wczytaj pliki GSM (biling, identyfikacja, ZIP)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj dane" draggable="false"></button>
+        <button class="btn pill-icon" id="gsm_add_folder_toolbar_btn" title="Wczytaj folder z danymi GSM"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></button>
         <span class="toolbar-sep" style="height:22px;margin:0 6px"></span>
         <button class="btn pill-icon" id="gsm_standalone_map_btn" title="Otwórz mapę (bez danych bilingowych)"><img src="/static/icons/inne/map.svg" alt="Mapa" width="20" height="20" draggable="false" style="opacity:.85"></button>
       </div>
@@ -362,11 +363,6 @@
     <!-- AML main content -->
     <div class="analyst-panel-main">
 
-    <!-- Empty state (before upload) -->
-    <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-      <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
-    </div>
-
     <!-- Progress bar (like transcription) -->
     <div class="an-progress" id="aml_progress">
       <div class="small">Status: <b id="aml_status">—</b> <span id="aml_pct"></span></div>
@@ -380,7 +376,8 @@
         <span class="small muted" id="aml_batch_counter"></span>
       </div>
       <div id="aml_batch_list" style="margin-top:8px"></div>
-      <div id="aml_batch_validation" style="margin-top:12px;display:none"></div>
+      <!-- Cross-validation removed — handled per-statement after opening -->
+      <div id="aml_batch_validation" style="display:none"></div>
     </div>
 
     <!-- Results -->
@@ -603,6 +600,12 @@
 
     </div><!-- /analyst-panel-main (AML) -->
   </div><!-- /analyst-panel-layout (AML) -->
+
+  <!-- Empty state (before upload) — outside layout so logo is centered -->
+  <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  </div>
+
   </div><!-- /aml_content -->
 
   <!-- GSM Analysis content -->
@@ -729,7 +732,22 @@
             <i data-icon="camera" data-size="22"></i>
           </button>
         </div>
-        <div id="gsm_anomalies_body"></div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div id="gsm_anomalies_body" style="flex:0 0 33%;min-width:280px;max-height:700px;overflow-y:auto"></div>
+          <div id="gsm_anomaly_map_wrap" style="flex:1;min-height:400px;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#e8e8e8;position:relative">
+            <div id="gsm_anomaly_map_header" style="padding:6px 12px;background:var(--card-bg,#fff);border-bottom:1px solid var(--border);font-size:13px;display:flex;align-items:center;gap:6px">
+              <i data-icon="map" data-size="14"></i>
+              <span id="gsm_anomaly_map_title" style="font-weight:600">Mapa BTS anomalii</span>
+              <span id="gsm_anomaly_map_stats" class="small muted" style="margin-left:auto"></span>
+              <button class="btn btn-icon gsm-card-screenshot-btn" id="gsm_anomaly_map_screenshot_btn" title="Zrób zrzut mapy anomalii" style="margin-left:4px">
+                <i data-icon="camera" data-size="18"></i>
+              </button>
+            </div>
+            <div id="gsm_anomaly_map_container" style="flex:1;min-height:350px"></div>
+            <div id="gsm_anomaly_id_table" style="max-height:200px;overflow-y:auto;border-top:1px solid var(--border);background:var(--card-bg,#fff)"></div>
+            <div class="gsm-graph-resize" id="gsm_anomaly_map_resize" title="Przeciągnij aby zmienić rozmiar"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Analysis -->
@@ -1142,13 +1160,14 @@
       </form>
     </dialog>
 
-    <!-- Empty state (before upload) -->
-    <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-      <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
-    </div>
-
     </div><!-- /analyst-panel-main (GSM) -->
   </div><!-- /analyst-panel-layout (GSM) -->
+
+  <!-- Empty state (before upload) — outside layout so logo is centered -->
+  <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  </div>
+
   </div><!-- /gsm_content -->
 
   <!-- Crypto Analysis content -->
@@ -1160,13 +1179,85 @@
       <div class="progress"><div id="crypto_bar"></div></div>
     </div>
 
-    <!-- Results -->
-    <div id="crypto_results" style="display:none">
+    <!-- Results (with analyst panel) -->
+    <div class="analyst-panel-layout" id="crypto_results" style="display:none">
+
+      <!-- Panel analityczny (collapsible left sidebar) -->
+      <aside class="analyst-panel collapsed" id="crypto_analyst_panel">
+        <button class="analyst-panel-toggle" id="crypto_panel_toggle" title="Panel analityczny">
+          <img src="/static/icons/akcje/sidebar_expand.svg" alt="" width="18" height="18" draggable="false">
+        </button>
+        <div class="analyst-panel-body">
+          <div class="analyst-panel-header">
+            <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
+              <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+              <span data-i18n="analyst_panel.title">Panel analityczny</span>
+            </div>
+            <button class="analyst-panel-toggle-inner" id="crypto_panel_collapse" title="Zwiń panel">
+              <img src="/static/icons/akcje/sidebar_collapse.svg" alt="" width="16" height="16" draggable="false">
+            </button>
+          </div>
+
+          <!-- Global project search -->
+          <div class="analyst-panel-section analyst-panel-search-section">
+            <div class="analyst-panel-label" style="display:flex;align-items:center;gap:5px">
+              <img src="/static/icons/akcje/search.svg" alt="" width="14" height="14" draggable="false" onerror="this.style.display='none'">
+              <span>Szukaj w projekcie</span>
+            </div>
+            <input id="crypto_panel_search" type="text" class="analyst-panel-search-input input" placeholder="Hash, adres, kwota&#8230;">
+            <div id="crypto_panel_search_results" class="analyst-panel-search-results" style="display:none"></div>
+          </div>
+
+          <div class="analyst-panel-divider"></div>
+
+          <!-- Global note -->
+          <div class="analyst-panel-section">
+            <div class="analyst-panel-label">
+              <img src="/static/icons/inne/pin.svg" alt="" width="14" height="14" draggable="false">
+              <span data-i18n="analyst_panel.global_note">Notatka globalna</span>
+            </div>
+            <textarea class="analyst-panel-global-ta input" id="crypto_analyst_global_note" data-i18n-placeholder="analyst_panel.global_placeholder" placeholder="Notatka do całej analizy Crypto..."></textarea>
+          </div>
+
+          <div class="analyst-panel-divider"></div>
+
+          <!-- Item notes -->
+          <div class="analyst-panel-section analyst-panel-items-section">
+            <div class="analyst-panel-label" style="display:flex;align-items:center;justify-content:space-between">
+              <span style="display:flex;align-items:center;gap:5px">
+                <img src="/static/icons/projekty/project_tag.svg" alt="" width="14" height="14" draggable="false">
+                <span data-i18n="analyst_panel.item_notes">Notatki do elementów</span>
+              </span>
+              <span class="analyst-panel-count" id="crypto_notes_count">0</span>
+            </div>
+            <!-- Tag filter -->
+            <div class="analyst-panel-tag-filter" id="crypto_tag_filter">
+              <select class="input mini-select" id="crypto_tag_filter_select" style="font-size:12px">
+                <option value="" data-i18n="analyst_panel.all_tags">Wszystkie</option>
+                <option value="neutral">Neutralny</option>
+                <option value="legitimate">Poprawny</option>
+                <option value="suspicious">Podejrzany</option>
+                <option value="monitoring">Obserwacja</option>
+                <option value="custom1">Własny 1</option>
+                <option value="custom2">Własny 2</option>
+                <option value="custom3">Własny 3</option>
+                <option value="custom4">Własny 4</option>
+              </select>
+            </div>
+            <div class="analyst-panel-items" id="crypto_notes_list">
+              <div class="analyst-panel-empty" data-i18n="analyst_panel.no_notes">Brak notatek. Użyj Ctrl+M aby dodać.</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="analyst-panel-main">
 
       <!-- Summary card -->
       <div class="card">
         <div class="h2"><i data-icon="link" data-size="16"></i> Podsumowanie analizy</div>
-        <div class="crypto-summary-grid" id="crypto_summary_grid"></div>
+        <div class="crypto-info-grid" id="crypto_info_grid"></div>
+        <div class="crypto-summary-grid" id="crypto_summary_grid" style="margin-top:12px"></div>
       </div>
 
       <!-- Risk assessment -->
@@ -1181,34 +1272,88 @@
         <div id="crypto_alerts_body"></div>
       </div>
 
-      <!-- Charts -->
+      <!-- Exchange metadata (exchange only) -->
+      <div class="card" id="crypto_exchange_meta_card" style="display:none">
+        <div class="h2">Portfel tokenów</div>
+        <div style="overflow-x:auto" id="crypto_exchange_meta_body"></div>
+      </div>
+
+      <!-- Anomalies (like GSM) -->
+      <div class="card" id="crypto_anomalies_card" style="display:none">
+        <div class="h2">Wykryte anomalie</div>
+        <div id="crypto_anomalies_body"></div>
+      </div>
+
+      <!-- Transaction Review & Classification -->
+      <div class="card" id="crypto_review_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Przegląd i klasyfikacja transakcji</div>
+          <div class="crypto-rv-stats-bar" id="crypto_rv_stats_bar" style="flex:1;margin-left:12px;min-width:100px"></div>
+        </div>
+        <div id="crypto_rv_stats_legend" style="margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+          <input class="input" id="crypto_rv_search" placeholder="Szukaj..." style="width:160px;padding:5px 10px;border-radius:10px">
+          <select class="input" id="crypto_rv_filter_class" style="padding:5px 8px;border-radius:10px;min-width:130px">
+            <option value="">Klasyfikacja: wszystkie</option>
+            <option value="neutral">Neutralne</option>
+            <option value="legitimate">Poprawne</option>
+            <option value="suspicious">Podejrzane</option>
+            <option value="monitoring">Obserwacja</option>
+          </select>
+          <select class="input" id="crypto_rv_filter_risk" style="padding:5px 8px;border-radius:10px;min-width:120px">
+            <option value="">Ryzyko: wszystkie</option>
+            <option value="critical">Krytyczne</option>
+            <option value="high">Wysokie</option>
+            <option value="medium">Średnie</option>
+            <option value="low">Niskie</option>
+          </select>
+          <span class="small muted" id="crypto_rv_tx_count">0</span>
+        </div>
+        <div id="crypto_rv_table_wrap" style="overflow-x:auto"></div>
+      </div>
+
+      <!-- Charts — main with dropdown selector -->
       <div class="card" id="crypto_charts_card">
-        <div class="h2">Wykresy</div>
-        <div class="crypto-charts-grid" id="crypto_charts_grid">
-          <div class="crypto-chart-box">
-            <div class="h3">Saldo w czasie</div>
-            <canvas id="crypto_chart_balance" height="200"></canvas>
+        <div class="analysis-sidehdr">
+          <div class="h2">Wykresy</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div id="crypto_chart_zoom_bar" class="crypto-chart-zoom-bar" style="display:none">
+              <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_out" title="Oddal">&minus;</button>
+              <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_reset" title="Resetuj zoom">1:1</button>
+              <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_in" title="Przybliż">+</button>
+            </div>
+            <select class="input" id="crypto_chart_select" style="padding:5px 8px;border-radius:10px;min-width:180px">
+              <option value="balance_timeline">Saldo w czasie</option>
+              <option value="monthly_volume">Wolumen miesięczny</option>
+              <option value="daily_tx_count">Aktywność dzienna</option>
+              <option value="top_counterparties">Top kontrahenci</option>
+            </select>
           </div>
-          <div class="crypto-chart-box">
-            <div class="h3">Wolumen miesięczny</div>
-            <canvas id="crypto_chart_volume" height="200"></canvas>
+        </div>
+        <div class="crypto-chart-scroll-wrap" id="crypto_chart_scroll_wrap">
+          <div class="crypto-chart-container" id="crypto_chart_container">
+            <canvas id="crypto_chart_main"></canvas>
           </div>
-          <div class="crypto-chart-box">
-            <div class="h3">Aktywność dzienna</div>
-            <canvas id="crypto_chart_daily" height="200"></canvas>
+        </div>
+        <!-- Small charts row -->
+        <div class="crypto-charts-small-grid" id="crypto_charts_small_grid">
+          <div class="crypto-chart-small">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Typy transakcji</div>
+            <canvas id="crypto_chart_types"></canvas>
           </div>
-          <div class="crypto-chart-box">
-            <div class="h3">Typy transakcji</div>
-            <canvas id="crypto_chart_types" height="200"></canvas>
+          <div class="crypto-chart-small">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Wolumen miesięczny</div>
+            <canvas id="crypto_chart_volume_small"></canvas>
+          </div>
+          <div class="crypto-chart-small">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Aktywność dzienna</div>
+            <canvas id="crypto_chart_daily_small"></canvas>
           </div>
         </div>
       </div>
 
-      <!-- Top counterparties -->
-      <div class="card" id="crypto_cp_card">
-        <div class="h2">Najważniejsi kontrahenci</div>
-        <canvas id="crypto_chart_counterparties" height="300"></canvas>
-      </div>
+      <!-- Token breakdown card placeholder (exchange only) -->
+      <div class="card" id="crypto_token_breakdown_card" style="display:none"></div>
 
       <!-- Transaction flow graph -->
       <div class="card" id="crypto_graph_card">
@@ -1220,15 +1365,6 @@
       <div class="card" id="crypto_wallets_card">
         <div class="h2">Portfele</div>
         <div style="overflow-x:auto" id="crypto_wallets_body"></div>
-      </div>
-
-      <!-- Transactions table -->
-      <div class="card" id="crypto_tx_card">
-        <div class="analysis-sidehdr">
-          <div class="h2">Transakcje</div>
-          <div class="small" id="crypto_tx_count_label"></div>
-        </div>
-        <div style="overflow-x:auto" id="crypto_tx_body"></div>
       </div>
 
       <!-- LLM narrative analysis -->
@@ -1244,7 +1380,8 @@
         <div id="crypto_llm_text" class="analysis-result-text" style="white-space:pre-wrap;line-height:1.6"></div>
       </div>
 
-    </div>
+      </div><!-- /analyst-panel-main -->
+    </div><!-- /crypto_results -->
 
     <!-- Empty state (before upload) -->
     <div id="crypto_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
@@ -1295,7 +1432,8 @@
   <input type="file" id="docs_file_input" style="display:none" multiple>
   <input type="file" id="aml_file_input" accept=".pdf" multiple style="display:none">
   <input type="file" id="gsm_file_input" accept=".xlsx,.xls,.csv,.txt,.zip" multiple style="display:none">
-  <input type="file" id="crypto_file_input" accept=".csv,.json,.txt" style="display:none">
+  <input type="file" id="gsm_folder_input" webkitdirectory directory multiple style="display:none">
+  <input type="file" id="crypto_file_input" accept=".csv,.json,.txt,.pdf" style="display:none">
   <input type="file" id="prompt_import_input" style="display:none" accept="application/json">
 
   <!-- Prompt dialog -->
@@ -1370,6 +1508,14 @@
         tab.classList.add('active');
         const which = tab.getAttribute('data-tab');
 
+        // Save active tab per project so it restores on next open
+        const _pid = (typeof AISTATE !== 'undefined' && AISTATE && AISTATE.projectId) || '';
+        if(_pid && ['aml','gsm','crypto'].includes(which)){
+          localStorage.setItem('aistate_analysis_tab_' + _pid, which);
+        } else if(_pid && which === 'llm'){
+          localStorage.removeItem('aistate_analysis_tab_' + _pid);
+        }
+
         // Hide all content and extra toolbars
         allContents.forEach(c => { if(c) c.style.display = 'none'; });
         if(amlToolbarEl) amlToolbarEl.style.display = 'none';
@@ -1427,11 +1573,24 @@
       await AnalysisManager.init();
     }
 
-    // Auto-activate AML tab for finance subprojects
+    // Auto-activate the correct analysis tab based on subproject type or saved tab
     const spType = localStorage.getItem('aistate_subproject_type') || '';
-    if(spType === 'finance'){
-      const amlTab = document.querySelector('.analysis-tab[data-tab="aml"]');
-      if(amlTab) amlTab.click();
+    const pid = (typeof AISTATE !== 'undefined' && AISTATE && AISTATE.projectId) || '';
+    const savedTab = pid ? (localStorage.getItem('aistate_analysis_tab_' + pid) || '') : '';
+
+    // Determine which tab to auto-open:
+    // 1. Saved tab from previous session (most specific)
+    // 2. Subproject type mapping (finance → aml)
+    let autoTab = '';
+    if(savedTab && ['aml','gsm','crypto'].includes(savedTab)){
+      autoTab = savedTab;
+    } else if(spType === 'finance'){
+      autoTab = 'aml';
+    }
+
+    if(autoTab){
+      const tab = document.querySelector(`.analysis-tab[data-tab="${autoTab}"]`);
+      if(tab) tab.click();
     }
   }catch(e){
     console.error(e);

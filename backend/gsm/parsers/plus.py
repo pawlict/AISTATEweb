@@ -205,6 +205,27 @@ def _is_phone(text: str) -> bool:
     return bool(re.match(r"^\d{7,15}$", digits))
 
 
+def _parse_bts_address(bts: str) -> Dict[str, str]:
+    """Parse Plus BTS ADDRESS into city/street components.
+
+    Plus BTS ADDRESS formats:
+    - "GDAŃSK, UL. GRUNWALDZKA 123"
+    - "WARSZAWA MOKOTÓW, MARSZAŁKOWSKA 10"
+    - plain text like "BTS-12345"
+
+    Returns dict with bts_city and bts_street (may be empty).
+    """
+    if not bts:
+        return {"bts_city": "", "bts_street": ""}
+    parts = bts.split(",", 1)
+    city = parts[0].strip()
+    street = parts[1].strip() if len(parts) > 1 else ""
+    # Don't treat BTS codes as city names
+    if re.match(r"^[A-Z0-9\-_]+$", city) and len(city) < 5:
+        return {"bts_city": "", "bts_street": ""}
+    return {"bts_city": city, "bts_street": street}
+
+
 # ---------------------------------------------------------------------------
 # CSV loading
 # ---------------------------------------------------------------------------
@@ -555,6 +576,9 @@ class PlusParser(BillingParser):
             else:
                 direction_label = "przychodz\u0105ce"  # przychodzące
 
+            # Parse BTS address for city/street
+            bts_parts = _parse_bts_address(sub_bts)
+
             record = BillingRecord(
                 datetime=dt,
                 caller=self.normalize_phone(caller),
@@ -577,6 +601,12 @@ class PlusParser(BillingParser):
                     if c_msisdn else "",
                     "gcr": _get(row, col_map.get("gcr")),
                     "end_time": end_str,
+                    "bts_lat": "",
+                    "bts_lon": "",
+                    "bts_city": bts_parts["bts_city"],
+                    "bts_street": bts_parts["bts_street"],
+                    "azimuth": "",
+                    "bts_code": "",
                 },
             )
             result.records.append(record)
@@ -700,6 +730,8 @@ class PlusParser(BillingParser):
             imei = _get(row, col_map.get("imei"))
             imsi = _get(row, col_map.get("imsi"))
 
+            bts_parts = _parse_bts_address(bts)
+
             record = BillingRecord(
                 datetime=dt,
                 caller=self.normalize_phone(msisdn),
@@ -717,6 +749,12 @@ class PlusParser(BillingParser):
                     "type_code": "DATA",
                     "ip": ip,
                     "end_time": end_str,
+                    "bts_lat": "",
+                    "bts_lon": "",
+                    "bts_city": bts_parts["bts_city"],
+                    "bts_street": bts_parts["bts_street"],
+                    "azimuth": "",
+                    "bts_code": "",
                 },
             )
             result.records.append(record)

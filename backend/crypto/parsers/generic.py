@@ -11,7 +11,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .base import CryptoTransaction, ParsedCryptoData, WalletInfo
+from .base import CryptoTransaction, ParsedCryptoData, WalletInfo, classify_source_type
 
 log = logging.getLogger("aistate.crypto.parser")
 
@@ -365,6 +365,193 @@ _PARSER_MAP = {
 }
 
 
+# ---------------------------------------------------------------------------
+# PDF parsing for crypto exchanges
+# ---------------------------------------------------------------------------
+
+def _extract_pdf_lines(path: Path) -> List[str]:
+    """Extract text lines from a PDF using PyMuPDF."""
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        log.warning("PyMuPDF (fitz) not installed; cannot parse PDF files")
+        return []
+
+    lines: List[str] = []
+    doc = fitz.open(str(path))
+    for page in doc:
+        text = page.get_text("text")
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if stripped:
+                lines.append(stripped)
+    doc.close()
+    return lines
+
+
+def _detect_crypto_pdf_format(lines: List[str]) -> str:
+    """Detect crypto exchange from PDF text lines."""
+    head = "\n".join(lines[:30]).lower()
+    if "binance" in head:
+        return "binance_pdf"
+    # Future: add more exchange PDF formats here
+    return ""
+
+
+def _parse_binance_pdf(lines: List[str]) -> Tuple[List[CryptoTransaction], Dict[str, str]]:
+    """Parse Binance 'Historia transakcji' PDF format.
+
+    Each transaction is a block of lines:
+      user_id (e.g. 849227679)
+      YY-MM-DD HH:MM:SS  (timestamp)
+      Account (Spot/Funding)
+      Operation (Deposit, Withdraw, Buy Crypto With Fiat, etc.)
+      Coin (PLN, BTC, ETH, ...)
+      Change (numeric, positive or negative)
+      [Notes] (optional, e.g. 'Withdraw fee is included')
+
+    Page headers repeat: www.binance.com, Page X/Y, column header lines.
+    """
+    txs: List[CryptoTransaction] = []
+    meta: Dict[str, str] = {}
+    n = len(lines)
+
+    # Extract metadata from header
+    for i in range(min(n, 15)):
+        l = lines[i]
+        if l.startswith("Nazwa:"):
+            meta["holder_name"] = l[len("Nazwa:"):].strip()
+        elif l.startswith("Adres:"):
+            meta["address"] = l[len("Adres:"):].strip()
+        elif l.startswith("ID u"):
+            m = re.match(r"ID\s+u.ytkownika:\s*(\d+)", l)
+            if m:
+                meta["user_id"] = m.group(1)
+        elif l.startswith("Okres"):
+            m = re.search(r"(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})", l)
+            if m:
+                meta["period_from"] = m.group(1)
+                meta["period_to"] = m.group(2)
+        elif l.startswith("E-mail:"):
+            meta["email"] = l[len("E-mail:"):].strip()
+
+    # Detect user_id for transaction block detection
+    user_id = meta.get("user_id", "")
+    if not user_id:
+        # Try to find it from first numeric-only line
+        for l in lines[:20]:
+            if re.match(r"^\d{6,}$", l):
+                user_id = l
+                break
+
+    if not user_id:
+        return [], meta
+
+    # Page header/footer lines to skip
+    _skip_patterns = {
+        "www.binance.com", "Identyfikator", "ownika", "Czas",
+        "Konto", "Operacja", "Moneta", "Zmie","Uwagi",
+    }
+
+    i = 0
+    while i < n:
+        l = lines[i]
+
+        # Skip page headers
+        if l.startswith("Page ") or l.startswith("www.binance") or l in _skip_patterns:
+            i += 1
+            continue
+
+        # Transaction block starts with user_id
+        if l != user_id:
+            i += 1
+            continue
+
+        i += 1
+        if i >= n:
+            break
+
+        # Timestamp: YY-MM-DD HH:MM:SS
+        ts_line = lines[i] if i < n else ""
+        ts_match = re.match(r"(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})", ts_line)
+        if not ts_match:
+            continue
+        ts_raw = ts_match.group(1)
+        # Convert YY-MM-DD to 20YY-MM-DD
+        ts_iso = f"20{ts_raw[:2]}-{ts_raw[3:5]}-{ts_raw[6:8]}T{ts_raw[9:]}"
+        i += 1
+
+        # Account (Spot, Funding)
+        account = lines[i].strip() if i < n else ""
+        i += 1
+
+        # Operation
+        operation = lines[i].strip() if i < n else ""
+        i += 1
+
+        # Coin
+        coin = lines[i].strip() if i < n else ""
+        i += 1
+
+        # Change (amount)
+        change_str = lines[i].strip() if i < n else "0"
+        i += 1
+
+        # Optional notes line (not a user_id, not a page header, not a timestamp)
+        notes = ""
+        if i < n:
+            next_l = lines[i].strip()
+            if (next_l != user_id
+                    and not next_l.startswith("Page ")
+                    and not next_l.startswith("www.")
+                    and next_l not in _skip_patterns
+                    and not re.match(r"\d{2}-\d{2}-\d{2}\s", next_l)):
+                notes = next_l
+                i += 1
+
+        # Parse amount
+        amount = _dec(change_str)
+
+        # Determine tx_type
+        op_lower = operation.lower()
+        tx_type = "transfer"
+        if "deposit" in op_lower:
+            tx_type = "deposit"
+        elif "withdraw" in op_lower:
+            tx_type = "withdrawal"
+        elif "buy" in op_lower or "sell" in op_lower:
+            tx_type = "swap"
+        elif "convert" in op_lower:
+            tx_type = "swap"
+        elif "crypto box" in op_lower:
+            tx_type = "transfer"
+        elif "transfer between" in op_lower:
+            tx_type = "transfer"
+
+        raw = {
+            "user_id": user_id,
+            "utc_time": ts_raw,
+            "account": account,
+            "operation": operation,
+            "coin": coin,
+            "change": change_str,
+            "notes": notes,
+        }
+
+        txs.append(CryptoTransaction(
+            timestamp=ts_iso,
+            amount=abs(amount),
+            token=coin.upper(),
+            chain="binance",
+            tx_type=tx_type,
+            exchange="binance",
+            category=operation,
+            raw=raw,
+        ))
+
+    return txs, meta
+
+
 def _read_csv(path: Path) -> Tuple[List[str], List[Dict[str, str]], str]:
     """Read CSV, auto-detect delimiter. Returns (headers, rows, metadata_line)."""
     text = path.read_text(encoding="utf-8", errors="replace")
@@ -409,13 +596,35 @@ def _read_json(path: Path) -> Tuple[str, List[Dict[str, str]]]:
 
 
 def parse_crypto_file(path: Path) -> ParsedCryptoData:
-    """Parse a crypto transaction file (CSV or JSON). Auto-detects format."""
+    """Parse a crypto transaction file (CSV, JSON, or PDF). Auto-detects format."""
     result = ParsedCryptoData()
     path = Path(path)
     ext = path.suffix.lower()
     metadata = ""
 
     try:
+        # --- PDF path (crypto exchange statements) ---
+        if ext == ".pdf":
+            lines = _extract_pdf_lines(path)
+            if not lines:
+                result.errors.append("Nie udało się wyodrębnić tekstu z pliku PDF.")
+                return result
+            pdf_fmt = _detect_crypto_pdf_format(lines)
+            if pdf_fmt == "binance_pdf":
+                txs, pdf_meta = _parse_binance_pdf(lines)
+                result.source = "binance_pdf"
+                result.source_type = classify_source_type("binance_pdf", txs)
+                result.raw_row_count = len(txs)
+                result.transactions = txs
+                result.chain = "binance"
+                result.wallets = _build_wallets(txs)
+                log.info(f"Parsed {len(txs)} transactions from binance_pdf ({path.name})")
+                return result
+            else:
+                result.errors.append("Nierozpoznany format PDF giełdy kryptowalutowej.")
+                return result
+
+        # --- JSON path ---
         if ext == ".json":
             fmt, rows = _read_json(path)
             result.source = fmt
@@ -468,6 +677,10 @@ def parse_crypto_file(path: Path) -> ParsedCryptoData:
     except Exception as e:
         log.error(f"Error parsing {path}: {e}")
         result.errors.append(f"Błąd parsowania: {e}")
+
+    # Classify source type (exchange vs blockchain)
+    if not result.source_type:
+        result.source_type = classify_source_type(result.source, result.transactions)
 
     return result
 
