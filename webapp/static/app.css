@@ -4347,6 +4347,31 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 [data-theme="dark"] .gsm-th-filtered{background:rgba(37,99,235,.08)!important}
 [data-theme="dark"] .gsm-col-filter-btn{background:var(--bg-secondary,#1e293b);border-color:var(--border,#334155);color:var(--text-muted,#94a3b8)}
 
+/* ─── GSM Section Layout Manager ──────────────────────────────────────── */
+.gsm-layout-bar{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.gsm-layout-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:var(--bg-card,#fff);color:var(--text-muted,#64748b);font-size:12px;cursor:pointer;transition:border-color .15s,color .15s,background .15s;user-select:none}
+.gsm-layout-btn:hover{border-color:var(--brand-blue,#2563eb);color:var(--brand-blue,#2563eb)}
+.gsm-layout-btn svg{flex-shrink:0}
+.gsm-layout-panel{z-index:9999;background:var(--bg-card,#fff);border:1px solid var(--border,#d1d5db);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.15);min-width:260px;max-width:340px;font-size:13px}
+.gsm-layout-panel-header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border,#e2e8f0)}
+.gsm-layout-reset-btn{padding:4px 10px;border:1px solid var(--border,#e2e8f0);border-radius:6px;background:var(--bg-card,#fff);color:var(--text-muted,#64748b);font-size:11px;cursor:pointer;transition:background .15s}
+.gsm-layout-reset-btn:hover{background:var(--bg-secondary,#f8fafc);color:var(--text,#334155)}
+.gsm-layout-panel-list{padding:6px 8px;max-height:400px;overflow-y:auto}
+.gsm-layout-panel-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;border:1px solid transparent;transition:background .12s,border-color .12s;cursor:default}
+.gsm-layout-panel-item:hover{background:var(--bg-secondary,#f8fafc)}
+.gsm-layout-panel-item.gsm-layout-dragging{opacity:.4}
+.gsm-layout-panel-item.gsm-layout-drag-over{border-color:var(--brand-blue,#2563eb);background:rgba(37,99,235,.06)}
+.gsm-layout-drag-handle{cursor:grab;color:var(--text-muted,#94a3b8);font-size:14px;user-select:none;flex-shrink:0;letter-spacing:-1px}
+.gsm-layout-drag-handle:active{cursor:grabbing}
+.gsm-layout-item-label{flex:1;font-size:12px}
+[data-theme="dark"] .gsm-layout-btn{background:var(--bg-card,#1e293b);border-color:var(--border,#334155);color:var(--text-muted,#94a3b8)}
+[data-theme="dark"] .gsm-layout-btn:hover{border-color:var(--brand-blue,#2563eb);color:var(--brand-blue,#60a5fa)}
+[data-theme="dark"] .gsm-layout-panel{background:var(--bg-card,#1e293b);border-color:var(--border,#334155);box-shadow:0 8px 32px rgba(0,0,0,.4)}
+[data-theme="dark"] .gsm-layout-panel-header{border-color:var(--border,#334155)}
+[data-theme="dark"] .gsm-layout-reset-btn{background:var(--bg-secondary,#0f172a);border-color:var(--border,#334155);color:var(--text-muted,#94a3b8)}
+[data-theme="dark"] .gsm-layout-panel-item:hover{background:var(--bg-secondary,#334155)}
+[data-theme="dark"] .gsm-layout-panel-item.gsm-layout-drag-over{background:rgba(37,99,235,.12)}
+
 /* ─── Note Template Editor ─────────────────────────────────────────────── */
 .note-tpl-editor{display:flex;flex-direction:column;gap:12px;max-height:65vh;overflow:hidden}
 .note-tpl-header{display:flex;align-items:center;gap:10px;padding:0 0 10px;border-bottom:1px solid var(--border,#e2e8f0)}
