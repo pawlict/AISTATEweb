@@ -132,6 +132,14 @@
         <button class="btn pill-icon sp-type-btn" data-type="translation" title="Tłumaczenie"><img src="/static/icons/sidebar/translation.svg" draggable="false"></button>
         <button class="btn pill-icon sp-type-btn" data-type="general" title="Ogólny"><img src="/static/icons/projekty/subproject_new.svg" draggable="false"></button>
       </div>
+      <!-- Encryption checkbox -->
+      <div id="npEncryptionRow" style="margin-top:10px;display:none">
+        <label style="font-size:.82rem;display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="npEncrypted"/>
+          <span data-i18n="projects.encrypt_project">Szyfruj projekt</span>
+        </label>
+        <small id="npEncMethod" style="color:var(--text-muted,#888);margin-left:22px"></small>
+      </div>
       <div class="label" style="margin-top:10px">Powiąż z (opcjonalnie)</div>
       <select class="input" id="npLinkTo"><option value="">— brak —</option></select>
     </div>
