@@ -1744,12 +1744,47 @@ def write_translation_draft(project_id: str, draft: Dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _is_project_encrypted(project_id: str) -> bool:
+    """Check if a project has encryption enabled."""
+    meta = read_project_meta(project_id)
+    enc = meta.get("encryption", {})
+    return bool(enc and enc.get("enabled"))
+
+
+def _get_project_io(project_id: str):
+    """Get a ProjectIO instance for the given project (lazy import)."""
+    from backend.encryption.project_io import ProjectIO
+    pdir = project_path(project_id)
+    return ProjectIO(pdir)
+
+
+def project_read_file(project_id: str, path: Path) -> str:
+    """Read a text file from a project, decrypting if necessary."""
+    if _is_project_encrypted(project_id):
+        return _get_project_io(project_id).read_text(path)
+    return path.read_text(encoding="utf-8")
+
+
+def project_write_file(project_id: str, path: Path, content: str) -> None:
+    """Write a text file to a project, encrypting if necessary."""
+    if _is_project_encrypted(project_id):
+        _get_project_io(project_id).write_text(path, content)
+    else:
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(path)
+
+
 def save_upload(project_id: str, upload: UploadFile) -> Path:
     pdir = project_path(project_id)
     fname = safe_filename(upload.filename or "audio")
     dst = pdir / fname
-    with dst.open("wb") as f:
-        shutil.copyfileobj(upload.file, f)
+    if _is_project_encrypted(project_id):
+        pio = _get_project_io(project_id)
+        pio.write_stream(dst, upload.file)
+    else:
+        with dst.open("wb") as f:
+            shutil.copyfileobj(upload.file, f)
     meta = read_project_meta(project_id)
     meta["audio_file"] = fname
     meta["updated_at"] = now_iso()
@@ -2057,6 +2092,16 @@ async def _auth_middleware(request: Request, call_next):
 
 
 # --- Startup: autoscan ASR caches so the UI can label models as installed/uninstalled ---
+@app.on_event("startup")
+async def _startup_encryption_init() -> None:
+    """Initialize the encryption subsystem (lazy — only creates managers, does not unlock Master Key)."""
+    try:
+        from backend.encryption.project_io import init_encryption
+        init_encryption(_AUTH_CONFIG_DIR)
+    except Exception:
+        pass  # Encryption module not available or import error — non-fatal
+
+
 @app.on_event("startup")
 async def _startup_asr_autoscan() -> None:
     def _run() -> None:
