@@ -6077,6 +6077,8 @@ def api_export_project(project_id: str) -> Any:
     """Export the whole project folder as a portable package.
 
     NOTE: .aistate is a ZIP container with a custom extension.
+    For encrypted projects, files are exported as-is (still encrypted).
+    An encryption_manifest.json is included to indicate encryption status.
     """
     pdir = (PROJECTS_DIR / project_id).resolve()
     root = PROJECTS_DIR.resolve()
@@ -6085,6 +6087,11 @@ def api_export_project(project_id: str) -> Any:
 
     _skip_suffixes = {".tmp", ".bak", ".pyc"}
     _skip_dirs = {"__pycache__", ".cache"}
+
+    # Check if project is encrypted and add manifest
+    meta = read_project_meta(project_id)
+    enc_meta = meta.get("encryption", {})
+    is_encrypted = bool(enc_meta and enc_meta.get("enabled"))
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
@@ -6096,6 +6103,15 @@ def api_export_project(project_id: str) -> Any:
             if any(part in _skip_dirs for part in fp.relative_to(pdir).parts):
                 continue
             z.write(fp, arcname=str(fp.relative_to(pdir)))
+
+        # Add encryption manifest if project is encrypted
+        if is_encrypted:
+            manifest = {
+                "encrypted": True,
+                "method": enc_meta.get("method", "standard"),
+                "version": enc_meta.get("version", 1),
+            }
+            z.writestr("encryption_manifest.json", json.dumps(manifest, indent=2))
     buf.seek(0)
 
     return StreamingResponse(
@@ -6636,6 +6652,32 @@ async def api_import_project(request: Request, file: UploadFile = File(...)) -> 
         meta["owner_id"] = uid
         meta["created_at"] = meta.get("created_at") or now_iso()
         meta["updated_at"] = now_iso()
+
+        # Handle encryption: if imported project was encrypted, re-encrypt per current policy
+        # Check for encryption_manifest.json in the archive
+        imported_enc = meta.get("encryption", {})
+        manifest_path = dest / "encryption_manifest.json"
+        if manifest_path.exists():
+            try:
+                manifest_path.unlink()  # remove manifest from project dir (metadata only)
+            except Exception:
+                pass
+
+        # Re-encrypt per current admin policy if encryption is enabled
+        s = load_settings()
+        if getattr(s, "encryption_enabled", False):
+            try:
+                from backend.encryption.project_io import get_managers
+                _, pkm = get_managers()
+                method = getattr(s, "encryption_method", "standard")
+                _, enc_meta = pkm.create_project_key(final_id, method)
+                meta["encryption"] = enc_meta
+            except Exception:
+                pass  # encryption not initialized — skip
+        elif "encryption" in meta:
+            # Admin disabled encryption — remove encryption from imported project
+            del meta["encryption"]
+
         write_project_meta(final_id, meta)
 
         # Create workspace subproject in a PRIVATE workspace (not shared)
