@@ -259,6 +259,53 @@ If multi-user mode is enabled:
 
 ---
 
+## 11. Project Encryption
+
+AISTATE allows encrypting projects to protect data from unauthorized access.
+
+### Configuration (administrator)
+
+In the **User Management → Security → Security Policy** panel, the administrator configures:
+
+- **Project encryption** — enable / disable encryption capability.
+- **Encryption method** — choose one of three methods:
+
+| Level | Algorithm | Description |
+|-------|-----------|-------------|
+| **Light** | AES-128-GCM | Fast encryption, protection against casual access |
+| **Standard** | AES-256-GCM | Default level — balance of speed and security |
+| **Maximum** | AES-256-GCM + ChaCha20-Poly1305 | Double-layer encryption for sensitive data |
+
+- **Enforce encryption** — when enabled, users cannot create unencrypted projects.
+
+The selected encryption level applies to all subsequent projects created by users.
+
+### Creating an encrypted project
+
+When creating a project, a **Encrypt project** checkbox appears with information about the current method (e.g., "AES-256-GCM"). The checkbox is checked by default if the administrator has enabled encryption, and locked if encryption is enforced.
+
+### Export and import
+
+- **Export** of an encrypted project — the `.aistate` file is always encrypted. The system asks for an **export password** (separate from the account password).
+- **Import** — the system automatically detects whether the `.aistate` file is encrypted. If so — it asks for the password. After import, the project is re-encrypted according to the administrator's current policy.
+- An unencrypted project can be exported without a password OR with the "encrypt export" option.
+
+### <span style="color:red">⚠ Access Recovery — Master Key</span>
+
+<span style="color:red">Each encrypted project has a random encryption key that is protected by the user's key (derived from their password). Additionally, the administrator holds a **Master Key** that can decrypt any project.</span>
+
+<span style="color:red">**WARNING:** If a user forgets their password and the administrator loses the Master Key — **the data in encrypted projects will be irrecoverable**. There is no "backdoor" or method to bypass the encryption. Therefore:</span>
+
+<span style="color:red">- The administrator **must** back up the Master Key and store it in a secure location (e.g., safe, offline storage medium).</span>
+<span style="color:red">- Users should use the **recovery phrase** assigned to their account — it allows password reset without losing access to projects.</span>
+<span style="color:red">- Loss of Master Key + user password = **permanent data loss**.</span>
+
+### <span style="color:red">⚠ Searching in encrypted projects</span>
+
+<span style="color:red">The project list (name, creation date) is always visible. However, **content search** (transcriptions, notes, analysis results) requires data decryption and works **only in the active (open) project**. It is not possible to search across multiple encrypted projects simultaneously.</span>
+
+---
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |

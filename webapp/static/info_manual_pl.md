@@ -259,6 +259,53 @@ Jeśli tryb multiuser jest włączony:
 
 ---
 
+## 11. Szyfrowanie projektów
+
+AISTATE umożliwia szyfrowanie projektów w celu ochrony danych przed nieuprawnionym dostępem.
+
+### Konfiguracja (administrator)
+
+W panelu **Zarządzanie użytkownikami → Bezpieczeństwo → Polityka bezpieczeństwa** administrator ustawia:
+
+- **Szyfrowanie projektów** — włącz / wyłącz możliwość szyfrowania.
+- **Metoda szyfrowania** — wybierz jedną z trzech metod:
+
+| Poziom | Algorytm | Opis |
+|--------|----------|------|
+| **Lekki** | AES-128-GCM | Szybkie szyfrowanie, ochrona przed przypadkowym dostępem |
+| **Standardowy** | AES-256-GCM | Domyślny poziom — równowaga szybkości i bezpieczeństwa |
+| **Maksymalny** | AES-256-GCM + ChaCha20-Poly1305 | Podwójna warstwa szyfrowania dla danych wrażliwych |
+
+- **Wymuszaj szyfrowanie** — jeśli włączone, użytkownicy nie mogą tworzyć niezaszyfrowanych projektów.
+
+Wybrany poziom szyfrowania obowiązuje dla wszystkich kolejnych projektów tworzonych przez użytkowników.
+
+### Tworzenie zaszyfrowanego projektu
+
+Podczas tworzenia projektu pojawia się checkbox **Szyfruj projekt** z informacją o aktualnej metodzie (np. „AES-256-GCM"). Checkbox jest domyślnie zaznaczony, jeśli administrator włączył szyfrowanie, i zablokowany, jeśli szyfrowanie jest wymuszone.
+
+### Eksport i import
+
+- **Eksport** zaszyfrowanego projektu — plik `.aistate` jest zawsze szyfrowany. System prosi o podanie **hasła eksportowego** (odrębnego od hasła konta).
+- **Import** — system automatycznie wykrywa, czy plik `.aistate` jest zaszyfrowany. Jeśli tak — prosi o hasło. Po imporcie projekt jest re-szyfrowany zgodnie z aktualną polityką administratora.
+- Niezaszyfrowany projekt można wyeksportować bez hasła LUB z opcją „szyfruj eksport".
+
+### <span style="color:red">⚠ Odzyskiwanie dostępu — klucz główny (Master Key)</span>
+
+<span style="color:red">Każdy projekt szyfrowany posiada losowy klucz szyfrowania, który jest chroniony kluczem użytkownika (derywowanym z hasła). Dodatkowo administrator posiada **klucz główny (Master Key)**, który umożliwia odszyfrowanie każdego projektu.</span>
+
+<span style="color:red">**UWAGA:** Jeśli użytkownik zapomni hasło, a administrator utraci klucz główny — **dane w zaszyfrowanych projektach będą niemożliwe do odzyskania**. Nie istnieje żadna „tylna furtka" ani metoda obejścia szyfrowania. Dlatego:</span>
+
+<span style="color:red">- Administrator **musi** wykonać kopię zapasową klucza głównego i przechowywać ją w bezpiecznym miejscu (np. sejf, nośnik offline).</span>
+<span style="color:red">- Użytkownicy powinni korzystać z **frazy odzyskiwania** (recovery phrase) przypisanej do konta — umożliwia ona reset hasła bez utraty dostępu do projektów.</span>
+<span style="color:red">- Utrata klucza głównego + hasła użytkownika = **trwała utrata danych**.</span>
+
+### <span style="color:red">⚠ Wyszukiwanie w zaszyfrowanych projektach</span>
+
+<span style="color:red">Lista projektów (nazwa, data utworzenia) jest zawsze widoczna. Jednak **wyszukiwanie w treści** (transkrypcje, notatki, wyniki analiz) wymaga odszyfrowania danych i działa **wyłącznie w aktywnym (otwartym) projekcie**. Nie jest możliwe przeszukiwanie zawartości wielu zaszyfrowanych projektów jednocześnie.</span>
+
+---
+
 ## Skróty klawiszowe
 
 | Skrót | Akcja |
