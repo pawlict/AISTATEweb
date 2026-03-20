@@ -5,7 +5,7 @@
 
   <!-- Toolbar -->
   <div class="card analysis-toolbar info-toolbar">
-    <div class="analysis-toolbar-left">
+    <div class="analysis-toolbar-left" data-no-project>
       <div class="h1" style="margin:0"><i data-icon="info_circle" data-size="40"></i> <span data-i18n="info.title">Info</span></div>
       <div class="small">{{ app_name }} {{ app_version }}</div>
     </div>
@@ -49,7 +49,7 @@
     try{
       const url = new URL(window.location.href);
       const ls = (localStorage.getItem("aistate_ui_lang") || localStorage.getItem("ui_language") || localStorage.getItem("lang") || "").toLowerCase();
-      const wanted = ls.startsWith("en") ? "en" : ls.startsWith("pl") ? "pl" : "";
+      const wanted = ls.startsWith("en") ? "en" : ls.startsWith("ko") ? "ko" : ls.startsWith("pl") ? "pl" : "";
       if (!wanted) return;
       const current = (url.searchParams.get("lang") || "").toLowerCase();
       if (current === wanted) return;

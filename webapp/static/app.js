@@ -965,7 +965,7 @@ function _updateNavProjectLabels(){
 
   // Insert/update project name badge in the toolbar (topbar)
   var toolbar = document.querySelector(".analysis-toolbar-left");
-  if(!toolbar) return;
+  if(!toolbar || toolbar.hasAttribute("data-no-project")) return;
 
   var existing = toolbar.querySelector(".toolbar-project-name");
   if(existing) existing.remove();
