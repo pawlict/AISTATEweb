@@ -38,6 +38,9 @@ logs/
 *.backup
 *.dump
 
+# Internal documentation (security-sensitive)
+docs/
+
 # OS junk
 nul
 Thumbs.db
