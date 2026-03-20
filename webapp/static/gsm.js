@@ -3952,43 +3952,148 @@
     wrap.innerHTML = html;
   }
 
-  /** Take a screenshot of the anomaly map (map + ID table below) with watermark */
+  /** Render the anomaly Leaflet map to canvas (same approach as _renderMapToCanvas) */
+  async function _renderAnomalyMapToCanvas() {
+    if (!_anomMapInstance) return null;
+    const map = _anomMapInstance;
+    const container = QS("#gsm_anomaly_map_container");
+    if (!container) return null;
+
+    const scale = 2;
+    const size = map.getSize();
+    const w = size.x * scale;
+    const h = size.y * scale;
+
+    await _waitForTilesToLoad(map, 3000);
+
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext("2d");
+
+    // 1. Background
+    ctx.fillStyle = "#e8e8e8";
+    ctx.fillRect(0, 0, w, h);
+
+    // 2. Tile images
+    const containerRect = map.getContainer().getBoundingClientRect();
+    const tilePane = map.getPane("tilePane");
+    if (tilePane) {
+      const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
+      const tilePromises = [];
+      for (const img of tileImgs) {
+        if (!img.src) continue;
+        const rect = img.getBoundingClientRect();
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+        const tw = rect.width * scale;
+        const th = rect.height * scale;
+        tilePromises.push(
+          _fetchImageBitmap(img.src)
+            .then(bmp => ({ bmp, x, y, tw, th }))
+            .catch(() => null)
+        );
+      }
+      const tiles = await Promise.all(tilePromises);
+      for (const tile of tiles) {
+        if (!tile) continue;
+        ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
+        tile.bmp.close();
+      }
+    }
+
+    // 3. Overlay pane (circleMarkers)
+    const overlayPane = map.getPane("overlayPane");
+    if (overlayPane) {
+      const canvases = overlayPane.querySelectorAll("canvas");
+      for (const c of canvases) {
+        try {
+          const cRect = c.getBoundingClientRect();
+          ctx.drawImage(c,
+            (cRect.left - containerRect.left) * scale, (cRect.top - containerRect.top) * scale,
+            cRect.width * scale, cRect.height * scale);
+        } catch (_) {}
+      }
+    }
+
+    // 4. Marker pane
+    _drawPaneMarkers(ctx, map, "markerPane", scale);
+
+    return out;
+  }
+
+  /** Take a screenshot of the anomaly map (map + header + ID table) with watermark */
   async function _takeAnomalyMapScreenshot() {
     const wrap = QS("#gsm_anomaly_map_wrap");
-    if (!wrap) return;
+    if (!wrap || !_anomMapInstance) return;
 
     const btn = QS("#gsm_anomaly_map_screenshot_btn");
     if (btn) btn.disabled = true;
 
     try {
-      // Use html2canvas to capture the entire anomaly map wrap (map + header + id table)
-      if (typeof html2canvas === "undefined") {
-        _addLog("warn", "Brak biblioteki html2canvas");
+      // 1. Render the Leaflet map to canvas (tiles + markers)
+      const mapCanvas = await _renderAnomalyMapToCanvas();
+      if (!mapCanvas) {
+        _addLog("warn", "Nie udało się wyrenderować mapy anomalii");
         return;
       }
 
-      // Hide screenshot button and resize handle during capture
-      const hideEls = wrap.querySelectorAll(".gsm-card-screenshot-btn, .gsm-graph-resize");
-      hideEls.forEach(el => el.style.display = "none");
+      const scale = 2;
 
-      const canvas = await html2canvas(wrap, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-      });
+      // 2. Render header via html2canvas
+      const header = QS("#gsm_anomaly_map_header");
+      let headerCanvas = null;
+      if (header) {
+        await _ensureHtml2Canvas();
+        // Hide screenshot button during capture
+        const hideEls = header.querySelectorAll(".gsm-card-screenshot-btn");
+        hideEls.forEach(el => el.style.display = "none");
+        headerCanvas = await html2canvas(header, { scale, backgroundColor: "#ffffff", logging: false });
+        hideEls.forEach(el => el.style.display = "");
+      }
 
-      // Restore hidden elements
-      hideEls.forEach(el => el.style.display = "");
+      // 3. Render ID table via html2canvas (if present)
+      const idTable = QS("#gsm_anomaly_id_table");
+      let tableCanvas = null;
+      if (idTable && idTable.innerHTML.trim()) {
+        await _ensureHtml2Canvas();
+        tableCanvas = await html2canvas(idTable, { scale, backgroundColor: "#ffffff", logging: false });
+      }
 
-      // Add watermark
+      // 4. Compose: header + map + table
+      const headerH = headerCanvas ? headerCanvas.height : 0;
+      const tableH = tableCanvas ? tableCanvas.height : 0;
+      const totalW = mapCanvas.width;
+      const totalH = headerH + mapCanvas.height + tableH;
+
+      const composed = document.createElement("canvas");
+      composed.width = totalW;
+      composed.height = totalH;
+      const cctx = composed.getContext("2d");
+      cctx.fillStyle = "#ffffff";
+      cctx.fillRect(0, 0, totalW, totalH);
+
+      let yOff = 0;
+      if (headerCanvas) {
+        // Scale header to match map width
+        const hScaleX = totalW / headerCanvas.width;
+        cctx.drawImage(headerCanvas, 0, 0, totalW, headerCanvas.height * hScaleX);
+        yOff = Math.round(headerCanvas.height * hScaleX);
+      }
+      cctx.drawImage(mapCanvas, 0, yOff);
+      yOff += mapCanvas.height;
+      if (tableCanvas) {
+        const tScaleX = totalW / tableCanvas.width;
+        cctx.drawImage(tableCanvas, 0, yOff, totalW, tableCanvas.height * tScaleX);
+      }
+
+      // 5. Add watermark
       const title = QS("#gsm_anomaly_map_title");
       const titleText = title ? title.textContent : "Mapa anomalii";
-      const final = _drawWatermark(canvas, [titleText, "© OpenStreetMap"]);
+      const final = _drawWatermark(composed, [titleText, "© OpenStreetMap contributors"]);
       if (!final) { _addLog("warn", "Nie udało się wyrenderować zrzutu"); return; }
 
-      // Download
+      // 6. Download
       final.toBlob((blob) => {
         if (!blob) return;
         const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
@@ -12213,6 +12318,10 @@
               Aktywność weekendowa
             </label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="anomaly_map" checked>
+              Mapa anomalii BTS
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
               <input type="checkbox" class="note-chart-cb" data-chart="map_bts" checked>
               Mapa lokalizacji BTS
             </label>
@@ -12864,6 +12973,7 @@
       "night_activity": "[data-chart-id='night']",
       "weekend_activity": "[data-chart-id='weekend']",
       "map_bts": "#gsm_map_container",
+      "anomaly_map": "#gsm_anomaly_map_wrap",
     };
 
     const chartLabels = {
@@ -12872,6 +12982,7 @@
       "night_activity": "Aktywność nocna",
       "weekend_activity": "Aktywność weekendowa",
       "map_bts": "Mapa BTS",
+      "anomaly_map": "Mapa anomalii BTS",
     };
 
     const selectors = selectorMap[chartName];
@@ -12885,6 +12996,20 @@
     }
     if (!el) {
       console.warn(`[GSM] Chart element not found for ${chartName}: ${selectors}`);
+      return null;
+    }
+
+    // For anomaly map, use the dedicated Leaflet rendering pipeline
+    if (chartName === "anomaly_map" && _anomMapInstance) {
+      try {
+        const mapCanvas = await _renderAnomalyMapToCanvas();
+        if (mapCanvas) {
+          const watermarked = _drawWatermark(mapCanvas, ["Mapa anomalii BTS", "© OpenStreetMap"]);
+          return watermarked.toDataURL("image/png").split(",")[1];
+        }
+      } catch (e) {
+        console.warn("[GSM] Anomaly map rendering failed:", e);
+      }
       return null;
     }
 
