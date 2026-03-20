@@ -13089,6 +13089,7 @@
   for (const s of _SECTION_DEFS) _SECTION_MAP[s.id] = s;
   const _DEFAULT_SECTION_ORDER = _SECTION_DEFS.map(s => s.id);
   const _LS_LAYOUT_KEY = "gsm_section_layout";
+  const _LS_HIDDEN_KEY = "gsm_section_hidden";
 
   function _getSectionOrder() {
     try {
@@ -13096,7 +13097,6 @@
       if (raw) {
         const saved = JSON.parse(raw);
         if (Array.isArray(saved) && saved.length) {
-          // Merge: keep saved order, append any new sections not in saved list
           const set = new Set(saved);
           const merged = [...saved];
           for (const id of _DEFAULT_SECTION_ORDER) {
@@ -13113,34 +13113,53 @@
     try { localStorage.setItem(_LS_LAYOUT_KEY, JSON.stringify(order)); } catch (_) {}
   }
 
-  /** Reorder DOM children of #gsm_results according to saved layout. */
+  function _getSectionHidden() {
+    try {
+      const raw = localStorage.getItem(_LS_HIDDEN_KEY);
+      if (raw) {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === "object") return obj;
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  function _saveSectionHidden(hidden) {
+    try { localStorage.setItem(_LS_HIDDEN_KEY, JSON.stringify(hidden)); } catch (_) {}
+  }
+
+  /** Reorder and show/hide DOM children of #gsm_results according to saved layout. */
   function _applySectionLayout() {
     const wrap = QS("#gsm_results");
     if (!wrap) return;
     const order = _getSectionOrder();
+    const hidden = _getSectionHidden();
     const sectionEls = {};
     wrap.querySelectorAll("[data-section-id]").forEach(el => {
       sectionEls[el.dataset.sectionId] = el;
     });
-    // The layout bar should always stay on top
-    const layoutBar = QS("#gsm_layout_bar");
-    let insertAfter = layoutBar || null;
+    let prev = null;
     for (const id of order) {
       const el = sectionEls[id];
       if (!el) continue;
-      if (insertAfter) {
-        insertAfter.after(el);
+      // Apply user hide (add class, don't touch inline display which is used by render logic)
+      if (hidden[id]) {
+        el.classList.add("gsm-section-user-hidden");
+      } else {
+        el.classList.remove("gsm-section-user-hidden");
+      }
+      if (prev) {
+        prev.after(el);
       } else {
         wrap.prepend(el);
       }
-      insertAfter = el;
+      prev = el;
     }
   }
 
   let _layoutPanelOpen = false;
 
   function _openLayoutPanel(anchorBtn) {
-    // Close if already open
     if (_layoutPanelOpen) { _closeLayoutPanel(); return; }
     _layoutPanelOpen = true;
 
@@ -13149,30 +13168,33 @@
     panel.id = "gsm_layout_panel";
 
     const order = _getSectionOrder();
+    const hidden = _getSectionHidden();
 
     let listHtml = "";
     for (const id of order) {
       const def = _SECTION_MAP[id];
       if (!def) continue;
-      listHtml += `<div class="gsm-layout-panel-item" draggable="true" data-sid="${id}">
+      const vis = !hidden[id];
+      listHtml += `<div class="gsm-layout-panel-item${vis ? "" : " gsm-layout-item-hidden"}" draggable="true" data-sid="${id}">
         <span class="gsm-layout-drag-handle">⠿</span>
+        <label class="gsm-layout-check"><input type="checkbox" ${vis ? "checked" : ""} data-vis-sid="${id}"></label>
         <span class="gsm-layout-item-label">${def.label}</span>
       </div>`;
     }
 
     panel.innerHTML = `
       <div class="gsm-layout-panel-header">
-        <span style="font-weight:600;font-size:13px">Kolejność sekcji</span>
+        <span style="font-weight:600;font-size:13px">Układ sekcji</span>
         <button class="gsm-layout-reset-btn" id="gsm_layout_reset" title="Przywróć domyślny układ">↺ Domyślny</button>
       </div>
       <div class="gsm-layout-panel-list" id="gsm_layout_list">${listHtml}</div>
     `;
 
-    // Position below button
+    // Position near button
     const rect = anchorBtn.getBoundingClientRect();
     panel.style.position = "fixed";
     panel.style.top = (rect.bottom + 6) + "px";
-    panel.style.left = rect.left + "px";
+    panel.style.left = (rect.right + 6) + "px";
     document.body.appendChild(panel);
 
     // Clamp to viewport
@@ -13186,9 +13208,28 @@
       }
     });
 
+    // Visibility checkboxes
+    panel.addEventListener("change", e => {
+      const cb = e.target.closest("[data-vis-sid]");
+      if (!cb) return;
+      const sid = cb.dataset.visSid;
+      const h = _getSectionHidden();
+      if (cb.checked) {
+        delete h[sid];
+      } else {
+        h[sid] = true;
+      }
+      _saveSectionHidden(h);
+      // Update item style
+      const item = cb.closest(".gsm-layout-panel-item");
+      if (item) item.classList.toggle("gsm-layout-item-hidden", !cb.checked);
+      _applySectionLayout();
+    });
+
     // Reset button
     panel.querySelector("#gsm_layout_reset").onclick = () => {
       localStorage.removeItem(_LS_LAYOUT_KEY);
+      localStorage.removeItem(_LS_HIDDEN_KEY);
       _applySectionLayout();
       _closeLayoutPanel();
     };
@@ -13225,7 +13266,6 @@
       if (!target || !dragSid) return;
       const targetSid = target.dataset.sid;
       if (dragSid === targetSid) return;
-      // Build new order from DOM
       const items = [...listEl.querySelectorAll(".gsm-layout-panel-item")];
       const currentOrder = items.map(el => el.dataset.sid);
       const fromIdx = currentOrder.indexOf(dragSid);
@@ -13233,7 +13273,6 @@
       if (fromIdx === -1 || toIdx === -1) return;
       currentOrder.splice(fromIdx, 1);
       currentOrder.splice(toIdx, 0, dragSid);
-      // Reorder DOM items in panel
       const dragEl = listEl.querySelector(`.gsm-layout-panel-item[data-sid="${dragSid}"]`);
       if (fromIdx < toIdx) {
         target.after(dragEl);
@@ -13241,12 +13280,10 @@
         target.before(dragEl);
       }
       listEl.querySelectorAll(".gsm-layout-panel-item").forEach(el => el.classList.remove("gsm-layout-drag-over"));
-      // Save and apply
       _saveSectionOrder(currentOrder);
       _applySectionLayout();
     });
 
-    // Close on outside click
     setTimeout(() => document.addEventListener("mousedown", _onLayoutPanelOutsideClick, true), 0);
   }
 
