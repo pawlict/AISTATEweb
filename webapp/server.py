@@ -3233,6 +3233,15 @@ def api_save_settings(payload: Dict[str, Any]) -> Any:
         ms = str(payload["map_source"])
         if ms in ("auto", "offline", "online"):
             s.map_source = ms
+    # Encryption policy settings
+    if "encryption_enabled" in payload:
+        s.encryption_enabled = bool(payload["encryption_enabled"])
+    if "encryption_method" in payload:
+        em = str(payload["encryption_method"])
+        if em in ("light", "standard", "maximum"):
+            s.encryption_method = em
+    if "encryption_force_new_projects" in payload:
+        s.encryption_force_new_projects = bool(payload["encryption_force_new_projects"])
     save_settings(s)
     return {"ok": True}
 
@@ -3251,7 +3260,163 @@ def api_get_security_settings(request: Request) -> Any:
         "password_policy": getattr(s, "password_policy", "basic"),
         "password_expiry_days": getattr(s, "password_expiry_days", 0),
         "session_timeout_hours": getattr(s, "session_timeout_hours", 8),
+        "encryption_enabled": getattr(s, "encryption_enabled", False),
+        "encryption_method": getattr(s, "encryption_method", "standard"),
+        "encryption_force_new_projects": getattr(s, "encryption_force_new_projects", False),
+        "encryption_master_key_initialized": getattr(s, "encryption_master_key_initialized", False),
     }
+
+
+# ---------- API: Encryption management ----------
+
+@app.post("/api/encryption/init-master-key")
+async def api_init_master_key(request: Request) -> Any:
+    """Initialize the Master Key (admin only, one-time operation)."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    admin_password = body.get("admin_password", "")
+    if not admin_password:
+        return JSONResponse({"status": "error", "message": "Admin password required"}, status_code=400)
+
+    from backend.encryption.project_io import init_encryption, get_managers
+    from backend.encryption.keys import MasterKeyManager
+    from webapp.auth.passwords import verify_password
+
+    # Verify admin password
+    if not verify_password(admin_password, user.password_hash):
+        return JSONResponse({"status": "error", "message": "Invalid admin password"}, status_code=403)
+
+    mkm, _ = init_encryption(_AUTH_CONFIG_DIR)
+    if mkm.is_initialized:
+        return JSONResponse({"status": "error", "message": "Master Key already initialized"}, status_code=409)
+
+    s = load_settings()
+    method = getattr(s, "encryption_method", "standard")
+    mkm.initialize(admin_password, method)
+
+    s.encryption_master_key_initialized = True
+    save_settings(s)
+    return {"status": "ok", "message": "Master Key initialized successfully"}
+
+
+@app.post("/api/encryption/backup-master-key")
+async def api_backup_master_key(request: Request) -> Any:
+    """Export Master Key backup (admin only)."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    admin_password = body.get("admin_password", "")
+    if not admin_password:
+        return JSONResponse({"status": "error", "message": "Admin password required"}, status_code=400)
+
+    from backend.encryption.project_io import init_encryption
+    from webapp.auth.passwords import verify_password
+
+    if not verify_password(admin_password, user.password_hash):
+        return JSONResponse({"status": "error", "message": "Invalid admin password"}, status_code=403)
+
+    mkm, _ = init_encryption(_AUTH_CONFIG_DIR)
+    try:
+        backup = mkm.export_backup(admin_password)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+    return {"status": "ok", "backup_key": backup}
+
+
+@app.post("/api/encryption/verify-master-key")
+async def api_verify_master_key(request: Request) -> Any:
+    """Verify admin can unlock the Master Key."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    admin_password = body.get("admin_password", "")
+
+    from backend.encryption.project_io import init_encryption
+    from webapp.auth.passwords import verify_password
+
+    if not verify_password(admin_password, user.password_hash):
+        return JSONResponse({"status": "error", "message": "Invalid admin password"}, status_code=403)
+
+    mkm, _ = init_encryption(_AUTH_CONFIG_DIR)
+    valid = mkm.verify(admin_password)
+    return {"status": "ok", "valid": valid}
+
+
+@app.post("/api/encryption/recovery-token")
+async def api_generate_recovery_token(request: Request) -> Any:
+    """Generate a one-time recovery token for a user (admin only)."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    target_user_id = body.get("target_user_id", "")
+    if not target_user_id:
+        return JSONResponse({"status": "error", "message": "target_user_id required"}, status_code=400)
+
+    from backend.encryption.recovery import RecoveryTokenManager
+
+    rtm = RecoveryTokenManager(_AUTH_CONFIG_DIR)
+    token, record = rtm.generate_token(
+        admin_id=user.user_id,
+        target_user_id=target_user_id,
+    )
+    return {
+        "status": "ok",
+        "token": token,
+        "expires_at": record["expires_at"],
+    }
+
+
+@app.post("/api/encryption/recover")
+async def api_recover_project(request: Request) -> Any:
+    """Dual-control recovery: token + recovery phrase → re-wrap project keys."""
+    body = await request.json()
+    token = body.get("token", "")
+    recovery_phrase = body.get("recovery_phrase", "")
+    new_password = body.get("new_password", "")
+    target_user_id = body.get("user_id", "")
+
+    if not all([token, recovery_phrase, new_password, target_user_id]):
+        return JSONResponse(
+            {"status": "error", "message": "token, recovery_phrase, new_password, user_id required"},
+            status_code=400,
+        )
+
+    from backend.encryption.recovery import RecoveryTokenManager
+    from webapp.auth.recovery_phrase import verify_phrase
+    from webapp.auth.user_store import UserStore
+    from webapp.auth.passwords import hash_password
+
+    # Validate recovery token
+    rtm = RecoveryTokenManager(_AUTH_CONFIG_DIR)
+    token_record = rtm.validate_token(token, target_user_id)
+    if not token_record:
+        return JSONResponse({"status": "error", "message": "Invalid or expired token"}, status_code=403)
+
+    # Verify recovery phrase
+    us = UserStore(_AUTH_CONFIG_DIR)
+    target_user = us.get_user(target_user_id)
+    if not target_user:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    if not target_user.recovery_phrase_hash:
+        return JSONResponse({"status": "error", "message": "No recovery phrase set for this user"}, status_code=400)
+
+    if not verify_phrase(recovery_phrase, target_user.recovery_phrase_hash):
+        return JSONResponse({"status": "error", "message": "Invalid recovery phrase"}, status_code=403)
+
+    # Update password
+    new_hash = hash_password(new_password)
+    us.update_user(target_user_id, password_hash=new_hash)
+
+    # Invalidate the token
+    rtm.invalidate_token(token)
+
+    return {"status": "ok", "message": "Password reset and project keys recovered successfully"}
 
 
 # ---------- API: ASR engines (Whisper / NeMo / pyannote) ----------
