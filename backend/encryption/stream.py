@@ -21,7 +21,7 @@ from typing import Generator, Optional, BinaryIO, Union
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 
-MAGIC = b"AISTATEENC\x00\x01\x00\x00"  # 14 bytes + 2 reserved = 16
+MAGIC = b"AISTATEENC\x00\x01\x00\x00\x00\x00"  # 10 + 2 version + 4 reserved = 16
 HEADER_SIZE = 16 + 4 + 1 + 3  # magic + chunk_size + method + reserved = 24
 DEFAULT_CHUNK_SIZE = 65536  # 64 KiB
 NONCE_SIZE = 12
@@ -162,7 +162,7 @@ class EncryptedFileReader:
         header = self._fp.read(HEADER_SIZE)
         if len(header) < HEADER_SIZE:
             raise ValueError("File too short — not an encrypted AISTATE file")
-        if header[:14] != MAGIC[:14]:
+        if header[:12] != MAGIC[:12]:
             raise ValueError("Invalid magic — not an encrypted AISTATE file")
         self._chunk_size = struct.unpack("<I", header[16:20])[0]
         method_code = header[20]
