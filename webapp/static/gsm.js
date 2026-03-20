@@ -13164,7 +13164,7 @@
     _layoutPanelOpen = true;
 
     const panel = document.createElement("div");
-    panel.className = "gsm-layout-panel";
+    panel.className = "gsm-layout-panel gsm-layout-panel-inline";
     panel.id = "gsm_layout_panel";
 
     const order = _getSectionOrder();
@@ -13190,23 +13190,13 @@
       <div class="gsm-layout-panel-list" id="gsm_layout_list">${listHtml}</div>
     `;
 
-    // Position near button
-    const rect = anchorBtn.getBoundingClientRect();
-    panel.style.position = "fixed";
-    panel.style.top = (rect.bottom + 6) + "px";
-    panel.style.left = (rect.right + 6) + "px";
-    document.body.appendChild(panel);
-
-    // Clamp to viewport
-    requestAnimationFrame(() => {
-      const pr = panel.getBoundingClientRect();
-      if (pr.right > window.innerWidth - 8) {
-        panel.style.left = Math.max(8, window.innerWidth - pr.width - 8) + "px";
-      }
-      if (pr.bottom > window.innerHeight - 8) {
-        panel.style.top = Math.max(8, rect.top - pr.height - 6) + "px";
-      }
-    });
+    // Insert inline after the button inside the analyst panel section
+    const section = anchorBtn.closest(".analyst-panel-section");
+    if (section) {
+      anchorBtn.after(panel);
+    } else {
+      anchorBtn.parentElement.appendChild(panel);
+    }
 
     // Visibility checkboxes
     panel.addEventListener("change", e => {
@@ -13284,22 +13274,12 @@
       _applySectionLayout();
     });
 
-    setTimeout(() => document.addEventListener("mousedown", _onLayoutPanelOutsideClick, true), 0);
-  }
-
-  function _onLayoutPanelOutsideClick(e) {
-    const panel = QS("#gsm_layout_panel");
-    const btn = QS("#gsm_layout_btn");
-    if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
-      _closeLayoutPanel();
-    }
   }
 
   function _closeLayoutPanel() {
     _layoutPanelOpen = false;
     const panel = QS("#gsm_layout_panel");
     if (panel) panel.remove();
-    document.removeEventListener("mousedown", _onLayoutPanelOutsideClick, true);
   }
 
   /* ── bindings ───────────────────────────────────────────── */

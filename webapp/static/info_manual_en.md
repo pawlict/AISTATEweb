@@ -42,6 +42,10 @@ Speech-to-Text module.
 - If you have a sound detection model installed (YAMNet, PANNs, BEATs), enable the **Sound detection** option in the toolbar.
 - Detected sounds (cough, laughter, music, siren, etc.) will appear as markers in the text.
 
+### Text proofreading
+- Use the **Proofread** feature to automatically correct the transcription using an LLM model (e.g., Bielik, PLLuM, Qwen3).
+- Compare the original with the corrected text in a side-by-side diff view.
+
 ### Notes
 - The **Notes** panel (on the right) lets you add a global note and notes for individual blocks.
 - The note icon next to each block indicates whether it has an assigned note.
@@ -118,11 +122,14 @@ Chat interface with local LLM models (via Ollama).
 
 ---
 
-## 6. Analysis (LLM)
+## 6. Analysis
+
+The Analysis tab contains four modules: LLM, AML, GSM, and Crypto. Switch between them using the tabs at the top.
+
+### 6.1 LLM Analysis
 
 Content analysis module using LLM models.
 
-### LLM Analysis
 1. Select **data sources** in the sidebar panel (transcription, diarization, notes, documents).
 2. Choose **prompts** — templates or create your own.
 3. Click **Generate** (AI icon in the toolbar).
@@ -135,11 +142,65 @@ Content analysis module using LLM models.
 - Full analysis from selected sources and prompts.
 - Supports custom prompts: type an instruction in the "Custom prompt" field (e.g., "Create meeting minutes with decisions").
 
-### AML Analysis
-- Upload a bank statement (PDF) — the system automatically detects the bank, parses transactions, and assesses risk.
-- Review and classify transactions (neutral / legitimate / suspicious / monitoring).
-- Charts: balance over time, categories, channels, monthly trend, top counterparties.
-- Flow graph: visualization of counterparty relationships.
+### 6.2 AML Analysis (Anti-Money Laundering)
+
+Financial analysis module for bank statements.
+
+1. Upload a bank statement (PDF or MT940) — the system automatically detects the bank and parses transactions.
+2. Review **statement information**, identified accounts and cards.
+3. Classify transactions: neutral / legitimate / suspicious / monitoring.
+4. View **charts**: balance over time, categories, channels, monthly trend, daily activity, top counterparties.
+5. **ML Anomalies** — Isolation Forest algorithm detects unusual transactions.
+6. **Flow graph** — counterparty relationship visualization (layouts: flow, amount, timeline).
+7. Ask the LLM model questions about the financial data ("Question / instruction for analysis" section).
+8. Download an **HTML report** with analysis results.
+
+#### Analyst panel (AML)
+- Left panel with search, global note, and item notes.
+- **Ctrl+M** — quickly add a note to the current element.
+- Tags: neutral, legitimate, suspicious, monitoring + 4 custom tags (double-click to rename).
+
+### 6.3 GSM / BTS Analysis
+
+GSM billing data analysis module.
+
+1. Load billing data (CSV, XLSX, PDF, ZIP with multiple files).
+2. View **summary**: record count, period, devices (IMEI/IMSI).
+3. **Anomalies** — detection of unusual patterns (night activity, roaming, dual-SIM, etc.).
+4. **Special numbers** — identification of emergency, service numbers, etc.
+5. **Contact graph** — visualization of most frequent contacts (Top 5/10/15/20).
+6. **Records** — table of all records with filtering, search, and column management.
+7. **Activity charts** — hourly distribution heatmap, night and weekend activity.
+8. **BTS Map** — interactive map with multiple views:
+   - All points, path, clusters, trips, border, BTS coverage, heatmap, timeline.
+   - **Overlays**: military bases, civilian airports, diplomatic posts.
+   - **KML/KMZ import** — custom layers from Google Earth.
+   - **Offline maps** — MBTiles support (raster + vector PBF).
+   - **Area selection** — circle / rectangle for spatial queries.
+9. **Detected locations** — clusters of most frequent locations.
+10. **Border crossings** — detection of trips abroad.
+11. **Overnight stays** — analysis of overnight locations.
+12. **Narrative analysis (LLM)** — generate a GSM analysis report using an Ollama model.
+13. **Reports** — export to HTML / DOCX / TXT. Analytical notes DOCX with charts.
+
+#### Section layout
+- The **Customize layout** button in the analyst panel lets you change the order and visibility of sections (drag / check-uncheck).
+
+#### Analyst panel (GSM)
+- Left panel with search, global note, and item notes.
+- **Ctrl+M** — quickly add a note to the current record.
+
+#### Standalone map
+- Open a map without billing data (map button in the toolbar).
+- Edit mode — add points, polygons, user layers.
+
+### 6.4 Crypto Analysis
+
+Cryptocurrency transaction analysis module.
+
+1. Load transaction data (CSV, JSON).
+2. Review analysis results.
+3. Generate narrative analysis using an LLM model.
 
 ---
 
@@ -183,7 +244,7 @@ Task monitoring and system diagnostics.
 
 ## 9. Settings
 
-- **UI language** — switch between PL / EN.
+- **UI language** — switch between PL / EN / KO.
 - **Hugging Face token** — required for pyannote models (gated models).
 - **Default Whisper model** — preference for new transcriptions.
 
@@ -204,4 +265,5 @@ If multi-user mode is enabled:
 |----------|--------|
 | **Esc** | Close block editor |
 | **Ctrl+Enter** | Save note |
+| **Ctrl+M** | Add analyst note (AML / GSM) |
 | **Right-click** | Open block editor (transcription / diarization) |

@@ -4352,6 +4352,8 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .gsm-layout-btn:hover{border-color:var(--brand-blue,#2563eb);color:var(--brand-blue,#2563eb)}
 .gsm-layout-btn svg{flex-shrink:0}
 .gsm-layout-panel{z-index:9999;background:var(--bg-card,#fff);border:1px solid var(--border,#d1d5db);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.15);min-width:260px;max-width:340px;font-size:13px}
+.gsm-layout-panel-inline{position:static!important;z-index:auto;box-shadow:none;border:1px solid var(--border,#e2e8f0);margin-top:8px;min-width:0;max-width:none;border-radius:8px;background:var(--bg-secondary,#f8fafc)}
+.gsm-layout-panel-inline .gsm-layout-panel-list{max-height:50vh}
 .gsm-layout-panel-header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border,#e2e8f0)}
 .gsm-layout-reset-btn{padding:4px 10px;border:1px solid var(--border,#e2e8f0);border-radius:6px;background:var(--bg-card,#fff);color:var(--text-muted,#64748b);font-size:11px;cursor:pointer;transition:background .15s}
 .gsm-layout-reset-btn:hover{background:var(--bg-secondary,#f8fafc);color:var(--text,#334155)}
@@ -4371,6 +4373,7 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 [data-theme="dark"] .gsm-layout-btn{background:var(--bg-card,#1e293b);border-color:var(--border,#334155);color:var(--text-muted,#94a3b8)}
 [data-theme="dark"] .gsm-layout-btn:hover{border-color:var(--brand-blue,#2563eb);color:var(--brand-blue,#60a5fa)}
 [data-theme="dark"] .gsm-layout-panel{background:var(--bg-card,#1e293b);border-color:var(--border,#334155);box-shadow:0 8px 32px rgba(0,0,0,.4)}
+[data-theme="dark"] .gsm-layout-panel-inline{box-shadow:none;background:var(--bg-secondary,#0f172a)}
 [data-theme="dark"] .gsm-layout-panel-header{border-color:var(--border,#334155)}
 [data-theme="dark"] .gsm-layout-reset-btn{background:var(--bg-secondary,#0f172a);border-color:var(--border,#334155);color:var(--text-muted,#94a3b8)}
 [data-theme="dark"] .gsm-layout-panel-item:hover{background:var(--bg-secondary,#334155)}

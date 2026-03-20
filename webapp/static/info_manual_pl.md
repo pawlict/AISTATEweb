@@ -42,6 +42,10 @@ Moduł zamiany mowy na tekst (Speech-to-Text).
 - Jeśli masz zainstalowany model detekcji dźwięków (YAMNet, PANNs, BEATs), włącz opcję **Detekcja dźwięków** w toolbarze.
 - Wykryte dźwięki (kaszel, śmiech, muzyka, syrena itp.) pojawią się jako znaczniki w tekście.
 
+### Korekta tekstu
+- Użyj funkcji **Korekta** do automatycznego poprawienia transkrypcji za pomocą modelu LLM (np. Bielik, PLLuM, Qwen3).
+- Porównaj oryginał z poprawionym tekstem w widoku diff (side-by-side).
+
 ### Notatki
 - Panel **Notatki** (po prawej) pozwala dodać notatkę globalną i notatki do poszczególnych bloków.
 - Ikona notatki obok każdego bloku wskazuje, czy blok ma przypisaną notatkę.
@@ -118,11 +122,14 @@ Interfejs czatu z lokalnymi modelami LLM (przez Ollama).
 
 ---
 
-## 6. Analiza (LLM)
+## 6. Analiza
+
+Zakładka Analiza zawiera cztery moduły: LLM, AML, GSM i Crypto. Przełączaj się między nimi za pomocą kart u góry.
+
+### 6.1 Analiza LLM
 
 Moduł analizy treści za pomocą modeli LLM.
 
-### Analiza LLM
 1. Zaznacz **źródła danych** w panelu bocznym (transkrypcja, diaryzacja, notatki, dokumenty).
 2. Wybierz **prompty** — gotowe szablony lub utwórz własne.
 3. Kliknij **Generuj** (ikona AI w toolbarze).
@@ -135,11 +142,65 @@ Moduł analizy treści za pomocą modeli LLM.
 - Pełna analiza z wybranych źródeł i promptów.
 - Obsługuje własne prompty: wpisz polecenie w polu „Własny prompt" (np. „Zrób protokół spotkania z decyzjami").
 
-### Analiza AML
-- Prześlij wyciąg bankowy (PDF) — system automatycznie rozpozna bank, sparsuje transakcje, oceni ryzyko.
-- Przeglądaj i klasyfikuj transakcje (neutralne / poprawne / podejrzane / obserwacja).
-- Wykresy: saldo w czasie, kategorie, kanały, trend miesięczny, top kontrahenci.
-- Graf przepływów: wizualizacja powiązań między kontrahentami.
+### 6.2 Analiza AML (Anti-Money Laundering)
+
+Moduł analizy finansowej wyciągów bankowych.
+
+1. Prześlij wyciąg bankowy (PDF lub MT940) — system automatycznie rozpozna bank i sparsuje transakcje.
+2. Przeglądaj **informacje o wyciągu**, zidentyfikowane rachunki i karty.
+3. Klasyfikuj transakcje: neutralne / poprawne / podejrzane / obserwacja.
+4. Przeglądaj **wykresy**: saldo w czasie, kategorie, kanały, trend miesięczny, aktywność dzienna, top kontrahenci.
+5. **Anomalie ML** — algorytm Isolation Forest wykrywa nietypowe transakcje.
+6. **Graf przepływów** — wizualizacja powiązań między kontrahentami (układy: przepływowy, kwotowy, czasowy).
+7. Zadaj pytanie modelowi LLM o dane finansowe (sekcja „Pytanie / instrukcja dla analizy").
+8. Pobierz **raport HTML** z wynikami analizy.
+
+#### Panel analityczny (AML)
+- Lewy panel z wyszukiwaniem, notatką globalną i notatkami do elementów.
+- **Ctrl+M** — szybkie dodanie notatki do bieżącego elementu.
+- Tagi: neutralny, poprawny, podejrzany, obserwacja + 4 tagi własne (kliknij 2× aby zmienić nazwę).
+
+### 6.3 Analiza GSM / BTS
+
+Moduł analizy danych billingowych GSM.
+
+1. Wczytaj dane billingowe (CSV, XLSX, PDF, ZIP z wieloma plikami).
+2. Przeglądaj **podsumowanie**: liczba rekordów, okres, urządzenia (IMEI/IMSI).
+3. **Anomalie** — wykrywanie nietypowych wzorców (aktywność nocna, roaming, dual-SIM itp.).
+4. **Numery specjalne** — identyfikacja numerów alarmowych, serwisowych itp.
+5. **Graf kontaktów** — wizualizacja najczęstszych kontaktów (Top 5/10/15/20).
+6. **Rekordy** — tabela wszystkich rekordów z filtrowaniem, wyszukiwaniem i zarządzaniem kolumnami.
+7. **Wykresy aktywności** — heatmapa rozkładu godzinowego, aktywność nocna i weekendowa.
+8. **Mapa BTS** — interaktywna mapa z wieloma widokami:
+   - Wszystkie punkty, ścieżka, klastry, podróże, granica, zasięg BTS, mapa cieplna, oś czasu.
+   - **Nakładki**: jednostki wojskowe, lotniska cywilne, placówki dyplomatyczne.
+   - **Import KML/KMZ** — własne warstwy z Google Earth.
+   - **Mapy offline** — obsługa MBTiles (raster + wektor PBF).
+   - **Selekcja obszarowa** — koło / prostokąt do zapytań przestrzennych.
+9. **Wykryte lokalizacje** — klastry najczęstszych lokalizacji.
+10. **Przekroczenia granic** — wykrywanie wyjazdów zagranicznych.
+11. **Nocowanie poza domem** — analiza miejsc noclegowych.
+12. **Analiza narracyjna (LLM)** — generuj raport z analizy GSM za pomocą modelu Ollama.
+13. **Raporty** — eksport do HTML / DOCX / TXT. Notatki analityczne DOCX z wykresami.
+
+#### Układ sekcji
+- Przycisk **Dostosuj układ** w panelu analitycznym pozwala zmienić kolejność i widoczność sekcji (przeciągnij / zaznacz-odznacz).
+
+#### Panel analityczny (GSM)
+- Lewy panel z wyszukiwaniem, notatką globalną i notatkami do elementów.
+- **Ctrl+M** — szybkie dodanie notatki do bieżącego rekordu.
+
+#### Mapa samodzielna
+- Otwórz mapę bez danych billingowych (przycisk mapy w toolbarze).
+- Tryb edycji — dodawaj punkty, poligony, warstwy użytkownika.
+
+### 6.4 Analiza Crypto
+
+Moduł analizy transakcji kryptowalutowych.
+
+1. Wczytaj dane transakcji (CSV, JSON).
+2. Przeglądaj wyniki analizy.
+3. Generuj analizę narracyjną za pomocą modelu LLM.
 
 ---
 
@@ -183,7 +244,7 @@ Podgląd zadań i diagnostyka systemowa.
 
 ## 9. Ustawienia
 
-- **Język interfejsu** — przełączanie PL / EN.
+- **Język interfejsu** — przełączanie PL / EN / KO.
 - **Token Hugging Face** — wymagany dla modeli pyannote (gated models).
 - **Domyślny model Whisper** — preferencja dla nowych transkrypcji.
 
@@ -204,4 +265,5 @@ Jeśli tryb multiuser jest włączony:
 |-------|-------|
 | **Esc** | Zamknij edytor bloku |
 | **Ctrl+Enter** | Zapisz notatkę |
+| **Ctrl+M** | Dodaj notatkę analityczną (AML / GSM) |
 | **PPM** (prawy przycisk myszy) | Otwórz edytor bloku (transkrypcja / diaryzacja) |
