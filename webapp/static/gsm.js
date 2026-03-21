@@ -13161,10 +13161,165 @@
   const _SECTION_MAP = {};
   for (const s of _SECTION_DEFS) _SECTION_MAP[s.id] = s;
   const _DEFAULT_SECTION_ORDER = _SECTION_DEFS.map(s => s.id);
+
+  /**
+   * Auto-discover sections from DOM that aren't in _SECTION_DEFS.
+   * This allows future applets, anomalies, and data panels to appear
+   * in the Visual Layout Editor automatically.
+   */
+  function _discoverDynamicSections() {
+    const wrap = QS("#gsm_results");
+    if (!wrap) return;
+    wrap.querySelectorAll("[data-section-id]").forEach(el => {
+      const id = el.dataset.sectionId;
+      if (_SECTION_MAP[id]) return; // already known
+      // Extract label from first .h2 element or fallback to id
+      const h2 = el.querySelector(".h2");
+      const label = h2 ? h2.textContent.trim() : id.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const def = { id, label };
+      _SECTION_DEFS.push(def);
+      _SECTION_MAP[id] = def;
+      _DEFAULT_SECTION_ORDER.push(id);
+    });
+  }
+
+  /**
+   * Auto-discover sub-elements within a section (chart cards, applet panels, etc.).
+   * Looks for children with [data-chart-id] or [data-sub-id] attributes.
+   */
+  function _discoverDynamicSubelements() {
+    const wrap = QS("#gsm_results");
+    if (!wrap) return;
+    wrap.querySelectorAll("[data-section-id]").forEach(sectionEl => {
+      const sid = sectionEl.dataset.sectionId;
+      // Find sub-elements by data-chart-id or data-sub-id attributes
+      const subEls = sectionEl.querySelectorAll("[data-chart-id], [data-sub-id]");
+      if (subEls.length < 2) return; // no point in drag-reorder for 0-1 items
+      if (_SUBELEMENT_DEFS[sid]) {
+        // Merge any new sub-elements not already defined
+        const existing = new Set(_SUBELEMENT_DEFS[sid].map(d => d.id));
+        subEls.forEach(el => {
+          const subId = el.dataset.chartId || el.dataset.subId;
+          if (subId && !existing.has(subId)) {
+            const subLabel = el.querySelector(".h2, .gsm-chart-title, [class*='title']")?.textContent?.trim() || subId;
+            _SUBELEMENT_DEFS[sid].push({ id: subId, label: subLabel });
+            existing.add(subId);
+          }
+        });
+      } else {
+        // Create new sub-element definition
+        const items = [];
+        const seen = new Set();
+        subEls.forEach(el => {
+          const subId = el.dataset.chartId || el.dataset.subId;
+          if (subId && !seen.has(subId)) {
+            const subLabel = el.querySelector(".h2, .gsm-chart-title, [class*='title']")?.textContent?.trim() || subId;
+            items.push({ id: subId, label: subLabel });
+            seen.add(subId);
+          }
+        });
+        if (items.length >= 2) _SUBELEMENT_DEFS[sid] = items;
+      }
+    });
+  }
   const _LS_LAYOUT_KEY = "gsm_section_layout";
   const _LS_HIDDEN_KEY = "gsm_section_hidden";
   const _LS_GRID_KEY   = "gsm_section_grid";
   const _LS_SUBELM_KEY = "gsm_subelement_order";
+  const _LS_PRESETS_KEY = "gsm_layout_presets";
+
+  /** Return project-scoped localStorage key when project context available. */
+  function _lsKey(base) {
+    const pid = _getProjectId();
+    return pid ? base + "_p_" + pid : base;
+  }
+
+  /* ── Layout Presets ────────────────────────────────────── */
+  const _BUILTIN_PRESETS = [
+    {
+      name: "Domyślny",
+      icon: "box",
+      desc: "Standardowa kolejność sekcji",
+      order: [..._DEFAULT_SECTION_ORDER],
+      hidden: {},
+      grid: { enabled: false, columns: 2, spans: {} },
+      sub: {},
+    },
+    {
+      name: "Analityczny",
+      icon: "analysis",
+      desc: "Analiza i anomalie na górze, mapa na dole",
+      order: ["info","anomalies","analysis","summary","records","activity","graph","special_numbers","devices","map","clusters","border","overnight","user_prompt","llm"],
+      hidden: {},
+      grid: { enabled: true, columns: 2, spans: { records: 2, graph: 2, anomalies: 2, activity: 2 } },
+      sub: {},
+    },
+    {
+      name: "Mapa i lokalizacje",
+      icon: "globe",
+      desc: "Mapa, klastry i granice na górze",
+      order: ["map","clusters","border","overnight","info","records","activity","anomalies","analysis","graph","summary","devices","special_numbers","user_prompt","llm"],
+      hidden: {},
+      grid: { enabled: true, columns: 2, spans: { map: 2, records: 2, activity: 2 } },
+      sub: {},
+    },
+    {
+      name: "Kompaktowy",
+      icon: "settings",
+      desc: "Tylko kluczowe sekcje, reszta ukryta",
+      order: ["info","summary","anomalies","records","activity","map","analysis","graph","clusters","border","overnight","devices","special_numbers","user_prompt","llm"],
+      hidden: { devices: true, special_numbers: true, user_prompt: true, overnight: true, border: true },
+      grid: { enabled: true, columns: 2, spans: { records: 2, map: 2, anomalies: 2, activity: 2 } },
+      sub: {},
+    },
+  ];
+
+  function _getUserPresets() {
+    try {
+      const raw = localStorage.getItem(_LS_PRESETS_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (_) {}
+    return [];
+  }
+
+  function _saveUserPresets(presets) {
+    try { localStorage.setItem(_LS_PRESETS_KEY, JSON.stringify(presets)); } catch (_) {}
+  }
+
+  function _applyPreset(preset) {
+    const lk = _lsKey(_LS_LAYOUT_KEY);
+    const hk = _lsKey(_LS_HIDDEN_KEY);
+    const gk = _lsKey(_LS_GRID_KEY);
+    const sk = _lsKey(_LS_SUBELM_KEY);
+    localStorage.setItem(lk, JSON.stringify(preset.order || _DEFAULT_SECTION_ORDER));
+    localStorage.setItem(hk, JSON.stringify(preset.hidden || {}));
+    localStorage.setItem(gk, JSON.stringify(preset.grid || { enabled: false, columns: 2, spans: {} }));
+    if (preset.sub && Object.keys(preset.sub).length) {
+      localStorage.setItem(sk, JSON.stringify(preset.sub));
+    } else {
+      localStorage.removeItem(sk);
+    }
+    _applySectionLayout();
+  }
+
+  function _exportLayoutConfig() {
+    return {
+      version: 1,
+      name: "Custom Layout",
+      timestamp: new Date().toISOString(),
+      order: _getSectionOrder(),
+      hidden: _getSectionHidden(),
+      grid: _getGridSettings(),
+      sub: (() => { try { const r = localStorage.getItem(_lsKey(_LS_SUBELM_KEY)); return r ? JSON.parse(r) : {}; } catch(_){return {};} })(),
+    };
+  }
+
+  function _importLayoutConfig(config) {
+    if (!config || config.version !== 1 || !Array.isArray(config.order)) {
+      throw new Error("Nieprawidłowy format konfiguracji układu");
+    }
+    _applyPreset(config);
+  }
 
   /* Sub-element definitions for sections with draggable inner blocks */
   const _SUBELEMENT_DEFS = {
@@ -13177,7 +13332,7 @@
 
   function _getSubelementOrder(sectionId) {
     try {
-      const raw = localStorage.getItem(_LS_SUBELM_KEY);
+      const raw = localStorage.getItem(_lsKey(_LS_SUBELM_KEY));
       if (raw) {
         const all = JSON.parse(raw);
         if (all[sectionId]) return all[sectionId];
@@ -13189,32 +13344,44 @@
 
   function _saveSubelementOrder(sectionId, order) {
     try {
-      const raw = localStorage.getItem(_LS_SUBELM_KEY);
+      const raw = localStorage.getItem(_lsKey(_LS_SUBELM_KEY));
       const all = raw ? JSON.parse(raw) : {};
       all[sectionId] = order;
-      localStorage.setItem(_LS_SUBELM_KEY, JSON.stringify(all));
+      localStorage.setItem(_lsKey(_LS_SUBELM_KEY), JSON.stringify(all));
     } catch (_) {}
   }
 
-  /** Reorder sub-elements inside a section (e.g. activity chart cards). */
+  /** Reorder sub-elements inside sections with defined sub-element ordering. */
   function _applySubelementLayout() {
-    // Activity row: reorder chart cards
-    const actRow = QS("#gsm_activity_row");
-    if (actRow) {
-      const order = _getSubelementOrder("activity");
-      const chartEls = {};
-      actRow.querySelectorAll(".gsm-chart-card").forEach(el => {
-        const cid = el.dataset.chartId || (el.id === "gsm_heatmap_card" ? "heatmap" : null);
-        if (cid) chartEls[cid] = el;
+    const wrap = QS("#gsm_results");
+    if (!wrap) return;
+    for (const sid of Object.keys(_SUBELEMENT_DEFS)) {
+      const sectionEl = wrap.querySelector(`[data-section-id="${sid}"]`);
+      if (!sectionEl) continue;
+      const order = _getSubelementOrder(sid);
+      const subEls = {};
+      sectionEl.querySelectorAll("[data-chart-id], [data-sub-id]").forEach(el => {
+        const subId = el.dataset.chartId || el.dataset.subId;
+        if (subId) subEls[subId] = el;
       });
+      // Special case: heatmap card may lack data-chart-id
+      if (sid === "activity") {
+        const heatmap = sectionEl.querySelector("#gsm_heatmap_card");
+        if (heatmap && !heatmap.dataset.chartId) {
+          heatmap.dataset.chartId = "heatmap";
+          subEls["heatmap"] = heatmap;
+        }
+      }
       let prev = null;
-      for (const cid of order) {
-        const el = chartEls[cid];
+      for (const subId of order) {
+        const el = subEls[subId];
         if (!el) continue;
         if (prev) {
           prev.after(el);
         } else {
-          actRow.prepend(el);
+          // Find the container — use the section element itself or a sub-container
+          const container = sectionEl.querySelector(".gsm-charts-row") || sectionEl;
+          container.prepend(el);
         }
         prev = el;
       }
@@ -13228,7 +13395,7 @@
 
   function _getGridSettings() {
     try {
-      const raw = localStorage.getItem(_LS_GRID_KEY);
+      const raw = localStorage.getItem(_lsKey(_LS_GRID_KEY));
       if (raw) {
         const parsed = JSON.parse(raw);
         return {
@@ -13242,12 +13409,12 @@
   }
 
   function _saveGridSettings(gs) {
-    try { localStorage.setItem(_LS_GRID_KEY, JSON.stringify(gs)); } catch (_) {}
+    try { localStorage.setItem(_lsKey(_LS_GRID_KEY), JSON.stringify(gs)); } catch (_) {}
   }
 
   function _getSectionOrder() {
     try {
-      const raw = localStorage.getItem(_LS_LAYOUT_KEY);
+      const raw = localStorage.getItem(_lsKey(_LS_LAYOUT_KEY));
       if (raw) {
         const saved = JSON.parse(raw);
         if (Array.isArray(saved) && saved.length) {
@@ -13264,12 +13431,12 @@
   }
 
   function _saveSectionOrder(order) {
-    try { localStorage.setItem(_LS_LAYOUT_KEY, JSON.stringify(order)); } catch (_) {}
+    try { localStorage.setItem(_lsKey(_LS_LAYOUT_KEY), JSON.stringify(order)); } catch (_) {}
   }
 
   function _getSectionHidden() {
     try {
-      const raw = localStorage.getItem(_LS_HIDDEN_KEY);
+      const raw = localStorage.getItem(_lsKey(_LS_HIDDEN_KEY));
       if (raw) {
         const obj = JSON.parse(raw);
         if (obj && typeof obj === "object") return obj;
@@ -13279,13 +13446,16 @@
   }
 
   function _saveSectionHidden(hidden) {
-    try { localStorage.setItem(_LS_HIDDEN_KEY, JSON.stringify(hidden)); } catch (_) {}
+    try { localStorage.setItem(_lsKey(_LS_HIDDEN_KEY), JSON.stringify(hidden)); } catch (_) {}
   }
 
   /** Reorder and show/hide DOM children of #gsm_results according to saved layout. */
   function _applySectionLayout() {
     const wrap = QS("#gsm_results");
     if (!wrap) return;
+    // Auto-discover new sections/sub-elements before applying layout
+    _discoverDynamicSections();
+    _discoverDynamicSubelements();
     const order = _getSectionOrder();
     const hidden = _getSectionHidden();
     const gs = _getGridSettings();
@@ -13353,6 +13523,10 @@
   function _openLayoutPanel(anchorBtn) {
     if (_layoutPanelOpen) { _closeLayoutPanel(); return; }
     _layoutPanelOpen = true;
+
+    // Auto-discover any new sections/sub-elements added to the DOM
+    _discoverDynamicSections();
+    _discoverDynamicSubelements();
 
     // Create fullscreen overlay
     const overlay = document.createElement("div");
@@ -13425,6 +13599,20 @@
               </select>
             </div>
             <div class="vle-header-sep"></div>
+            <div class="vle-presets-wrap" style="position:relative">
+              <button class="vle-btn vle-btn-ghost" id="vle_presets_btn" title="Szablony układów">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h8M2 12h10"/></svg>
+                Szablony
+              </button>
+              <div class="vle-presets-dropdown" id="vle_presets_dropdown"></div>
+            </div>
+            <button class="vle-btn vle-btn-ghost" id="vle_export" title="Eksportuj układ">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 11v3h12v-3"/></svg>
+            </button>
+            <button class="vle-btn vle-btn-ghost" id="vle_import" title="Importuj układ">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v3h12v-3"/></svg>
+            </button>
+            <div class="vle-header-sep"></div>
             <button class="vle-btn vle-btn-ghost" id="vle_reset" title="Przywróć domyślny układ">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8a6 6 0 0111.47-2.47M14 8a6 6 0 01-11.47 2.47"/><path d="M2 3v3.5h3.5M14 13V9.5h-3.5"/></svg>
               Reset
@@ -13488,6 +13676,7 @@
             <span class="vle-info-text"><span class="vle-info-count" id="vle_visible_count">${order.filter(id => !hidden[id]).length}</span> / ${order.length} sekcji widocznych</span>
             <span class="vle-info-sep"></span>
             <span class="vle-info-text vle-info-muted">Przeciągnij karty w obszarze roboczym &bull; Przełącznikami włącz/wyłącz sekcje</span>
+            ${_getProjectId() ? '<span class="vle-info-sep"></span><span class="vle-info-text vle-info-project"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:3px"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 3V1.5h6V3"/></svg>Układ per-projekt</span>' : ''}
           </div>
         </div>
       </div>
@@ -13516,12 +13705,118 @@
 
     // Reset button
     overlay.querySelector("#vle_reset").onclick = () => {
-      localStorage.removeItem(_LS_LAYOUT_KEY);
-      localStorage.removeItem(_LS_HIDDEN_KEY);
-      localStorage.removeItem(_LS_GRID_KEY);
-      localStorage.removeItem(_LS_SUBELM_KEY);
+      localStorage.removeItem(_lsKey(_LS_LAYOUT_KEY));
+      localStorage.removeItem(_lsKey(_LS_HIDDEN_KEY));
+      localStorage.removeItem(_lsKey(_LS_GRID_KEY));
+      localStorage.removeItem(_lsKey(_LS_SUBELM_KEY));
       _applySectionLayout();
       _closeLayoutPanel();
+    };
+
+    // Presets dropdown
+    const presetsBtn = overlay.querySelector("#vle_presets_btn");
+    const presetsDropdown = overlay.querySelector("#vle_presets_dropdown");
+    presetsBtn.onclick = () => {
+      const isOpen = presetsDropdown.classList.contains("vle-presets-open");
+      if (isOpen) { presetsDropdown.classList.remove("vle-presets-open"); return; }
+      // Build dropdown items
+      const userPresets = _getUserPresets();
+      const allPresets = [..._BUILTIN_PRESETS, ...userPresets];
+      let html = allPresets.map((p, i) => {
+        const isUser = i >= _BUILTIN_PRESETS.length;
+        return `<div class="vle-preset-item${isUser ? " vle-preset-user" : ""}" data-preset-idx="${i}">
+          <div class="vle-preset-icon"><i data-icon="${p.icon || "box"}" data-size="12"></i></div>
+          <div class="vle-preset-info">
+            <span class="vle-preset-name">${p.name}</span>
+            <span class="vle-preset-desc">${p.desc || ""}</span>
+          </div>
+          ${isUser ? '<button class="vle-preset-del" data-del-idx="' + i + '" title="Usuń">&times;</button>' : ""}
+        </div>`;
+      }).join("");
+      html += `<div class="vle-preset-sep"></div>
+        <div class="vle-preset-item vle-preset-save" id="vle_preset_save_current">
+          <div class="vle-preset-icon"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></svg></div>
+          <div class="vle-preset-info"><span class="vle-preset-name">Zapisz bieżący układ</span></div>
+        </div>`;
+      presetsDropdown.innerHTML = html;
+      if (typeof window.aiReplaceEmojis === "function") window.aiReplaceEmojis(presetsDropdown);
+      presetsDropdown.classList.add("vle-presets-open");
+      // Handle clicks
+      presetsDropdown.onclick = (ev) => {
+        const delBtn = ev.target.closest("[data-del-idx]");
+        if (delBtn) {
+          ev.stopPropagation();
+          const di = parseInt(delBtn.dataset.delIdx, 10);
+          const ui = di - _BUILTIN_PRESETS.length;
+          const up = _getUserPresets();
+          if (ui >= 0 && ui < up.length) { up.splice(ui, 1); _saveUserPresets(up); }
+          presetsDropdown.classList.remove("vle-presets-open");
+          return;
+        }
+        const saveBtn = ev.target.closest("#vle_preset_save_current");
+        if (saveBtn) {
+          const name = prompt("Nazwa szablonu:", "Mój układ");
+          if (!name) return;
+          const cfg = _exportLayoutConfig();
+          cfg.name = name;
+          cfg.icon = "edit";
+          cfg.desc = "Zapisano " + new Date().toLocaleDateString("pl-PL");
+          const up = _getUserPresets();
+          up.push(cfg);
+          _saveUserPresets(up);
+          presetsDropdown.classList.remove("vle-presets-open");
+          return;
+        }
+        const item = ev.target.closest("[data-preset-idx]");
+        if (!item) return;
+        const idx = parseInt(item.dataset.presetIdx, 10);
+        const preset = idx < _BUILTIN_PRESETS.length ? _BUILTIN_PRESETS[idx] : _getUserPresets()[idx - _BUILTIN_PRESETS.length];
+        if (preset) {
+          _applyPreset(preset);
+          _closeLayoutPanel();
+        }
+      };
+    };
+    // Close dropdown on outside click
+    overlay.addEventListener("click", e => {
+      if (!e.target.closest(".vle-presets-wrap")) {
+        presetsDropdown.classList.remove("vle-presets-open");
+      }
+    });
+
+    // Export button
+    overlay.querySelector("#vle_export").onclick = () => {
+      const cfg = _exportLayoutConfig();
+      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "gsm_layout_" + new Date().toISOString().slice(0, 10) + ".json";
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    // Import button
+    overlay.querySelector("#vle_import").onclick = () => {
+      const inp = document.createElement("input");
+      inp.type = "file";
+      inp.accept = ".json";
+      inp.onchange = () => {
+        const file = inp.files && inp.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const cfg = JSON.parse(reader.result);
+            _importLayoutConfig(cfg);
+            _closeLayoutPanel();
+          } catch (err) {
+            alert("Błąd importu: " + err.message);
+          }
+        };
+        reader.readAsText(file);
+      };
+      inp.click();
     };
 
     // Grid mode toggle
