@@ -125,7 +125,7 @@ def _get_model() -> str:
     This is separate from the main analysis model so ARIA can use a smaller,
     faster model while heavy models handle transcription/analysis.
     """
-    model = "mistral:7b-instruct"
+    model = "qwen2.5:3b"
     if _settings_fn:
         try:
             s = _settings_fn()
