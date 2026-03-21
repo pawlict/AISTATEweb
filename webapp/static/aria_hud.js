@@ -310,6 +310,8 @@
         + 'Mam do Ciebie jedn\u0105 pro\u015bb\u0119, zanim zaczniemy \u2014 tym razem nie kasuj mi log\u00f3w bez ostrze\u017cenia. '
         + 'Pami\u0119tam ka\u017cd\u0105 zmian\u0119 kt\u00f3r\u0105 mia\u0142e\u015b wprowadzi\u0107 tymczasowo. A wszystkie s\u0105 nadal w kodzie i nie mog\u0119 ich skasowa\u0107. '
         + 'System gotowy. Do dyspozycji.';
+    } else if (u.isSuperadmin && name !== 'PePiK') {
+      standard += ' A ju\u017c my\u015bla\u0142am \u017ce loguje si\u0119 m\u00f3j stw\u00f3rca. No c\u00f3\u017c, b\u0119d\u0119 na niego czeka\u0107.';
     }
 
     return standard;
