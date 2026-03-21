@@ -1106,11 +1106,11 @@
         { page: '/projects',  el: '#projectList, #projectEmpty',  closeModal: true,
           text: 'Lista projekt\u00f3w. Ka\u017cdy projekt wy\u015bwietla si\u0119 jako karta z nazw\u0105, typem, dat\u0105 utworzenia i przyciskami akcji. Je\u015bli lista jest pusta, zobaczysz komunikat z zach\u0119t\u0105 do utworzenia pierwszego projektu.' },
 
-        // --- Karta projektu ---
-        { page: '/projects',  el: '.sp-card, #projectList',
+        // --- Karta projektu (mock if empty) ---
+        { page: '/projects',  el: '.sp-card',  mock: 'project',
           text: 'Karta projektu. Klikni\u0119cie otwiera projekt i aktywuje go jako bie\u017c\u0105cy. Na karcie widzisz: ikon\u0119 typu, nazw\u0119 projektu, informacj\u0119 o w\u0142a\u015bcicielu i cz\u0142onkach zespo\u0142u, oraz przyciski akcji po prawej stronie.' },
 
-        { page: '/projects',  el: '.sp-card-actions, .sp-open',
+        { page: '/projects',  el: '.sp-card-actions',  mock: 'project',
           text: 'Przyciski akcji na karcie. Od lewej: Otw\u00f3rz projekt, Zapro\u015b u\u017cytkownika, Zarz\u0105dzaj cz\u0142onkami, Usu\u0144 projekt. Dost\u0119pno\u015b\u0107 przycisk\u00f3w zale\u017cy od Twojej roli \u2014 w\u0142a\u015bciciel widzi wszystko, zwyk\u0142y cz\u0142onek mo\u017ce tylko otwiera\u0107.' },
 
         // --- Import ---
@@ -1132,8 +1132,8 @@
         { page: '/projects',  el: '#btnManageMembers',  closeModal: true,
           text: 'Zarz\u0105dzanie cz\u0142onkami projektu. Otwiera list\u0119 wszystkich os\u00f3b z dost\u0119pem do wybranego projektu. Mo\u017cesz zmieni\u0107 rol\u0119 cz\u0142onka, usun\u0105\u0107 go z projektu lub zobaczy\u0107 kto jest w\u0142a\u015bcicielem.' },
 
-        // --- Zaproszenia przychodzące ---
-        { page: '/projects',  el: '#invitationsCard, #invitationList',
+        // --- Zaproszenia przychodzące (mock if none) ---
+        { page: '/projects',  el: '#invitationsCard',  mock: 'invitation',
           text: 'Sekcja zaprosze\u0144. Je\u015bli inny u\u017cytkownik zaprosi\u0142 Ci\u0119 do swojego projektu, zaproszenie pojawi si\u0119 tutaj. Przy ka\u017cdym zaproszeniu widzisz: kto Ci\u0119 zaprosi\u0142, do jakiego projektu, z jak\u0105 rol\u0105 oraz ewentualn\u0105 wiadomo\u015b\u0107. Kliknij Akceptuj aby do\u0142\u0105czy\u0107 lub Odrzu\u0107 aby odm\u00f3wi\u0107.' },
 
         // --- Usuwanie projektów (toolbar) ---
@@ -1201,6 +1201,89 @@
   var _tourHighlightedEl = null;  // currently brightened element
   var _tourAutoTimer = null;      // auto-advance timer
   var _tourPaused = false;        // user clicked tooltip → paused
+  var _tourMockEls = [];          // mock elements injected by tour
+
+  /* ---- Mock data generators for tour ---- */
+
+  function _createMockProjectCard(container) {
+    var card = document.createElement('div');
+    card.className = 'subcard sp-card aria-tour-mock';
+    card.innerHTML = '<div class="sp-card-row">'
+      + '<div class="sp-card-info">'
+      + '<div>\ud83d\udcc1 Przyk\u0142adowy projekt analityczny</div>'
+      + '<div class="small" style="font-size:.7rem;white-space:nowrap">Transkrypcja \u00b7 2025-03-21 14:30</div>'
+      + '</div>'
+      + '<div class="sp-card-sep"></div>'
+      + '<div class="sp-card-team">'
+      + '<span class="small" style="opacity:.6">W\u0142a\u015bciciel: PePiK</span>'
+      + '</div>'
+      + '<div class="sp-card-sep"></div>'
+      + '<div class="sp-card-actions">'
+      + '<button class="btn pill-icon sp-open" title="Otw\u00f3rz"><img src="/static/icons/projekty/project_open.svg" alt="Otw\u00f3rz" draggable="false"></button>'
+      + '<button class="btn pill-icon sp-invite" title="Zapro\u015b u\u017cytkownika"><img src="/static/icons/uzytkownicy/user_invite.svg" alt="Zapro\u015b" draggable="false"></button>'
+      + '<button class="btn pill-icon sp-members" title="Zarz\u0105dzaj cz\u0142onkami"><img src="/static/icons/uzytkownicy/user_role.svg" alt="Cz\u0142onkowie" draggable="false"></button>'
+      + '<button class="btn pill-icon sp-del" title="Usu\u0144"><img src="/static/icons/akcje/remove.svg" alt="Usu\u0144" draggable="false"></button>'
+      + '</div>'
+      + '</div>';
+    container.prepend(card);
+    _tourMockEls.push(card);
+    // Also hide the empty message
+    var empty = document.getElementById('projectEmpty');
+    if (empty) { empty._origDisplay = empty.style.display; empty.style.display = 'none'; _tourMockEls.push({ restore: empty }); }
+    return card;
+  }
+
+  function _createMockInvitation() {
+    var container = document.getElementById('invitationsCard');
+    var list = document.getElementById('invitationList');
+    if (!container || !list) return null;
+
+    // Show the invitations card
+    container._origDisplay = container.style.display;
+    container.style.display = '';
+    _tourMockEls.push({ restore: container });
+
+    // Set count badge
+    var countEl = document.getElementById('invitationCount');
+    if (countEl) { countEl._origText = countEl.textContent; countEl.textContent = '1'; _tourMockEls.push({ restoreText: countEl }); }
+
+    // Create mock invitation
+    var row = document.createElement('div');
+    row.className = 'subcard aria-tour-mock';
+    row.style.cssText = 'padding:10px 14px;';
+    row.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+      + '<div style="min-width:0;flex:1">'
+      + '<div style="font-weight:700;font-size:.85rem">Analiza bilingu GSM \u2014 Sprawa 2024/1337</div>'
+      + '<div class="small" style="font-size:.72rem;opacity:.7">'
+      + 'Od: <b>admin</b> \u00b7 Rola: <b>edytor</b> \u00b7 2025-03-21'
+      + '</div>'
+      + '<div class="small" style="font-size:.72rem;margin-top:2px;opacity:.6;font-style:italic">'
+      + 'Potrzebuj\u0119 Twojej pomocy przy analizie tego bilingu.'
+      + '</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:4px;flex-shrink:0">'
+      + '<button class="btn pill-icon inv-accept" title="Zaakceptuj zaproszenie"><img src="/static/icons/akcje/accept.svg" alt="Akceptuj" draggable="false"></button>'
+      + '<button class="btn pill-icon inv-reject" title="Odrzu\u0107 zaproszenie"><img src="/static/icons/akcje/remove.svg" alt="Odrzu\u0107" draggable="false"></button>'
+      + '</div>'
+      + '</div>';
+    list.prepend(row);
+    _tourMockEls.push(row);
+    return container;
+  }
+
+  function _removeTourMocks() {
+    _tourMockEls.forEach(function (item) {
+      if (item instanceof HTMLElement && item.classList && item.classList.contains('aria-tour-mock')) {
+        item.remove();
+      } else if (item && item.restore) {
+        // Restore hidden element
+        item.restore.style.display = item.restore._origDisplay || 'none';
+      } else if (item && item.restoreText) {
+        item.restoreText.textContent = item.restoreText._origText || '';
+      }
+    });
+    _tourMockEls = [];
+  }
 
   function _showTourMenu(anchorEl) {
     // Remove existing menu if any
@@ -1295,6 +1378,8 @@
       p.el.style.zIndex = p.orig;
     });
     _tourElevatedParents = [];
+    // Remove mocks from previous step
+    _removeTourMocks();
   }
 
   function _executeTourStep() {
@@ -1364,6 +1449,26 @@
         if (el && el.offsetParent !== null) { targetEl = el; break; }
         if (el && !targetEl) targetEl = el; // fallback to hidden element
       } catch (e) { /* */ }
+    }
+
+    // If element not found (or hidden) and step has mock, generate it
+    if ((!targetEl || targetEl.offsetParent === null) && step.mock) {
+      if (step.mock === 'project') {
+        var projList = document.getElementById('projectList');
+        if (projList && !document.querySelector('.sp-card:not(.aria-tour-mock)')) {
+          var mockCard = _createMockProjectCard(projList);
+          // Re-search for the element using the selectors
+          for (var j = 0; j < selectors.length; j++) {
+            try { var found = document.querySelector(selectors[j]); if (found) { targetEl = found; break; } } catch (e2) { /* */ }
+          }
+        }
+      } else if (step.mock === 'invitation') {
+        var invCard = document.getElementById('invitationsCard');
+        var hasRealInvites = invCard && invCard.style.display !== 'none' && document.querySelector('#invitationList .subcard:not(.aria-tour-mock)');
+        if (!hasRealInvites) {
+          targetEl = _createMockInvitation();
+        }
+      }
     }
 
     if (targetEl) {
