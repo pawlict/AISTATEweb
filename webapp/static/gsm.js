@@ -13090,6 +13090,31 @@
   const _DEFAULT_SECTION_ORDER = _SECTION_DEFS.map(s => s.id);
   const _LS_LAYOUT_KEY = "gsm_section_layout";
   const _LS_HIDDEN_KEY = "gsm_section_hidden";
+  const _LS_GRID_KEY   = "gsm_section_grid";
+
+  /* Default column spans for grid mode (sections that benefit from full width) */
+  const _DEFAULT_GRID_SPANS = {
+    records: 2, graph: 2, map: 2, activity: 2, anomalies: 2
+  };
+
+  function _getGridSettings() {
+    try {
+      const raw = localStorage.getItem(_LS_GRID_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          enabled: !!parsed.enabled,
+          columns: parsed.columns || 2,
+          spans: parsed.spans || { ..._DEFAULT_GRID_SPANS }
+        };
+      }
+    } catch (_) {}
+    return { enabled: false, columns: 2, spans: { ..._DEFAULT_GRID_SPANS } };
+  }
+
+  function _saveGridSettings(gs) {
+    try { localStorage.setItem(_LS_GRID_KEY, JSON.stringify(gs)); } catch (_) {}
+  }
 
   function _getSectionOrder() {
     try {
@@ -13134,6 +13159,7 @@
     if (!wrap) return;
     const order = _getSectionOrder();
     const hidden = _getSectionHidden();
+    const gs = _getGridSettings();
     const sectionEls = {};
     wrap.querySelectorAll("[data-section-id]").forEach(el => {
       sectionEls[el.dataset.sectionId] = el;
@@ -13148,12 +13174,27 @@
       } else {
         el.classList.remove("gsm-section-user-hidden");
       }
+      // Apply grid column span
+      if (gs.enabled) {
+        const span = (gs.spans && gs.spans[id]) || 1;
+        el.style.gridColumn = span >= gs.columns ? "1 / -1" : "auto";
+      } else {
+        el.style.gridColumn = "";
+      }
       if (prev) {
         prev.after(el);
       } else {
         wrap.prepend(el);
       }
       prev = el;
+    }
+    // Apply or remove grid layout on container
+    if (gs.enabled) {
+      wrap.classList.add("gsm-grid-layout");
+      wrap.style.setProperty("--gsm-grid-cols", gs.columns);
+    } else {
+      wrap.classList.remove("gsm-grid-layout");
+      wrap.style.removeProperty("--gsm-grid-cols");
     }
   }
 
@@ -13189,6 +13230,7 @@
 
     const order = _getSectionOrder();
     const hidden = _getSectionHidden();
+    const gs = _getGridSettings();
 
     // Build section card elements for the miniature work area
     let cardsHtml = "";
@@ -13198,12 +13240,16 @@
       const meta = _SECTION_ICONS[id] || { icon: "box", color: "#94a3b8", h: 1 };
       const vis = !hidden[id];
       const hFactor = meta.h || 1;
-      cardsHtml += `<div class="vle-card${vis ? "" : " vle-card-hidden"}" draggable="true" data-sid="${id}" style="--card-accent:${meta.color};--card-h:${hFactor}">
+      const span = (gs.spans && gs.spans[id]) || 1;
+      cardsHtml += `<div class="vle-card${vis ? "" : " vle-card-hidden"}${span >= 2 ? " vle-card-wide" : ""}" draggable="true" data-sid="${id}" data-span="${span}" style="--card-accent:${meta.color};--card-h:${hFactor}">
         <div class="vle-card-grip">⠿</div>
         <div class="vle-card-icon"><i data-icon="${meta.icon}" data-size="14"></i></div>
         <div class="vle-card-info">
           <span class="vle-card-name">${def.label}</span>
         </div>
+        <button class="vle-card-span${gs.enabled ? "" : " vle-span-disabled"}" data-span-sid="${id}" title="${span >= 2 ? "Pełna szerokość" : "Pół szerokości"}">
+          <svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="${span >= 2 ? 14 : 6}" height="10" rx="1.5" fill="currentColor" opacity=".7"/>${span < 2 ? '<rect x="8" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".2"/>' : ''}</svg>
+        </button>
         <label class="vle-card-toggle" title="${vis ? "Ukryj" : "Pokaż"}">
           <input type="checkbox" ${vis ? "checked" : ""} data-vis-sid="${id}">
           <span class="vle-toggle-track"><span class="vle-toggle-thumb"></span></span>
@@ -13220,6 +13266,17 @@
             <span class="vle-badge">GSM Analysis</span>
           </div>
           <div class="vle-header-right">
+            <div class="vle-grid-toggle">
+              <button class="vle-btn vle-btn-ghost vle-grid-btn${gs.enabled ? " vle-grid-active" : ""}" id="vle_grid_toggle" title="Tryb siatki 2D">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+                Grid
+              </button>
+              <select class="vle-cols-select${gs.enabled ? "" : " vle-span-disabled"}" id="vle_cols_select" title="Liczba kolumn">
+                <option value="2"${gs.columns === 2 ? " selected" : ""}>2 kol.</option>
+                <option value="3"${gs.columns === 3 ? " selected" : ""}>3 kol.</option>
+              </select>
+            </div>
+            <div class="vle-header-sep"></div>
             <button class="vle-btn vle-btn-ghost" id="vle_reset" title="Przywróć domyślny układ">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8a6 6 0 0111.47-2.47M14 8a6 6 0 01-11.47 2.47"/><path d="M2 3v3.5h3.5M14 13V9.5h-3.5"/></svg>
               Reset
@@ -13313,12 +13370,59 @@
     overlay.querySelector("#vle_reset").onclick = () => {
       localStorage.removeItem(_LS_LAYOUT_KEY);
       localStorage.removeItem(_LS_HIDDEN_KEY);
+      localStorage.removeItem(_LS_GRID_KEY);
       _applySectionLayout();
       _closeLayoutPanel();
     };
 
-    // Visibility toggles
+    // Grid mode toggle
+    const gridBtn = overlay.querySelector("#vle_grid_toggle");
+    const colsSelect = overlay.querySelector("#vle_cols_select");
+    const _updateGridUI = (enabled) => {
+      overlay.querySelectorAll(".vle-card-span").forEach(b => b.classList.toggle("vle-span-disabled", !enabled));
+      colsSelect.classList.toggle("vle-span-disabled", !enabled);
+      gridBtn.classList.toggle("vle-grid-active", enabled);
+    };
+    gridBtn.onclick = () => {
+      const g = _getGridSettings();
+      g.enabled = !g.enabled;
+      _saveGridSettings(g);
+      _updateGridUI(g.enabled);
+      _applySectionLayout();
+    };
+    colsSelect.onchange = () => {
+      const g = _getGridSettings();
+      g.columns = parseInt(colsSelect.value, 10) || 2;
+      _saveGridSettings(g);
+      _applySectionLayout();
+    };
+
+    // Column span buttons
     const cardList = overlay.querySelector("#vle_card_list");
+    cardList.addEventListener("click", e => {
+      const spanBtn = e.target.closest("[data-span-sid]");
+      if (!spanBtn) return;
+      const sid = spanBtn.dataset.spanSid;
+      const g = _getGridSettings();
+      if (!g.spans) g.spans = {};
+      const cur = g.spans[sid] || 1;
+      const next = cur >= 2 ? 1 : 2;
+      g.spans[sid] = next;
+      _saveGridSettings(g);
+      const card = spanBtn.closest(".vle-card");
+      if (card) {
+        card.dataset.span = next;
+        card.classList.toggle("vle-card-wide", next >= 2);
+      }
+      // Update the SVG inside span button
+      spanBtn.innerHTML = next >= 2
+        ? '<svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="14" height="10" rx="1.5" fill="currentColor" opacity=".7"/></svg>'
+        : '<svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".7"/><rect x="8" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".2"/></svg>';
+      spanBtn.title = next >= 2 ? "Pełna szerokość" : "Pół szerokości";
+      _applySectionLayout();
+    });
+
+    // Visibility toggles
     cardList.addEventListener("change", e => {
       const cb = e.target.closest("[data-vis-sid]");
       if (!cb) return;

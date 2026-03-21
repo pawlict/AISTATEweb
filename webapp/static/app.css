@@ -4474,6 +4474,30 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 [data-theme="dark"] .gsm-layout-btn{background:var(--bg-card,#1e293b);border-color:var(--border,#334155);color:var(--text-muted,#94a3b8)}
 [data-theme="dark"] .gsm-layout-btn:hover{border-color:var(--brand-blue,#2563eb);color:var(--brand-blue,#60a5fa)}
 
+/* ─── GSM Grid Layout (Phase 2) ───────────────────────────────────────── */
+.gsm-grid-layout{display:grid!important;grid-template-columns:repeat(var(--gsm-grid-cols,2),1fr);gap:16px;align-items:start}
+.gsm-grid-layout>.card,.gsm-grid-layout>[data-section-id]{min-width:0}
+
+/* VLE Grid toggle & column span controls */
+.vle-grid-toggle{display:flex;align-items:center;gap:4px}
+.vle-grid-btn.vle-grid-active{background:rgba(37,99,235,.1);border-color:var(--brand-blue,#2563eb);color:var(--brand-blue,#2563eb)}
+.vle-cols-select{padding:4px 6px;border:1px solid var(--border,#e2e8f0);border-radius:6px;font-size:11px;background:var(--bg-card,#fff);color:var(--text,#1e293b);cursor:pointer;outline:none;transition:border-color .15s}
+.vle-cols-select:focus{border-color:var(--brand-blue,#2563eb)}
+.vle-header-sep{width:1px;height:20px;background:var(--border,#e2e8f0);margin:0 4px}
+.vle-card-span{display:flex;align-items:center;justify-content:center;width:26px;height:22px;border:1px solid var(--border,#e2e8f0);border-radius:5px;background:transparent;color:var(--text-muted,#94a3b8);cursor:pointer;flex-shrink:0;transition:all .15s;padding:0}
+.vle-card-span:hover{border-color:var(--brand-blue,#2563eb);color:var(--brand-blue,#2563eb);background:rgba(37,99,235,.04)}
+.vle-span-disabled{opacity:.3;pointer-events:none}
+.vle-card-wide{background:linear-gradient(135deg,var(--bg-card,#fff),rgba(37,99,235,.02))!important}
+.vle-card-wide::before{opacity:1!important}
+
+/* Dark theme for grid controls */
+[data-theme="dark"] .vle-grid-btn.vle-grid-active{background:rgba(96,165,250,.12);border-color:var(--brand-blue,#60a5fa);color:var(--brand-blue,#60a5fa)}
+[data-theme="dark"] .vle-cols-select{background:var(--bg-secondary,#0f172a);border-color:var(--border,#334155);color:var(--text,#e2e8f0)}
+[data-theme="dark"] .vle-header-sep{background:var(--border,#334155)}
+[data-theme="dark"] .vle-card-span{border-color:var(--border,#334155);color:#475569}
+[data-theme="dark"] .vle-card-span:hover{border-color:var(--brand-blue,#60a5fa);color:var(--brand-blue,#60a5fa)}
+[data-theme="dark"] .vle-card-wide{background:linear-gradient(135deg,var(--bg-secondary,#0f172a),rgba(37,99,235,.05))!important}
+
 /* ─── Note Template Editor ─────────────────────────────────────────────── */
 .note-tpl-editor{display:flex;flex-direction:column;gap:12px;max-height:65vh;overflow:hidden}
 .note-tpl-header{display:flex;align-items:center;gap:10px;padding:0 0 10px;border-bottom:1px solid var(--border,#e2e8f0)}
