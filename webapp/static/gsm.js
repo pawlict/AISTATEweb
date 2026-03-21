@@ -2051,6 +2051,36 @@
   });
 
   /* ── render ─────────────────────────────────────────────── */
+
+  /** Yield to the browser's main thread so the UI stays responsive. */
+  function _yieldToUI() {
+    return new Promise(resolve => setTimeout(resolve, 0));
+  }
+
+  /** Show/update/hide a rendering progress overlay. */
+  function _renderProgress(step, total, label) {
+    let bar = QS("#gsm_render_progress");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "gsm_render_progress";
+      bar.className = "gsm-render-progress";
+      bar.innerHTML = '<div class="gsm-render-progress-inner"><div class="gsm-render-progress-bar"></div><span class="gsm-render-progress-label"></span></div>';
+      const wrap = QS("#gsm_results");
+      if (wrap) wrap.prepend(bar);
+    }
+    const pct = Math.round((step / total) * 100);
+    const fill = bar.querySelector(".gsm-render-progress-bar");
+    const lbl = bar.querySelector(".gsm-render-progress-label");
+    if (fill) fill.style.width = pct + "%";
+    if (lbl) lbl.textContent = label || `Renderowanie… ${pct}%`;
+    bar.style.display = "";
+  }
+
+  function _hideRenderProgress() {
+    const bar = QS("#gsm_render_progress");
+    if (bar) bar.style.display = "none";
+  }
+
   async function _renderResults(data) {
     const wrap = QS("#gsm_results");
     if (!wrap) return;
@@ -2060,25 +2090,42 @@
     const empty = QS("#gsm_empty_state");
     if (empty) empty.style.display = "none";
 
-    _renderInfo(data);
-    _renderSummary(data.summary);
-    _renderDevices(data.analysis, data.records, data.subscriber);
-    _renderAnalysis(data.analysis);
-    _renderAnomalies(data.analysis);
-    _renderRecords(data.records, data.records_truncated, data.record_count);
-    _renderSpecialNumbers(data.analysis ? data.analysis.special_numbers : []);
-    _renderActivityCharts(data.analysis);
-    // Heatmap: hour × day-of-week
-    St.hmActiveCell = null;
-    _buildHeatmapData(data.records);
-    _renderHeatmap();
-    // Map is async (loads Leaflet) — must finish before travel sections
-    await _renderMap(data.geolocation);
-    _renderOvernightStays(data.analysis);
-    _renderWarnings(data.warnings);
+    // Render in stages, yielding to the browser between each
+    const stages = [
+      { fn: () => _renderInfo(data),                              label: "Informacje o bilingu…" },
+      { fn: () => _renderSummary(data.summary),                   label: "Podsumowanie…" },
+      { fn: () => _renderDevices(data.analysis, data.records, data.subscriber), label: "Urządzenia…" },
+      { fn: () => _renderAnalysis(data.analysis),                 label: "Analiza kontaktów…" },
+      { fn: () => _renderAnomalies(data.analysis),                label: "Wykrywanie anomalii…" },
+      { fn: () => _renderRecords(data.records, data.records_truncated, data.record_count), label: "Rekordy…" },
+      { fn: () => _renderSpecialNumbers(data.analysis ? data.analysis.special_numbers : []), label: "Numery specjalne…" },
+      { fn: () => _renderActivityCharts(data.analysis),           label: "Wykresy aktywności…" },
+      { fn: () => { St.hmActiveCell = null; _buildHeatmapData(data.records); _renderHeatmap(); }, label: "Mapa cieplna…" },
+      { fn: () => _renderMap(data.geolocation),                   label: "Mapa BTS…", async: true },
+      { fn: () => _renderOvernightStays(data.analysis),           label: "Nocowania…" },
+      { fn: () => _renderWarnings(data.warnings),                 label: "Ostrzeżenia…" },
+    ];
+
+    const total = stages.length;
+    for (let i = 0; i < total; i++) {
+      _renderProgress(i, total, stages[i].label);
+      await _yieldToUI();
+      try {
+        if (stages[i].async) {
+          await stages[i].fn();
+        } else {
+          stages[i].fn();
+        }
+      } catch (err) {
+        console.warn("[GSM] Stage", stages[i].label, "error:", err);
+      }
+    }
+
+    _renderProgress(total, total, "Finalizacja…");
+    await _yieldToUI();
     _bindCardScreenshotButtons();
-    // Apply user's saved section layout order
     _applySectionLayout();
+    _hideRenderProgress();
   }
 
   function _renderInfo(data) {
@@ -5076,7 +5123,13 @@
     html += `</tr></thead><tbody>`;
 
     const hl = St._anomalyHighlight || null;
-    for (const r of sorted) {
+
+    // Chunked rendering: render first batch immediately, rest lazily
+    const INITIAL_BATCH = 200;
+    const LAZY_BATCH = 500;
+    const totalRows = sorted.length;
+
+    function _buildRowHtml(r) {
       let rowStyle = "";
       if (hl) {
         if (hl.anomalyRecords && hl.anomalyRecords.has(r)) {
@@ -5087,18 +5140,57 @@
       }
       const rowIdx = r.raw_row != null ? r.raw_row : "";
       const hasNote = _notesMgr && _notesMgr.hasNote("gsm_record", "record_idx", rowIdx);
-      html += `<tr data-row="${rowIdx}"${rowStyle}>`;
-      html += `<td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${hasNote ? " has-note" : ""}" data-note-row="${rowIdx}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>`;
+      let rh = `<tr data-row="${rowIdx}"${rowStyle}>`;
+      rh += `<td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${hasNote ? " has-note" : ""}" data-note-row="${rowIdx}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>`;
       for (const col of cols) {
-        html += `<td>${col.renderCell(r)}</td>`;
+        rh += `<td>${col.renderCell(r)}</td>`;
       }
-      html += `</tr>`;
+      rh += `</tr>`;
+      return rh;
+    }
+
+    // Build first batch
+    const firstBatch = Math.min(INITIAL_BATCH, totalRows);
+    for (let i = 0; i < firstBatch; i++) {
+      html += _buildRowHtml(sorted[i]);
     }
     html += "</tbody></table>";
     if (truncated) {
       html += `<div class="small muted" style="margin-top:8px">Pokazano ${records.length} z ${_fmt(totalCount)} rekordów.</div>`;
     }
+    if (totalRows > INITIAL_BATCH) {
+      html += `<div id="gsm_records_lazy_status" class="small muted" style="margin-top:4px;color:var(--brand-blue,#2563eb)">Ładowanie pozostałych ${_fmt(totalRows - INITIAL_BATCH)} wierszy…</div>`;
+    }
     el.innerHTML = html;
+
+    // Lazy-load remaining rows in chunks (non-blocking)
+    if (totalRows > INITIAL_BATCH) {
+      const tbody = el.querySelector("tbody");
+      let offset = INITIAL_BATCH;
+      const _appendChunk = () => {
+        if (!tbody || !tbody.isConnected) return; // table was replaced
+        const end = Math.min(offset + LAZY_BATCH, totalRows);
+        let chunk = "";
+        for (let i = offset; i < end; i++) {
+          chunk += _buildRowHtml(sorted[i]);
+        }
+        tbody.insertAdjacentHTML("beforeend", chunk);
+        offset = end;
+        if (offset < totalRows) {
+          const status = QS("#gsm_records_lazy_status");
+          if (status) status.textContent = `Ładowanie wierszy… ${_fmt(offset)} / ${_fmt(totalRows)}`;
+          requestAnimationFrame(() => setTimeout(_appendChunk, 0));
+        } else {
+          const status = QS("#gsm_records_lazy_status");
+          if (status) status.remove();
+          // Bind note markers for lazy-loaded rows
+          if (_notesMgr) {
+            _bindNoteMarkers(el, sorted);
+          }
+        }
+      };
+      requestAnimationFrame(() => setTimeout(_appendChunk, 0));
+    }
 
     // Bind header interactions
     el.querySelectorAll(".gsm-col-filter-btn").forEach(btn => {
@@ -5125,21 +5217,30 @@
     // Bind column drag-and-drop reordering on headers
     _bindColumnDragDrop(el);
 
-    // Bind note marker clicks
-    if (_notesMgr) {
-      el.querySelectorAll(".analyst-note-marker[data-note-row]").forEach(marker => {
-        marker.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const rowIdx = parseInt(marker.getAttribute("data-note-row"), 10);
-          if (isNaN(rowIdx)) return;
-          const rec = sorted.find(r => r.raw_row === rowIdx);
-          if (!rec) return;
-          const label = _buildRecordNoteLabel(rec);
-          const ref = { type: "gsm_record", record_idx: rowIdx, snapshot: { caller: rec.caller || "", callee: rec.callee || "", datetime: rec.datetime || "" } };
-          _notesMgr.openNoteForElement(label, "phone", ref);
-        });
-      });
-    }
+    // Bind note markers using event delegation (works for lazy-loaded rows too)
+    _bindNoteMarkers(el, sorted);
+  }
+
+  /** Bind note marker clicks via event delegation on container. */
+  function _bindNoteMarkers(container, sortedRecords) {
+    const _notesMgr = window._gsmNotesMgr || null;
+    if (!_notesMgr) return;
+    // Remove previous delegated handler if any
+    if (container._noteHandler) container.removeEventListener("click", container._noteHandler);
+    const handler = (e) => {
+      const marker = e.target.closest(".analyst-note-marker[data-note-row]");
+      if (!marker) return;
+      e.stopPropagation();
+      const rowIdx = parseInt(marker.getAttribute("data-note-row"), 10);
+      if (isNaN(rowIdx)) return;
+      const rec = sortedRecords.find(r => r.raw_row === rowIdx);
+      if (!rec) return;
+      const label = _buildRecordNoteLabel(rec);
+      const ref = { type: "gsm_record", record_idx: rowIdx, snapshot: { caller: rec.caller || "", callee: rec.callee || "", datetime: rec.datetime || "" } };
+      _notesMgr.openNoteForElement(label, "phone", ref);
+    };
+    container.addEventListener("click", handler);
+    container._noteHandler = handler;
   }
 
   /* ── Column drag & drop (custom mouse events) ────────── */
@@ -13703,6 +13804,27 @@
     });
     closeBtn.focus();
 
+    // Apply grid mode to card list so VLE mirrors actual layout
+    const cardListEl = overlay.querySelector("#vle_card_list");
+    const _syncVleGrid = () => {
+      const g = _getGridSettings();
+      if (g.enabled) {
+        cardListEl.classList.add("vle-grid-mode");
+        cardListEl.style.setProperty("--vle-grid-cols", g.columns);
+      } else {
+        cardListEl.classList.remove("vle-grid-mode");
+        cardListEl.style.removeProperty("--vle-grid-cols");
+      }
+    };
+    _syncVleGrid();
+
+    // Debounced layout application — batch rapid changes
+    let _layoutTimer = null;
+    const _debouncedApply = () => {
+      if (_layoutTimer) clearTimeout(_layoutTimer);
+      _layoutTimer = setTimeout(() => { _applySectionLayout(); _layoutTimer = null; }, 150);
+    };
+
     // Reset button
     overlay.querySelector("#vle_reset").onclick = () => {
       localStorage.removeItem(_lsKey(_LS_LAYOUT_KEY));
@@ -13832,13 +13954,15 @@
       g.enabled = !g.enabled;
       _saveGridSettings(g);
       _updateGridUI(g.enabled);
-      _applySectionLayout();
+      _syncVleGrid();
+      _debouncedApply();
     };
     colsSelect.onchange = () => {
       const g = _getGridSettings();
       g.columns = parseInt(colsSelect.value, 10) || 2;
       _saveGridSettings(g);
-      _applySectionLayout();
+      _syncVleGrid();
+      _debouncedApply();
     };
 
     // Column span buttons
@@ -13863,7 +13987,7 @@
         ? '<svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="14" height="10" rx="1.5" fill="currentColor" opacity=".7"/></svg>'
         : '<svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".7"/><rect x="8" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".2"/></svg>';
       spanBtn.title = next >= 2 ? "Pełna szerokość" : "Pół szerokości";
-      _applySectionLayout();
+      _debouncedApply();
     });
 
     // Visibility toggles
@@ -13880,7 +14004,7 @@
       _saveSectionHidden(h);
       const card = cb.closest(".vle-card");
       if (card) card.classList.toggle("vle-card-hidden", !cb.checked);
-      _applySectionLayout();
+      _debouncedApply();
       // Update counter
       const cnt = overlay.querySelector("#vle_visible_count");
       if (cnt) {
@@ -13950,7 +14074,7 @@
       const items = [...cardList.querySelectorAll(".vle-card")];
       const newOrder = items.map(el => el.dataset.sid);
       _saveSectionOrder(newOrder);
-      _applySectionLayout();
+      _debouncedApply();
       dragEl = null;
       dragSid = null;
     });
@@ -13994,7 +14118,7 @@
       const items = [...cardList.querySelectorAll(".vle-card")];
       const newOrder = items.map(el => el.dataset.sid);
       _saveSectionOrder(newOrder);
-      _applySectionLayout();
+      _debouncedApply();
       touchDragEl = null;
     }, { passive: true });
 
@@ -14062,7 +14186,7 @@
           const numEl = el.querySelector(".vle-sub-num");
           if (numEl) numEl.textContent = i + 1;
         });
-        _applySubelementLayout();
+        _debouncedApply();
         subDragEl = null;
       });
     });
