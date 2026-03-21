@@ -624,3 +624,127 @@
   cursor: nwse-resize;
   z-index: 10;
 }
+
+
+/* =========================================================================
+   GUIDED TOUR — "Omów aplikację" overlay system
+   ========================================================================= */
+
+/* Tour module selector dropdown */
+.aria-tour-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 6px;
+  background: rgba(7, 12, 17, 0.97);
+  border: 1px solid rgba(0, 212, 200, 0.3);
+  border-radius: 6px;
+  padding: 4px 0;
+  z-index: 20;
+  min-width: 180px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  animation: ariaFadeIn 0.15s ease;
+}
+
+.aria-tour-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--aria-text);
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.aria-tour-menu-item:hover {
+  background: rgba(0, 212, 200, 0.12);
+  color: var(--aria-cyan);
+}
+
+/* Semi-transparent overlay behind spotlight */
+.aria-tour-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 8000;
+  pointer-events: none;
+  display: none;
+}
+
+/* Spotlight cutout around highlighted element */
+.aria-tour-spotlight {
+  position: absolute;
+  border: 2px solid var(--aria-cyan);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55), 0 0 30px rgba(0, 212, 200, 0.3);
+  z-index: 8001;
+  pointer-events: none;
+  display: none;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: ariaTourPulse 2s ease-in-out infinite;
+}
+
+@keyframes ariaTourPulse {
+  0%, 100% { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55), 0 0 20px rgba(0, 212, 200, 0.2); }
+  50%      { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55), 0 0 40px rgba(0, 212, 200, 0.5); }
+}
+
+/* Animated pointer arrow */
+.aria-tour-pointer {
+  position: absolute;
+  z-index: 8002;
+  color: var(--aria-cyan);
+  font-size: 24px;
+  pointer-events: none;
+  display: none;
+  animation: ariaTourBounce 1s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(0, 212, 200, 0.5));
+}
+
+@keyframes ariaTourBounce {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(8px); }
+}
+
+/* Tour tooltip panel */
+.aria-tour-tooltip {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(480px, 90vw);
+  background: rgba(7, 12, 17, 0.97);
+  border: 1px solid rgba(0, 212, 200, 0.3);
+  border-radius: 8px;
+  padding: 16px 20px;
+  z-index: 8500;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 212, 200, 0.1);
+  font-family: 'Courier New', Consolas, monospace;
+  display: none;
+  animation: ariaFadeIn 0.25s ease;
+}
+
+.aria-tour-text {
+  color: var(--aria-text);
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.aria-tour-step-info {
+  color: var(--aria-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+
+.aria-tour-btns {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

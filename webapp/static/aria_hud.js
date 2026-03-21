@@ -7,6 +7,7 @@
 
   /* ---- Hint chips ---- */
   var ARIA_HINTS = [
+    { label: '📖 Omów aplikację', tour: true },
     { label: 'Jak transkrybować?', query: 'Jak uruchomić transkrypcję pliku audio?' },
     { label: 'Mówcy',             query: 'Jak działa diaryzacja mówców?' },
     { label: 'Analiza GSM',       query: 'Jak wczytać i analizować billing GSM?' },
@@ -95,6 +96,9 @@
     // Make the HUD draggable and resizable
     _initDrag();
     _initResize();
+
+    // Resume guided tour if navigated mid-tour
+    _resumeTourIfNeeded();
   }
 
   /* ---- Drag to reposition ---- */
@@ -434,6 +438,11 @@
     var gotModel = '';
     var hadError = false;
 
+    // Prepare TTS sentence streaming — start fresh TTS session
+    stopSpeech();
+    var ttsSid = ++_ttsReqId;
+    _ttsSentenceBuf = '';
+
     try {
       var res = await fetch('/api/aria/chat/stream', {
         method: 'POST',
@@ -482,6 +491,8 @@
                 if (AriaHUD.$messages) {
                   AriaHUD.$messages.scrollTop = AriaHUD.$messages.scrollHeight;
                 }
+                // Feed token to TTS sentence buffer — speaks as soon as sentence ends
+                _feedTTSToken(data.token, ttsSid);
               }
               if (data.model) gotModel = data.model;
               if (data.done) break;
@@ -494,6 +505,11 @@
       hadError = true;
       assistantDiv.className = 'aria-msg error';
       assistantDiv.textContent = fullReply;
+    }
+
+    // Flush remaining TTS buffer (last sentence without final period)
+    if (!hadError) {
+      _flushTTSBuffer(ttsSid);
     }
 
     // Parse and execute actions, strip tags from displayed/saved text
@@ -514,10 +530,6 @@
     _setBusy(false);
     _updateStatusLine();
     _saveSession();
-
-    if (AriaHUD.ttsEnabled && !hadError && cleanReply) {
-      speakText(cleanReply);
-    }
 
     // Execute immediate actions after a short delay
     if (actions.length > 0) {
@@ -763,65 +775,152 @@
     if (btn) btn.click();
   }
 
-  /* ---- TTS ---- */
-  var _ttsReqId = 0;  // monotonic counter to cancel stale TTS requests
+  /* ---- TTS — sentence-level streaming queue ---- */
+  var _ttsReqId = 0;      // monotonic session counter (cancel all on new message)
+  var _ttsQueue = [];      // queue of sentence strings to speak
+  var _ttsPlaying = false; // is audio currently playing from queue
+  var _ttsSentenceBuf = ''; // buffer for accumulating tokens into sentences
 
-  async function speakText(text) {
+  /**
+   * Queue a sentence for TTS playback. Starts playing immediately if idle.
+   */
+  function _queueTTSSentence(sentence, sessionId) {
     if (!AriaHUD.ttsEnabled) return;
-    stopSpeech();
+    sentence = sentence.trim();
+    if (!sentence) return;
+    // Strip action/confirm tags from TTS
+    sentence = sentence.replace(/\[ACTION:[^\]]*\]/g, '').replace(/\[CONFIRM:[^\]]*\]/g, '').trim();
+    if (!sentence) return;
+
+    _ttsQueue.push({ text: sentence, sid: sessionId });
+    if (!_ttsPlaying) {
+      _playNextFromQueue();
+    }
+  }
+
+  /**
+   * Play next sentence from queue. Chains: play → onended → playNext.
+   */
+  async function _playNextFromQueue() {
+    if (_ttsQueue.length === 0) {
+      _ttsPlaying = false;
+      setAriaWaveMode(false);
+      return;
+    }
+
+    _ttsPlaying = true;
     setAriaWaveMode(true);
 
-    var myId = ++_ttsReqId;
+    var item = _ttsQueue.shift();
+    // If session changed (new message started or stopSpeech called), drop
+    if (item.sid !== _ttsReqId) {
+      _ttsPlaying = false;
+      _ttsQueue = [];
+      setAriaWaveMode(false);
+      return;
+    }
 
     try {
       var res = await fetch('/api/aria/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text }),
+        body: JSON.stringify({ text: item.text }),
       });
 
-      // If a newer request was started while we waited, discard this one
-      if (myId !== _ttsReqId) return;
-
-      if (!res.ok) {
-        setAriaWaveMode(false);
-        return;
-      }
+      if (item.sid !== _ttsReqId) { _ttsPlaying = false; _ttsQueue = []; setAriaWaveMode(false); return; }
+      if (!res.ok) { _playNextFromQueue(); return; }
 
       var blob = await res.blob();
-      if (myId !== _ttsReqId) return;
+      if (item.sid !== _ttsReqId) { _ttsPlaying = false; _ttsQueue = []; setAriaWaveMode(false); return; }
 
       var url = URL.createObjectURL(blob);
       var audio = new Audio(url);
       AriaHUD.currentAudio = audio;
 
       audio.onended = function () {
-        setAriaWaveMode(false);
         URL.revokeObjectURL(url);
         AriaHUD.currentAudio = null;
+        _playNextFromQueue();
       };
 
       audio.onerror = function () {
-        setAriaWaveMode(false);
         URL.revokeObjectURL(url);
         AriaHUD.currentAudio = null;
+        _playNextFromQueue();
       };
 
       audio.play().catch(function () {
-        setAriaWaveMode(false);
         AriaHUD.currentAudio = null;
+        _playNextFromQueue();
       });
     } catch (e) {
-      setAriaWaveMode(false);
+      _playNextFromQueue();
+    }
+  }
+
+  /**
+   * Feed a token into the sentence buffer. When a sentence boundary is detected,
+   * the sentence is queued for TTS. Called during SSE streaming.
+   */
+  function _feedTTSToken(token, sessionId) {
+    if (!AriaHUD.ttsEnabled) return;
+    _ttsSentenceBuf += token;
+
+    // Detect sentence boundary: ends with . ! ? followed by optional whitespace or end of token
+    // But skip dots in abbreviations like "A.R.I.A." or numbers like "3.5"
+    var match = _ttsSentenceBuf.match(/^([\s\S]*?[.!?])\s+([\s\S]*)$/);
+    if (match) {
+      var sentence = match[1].trim();
+      var remainder = match[2] || '';
+      // Skip if it looks like an abbreviation (single letter before dot) or decimal number
+      var lastDot = sentence.lastIndexOf('.');
+      if (lastDot >= 0) {
+        var charBefore = sentence[lastDot - 1] || '';
+        // e.g. "A." or "3." — skip boundary
+        if (/^[A-Z]$/.test(charBefore) || /^\d$/.test(charBefore)) {
+          return; // don't split yet
+        }
+      }
+      _ttsSentenceBuf = remainder;
+      _queueTTSSentence(sentence, sessionId);
+    }
+  }
+
+  /**
+   * Flush any remaining text in the sentence buffer to TTS.
+   */
+  function _flushTTSBuffer(sessionId) {
+    if (_ttsSentenceBuf.trim()) {
+      _queueTTSSentence(_ttsSentenceBuf, sessionId);
+    }
+    _ttsSentenceBuf = '';
+  }
+
+  /**
+   * Speak a complete text (used for welcome greeting).
+   * Splits into sentences and queues all.
+   */
+  function speakText(text) {
+    if (!AriaHUD.ttsEnabled) return;
+    stopSpeech();
+    var sid = ++_ttsReqId;
+    // Split by sentence boundaries
+    var sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    for (var i = 0; i < sentences.length; i++) {
+      _queueTTSSentence(sentences[i], sid);
     }
   }
 
   function stopSpeech() {
+    ++_ttsReqId; // invalidate all pending/queued
+    _ttsQueue = [];
+    _ttsSentenceBuf = '';
     if (AriaHUD.currentAudio) {
       AriaHUD.currentAudio.pause();
       AriaHUD.currentAudio.currentTime = 0;
       AriaHUD.currentAudio = null;
     }
+    _ttsPlaying = false;
     setAriaWaveMode(false);
   }
 
@@ -886,13 +985,321 @@
       var chip = document.createElement('button');
       chip.className = 'aria-hint-chip';
       chip.textContent = h.label;
-      chip.title = h.query;
+      chip.title = h.query || h.label;
       chip.addEventListener('click', function () {
-        if (AriaHUD.$input) AriaHUD.$input.value = h.query;
-        sendMessage();
+        if (h.tour) {
+          _showTourMenu(chip);
+        } else {
+          if (AriaHUD.$input) AriaHUD.$input.value = h.query;
+          sendMessage();
+        }
       });
       AriaHUD.$hints.appendChild(chip);
     });
+  }
+
+  /* ==================================================================
+   * GUIDED TOUR — "Omów aplikację"
+   * Interactive walkthrough with element highlighting and TTS narration
+   * ================================================================== */
+
+  var TOUR_MODULES = {
+    all: {
+      label: 'Cała aplikacja',
+      steps: [
+        { page: '/projects',      el: '.workspace-card, .project-card, #projectGrid',  text: 'To jest strona projektów. Tutaj tworzysz nowe projekty analityczne, otwierasz istniejące i zarządzasz plikami. Każdy projekt to osobny kontener na pliki audio, transkrypcje, analizy i raporty.' },
+        { page: '/transcription',  el: '#btn_transcribe, .transcription-controls, .main-card',  text: 'Moduł transkrypcji. Tutaj wgrywasz pliki audio i uruchamiasz automatyczną transkrypcję mowy na tekst. Wspierane modele to Whisper i NeMo FastConformer. Wynik to tekst z sygnaturami czasowymi.' },
+        { page: '/diarization',    el: '#btn_diarize, .diarization-controls, .main-card',  text: 'Moduł diaryzacji mówców. Rozpoznaje kto mówi w nagraniu i dzieli tekst na segmenty przypisane do konkretnych osób. Wykorzystuje model pyannote.' },
+        { page: '/translation',    el: '.translation-controls, .main-card',  text: 'Moduł tłumaczenia offline. Tłumaczy transkrypcje na ponad 200 języków używając modelu NLLB. Wszystko działa lokalnie, bez wysyłania danych na zewnętrzne serwery.' },
+        { page: '/analysis',       el: '.analysis-tabs, .tab-bar, .main-card',  text: 'Centrum analiz. Zawiera moduły: analiza GSM, analiza AML transakcji finansowych, analiza dokumentów i czat z LLM. Każdy moduł posiada własne narzędzia wizualizacji.' },
+        { page: '/chat',           el: '.chat-container, .main-card',  text: 'Czat z modelem LLM. Możesz zadawać pytania o załadowane dokumenty i transkrypcje. Model analizuje treść i generuje odpowiedzi. Działa offline przez Ollama.' },
+        { page: '/admin',          el: '.gpu-status, .main-card',  text: 'Panel ustawień GPU. Monitorujesz tu zużycie pamięci karty graficznej, stan modeli i procesów. Ważne przy pracy z wieloma modelami jednocześnie.' },
+      ],
+    },
+    transcription: {
+      label: 'Transkrypcja',
+      steps: [
+        { page: '/transcription',  el: '.file-upload, input[type="file"], .upload-area',  text: 'Tutaj wgrywasz pliki audio do transkrypcji. Obsługiwane formaty to WAV, MP3, FLAC, OGG i inne. Możesz przeciągnąć plik lub kliknąć przycisk wyboru.' },
+        { page: '/transcription',  el: '#whisperModel, .model-select, select[name*="model"]',  text: 'Wybór modelu ASR. Whisper large v3 daje najlepszą jakość, ale wymaga więcej pamięci GPU. Mniejsze modele działają szybciej.' },
+        { page: '/transcription',  el: '#btn_transcribe, button[onclick*="transcri"]',  text: 'Przycisk uruchamiający transkrypcję. Po kliknięciu system przetwarza audio i generuje tekst z sygnaturami czasowymi.' },
+        { page: '/transcription',  el: '.transcript-output, .transcript-text, #transcriptArea',  text: 'Tutaj pojawia się wynik transkrypcji — tekst z oznaczeniami czasu. Możesz go edytować, eksportować do różnych formatów i wysłać do dalszej analizy.' },
+      ],
+    },
+    analysis_gsm: {
+      label: 'Analiza GSM',
+      steps: [
+        { page: '/analysis#gsm',  el: '.gsm-upload, .upload-area, input[type="file"]',  text: 'Wgraj plik bilingu GSM w formacie CSV lub XLSX. System automatycznie rozpozna strukturę kolumn i przeprowadzi wstępną analizę.' },
+        { page: '/analysis#gsm',  el: '.gsm-map, #gsmMap, .map-container',  text: 'Mapa z pozycjami stacji BTS. Pokazuje lokalizacje z których wykonywano połączenia. Pomaga odtworzyć trasę poruszania się.' },
+        { page: '/analysis#gsm',  el: '.gsm-timeline, .timeline, #gsmTimeline',  text: 'Oś czasu połączeń i wiadomości SMS. Wizualizuje aktywność w czasie, ułatwia wykrywanie wzorców komunikacji.' },
+        { page: '/analysis#gsm',  el: '.gsm-contacts, .contact-list',  text: 'Lista kontaktów z bilingu. Pokazuje najczęstszych rozmówców, ilość połączeń i ich czas trwania.' },
+      ],
+    },
+    analysis_aml: {
+      label: 'Analiza AML',
+      steps: [
+        { page: '/analysis#aml',  el: '.aml-upload, .upload-area',  text: 'Wgraj wyciąg bankowy w formacie MT940, CSV lub XLSX. System przeprowadzi automatyczną analizę transakcji pod kątem podejrzanych operacji.' },
+        { page: '/analysis#aml',  el: '.aml-alerts, .alert-list',  text: 'Lista alertów i podejrzanych transakcji. System wykrywa: strukturyzację kwot, transakcje okrężne, szybkie przelewy i inne anomalie.' },
+        { page: '/analysis#aml',  el: '.aml-graph, #amlGraph',  text: 'Graf powiązań między kontami. Wizualizuje przepływ pieniędzy i pomaga odkrywać sieci powiązanych kont.' },
+      ],
+    },
+    diarization: {
+      label: 'Diaryzacja',
+      steps: [
+        { page: '/diarization',  el: '.file-select, .project-files',  text: 'Wybierz plik audio z projektu do diaryzacji. Plik musi być najpierw wgrany do aktywnego projektu.' },
+        { page: '/diarization',  el: '#btn_diarize, button[onclick*="diariz"]',  text: 'Przycisk uruchamiający diaryzację. Model pyannote przeanalizuje nagranie i przypisze segmenty do poszczególnych mówców.' },
+        { page: '/diarization',  el: '.speaker-map, .diarization-result',  text: 'Wynik diaryzacji. Każdy mówca ma swój kolor. Możesz nadać mówcom imiona i edytować przypisania.' },
+      ],
+    },
+  };
+
+  var _tourActive = false;
+  var _tourSteps = [];
+  var _tourStep = 0;
+  var _tourOverlay = null;
+  var _tourSpotlight = null;
+  var _tourPointer = null;
+  var _tourTooltip = null;
+
+  function _showTourMenu(anchorEl) {
+    // Remove existing menu if any
+    var old = document.getElementById('aria-tour-menu');
+    if (old) { old.remove(); return; }
+
+    var menu = document.createElement('div');
+    menu.id = 'aria-tour-menu';
+    menu.className = 'aria-tour-menu';
+
+    var keys = Object.keys(TOUR_MODULES);
+    for (var i = 0; i < keys.length; i++) {
+      (function (key) {
+        var btn = document.createElement('button');
+        btn.className = 'aria-tour-menu-item';
+        btn.textContent = TOUR_MODULES[key].label;
+        btn.addEventListener('click', function () {
+          menu.remove();
+          _startTour(key);
+        });
+        menu.appendChild(btn);
+      })(keys[i]);
+    }
+
+    // Position near the anchor chip
+    if (AriaHUD.$hints) {
+      AriaHUD.$hints.appendChild(menu);
+    }
+
+    // Close on outside click
+    setTimeout(function () {
+      document.addEventListener('click', function _closeTourMenu(e) {
+        if (!menu.contains(e.target) && e.target !== anchorEl) {
+          menu.remove();
+          document.removeEventListener('click', _closeTourMenu);
+        }
+      });
+    }, 50);
+  }
+
+  function _startTour(moduleKey) {
+    var mod = TOUR_MODULES[moduleKey];
+    if (!mod || !mod.steps || mod.steps.length === 0) return;
+
+    _tourActive = true;
+    _tourSteps = mod.steps;
+    _tourStep = 0;
+
+    // Create overlay elements
+    _createTourOverlay();
+
+    // Add system message
+    _addMsgBubble('system', '🎯 Przewodnik: ' + mod.label + ' (' + mod.steps.length + ' kroków)');
+
+    // Start first step
+    _executeTourStep();
+  }
+
+  function _createTourOverlay() {
+    // Semi-transparent overlay
+    _tourOverlay = document.createElement('div');
+    _tourOverlay.id = 'aria-tour-overlay';
+    _tourOverlay.className = 'aria-tour-overlay';
+    document.body.appendChild(_tourOverlay);
+
+    // Spotlight cutout
+    _tourSpotlight = document.createElement('div');
+    _tourSpotlight.className = 'aria-tour-spotlight';
+    document.body.appendChild(_tourSpotlight);
+
+    // Animated pointer
+    _tourPointer = document.createElement('div');
+    _tourPointer.className = 'aria-tour-pointer';
+    _tourPointer.innerHTML = '&#9654;'; // ▶
+    document.body.appendChild(_tourPointer);
+
+    // Tooltip with text + nav buttons
+    _tourTooltip = document.createElement('div');
+    _tourTooltip.className = 'aria-tour-tooltip';
+    document.body.appendChild(_tourTooltip);
+  }
+
+  function _executeTourStep() {
+    if (!_tourActive || _tourStep >= _tourSteps.length) {
+      _endTour();
+      return;
+    }
+
+    var step = _tourSteps[_tourStep];
+
+    // Navigate if needed
+    var currentPath = location.pathname + location.hash;
+    var targetPath = step.page || '';
+    var needsNav = false;
+
+    if (targetPath) {
+      var hashIdx = targetPath.indexOf('#');
+      var pagePart = hashIdx >= 0 ? targetPath.substring(0, hashIdx) : targetPath;
+      var hashPart = hashIdx >= 0 ? targetPath.substring(hashIdx) : '';
+
+      if (pagePart && location.pathname !== pagePart) {
+        needsNav = true;
+        // Store tour state so it resumes after navigation
+        sessionStorage.setItem('aria_tour_module', JSON.stringify({
+          steps: _tourSteps,
+          step: _tourStep,
+        }));
+        window.location.href = targetPath;
+        return;
+      }
+
+      // If same page but different hash (tab), click the tab
+      if (hashPart && location.hash !== hashPart) {
+        var tabId = hashPart.substring(1);
+        var tabBtn = document.querySelector('[data-tab="' + tabId + '"], [onclick*="' + tabId + '"]');
+        if (tabBtn) tabBtn.click();
+      }
+    }
+
+    // Find and highlight element
+    setTimeout(function () {
+      _highlightElement(step);
+    }, needsNav ? 500 : 100);
+  }
+
+  function _highlightElement(step) {
+    // Try each selector (comma-separated) until one matches
+    var selectors = (step.el || '').split(',').map(function (s) { return s.trim(); });
+    var targetEl = null;
+
+    for (var i = 0; i < selectors.length; i++) {
+      try { targetEl = document.querySelector(selectors[i]); } catch (e) { /* */ }
+      if (targetEl) break;
+    }
+
+    if (targetEl) {
+      var rect = targetEl.getBoundingClientRect();
+
+      // Position spotlight
+      var pad = 12;
+      _tourSpotlight.style.left = (rect.left - pad + window.scrollX) + 'px';
+      _tourSpotlight.style.top = (rect.top - pad + window.scrollY) + 'px';
+      _tourSpotlight.style.width = (rect.width + pad * 2) + 'px';
+      _tourSpotlight.style.height = (rect.height + pad * 2) + 'px';
+      _tourSpotlight.style.display = 'block';
+
+      // Position pointer
+      _tourPointer.style.left = (rect.left - 30 + window.scrollX) + 'px';
+      _tourPointer.style.top = (rect.top + rect.height / 2 - 12 + window.scrollY) + 'px';
+      _tourPointer.style.display = 'block';
+
+      // Scroll into view
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      _tourSpotlight.style.display = 'none';
+      _tourPointer.style.display = 'none';
+    }
+
+    // Show tooltip
+    _tourTooltip.innerHTML = '';
+
+    var textDiv = document.createElement('div');
+    textDiv.className = 'aria-tour-text';
+    textDiv.textContent = step.text;
+    _tourTooltip.appendChild(textDiv);
+
+    var stepInfo = document.createElement('div');
+    stepInfo.className = 'aria-tour-step-info';
+    stepInfo.textContent = 'Krok ' + (_tourStep + 1) + ' / ' + _tourSteps.length;
+    _tourTooltip.appendChild(stepInfo);
+
+    var btnRow = document.createElement('div');
+    btnRow.className = 'aria-tour-btns';
+
+    if (_tourStep > 0) {
+      var prevBtn = document.createElement('button');
+      prevBtn.className = 'aria-confirm-btn no';
+      prevBtn.textContent = '◀ Wstecz';
+      prevBtn.onclick = function () { _tourStep--; _executeTourStep(); };
+      btnRow.appendChild(prevBtn);
+    }
+
+    var stopBtn = document.createElement('button');
+    stopBtn.className = 'aria-confirm-btn no';
+    stopBtn.textContent = '✕ Zakończ';
+    stopBtn.onclick = function () { _endTour(); };
+    btnRow.appendChild(stopBtn);
+
+    if (_tourStep < _tourSteps.length - 1) {
+      var nextBtn = document.createElement('button');
+      nextBtn.className = 'aria-confirm-btn yes';
+      nextBtn.textContent = 'Dalej ▶';
+      nextBtn.onclick = function () { _tourStep++; _executeTourStep(); };
+      btnRow.appendChild(nextBtn);
+    } else {
+      var finBtn = document.createElement('button');
+      finBtn.className = 'aria-confirm-btn yes';
+      finBtn.textContent = '✓ Koniec';
+      finBtn.onclick = function () { _endTour(); };
+      btnRow.appendChild(finBtn);
+    }
+
+    _tourTooltip.appendChild(btnRow);
+    _tourTooltip.style.display = 'block';
+
+    // Speak the step text via TTS
+    speakText(step.text);
+
+    // Show overlay
+    if (_tourOverlay) _tourOverlay.style.display = 'block';
+  }
+
+  function _endTour() {
+    _tourActive = false;
+    _tourSteps = [];
+    _tourStep = 0;
+    stopSpeech();
+
+    if (_tourOverlay) { _tourOverlay.remove(); _tourOverlay = null; }
+    if (_tourSpotlight) { _tourSpotlight.remove(); _tourSpotlight = null; }
+    if (_tourPointer) { _tourPointer.remove(); _tourPointer = null; }
+    if (_tourTooltip) { _tourTooltip.remove(); _tourTooltip = null; }
+
+    sessionStorage.removeItem('aria_tour_module');
+
+    _addMsgBubble('system', '✓ Przewodnik zakończony.');
+  }
+
+  function _resumeTourIfNeeded() {
+    try {
+      var saved = sessionStorage.getItem('aria_tour_module');
+      if (!saved) return;
+      var data = JSON.parse(saved);
+      if (data && data.steps && typeof data.step === 'number') {
+        _tourActive = true;
+        _tourSteps = data.steps;
+        _tourStep = data.step;
+        _createTourOverlay();
+        setTimeout(function () { _executeTourStep(); }, 600);
+      }
+    } catch (e) { /* */ }
   }
 
   async function _checkStatus() {
