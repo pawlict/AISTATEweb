@@ -6291,6 +6291,79 @@
     });
 
     _bindCardScreenshotButtons(row);
+
+    // Add drag handles to all chart cards for sub-element reordering
+    row.querySelectorAll(".gsm-chart-card").forEach(el => {
+      if (el.querySelector(".gsm-sub-drag-handle")) return; // already added
+      const cid = el.dataset.chartId || (el.id === "gsm_heatmap_card" ? "heatmap" : null);
+      if (!cid) return;
+      if (!el.dataset.chartId) el.dataset.chartId = cid; // normalize
+      const handle = document.createElement("div");
+      handle.className = "gsm-sub-drag-handle";
+      handle.title = "Przeciągnij aby zmienić kolejność";
+      handle.innerHTML = "⠿";
+      el.style.position = "relative";
+      el.prepend(handle);
+      el.draggable = true;
+    });
+    _bindSubelementDrag(row, "activity");
+    _applySubelementLayout();
+  }
+
+  /** Bind drag & drop for sub-elements within a section container. */
+  function _bindSubelementDrag(container, sectionId) {
+    let dragEl = null;
+    let placeholder = null;
+    container.addEventListener("dragstart", e => {
+      const handle = e.target.closest(".gsm-sub-drag-handle");
+      const card = e.target.closest(".gsm-chart-card");
+      if (!handle && !card) return;
+      if (!handle) { e.preventDefault(); return; } // only drag from handle
+      dragEl = card || handle.closest(".gsm-chart-card");
+      if (!dragEl) return;
+      dragEl.classList.add("gsm-sub-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      placeholder = document.createElement("div");
+      placeholder.className = "gsm-sub-placeholder";
+      placeholder.style.width = dragEl.offsetWidth + "px";
+      placeholder.style.height = dragEl.offsetHeight + "px";
+      requestAnimationFrame(() => {
+        if (dragEl && dragEl.parentNode) dragEl.parentNode.insertBefore(placeholder, dragEl.nextSibling);
+      });
+    });
+    container.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (!placeholder) return;
+      const target = e.target.closest(".gsm-chart-card");
+      if (!target || target === dragEl) return;
+      const rect = target.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      if (e.clientX < midX) {
+        target.parentNode.insertBefore(placeholder, target);
+      } else {
+        target.parentNode.insertBefore(placeholder, target.nextSibling);
+      }
+    });
+    container.addEventListener("dragend", () => {
+      if (dragEl) dragEl.classList.remove("gsm-sub-dragging");
+      if (placeholder && placeholder.parentNode) placeholder.remove();
+      dragEl = null;
+      placeholder = null;
+    });
+    container.addEventListener("drop", e => {
+      e.preventDefault();
+      if (!dragEl || !placeholder) return;
+      placeholder.parentNode.insertBefore(dragEl, placeholder);
+      placeholder.remove();
+      placeholder = null;
+      dragEl.classList.remove("gsm-sub-dragging");
+      // Save new order
+      const cards = [...container.querySelectorAll(".gsm-chart-card")];
+      const newOrder = cards.map(c => c.dataset.chartId).filter(Boolean);
+      _saveSubelementOrder(sectionId, newOrder);
+      dragEl = null;
+    });
   }
 
   function _renderOneChart(id, title, subtitle, d, buildTotalBars) {
@@ -13091,6 +13164,62 @@
   const _LS_LAYOUT_KEY = "gsm_section_layout";
   const _LS_HIDDEN_KEY = "gsm_section_hidden";
   const _LS_GRID_KEY   = "gsm_section_grid";
+  const _LS_SUBELM_KEY = "gsm_subelement_order";
+
+  /* Sub-element definitions for sections with draggable inner blocks */
+  const _SUBELEMENT_DEFS = {
+    activity: [
+      { id: "heatmap",  label: "Rozkład aktywności" },
+      { id: "night",    label: "Aktywność nocna" },
+      { id: "weekend",  label: "Aktywność weekendowa" },
+    ],
+  };
+
+  function _getSubelementOrder(sectionId) {
+    try {
+      const raw = localStorage.getItem(_LS_SUBELM_KEY);
+      if (raw) {
+        const all = JSON.parse(raw);
+        if (all[sectionId]) return all[sectionId];
+      }
+    } catch (_) {}
+    const def = _SUBELEMENT_DEFS[sectionId];
+    return def ? def.map(d => d.id) : [];
+  }
+
+  function _saveSubelementOrder(sectionId, order) {
+    try {
+      const raw = localStorage.getItem(_LS_SUBELM_KEY);
+      const all = raw ? JSON.parse(raw) : {};
+      all[sectionId] = order;
+      localStorage.setItem(_LS_SUBELM_KEY, JSON.stringify(all));
+    } catch (_) {}
+  }
+
+  /** Reorder sub-elements inside a section (e.g. activity chart cards). */
+  function _applySubelementLayout() {
+    // Activity row: reorder chart cards
+    const actRow = QS("#gsm_activity_row");
+    if (actRow) {
+      const order = _getSubelementOrder("activity");
+      const chartEls = {};
+      actRow.querySelectorAll(".gsm-chart-card").forEach(el => {
+        const cid = el.dataset.chartId || (el.id === "gsm_heatmap_card" ? "heatmap" : null);
+        if (cid) chartEls[cid] = el;
+      });
+      let prev = null;
+      for (const cid of order) {
+        const el = chartEls[cid];
+        if (!el) continue;
+        if (prev) {
+          prev.after(el);
+        } else {
+          actRow.prepend(el);
+        }
+        prev = el;
+      }
+    }
+  }
 
   /* Default column spans for grid mode (sections that benefit from full width) */
   const _DEFAULT_GRID_SPANS = {
@@ -13196,6 +13325,8 @@
       wrap.classList.remove("gsm-grid-layout");
       wrap.style.removeProperty("--gsm-grid-cols");
     }
+    // Apply sub-element ordering
+    _applySubelementLayout();
   }
 
   let _layoutPanelOpen = false;
@@ -13241,11 +13372,27 @@
       const vis = !hidden[id];
       const hFactor = meta.h || 1;
       const span = (gs.spans && gs.spans[id]) || 1;
-      cardsHtml += `<div class="vle-card${vis ? "" : " vle-card-hidden"}${span >= 2 ? " vle-card-wide" : ""}" draggable="true" data-sid="${id}" data-span="${span}" style="--card-accent:${meta.color};--card-h:${hFactor}">
+      // Sub-elements indicator for sections with inner blocks
+      const subDefs = _SUBELEMENT_DEFS[id];
+      let subHtml = "";
+      if (subDefs && subDefs.length > 0) {
+        const subOrder = _getSubelementOrder(id);
+        const subItems = subOrder.map(sid => subDefs.find(d => d.id === sid)).filter(Boolean);
+        subHtml = `<div class="vle-sub-list" data-sub-section="${id}">
+          ${subItems.map((s, i) => `<div class="vle-sub-item" draggable="true" data-sub-id="${s.id}">
+            <span class="vle-sub-grip">⋮⋮</span>
+            <span class="vle-sub-num">${i + 1}</span>
+            <span class="vle-sub-name">${s.label}</span>
+          </div>`).join("")}
+        </div>`;
+      }
+
+      cardsHtml += `<div class="vle-card${vis ? "" : " vle-card-hidden"}${span >= 2 ? " vle-card-wide" : ""}${subDefs ? " vle-card-has-sub" : ""}" draggable="true" data-sid="${id}" data-span="${span}" style="--card-accent:${meta.color};--card-h:${hFactor}">
         <div class="vle-card-grip">⠿</div>
         <div class="vle-card-icon"><i data-icon="${meta.icon}" data-size="14"></i></div>
         <div class="vle-card-info">
           <span class="vle-card-name">${def.label}</span>
+          ${subDefs ? '<span class="vle-card-sub-badge">' + subDefs.length + ' elementów</span>' : ''}
         </div>
         <button class="vle-card-span${gs.enabled ? "" : " vle-span-disabled"}" data-span-sid="${id}" title="${span >= 2 ? "Pełna szerokość" : "Pół szerokości"}">
           <svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="${span >= 2 ? 14 : 6}" height="10" rx="1.5" fill="currentColor" opacity=".7"/>${span < 2 ? '<rect x="8" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".2"/>' : ''}</svg>
@@ -13254,6 +13401,7 @@
           <input type="checkbox" ${vis ? "checked" : ""} data-vis-sid="${id}">
           <span class="vle-toggle-track"><span class="vle-toggle-thumb"></span></span>
         </label>
+        ${subHtml}
       </div>`;
     }
 
@@ -13371,6 +13519,7 @@
       localStorage.removeItem(_LS_LAYOUT_KEY);
       localStorage.removeItem(_LS_HIDDEN_KEY);
       localStorage.removeItem(_LS_GRID_KEY);
+      localStorage.removeItem(_LS_SUBELM_KEY);
       _applySectionLayout();
       _closeLayoutPanel();
     };
@@ -13452,6 +13601,8 @@
     let placeholder = null;
 
     cardList.addEventListener("dragstart", e => {
+      // Skip if drag started from a sub-element item
+      if (e.target.closest(".vle-sub-item")) return;
       const card = e.target.closest(".vle-card");
       if (!card) return;
       dragSid = card.dataset.sid;
@@ -13551,6 +13702,75 @@
       _applySectionLayout();
       touchDragEl = null;
     }, { passive: true });
+
+    // ── Sub-element drag within VLE cards ──
+    overlay.querySelectorAll(".vle-sub-list").forEach(subList => {
+      const sectionId = subList.dataset.subSection;
+      if (!sectionId) return;
+      let subDragEl = null;
+      let subPlaceholder = null;
+
+      subList.addEventListener("dragstart", e => {
+        const item = e.target.closest(".vle-sub-item");
+        if (!item) return;
+        e.stopPropagation(); // don't trigger parent card drag
+        subDragEl = item;
+        item.classList.add("vle-sub-dragging");
+        e.dataTransfer.effectAllowed = "move";
+        subPlaceholder = document.createElement("div");
+        subPlaceholder.className = "vle-sub-placeholder-inner";
+        subPlaceholder.style.height = item.offsetHeight + "px";
+        requestAnimationFrame(() => {
+          if (subDragEl && subDragEl.parentNode) {
+            subDragEl.parentNode.insertBefore(subPlaceholder, subDragEl.nextSibling);
+          }
+        });
+      });
+
+      subList.addEventListener("dragover", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        if (!subPlaceholder) return;
+        const target = e.target.closest(".vle-sub-item");
+        if (!target || target === subDragEl) return;
+        const rect = target.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+          target.parentNode.insertBefore(subPlaceholder, target);
+        } else {
+          target.parentNode.insertBefore(subPlaceholder, target.nextSibling);
+        }
+      });
+
+      subList.addEventListener("dragend", () => {
+        if (subDragEl) subDragEl.classList.remove("vle-sub-dragging");
+        if (subPlaceholder && subPlaceholder.parentNode) subPlaceholder.remove();
+        subDragEl = null;
+        subPlaceholder = null;
+      });
+
+      subList.addEventListener("drop", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!subDragEl || !subPlaceholder) return;
+        subPlaceholder.parentNode.insertBefore(subDragEl, subPlaceholder);
+        subPlaceholder.remove();
+        subPlaceholder = null;
+        subDragEl.classList.remove("vle-sub-dragging");
+        // Save new sub-element order
+        const items = [...subList.querySelectorAll(".vle-sub-item")];
+        const newOrder = items.map(el => el.dataset.subId).filter(Boolean);
+        _saveSubelementOrder(sectionId, newOrder);
+        // Update numbering
+        items.forEach((el, i) => {
+          const numEl = el.querySelector(".vle-sub-num");
+          if (numEl) numEl.textContent = i + 1;
+        });
+        _applySubelementLayout();
+        subDragEl = null;
+      });
+    });
   }
 
   function _closeLayoutPanel() {
