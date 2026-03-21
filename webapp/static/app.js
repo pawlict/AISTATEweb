@@ -392,6 +392,11 @@ async function api(url, opts={}){
 
 // ---------- Require active project (show dialog if missing, no redirect) ----------
 async function requireProjectId(moduleType){
+  // Skip during ARIA guided tour
+  if(sessionStorage.getItem('aria_tour_module') || window.__ariaTourActive){
+    _dbgLog("requireProjectId", "skipped — ARIA tour active");
+    return AISTATE.projectId || "tour-mode";
+  }
   _dbgLog("requireProjectId", `called with moduleType="${moduleType}", current projectId="${AISTATE.projectId}"`);
   const pid = AISTATE.projectId || "";
 
@@ -545,6 +550,9 @@ async function refreshCurrentProjectInfo(){
 
 // ---------- Project status banner (auto-injected on module pages) ----------
 async function _injectProjectBanner(){
+  // Skip project requirement during ARIA guided tour
+  if(sessionStorage.getItem('aria_tour_module') || window.__ariaTourActive) return;
+
   // Only show on module pages (not projects page itself)
   const modulePaths = ["/diarization", "/transcription", "/analysis", "/analiza", "/translation", "/chat"];
   const path = location.pathname;

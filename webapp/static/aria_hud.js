@@ -535,7 +535,10 @@
     if (fullReply && !hadError) {
       var parsed = _parseActions(fullReply);
       actions = parsed.actions;
-      cleanReply = parsed.text;
+      cleanReply = parsed.text
+        .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
+        .replace(/#{1,4}\s*/g, '')
+        .replace(/`([^`]+)`/g, '$1');
       assistantDiv.textContent = cleanReply;
       AriaHUD.messages.push({ role: 'assistant', content: cleanReply });
       AriaHUD.msgCount++;
@@ -668,6 +671,10 @@
 
         case 'start_diarization':
           _actionStartDiarization();
+          break;
+
+        case 'tour':
+          _startTour(a.param);
           break;
 
         default:
@@ -808,7 +815,12 @@
     if (!AriaHUD.ttsEnabled) return;
     sentence = sentence.trim();
     if (!sentence) return;
-    sentence = sentence.replace(/\[ACTION:[^\]]*\]/g, '').replace(/\[CONFIRM:[^\]]*\]/g, '').trim();
+    sentence = sentence.replace(/\[ACTION:[^\]]*\]/g, '').replace(/\[CONFIRM:[^\]]*\]/g, '')
+      .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')   // strip **bold** and *italic*
+      .replace(/#{1,4}\s*/g, '')                    // strip markdown headings
+      .replace(/`([^`]+)`/g, '$1')                  // strip inline code
+      .replace(/^\s*[-*]\s+/gm, '')                 // strip bullet markers
+      .trim();
     if (!sentence) return;
 
     _ttsQueue.push({ text: sentence, sid: sessionId });
@@ -1161,10 +1173,88 @@
     transcription: {
       label: 'Transkrypcja',
       steps: [
-        { page: '/transcription',  el: '.file-upload, input[type="file"], .upload-area',  text: 'Tutaj wgrywasz pliki audio do transkrypcji. Obsługiwane formaty to WAV, MP3, FLAC, OGG i inne. Możesz przeciągnąć plik lub kliknąć przycisk wyboru.' },
-        { page: '/transcription',  el: '#whisperModel, .model-select, select[name*="model"]',  text: 'Wybór modelu ASR. Whisper large v3 daje najlepszą jakość, ale wymaga więcej pamięci GPU. Mniejsze modele działają szybciej.' },
-        { page: '/transcription',  el: '#btn_transcribe, button[onclick*="transcri"]',  text: 'Przycisk uruchamiający transkrypcję. Po kliknięciu system przetwarza audio i generuje tekst z sygnaturami czasowymi.' },
-        { page: '/transcription',  el: '.transcript-output, .transcript-text, #transcriptArea',  text: 'Tutaj pojawia się wynik transkrypcji — tekst z oznaczeniami czasu. Możesz go edytować, eksportować do różnych formatów i wysłać do dalszej analizy.' },
+        // --- Wprowadzenie ---
+        { page: '/transcription',  el: '#tr_toolbar',
+          text: 'Witaj w module transkrypcji. Tutaj zamieniasz nagrania audio na tekst. Ca\u0142y proces jest zautomatyzowany \u2014 wgrywasz plik d\u017awi\u0119kowy, wybierasz model rozpoznawania mowy i klikasz przycisk. System przetworzy nagranie i wygeneruje tekst z sygnaturami czasowymi.' },
+
+        // --- ASR: co to jest ---
+        { page: '/transcription',  el: '#tr_engine',
+          text: 'Zanim przejdziemy do obs\u0142ugi, kilka s\u0142\u00f3w o technologii. A-S-R to skr\u00f3t od otomatic spicz rekogni\u0161yn, czyli automatyczne rozpoznawanie mowy. To technologia kt\u00f3ra zamienia d\u017awi\u0119k na tekst. W Aj Stejt \u0142eb masz do dyspozycji dwa silniki A-S-R.' },
+
+        // --- Whisper ---
+        { page: '/transcription',  el: '#tr_engine',
+          text: 'Pierwszy silnik to \u0142isper, stworzony przez firmę Open Ej-Aj. To obecnie najpopularniejszy model rozpoznawania mowy na \u015bwiecie. Obs\u0142uguje ponad dziewi\u0119\u0107dziesi\u0105t j\u0119zyk\u00f3w, dobrze radzi sobie z akcentami, szumem t\u0142a i mow\u0105 potoczn\u0105. Dzia\u0142a na karcie graficznej z obs\u0142ug\u0105 CUDA.' },
+
+        // --- NeMo ---
+        { page: '/transcription',  el: '#tr_engine',
+          text: 'Drugi silnik to Nemo, stworzony przez firm\u0119 NVIDIA. Modele Nemo s\u0105 zoptymalizowane pod k\u0105tem szybko\u015bci i sprawdzaj\u0105 si\u0119 szczeg\u00f3lnie dobrze w j\u0119zyku angielskim. Mog\u0105 dzia\u0142a\u0107 szybciej ni\u017c \u0142isper, ale obs\u0142uguj\u0105 mniej j\u0119zyk\u00f3w.' },
+
+        // --- Model selection ---
+        { page: '/transcription',  el: '#tr_model',
+          text: 'Wyb\u00f3r modelu A-S-R. Modele \u0142isper wyst\u0119puj\u0105 w kilku rozmiarach. Tajni \u2014 najmniejszy i najszybszy, ale najmniej dok\u0142adny. Bejs \u2014 szybki kompromis. Smol \u2014 dobra jako\u015b\u0107 przy umiarkowanych wymaganiach. Midijum \u2014 wysoka dok\u0142adno\u015b\u0107. Lard\u017c we trzy \u2014 najwy\u017csza jako\u015b\u0107, zalecany do wa\u017cnych transkrypcji ale wymaga wi\u0119cej pami\u0119ci d\u017ci-pi-ju. Turbo \u2014 to szybsza wersja lard\u017c z minimalnymi stratami jako\u015bci. Im wi\u0119kszy model, tym lepsze wyniki, ale wolniejsze przetwarzanie.' },
+
+        // --- Language ---
+        { page: '/transcription',  el: '#tr_lang',
+          text: 'Wyb\u00f3r j\u0119zyka nagrania. Opcja auto pozwala modelowi samodzielnie wykry\u0107 j\u0119zyk \u2014 dzia\u0142a dobrze w wi\u0119kszo\u015bci przypadk\u00f3w. Je\u015bli wiesz jaki to j\u0119zyk, wybierz go r\u0119cznie \u2014 to przyspieszy transkrypcj\u0119 i zwi\u0119kszy dok\u0142adno\u015b\u0107. Dost\u0119pne j\u0119zyki to mi\u0119dzy innymi: polski, angielski, niemiecki, francuski, hiszpa\u0144ski, ukrai\u0144ski i rosyjski.' },
+
+        // --- File upload ---
+        { page: '/transcription',  el: '#tr_add_file_btn',
+          text: 'Przycisk dodawania pliku audio. Kliknij aby wybra\u0107 plik z dysku. Obs\u0142ugiwane formaty to: \u0142aw, em-pe-trzy, em-cztery-a, flak, og, opus i inne popularne formaty d\u017awi\u0119kowe. Mo\u017cesz te\u017c przeci\u0105gn\u0105\u0107 plik bezpo\u015brednio na stron\u0119.' },
+
+        // --- Transcribe button ---
+        { page: '/transcription',  el: '#tr_btn',
+          text: 'Przycisk uruchamiaj\u0105cy transkrypcj\u0119. Po klikni\u0119ciu system wy\u015ble plik audio do wybranego silnika A-S-R. Proces mo\u017ce trwa\u0107 od kilku sekund do kilkunastu minut w zale\u017cno\u015bci od d\u0142ugo\u015bci nagrania i wybranego modelu. Post\u0119p widoczny jest na pasku poni\u017cej.' },
+
+        // --- Sound detection ---
+        { page: '/transcription',  el: '#tr_sound_detection_section',
+          text: 'Sekcja detekcji d\u017awi\u0119k\u00f3w. Po w\u0142\u0105czeniu tej opcji system opr\u00f3cz tekstu rozpozna r\u00f3wnie\u017c d\u017awi\u0119ki otoczenia \u2014 na przyk\u0142ad: \u015bmiech, p\u0142acz, krzyk, odg\u0142osy zwierz\u0105t, muzyk\u0119, syreny, strza\u0142y, klakson. Wyniki pojawiaj\u0105 si\u0119 w osobnym panelu obok transkrypcji. Przydatne w analizie nagra\u0144 z monitoringu lub pods\u0142uch\u00f3w.' },
+
+        // --- Report formats ---
+        { page: '/transcription',  el: '#tr_report_formats',
+          text: 'Formaty raportu. Mo\u017cesz wygenerowa\u0107 raport z transkrypcji w trzech formatach: ha-te-em-el \u2014 interaktywny raport do przegl\u0105darki z kolorami i odno\u015bnikami, dok \u2014 dokument \u0142ord do edycji, te-iks-te \u2014 czysty tekst. Mo\u017cesz zaznaczy\u0107 jeden lub wi\u0119cej format\u00f3w jednocze\u015bnie. Opcja do\u0142\u0105czenia notatki dodaje Twoje uwagi do raportu.' },
+
+        { page: '/transcription',  el: '#tr_report_save_btn',
+          text: 'Przycisk zapisu raportu. Generuje raporty w zaznaczonych formatach i zapisuje je w katalogu projektu. Raporty s\u0105 te\u017c dost\u0119pne do pobrania.' },
+
+        // --- Progress & logs ---
+        { page: '/transcription',  el: '#tr_progress',
+          text: 'Pasek post\u0119pu transkrypcji. Podczas przetwarzania pokazuje aktualny stan: procent uko\u0144czenia, etap przetwarzania i szacowany czas do ko\u0144ca. Pod spodem mo\u017cesz rozwin\u0105\u0107 szczeg\u00f3\u0142owe logi z informacjami technicznymi o procesie.' },
+
+        // --- Results: segments ---
+        { page: '/transcription',  el: '#tr_blocks',  mock: 'transcription',
+          text: 'Lista blok\u00f3w transkrypcji. Ka\u017cdy blok to fragment nagrania z sygnatur\u0105 czasow\u0105, rozpoznanym m\u00f3wc\u0105 i tekstem. Klikni\u0119cie lewym przyciskiem na blok odtwarza odpowiedni fragment audio. Klikni\u0119cie prawym przyciskiem otwiera edytor \u2014 mo\u017cesz poprawi\u0107 tekst, zmieni\u0107 nazw\u0119 m\u00f3wcy i doda\u0107 notatk\u0119.' },
+
+        // --- Single segment detail ---
+        { page: '/transcription',  el: '.seg',  mock: 'transcription',
+          text: 'Pojedynczy blok transkrypcji. Sk\u0142ada si\u0119 z trzech cz\u0119\u015bci: sygnatury czasowej po lewej \u2014 okre\u015bla pocz\u0105tek i koniec fragmentu w nagraniu. Nazwy m\u00f3wcy \u2014 system automatycznie przypisuje m\u00f3wc\u00f3w, mo\u017cesz je p\u00f3\u017aniej zmieni\u0107 na prawdziwe imiona. I tekstu wypowiedzi \u2014 edytowalnego po klikni\u0119ciu prawym przyciskiem.' },
+
+        // --- Audio player ---
+        { page: '/transcription',  el: '#tr_audio_player',  mock: 'transcription',
+          text: 'Odtwarzacz audio. Pozwala ods\u0142ucha\u0107 nagranie zsynchronizowane z transkrypcj\u0105. Przyciski: odtw\u00f3rz i zatrzymaj, przewi\u0144 pi\u0119\u0107 sekund do ty\u0142u lub do przodu. Mo\u017cesz zmieni\u0107 pr\u0119dko\u015b\u0107 odtwarzania od p\u00f3\u0142 iks do dwa iks \u2014 przydatne przy trudnych fragmentach lub d\u0142ugich nagraniach.' },
+
+        // --- Raw transcript textarea ---
+        { page: '/transcription',  el: '#tr_out',
+          text: 'Pole tekstowe z surowym wynikiem transkrypcji. To pe\u0142ny tekst bez podzia\u0142u na bloki. Mo\u017cesz go r\u0119cznie edytowa\u0107 \u2014 zmiany zapisuj\u0105 si\u0119 automatycznie w projekcie. Przydatne do szybkiego kopiowania ca\u0142ego tekstu.' },
+
+        // --- Search ---
+        { page: '/transcription',  el: '#tr_search_btn',
+          text: 'Przycisk wyszukiwania w tek\u015bcie transkrypcji. Otwiera pasek wyszukiwania z pod\u015bwietlaniem trafie\u0144, licznikiem wynik\u00f3w i nawigacj\u0105 mi\u0119dzy nimi. Wpisz szukany tekst, u\u017cyj Enter aby przej\u015b\u0107 do nast\u0119pnego trafienia, Shift plus Enter aby cofn\u0105\u0107 si\u0119, Escape aby zamkn\u0105\u0107.' },
+
+        // --- Notes panel ---
+        { page: '/transcription',  el: '.notes-panel',
+          text: 'Panel notatek po prawej stronie. Sk\u0142ada si\u0119 z dw\u00f3ch sekcji. Notatka globalna \u2014 Twoje uwagi do ca\u0142ej transkrypcji, na przyk\u0142ad kontekst nagrania, wnioski, zalecenia. Notatki do blok\u00f3w \u2014 przypisane do konkretnych fragment\u00f3w, pojawiaj\u0105 si\u0119 jako ikonka przy bloku. Wszystkie notatki zapisuj\u0105 si\u0119 automatycznie i mog\u0105 by\u0107 do\u0142\u0105czone do raportu.' },
+
+        // --- Sound events panel ---
+        { page: '/transcription',  el: '#tr_sound_events',
+          text: 'Panel wykrytych d\u017awi\u0119k\u00f3w. Je\u015bli w\u0142\u0105czy\u0142e\u015b detekcj\u0119 d\u017awi\u0119k\u00f3w, tutaj pojawi\u0105 si\u0119 wyniki. Ka\u017cdy typ d\u017awi\u0119ku ma swoj\u0105 ikon\u0119, liczb\u0119 wyst\u0105pie\u0144 i poziom pewno\u015bci detekcji. Klikni\u0119cie na d\u017awi\u0119k pod\u015bwietla odpowiednie fragmenty na osi czasu.' },
+
+        // --- Download ---
+        { page: '/transcription',  el: '#tr_download, #tr_report_save_btn',
+          text: 'Pobieranie wynik\u00f3w. Po zako\u0144czeniu transkrypcji mo\u017cesz pobra\u0107 tekst jako plik te-iks-te lub wygenerowa\u0107 pe\u0142ny raport w wybranych formatach. Raporty s\u0105 zapisywane r\u00f3wnie\u017c w katalogu projektu.' },
+
+        // --- Podsumowanie ---
+        { page: '/transcription',  el: '#tr_toolbar',
+          text: 'To wszystko o module transkrypcji. Podsumowuj\u0105c: wgraj plik audio, wybierz silnik i model A-S-R, kliknij transkrybuj. Wynik mo\u017cesz edytowa\u0107, opatrzy\u0107 notatkami i wyeksportowa\u0107 jako raport. Pami\u0119taj \u017ce im wi\u0119kszy model, tym lepsza jako\u015b\u0107, ale d\u0142u\u017csze przetwarzanie. Do szybkich test\u00f3w u\u017cyj modelu bejs lub smol. Do finalnych transkrypcji \u2014 lard\u017c we trzy. Je\u015bli masz pytania, po prostu zapytaj mnie.' },
       ],
     },
     analysis_gsm: {
@@ -1274,6 +1364,61 @@
     return container;
   }
 
+  function _createMockTranscription() {
+    // Show the blocks container
+    var blocks = document.getElementById('tr_blocks');
+    if (!blocks) return null;
+
+    if (blocks.style.display === 'none' || blocks.style.display === '') {
+      blocks._origDisplay = blocks.style.display;
+      blocks.style.display = 'block';
+      _tourMockEls.push({ restore: blocks });
+    }
+
+    // Only create if no real segments exist
+    if (blocks.querySelector('.seg:not(.aria-tour-mock)')) return blocks;
+
+    var mockSegments = [
+      { time: '0:00 \u2014 0:08', speaker: 'M\u00f3wca 1', text: 'Dzie\u0144 dobry, chcia\u0142bym z\u0142o\u017cy\u0107 zeznania w sprawie zdarzenia z dnia pi\u0119tnastego marca.' },
+      { time: '0:08 \u2014 0:14', speaker: 'M\u00f3wca 2', text: 'Prosz\u0119, niech pan usi\u0105dzie. Na pocz\u0105tek prosz\u0119 poda\u0107 swoje dane osobowe.' },
+      { time: '0:14 \u2014 0:23', speaker: 'M\u00f3wca 1', text: 'Nazywam si\u0119 Jan Kowalski, zamieszka\u0142y przy ulicy Polnej siedem w Warszawie. Numer PESEL ko\u0144czy si\u0119 na czterdzie\u015bci dwa.' },
+      { time: '0:23 \u2014 0:31', speaker: 'M\u00f3wca 2', text: 'Dzi\u0119kuj\u0119. Prosz\u0119 opisa\u0107 okoliczno\u015bci zdarzenia w\u0142asnymi s\u0142owami, od pocz\u0105tku.' },
+      { time: '0:31 \u2014 0:45', speaker: 'M\u00f3wca 1', text: 'Tego dnia oko\u0142o godziny czternastej by\u0142em w sklepie na rogu. Us\u0142ysza\u0142em ha\u0142as dochodzacy z parkingu. Kiedy wyszed\u0142em, zobaczy\u0142em dwa samochody po kolizji.' }
+    ];
+
+    for (var i = 0; i < mockSegments.length; i++) {
+      var seg = document.createElement('div');
+      seg.className = 'seg aria-tour-mock';
+      seg.setAttribute('data-idx', i);
+      seg.innerHTML = '<span class="seg-time">' + mockSegments[i].time + '</span>'
+        + ' <span class="seg-speaker" style="color:#4fc3f7;font-weight:700">' + mockSegments[i].speaker + '</span>'
+        + ' <span class="seg-text">' + mockSegments[i].text + '</span>';
+      blocks.appendChild(seg);
+      _tourMockEls.push(seg);
+    }
+
+    // Show audio player mock if needed
+    var player = document.getElementById('tr_audio_player');
+    if (player && player.children.length === 0) {
+      var mockPlayer = document.createElement('div');
+      mockPlayer.className = 'audio-player-bar aria-tour-mock';
+      mockPlayer.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.05);border-radius:6px;';
+      mockPlayer.innerHTML = '<button class="ap-btn" style="opacity:.6" title="Cofnij 5s">\u23ea</button>'
+        + '<button class="ap-btn ap-btn-play" style="font-size:1.2em" title="Odtw\u00f3rz">\u25b6</button>'
+        + '<button class="ap-btn" style="opacity:.6" title="Do przodu 5s">\u23e9</button>'
+        + '<div style="flex:1;height:4px;background:rgba(255,255,255,.15);border-radius:2px;position:relative">'
+        + '<div style="width:35%;height:100%;background:#4fc3f7;border-radius:2px"></div>'
+        + '</div>'
+        + '<span style="font-size:.75rem;opacity:.6;font-family:monospace">0:31 / 1:28</span>'
+        + '<select style="font-size:.7rem;background:transparent;color:inherit;border:1px solid rgba(255,255,255,.2);border-radius:3px;padding:1px 3px">'
+        + '<option>1x</option></select>';
+      player.appendChild(mockPlayer);
+      _tourMockEls.push(mockPlayer);
+    }
+
+    return blocks;
+  }
+
   function _removeTourMocks() {
     _tourMockEls.forEach(function (item) {
       if (item instanceof HTMLElement && item.classList && item.classList.contains('aria-tour-mock')) {
@@ -1332,6 +1477,7 @@
     if (!mod || !mod.steps || mod.steps.length === 0) return;
 
     _tourActive = true;
+    window.__ariaTourActive = true;
     _tourSteps = mod.steps;
     _tourStep = 0;
 
@@ -1470,6 +1616,12 @@
         var hasRealInvites = invCard && invCard.style.display !== 'none' && document.querySelector('#invitationList .subcard:not(.aria-tour-mock)');
         if (!hasRealInvites) {
           targetEl = _createMockInvitation();
+        }
+      } else if (step.mock === 'transcription') {
+        _createMockTranscription();
+        // Re-search for the element
+        for (var k = 0; k < selectors.length; k++) {
+          try { var f = document.querySelector(selectors[k]); if (f && f.offsetParent !== null) { targetEl = f; break; } if (f && !targetEl) targetEl = f; } catch (e3) { /* */ }
         }
       }
     }
@@ -1628,6 +1780,7 @@
 
   function _endTour() {
     _tourActive = false;
+    window.__ariaTourActive = false;
     _tourSteps = [];
     _tourStep = 0;
     _tourPaused = false;

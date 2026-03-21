@@ -57,7 +57,7 @@
 
   <!-- Input row -->
   <div class="aria-inputrow">
-    <span class="aria-input-prefix">OP&gt;</span>
+    <span class="aria-input-prefix">{{ (user.display_name or user.username or 'OP') if user else 'OP' }}&gt;</span>
     <textarea id="aria-input" class="aria-input" rows="1" placeholder="Zapytaj ARIA..."></textarea>
     <button id="aria-send" class="aria-send-btn" title="Wyślij">&#9654;</button>
     <button id="aria-tts-toggle" class="aria-tts-btn active" title="TTS aktywny">&#128266;</button>
