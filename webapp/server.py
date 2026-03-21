@@ -64,6 +64,7 @@ from webapp.routers import report_profiles as report_profiles_router
 from webapp.routers import messages as messages_router
 from webapp.routers import workspaces as workspaces_router
 from webapp.routers import crypto as crypto_router
+from webapp.routers import aria as aria_router
 
 try:
     from markdown import markdown as md_to_html  # type: ignore
@@ -1860,6 +1861,10 @@ app.include_router(gsm_router.router)
 # Crypto analysis router
 app.include_router(crypto_router.router)
 
+# ARIA HUD — Analytical Response & Intelligence Assistant
+aria_router.init(ollama_client=OLLAMA, app_log_fn=app_log, get_settings=load_settings)
+app.include_router(aria_router.router)
+
 # Report profiles router
 app.include_router(report_profiles_router.router)
 
@@ -2338,6 +2343,8 @@ def render_page(request: Request, tpl: str, title: str, active: str, current_pro
             "multiuser": multiuser,
             "user": user,
             "user_modules": user_modules,
+            "aria_enabled": getattr(settings, "aria_enabled", False),
+            "aria_tts_enabled": getattr(settings, "aria_tts_enabled", True),
             **ctx,
         },
     )
@@ -3287,6 +3294,15 @@ def api_save_settings(payload: Dict[str, Any]) -> Any:
             s.encryption_method = em
     if "encryption_force_new_projects" in payload:
         s.encryption_force_new_projects = bool(payload["encryption_force_new_projects"])
+    # ARIA HUD settings
+    if "aria_enabled" in payload:
+        s.aria_enabled = bool(payload["aria_enabled"])
+    if "aria_tts_enabled" in payload:
+        s.aria_tts_enabled = bool(payload["aria_tts_enabled"])
+    if "aria_voice" in payload:
+        av = str(payload["aria_voice"])
+        if av in ("pl_PL-gosia-medium", "pl_PL-darkman-medium"):
+            s.aria_voice = av
     save_settings(s)
     return {"ok": True}
 
@@ -3309,6 +3325,9 @@ def api_get_security_settings(request: Request) -> Any:
         "encryption_method": getattr(s, "encryption_method", "standard"),
         "encryption_force_new_projects": getattr(s, "encryption_force_new_projects", False),
         "encryption_master_key_initialized": getattr(s, "encryption_master_key_initialized", False),
+        "aria_enabled": getattr(s, "aria_enabled", False),
+        "aria_voice": getattr(s, "aria_voice", "pl_PL-gosia-medium"),
+        "aria_tts_enabled": getattr(s, "aria_tts_enabled", True),
     }
 
 

@@ -1086,7 +1086,30 @@
         if (btnBackup) btnBackup.style.display = mkInit ? '' : 'none';
         if (btnVerify) btnVerify.style.display = mkInit ? '' : 'none';
         if (keyStatus) keyStatus.textContent = mkInit ? '✓ Klucz główny zainicjalizowany / Master Key initialized' : '';
+        // ARIA settings
+        el = document.getElementById('secAriaEnabled');
+        if (el) el.checked = !!data.aria_enabled;
+        el = document.getElementById('secAriaTtsEnabled');
+        if (el) el.checked = data.aria_tts_enabled !== false;
+        el = document.getElementById('secAriaVoice');
+        if (el) el.value = data.aria_voice || 'pl_PL-gosia-medium';
+        // Check ARIA subsystem status
+        _checkAriaStatus();
       }
+    } catch (e) { /* ignore */ }
+  }
+
+  async function _checkAriaStatus() {
+    try {
+      var res = await fetch('/api/aria/status');
+      var data = await res.json();
+      var el = document.getElementById('ariaStatusInfo');
+      if (!el) return;
+      var parts = [];
+      parts.push('Ollama: ' + (data.ollama ? '✓' : '✗'));
+      parts.push('Piper: ' + (data.piper_installed ? '✓' : '✗'));
+      parts.push('Model głosu: ' + (data.voice_model ? '✓ ' + data.voice : '✗ brak'));
+      el.textContent = parts.join(' | ');
     } catch (e) { /* ignore */ }
   }
 
