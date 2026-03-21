@@ -1062,7 +1062,7 @@
     all: {
       label: 'Cała aplikacja',
       steps: [
-        { page: '/projects',      el: '#projectsApp',  text: 'To jest strona projektów — centralny punkt pracy z platformą. Tutaj tworzysz nowe projekty analityczne, otwierasz istniejące, zarządzasz plikami, zapraszasz członków zespołu i eksportujesz wyniki. Każdy projekt to osobny kontener na pliki audio, transkrypcje, analizy i raporty.' },
+        { page: '/projects',      el: '#projectsApp',  text: 'To jest strona projekt\u00f3w \u2014 centralny punkt pracy z platform\u0105 Aj Stejt \u0142eb. Tutaj tworzysz nowe projekty analityczne, otwierasz istniej\u0105ce, zarz\u0105dzasz plikami, zapraszasz cz\u0142onk\u00f3w zespo\u0142u i eksportujesz wyniki. Ka\u017cdy projekt to osobny kontener na pliki audio, transkrypcje, analizy i raporty.' },
         { page: '/transcription',  el: '.main-card',  text: 'Moduł transkrypcji. Tutaj wgrywasz pliki audio i uruchamiasz automatyczną transkrypcję mowy na tekst. Wspierane modele to Whisper i NeMo FastConformer. Wynik to tekst z sygnaturami czasowymi.' },
         { page: '/diarization',    el: '.main-card',  text: 'Moduł diaryzacji mówców. Rozpoznaje kto mówi w nagraniu i dzieli tekst na segmenty przypisane do konkretnych osób. Wykorzystuje model pyannote.' },
         { page: '/translation',    el: '.main-card',  text: 'Moduł tłumaczenia offline. Tłumaczy transkrypcje na ponad 200 języków używając modelu NLLB. Wszystko działa lokalnie, bez wysyłania danych na zewnętrzne serwery.' },
@@ -1072,90 +1072,87 @@
       ],
     },
     projects: {
-      label: 'Projekty (szczegółowo)',
+      label: 'Projekty (szczeg\u00f3\u0142owo)',
       steps: [
         // --- Widok ogólny ---
         { page: '/projects',  el: '#projectsApp',
-          text: 'Strona projektów. Widoczna jest lista Twoich projektów, pasek narzędzi u góry z przyciskami akcji oraz sekcja zaproszeń jeśli ktoś Cię zaprosił do współpracy. Projekty mogą być indywidualne lub współdzielone z innymi użytkownikami.' },
+          text: 'Strona projekt\u00f3w Aj Stejt \u0142eb. Widoczna jest lista Twoich projekt\u00f3w, pasek narz\u0119dzi u g\u00f3ry z przyciskami akcji oraz sekcja zaprosze\u0144 je\u015bli kto\u015b Ci\u0119 zaprosi\u0142 do wsp\u00f3\u0142pracy. Projekty mog\u0105 by\u0107 indywidualne lub wsp\u00f3\u0142dzielone z innymi u\u017cytkownikami.' },
 
         // --- Pasek narzędzi ---
         { page: '/projects',  el: '#projects_toolbar',
-          text: 'Pasek narzędzi projektu. Zawiera wszystkie główne akcje: tworzenie nowego projektu, import i eksport, zapraszanie użytkowników, zarządzanie członkami i usuwanie projektów. Przyciski aktywują się w zależności od wybranego projektu i Twoich uprawnień.' },
+          text: 'Pasek narz\u0119dzi projektu. Zawiera wszystkie g\u0142\u00f3wne akcje: tworzenie nowego projektu, import i eksport, zapraszanie u\u017cytkownik\u00f3w, zarz\u0105dzanie cz\u0142onkami i usuwanie projekt\u00f3w. Przyciski aktywuj\u0105 si\u0119 w zale\u017cno\u015bci od wybranego projektu i Twoich uprawnie\u0144.' },
 
         // --- Tworzenie nowego projektu ---
         { page: '/projects',  el: '#btnNewProject',
-          text: 'Przycisk tworzenia nowego projektu. Po kliknięciu otworzy się okno dialogowe z formularzem. Możesz go też wywołać mówiąc do mnie: utwórz nowy projekt.' },
+          text: 'Przycisk tworzenia nowego projektu. Po klikni\u0119ciu otworzy si\u0119 okno dialogowe z formularzem. Mo\u017cesz go te\u017c wywo\u0142a\u0107 m\u00f3wi\u0105c do mnie: utw\u00f3rz nowy projekt.' },
 
         // --- Okno tworzenia (otwieramy modal) ---
-        { page: '/projects',  el: '#modalNewProject',  openModal: '#btnNewProject',
-          text: 'Okno tworzenia nowego projektu. Znajdziesz tu cztery sekcje: nazwę projektu, wybór typu, opcjonalne powiązanie z workspace oraz checkbox szyfrowania.' },
+        { page: '/projects',  el: '#modalNewProject .modal-panel',  openModal: '#btnNewProject',
+          text: 'Okno tworzenia nowego projektu. Znajdziesz tu trzy sekcje: nazw\u0119 projektu, wyb\u00f3r typu oraz opcjonalne powi\u0105zanie z \u0142orkspejs.' },
 
         { page: '/projects',  el: '#npName',  keepModal: true,
-          text: 'Pole nazwy projektu. Wpisz opisową nazwę, na przykład: Przesłuchanie świadka A, Billing GSM podejrzanego, Analiza konta firmowego. Nazwa pojawi się na karcie projektu i w plikach eksportu.' },
+          text: 'Pole nazwy projektu. Wpisz opisow\u0105 nazw\u0119, na przyk\u0142ad: Przes\u0142uchanie \u015bwiadka A, Billing GSM podejrzanego, Analiza konta firmowego. Je\u015bli projekt o takiej nazwie ju\u017c istnieje, system automatycznie doda dat\u0119 i godzin\u0119 do nazwy, \u017ceby unikn\u0105\u0107 konfliktu.' },
 
         { page: '/projects',  el: '#npTypes',  keepModal: true,
-          text: 'Wybór typu projektu. Dostępne typy: Transkrypcja, Diaryzacja, Analiza, Czat LLM, Tłumaczenie i Ogólny. Typ określa domyślny moduł powiązany z projektem, ale nie ogranicza dostępu do innych modułów — każdy projekt może korzystać ze wszystkich funkcji platformy.' },
+          text: 'Wyb\u00f3r typu projektu. Dost\u0119pne typy: Transkrypcja, Diaryzacja, Analiza, Czat LLM, T\u0142umaczenie i Og\u00f3lny. Typ okre\u015bla domy\u015blny modu\u0142 powi\u0105zany z projektem, ale nie ogranicza dost\u0119pu do innych modu\u0142\u00f3w \u2014 ka\u017cdy projekt mo\u017ce korzysta\u0107 ze wszystkich funkcji platformy.' },
 
         { page: '/projects',  el: '#npLinkTo',  keepModal: true,
-          text: 'Powiązanie z workspace. Opcjonalnie możesz przypisać projekt do istniejącej przestrzeni roboczej. Workspace grupuje powiązane projekty — na przykład wszystkie projekty dotyczące jednej sprawy. Pozostaw puste jeśli projekt jest samodzielny.' },
-
-        { page: '/projects',  el: '#npEncryptionRow, #npEncrypted',  keepModal: true,
-          text: 'Checkbox szyfrowania projektu. Gdy zaznaczony, wszystkie pliki w projekcie będą szyfrowane na dysku algorytmem AES-256. Nawet jeśli ktoś uzyska dostęp do serwera, nie odczyta zaszyfrowanych plików bez klucza. Metoda szyfrowania zależy od polityki ustawionej przez administratora: lekka, standardowa lub maksymalna.' },
+          text: 'Powi\u0105zanie z \u0142orkspejs. Opcjonalnie mo\u017cesz przypisa\u0107 projekt do istniej\u0105cej przestrzeni roboczej. \u0141orkspejs grupuje powi\u0105zane projekty \u2014 na przyk\u0142ad wszystkie projekty dotycz\u0105ce jednej sprawy. Pozostaw puste je\u015bli projekt jest samodzielny.' },
 
         { page: '/projects',  el: '#npSubmit',  keepModal: true,
-          text: 'Przycisk zatwierdzający utworzenie projektu. Po kliknięciu projekt zostanie utworzony i pojawi się na liście. Jeśli szyfrowanie jest włączone, klucz projektu zostanie wygenerowany automatycznie.' },
+          text: 'Przycisk zatwierdzaj\u0105cy utworzenie projektu. Po klikni\u0119ciu projekt zostanie utworzony i pojawi si\u0119 na li\u015bcie.' },
 
         // --- Zamykamy modal, wracamy do listy ---
         { page: '/projects',  el: '#projectList, #projectEmpty',  closeModal: true,
-          text: 'Lista projektów. Każdy projekt wyświetla się jako karta z nazwą, typem, datą utworzenia i przyciskami akcji. Jeśli lista jest pusta, zobaczysz komunikat z zachętą do utworzenia pierwszego projektu.' },
+          text: 'Lista projekt\u00f3w. Ka\u017cdy projekt wy\u015bwietla si\u0119 jako karta z nazw\u0105, typem, dat\u0105 utworzenia i przyciskami akcji. Je\u015bli lista jest pusta, zobaczysz komunikat z zach\u0119t\u0105 do utworzenia pierwszego projektu.' },
 
         // --- Karta projektu ---
         { page: '/projects',  el: '.sp-card, #projectList',
-          text: 'Karta projektu. Kliknięcie otwiera projekt i aktywuje go jako bieżący. Na karcie widzisz: ikonę typu, nazwę projektu, informację o właścicielu i członkach zespołu, oraz przyciski akcji po prawej stronie.' },
+          text: 'Karta projektu. Klikni\u0119cie otwiera projekt i aktywuje go jako bie\u017c\u0105cy. Na karcie widzisz: ikon\u0119 typu, nazw\u0119 projektu, informacj\u0119 o w\u0142a\u015bcicielu i cz\u0142onkach zespo\u0142u, oraz przyciski akcji po prawej stronie.' },
 
         { page: '/projects',  el: '.sp-card-actions, .sp-open',
-          text: 'Przyciski akcji na karcie. Od lewej: Otwórz projekt, Zaproś użytkownika, Zarządzaj członkami, Usuń projekt. Dostępność przycisków zależy od Twojej roli — właściciel widzi wszystko, zwykły członek może tylko otwierać.' },
+          text: 'Przyciski akcji na karcie. Od lewej: Otw\u00f3rz projekt, Zapro\u015b u\u017cytkownika, Zarz\u0105dzaj cz\u0142onkami, Usu\u0144 projekt. Dost\u0119pno\u015b\u0107 przycisk\u00f3w zale\u017cy od Twojej roli \u2014 w\u0142a\u015bciciel widzi wszystko, zwyk\u0142y cz\u0142onek mo\u017ce tylko otwiera\u0107.' },
 
         // --- Import ---
         { page: '/projects',  el: '#btnImportProject',
-          text: 'Import projektu. Wczytuje projekt z pliku w formacie aistate. Plik aistate to skompresowane archiwum zawierające wszystkie dane projektu: transkrypcje, analizy, ustawienia i opcjonalnie pliki audio. Import odtwarza pełną strukturę projektu.' },
+          text: 'Import projektu. Wczytuje projekt z pliku w formacie aj stejt. Plik aj stejt to skompresowane archiwum zawieraj\u0105ce wszystkie dane projektu: transkrypcje, analizy, ustawienia i opcjonalnie pliki audio. Import odtwarza pe\u0142n\u0105 struktur\u0119 projektu.' },
 
         // --- Eksport ---
         { page: '/projects',  el: '#btnExportProject',
-          text: 'Eksport projektu. Zapisuje cały projekt do pliku aistate, który możesz przenieść na inny komputer, zarchiwizować lub udostępnić. Jeśli projekt jest zaszyfrowany, eksport zachowuje szyfrowanie — potrzebujesz hasła aby go otworzyć na innej instancji.' },
+          text: 'Eksport projektu. Zapisuje ca\u0142y projekt do pliku aj stejt, kt\u00f3ry mo\u017cesz przenie\u015b\u0107 na inny komputer, zarchiwizowa\u0107 lub udost\u0119pni\u0107. Je\u015bli projekt jest zaszyfrowany, eksport zachowuje szyfrowanie.' },
 
         // --- Zapraszanie użytkowników ---
         { page: '/projects',  el: '#btnInviteUser',
-          text: 'Zapraszanie użytkownika do projektu. Otwiera formularz gdzie podajesz nazwę użytkownika, wybierasz rolę i opcjonalnie dodajesz wiadomość. Zaproszenie pojawi się u użytkownika w sekcji Zaproszenia na stronie projektów.' },
+          text: 'Zapraszanie u\u017cytkownika do projektu. Otwiera formularz gdzie podajesz nazw\u0119 u\u017cytkownika, wybierasz rol\u0119 i opcjonalnie dodajesz wiadomo\u015b\u0107. Zaproszenie pojawi si\u0119 u u\u017cytkownika w sekcji Zaproszenia na stronie projekt\u00f3w.' },
 
-        { page: '/projects',  el: '#modalInviteUser',  openModal: '#btnInviteUser',
-          text: 'Formularz zaproszenia. Pola: wybór projektu, nazwa użytkownika do zaproszenia, rola w projekcie i opcjonalna wiadomość. Dostępne role to: przeglądający — może czytać, edytor — może modyfikować, menedżer — pełne uprawnienia oprócz usuwania projektu.' },
+        { page: '/projects',  el: '#modalInviteUser .modal-panel',  openModal: '#btnInviteUser',
+          text: 'Formularz zaproszenia. Pola: wyb\u00f3r projektu, nazwa u\u017cytkownika do zaproszenia, rola w projekcie i opcjonalna wiadomo\u015b\u0107. Dost\u0119pne role to: przegl\u0105daj\u0105cy \u2014 mo\u017ce czyta\u0107, edytor \u2014 mo\u017ce modyfikowa\u0107, mened\u017cer \u2014 pe\u0142ne uprawnienia opr\u00f3cz usuwania projektu.' },
 
         // --- Zarządzanie członkami ---
         { page: '/projects',  el: '#btnManageMembers',  closeModal: true,
-          text: 'Zarządzanie członkami projektu. Otwiera listę wszystkich osób z dostępem do wybranego projektu. Możesz zmienić rolę członka, usunąć go z projektu lub zobaczyć kto jest właścicielem.' },
+          text: 'Zarz\u0105dzanie cz\u0142onkami projektu. Otwiera list\u0119 wszystkich os\u00f3b z dost\u0119pem do wybranego projektu. Mo\u017cesz zmieni\u0107 rol\u0119 cz\u0142onka, usun\u0105\u0107 go z projektu lub zobaczy\u0107 kto jest w\u0142a\u015bcicielem.' },
 
         // --- Zaproszenia przychodzące ---
         { page: '/projects',  el: '#invitationsCard, #invitationList',
-          text: 'Sekcja zaproszeń. Jeśli inny użytkownik zaprosił Cię do swojego projektu, zaproszenie pojawi się tutaj. Przy każdym zaproszeniu widzisz: kto Cię zaprosił, do jakiego projektu, z jaką rolą oraz ewentualną wiadomość. Kliknij Akceptuj aby dołączyć lub Odrzuć aby odmówić.' },
+          text: 'Sekcja zaprosze\u0144. Je\u015bli inny u\u017cytkownik zaprosi\u0142 Ci\u0119 do swojego projektu, zaproszenie pojawi si\u0119 tutaj. Przy ka\u017cdym zaproszeniu widzisz: kto Ci\u0119 zaprosi\u0142, do jakiego projektu, z jak\u0105 rol\u0105 oraz ewentualn\u0105 wiadomo\u015b\u0107. Kliknij Akceptuj aby do\u0142\u0105czy\u0107 lub Odrzu\u0107 aby odm\u00f3wi\u0107.' },
 
         // --- Usuwanie projektów (toolbar) ---
         { page: '/projects',  el: '#btnDeleteProject',
-          text: 'Usuwanie projektu z paska narzędzi. Otwiera okno dialogowe z listą Twoich projektów do usunięcia. Możesz usunąć tylko projekty których jesteś właścicielem.' },
+          text: 'Usuwanie projektu z paska narz\u0119dzi. Otwiera okno dialogowe z list\u0105 Twoich projekt\u00f3w do usuni\u0119cia. Mo\u017cesz usun\u0105\u0107 tylko projekty kt\u00f3rych jeste\u015b w\u0142a\u015bcicielem.' },
 
         // --- Usuwanie projektów (modal) ---
-        { page: '/projects',  el: '#modalDeleteProject',  openModal: '#btnDeleteProject',
-          text: 'Okno usuwania projektu. Wybierasz projekt z listy i metodę kasowania danych. Dostępne są cztery metody kasowania danych z dysku.' },
+        { page: '/projects',  el: '#modalDeleteProject .modal-panel',  openModal: '#btnDeleteProject',
+          text: 'Okno usuwania projektu. Wybierasz projekt z listy i metod\u0119 kasowania danych. Dost\u0119pne s\u0105 cztery metody kasowania danych z dysku.' },
 
         { page: '/projects',  el: '#delProjWipeMethod',  keepModal: true,
-          text: 'Metody bezpiecznego kasowania danych: Pierwsza — szybkie usunięcie, pliki znikają z systemu ale mogą być teoretycznie odzyskane. Druga — jednokrotne nadpisanie losowymi danymi, bezpieczne dla większości zastosowań. Trzecia — HMG IS5, trzykrotne nadpisanie według brytyjskiego standardu rządowego. Czwarta — metoda Gutmanna, 35-krotne nadpisanie — najwolniejsza ale najbezpieczniejsza, uniemożliwia odzyskanie nawet w laboratorium.' },
+          text: 'Metody bezpiecznego kasowania danych: Pierwsza \u2014 szybkie usuni\u0119cie, pliki znikaj\u0105 z systemu ale mog\u0105 by\u0107 teoretycznie odzyskane. Druga \u2014 jednokrotne nadpisanie losowymi danymi, bezpieczne dla wi\u0119kszo\u015bci zastosowa\u0144. Trzecia \u2014 HMG IS5, trzykrotne nadpisanie wed\u0142ug brytyjskiego standardu rz\u0105dowego. Czwarta \u2014 metoda Gutmanna, 35-krotne nadpisanie \u2014 najwolniejsza ale najbezpieczniejsza, uniemo\u017cliwia odzyskanie nawet w laboratorium.' },
 
         { page: '/projects',  el: '#delProjConfirm',  keepModal: true,
-          text: 'Przycisk potwierdzający usunięcie. Operacja jest nieodwracalna! Po kliknięciu wszystkie pliki projektu zostaną skasowane wybraną metodą, a metadane usunięte z bazy danych. Przed kliknięciem upewnij się że wybrałeś właściwy projekt.' },
+          text: 'Przycisk potwierdzaj\u0105cy usuni\u0119cie. Operacja jest nieodwracalna! Po klikni\u0119ciu wszystkie pliki projektu zostan\u0105 skasowane wybran\u0105 metod\u0105, a metadane usuni\u0119te z bazy danych. Przed klikni\u0119ciem upewnij si\u0119 \u017ce wybra\u0142e\u015b w\u0142a\u015bciwy projekt.' },
 
         // --- Koniec ---
         { page: '/projects',  el: '#projectsApp',  closeModal: true,
-          text: 'To wszystko o zarządzaniu projektami. Pamiętaj: projekty to podstawa pracy z platformą. Stwórz projekt, wgraj pliki, uruchom transkrypcję lub analizę. Jeśli pracujesz w zespole, zaproś członków i przydziel im odpowiednie role.' },
+          text: 'To wszystko o zarz\u0105dzaniu projektami w Aj Stejt \u0142eb. Pami\u0119taj: projekty to podstawa pracy z platform\u0105. Stw\u00f3rz projekt, wgraj pliki, uruchom transkrypcj\u0119 lub analiz\u0119. Je\u015bli pracujesz w zespole, zapro\u015b cz\u0142onk\u00f3w i przydziel im odpowiednie role.' },
       ],
     },
     transcription: {
@@ -1202,6 +1199,8 @@
   var _tourPointer = null;
   var _tourTooltip = null;
   var _tourHighlightedEl = null;  // currently brightened element
+  var _tourAutoTimer = null;      // auto-advance timer
+  var _tourPaused = false;        // user clicked tooltip → paused
 
   function _showTourMenu(anchorEl) {
     // Remove existing menu if any
@@ -1409,13 +1408,38 @@
       _tourPointer.style.display = 'none';
     }
 
+    // Clear any pending auto-advance
+    if (_tourAutoTimer) { clearTimeout(_tourAutoTimer); _tourAutoTimer = null; }
+    _tourPaused = false;
+
     // Show tooltip
     _tourTooltip.innerHTML = '';
 
     var textDiv = document.createElement('div');
     textDiv.className = 'aria-tour-text';
     textDiv.textContent = step.text;
+    // Click on text = pause auto-advance
+    textDiv.style.cursor = 'pointer';
+    textDiv.title = 'Kliknij aby wstrzyma\u0107 / wznowi\u0107';
+    textDiv.addEventListener('click', function () {
+      _tourPaused = !_tourPaused;
+      if (_tourPaused) {
+        if (_tourAutoTimer) { clearTimeout(_tourAutoTimer); _tourAutoTimer = null; }
+        textDiv.style.borderLeft = '3px solid var(--aria-amber)';
+        pauseLabel.textContent = '\u275a\u275a PAUZA \u2014 kliknij tekst lub Dalej';
+        pauseLabel.style.display = 'block';
+      } else {
+        textDiv.style.borderLeft = '';
+        pauseLabel.style.display = 'none';
+        _tourAutoAdvance();
+      }
+    });
     _tourTooltip.appendChild(textDiv);
+
+    var pauseLabel = document.createElement('div');
+    pauseLabel.className = 'aria-tour-pause-label';
+    pauseLabel.style.display = 'none';
+    _tourTooltip.appendChild(pauseLabel);
 
     var stepInfo = document.createElement('div');
     stepInfo.className = 'aria-tour-step-info';
@@ -1428,27 +1452,27 @@
     if (_tourStep > 0) {
       var prevBtn = document.createElement('button');
       prevBtn.className = 'aria-confirm-btn no';
-      prevBtn.textContent = '◀ Wstecz';
-      prevBtn.onclick = function () { _tourStep--; _executeTourStep(); };
+      prevBtn.textContent = '\u25c0 Wstecz';
+      prevBtn.onclick = function () { _tourPaused = false; _tourStep--; _executeTourStep(); };
       btnRow.appendChild(prevBtn);
     }
 
     var stopBtn = document.createElement('button');
     stopBtn.className = 'aria-confirm-btn no';
-    stopBtn.textContent = '✕ Zakończ';
+    stopBtn.textContent = '\u2715 Zako\u0144cz';
     stopBtn.onclick = function () { _endTour(); };
     btnRow.appendChild(stopBtn);
 
     if (_tourStep < _tourSteps.length - 1) {
       var nextBtn = document.createElement('button');
       nextBtn.className = 'aria-confirm-btn yes';
-      nextBtn.textContent = 'Dalej ▶';
-      nextBtn.onclick = function () { _tourStep++; _executeTourStep(); };
+      nextBtn.textContent = 'Dalej \u25b6';
+      nextBtn.onclick = function () { _tourPaused = false; _tourStep++; _executeTourStep(); };
       btnRow.appendChild(nextBtn);
     } else {
       var finBtn = document.createElement('button');
       finBtn.className = 'aria-confirm-btn yes';
-      finBtn.textContent = '✓ Koniec';
+      finBtn.textContent = '\u2713 Koniec';
       finBtn.onclick = function () { _endTour(); };
       btnRow.appendChild(finBtn);
     }
@@ -1459,14 +1483,47 @@
     // Speak the step text via TTS
     speakText(step.text);
 
+    // Schedule auto-advance: 3 seconds after TTS finishes
+    _tourAutoAdvance();
+
     // Show overlay
     if (_tourOverlay) _tourOverlay.style.display = 'block';
+  }
+
+  /**
+   * Auto-advance to next tour step 3 seconds after TTS finishes.
+   * Polls every 500ms to check if TTS is done.
+   */
+  function _tourAutoAdvance() {
+    if (_tourAutoTimer) clearTimeout(_tourAutoTimer);
+    if (!_tourActive || _tourPaused) return;
+
+    // If this is the last step, don't auto-advance
+    if (_tourStep >= _tourSteps.length - 1) return;
+
+    _tourAutoTimer = setTimeout(function _checkTTSDone() {
+      if (!_tourActive || _tourPaused) return;
+      // Check if TTS is still playing or fetching
+      if (_ttsPlaying || _ttsQueue.length > 0 || _ttsAudioQueue.length > 0 || _ttsFetching) {
+        // Still speaking — check again in 500ms
+        _tourAutoTimer = setTimeout(_checkTTSDone, 500);
+      } else {
+        // TTS done — wait 3 seconds then advance
+        _tourAutoTimer = setTimeout(function () {
+          if (!_tourActive || _tourPaused) return;
+          _tourStep++;
+          _executeTourStep();
+        }, 3000);
+      }
+    }, 500);
   }
 
   function _endTour() {
     _tourActive = false;
     _tourSteps = [];
     _tourStep = 0;
+    _tourPaused = false;
+    if (_tourAutoTimer) { clearTimeout(_tourAutoTimer); _tourAutoTimer = null; }
     stopSpeech();
     _unhighlightPrev();
 

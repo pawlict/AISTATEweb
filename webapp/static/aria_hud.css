@@ -697,26 +697,29 @@
 .aria-tour-active {
   position: relative !important;
   z-index: 8002 !important;
-  background: rgba(0, 212, 200, 0.12) !important;
-  box-shadow: 0 0 30px rgba(0, 212, 200, 0.4), inset 0 0 0 2px rgba(0, 212, 200, 0.35) !important;
-  filter: brightness(1.5) !important;
+  box-shadow: 0 0 25px rgba(0, 212, 200, 0.35), inset 0 0 0 2px rgba(0, 212, 200, 0.3) !important;
+  filter: brightness(1.25) !important;
   transition: filter 0.3s ease, box-shadow 0.3s ease !important;
 }
 
-/* Everything inside the active element also gets brightened */
-.aria-tour-active * {
-  filter: brightness(1.2) !important;
-}
+/* Icons inside highlighted elements — make very visible */
 .aria-tour-active img {
-  filter: brightness(2.0) drop-shadow(0 0 4px rgba(0, 212, 200, 0.6)) !important;
+  filter: brightness(1.8) drop-shadow(0 0 4px rgba(0, 212, 200, 0.6)) !important;
   opacity: 1 !important;
 }
 
-/* For dark-themed pages, make the brightening even more visible */
-[data-theme="dark"] .aria-tour-active,
-.dark .aria-tour-active {
-  background: rgba(0, 212, 200, 0.18) !important;
-  filter: brightness(1.8) !important;
+/* Modal panels highlighted — subtle brightening (not blinding) */
+.modal-panel.aria-tour-active {
+  filter: brightness(1.05) !important;
+  box-shadow: 0 0 40px rgba(0, 212, 200, 0.2), 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Individual fields inside modals — subtle highlight */
+input.aria-tour-active,
+select.aria-tour-active,
+button.aria-tour-active,
+div.aria-tour-active:not(.modal-panel) {
+  background: rgba(0, 212, 200, 0.06) !important;
 }
 
 /* Tour active on modals — ensure they appear above the overlay */
@@ -732,6 +735,22 @@
 }
 .modal-overlay:has(.aria-tour-active) .modal-panel {
   z-index: 8200 !important;
+}
+
+/* Pause indicator */
+.aria-tour-pause-label {
+  color: var(--aria-amber);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 4px 0;
+  text-align: center;
+  animation: ariaTourBlink 1s ease-in-out infinite;
+}
+
+@keyframes ariaTourBlink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
 }
 
 /* Animated pointer arrow */
