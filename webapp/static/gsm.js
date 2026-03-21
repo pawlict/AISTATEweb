@@ -13804,6 +13804,27 @@
     });
     closeBtn.focus();
 
+    // Apply grid mode to card list so VLE mirrors actual layout
+    const cardListEl = overlay.querySelector("#vle_card_list");
+    const _syncVleGrid = () => {
+      const g = _getGridSettings();
+      if (g.enabled) {
+        cardListEl.classList.add("vle-grid-mode");
+        cardListEl.style.setProperty("--vle-grid-cols", g.columns);
+      } else {
+        cardListEl.classList.remove("vle-grid-mode");
+        cardListEl.style.removeProperty("--vle-grid-cols");
+      }
+    };
+    _syncVleGrid();
+
+    // Debounced layout application — batch rapid changes
+    let _layoutTimer = null;
+    const _debouncedApply = () => {
+      if (_layoutTimer) clearTimeout(_layoutTimer);
+      _layoutTimer = setTimeout(() => { _applySectionLayout(); _layoutTimer = null; }, 150);
+    };
+
     // Reset button
     overlay.querySelector("#vle_reset").onclick = () => {
       localStorage.removeItem(_lsKey(_LS_LAYOUT_KEY));
@@ -13933,13 +13954,15 @@
       g.enabled = !g.enabled;
       _saveGridSettings(g);
       _updateGridUI(g.enabled);
-      _applySectionLayout();
+      _syncVleGrid();
+      _debouncedApply();
     };
     colsSelect.onchange = () => {
       const g = _getGridSettings();
       g.columns = parseInt(colsSelect.value, 10) || 2;
       _saveGridSettings(g);
-      _applySectionLayout();
+      _syncVleGrid();
+      _debouncedApply();
     };
 
     // Column span buttons
@@ -13964,7 +13987,7 @@
         ? '<svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="14" height="10" rx="1.5" fill="currentColor" opacity=".7"/></svg>'
         : '<svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".7"/><rect x="8" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".2"/></svg>';
       spanBtn.title = next >= 2 ? "Pełna szerokość" : "Pół szerokości";
-      _applySectionLayout();
+      _debouncedApply();
     });
 
     // Visibility toggles
@@ -13981,7 +14004,7 @@
       _saveSectionHidden(h);
       const card = cb.closest(".vle-card");
       if (card) card.classList.toggle("vle-card-hidden", !cb.checked);
-      _applySectionLayout();
+      _debouncedApply();
       // Update counter
       const cnt = overlay.querySelector("#vle_visible_count");
       if (cnt) {
@@ -14051,7 +14074,7 @@
       const items = [...cardList.querySelectorAll(".vle-card")];
       const newOrder = items.map(el => el.dataset.sid);
       _saveSectionOrder(newOrder);
-      _applySectionLayout();
+      _debouncedApply();
       dragEl = null;
       dragSid = null;
     });
@@ -14095,7 +14118,7 @@
       const items = [...cardList.querySelectorAll(".vle-card")];
       const newOrder = items.map(el => el.dataset.sid);
       _saveSectionOrder(newOrder);
-      _applySectionLayout();
+      _debouncedApply();
       touchDragEl = null;
     }, { passive: true });
 
@@ -14163,7 +14186,7 @@
           const numEl = el.querySelector(".vle-sub-num");
           if (numEl) numEl.textContent = i + 1;
         });
-        _applySubelementLayout();
+        _debouncedApply();
         subDragEl = null;
       });
     });
