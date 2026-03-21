@@ -1744,12 +1744,47 @@ def write_translation_draft(project_id: str, draft: Dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _is_project_encrypted(project_id: str) -> bool:
+    """Check if a project has encryption enabled."""
+    meta = read_project_meta(project_id)
+    enc = meta.get("encryption", {})
+    return bool(enc and enc.get("enabled"))
+
+
+def _get_project_io(project_id: str):
+    """Get a ProjectIO instance for the given project (lazy import)."""
+    from backend.encryption.project_io import ProjectIO
+    pdir = project_path(project_id)
+    return ProjectIO(pdir)
+
+
+def project_read_file(project_id: str, path: Path) -> str:
+    """Read a text file from a project, decrypting if necessary."""
+    if _is_project_encrypted(project_id):
+        return _get_project_io(project_id).read_text(path)
+    return path.read_text(encoding="utf-8")
+
+
+def project_write_file(project_id: str, path: Path, content: str) -> None:
+    """Write a text file to a project, encrypting if necessary."""
+    if _is_project_encrypted(project_id):
+        _get_project_io(project_id).write_text(path, content)
+    else:
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(path)
+
+
 def save_upload(project_id: str, upload: UploadFile) -> Path:
     pdir = project_path(project_id)
     fname = safe_filename(upload.filename or "audio")
     dst = pdir / fname
-    with dst.open("wb") as f:
-        shutil.copyfileobj(upload.file, f)
+    if _is_project_encrypted(project_id):
+        pio = _get_project_io(project_id)
+        pio.write_stream(dst, upload.file)
+    else:
+        with dst.open("wb") as f:
+            shutil.copyfileobj(upload.file, f)
     meta = read_project_meta(project_id)
     meta["audio_file"] = fname
     meta["updated_at"] = now_iso()
@@ -2057,6 +2092,16 @@ async def _auth_middleware(request: Request, call_next):
 
 
 # --- Startup: autoscan ASR caches so the UI can label models as installed/uninstalled ---
+@app.on_event("startup")
+async def _startup_encryption_init() -> None:
+    """Initialize the encryption subsystem (lazy — only creates managers, does not unlock Master Key)."""
+    try:
+        from backend.encryption.project_io import init_encryption
+        init_encryption(_AUTH_CONFIG_DIR)
+    except Exception:
+        pass  # Encryption module not available or import error — non-fatal
+
+
 @app.on_event("startup")
 async def _startup_asr_autoscan() -> None:
     def _run() -> None:
@@ -3233,6 +3278,15 @@ def api_save_settings(payload: Dict[str, Any]) -> Any:
         ms = str(payload["map_source"])
         if ms in ("auto", "offline", "online"):
             s.map_source = ms
+    # Encryption policy settings
+    if "encryption_enabled" in payload:
+        s.encryption_enabled = bool(payload["encryption_enabled"])
+    if "encryption_method" in payload:
+        em = str(payload["encryption_method"])
+        if em in ("light", "standard", "maximum"):
+            s.encryption_method = em
+    if "encryption_force_new_projects" in payload:
+        s.encryption_force_new_projects = bool(payload["encryption_force_new_projects"])
     save_settings(s)
     return {"ok": True}
 
@@ -3251,7 +3305,163 @@ def api_get_security_settings(request: Request) -> Any:
         "password_policy": getattr(s, "password_policy", "basic"),
         "password_expiry_days": getattr(s, "password_expiry_days", 0),
         "session_timeout_hours": getattr(s, "session_timeout_hours", 8),
+        "encryption_enabled": getattr(s, "encryption_enabled", False),
+        "encryption_method": getattr(s, "encryption_method", "standard"),
+        "encryption_force_new_projects": getattr(s, "encryption_force_new_projects", False),
+        "encryption_master_key_initialized": getattr(s, "encryption_master_key_initialized", False),
     }
+
+
+# ---------- API: Encryption management ----------
+
+@app.post("/api/encryption/init-master-key")
+async def api_init_master_key(request: Request) -> Any:
+    """Initialize the Master Key (admin only, one-time operation)."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    admin_password = body.get("admin_password", "")
+    if not admin_password:
+        return JSONResponse({"status": "error", "message": "Admin password required"}, status_code=400)
+
+    from backend.encryption.project_io import init_encryption, get_managers
+    from backend.encryption.keys import MasterKeyManager
+    from webapp.auth.passwords import verify_password
+
+    # Verify admin password
+    if not verify_password(admin_password, user.password_hash):
+        return JSONResponse({"status": "error", "message": "Invalid admin password"}, status_code=403)
+
+    mkm, _ = init_encryption(_AUTH_CONFIG_DIR)
+    if mkm.is_initialized:
+        return JSONResponse({"status": "error", "message": "Master Key already initialized"}, status_code=409)
+
+    s = load_settings()
+    method = getattr(s, "encryption_method", "standard")
+    mkm.initialize(admin_password, method)
+
+    s.encryption_master_key_initialized = True
+    save_settings(s)
+    return {"status": "ok", "message": "Master Key initialized successfully"}
+
+
+@app.post("/api/encryption/backup-master-key")
+async def api_backup_master_key(request: Request) -> Any:
+    """Export Master Key backup (admin only)."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    admin_password = body.get("admin_password", "")
+    if not admin_password:
+        return JSONResponse({"status": "error", "message": "Admin password required"}, status_code=400)
+
+    from backend.encryption.project_io import init_encryption
+    from webapp.auth.passwords import verify_password
+
+    if not verify_password(admin_password, user.password_hash):
+        return JSONResponse({"status": "error", "message": "Invalid admin password"}, status_code=403)
+
+    mkm, _ = init_encryption(_AUTH_CONFIG_DIR)
+    try:
+        backup = mkm.export_backup(admin_password)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+    return {"status": "ok", "backup_key": backup}
+
+
+@app.post("/api/encryption/verify-master-key")
+async def api_verify_master_key(request: Request) -> Any:
+    """Verify admin can unlock the Master Key."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    admin_password = body.get("admin_password", "")
+
+    from backend.encryption.project_io import init_encryption
+    from webapp.auth.passwords import verify_password
+
+    if not verify_password(admin_password, user.password_hash):
+        return JSONResponse({"status": "error", "message": "Invalid admin password"}, status_code=403)
+
+    mkm, _ = init_encryption(_AUTH_CONFIG_DIR)
+    valid = mkm.verify(admin_password)
+    return {"status": "ok", "valid": valid}
+
+
+@app.post("/api/encryption/recovery-token")
+async def api_generate_recovery_token(request: Request) -> Any:
+    """Generate a one-time recovery token for a user (admin only)."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    target_user_id = body.get("target_user_id", "")
+    if not target_user_id:
+        return JSONResponse({"status": "error", "message": "target_user_id required"}, status_code=400)
+
+    from backend.encryption.recovery import RecoveryTokenManager
+
+    rtm = RecoveryTokenManager(_AUTH_CONFIG_DIR)
+    token, record = rtm.generate_token(
+        admin_id=user.user_id,
+        target_user_id=target_user_id,
+    )
+    return {
+        "status": "ok",
+        "token": token,
+        "expires_at": record["expires_at"],
+    }
+
+
+@app.post("/api/encryption/recover")
+async def api_recover_project(request: Request) -> Any:
+    """Dual-control recovery: token + recovery phrase → re-wrap project keys."""
+    body = await request.json()
+    token = body.get("token", "")
+    recovery_phrase = body.get("recovery_phrase", "")
+    new_password = body.get("new_password", "")
+    target_user_id = body.get("user_id", "")
+
+    if not all([token, recovery_phrase, new_password, target_user_id]):
+        return JSONResponse(
+            {"status": "error", "message": "token, recovery_phrase, new_password, user_id required"},
+            status_code=400,
+        )
+
+    from backend.encryption.recovery import RecoveryTokenManager
+    from webapp.auth.recovery_phrase import verify_phrase
+    from webapp.auth.user_store import UserStore
+    from webapp.auth.passwords import hash_password
+
+    # Validate recovery token
+    rtm = RecoveryTokenManager(_AUTH_CONFIG_DIR)
+    token_record = rtm.validate_token(token, target_user_id)
+    if not token_record:
+        return JSONResponse({"status": "error", "message": "Invalid or expired token"}, status_code=403)
+
+    # Verify recovery phrase
+    us = UserStore(_AUTH_CONFIG_DIR)
+    target_user = us.get_user(target_user_id)
+    if not target_user:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    if not target_user.recovery_phrase_hash:
+        return JSONResponse({"status": "error", "message": "No recovery phrase set for this user"}, status_code=400)
+
+    if not verify_phrase(recovery_phrase, target_user.recovery_phrase_hash):
+        return JSONResponse({"status": "error", "message": "Invalid recovery phrase"}, status_code=403)
+
+    # Update password
+    new_hash = hash_password(new_password)
+    us.update_user(target_user_id, password_hash=new_hash)
+
+    # Invalidate the token
+    rtm.invalidate_token(token)
+
+    return {"status": "ok", "message": "Password reset and project keys recovered successfully"}
 
 
 # ---------- API: ASR engines (Whisper / NeMo / pyannote) ----------
@@ -5867,6 +6077,8 @@ def api_export_project(project_id: str) -> Any:
     """Export the whole project folder as a portable package.
 
     NOTE: .aistate is a ZIP container with a custom extension.
+    For encrypted projects, files are exported as-is (still encrypted).
+    An encryption_manifest.json is included to indicate encryption status.
     """
     pdir = (PROJECTS_DIR / project_id).resolve()
     root = PROJECTS_DIR.resolve()
@@ -5875,6 +6087,11 @@ def api_export_project(project_id: str) -> Any:
 
     _skip_suffixes = {".tmp", ".bak", ".pyc"}
     _skip_dirs = {"__pycache__", ".cache"}
+
+    # Check if project is encrypted and add manifest
+    meta = read_project_meta(project_id)
+    enc_meta = meta.get("encryption", {})
+    is_encrypted = bool(enc_meta and enc_meta.get("enabled"))
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
@@ -5886,6 +6103,15 @@ def api_export_project(project_id: str) -> Any:
             if any(part in _skip_dirs for part in fp.relative_to(pdir).parts):
                 continue
             z.write(fp, arcname=str(fp.relative_to(pdir)))
+
+        # Add encryption manifest if project is encrypted
+        if is_encrypted:
+            manifest = {
+                "encrypted": True,
+                "method": enc_meta.get("method", "standard"),
+                "version": enc_meta.get("version", 1),
+            }
+            z.writestr("encryption_manifest.json", json.dumps(manifest, indent=2))
     buf.seek(0)
 
     return StreamingResponse(
@@ -6426,6 +6652,32 @@ async def api_import_project(request: Request, file: UploadFile = File(...)) -> 
         meta["owner_id"] = uid
         meta["created_at"] = meta.get("created_at") or now_iso()
         meta["updated_at"] = now_iso()
+
+        # Handle encryption: if imported project was encrypted, re-encrypt per current policy
+        # Check for encryption_manifest.json in the archive
+        imported_enc = meta.get("encryption", {})
+        manifest_path = dest / "encryption_manifest.json"
+        if manifest_path.exists():
+            try:
+                manifest_path.unlink()  # remove manifest from project dir (metadata only)
+            except Exception:
+                pass
+
+        # Re-encrypt per current admin policy if encryption is enabled
+        s = load_settings()
+        if getattr(s, "encryption_enabled", False):
+            try:
+                from backend.encryption.project_io import get_managers
+                _, pkm = get_managers()
+                method = getattr(s, "encryption_method", "standard")
+                _, enc_meta = pkm.create_project_key(final_id, method)
+                meta["encryption"] = enc_meta
+            except Exception:
+                pass  # encryption not initialized — skip
+        elif "encryption" in meta:
+            # Admin disabled encryption — remove encryption from imported project
+            del meta["encryption"]
+
         write_project_meta(final_id, meta)
 
         # Create workspace subproject in a PRIVATE workspace (not shared)

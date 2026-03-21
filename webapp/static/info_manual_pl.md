@@ -290,15 +290,74 @@ Podczas tworzenia projektu pojawia się checkbox **Szyfruj projekt** z informacj
 - **Import** — system automatycznie wykrywa, czy plik `.aistate` jest zaszyfrowany. Jeśli tak — prosi o hasło. Po imporcie projekt jest re-szyfrowany zgodnie z aktualną polityką administratora.
 - Niezaszyfrowany projekt można wyeksportować bez hasła LUB z opcją „szyfruj eksport".
 
-### <span style="color:red">⚠ Odzyskiwanie dostępu — klucz główny (Master Key)</span>
+### <span style="color:red">⚠ Odzyskiwanie dostępu — procedury krok po kroku</span>
 
-<span style="color:red">Każdy projekt szyfrowany posiada losowy klucz szyfrowania, który jest chroniony kluczem użytkownika (derywowanym z hasła). Dodatkowo administrator posiada **klucz główny (Master Key)**, który umożliwia odszyfrowanie każdego projektu.</span>
+<span style="color:red">Każdy zaszyfrowany projekt posiada losowy klucz szyfrowania (Project Key), który jest chroniony kluczem użytkownika (derywowanym z hasła). Dodatkowo klucz projektu jest zabezpieczony **kluczem głównym (Master Key)** administratora. Administrator **nie może samodzielnie odszyfrować projektu** — wymagana jest interakcja z użytkownikiem.</span>
 
-<span style="color:red">**UWAGA:** Jeśli użytkownik zapomni hasło, a administrator utraci klucz główny — **dane w zaszyfrowanych projektach będą niemożliwe do odzyskania**. Nie istnieje żadna „tylna furtka" ani metoda obejścia szyfrowania. Dlatego:</span>
+#### <span style="color:red">Scenariusz 1: Użytkownik zapomniał hasło (samodzielne odzyskanie)</span>
 
-<span style="color:red">- Administrator **musi** wykonać kopię zapasową klucza głównego i przechowywać ją w bezpiecznym miejscu (np. sejf, nośnik offline).</span>
-<span style="color:red">- Użytkownicy powinni korzystać z **frazy odzyskiwania** (recovery phrase) przypisanej do konta — umożliwia ona reset hasła bez utraty dostępu do projektów.</span>
-<span style="color:red">- Utrata klucza głównego + hasła użytkownika = **trwała utrata danych**.</span>
+<span style="color:red">Użytkownik posiada frazę odzyskiwania (12 słów otrzymanych przy tworzeniu konta).</span>
+
+<span style="color:red">**Kroki użytkownika:**</span>
+<span style="color:red">1. Na ekranie logowania kliknij **„Nie pamiętam hasła"**.</span>
+<span style="color:red">2. Wpisz swoją **frazę odzyskiwania** (12 słów, oddzielonych spacjami).</span>
+<span style="color:red">3. System weryfikuje frazę — jeśli poprawna, pojawia się formularz nowego hasła.</span>
+<span style="color:red">4. Ustaw **nowe hasło** i potwierdź.</span>
+<span style="color:red">5. System automatycznie re-szyfruje klucze wszystkich Twoich zaszyfrowanych projektów nowym hasłem.</span>
+<span style="color:red">6. Logowanie odbywa się normalnie z nowym hasłem.</span>
+
+<span style="color:red">**Administrator nie jest potrzebny** — cały proces jest automatyczny.</span>
+
+#### <span style="color:red">Scenariusz 2: Użytkownik zapomniał hasło, ale ma frazę odzyskiwania (odzyskanie z pomocą admina)</span>
+
+<span style="color:red">Jeśli samodzielny reset nie zadziałał lub jest wyłączony przez politykę:</span>
+
+<span style="color:red">**Kroki administratora:**</span>
+<span style="color:red">1. Otwórz **Zarządzanie użytkownikami** → znajdź konto użytkownika.</span>
+<span style="color:red">2. Kliknij **„Generuj token odzyskiwania"** — system wygeneruje jednorazowy token (ważny 24h).</span>
+<span style="color:red">3. Przekaż token użytkownikowi (osobiście, telefonicznie lub innym bezpiecznym kanałem).</span>
+
+<span style="color:red">**Kroki użytkownika:**</span>
+<span style="color:red">1. Przejdź do strony **odzyskiwania dostępu** (link na ekranie logowania).</span>
+<span style="color:red">2. Wpisz **token odzyskiwania** otrzymany od administratora.</span>
+<span style="color:red">3. Wpisz swoją **frazę odzyskiwania** (12 słów).</span>
+<span style="color:red">4. Ustaw **nowe hasło**.</span>
+<span style="color:red">5. System re-szyfruje klucze projektów nowym hasłem.</span>
+<span style="color:red">6. Token zostaje unieważniony po użyciu.</span>
+
+#### <span style="color:red">Scenariusz 3: Użytkownik stracił hasło ORAZ frazę odzyskiwania (odzyskanie kluczem głównym)</span>
+
+<span style="color:red">To jedyny scenariusz, w którym wykorzystywany jest **klucz główny (Master Key)**.</span>
+
+<span style="color:red">**Kroki administratora:**</span>
+<span style="color:red">1. Otwórz **Zarządzanie użytkownikami → Bezpieczeństwo → Szyfrowanie**.</span>
+<span style="color:red">2. Podaj swoje **hasło administratora** w celu odblokowania klucza głównego.</span>
+<span style="color:red">3. Wybierz konto użytkownika, który utracił dostęp.</span>
+<span style="color:red">4. Kliknij **„Odzyskiwanie awaryjne"** — system użyje klucza głównego do odszyfrowania kluczy projektów użytkownika.</span>
+<span style="color:red">5. System wygeneruje **nową frazę odzyskiwania** dla użytkownika.</span>
+<span style="color:red">6. System wygeneruje **jednorazowy token odzyskiwania**.</span>
+<span style="color:red">7. Przekaż użytkownikowi: token + nową frazę odzyskiwania.</span>
+
+<span style="color:red">**Kroki użytkownika:**</span>
+<span style="color:red">1. Przejdź do strony **odzyskiwania dostępu**.</span>
+<span style="color:red">2. Wpisz **token** od administratora.</span>
+<span style="color:red">3. Wpisz **nową frazę odzyskiwania** od administratora.</span>
+<span style="color:red">4. Ustaw **nowe hasło**.</span>
+<span style="color:red">5. System re-szyfruje klucze projektów nowym hasłem.</span>
+
+<span style="color:red">**WAŻNE:** Nową frazę odzyskiwania należy natychmiast zapisać i przechowywać w bezpiecznym miejscu!</span>
+
+### <span style="color:red">⚠ Kopia zapasowa klucza głównego (Master Key)</span>
+
+<span style="color:red">**UWAGA:** Jeśli użytkownik utraci hasło i frazę odzyskiwania, a administrator utraci klucz główny — **dane w zaszyfrowanych projektach będą niemożliwe do odzyskania**. Nie istnieje żadna „tylna furtka".</span>
+
+<span style="color:red">**Obowiązki administratora:**</span>
+<span style="color:red">1. Po inicjalizacji klucza głównego kliknij **„Kopia zapasowa klucza głównego"** w panelu szyfrowania.</span>
+<span style="color:red">2. Podaj hasło administratora — system wyświetli klucz w formacie base64.</span>
+<span style="color:red">3. **Zapisz klucz na nośniku offline** (pendrive, wydruk w sejfie) — NIE przechowuj go w systemie ani w e-mailu.</span>
+<span style="color:red">4. Okresowo weryfikuj kopię zapasową przyciskiem **„Weryfikuj klucz główny"**.</span>
+
+<span style="color:red">**Utrata klucza głównego + hasła użytkownika + frazy odzyskiwania = trwała utrata danych.**</span>
 
 ### <span style="color:red">⚠ Wyszukiwanie w zaszyfrowanych projektach</span>
 

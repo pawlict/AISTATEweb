@@ -26,3 +26,8 @@ class Settings:
     password_expiry_days: int = 0
     # Map source: "auto" (offline if available, else online), "offline", "online"
     map_source: str = "auto"
+    # Encryption policy
+    encryption_enabled: bool = False                # global toggle
+    encryption_method: str = "standard"             # "light", "standard", "maximum"
+    encryption_force_new_projects: bool = False      # force encryption on all new projects
+    encryption_master_key_initialized: bool = False  # True once Master Key is created

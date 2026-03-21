@@ -282,7 +282,7 @@ The selected encryption level applies to all subsequent projects created by user
 
 ### Creating an encrypted project
 
-When creating a project, a **Encrypt project** checkbox appears with information about the current method (e.g., "AES-256-GCM"). The checkbox is checked by default if the administrator has enabled encryption, and locked if encryption is enforced.
+When creating a project, an **Encrypt project** checkbox appears with information about the current method (e.g., "AES-256-GCM"). The checkbox is checked by default if the administrator has enabled encryption, and locked if encryption is enforced.
 
 ### Export and import
 
@@ -290,15 +290,74 @@ When creating a project, a **Encrypt project** checkbox appears with information
 - **Import** — the system automatically detects whether the `.aistate` file is encrypted. If so — it asks for the password. After import, the project is re-encrypted according to the administrator's current policy.
 - An unencrypted project can be exported without a password OR with the "encrypt export" option.
 
-### <span style="color:red">⚠ Access Recovery — Master Key</span>
+### <span style="color:red">⚠ Access Recovery — step-by-step procedures</span>
 
-<span style="color:red">Each encrypted project has a random encryption key that is protected by the user's key (derived from their password). Additionally, the administrator holds a **Master Key** that can decrypt any project.</span>
+<span style="color:red">Each encrypted project has a random encryption key (Project Key), which is protected by the user's key (derived from their password). Additionally, the project key is secured by the administrator's **Master Key**. The administrator **cannot decrypt a project alone** — user interaction is required.</span>
 
-<span style="color:red">**WARNING:** If a user forgets their password and the administrator loses the Master Key — **the data in encrypted projects will be irrecoverable**. There is no "backdoor" or method to bypass the encryption. Therefore:</span>
+#### <span style="color:red">Scenario 1: User forgot password (self-recovery)</span>
 
-<span style="color:red">- The administrator **must** back up the Master Key and store it in a secure location (e.g., safe, offline storage medium).</span>
-<span style="color:red">- Users should use the **recovery phrase** assigned to their account — it allows password reset without losing access to projects.</span>
-<span style="color:red">- Loss of Master Key + user password = **permanent data loss**.</span>
+<span style="color:red">The user has their recovery phrase (12 words received when the account was created).</span>
+
+<span style="color:red">**User steps:**</span>
+<span style="color:red">1. On the login screen, click **"Forgot password"**.</span>
+<span style="color:red">2. Enter your **recovery phrase** (12 words, separated by spaces).</span>
+<span style="color:red">3. The system verifies the phrase — if correct, a new password form appears.</span>
+<span style="color:red">4. Set a **new password** and confirm.</span>
+<span style="color:red">5. The system automatically re-encrypts the keys of all your encrypted projects with the new password.</span>
+<span style="color:red">6. Log in normally with the new password.</span>
+
+<span style="color:red">**No administrator involvement needed** — the process is fully automatic.</span>
+
+#### <span style="color:red">Scenario 2: User forgot password but has recovery phrase (admin-assisted recovery)</span>
+
+<span style="color:red">If self-service reset did not work or is disabled by policy:</span>
+
+<span style="color:red">**Administrator steps:**</span>
+<span style="color:red">1. Open **User Management** → find the user's account.</span>
+<span style="color:red">2. Click **"Generate recovery token"** — the system generates a one-time token (valid for 24 hours).</span>
+<span style="color:red">3. Deliver the token to the user (in person, by phone, or via another secure channel).</span>
+
+<span style="color:red">**User steps:**</span>
+<span style="color:red">1. Go to the **access recovery** page (link on the login screen).</span>
+<span style="color:red">2. Enter the **recovery token** received from the administrator.</span>
+<span style="color:red">3. Enter your **recovery phrase** (12 words).</span>
+<span style="color:red">4. Set a **new password**.</span>
+<span style="color:red">5. The system re-encrypts the project keys with the new password.</span>
+<span style="color:red">6. The token is invalidated after use.</span>
+
+#### <span style="color:red">Scenario 3: User lost password AND recovery phrase (Master Key recovery)</span>
+
+<span style="color:red">This is the only scenario where the **Master Key** is used.</span>
+
+<span style="color:red">**Administrator steps:**</span>
+<span style="color:red">1. Open **User Management → Security → Encryption**.</span>
+<span style="color:red">2. Enter your **administrator password** to unlock the Master Key.</span>
+<span style="color:red">3. Select the user account that lost access.</span>
+<span style="color:red">4. Click **"Emergency recovery"** — the system uses the Master Key to decrypt the user's project keys.</span>
+<span style="color:red">5. The system generates a **new recovery phrase** for the user.</span>
+<span style="color:red">6. The system generates a **one-time recovery token**.</span>
+<span style="color:red">7. Deliver to the user: the token + the new recovery phrase.</span>
+
+<span style="color:red">**User steps:**</span>
+<span style="color:red">1. Go to the **access recovery** page.</span>
+<span style="color:red">2. Enter the **token** from the administrator.</span>
+<span style="color:red">3. Enter the **new recovery phrase** from the administrator.</span>
+<span style="color:red">4. Set a **new password**.</span>
+<span style="color:red">5. The system re-encrypts the project keys with the new password.</span>
+
+<span style="color:red">**IMPORTANT:** The new recovery phrase must be immediately saved and stored in a secure location!</span>
+
+### <span style="color:red">⚠ Master Key Backup</span>
+
+<span style="color:red">**WARNING:** If a user loses their password and recovery phrase, and the administrator loses the Master Key — **data in encrypted projects will be irrecoverable**. There is no "backdoor".</span>
+
+<span style="color:red">**Administrator responsibilities:**</span>
+<span style="color:red">1. After initializing the Master Key, click **"Backup Master Key"** in the encryption panel.</span>
+<span style="color:red">2. Enter the administrator password — the system displays the key in base64 format.</span>
+<span style="color:red">3. **Save the key on an offline medium** (USB drive, printout in a safe) — do NOT store it in the system or in email.</span>
+<span style="color:red">4. Periodically verify the backup using the **"Verify Master Key"** button.</span>
+
+<span style="color:red">**Loss of Master Key + user password + recovery phrase = permanent data loss.**</span>
 
 ### <span style="color:red">⚠ Searching in encrypted projects</span>
 

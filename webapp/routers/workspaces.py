@@ -65,7 +65,7 @@ def _default_subproject_type(request: Request) -> str:
     return _ROLE_TYPE_MAP.get(role, "analysis")
 
 
-def _ensure_data_dir(name: str, owner_id: str) -> str:
+def _ensure_data_dir(name: str, owner_id: str, encrypted: bool = False) -> str:
     """Create a file-based project directory and return its relative path."""
     import uuid
     import json
@@ -92,6 +92,21 @@ def _ensure_data_dir(name: str, owner_id: str) -> str:
         "created_at": datetime.now().isoformat(),
         "owner_id": owner_id,
     }
+
+    # If encryption requested, generate and store project key
+    if encrypted:
+        try:
+            from backend.encryption.project_io import get_managers
+            from backend.settings_store import load_settings
+            _, pkm = get_managers()
+            s = load_settings()
+            method = getattr(s, "encryption_method", "standard")
+            _, enc_meta = pkm.create_project_key(pid, method)
+            meta["encryption"] = enc_meta
+        except Exception:
+            # If encryption not initialized, skip silently
+            pass
+
     meta_path = pdir / "project.json"
     meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     return f"projects/{pid}"
@@ -547,10 +562,20 @@ async def create_subproject(request: Request, workspace_id: str):
     data_dir = body.get("data_dir", "")
     audio_file = body.get("audio_file", "")
     link_to = body.get("link_to", "")
+    encrypted = bool(body.get("encrypted", False))
+
+    # Check if encryption is forced by admin policy
+    try:
+        from backend.settings_store import load_settings as _load_s
+        _s = _load_s()
+        if getattr(_s, "encryption_force_new_projects", False) and getattr(_s, "encryption_enabled", False):
+            encrypted = True
+    except Exception:
+        pass
 
     # Auto-create file-based project directory if not provided
     if not data_dir:
-        data_dir = _ensure_data_dir(name, uid)
+        data_dir = _ensure_data_dir(name, uid, encrypted=encrypted)
 
     sp = _STORE.create_subproject(
         workspace_id=workspace_id,

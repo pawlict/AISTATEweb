@@ -194,6 +194,45 @@
         </div>
       </div>
 
+      <!-- Encryption Policy -->
+      <div style="border:1px solid var(--border,#e0e3e8);border-radius:8px;padding:.8rem 1rem;">
+        <h4 style="margin:0 0 .5rem;font-size:.85rem;">
+          Szyfrowanie projektów <span class="en">Project encryption</span>
+        </h4>
+        <div class="field" style="margin-bottom:.4rem;">
+          <label style="font-size:.78rem;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="secEncryptionEnabled" onchange="saveSecuritySetting('encryption_enabled', this.checked)"/>
+            Włącz szyfrowanie <span class="en">Enable encryption</span>
+          </label>
+        </div>
+        <div class="field" style="margin-bottom:.4rem;">
+          <label style="font-size:.78rem;">Metoda <span class="en">Method</span></label>
+          <select id="secEncryptionMethod" style="font-size:.78rem;" onchange="saveSecuritySetting('encryption_method', this.value)">
+            <option value="light">Lekka — AES-128-GCM</option>
+            <option value="standard">Standardowa — AES-256-GCM</option>
+            <option value="maximum">Maksymalna — AES-256-GCM + ChaCha20</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:.4rem;">
+          <label style="font-size:.78rem;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="secEncryptionForce" onchange="saveSecuritySetting('encryption_force_new_projects', this.checked)"/>
+            Wymuszaj szyfrowanie nowych projektów <span class="en">Force encryption for new projects</span>
+          </label>
+        </div>
+        <div style="margin-top:.6rem;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-secondary" id="btnInitMasterKey" style="font-size:.72rem;padding:.25rem .6rem;" onclick="initMasterKey()">
+            Inicjalizuj klucz główny <span class="en">Initialize Master Key</span>
+          </button>
+          <button class="btn btn-secondary" id="btnBackupMasterKey" style="font-size:.72rem;padding:.25rem .6rem;display:none;" onclick="backupMasterKey()">
+            Kopia zapasowa klucza <span class="en">Backup Master Key</span>
+          </button>
+          <button class="btn btn-secondary" id="btnVerifyMasterKey" style="font-size:.72rem;padding:.25rem .6rem;display:none;" onclick="verifyMasterKey()">
+            Weryfikuj klucz <span class="en">Verify Key</span>
+          </button>
+        </div>
+        <div id="encKeyStatus" style="font-size:.72rem;color:var(--muted,#888);margin-top:.3rem;"></div>
+      </div>
+
     </div>
     <div id="secSaveMsg" style="font-size:.82rem;color:#27ae60;margin-top:.6rem;min-height:1.2em;"></div>
 

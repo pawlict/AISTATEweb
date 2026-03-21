@@ -247,11 +247,33 @@ function renderProjects(ws, sharedWorkspaces){
 // CREATE PROJECT
 // =====================================================================
 
-document.getElementById('btnNewProject').addEventListener('click', () => {
+document.getElementById('btnNewProject').addEventListener('click', async () => {
   document.getElementById('npName').value = '';
   document.querySelectorAll('.sp-type-btn').forEach(b => b.classList.remove('active'));
   const firstTypeBtn = document.querySelector('.sp-type-btn');
   if(firstTypeBtn) firstTypeBtn.classList.add('active');
+  // Load encryption policy from admin settings
+  try {
+    const sec = await apiFetch('/api/settings/security');
+    const row = document.getElementById('npEncryptionRow');
+    const cb = document.getElementById('npEncrypted');
+    const methodLabel = document.getElementById('npEncMethod');
+    if(sec && sec.encryption_enabled){
+      row.style.display = '';
+      const methods = {light:'AES-128-GCM', standard:'AES-256-GCM', maximum:'AES-256-GCM + ChaCha20-Poly1305'};
+      methodLabel.textContent = methods[sec.encryption_method] || sec.encryption_method;
+      if(sec.encryption_force_new_projects){
+        cb.checked = true;
+        cb.disabled = true;
+      } else {
+        cb.checked = true;
+        cb.disabled = false;
+      }
+    } else {
+      row.style.display = 'none';
+      cb.checked = false;
+    }
+  } catch(e){ /* ignore — encryption not available */ }
   showModal('modalNewProject');
   document.getElementById('npName').focus();
 });
@@ -281,9 +303,10 @@ document.getElementById('npSubmit').addEventListener('click', async () => {
   }
   const type = document.querySelector('.sp-type-btn.active')?.dataset?.type || 'analysis';
   const linkTo = document.getElementById('npLinkTo').value;
+  const encrypted = document.getElementById('npEncrypted')?.checked || false;
   try {
     const data = await apiFetch(API+'/'+_ws.id+'/subprojects', {
-      method:'POST', body:JSON.stringify({name, type, link_to:linkTo})
+      method:'POST', body:JSON.stringify({name, type, link_to:linkTo, encrypted})
     });
     hideModal('modalNewProject');
     showToast(t('projects.toast.created'),'success');
