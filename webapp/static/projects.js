@@ -254,7 +254,7 @@ document.getElementById('btnNewProject').addEventListener('click', async () => {
   if(firstTypeBtn) firstTypeBtn.classList.add('active');
   // Load encryption policy from admin settings
   try {
-    const sec = await apiFetch('/api/settings/security');
+    const sec = await apiFetch('/api/encryption/policy');
     const row = document.getElementById('npEncryptionRow');
     const cb = document.getElementById('npEncrypted');
     const methodLabel = document.getElementById('npEncMethod');

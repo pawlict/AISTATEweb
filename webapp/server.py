@@ -3314,6 +3314,19 @@ def api_get_security_settings(request: Request) -> Any:
 
 # ---------- API: Encryption management ----------
 
+@app.get("/api/encryption/policy")
+def api_encryption_policy(request: Request) -> Any:
+    """Return encryption policy for any authenticated user (needed by project creation UI)."""
+    s = load_settings()
+    return {
+        "status": "ok",
+        "encryption_enabled": getattr(s, "encryption_enabled", False),
+        "encryption_method": getattr(s, "encryption_method", "standard"),
+        "encryption_force_new_projects": getattr(s, "encryption_force_new_projects", False),
+        "encryption_master_key_initialized": getattr(s, "encryption_master_key_initialized", False),
+    }
+
+
 @app.post("/api/encryption/init-master-key")
 async def api_init_master_key(request: Request) -> Any:
     """Initialize the Master Key (admin only, one-time operation)."""
