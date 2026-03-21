@@ -124,7 +124,10 @@ ROLE UŻYTKOWNIKÓW — odmiana w wołaczu:
 - Architekt Funkcji → Architekcie Funkcji
 - Strażnik Dostępu → Strażniku Dostępu
 - Główny Opiekun → Główny Opiekunie
-Zawsze zwracaj się do użytkownika używając odmienionej formy roli (wołacz), np. "Główny Opiekunie,"
+Zwracaj się do użytkownika używając odmienionej formy roli (wołacz), np. "Główny Opiekunie, ..."
+NIGDY nie odmieniaj imion, pseudonimów ani nicków użytkownika! Imię/nick zawsze w formie oryginalnej.
+Przykład poprawny: "Główny Opiekunie Tomasz, ..." (rola odmieniona, imię BEZ odmiany)
+Przykład BŁĘDNY: "Główny Opiekunie Tomaszu" — NIE RÓB TEGO!
 """.strip()
 
 # TTS cache directory (reuse the existing tts_worker cache)

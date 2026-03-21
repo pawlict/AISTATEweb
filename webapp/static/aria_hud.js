@@ -775,48 +775,55 @@
     if (btn) btn.click();
   }
 
-  /* ---- TTS — sentence-level streaming queue ---- */
-  var _ttsReqId = 0;      // monotonic session counter (cancel all on new message)
-  var _ttsQueue = [];      // queue of sentence strings to speak
-  var _ttsPlaying = false; // is audio currently playing from queue
-  var _ttsSentenceBuf = ''; // buffer for accumulating tokens into sentences
+  /* ---- TTS — pre-fetching pipeline with zero-gap playback ---- */
+  var _ttsReqId = 0;          // monotonic session counter (cancel all on new message)
+  var _ttsQueue = [];          // queue of {text, sid} to synthesize
+  var _ttsAudioQueue = [];     // queue of ready-to-play {blob, url, sid} audio buffers
+  var _ttsPlaying = false;     // is audio currently playing
+  var _ttsFetching = false;    // is a TTS fetch in progress
+  var _ttsSentenceBuf = '';    // buffer for accumulating tokens into sentences
+  var _ttsPrefetchCount = 2;   // how many sentences to pre-fetch ahead
 
   /**
-   * Queue a sentence for TTS playback. Starts playing immediately if idle.
+   * Queue a sentence for TTS. Kicks off pre-fetching pipeline.
    */
   function _queueTTSSentence(sentence, sessionId) {
     if (!AriaHUD.ttsEnabled) return;
     sentence = sentence.trim();
     if (!sentence) return;
-    // Strip action/confirm tags from TTS
     sentence = sentence.replace(/\[ACTION:[^\]]*\]/g, '').replace(/\[CONFIRM:[^\]]*\]/g, '').trim();
     if (!sentence) return;
 
     _ttsQueue.push({ text: sentence, sid: sessionId });
-    if (!_ttsPlaying) {
-      _playNextFromQueue();
+    _pumpTTSPipeline();
+  }
+
+  /**
+   * Pipeline pump: fetch audio for queued sentences + play ready audio.
+   * Pre-fetches N sentences ahead so audio is ready when needed.
+   */
+  function _pumpTTSPipeline() {
+    // Start fetching if idle and there are queued sentences
+    if (!_ttsFetching && _ttsQueue.length > 0) {
+      _fetchNextTTS();
+    }
+    // Start playing if idle and there are ready audio buffers
+    if (!_ttsPlaying && _ttsAudioQueue.length > 0) {
+      _playNextReady();
     }
   }
 
   /**
-   * Play next sentence from queue. Chains: play → onended → playNext.
+   * Fetch TTS for the next queued sentence. When done, store blob and pump again.
    */
-  async function _playNextFromQueue() {
-    if (_ttsQueue.length === 0) {
-      _ttsPlaying = false;
-      setAriaWaveMode(false);
-      return;
-    }
-
-    _ttsPlaying = true;
-    setAriaWaveMode(true);
+  async function _fetchNextTTS() {
+    if (_ttsQueue.length === 0) { _ttsFetching = false; return; }
+    _ttsFetching = true;
 
     var item = _ttsQueue.shift();
-    // If session changed (new message started or stopSpeech called), drop
     if (item.sid !== _ttsReqId) {
-      _ttsPlaying = false;
+      _ttsFetching = false;
       _ttsQueue = [];
-      setAriaWaveMode(false);
       return;
     }
 
@@ -827,35 +834,67 @@
         body: JSON.stringify({ text: item.text }),
       });
 
-      if (item.sid !== _ttsReqId) { _ttsPlaying = false; _ttsQueue = []; setAriaWaveMode(false); return; }
-      if (!res.ok) { _playNextFromQueue(); return; }
+      if (item.sid !== _ttsReqId) { _ttsFetching = false; _ttsQueue = []; _ttsAudioQueue = []; return; }
 
-      var blob = await res.blob();
-      if (item.sid !== _ttsReqId) { _ttsPlaying = false; _ttsQueue = []; setAriaWaveMode(false); return; }
+      if (res.ok) {
+        var blob = await res.blob();
+        if (item.sid !== _ttsReqId) { _ttsFetching = false; _ttsQueue = []; _ttsAudioQueue = []; return; }
+        _ttsAudioQueue.push({ blob: blob, sid: item.sid });
+      }
+    } catch (e) { /* skip failed sentence */ }
 
-      var url = URL.createObjectURL(blob);
-      var audio = new Audio(url);
-      AriaHUD.currentAudio = audio;
+    _ttsFetching = false;
+    _pumpTTSPipeline(); // continue fetching next + maybe start playing
+  }
 
-      audio.onended = function () {
-        URL.revokeObjectURL(url);
-        AriaHUD.currentAudio = null;
-        _playNextFromQueue();
-      };
-
-      audio.onerror = function () {
-        URL.revokeObjectURL(url);
-        AriaHUD.currentAudio = null;
-        _playNextFromQueue();
-      };
-
-      audio.play().catch(function () {
-        AriaHUD.currentAudio = null;
-        _playNextFromQueue();
-      });
-    } catch (e) {
-      _playNextFromQueue();
+  /**
+   * Play the next ready audio blob. On ended, pump pipeline for next.
+   */
+  function _playNextReady() {
+    if (_ttsAudioQueue.length === 0) {
+      _ttsPlaying = false;
+      // If no more sentences queued either, stop wave animation
+      if (_ttsQueue.length === 0) setAriaWaveMode(false);
+      return;
     }
+
+    _ttsPlaying = true;
+    setAriaWaveMode(true);
+
+    var item = _ttsAudioQueue.shift();
+    if (item.sid !== _ttsReqId) {
+      _ttsPlaying = false;
+      _ttsAudioQueue = [];
+      setAriaWaveMode(false);
+      return;
+    }
+
+    var url = URL.createObjectURL(item.blob);
+    var audio = new Audio(url);
+    AriaHUD.currentAudio = audio;
+
+    // Pre-fetch next while this one plays
+    _pumpTTSPipeline();
+
+    audio.onended = function () {
+      URL.revokeObjectURL(url);
+      AriaHUD.currentAudio = null;
+      _ttsPlaying = false;
+      _pumpTTSPipeline();
+    };
+
+    audio.onerror = function () {
+      URL.revokeObjectURL(url);
+      AriaHUD.currentAudio = null;
+      _ttsPlaying = false;
+      _pumpTTSPipeline();
+    };
+
+    audio.play().catch(function () {
+      AriaHUD.currentAudio = null;
+      _ttsPlaying = false;
+      _pumpTTSPipeline();
+    });
   }
 
   /**
@@ -866,17 +905,15 @@
     if (!AriaHUD.ttsEnabled) return;
     _ttsSentenceBuf += token;
 
-    // Detect sentence boundary: ends with . ! ? followed by optional whitespace or end of token
-    // But skip dots in abbreviations like "A.R.I.A." or numbers like "3.5"
+    // Detect sentence boundary: . ! ? followed by space or end
     var match = _ttsSentenceBuf.match(/^([\s\S]*?[.!?])\s+([\s\S]*)$/);
     if (match) {
       var sentence = match[1].trim();
       var remainder = match[2] || '';
-      // Skip if it looks like an abbreviation (single letter before dot) or decimal number
+      // Skip abbreviations (single uppercase letter before dot) or decimals
       var lastDot = sentence.lastIndexOf('.');
       if (lastDot >= 0) {
         var charBefore = sentence[lastDot - 1] || '';
-        // e.g. "A." or "3." — skip boundary
         if (/^[A-Z]$/.test(charBefore) || /^\d$/.test(charBefore)) {
           return; // don't split yet
         }
@@ -904,7 +941,6 @@
     if (!AriaHUD.ttsEnabled) return;
     stopSpeech();
     var sid = ++_ttsReqId;
-    // Split by sentence boundaries
     var sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
     for (var i = 0; i < sentences.length; i++) {
       _queueTTSSentence(sentences[i], sid);
@@ -914,7 +950,9 @@
   function stopSpeech() {
     ++_ttsReqId; // invalidate all pending/queued
     _ttsQueue = [];
+    _ttsAudioQueue = [];
     _ttsSentenceBuf = '';
+    _ttsFetching = false;
     if (AriaHUD.currentAudio) {
       AriaHUD.currentAudio.pause();
       AriaHUD.currentAudio.currentTime = 0;
@@ -1007,13 +1045,100 @@
     all: {
       label: 'Cała aplikacja',
       steps: [
-        { page: '/projects',      el: '.workspace-card, .project-card, #projectGrid',  text: 'To jest strona projektów. Tutaj tworzysz nowe projekty analityczne, otwierasz istniejące i zarządzasz plikami. Każdy projekt to osobny kontener na pliki audio, transkrypcje, analizy i raporty.' },
-        { page: '/transcription',  el: '#btn_transcribe, .transcription-controls, .main-card',  text: 'Moduł transkrypcji. Tutaj wgrywasz pliki audio i uruchamiasz automatyczną transkrypcję mowy na tekst. Wspierane modele to Whisper i NeMo FastConformer. Wynik to tekst z sygnaturami czasowymi.' },
-        { page: '/diarization',    el: '#btn_diarize, .diarization-controls, .main-card',  text: 'Moduł diaryzacji mówców. Rozpoznaje kto mówi w nagraniu i dzieli tekst na segmenty przypisane do konkretnych osób. Wykorzystuje model pyannote.' },
-        { page: '/translation',    el: '.translation-controls, .main-card',  text: 'Moduł tłumaczenia offline. Tłumaczy transkrypcje na ponad 200 języków używając modelu NLLB. Wszystko działa lokalnie, bez wysyłania danych na zewnętrzne serwery.' },
-        { page: '/analysis',       el: '.analysis-tabs, .tab-bar, .main-card',  text: 'Centrum analiz. Zawiera moduły: analiza GSM, analiza AML transakcji finansowych, analiza dokumentów i czat z LLM. Każdy moduł posiada własne narzędzia wizualizacji.' },
-        { page: '/chat',           el: '.chat-container, .main-card',  text: 'Czat z modelem LLM. Możesz zadawać pytania o załadowane dokumenty i transkrypcje. Model analizuje treść i generuje odpowiedzi. Działa offline przez Ollama.' },
-        { page: '/admin',          el: '.gpu-status, .main-card',  text: 'Panel ustawień GPU. Monitorujesz tu zużycie pamięci karty graficznej, stan modeli i procesów. Ważne przy pracy z wieloma modelami jednocześnie.' },
+        { page: '/projects',      el: '#projectsApp',  text: 'To jest strona projektów — centralny punkt pracy z platformą. Tutaj tworzysz nowe projekty analityczne, otwierasz istniejące, zarządzasz plikami, zapraszasz członków zespołu i eksportujesz wyniki. Każdy projekt to osobny kontener na pliki audio, transkrypcje, analizy i raporty.' },
+        { page: '/transcription',  el: '.main-card',  text: 'Moduł transkrypcji. Tutaj wgrywasz pliki audio i uruchamiasz automatyczną transkrypcję mowy na tekst. Wspierane modele to Whisper i NeMo FastConformer. Wynik to tekst z sygnaturami czasowymi.' },
+        { page: '/diarization',    el: '.main-card',  text: 'Moduł diaryzacji mówców. Rozpoznaje kto mówi w nagraniu i dzieli tekst na segmenty przypisane do konkretnych osób. Wykorzystuje model pyannote.' },
+        { page: '/translation',    el: '.main-card',  text: 'Moduł tłumaczenia offline. Tłumaczy transkrypcje na ponad 200 języków używając modelu NLLB. Wszystko działa lokalnie, bez wysyłania danych na zewnętrzne serwery.' },
+        { page: '/analysis',       el: '.main-card',  text: 'Centrum analiz. Zawiera moduły: analiza GSM billingów, analiza AML transakcji finansowych, analiza dokumentów i czat z LLM. Każdy moduł posiada własne narzędzia wizualizacji.' },
+        { page: '/chat',           el: '.main-card',  text: 'Czat z modelem LLM. Możesz zadawać pytania o załadowane dokumenty i transkrypcje. Model analizuje treść i generuje odpowiedzi. Działa offline przez Ollama.' },
+        { page: '/admin',          el: '.main-card',  text: 'Panel ustawień GPU. Monitorujesz tu zużycie pamięci karty graficznej, stan modeli i procesów. Ważne przy pracy z wieloma modelami jednocześnie.' },
+      ],
+    },
+    projects: {
+      label: 'Projekty (szczegółowo)',
+      steps: [
+        // --- Widok ogólny ---
+        { page: '/projects',  el: '#projectsApp',
+          text: 'Strona projektów. Widoczna jest lista Twoich projektów, pasek narzędzi u góry z przyciskami akcji oraz sekcja zaproszeń jeśli ktoś Cię zaprosił do współpracy. Projekty mogą być indywidualne lub współdzielone z innymi użytkownikami.' },
+
+        // --- Pasek narzędzi ---
+        { page: '/projects',  el: '#projects_toolbar',
+          text: 'Pasek narzędzi projektu. Zawiera wszystkie główne akcje: tworzenie nowego projektu, import i eksport, zapraszanie użytkowników, zarządzanie członkami i usuwanie projektów. Przyciski aktywują się w zależności od wybranego projektu i Twoich uprawnień.' },
+
+        // --- Tworzenie nowego projektu ---
+        { page: '/projects',  el: '#btnNewProject',
+          text: 'Przycisk tworzenia nowego projektu. Po kliknięciu otworzy się okno dialogowe z formularzem. Możesz go też wywołać mówiąc do mnie: utwórz nowy projekt.' },
+
+        // --- Okno tworzenia (otwieramy modal) ---
+        { page: '/projects',  el: '#modalNewProject',  openModal: '#btnNewProject',
+          text: 'Okno tworzenia nowego projektu. Znajdziesz tu cztery sekcje: nazwę projektu, wybór typu, opcjonalne powiązanie z workspace oraz checkbox szyfrowania.' },
+
+        { page: '/projects',  el: '#npName',  keepModal: true,
+          text: 'Pole nazwy projektu. Wpisz opisową nazwę, na przykład: Przesłuchanie świadka A, Billing GSM podejrzanego, Analiza konta firmowego. Nazwa pojawi się na karcie projektu i w plikach eksportu.' },
+
+        { page: '/projects',  el: '#npTypes',  keepModal: true,
+          text: 'Wybór typu projektu. Dostępne typy: Transkrypcja, Diaryzacja, Analiza, Czat LLM, Tłumaczenie i Ogólny. Typ określa domyślny moduł powiązany z projektem, ale nie ogranicza dostępu do innych modułów — każdy projekt może korzystać ze wszystkich funkcji platformy.' },
+
+        { page: '/projects',  el: '#npLinkTo',  keepModal: true,
+          text: 'Powiązanie z workspace. Opcjonalnie możesz przypisać projekt do istniejącej przestrzeni roboczej. Workspace grupuje powiązane projekty — na przykład wszystkie projekty dotyczące jednej sprawy. Pozostaw puste jeśli projekt jest samodzielny.' },
+
+        { page: '/projects',  el: '#npEncryptionRow, #npEncrypted',  keepModal: true,
+          text: 'Checkbox szyfrowania projektu. Gdy zaznaczony, wszystkie pliki w projekcie będą szyfrowane na dysku algorytmem AES-256. Nawet jeśli ktoś uzyska dostęp do serwera, nie odczyta zaszyfrowanych plików bez klucza. Metoda szyfrowania zależy od polityki ustawionej przez administratora: lekka, standardowa lub maksymalna.' },
+
+        { page: '/projects',  el: '#npSubmit',  keepModal: true,
+          text: 'Przycisk zatwierdzający utworzenie projektu. Po kliknięciu projekt zostanie utworzony i pojawi się na liście. Jeśli szyfrowanie jest włączone, klucz projektu zostanie wygenerowany automatycznie.' },
+
+        // --- Zamykamy modal, wracamy do listy ---
+        { page: '/projects',  el: '#projectList, #projectEmpty',  closeModal: true,
+          text: 'Lista projektów. Każdy projekt wyświetla się jako karta z nazwą, typem, datą utworzenia i przyciskami akcji. Jeśli lista jest pusta, zobaczysz komunikat z zachętą do utworzenia pierwszego projektu.' },
+
+        // --- Karta projektu ---
+        { page: '/projects',  el: '.sp-card, #projectList',
+          text: 'Karta projektu. Kliknięcie otwiera projekt i aktywuje go jako bieżący. Na karcie widzisz: ikonę typu, nazwę projektu, informację o właścicielu i członkach zespołu, oraz przyciski akcji po prawej stronie.' },
+
+        { page: '/projects',  el: '.sp-card-actions, .sp-open',
+          text: 'Przyciski akcji na karcie. Od lewej: Otwórz projekt, Zaproś użytkownika, Zarządzaj członkami, Usuń projekt. Dostępność przycisków zależy od Twojej roli — właściciel widzi wszystko, zwykły członek może tylko otwierać.' },
+
+        // --- Import ---
+        { page: '/projects',  el: '#btnImportProject',
+          text: 'Import projektu. Wczytuje projekt z pliku w formacie aistate. Plik aistate to skompresowane archiwum zawierające wszystkie dane projektu: transkrypcje, analizy, ustawienia i opcjonalnie pliki audio. Import odtwarza pełną strukturę projektu.' },
+
+        // --- Eksport ---
+        { page: '/projects',  el: '#btnExportProject',
+          text: 'Eksport projektu. Zapisuje cały projekt do pliku aistate, który możesz przenieść na inny komputer, zarchiwizować lub udostępnić. Jeśli projekt jest zaszyfrowany, eksport zachowuje szyfrowanie — potrzebujesz hasła aby go otworzyć na innej instancji.' },
+
+        // --- Zapraszanie użytkowników ---
+        { page: '/projects',  el: '#btnInviteUser',
+          text: 'Zapraszanie użytkownika do projektu. Otwiera formularz gdzie podajesz nazwę użytkownika, wybierasz rolę i opcjonalnie dodajesz wiadomość. Zaproszenie pojawi się u użytkownika w sekcji Zaproszenia na stronie projektów.' },
+
+        { page: '/projects',  el: '#modalInviteUser',  openModal: '#btnInviteUser',
+          text: 'Formularz zaproszenia. Pola: wybór projektu, nazwa użytkownika do zaproszenia, rola w projekcie i opcjonalna wiadomość. Dostępne role to: przeglądający — może czytać, edytor — może modyfikować, menedżer — pełne uprawnienia oprócz usuwania projektu.' },
+
+        // --- Zarządzanie członkami ---
+        { page: '/projects',  el: '#btnManageMembers',  closeModal: true,
+          text: 'Zarządzanie członkami projektu. Otwiera listę wszystkich osób z dostępem do wybranego projektu. Możesz zmienić rolę członka, usunąć go z projektu lub zobaczyć kto jest właścicielem.' },
+
+        // --- Zaproszenia przychodzące ---
+        { page: '/projects',  el: '#invitationsCard, #invitationList',
+          text: 'Sekcja zaproszeń. Jeśli inny użytkownik zaprosił Cię do swojego projektu, zaproszenie pojawi się tutaj. Przy każdym zaproszeniu widzisz: kto Cię zaprosił, do jakiego projektu, z jaką rolą oraz ewentualną wiadomość. Kliknij Akceptuj aby dołączyć lub Odrzuć aby odmówić.' },
+
+        // --- Usuwanie projektów (toolbar) ---
+        { page: '/projects',  el: '#btnDeleteProject',
+          text: 'Usuwanie projektu z paska narzędzi. Otwiera okno dialogowe z listą Twoich projektów do usunięcia. Możesz usunąć tylko projekty których jesteś właścicielem.' },
+
+        // --- Usuwanie projektów (modal) ---
+        { page: '/projects',  el: '#modalDeleteProject',  openModal: '#btnDeleteProject',
+          text: 'Okno usuwania projektu. Wybierasz projekt z listy i metodę kasowania danych. Dostępne są cztery metody kasowania danych z dysku.' },
+
+        { page: '/projects',  el: '#delProjWipeMethod',  keepModal: true,
+          text: 'Metody bezpiecznego kasowania danych: Pierwsza — szybkie usunięcie, pliki znikają z systemu ale mogą być teoretycznie odzyskane. Druga — jednokrotne nadpisanie losowymi danymi, bezpieczne dla większości zastosowań. Trzecia — HMG IS5, trzykrotne nadpisanie według brytyjskiego standardu rządowego. Czwarta — metoda Gutmanna, 35-krotne nadpisanie — najwolniejsza ale najbezpieczniejsza, uniemożliwia odzyskanie nawet w laboratorium.' },
+
+        { page: '/projects',  el: '#delProjConfirm',  keepModal: true,
+          text: 'Przycisk potwierdzający usunięcie. Operacja jest nieodwracalna! Po kliknięciu wszystkie pliki projektu zostaną skasowane wybraną metodą, a metadane usunięte z bazy danych. Przed kliknięciem upewnij się że wybrałeś właściwy projekt.' },
+
+        // --- Koniec ---
+        { page: '/projects',  el: '#projectsApp',  closeModal: true,
+          text: 'To wszystko o zarządzaniu projektami. Pamiętaj: projekty to podstawa pracy z platformą. Stwórz projekt, wgraj pliki, uruchom transkrypcję lub analizę. Jeśli pracujesz w zespole, zaproś członków i przydziel im odpowiednie role.' },
       ],
     },
     transcription: {
@@ -1059,6 +1184,7 @@
   var _tourSpotlight = null;
   var _tourPointer = null;
   var _tourTooltip = null;
+  var _tourHighlightedEl = null;  // currently brightened element
 
   function _showTourMenu(anchorEl) {
     // Remove existing menu if any
@@ -1141,27 +1267,47 @@
     document.body.appendChild(_tourTooltip);
   }
 
+  function _unhighlightPrev() {
+    if (_tourHighlightedEl) {
+      _tourHighlightedEl.classList.remove('aria-tour-active');
+      _tourHighlightedEl = null;
+    }
+  }
+
   function _executeTourStep() {
     if (!_tourActive || _tourStep >= _tourSteps.length) {
       _endTour();
       return;
     }
 
+    _unhighlightPrev();
     var step = _tourSteps[_tourStep];
 
-    // Navigate if needed
-    var currentPath = location.pathname + location.hash;
-    var targetPath = step.page || '';
-    var needsNav = false;
+    // Close modal from previous step if this step says closeModal
+    if (step.closeModal) {
+      var openModals = document.querySelectorAll('.modal-overlay[style*="display: block"], .modal-overlay[style*="display:block"]');
+      openModals.forEach(function (m) { m.style.display = 'none'; });
+      // Also try clicking close buttons
+      var closeBtn = document.querySelector('.modal-overlay:not([style*="display: none"]):not([style*="display:none"]) .modal-close-x');
+      if (closeBtn) closeBtn.click();
+    }
 
+    // Open modal if step requires it
+    if (step.openModal) {
+      var trigger = document.querySelector(step.openModal);
+      if (trigger) {
+        setTimeout(function () { trigger.click(); }, 50);
+      }
+    }
+
+    // Navigate if needed
+    var targetPath = step.page || '';
     if (targetPath) {
       var hashIdx = targetPath.indexOf('#');
       var pagePart = hashIdx >= 0 ? targetPath.substring(0, hashIdx) : targetPath;
       var hashPart = hashIdx >= 0 ? targetPath.substring(hashIdx) : '';
 
       if (pagePart && location.pathname !== pagePart) {
-        needsNav = true;
-        // Store tour state so it resumes after navigation
         sessionStorage.setItem('aria_tour_module', JSON.stringify({
           steps: _tourSteps,
           step: _tourStep,
@@ -1170,7 +1316,6 @@
         return;
       }
 
-      // If same page but different hash (tab), click the tab
       if (hashPart && location.hash !== hashPart) {
         var tabId = hashPart.substring(1);
         var tabBtn = document.querySelector('[data-tab="' + tabId + '"], [onclick*="' + tabId + '"]');
@@ -1178,23 +1323,31 @@
       }
     }
 
-    // Find and highlight element
+    // Delay for modal to open / tab to switch
+    var delay = (step.openModal || step.closeModal) ? 350 : 100;
     setTimeout(function () {
       _highlightElement(step);
-    }, needsNav ? 500 : 100);
+    }, delay);
   }
 
   function _highlightElement(step) {
-    // Try each selector (comma-separated) until one matches
+    // Try each selector until one matches a visible element
     var selectors = (step.el || '').split(',').map(function (s) { return s.trim(); });
     var targetEl = null;
 
     for (var i = 0; i < selectors.length; i++) {
-      try { targetEl = document.querySelector(selectors[i]); } catch (e) { /* */ }
-      if (targetEl) break;
+      try {
+        var el = document.querySelector(selectors[i]);
+        if (el && el.offsetParent !== null) { targetEl = el; break; }
+        if (el && !targetEl) targetEl = el; // fallback to hidden element
+      } catch (e) { /* */ }
     }
 
     if (targetEl) {
+      // Add brightening class to the element
+      targetEl.classList.add('aria-tour-active');
+      _tourHighlightedEl = targetEl;
+
       var rect = targetEl.getBoundingClientRect();
 
       // Position spotlight
@@ -1276,6 +1429,10 @@
     _tourSteps = [];
     _tourStep = 0;
     stopSpeech();
+    _unhighlightPrev();
+
+    // Close any open modals
+    document.querySelectorAll('.modal-overlay').forEach(function (m) { m.style.display = 'none'; });
 
     if (_tourOverlay) { _tourOverlay.remove(); _tourOverlay = null; }
     if (_tourSpotlight) { _tourSpotlight.remove(); _tourSpotlight = null; }
