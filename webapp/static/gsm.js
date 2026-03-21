@@ -13159,47 +13159,167 @@
 
   let _layoutPanelOpen = false;
 
+  /* ── Section icon map for visual editor ── */
+  const _SECTION_ICONS = {
+    info:            { icon: "info_circle", color: "#3b82f6", h: 1 },
+    summary:         { icon: "analysis",    color: "#8b5cf6", h: 1 },
+    devices:         { icon: "settings",    color: "#6366f1", h: 0.7 },
+    anomalies:       { icon: "warning",     color: "#ef4444", h: 1.6 },
+    analysis:        { icon: "document",    color: "#10b981", h: 1 },
+    special_numbers: { icon: "tag",         color: "#f59e0b", h: 0.7 },
+    graph:           { icon: "target",      color: "#06b6d4", h: 1.3 },
+    records:         { icon: "receipt",     color: "#64748b", h: 1.4 },
+    activity:        { icon: "lightning",   color: "#a855f7", h: 1.2 },
+    map:             { icon: "globe",       color: "#2563eb", h: 1.8 },
+    clusters:        { icon: "pin",         color: "#14b8a6", h: 0.8 },
+    border:          { icon: "flag",        color: "#f97316", h: 0.8 },
+    overnight:       { icon: "calendar",    color: "#6366f1", h: 0.8 },
+    user_prompt:     { icon: "edit",        color: "#78716c", h: 0.7 },
+    llm:             { icon: "brain",       color: "#ec4899", h: 1 },
+  };
+
   function _openLayoutPanel(anchorBtn) {
     if (_layoutPanelOpen) { _closeLayoutPanel(); return; }
     _layoutPanelOpen = true;
 
-    const panel = document.createElement("div");
-    panel.className = "gsm-layout-panel gsm-layout-panel-inline";
-    panel.id = "gsm_layout_panel";
+    // Create fullscreen overlay
+    const overlay = document.createElement("div");
+    overlay.className = "vle-overlay";
+    overlay.id = "gsm_layout_panel";
 
     const order = _getSectionOrder();
     const hidden = _getSectionHidden();
 
-    let listHtml = "";
+    // Build section card elements for the miniature work area
+    let cardsHtml = "";
     for (const id of order) {
       const def = _SECTION_MAP[id];
       if (!def) continue;
+      const meta = _SECTION_ICONS[id] || { icon: "box", color: "#94a3b8", h: 1 };
       const vis = !hidden[id];
-      listHtml += `<div class="gsm-layout-panel-item${vis ? "" : " gsm-layout-item-hidden"}" draggable="true" data-sid="${id}">
-        <span class="gsm-layout-drag-handle">⠿</span>
-        <label class="gsm-layout-check"><input type="checkbox" ${vis ? "checked" : ""} data-vis-sid="${id}"></label>
-        <span class="gsm-layout-item-label">${def.label}</span>
+      const hFactor = meta.h || 1;
+      cardsHtml += `<div class="vle-card${vis ? "" : " vle-card-hidden"}" draggable="true" data-sid="${id}" style="--card-accent:${meta.color};--card-h:${hFactor}">
+        <div class="vle-card-grip">⠿</div>
+        <div class="vle-card-icon"><i data-icon="${meta.icon}" data-size="14"></i></div>
+        <div class="vle-card-info">
+          <span class="vle-card-name">${def.label}</span>
+        </div>
+        <label class="vle-card-toggle" title="${vis ? "Ukryj" : "Pokaż"}">
+          <input type="checkbox" ${vis ? "checked" : ""} data-vis-sid="${id}">
+          <span class="vle-toggle-track"><span class="vle-toggle-thumb"></span></span>
+        </label>
       </div>`;
     }
 
-    panel.innerHTML = `
-      <div class="gsm-layout-panel-header">
-        <span style="font-weight:600;font-size:13px">Układ sekcji</span>
-        <button class="gsm-layout-reset-btn" id="gsm_layout_reset" title="Przywróć domyślny układ">↺ Domyślny</button>
+    overlay.innerHTML = `
+      <div class="vle-container">
+        <div class="vle-header">
+          <div class="vle-header-left">
+            <svg class="vle-logo" width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+            <span class="vle-title">Visual Layout Editor</span>
+            <span class="vle-badge">GSM Analysis</span>
+          </div>
+          <div class="vle-header-right">
+            <button class="vle-btn vle-btn-ghost" id="vle_reset" title="Przywróć domyślny układ">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8a6 6 0 0111.47-2.47M14 8a6 6 0 01-11.47 2.47"/><path d="M2 3v3.5h3.5M14 13V9.5h-3.5"/></svg>
+              Reset
+            </button>
+            <button class="vle-btn vle-btn-close" id="vle_close" title="Zamknij">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="vle-body">
+          <!-- Miniature app wireframe -->
+          <div class="vle-miniature">
+            <!-- Sidebar wireframe -->
+            <div class="vle-mini-sidebar">
+              <div class="vle-mini-logo-block"></div>
+              <div class="vle-mini-nav-item vle-mini-nav-active"></div>
+              <div class="vle-mini-nav-item"></div>
+              <div class="vle-mini-nav-item"></div>
+              <div class="vle-mini-nav-item"></div>
+              <div class="vle-mini-nav-item"></div>
+              <div class="vle-mini-nav-spacer"></div>
+              <div class="vle-mini-nav-item"></div>
+              <div class="vle-mini-nav-item"></div>
+            </div>
+            <!-- Main content area -->
+            <div class="vle-mini-main">
+              <!-- Toolbar wireframe -->
+              <div class="vle-mini-toolbar">
+                <div class="vle-mini-tb-item"></div>
+                <div class="vle-mini-tb-item"></div>
+                <div class="vle-mini-tb-item vle-mini-tb-wide"></div>
+                <div class="vle-mini-tb-spacer"></div>
+                <div class="vle-mini-tb-item"></div>
+              </div>
+              <!-- Analyst panel (left) + work area -->
+              <div class="vle-mini-content">
+                <div class="vle-mini-analyst">
+                  <div class="vle-mini-ap-label"></div>
+                  <div class="vle-mini-ap-block"></div>
+                  <div class="vle-mini-ap-label"></div>
+                  <div class="vle-mini-ap-block"></div>
+                  <div class="vle-mini-ap-block vle-mini-ap-active"></div>
+                  <div class="vle-mini-ap-label"></div>
+                  <div class="vle-mini-ap-block"></div>
+                </div>
+                <!-- Work area with draggable cards -->
+                <div class="vle-mini-work" id="vle_work_area">
+                  <div class="vle-work-header">
+                    <span>Obszar roboczy</span>
+                    <span class="vle-work-hint">Przeciągnij karty aby zmienić kolejność</span>
+                  </div>
+                  <div class="vle-work-cards" id="vle_card_list">
+                    ${cardsHtml}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Info bar -->
+          <div class="vle-info-bar">
+            <span class="vle-info-text"><span class="vle-info-count" id="vle_visible_count">${order.filter(id => !hidden[id]).length}</span> / ${order.length} sekcji widocznych</span>
+            <span class="vle-info-sep"></span>
+            <span class="vle-info-text vle-info-muted">Przeciągnij karty w obszarze roboczym &bull; Przełącznikami włącz/wyłącz sekcje</span>
+          </div>
+        </div>
       </div>
-      <div class="gsm-layout-panel-list" id="gsm_layout_list">${listHtml}</div>
     `;
 
-    // Insert inline after the button inside the analyst panel section
-    const section = anchorBtn.closest(".analyst-panel-section");
-    if (section) {
-      anchorBtn.after(panel);
-    } else {
-      anchorBtn.parentElement.appendChild(panel);
-    }
+    document.body.appendChild(overlay);
 
-    // Visibility checkboxes
-    panel.addEventListener("change", e => {
+    // Trigger icons rendering if available
+    if (typeof window.aiReplaceEmojis === "function") window.aiReplaceEmojis(overlay);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      overlay.classList.add("vle-overlay-visible");
+    });
+
+    // Close handlers
+    const closeBtn = overlay.querySelector("#vle_close");
+    closeBtn.onclick = () => _closeLayoutPanel();
+    overlay.addEventListener("click", e => {
+      if (e.target === overlay) _closeLayoutPanel();
+    });
+    overlay.addEventListener("keydown", e => {
+      if (e.key === "Escape") _closeLayoutPanel();
+    });
+    closeBtn.focus();
+
+    // Reset button
+    overlay.querySelector("#vle_reset").onclick = () => {
+      localStorage.removeItem(_LS_LAYOUT_KEY);
+      localStorage.removeItem(_LS_HIDDEN_KEY);
+      _applySectionLayout();
+      _closeLayoutPanel();
+    };
+
+    // Visibility toggles
+    const cardList = overlay.querySelector("#vle_card_list");
+    cardList.addEventListener("change", e => {
       const cb = e.target.closest("[data-vis-sid]");
       if (!cb) return;
       const sid = cb.dataset.visSid;
@@ -13210,76 +13330,134 @@
         h[sid] = true;
       }
       _saveSectionHidden(h);
-      // Update item style
-      const item = cb.closest(".gsm-layout-panel-item");
-      if (item) item.classList.toggle("gsm-layout-item-hidden", !cb.checked);
+      const card = cb.closest(".vle-card");
+      if (card) card.classList.toggle("vle-card-hidden", !cb.checked);
       _applySectionLayout();
+      // Update counter
+      const cnt = overlay.querySelector("#vle_visible_count");
+      if (cnt) {
+        const allCards = cardList.querySelectorAll(".vle-card");
+        const visibleCount = [...allCards].filter(c => !c.classList.contains("vle-card-hidden")).length;
+        cnt.textContent = visibleCount;
+      }
     });
-
-    // Reset button
-    panel.querySelector("#gsm_layout_reset").onclick = () => {
-      localStorage.removeItem(_LS_LAYOUT_KEY);
-      localStorage.removeItem(_LS_HIDDEN_KEY);
-      _applySectionLayout();
-      _closeLayoutPanel();
-    };
 
     // Drag & drop reordering
-    const listEl = panel.querySelector("#gsm_layout_list");
     let dragSid = null;
+    let dragEl = null;
+    let placeholder = null;
 
-    listEl.addEventListener("dragstart", e => {
-      const item = e.target.closest(".gsm-layout-panel-item");
-      if (!item) return;
-      dragSid = item.dataset.sid;
-      item.classList.add("gsm-layout-dragging");
+    cardList.addEventListener("dragstart", e => {
+      const card = e.target.closest(".vle-card");
+      if (!card) return;
+      dragSid = card.dataset.sid;
+      dragEl = card;
+      card.classList.add("vle-card-dragging");
       e.dataTransfer.effectAllowed = "move";
+      // Create placeholder
+      placeholder = document.createElement("div");
+      placeholder.className = "vle-card-placeholder";
+      placeholder.style.height = card.offsetHeight + "px";
+      requestAnimationFrame(() => {
+        if (dragEl && dragEl.parentNode) {
+          dragEl.parentNode.insertBefore(placeholder, dragEl.nextSibling);
+        }
+      });
     });
-    listEl.addEventListener("dragend", e => {
-      const item = e.target.closest(".gsm-layout-panel-item");
-      if (item) item.classList.remove("gsm-layout-dragging");
+
+    cardList.addEventListener("dragend", e => {
+      if (dragEl) dragEl.classList.remove("vle-card-dragging");
+      if (placeholder && placeholder.parentNode) placeholder.remove();
       dragSid = null;
-      listEl.querySelectorAll(".gsm-layout-panel-item").forEach(el => el.classList.remove("gsm-layout-drag-over"));
+      dragEl = null;
+      placeholder = null;
     });
-    listEl.addEventListener("dragover", e => {
+
+    cardList.addEventListener("dragover", e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
-      const target = e.target.closest(".gsm-layout-panel-item");
-      if (target) {
-        listEl.querySelectorAll(".gsm-layout-panel-item").forEach(el => el.classList.remove("gsm-layout-drag-over"));
-        target.classList.add("gsm-layout-drag-over");
-      }
-    });
-    listEl.addEventListener("drop", e => {
-      e.preventDefault();
-      const target = e.target.closest(".gsm-layout-panel-item");
-      if (!target || !dragSid) return;
-      const targetSid = target.dataset.sid;
-      if (dragSid === targetSid) return;
-      const items = [...listEl.querySelectorAll(".gsm-layout-panel-item")];
-      const currentOrder = items.map(el => el.dataset.sid);
-      const fromIdx = currentOrder.indexOf(dragSid);
-      const toIdx = currentOrder.indexOf(targetSid);
-      if (fromIdx === -1 || toIdx === -1) return;
-      currentOrder.splice(fromIdx, 1);
-      currentOrder.splice(toIdx, 0, dragSid);
-      const dragEl = listEl.querySelector(`.gsm-layout-panel-item[data-sid="${dragSid}"]`);
-      if (fromIdx < toIdx) {
-        target.after(dragEl);
+      if (!placeholder) return;
+      const target = e.target.closest(".vle-card");
+      if (!target || target === dragEl) return;
+      const rect = target.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY < midY) {
+        target.parentNode.insertBefore(placeholder, target);
       } else {
-        target.before(dragEl);
+        target.parentNode.insertBefore(placeholder, target.nextSibling);
       }
-      listEl.querySelectorAll(".gsm-layout-panel-item").forEach(el => el.classList.remove("gsm-layout-drag-over"));
-      _saveSectionOrder(currentOrder);
-      _applySectionLayout();
     });
 
+    cardList.addEventListener("drop", e => {
+      e.preventDefault();
+      if (!dragEl || !placeholder) return;
+      // Insert dragged element where placeholder is
+      placeholder.parentNode.insertBefore(dragEl, placeholder);
+      placeholder.remove();
+      placeholder = null;
+      dragEl.classList.remove("vle-card-dragging");
+      // Save new order
+      const items = [...cardList.querySelectorAll(".vle-card")];
+      const newOrder = items.map(el => el.dataset.sid);
+      _saveSectionOrder(newOrder);
+      _applySectionLayout();
+      dragEl = null;
+      dragSid = null;
+    });
+
+    // Touch drag support for mobile
+    let touchDragEl = null;
+    let touchClone = null;
+    let touchStartY = 0;
+
+    cardList.addEventListener("touchstart", e => {
+      const grip = e.target.closest(".vle-card-grip");
+      if (!grip) return;
+      const card = grip.closest(".vle-card");
+      if (!card) return;
+      touchDragEl = card;
+      touchStartY = e.touches[0].clientY;
+      card.classList.add("vle-card-dragging");
+    }, { passive: true });
+
+    cardList.addEventListener("touchmove", e => {
+      if (!touchDragEl) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const elBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (!elBelow) return;
+      const target = elBelow.closest(".vle-card");
+      if (target && target !== touchDragEl) {
+        const rect = target.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (touch.clientY < midY) {
+          target.parentNode.insertBefore(touchDragEl, target);
+        } else {
+          target.parentNode.insertBefore(touchDragEl, target.nextSibling);
+        }
+      }
+    }, { passive: false });
+
+    cardList.addEventListener("touchend", e => {
+      if (!touchDragEl) return;
+      touchDragEl.classList.remove("vle-card-dragging");
+      const items = [...cardList.querySelectorAll(".vle-card")];
+      const newOrder = items.map(el => el.dataset.sid);
+      _saveSectionOrder(newOrder);
+      _applySectionLayout();
+      touchDragEl = null;
+    }, { passive: true });
   }
 
   function _closeLayoutPanel() {
     _layoutPanelOpen = false;
-    const panel = QS("#gsm_layout_panel");
-    if (panel) panel.remove();
+    const overlay = QS("#gsm_layout_panel");
+    if (overlay) {
+      overlay.classList.remove("vle-overlay-visible");
+      overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
+      // Fallback if no transition
+      setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 350);
+    }
   }
 
   /* ── bindings ───────────────────────────────────────────── */
