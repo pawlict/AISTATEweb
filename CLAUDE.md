@@ -3,6 +3,7 @@
 ## Workflow Rules
 
 - **After every code change, always commit and push to GitHub.** Do not wait for the user to ask — push automatically after each edit or set of related edits.
+- **Never start a test server on port 8000** — that is reserved for the user's own instance. Use port **8001** (or higher) for testing: `AISTATEWEB_PORT=8001 python AISTATEweb.py`.
 
 ## Project Overview
 
