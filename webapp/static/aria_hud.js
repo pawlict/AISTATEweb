@@ -92,8 +92,9 @@
     _updateTTSButton();
     _updateStatusLine();
 
-    // Make the HUD draggable by its header
+    // Make the HUD draggable and resizable
     _initDrag();
+    _initResize();
   }
 
   /* ---- Drag to reposition ---- */
@@ -175,6 +176,67 @@
       if (!dragging) return;
       dragging = false;
       AriaHUD.$hud.classList.remove('aria-dragging');
+    });
+  }
+
+  /* ---- Resize ---- */
+  function _initResize() {
+    var handle = document.getElementById('aria-resize');
+    if (!handle || !AriaHUD.$hud) return;
+
+    var resizing = false;
+    var startX, startY, startW, startH;
+
+    handle.addEventListener('mousedown', function (e) {
+      resizing = true;
+      AriaHUD.$hud.classList.add('aria-resizing');
+      startX = e.clientX;
+      startY = e.clientY;
+      startW = AriaHUD.$hud.offsetWidth;
+      startH = AriaHUD.$hud.offsetHeight;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    document.addEventListener('mousemove', function (e) {
+      if (!resizing) return;
+      var newW = Math.max(300, Math.min(window.innerWidth * 0.9, startW + (e.clientX - startX)));
+      var newH = Math.max(280, Math.min(window.innerHeight * 0.9, startH + (e.clientY - startY)));
+      AriaHUD.$hud.style.width = newW + 'px';
+      AriaHUD.$hud.style.height = newH + 'px';
+    });
+
+    document.addEventListener('mouseup', function () {
+      if (!resizing) return;
+      resizing = false;
+      AriaHUD.$hud.classList.remove('aria-resizing');
+    });
+
+    // Touch support
+    handle.addEventListener('touchstart', function (e) {
+      var t = e.touches[0];
+      resizing = true;
+      AriaHUD.$hud.classList.add('aria-resizing');
+      startX = t.clientX;
+      startY = t.clientY;
+      startW = AriaHUD.$hud.offsetWidth;
+      startH = AriaHUD.$hud.offsetHeight;
+      e.stopPropagation();
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function (e) {
+      if (!resizing) return;
+      var t = e.touches[0];
+      var newW = Math.max(300, Math.min(window.innerWidth * 0.9, startW + (t.clientX - startX)));
+      var newH = Math.max(280, Math.min(window.innerHeight * 0.9, startH + (t.clientY - startY)));
+      AriaHUD.$hud.style.width = newW + 'px';
+      AriaHUD.$hud.style.height = newH + 'px';
+    }, { passive: true });
+
+    document.addEventListener('touchend', function () {
+      if (!resizing) return;
+      resizing = false;
+      AriaHUD.$hud.classList.remove('aria-resizing');
     });
   }
 

@@ -112,8 +112,12 @@
   position: fixed;
   bottom: 88px;
   right: 20px;
-  width: 360px;
-  max-height: 540px;
+  width: 380px;
+  height: 500px;
+  min-width: 300px;
+  min-height: 280px;
+  max-width: 90vw;
+  max-height: 90vh;
   z-index: 9001;
   display: flex;
   flex-direction: column;
@@ -127,6 +131,7 @@
   color: var(--aria-text);
   transform-origin: bottom right;
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;
+  overflow: hidden;
 }
 
 #aria-hud.hidden {
@@ -261,8 +266,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 100px;
-  max-height: 320px;
+  min-height: 60px;
   position: relative;
   z-index: 2;
 }
@@ -570,7 +574,53 @@
   cursor: grabbing;
 }
 
-#aria-hud.aria-dragging {
+#aria-hud.aria-dragging,
+#aria-hud.aria-resizing {
   transition: none;
   opacity: 0.92;
+}
+
+/* ---- Resize handle ---- */
+
+.aria-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 10;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.aria-resize-handle:hover {
+  opacity: 0.8;
+}
+.aria-resize-handle::before,
+.aria-resize-handle::after {
+  content: '';
+  position: absolute;
+  background: var(--aria-cyan);
+  border-radius: 1px;
+}
+.aria-resize-handle::before {
+  width: 10px; height: 1px;
+  bottom: 5px; right: 3px;
+  transform: rotate(-45deg);
+}
+.aria-resize-handle::after {
+  width: 6px; height: 1px;
+  bottom: 4px; right: 2px;
+  transform: rotate(-45deg);
+}
+
+/* Also allow top-left resize */
+.aria-resize-handle-tl {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 10;
 }
