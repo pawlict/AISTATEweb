@@ -596,13 +596,22 @@ def _read_json(path: Path) -> Tuple[str, List[Dict[str, str]]]:
 
 
 def parse_crypto_file(path: Path) -> ParsedCryptoData:
-    """Parse a crypto transaction file (CSV, JSON, or PDF). Auto-detects format."""
+    """Parse a crypto transaction file (CSV, JSON, PDF, or XLSX). Auto-detects format."""
     result = ParsedCryptoData()
     path = Path(path)
     ext = path.suffix.lower()
     metadata = ""
 
     try:
+        # --- XLSX path (Binance full account export) ---
+        if ext in (".xlsx", ".xls"):
+            from .binance_xlsx import is_binance_xlsx, parse_binance_xlsx
+            if is_binance_xlsx(path):
+                return parse_binance_xlsx(path)
+            else:
+                result.errors.append("Nierozpoznany format XLSX giełdy kryptowalutowej.")
+                return result
+
         # --- PDF path (crypto exchange statements) ---
         if ext == ".pdf":
             lines = _extract_pdf_lines(path)
