@@ -1147,6 +1147,9 @@
         { page: '/projects',  el: '#delProjWipeMethod',  keepModal: true,
           text: 'Metody bezpiecznego kasowania danych: Pierwsza \u2014 szybkie usuni\u0119cie, pliki znikaj\u0105 z systemu ale mog\u0105 by\u0107 teoretycznie odzyskane. Druga \u2014 jednokrotne nadpisanie losowymi danymi, bezpieczne dla wi\u0119kszo\u015bci zastosowa\u0144. Trzecia \u2014 HMG IS5, trzykrotne nadpisanie wed\u0142ug brytyjskiego standardu rz\u0105dowego. Czwarta \u2014 metoda Gutmanna, 35-krotne nadpisanie \u2014 najwolniejsza ale najbezpieczniejsza, uniemo\u017cliwia odzyskanie nawet w laboratorium.' },
 
+        { page: '/projects',  el: '#delProjWipeMethod',  keepModal: true,
+          text: 'Uwaga dotycz\u0105ca dysk\u00f3w SSD i NVMe. Z uwagi na ich architektur\u0119 \u2014 kontroler dysku sam decyduje gdzie fizycznie zapisuje dane, a polecenie TRIM jedynie oznacza bloki jako wolne \u2014 nadpisywanie plik\u00f3w mo\u017ce nie by\u0107 w pe\u0142ni skuteczne. Dane mog\u0105 pozosta\u0107 w zapasowych blokach lub obszarach r\u00f3wnowa\u017cenia zu\u017cycia. Aby zwi\u0119kszy\u0107 skuteczno\u015b\u0107 kasowania, nale\u017cy dodatkowo wajpowa\u0107 nieu\u017cywan\u0105 przestrze\u0144 dysku specjalistycznym narz\u0119dziem. Na dyskach talerzowych HDD metody nadpisywania dzia\u0142aj\u0105 zgodnie z oczekiwaniami.' },
+
         { page: '/projects',  el: '#delProjConfirm',  keepModal: true,
           text: 'Przycisk potwierdzaj\u0105cy usuni\u0119cie. Operacja jest nieodwracalna! Po klikni\u0119ciu wszystkie pliki projektu zostan\u0105 skasowane wybran\u0105 metod\u0105, a metadane usuni\u0119te z bazy danych. Przed klikni\u0119ciem upewnij si\u0119 \u017ce wybra\u0142e\u015b w\u0142a\u015bciwy projekt.' },
 
