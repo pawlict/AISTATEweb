@@ -316,19 +316,109 @@ async def aria_chat_stream(request: Request) -> StreamingResponse:
 
 
 # ---------------------------------------------------------------------------
-# TTS endpoint (Piper CLI) — hybrid PL/EN with language detection
+# TTS endpoint (Piper CLI) — phonetic pronunciation for English terms
 # ---------------------------------------------------------------------------
 
-ARIA_VOICE_EN = "en_US-amy-medium"
+# Phonetic dictionary: English terms → Polish phonetic spelling for Piper PL voice.
+# Sorted longest-first so multi-word phrases match before single words.
+_PHONETIC_MAP: List[tuple] = [
+    # Platform name — read as one word, not with dots
+    ("A.R.I.A.", "Arja"),
+    ("ARIA", "Arja"),
+    ("AISTATEweb", "Aj Stejt łeb"),
+    ("AISTATE", "Aj Stejt"),
+    ("AI S.T.A.T.E.", "Aj Stejt"),
+    # Full phrases
+    ("Speech-To-Analysis-Translation Engine", "Spicz Tu Analisis Transleszyn Endżin"),
+    ("Analytical Response & Intelligence Assistant", "Analitikał Respons end Inteligens Asystent"),
+    ("Analytical Response", "Analitikał Respons"),
+    ("Intelligence Assistant", "Inteligens Asystent"),
+    ("Isolation Forest", "Ajsoleszyn Forest"),
+    ("speaker-diarization", "spiker dajaryzeszyn"),
+    # ASR / ML models
+    ("Whisper", "łisper"),
+    ("whisper", "łisper"),
+    ("FastConformer", "Fast Konformer"),
+    ("Canary-1B", "Kanari łan bi"),
+    ("Canary", "Kanari"),
+    ("pyannote", "pijanot"),
+    ("NLLB-200", "en el el bi dwieście"),
+    ("NLLB", "en el el bi"),
+    ("Ollama", "Olama"),
+    ("LLaMA", "Lama"),
+    ("llama", "lama"),
+    ("Piper", "Pajper"),
+    ("piper", "pajper"),
+    ("Kokoro", "Kokoro"),
+    ("YAMNet", "Jam Net"),
+    ("PANNs", "Pans"),
+    ("BEATs", "Bits"),
+    ("NeMo", "Nimo"),
+    # File formats
+    ("ONNX", "oniks"),
+    ("WAV", "ław"),
+    (".wav", "ław"),
+    ("MP3", "em pi tri"),
+    ("FLAC", "flak"),
+    ("DOCX", "doks"),
+    ("XLSX", "ekscel"),
+    ("PDF", "pe de ef"),
+    ("SRT", "es er te"),
+    ("CSV", "ce es we"),
+    ("JSON", "dżejson"),
+    ("HTML", "ha te em el"),
+    ("KML", "ka em el"),
+    ("KMZ", "ka em zet"),
+    ("MBTiles", "em bi tajls"),
+    # Tech acronyms
+    ("GPU", "dżi pi ju"),
+    ("CPU", "si pi ju"),
+    ("VRAM", "wi ram"),
+    ("RAM", "ram"),
+    ("TTS", "te te es"),
+    ("ASR", "a es er"),
+    ("LLM", "el el em"),
+    ("SSE", "es es i"),
+    ("API", "a pe i"),
+    ("IMEI", "i mej"),
+    ("IMSI", "i em si"),
+    ("BTS", "be te es"),
+    ("GSM", "dże es em"),
+    ("AML", "a em el"),
+    ("HUD", "had"),
+    ("URL", "u er el"),
+    ("OCR", "o ce er"),
+    # Common English words in context
+    ("stream", "strim"),
+    ("streaming", "striming"),
+    ("token", "token"),
+    ("pipeline", "pajplajn"),
+    ("dashboard", "deszboard"),
+    ("offline", "oflajn"),
+    ("online", "onlajn"),
+    ("large-v3", "lardż wu tri"),
+    ("large-v2", "lardż wu tu"),
+    ("download", "dałnloud"),
+    ("upload", "aploud"),
+    ("backup", "bakap"),
+    ("checkbox", "czekboks"),
+    ("dataset", "dateset"),
+    ("heatmap", "hitmepa"),
+]
 
-# Words/phrases that should always be spoken with EN voice
-_EN_KEYWORDS = re.compile(
-    r'\b(?:Speech-To-Analysis-Translation Engine|AISTATEweb|Whisper|NeMo|Canary|'
-    r'FastConformer|pyannote|NLLB|Ollama|LLaMA|Piper|Kokoro|YAMNet|PANNs|BEATs|'
-    r'Isolation Forest|GPU|CPU|VRAM|TTS|ASR|LLM|SSE|API|ONNX|WAV|MP3|FLAC|'
-    r'Analytical Response|Intelligence Assistant)\b',
-    re.IGNORECASE,
+# Compile into a single regex for efficient replacement (longest first)
+_PHONETIC_MAP.sort(key=lambda x: -len(x[0]))
+_PHONETIC_PATTERN = re.compile(
+    "|".join(re.escape(term) for term, _ in _PHONETIC_MAP)
 )
+_PHONETIC_DICT = dict(_PHONETIC_MAP)
+
+
+def _phonetic_replace(text: str) -> str:
+    """Replace English terms with Polish phonetic equivalents for TTS."""
+    def _repl(m: re.Match) -> str:
+        return _PHONETIC_DICT.get(m.group(0), m.group(0))
+    return _PHONETIC_PATTERN.sub(_repl, text)
 
 
 def _find_piper_exe() -> Optional[str]:
@@ -343,53 +433,22 @@ def _find_piper_exe() -> Optional[str]:
     return None
 
 
-def _is_english_segment(text: str) -> bool:
-    """Heuristic: is this text segment mostly English?"""
-    words = re.findall(r'[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+', text)
-    if not words:
-        return False
-    polish_chars = set('ąćęłńóśźżĄĆĘŁŃÓŚŹŻ')
-    en_words = 0
-    for w in words:
-        if not any(c in polish_chars for c in w):
-            en_words += 1
-    return en_words / len(words) > 0.7
+def _piper_synthesize_sync(text: str, voice: str = ARIA_VOICE, speed: float = 1.0) -> Optional[bytes]:
+    """Synthesize text to WAV bytes using Piper CLI.
 
-
-def _split_by_language(text: str) -> List[Dict[str, str]]:
-    """Split text into segments with language tags (pl/en).
-
-    Splits on sentence boundaries and checks each sentence's language.
-    Short technical terms embedded in Polish sentences stay Polish
-    (Piper handles them ok). Only full English sentences switch voice.
+    Pre-processes text through phonetic dictionary so English terms
+    are pronounced correctly by the Polish voice model.
     """
-    # Split by sentence-ending punctuation, keeping delimiters
-    parts = re.split(r'(?<=[.!?])\s+', text)
-    segments: List[Dict[str, str]] = []
+    piper_exe = _find_piper_exe()
+    if not piper_exe:
+        return None
 
-    for part in parts:
-        part = part.strip()
-        if not part:
-            continue
-        # Check if this sentence is predominantly English
-        lang = "en" if _is_english_segment(part) else "pl"
-        # Merge consecutive same-language segments
-        if segments and segments[-1]["lang"] == lang:
-            segments[-1]["text"] += " " + part
-        else:
-            segments.append({"lang": lang, "text": part})
-
-    if not segments:
-        segments = [{"lang": "pl", "text": text}]
-
-    return segments
-
-
-def _piper_synthesize_one(piper_exe: str, text: str, voice: str, speed: float = 1.0) -> Optional[bytes]:
-    """Synthesize a single text segment to WAV bytes using Piper CLI."""
     onnx_path = _PIPER_VOICES_DIR / f"{voice}.onnx"
     if not onnx_path.exists():
         return None
+
+    # Apply phonetic replacements for natural Polish pronunciation
+    tts_text = _phonetic_replace(text)
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp_path = tmp.name
@@ -401,7 +460,7 @@ def _piper_synthesize_one(piper_exe: str, text: str, voice: str, speed: float = 
 
         result = subprocess.run(
             cmd,
-            input=text,
+            input=tts_text,
             capture_output=True,
             text=True,
             timeout=60,
@@ -424,67 +483,9 @@ def _piper_synthesize_one(piper_exe: str, text: str, voice: str, speed: float = 
             pass
 
 
-def _concat_wav(wav_parts: List[bytes]) -> bytes:
-    """Concatenate multiple WAV byte buffers into one."""
-    import io
-    import wave
-
-    if len(wav_parts) == 1:
-        return wav_parts[0]
-
-    # Read params from first WAV
-    with wave.open(io.BytesIO(wav_parts[0]), 'rb') as w0:
-        params = w0.getparams()
-        frames = [w0.readframes(w0.getnframes())]
-
-    for part in wav_parts[1:]:
-        try:
-            with wave.open(io.BytesIO(part), 'rb') as w:
-                # Only concat if same format
-                if w.getnchannels() == params.nchannels and w.getsampwidth() == params.sampwidth:
-                    frames.append(w.readframes(w.getnframes()))
-        except Exception:
-            continue
-
-    out_buf = io.BytesIO()
-    with wave.open(out_buf, 'wb') as out:
-        out.setparams(params)
-        for f in frames:
-            out.writeframes(f)
-
-    return out_buf.getvalue()
-
-
-def _piper_synthesize_hybrid(text: str, voice_pl: str, speed: float = 1.0) -> Optional[bytes]:
-    """Synthesize text with hybrid PL/EN voice switching."""
-    piper_exe = _find_piper_exe()
-    if not piper_exe:
-        return None
-
-    # Check if EN voice is available
-    en_available = (_PIPER_VOICES_DIR / f"{ARIA_VOICE_EN}.onnx").exists()
-
-    segments = _split_by_language(text)
-    wav_parts: List[bytes] = []
-
-    for seg in segments:
-        voice = voice_pl
-        if seg["lang"] == "en" and en_available:
-            voice = ARIA_VOICE_EN
-
-        wav = _piper_synthesize_one(piper_exe, seg["text"], voice, speed)
-        if wav:
-            wav_parts.append(wav)
-
-    if not wav_parts:
-        return None
-
-    return _concat_wav(wav_parts)
-
-
 @router.post("/tts")
 async def aria_tts(request: Request) -> Response:
-    """Generate TTS audio from text using Piper (hybrid PL/EN)."""
+    """Generate TTS audio from text using Piper (single Polish voice with phonetics)."""
     try:
         body = await request.json()
     except Exception:
@@ -505,7 +506,7 @@ async def aria_tts(request: Request) -> Response:
         except Exception:
             pass
 
-    wav_bytes = await asyncio.to_thread(_piper_synthesize_hybrid, text, voice, speed)
+    wav_bytes = await asyncio.to_thread(_piper_synthesize_sync, text, voice, speed)
 
     if wav_bytes is None:
         return JSONResponse(
