@@ -61,6 +61,10 @@
 
     if (!AriaHUD.$trigger || !AriaHUD.$hud) return;
 
+    // Set CSS custom property for user label in chat bubbles
+    var userName = (window.__ariaUser && window.__ariaUser.name) || 'OP';
+    document.documentElement.style.setProperty('--aria-user-label', '"' + userName + '"');
+
     _restoreSession();
 
     var sesEl = document.getElementById('aria-st-ses');

@@ -308,7 +308,7 @@
 }
 
 .aria-msg.user::before {
-  content: 'OP> ';
+  content: var(--aria-user-label, 'OP') '> ';
   color: var(--aria-amber);
   font-weight: bold;
 }
