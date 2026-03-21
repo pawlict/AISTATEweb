@@ -4498,6 +4498,17 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 [data-theme="dark"] .vle-card-span:hover{border-color:var(--brand-blue,#60a5fa);color:var(--brand-blue,#60a5fa)}
 [data-theme="dark"] .vle-card-wide{background:linear-gradient(135deg,var(--bg-secondary,#0f172a),rgba(37,99,235,.05))!important}
 
+/* ─── GSM Render Progress ────────────────────────────────────────────── */
+.gsm-render-progress{position:sticky;top:0;z-index:5;padding:8px 16px;background:var(--bg-card,#fff);border-bottom:1px solid var(--border,#e2e8f0);border-radius:8px 8px 0 0;margin-bottom:8px}
+.gsm-render-progress-inner{display:flex;align-items:center;gap:12px}
+.gsm-render-progress-bar{height:4px;border-radius:2px;background:var(--brand-blue,#2563eb);transition:width .2s ease;flex-shrink:0;width:0}
+.gsm-render-progress-label{font-size:12px;color:var(--text-muted,#64748b);white-space:nowrap}
+.gsm-render-progress-inner{position:relative}
+.gsm-render-progress-inner::before{content:"";position:absolute;bottom:0;left:0;right:0;height:4px;border-radius:2px;background:var(--border,#e2e8f0)}
+.gsm-render-progress-bar{position:relative;z-index:1}
+[data-theme="dark"] .gsm-render-progress{background:var(--bg-card,#1e293b);border-bottom-color:var(--border,#334155)}
+[data-theme="dark"] .gsm-render-progress-inner::before{background:var(--border,#334155)}
+
 /* ─── Sub-element Drag (Phase 3) ─────────────────────────────────────── */
 
 /* Drag handle on actual chart cards */
