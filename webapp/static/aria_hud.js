@@ -91,6 +91,91 @@
     _checkStatus();
     _updateTTSButton();
     _updateStatusLine();
+
+    // Make the HUD draggable by its header
+    _initDrag();
+  }
+
+  /* ---- Drag to reposition ---- */
+  function _initDrag() {
+    var header = AriaHUD.$hud?.querySelector('.aria-header');
+    if (!header || !AriaHUD.$hud) return;
+
+    var dragging = false;
+    var startX, startY, startLeft, startTop;
+
+    header.addEventListener('mousedown', function (e) {
+      // Don't drag when clicking buttons
+      if (e.target.closest('button')) return;
+      dragging = true;
+      AriaHUD.$hud.classList.add('aria-dragging');
+
+      var rect = AriaHUD.$hud.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = rect.left;
+      startTop = rect.top;
+
+      // Switch from bottom/right positioning to top/left for drag
+      AriaHUD.$hud.style.left = rect.left + 'px';
+      AriaHUD.$hud.style.top = rect.top + 'px';
+      AriaHUD.$hud.style.right = 'auto';
+      AriaHUD.$hud.style.bottom = 'auto';
+
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+      var newLeft = Math.max(0, Math.min(window.innerWidth - 100, startLeft + dx));
+      var newTop = Math.max(0, Math.min(window.innerHeight - 50, startTop + dy));
+      AriaHUD.$hud.style.left = newLeft + 'px';
+      AriaHUD.$hud.style.top = newTop + 'px';
+    });
+
+    document.addEventListener('mouseup', function () {
+      if (!dragging) return;
+      dragging = false;
+      AriaHUD.$hud.classList.remove('aria-dragging');
+    });
+
+    // Also support touch for mobile/tablet
+    header.addEventListener('touchstart', function (e) {
+      if (e.target.closest('button')) return;
+      var touch = e.touches[0];
+      dragging = true;
+      AriaHUD.$hud.classList.add('aria-dragging');
+
+      var rect = AriaHUD.$hud.getBoundingClientRect();
+      startX = touch.clientX;
+      startY = touch.clientY;
+      startLeft = rect.left;
+      startTop = rect.top;
+
+      AriaHUD.$hud.style.left = rect.left + 'px';
+      AriaHUD.$hud.style.top = rect.top + 'px';
+      AriaHUD.$hud.style.right = 'auto';
+      AriaHUD.$hud.style.bottom = 'auto';
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function (e) {
+      if (!dragging) return;
+      var touch = e.touches[0];
+      var dx = touch.clientX - startX;
+      var dy = touch.clientY - startY;
+      var newLeft = Math.max(0, Math.min(window.innerWidth - 100, startLeft + dx));
+      var newTop = Math.max(0, Math.min(window.innerHeight - 50, startTop + dy));
+      AriaHUD.$hud.style.left = newLeft + 'px';
+      AriaHUD.$hud.style.top = newTop + 'px';
+    }, { passive: true });
+
+    document.addEventListener('touchend', function () {
+      if (!dragging) return;
+      dragging = false;
+      AriaHUD.$hud.classList.remove('aria-dragging');
+    });
   }
 
   /* ---- Welcome greeting (spoken via TTS only — NOT displayed in chat) ---- */
@@ -304,8 +389,15 @@
       assistantDiv.textContent = fullReply;
     }
 
+    // Parse and execute actions, strip tags from displayed/saved text
+    var actions = [];
+    var cleanReply = fullReply;
     if (fullReply && !hadError) {
-      AriaHUD.messages.push({ role: 'assistant', content: fullReply });
+      var parsed = _parseActions(fullReply);
+      actions = parsed.actions;
+      cleanReply = parsed.text;
+      assistantDiv.textContent = cleanReply;
+      AriaHUD.messages.push({ role: 'assistant', content: cleanReply });
       AriaHUD.msgCount++;
     }
 
@@ -316,9 +408,252 @@
     _updateStatusLine();
     _saveSession();
 
-    if (AriaHUD.ttsEnabled && !hadError && fullReply) {
-      speakText(fullReply);
+    if (AriaHUD.ttsEnabled && !hadError && cleanReply) {
+      speakText(cleanReply);
     }
+
+    // Execute immediate actions after a short delay
+    if (actions.length > 0) {
+      setTimeout(function () { _executeActions(actions); }, 1200);
+    }
+
+    // Show confirm buttons if ARIA proposed actions
+    var parsed2 = _parseActions(fullReply);
+    if (parsed2.confirms && parsed2.confirms.length > 0) {
+      _showConfirmButtons(parsed2.confirms, assistantDiv);
+    }
+  }
+
+  /* ---- Action system ---- */
+
+  function _parseActions(text) {
+    // Extract [ACTION:name:param] tags
+    var actionRegex = /\[ACTION:([^\]:]+)(?::([^\]]*))?\]/g;
+    var actions = [];
+    var match;
+    while ((match = actionRegex.exec(text)) !== null) {
+      actions.push({ name: match[1], param: match[2] || '' });
+    }
+
+    // Extract [CONFIRM:name:param:question] tags
+    var confirmRegex = /\[CONFIRM:([^\]:]+):([^\]:]*):([^\]]*)\]/g;
+    var confirms = [];
+    while ((match = confirmRegex.exec(text)) !== null) {
+      confirms.push({ name: match[1], param: match[2] || '', question: match[3] || '' });
+    }
+
+    // Remove all tags from displayed text
+    var cleanText = text
+      .replace(/\s*\[ACTION:[^\]]*\]\s*/g, '')
+      .replace(/\s*\[CONFIRM:[^\]]*\]\s*/g, '')
+      .trim();
+
+    return { actions: actions, confirms: confirms, text: cleanText };
+  }
+
+  function _showConfirmButtons(confirms, parentDiv) {
+    confirms.forEach(function (c) {
+      var row = document.createElement('div');
+      row.className = 'aria-confirm-row';
+
+      var label = document.createElement('span');
+      label.className = 'aria-confirm-label';
+      label.textContent = c.question;
+
+      var btnYes = document.createElement('button');
+      btnYes.className = 'aria-confirm-btn yes';
+      btnYes.textContent = 'TAK';
+      btnYes.onclick = function () {
+        row.remove();
+        _executeActions([{ name: c.name, param: c.param }]);
+        // Add user confirmation to chat
+        AriaHUD.messages.push({ role: 'user', content: '✓ ' + c.question + ' — Tak' });
+        _saveSession();
+      };
+
+      var btnNo = document.createElement('button');
+      btnNo.className = 'aria-confirm-btn no';
+      btnNo.textContent = 'NIE';
+      btnNo.onclick = function () {
+        row.remove();
+        AriaHUD.messages.push({ role: 'user', content: '✗ ' + c.question + ' — Nie' });
+        _saveSession();
+      };
+
+      row.appendChild(label);
+      row.appendChild(btnYes);
+      row.appendChild(btnNo);
+
+      // Insert after the assistant message
+      if (parentDiv && parentDiv.parentNode) {
+        parentDiv.parentNode.insertBefore(row, parentDiv.nextSibling);
+      } else if (AriaHUD.$messages) {
+        AriaHUD.$messages.appendChild(row);
+      }
+
+      if (AriaHUD.$messages) {
+        AriaHUD.$messages.scrollTop = AriaHUD.$messages.scrollHeight;
+      }
+    });
+  }
+
+  function _executeActions(actions) {
+    for (var i = 0; i < actions.length; i++) {
+      var a = actions[i];
+      switch (a.name) {
+
+        case 'navigate':
+          _actionNavigate(a.param);
+          break;
+
+        case 'new_project':
+          _actionNewProject(a.param);
+          break;
+
+        case 'open_project':
+          _actionOpenProject(a.param);
+          break;
+
+        case 'switch_lang':
+          _actionSwitchLang(a.param);
+          break;
+
+        case 'toggle_theme':
+          _actionToggleTheme();
+          break;
+
+        case 'export_report':
+          _actionExportReport(a.param);
+          break;
+
+        case 'start_transcription':
+          _actionStartTranscription();
+          break;
+
+        case 'start_diarization':
+          _actionStartDiarization();
+          break;
+
+        default:
+          console.warn('ARIA: unknown action:', a.name);
+      }
+    }
+  }
+
+  function _actionNavigate(path) {
+    if (!path) return;
+    // Handle hash fragments for analysis tabs
+    var hash = '';
+    var idx = path.indexOf('#');
+    if (idx >= 0) {
+      hash = path.substring(idx);
+      path = path.substring(0, idx);
+    }
+    // Navigate
+    if (location.pathname !== path) {
+      window.location.href = path + hash;
+    } else if (hash) {
+      // Same page, just switch tab
+      var tabId = hash.substring(1);
+      var tabBtn = document.querySelector('[data-tab="' + tabId + '"], [onclick*="' + tabId + '"]');
+      if (tabBtn) tabBtn.click();
+    }
+  }
+
+  function _actionNewProject(name) {
+    // Navigate to projects and trigger new project dialog
+    if (location.pathname !== '/projects') {
+      // Store intent in sessionStorage, projects page will pick it up
+      sessionStorage.setItem('aria_create_project', name || '');
+      window.location.href = '/projects';
+    } else {
+      // Already on projects page — try to open the dialog
+      var btn = document.querySelector('[onclick*="createProject"], #btn_new_project, .btn-new-project');
+      if (btn) btn.click();
+      // Pre-fill name if dialog opened
+      setTimeout(function () {
+        var nameInput = document.getElementById('new_project_name') || document.querySelector('input[name="project_name"]');
+        if (nameInput && name) {
+          nameInput.value = name;
+          nameInput.dispatchEvent(new Event('input'));
+        }
+      }, 300);
+    }
+  }
+
+  function _actionOpenProject(idOrName) {
+    if (!idOrName) return;
+    // Try to find project card by name or ID and click it
+    var cards = document.querySelectorAll('.project-card, [data-project-id]');
+    for (var i = 0; i < cards.length; i++) {
+      var card = cards[i];
+      var projId = card.dataset?.projectId || '';
+      var projName = card.querySelector('.project-name, .project-title')?.textContent || '';
+      if (projId === idOrName || projName.toLowerCase().indexOf(idOrName.toLowerCase()) >= 0) {
+        card.click();
+        return;
+      }
+    }
+    // If not found on current page, navigate to projects
+    if (location.pathname !== '/projects') {
+      sessionStorage.setItem('aria_open_project', idOrName);
+      window.location.href = '/projects';
+    }
+  }
+
+  function _actionSwitchLang(lang) {
+    if (!lang) return;
+    // Use the app's language switcher if available
+    if (typeof window.setLanguage === 'function') {
+      window.setLanguage(lang);
+    } else if (typeof window.switchLang === 'function') {
+      window.switchLang(lang);
+    } else {
+      // Fallback: set cookie and reload
+      document.cookie = 'lang=' + lang + ';path=/;max-age=31536000';
+      location.reload();
+    }
+  }
+
+  function _actionToggleTheme() {
+    var themeBtn = document.getElementById('theme-toggle') || document.querySelector('[onclick*="toggleTheme"], [onclick*="theme"]');
+    if (themeBtn) {
+      themeBtn.click();
+    } else if (typeof window.toggleTheme === 'function') {
+      window.toggleTheme();
+    }
+  }
+
+  function _actionExportReport(format) {
+    // Click the appropriate export checkbox/button
+    var formatMap = { html: 'html', docx: 'doc', txt: 'txt' };
+    var f = formatMap[format] || format;
+    // Try to check the format checkbox
+    var cb = document.querySelector('input[type="checkbox"][value="' + f + '"], #chk_' + f + ', #report_' + f);
+    if (cb && !cb.checked) cb.click();
+    // Click save/export button
+    setTimeout(function () {
+      var saveBtn = document.querySelector('#btn_save_report, [onclick*="saveReport"], [onclick*="exportReport"]');
+      if (saveBtn) saveBtn.click();
+    }, 200);
+  }
+
+  function _actionStartTranscription() {
+    if (location.pathname !== '/transcription') {
+      window.location.href = '/transcription';
+      return;
+    }
+    var btn = document.querySelector('#btn_transcribe, [onclick*="startTranscri"], [title*="Transkrybuj"]');
+    if (btn) btn.click();
+  }
+
+  function _actionStartDiarization() {
+    if (location.pathname !== '/diarization') {
+      window.location.href = '/diarization';
+      return;
+    }
+    var btn = document.querySelector('#btn_diarize, [onclick*="startDiariz"], [title*="Diaryzuj"]');
+    if (btn) btn.click();
   }
 
   /* ---- TTS ---- */
