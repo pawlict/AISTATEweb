@@ -119,13 +119,22 @@ def _build_system_prompt(context: Dict[str, Any]) -> str:
 
 
 def _get_model() -> str:
-    """Get the LLM model to use for ARIA."""
+    """Get the LLM model to use for ARIA.
+
+    Uses a dedicated aria_model setting (defaults to mistral:7b-instruct).
+    This is separate from the main analysis model so ARIA can use a smaller,
+    faster model while heavy models handle transcription/analysis.
+    """
     model = "mistral:7b-instruct"
     if _settings_fn:
         try:
             s = _settings_fn()
-            if hasattr(s, "ollama_model") and s.ollama_model:
-                model = s.ollama_model
+            # Use dedicated ARIA model if set, otherwise fall back to quick_model
+            aria_model = getattr(s, "aria_model", None)
+            if aria_model:
+                model = aria_model
+            elif hasattr(s, "ollama_model_quick") and s.ollama_model_quick:
+                model = s.ollama_model_quick
         except Exception:
             pass
     return model
@@ -178,7 +187,7 @@ async def aria_chat(request: Request) -> JSONResponse:
         # Force CPU inference: num_gpu=0 to avoid competing with Whisper/pyannote
         result = await _ollama.chat(
             model, ollama_messages,
-            options={"num_predict": 400, "num_gpu": 0},
+            options={"num_predict": 400},
         )
         reply = (result.get("message") or {}).get("content", "")
         if not reply:
@@ -229,7 +238,7 @@ async def aria_chat_stream(request: Request) -> StreamingResponse:
             # Force CPU inference: num_gpu=0
             async for chunk in _ollama.stream_chat(
                 model, ollama_messages,
-                options={"num_predict": 400, "num_gpu": 0},
+                options={"num_predict": 400},
             ):
                 data = json.dumps({"token": chunk, "session_id": session_id, "model": model})
                 yield f"data: {data}\n\n"

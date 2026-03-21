@@ -3303,6 +3303,8 @@ def api_save_settings(payload: Dict[str, Any]) -> Any:
         av = str(payload["aria_voice"])
         if av in ("pl_PL-gosia-medium", "pl_PL-darkman-medium"):
             s.aria_voice = av
+    if "aria_model" in payload:
+        s.aria_model = str(payload["aria_model"]).strip()
     save_settings(s)
     return {"ok": True}
 
@@ -3328,6 +3330,7 @@ def api_get_security_settings(request: Request) -> Any:
         "aria_enabled": getattr(s, "aria_enabled", False),
         "aria_voice": getattr(s, "aria_voice", "pl_PL-gosia-medium"),
         "aria_tts_enabled": getattr(s, "aria_tts_enabled", True),
+        "aria_model": getattr(s, "aria_model", ""),
     }
 
 

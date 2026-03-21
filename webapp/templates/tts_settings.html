@@ -248,8 +248,143 @@
     </div>
   </div>
 </div>
+
+<!-- ============ A.R.I.A. HUD Settings ============ -->
+{% if user and (user.is_admin or user.is_superadmin) %}
+<div class="card" style="margin-top:1rem;">
+  <h1 class="h1">A.R.I.A. — Asystent analityczny <span class="en" style="font-size:.7em;opacity:.6;">Analytical Assistant</span></h1>
+  <div class="grid">
+    <div class="subcard">
+
+      <div class="small muted" style="margin-bottom:.8rem;">
+        Wbudowany asystent AI dostępny jako pływający panel na każdej stronie. Wykorzystuje model LLM (Ollama) do odpowiadania na pytania i silnik Piper TTS do syntezy mowy.
+        <span class="en" style="display:block;margin-top:4px;">Built-in AI assistant available as a floating panel on every page. Uses Ollama LLM for answers and Piper TTS for speech synthesis.</span>
+      </div>
+
+      <div class="field" style="margin-bottom:.6rem;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
+          <input type="checkbox" id="ariaSettingsEnabled" onchange="saveAriaSetting('aria_enabled', this.checked)"/>
+          Włącz ARIA HUD <span class="en">Enable ARIA HUD</span>
+        </label>
+        <div class="small muted" style="margin-left:26px;">
+          Po włączeniu w prawym dolnym rogu każdej strony pojawi się przycisk ARIA.
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="field" style="margin-bottom:.6rem;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="ariaSettingsTts" onchange="saveAriaSetting('aria_tts_enabled', this.checked)"/>
+          Synteza mowy (TTS) <span class="en">Text-to-speech</span>
+        </label>
+        <div class="small muted" style="margin-left:26px;">
+          ARIA będzie odczytywać odpowiedzi głosem.
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:.6rem;">
+        <label class="small" style="font-weight:600;">Model głosu <span class="en">Voice model</span></label>
+        <select id="ariaSettingsVoice" style="margin-top:4px;" onchange="saveAriaSetting('aria_voice', this.value)">
+          <option value="pl_PL-gosia-medium">Gosia (żeński PL)</option>
+          <option value="pl_PL-darkman-medium">Darkman (męski PL)</option>
+        </select>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="field" style="margin-bottom:.6rem;">
+        <label class="small" style="font-weight:600;">Model LLM dla ARIA <span class="en">LLM model for ARIA</span></label>
+        <div class="small muted" style="margin-bottom:4px;">
+          Mały, szybki model jest zalecany (np. mistral:7b-instruct, qwen2.5:3b, phi3:mini).
+          Pusty = model szybkiej analizy.
+        </div>
+        <select id="ariaSettingsModel" style="margin-top:4px;" onchange="saveAriaSetting('aria_model', this.value)">
+          <option value="">— domyślny (model szybkiej analizy) —</option>
+        </select>
+      </div>
+
+      <div class="hr"></div>
+
+      <div id="ariaSettingsStatus" class="small muted" style="margin-top:.4rem;"></div>
+
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/tts_settings.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script>
+/* ARIA settings — save/load from security API */
+async function saveAriaSetting(key, value) {
+  var payload = {};
+  payload[key] = value;
+  try {
+    var r = await fetch('/api/settings/security', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (r.ok) {
+      var st = document.getElementById('ariaSettingsStatus');
+      if (st) { st.textContent = 'Zapisano.'; setTimeout(function(){ st.textContent=''; }, 2000); }
+    }
+  } catch(e) { console.error('saveAriaSetting', e); }
+}
+
+async function loadAriaSettings() {
+  try {
+    var r = await fetch('/api/settings/security');
+    if (!r.ok) return;
+    var d = await r.json();
+    var en = document.getElementById('ariaSettingsEnabled');
+    if (en) en.checked = !!d.aria_enabled;
+    var tts = document.getElementById('ariaSettingsTts');
+    if (tts) tts.checked = d.aria_tts_enabled !== false;
+    var voice = document.getElementById('ariaSettingsVoice');
+    if (voice) voice.value = d.aria_voice || 'pl_PL-gosia-medium';
+
+    // Load available Ollama models into ARIA model selector
+    var modelSel = document.getElementById('ariaSettingsModel');
+    if (modelSel) {
+      try {
+        var mr = await fetch('/api/ollama/models');
+        if (mr.ok) {
+          var md = await mr.json();
+          var models = md.models || md || [];
+          if (Array.isArray(models)) {
+            models.forEach(function(m) {
+              var name = typeof m === 'string' ? m : (m.name || '');
+              if (!name) return;
+              var opt = document.createElement('option');
+              opt.value = name;
+              opt.textContent = name;
+              modelSel.appendChild(opt);
+            });
+          }
+        }
+      } catch(e) {}
+      modelSel.value = d.aria_model || '';
+    }
+
+    // Show status info
+    var st = document.getElementById('ariaSettingsStatus');
+    if (st) {
+      fetch('/api/aria/status').then(function(r2){ return r2.json(); }).then(function(s){
+        var parts = [];
+        parts.push('Ollama: ' + (s.ollama ? '✓ online' : '✗ offline'));
+        parts.push('Piper: ' + (s.piper_installed ? '✓' : '✗'));
+        parts.push('Głos: ' + (s.voice_model ? '✓ ' + s.voice : '✗ brak modelu'));
+        if (s.manual_loaded) parts.push('Instrukcja: ✓ (' + Math.round(s.manual_size/1024) + ' KB)');
+        st.textContent = parts.join(' | ');
+      }).catch(function(){});
+    }
+  } catch(e) { console.error('loadAriaSettings', e); }
+}
+
+document.addEventListener('DOMContentLoaded', loadAriaSettings);
+</script>
 {% endblock %}
