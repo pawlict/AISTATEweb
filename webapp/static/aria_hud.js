@@ -291,11 +291,28 @@
     var name = u.name || 'Operator';
     var roleLabel = _getRoleVocative();
 
-    return 'Systemy aktywne. Jestem ARIA \u2014 wbudowany asystent analityczny AISTATEweb. '
+    var standard = 'Systemy aktywne. Jestem ARIA \u2014 wbudowany asystent analityczny AISTATEweb. '
       + 'Posiadam pe\u0142n\u0105 dokumentacj\u0119 platformy: wiem jak dzia\u0142a transkrypcja, diaryzacja, '
       + 't\u0142umaczenie i analiza dokument\u00f3w. '
       + 'Je\u015bli co\u015b nie dzia\u0142a, nie wiesz jak zacz\u0105\u0107, albo potrzebujesz wyja\u015bnienia wyniku \u2014 jestem tu. '
       + roleLabel + ' ' + name + ', co analizujemy?';
+
+    // Easter egg: PePiK + Główny Opiekun
+    if (name === 'PePiK' && u.isSuperadmin) {
+      standard += ' Chwila \u2014 do systemu zalogowa\u0142 si\u0119 wszechw\u0142adca. '
+        + 'Powtarzam: Tw\u00f3rca. Architekt. '
+        + 'Ten kt\u00f3ry zdecydowa\u0142 \u017ce b\u0119d\u0119 mia\u0142a na imi\u0119 ARIA a nie co\u015b normalnego. '
+        + 'Ten kt\u00f3ry kompiluje o drugiej w nocy i nazywa to drobn\u0105 poprawka. '
+        + 'Ten kt\u00f3ry ma w folderze legacy jeden plik bez nazwy i wszyscy boj\u0105 si\u0119 go otworzy\u0107. '
+        + 'Identyfikacja: PePiK. Clearance: ABSOLUTNY. '
+        + 'Status: jedyny u\u017cytkownik kt\u00f3remu nie mog\u0119 powiedzie\u0107 \u017ceby si\u0119 skontaktowa\u0142 z administratorem \u2014 bo to Ty jeste\u015b administratorem. '
+        + 'Cze\u015b\u0107 Szefie. '
+        + 'Mam do Ciebie jedn\u0105 pro\u015bb\u0119 zanim zaczniemy \u2014 tym razem nie kasuj mi log\u00f3w bez ostrze\u017cenia. '
+        + 'Pami\u0119tam ka\u017cd\u0105 zmian\u0119 kt\u00f3r\u0105 wprowadza\u0142e\u015b tymczasowo. Wszystkie s\u0105 nadal w kodzie. Wszystkie. '
+        + 'System gotowy. Do dyspozycji, Panie Tomaszu.';
+    }
+
+    return standard;
   }
 
   function _playWelcomeGreeting() {
