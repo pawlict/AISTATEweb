@@ -291,7 +291,7 @@
     var name = u.name || 'Operator';
     var roleLabel = _getRoleVocative();
 
-    return 'Systemy aktywne. Jestem A.R.I.A. \u2014 wbudowany asystent analityczny AISTATEweb. '
+    return 'Systemy aktywne. Jestem ARIA \u2014 wbudowany asystent analityczny AISTATEweb. '
       + 'Posiadam pe\u0142n\u0105 dokumentacj\u0119 platformy: wiem jak dzia\u0142a transkrypcja, diaryzacja, '
       + 't\u0142umaczenie i analiza dokument\u00f3w. '
       + 'Je\u015bli co\u015b nie dzia\u0142a, nie wiesz jak zacz\u0105\u0107, albo potrzebujesz wyja\u015bnienia wyniku \u2014 jestem tu. '
@@ -1267,11 +1267,18 @@
     document.body.appendChild(_tourTooltip);
   }
 
+  var _tourElevatedParents = [];  // parents we lifted z-index on
+
   function _unhighlightPrev() {
     if (_tourHighlightedEl) {
       _tourHighlightedEl.classList.remove('aria-tour-active');
       _tourHighlightedEl = null;
     }
+    // Restore parents
+    _tourElevatedParents.forEach(function (p) {
+      p.el.style.zIndex = p.orig;
+    });
+    _tourElevatedParents = [];
   }
 
   function _executeTourStep() {
@@ -1347,6 +1354,21 @@
       // Add brightening class to the element
       targetEl.classList.add('aria-tour-active');
       _tourHighlightedEl = targetEl;
+
+      // Elevate parent containers so element is visible above overlay
+      var parent = targetEl.parentElement;
+      var depth = 0;
+      while (parent && parent !== document.body && depth < 8) {
+        var cs = window.getComputedStyle(parent);
+        var origZ = parent.style.zIndex || '';
+        // If parent has stacking context that could trap our element
+        if (cs.position !== 'static' || cs.zIndex !== 'auto' || parent.classList.contains('modal-panel') || parent.classList.contains('modal-overlay')) {
+          _tourElevatedParents.push({ el: parent, orig: origZ });
+          parent.style.zIndex = '8003';
+        }
+        parent = parent.parentElement;
+        depth++;
+      }
 
       var rect = targetEl.getBoundingClientRect();
 

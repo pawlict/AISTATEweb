@@ -187,6 +187,7 @@ def _build_system_prompt(context: Dict[str, Any]) -> str:
     if user_name or user_role:
         parts.append(f"\n\nUżytkownik: {user_name}, rola: {user_role}")
         parts.append(f"Zwracaj się do użytkownika po roli w wołaczu (patrz odmiana powyżej).")
+        parts.append(f"Imię/nick użytkownika to \"{user_name}\" — pisz je DOKŁADNIE tak, bez odmiany, bez zmiany końcówki!")
 
     # Inject current page context
     ctx_lines = []
