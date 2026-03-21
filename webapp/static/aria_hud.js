@@ -1,30 +1,30 @@
 /**
  * A.R.I.A. HUD — Analytical Response & Intelligence Assistant
- * Frontend logic: chat, TTS, context injection
+ * Frontend logic: SSE streaming chat, TTS, context injection, session memory
  */
 (function () {
   'use strict';
 
   /* ---- Hint chips ---- */
-  const ARIA_HINTS = [
-    { label: 'Mówcy',       query: 'Ilu mówców wykryto w nagraniu?' },
-    { label: 'Eksport',     query: 'Jak wyeksportować transkrypt do pliku?' },
-    { label: 'Języki',      query: 'Jakie języki obsługuje transkrypcja?' },
-    { label: 'Jakość',      query: 'Jak poprawić jakość diaryzacji?' },
-    { label: 'Tłumaczenie', query: 'Jak uruchomić tłumaczenie offline?' },
+  var ARIA_HINTS = [
+    { label: 'Jak transkrybować?', query: 'Jak uruchomić transkrypcję pliku audio?' },
+    { label: 'Mówcy',             query: 'Jak działa diaryzacja mówców?' },
+    { label: 'Analiza GSM',       query: 'Jak wczytać i analizować billing GSM?' },
+    { label: 'Tłumaczenie',       query: 'Jak uruchomić tłumaczenie offline?' },
+    { label: 'Szyfrowanie',       query: 'Jak zaszyfrować projekt?' },
   ];
 
   /* ---- State ---- */
-  const AriaHUD = {
+  var AriaHUD = {
     open: false,
     busy: false,
     ttsEnabled: true,
-    messages: [],         // { role: 'user'|'assistant', content: '...' }
+    messages: [],
     currentAudio: null,
     sessionId: null,
     msgCount: 0,
+    greeted: false,
 
-    // DOM refs (set in init)
     $trigger: null,
     $hud: null,
     $messages: null,
@@ -37,6 +37,12 @@
     $statusState: null,
     $statusDot: null,
   };
+
+  /* ---- Session Storage Keys ---- */
+  var SS_MESSAGES  = 'aria_hud_messages';
+  var SS_SESSION   = 'aria_hud_session';
+  var SS_TTS       = 'aria_hud_tts';
+  var SS_GREETED   = 'aria_hud_greeted';
 
   /* ---- Init ---- */
   function init() {
@@ -54,15 +60,13 @@
 
     if (!AriaHUD.$trigger || !AriaHUD.$hud) return;
 
-    AriaHUD.sessionId = _genSessionId();
+    _restoreSession();
 
-    // Set session ID in status line
     var sesEl = document.getElementById('aria-st-ses');
     if (sesEl) sesEl.textContent = 'SES:' + AriaHUD.sessionId;
 
-    // Event listeners
     AriaHUD.$trigger.addEventListener('click', toggle);
-    document.getElementById('aria-close')?.addEventListener('click', () => setOpen(false));
+    document.getElementById('aria-close')?.addEventListener('click', function () { setOpen(false); });
     AriaHUD.$sendBtn?.addEventListener('click', sendMessage);
     AriaHUD.$ttsBtn?.addEventListener('click', toggleTTS);
 
@@ -73,23 +77,85 @@
       }
     });
 
-    // Auto-resize textarea
     AriaHUD.$input?.addEventListener('input', function () {
       this.style.height = 'auto';
       this.style.height = Math.min(this.scrollHeight, 80) + 'px';
     });
 
-    // Build hint chips
-    _buildHints();
+    if (AriaHUD.messages.length === 0) {
+      _buildHints();
+    } else {
+      if (AriaHUD.$hints) AriaHUD.$hints.style.display = 'none';
+    }
 
-    // Check ARIA status
     _checkStatus();
-
-    // Add system welcome message
-    _addSystemMsg('A.R.I.A. online — gotowa do analizy.');
+    _updateTTSButton();
+    _updateStatusLine();
   }
 
-  /* ---- Session ID ---- */
+  /* ---- Welcome greeting (spoken via TTS only — NOT displayed in chat) ---- */
+  function _buildWelcomeText() {
+    var u = window.__ariaUser || {};
+    var name = u.name || 'Operator';
+    var role = u.role || 'user';
+
+    var ROLE_MAP = {
+      admin:       'Administratorze',
+      superadmin:  'Superadministratorze',
+      analyst:     'Analityku',
+      user:        'Operatorze',
+      viewer:      'Obserwatorze',
+    };
+    var roleLabel = ROLE_MAP[role] || 'Operatorze';
+
+    return 'Systemy aktywne. Jestem A.R.I.A. \u2014 wbudowany asystent analityczny AISTATEweb. '
+      + 'Posiadam pe\u0142n\u0105 dokumentacj\u0119 platformy: wiem jak dzia\u0142a transkrypcja, diaryzacja, '
+      + 't\u0142umaczenie i analiza dokument\u00f3w. '
+      + 'Je\u015bli co\u015b nie dzia\u0142a, nie wiesz jak zacz\u0105\u0107, albo potrzebujesz wyja\u015bnienia wyniku \u2014 jestem tu. '
+      + roleLabel + ' ' + name + ', co analizujemy?';
+  }
+
+  function _playWelcomeGreeting() {
+    if (AriaHUD.greeted || !AriaHUD.ttsEnabled) return;
+    AriaHUD.greeted = true;
+    try { sessionStorage.setItem(SS_GREETED, 'true'); } catch (e) { /* */ }
+    // Speak the welcome — no text bubble in chat
+    speakText(_buildWelcomeText());
+  }
+
+  /* ---- Session persistence ---- */
+  function _restoreSession() {
+    try {
+      var savedSession = sessionStorage.getItem(SS_SESSION);
+      var savedMessages = sessionStorage.getItem(SS_MESSAGES);
+      var savedTTS = sessionStorage.getItem(SS_TTS);
+      var savedGreeted = sessionStorage.getItem(SS_GREETED);
+
+      AriaHUD.sessionId = savedSession || _genSessionId();
+      AriaHUD.greeted = savedGreeted === 'true';
+
+      if (savedMessages) {
+        AriaHUD.messages = JSON.parse(savedMessages);
+        AriaHUD.msgCount = AriaHUD.messages.length;
+        AriaHUD.messages.forEach(function (m) {
+          _addMsgBubble(m.role, m.content, true);
+        });
+      }
+
+      if (savedTTS !== null) {
+        AriaHUD.ttsEnabled = savedTTS === 'true';
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function _saveSession() {
+    try {
+      sessionStorage.setItem(SS_SESSION, AriaHUD.sessionId);
+      sessionStorage.setItem(SS_MESSAGES, JSON.stringify(AriaHUD.messages));
+      sessionStorage.setItem(SS_TTS, String(AriaHUD.ttsEnabled));
+    } catch (e) { /* ignore */ }
+  }
+
   function _genSessionId() {
     return Math.random().toString(36).substring(2, 10).toUpperCase();
   }
@@ -104,49 +170,80 @@
     if (AriaHUD.$hud) {
       AriaHUD.$hud.classList.toggle('hidden', !state);
     }
-    if (state && AriaHUD.$input) {
-      setTimeout(() => AriaHUD.$input.focus(), 300);
+    if (state) {
+      if (AriaHUD.$input) {
+        setTimeout(function () { AriaHUD.$input.focus(); }, 300);
+      }
+      // Play spoken welcome on first open this session
+      if (!AriaHUD.greeted) {
+        setTimeout(_playWelcomeGreeting, 500);
+      }
     }
   }
 
   /* ---- Context ---- */
   function getPageContext() {
     return {
-      module: document.body?.dataset?.ariaModule || document.querySelector('[data-aria-module]')?.dataset?.ariaModule || 'unknown',
+      module: document.body?.dataset?.ariaModule || document.querySelector('[data-aria-module]')?.dataset?.ariaModule || _guessModule(),
       filename: document.querySelector('[data-aria-filename]')?.dataset?.ariaFilename || null,
       speakers: parseInt(document.querySelector('[data-aria-speakers]')?.dataset?.ariaSpeakers) || null,
       segments: parseInt(document.querySelector('[data-aria-segments]')?.dataset?.ariaSegments) || null,
     };
   }
 
-  /* ---- Send message ---- */
+  function _guessModule() {
+    var path = location.pathname;
+    if (path.indexOf('/transcription') >= 0) return 'transkrypcja';
+    if (path.indexOf('/diarization') >= 0) return 'diaryzacja';
+    if (path.indexOf('/analysis') >= 0) return 'analiza';
+    if (path.indexOf('/chat') >= 0) return 'chat_llm';
+    if (path.indexOf('/translation') >= 0) return 'tłumaczenie';
+    if (path.indexOf('/projects') >= 0) return 'projekty';
+    if (path.indexOf('/admin') >= 0) return 'ustawienia_gpu';
+    if (path.indexOf('/llm-settings') >= 0) return 'ustawienia_llm';
+    if (path.indexOf('/asr-settings') >= 0) return 'ustawienia_asr';
+    if (path.indexOf('/tts-settings') >= 0) return 'ustawienia_tts';
+    if (path.indexOf('/info') >= 0) return 'info';
+    if (path.indexOf('/logs') >= 0) return 'logi';
+    return 'unknown';
+  }
+
+  /* ---- Send message (SSE streaming) ---- */
   async function sendMessage() {
     if (AriaHUD.busy) return;
-    const text = (AriaHUD.$input?.value || '').trim();
+    var text = (AriaHUD.$input?.value || '').trim();
     if (!text) return;
 
-    // Clear input
     AriaHUD.$input.value = '';
     AriaHUD.$input.style.height = 'auto';
 
-    // Hide hints after first message
     if (AriaHUD.$hints) {
       AriaHUD.$hints.style.display = 'none';
     }
 
-    // Add user message
     AriaHUD.messages.push({ role: 'user', content: text });
     AriaHUD.msgCount++;
     _addMsgBubble('user', text);
+    _saveSession();
     _updateStatusLine();
 
-    // Show typing indicator
     AriaHUD.busy = true;
     _setBusy(true);
-    const typingEl = _showTyping();
+
+    var assistantDiv = document.createElement('div');
+    assistantDiv.className = 'aria-msg assistant';
+    assistantDiv.textContent = '';
+    if (AriaHUD.$messages) {
+      AriaHUD.$messages.appendChild(assistantDiv);
+      AriaHUD.$messages.scrollTop = AriaHUD.$messages.scrollHeight;
+    }
+
+    var fullReply = '';
+    var gotModel = '';
+    var hadError = false;
 
     try {
-      const res = await fetch('/api/aria/chat', {
+      var res = await fetch('/api/aria/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -156,46 +253,82 @@
         }),
       });
 
-      const data = await res.json();
-      const reply = data.reply || 'Brak odpowiedzi.';
+      if (!res.ok) {
+        var errData = await res.json().catch(function () { return {}; });
+        fullReply = errData.error || 'Błąd połączenia z ARIA.';
+        hadError = true;
+        assistantDiv.className = 'aria-msg error';
+        assistantDiv.textContent = fullReply;
+      } else {
+        var reader = res.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
 
-      // Remove typing indicator
-      if (typingEl) typingEl.remove();
+        while (true) {
+          var result = await reader.read();
+          if (result.done) break;
 
-      // Add assistant message
-      AriaHUD.messages.push({ role: 'assistant', content: reply });
-      AriaHUD.msgCount++;
-      _addMsgBubble(data.error ? 'error' : 'assistant', reply);
+          buffer += decoder.decode(result.value, { stream: true });
+          var lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-      if (data.model) {
-        _setStatusModel(data.model);
-      }
-
-      // TTS
-      if (AriaHUD.ttsEnabled && !data.error) {
-        speakText(reply);
+          for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            if (!line.startsWith('data: ')) continue;
+            try {
+              var data = JSON.parse(line.substring(6));
+              if (data.error) {
+                fullReply = data.error;
+                hadError = true;
+                assistantDiv.className = 'aria-msg error';
+                assistantDiv.textContent = fullReply;
+                break;
+              }
+              if (data.token) {
+                fullReply += data.token;
+                assistantDiv.textContent = fullReply;
+                if (AriaHUD.$messages) {
+                  AriaHUD.$messages.scrollTop = AriaHUD.$messages.scrollHeight;
+                }
+              }
+              if (data.model) gotModel = data.model;
+              if (data.done) break;
+            } catch (e) { /* ignore */ }
+          }
+        }
       }
     } catch (err) {
-      if (typingEl) typingEl.remove();
-      _addMsgBubble('error', 'Błąd połączenia: ' + (err.message || 'unknown'));
-    } finally {
-      AriaHUD.busy = false;
-      _setBusy(false);
-      _updateStatusLine();
+      fullReply = 'Błąd połączenia: ' + (err.message || 'unknown');
+      hadError = true;
+      assistantDiv.className = 'aria-msg error';
+      assistantDiv.textContent = fullReply;
+    }
+
+    if (fullReply && !hadError) {
+      AriaHUD.messages.push({ role: 'assistant', content: fullReply });
+      AriaHUD.msgCount++;
+    }
+
+    if (gotModel) _setStatusModel(gotModel);
+
+    AriaHUD.busy = false;
+    _setBusy(false);
+    _updateStatusLine();
+    _saveSession();
+
+    if (AriaHUD.ttsEnabled && !hadError && fullReply) {
+      speakText(fullReply);
     }
   }
 
   /* ---- TTS ---- */
   async function speakText(text) {
     if (!AriaHUD.ttsEnabled) return;
-
-    // Stop previous
     stopSpeech();
-
     setAriaWaveMode(true);
 
     try {
-      const res = await fetch('/api/aria/tts', {
+      var res = await fetch('/api/aria/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: text }),
@@ -206,9 +339,9 @@
         return;
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
+      var blob = await res.blob();
+      var url = URL.createObjectURL(blob);
+      var audio = new Audio(url);
       AriaHUD.currentAudio = audio;
 
       audio.onended = function () {
@@ -223,7 +356,7 @@
         AriaHUD.currentAudio = null;
       };
 
-      audio.play().catch(() => {
+      audio.play().catch(function () {
         setAriaWaveMode(false);
         AriaHUD.currentAudio = null;
       });
@@ -250,10 +383,9 @@
 
   function toggleTTS() {
     AriaHUD.ttsEnabled = !AriaHUD.ttsEnabled;
-    if (!AriaHUD.ttsEnabled) {
-      stopSpeech();
-    }
+    if (!AriaHUD.ttsEnabled) stopSpeech();
     _updateTTSButton();
+    _saveSession();
   }
 
   function _updateTTSButton() {
@@ -265,32 +397,14 @@
   }
 
   /* ---- DOM helpers ---- */
-
-  function _addMsgBubble(role, content) {
+  function _addMsgBubble(role, content, silent) {
     if (!AriaHUD.$messages) return;
     var div = document.createElement('div');
     div.className = 'aria-msg ' + role;
     div.textContent = content;
+    if (!silent) div.style.animation = 'ariaFadeIn 0.2s ease';
     AriaHUD.$messages.appendChild(div);
     AriaHUD.$messages.scrollTop = AriaHUD.$messages.scrollHeight;
-  }
-
-  function _addSystemMsg(text) {
-    if (!AriaHUD.$messages) return;
-    var div = document.createElement('div');
-    div.className = 'aria-msg system';
-    div.textContent = text;
-    AriaHUD.$messages.appendChild(div);
-  }
-
-  function _showTyping() {
-    if (!AriaHUD.$messages) return null;
-    var div = document.createElement('div');
-    div.className = 'aria-typing';
-    div.innerHTML = '<span></span><span></span><span></span>';
-    AriaHUD.$messages.appendChild(div);
-    AriaHUD.$messages.scrollTop = AriaHUD.$messages.scrollHeight;
-    return div;
   }
 
   function _setBusy(busy) {
@@ -308,9 +422,8 @@
 
   function _setStatusModel(model) {
     if (AriaHUD.$statusModel) {
-      // Shorten model name
       var short = model.replace(/:latest$/, '');
-      if (short.length > 16) short = short.substring(0, 16) + '…';
+      if (short.length > 16) short = short.substring(0, 16) + '\u2026';
       AriaHUD.$statusModel.textContent = 'MDL:' + short;
     }
   }
@@ -324,9 +437,7 @@
       chip.textContent = h.label;
       chip.title = h.query;
       chip.addEventListener('click', function () {
-        if (AriaHUD.$input) {
-          AriaHUD.$input.value = h.query;
-        }
+        if (AriaHUD.$input) AriaHUD.$input.value = h.query;
         sendMessage();
       });
       AriaHUD.$hints.appendChild(chip);
@@ -343,16 +454,30 @@
       if (data.ollama && AriaHUD.$statusState) {
         AriaHUD.$statusState.textContent = 'READY';
       }
-      // Update TTS button state based on availability
       if (!data.piper_installed || !data.voice_model) {
         AriaHUD.ttsEnabled = false;
-        _updateTTSButton();
-      } else {
         _updateTTSButton();
       }
     } catch (e) {
       if (AriaHUD.$statusDot) AriaHUD.$statusDot.classList.add('offline');
     }
+  }
+
+  /* ---- Clear history ---- */
+  function clearHistory() {
+    AriaHUD.messages = [];
+    AriaHUD.msgCount = 0;
+    AriaHUD.greeted = false;
+    AriaHUD.sessionId = _genSessionId();
+    if (AriaHUD.$messages) AriaHUD.$messages.innerHTML = '';
+    _buildHints();
+    if (AriaHUD.$hints) AriaHUD.$hints.style.display = '';
+    _updateStatusLine();
+    _saveSession();
+    try { sessionStorage.removeItem(SS_GREETED); } catch (e) { /* */ }
+    setTimeout(_playWelcomeGreeting, 300);
+    var sesEl = document.getElementById('aria-st-ses');
+    if (sesEl) sesEl.textContent = 'SES:' + AriaHUD.sessionId;
   }
 
   /* ---- Boot ---- */
@@ -362,9 +487,9 @@
     init();
   }
 
-  // Expose for external use
   window.AriaHUD = AriaHUD;
   window.AriaHUD.toggle = toggle;
   window.AriaHUD.setOpen = setOpen;
+  window.AriaHUD.clearHistory = clearHistory;
 
 })();

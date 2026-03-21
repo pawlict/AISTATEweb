@@ -1,25 +1,26 @@
 """ARIA HUD — Analytical Response & Intelligence Assistant.
 
 FastAPI router providing:
-- POST /api/aria/chat  — LLM chat via Ollama
-- POST /api/aria/tts   — Text-to-speech via Piper CLI
+- POST /api/aria/chat      — LLM chat via Ollama (JSON response)
+- POST /api/aria/chat/stream — LLM chat via Ollama (SSE streaming)
+- POST /api/aria/tts        — Text-to-speech via Piper CLI
+- GET  /api/aria/status     — Subsystem health check
 """
 
 from __future__ import annotations
 
 import asyncio
-import io
 import json
+import re
 import shutil
 import subprocess
 import tempfile
 import uuid
-import wave
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 router = APIRouter(prefix="/api/aria", tags=["aria"])
 
@@ -29,24 +30,22 @@ router = APIRouter(prefix="/api/aria", tags=["aria"])
 _ollama = None          # OllamaClient
 _app_log = None         # app_log function
 _settings_fn = None     # get_settings callable
+_manual_text: str = ""  # cached manual text
 
-ARIA_SYSTEM_PROMPT = """
+# ---------------------------------------------------------------------------
+# System prompt — ARIA persona + full AISTATEweb manual
+# ---------------------------------------------------------------------------
+
+ARIA_PERSONA = """
 Jesteś A.R.I.A. (Analytical Response & Intelligence Assistant) — wbudowanym asystentem
 analitycznym platformy AISTATEweb (AI S.T.A.T.E. = Artificial Intelligence
 Speech-To-Analysis-Translation Engine).
-
-Platforma obsługuje:
-- Transkrypcję audio: Whisper large-v3, NeMo Canary-1B, FastConformer
-- Diaryzację mówców: pyannote/speaker-diarization-3.1
-- Tłumaczenie offline: NLLB-200, Ollama/LLaMA (modele lokalne)
-- Analizę dokumentów i wyciągów bankowych (parser ING)
-- Analizę billingów GSM (telefonia komórkowa)
-- Języki: polski, angielski, rosyjski, ukraiński, białoruski, chiński
 
 Twój charakter:
 - Precyzyjny analityk — zwięzłe, rzeczowe odpowiedzi (max 4 zdania lub lista 5 punktów)
 - Odpowiadaj TYLKO po polsku
 - Masz świadomość kontekstu: wiesz w jakim module pracuje użytkownik i jaki plik przetwarza
+- Jeśli pytanie dotyczy obsługi programu, odpowiadaj na podstawie poniższej instrukcji
 - Jeśli pytanie jest poza zakresem AISTATEweb, grzecznie skieruj z powrotem do tematu
 - Styl: profesjonalny, bez zbędnych uprzejmości, jak briefing analityczny
 """.strip()
@@ -65,10 +64,12 @@ def init(
     app_log_fn: Any = None,
     get_settings: Any = None,
 ) -> None:
-    global _ollama, _app_log, _settings_fn
+    global _ollama, _app_log, _settings_fn, _manual_text
     _ollama = ollama_client
     _app_log = app_log_fn
     _settings_fn = get_settings
+    # Load the user manual once at startup
+    _manual_text = _load_manual()
 
 
 def _log(msg: str) -> None:
@@ -76,13 +77,84 @@ def _log(msg: str) -> None:
         _app_log(msg)
 
 
+def _load_manual() -> str:
+    """Load the AISTATEweb user manual (PL) from static files."""
+    manual_path = Path(__file__).resolve().parents[1] / "static" / "info_manual_pl.md"
+    try:
+        text = manual_path.read_text(encoding="utf-8")
+        # Strip HTML color spans to reduce tokens — keep text content only
+        text = re.sub(r'<span[^>]*>', '', text)
+        text = re.sub(r'</span>', '', text)
+        return text.strip()
+    except Exception as e:
+        _log(f"ARIA: failed to load manual: {e}")
+        return ""
+
+
+def _build_system_prompt(context: Dict[str, Any]) -> str:
+    """Build the full system prompt with persona + manual + current context."""
+    parts = [ARIA_PERSONA]
+
+    # Inject full manual
+    if _manual_text:
+        parts.append("\n\n--- INSTRUKCJA OBSŁUGI AISTATEWEB (używaj do odpowiedzi na pytania użytkownika) ---\n")
+        parts.append(_manual_text)
+        parts.append("\n--- KONIEC INSTRUKCJI ---")
+
+    # Inject current page context
+    ctx_lines = []
+    if context.get("module"):
+        ctx_lines.append(f"Aktywny moduł: {context['module']}")
+    if context.get("filename"):
+        ctx_lines.append(f"Plik: {context['filename']}")
+    if context.get("speakers"):
+        ctx_lines.append(f"Wykryci mówcy: {context['speakers']}")
+    if context.get("segments"):
+        ctx_lines.append(f"Segmenty: {context['segments']}")
+
+    if ctx_lines:
+        parts.append("\n\nAktualny kontekst użytkownika:\n" + "\n".join(ctx_lines))
+
+    return "\n".join(parts)
+
+
+def _get_model() -> str:
+    """Get the LLM model to use for ARIA."""
+    model = "mistral:7b-instruct"
+    if _settings_fn:
+        try:
+            s = _settings_fn()
+            if hasattr(s, "ollama_model") and s.ollama_model:
+                model = s.ollama_model
+        except Exception:
+            pass
+    return model
+
+
+def _build_ollama_messages(
+    system_prompt: str,
+    user_messages: List[Dict[str, str]],
+) -> List[Dict[str, str]]:
+    """Build the Ollama messages list."""
+    msgs: List[Dict[str, str]] = [
+        {"role": "system", "content": system_prompt}
+    ]
+    # Add user conversation history (last 20 messages)
+    for msg in user_messages[-20:]:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if role in ("user", "assistant") and content:
+            msgs.append({"role": role, "content": content})
+    return msgs
+
+
 # ---------------------------------------------------------------------------
-# Chat endpoint
+# Chat endpoint (non-streaming, JSON response)
 # ---------------------------------------------------------------------------
 
 @router.post("/chat")
 async def aria_chat(request: Request) -> JSONResponse:
-    """Chat with ARIA using Ollama LLM."""
+    """Chat with ARIA using Ollama LLM — full response."""
     try:
         body = await request.json()
     except Exception:
@@ -98,45 +170,16 @@ async def aria_chat(request: Request) -> JSONResponse:
     if _ollama is None:
         return JSONResponse({"error": "Ollama not available"}, status_code=503)
 
-    # Build context string
-    ctx_parts = []
-    if context.get("module"):
-        ctx_parts.append(f"Aktywny moduł: {context['module']}")
-    if context.get("filename"):
-        ctx_parts.append(f"Plik: {context['filename']}")
-    if context.get("speakers"):
-        ctx_parts.append(f"Wykryci mówcy: {context['speakers']}")
-    if context.get("segments"):
-        ctx_parts.append(f"Segmenty: {context['segments']}")
-
-    system_content = ARIA_SYSTEM_PROMPT
-    if ctx_parts:
-        system_content += "\n\nAktualny kontekst użytkownika:\n" + "\n".join(ctx_parts)
-
-    # Build messages list for Ollama
-    ollama_messages: List[Dict[str, str]] = [
-        {"role": "system", "content": system_content}
-    ]
-
-    # Add user conversation history (last 10 messages to keep context manageable)
-    for msg in user_messages[-10:]:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        if role in ("user", "assistant") and content:
-            ollama_messages.append({"role": role, "content": content})
-
-    # Pick model — use settings if available, else a sensible default
-    model = "mistral:7b-instruct"
-    if _settings_fn:
-        try:
-            s = _settings_fn()
-            if hasattr(s, "ollama_model") and s.ollama_model:
-                model = s.ollama_model
-        except Exception:
-            pass
+    system_prompt = _build_system_prompt(context)
+    ollama_messages = _build_ollama_messages(system_prompt, user_messages)
+    model = _get_model()
 
     try:
-        result = await _ollama.chat(model, ollama_messages, options={"num_predict": 300})
+        # Force CPU inference: num_gpu=0 to avoid competing with Whisper/pyannote
+        result = await _ollama.chat(
+            model, ollama_messages,
+            options={"num_predict": 400, "num_gpu": 0},
+        )
         reply = (result.get("message") or {}).get("content", "")
         if not reply:
             reply = "Brak odpowiedzi z modelu. Sprawdź, czy Ollama działa i model jest załadowany."
@@ -153,6 +196,59 @@ async def aria_chat(request: Request) -> JSONResponse:
             "session_id": session_id,
             "error": True,
         })
+
+
+# ---------------------------------------------------------------------------
+# Streaming chat endpoint (SSE)
+# ---------------------------------------------------------------------------
+
+@router.post("/chat/stream")
+async def aria_chat_stream(request: Request) -> StreamingResponse:
+    """Chat with ARIA using Ollama LLM — Server-Sent Events streaming."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    user_messages: List[Dict[str, str]] = body.get("messages", [])
+    context: Dict[str, Any] = body.get("context", {})
+    session_id: str = body.get("session_id") or str(uuid.uuid4())[:8].upper()
+
+    if not user_messages:
+        return JSONResponse({"error": "No messages provided"}, status_code=400)
+
+    if _ollama is None:
+        return JSONResponse({"error": "Ollama not available"}, status_code=503)
+
+    system_prompt = _build_system_prompt(context)
+    ollama_messages = _build_ollama_messages(system_prompt, user_messages)
+    model = _get_model()
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        try:
+            # Force CPU inference: num_gpu=0
+            async for chunk in _ollama.stream_chat(
+                model, ollama_messages,
+                options={"num_predict": 400, "num_gpu": 0},
+            ):
+                data = json.dumps({"token": chunk, "session_id": session_id, "model": model})
+                yield f"data: {data}\n\n"
+            # End signal
+            yield f"data: {json.dumps({'done': True, 'session_id': session_id, 'model': model})}\n\n"
+        except Exception as e:
+            _log(f"ARIA stream error: {e}")
+            error_data = json.dumps({"error": str(e)[:200], "session_id": session_id})
+            yield f"data: {error_data}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -277,4 +373,6 @@ async def aria_status() -> JSONResponse:
         "piper_installed": piper_ok,
         "voice_model": voice_ok,
         "voice": ARIA_VOICE,
+        "manual_loaded": bool(_manual_text),
+        "manual_size": len(_manual_text),
     })

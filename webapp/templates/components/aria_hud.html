@@ -35,6 +35,7 @@
   <div class="aria-header">
     <div id="aria-status-dot" class="aria-status-dot"></div>
     <div class="aria-header-title">A.R.I.A.</div>
+    <button class="aria-close-btn" title="Wyczyść historię" onclick="AriaHUD.clearHistory()" style="font-size:12px;">&#8634;</button>
     <button id="aria-close" class="aria-close-btn" title="Zamknij">&times;</button>
   </div>
 
@@ -61,4 +62,18 @@
   </div>
 </div>
 
+<!-- User context for ARIA greeting -->
+<script>
+  window.__ariaUser = {
+    {% if user %}
+    name: {{ (user.display_name or user.username or 'Operator')|tojson }},
+    role: {{ (user.role or 'user')|tojson }},
+    isAdmin: {{ 'true' if user.is_admin else 'false' }}
+    {% else %}
+    name: 'Operator',
+    role: 'admin',
+    isAdmin: true
+    {% endif %}
+  };
+</script>
 <script src="/static/aria_hud.js?v={{ app_version }}&_={{ static_ts }}"></script>
