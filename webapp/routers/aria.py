@@ -261,15 +261,26 @@ async def aria_chat_stream(request: Request) -> StreamingResponse:
 
 
 # ---------------------------------------------------------------------------
-# TTS endpoint (Piper CLI)
+# TTS endpoint (Piper CLI) — hybrid PL/EN with language detection
 # ---------------------------------------------------------------------------
+
+ARIA_VOICE_EN = "en_US-amy-medium"
+
+# Words/phrases that should always be spoken with EN voice
+_EN_KEYWORDS = re.compile(
+    r'\b(?:Speech-To-Analysis-Translation Engine|AISTATEweb|Whisper|NeMo|Canary|'
+    r'FastConformer|pyannote|NLLB|Ollama|LLaMA|Piper|Kokoro|YAMNet|PANNs|BEATs|'
+    r'Isolation Forest|GPU|CPU|VRAM|TTS|ASR|LLM|SSE|API|ONNX|WAV|MP3|FLAC|'
+    r'Analytical Response|Intelligence Assistant)\b',
+    re.IGNORECASE,
+)
+
 
 def _find_piper_exe() -> Optional[str]:
     """Find the piper executable."""
     exe = shutil.which("piper")
     if exe:
         return exe
-    # Try venv bin directory
     import sys
     venv_piper = Path(sys.executable).parent / "piper"
     if venv_piper.exists():
@@ -277,27 +288,53 @@ def _find_piper_exe() -> Optional[str]:
     return None
 
 
-def _piper_synthesize_sync(text: str, voice: str = ARIA_VOICE, speed: float = 1.0) -> Optional[bytes]:
-    """Synthesize text to WAV bytes using Piper CLI (blocking)."""
-    piper_exe = _find_piper_exe()
-    if not piper_exe:
-        return None
+def _is_english_segment(text: str) -> bool:
+    """Heuristic: is this text segment mostly English?"""
+    words = re.findall(r'[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+', text)
+    if not words:
+        return False
+    polish_chars = set('ąćęłńóśźżĄĆĘŁŃÓŚŹŻ')
+    en_words = 0
+    for w in words:
+        if not any(c in polish_chars for c in w):
+            en_words += 1
+    return en_words / len(words) > 0.7
 
+
+def _split_by_language(text: str) -> List[Dict[str, str]]:
+    """Split text into segments with language tags (pl/en).
+
+    Splits on sentence boundaries and checks each sentence's language.
+    Short technical terms embedded in Polish sentences stay Polish
+    (Piper handles them ok). Only full English sentences switch voice.
+    """
+    # Split by sentence-ending punctuation, keeping delimiters
+    parts = re.split(r'(?<=[.!?])\s+', text)
+    segments: List[Dict[str, str]] = []
+
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        # Check if this sentence is predominantly English
+        lang = "en" if _is_english_segment(part) else "pl"
+        # Merge consecutive same-language segments
+        if segments and segments[-1]["lang"] == lang:
+            segments[-1]["text"] += " " + part
+        else:
+            segments.append({"lang": lang, "text": part})
+
+    if not segments:
+        segments = [{"lang": "pl", "text": text}]
+
+    return segments
+
+
+def _piper_synthesize_one(piper_exe: str, text: str, voice: str, speed: float = 1.0) -> Optional[bytes]:
+    """Synthesize a single text segment to WAV bytes using Piper CLI."""
     onnx_path = _PIPER_VOICES_DIR / f"{voice}.onnx"
     if not onnx_path.exists():
         return None
-
-    # Truncate long text for TTS (max ~300 chars, up to 2 sentences)
-    tts_text = text
-    if len(tts_text) > 300:
-        # Try to cut at sentence boundary
-        for sep in [". ", "! ", "? ", ".\n"]:
-            idx = tts_text.find(sep, 80)
-            if 80 < idx < 300:
-                tts_text = tts_text[:idx + 1]
-                break
-        else:
-            tts_text = tts_text[:300]
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp_path = tmp.name
@@ -309,10 +346,10 @@ def _piper_synthesize_sync(text: str, voice: str = ARIA_VOICE, speed: float = 1.
 
         result = subprocess.run(
             cmd,
-            input=tts_text,
+            input=text,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=60,
         )
 
         if result.returncode != 0:
@@ -332,9 +369,67 @@ def _piper_synthesize_sync(text: str, voice: str = ARIA_VOICE, speed: float = 1.
             pass
 
 
+def _concat_wav(wav_parts: List[bytes]) -> bytes:
+    """Concatenate multiple WAV byte buffers into one."""
+    import io
+    import wave
+
+    if len(wav_parts) == 1:
+        return wav_parts[0]
+
+    # Read params from first WAV
+    with wave.open(io.BytesIO(wav_parts[0]), 'rb') as w0:
+        params = w0.getparams()
+        frames = [w0.readframes(w0.getnframes())]
+
+    for part in wav_parts[1:]:
+        try:
+            with wave.open(io.BytesIO(part), 'rb') as w:
+                # Only concat if same format
+                if w.getnchannels() == params.nchannels and w.getsampwidth() == params.sampwidth:
+                    frames.append(w.readframes(w.getnframes()))
+        except Exception:
+            continue
+
+    out_buf = io.BytesIO()
+    with wave.open(out_buf, 'wb') as out:
+        out.setparams(params)
+        for f in frames:
+            out.writeframes(f)
+
+    return out_buf.getvalue()
+
+
+def _piper_synthesize_hybrid(text: str, voice_pl: str, speed: float = 1.0) -> Optional[bytes]:
+    """Synthesize text with hybrid PL/EN voice switching."""
+    piper_exe = _find_piper_exe()
+    if not piper_exe:
+        return None
+
+    # Check if EN voice is available
+    en_available = (_PIPER_VOICES_DIR / f"{ARIA_VOICE_EN}.onnx").exists()
+
+    segments = _split_by_language(text)
+    wav_parts: List[bytes] = []
+
+    for seg in segments:
+        voice = voice_pl
+        if seg["lang"] == "en" and en_available:
+            voice = ARIA_VOICE_EN
+
+        wav = _piper_synthesize_one(piper_exe, seg["text"], voice, speed)
+        if wav:
+            wav_parts.append(wav)
+
+    if not wav_parts:
+        return None
+
+    return _concat_wav(wav_parts)
+
+
 @router.post("/tts")
 async def aria_tts(request: Request) -> Response:
-    """Generate TTS audio from text using Piper."""
+    """Generate TTS audio from text using Piper (hybrid PL/EN)."""
     try:
         body = await request.json()
     except Exception:
@@ -346,7 +441,7 @@ async def aria_tts(request: Request) -> Response:
     if not text:
         return JSONResponse({"error": "No text provided"}, status_code=400)
 
-    # Use admin-configured voice
+    # Use admin-configured voice (PL)
     voice = ARIA_VOICE
     if _settings_fn:
         try:
@@ -355,7 +450,7 @@ async def aria_tts(request: Request) -> Response:
         except Exception:
             pass
 
-    wav_bytes = await asyncio.to_thread(_piper_synthesize_sync, text, voice, speed)
+    wav_bytes = await asyncio.to_thread(_piper_synthesize_hybrid, text, voice, speed)
 
     if wav_bytes is None:
         return JSONResponse(
