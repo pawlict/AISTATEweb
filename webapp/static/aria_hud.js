@@ -322,10 +322,14 @@
   }
 
   /* ---- TTS ---- */
+  var _ttsReqId = 0;  // monotonic counter to cancel stale TTS requests
+
   async function speakText(text) {
     if (!AriaHUD.ttsEnabled) return;
     stopSpeech();
     setAriaWaveMode(true);
+
+    var myId = ++_ttsReqId;
 
     try {
       var res = await fetch('/api/aria/tts', {
@@ -334,12 +338,17 @@
         body: JSON.stringify({ text: text }),
       });
 
+      // If a newer request was started while we waited, discard this one
+      if (myId !== _ttsReqId) return;
+
       if (!res.ok) {
         setAriaWaveMode(false);
         return;
       }
 
       var blob = await res.blob();
+      if (myId !== _ttsReqId) return;
+
       var url = URL.createObjectURL(blob);
       var audio = new Audio(url);
       AriaHUD.currentAudio = audio;
@@ -465,6 +474,7 @@
 
   /* ---- Clear history ---- */
   function clearHistory() {
+    stopSpeech();
     AriaHUD.messages = [];
     AriaHUD.msgCount = 0;
     AriaHUD.greeted = false;
