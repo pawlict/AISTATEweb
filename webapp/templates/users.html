@@ -233,6 +233,37 @@
         <div id="encKeyStatus" style="font-size:.72rem;color:var(--muted,#888);margin-top:.3rem;"></div>
       </div>
 
+      <!-- ARIA HUD Settings -->
+      <div style="border:1px solid var(--border,#e0e3e8);border-radius:8px;padding:.8rem 1rem;margin-top:.8rem;">
+        <h4 style="margin:0 0 .5rem;font-size:.85rem;">
+          A.R.I.A. — Asystent analityczny <span class="en">Analytical Assistant</span>
+        </h4>
+        <div class="field" style="margin-bottom:.4rem;">
+          <label style="font-size:.78rem;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="secAriaEnabled" onchange="saveSecuritySetting('aria_enabled', this.checked)"/>
+            Włącz ARIA HUD <span class="en">Enable ARIA HUD</span>
+          </label>
+          <div style="font-size:.68rem;color:var(--muted,#888);margin-left:22px;">
+            Pływający asystent AI dostępny na każdej stronie
+            <span class="en">Floating AI assistant available on every page</span>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:.4rem;">
+          <label style="font-size:.78rem;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="secAriaTtsEnabled" onchange="saveSecuritySetting('aria_tts_enabled', this.checked)"/>
+            Włącz syntezę mowy (TTS) <span class="en">Enable text-to-speech</span>
+          </label>
+        </div>
+        <div class="field" style="margin-bottom:.4rem;">
+          <label style="font-size:.78rem;">Model głosu <span class="en">Voice model</span></label>
+          <select id="secAriaVoice" style="font-size:.78rem;" onchange="saveSecuritySetting('aria_voice', this.value)">
+            <option value="pl_PL-gosia-medium">Gosia (żeński PL)</option>
+            <option value="pl_PL-darkman-medium">Darkman (męski PL)</option>
+          </select>
+        </div>
+        <div id="ariaStatusInfo" style="font-size:.72rem;color:var(--muted,#888);margin-top:.3rem;"></div>
+      </div>
+
     </div>
     <div id="secSaveMsg" style="font-size:.82rem;color:#27ae60;margin-top:.6rem;min-height:1.2em;"></div>
 

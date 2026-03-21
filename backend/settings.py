@@ -31,3 +31,7 @@ class Settings:
     encryption_method: str = "standard"             # "light", "standard", "maximum"
     encryption_force_new_projects: bool = False      # force encryption on all new projects
     encryption_master_key_initialized: bool = False  # True once Master Key is created
+    # ARIA HUD — Analytical Response & Intelligence Assistant
+    aria_enabled: bool = False                        # admin toggle — show ARIA HUD globally
+    aria_voice: str = "pl_PL-gosia-medium"            # Piper TTS voice model
+    aria_tts_enabled: bool = True                     # enable TTS in ARIA responses
