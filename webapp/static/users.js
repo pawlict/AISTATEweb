@@ -1086,15 +1086,7 @@
         if (btnBackup) btnBackup.style.display = mkInit ? '' : 'none';
         if (btnVerify) btnVerify.style.display = mkInit ? '' : 'none';
         if (keyStatus) keyStatus.textContent = mkInit ? '✓ Klucz główny zainicjalizowany / Master Key initialized' : '';
-        // ARIA settings
-        el = document.getElementById('secAriaEnabled');
-        if (el) el.checked = !!data.aria_enabled;
-        el = document.getElementById('secAriaTtsEnabled');
-        if (el) el.checked = data.aria_tts_enabled !== false;
-        el = document.getElementById('secAriaVoice');
-        if (el) el.value = data.aria_voice || 'pl_PL-gosia-medium';
-        // Check ARIA subsystem status
-        _checkAriaStatus();
+        // ARIA settings moved to TTS Settings page
       }
     } catch (e) { /* ignore */ }
   }

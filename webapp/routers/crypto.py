@@ -58,7 +58,7 @@ async def crypto_analyze(
     file: UploadFile = File(...),
     project_id: str = Form(""),
 ):
-    """Upload a crypto CSV/JSON file and run the full analysis pipeline."""
+    """Upload a crypto CSV/JSON/XLSX file and run the full analysis pipeline."""
     try:
         filename = file.filename or "upload.csv"
         content = await file.read()

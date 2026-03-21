@@ -30,6 +30,8 @@
   <div class="aria-corner tr"></div>
   <div class="aria-corner bl"></div>
   <div class="aria-corner br"></div>
+  <!-- Resize handle -->
+  <div class="aria-resize-handle" id="aria-resize"></div>
 
   <!-- Header -->
   <div class="aria-header">
@@ -55,7 +57,7 @@
 
   <!-- Input row -->
   <div class="aria-inputrow">
-    <span class="aria-input-prefix">OP&gt;</span>
+    <span class="aria-input-prefix">{{ (user.display_name or user.username or 'OP') if user else 'OP' }}&gt;</span>
     <textarea id="aria-input" class="aria-input" rows="1" placeholder="Zapytaj ARIA..."></textarea>
     <button id="aria-send" class="aria-send-btn" title="Wyślij">&#9654;</button>
     <button id="aria-tts-toggle" class="aria-tts-btn active" title="TTS aktywny">&#128266;</button>
@@ -67,12 +69,16 @@
   window.__ariaUser = {
     {% if user %}
     name: {{ (user.display_name or user.username or 'Operator')|tojson }},
-    role: {{ (user.role or 'user')|tojson }},
-    isAdmin: {{ 'true' if user.is_admin else 'false' }}
+    role: {{ (user.role or '')|tojson }},
+    adminRoles: {{ (user.admin_roles or [])|tojson }},
+    isAdmin: {{ 'true' if user.is_admin else 'false' }},
+    isSuperadmin: {{ 'true' if user.is_superadmin else 'false' }}
     {% else %}
     name: 'Operator',
-    role: 'admin',
-    isAdmin: true
+    role: '',
+    adminRoles: [],
+    isAdmin: true,
+    isSuperadmin: true
     {% endif %}
   };
 </script>

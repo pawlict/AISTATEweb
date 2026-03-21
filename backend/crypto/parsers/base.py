@@ -15,6 +15,7 @@ _SOURCE_TYPE_MAP: Dict[str, str] = {
     "binance": "exchange",
     "binance_trade": "exchange",
     "binance_pdf": "exchange",
+    "binance_xlsx": "exchange",
     "coinbase": "exchange",
     "coinbase_pro": "exchange",
     "kraken": "exchange",

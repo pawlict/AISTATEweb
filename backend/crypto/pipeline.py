@@ -131,11 +131,20 @@ def run_crypto_pipeline(
     exchange_meta: Dict[str, Any] = {}
     if source_type == "exchange":
         exchange_meta = {
-            "exchange_name": parsed.source.replace("_pdf", "").replace("_trade", "").title(),
+            "exchange_name": parsed.source.replace("_pdf", "").replace("_trade", "").replace("_xlsx", "").title(),
             "account_types": sorted({tx.raw.get("account", "") for tx in txs if tx.raw.get("account")}),
             "fiat_tokens": sorted({tx.token for tx in txs if tx.token in _FIAT}),
             "crypto_tokens": sorted({tx.token for tx in txs if tx.token not in _FIAT}),
         }
+
+    # Binance XLSX — add rich summary (counterparties, coins, fiat flow, etc.)
+    binance_summary: Dict[str, Any] = {}
+    if parsed.source == "binance_xlsx":
+        try:
+            from .parsers.binance_xlsx import build_binance_summary
+            binance_summary = build_binance_summary(parsed)
+        except Exception as e:
+            log.warning("Error building binance summary: %s", e)
 
     elapsed = time.time() - t0
     log.info(f"Crypto pipeline done: {len(txs)} txs, source_type={source_type}, {elapsed:.2f}s")
@@ -193,5 +202,6 @@ def run_crypto_pipeline(
         "transactions_truncated": len(txs) > 2000,
         "transactions_total": len(txs),
         "llm_prompt": llm_prompt,
+        "binance_summary": binance_summary,
         "elapsed_sec": round(elapsed, 2),
     }

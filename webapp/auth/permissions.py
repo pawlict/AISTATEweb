@@ -134,6 +134,7 @@ COMMON_PREFIXES: List[str] = [
     "/api/messages",  # call center messaging system (matches /api/messages and /api/messages/*)
     "/api/tasks/",  # task progress checking — used by all modules (analysis, transcription, etc.)
     "/api/debug/",  # diagnostic endpoints (temporary)
+    "/api/aria/",  # ARIA HUD assistant — available to all logged-in users
 ]
 
 
