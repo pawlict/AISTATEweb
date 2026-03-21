@@ -69,12 +69,16 @@
   window.__ariaUser = {
     {% if user %}
     name: {{ (user.display_name or user.username or 'Operator')|tojson }},
-    role: {{ (user.role or 'user')|tojson }},
-    isAdmin: {{ 'true' if user.is_admin else 'false' }}
+    role: {{ (user.role or '')|tojson }},
+    adminRoles: {{ (user.admin_roles or [])|tojson }},
+    isAdmin: {{ 'true' if user.is_admin else 'false' }},
+    isSuperadmin: {{ 'true' if user.is_superadmin else 'false' }}
     {% else %}
     name: 'Operator',
-    role: 'admin',
-    isAdmin: true
+    role: '',
+    adminRoles: [],
+    isAdmin: true,
+    isSuperadmin: true
     {% endif %}
   };
 </script>

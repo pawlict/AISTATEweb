@@ -241,19 +241,51 @@
   }
 
   /* ---- Welcome greeting (spoken via TTS only — NOT displayed in chat) ---- */
+  function _getRoleVocative() {
+    var u = window.__ariaUser || {};
+
+    // Polish vocative case (wołacz) for all system roles
+    // User roles
+    var ROLE_VOCATIVE = {
+      'Transkryptor':        'Transkryptorze',
+      'Lingwista':           'Lingwisto',
+      'Analityk':            'Analityku',
+      'Dialogista':          'Dialogisto',
+      'Strateg':             'Strategu',
+      'Mistrz Sesji':        'Mistrzu Sesji',
+      // Admin roles
+      'Architekt Funkcji':   'Architekcie Funkcji',
+      'Strażnik Dostępu':    'Strażniku Dostępu',
+      'Główny Opiekun':      'Główny Opiekunie',
+    };
+
+    // Priority: superadmin > admin roles > user role
+    if (u.isSuperadmin) {
+      return 'Główny Opiekunie';
+    }
+
+    // Check admin roles (use first one found)
+    if (u.adminRoles && u.adminRoles.length > 0) {
+      for (var i = 0; i < u.adminRoles.length; i++) {
+        if (ROLE_VOCATIVE[u.adminRoles[i]]) {
+          return ROLE_VOCATIVE[u.adminRoles[i]];
+        }
+      }
+    }
+
+    // Check user role
+    if (u.role && ROLE_VOCATIVE[u.role]) {
+      return ROLE_VOCATIVE[u.role];
+    }
+
+    // Fallback
+    return u.isAdmin ? 'Administratorze' : 'Operatorze';
+  }
+
   function _buildWelcomeText() {
     var u = window.__ariaUser || {};
     var name = u.name || 'Operator';
-    var role = u.role || 'user';
-
-    var ROLE_MAP = {
-      admin:       'Administratorze',
-      superadmin:  'Superadministratorze',
-      analyst:     'Analityku',
-      user:        'Operatorze',
-      viewer:      'Obserwatorze',
-    };
-    var roleLabel = ROLE_MAP[role] || 'Operatorze';
+    var roleLabel = _getRoleVocative();
 
     return 'Systemy aktywne. Jestem A.R.I.A. \u2014 wbudowany asystent analityczny AISTATEweb. '
       + 'Posiadam pe\u0142n\u0105 dokumentacj\u0119 platformy: wiem jak dzia\u0142a transkrypcja, diaryzacja, '
@@ -330,11 +362,24 @@
 
   /* ---- Context ---- */
   function getPageContext() {
+    var u = window.__ariaUser || {};
+    // Determine display role for LLM context
+    var displayRole = '';
+    if (u.isSuperadmin) {
+      displayRole = 'Główny Opiekun';
+    } else if (u.adminRoles && u.adminRoles.length > 0) {
+      displayRole = u.adminRoles[0];
+    } else if (u.role) {
+      displayRole = u.role;
+    }
+
     return {
       module: document.body?.dataset?.ariaModule || document.querySelector('[data-aria-module]')?.dataset?.ariaModule || _guessModule(),
       filename: document.querySelector('[data-aria-filename]')?.dataset?.ariaFilename || null,
       speakers: parseInt(document.querySelector('[data-aria-speakers]')?.dataset?.ariaSpeakers) || null,
       segments: parseInt(document.querySelector('[data-aria-segments]')?.dataset?.ariaSegments) || null,
+      user_name: u.name || 'Operator',
+      user_role: displayRole,
     };
   }
 
