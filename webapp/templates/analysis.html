@@ -135,6 +135,16 @@
         <button class="btn pill-icon" id="crypto_generate_btn" title="Generuj analizę narracyjną"><img src="/static/icons/akcje/generate_ai.svg" alt="Analizuj" draggable="false"></button>
       </div>
       <div class="toolbar-sep"></div>
+      <!-- Report -->
+      <div class="toolbar-section">
+        <div class="toolbar-group">
+          <label class="toolbar-group-label"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
+          <div class="toolbar-group-controls">
+            <button class="btn pill-icon" id="crypto_report_html_btn" title="Pobierz raport HTML"><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></button>
+          </div>
+        </div>
+      </div>
+      <div class="toolbar-sep"></div>
       <div class="toolbar-section">
         <div class="analysis-models">
           <div class="analysis-model">
@@ -1258,6 +1268,12 @@
         <div class="h2"><i data-icon="link" data-size="16"></i> Podsumowanie analizy</div>
         <div class="crypto-info-grid" id="crypto_info_grid"></div>
         <div class="crypto-summary-grid" id="crypto_summary_grid" style="margin-top:12px"></div>
+      </div>
+
+      <!-- User behavior profile -->
+      <div class="card" id="crypto_behavior_card" style="display:none">
+        <div class="h2">🧠 Profil zachowania użytkownika</div>
+        <div id="crypto_behavior_body"></div>
       </div>
 
       <!-- Risk assessment -->

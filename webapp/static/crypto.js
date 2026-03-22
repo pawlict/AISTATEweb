@@ -286,6 +286,7 @@
     const isExchange = (r.source_type === "exchange");
 
     _renderSummary(r, isExchange);
+    _renderBehaviorProfile(r);
     _renderRisk(r);
     _renderAlerts(r);
 
@@ -428,6 +429,121 @@
   function _renderTokenBreakdown(r) {
     _show("crypto_token_breakdown_card");
     // Actual chart is rendered in _renderCharts
+  }
+
+  /* -- User behavior profile ----------------------------------------- */
+
+  function _renderBehaviorProfile(r) {
+    const bp = r.behavior_profile;
+    if (!bp || !bp.profiles || !bp.profiles.length) { _hide("crypto_behavior_card"); return; }
+    _show("crypto_behavior_card");
+
+    const profiles = bp.profiles;
+    const primary = profiles[0];
+
+    let html = '';
+
+    // Primary profile — large display
+    const confColor = primary.score >= 70 ? "#22c55e" : primary.score >= 40 ? "#eab308" : "#94a3b8";
+    html += `<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding:12px 16px;background:rgba(37,99,235,.04);border-radius:10px;border:1px solid rgba(37,99,235,.12)">
+      <div style="font-size:40px;line-height:1">${_esc(primary.icon)}</div>
+      <div style="flex:1">
+        <div style="font-size:20px;font-weight:700">${_esc(primary.label)}</div>
+        <div class="small muted" style="margin-top:2px">${_esc(primary.desc)}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:28px;font-weight:700;color:${confColor}">${primary.score}<span style="font-size:14px;color:var(--text-muted)">%</span></div>
+        <div class="small muted">pewność</div>
+      </div>
+    </div>`;
+
+    // Primary reasons
+    if (primary.reasons && primary.reasons.length) {
+      html += '<div style="margin-bottom:16px"><b>Dlaczego ten profil:</b></div>';
+      html += '<ul style="margin:0 0 12px;padding-left:20px;font-size:13px">';
+      for (const reason of primary.reasons) {
+        html += `<li style="margin-bottom:3px">${_esc(reason)}</li>`;
+      }
+      html += '</ul>';
+    }
+
+    // Alternative profiles (score >= 20)
+    const alts = profiles.slice(1).filter(p => p.score >= 20);
+    if (alts.length) {
+      html += '<div style="margin-bottom:8px"><b>Profile alternatywne:</b></div>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
+      for (const alt of alts) {
+        const altColor = alt.score >= 50 ? "#f59e0b" : "#94a3b8";
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;transition:background .15s" class="crypto-alt-profile" data-profile="${_esc(alt.type)}">
+          <span style="font-size:20px">${_esc(alt.icon)}</span>
+          <div>
+            <div style="font-weight:600">${_esc(alt.label)} <span style="color:${altColor};font-weight:700">${alt.score}%</span></div>
+            <div class="small muted">${_esc(alt.desc)}</div>
+          </div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    // Expandable detail for alternative profiles
+    html += '<div id="crypto_behavior_alt_detail" style="display:none;margin-bottom:12px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>';
+
+    // Key metrics
+    const met = bp.metrics || {};
+    const metricItems = [];
+    if (met.tx_per_day != null) metricItems.push(["TX/dzień", met.tx_per_day.toFixed(2)]);
+    if (met.span_days != null) metricItems.push(["Okres (dni)", met.span_days]);
+    if (met.active_days != null) metricItems.push(["Aktywne dni", met.active_days]);
+    if (met.unique_tokens != null) metricItems.push(["Unikalne tokeny", met.unique_tokens]);
+    if (met.swap_count != null) metricItems.push(["Transakcje handlowe", met.swap_count]);
+    if (met.total_volume != null) metricItems.push(["Wolumen", met.total_volume.toFixed(2)]);
+    if (met.avg_holding_hours != null) metricItems.push(["Śr. czas trzymania", (met.avg_holding_hours / 24).toFixed(1) + " dni"]);
+    if (met.uses_leverage) metricItems.push(["Dźwignia", "Tak"]);
+    if (met.large_tx_count) metricItems.push(["Duże TX", met.large_tx_count]);
+    if (met.rapid_sequence_count) metricItems.push(["Szybkie sekwencje", met.rapid_sequence_count]);
+    if (met.privacy_coin_tx_count) metricItems.push(["Privacy coins TX", met.privacy_coin_tx_count]);
+    if (met.internal_transfer_count) metricItems.push(["Transfery wewnętrzne", met.internal_transfer_count]);
+
+    if (metricItems.length) {
+      html += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-muted)">📐 Metryki bazowe</summary>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 16px;margin-top:8px;font-size:12px">';
+      for (const [label, val] of metricItems) {
+        html += `<div><span class="muted">${_esc(label)}:</span> <b>${_esc(String(val))}</b></div>`;
+      }
+      html += '</div></details>';
+    }
+
+    _html("crypto_behavior_body", html);
+
+    // Click handler for alternative profiles — show reasons
+    document.querySelectorAll(".crypto-alt-profile").forEach(el => {
+      el.addEventListener("click", function() {
+        const type = this.dataset.profile;
+        const prof = profiles.find(p => p.type === type);
+        if (!prof) return;
+        const detail = document.getElementById("crypto_behavior_alt_detail");
+        if (!detail) return;
+        if (detail.style.display !== "none" && detail.dataset.currentType === type) {
+          detail.style.display = "none";
+          return;
+        }
+        detail.dataset.currentType = type;
+        let dHtml = `<div style="margin-bottom:6px"><b>${_esc(prof.icon)} ${_esc(prof.label)}</b> — dlaczego pasuje (${prof.score}%):</div>`;
+        if (prof.reasons && prof.reasons.length) {
+          dHtml += '<ul style="margin:0;padding-left:18px">';
+          for (const r of prof.reasons) {
+            dHtml += `<li>${_esc(r)}</li>`;
+          }
+          dHtml += '</ul>';
+        } else {
+          dHtml += '<div class="muted">Brak szczegółowych wskaźników.</div>';
+        }
+        detail.innerHTML = dHtml;
+        detail.style.display = "";
+      });
+      el.addEventListener("mouseenter", function() { this.style.background = "rgba(37,99,235,.05)"; });
+      el.addEventListener("mouseleave", function() { this.style.background = ""; });
+    });
   }
 
   /* -- Risk assessment ----------------------------------------------- */
@@ -2341,6 +2457,17 @@
     const genBtn = QS("#crypto_generate_btn");
     if (genBtn) {
       genBtn.onclick = () => _generateLLM();
+    }
+
+    // Report HTML download
+    const reportBtn = QS("#crypto_report_html_btn");
+    if (reportBtn) {
+      reportBtn.onclick = () => {
+        const pid = _getProjectId();
+        if (!pid) { alert("Brak projektu — zapisz analizę, aby wygenerować raport."); return; }
+        if (!_lastResult) { alert("Brak danych do raportu. Wczytaj dane crypto."); return; }
+        window.open("/api/crypto/report?project_id=" + encodeURIComponent(pid), "_blank");
+      };
     }
 
     // Chart selector (dropdown)

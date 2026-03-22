@@ -21,6 +21,7 @@ from .risk_rules import classify_transactions, compute_overall_risk, detect_all_
 from .charts import generate_all_charts
 from .graph import build_crypto_graph
 from .llm_analysis import build_crypto_prompt
+from .behavior import profile_user_behavior
 
 log = logging.getLogger("aistate.crypto.pipeline")
 
@@ -64,6 +65,9 @@ def run_crypto_pipeline(
 
     # 4. Compute overall risk
     risk_score, risk_reasons = compute_overall_risk(txs, alerts, source_type=source_type)
+
+    # 4b. User behavior profiling
+    behavior_profile = profile_user_behavior(txs, source_type=source_type)
 
     # 5. Build wallet info
     wallets = parsed.wallets
@@ -204,6 +208,7 @@ def run_crypto_pipeline(
         "transactions_truncated": len(txs) > 2000,
         "transactions_total": len(txs),
         "llm_prompt": llm_prompt,
+        "behavior_profile": behavior_profile,
         "binance_summary": binance_summary,
         "forensic_report": forensic_report,
         "elapsed_sec": round(elapsed, 2),
