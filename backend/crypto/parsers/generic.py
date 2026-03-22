@@ -699,12 +699,15 @@ def _build_wallets(txs: List[CryptoTransaction]) -> List[WalletInfo]:
     wallets: Dict[str, WalletInfo] = {}
 
     for tx in txs:
-        for addr, direction in [(tx.from_address, "sent"), (tx.to_address, "received")]:
-            if not addr:
+        for addr_raw, direction in [(tx.from_address, "sent"), (tx.to_address, "received")]:
+            if not addr_raw:
                 continue
-            if addr not in wallets:
-                wallets[addr] = WalletInfo(address=addr, chain=tx.chain)
-            w = wallets[addr]
+            addr = addr_raw.strip()
+            # Normalize key: lowercase for EVM addresses to avoid duplicates
+            key = addr.lower() if addr.startswith("0x") or addr.startswith("0X") else addr
+            if key not in wallets:
+                wallets[key] = WalletInfo(address=addr, chain=tx.chain)
+            w = wallets[key]
             w.tx_count += 1
             if direction == "sent":
                 w.total_sent += tx.amount

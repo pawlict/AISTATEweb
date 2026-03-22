@@ -91,16 +91,42 @@ def _is_internal(counterparty_id: str) -> bool:
     return bool(counterparty_id) and counterparty_id not in ("", "nan", "NaN", "None")
 
 
+def _dedup_addr(raw: str) -> str:
+    """Deduplicate comma-separated address field.
+
+    Binance exports sometimes repeat the same address many times in a single
+    cell (e.g. "addr1,addr1,addr1,...").  This extracts unique addresses and
+    returns them joined by comma.  If there's only one unique address, returns
+    it without commas.
+    """
+    if not raw or "," not in raw:
+        return raw
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    seen = []
+    seen_set = set()
+    for p in parts:
+        key = p.lower()
+        if key not in seen_set:
+            seen_set.add(key)
+            seen.append(p)
+    return ", ".join(seen) if len(seen) > 1 else (seen[0] if seen else raw)
+
+
 # ---------------------------------------------------------------------------
 # Sheet parsers
 # ---------------------------------------------------------------------------
 
 def _parse_customer_info(df) -> Dict[str, Any]:
-    """Extract account metadata from Customer Information sheet."""
+    """Extract account metadata from Customer Information sheet.
+
+    The Binance Customer Information sheet has a key-value layout where
+    some rows contain labels and the next row (or adjacent column) has the
+    corresponding values.  We scan for known label strings and capture
+    everything available.
+    """
     meta: Dict[str, Any] = {}
-    # The sheet has a complex layout: first row is a header string,
-    # actual data starts around row 3-4 with specific column positions.
-    # Header string often contains: "User Basic Information(id: XXXXX ...)"
+
+    # ---- 1. Header string often contains "User Basic Information(id: XXXXX ...)"
     first_col = str(df.columns[0]) if len(df.columns) > 0 else ""
     m = re.search(r"id:\s*(\d+)", first_col)
     if m:
@@ -109,20 +135,125 @@ def _parse_customer_info(df) -> Dict[str, Any]:
     if m:
         meta["email"] = m.group(1)
 
-    # Search rows for user ID, email, name
+    # ---- 2. Build a flat list of all cell values for label-based scanning
+    all_rows = []
     for _, row in df.iterrows():
-        vals = [_safe_str(v) for v in row.values]
-        if "User ID" in vals:
-            idx = vals.index("User ID")
-            # Next row typically has the values
-            continue
-        # Look for numeric user ID in first column
+        all_rows.append([_safe_str(v) for v in row.values])
+
+    # Also treat column names as a row (some sheets put labels in the header)
+    col_row = [_safe_str(c) for c in df.columns]
+    all_rows.insert(0, col_row)
+
+    # Known label → meta key mapping (case-insensitive matching)
+    _LABEL_MAP = {
+        "user id": "user_id",
+        "userid": "user_id",
+        "uid": "user_id",
+        "email": "email",
+        "e-mail": "email",
+        "phone": "phone",
+        "phone number": "phone",
+        "mobile": "phone",
+        "mobile number": "phone",
+        "contact number": "phone",
+        "name": "holder_name",
+        "full name": "holder_name",
+        "real name": "holder_name",
+        "account name": "holder_name",
+        "first name": "first_name",
+        "last name": "last_name",
+        "country": "country",
+        "country/region": "country",
+        "residence country": "country",
+        "nationality": "nationality",
+        "kyc level": "kyc_level",
+        "kyc": "kyc_level",
+        "verification level": "kyc_level",
+        "identity verification": "kyc_level",
+        "vip level": "vip_level",
+        "vip": "vip_level",
+        "registration date": "registration_date",
+        "register time": "registration_date",
+        "register date": "registration_date",
+        "created at": "registration_date",
+        "account create time": "registration_date",
+        "account status": "account_status",
+        "status": "account_status",
+        "id type": "id_type",
+        "document type": "id_type",
+        "identity type": "id_type",
+        "id number": "id_number",
+        "document number": "id_number",
+        "identity number": "id_number",
+        "address": "physical_address",
+        "residential address": "physical_address",
+        "city": "city",
+        "state": "state",
+        "province": "state",
+        "zip code": "zip_code",
+        "postal code": "zip_code",
+        "date of birth": "date_of_birth",
+        "birthday": "date_of_birth",
+        "dob": "date_of_birth",
+        "gender": "gender",
+        "referral id": "referral_id",
+        "referrer id": "referral_id",
+        "agent id": "agent_id",
+        "sub-account": "sub_account",
+        "sub account": "sub_account",
+        "margin enabled": "margin_enabled",
+        "futures enabled": "futures_enabled",
+        "api trading enabled": "api_trading",
+        "anti-phishing code": "anti_phishing_code",
+    }
+
+    # Build set of all known labels for collision detection
+    _ALL_LABELS = set(_LABEL_MAP.keys())
+
+    # ---- 3. Scan rows: look for label-value pairs
+    # The sheet typically has a header row with labels (User ID, Email, Mobile, ...)
+    # and the next row has the corresponding values (12345, adam@..., +48...).
+    # Strategy: first try value BELOW (same column, next row).
+    #           Only use value to the RIGHT if it's NOT another known label.
+    for ri, vals in enumerate(all_rows):
+        for ci, cell in enumerate(vals):
+            cell_lower = cell.lower().strip().rstrip(":")
+            if cell_lower not in _LABEL_MAP:
+                continue
+            key = _LABEL_MAP[cell_lower]
+
+            # Strategy A: value below (next row, same column) — preferred
+            val_below = ""
+            if ri + 1 < len(all_rows) and ci < len(all_rows[ri + 1]):
+                val_below = all_rows[ri + 1][ci]
+
+            # Strategy B: value to the right (same row, next column)
+            val_right = ""
+            if ci + 1 < len(vals):
+                candidate = vals[ci + 1]
+                # Only use if it's NOT another label name
+                if candidate and candidate.lower().strip().rstrip(":") not in _ALL_LABELS:
+                    val_right = candidate
+
+            # Prefer below (header→data row pattern), fallback to right
+            if val_below:
+                meta.setdefault(key, val_below)
+            elif val_right:
+                meta.setdefault(key, val_right)
+
+    # ---- 4. Fallback: row with numeric user ID (original heuristic)
+    for vals in all_rows:
         if vals[0] and re.match(r"^\d{6,}$", vals[0]):
             meta.setdefault("user_id", vals[0])
             if len(vals) > 1 and "@" in str(vals[1]):
-                meta["email"] = vals[1]
+                meta.setdefault("email", vals[1])
             if len(vals) > 4 and vals[4]:
-                meta["holder_name"] = vals[4]
+                meta.setdefault("holder_name", vals[4])
+
+    # ---- 5. Compose full name from first + last if holder_name missing
+    if not meta.get("holder_name") and (meta.get("first_name") or meta.get("last_name")):
+        parts = [meta.get("first_name", ""), meta.get("last_name", "")]
+        meta["holder_name"] = " ".join(p for p in parts if p)
 
     return meta
 
@@ -136,8 +267,8 @@ def _parse_deposit_history(df) -> List[CryptoTransaction]:
             continue
         amount = _dec(row.get("Amount"))
         ts = _ts(row.get("Create Time"))
-        dep_addr = _safe_str(row.get("Deposit Address", ""))
-        src_addr = _safe_str(row.get("Source Address", ""))
+        dep_addr = _dedup_addr(_safe_str(row.get("Deposit Address", "")))
+        src_addr = _dedup_addr(_safe_str(row.get("Source Address", "")))
         txid = _safe_str(row.get("TXID", ""))
         network = _safe_str(row.get("Network", ""))
         cp_id = _safe_str(row.get("CounterParty ID", "") or row.get("CounterPartyID", ""))
@@ -184,7 +315,7 @@ def _parse_withdrawal_history(df) -> List[CryptoTransaction]:
         amount = _dec(row.get("Amount"))
         ts = _ts(row.get("Apply Time"))
         # Note: column name has trailing space in real exports
-        dest_addr = _safe_str(row.get("Destination Address ", "") or row.get("Destination Address", ""))
+        dest_addr = _dedup_addr(_safe_str(row.get("Destination Address ", "") or row.get("Destination Address", "")))
         txid = _safe_str(row.get("txId", "") or row.get("TXID", ""))
         network = _safe_str(row.get("Network", ""))
         cp_id = _safe_str(row.get("CounterParty ID", "") or row.get("CounterPartyID", ""))
@@ -798,15 +929,18 @@ def parse_binance_xlsx(path: Path) -> ParsedCryptoData:
 
 
 def _build_tx_wallets(txs: List[CryptoTransaction]) -> List[WalletInfo]:
-    """Build wallet info from transaction addresses."""
+    """Build wallet info from transaction addresses (deduplicated)."""
     wallets: Dict[str, WalletInfo] = {}
     for tx in txs:
-        for addr, direction in [(tx.from_address, "sent"), (tx.to_address, "received")]:
-            if not addr:
+        for addr_raw, direction in [(tx.from_address, "sent"), (tx.to_address, "received")]:
+            if not addr_raw:
                 continue
-            if addr not in wallets:
-                wallets[addr] = WalletInfo(address=addr, chain=tx.chain)
-            w = wallets[addr]
+            addr = addr_raw.strip()
+            # Normalize key: lowercase for EVM addresses to avoid duplicates
+            key = addr.lower() if addr.startswith("0x") or addr.startswith("0X") else addr
+            if key not in wallets:
+                wallets[key] = WalletInfo(address=addr, chain=tx.chain)
+            w = wallets[key]
             w.tx_count += 1
             if direction == "sent":
                 w.total_sent += tx.amount
@@ -1162,34 +1296,48 @@ def build_forensic_report(path: Path, parsed: ParsedCryptoData) -> Dict[str, Any
     # 6. External source/dest addresses (on-chain)
     # -----------------------------------------------------------------------
     ext_sources: Dict[str, Dict[str, Any]] = defaultdict(
-        lambda: {"total": 0.0, "tokens": set(), "count": 0, "networks": set()}
+        lambda: {"total": 0.0, "tokens": set(), "count": 0, "networks": set(), "display": ""}
     )
     ext_dests: Dict[str, Dict[str, Any]] = defaultdict(
-        lambda: {"total": 0.0, "tokens": set(), "count": 0, "networks": set()}
+        lambda: {"total": 0.0, "tokens": set(), "count": 0, "networks": set(), "display": ""}
     )
+
+    def _norm_addr(addr: str) -> str:
+        """Normalize address for dedup — lowercase for EVM, strip whitespace."""
+        a = addr.strip()
+        if a.startswith("0x") or a.startswith("0X"):
+            return a.lower()
+        return a
+
     for tx in txs:
         is_int = "binance_internal" in (tx.risk_tags or [])
         if tx.tx_type == "deposit" and not is_int and tx.from_address:
-            s = ext_sources[tx.from_address]
+            key = _norm_addr(tx.from_address)
+            s = ext_sources[key]
             s["total"] += float(tx.amount)
             s["tokens"].add(tx.token)
             s["count"] += 1
             s["networks"].add(tx.chain)
+            if not s["display"]:
+                s["display"] = tx.from_address.strip()
         elif tx.tx_type == "withdrawal" and not is_int and tx.to_address:
-            d = ext_dests[tx.to_address]
+            key = _norm_addr(tx.to_address)
+            d = ext_dests[key]
             d["total"] += float(tx.amount)
             d["tokens"].add(tx.token)
             d["count"] += 1
             d["networks"].add(tx.chain)
+            if not d["display"]:
+                d["display"] = tx.to_address.strip()
 
     report["external_source_addresses"] = sorted(
-        [{"address": k, "total": v["total"], "tokens": sorted(v["tokens"]),
+        [{"address": v["display"] or k, "total": v["total"], "tokens": sorted(v["tokens"]),
           "count": v["count"], "networks": sorted(v["networks"])}
          for k, v in ext_sources.items()],
         key=lambda x: x["total"], reverse=True,
     )
     report["external_dest_addresses"] = sorted(
-        [{"address": k, "total": v["total"], "tokens": sorted(v["tokens"]),
+        [{"address": v["display"] or k, "total": v["total"], "tokens": sorted(v["tokens"]),
           "count": v["count"], "networks": sorted(v["networks"])}
          for k, v in ext_dests.items()],
         key=lambda x: x["total"], reverse=True,

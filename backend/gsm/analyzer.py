@@ -1153,7 +1153,7 @@ _PHONE_PREFIX_TO_COUNTRY: List[Tuple[str, str, str]] = [
     ("+52", "MX", "Meksyk"),
     ("+51", "PE", "Peru"),
     ("+49", "DE", "Niemcy"),
-    # +48 = Polska — pomijamy (krajowe)
+    ("+48", "PL", "Polska"),
     ("+47", "NO", "Norwegia"),
     ("+46", "SE", "Szwecja"),
     ("+45", "DK", "Dania"),
