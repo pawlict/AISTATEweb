@@ -1272,6 +1272,54 @@
         <div id="crypto_alerts_body"></div>
       </div>
 
+      <!-- Account owner info (Binance XLSX) -->
+      <div class="card" id="crypto_account_card" style="display:none">
+        <div class="h2">👤 Właściciel rachunku</div>
+        <div id="crypto_account_body"></div>
+      </div>
+
+      <!-- Forensic: Counterparties (Binance internal) -->
+      <div class="card" id="crypto_counterparties_card" style="display:none">
+        <div class="h2">🔗 Kontrahenci wewnętrzni Binance</div>
+        <div style="overflow-x:auto" id="crypto_counterparties_body"></div>
+      </div>
+
+      <!-- Forensic: Binance Pay C2C -->
+      <div class="card" id="crypto_pay_c2c_card" style="display:none">
+        <div class="h2">💸 Binance Pay (C2C)</div>
+        <div style="overflow-x:auto" id="crypto_pay_c2c_body"></div>
+      </div>
+
+      <!-- Forensic: External addresses -->
+      <div class="card" id="crypto_ext_addresses_card" style="display:none">
+        <div class="h2">🌐 Adresy zewnętrzne (on-chain)</div>
+        <div style="overflow-x:auto" id="crypto_ext_addresses_body"></div>
+      </div>
+
+      <!-- Forensic: Pass-through detection -->
+      <div class="card" id="crypto_passthrough_card" style="display:none">
+        <div class="h2">⚡ Wykryte przeloty środków (pass-through)</div>
+        <div style="overflow-x:auto" id="crypto_passthrough_body"></div>
+      </div>
+
+      <!-- Forensic: Privacy coins -->
+      <div class="card" id="crypto_privacy_card" style="display:none">
+        <div class="h2">🔒 Kryptowaluty prywatności</div>
+        <div id="crypto_privacy_body"></div>
+      </div>
+
+      <!-- Forensic: Access logs & devices -->
+      <div class="card" id="crypto_access_card" style="display:none">
+        <div class="h2">📡 Logi dostępu / Urządzenia / Geolokalizacja</div>
+        <div id="crypto_access_body"></div>
+      </div>
+
+      <!-- Forensic: Card geo-timeline -->
+      <div class="card" id="crypto_card_timeline_card" style="display:none">
+        <div class="h2">💳 Karta płatnicza — ślad lokalizacyjny</div>
+        <div style="overflow-x:auto" id="crypto_card_timeline_body"></div>
+      </div>
+
       <!-- Exchange metadata (exchange only) -->
       <div class="card" id="crypto_exchange_meta_card" style="display:none">
         <div class="h2">Portfel tokenów</div>
@@ -1433,7 +1481,7 @@
   <input type="file" id="aml_file_input" accept=".pdf" multiple style="display:none">
   <input type="file" id="gsm_file_input" accept=".xlsx,.xls,.csv,.txt,.zip" multiple style="display:none">
   <input type="file" id="gsm_folder_input" webkitdirectory directory multiple style="display:none">
-  <input type="file" id="crypto_file_input" accept=".csv,.json,.txt,.pdf" style="display:none">
+  <input type="file" id="crypto_file_input" accept=".csv,.json,.txt,.pdf,.xlsx,.xls" style="display:none">
   <input type="file" id="prompt_import_input" style="display:none" accept="application/json">
 
   <!-- Prompt dialog -->
