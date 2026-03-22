@@ -2404,19 +2404,19 @@
     html += `<div class="stat-box"><small>Weekend / tygodniowo</small><b>${ta.weekend_count || 0} / ${ta.weekday_count || 0} (${ta.weekend_ratio || 0}%)</b></div>`;
     html += '</div>';
 
-    // Hourly distribution bar chart (text-based)
+    // Hourly distribution bar chart
     const hd = ta.hourly_distribution || {};
     const maxH = Math.max(1, ...Object.values(hd));
-    html += '<div style="margin-bottom:14px"><b>📊 Rozkład godzinowy:</b></div>';
-    html += '<div style="display:flex;align-items:flex-end;gap:2px;height:100px;margin-bottom:4px">';
+    html += '<div style="margin-bottom:6px"><b>📊 Rozkład godzinowy:</b></div>';
+    html += '<div style="display:flex;align-items:flex-end;gap:2px;height:120px;margin-bottom:4px;padding:4px 0;border-bottom:1px solid #e2e8f0">';
     for (let h = 0; h < 24; h++) {
       const v = hd[h] || 0;
-      const pct = (v / maxH * 100).toFixed(0);
+      const pct = Math.max(1, v / maxH * 100);
       const color = (h >= 0 && h < 6) ? '#ef4444' : '#3b82f6';
-      html += `<div title="${h}:00 — ${v} tx" style="flex:1;background:${color};height:${pct}%;min-height:1px;border-radius:2px 2px 0 0"></div>`;
+      html += `<div title="${h}:00 — ${v} tx" style="flex:1;background:${color};height:${pct.toFixed(0)}%;border-radius:2px 2px 0 0"></div>`;
     }
     html += '</div>';
-    html += '<div style="display:flex;gap:2px;font-size:9px;color:#94a3b8">';
+    html += '<div style="display:flex;gap:2px;font-size:9px;color:#94a3b8;margin-bottom:20px">';
     for (let h = 0; h < 24; h++) html += `<div style="flex:1;text-align:center">${h}</div>`;
     html += '</div>';
 
@@ -2424,13 +2424,19 @@
     const dow = ta.dow_distribution || {};
     const dowNames = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'];
     const maxD = Math.max(1, ...Object.values(dow));
-    html += '<div style="margin:14px 0 6px"><b>📅 Rozkład dni tygodnia:</b></div>';
-    html += '<div style="display:flex;align-items:flex-end;gap:4px;height:60px;max-width:400px">';
+    html += '<div style="margin-bottom:6px"><b>📅 Rozkład dni tygodnia:</b></div>';
+    html += '<div style="display:flex;align-items:flex-end;gap:6px;height:80px;max-width:400px;padding:4px 0;border-bottom:1px solid #e2e8f0">';
     for (let d = 0; d < 7; d++) {
       const v = dow[d] || 0;
-      const pct = (v / maxD * 100).toFixed(0);
+      const pct = Math.max(1, v / maxD * 100);
       const color = d >= 5 ? '#f59e0b' : '#3b82f6';
-      html += `<div style="flex:1;text-align:center"><div style="background:${color};height:${pct}px;min-height:1px;border-radius:2px 2px 0 0;margin:0 auto;width:80%"></div><div style="font-size:10px;color:#64748b;margin-top:2px">${dowNames[d]}<br><span style="font-size:9px">${v}</span></div></div>`;
+      html += `<div title="${dowNames[d]} — ${v} tx" style="flex:1;background:${color};height:${pct.toFixed(0)}%;border-radius:2px 2px 0 0"></div>`;
+    }
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;max-width:400px;margin-bottom:16px">';
+    for (let d = 0; d < 7; d++) {
+      const v = dow[d] || 0;
+      html += `<div style="flex:1;text-align:center;font-size:10px;color:#64748b;margin-top:2px">${dowNames[d]}<br><span style="font-size:9px">${v}</span></div>`;
     }
     html += '</div>';
 
