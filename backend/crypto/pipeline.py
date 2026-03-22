@@ -137,14 +137,16 @@ def run_crypto_pipeline(
             "crypto_tokens": sorted({tx.token for tx in txs if tx.token not in _FIAT}),
         }
 
-    # Binance XLSX — add rich summary (counterparties, coins, fiat flow, etc.)
+    # Binance XLSX — add rich summary and forensic report
     binance_summary: Dict[str, Any] = {}
+    forensic_report: Dict[str, Any] = {}
     if parsed.source == "binance_xlsx":
         try:
-            from .parsers.binance_xlsx import build_binance_summary
+            from .parsers.binance_xlsx import build_binance_summary, build_forensic_report
             binance_summary = build_binance_summary(parsed)
+            forensic_report = build_forensic_report(path, parsed)
         except Exception as e:
-            log.warning("Error building binance summary: %s", e)
+            log.warning("Error building binance summary/forensic: %s", e)
 
     elapsed = time.time() - t0
     log.info(f"Crypto pipeline done: {len(txs)} txs, source_type={source_type}, {elapsed:.2f}s")
@@ -203,5 +205,6 @@ def run_crypto_pipeline(
         "transactions_total": len(txs),
         "llm_prompt": llm_prompt,
         "binance_summary": binance_summary,
+        "forensic_report": forensic_report,
         "elapsed_sec": round(elapsed, 2),
     }

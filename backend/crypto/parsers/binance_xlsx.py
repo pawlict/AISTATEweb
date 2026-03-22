@@ -950,3 +950,400 @@ def build_binance_summary(parsed: ParsedCryptoData) -> Dict[str, Any]:
         "card_spending": card_total,
         "card_merchants": card_merchants,
     }
+
+
+def build_forensic_report(path: Path, parsed: ParsedCryptoData) -> Dict[str, Any]:
+    """Build a comprehensive forensic report from a Binance XLSX export.
+
+    Extracts intelligence useful for law enforcement:
+      - account_info: KYC data, user IDs, email, phone
+      - user_ids_in_file: all distinct Binance user IDs found across sheets
+      - access_log_analysis: IP addresses, geolocations, devices, foreign logins
+      - device_fingerprints: approved devices with IP/geo/timestamps
+      - card_info: Binance card numbers, types, statuses
+      - card_geo_timeline: card spending locations with timestamps (travel trail)
+      - external_source_addresses: on-chain addresses that deposited to this account
+      - external_dest_addresses: on-chain addresses that received withdrawals
+      - binance_pay_counterparties: C2C transfer partners with volumes
+      - pass_through_detection: deposit→withdrawal chains within 24h (flow-through)
+      - privacy_coin_usage: ZEC/XMR/DASH deposit/trade/withdrawal activity
+      - mining_patterns: repeated small deposits from same address (mining pools)
+      - margin_analysis: separate user ID on margin, markets, volumes
+      - activity_timeline: hourly/daily activity patterns
+      - foreign_logins: logins from non-primary country
+      - multi_ip_days: days with suspiciously many unique IP addresses
+    """
+    import pandas as pd
+    from collections import defaultdict
+
+    report: Dict[str, Any] = {}
+    txs = parsed.transactions
+
+    try:
+        xls = pd.ExcelFile(str(path))
+    except Exception as e:
+        return {"error": str(e)}
+
+    sheets = set(xls.sheet_names)
+
+    # -----------------------------------------------------------------------
+    # 1. Account info (KYC)
+    # -----------------------------------------------------------------------
+    account_info: Dict[str, Any] = {}
+    if "Customer Information" in sheets:
+        try:
+            df = pd.read_excel(xls, sheet_name="Customer Information")
+            account_info = _parse_customer_info(df)
+        except Exception:
+            pass
+    report["account_info"] = account_info
+
+    # -----------------------------------------------------------------------
+    # 2. All User IDs found in file (some sheets have different users!)
+    # -----------------------------------------------------------------------
+    user_ids_found: Dict[str, List[str]] = {}
+    for sheet_name in ["Deposit History", "Withdrawal History", "Order History",
+                       "Margin Order", "Binance Pay", "Card Transaction"]:
+        if sheet_name not in sheets:
+            continue
+        try:
+            df = pd.read_excel(xls, sheet_name=sheet_name)
+            uid_col = None
+            for c in df.columns:
+                if "user" in str(c).lower() and "id" in str(c).lower():
+                    uid_col = c
+                    break
+            if uid_col:
+                uids = sorted(set(str(x) for x in df[uid_col].dropna().unique()
+                                   if str(x) not in ("nan", "")))
+                if uids:
+                    user_ids_found[sheet_name] = uids
+        except Exception:
+            pass
+    report["user_ids_in_file"] = user_ids_found
+
+    # -----------------------------------------------------------------------
+    # 3. Access log analysis
+    # -----------------------------------------------------------------------
+    access_analysis: Dict[str, Any] = {}
+    if "Access Logs" in sheets:
+        try:
+            al = pd.read_excel(xls, sheet_name="Access Logs")
+            al["ts"] = pd.to_datetime(al["Timestamp (UTC)"], errors="coerce")
+
+            # Unique IPs
+            ip_counts = al["Real IP"].value_counts()
+            access_analysis["total_entries"] = len(al)
+            access_analysis["unique_ips"] = len(ip_counts)
+            access_analysis["top_ips"] = {str(k): int(v) for k, v in ip_counts.head(20).items()}
+
+            # Geolocations
+            geo_counts = al["Geolocation"].value_counts()
+            access_analysis["geolocations"] = {str(k): int(v) for k, v in geo_counts.head(30).items()}
+
+            # Clients/devices
+            client_counts = al["Client"].value_counts()
+            access_analysis["clients"] = {str(k): int(v) for k, v in client_counts.items()}
+
+            # Date range
+            dates = al["ts"].dropna()
+            if len(dates) > 0:
+                access_analysis["first_login"] = str(dates.min())[:19]
+                access_analysis["last_login"] = str(dates.max())[:19]
+
+            # Hourly activity pattern
+            hours = al["ts"].dt.hour.value_counts().sort_index()
+            access_analysis["hourly_pattern"] = {int(k): int(v) for k, v in hours.items()}
+
+            # Foreign logins (non-primary country)
+            all_geos = al["Geolocation"].dropna()
+            if len(all_geos) > 0:
+                # Determine primary country from most common geo
+                primary_country = ""
+                for geo in geo_counts.index:
+                    geo_str = str(geo)
+                    if " " in geo_str:
+                        primary_country = geo_str.split()[0]
+                        break
+
+                if primary_country:
+                    foreign = al[~al["Geolocation"].astype(str).str.startswith(primary_country)]
+                    foreign_geos = foreign["Geolocation"].value_counts()
+                    access_analysis["primary_country"] = primary_country
+                    access_analysis["foreign_login_count"] = len(foreign)
+                    access_analysis["foreign_locations"] = {
+                        str(k): int(v) for k, v in foreign_geos.items()
+                    }
+
+                    # Foreign login details (for timeline)
+                    foreign_details = []
+                    for _, row in foreign.sort_values("ts").iterrows():
+                        foreign_details.append({
+                            "timestamp": str(row["ts"])[:19],
+                            "geo": _safe_str(row.get("Geolocation", "")),
+                            "ip": _safe_str(row.get("Real IP", "")),
+                            "client": _safe_str(row.get("Client", "")),
+                            "operation": _safe_str(row.get("Operation", "")),
+                        })
+                    access_analysis["foreign_login_timeline"] = foreign_details[:200]
+
+            # Multi-IP days (suspicious concurrent usage)
+            al["date"] = al["ts"].dt.date
+            daily_ips = al.groupby("date")["Real IP"].nunique()
+            multi_ip = daily_ips[daily_ips > 3]
+            access_analysis["multi_ip_days"] = [
+                {"date": str(d), "unique_ips": int(c)}
+                for d, c in multi_ip.sort_values(ascending=False).head(20).items()
+            ]
+
+        except Exception as e:
+            access_analysis["error"] = str(e)
+    report["access_log_analysis"] = access_analysis
+
+    # -----------------------------------------------------------------------
+    # 4. Approved devices (fingerprints)
+    # -----------------------------------------------------------------------
+    devices: List[Dict[str, str]] = []
+    if "Approved Devices" in sheets:
+        try:
+            ad = pd.read_excel(xls, sheet_name="Approved Devices")
+            for _, row in ad.iterrows():
+                dn = _safe_str(row.get("Device Name"))
+                if not dn:
+                    continue
+                devices.append({
+                    "device": dn,
+                    "client": _safe_str(row.get("Client")),
+                    "ip": _safe_str(row.get("IP Address")),
+                    "geo": _safe_str(row.get("Geolocation")),
+                    "last_used": _safe_str(row.get("Recent Usage Timestamp (UTC)")),
+                    "status": _safe_str(row.get("Status")),
+                })
+        except Exception:
+            pass
+    report["device_fingerprints"] = devices
+
+    # -----------------------------------------------------------------------
+    # 5. Card info & geo-timeline
+    # -----------------------------------------------------------------------
+    cards: List[Dict[str, str]] = []
+    if "Card Info" in sheets:
+        try:
+            ci = pd.read_excel(xls, sheet_name="Card Info")
+            for _, row in ci.iterrows():
+                cards.append({
+                    "card_number": _safe_str(row.get("Card Number")),
+                    "card_type": _safe_str(row.get("Card Type")),
+                    "status": _safe_str(row.get("Card Status")),
+                    "created": _safe_str(row.get("Create Date")),
+                })
+        except Exception:
+            pass
+    report["card_info"] = cards
+
+    card_timeline: List[Dict[str, Any]] = []
+    if "Card Transaction" in sheets:
+        try:
+            ct = pd.read_excel(xls, sheet_name="Card Transaction")
+            ct["ts"] = pd.to_datetime(ct["Created date"], errors="coerce")
+            for _, row in ct.sort_values("ts").iterrows():
+                card_timeline.append({
+                    "timestamp": str(row["ts"])[:19] if pd.notna(row["ts"]) else "",
+                    "merchant": _safe_str(row.get("Merchant Name")),
+                    "amount": float(row.get("Total", 0)),
+                    "currency": _safe_str(row.get("Currency")),
+                    "status": _safe_str(row.get("Status")),
+                })
+        except Exception:
+            pass
+    report["card_geo_timeline"] = card_timeline
+
+    # -----------------------------------------------------------------------
+    # 6. External source/dest addresses (on-chain)
+    # -----------------------------------------------------------------------
+    ext_sources: Dict[str, Dict[str, Any]] = defaultdict(
+        lambda: {"total": 0.0, "tokens": set(), "count": 0, "networks": set()}
+    )
+    ext_dests: Dict[str, Dict[str, Any]] = defaultdict(
+        lambda: {"total": 0.0, "tokens": set(), "count": 0, "networks": set()}
+    )
+    for tx in txs:
+        is_int = "binance_internal" in (tx.risk_tags or [])
+        if tx.tx_type == "deposit" and not is_int and tx.from_address:
+            s = ext_sources[tx.from_address]
+            s["total"] += float(tx.amount)
+            s["tokens"].add(tx.token)
+            s["count"] += 1
+            s["networks"].add(tx.chain)
+        elif tx.tx_type == "withdrawal" and not is_int and tx.to_address:
+            d = ext_dests[tx.to_address]
+            d["total"] += float(tx.amount)
+            d["tokens"].add(tx.token)
+            d["count"] += 1
+            d["networks"].add(tx.chain)
+
+    report["external_source_addresses"] = sorted(
+        [{"address": k, "total": v["total"], "tokens": sorted(v["tokens"]),
+          "count": v["count"], "networks": sorted(v["networks"])}
+         for k, v in ext_sources.items()],
+        key=lambda x: x["total"], reverse=True,
+    )
+    report["external_dest_addresses"] = sorted(
+        [{"address": k, "total": v["total"], "tokens": sorted(v["tokens"]),
+          "count": v["count"], "networks": sorted(v["networks"])}
+         for k, v in ext_dests.items()],
+        key=lambda x: x["total"], reverse=True,
+    )
+
+    # -----------------------------------------------------------------------
+    # 7. Binance Pay counterparties (C2C)
+    # -----------------------------------------------------------------------
+    pay_cps: Dict[str, Dict[str, Any]] = defaultdict(
+        lambda: {"in": 0.0, "out": 0.0, "tokens": set(), "count": 0,
+                 "wallet_id": "", "first": "", "last": ""}
+    )
+    for tx in txs:
+        if tx.raw.get("sheet") != "Binance Pay":
+            continue
+        cpid = tx.raw.get("counterparty_binance_id", "")
+        if not cpid:
+            continue
+        p = pay_cps[cpid]
+        p["count"] += 1
+        p["tokens"].add(tx.token)
+        p["wallet_id"] = tx.raw.get("counterparty_wallet_id", p["wallet_id"])
+        if tx.raw.get("direction") == "IN":
+            p["in"] += float(tx.amount)
+        else:
+            p["out"] += float(tx.amount)
+        if tx.timestamp:
+            if not p["first"] or tx.timestamp < p["first"]:
+                p["first"] = tx.timestamp
+            if not p["last"] or tx.timestamp > p["last"]:
+                p["last"] = tx.timestamp
+
+    report["binance_pay_counterparties"] = {
+        k: {**v, "tokens": sorted(v["tokens"])} for k, v in pay_cps.items()
+    }
+
+    # -----------------------------------------------------------------------
+    # 8. Pass-through detection (deposit→withdrawal within 24h)
+    # -----------------------------------------------------------------------
+    from datetime import timedelta
+
+    int_deps = [tx for tx in txs if tx.tx_type == "deposit"
+                and "binance_internal" in (tx.risk_tags or []) and tx.timestamp]
+    int_wds = [tx for tx in txs if tx.tx_type == "withdrawal"
+               and "binance_internal" in (tx.risk_tags or []) and tx.timestamp]
+
+    pass_throughs: List[Dict[str, Any]] = []
+    for dep_tx in int_deps:
+        try:
+            dep_dt = datetime.strptime(dep_tx.timestamp[:19], "%Y-%m-%dT%H:%M:%S")
+        except Exception:
+            continue
+        for wd_tx in int_wds:
+            try:
+                wd_dt = datetime.strptime(wd_tx.timestamp[:19], "%Y-%m-%dT%H:%M:%S")
+            except Exception:
+                continue
+            delta = (wd_dt - dep_dt).total_seconds()
+            if 0 < delta <= 86400:  # within 24 hours
+                pass_throughs.append({
+                    "deposit_time": dep_tx.timestamp,
+                    "deposit_amount": float(dep_tx.amount),
+                    "deposit_token": dep_tx.token,
+                    "deposit_from": dep_tx.counterparty,
+                    "withdrawal_time": wd_tx.timestamp,
+                    "withdrawal_amount": float(wd_tx.amount),
+                    "withdrawal_token": wd_tx.token,
+                    "withdrawal_to": wd_tx.counterparty,
+                    "delay_hours": round(delta / 3600, 1),
+                })
+    report["pass_through_detection"] = pass_throughs[:100]
+    report["pass_through_count"] = len(pass_throughs)
+
+    # -----------------------------------------------------------------------
+    # 9. Privacy coin usage
+    # -----------------------------------------------------------------------
+    _PRIVACY = {"XMR", "ZEC", "DASH", "SCRT", "BEAM", "GRIN", "FIRO"}
+    priv_txs = [tx for tx in txs if tx.token in _PRIVACY]
+    priv_summary: Dict[str, Dict[str, Any]] = {}
+    for tx in priv_txs:
+        if tx.token not in priv_summary:
+            priv_summary[tx.token] = {
+                "deposits": 0, "deposit_amount": 0.0,
+                "withdrawals": 0, "withdrawal_amount": 0.0,
+                "trades": 0, "trade_amount": 0.0,
+                "unique_source_addresses": set(),
+            }
+        ps = priv_summary[tx.token]
+        if tx.tx_type == "deposit":
+            ps["deposits"] += 1
+            ps["deposit_amount"] += float(tx.amount)
+            if tx.from_address:
+                ps["unique_source_addresses"].add(tx.from_address)
+        elif tx.tx_type == "withdrawal":
+            ps["withdrawals"] += 1
+            ps["withdrawal_amount"] += float(tx.amount)
+        elif tx.tx_type == "swap":
+            ps["trades"] += 1
+            ps["trade_amount"] += float(tx.amount)
+
+    for ps in priv_summary.values():
+        ps["unique_source_addresses"] = len(ps["unique_source_addresses"])
+
+    report["privacy_coin_usage"] = priv_summary
+
+    # -----------------------------------------------------------------------
+    # 10. Mining patterns (repeated small deposits from same address)
+    # -----------------------------------------------------------------------
+    addr_stats: Dict[str, Dict[str, Any]] = defaultdict(
+        lambda: {"count": 0, "total": 0.0, "token": ""}
+    )
+    for tx in txs:
+        if tx.tx_type != "deposit" or not tx.from_address:
+            continue
+        if "binance_internal" in (tx.risk_tags or []):
+            continue
+        key = tx.from_address
+        s = addr_stats[key]
+        s["count"] += 1
+        s["total"] += float(tx.amount)
+        s["token"] = tx.token
+
+    mining = [
+        {"address": k, "count": v["count"], "total": round(v["total"], 8),
+         "avg": round(v["total"] / v["count"], 8), "token": v["token"]}
+        for k, v in addr_stats.items()
+        if v["count"] >= 5 and (v["total"] / v["count"]) < 1.0
+    ]
+    mining.sort(key=lambda x: x["count"], reverse=True)
+    report["mining_patterns"] = mining[:50]
+
+    # -----------------------------------------------------------------------
+    # 11. Margin trading analysis (often different user ID!)
+    # -----------------------------------------------------------------------
+    margin_info: Dict[str, Any] = {}
+    if "Margin Order" in sheets:
+        try:
+            mo = pd.read_excel(xls, sheet_name="Margin Order")
+            user_ids = [str(x) for x in mo["User ID"].unique() if str(x) != "nan"]
+            filled = mo[mo["Status"] == "FILLED"]
+            markets = filled["Market ID"].value_counts()
+            buys = len(filled[filled["Side"] == "BUY"])
+            sells = len(filled[filled["Side"] == "SELL"])
+            margin_info = {
+                "user_ids": user_ids,
+                "total_orders": len(mo),
+                "filled_orders": len(filled),
+                "cancelled_orders": len(mo[mo["Status"] == "CANCELED"]),
+                "buy_count": buys,
+                "sell_count": sells,
+                "top_markets": {str(k): int(v) for k, v in markets.head(15).items()},
+            }
+        except Exception as e:
+            margin_info["error"] = str(e)
+    report["margin_analysis"] = margin_info
+
+    return report

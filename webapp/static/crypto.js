@@ -298,6 +298,28 @@
       _hide("crypto_token_breakdown_card");
     }
 
+    // Binance XLSX forensic cards
+    const isBinance = (r.source === "binance_xlsx");
+    if (isBinance) {
+      _renderAccountInfo(r);
+      _renderCounterparties(r);
+      _renderPayC2C(r);
+      _renderExtAddresses(r);
+      _renderPassThrough(r);
+      _renderPrivacyCoins(r);
+      _renderAccessLogs(r);
+      _renderCardTimeline(r);
+    } else {
+      _hide("crypto_account_card");
+      _hide("crypto_counterparties_card");
+      _hide("crypto_pay_c2c_card");
+      _hide("crypto_ext_addresses_card");
+      _hide("crypto_passthrough_card");
+      _hide("crypto_privacy_card");
+      _hide("crypto_access_card");
+      _hide("crypto_card_timeline_card");
+    }
+
     _renderReviewTable(r, isExchange);
     _renderAnomalies(r, isExchange);
 
@@ -319,6 +341,12 @@
       let html = "";
       if (isExchange) {
         const em = r.exchange_meta || {};
+        // Account owner info from forensic report
+        const acct = (r.forensic_report && r.forensic_report.account_info) || {};
+        if (acct.holder_name) html += `<div class="crypto-info-row"><b>Właściciel:</b> ${_esc(acct.holder_name)}</div>`;
+        if (acct.user_id) html += `<div class="crypto-info-row"><b>User ID:</b> ${_esc(acct.user_id)}</div>`;
+        if (acct.email) html += `<div class="crypto-info-row"><b>Email:</b> ${_esc(acct.email)}</div>`;
+        if (acct.phone) html += `<div class="crypto-info-row"><b>Telefon:</b> ${_esc(acct.phone)}</div>`;
         if (em.exchange_name || r.source) html += `<div class="crypto-info-row"><b>Giełda:</b> ${_esc(em.exchange_name || r.source)}</div>`;
         if (r.filename) html += `<div class="crypto-info-row"><b>Plik:</b> ${_esc(r.filename)}</div>`;
         const dateFrom = (r.date_from || "").slice(0, 10);
@@ -1707,6 +1735,392 @@
     html += "</tbody></table>";
     if (wallets.length > 50) html += `<div class="small" style="margin-top:4px;color:var(--text-muted)">Pokazano 50 z ${wallets.length}</div>`;
     _html("crypto_wallets_body", html);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Binance XLSX forensic cards                                       */
+  /* ------------------------------------------------------------------ */
+
+  function _renderAccountInfo(r) {
+    const fr = r.forensic_report || {};
+    const ai = fr.account_info || {};
+    if (!ai.user_id && !ai.holder_name) { _hide("crypto_account_card"); return; }
+    _show("crypto_account_card");
+
+    let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;font-size:13px">';
+    const fields = [
+      ["User ID", ai.user_id], ["Imię i nazwisko", ai.holder_name],
+      ["Email", ai.email], ["Telefon", ai.phone],
+      ["Kraj", ai.country], ["Narodowość", ai.nationality],
+      ["KYC Level", ai.kyc_level], ["Data rejestracji", ai.registration_date],
+      ["Status konta", ai.account_status], ["Typ dokumentu", ai.id_type],
+      ["Nr dokumentu", ai.id_number],
+    ];
+    for (const [label, val] of fields) {
+      if (val) html += `<div><b>${_esc(label)}:</b> ${_esc(val)}</div>`;
+    }
+    html += '</div>';
+
+    // User IDs across sheets
+    const uids = fr.user_ids_in_file || {};
+    if (Object.keys(uids).length) {
+      html += '<div style="margin-top:12px"><b>User IDs w pliku:</b></div>';
+      html += '<table class="data-table" style="width:100%;font-size:12px;margin-top:4px"><thead><tr><th>Arkusz</th><th>User ID</th></tr></thead><tbody>';
+      for (const [sheet, ids] of Object.entries(uids)) {
+        html += `<tr><td>${_esc(sheet)}</td><td style="font-family:monospace">${_esc(ids.join(", "))}</td></tr>`;
+      }
+      html += '</tbody></table>';
+    }
+    _html("crypto_account_body", html);
+  }
+
+  function _renderCounterparties(r) {
+    const bs = r.binance_summary || {};
+    const cps = bs.counterparties || {};
+    const keys = Object.keys(cps);
+    if (!keys.length) { _hide("crypto_counterparties_card"); return; }
+    _show("crypto_counterparties_card");
+
+    let html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+      '<th>User ID</th><th>TX</th><th>Wpływy</th><th>Wypływy</th><th>Tokeny</th><th>Źródło</th><th>Okres</th></tr></thead><tbody>';
+    const sorted = keys.sort((a, b) => cps[b].tx_count - cps[a].tx_count);
+    for (const k of sorted.slice(0, 50)) {
+      const c = cps[k];
+      const period = ((c.first_seen || "").slice(0, 10)) + " — " + ((c.last_seen || "").slice(0, 10));
+      html += `<tr>
+        <td style="font-family:monospace;font-weight:600">${_esc(k)}</td>
+        <td>${c.tx_count}</td>
+        <td style="text-align:right">${(c.total_in || 0).toFixed(4)}</td>
+        <td style="text-align:right">${(c.total_out || 0).toFixed(4)}</td>
+        <td>${_esc((c.tokens || []).join(", "))}</td>
+        <td>${_esc((c.sources || []).join(", "))}</td>
+        <td style="font-size:11px">${_esc(period)}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    if (keys.length > 50) html += `<div class="small muted" style="margin-top:4px">Pokazano 50 z ${keys.length}</div>`;
+
+    // Internal vs external stats
+    html += '<div style="margin-top:12px;display:flex;gap:24px;font-size:13px">';
+    html += `<span>🔄 Transfery wewnętrzne: <b>${bs.internal_transfer_count || 0}</b></span>`;
+    html += `<span>📥 Depozyty zewnętrzne: <b>${bs.external_deposit_count || 0}</b></span>`;
+    html += `<span>📤 Wypłaty zewnętrzne: <b>${bs.external_withdrawal_count || 0}</b></span>`;
+    html += '</div>';
+
+    _html("crypto_counterparties_body", html);
+  }
+
+  function _renderPayC2C(r) {
+    const fr = r.forensic_report || {};
+    const pcs = fr.binance_pay_counterparties || {};
+    const keys = Object.keys(pcs);
+    if (!keys.length) { _hide("crypto_pay_c2c_card"); return; }
+    _show("crypto_pay_c2c_card");
+
+    let html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+      '<th>Binance ID</th><th>Wallet ID</th><th>TX</th><th>Wpływy</th><th>Wypływy</th><th>Tokeny</th><th>Okres</th></tr></thead><tbody>';
+    const sorted = keys.sort((a, b) => pcs[b].count - pcs[a].count);
+    for (const k of sorted.slice(0, 50)) {
+      const c = pcs[k];
+      const period = ((c.first || "").slice(0, 10)) + " — " + ((c.last || "").slice(0, 10));
+      html += `<tr>
+        <td style="font-family:monospace;font-weight:600">${_esc(k)}</td>
+        <td style="font-family:monospace;font-size:11px">${_esc(c.wallet_id || "—")}</td>
+        <td>${c.count}</td>
+        <td style="text-align:right">${(c["in"] || 0).toFixed(4)}</td>
+        <td style="text-align:right">${(c["out"] || 0).toFixed(4)}</td>
+        <td>${_esc((c.tokens || []).join(", "))}</td>
+        <td style="font-size:11px">${_esc(period)}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    _html("crypto_pay_c2c_body", html);
+  }
+
+  function _renderExtAddresses(r) {
+    const fr = r.forensic_report || {};
+    const src = fr.external_source_addresses || [];
+    const dst = fr.external_dest_addresses || [];
+    if (!src.length && !dst.length) { _hide("crypto_ext_addresses_card"); return; }
+    _show("crypto_ext_addresses_card");
+
+    let html = '';
+    if (src.length) {
+      html += '<div style="margin-bottom:8px"><b>📥 Adresy źródłowe depozytów (zewnętrzne):</b></div>';
+      html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:16px"><thead><tr>' +
+        '<th>Adres</th><th>TX</th><th>Suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>';
+      for (const a of src.slice(0, 30)) {
+        html += `<tr>
+          <td style="font-family:monospace;font-size:11px" title="${_esc(a.address)}">${_esc(_shorten(a.address))}</td>
+          <td>${a.count}</td>
+          <td style="text-align:right">${(a.total || 0).toFixed(4)}</td>
+          <td>${_esc((a.tokens || []).join(", "))}</td>
+          <td>${_esc((a.networks || []).join(", "))}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      if (src.length > 30) html += `<div class="small muted">Pokazano 30 z ${src.length}</div>`;
+    }
+    if (dst.length) {
+      html += '<div style="margin-bottom:8px"><b>📤 Adresy docelowe wypłat (zewnętrzne):</b></div>';
+      html += '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+        '<th>Adres</th><th>TX</th><th>Suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>';
+      for (const a of dst.slice(0, 30)) {
+        html += `<tr>
+          <td style="font-family:monospace;font-size:11px" title="${_esc(a.address)}">${_esc(_shorten(a.address))}</td>
+          <td>${a.count}</td>
+          <td style="text-align:right">${(a.total || 0).toFixed(4)}</td>
+          <td>${_esc((a.tokens || []).join(", "))}</td>
+          <td>${_esc((a.networks || []).join(", "))}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      if (dst.length > 30) html += `<div class="small muted">Pokazano 30 z ${dst.length}</div>`;
+    }
+    _html("crypto_ext_addresses_body", html);
+  }
+
+  function _renderPassThrough(r) {
+    const fr = r.forensic_report || {};
+    const pts = fr.pass_through_detection || [];
+    const ptCount = fr.pass_through_count || pts.length;
+    if (!pts.length) { _hide("crypto_passthrough_card"); return; }
+    _show("crypto_passthrough_card");
+
+    let html = `<div style="margin-bottom:8px;font-size:13px">⚠️ Wykryto <b>${ptCount}</b> potencjalnych przepływów tranzytowych (depozyt → wypłata w ciągu 24h)</div>`;
+    html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr>' +
+      '<th>Depozyt (czas)</th><th>Kwota</th><th>Token</th><th>Od</th>' +
+      '<th>Wypłata (czas)</th><th>Kwota</th><th>Token</th><th>Do</th><th>Opóźn.</th></tr></thead><tbody>';
+    for (const pt of pts.slice(0, 30)) {
+      html += `<tr>
+        <td>${_esc((pt.deposit_time || "").slice(0, 16).replace("T", " "))}</td>
+        <td style="text-align:right">${(pt.deposit_amount || 0).toFixed(4)}</td>
+        <td>${_esc(pt.deposit_token || "")}</td>
+        <td style="font-size:10px">${_esc(pt.deposit_from || "—")}</td>
+        <td>${_esc((pt.withdrawal_time || "").slice(0, 16).replace("T", " "))}</td>
+        <td style="text-align:right">${(pt.withdrawal_amount || 0).toFixed(4)}</td>
+        <td>${_esc(pt.withdrawal_token || "")}</td>
+        <td style="font-size:10px">${_esc(pt.withdrawal_to || "—")}</td>
+        <td>${pt.delay_hours}h</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    if (pts.length > 30) html += `<div class="small muted" style="margin-top:4px">Pokazano 30 z ${pts.length}</div>`;
+    _html("crypto_passthrough_body", html);
+  }
+
+  function _renderPrivacyCoins(r) {
+    const fr = r.forensic_report || {};
+    const priv = fr.privacy_coin_usage || {};
+    const coins = Object.keys(priv);
+    if (!coins.length) { _hide("crypto_privacy_card"); return; }
+    _show("crypto_privacy_card");
+
+    let html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+      '<th>Moneta</th><th>Depozyty</th><th>Kwota dep.</th><th>Wypłaty</th><th>Kwota wyp.</th>' +
+      '<th>Transakcje</th><th>Kwota</th><th>Unik. adresy źr.</th></tr></thead><tbody>';
+    for (const coin of coins) {
+      const p = priv[coin];
+      html += `<tr>
+        <td style="font-weight:600;color:#f59e0b">${_esc(coin)}</td>
+        <td>${p.deposits || 0}</td>
+        <td style="text-align:right">${(p.deposit_amount || 0).toFixed(4)}</td>
+        <td>${p.withdrawals || 0}</td>
+        <td style="text-align:right">${(p.withdrawal_amount || 0).toFixed(4)}</td>
+        <td>${p.trades || 0}</td>
+        <td style="text-align:right">${(p.trade_amount || 0).toFixed(4)}</td>
+        <td style="font-weight:600;color:${(p.unique_source_addresses || 0) > 10 ? '#ef4444' : '#22c55e'}">${p.unique_source_addresses || 0}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+
+    // Mining patterns
+    const mining = fr.mining_patterns || [];
+    if (mining.length) {
+      html += `<div style="margin-top:16px"><b>⛏️ Wzorce górnicze (powtarzające się małe depozyty z tego samego adresu):</b></div>`;
+      html += '<table class="data-table" style="width:100%;font-size:12px;margin-top:4px"><thead><tr>' +
+        '<th>Adres</th><th>Token</th><th>TX</th><th>Suma</th><th>Średnia</th></tr></thead><tbody>';
+      for (const m of mining.slice(0, 20)) {
+        html += `<tr>
+          <td style="font-family:monospace;font-size:11px" title="${_esc(m.address)}">${_esc(_shorten(m.address))}</td>
+          <td>${_esc(m.token)}</td>
+          <td>${m.count}</td>
+          <td style="text-align:right">${(m.total || 0).toFixed(8)}</td>
+          <td style="text-align:right">${(m.avg || 0).toFixed(8)}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    _html("crypto_privacy_body", html);
+  }
+
+  function _renderAccessLogs(r) {
+    const fr = r.forensic_report || {};
+    const al = fr.access_log_analysis || {};
+    const devs = fr.device_fingerprints || [];
+    if (!al.total_entries && !devs.length) { _hide("crypto_access_card"); return; }
+    _show("crypto_access_card");
+
+    let html = '';
+    // Summary
+    if (al.total_entries) {
+      html += '<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:13px;margin-bottom:12px">';
+      html += `<span>📊 Łącznie wpisów: <b>${al.total_entries}</b></span>`;
+      html += `<span>🌐 Unikalne IP: <b>${al.unique_ips || 0}</b></span>`;
+      if (al.first_login) html += `<span>📅 Pierwszy login: <b>${_esc(al.first_login.slice(0, 10))}</b></span>`;
+      if (al.last_login) html += `<span>📅 Ostatni login: <b>${_esc(al.last_login.slice(0, 10))}</b></span>`;
+      if (al.foreign_login_count) html += `<span style="color:#ef4444">🚨 Zagraniczne loginy: <b>${al.foreign_login_count}</b></span>`;
+      html += '</div>';
+    }
+
+    // Geolocations
+    const geos = al.geolocations || {};
+    const geoKeys = Object.keys(geos);
+    if (geoKeys.length) {
+      html += '<div style="margin-bottom:8px"><b>📍 Geolokalizacje:</b></div>';
+      html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr><th>Lokalizacja</th><th>Loginy</th></tr></thead><tbody>';
+      for (const g of geoKeys.slice(0, 15)) {
+        html += `<tr><td>${_esc(g)}</td><td>${geos[g]}</td></tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    // Top IPs
+    const ips = al.top_ips || {};
+    const ipKeys = Object.keys(ips);
+    if (ipKeys.length) {
+      html += '<div style="margin-bottom:8px"><b>🌐 Najczęstsze adresy IP:</b></div>';
+      html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr><th>IP</th><th>Loginy</th></tr></thead><tbody>';
+      for (const ip of ipKeys.slice(0, 10)) {
+        html += `<tr><td style="font-family:monospace">${_esc(ip)}</td><td>${ips[ip]}</td></tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    // Devices
+    if (devs.length) {
+      html += '<div style="margin-bottom:8px"><b>📱 Zatwierdzone urządzenia:</b></div>';
+      html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr>' +
+        '<th>Urządzenie</th><th>Klient</th><th>IP</th><th>Geo</th><th>Ostatnie użycie</th><th>Status</th></tr></thead><tbody>';
+      for (const d of devs) {
+        html += `<tr>
+          <td>${_esc(d.device || "")}</td>
+          <td style="font-size:11px">${_esc(d.client || "")}</td>
+          <td style="font-family:monospace">${_esc(d.ip || "")}</td>
+          <td>${_esc(d.geo || "")}</td>
+          <td>${_esc((d.last_used || "").slice(0, 10))}</td>
+          <td>${_esc(d.status || "")}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    // Multi-IP days
+    const mid = al.multi_ip_days || [];
+    if (mid.length) {
+      html += '<div style="margin-bottom:8px"><b>⚠️ Dni z wieloma IP (podejrzane jednoczesne użycie):</b></div>';
+      html += '<table class="data-table" style="width:100%;font-size:12px"><thead><tr><th>Data</th><th>Unikalne IP</th></tr></thead><tbody>';
+      for (const d of mid.slice(0, 10)) {
+        html += `<tr><td>${_esc(d.date)}</td><td style="font-weight:600;color:#f59e0b">${d.unique_ips}</td></tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    // Foreign logins
+    const fl = al.foreign_login_timeline || [];
+    if (fl.length) {
+      html += `<div style="margin-top:12px;margin-bottom:8px"><b>🚨 Zagraniczne loginy (poza ${_esc(al.primary_country || "?")}):</b></div>`;
+      html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr>' +
+        '<th>Czas</th><th>Geolokalizacja</th><th>IP</th><th>Klient</th><th>Operacja</th></tr></thead><tbody>';
+      for (const f of fl.slice(0, 30)) {
+        html += `<tr>
+          <td>${_esc((f.timestamp || "").replace("T", " "))}</td>
+          <td>${_esc(f.geo || "")}</td>
+          <td style="font-family:monospace">${_esc(f.ip || "")}</td>
+          <td style="font-size:10px">${_esc(f.client || "")}</td>
+          <td>${_esc(f.operation || "")}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      if (fl.length > 30) html += `<div class="small muted" style="margin-top:4px">Pokazano 30 z ${fl.length}</div>`;
+    }
+
+    _html("crypto_access_body", html);
+  }
+
+  function _renderCardTimeline(r) {
+    const fr = r.forensic_report || {};
+    const cards = fr.card_info || [];
+    const timeline = fr.card_geo_timeline || [];
+    const bs = r.binance_summary || {};
+    const merchants = bs.card_merchants || {};
+    const spending = bs.card_spending || {};
+
+    if (!cards.length && !timeline.length && !Object.keys(spending).length) {
+      _hide("crypto_card_timeline_card"); return;
+    }
+    _show("crypto_card_timeline_card");
+
+    let html = '';
+
+    // Card info
+    if (cards.length) {
+      html += '<div style="margin-bottom:8px"><b>💳 Karty Binance:</b></div>';
+      html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr>' +
+        '<th>Numer karty</th><th>Typ</th><th>Status</th><th>Data utworzenia</th></tr></thead><tbody>';
+      for (const c of cards) {
+        html += `<tr>
+          <td style="font-family:monospace">${_esc(c.card_number || "")}</td>
+          <td>${_esc(c.card_type || "")}</td>
+          <td>${_esc(c.status || "")}</td>
+          <td>${_esc((c.created || "").slice(0, 10))}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    // Spending totals
+    const spKeys = Object.keys(spending);
+    if (spKeys.length) {
+      html += '<div style="display:flex;gap:24px;font-size:13px;margin-bottom:12px">';
+      for (const k of spKeys) {
+        html += `<span>Wydatki ${_esc(k)}: <b>${spending[k].toFixed(2)}</b></span>`;
+      }
+      html += '</div>';
+    }
+
+    // Top merchants
+    const mKeys = Object.keys(merchants);
+    if (mKeys.length) {
+      html += '<div style="margin-bottom:8px"><b>🏪 Merchants (TOP wydatki):</b></div>';
+      html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr><th>Merchant</th><th>Kwota</th></tr></thead><tbody>';
+      const sortedM = mKeys.sort((a, b) => merchants[b] - merchants[a]);
+      for (const m of sortedM.slice(0, 15)) {
+        html += `<tr><td>${_esc(m)}</td><td style="text-align:right">${merchants[m].toFixed(2)}</td></tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    // Transaction timeline
+    if (timeline.length) {
+      html += '<div style="margin-bottom:8px"><b>📍 Oś czasu transakcji kartą (geolokalizacja):</b></div>';
+      html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr>' +
+        '<th>Data/czas</th><th>Merchant</th><th>Kwota</th><th>Waluta</th><th>Status</th></tr></thead><tbody>';
+      for (const t of timeline.slice(0, 50)) {
+        html += `<tr>
+          <td>${_esc((t.timestamp || "").replace("T", " "))}</td>
+          <td>${_esc(t.merchant || "")}</td>
+          <td style="text-align:right">${(t.amount || 0).toFixed(2)}</td>
+          <td>${_esc(t.currency || "")}</td>
+          <td>${_esc(t.status || "")}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      if (timeline.length > 50) html += `<div class="small muted" style="margin-top:4px">Pokazano 50 z ${timeline.length}</div>`;
+    }
+
+    _html("crypto_card_timeline_body", html);
   }
 
   /* ------------------------------------------------------------------ */
