@@ -52,7 +52,7 @@
     dropzone.addEventListener("click", () => fileInput.click());
     dropzone.addEventListener("dragover", (e) => {
       e.preventDefault();
-      dropzone.style.borderColor = "var(--brand-sky)";
+      dropzone.style.borderColor = "var(--accent,#4a6cf7)";
     });
     dropzone.addEventListener("dragleave", () => {
       dropzone.style.borderColor = "rgba(255,255,255,0.12)";
@@ -313,7 +313,7 @@
     html += '<tr style="background:rgba(255,255,255,0.03);">';
     html += '<td style="font-weight:700;">' + esc(currentVersion) + '</td>';
     html += '<td class="small muted">—</td>';
-    html += '<td><span style="color:var(--brand-sky);">bieżąca</span></td>';
+    html += '<td><span style="color:var(--accent,#4a6cf7);">bieżąca</span></td>';
     html += '<td>—</td>';
     html += '<td>—</td>';
     html += '</tr>';
@@ -323,7 +323,7 @@
       const dt = entry.installed_at ? entry.installed_at.replace("T", " ").substring(0, 19) : "";
       const isRollback = entry.status === "rollback";
       const typeLabel = isRollback ? "rollback" : "aktualizacja";
-      const typeColor = isRollback ? "#f59e0b" : "var(--brand-sky)";
+      const typeColor = isRollback ? "#f59e0b" : "var(--accent,#4a6cf7)";
 
       // Check if there's a matching backup for rollback
       const backup = backups.find(b => b.version === entry.version || b.path === entry.backup_path);
@@ -336,7 +336,7 @@
       html += "<td>";
       // Only show rollback for non-current versions that have a backup
       if (entry.backup_path) {
-        html += '<button class="btn btn-ghost btn-sm" onclick="window._updRollback(\'' + esc(entry.backup_path) + '\')" data-i18n="admin.update.restore_btn">Przywróć tę wersję</button>';
+        html += '<button class="btn" style="font-size:.72rem;padding:.2rem .5rem;" onclick="window._updRollback(\'' + esc(entry.backup_path) + '\')">Przywr\u00f3\u0107</button>';
       }
       html += "</td>";
       html += "</tr>";
