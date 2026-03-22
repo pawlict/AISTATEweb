@@ -286,6 +286,15 @@
     const isExchange = (r.source_type === "exchange");
 
     _renderSummary(r, isExchange);
+
+    // Account owner — right after summary (Binance XLSX or any source with account_info)
+    const isBinance = (r.source === "binance_xlsx");
+    if (isBinance || (r.forensic_report && r.forensic_report.account_info)) {
+      _renderAccountInfo(r);
+    } else {
+      _hide("crypto_account_card");
+    }
+
     _renderBehaviorProfile(r);
     _renderRisk(r);
     _renderAlerts(r);
@@ -303,9 +312,7 @@
     _renderPhones(r);
 
     // Binance XLSX forensic cards
-    const isBinance = (r.source === "binance_xlsx");
     if (isBinance) {
-      _renderAccountInfo(r);
       _renderCounterparties(r);
       _renderPayC2C(r);
       _renderExtAddresses(r);
@@ -314,7 +321,6 @@
       _renderAccessLogs(r);
       _renderCardTimeline(r);
     } else {
-      _hide("crypto_account_card");
       _hide("crypto_counterparties_card");
       _hide("crypto_pay_c2c_card");
       _hide("crypto_ext_addresses_card");
@@ -339,23 +345,18 @@
   /* -- Summary (light fields like AML/GSM) ----------------------------- */
 
   function _renderSummary(r, isExchange) {
-    // Info rows (like AML bank info)
+    // Brief file/period/stats summary — personal data moved to Account Owner card
     const infoGrid = document.getElementById("crypto_info_grid");
     if (infoGrid) {
       let html = "";
       if (isExchange) {
         const em = r.exchange_meta || {};
-        // Account owner info from forensic report
-        const acct = (r.forensic_report && r.forensic_report.account_info) || {};
-        if (acct.holder_name) html += `<div class="crypto-info-row"><b>Właściciel:</b> ${_esc(acct.holder_name)}</div>`;
-        if (acct.user_id) html += `<div class="crypto-info-row"><b>User ID:</b> ${_esc(acct.user_id)}</div>`;
-        if (acct.email) html += `<div class="crypto-info-row"><b>Email:</b> ${_esc(acct.email)}</div>`;
-        if (acct.phone) html += `<div class="crypto-info-row"><b>Telefon:</b> ${_esc(acct.phone)}</div>`;
         if (em.exchange_name || r.source) html += `<div class="crypto-info-row"><b>Giełda:</b> ${_esc(em.exchange_name || r.source)}</div>`;
         if (r.filename) html += `<div class="crypto-info-row"><b>Plik:</b> ${_esc(r.filename)}</div>`;
         const dateFrom = (r.date_from || "").slice(0, 10);
         const dateTo = (r.date_to || "").slice(0, 10);
         if (dateFrom || dateTo) html += `<div class="crypto-info-row"><b>Okres:</b> ${_esc(dateFrom)} \u2014 ${_esc(dateTo)}</div>`;
+        if (r.tx_count) html += `<div class="crypto-info-row"><b>Transakcje:</b> ${r.tx_count}${r.transactions_truncated ? ' (pokazano max 2000)' : ''}</div>`;
         if (em.crypto_tokens && em.crypto_tokens.length) html += `<div class="crypto-info-row"><b>Tokeny krypto:</b> ${_esc(em.crypto_tokens.join(", "))}</div>`;
         if (em.fiat_tokens && em.fiat_tokens.length) html += `<div class="crypto-info-row"><b>Waluty fiat:</b> ${_esc(em.fiat_tokens.join(", "))}</div>`;
         if (em.account_types && em.account_types.length) html += `<div class="crypto-info-row"><b>Konta:</b> ${_esc(em.account_types.join(", "))}</div>`;
@@ -371,6 +372,7 @@
         const dateFrom = (r.date_from || "").slice(0, 10);
         const dateTo = (r.date_to || "").slice(0, 10);
         if (dateFrom || dateTo) html += `<div class="crypto-info-row"><b>Okres:</b> ${_esc(dateFrom)} \u2014 ${_esc(dateTo)}</div>`;
+        if (r.tx_count) html += `<div class="crypto-info-row"><b>Transakcje:</b> ${r.tx_count}</div>`;
         html += '<div class="crypto-info-stats">';
         if (r.total_received != null) html += `<span><b>Wpłaty:</b> ${_fmtCrypto(r.total_received, token)}</span>`;
         if (r.total_sent != null) html += `<span><b>Wypłaty:</b> ${_fmtCrypto(r.total_sent, token)}</span>`;
@@ -1898,22 +1900,63 @@
   function _renderAccountInfo(r) {
     const fr = r.forensic_report || {};
     const ai = fr.account_info || {};
-    if (!ai.user_id && !ai.holder_name) { _hide("crypto_account_card"); return; }
+    // Show card if ANY customer info field is present
+    const hasAny = Object.values(ai).some(v => v);
+    if (!hasAny) { _hide("crypto_account_card"); return; }
     _show("crypto_account_card");
 
     let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;font-size:13px">';
     const fields = [
-      ["User ID", ai.user_id], ["Imię i nazwisko", ai.holder_name],
-      ["Email", ai.email], ["Telefon", ai.phone],
-      ["Kraj", ai.country], ["Narodowość", ai.nationality],
-      ["KYC Level", ai.kyc_level], ["Data rejestracji", ai.registration_date],
-      ["Status konta", ai.account_status], ["Typ dokumentu", ai.id_type],
+      ["User ID", ai.user_id],
+      ["Imię i nazwisko", ai.holder_name],
+      ["Imię", ai.first_name],
+      ["Nazwisko", ai.last_name],
+      ["Email", ai.email],
+      ["Telefon", ai.phone],
+      ["Data urodzenia", ai.date_of_birth],
+      ["Płeć", ai.gender],
+      ["Kraj zamieszkania", ai.country],
+      ["Narodowość", ai.nationality],
+      ["Adres", ai.physical_address],
+      ["Miasto", ai.city],
+      ["Województwo/Stan", ai.state],
+      ["Kod pocztowy", ai.zip_code],
+      ["Poziom KYC", ai.kyc_level],
+      ["Poziom VIP", ai.vip_level],
+      ["Data rejestracji", ai.registration_date],
+      ["Status konta", ai.account_status],
+      ["Typ dokumentu", ai.id_type],
       ["Nr dokumentu", ai.id_number],
+      ["ID polecającego", ai.referral_id],
+      ["ID agenta", ai.agent_id],
+      ["Sub-konto", ai.sub_account],
+      ["Margin", ai.margin_enabled],
+      ["Futures", ai.futures_enabled],
+      ["API Trading", ai.api_trading],
+      ["Kod anti-phishing", ai.anti_phishing_code],
     ];
     for (const [label, val] of fields) {
-      if (val) html += `<div><b>${_esc(label)}:</b> ${_esc(val)}</div>`;
+      if (val) html += `<div><b>${_esc(label)}:</b> ${_esc(String(val))}</div>`;
     }
     html += '</div>';
+
+    // Show any remaining unknown fields from account_info
+    const knownKeys = new Set([
+      "user_id","holder_name","first_name","last_name","email","phone",
+      "date_of_birth","gender","country","nationality","physical_address",
+      "city","state","zip_code","kyc_level","vip_level","registration_date",
+      "account_status","id_type","id_number","referral_id","agent_id",
+      "sub_account","margin_enabled","futures_enabled","api_trading",
+      "anti_phishing_code"
+    ]);
+    const extra = Object.entries(ai).filter(([k,v]) => !knownKeys.has(k) && v);
+    if (extra.length) {
+      html += '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;font-size:13px">';
+      for (const [k, v] of extra) {
+        html += `<div><b>${_esc(k)}:</b> ${_esc(String(v))}</div>`;
+      }
+      html += '</div>';
+    }
 
     // User IDs across sheets
     const uids = fr.user_ids_in_file || {};

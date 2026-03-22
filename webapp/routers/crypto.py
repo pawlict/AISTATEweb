@@ -617,16 +617,32 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
     id_rows = []
     for label, val in [
         ("Właściciel konta", ai.get("holder_name")),
+        ("Imię", ai.get("first_name")),
+        ("Nazwisko", ai.get("last_name")),
         ("User ID", ai.get("user_id")),
         ("Email", ai.get("email")),
         ("Telefon", ai.get("phone")),
-        ("Kraj", ai.get("country")),
+        ("Data urodzenia", ai.get("date_of_birth")),
+        ("Płeć", ai.get("gender")),
+        ("Kraj zamieszkania", ai.get("country")),
         ("Narodowość", ai.get("nationality")),
-        ("KYC Level", ai.get("kyc_level")),
+        ("Adres zamieszkania", ai.get("physical_address")),
+        ("Miasto", ai.get("city")),
+        ("Województwo/Stan", ai.get("state")),
+        ("Kod pocztowy", ai.get("zip_code")),
+        ("Poziom KYC", ai.get("kyc_level")),
+        ("Poziom VIP", ai.get("vip_level")),
         ("Data rejestracji", ai.get("registration_date")),
         ("Status konta", ai.get("account_status")),
         ("Typ dokumentu", ai.get("id_type")),
         ("Nr dokumentu", ai.get("id_number")),
+        ("ID polecającego", ai.get("referral_id")),
+        ("ID agenta", ai.get("agent_id")),
+        ("Sub-konto", ai.get("sub_account")),
+        ("Margin", ai.get("margin_enabled")),
+        ("Futures", ai.get("futures_enabled")),
+        ("API Trading", ai.get("api_trading")),
+        ("Kod anti-phishing", ai.get("anti_phishing_code")),
         ("Platforma", em.get("exchange_name") or source),
         ("Plik źródłowy", filename),
     ]:
@@ -962,10 +978,31 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
     bs = r.get("binance_summary", {}) or {}
 
     lines.append("--- IDENTYFIKACJA ---")
-    for label, val in [("Właściciel", ai.get("holder_name")), ("User ID", ai.get("user_id")),
-                        ("Email", ai.get("email")), ("Telefon", ai.get("phone")),
-                        ("Platforma", em.get("exchange_name", r.get("source", ""))),
-                        ("Plik", r.get("filename"))]:
+    for label, val in [
+        ("Właściciel", ai.get("holder_name")),
+        ("Imię", ai.get("first_name")),
+        ("Nazwisko", ai.get("last_name")),
+        ("User ID", ai.get("user_id")),
+        ("Email", ai.get("email")),
+        ("Telefon", ai.get("phone")),
+        ("Data urodzenia", ai.get("date_of_birth")),
+        ("Płeć", ai.get("gender")),
+        ("Kraj", ai.get("country")),
+        ("Narodowość", ai.get("nationality")),
+        ("Adres", ai.get("physical_address")),
+        ("Miasto", ai.get("city")),
+        ("Województwo/Stan", ai.get("state")),
+        ("Kod pocztowy", ai.get("zip_code")),
+        ("KYC Level", ai.get("kyc_level")),
+        ("VIP Level", ai.get("vip_level")),
+        ("Data rejestracji", ai.get("registration_date")),
+        ("Status konta", ai.get("account_status")),
+        ("Typ dokumentu", ai.get("id_type")),
+        ("Nr dokumentu", ai.get("id_number")),
+        ("ID polecającego", ai.get("referral_id")),
+        ("Platforma", em.get("exchange_name", r.get("source", ""))),
+        ("Plik", r.get("filename")),
+    ]:
         if val:
             lines.append(f"  {label}: {val}")
     lines.append("")

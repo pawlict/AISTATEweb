@@ -96,11 +96,16 @@ def _is_internal(counterparty_id: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _parse_customer_info(df) -> Dict[str, Any]:
-    """Extract account metadata from Customer Information sheet."""
+    """Extract account metadata from Customer Information sheet.
+
+    The Binance Customer Information sheet has a key-value layout where
+    some rows contain labels and the next row (or adjacent column) has the
+    corresponding values.  We scan for known label strings and capture
+    everything available.
+    """
     meta: Dict[str, Any] = {}
-    # The sheet has a complex layout: first row is a header string,
-    # actual data starts around row 3-4 with specific column positions.
-    # Header string often contains: "User Basic Information(id: XXXXX ...)"
+
+    # ---- 1. Header string often contains "User Basic Information(id: XXXXX ...)"
     first_col = str(df.columns[0]) if len(df.columns) > 0 else ""
     m = re.search(r"id:\s*(\d+)", first_col)
     if m:
@@ -109,20 +114,106 @@ def _parse_customer_info(df) -> Dict[str, Any]:
     if m:
         meta["email"] = m.group(1)
 
-    # Search rows for user ID, email, name
+    # ---- 2. Build a flat list of all cell values for label-based scanning
+    all_rows = []
     for _, row in df.iterrows():
-        vals = [_safe_str(v) for v in row.values]
-        if "User ID" in vals:
-            idx = vals.index("User ID")
-            # Next row typically has the values
-            continue
-        # Look for numeric user ID in first column
+        all_rows.append([_safe_str(v) for v in row.values])
+
+    # Also treat column names as a row (some sheets put labels in the header)
+    col_row = [_safe_str(c) for c in df.columns]
+    all_rows.insert(0, col_row)
+
+    # Known label → meta key mapping (case-insensitive matching)
+    _LABEL_MAP = {
+        "user id": "user_id",
+        "userid": "user_id",
+        "uid": "user_id",
+        "email": "email",
+        "e-mail": "email",
+        "phone": "phone",
+        "phone number": "phone",
+        "mobile": "phone",
+        "mobile number": "phone",
+        "contact number": "phone",
+        "name": "holder_name",
+        "full name": "holder_name",
+        "real name": "holder_name",
+        "account name": "holder_name",
+        "first name": "first_name",
+        "last name": "last_name",
+        "country": "country",
+        "country/region": "country",
+        "residence country": "country",
+        "nationality": "nationality",
+        "kyc level": "kyc_level",
+        "kyc": "kyc_level",
+        "verification level": "kyc_level",
+        "identity verification": "kyc_level",
+        "vip level": "vip_level",
+        "vip": "vip_level",
+        "registration date": "registration_date",
+        "register time": "registration_date",
+        "register date": "registration_date",
+        "created at": "registration_date",
+        "account create time": "registration_date",
+        "account status": "account_status",
+        "status": "account_status",
+        "id type": "id_type",
+        "document type": "id_type",
+        "identity type": "id_type",
+        "id number": "id_number",
+        "document number": "id_number",
+        "identity number": "id_number",
+        "address": "physical_address",
+        "residential address": "physical_address",
+        "city": "city",
+        "state": "state",
+        "province": "state",
+        "zip code": "zip_code",
+        "postal code": "zip_code",
+        "date of birth": "date_of_birth",
+        "birthday": "date_of_birth",
+        "dob": "date_of_birth",
+        "gender": "gender",
+        "referral id": "referral_id",
+        "referrer id": "referral_id",
+        "agent id": "agent_id",
+        "sub-account": "sub_account",
+        "sub account": "sub_account",
+        "margin enabled": "margin_enabled",
+        "futures enabled": "futures_enabled",
+        "api trading enabled": "api_trading",
+        "anti-phishing code": "anti_phishing_code",
+    }
+
+    # ---- 3. Scan rows: look for label-value pairs
+    # Strategy A: label in column i, value in column i+1 (same row)
+    # Strategy B: label in row i, value in row i+1 (same column)
+    for ri, vals in enumerate(all_rows):
+        for ci, cell in enumerate(vals):
+            cell_lower = cell.lower().strip().rstrip(":")
+            if cell_lower in _LABEL_MAP:
+                key = _LABEL_MAP[cell_lower]
+                # Try value to the right (same row)
+                if ci + 1 < len(vals) and vals[ci + 1]:
+                    meta.setdefault(key, vals[ci + 1])
+                # Try value below (next row, same column)
+                elif ri + 1 < len(all_rows) and ci < len(all_rows[ri + 1]) and all_rows[ri + 1][ci]:
+                    meta.setdefault(key, all_rows[ri + 1][ci])
+
+    # ---- 4. Fallback: row with numeric user ID (original heuristic)
+    for vals in all_rows:
         if vals[0] and re.match(r"^\d{6,}$", vals[0]):
             meta.setdefault("user_id", vals[0])
             if len(vals) > 1 and "@" in str(vals[1]):
-                meta["email"] = vals[1]
+                meta.setdefault("email", vals[1])
             if len(vals) > 4 and vals[4]:
-                meta["holder_name"] = vals[4]
+                meta.setdefault("holder_name", vals[4])
+
+    # ---- 5. Compose full name from first + last if holder_name missing
+    if not meta.get("holder_name") and (meta.get("first_name") or meta.get("last_name")):
+        parts = [meta.get("first_name", ""), meta.get("last_name", "")]
+        meta["holder_name"] = " ".join(p for p in parts if p)
 
     return meta
 
