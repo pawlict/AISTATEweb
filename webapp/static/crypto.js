@@ -299,6 +299,9 @@
       _hide("crypto_token_breakdown_card");
     }
 
+    // Phone numbers (all sources)
+    _renderPhones(r);
+
     // Binance XLSX forensic cards
     const isBinance = (r.source === "binance_xlsx");
     if (isBinance) {
@@ -1840,7 +1843,7 @@
     for (const w of wallets.slice(0, 50)) {
       const rc = RISK_COLORS[w.risk_level] || "#94a3b8";
       html += `<tr>
-        <td style="font-family:monospace;font-size:11px" title="${_esc(w.address)}">${_esc(_shorten(w.address))}</td>
+        <td style="font-family:monospace;font-size:11px;word-break:break-all" title="${_esc(w.address)}">${_esc(_shorten(w.address))}</td>
         <td>${_esc(w.label || "\u2014")}</td>
         <td>${w.tx_count}</td>
         <td>${_fmtCrypto(w.total_received, "")}</td>
@@ -1851,6 +1854,41 @@
     html += "</tbody></table>";
     if (wallets.length > 50) html += `<div class="small" style="margin-top:4px;color:var(--text-muted)">Pokazano 50 z ${wallets.length}</div>`;
     _html("crypto_wallets_body", html);
+  }
+
+  /* -- Detected phone numbers (all sources) -------------------------- */
+
+  function _renderPhones(r) {
+    const phones = r.detected_phones || [];
+    if (!phones.length) { _hide("crypto_phones_card"); return; }
+    _show("crypto_phones_card");
+
+    let html = `<div style="margin-bottom:8px;font-size:13px">Znaleziono <b>${phones.length}</b> unikalnych numerów telefonów w danych transakcyjnych.</div>`;
+    html += '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+      '<th>Numer</th><th>Kraj</th><th>ISO</th><th>Wystąpienia</th><th>Kontekst</th></tr></thead><tbody>';
+    for (const p of phones) {
+      const flag = p.country_iso ? _countryFlag(p.country_iso) + " " : "";
+      let ctxHtml = "";
+      if (p.contexts && p.contexts.length) {
+        const ctx = p.contexts[0];
+        ctxHtml = `${_esc(ctx.tx_type)} ${_esc(ctx.token)} ${_esc(ctx.timestamp)} (pole: ${_esc(ctx.field)})`;
+      }
+      html += `<tr>
+        <td style="font-family:monospace;font-weight:600;white-space:nowrap">${_esc(p.number)}</td>
+        <td>${flag}${_esc(p.country_name || "—")}</td>
+        <td>${_esc(p.country_iso || "—")}</td>
+        <td>${p.occurrences}</td>
+        <td style="font-size:11px">${ctxHtml}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    _html("crypto_phones_body", html);
+  }
+
+  function _countryFlag(iso) {
+    if (!iso || iso.length !== 2) return "";
+    const codePoints = [...iso.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65);
+    try { return String.fromCodePoint(...codePoints); } catch (_) { return ""; }
   }
 
   /* ------------------------------------------------------------------ */
@@ -1967,7 +2005,7 @@
         '<th>Adres</th><th>TX</th><th>Suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>';
       for (const a of src.slice(0, 30)) {
         html += `<tr>
-          <td style="font-family:monospace;font-size:11px" title="${_esc(a.address)}">${_esc(_shorten(a.address))}</td>
+          <td style="font-family:monospace;font-size:11px;word-break:break-all" title="${_esc(a.address)}">${_esc(_shorten(a.address))}</td>
           <td>${a.count}</td>
           <td style="text-align:right">${(a.total || 0).toFixed(4)}</td>
           <td>${_esc((a.tokens || []).join(", "))}</td>
@@ -1983,7 +2021,7 @@
         '<th>Adres</th><th>TX</th><th>Suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>';
       for (const a of dst.slice(0, 30)) {
         html += `<tr>
-          <td style="font-family:monospace;font-size:11px" title="${_esc(a.address)}">${_esc(_shorten(a.address))}</td>
+          <td style="font-family:monospace;font-size:11px;word-break:break-all" title="${_esc(a.address)}">${_esc(_shorten(a.address))}</td>
           <td>${a.count}</td>
           <td style="text-align:right">${(a.total || 0).toFixed(4)}</td>
           <td>${_esc((a.tokens || []).join(", "))}</td>
@@ -2058,7 +2096,7 @@
         '<th>Adres</th><th>Token</th><th>TX</th><th>Suma</th><th>Średnia</th></tr></thead><tbody>';
       for (const m of mining.slice(0, 20)) {
         html += `<tr>
-          <td style="font-family:monospace;font-size:11px" title="${_esc(m.address)}">${_esc(_shorten(m.address))}</td>
+          <td style="font-family:monospace;font-size:11px;word-break:break-all" title="${_esc(m.address)}">${_esc(_shorten(m.address))}</td>
           <td>${_esc(m.token)}</td>
           <td>${m.count}</td>
           <td style="text-align:right">${(m.total || 0).toFixed(8)}</td>
@@ -2427,7 +2465,7 @@
 
   function _shorten(addr) {
     if (!addr) return "\u2014";
-    if (addr.length > 18) return addr.slice(0, 8) + "\u2026" + addr.slice(-6);
+    // Show full address — use CSS word-break for overflow
     return addr;
   }
 
@@ -2459,14 +2497,18 @@
       genBtn.onclick = () => _generateLLM();
     }
 
-    // Report HTML download
-    const reportBtn = QS("#crypto_report_html_btn");
-    if (reportBtn) {
-      reportBtn.onclick = () => {
+    // Report save (multi-format like GSM)
+    const reportSaveBtn = QS("#crypto_report_save_btn");
+    if (reportSaveBtn) {
+      reportSaveBtn.onclick = () => {
+        const checked = document.querySelectorAll('input[name="crypto_report_fmt"]:checked');
+        const formats = Array.from(checked).map(cb => cb.value);
+        if (!formats.length) { alert("Nie wybrano formatu raportu."); return; }
         const pid = _getProjectId();
         if (!pid) { alert("Brak projektu — zapisz analizę, aby wygenerować raport."); return; }
         if (!_lastResult) { alert("Brak danych do raportu. Wczytaj dane crypto."); return; }
-        window.open("/api/crypto/report?project_id=" + encodeURIComponent(pid), "_blank");
+        const fmtParam = formats.join(",");
+        window.open("/api/crypto/report?project_id=" + encodeURIComponent(pid) + "&formats=" + encodeURIComponent(fmtParam), "_blank");
       };
     }
 

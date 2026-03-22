@@ -135,16 +135,6 @@
         <button class="btn pill-icon" id="crypto_generate_btn" title="Generuj analizę narracyjną"><img src="/static/icons/akcje/generate_ai.svg" alt="Analizuj" draggable="false"></button>
       </div>
       <div class="toolbar-sep"></div>
-      <!-- Report -->
-      <div class="toolbar-section">
-        <div class="toolbar-group">
-          <label class="toolbar-group-label"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
-          <div class="toolbar-group-controls">
-            <button class="btn pill-icon" id="crypto_report_html_btn" title="Pobierz raport HTML"><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></button>
-          </div>
-        </div>
-      </div>
-      <div class="toolbar-sep"></div>
       <div class="toolbar-section">
         <div class="analysis-models">
           <div class="analysis-model">
@@ -152,6 +142,19 @@
             <select class="input mini-select" id="crypto_model_deep" disabled>
               <option data-i18n="analysis.models_loading">Ładowanie…</option>
             </select>
+          </div>
+        </div>
+      </div>
+      <div class="toolbar-sep"></div>
+      <!-- Report (at end, like GSM) -->
+      <div class="toolbar-section">
+        <div class="toolbar-group" id="crypto_report_formats">
+          <label class="toolbar-group-label"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="Dodaj raport HTML"><input type="checkbox" name="crypto_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport DOCX"><input type="checkbox" name="crypto_report_fmt" value="docx"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOCX" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport TXT"><input type="checkbox" name="crypto_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+            <button class="btn pill-icon" id="crypto_report_save_btn" title="Zapisz raport"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
           </div>
         </div>
       </div>
@@ -1298,6 +1301,12 @@
       <div class="card" id="crypto_counterparties_card" style="display:none">
         <div class="h2">🔗 Kontrahenci wewnętrzni Binance</div>
         <div style="overflow-x:auto" id="crypto_counterparties_body"></div>
+      </div>
+
+      <!-- Forensic: Identified phone numbers -->
+      <div class="card" id="crypto_phones_card" style="display:none">
+        <div class="h2">📞 Zidentyfikowane numery telefonów</div>
+        <div style="overflow-x:auto" id="crypto_phones_body"></div>
       </div>
 
       <!-- Forensic: Binance Pay C2C -->

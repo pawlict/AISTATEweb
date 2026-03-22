@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
+from collections import defaultdict
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .parsers import parse_crypto_file, CryptoTransaction, WalletInfo, ParsedCryptoData
 from .risk_rules import classify_transactions, compute_overall_risk, detect_all_patterns
@@ -30,6 +32,113 @@ def _dec_to_float(val: Any) -> float:
     if isinstance(val, Decimal):
         return float(val)
     return val
+
+
+# ---------------------------------------------------------------------------
+# Phone number extraction from transaction fields
+# ---------------------------------------------------------------------------
+
+_PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d[\d\s\-]{7,16}\d)(?!\d)")
+
+
+def _identify_phone_country(number: str) -> Optional[Tuple[str, str]]:
+    """Identify country by phone prefix. Reuses GSM module if available."""
+    try:
+        from backend.gsm.analyzer import _identify_country_by_prefix
+        return _identify_country_by_prefix(number)
+    except ImportError:
+        pass
+    # Fallback: minimal prefix table
+    _BASIC = [
+        ("+48", "PL", "Polska"), ("+1", "US", "USA/Kanada"),
+        ("+44", "GB", "Wielka Brytania"), ("+49", "DE", "Niemcy"),
+        ("+33", "FR", "Francja"), ("+380", "UA", "Ukraina"),
+        ("+7", "RU", "Rosja"), ("+86", "CN", "Chiny"),
+        ("+90", "TR", "Turcja"), ("+971", "AE", "ZEA"),
+        ("+234", "NG", "Nigeria"), ("+91", "IN", "Indie"),
+    ]
+    if not number.startswith("+"):
+        return None
+    for prefix, iso, name in _BASIC:
+        if number.startswith(prefix):
+            return (iso, name)
+    return None
+
+
+def _normalize_phone(raw: str) -> Optional[str]:
+    """Normalize a candidate phone number to +CC format."""
+    digits = re.sub(r"[^\d+]", "", raw.strip())
+    if not digits:
+        return None
+    if digits.startswith("00") and len(digits) >= 10:
+        digits = "+" + digits[2:]
+    elif digits.startswith("+"):
+        pass
+    elif len(digits) == 9:
+        digits = "+48" + digits
+    elif len(digits) >= 10 and not digits.startswith("+"):
+        digits = "+" + digits
+    if not re.match(r"^\+\d{7,15}$", digits):
+        return None
+    return digits
+
+
+def _extract_phone_numbers(txs: List[CryptoTransaction]) -> List[Dict[str, Any]]:
+    """Scan transaction fields for phone number patterns.
+
+    Checks counterparty, raw notes, merchant names etc.
+    Returns list of {number, country_iso, country_name, occurrences, contexts[]}.
+    """
+    phone_map: Dict[str, Dict[str, Any]] = {}
+
+    for tx in txs:
+        # Fields to scan
+        fields = [
+            ("counterparty", tx.counterparty),
+            ("to_address", tx.to_address),
+            ("from_address", tx.from_address),
+        ]
+        for key, val in (tx.raw or {}).items():
+            if key in ("sheet", "account", "status", "side"):
+                continue
+            fields.append((key, str(val)))
+
+        for field_name, field_val in fields:
+            if not field_val:
+                continue
+            for match in _PHONE_RE.finditer(str(field_val)):
+                raw_num = match.group(0).strip()
+                normalized = _normalize_phone(raw_num)
+                if not normalized:
+                    continue
+                # Skip if looks like a Binance user ID (pure digits, no country code)
+                if normalized.startswith("+48") and len(normalized) == 12:
+                    # Valid Polish number
+                    pass
+                elif len(re.sub(r"\D", "", raw_num)) < 9:
+                    continue
+
+                if normalized not in phone_map:
+                    country = _identify_phone_country(normalized)
+                    phone_map[normalized] = {
+                        "number": normalized,
+                        "country_iso": country[0] if country else "",
+                        "country_name": country[1] if country else "",
+                        "occurrences": 0,
+                        "contexts": [],
+                    }
+                entry = phone_map[normalized]
+                entry["occurrences"] += 1
+                if len(entry["contexts"]) < 5:
+                    entry["contexts"].append({
+                        "field": field_name,
+                        "tx_type": tx.tx_type,
+                        "timestamp": tx.timestamp[:10] if tx.timestamp else "",
+                        "token": tx.token,
+                        "amount": _dec_to_float(tx.amount),
+                    })
+
+    return sorted(phone_map.values(), key=lambda x: x["occurrences"], reverse=True)
 
 
 def run_crypto_pipeline(
@@ -68,6 +177,9 @@ def run_crypto_pipeline(
 
     # 4b. User behavior profiling
     behavior_profile = profile_user_behavior(txs, source_type=source_type)
+
+    # 4c. Phone number extraction from transaction data
+    detected_phones = _extract_phone_numbers(txs)
 
     # 5. Build wallet info
     wallets = parsed.wallets
@@ -209,6 +321,7 @@ def run_crypto_pipeline(
         "transactions_total": len(txs),
         "llm_prompt": llm_prompt,
         "behavior_profile": behavior_profile,
+        "detected_phones": detected_phones,
         "binance_summary": binance_summary,
         "forensic_report": forensic_report,
         "elapsed_sec": round(elapsed, 2),
