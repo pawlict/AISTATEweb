@@ -456,6 +456,145 @@
         <span id="bkSettingsSaved" style="font-size:.78rem;color:#27ae60;display:none;">Zapisano!</span>
       </div>
     </div>
+
+    <div class="hr" style="margin:1.5rem 0;"></div>
+
+    <!-- ═══════════ SOFTWARE UPDATE ═══════════ -->
+    <h4 style="margin:.8rem 0 .5rem;font-size:.85rem;">
+      Aktualizacje oprogramowania <span class="en">Software Updates</span>
+    </h4>
+    <p style="color:var(--muted,#888);font-size:.78rem;margin:0 0 .8rem;">
+      Importuj paczki aktualizacji, zarządzaj wersjami i przywracaj poprzednie wersje.
+      <span class="en">Import update packages, manage versions and restore previous versions.</span>
+    </p>
+
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-start;">
+
+      <!-- LEFT: Import & Install -->
+      <div style="flex:1 1 340px;max-width:560px;">
+        <div style="font-weight:600;font-size:.82rem;margin-bottom:.4rem;">
+          Importuj aktualizacj&#281; <span class="en">Import update</span>
+        </div>
+        <div style="font-size:.76rem;color:var(--muted,#888);margin-bottom:.6rem;">
+          Wybierz plik .zip z paczk&#261; aktualizacji pobranej ze strony dostawcy.
+          <span class="en">Select a .zip update package downloaded from the vendor.</span>
+        </div>
+
+        <div id="upd_dropzone" style="padding:20px;border:2px dashed var(--border,#ccc);border-radius:10px;text-align:center;cursor:pointer;transition:border-color .2s;background:var(--panel2,#f8f9fa);">
+          <div style="font-size:24px;opacity:.5;margin-bottom:4px;">&#128230;</div>
+          <div style="font-size:.76rem;color:var(--muted,#888);">
+            Przeci&#261;gnij plik .zip tutaj lub kliknij aby wybra&#263;
+            <span class="en">Drag a .zip file here or click to select</span>
+          </div>
+          <input type="file" id="upd_file" accept=".zip" style="display:none" />
+        </div>
+
+        <!-- Upload progress -->
+        <div id="upd_uploading" style="display:none;margin-top:.6rem;">
+          <div style="font-size:.78rem;color:var(--muted,#888);">Przesy&#322;anie i walidacja... <span class="en">Uploading...</span></div>
+          <div style="margin-top:4px;height:4px;background:var(--border,#e0e3e8);border-radius:2px;overflow:hidden;">
+            <div id="upd_progress_bar" style="width:0%;height:100%;background:var(--accent,#4a6cf7);transition:width .3s;"></div>
+          </div>
+        </div>
+
+        <!-- Package info (after upload) -->
+        <div id="upd_info" style="display:none;margin-top:.8rem;padding:.6rem .8rem;background:var(--panel2,#f8f9fa);border:1px solid var(--border,#e0e3e8);border-radius:8px;">
+          <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.4rem;">
+            <span style="font-weight:600;font-size:.82rem;">Nowa wersja: <span class="en">New version:</span></span>
+            <span id="upd_version" style="font-weight:700;font-size:.88rem;"></span>
+          </div>
+          <div id="upd_release_date" style="font-size:.76rem;color:var(--muted,#888);margin-bottom:.3rem;"></div>
+          <div id="upd_changelog_box" style="margin-top:.4rem;">
+            <div style="font-weight:600;font-size:.76rem;color:var(--muted,#888);">Lista zmian: <span class="en">Changelog:</span></div>
+            <div id="upd_changelog" style="margin-top:.2rem;padding:.4rem .6rem;background:var(--card-bg,#fff);border:1px solid var(--border,#eee);border-radius:6px;white-space:pre-wrap;max-height:160px;overflow:auto;font-size:.78rem;"></div>
+          </div>
+          <div id="upd_migrations" style="font-size:.76rem;color:var(--muted,#888);margin-top:.3rem;"></div>
+          <div id="upd_deps" style="font-size:.76rem;color:var(--muted,#888);margin-top:.2rem;"></div>
+
+          <div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center;">
+            <button id="upd_install_btn" class="btn" style="font-size:.82rem;">Zainstaluj aktualizacj&#281; <span class="en">Install update</span></button>
+            <button id="upd_cancel_upload_btn" class="btn" style="font-size:.82rem;background:transparent;border:1px solid var(--border,#ccc);">Anuluj <span class="en">Cancel</span></button>
+            <span id="upd_install_msg" style="font-size:.78rem;color:var(--muted,#888);"></span>
+          </div>
+        </div>
+
+        <!-- Error display -->
+        <div id="upd_error" style="display:none;margin-top:.5rem;font-size:.78rem;color:#e74c3c;"></div>
+      </div>
+
+      <!-- RIGHT: Version info & Restart -->
+      <div style="flex:1 1 280px;max-width:400px;">
+        <div style="font-weight:600;font-size:.82rem;margin-bottom:.4rem;">
+          Informacje o wersji <span class="en">Version info</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:.4rem;font-size:.82rem;">
+          <span style="color:var(--muted,#888);">Obecna wersja: <span class="en">Current version:</span></span>
+          <span id="upd_current_ver" style="font-weight:700;">{{ app_version }}</span>
+        </div>
+
+        <div class="hr" style="margin:.8rem 0;"></div>
+
+        <div style="font-weight:600;font-size:.82rem;margin-bottom:.4rem;">
+          Restart po aktualizacji <span class="en">Post-update restart</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;">
+          <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;">
+            <input type="checkbox" id="upd_auto_restart" checked />
+            Auto-restart
+          </label>
+          <span style="color:var(--muted,#888);">Op&#243;&#378;nienie: <span class="en">Delay:</span></span>
+          <input id="upd_delay" type="number" min="1" max="60" value="5" style="width:50px;padding:3px 6px;border-radius:6px;font-size:.82rem;border:1px solid var(--border,#ccc);" />
+          <span style="color:var(--muted,#888);">min</span>
+        </div>
+
+        <!-- Countdown (visible after install) -->
+        <div id="upd_restart_panel" style="display:none;margin-top:.8rem;padding:.6rem .8rem;background:var(--panel2,#f8f9fa);border:1px solid var(--border,#e0e3e8);border-radius:8px;">
+          <div style="display:flex;align-items:center;gap:.4rem;font-size:.82rem;">
+            <span style="color:var(--muted,#888);">Restart za: <span class="en">Restart in:</span></span>
+            <span id="upd_countdown" style="font-weight:700;font-size:1.1rem;font-family:monospace;"></span>
+          </div>
+          <div style="margin-top:.5rem;display:flex;gap:.4rem;">
+            <button id="upd_restart_now_btn" class="btn" style="font-size:.78rem;">Restartuj teraz <span class="en">Restart now</span></button>
+            <button id="upd_cancel_restart_btn" class="btn" style="font-size:.78rem;background:transparent;border:1px solid var(--border,#ccc);">Anuluj restart <span class="en">Cancel</span></button>
+          </div>
+        </div>
+
+        <!-- Manual restart (when auto-restart cancelled) -->
+        <div id="upd_manual_restart" style="display:none;margin-top:.8rem;">
+          <div style="font-size:.76rem;color:var(--muted,#888);">
+            Auto-restart wy&#322;&#261;czony. Kliknij poni&#380;ej, aby zrestartowa&#263; r&#281;cznie.
+            <span class="en">Auto-restart disabled. Click below to restart manually.</span>
+          </div>
+          <button id="upd_manual_restart_btn" class="btn" style="margin-top:.4rem;font-size:.78rem;">Restartuj teraz <span class="en">Restart now</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- History & Rollback -->
+    <h4 style="margin:1.2rem 0 .5rem;font-size:.85rem;">
+      Historia aktualizacji <span class="en">Update history</span>
+    </h4>
+    <p style="color:var(--muted,#888);font-size:.76rem;margin:0 0 .5rem;">
+      Lista zainstalowanych wersji. Mo&#380;esz przywr&#243;ci&#263; dowoln&#261; poprzedni&#261; wersj&#281;.
+      <span class="en">Installed versions. You can restore any previous version.</span>
+    </p>
+    <div class="resizable-scroll" style="max-height:220px;">
+      <table class="data-table" style="width:100%;font-size:.78rem;">
+        <thead>
+          <tr>
+            <th>Wersja <span class="en">Version</span></th>
+            <th>Data <span class="en">Date</span></th>
+            <th>Typ <span class="en">Type</span></th>
+            <th>Poprzednia <span class="en">Previous</span></th>
+            <th>Akcje <span class="en">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody id="upd_history_body">
+          <tr><td colspan="5" style="text-align:center;opacity:.5;">&#321;adowanie...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
   </div>
   {% endif %}
 
@@ -881,6 +1020,9 @@
 
 {% block scripts %}
 <script src="/static/users.js?v={{ app_version }}&_={{ static_ts }}"></script>
+{% if user and user.is_superadmin %}
+<script src="/static/admin_update.js?v={{ app_version }}&_={{ static_ts }}"></script>
+{% endif %}
 {% if user and user.is_superadmin %}
 <script>
 /* Call Center — rich text messaging for Główny Opiekun */
