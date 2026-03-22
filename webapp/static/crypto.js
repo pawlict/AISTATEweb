@@ -320,6 +320,17 @@
       _renderPrivacyCoins(r);
       _renderAccessLogs(r);
       _renderCardTimeline(r);
+      // New forensic cards (v3.7.1)
+      _renderTemporal(r);
+      _renderConversionChains(r);
+      _renderStructuring(r);
+      _renderWashTrading(r);
+      _renderFiatRamp(r);
+      _renderP2PAnalysis(r);
+      _renderVelocity(r);
+      _renderFeeAnalysis(r);
+      _renderNetworkAnalysis(r);
+      _renderExtSecurity(r);
     } else {
       _hide("crypto_counterparties_card");
       _hide("crypto_pay_c2c_card");
@@ -328,6 +339,16 @@
       _hide("crypto_privacy_card");
       _hide("crypto_access_card");
       _hide("crypto_card_timeline_card");
+      _hide("crypto_temporal_card");
+      _hide("crypto_conversion_card");
+      _hide("crypto_structuring_card");
+      _hide("crypto_wash_card");
+      _hide("crypto_fiat_ramp_card");
+      _hide("crypto_p2p_card");
+      _hide("crypto_velocity_card");
+      _hide("crypto_fee_card");
+      _hide("crypto_network_card");
+      _hide("crypto_ext_security_card");
     }
 
     _renderReviewTable(r, isExchange);
@@ -826,7 +847,8 @@
       }
 
       if (searchLow) {
-        const haystack = [tx.from, tx.to, tx.hash, tx.token, tx.tx_type, tx.category, ...(tx.risk_tags || [])].join(" ").toLowerCase();
+        const rawVals = tx.raw ? Object.values(tx.raw).map(v => String(v)) : [];
+        const haystack = [tx.from, tx.to, tx.hash, tx.token, tx.tx_type, tx.category, tx.counterparty, ...(tx.risk_tags || []), ...rawVals].join(" ").toLowerCase();
         if (!haystack.includes(searchLow)) return false;
       }
 
@@ -1865,6 +1887,7 @@
     _show("crypto_phones_card");
 
     let html = `<div style="margin-bottom:8px;font-size:13px">Znaleziono <b>${phones.length}</b> unikalnych numerów telefonów w danych transakcyjnych.</div>`;
+    html += `<div style="margin-bottom:6px;font-size:11px;color:#64748b">💡 Kliknij 2× na wiersz, aby przefiltrować transakcje po tym numerze.</div>`;
     html += '<div style="max-height:600px;overflow-y:auto"><table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
       '<th>Numer</th><th>Kraj</th><th>ISO</th><th>Wystąpienia</th><th>Kontekst</th></tr></thead><tbody>';
     for (const p of phones) {
@@ -1874,7 +1897,7 @@
         const ctx = p.contexts[0];
         ctxHtml = `${_esc(ctx.tx_type)} ${_esc(ctx.token)} ${_esc(ctx.timestamp)} (pole: ${_esc(ctx.field)})`;
       }
-      html += `<tr>
+      html += `<tr style="cursor:pointer" data-phone-filter="${_esc(p.number)}">
         <td style="font-family:monospace;font-weight:600;white-space:nowrap">${_esc(p.number)}</td>
         <td>${flag}${_esc(p.country_name || "—")}</td>
         <td>${_esc(p.country_iso || "—")}</td>
@@ -1884,6 +1907,26 @@
     }
     html += '</tbody></table></div>';
     _html("crypto_phones_body", html);
+
+    // Bind double-click: filter review table by this phone number
+    const phonesBody = document.getElementById("crypto_phones_body");
+    if (phonesBody) {
+      phonesBody.querySelectorAll("tr[data-phone-filter]").forEach(row => {
+        row.addEventListener("dblclick", () => {
+          const phone = row.getAttribute("data-phone-filter");
+          if (!phone) return;
+          // Set search field and trigger filter
+          const searchInput = QS("#crypto_rv_search");
+          if (searchInput) {
+            searchInput.value = phone;
+            searchInput.dispatchEvent(new Event("input"));
+          }
+          // Scroll to the review card
+          const reviewCard = document.getElementById("crypto_review_card");
+          if (reviewCard) reviewCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+    }
   }
 
   function _countryFlag(iso) {
@@ -2360,6 +2403,379 @@
 
     const ctBody = document.getElementById("crypto_card_timeline_body");
     if (ctBody) { ctBody.innerHTML = html; ctBody.style.maxHeight = "700px"; ctBody.style.overflowY = "auto"; }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  NEW FORENSIC CARDS (v3.7.1) — 10 additional analysis cards        */
+  /* ------------------------------------------------------------------ */
+
+  // ── 1. Temporal Analysis ──
+  function _renderTemporal(r) {
+    const fr = r.forensic_report || {};
+    const ta = fr.temporal_analysis;
+    if (!ta) { _hide("crypto_temporal_card"); return; }
+    _show("crypto_temporal_card");
+    let html = '';
+
+    // Summary stats
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">';
+    if (ta.active_span_days) html += `<div class="stat-box"><small>Okres aktywności</small><b>${ta.active_span_days} dni</b></div>`;
+    if (ta.active_days) html += `<div class="stat-box"><small>Aktywne dni</small><b>${ta.active_days} (${ta.activity_density || 0}%)</b></div>`;
+    if (ta.peak_hour != null) html += `<div class="stat-box"><small>Szczytowa godzina</small><b>${ta.peak_hour}:00 (${ta.peak_hour_count} tx)</b></div>`;
+    html += `<div class="stat-box"><small>Aktywność nocna (0-5)</small><b>${ta.night_activity_count || 0} (${ta.night_activity_ratio || 0}%)</b></div>`;
+    html += `<div class="stat-box"><small>Weekend / tygodniowo</small><b>${ta.weekend_count || 0} / ${ta.weekday_count || 0} (${ta.weekend_ratio || 0}%)</b></div>`;
+    html += '</div>';
+
+    // Hourly distribution bar chart
+    const hd = ta.hourly_distribution || {};
+    const maxH = Math.max(1, ...Object.values(hd));
+    html += '<div style="margin-bottom:6px"><b>📊 Rozkład godzinowy:</b></div>';
+    html += '<div style="display:flex;align-items:flex-end;gap:2px;height:120px;margin-bottom:4px;padding:4px 0;border-bottom:1px solid #e2e8f0">';
+    for (let h = 0; h < 24; h++) {
+      const v = hd[h] || 0;
+      const pct = Math.max(1, v / maxH * 100);
+      const color = (h >= 0 && h < 6) ? '#ef4444' : '#3b82f6';
+      html += `<div title="${h}:00 — ${v} tx" style="flex:1;background:${color};height:${pct.toFixed(0)}%;border-radius:2px 2px 0 0"></div>`;
+    }
+    html += '</div>';
+    html += '<div style="display:flex;gap:2px;font-size:9px;color:#94a3b8;margin-bottom:20px">';
+    for (let h = 0; h < 24; h++) html += `<div style="flex:1;text-align:center">${h}</div>`;
+    html += '</div>';
+
+    // Day of week
+    const dow = ta.dow_distribution || {};
+    const dowNames = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'];
+    const maxD = Math.max(1, ...Object.values(dow));
+    html += '<div style="margin-bottom:6px"><b>📅 Rozkład dni tygodnia:</b></div>';
+    html += '<div style="display:flex;align-items:flex-end;gap:6px;height:80px;max-width:400px;padding:4px 0;border-bottom:1px solid #e2e8f0">';
+    for (let d = 0; d < 7; d++) {
+      const v = dow[d] || 0;
+      const pct = Math.max(1, v / maxD * 100);
+      const color = d >= 5 ? '#f59e0b' : '#3b82f6';
+      html += `<div title="${dowNames[d]} — ${v} tx" style="flex:1;background:${color};height:${pct.toFixed(0)}%;border-radius:2px 2px 0 0"></div>`;
+    }
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;max-width:400px;margin-bottom:16px">';
+    for (let d = 0; d < 7; d++) {
+      const v = dow[d] || 0;
+      html += `<div style="flex:1;text-align:center;font-size:10px;color:#64748b;margin-top:2px">${dowNames[d]}<br><span style="font-size:9px">${v}</span></div>`;
+    }
+    html += '</div>';
+
+    // Burst days
+    if (ta.burst_days && ta.burst_days.length) {
+      html += '<div style="margin-top:14px"><b>⚡ Dni z nagłą aktywnością (&gt;50 tx):</b></div>';
+      html += '<table class="data-table" style="width:auto;font-size:11px;margin-top:4px"><thead><tr><th>Data</th><th>TX</th></tr></thead><tbody>';
+      for (const b of ta.burst_days) html += `<tr><td>${_esc(b.date)}</td><td style="text-align:right;font-weight:bold;color:#dc2626">${b.tx_count}</td></tr>`;
+      html += '</tbody></table>';
+    }
+
+    // Dormancy periods
+    if (ta.dormancy_periods && ta.dormancy_periods.length) {
+      html += '<div style="margin-top:14px"><b>😴 Okresy uśpienia (&gt;7 dni):</b></div>';
+      html += '<table class="data-table" style="width:auto;font-size:11px;margin-top:4px"><thead><tr><th>Od</th><th>Do</th><th>Dni</th></tr></thead><tbody>';
+      for (const d of ta.dormancy_periods) html += `<tr><td>${_esc(d.from)}</td><td>${_esc(d.to)}</td><td style="text-align:right">${d.days}</td></tr>`;
+      html += '</tbody></table>';
+    }
+
+    _html("crypto_temporal_body", html);
+  }
+
+  // ── 2. Conversion Chains ──
+  function _renderConversionChains(r) {
+    const fr = r.forensic_report || {};
+    const cc = fr.conversion_chains;
+    if (!cc || !cc.edges || !cc.edges.length) { _hide("crypto_conversion_card"); return; }
+    _show("crypto_conversion_card");
+    let html = '';
+
+    html += `<div style="margin-bottom:10px"><b>Unikalne pary konwersji:</b> ${cc.unique_swap_pairs || 0}`;
+    if (cc.fiat_entry_tokens && cc.fiat_entry_tokens.length) html += ` &nbsp;|&nbsp; <b>Waluty fiat wejściowe:</b> ${_esc(cc.fiat_entry_tokens.join(', '))}`;
+    if (cc.withdrawal_tokens && cc.withdrawal_tokens.length) html += ` &nbsp;|&nbsp; <b>Tokeny wypłacane:</b> ${_esc(cc.withdrawal_tokens.join(', '))}`;
+    html += '</div>';
+
+    html += '<div style="max-height:600px;overflow-y:auto">';
+    html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr><th>Z tokenu</th><th>→</th><th>Na token</th><th>Wolumen</th></tr></thead><tbody>';
+    for (const e of cc.edges) {
+      html += `<tr><td><b>${_esc(e.from)}</b></td><td style="text-align:center">→</td><td><b>${_esc(e.to)}</b></td><td style="text-align:right">${e.volume.toFixed(4)}</td></tr>`;
+    }
+    html += '</tbody></table></div>';
+    _html("crypto_conversion_body", html);
+  }
+
+  // ── 3. Structuring Detection ──
+  function _renderStructuring(r) {
+    const fr = r.forensic_report || {};
+    const sd = fr.structuring_detection;
+    if (!sd) { _hide("crypto_structuring_card"); return; }
+    const alerts = sd.alerts || [];
+    const freq = sd.frequent_amounts || [];
+    if (!alerts.length && !freq.length) { _hide("crypto_structuring_card"); return; }
+    _show("crypto_structuring_card");
+    let html = '';
+
+    if (alerts.length) {
+      html += `<div style="margin-bottom:8px;color:#dc2626;font-weight:bold">⚠️ Wykryto ${sd.alert_count || alerts.length} potencjalnych przypadków structuringu</div>`;
+      html += '<div style="max-height:500px;overflow-y:auto">';
+      html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr><th>Data</th><th>Typ</th><th>Próg</th><th>Ilość tx</th><th>Kwoty</th><th>Suma dzienna</th></tr></thead><tbody>';
+      for (const a of alerts) {
+        html += `<tr><td>${_esc(a.date)}</td><td>${_esc(a.type)}</td><td>${a.threshold}</td><td>${a.count}</td><td style="font-size:10px">${(a.amounts || []).join(', ')}</td><td style="text-align:right;font-weight:bold">${a.daily_total.toFixed(2)}</td></tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+
+    if (freq.length) {
+      html += '<div style="margin-top:12px"><b>📊 Najczęściej używane kwoty (zaokrąglone do 100):</b></div>';
+      html += '<table class="data-table" style="width:auto;font-size:11px;margin-top:4px"><thead><tr><th>Kwota</th><th>Wystąpienia</th></tr></thead><tbody>';
+      for (const f of freq) html += `<tr><td style="text-align:right">${f.amount.toFixed(0)}</td><td style="text-align:right">${f.count}</td></tr>`;
+      html += '</tbody></table>';
+    }
+
+    _html("crypto_structuring_body", html);
+  }
+
+  // ── 4. Wash Trading Detection ──
+  function _renderWashTrading(r) {
+    const fr = r.forensic_report || {};
+    const wt = fr.wash_trading;
+    if (!wt) { _hide("crypto_wash_card"); return; }
+    const reversals = wt.rapid_reversals || [];
+    const zeroNet = wt.zero_net_markets || [];
+    if (!reversals.length && !zeroNet.length) { _hide("crypto_wash_card"); return; }
+    _show("crypto_wash_card");
+    let html = '';
+
+    if (zeroNet.length) {
+      html += `<div style="margin-bottom:8px;color:#f97316;font-weight:bold">⚠️ Rynki z zerową pozycją netto (podejrzenie wash tradingu):</div>`;
+      html += '<div style="max-height:400px;overflow-y:auto">';
+      html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr><th>Rynek</th><th>Wolumen brutto</th><th>Pozycja netto</th><th>Net ratio %</th><th>Kupno</th><th>Sprzedaż</th></tr></thead><tbody>';
+      for (const m of zeroNet) {
+        html += `<tr><td><b>${_esc(m.market)}</b></td><td style="text-align:right">${m.gross_volume.toFixed(4)}</td><td style="text-align:right;color:#dc2626">${m.net_position.toFixed(4)}</td><td style="text-align:right;color:#dc2626">${m.net_ratio}%</td><td style="text-align:right">${m.buys.toFixed(4)}</td><td style="text-align:right">${m.sells.toFixed(4)}</td></tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+
+    if (reversals.length) {
+      html += `<div style="margin-top:12px"><b>🔄 Szybkie odwrócenia (kupno↔sprzedaż &lt;5min) — ${wt.rapid_reversal_count || reversals.length} wykrytych:</b></div>`;
+      html += '<div style="max-height:500px;overflow-y:auto">';
+      html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr><th>Rynek</th><th>Czas 1</th><th>Strona</th><th>Kwota</th><th>Czas 2</th><th>Strona</th><th>Kwota</th><th>Opóźn.(s)</th></tr></thead><tbody>';
+      for (const w of reversals) {
+        html += `<tr><td>${_esc(w.market)}</td><td>${_esc((w.time1 || '').replace('T', ' '))}</td><td>${_esc(w.side1)}</td><td style="text-align:right">${w.amount1}</td><td>${_esc((w.time2 || '').replace('T', ' '))}</td><td>${_esc(w.side2)}</td><td style="text-align:right">${w.amount2}</td><td style="text-align:right">${w.delay_sec}</td></tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+
+    _html("crypto_wash_body", html);
+  }
+
+  // ── 5. Fiat On/Off Ramp Analysis ──
+  function _renderFiatRamp(r) {
+    const fr = r.forensic_report || {};
+    const fa = fr.fiat_ramp_analysis;
+    if (!fa || (fa.fiat_deposit_count === 0 && fa.fiat_withdrawal_count === 0)) { _hide("crypto_fiat_ramp_card"); return; }
+    _show("crypto_fiat_ramp_card");
+    let html = '';
+
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">';
+    html += `<div class="stat-box"><small>Wpłaty fiat</small><b>${fa.fiat_deposit_count || 0}</b></div>`;
+    html += `<div class="stat-box"><small>Wypłaty fiat</small><b>${fa.fiat_withdrawal_count || 0}</b></div>`;
+    html += `<div class="stat-box"><small>Łącznie fiat IN</small><b>${(fa.total_fiat_in || 0).toFixed(2)}</b></div>`;
+    html += `<div class="stat-box"><small>Łącznie fiat OUT</small><b>${(fa.total_fiat_out || 0).toFixed(2)}</b></div>`;
+    const nf = fa.net_fiat_flow || 0;
+    const nfColor = nf >= 0 ? '#22c55e' : '#dc2626';
+    html += `<div class="stat-box"><small>Saldo netto fiat</small><b style="color:${nfColor}">${nf.toFixed(2)}</b></div>`;
+    html += '</div>';
+
+    // Fiat currencies
+    const ci = fa.currencies_in || {};
+    const co = fa.currencies_out || {};
+    if (Object.keys(ci).length || Object.keys(co).length) {
+      html += '<table class="data-table" style="width:auto;font-size:11px"><thead><tr><th>Waluta</th><th>Wpłaty</th><th>Wypłaty</th></tr></thead><tbody>';
+      const allCurr = new Set([...Object.keys(ci), ...Object.keys(co)]);
+      for (const c of allCurr) {
+        html += `<tr><td><b>${_esc(c)}</b></td><td style="text-align:right">${(ci[c] || 0).toFixed(2)}</td><td style="text-align:right">${(co[c] || 0).toFixed(2)}</td></tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    // Fiat-to-crypto withdrawal timing
+    if (fa.fiat_to_crypto_wd_hours != null) {
+      const h = fa.fiat_to_crypto_wd_hours;
+      const color = h < 24 ? '#dc2626' : (h < 72 ? '#f97316' : '#64748b');
+      html += `<div style="margin-top:10px"><b>⏱️ Czas od pierwszej wpłaty fiat do pierwszej wypłaty krypto:</b> <span style="color:${color};font-weight:bold">${h.toFixed(1)} godz.</span>`;
+      if (h < 24) html += ' <span style="color:#dc2626">⚠️ Szybki pipeline fiat→crypto</span>';
+      html += '</div>';
+    }
+
+    if (fa.p2p_transaction_count > 0) {
+      html += `<div style="margin-top:6px"><b>P2P jako rampa:</b> ${fa.p2p_transaction_count} transakcji P2P</div>`;
+    }
+
+    _html("crypto_fiat_ramp_body", html);
+  }
+
+  // ── 6. P2P Analysis ──
+  function _renderP2PAnalysis(r) {
+    const fr = r.forensic_report || {};
+    const p2p = fr.p2p_analysis;
+    if (!p2p || !p2p.total_count) { _hide("crypto_p2p_card"); return; }
+    _show("crypto_p2p_card");
+    let html = '';
+
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px">';
+    html += `<div class="stat-box"><small>Transakcje P2P</small><b>${p2p.total_count}</b></div>`;
+    html += `<div class="stat-box"><small>% całkowitej aktywności</small><b>${p2p.total_pct || 0}%</b></div>`;
+    html += `<div class="stat-box"><small>Wolumen</small><b>${(p2p.total_volume || 0).toFixed(2)}</b></div>`;
+    html += `<div class="stat-box"><small>Unikalni kontrahenci</small><b>${p2p.unique_counterparties || 0}</b></div>`;
+    html += '</div>';
+
+    // Payment methods
+    const pm = p2p.payment_methods || {};
+    if (Object.keys(pm).length) {
+      html += '<div style="margin-bottom:6px"><b>💳 Metody płatności:</b></div>';
+      html += '<table class="data-table" style="width:auto;font-size:11px"><thead><tr><th>Metoda</th><th>Transakcje</th></tr></thead><tbody>';
+      for (const [m, c] of Object.entries(pm)) html += `<tr><td>${_esc(m)}</td><td style="text-align:right">${c}</td></tr>`;
+      html += '</tbody></table>';
+    }
+
+    // Top counterparties
+    const tops = p2p.top_counterparties || [];
+    if (tops.length) {
+      html += '<div style="margin-top:10px"><b>👥 Top kontrahenci P2P:</b></div>';
+      html += '<div style="max-height:400px;overflow-y:auto">';
+      html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr><th>ID</th><th>TX</th><th>Wolumen</th><th>Tokeny</th></tr></thead><tbody>';
+      for (const cp of tops) {
+        html += `<tr><td><code>${_esc(cp.id)}</code></td><td style="text-align:right">${cp.count}</td><td style="text-align:right">${cp.volume.toFixed(4)}</td><td>${_esc((cp.tokens || []).join(', '))}</td></tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+
+    _html("crypto_p2p_body", html);
+  }
+
+  // ── 7. Velocity Analysis ──
+  function _renderVelocity(r) {
+    const fr = r.forensic_report || {};
+    const va = fr.velocity_analysis;
+    if (!va) { _hide("crypto_velocity_card"); return; }
+    _show("crypto_velocity_card");
+    let html = '';
+
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">';
+    html += `<div class="stat-box"><small>Wpłaty / Wypłaty</small><b>${va.deposit_count || 0} / ${va.withdrawal_count || 0}</b></div>`;
+    html += `<div class="stat-box"><small>Stosunek DEP/WD</small><b>${va.dep_wd_ratio || 0}</b></div>`;
+    if (va.has_hot_wallet_behavior) html += `<div class="stat-box" style="border-color:#dc2626"><small>🔥 Hot wallet</small><b style="color:#dc2626">TAK</b></div>`;
+    html += '</div>';
+
+    // Hot wallet indicators
+    if (va.hot_wallet_indicators && va.hot_wallet_indicators.length) {
+      html += '<div style="margin-bottom:8px;color:#dc2626;font-weight:bold">⚠️ Tokeny z zachowaniem "hot wallet" (śr. trzymanie &lt;1h):</div>';
+      html += '<table class="data-table" style="width:auto;font-size:11px"><thead><tr><th>Token</th><th>Średni czas (godz.)</th></tr></thead><tbody>';
+      for (const h of va.hot_wallet_indicators) html += `<tr><td><b>${_esc(h.token)}</b></td><td style="text-align:right;color:#dc2626">${h.avg_hold_hours}</td></tr>`;
+      html += '</tbody></table>';
+    }
+
+    // Token velocities
+    const tv = va.token_velocities || [];
+    if (tv.length) {
+      html += '<div style="margin-top:10px"><b>⏱️ Czas trzymania per token:</b></div>';
+      html += '<div style="max-height:500px;overflow-y:auto">';
+      html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr><th>Token</th><th>Śr. czas (godz.)</th><th>Min czas (godz.)</th><th>Wpłaty</th><th>Wypłaty</th></tr></thead><tbody>';
+      for (const t of tv) {
+        const color = t.avg_hold_hours < 1 ? '#dc2626' : (t.avg_hold_hours < 24 ? '#f97316' : '#64748b');
+        html += `<tr><td><b>${_esc(t.token)}</b></td><td style="text-align:right;color:${color}">${t.avg_hold_hours}</td><td style="text-align:right">${t.min_hold_hours}</td><td style="text-align:right">${t.deposit_count}</td><td style="text-align:right">${t.withdrawal_count}</td></tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+
+    _html("crypto_velocity_body", html);
+  }
+
+  // ── 8. Fee Analysis ──
+  function _renderFeeAnalysis(r) {
+    const fr = r.forensic_report || {};
+    const fa = fr.fee_analysis;
+    if (!fa || !fa.fee_paying_tx_count) { _hide("crypto_fee_card"); return; }
+    _show("crypto_fee_card");
+    let html = '';
+
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">';
+    html += `<div class="stat-box"><small>TX z opłatami</small><b>${fa.fee_paying_tx_count}</b></div>`;
+    html += `<div class="stat-box"><small>Opłaty w BNB</small><b>${fa.bnb_fee_count} (${fa.bnb_fee_ratio}%)</b></div>`;
+    html += '</div>';
+
+    const fees = fa.total_fees_by_token || {};
+    if (Object.keys(fees).length) {
+      html += '<table class="data-table" style="width:auto;font-size:11px"><thead><tr><th>Token opłaty</th><th>Suma opłat</th></tr></thead><tbody>';
+      for (const [tok, val] of Object.entries(fees)) {
+        html += `<tr><td><b>${_esc(tok)}</b></td><td style="text-align:right">${Number(val).toFixed(8)}</td></tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    _html("crypto_fee_body", html);
+  }
+
+  // ── 9. Network Analysis ──
+  function _renderNetworkAnalysis(r) {
+    const fr = r.forensic_report || {};
+    const na = fr.network_analysis;
+    if (!na || !na.networks || !na.networks.length) { _hide("crypto_network_card"); return; }
+    _show("crypto_network_card");
+    let html = '';
+
+    html += `<div style="margin-bottom:10px"><b>Unikalne sieci:</b> ${na.unique_networks || 0}`;
+    if (na.high_risk_networks && na.high_risk_networks.length) {
+      html += ` &nbsp;|&nbsp; <span style="color:#dc2626;font-weight:bold">⚠️ Sieci wysokiego ryzyka: ${na.high_risk_networks.map(n => n.network).join(', ')}</span>`;
+    }
+    html += '</div>';
+
+    html += '<div style="max-height:500px;overflow-y:auto">';
+    html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr><th>Sieć</th><th>Wpłaty</th><th>Wypłaty</th><th>Łącznie TX</th><th>Wol. wpłat</th><th>Wol. wypłat</th></tr></thead><tbody>';
+    const _HR = new Set(["TRX", "TRON", "TRC20", "BSC", "BEP20", "BEP2"]);
+    for (const n of na.networks) {
+      const isHR = _HR.has((n.network || '').toUpperCase());
+      const style = isHR ? 'background:#fef2f2' : '';
+      html += `<tr style="${style}"><td><b>${_esc(n.network)}</b>${isHR ? ' ⚠️' : ''}</td><td style="text-align:right">${n.deposits}</td><td style="text-align:right">${n.withdrawals}</td><td style="text-align:right;font-weight:bold">${n.total_tx}</td><td style="text-align:right">${n.dep_volume.toFixed(4)}</td><td style="text-align:right">${n.wd_volume.toFixed(4)}</td></tr>`;
+    }
+    html += '</tbody></table></div>';
+
+    _html("crypto_network_body", html);
+  }
+
+  // ── 10. Extended Security Analysis ──
+  function _renderExtSecurity(r) {
+    const fr = r.forensic_report || {};
+    const es = fr.extended_security;
+    if (!es) { _hide("crypto_ext_security_card"); return; }
+    _show("crypto_ext_security_card");
+    let html = '';
+
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">';
+    html += `<div class="stat-box"><small>Kraje logowań</small><b>${es.login_country_count || 0}</b></div>`;
+    if (es.vpn_suspect_days > 0) html += `<div class="stat-box" style="border-color:#dc2626"><small>Podejrzane dni VPN</small><b style="color:#dc2626">${es.vpn_suspect_days}</b></div>`;
+    html += `<div class="stat-box"><small>API Trading</small><b>${es.api_trading_enabled ? '✅ Włączone' : '❌ Wyłączone'}</b></div>`;
+    html += `<div class="stat-box"><small>Sub-konto</small><b>${es.has_sub_account ? '✅ Tak' : '❌ Nie'}</b></div>`;
+    html += '</div>';
+
+    // Login countries
+    if (es.login_countries && es.login_countries.length) {
+      html += `<div style="margin-bottom:6px"><b>🌍 Kraje logowań:</b> ${_esc(es.login_countries.join(', '))}</div>`;
+    }
+
+    // VPN suspects
+    const vpn = es.vpn_suspects || [];
+    if (vpn.length) {
+      html += '<div style="margin-top:10px;color:#dc2626;font-weight:bold">⚠️ Podejrzenie VPN/proxy — wiele krajów w jednym dniu:</div>';
+      html += '<div style="max-height:400px;overflow-y:auto">';
+      html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr><th>Data</th><th>Kraje</th><th>Ilość krajów</th><th>Loginy</th></tr></thead><tbody>';
+      for (const v of vpn) {
+        html += `<tr><td>${_esc(v.date)}</td><td>${_esc((v.countries || []).join(', '))}</td><td style="text-align:right;color:#dc2626;font-weight:bold">${v.country_count}</td><td style="text-align:right">${v.login_count}</td></tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+
+    _html("crypto_ext_security_body", html);
   }
 
   /* ------------------------------------------------------------------ */

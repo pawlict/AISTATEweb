@@ -1494,4 +1494,558 @@ def build_forensic_report(path: Path, parsed: ParsedCryptoData) -> Dict[str, Any
             margin_info["error"] = str(e)
     report["margin_analysis"] = margin_info
 
+    # -----------------------------------------------------------------------
+    # 12. Temporal analysis — activity patterns
+    # -----------------------------------------------------------------------
+    temporal: Dict[str, Any] = {}
+    # Hourly distribution (0-23)
+    hour_dist: Dict[int, int] = defaultdict(int)
+    # Day of week distribution (0=Mon, 6=Sun)
+    dow_dist: Dict[int, int] = defaultdict(int)
+    # Daily tx count for burst detection
+    daily_counts: Dict[str, int] = defaultdict(int)
+    # Weekend vs weekday
+    weekend_count = 0
+    weekday_count = 0
+    # Dormancy — gaps between consecutive txs
+    sorted_timestamps = []
+
+    for tx in txs:
+        if not tx.timestamp:
+            continue
+        try:
+            dt = datetime.strptime(tx.timestamp[:19], "%Y-%m-%dT%H:%M:%S")
+        except Exception:
+            continue
+        hour_dist[dt.hour] += 1
+        dow_dist[dt.weekday()] += 1
+        day_key = dt.strftime("%Y-%m-%d")
+        daily_counts[day_key] += 1
+        if dt.weekday() >= 5:
+            weekend_count += 1
+        else:
+            weekday_count += 1
+        sorted_timestamps.append(dt)
+
+    sorted_timestamps.sort()
+
+    temporal["hourly_distribution"] = {h: hour_dist.get(h, 0) for h in range(24)}
+    temporal["dow_distribution"] = {d: dow_dist.get(d, 0) for d in range(7)}
+    temporal["weekend_count"] = weekend_count
+    temporal["weekday_count"] = weekday_count
+    temporal["weekend_ratio"] = round(weekend_count / max(1, weekend_count + weekday_count) * 100, 1)
+
+    # Peak hour
+    if hour_dist:
+        peak_hour = max(hour_dist, key=hour_dist.get)
+        temporal["peak_hour"] = peak_hour
+        temporal["peak_hour_count"] = hour_dist[peak_hour]
+
+    # Night activity (0-5 AM)
+    night_count = sum(hour_dist.get(h, 0) for h in range(0, 6))
+    temporal["night_activity_count"] = night_count
+    temporal["night_activity_ratio"] = round(night_count / max(1, sum(hour_dist.values())) * 100, 1)
+
+    # Burst detection — days with > 50 transactions
+    bursts = [{"date": d, "tx_count": c} for d, c in daily_counts.items() if c > 50]
+    bursts.sort(key=lambda x: x["tx_count"], reverse=True)
+    temporal["burst_days"] = bursts[:20]
+
+    # Top active days
+    top_days = sorted(daily_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+    temporal["top_active_days"] = [{"date": d, "tx_count": c} for d, c in top_days]
+
+    # Dormancy periods (gaps > 7 days)
+    dormancy_periods = []
+    if len(sorted_timestamps) >= 2:
+        for i in range(1, len(sorted_timestamps)):
+            gap = (sorted_timestamps[i] - sorted_timestamps[i - 1]).total_seconds()
+            if gap > 7 * 86400:  # > 7 days
+                dormancy_periods.append({
+                    "from": sorted_timestamps[i - 1].strftime("%Y-%m-%d"),
+                    "to": sorted_timestamps[i].strftime("%Y-%m-%d"),
+                    "days": round(gap / 86400, 1),
+                })
+        dormancy_periods.sort(key=lambda x: x["days"], reverse=True)
+    temporal["dormancy_periods"] = dormancy_periods[:10]
+
+    # Activity first/last
+    if sorted_timestamps:
+        temporal["first_activity"] = sorted_timestamps[0].strftime("%Y-%m-%dT%H:%M:%S")
+        temporal["last_activity"] = sorted_timestamps[-1].strftime("%Y-%m-%dT%H:%M:%S")
+        total_days = (sorted_timestamps[-1] - sorted_timestamps[0]).days + 1
+        temporal["active_span_days"] = total_days
+        active_days = len(daily_counts)
+        temporal["active_days"] = active_days
+        temporal["activity_density"] = round(active_days / max(1, total_days) * 100, 1)
+
+    report["temporal_analysis"] = temporal
+
+    # -----------------------------------------------------------------------
+    # 13. Conversion chains — token flow paths
+    # -----------------------------------------------------------------------
+    # Track sequences: deposit token → swap chain → withdrawal token
+    token_flows: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for tx in txs:
+        if tx.tx_type == "swap":
+            base = tx.token
+            quote = tx.raw.get("quote_token", "")
+            side = tx.raw.get("side", "")
+            if base and quote:
+                if side == "BUY":
+                    token_flows[quote][base] += float(tx.amount)
+                else:
+                    token_flows[base][quote] += float(tx.amount)
+
+    # Detect fiat→crypto→withdrawal chains
+    fiat_to_crypto_chains = []
+    fiat_deposit_tokens = set()
+    withdrawal_tokens = set()
+    for tx in txs:
+        if tx.tx_type == "fiat_deposit":
+            fiat_deposit_tokens.add(tx.token)
+        elif tx.tx_type == "withdrawal" and "binance_internal" not in (tx.risk_tags or []):
+            withdrawal_tokens.add(tx.token)
+
+    # Build conversion edges
+    conversion_edges = []
+    for src, dests in token_flows.items():
+        for dst, vol in sorted(dests.items(), key=lambda x: x[1], reverse=True):
+            conversion_edges.append({"from": src, "to": dst, "volume": round(vol, 4)})
+    conversion_edges.sort(key=lambda x: x["volume"], reverse=True)
+
+    report["conversion_chains"] = {
+        "edges": conversion_edges[:50],
+        "fiat_entry_tokens": sorted(fiat_deposit_tokens),
+        "withdrawal_tokens": sorted(withdrawal_tokens),
+        "unique_swap_pairs": len(conversion_edges),
+    }
+
+    # -----------------------------------------------------------------------
+    # 14. Structuring / smurfing detection
+    # -----------------------------------------------------------------------
+    structuring: Dict[str, Any] = {}
+    # Thresholds (USD equivalent)
+    _THRESHOLDS = [1000, 5000, 9000, 10000, 15000]
+
+    # Group deposits by day and check for multiple just-below-threshold
+    dep_by_day: Dict[str, List[float]] = defaultdict(list)
+    wd_by_day: Dict[str, List[float]] = defaultdict(list)
+    for tx in txs:
+        if not tx.timestamp:
+            continue
+        day = tx.timestamp[:10]
+        amt = float(tx.amount)
+        if tx.tx_type in ("deposit", "fiat_deposit"):
+            dep_by_day[day].append(amt)
+        elif tx.tx_type in ("withdrawal", "fiat_withdrawal"):
+            wd_by_day[day].append(amt)
+
+    # Detect days with multiple txs just below threshold (within 10% below)
+    structuring_alerts = []
+    for threshold in _THRESHOLDS:
+        low = threshold * 0.90
+        for day, amounts in dep_by_day.items():
+            near = [a for a in amounts if low <= a < threshold]
+            if len(near) >= 2:
+                structuring_alerts.append({
+                    "date": day,
+                    "type": "deposit",
+                    "threshold": threshold,
+                    "count": len(near),
+                    "amounts": [round(a, 2) for a in near[:5]],
+                    "daily_total": round(sum(near), 2),
+                })
+        for day, amounts in wd_by_day.items():
+            near = [a for a in amounts if low <= a < threshold]
+            if len(near) >= 2:
+                structuring_alerts.append({
+                    "date": day,
+                    "type": "withdrawal",
+                    "threshold": threshold,
+                    "count": len(near),
+                    "amounts": [round(a, 2) for a in near[:5]],
+                    "daily_total": round(sum(near), 2),
+                })
+
+    structuring_alerts.sort(key=lambda x: x["daily_total"], reverse=True)
+
+    # Amount clustering — find frequently used amounts (rounded)
+    all_amounts = [float(tx.amount) for tx in txs if float(tx.amount) > 0]
+    rounded_amounts: Dict[float, int] = defaultdict(int)
+    for a in all_amounts:
+        # Round to nearest 100
+        ra = round(a / 100) * 100
+        if ra > 0:
+            rounded_amounts[ra] += 1
+    frequent_amounts = sorted(
+        [{"amount": a, "count": c} for a, c in rounded_amounts.items() if c >= 5],
+        key=lambda x: x["count"], reverse=True
+    )[:20]
+
+    structuring["alerts"] = structuring_alerts[:30]
+    structuring["alert_count"] = len(structuring_alerts)
+    structuring["frequent_amounts"] = frequent_amounts
+    report["structuring_detection"] = structuring
+
+    # -----------------------------------------------------------------------
+    # 15. Wash trading detection
+    # -----------------------------------------------------------------------
+    wash: Dict[str, Any] = {}
+
+    # Find buy-sell pairs on same market within short time windows
+    swap_txs = [(tx, datetime.strptime(tx.timestamp[:19], "%Y-%m-%dT%H:%M:%S"))
+                for tx in txs if tx.tx_type == "swap" and tx.timestamp
+                and tx.raw.get("market")]
+    swap_txs.sort(key=lambda x: x[1])
+
+    wash_suspects = []
+    for i, (tx1, dt1) in enumerate(swap_txs):
+        for j in range(i + 1, min(i + 20, len(swap_txs))):
+            tx2, dt2 = swap_txs[j]
+            delta = (dt2 - dt1).total_seconds()
+            if delta > 300:  # 5 min window
+                break
+            if (tx1.raw.get("market") == tx2.raw.get("market")
+                    and tx1.raw.get("side") != tx2.raw.get("side")):
+                wash_suspects.append({
+                    "market": tx1.raw.get("market", ""),
+                    "time1": tx1.timestamp[:19],
+                    "side1": tx1.raw.get("side", ""),
+                    "amount1": round(float(tx1.amount), 6),
+                    "time2": tx2.timestamp[:19],
+                    "side2": tx2.raw.get("side", ""),
+                    "amount2": round(float(tx2.amount), 6),
+                    "delay_sec": round(delta),
+                })
+    wash_suspects = wash_suspects[:50]
+
+    # Per-market net position analysis
+    market_net: Dict[str, Dict[str, float]] = defaultdict(lambda: {"bought": 0.0, "sold": 0.0, "gross": 0.0})
+    for tx in txs:
+        if tx.tx_type != "swap":
+            continue
+        market = tx.raw.get("market", "")
+        side = tx.raw.get("side", "")
+        qty = float(tx.amount)
+        if side == "BUY":
+            market_net[market]["bought"] += qty
+            market_net[market]["gross"] += qty
+        elif side == "SELL":
+            market_net[market]["sold"] += qty
+            market_net[market]["gross"] += qty
+
+    wash_markets = []
+    for market, data in market_net.items():
+        net = abs(data["bought"] - data["sold"])
+        gross = data["gross"]
+        if gross > 0:
+            net_ratio = net / gross
+            if net_ratio < 0.1 and gross > 0 and (data["bought"] > 0 and data["sold"] > 0):
+                wash_markets.append({
+                    "market": market,
+                    "gross_volume": round(gross, 4),
+                    "net_position": round(net, 4),
+                    "net_ratio": round(net_ratio * 100, 1),
+                    "buys": round(data["bought"], 4),
+                    "sells": round(data["sold"], 4),
+                })
+    wash_markets.sort(key=lambda x: x["gross_volume"], reverse=True)
+
+    wash["rapid_reversals"] = wash_suspects
+    wash["zero_net_markets"] = wash_markets[:20]
+    wash["rapid_reversal_count"] = len(wash_suspects)
+    report["wash_trading"] = wash
+
+    # -----------------------------------------------------------------------
+    # 16. Fiat on/off ramp analysis
+    # -----------------------------------------------------------------------
+    fiat_analysis: Dict[str, Any] = {}
+
+    fiat_deps = [tx for tx in txs if tx.tx_type == "fiat_deposit"]
+    fiat_wds = [tx for tx in txs if tx.tx_type == "fiat_withdrawal"]
+
+    fiat_in_total: Dict[str, float] = defaultdict(float)
+    fiat_out_total: Dict[str, float] = defaultdict(float)
+    for tx in fiat_deps:
+        fiat_in_total[tx.token] += float(tx.amount)
+    for tx in fiat_wds:
+        fiat_out_total[tx.token] += float(tx.amount)
+
+    fiat_analysis["currencies_in"] = {k: round(v, 2) for k, v in fiat_in_total.items()}
+    fiat_analysis["currencies_out"] = {k: round(v, 2) for k, v in fiat_out_total.items()}
+    fiat_analysis["total_fiat_in"] = round(sum(fiat_in_total.values()), 2)
+    fiat_analysis["total_fiat_out"] = round(sum(fiat_out_total.values()), 2)
+    fiat_analysis["net_fiat_flow"] = round(sum(fiat_in_total.values()) - sum(fiat_out_total.values()), 2)
+    fiat_analysis["fiat_deposit_count"] = len(fiat_deps)
+    fiat_analysis["fiat_withdrawal_count"] = len(fiat_wds)
+
+    # Time from first fiat deposit to first crypto withdrawal
+    fiat_dep_times = []
+    crypto_wd_times = []
+    for tx in fiat_deps:
+        if tx.timestamp:
+            try:
+                fiat_dep_times.append(datetime.strptime(tx.timestamp[:19], "%Y-%m-%dT%H:%M:%S"))
+            except Exception:
+                pass
+    for tx in txs:
+        if tx.tx_type == "withdrawal" and "binance_internal" not in (tx.risk_tags or []) and tx.timestamp:
+            try:
+                crypto_wd_times.append(datetime.strptime(tx.timestamp[:19], "%Y-%m-%dT%H:%M:%S"))
+            except Exception:
+                pass
+
+    if fiat_dep_times and crypto_wd_times:
+        first_fiat = min(fiat_dep_times)
+        first_crypto_wd = min(crypto_wd_times)
+        delta = (first_crypto_wd - first_fiat).total_seconds()
+        fiat_analysis["first_fiat_deposit"] = first_fiat.strftime("%Y-%m-%dT%H:%M:%S")
+        fiat_analysis["first_crypto_withdrawal"] = first_crypto_wd.strftime("%Y-%m-%dT%H:%M:%S")
+        fiat_analysis["fiat_to_crypto_wd_hours"] = round(delta / 3600, 1)
+
+    # P2P as fiat ramp
+    p2p_txs = [tx for tx in txs if tx.raw.get("sheet") == "P2P"]
+    fiat_analysis["p2p_transaction_count"] = len(p2p_txs)
+    fiat_analysis["p2p_as_ramp"] = len(p2p_txs) > 0
+
+    report["fiat_ramp_analysis"] = fiat_analysis
+
+    # -----------------------------------------------------------------------
+    # 17. P2P trading analysis
+    # -----------------------------------------------------------------------
+    p2p_analysis: Dict[str, Any] = {}
+    p2p_all = [tx for tx in txs if tx.raw.get("sheet") == "P2P"]
+
+    if p2p_all:
+        p2p_analysis["total_count"] = len(p2p_all)
+        p2p_analysis["total_pct"] = round(len(p2p_all) / max(1, len(txs)) * 100, 1)
+
+        # P2P counterparties
+        p2p_cps: Dict[str, Dict[str, Any]] = defaultdict(
+            lambda: {"count": 0, "volume": 0.0, "tokens": set()}
+        )
+        p2p_methods: Dict[str, int] = defaultdict(int)
+        p2p_fiat: Dict[str, float] = defaultdict(float)
+        p2p_volume = 0.0
+
+        for tx in p2p_all:
+            cp = tx.counterparty or tx.raw.get("counterparty_id", "")
+            if cp:
+                p2p_cps[cp]["count"] += 1
+                p2p_cps[cp]["volume"] += float(tx.amount)
+                p2p_cps[cp]["tokens"].add(tx.token)
+            method = tx.raw.get("payment_method", "")
+            if method:
+                p2p_methods[method] += 1
+            if tx.token in _FIAT_CURRENCIES:
+                p2p_fiat[tx.token] += float(tx.amount)
+            p2p_volume += float(tx.amount)
+
+        p2p_analysis["total_volume"] = round(p2p_volume, 2)
+        p2p_analysis["unique_counterparties"] = len(p2p_cps)
+        p2p_analysis["payment_methods"] = dict(p2p_methods)
+        p2p_analysis["fiat_currencies"] = {k: round(v, 2) for k, v in p2p_fiat.items()}
+        p2p_analysis["top_counterparties"] = sorted(
+            [{"id": k, "count": v["count"], "volume": round(v["volume"], 4),
+              "tokens": sorted(v["tokens"])} for k, v in p2p_cps.items()],
+            key=lambda x: x["count"], reverse=True
+        )[:30]
+    else:
+        p2p_analysis["total_count"] = 0
+
+    report["p2p_analysis"] = p2p_analysis
+
+    # -----------------------------------------------------------------------
+    # 18. Deposit-to-withdrawal velocity
+    # -----------------------------------------------------------------------
+    velocity: Dict[str, Any] = {}
+
+    # For each token: average time between deposit and next withdrawal
+    dep_times: Dict[str, List[datetime]] = defaultdict(list)
+    wd_times: Dict[str, List[datetime]] = defaultdict(list)
+    for tx in txs:
+        if not tx.timestamp:
+            continue
+        try:
+            dt = datetime.strptime(tx.timestamp[:19], "%Y-%m-%dT%H:%M:%S")
+        except Exception:
+            continue
+        if tx.tx_type == "deposit":
+            dep_times[tx.token].append(dt)
+        elif tx.tx_type == "withdrawal":
+            wd_times[tx.token].append(dt)
+
+    token_velocities = []
+    hot_wallet_indicators = []
+    for token in set(list(dep_times.keys()) + list(wd_times.keys())):
+        deps = sorted(dep_times.get(token, []))
+        wds = sorted(wd_times.get(token, []))
+        if not deps or not wds:
+            continue
+        # For each deposit, find closest subsequent withdrawal
+        delays = []
+        for d in deps:
+            for w in wds:
+                delta = (w - d).total_seconds()
+                if delta > 0:
+                    delays.append(delta)
+                    break
+        if delays:
+            avg_delay_h = sum(delays) / len(delays) / 3600
+            min_delay_h = min(delays) / 3600
+            token_velocities.append({
+                "token": token,
+                "avg_hold_hours": round(avg_delay_h, 1),
+                "min_hold_hours": round(min_delay_h, 2),
+                "deposit_count": len(deps),
+                "withdrawal_count": len(wds),
+            })
+            if avg_delay_h < 1:
+                hot_wallet_indicators.append({
+                    "token": token,
+                    "avg_hold_hours": round(avg_delay_h, 2),
+                })
+
+    token_velocities.sort(key=lambda x: x["avg_hold_hours"])
+    velocity["token_velocities"] = token_velocities[:30]
+    velocity["hot_wallet_indicators"] = hot_wallet_indicators
+    velocity["has_hot_wallet_behavior"] = len(hot_wallet_indicators) > 0
+
+    # Overall deposit-to-withdrawal ratio
+    total_dep = sum(1 for tx in txs if tx.tx_type == "deposit")
+    total_wd = sum(1 for tx in txs if tx.tx_type == "withdrawal")
+    velocity["deposit_count"] = total_dep
+    velocity["withdrawal_count"] = total_wd
+    velocity["dep_wd_ratio"] = round(total_dep / max(1, total_wd), 2)
+
+    report["velocity_analysis"] = velocity
+
+    # -----------------------------------------------------------------------
+    # 19. Fee analysis
+    # -----------------------------------------------------------------------
+    fee_analysis: Dict[str, Any] = {}
+    fee_by_token: Dict[str, float] = defaultdict(float)
+    fee_total = 0.0
+    fee_count = 0
+    bnb_fee_count = 0
+
+    for tx in txs:
+        fee_str = tx.raw.get("fee", "")
+        fee_coin = tx.raw.get("fee_coin", "")
+        if fee_str:
+            try:
+                fee_val = float(str(fee_str).replace(",", "."))
+                if fee_val > 0:
+                    fee_by_token[fee_coin or "UNKNOWN"] += fee_val
+                    fee_total += fee_val
+                    fee_count += 1
+                    if fee_coin == "BNB":
+                        bnb_fee_count += 1
+            except (ValueError, TypeError):
+                pass
+
+    fee_analysis["total_fees_by_token"] = {k: round(v, 8) for k, v in
+                                           sorted(fee_by_token.items(), key=lambda x: x[1], reverse=True)}
+    fee_analysis["fee_paying_tx_count"] = fee_count
+    fee_analysis["bnb_fee_count"] = bnb_fee_count
+    fee_analysis["bnb_fee_ratio"] = round(bnb_fee_count / max(1, fee_count) * 100, 1)
+
+    report["fee_analysis"] = fee_analysis
+
+    # -----------------------------------------------------------------------
+    # 20. Network / blockchain analysis
+    # -----------------------------------------------------------------------
+    network_analysis: Dict[str, Any] = {}
+    network_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"deposits": 0, "withdrawals": 0})
+    network_volumes: Dict[str, Dict[str, float]] = defaultdict(lambda: {"dep_volume": 0.0, "wd_volume": 0.0})
+
+    for tx in txs:
+        net = tx.chain or tx.raw.get("network", "")
+        if not net:
+            continue
+        if tx.tx_type == "deposit":
+            network_counts[net]["deposits"] += 1
+            network_volumes[net]["dep_volume"] += float(tx.amount)
+        elif tx.tx_type == "withdrawal":
+            network_counts[net]["withdrawals"] += 1
+            network_volumes[net]["wd_volume"] += float(tx.amount)
+
+    networks = []
+    for net in set(list(network_counts.keys()) + list(network_volumes.keys())):
+        c = network_counts.get(net, {"deposits": 0, "withdrawals": 0})
+        v = network_volumes.get(net, {"dep_volume": 0.0, "wd_volume": 0.0})
+        networks.append({
+            "network": net,
+            "deposits": c["deposits"],
+            "withdrawals": c["withdrawals"],
+            "total_tx": c["deposits"] + c["withdrawals"],
+            "dep_volume": round(v["dep_volume"], 4),
+            "wd_volume": round(v["wd_volume"], 4),
+        })
+    networks.sort(key=lambda x: x["total_tx"], reverse=True)
+
+    # Flag high-risk networks (commonly used for laundering)
+    _HIGH_RISK_NETS = {"TRX", "TRON", "TRC20", "BSC", "BEP20", "BEP2"}
+    high_risk_nets = [n for n in networks if n["network"].upper() in _HIGH_RISK_NETS]
+
+    network_analysis["networks"] = networks
+    network_analysis["unique_networks"] = len(networks)
+    network_analysis["high_risk_networks"] = high_risk_nets
+
+    report["network_analysis"] = network_analysis
+
+    # -----------------------------------------------------------------------
+    # 21. Extended account security analysis
+    # -----------------------------------------------------------------------
+    ext_security: Dict[str, Any] = {}
+
+    # Correlate login countries with withdrawal activity
+    login_countries = set()
+    al_data = access_analysis  # reuse from section 3
+    if al_data.get("geolocations"):
+        for geo in al_data["geolocations"]:
+            parts = str(geo).split()
+            if parts:
+                login_countries.add(parts[0])
+
+    # Check for new-device + immediate large withdrawal pattern
+    ext_security["login_countries"] = sorted(login_countries)
+    ext_security["login_country_count"] = len(login_countries)
+
+    # VPN detection: multiple countries within same day
+    vpn_suspects = []
+    if "Access Logs" in sheets:
+        try:
+            al = pd.read_excel(xls, sheet_name="Access Logs")
+            al["ts"] = pd.to_datetime(al["Timestamp (UTC)"], errors="coerce")
+            al["date"] = al["ts"].dt.date
+            al["country"] = al["Geolocation"].astype(str).str.split().str[0]
+
+            for day, group in al.groupby("date"):
+                countries = group["country"].nunique()
+                if countries >= 3:
+                    vpn_suspects.append({
+                        "date": str(day),
+                        "countries": sorted(group["country"].unique().tolist()),
+                        "country_count": countries,
+                        "login_count": len(group),
+                    })
+        except Exception:
+            pass
+
+    vpn_suspects.sort(key=lambda x: x["country_count"], reverse=True)
+    ext_security["vpn_suspects"] = vpn_suspects[:20]
+    ext_security["vpn_suspect_days"] = len(vpn_suspects)
+
+    # API trading indicator
+    api_trading = account_info.get("api_trading", "")
+    ext_security["api_trading_enabled"] = bool(api_trading and api_trading.lower() not in ("", "no", "false", "0", "disabled"))
+
+    # Sub-account indicator
+    sub = account_info.get("sub_account", "")
+    ext_security["has_sub_account"] = bool(sub and sub.lower() not in ("", "no", "false", "0", "none"))
+
+    report["extended_security"] = ext_security
+
     return report

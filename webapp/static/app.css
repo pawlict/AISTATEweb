@@ -4657,6 +4657,11 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .crypto-stat-value{font-size:22px;font-weight:700;color:var(--primary,#2563eb)}
 .crypto-stat-label{font-size:12px;color:var(--text-muted,#64748b);margin-top:2px}
 [data-theme="dark"] .crypto-stat-card{background:var(--bg-secondary,#1e293b)}
+.stat-box{background:var(--bg-secondary,#f1f5f9);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:10px 14px;text-align:center}
+.stat-box small{display:block;font-size:11px;color:var(--text-muted,#64748b);margin-bottom:2px}
+.stat-box b{display:block;font-size:15px;font-weight:700;color:var(--text-primary,#1e293b)}
+[data-theme="dark"] .stat-box{background:var(--bg-secondary,#1e293b);border-color:var(--border,#334155)}
+[data-theme="dark"] .stat-box b{color:var(--text-primary,#e2e8f0)}
 .crypto-info-grid{display:flex;flex-direction:column;gap:6px}
 .crypto-info-row b{font-weight:700}
 .crypto-info-stats{display:flex;gap:16px;flex-wrap:wrap}
