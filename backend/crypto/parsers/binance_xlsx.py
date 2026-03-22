@@ -908,15 +908,18 @@ def parse_binance_xlsx(path: Path) -> ParsedCryptoData:
 
 
 def _build_tx_wallets(txs: List[CryptoTransaction]) -> List[WalletInfo]:
-    """Build wallet info from transaction addresses."""
+    """Build wallet info from transaction addresses (deduplicated)."""
     wallets: Dict[str, WalletInfo] = {}
     for tx in txs:
-        for addr, direction in [(tx.from_address, "sent"), (tx.to_address, "received")]:
-            if not addr:
+        for addr_raw, direction in [(tx.from_address, "sent"), (tx.to_address, "received")]:
+            if not addr_raw:
                 continue
-            if addr not in wallets:
-                wallets[addr] = WalletInfo(address=addr, chain=tx.chain)
-            w = wallets[addr]
+            addr = addr_raw.strip()
+            # Normalize key: lowercase for EVM addresses to avoid duplicates
+            key = addr.lower() if addr.startswith("0x") or addr.startswith("0X") else addr
+            if key not in wallets:
+                wallets[key] = WalletInfo(address=addr, chain=tx.chain)
+            w = wallets[key]
             w.tx_count += 1
             if direction == "sent":
                 w.total_sent += tx.amount
@@ -1272,34 +1275,48 @@ def build_forensic_report(path: Path, parsed: ParsedCryptoData) -> Dict[str, Any
     # 6. External source/dest addresses (on-chain)
     # -----------------------------------------------------------------------
     ext_sources: Dict[str, Dict[str, Any]] = defaultdict(
-        lambda: {"total": 0.0, "tokens": set(), "count": 0, "networks": set()}
+        lambda: {"total": 0.0, "tokens": set(), "count": 0, "networks": set(), "display": ""}
     )
     ext_dests: Dict[str, Dict[str, Any]] = defaultdict(
-        lambda: {"total": 0.0, "tokens": set(), "count": 0, "networks": set()}
+        lambda: {"total": 0.0, "tokens": set(), "count": 0, "networks": set(), "display": ""}
     )
+
+    def _norm_addr(addr: str) -> str:
+        """Normalize address for dedup — lowercase for EVM, strip whitespace."""
+        a = addr.strip()
+        if a.startswith("0x") or a.startswith("0X"):
+            return a.lower()
+        return a
+
     for tx in txs:
         is_int = "binance_internal" in (tx.risk_tags or [])
         if tx.tx_type == "deposit" and not is_int and tx.from_address:
-            s = ext_sources[tx.from_address]
+            key = _norm_addr(tx.from_address)
+            s = ext_sources[key]
             s["total"] += float(tx.amount)
             s["tokens"].add(tx.token)
             s["count"] += 1
             s["networks"].add(tx.chain)
+            if not s["display"]:
+                s["display"] = tx.from_address.strip()
         elif tx.tx_type == "withdrawal" and not is_int and tx.to_address:
-            d = ext_dests[tx.to_address]
+            key = _norm_addr(tx.to_address)
+            d = ext_dests[key]
             d["total"] += float(tx.amount)
             d["tokens"].add(tx.token)
             d["count"] += 1
             d["networks"].add(tx.chain)
+            if not d["display"]:
+                d["display"] = tx.to_address.strip()
 
     report["external_source_addresses"] = sorted(
-        [{"address": k, "total": v["total"], "tokens": sorted(v["tokens"]),
+        [{"address": v["display"] or k, "total": v["total"], "tokens": sorted(v["tokens"]),
           "count": v["count"], "networks": sorted(v["networks"])}
          for k, v in ext_sources.items()],
         key=lambda x: x["total"], reverse=True,
     )
     report["external_dest_addresses"] = sorted(
-        [{"address": k, "total": v["total"], "tokens": sorted(v["tokens"]),
+        [{"address": v["display"] or k, "total": v["total"], "tokens": sorted(v["tokens"]),
           "count": v["count"], "networks": sorted(v["networks"])}
          for k, v in ext_dests.items()],
         key=lambda x: x["total"], reverse=True,

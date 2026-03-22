@@ -232,15 +232,19 @@ def run_crypto_pipeline(
     date_from = min(dates) if dates else ""
     date_to = max(dates) if dates else ""
 
-    # Unique counterparties
+    # Unique counterparties (normalized to avoid case-duplicates for EVM addresses)
+    def _norm_addr(a: str) -> str:
+        a = a.strip()
+        return a.lower() if a.startswith("0x") or a.startswith("0X") else a
+
     counterparties = set()
     for tx in txs:
         if tx.from_address:
-            counterparties.add(tx.from_address)
+            counterparties.add(_norm_addr(tx.from_address))
         if tx.to_address:
-            counterparties.add(tx.to_address)
+            counterparties.add(_norm_addr(tx.to_address))
         if tx.counterparty:
-            counterparties.add(tx.counterparty)
+            counterparties.add(_norm_addr(tx.counterparty))
 
     # Exchange-specific metadata
     _FIAT = {"PLN", "USD", "EUR", "GBP", "CHF", "CZK", "TRY", "BRL", "AUD", "CAD", "JPY", "KRW"}

@@ -2043,26 +2043,40 @@
     if (!src.length && !dst.length) { _hide("crypto_ext_addresses_card"); return; }
     _show("crypto_ext_addresses_card");
 
-    // Merge src and dst by address — avoid duplicates
+    // Merge src and dst by address — avoid duplicates (case-insensitive for EVM)
+    function _normAddr(addr) {
+      const a = (addr || "").trim();
+      return (a.startsWith("0x") || a.startsWith("0X")) ? a.toLowerCase() : a;
+    }
     const addrMap = {};
     for (const a of src) {
-      addrMap[a.address] = {
-        address: a.address,
-        dep_count: a.count || 0, dep_total: a.total || 0,
-        wd_count: 0, wd_total: 0,
-        tokens: new Set(a.tokens || []),
-        networks: new Set(a.networks || []),
-      };
-    }
-    for (const a of dst) {
-      if (addrMap[a.address]) {
-        const m = addrMap[a.address];
-        m.wd_count = a.count || 0;
-        m.wd_total = a.total || 0;
+      const key = _normAddr(a.address);
+      if (addrMap[key]) {
+        const m = addrMap[key];
+        m.dep_count += (a.count || 0);
+        m.dep_total += (a.total || 0);
         (a.tokens || []).forEach(t => m.tokens.add(t));
         (a.networks || []).forEach(n => m.networks.add(n));
       } else {
-        addrMap[a.address] = {
+        addrMap[key] = {
+          address: a.address,
+          dep_count: a.count || 0, dep_total: a.total || 0,
+          wd_count: 0, wd_total: 0,
+          tokens: new Set(a.tokens || []),
+          networks: new Set(a.networks || []),
+        };
+      }
+    }
+    for (const a of dst) {
+      const key = _normAddr(a.address);
+      if (addrMap[key]) {
+        const m = addrMap[key];
+        m.wd_count += (a.count || 0);
+        m.wd_total += (a.total || 0);
+        (a.tokens || []).forEach(t => m.tokens.add(t));
+        (a.networks || []).forEach(n => m.networks.add(n));
+      } else {
+        addrMap[key] = {
           address: a.address,
           dep_count: 0, dep_total: 0,
           wd_count: a.count || 0, wd_total: a.total || 0,

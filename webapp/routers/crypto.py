@@ -708,7 +708,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         risk_html += "<h3>Czynniki ryzyka</h3><ul>" + "".join(f"<li>{_resc(rr)}</li>" for rr in risk_reasons) + "</ul>"
     alerts = r.get("alerts", [])
     if alerts:
-        alert_items = "".join(f"<li><strong>{_resc(a.get('type', ''))}</strong>: {_resc(a.get('message', ''))}</li>" for a in alerts[:50])
+        alert_items = "".join(f"<li><strong>{_resc(a.get('type', ''))}</strong>: {_resc(a.get('message', ''))}</li>" for a in alerts)
         risk_html += f"<h3>Alerty ({len(alerts)})</h3><ul>{alert_items}</ul>"
     sections.append(f"<h2>{sn}. Ocena ryzyka AML</h2>{risk_html}")
 
@@ -732,7 +732,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         ct_html = ""
         if cps:
             rows = ""
-            for uid, c in sorted(cps.items(), key=lambda x: x[1].get("tx_count", 0), reverse=True)[:50]:
+            for uid, c in sorted(cps.items(), key=lambda x: x[1].get("tx_count", 0), reverse=True):
                 period = f"{(c.get('first_seen', '') or '')[:10]} — {(c.get('last_seen', '') or '')[:10]}"
                 rows += f"<tr><td><code>{_resc(uid)}</code></td><td>{c.get('tx_count', 0)}</td><td class='num'>{c.get('total_in', 0):.4f}</td><td class='num'>{c.get('total_out', 0):.4f}</td><td>{_resc(', '.join(c.get('tokens', [])))}</td><td>{_resc(', '.join(c.get('sources', [])))}</td><td style='font-size:11px'>{_resc(period)}</td></tr>"
             ct_html += f'<h3>Kontrahenci wewnętrzni Binance</h3><table class="data-table"><thead><tr><th>User ID</th><th>TX</th><th>Wpływy</th><th>Wypływy</th><th>Tokeny</th><th>Źródło</th><th>Okres</th></tr></thead><tbody>{rows}</tbody></table>'
@@ -740,7 +740,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
 
         if pay_cps:
             rows = ""
-            for k, c in sorted(pay_cps.items(), key=lambda x: x[1].get("count", 0), reverse=True)[:30]:
+            for k, c in sorted(pay_cps.items(), key=lambda x: x[1].get("count", 0), reverse=True):
                 rows += f"<tr><td><code>{_resc(k)}</code></td><td>{_resc(c.get('wallet_id', ''))}</td><td>{c.get('count', 0)}</td><td class='num'>{c.get('in', 0):.4f}</td><td class='num'>{c.get('out', 0):.4f}</td><td>{_resc(', '.join(c.get('tokens', [])))}</td></tr>"
             ct_html += f'<h3>Binance Pay (C2C)</h3><table class="data-table"><thead><tr><th>Binance ID</th><th>Wallet ID</th><th>TX</th><th>Wpływy</th><th>Wypływy</th><th>Tokeny</th></tr></thead><tbody>{rows}</tbody></table>'
 
@@ -766,28 +766,43 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         addr_html = ""
 
         if dep_addrs:
-            rows = "".join(f"<tr><td><code style='word-break:break-all'>{_resc(a['address'])}</code></td><td>{_resc(a.get('chain', ''))}</td><td>{_resc(', '.join(a.get('tokens', [])))}</td></tr>" for a in dep_addrs[:50])
+            rows = "".join(f"<tr><td><code style='word-break:break-all'>{_resc(a['address'])}</code></td><td>{_resc(a.get('chain', ''))}</td><td>{_resc(', '.join(a.get('tokens', [])))}</td></tr>" for a in dep_addrs)
             addr_html += f'<h3>Adresy depozytowe (portfele użytkownika)</h3><table class="data-table"><thead><tr><th>Adres</th><th>Sieć</th><th>Tokeny</th></tr></thead><tbody>{rows}</tbody></table>'
 
-        # Merge external source + dest addresses (deduplicate)
+        # Merge external source + dest addresses (deduplicate, case-insensitive for EVM)
         if ext_src or ext_dst:
+            def _nk(addr: str) -> str:
+                a = addr.strip()
+                return a.lower() if a.startswith("0x") or a.startswith("0X") else a
+
             addr_merged: Dict[str, Dict[str, Any]] = {}
             for a in ext_src:
-                addr_merged[a["address"]] = {
-                    "dep_count": a["count"], "dep_total": a["total"],
-                    "wd_count": 0, "wd_total": 0.0,
-                    "tokens": set(a.get("tokens", [])),
-                    "networks": set(a.get("networks", [])),
-                }
-            for a in ext_dst:
-                if a["address"] in addr_merged:
-                    m = addr_merged[a["address"]]
-                    m["wd_count"] = a["count"]
-                    m["wd_total"] = a["total"]
+                key = _nk(a["address"])
+                if key in addr_merged:
+                    m = addr_merged[key]
+                    m["dep_count"] += a["count"]
+                    m["dep_total"] += a["total"]
                     m["tokens"].update(a.get("tokens", []))
                     m["networks"].update(a.get("networks", []))
                 else:
-                    addr_merged[a["address"]] = {
+                    addr_merged[key] = {
+                        "display": a["address"],
+                        "dep_count": a["count"], "dep_total": a["total"],
+                        "wd_count": 0, "wd_total": 0.0,
+                        "tokens": set(a.get("tokens", [])),
+                        "networks": set(a.get("networks", [])),
+                    }
+            for a in ext_dst:
+                key = _nk(a["address"])
+                if key in addr_merged:
+                    m = addr_merged[key]
+                    m["wd_count"] += a["count"]
+                    m["wd_total"] += a["total"]
+                    m["tokens"].update(a.get("tokens", []))
+                    m["networks"].update(a.get("networks", []))
+                else:
+                    addr_merged[key] = {
+                        "display": a["address"],
                         "dep_count": 0, "dep_total": 0.0,
                         "wd_count": a["count"], "wd_total": a["total"],
                         "tokens": set(a.get("tokens", [])),
@@ -796,14 +811,15 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             sorted_addrs = sorted(addr_merged.items(),
                                   key=lambda x: x[1]["dep_total"] + x[1]["wd_total"], reverse=True)
             rows = ""
-            for addr, m in sorted_addrs[:60]:
+            for _key, m in sorted_addrs:
+                display_addr = m.get("display", _key)
                 direction = "dep+wd" if m["dep_count"] > 0 and m["wd_count"] > 0 else ("dep" if m["dep_count"] > 0 else "wd")
                 dir_label = {"dep+wd": "&#x1F4E5;&#x1F4E4;", "dep": "&#x1F4E5;", "wd": "&#x1F4E4;"}[direction]
                 dc = m["dep_count"] or "—"
                 dt = f"{m['dep_total']:.4f}" if m["dep_count"] else "—"
                 wc = m["wd_count"] or "—"
                 wt = f"{m['wd_total']:.4f}" if m["wd_count"] else "—"
-                rows += f"<tr><td><code style='word-break:break-all'>{_resc(addr)}</code></td><td style='text-align:center'>{dir_label}</td><td>{dc}</td><td class='num'>{dt}</td><td>{wc}</td><td class='num'>{wt}</td><td>{_resc(', '.join(sorted(m['tokens'])))}</td><td>{_resc(', '.join(sorted(m['networks'])))}</td></tr>"
+                rows += f"<tr><td><code style='word-break:break-all'>{_resc(display_addr)}</code></td><td style='text-align:center'>{dir_label}</td><td>{dc}</td><td class='num'>{dt}</td><td>{wc}</td><td class='num'>{wt}</td><td>{_resc(', '.join(sorted(m['tokens'])))}</td><td>{_resc(', '.join(sorted(m['networks'])))}</td></tr>"
             both_count = sum(1 for _, m in sorted_addrs if m["dep_count"] > 0 and m["wd_count"] > 0)
             note = f" (w tym <b>{both_count}</b> dwukierunkowych)" if both_count else ""
             addr_html += f'<h3>Adresy zewnętrzne ({len(sorted_addrs)} unikalnych{note})</h3><table class="data-table"><thead><tr><th>Adres</th><th>Kier.</th><th>Dep.TX</th><th>Dep.suma</th><th>Wyp.TX</th><th>Wyp.suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>{rows}</tbody></table>'
@@ -829,7 +845,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                 f"<tr><td>{_resc(p['deposit_time'][:16])}</td><td class='num'>{p['deposit_amount']:.4f}</td><td>{_resc(p['deposit_token'])}</td><td>{_resc(p.get('deposit_from', ''))}</td>"
                 f"<td>{_resc(p['withdrawal_time'][:16])}</td><td class='num'>{p['withdrawal_amount']:.4f}</td><td>{_resc(p['withdrawal_token'])}</td><td>{_resc(p.get('withdrawal_to', ''))}</td>"
                 f"<td>{p['delay_hours']}h</td></tr>"
-                for p in pts[:30]
+                for p in pts
             )
             forens_html += f'<h3>Przeloty tranzytowe (pass-through)</h3><p>Wykryto {pt_count} potencjalnych przepływów (depozyt → wypłata w ciągu 24h).</p><table class="data-table"><thead><tr><th>Dep. czas</th><th>Dep. kwota</th><th>Token</th><th>Od</th><th>Wyp. czas</th><th>Wyp. kwota</th><th>Token</th><th>Do</th><th>Opóźn.</th></tr></thead><tbody>{rows}</tbody></table>'
 
@@ -840,7 +856,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             forens_html += f'<h3>Kryptowaluty prywatności</h3><table class="data-table"><thead><tr><th>Moneta</th><th>Dep.</th><th>Kwota dep.</th><th>Wyp.</th><th>Kwota wyp.</th><th>Transakcje</th><th>Unik. adresy</th></tr></thead><tbody>{rows}</tbody></table>'
 
         if mining:
-            rows = "".join(f"<tr><td><code style='word-break:break-all'>{_resc(m['address'])}</code></td><td>{_resc(m['token'])}</td><td>{m['count']}</td><td class='num'>{m['total']:.8f}</td><td class='num'>{m['avg']:.8f}</td></tr>" for m in mining[:30])
+            rows = "".join(f"<tr><td><code style='word-break:break-all'>{_resc(m['address'])}</code></td><td>{_resc(m['token'])}</td><td>{m['count']}</td><td class='num'>{m['total']:.8f}</td><td class='num'>{m['avg']:.8f}</td></tr>" for m in mining)
             forens_html += f'<h3>Wzorce górnicze</h3><table class="data-table"><thead><tr><th>Adres</th><th>Token</th><th>TX</th><th>Suma</th><th>Średnia</th></tr></thead><tbody>{rows}</tbody></table>'
 
         if margin and margin.get("total_orders"):
@@ -875,11 +891,11 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                 sec_html += f'<p style="color:#dc2626"><b>Zagraniczne loginy: {al["foreign_login_count"]}</b> (poza {_resc(al.get("primary_country", "?"))})</p>'
             geos = al.get("geolocations", {})
             if geos:
-                rows = "".join(f"<tr><td>{_resc(g)}</td><td>{c}</td></tr>" for g, c in list(geos.items())[:20])
+                rows = "".join(f"<tr><td>{_resc(g)}</td><td>{c}</td></tr>" for g, c in geos.items())
                 sec_html += f'<h4>Geolokalizacje</h4><table class="data-table"><thead><tr><th>Lokalizacja</th><th>Loginy</th></tr></thead><tbody>{rows}</tbody></table>'
             ips = al.get("top_ips", {})
             if ips:
-                rows = "".join(f"<tr><td><code>{_resc(ip)}</code></td><td>{c}</td></tr>" for ip, c in list(ips.items())[:15])
+                rows = "".join(f"<tr><td><code>{_resc(ip)}</code></td><td>{c}</td></tr>" for ip, c in ips.items())
                 sec_html += f'<h4>Najczęstsze IP</h4><table class="data-table"><thead><tr><th>IP</th><th>Loginy</th></tr></thead><tbody>{rows}</tbody></table>'
 
         if devs:
@@ -895,11 +911,11 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         if card_spending:
             sec_html += '<h4>Wydatki kartą</h4><p>' + ", ".join(f"{_resc(k)}: <b>{v:.2f}</b>" for k, v in card_spending.items()) + '</p>'
         if card_merchants:
-            rows = "".join(f"<tr><td>{_resc(m)}</td><td class='num'>{v:.2f}</td></tr>" for m, v in sorted(card_merchants.items(), key=lambda x: x[1], reverse=True)[:20])
+            rows = "".join(f"<tr><td>{_resc(m)}</td><td class='num'>{v:.2f}</td></tr>" for m, v in sorted(card_merchants.items(), key=lambda x: x[1], reverse=True))
             sec_html += f'<h4>Merchants</h4><table class="data-table"><thead><tr><th>Merchant</th><th>Kwota</th></tr></thead><tbody>{rows}</tbody></table>'
 
         if card_tl:
-            rows = "".join(f"<tr><td>{_resc(t.get('timestamp', '')[:16])}</td><td>{_resc(t.get('merchant', ''))}</td><td class='num'>{t.get('amount', 0):.2f}</td><td>{_resc(t.get('currency', ''))}</td><td>{_resc(t.get('status', ''))}</td></tr>" for t in card_tl[:50])
+            rows = "".join(f"<tr><td>{_resc(t.get('timestamp', '')[:16])}</td><td>{_resc(t.get('merchant', ''))}</td><td class='num'>{t.get('amount', 0):.2f}</td><td>{_resc(t.get('currency', ''))}</td><td>{_resc(t.get('status', ''))}</td></tr>" for t in card_tl)
             sec_html += f'<h3>Oś czasu transakcji kartą</h3><table class="data-table"><thead><tr><th>Data</th><th>Merchant</th><th>Kwota</th><th>Waluta</th><th>Status</th></tr></thead><tbody>{rows}</tbody></table>'
 
         sections.append(f"<h2>{sn}. Bezpieczeństwo konta</h2>{sec_html}")
@@ -1059,24 +1075,35 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
             lines.append(f"  UID: {uid}  TX: {c.get('tx_count', 0)}  IN: {c.get('total_in', 0):.4f}  OUT: {c.get('total_out', 0):.4f}  Tokeny: {', '.join(c.get('tokens', []))}")
         lines.append("")
 
-    # Addresses — merged, deduplicated
+    # Addresses — merged, deduplicated (case-insensitive for EVM)
     ext_src = fr.get("external_source_addresses", [])
     ext_dst = fr.get("external_dest_addresses", [])
     if ext_src or ext_dst:
+        def _nk_txt(addr: str) -> str:
+            a = addr.strip()
+            return a.lower() if a.startswith("0x") or a.startswith("0X") else a
+
         addr_m: Dict[str, Dict[str, Any]] = {}
         for a in ext_src:
-            addr_m[a["address"]] = {"dc": a["count"], "dt": a["total"], "wc": 0, "wt": 0.0, "tok": set(a.get("tokens", []))}
-        for a in ext_dst:
-            if a["address"] in addr_m:
-                addr_m[a["address"]]["wc"] = a["count"]
-                addr_m[a["address"]]["wt"] = a["total"]
-                addr_m[a["address"]]["tok"].update(a.get("tokens", []))
+            key = _nk_txt(a["address"])
+            if key in addr_m:
+                addr_m[key]["dc"] += a["count"]
+                addr_m[key]["dt"] += a["total"]
+                addr_m[key]["tok"].update(a.get("tokens", []))
             else:
-                addr_m[a["address"]] = {"dc": 0, "dt": 0.0, "wc": a["count"], "wt": a["total"], "tok": set(a.get("tokens", []))}
+                addr_m[key] = {"disp": a["address"], "dc": a["count"], "dt": a["total"], "wc": 0, "wt": 0.0, "tok": set(a.get("tokens", []))}
+        for a in ext_dst:
+            key = _nk_txt(a["address"])
+            if key in addr_m:
+                addr_m[key]["wc"] += a["count"]
+                addr_m[key]["wt"] += a["total"]
+                addr_m[key]["tok"].update(a.get("tokens", []))
+            else:
+                addr_m[key] = {"disp": a["address"], "dc": 0, "dt": 0.0, "wc": a["count"], "wt": a["total"], "tok": set(a.get("tokens", []))}
         lines.append("--- ADRESY ZEWNĘTRZNE (zjednoczone) ---")
-        for addr, m in sorted(addr_m.items(), key=lambda x: x[1]["dt"] + x[1]["wt"], reverse=True):
+        for _key, m in sorted(addr_m.items(), key=lambda x: x[1]["dt"] + x[1]["wt"], reverse=True):
             d = "DEP+WD" if m["dc"] > 0 and m["wc"] > 0 else ("DEP" if m["dc"] > 0 else "WD")
-            lines.append(f"  {addr}")
+            lines.append(f"  {m['disp']}")
             lines.append(f"    Kier: {d}  Dep TX: {m['dc']}  Dep suma: {m['dt']:.4f}  Wyp TX: {m['wc']}  Wyp suma: {m['wt']:.4f}  Tokeny: {', '.join(sorted(m['tok']))}")
         lines.append("")
 
@@ -1260,22 +1287,34 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     ext_dst = fr.get("external_dest_addresses", [])
     if ext_src or ext_dst:
         doc.add_heading("8. Adresy zewnętrzne", level=1)
+
+        def _nk_docx(addr: str) -> str:
+            a = addr.strip()
+            return a.lower() if a.startswith("0x") or a.startswith("0X") else a
+
         addr_m: Dict[str, Dict[str, Any]] = {}
         for a in ext_src:
-            addr_m[a["address"]] = {"dc": a["count"], "dt": a["total"], "wc": 0, "wt": 0.0,
-                                     "tok": set(a.get("tokens", []))}
-        for a in ext_dst:
-            if a["address"] in addr_m:
-                addr_m[a["address"]]["wc"] = a["count"]
-                addr_m[a["address"]]["wt"] = a["total"]
-                addr_m[a["address"]]["tok"].update(a.get("tokens", []))
+            key = _nk_docx(a["address"])
+            if key in addr_m:
+                addr_m[key]["dc"] += a["count"]
+                addr_m[key]["dt"] += a["total"]
+                addr_m[key]["tok"].update(a.get("tokens", []))
             else:
-                addr_m[a["address"]] = {"dc": 0, "dt": 0.0, "wc": a["count"], "wt": a["total"],
-                                         "tok": set(a.get("tokens", []))}
+                addr_m[key] = {"disp": a["address"], "dc": a["count"], "dt": a["total"],
+                               "wc": 0, "wt": 0.0, "tok": set(a.get("tokens", []))}
+        for a in ext_dst:
+            key = _nk_docx(a["address"])
+            if key in addr_m:
+                addr_m[key]["wc"] += a["count"]
+                addr_m[key]["wt"] += a["total"]
+                addr_m[key]["tok"].update(a.get("tokens", []))
+            else:
+                addr_m[key] = {"disp": a["address"], "dc": 0, "dt": 0.0,
+                               "wc": a["count"], "wt": a["total"], "tok": set(a.get("tokens", []))}
         a_rows = []
-        for addr, m in sorted(addr_m.items(), key=lambda x: x[1]["dt"] + x[1]["wt"], reverse=True):
+        for _key, m in sorted(addr_m.items(), key=lambda x: x[1]["dt"] + x[1]["wt"], reverse=True):
             d = "DEP+WD" if m["dc"] > 0 and m["wc"] > 0 else ("DEP" if m["dc"] > 0 else "WD")
-            a_rows.append([addr, d, str(m["dc"]), f"{m['dt']:.4f}",
+            a_rows.append([m["disp"], d, str(m["dc"]), f"{m['dt']:.4f}",
                            str(m["wc"]), f"{m['wt']:.4f}", ", ".join(sorted(m["tok"]))])
         add_data_table(["Adres", "Kier.", "Dep TX", "Dep suma", "Wyp TX", "Wyp suma", "Tokeny"], a_rows)
 
