@@ -229,5 +229,137 @@
   </div></div>
 </div>
 
+<!-- ═══════════════════════ SOFTWARE UPDATE ═══════════════════════ -->
+<div class="card" style="margin-top:20px">
+  <div class="card-title">
+    <span data-i18n="admin.update.title">Aktualizacje oprogramowania</span>
+  </div>
+  <div class="small muted" style="margin-top:6px" data-i18n="admin.update.subtitle">
+    Importuj paczki aktualizacji, zarządzaj wersjami i przywracaj poprzednie wersje.
+  </div>
+
+  <div class="hr"></div>
+
+  <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 16px;">
+
+    <!-- LEFT: Import & Install -->
+    <div class="card" style="margin:0">
+      <div class="label" data-i18n="admin.update.import">Importuj aktualizację</div>
+      <div class="small muted" style="margin-top:6px" data-i18n="admin.update.import_desc">
+        Wybierz plik .zip z paczką aktualizacji pobraną ze strony dostawcy.
+      </div>
+
+      <div id="upd_dropzone" style="margin-top:12px; padding:28px; border:2px dashed rgba(255,255,255,0.12); border-radius:14px; text-align:center; cursor:pointer; transition: border-color .2s;">
+        <div style="font-size:28px; opacity:.5; margin-bottom:6px;">📦</div>
+        <div class="small muted" data-i18n="admin.update.drop_hint">Przeciągnij plik .zip tutaj lub kliknij aby wybrać</div>
+        <input type="file" id="upd_file" accept=".zip" style="display:none" />
+      </div>
+
+      <!-- Upload progress -->
+      <div id="upd_uploading" style="display:none; margin-top:12px;">
+        <div class="small muted" data-i18n="admin.update.uploading">Przesyłanie i walidacja...</div>
+        <div style="margin-top:6px; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;">
+          <div id="upd_progress_bar" style="width:0%; height:100%; background:var(--brand-sky); transition:width .3s;"></div>
+        </div>
+      </div>
+
+      <!-- Package info (after upload) -->
+      <div id="upd_info" style="display:none; margin-top:14px;">
+        <div class="hr" style="margin:8px 0"></div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <span class="label" style="margin:0" data-i18n="admin.update.new_version">Nowa wersja:</span>
+          <span id="upd_version" style="font-weight:700;"></span>
+        </div>
+        <div id="upd_release_date" class="small muted" style="margin-bottom:6px;"></div>
+        <div id="upd_changelog_box" style="margin-top:8px;">
+          <div class="small muted" style="font-weight:600;" data-i18n="admin.update.changelog">Lista zmian:</div>
+          <div id="upd_changelog" class="small" style="margin-top:4px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:10px; white-space:pre-wrap; max-height:200px; overflow:auto;"></div>
+        </div>
+        <div id="upd_migrations" class="small muted" style="margin-top:6px;"></div>
+        <div id="upd_deps" class="small muted" style="margin-top:4px;"></div>
+
+        <div style="margin-top:14px; display:flex; gap:10px; align-items:center;">
+          <button id="upd_install_btn" class="btn" data-i18n="admin.update.install_btn">Zainstaluj aktualizację</button>
+          <button id="upd_cancel_upload_btn" class="btn btn-ghost" data-i18n="admin.update.cancel_upload">Anuluj</button>
+          <span id="upd_install_msg" class="small muted"></span>
+        </div>
+      </div>
+
+      <!-- Error display -->
+      <div id="upd_error" class="small" style="display:none; margin-top:10px; color:#f87171;"></div>
+    </div>
+
+    <!-- RIGHT: Restart controls & current version -->
+    <div class="card" style="margin:0">
+      <div class="label" data-i18n="admin.update.version_info">Informacje o wersji</div>
+      <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
+        <span class="small muted" data-i18n="admin.update.current_version">Obecna wersja:</span>
+        <span id="upd_current_ver" style="font-weight:700;">{{ app_version }}</span>
+      </div>
+
+      <div class="hr" style="margin:14px 0"></div>
+
+      <div class="label" data-i18n="admin.update.restart_settings">Restart po aktualizacji</div>
+
+      <div style="margin-top:10px; display:flex; align-items:center; gap:10px;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="upd_auto_restart" checked />
+          <span class="small" data-i18n="admin.update.auto_restart">Auto-restart</span>
+        </label>
+        <span class="small muted" data-i18n="admin.update.delay_label">Opóźnienie:</span>
+        <input id="upd_delay" class="input" type="number" min="1" max="60" value="5" style="width:60px;" />
+        <span class="small muted" data-i18n="admin.update.minutes">min</span>
+      </div>
+
+      <!-- Countdown (visible after install) -->
+      <div id="upd_restart_panel" style="display:none; margin-top:14px; padding:14px; background:rgba(255,255,255,0.03); border-radius:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="small muted" data-i18n="admin.update.restart_in">Restart za:</span>
+          <span id="upd_countdown" style="font-weight:700; font-size:18px; font-family:monospace;"></span>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:10px;">
+          <button id="upd_restart_now_btn" class="btn" data-i18n="admin.update.restart_now">Restartuj teraz</button>
+          <button id="upd_cancel_restart_btn" class="btn btn-ghost" data-i18n="admin.update.cancel_restart">Anuluj restart</button>
+        </div>
+      </div>
+
+      <!-- Manual restart button (when auto-restart cancelled) -->
+      <div id="upd_manual_restart" style="display:none; margin-top:14px;">
+        <div class="small muted" data-i18n="admin.update.manual_restart_hint">
+          Auto-restart wyłączony. Kliknij poniżej, aby zrestartować ręcznie.
+        </div>
+        <button id="upd_manual_restart_btn" class="btn" style="margin-top:8px;" data-i18n="admin.update.restart_now">Restartuj teraz</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <!-- History & Rollback -->
+  <div class="card" style="margin:0">
+    <div class="label" data-i18n="admin.update.history">Historia aktualizacji</div>
+    <div class="small muted" style="margin-top:6px;" data-i18n="admin.update.history_desc">
+      Lista zainstalowanych wersji. Możesz przywrócić dowolną poprzednią wersję.
+    </div>
+    <div style="margin-top:10px; overflow:auto;">
+      <table class="table" style="min-width:600px;">
+        <thead>
+          <tr>
+            <th data-i18n="admin.update.col.version">Wersja</th>
+            <th data-i18n="admin.update.col.date">Data</th>
+            <th data-i18n="admin.update.col.type">Typ</th>
+            <th data-i18n="admin.update.col.previous">Poprzednia</th>
+            <th data-i18n="admin.update.col.actions">Akcje</th>
+          </tr>
+        </thead>
+        <tbody id="upd_history_body">
+          <tr><td colspan="5" class="small muted" style="text-align:center;" data-i18n="admin.update.loading">Ładowanie...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <script src="/static/admin_gpu.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/admin_update.js?v={{ app_version }}&_={{ static_ts }}"></script>
 {% endblock %}

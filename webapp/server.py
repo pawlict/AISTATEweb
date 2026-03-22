@@ -64,6 +64,7 @@ from webapp.routers import report_profiles as report_profiles_router
 from webapp.routers import messages as messages_router
 from webapp.routers import workspaces as workspaces_router
 from webapp.routers import crypto as crypto_router
+from webapp.routers import updates as updates_router
 from webapp.routers import aria as aria_router
 
 try:
@@ -2094,6 +2095,78 @@ async def _auth_middleware(request: Request, call_next):
         return RedirectResponse(url="/", status_code=302)
 
     return await call_next(request)
+
+
+# --- Startup: send post-update Call Center message (once) ---
+@app.on_event("startup")
+async def _startup_post_update_message() -> None:
+    """If the app was just updated, send a Call Center notification to all users."""
+    try:
+        from backend.db.engine import get_system_config, set_system_config
+
+        pending = get_system_config("post_update_pending", "")
+        if pending != "1":
+            return
+
+        new_version = get_system_config("post_update_version", "")
+        changelog = get_system_config("post_update_changelog", "")
+
+        content = (
+            "<b>Zmiana sposobu aktualizacji systemu</b><br><br>"
+            "Dotychczasowa metoda aktualizacji (ręczne kopiowanie plików) została zastąpiona "
+            "wbudowanym panelem aktualizacji.<br><br>"
+            "<b>Jak teraz wygląda proces aktualizacji:</b><br>"
+            "1. Pobierz paczkę aktualizacji (plik .zip) ze strony dostawcy<br>"
+            "2. Przejdź do <b>Panel Administracyjny → Aktualizacje</b><br>"
+            "3. Kliknij <b>„Importuj aktualizację"</b> i wskaż pobrany plik<br>"
+            "4. System wyświetli informacje o nowej wersji oraz listę zmian<br>"
+            "5. Kliknij <b>„Zainstaluj aktualizację"</b><br>"
+            "6. Po instalacji system automatycznie zrestartuje się po 5 minutach — "
+            "w tym czasie możesz kliknąć <b>„Restartuj teraz"</b> lub <b>„Anuluj restart"</b> "
+            "i zrestartować ręcznie w dogodnym momencie<br><br>"
+            "<b>Co z danymi?</b><br>"
+            "Twoje projekty, nagrania, transkrypcje i ustawienia <b>nie zostaną naruszone</b> — "
+            "aktualizacja dotyczy wyłącznie kodu aplikacji. Jeśli nowa wersja wymaga migracji danych "
+            "(np. zmiana formatu plików), zostanie ona przeprowadzona <b>automatycznie</b> podczas instalacji.<br><br>"
+            "<b>Cofanie aktualizacji</b><br>"
+            "W panelu aktualizacji dostępna jest historia zainstalowanych wersji. "
+            "W razie problemów możesz w każdej chwili przywrócić poprzednią wersję "
+            "klikając <b>„Przywróć tę wersję"</b>.<br><br>"
+            "<b>Ważne:</b><br>"
+            "• Nie kopiuj już plików ręcznie — korzystaj wyłącznie z panelu aktualizacji<br>"
+            "• Przed aktualizacją nie musisz zatrzymywać systemu — panel zrobi to za Ciebie<br>"
+            "• Zalecamy wykonanie aktualizacji w momencie, gdy system nie jest intensywnie używany"
+        )
+
+        if new_version:
+            subject = f"Nowy system aktualizacji AISTATEweb (v{new_version})"
+        else:
+            subject = "Nowy system aktualizacji AISTATEweb"
+
+        if changelog:
+            content += f"<br><br><b>Co nowego w v{new_version}:</b><br>{changelog}"
+
+        from webapp.auth.message_store import Message
+        msg = Message(
+            author_id="system",
+            author_name="AISTATEweb",
+            subject=subject,
+            content=content,
+            target_groups=["all"],
+        )
+        MESSAGE_STORE.create_message(msg)
+
+        # Clear the flag
+        set_system_config("post_update_pending", "")
+        set_system_config("post_update_version", "")
+        set_system_config("post_update_changelog", "")
+
+        app_log(f"Post-update Call Center message sent for v{new_version}")
+    except Exception as e:
+        try:
+            app_log(f"Post-update message failed: {e}")
+        except Exception:
+            pass
 
 
 # --- Startup: autoscan ASR caches so the UI can label models as installed/uninstalled ---
@@ -4685,6 +4758,16 @@ admin_router.init(
     app_log_fn=app_log,
 )
 app.include_router(admin_router.router)
+
+# Software update router
+from backend.updater.restart_manager import RestartManager
+RESTART_MANAGER = RestartManager()
+updates_router.init(
+    message_store=MESSAGE_STORE,
+    app_log_fn=app_log,
+    restart_manager=RESTART_MANAGER,
+)
+app.include_router(updates_router.router)
 
 def _read_custom_models() -> Dict[str, List[str]]:
     """Read user-added custom model ids grouped by category from global settings."""
