@@ -91,6 +91,27 @@ def _is_internal(counterparty_id: str) -> bool:
     return bool(counterparty_id) and counterparty_id not in ("", "nan", "NaN", "None")
 
 
+def _dedup_addr(raw: str) -> str:
+    """Deduplicate comma-separated address field.
+
+    Binance exports sometimes repeat the same address many times in a single
+    cell (e.g. "addr1,addr1,addr1,...").  This extracts unique addresses and
+    returns them joined by comma.  If there's only one unique address, returns
+    it without commas.
+    """
+    if not raw or "," not in raw:
+        return raw
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    seen = []
+    seen_set = set()
+    for p in parts:
+        key = p.lower()
+        if key not in seen_set:
+            seen_set.add(key)
+            seen.append(p)
+    return ", ".join(seen) if len(seen) > 1 else (seen[0] if seen else raw)
+
+
 # ---------------------------------------------------------------------------
 # Sheet parsers
 # ---------------------------------------------------------------------------
@@ -246,8 +267,8 @@ def _parse_deposit_history(df) -> List[CryptoTransaction]:
             continue
         amount = _dec(row.get("Amount"))
         ts = _ts(row.get("Create Time"))
-        dep_addr = _safe_str(row.get("Deposit Address", ""))
-        src_addr = _safe_str(row.get("Source Address", ""))
+        dep_addr = _dedup_addr(_safe_str(row.get("Deposit Address", "")))
+        src_addr = _dedup_addr(_safe_str(row.get("Source Address", "")))
         txid = _safe_str(row.get("TXID", ""))
         network = _safe_str(row.get("Network", ""))
         cp_id = _safe_str(row.get("CounterParty ID", "") or row.get("CounterPartyID", ""))
@@ -294,7 +315,7 @@ def _parse_withdrawal_history(df) -> List[CryptoTransaction]:
         amount = _dec(row.get("Amount"))
         ts = _ts(row.get("Apply Time"))
         # Note: column name has trailing space in real exports
-        dest_addr = _safe_str(row.get("Destination Address ", "") or row.get("Destination Address", ""))
+        dest_addr = _dedup_addr(_safe_str(row.get("Destination Address ", "") or row.get("Destination Address", "")))
         txid = _safe_str(row.get("txId", "") or row.get("TXID", ""))
         network = _safe_str(row.get("Network", ""))
         cp_id = _safe_str(row.get("CounterParty ID", "") or row.get("CounterPartyID", ""))

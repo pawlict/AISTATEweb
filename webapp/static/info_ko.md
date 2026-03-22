@@ -16,6 +16,15 @@
 
 ---
 
+## 🆕 3.7.1 베타 새로운 기능
+
+### 🔐 암호화폐 분석 — 바이낸스 XLSX
+- 바이낸스 거래소 데이터 확장 분석
+- 사용자 행동 프로파일링 (10가지 패턴: HODLer, Scalper, Day Trader, Swing Trader, Staker, Whale, Institutional, Alpha Hunter, Meme Trader, Bagholder)
+- 8가지 포렌식 분석 카드: 내부 거래 상대방, Pay C2C, 온체인 주소, 패스스루 플로우, 프라이버시 코인, 접근 로그, 결제 카드
+
+---
+
 ## 🆕 3.6 베타 새로운 기능
 
 ### 📱 GSM / BTS 분석
