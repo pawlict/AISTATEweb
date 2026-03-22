@@ -541,14 +541,13 @@ async def crypto_report(
 
     if primary == "docx":
         try:
-            from backend.report_generator import generate_crypto_docx
-            docx_bytes = generate_crypto_docx(result)
+            docx_bytes = _build_crypto_report_docx(result)
             return StreamingResponse(
                 iter([docx_bytes]),
                 media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 headers={"Content-Disposition": f"attachment; filename=crypto_report.docx"},
             )
-        except ImportError:
+        except Exception:
             # Fallback: generate TXT if DOCX module unavailable
             txt = _build_crypto_report_txt(result)
             return StreamingResponse(
@@ -1056,7 +1055,7 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
     cps = bs.get("counterparties", {})
     if cps:
         lines.append("--- KONTRAHENCI ---")
-        for uid, c in sorted(cps.items(), key=lambda x: x[1].get("tx_count", 0), reverse=True)[:30]:
+        for uid, c in sorted(cps.items(), key=lambda x: x[1].get("tx_count", 0), reverse=True):
             lines.append(f"  UID: {uid}  TX: {c.get('tx_count', 0)}  IN: {c.get('total_in', 0):.4f}  OUT: {c.get('total_out', 0):.4f}  Tokeny: {', '.join(c.get('tokens', []))}")
         lines.append("")
 
@@ -1075,7 +1074,7 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
             else:
                 addr_m[a["address"]] = {"dc": 0, "dt": 0.0, "wc": a["count"], "wt": a["total"], "tok": set(a.get("tokens", []))}
         lines.append("--- ADRESY ZEWNĘTRZNE (zjednoczone) ---")
-        for addr, m in sorted(addr_m.items(), key=lambda x: x[1]["dt"] + x[1]["wt"], reverse=True)[:40]:
+        for addr, m in sorted(addr_m.items(), key=lambda x: x[1]["dt"] + x[1]["wt"], reverse=True):
             d = "DEP+WD" if m["dc"] > 0 and m["wc"] > 0 else ("DEP" if m["dc"] > 0 else "WD")
             lines.append(f"  {addr}")
             lines.append(f"    Kier: {d}  Dep TX: {m['dc']}  Dep suma: {m['dt']:.4f}  Wyp TX: {m['wc']}  Wyp suma: {m['wt']:.4f}  Tokeny: {', '.join(sorted(m['tok']))}")
@@ -1084,8 +1083,8 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
     # Transactions
     txs = r.get("transactions", [])
     if txs:
-        lines.append(f"--- TRANSAKCJE (próbka {min(len(txs), 200)}/{r.get('transactions_total', len(txs))}) ---")
-        for tx in txs[:200]:
+        lines.append(f"--- TRANSAKCJE ({len(txs)}) ---")
+        for tx in txs:
             ts = (tx.get("timestamp", "") or "")[:16]
             lines.append(f"  {ts}  {tx.get('tx_type', ''):<12} {tx.get('token', ''):<6} {tx.get('amount', 0):>14.4f}  {tx.get('counterparty', '') or tx.get('to', '') or ''}")
         lines.append("")
@@ -1095,3 +1094,209 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
     lines.append("=" * 70)
 
     return "\n".join(lines)
+
+
+def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
+    """Build a DOCX report from crypto analysis results.
+
+    Uses python-docx to create a formatted Word document with the same
+    structure as the TXT report but with proper headings, tables and styles.
+    """
+    from io import BytesIO
+    from datetime import datetime
+    from docx import Document  # type: ignore
+    from docx.shared import Pt, Cm, RGBColor  # type: ignore
+    from docx.enum.text import WD_ALIGN_PARAGRAPH  # type: ignore
+
+    doc = Document()
+
+    # Base styles
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(11)
+    style.paragraph_format.space_after = Pt(4)
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    fr = r.get("forensic_report", {}) or {}
+    ai = fr.get("account_info", {}) or {}
+    em = r.get("exchange_meta", {}) or {}
+    bs = r.get("binance_summary", {}) or {}
+    risk_score = r.get("risk_score", 0)
+
+    doc.add_heading("Raport analizy kryptowalutowej", level=0)
+    p = doc.add_paragraph(f"Wygenerowano: {now}")
+    p.runs[0].italic = True
+
+    # ── Helper ──
+    def add_kv_table(pairs):
+        """Add a 2-column key-value table."""
+        filtered = [(k, v) for k, v in pairs if v and str(v).strip()]
+        if not filtered:
+            return
+        tbl = doc.add_table(rows=len(filtered), cols=2)
+        tbl.style = "Table Grid"
+        for i, (k, v) in enumerate(filtered):
+            tbl.cell(i, 0).text = str(k)
+            tbl.cell(i, 1).text = str(v)
+            for cell in (tbl.cell(i, 0), tbl.cell(i, 1)):
+                for para in cell.paragraphs:
+                    para.paragraph_format.space_after = Pt(1)
+                    for run in para.runs:
+                        run.font.size = Pt(10)
+            # Bold label
+            for run in tbl.cell(i, 0).paragraphs[0].runs:
+                run.bold = True
+
+    def add_data_table(headers, rows):
+        """Add a table with header row and data rows."""
+        if not rows:
+            return
+        tbl = doc.add_table(rows=1 + len(rows), cols=len(headers))
+        tbl.style = "Table Grid"
+        # Header
+        for ci, h in enumerate(headers):
+            tbl.cell(0, ci).text = h
+            for run in tbl.cell(0, ci).paragraphs[0].runs:
+                run.bold = True
+                run.font.size = Pt(9)
+        # Data
+        for ri, row in enumerate(rows, 1):
+            for ci, val in enumerate(row):
+                tbl.cell(ri, ci).text = str(val) if val else ""
+                for para in tbl.cell(ri, ci).paragraphs:
+                    para.paragraph_format.space_after = Pt(0)
+                    for run in para.runs:
+                        run.font.size = Pt(9)
+
+    # ── 1. Identyfikacja ──
+    doc.add_heading("1. Identyfikacja podmiotu", level=1)
+    add_kv_table([
+        ("Właściciel konta", ai.get("holder_name")),
+        ("Imię", ai.get("first_name")),
+        ("Nazwisko", ai.get("last_name")),
+        ("User ID", ai.get("user_id")),
+        ("Email", ai.get("email")),
+        ("Telefon", ai.get("phone")),
+        ("Data urodzenia", ai.get("date_of_birth")),
+        ("Kraj", ai.get("country")),
+        ("Narodowość", ai.get("nationality")),
+        ("Adres", ai.get("physical_address")),
+        ("Miasto", ai.get("city")),
+        ("KYC Level", ai.get("kyc_level")),
+        ("VIP Level", ai.get("vip_level")),
+        ("Data rejestracji", ai.get("registration_date")),
+        ("Status konta", ai.get("account_status")),
+        ("Typ dokumentu", ai.get("id_type")),
+        ("Nr dokumentu", ai.get("id_number")),
+        ("Platforma", em.get("exchange_name", r.get("source", ""))),
+        ("Plik", r.get("filename")),
+    ])
+
+    # ── 2. Podsumowanie ──
+    doc.add_heading("2. Podsumowanie ogólne", level=1)
+    date_from = (r.get("date_from", "") or "")[:10]
+    date_to = (r.get("date_to", "") or "")[:10]
+    add_kv_table([
+        ("Okres analizy", f"{date_from} — {date_to}"),
+        ("Transakcje", r.get("tx_count", 0)),
+        ("Portfele/adresy", r.get("wallet_count", 0)),
+        ("Kontrahenci", r.get("counterparty_count", 0)),
+        ("Unikalne tokeny", len(r.get("tokens", {}))),
+        ("Ryzyko AML", f"{risk_score:.1f}/100"),
+    ])
+
+    # ── 3. Profil zachowania ──
+    bp = r.get("behavior_profile", {})
+    if bp and bp.get("profiles"):
+        doc.add_heading("3. Profil zachowania użytkownika", level=1)
+        for p in bp["profiles"][:5]:
+            if p["score"] < 15:
+                continue
+            para = doc.add_paragraph()
+            run = para.add_run(f"{p.get('icon', '')} {p['label']} — {p['score']}%")
+            run.bold = True
+            for reason in p.get("reasons", []):
+                doc.add_paragraph(f"  • {reason}", style="List Bullet")
+
+    # ── 4. Ryzyko AML ──
+    risk_reasons = r.get("risk_reasons", [])
+    if risk_reasons:
+        doc.add_heading("4. Czynniki ryzyka AML", level=1)
+        for rr in risk_reasons:
+            doc.add_paragraph(f"• {rr}", style="List Bullet")
+
+    # ── 5. Portfel tokenów ──
+    tokens = r.get("tokens", {})
+    if tokens:
+        doc.add_heading("5. Portfel tokenów", level=1)
+        t_rows = []
+        for tok, s in sorted(tokens.items(), key=lambda x: x[1].get("count", 0), reverse=True):
+            net = (s.get("received", 0) or 0) - (s.get("sent", 0) or 0)
+            t_rows.append([tok, f"{s.get('received', 0):.4f}", f"{s.get('sent', 0):.4f}",
+                           f"{net:.4f}", str(s.get("count", 0))])
+        add_data_table(["Token", "Wpływy", "Wypływy", "Saldo", "TX"], t_rows)
+
+    # ── 6. Numery telefonów ──
+    phones = r.get("detected_phones", [])
+    if phones:
+        doc.add_heading("6. Zidentyfikowane numery telefonów", level=1)
+        p_rows = [[p["number"], p.get("country_name", "?"), p.get("country_iso", "?"),
+                    str(p.get("occurrences", 0))] for p in phones]
+        add_data_table(["Numer", "Kraj", "ISO", "Wystąpienia"], p_rows)
+
+    # ── 7. Kontrahenci ──
+    cps = bs.get("counterparties", {})
+    if cps:
+        doc.add_heading("7. Kontrahenci wewnętrzni", level=1)
+        c_rows = []
+        for uid, c in sorted(cps.items(), key=lambda x: x[1].get("tx_count", 0), reverse=True):
+            c_rows.append([uid, str(c.get("tx_count", 0)),
+                           f"{c.get('total_in', 0):.4f}", f"{c.get('total_out', 0):.4f}",
+                           ", ".join(c.get("tokens", []))])
+        add_data_table(["User ID", "TX", "Wpływy", "Wypływy", "Tokeny"], c_rows)
+
+    # ── 8. Adresy zewnętrzne ──
+    ext_src = fr.get("external_source_addresses", [])
+    ext_dst = fr.get("external_dest_addresses", [])
+    if ext_src or ext_dst:
+        doc.add_heading("8. Adresy zewnętrzne", level=1)
+        addr_m: Dict[str, Dict[str, Any]] = {}
+        for a in ext_src:
+            addr_m[a["address"]] = {"dc": a["count"], "dt": a["total"], "wc": 0, "wt": 0.0,
+                                     "tok": set(a.get("tokens", []))}
+        for a in ext_dst:
+            if a["address"] in addr_m:
+                addr_m[a["address"]]["wc"] = a["count"]
+                addr_m[a["address"]]["wt"] = a["total"]
+                addr_m[a["address"]]["tok"].update(a.get("tokens", []))
+            else:
+                addr_m[a["address"]] = {"dc": 0, "dt": 0.0, "wc": a["count"], "wt": a["total"],
+                                         "tok": set(a.get("tokens", []))}
+        a_rows = []
+        for addr, m in sorted(addr_m.items(), key=lambda x: x[1]["dt"] + x[1]["wt"], reverse=True):
+            d = "DEP+WD" if m["dc"] > 0 and m["wc"] > 0 else ("DEP" if m["dc"] > 0 else "WD")
+            a_rows.append([addr, d, str(m["dc"]), f"{m['dt']:.4f}",
+                           str(m["wc"]), f"{m['wt']:.4f}", ", ".join(sorted(m["tok"]))])
+        add_data_table(["Adres", "Kier.", "Dep TX", "Dep suma", "Wyp TX", "Wyp suma", "Tokeny"], a_rows)
+
+    # ── 9. Transakcje ──
+    txs = r.get("transactions", [])
+    if txs:
+        doc.add_heading("9. Transakcje", level=1)
+        doc.add_paragraph(f"Łącznie: {len(txs)}")
+        tx_rows = []
+        for tx in txs:
+            ts = (tx.get("timestamp", "") or "")[:16]
+            cp = tx.get("counterparty", "") or tx.get("to", "") or ""
+            tx_rows.append([ts, tx.get("tx_type", ""), tx.get("token", ""),
+                            f"{tx.get('amount', 0):.4f}", cp])
+        add_data_table(["Data", "Typ", "Token", "Kwota", "Kontrahent/Do"], tx_rows)
+
+    # Footer
+    doc.add_paragraph("")
+    p = doc.add_paragraph(f"Wygenerowano: {now} — AISTATE Crypto Analysis Module")
+    p.runs[0].italic = True
+
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()

@@ -1865,7 +1865,7 @@
     _show("crypto_phones_card");
 
     let html = `<div style="margin-bottom:8px;font-size:13px">Znaleziono <b>${phones.length}</b> unikalnych numerów telefonów w danych transakcyjnych.</div>`;
-    html += '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+    html += '<div style="max-height:600px;overflow-y:auto"><table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
       '<th>Numer</th><th>Kraj</th><th>ISO</th><th>Wystąpienia</th><th>Kontekst</th></tr></thead><tbody>';
     for (const p of phones) {
       const flag = p.country_iso ? _countryFlag(p.country_iso) + " " : "";
@@ -1882,7 +1882,7 @@
         <td style="font-size:11px">${ctxHtml}</td>
       </tr>`;
     }
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     _html("crypto_phones_body", html);
   }
 
@@ -2568,7 +2568,7 @@
       genBtn.onclick = () => _generateLLM();
     }
 
-    // Report save (multi-format like GSM)
+    // Report save — each format triggers a separate request
     const reportSaveBtn = QS("#crypto_report_save_btn");
     if (reportSaveBtn) {
       reportSaveBtn.onclick = () => {
@@ -2578,8 +2578,22 @@
         const pid = _getProjectId();
         if (!pid) { alert("Brak projektu — zapisz analizę, aby wygenerować raport."); return; }
         if (!_lastResult) { alert("Brak danych do raportu. Wczytaj dane crypto."); return; }
-        const fmtParam = formats.join(",");
-        window.open("/api/crypto/report?project_id=" + encodeURIComponent(pid) + "&formats=" + encodeURIComponent(fmtParam), "_blank");
+        for (const fmt of formats) {
+          const url = "/api/crypto/report?project_id=" + encodeURIComponent(pid) + "&formats=" + encodeURIComponent(fmt);
+          if (fmt === "html") {
+            // HTML opens in new tab for viewing
+            window.open(url, "_blank");
+          } else {
+            // TXT, DOCX — download via hidden link
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "crypto_report." + fmt;
+            a.style.display = "none";
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => a.remove(), 1000);
+          }
+        }
       };
     }
 
