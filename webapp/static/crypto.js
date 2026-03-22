@@ -847,7 +847,8 @@
       }
 
       if (searchLow) {
-        const haystack = [tx.from, tx.to, tx.hash, tx.token, tx.tx_type, tx.category, ...(tx.risk_tags || [])].join(" ").toLowerCase();
+        const rawVals = tx.raw ? Object.values(tx.raw).map(v => String(v)) : [];
+        const haystack = [tx.from, tx.to, tx.hash, tx.token, tx.tx_type, tx.category, tx.counterparty, ...(tx.risk_tags || []), ...rawVals].join(" ").toLowerCase();
         if (!haystack.includes(searchLow)) return false;
       }
 
@@ -1886,6 +1887,7 @@
     _show("crypto_phones_card");
 
     let html = `<div style="margin-bottom:8px;font-size:13px">Znaleziono <b>${phones.length}</b> unikalnych numerów telefonów w danych transakcyjnych.</div>`;
+    html += `<div style="margin-bottom:6px;font-size:11px;color:#64748b">💡 Kliknij 2× na wiersz, aby przefiltrować transakcje po tym numerze.</div>`;
     html += '<div style="max-height:600px;overflow-y:auto"><table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
       '<th>Numer</th><th>Kraj</th><th>ISO</th><th>Wystąpienia</th><th>Kontekst</th></tr></thead><tbody>';
     for (const p of phones) {
@@ -1895,7 +1897,7 @@
         const ctx = p.contexts[0];
         ctxHtml = `${_esc(ctx.tx_type)} ${_esc(ctx.token)} ${_esc(ctx.timestamp)} (pole: ${_esc(ctx.field)})`;
       }
-      html += `<tr>
+      html += `<tr style="cursor:pointer" data-phone-filter="${_esc(p.number)}">
         <td style="font-family:monospace;font-weight:600;white-space:nowrap">${_esc(p.number)}</td>
         <td>${flag}${_esc(p.country_name || "—")}</td>
         <td>${_esc(p.country_iso || "—")}</td>
@@ -1905,6 +1907,26 @@
     }
     html += '</tbody></table></div>';
     _html("crypto_phones_body", html);
+
+    // Bind double-click: filter review table by this phone number
+    const phonesBody = document.getElementById("crypto_phones_body");
+    if (phonesBody) {
+      phonesBody.querySelectorAll("tr[data-phone-filter]").forEach(row => {
+        row.addEventListener("dblclick", () => {
+          const phone = row.getAttribute("data-phone-filter");
+          if (!phone) return;
+          // Set search field and trigger filter
+          const searchInput = QS("#crypto_rv_search");
+          if (searchInput) {
+            searchInput.value = phone;
+            searchInput.dispatchEvent(new Event("input"));
+          }
+          // Scroll to the review card
+          const reviewCard = document.getElementById("crypto_review_card");
+          if (reviewCard) reviewCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+    }
   }
 
   function _countryFlag(iso) {
