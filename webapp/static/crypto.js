@@ -356,7 +356,7 @@
         const dateFrom = (r.date_from || "").slice(0, 10);
         const dateTo = (r.date_to || "").slice(0, 10);
         if (dateFrom || dateTo) html += `<div class="crypto-info-row"><b>Okres:</b> ${_esc(dateFrom)} \u2014 ${_esc(dateTo)}</div>`;
-        if (r.tx_count) html += `<div class="crypto-info-row"><b>Transakcje:</b> ${r.tx_count}${r.transactions_truncated ? ' (pokazano max 2000)' : ''}</div>`;
+        if (r.tx_count) html += `<div class="crypto-info-row"><b>Transakcje:</b> ${r.tx_count}</div>`;
         if (em.crypto_tokens && em.crypto_tokens.length) html += `<div class="crypto-info-row"><b>Tokeny krypto:</b> ${_esc(em.crypto_tokens.join(", "))}</div>`;
         if (em.fiat_tokens && em.fiat_tokens.length) html += `<div class="crypto-info-row"><b>Waluty fiat:</b> ${_esc(em.fiat_tokens.join(", "))}</div>`;
         if (em.account_types && em.account_types.length) html += `<div class="crypto-info-row"><b>Konta:</b> ${_esc(em.account_types.join(", "))}</div>`;
@@ -838,7 +838,7 @@
     const wrap = document.getElementById("crypto_rv_table_wrap");
     if (!wrap) return;
 
-    const show = filtered.slice(0, 200);
+    const show = filtered;
     let html;
 
     // Note marker helper (like GSM/AML)
@@ -921,11 +921,10 @@
     }
 
     html += "</tbody></table>";
-    if (show.length < filtered.length) {
-      html += `<div class="small muted" style="margin-top:4px">Pokazano ${show.length} z ${filtered.length}</div>`;
-    }
 
     wrap.innerHTML = html;
+    wrap.style.maxHeight = "700px";
+    wrap.style.overflowY = "auto";
 
     // Bind classification buttons — per-record DOM update (like AML)
     wrap.querySelectorAll(".crypto-rv-cls-btn").forEach(btn => {
@@ -1842,7 +1841,7 @@
     let html = '<table class="data-table" style="width:100%;font-size:13px"><thead><tr>' +
       "<th>Adres</th><th>Etykieta</th><th>TX</th><th>Otrzymane</th><th>Wysłane</th><th>Ryzyko</th>" +
       "</tr></thead><tbody>";
-    for (const w of wallets.slice(0, 50)) {
+    for (const w of wallets) {
       const rc = RISK_COLORS[w.risk_level] || "#94a3b8";
       html += `<tr>
         <td style="font-family:monospace;font-size:11px;word-break:break-all" title="${_esc(w.address)}">${_esc(_shorten(w.address))}</td>
@@ -1854,8 +1853,8 @@
       </tr>`;
     }
     html += "</tbody></table>";
-    if (wallets.length > 50) html += `<div class="small" style="margin-top:4px;color:var(--text-muted)">Pokazano 50 z ${wallets.length}</div>`;
-    _html("crypto_wallets_body", html);
+    const wBody = document.getElementById("crypto_wallets_body");
+    if (wBody) { wBody.innerHTML = html; wBody.style.maxHeight = "600px"; wBody.style.overflowY = "auto"; }
   }
 
   /* -- Detected phone numbers (all sources) -------------------------- */
@@ -1978,10 +1977,10 @@
     if (!keys.length) { _hide("crypto_counterparties_card"); return; }
     _show("crypto_counterparties_card");
 
-    let html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+    let html = '<div style="max-height:600px;overflow-y:auto"><table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
       '<th>User ID</th><th>TX</th><th>Wpływy</th><th>Wypływy</th><th>Tokeny</th><th>Źródło</th><th>Okres</th></tr></thead><tbody>';
     const sorted = keys.sort((a, b) => cps[b].tx_count - cps[a].tx_count);
-    for (const k of sorted.slice(0, 50)) {
+    for (const k of sorted) {
       const c = cps[k];
       const period = ((c.first_seen || "").slice(0, 10)) + " — " + ((c.last_seen || "").slice(0, 10));
       html += `<tr>
@@ -1994,8 +1993,7 @@
         <td style="font-size:11px">${_esc(period)}</td>
       </tr>`;
     }
-    html += '</tbody></table>';
-    if (keys.length > 50) html += `<div class="small muted" style="margin-top:4px">Pokazano 50 z ${keys.length}</div>`;
+    html += '</tbody></table></div>';
 
     // Internal vs external stats
     html += '<div style="margin-top:12px;display:flex;gap:24px;font-size:13px">';
@@ -2014,10 +2012,10 @@
     if (!keys.length) { _hide("crypto_pay_c2c_card"); return; }
     _show("crypto_pay_c2c_card");
 
-    let html = '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+    let html = '<div style="max-height:600px;overflow-y:auto"><table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
       '<th>Binance ID</th><th>Wallet ID</th><th>TX</th><th>Wpływy</th><th>Wypływy</th><th>Tokeny</th><th>Okres</th></tr></thead><tbody>';
     const sorted = keys.sort((a, b) => pcs[b].count - pcs[a].count);
-    for (const k of sorted.slice(0, 50)) {
+    for (const k of sorted) {
       const c = pcs[k];
       const period = ((c.first || "").slice(0, 10)) + " — " + ((c.last || "").slice(0, 10));
       html += `<tr>
@@ -2030,7 +2028,7 @@
         <td style="font-size:11px">${_esc(period)}</td>
       </tr>`;
     }
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     _html("crypto_pay_c2c_body", html);
   }
 
@@ -2084,9 +2082,9 @@
     if (bothCount > 0) html += ` (w tym <b>${bothCount}</b> używanych dwukierunkowo)`;
     html += `</div>`;
 
-    html += '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+    html += '<div style="max-height:600px;overflow-y:auto"><table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
       '<th>Adres</th><th>Kierunek</th><th>Dep. TX</th><th>Dep. suma</th><th>Wyp. TX</th><th>Wyp. suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>';
-    for (const a of merged.slice(0, 50)) {
+    for (const a of merged) {
       const dir = (a.dep_count > 0 && a.wd_count > 0) ? "📥📤"
                 : a.dep_count > 0 ? "📥" : "📤";
       html += `<tr>
@@ -2100,8 +2098,7 @@
         <td>${_esc([...a.networks].join(", "))}</td>
       </tr>`;
     }
-    html += '</tbody></table>';
-    if (merged.length > 50) html += `<div class="small muted" style="margin-top:4px">Pokazano 50 z ${merged.length}</div>`;
+    html += '</tbody></table></div>';
     _html("crypto_ext_addresses_body", html);
   }
 
@@ -2113,10 +2110,10 @@
     _show("crypto_passthrough_card");
 
     let html = `<div style="margin-bottom:8px;font-size:13px">⚠️ Wykryto <b>${ptCount}</b> potencjalnych przepływów tranzytowych (depozyt → wypłata w ciągu 24h)</div>`;
-    html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr>' +
+    html += '<div style="max-height:600px;overflow-y:auto"><table class="data-table" style="width:100%;font-size:11px"><thead><tr>' +
       '<th>Depozyt (czas)</th><th>Kwota</th><th>Token</th><th>Od</th>' +
       '<th>Wypłata (czas)</th><th>Kwota</th><th>Token</th><th>Do</th><th>Opóźn.</th></tr></thead><tbody>';
-    for (const pt of pts.slice(0, 30)) {
+    for (const pt of pts) {
       html += `<tr>
         <td>${_esc((pt.deposit_time || "").slice(0, 16).replace("T", " "))}</td>
         <td style="text-align:right">${(pt.deposit_amount || 0).toFixed(4)}</td>
@@ -2129,8 +2126,7 @@
         <td>${pt.delay_hours}h</td>
       </tr>`;
     }
-    html += '</tbody></table>';
-    if (pts.length > 30) html += `<div class="small muted" style="margin-top:4px">Pokazano 30 z ${pts.length}</div>`;
+    html += '</tbody></table></div>';
     _html("crypto_passthrough_body", html);
   }
 
@@ -2165,7 +2161,7 @@
       html += `<div style="margin-top:16px"><b>⛏️ Wzorce górnicze (powtarzające się małe depozyty z tego samego adresu):</b></div>`;
       html += '<table class="data-table" style="width:100%;font-size:12px;margin-top:4px"><thead><tr>' +
         '<th>Adres</th><th>Token</th><th>TX</th><th>Suma</th><th>Średnia</th></tr></thead><tbody>';
-      for (const m of mining.slice(0, 20)) {
+      for (const m of mining) {
         html += `<tr>
           <td style="font-family:monospace;font-size:11px;word-break:break-all" title="${_esc(m.address)}">${_esc(_shorten(m.address))}</td>
           <td>${_esc(m.token)}</td>
@@ -2205,7 +2201,7 @@
     if (geoKeys.length) {
       html += '<div style="margin-bottom:8px"><b>📍 Geolokalizacje:</b></div>';
       html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr><th>Lokalizacja</th><th>Loginy</th></tr></thead><tbody>';
-      for (const g of geoKeys.slice(0, 15)) {
+      for (const g of geoKeys) {
         html += `<tr><td>${_esc(g)}</td><td>${geos[g]}</td></tr>`;
       }
       html += '</tbody></table>';
@@ -2217,7 +2213,7 @@
     if (ipKeys.length) {
       html += '<div style="margin-bottom:8px"><b>🌐 Najczęstsze adresy IP:</b></div>';
       html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr><th>IP</th><th>Loginy</th></tr></thead><tbody>';
-      for (const ip of ipKeys.slice(0, 10)) {
+      for (const ip of ipKeys) {
         html += `<tr><td style="font-family:monospace">${_esc(ip)}</td><td>${ips[ip]}</td></tr>`;
       }
       html += '</tbody></table>';
@@ -2246,7 +2242,7 @@
     if (mid.length) {
       html += '<div style="margin-bottom:8px"><b>⚠️ Dni z wieloma IP (podejrzane jednoczesne użycie):</b></div>';
       html += '<table class="data-table" style="width:100%;font-size:12px"><thead><tr><th>Data</th><th>Unikalne IP</th></tr></thead><tbody>';
-      for (const d of mid.slice(0, 10)) {
+      for (const d of mid) {
         html += `<tr><td>${_esc(d.date)}</td><td style="font-weight:600;color:#f59e0b">${d.unique_ips}</td></tr>`;
       }
       html += '</tbody></table>';
@@ -2258,7 +2254,7 @@
       html += `<div style="margin-top:12px;margin-bottom:8px"><b>🚨 Zagraniczne loginy (poza ${_esc(al.primary_country || "?")}):</b></div>`;
       html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr>' +
         '<th>Czas</th><th>Geolokalizacja</th><th>IP</th><th>Klient</th><th>Operacja</th></tr></thead><tbody>';
-      for (const f of fl.slice(0, 30)) {
+      for (const f of fl) {
         html += `<tr>
           <td>${_esc((f.timestamp || "").replace("T", " "))}</td>
           <td>${_esc(f.geo || "")}</td>
@@ -2268,10 +2264,10 @@
         </tr>`;
       }
       html += '</tbody></table>';
-      if (fl.length > 30) html += `<div class="small muted" style="margin-top:4px">Pokazano 30 z ${fl.length}</div>`;
     }
 
-    _html("crypto_access_body", html);
+    const accBody = document.getElementById("crypto_access_body");
+    if (accBody) { accBody.innerHTML = html; accBody.style.maxHeight = "700px"; accBody.style.overflowY = "auto"; }
   }
 
   function _renderCardTimeline(r) {
@@ -2321,7 +2317,7 @@
       html += '<div style="margin-bottom:8px"><b>🏪 Merchants (TOP wydatki):</b></div>';
       html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr><th>Merchant</th><th>Kwota</th></tr></thead><tbody>';
       const sortedM = mKeys.sort((a, b) => merchants[b] - merchants[a]);
-      for (const m of sortedM.slice(0, 15)) {
+      for (const m of sortedM) {
         html += `<tr><td>${_esc(m)}</td><td style="text-align:right">${merchants[m].toFixed(2)}</td></tr>`;
       }
       html += '</tbody></table>';
@@ -2332,7 +2328,7 @@
       html += '<div style="margin-bottom:8px"><b>📍 Oś czasu transakcji kartą (geolokalizacja):</b></div>';
       html += '<table class="data-table" style="width:100%;font-size:11px"><thead><tr>' +
         '<th>Data/czas</th><th>Merchant</th><th>Kwota</th><th>Waluta</th><th>Status</th></tr></thead><tbody>';
-      for (const t of timeline.slice(0, 50)) {
+      for (const t of timeline) {
         html += `<tr>
           <td>${_esc((t.timestamp || "").replace("T", " "))}</td>
           <td>${_esc(t.merchant || "")}</td>
@@ -2342,10 +2338,10 @@
         </tr>`;
       }
       html += '</tbody></table>';
-      if (timeline.length > 50) html += `<div class="small muted" style="margin-top:4px">Pokazano 50 z ${timeline.length}</div>`;
     }
 
-    _html("crypto_card_timeline_body", html);
+    const ctBody = document.getElementById("crypto_card_timeline_body");
+    if (ctBody) { ctBody.innerHTML = html; ctBody.style.maxHeight = "700px"; ctBody.style.overflowY = "auto"; }
   }
 
   /* ------------------------------------------------------------------ */

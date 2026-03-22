@@ -298,7 +298,7 @@ def run_crypto_pipeline(
                 "risk_level": w.risk_level,
                 "risk_reasons": w.risk_reasons,
             }
-            for w in wallets[:200]
+            for w in wallets
         ],
         "transactions": [
             {
@@ -315,9 +315,8 @@ def run_crypto_pipeline(
                 "risk_tags": tx.risk_tags,
                 "raw": {k: str(v) for k, v in (tx.raw or {}).items()},
             }
-            for tx in txs[:2000]
+            for tx in txs
         ],
-        "transactions_truncated": len(txs) > 2000,
         "transactions_total": len(txs),
         "llm_prompt": llm_prompt,
         "behavior_profile": behavior_profile,
