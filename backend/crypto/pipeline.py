@@ -86,20 +86,34 @@ def _normalize_phone(raw: str) -> Optional[str]:
 def _extract_phone_numbers(txs: List[CryptoTransaction]) -> List[Dict[str, Any]]:
     """Scan transaction fields for phone number patterns.
 
-    Checks counterparty, raw notes, merchant names etc.
+    Only scans fields that could plausibly contain phone numbers.
+    Skips numeric IDs (Binance User IDs, Order IDs, TX IDs etc.) that
+    produce false-positive matches.
+
     Returns list of {number, country_iso, country_name, occurrences, contexts[]}.
     """
     phone_map: Dict[str, Dict[str, Any]] = {}
 
+    # Raw fields that are NEVER phone numbers — numeric IDs, amounts, technical data
+    _SKIP_RAW_KEYS = {
+        "sheet", "account", "status", "side", "direction",
+        "counterparty_id", "counterparty_binance_id", "counterparty_wallet_id",
+        "order_id", "tx_id", "txId", "transaction_id",
+        "market", "market_id", "pair",
+        "total_value", "price", "quantity", "qty", "fee", "fee_coin",
+        "network", "chain", "quote_token", "base_token",
+        "change", "BUSD_value", "busd_value",
+        "card_number", "card_type", "card_status",
+        "operation", "type", "sub_type",
+        "user_id", "uid",
+    }
+
     for tx in txs:
-        # Fields to scan
-        fields = [
-            ("counterparty", tx.counterparty),
-            ("to_address", tx.to_address),
-            ("from_address", tx.from_address),
-        ]
+        # Only scan raw fields that could plausibly contain phone numbers
+        # (free-text fields like notes, descriptions, merchant names)
+        fields = []
         for key, val in (tx.raw or {}).items():
-            if key in ("sheet", "account", "status", "side"):
+            if key in _SKIP_RAW_KEYS:
                 continue
             fields.append((key, str(val)))
 
@@ -108,14 +122,14 @@ def _extract_phone_numbers(txs: List[CryptoTransaction]) -> List[Dict[str, Any]]
                 continue
             for match in _PHONE_RE.finditer(str(field_val)):
                 raw_num = match.group(0).strip()
+
+                # Must have explicit country code prefix (+XX or 00XX) to be a phone
+                # Pure digit strings (like Binance IDs) are NOT phone numbers
+                if not raw_num.startswith("+") and not raw_num.startswith("00"):
+                    continue
+
                 normalized = _normalize_phone(raw_num)
                 if not normalized:
-                    continue
-                # Skip if looks like a Binance user ID (pure digits, no country code)
-                if normalized.startswith("+48") and len(normalized) == 12:
-                    # Valid Polish number
-                    pass
-                elif len(re.sub(r"\D", "", raw_num)) < 9:
                     continue
 
                 if normalized not in phone_map:
