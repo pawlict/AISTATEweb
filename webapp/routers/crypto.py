@@ -556,9 +556,13 @@ async def crypto_report(
                 headers={"Content-Disposition": f"attachment; filename=crypto_report.txt"},
             )
 
-    # Default: HTML
+    # Default: HTML — download as file
     html = _build_crypto_report_html(result)
-    return HTMLResponse(html)
+    return StreamingResponse(
+        iter([html.encode("utf-8")]),
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=crypto_report.html"},
+    )
 
 
 def _resc(s) -> str:

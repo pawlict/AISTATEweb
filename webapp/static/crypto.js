@@ -2594,19 +2594,14 @@
         if (!_lastResult) { alert("Brak danych do raportu. Wczytaj dane crypto."); return; }
         for (const fmt of formats) {
           const url = "/api/crypto/report?project_id=" + encodeURIComponent(pid) + "&formats=" + encodeURIComponent(fmt);
-          if (fmt === "html") {
-            // HTML opens in new tab for viewing
-            window.open(url, "_blank");
-          } else {
-            // TXT, DOCX — download via hidden link
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "crypto_report." + fmt;
-            a.style.display = "none";
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => a.remove(), 1000);
-          }
+          // All formats — download as file
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "crypto_report." + fmt;
+          a.style.display = "none";
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => a.remove(), 1000);
         }
       };
     }
