@@ -754,13 +754,44 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             rows = "".join(f"<tr><td><code style='word-break:break-all'>{_resc(a['address'])}</code></td><td>{_resc(a.get('chain', ''))}</td><td>{_resc(', '.join(a.get('tokens', [])))}</td></tr>" for a in dep_addrs[:50])
             addr_html += f'<h3>Adresy depozytowe (portfele użytkownika)</h3><table class="data-table"><thead><tr><th>Adres</th><th>Sieć</th><th>Tokeny</th></tr></thead><tbody>{rows}</tbody></table>'
 
-        if ext_src:
-            rows = "".join(f"<tr><td><code style='word-break:break-all'>{_resc(a['address'])}</code></td><td>{a['count']}</td><td class='num'>{a['total']:.4f}</td><td>{_resc(', '.join(a.get('tokens', [])))}</td><td>{_resc(', '.join(a.get('networks', [])))}</td></tr>" for a in ext_src[:50])
-            addr_html += f'<h3>Adresy źródłowe depozytów (zewnętrzne)</h3><table class="data-table"><thead><tr><th>Adres</th><th>TX</th><th>Suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>{rows}</tbody></table>'
-
-        if ext_dst:
-            rows = "".join(f"<tr><td><code style='word-break:break-all'>{_resc(a['address'])}</code></td><td>{a['count']}</td><td class='num'>{a['total']:.4f}</td><td>{_resc(', '.join(a.get('tokens', [])))}</td><td>{_resc(', '.join(a.get('networks', [])))}</td></tr>" for a in ext_dst[:50])
-            addr_html += f'<h3>Adresy docelowe wypłat (zewnętrzne)</h3><table class="data-table"><thead><tr><th>Adres</th><th>TX</th><th>Suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>{rows}</tbody></table>'
+        # Merge external source + dest addresses (deduplicate)
+        if ext_src or ext_dst:
+            addr_merged: Dict[str, Dict[str, Any]] = {}
+            for a in ext_src:
+                addr_merged[a["address"]] = {
+                    "dep_count": a["count"], "dep_total": a["total"],
+                    "wd_count": 0, "wd_total": 0.0,
+                    "tokens": set(a.get("tokens", [])),
+                    "networks": set(a.get("networks", [])),
+                }
+            for a in ext_dst:
+                if a["address"] in addr_merged:
+                    m = addr_merged[a["address"]]
+                    m["wd_count"] = a["count"]
+                    m["wd_total"] = a["total"]
+                    m["tokens"].update(a.get("tokens", []))
+                    m["networks"].update(a.get("networks", []))
+                else:
+                    addr_merged[a["address"]] = {
+                        "dep_count": 0, "dep_total": 0.0,
+                        "wd_count": a["count"], "wd_total": a["total"],
+                        "tokens": set(a.get("tokens", [])),
+                        "networks": set(a.get("networks", [])),
+                    }
+            sorted_addrs = sorted(addr_merged.items(),
+                                  key=lambda x: x[1]["dep_total"] + x[1]["wd_total"], reverse=True)
+            rows = ""
+            for addr, m in sorted_addrs[:60]:
+                direction = "dep+wd" if m["dep_count"] > 0 and m["wd_count"] > 0 else ("dep" if m["dep_count"] > 0 else "wd")
+                dir_label = {"dep+wd": "&#x1F4E5;&#x1F4E4;", "dep": "&#x1F4E5;", "wd": "&#x1F4E4;"}[direction]
+                dc = m["dep_count"] or "—"
+                dt = f"{m['dep_total']:.4f}" if m["dep_count"] else "—"
+                wc = m["wd_count"] or "—"
+                wt = f"{m['wd_total']:.4f}" if m["wd_count"] else "—"
+                rows += f"<tr><td><code style='word-break:break-all'>{_resc(addr)}</code></td><td style='text-align:center'>{dir_label}</td><td>{dc}</td><td class='num'>{dt}</td><td>{wc}</td><td class='num'>{wt}</td><td>{_resc(', '.join(sorted(m['tokens'])))}</td><td>{_resc(', '.join(sorted(m['networks'])))}</td></tr>"
+            both_count = sum(1 for _, m in sorted_addrs if m["dep_count"] > 0 and m["wd_count"] > 0)
+            note = f" (w tym <b>{both_count}</b> dwukierunkowych)" if both_count else ""
+            addr_html += f'<h3>Adresy zewnętrzne ({len(sorted_addrs)} unikalnych{note})</h3><table class="data-table"><thead><tr><th>Adres</th><th>Kier.</th><th>Dep.TX</th><th>Dep.suma</th><th>Wyp.TX</th><th>Wyp.suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>{rows}</tbody></table>'
 
         if wallets:
             rows = "".join(f"<tr><td><code style='word-break:break-all'>{_resc(w['address'])}</code></td><td>{_resc(w.get('label', ''))}</td><td>{w.get('tx_count', 0)}</td><td class='num'>{w.get('total_received', 0):.4f}</td><td class='num'>{w.get('total_sent', 0):.4f}</td><td>{_resc(w.get('risk_level', ''))}</td></tr>" for w in wallets[:100])
@@ -992,18 +1023,25 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
             lines.append(f"  UID: {uid}  TX: {c.get('tx_count', 0)}  IN: {c.get('total_in', 0):.4f}  OUT: {c.get('total_out', 0):.4f}  Tokeny: {', '.join(c.get('tokens', []))}")
         lines.append("")
 
-    # Addresses
+    # Addresses — merged, deduplicated
     ext_src = fr.get("external_source_addresses", [])
     ext_dst = fr.get("external_dest_addresses", [])
-    if ext_src:
-        lines.append("--- ADRESY ŹRÓDŁOWE DEPOZYTÓW ---")
-        for a in ext_src[:30]:
-            lines.append(f"  {a['address']}  TX: {a['count']}  Suma: {a['total']:.4f}  {', '.join(a.get('tokens', []))}")
-        lines.append("")
-    if ext_dst:
-        lines.append("--- ADRESY DOCELOWE WYPŁAT ---")
-        for a in ext_dst[:30]:
-            lines.append(f"  {a['address']}  TX: {a['count']}  Suma: {a['total']:.4f}  {', '.join(a.get('tokens', []))}")
+    if ext_src or ext_dst:
+        addr_m: Dict[str, Dict[str, Any]] = {}
+        for a in ext_src:
+            addr_m[a["address"]] = {"dc": a["count"], "dt": a["total"], "wc": 0, "wt": 0.0, "tok": set(a.get("tokens", []))}
+        for a in ext_dst:
+            if a["address"] in addr_m:
+                addr_m[a["address"]]["wc"] = a["count"]
+                addr_m[a["address"]]["wt"] = a["total"]
+                addr_m[a["address"]]["tok"].update(a.get("tokens", []))
+            else:
+                addr_m[a["address"]] = {"dc": 0, "dt": 0.0, "wc": a["count"], "wt": a["total"], "tok": set(a.get("tokens", []))}
+        lines.append("--- ADRESY ZEWNĘTRZNE (zjednoczone) ---")
+        for addr, m in sorted(addr_m.items(), key=lambda x: x[1]["dt"] + x[1]["wt"], reverse=True)[:40]:
+            d = "DEP+WD" if m["dc"] > 0 and m["wc"] > 0 else ("DEP" if m["dc"] > 0 else "WD")
+            lines.append(f"  {addr}")
+            lines.append(f"    Kier: {d}  Dep TX: {m['dc']}  Dep suma: {m['dt']:.4f}  Wyp TX: {m['wc']}  Wyp suma: {m['wt']:.4f}  Tokeny: {', '.join(sorted(m['tok']))}")
         lines.append("")
 
     # Transactions

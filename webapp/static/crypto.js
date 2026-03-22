@@ -1998,39 +1998,67 @@
     if (!src.length && !dst.length) { _hide("crypto_ext_addresses_card"); return; }
     _show("crypto_ext_addresses_card");
 
-    let html = '';
-    if (src.length) {
-      html += '<div style="margin-bottom:8px"><b>📥 Adresy źródłowe depozytów (zewnętrzne):</b></div>';
-      html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:16px"><thead><tr>' +
-        '<th>Adres</th><th>TX</th><th>Suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>';
-      for (const a of src.slice(0, 30)) {
-        html += `<tr>
-          <td style="font-family:monospace;font-size:11px;word-break:break-all" title="${_esc(a.address)}">${_esc(_shorten(a.address))}</td>
-          <td>${a.count}</td>
-          <td style="text-align:right">${(a.total || 0).toFixed(4)}</td>
-          <td>${_esc((a.tokens || []).join(", "))}</td>
-          <td>${_esc((a.networks || []).join(", "))}</td>
-        </tr>`;
-      }
-      html += '</tbody></table>';
-      if (src.length > 30) html += `<div class="small muted">Pokazano 30 z ${src.length}</div>`;
+    // Merge src and dst by address — avoid duplicates
+    const addrMap = {};
+    for (const a of src) {
+      addrMap[a.address] = {
+        address: a.address,
+        dep_count: a.count || 0, dep_total: a.total || 0,
+        wd_count: 0, wd_total: 0,
+        tokens: new Set(a.tokens || []),
+        networks: new Set(a.networks || []),
+      };
     }
-    if (dst.length) {
-      html += '<div style="margin-bottom:8px"><b>📤 Adresy docelowe wypłat (zewnętrzne):</b></div>';
-      html += '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
-        '<th>Adres</th><th>TX</th><th>Suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>';
-      for (const a of dst.slice(0, 30)) {
-        html += `<tr>
-          <td style="font-family:monospace;font-size:11px;word-break:break-all" title="${_esc(a.address)}">${_esc(_shorten(a.address))}</td>
-          <td>${a.count}</td>
-          <td style="text-align:right">${(a.total || 0).toFixed(4)}</td>
-          <td>${_esc((a.tokens || []).join(", "))}</td>
-          <td>${_esc((a.networks || []).join(", "))}</td>
-        </tr>`;
+    for (const a of dst) {
+      if (addrMap[a.address]) {
+        const m = addrMap[a.address];
+        m.wd_count = a.count || 0;
+        m.wd_total = a.total || 0;
+        (a.tokens || []).forEach(t => m.tokens.add(t));
+        (a.networks || []).forEach(n => m.networks.add(n));
+      } else {
+        addrMap[a.address] = {
+          address: a.address,
+          dep_count: 0, dep_total: 0,
+          wd_count: a.count || 0, wd_total: a.total || 0,
+          tokens: new Set(a.tokens || []),
+          networks: new Set(a.networks || []),
+        };
       }
-      html += '</tbody></table>';
-      if (dst.length > 30) html += `<div class="small muted">Pokazano 30 z ${dst.length}</div>`;
     }
+
+    // Sort by total volume (deposits + withdrawals)
+    const merged = Object.values(addrMap).sort((a, b) =>
+      (b.dep_total + b.wd_total) - (a.dep_total + a.wd_total)
+    );
+
+    // Count how many are deposit-only, withdrawal-only, or both
+    const bothCount = merged.filter(a => a.dep_count > 0 && a.wd_count > 0).length;
+    const depOnly = merged.filter(a => a.dep_count > 0 && a.wd_count === 0).length;
+    const wdOnly = merged.filter(a => a.dep_count === 0 && a.wd_count > 0).length;
+
+    let html = `<div style="margin-bottom:8px;font-size:13px">Łącznie <b>${merged.length}</b> unikalnych adresów zewnętrznych`;
+    if (bothCount > 0) html += ` (w tym <b>${bothCount}</b> używanych dwukierunkowo)`;
+    html += `</div>`;
+
+    html += '<table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
+      '<th>Adres</th><th>Kierunek</th><th>Dep. TX</th><th>Dep. suma</th><th>Wyp. TX</th><th>Wyp. suma</th><th>Tokeny</th><th>Sieci</th></tr></thead><tbody>';
+    for (const a of merged.slice(0, 50)) {
+      const dir = (a.dep_count > 0 && a.wd_count > 0) ? "📥📤"
+                : a.dep_count > 0 ? "📥" : "📤";
+      html += `<tr>
+        <td style="font-family:monospace;font-size:11px;word-break:break-all">${_esc(a.address)}</td>
+        <td style="text-align:center">${dir}</td>
+        <td>${a.dep_count || "—"}</td>
+        <td style="text-align:right">${a.dep_count ? a.dep_total.toFixed(4) : "—"}</td>
+        <td>${a.wd_count || "—"}</td>
+        <td style="text-align:right">${a.wd_count ? a.wd_total.toFixed(4) : "—"}</td>
+        <td>${_esc([...a.tokens].join(", "))}</td>
+        <td>${_esc([...a.networks].join(", "))}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    if (merged.length > 50) html += `<div class="small muted" style="margin-top:4px">Pokazano 50 z ${merged.length}</div>`;
     _html("crypto_ext_addresses_body", html);
   }
 
