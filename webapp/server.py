@@ -2104,6 +2104,48 @@ async def _startup_post_update_message() -> None:
     try:
         from backend.db.engine import get_system_config, set_system_config
 
+        # --- First-time intro message (sent once when update module is first available) ---
+        intro_sent = get_system_config("update_intro_sent", "")
+        if intro_sent != "1":
+            set_system_config("update_intro_sent", "1")
+            # Send the intro message about new update system
+            from webapp.auth.message_store import Message as _Msg
+            _intro = _Msg(
+                author_id="system",
+                author_name="AISTATEweb",
+                subject="Nowy system aktualizacji AISTATEweb",
+                content=(
+                    "<b>Zmiana sposobu aktualizacji systemu</b><br><br>"
+                    "Dotychczasowa metoda aktualizacji (r\u0119czne kopiowanie plik\u00f3w) zosta\u0142a zast\u0105piona "
+                    "wbudowanym panelem aktualizacji.<br><br>"
+                    "<b>Jak teraz wygl\u0105da proces aktualizacji:</b><br>"
+                    "1. Pobierz paczk\u0119 aktualizacji (plik .zip) ze strony dostawcy<br>"
+                    "2. Przejd\u017a do <b>Zarz\u0105dzanie u\u017cytkownikami \u2192 System \u2192 Aktualizacje</b><br>"
+                    "3. Kliknij <b>\u201eImportuj aktualizacj\u0119\u201d</b> i wska\u017c pobrany plik<br>"
+                    "4. System wy\u015bwietli informacje o nowej wersji oraz list\u0119 zmian<br>"
+                    "5. Kliknij <b>\u201eZainstaluj aktualizacj\u0119\u201d</b><br>"
+                    "6. Po instalacji system automatycznie zrestartuje si\u0119 po 5 minutach \u2014 "
+                    "w tym czasie mo\u017cesz klikn\u0105\u0107 <b>\u201eRestartuj teraz\u201d</b> lub <b>\u201eAnuluj restart\u201d</b> "
+                    "i zrestartowa\u0107 r\u0119cznie w dogodnym momencie<br><br>"
+                    "<b>Co z danymi?</b><br>"
+                    "Twoje projekty, nagrania, transkrypcje i ustawienia <b>nie zostan\u0105 naruszone</b> \u2014 "
+                    "aktualizacja dotyczy wy\u0142\u0105cznie kodu aplikacji. Je\u015bli nowa wersja wymaga migracji danych "
+                    "(np. zmiana formatu plik\u00f3w), zostanie ona przeprowadzona <b>automatycznie</b> podczas instalacji.<br><br>"
+                    "<b>Cofanie aktualizacji</b><br>"
+                    "W panelu aktualizacji dost\u0119pna jest historia zainstalowanych wersji. "
+                    "W razie problem\u00f3w mo\u017cesz w ka\u017cdej chwili przywr\u00f3ci\u0107 poprzedni\u0105 wersj\u0119 "
+                    "klikaj\u0105c <b>\u201ePrzywra\u0107 t\u0119 wersj\u0119\u201d</b>.<br><br>"
+                    "<b>Wa\u017cne:</b><br>"
+                    "\u2022 Nie kopiuj ju\u017c plik\u00f3w r\u0119cznie \u2014 korzystaj wy\u0142\u0105cznie z panelu aktualizacji<br>"
+                    "\u2022 Przed aktualizacj\u0105 nie musisz zatrzymywa\u0107 systemu \u2014 panel zrobi to za Ciebie<br>"
+                    "\u2022 Zalecamy wykonanie aktualizacji w momencie, gdy system nie jest intensywnie u\u017cywany"
+                ),
+                target_groups=["all"],
+            )
+            MESSAGE_STORE.create_message(_intro)
+            app_log("Update system intro message sent via Call Center")
+
+        # --- Post-update message (sent after each update via the panel) ---
         pending = get_system_config("post_update_pending", "")
         if pending != "1":
             return
