@@ -4,7 +4,7 @@ from dataclasses import dataclass
 # ====== App identity (used by UI + reports) ======
 # NOTE: Name/version are intentionally sourced from this file.
 APP_NAME: str = "AISTATEweb"
-APP_VERSION: str = "3.7 beta"
+APP_VERSION: str = "3.7.1 beta"
 AUTHOR_EMAIL: str = "pawlict@proton.me"
 AUTHOR_NAME: str = "pawlict"
 
@@ -26,3 +26,12 @@ class Settings:
     password_expiry_days: int = 0
     # Map source: "auto" (offline if available, else online), "offline", "online"
     map_source: str = "auto"
+    # Encryption policy
+    encryption_enabled: bool = False                # global toggle
+    encryption_method: str = "standard"             # "light", "standard", "maximum"
+    encryption_force_new_projects: bool = False      # force encryption on all new projects
+    encryption_master_key_initialized: bool = False  # True once Master Key is created
+    # ARIA HUD — Analytical Response & Intelligence Assistant
+    aria_enabled: bool = False                        # admin toggle — show ARIA HUD globally
+    aria_voice: str = "pl_PL-gosia-medium"            # Piper TTS voice model
+    aria_tts_enabled: bool = True                     # enable TTS in ARIA responses

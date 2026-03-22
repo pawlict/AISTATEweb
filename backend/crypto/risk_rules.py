@@ -336,7 +336,7 @@ def _classify_blockchain(txs: List[CryptoTransaction]) -> List[CryptoTransaction
     mixer_addrs = {a for a, v in sanctioned_db.get("addresses", {}).items() if "mixer" in str(v.get("reason", "")).lower()}
 
     for tx in txs:
-        tags: List[str] = []
+        tags: List[str] = list(tx.risk_tags or [])  # preserve parser-set tags
         score = 0.0
 
         # Check sanctioned
@@ -395,7 +395,7 @@ def _classify_exchange(txs: List[CryptoTransaction]) -> List[CryptoTransaction]:
     _MEME = {"PEPE", "DOGE", "SHIB", "BONK", "FLOKI", "BABYDOGE", "WIF", "BOME", "MEME"}
 
     for tx in txs:
-        tags: List[str] = []
+        tags: List[str] = list(tx.risk_tags or [])  # preserve parser-set tags
         score = 0.0
 
         # Privacy coins on exchange
@@ -417,6 +417,10 @@ def _classify_exchange(txs: List[CryptoTransaction]) -> List[CryptoTransaction]:
         if tx.tx_type == "withdrawal":
             score += 10
             tags.append("withdrawal")
+
+        # Binance internal transfer (lower risk — within same exchange)
+        if "binance_internal" in tags:
+            score = max(score - 5, 0)
 
         tx.risk_tags = tags
         tx.risk_score = min(score, 100)

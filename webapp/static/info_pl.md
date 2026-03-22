@@ -18,6 +18,17 @@
 
 ---
 
+## 🆕 Nowości w 3.7.1 beta
+
+### 🔐 Analiza kryptowalut — Binance XLSX
+- Rozbudowana analiza danych z giełdy Binance
+- Profilowanie zachowania użytkownika (10 wzorców: HODLer, Scalper, Day Trader, Swing Trader, Staker, Whale, Institutional, Alpha Hunter, Meme Trader, Bagholder)
+- 18 kart analizy kryminalistycznej:
+  - Kontrahenci wewnętrzni, Pay C2C, adresy on-chain, przepływy tranzytowe, kryptowaluty prywatności, logi dostępu, karty płatnicze
+  - **NOWE:** Analiza czasowa (rozkład godzinowy, burst, okresy uśpienia), łańcuchy konwersji tokenów, wykrywanie structuringu/smurfingu, wash trading, analiza fiat on/off ramp, analiza P2P, prędkość przepływu środków (velocity), analiza opłat (fees), analiza sieci blockchain, rozszerzona analiza bezpieczeństwa (VPN/proxy)
+
+---
+
 ## 🆕 Nowości w 3.6 beta
 
 ### 📱 Analiza GSM / BTS

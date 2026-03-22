@@ -1,6 +1,6 @@
-# AISTATEweb (3.7 beta)
+# AISTATEweb (3.7.1 beta)
 
-![Version](https://img.shields.io/badge/Version-3.7%20beta-orange)
+![Version](https://img.shields.io/badge/Version-3.7.1%20beta-orange)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Web-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -326,6 +326,13 @@ Open in browser: http://127.0.0.1:8000
 
 * * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
+
+## beta 3.7.1
+- **Cryptocurrency Analysis — Binance** — extended analysis of Binance exchange data
+- User behavior profiling (10 patterns: HODLer, Scalper, Day Trader, Swing Trader, Staker, Whale, Institutional, Alpha Hunter, Meme Trader, Bagholder)
+- 18 forensic analysis cards: internal counterparties, Pay C2C, on-chain addresses, pass-through flows, privacy coins, access logs, payment cards + **NEW:** temporal analysis, token conversion chains, structuring/smurfing detection, wash trading, fiat on/off ramp, P2P analysis, deposit-to-withdrawal velocity, fee analysis, blockchain network analysis, extended security (VPN/proxy)
+- All record limits removed — full data with scrollable tables
+- Reports download as files (HTML, TXT, DOCX)
 
 ## beta 3.7
 - **Crypto Analysis** *(experimental)* — offline blockchain transaction analysis module (BTC/ETH), CSV import (WalletExplorer + 16 exchange formats), risk scoring, pattern detection, flow graph, Chart.js charts, LLM narrative — currently in deep testing phase

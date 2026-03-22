@@ -1069,7 +1069,39 @@
         if (el) el.value = data.password_expiry_days;
         el = document.getElementById('secSessionTimeout');
         if (el) el.value = data.session_timeout_hours;
+        // Encryption settings
+        el = document.getElementById('secEncryptionEnabled');
+        if (el) el.checked = !!data.encryption_enabled;
+        el = document.getElementById('secEncryptionMethod');
+        if (el) el.value = data.encryption_method || 'standard';
+        el = document.getElementById('secEncryptionForce');
+        if (el) el.checked = !!data.encryption_force_new_projects;
+        // Master key buttons visibility
+        var mkInit = data.encryption_master_key_initialized;
+        var btnInit = document.getElementById('btnInitMasterKey');
+        var btnBackup = document.getElementById('btnBackupMasterKey');
+        var btnVerify = document.getElementById('btnVerifyMasterKey');
+        var keyStatus = document.getElementById('encKeyStatus');
+        if (btnInit) btnInit.style.display = mkInit ? 'none' : '';
+        if (btnBackup) btnBackup.style.display = mkInit ? '' : 'none';
+        if (btnVerify) btnVerify.style.display = mkInit ? '' : 'none';
+        if (keyStatus) keyStatus.textContent = mkInit ? '✓ Klucz główny zainicjalizowany / Master Key initialized' : '';
+        // ARIA settings moved to TTS Settings page
       }
+    } catch (e) { /* ignore */ }
+  }
+
+  async function _checkAriaStatus() {
+    try {
+      var res = await fetch('/api/aria/status');
+      var data = await res.json();
+      var el = document.getElementById('ariaStatusInfo');
+      if (!el) return;
+      var parts = [];
+      parts.push('Ollama: ' + (data.ollama ? '✓' : '✗'));
+      parts.push('Piper: ' + (data.piper_installed ? '✓' : '✗'));
+      parts.push('Model głosu: ' + (data.voice_model ? '✓ ' + data.voice : '✗ brak'));
+      el.textContent = parts.join(' | ');
     } catch (e) { /* ignore */ }
   }
 
@@ -1087,6 +1119,71 @@
       if (msg) { msg.textContent = 'Zapisano / Saved'; setTimeout(function(){ msg.textContent = ''; }, 2000); }
     } catch (e) { /* ignore */ }
   }
+
+  /* ---- Encryption: Master Key Management ---- */
+
+  window.initMasterKey = async function() {
+    var pwd = prompt('Podaj hasło administratora / Enter admin password:');
+    if (!pwd) return;
+    try {
+      var res = await fetch('/api/encryption/init-master-key', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({admin_password: pwd}),
+      });
+      var data = await res.json();
+      if (data.status === 'ok') {
+        alert('Klucz główny zainicjalizowany pomyślnie!\nMaster Key initialized successfully!\n\nWYKONAJ KOPIĘ ZAPASOWĄ KLUCZA!\nPLEASE BACKUP THE KEY!');
+        loadSecuritySettings();
+      } else {
+        alert('Błąd / Error: ' + (data.message || 'Unknown error'));
+      }
+    } catch(e) { alert('Error: ' + e.message); }
+  };
+
+  window.backupMasterKey = async function() {
+    var pwd = prompt('Podaj hasło administratora / Enter admin password:');
+    if (!pwd) return;
+    try {
+      var res = await fetch('/api/encryption/backup-master-key', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({admin_password: pwd}),
+      });
+      var data = await res.json();
+      if (data.status === 'ok' && data.backup_key) {
+        // Show in a modal-like alert with copy capability
+        var msg = 'KLUCZ GŁÓWNY (Master Key) — KOPIA ZAPASOWA\n'
+          + '============================================\n\n'
+          + data.backup_key + '\n\n'
+          + 'ZAPISZ TEN KLUCZ NA NOŚNIKU OFFLINE (pendrive, wydruk w sejfie).\n'
+          + 'NIE przechowuj w systemie ani w e-mailu!\n\n'
+          + 'SAVE THIS KEY ON OFFLINE MEDIUM (USB drive, printout in safe).\n'
+          + 'Do NOT store in the system or email!';
+        prompt('Skopiuj klucz / Copy the key:', data.backup_key);
+      } else {
+        alert('Błąd / Error: ' + (data.message || 'Unknown error'));
+      }
+    } catch(e) { alert('Error: ' + e.message); }
+  };
+
+  window.verifyMasterKey = async function() {
+    var pwd = prompt('Podaj hasło administratora / Enter admin password:');
+    if (!pwd) return;
+    try {
+      var res = await fetch('/api/encryption/verify-master-key', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({admin_password: pwd}),
+      });
+      var data = await res.json();
+      if (data.status === 'ok' && data.valid) {
+        alert('✓ Klucz główny poprawny / Master Key verified successfully');
+      } else {
+        alert('✗ Nie można zweryfikować klucza / Master Key verification failed');
+      }
+    } catch(e) { alert('Error: ' + e.message); }
+  };
 
   /* ---- Password Blacklist ---- */
 

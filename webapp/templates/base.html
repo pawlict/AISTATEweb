@@ -723,5 +723,8 @@
   })();
 </script>
 {% block scripts %}{% endblock %}
+{% if aria_enabled is defined and aria_enabled %}
+{% include "components/aria_hud.html" %}
+{% endif %}
 </body>
 </html>
