@@ -924,6 +924,169 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
 
         sections.append(f"<h2>{sn}. Bezpieczeństwo konta</h2>{sec_html}")
 
+    # ── X. Analiza czasowa ──
+    ta = fr.get("temporal_analysis", {})
+    if ta and ta.get("active_span_days"):
+        sn += 1
+        t_html = f'<table class="info-table">'
+        t_html += f'<tr><th>Okres aktywności</th><td>{ta.get("active_span_days", 0)} dni</td></tr>'
+        t_html += f'<tr><th>Aktywne dni</th><td>{ta.get("active_days", 0)} ({ta.get("activity_density", 0)}%)</td></tr>'
+        t_html += f'<tr><th>Szczytowa godzina</th><td>{ta.get("peak_hour", "?")}:00 ({ta.get("peak_hour_count", 0)} tx)</td></tr>'
+        t_html += f'<tr><th>Aktywność nocna (0-5)</th><td>{ta.get("night_activity_count", 0)} ({ta.get("night_activity_ratio", 0)}%)</td></tr>'
+        t_html += f'<tr><th>Weekend / dni robocze</th><td>{ta.get("weekend_count", 0)} / {ta.get("weekday_count", 0)} ({ta.get("weekend_ratio", 0)}%)</td></tr>'
+        t_html += '</table>'
+        bursts = ta.get("burst_days", [])
+        if bursts:
+            rows = "".join(f"<tr><td>{_resc(b['date'])}</td><td class='num' style='color:#dc2626'>{b['tx_count']}</td></tr>" for b in bursts)
+            t_html += f'<h3>Dni z nagłą aktywnością (&gt;50 tx)</h3><table class="data-table"><thead><tr><th>Data</th><th>TX</th></tr></thead><tbody>{rows}</tbody></table>'
+        dorm = ta.get("dormancy_periods", [])
+        if dorm:
+            rows = "".join(f"<tr><td>{_resc(d['from'])}</td><td>{_resc(d['to'])}</td><td class='num'>{d['days']}</td></tr>" for d in dorm)
+            t_html += f'<h3>Okresy uśpienia (&gt;7 dni)</h3><table class="data-table"><thead><tr><th>Od</th><th>Do</th><th>Dni</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Analiza czasowa</h2>{t_html}")
+
+    # ── X. Łańcuchy konwersji ──
+    cc = fr.get("conversion_chains", {})
+    if cc and cc.get("edges"):
+        sn += 1
+        c_html = f'<p><b>Unikalne pary konwersji:</b> {cc.get("unique_swap_pairs", 0)}'
+        if cc.get("fiat_entry_tokens"):
+            c_html += f' | <b>Fiat wejściowe:</b> {_resc(", ".join(cc["fiat_entry_tokens"]))}'
+        c_html += '</p>'
+        rows = "".join(f"<tr><td><b>{_resc(e['from'])}</b></td><td>→</td><td><b>{_resc(e['to'])}</b></td><td class='num'>{e['volume']:.4f}</td></tr>" for e in cc["edges"])
+        c_html += f'<table class="data-table"><thead><tr><th>Z tokenu</th><th></th><th>Na token</th><th>Wolumen</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Łańcuchy konwersji tokenów</h2>{c_html}")
+
+    # ── X. Structuring ──
+    sd = fr.get("structuring_detection", {})
+    s_alerts = sd.get("alerts", [])
+    s_freq = sd.get("frequent_amounts", [])
+    if s_alerts or s_freq:
+        sn += 1
+        s_html = ''
+        if s_alerts:
+            s_html += f'<p style="color:#dc2626;font-weight:bold">⚠️ Wykryto {sd.get("alert_count", len(s_alerts))} potencjalnych przypadków structuringu</p>'
+            rows = "".join(f"<tr><td>{_resc(a['date'])}</td><td>{_resc(a['type'])}</td><td>{a['threshold']}</td><td>{a['count']}</td><td>{', '.join(str(x) for x in a.get('amounts', []))}</td><td class='num'>{a['daily_total']:.2f}</td></tr>" for a in s_alerts)
+            s_html += f'<table class="data-table"><thead><tr><th>Data</th><th>Typ</th><th>Próg</th><th>TX</th><th>Kwoty</th><th>Suma</th></tr></thead><tbody>{rows}</tbody></table>'
+        if s_freq:
+            rows = "".join(f"<tr><td class='num'>{f['amount']:.0f}</td><td class='num'>{f['count']}</td></tr>" for f in s_freq)
+            s_html += f'<h3>Najczęściej używane kwoty</h3><table class="data-table"><thead><tr><th>Kwota</th><th>Wystąpienia</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Wykrywanie structuringu (smurfing)</h2>{s_html}")
+
+    # ── X. Wash trading ──
+    wt = fr.get("wash_trading", {})
+    w_rev = wt.get("rapid_reversals", [])
+    w_net = wt.get("zero_net_markets", [])
+    if w_rev or w_net:
+        sn += 1
+        w_html = ''
+        if w_net:
+            rows = "".join(f"<tr><td><b>{_resc(m['market'])}</b></td><td class='num'>{m['gross_volume']:.4f}</td><td class='num' style='color:#dc2626'>{m['net_position']:.4f}</td><td class='num'>{m['net_ratio']}%</td><td class='num'>{m['buys']:.4f}</td><td class='num'>{m['sells']:.4f}</td></tr>" for m in w_net)
+            w_html += f'<h3>Rynki z zerową pozycją netto</h3><table class="data-table"><thead><tr><th>Rynek</th><th>Wol. brutto</th><th>Poz. netto</th><th>Net%</th><th>Kupno</th><th>Sprzedaż</th></tr></thead><tbody>{rows}</tbody></table>'
+        if w_rev:
+            rows = "".join(f"<tr><td>{_resc(w['market'])}</td><td>{_resc(w['time1'][:16])}</td><td>{_resc(w['side1'])}</td><td class='num'>{w['amount1']}</td><td>{_resc(w['time2'][:16])}</td><td>{_resc(w['side2'])}</td><td class='num'>{w['amount2']}</td><td class='num'>{w['delay_sec']}</td></tr>" for w in w_rev[:50])
+            w_html += f'<h3>Szybkie odwrócenia (&lt;5 min) — {wt.get("rapid_reversal_count", len(w_rev))} wykrytych</h3><table class="data-table"><thead><tr><th>Rynek</th><th>Czas 1</th><th>Strona</th><th>Kwota</th><th>Czas 2</th><th>Strona</th><th>Kwota</th><th>Opóźn.(s)</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Wash trading</h2>{w_html}")
+
+    # ── X. Fiat ramp ──
+    fa = fr.get("fiat_ramp_analysis", {})
+    if fa and (fa.get("fiat_deposit_count", 0) > 0 or fa.get("fiat_withdrawal_count", 0) > 0):
+        sn += 1
+        f_html = f'<table class="info-table">'
+        f_html += f'<tr><th>Wpłaty fiat</th><td>{fa.get("fiat_deposit_count", 0)}</td></tr>'
+        f_html += f'<tr><th>Wypłaty fiat</th><td>{fa.get("fiat_withdrawal_count", 0)}</td></tr>'
+        f_html += f'<tr><th>Łącznie fiat IN</th><td>{fa.get("total_fiat_in", 0):.2f}</td></tr>'
+        f_html += f'<tr><th>Łącznie fiat OUT</th><td>{fa.get("total_fiat_out", 0):.2f}</td></tr>'
+        nf = fa.get("net_fiat_flow", 0)
+        f_html += f'<tr><th>Saldo netto</th><td style="color:{"#22c55e" if nf >= 0 else "#dc2626"};font-weight:bold">{nf:.2f}</td></tr>'
+        if fa.get("fiat_to_crypto_wd_hours") is not None:
+            f_html += f'<tr><th>Fiat→crypto wypłata</th><td>{fa["fiat_to_crypto_wd_hours"]:.1f} godz.</td></tr>'
+        f_html += '</table>'
+        ci = fa.get("currencies_in", {})
+        co = fa.get("currencies_out", {})
+        if ci or co:
+            all_c = sorted(set(list(ci.keys()) + list(co.keys())))
+            rows = "".join(f"<tr><td><b>{_resc(c)}</b></td><td class='num'>{ci.get(c, 0):.2f}</td><td class='num'>{co.get(c, 0):.2f}</td></tr>" for c in all_c)
+            f_html += f'<table class="data-table"><thead><tr><th>Waluta</th><th>Wpłaty</th><th>Wypłaty</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Analiza fiat on/off ramp</h2>{f_html}")
+
+    # ── X. P2P ──
+    p2p = fr.get("p2p_analysis", {})
+    if p2p and p2p.get("total_count", 0) > 0:
+        sn += 1
+        p_html = f'<table class="info-table">'
+        p_html += f'<tr><th>Transakcje P2P</th><td>{p2p["total_count"]}</td></tr>'
+        p_html += f'<tr><th>% aktywności</th><td>{p2p.get("total_pct", 0)}%</td></tr>'
+        p_html += f'<tr><th>Wolumen</th><td>{p2p.get("total_volume", 0):.2f}</td></tr>'
+        p_html += f'<tr><th>Unikalni kontrahenci</th><td>{p2p.get("unique_counterparties", 0)}</td></tr>'
+        p_html += '</table>'
+        tops = p2p.get("top_counterparties", [])
+        if tops:
+            rows = "".join(f"<tr><td><code>{_resc(cp['id'])}</code></td><td class='num'>{cp['count']}</td><td class='num'>{cp['volume']:.4f}</td><td>{_resc(', '.join(cp.get('tokens', [])))}</td></tr>" for cp in tops)
+            p_html += f'<h3>Top kontrahenci P2P</h3><table class="data-table"><thead><tr><th>ID</th><th>TX</th><th>Wolumen</th><th>Tokeny</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Analiza P2P</h2>{p_html}")
+
+    # ── X. Velocity ──
+    va = fr.get("velocity_analysis", {})
+    if va and va.get("token_velocities"):
+        sn += 1
+        v_html = f'<table class="info-table">'
+        v_html += f'<tr><th>Wpłaty / Wypłaty</th><td>{va.get("deposit_count", 0)} / {va.get("withdrawal_count", 0)}</td></tr>'
+        v_html += f'<tr><th>Stosunek DEP/WD</th><td>{va.get("dep_wd_ratio", 0)}</td></tr>'
+        v_html += f'<tr><th>Hot wallet</th><td>{"TAK ⚠️" if va.get("has_hot_wallet_behavior") else "NIE"}</td></tr>'
+        v_html += '</table>'
+        rows = "".join(f"<tr><td><b>{_resc(t['token'])}</b></td><td class='num'>{t['avg_hold_hours']}</td><td class='num'>{t['min_hold_hours']}</td><td class='num'>{t['deposit_count']}</td><td class='num'>{t['withdrawal_count']}</td></tr>" for t in va["token_velocities"])
+        v_html += f'<table class="data-table"><thead><tr><th>Token</th><th>Śr. czas (godz.)</th><th>Min (godz.)</th><th>Wpłaty</th><th>Wypłaty</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Prędkość przepływu środków</h2>{v_html}")
+
+    # ── X. Fee analysis ──
+    fee = fr.get("fee_analysis", {})
+    if fee and fee.get("fee_paying_tx_count", 0) > 0:
+        sn += 1
+        fe_html = f'<table class="info-table">'
+        fe_html += f'<tr><th>TX z opłatami</th><td>{fee["fee_paying_tx_count"]}</td></tr>'
+        fe_html += f'<tr><th>Opłaty w BNB</th><td>{fee.get("bnb_fee_count", 0)} ({fee.get("bnb_fee_ratio", 0)}%)</td></tr>'
+        fe_html += '</table>'
+        fees = fee.get("total_fees_by_token", {})
+        if fees:
+            rows = "".join(f"<tr><td><b>{_resc(tok)}</b></td><td class='num'>{val:.8f}</td></tr>" for tok, val in fees.items())
+            fe_html += f'<table class="data-table"><thead><tr><th>Token opłaty</th><th>Suma opłat</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Analiza opłat (fees)</h2>{fe_html}")
+
+    # ── X. Network analysis ──
+    na = fr.get("network_analysis", {})
+    if na and na.get("networks"):
+        sn += 1
+        _HR = {"TRX", "TRON", "TRC20", "BSC", "BEP20", "BEP2"}
+        n_html = f'<p><b>Unikalne sieci:</b> {na.get("unique_networks", 0)}'
+        hr_nets = na.get("high_risk_networks", [])
+        if hr_nets:
+            n_html += f' | <span style="color:#dc2626"><b>Sieci wysokiego ryzyka:</b> {_resc(", ".join(n["network"] for n in hr_nets))}</span>'
+        n_html += '</p>'
+        rows = ""
+        for n in na["networks"]:
+            is_hr = n["network"].upper() in _HR
+            style = 'background:#fef2f2' if is_hr else ''
+            rows += f"<tr style='{style}'><td><b>{_resc(n['network'])}</b>{'⚠️' if is_hr else ''}</td><td class='num'>{n['deposits']}</td><td class='num'>{n['withdrawals']}</td><td class='num'>{n['total_tx']}</td><td class='num'>{n['dep_volume']:.4f}</td><td class='num'>{n['wd_volume']:.4f}</td></tr>"
+        n_html += f'<table class="data-table"><thead><tr><th>Sieć</th><th>Wpłaty</th><th>Wypłaty</th><th>TX</th><th>Wol. wpłat</th><th>Wol. wypłat</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Analiza sieci blockchain</h2>{n_html}")
+
+    # ── X. Extended security ──
+    es = fr.get("extended_security", {})
+    if es:
+        sn += 1
+        e_html = f'<table class="info-table">'
+        e_html += f'<tr><th>Kraje logowań</th><td>{", ".join(es.get("login_countries", []))} ({es.get("login_country_count", 0)})</td></tr>'
+        e_html += f'<tr><th>Podejrzane dni VPN</th><td>{es.get("vpn_suspect_days", 0)}</td></tr>'
+        e_html += f'<tr><th>API Trading</th><td>{"Włączone" if es.get("api_trading_enabled") else "Wyłączone"}</td></tr>'
+        e_html += f'<tr><th>Sub-konto</th><td>{"Tak" if es.get("has_sub_account") else "Nie"}</td></tr>'
+        e_html += '</table>'
+        vpn = es.get("vpn_suspects", [])
+        if vpn:
+            rows = "".join(f"<tr><td>{_resc(v['date'])}</td><td>{_resc(', '.join(v.get('countries', [])))}</td><td class='num' style='color:#dc2626'>{v['country_count']}</td><td class='num'>{v['login_count']}</td></tr>" for v in vpn)
+            e_html += f'<h3>Podejrzenie VPN/proxy</h3><table class="data-table"><thead><tr><th>Data</th><th>Kraje</th><th>Ilość krajów</th><th>Loginy</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Rozszerzona analiza bezpieczeństwa</h2>{e_html}")
+
     # ── X. Transakcje ──
     txs = r.get("transactions", [])
     if txs:
@@ -1109,6 +1272,105 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
             d = "DEP+WD" if m["dc"] > 0 and m["wc"] > 0 else ("DEP" if m["dc"] > 0 else "WD")
             lines.append(f"  {m['disp']}")
             lines.append(f"    Kier: {d}  Dep TX: {m['dc']}  Dep suma: {m['dt']:.4f}  Wyp TX: {m['wc']}  Wyp suma: {m['wt']:.4f}  Tokeny: {', '.join(sorted(m['tok']))}")
+        lines.append("")
+
+    # Temporal analysis
+    ta = fr.get("temporal_analysis", {})
+    if ta and ta.get("active_span_days"):
+        lines.append("--- ANALIZA CZASOWA ---")
+        lines.append(f"  Okres aktywności: {ta.get('active_span_days', 0)} dni")
+        lines.append(f"  Aktywne dni: {ta.get('active_days', 0)} ({ta.get('activity_density', 0)}%)")
+        lines.append(f"  Szczytowa godzina: {ta.get('peak_hour', '?')}:00 ({ta.get('peak_hour_count', 0)} tx)")
+        lines.append(f"  Nocna aktywność (0-5): {ta.get('night_activity_count', 0)} ({ta.get('night_activity_ratio', 0)}%)")
+        lines.append(f"  Weekend/robocze: {ta.get('weekend_count', 0)}/{ta.get('weekday_count', 0)} ({ta.get('weekend_ratio', 0)}%)")
+        for b in ta.get("burst_days", []):
+            lines.append(f"  BURST: {b['date']} — {b['tx_count']} tx")
+        for d in ta.get("dormancy_periods", []):
+            lines.append(f"  UŚPIENIE: {d['from']} → {d['to']} ({d['days']} dni)")
+        lines.append("")
+
+    # Conversion chains
+    cc = fr.get("conversion_chains", {})
+    if cc and cc.get("edges"):
+        lines.append("--- ŁAŃCUCHY KONWERSJI ---")
+        lines.append(f"  Unikalne pary: {cc.get('unique_swap_pairs', 0)}")
+        for e in cc["edges"]:
+            lines.append(f"  {e['from']:<8} → {e['to']:<8} vol: {e['volume']:.4f}")
+        lines.append("")
+
+    # Structuring
+    sd = fr.get("structuring_detection", {})
+    if sd.get("alerts"):
+        lines.append("--- STRUCTURING / SMURFING ---")
+        for a in sd["alerts"]:
+            lines.append(f"  {a['date']} {a['type']:<12} próg:{a['threshold']}  x{a['count']}  suma:{a['daily_total']:.2f}")
+        lines.append("")
+
+    # Wash trading
+    wt = fr.get("wash_trading", {})
+    if wt.get("zero_net_markets") or wt.get("rapid_reversals"):
+        lines.append("--- WASH TRADING ---")
+        for m in wt.get("zero_net_markets", []):
+            lines.append(f"  {m['market']:<16} brutto:{m['gross_volume']:.4f}  netto:{m['net_position']:.4f}  ({m['net_ratio']}%)")
+        lines.append(f"  Szybkie odwrócenia: {wt.get('rapid_reversal_count', 0)}")
+        lines.append("")
+
+    # Fiat ramp
+    fa_txt = fr.get("fiat_ramp_analysis", {})
+    if fa_txt and (fa_txt.get("fiat_deposit_count", 0) > 0 or fa_txt.get("fiat_withdrawal_count", 0) > 0):
+        lines.append("--- FIAT ON/OFF RAMP ---")
+        lines.append(f"  Wpłaty fiat: {fa_txt.get('fiat_deposit_count', 0)}  Suma: {fa_txt.get('total_fiat_in', 0):.2f}")
+        lines.append(f"  Wypłaty fiat: {fa_txt.get('fiat_withdrawal_count', 0)}  Suma: {fa_txt.get('total_fiat_out', 0):.2f}")
+        lines.append(f"  Saldo netto: {fa_txt.get('net_fiat_flow', 0):.2f}")
+        if fa_txt.get("fiat_to_crypto_wd_hours") is not None:
+            lines.append(f"  Fiat→crypto wypłata: {fa_txt['fiat_to_crypto_wd_hours']:.1f} godz.")
+        lines.append("")
+
+    # P2P
+    p2p_txt = fr.get("p2p_analysis", {})
+    if p2p_txt and p2p_txt.get("total_count", 0) > 0:
+        lines.append("--- ANALIZA P2P ---")
+        lines.append(f"  Transakcje P2P: {p2p_txt['total_count']} ({p2p_txt.get('total_pct', 0)}% aktywności)")
+        lines.append(f"  Wolumen: {p2p_txt.get('total_volume', 0):.2f}")
+        lines.append(f"  Kontrahenci: {p2p_txt.get('unique_counterparties', 0)}")
+        lines.append("")
+
+    # Velocity
+    va_txt = fr.get("velocity_analysis", {})
+    if va_txt and va_txt.get("token_velocities"):
+        lines.append("--- PRĘDKOŚĆ PRZEPŁYWU ---")
+        lines.append(f"  DEP/WD: {va_txt.get('deposit_count', 0)}/{va_txt.get('withdrawal_count', 0)} (ratio: {va_txt.get('dep_wd_ratio', 0)})")
+        lines.append(f"  Hot wallet: {'TAK' if va_txt.get('has_hot_wallet_behavior') else 'NIE'}")
+        for t in va_txt["token_velocities"][:15]:
+            lines.append(f"  {t['token']:<8} śr: {t['avg_hold_hours']} godz.  min: {t['min_hold_hours']} godz.")
+        lines.append("")
+
+    # Fee analysis
+    fee_txt = fr.get("fee_analysis", {})
+    if fee_txt and fee_txt.get("fee_paying_tx_count", 0) > 0:
+        lines.append("--- ANALIZA OPŁAT ---")
+        lines.append(f"  TX z opłatami: {fee_txt['fee_paying_tx_count']}")
+        lines.append(f"  BNB fees: {fee_txt.get('bnb_fee_count', 0)} ({fee_txt.get('bnb_fee_ratio', 0)}%)")
+        for tok, val in fee_txt.get("total_fees_by_token", {}).items():
+            lines.append(f"  {tok:<8} {val:.8f}")
+        lines.append("")
+
+    # Network analysis
+    na_txt = fr.get("network_analysis", {})
+    if na_txt and na_txt.get("networks"):
+        lines.append("--- ANALIZA SIECI BLOCKCHAIN ---")
+        for n in na_txt["networks"]:
+            lines.append(f"  {n['network']:<10} dep:{n['deposits']}  wd:{n['withdrawals']}  vol_dep:{n['dep_volume']:.4f}  vol_wd:{n['wd_volume']:.4f}")
+        lines.append("")
+
+    # Extended security
+    es_txt = fr.get("extended_security", {})
+    if es_txt:
+        lines.append("--- ROZSZERZONE BEZPIECZEŃSTWO ---")
+        lines.append(f"  Kraje logowań: {', '.join(es_txt.get('login_countries', []))}")
+        lines.append(f"  Podejrzane dni VPN: {es_txt.get('vpn_suspect_days', 0)}")
+        lines.append(f"  API Trading: {'Tak' if es_txt.get('api_trading_enabled') else 'Nie'}")
+        lines.append(f"  Sub-konto: {'Tak' if es_txt.get('has_sub_account') else 'Nie'}")
         lines.append("")
 
     # Transactions
@@ -1322,10 +1584,134 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
                            str(m["wc"]), f"{m['wt']:.4f}", ", ".join(sorted(m["tok"]))])
         add_data_table(["Adres", "Kier.", "Dep TX", "Dep suma", "Wyp TX", "Wyp suma", "Tokeny"], a_rows)
 
-    # ── 9. Transakcje ──
+    # ── 9. Analiza czasowa ──
+    d_ta = fr.get("temporal_analysis", {})
+    if d_ta and d_ta.get("active_span_days"):
+        doc.add_heading("9. Analiza czasowa", level=1)
+        add_kv_table([
+            ("Okres aktywności", f"{d_ta.get('active_span_days', 0)} dni"),
+            ("Aktywne dni", f"{d_ta.get('active_days', 0)} ({d_ta.get('activity_density', 0)}%)"),
+            ("Szczytowa godzina", f"{d_ta.get('peak_hour', '?')}:00 ({d_ta.get('peak_hour_count', 0)} tx)"),
+            ("Nocna aktywność", f"{d_ta.get('night_activity_count', 0)} ({d_ta.get('night_activity_ratio', 0)}%)"),
+            ("Weekend/robocze", f"{d_ta.get('weekend_count', 0)}/{d_ta.get('weekday_count', 0)} ({d_ta.get('weekend_ratio', 0)}%)"),
+        ])
+        if d_ta.get("burst_days"):
+            add_data_table(["Data", "TX"], [[b["date"], str(b["tx_count"])] for b in d_ta["burst_days"]])
+        if d_ta.get("dormancy_periods"):
+            add_data_table(["Od", "Do", "Dni"], [[d["from"], d["to"], str(d["days"])] for d in d_ta["dormancy_periods"]])
+
+    # ── 10. Łańcuchy konwersji ──
+    d_cc = fr.get("conversion_chains", {})
+    if d_cc and d_cc.get("edges"):
+        doc.add_heading("10. Łańcuchy konwersji tokenów", level=1)
+        doc.add_paragraph(f"Unikalne pary: {d_cc.get('unique_swap_pairs', 0)}")
+        add_data_table(["Z tokenu", "Na token", "Wolumen"],
+                       [[e["from"], e["to"], f"{e['volume']:.4f}"] for e in d_cc["edges"]])
+
+    # ── 11. Structuring ──
+    d_sd = fr.get("structuring_detection", {})
+    if d_sd.get("alerts"):
+        doc.add_heading("11. Wykrywanie structuringu", level=1)
+        add_data_table(["Data", "Typ", "Próg", "TX", "Suma"],
+                       [[a["date"], a["type"], str(a["threshold"]), str(a["count"]),
+                         f"{a['daily_total']:.2f}"] for a in d_sd["alerts"]])
+
+    # ── 12. Wash trading ──
+    d_wt = fr.get("wash_trading", {})
+    if d_wt.get("zero_net_markets"):
+        doc.add_heading("12. Wash trading", level=1)
+        add_data_table(["Rynek", "Wol. brutto", "Poz. netto", "Net%", "Kupno", "Sprzedaż"],
+                       [[m["market"], f"{m['gross_volume']:.4f}", f"{m['net_position']:.4f}",
+                         f"{m['net_ratio']}%", f"{m['buys']:.4f}", f"{m['sells']:.4f}"]
+                        for m in d_wt["zero_net_markets"]])
+
+    # ── 13. Fiat ramp ──
+    d_fa = fr.get("fiat_ramp_analysis", {})
+    if d_fa and (d_fa.get("fiat_deposit_count", 0) > 0 or d_fa.get("fiat_withdrawal_count", 0) > 0):
+        doc.add_heading("13. Analiza fiat on/off ramp", level=1)
+        kv = [
+            ("Wpłaty fiat", d_fa.get("fiat_deposit_count", 0)),
+            ("Wypłaty fiat", d_fa.get("fiat_withdrawal_count", 0)),
+            ("Łącznie IN", f"{d_fa.get('total_fiat_in', 0):.2f}"),
+            ("Łącznie OUT", f"{d_fa.get('total_fiat_out', 0):.2f}"),
+            ("Saldo netto", f"{d_fa.get('net_fiat_flow', 0):.2f}"),
+        ]
+        if d_fa.get("fiat_to_crypto_wd_hours") is not None:
+            kv.append(("Fiat→crypto", f"{d_fa['fiat_to_crypto_wd_hours']:.1f} godz."))
+        add_kv_table(kv)
+
+    # ── 14. P2P ──
+    d_p2p = fr.get("p2p_analysis", {})
+    if d_p2p and d_p2p.get("total_count", 0) > 0:
+        doc.add_heading("14. Analiza P2P", level=1)
+        add_kv_table([
+            ("Transakcje P2P", d_p2p["total_count"]),
+            ("% aktywności", f"{d_p2p.get('total_pct', 0)}%"),
+            ("Wolumen", f"{d_p2p.get('total_volume', 0):.2f}"),
+            ("Kontrahenci", d_p2p.get("unique_counterparties", 0)),
+        ])
+        tops = d_p2p.get("top_counterparties", [])
+        if tops:
+            add_data_table(["ID", "TX", "Wolumen", "Tokeny"],
+                           [[cp["id"], str(cp["count"]), f"{cp['volume']:.4f}",
+                             ", ".join(cp.get("tokens", []))] for cp in tops])
+
+    # ── 15. Velocity ──
+    d_va = fr.get("velocity_analysis", {})
+    if d_va and d_va.get("token_velocities"):
+        doc.add_heading("15. Prędkość przepływu środków", level=1)
+        add_kv_table([
+            ("DEP/WD", f"{d_va.get('deposit_count', 0)}/{d_va.get('withdrawal_count', 0)}"),
+            ("Ratio", d_va.get("dep_wd_ratio", 0)),
+            ("Hot wallet", "TAK" if d_va.get("has_hot_wallet_behavior") else "NIE"),
+        ])
+        add_data_table(["Token", "Śr. godz.", "Min godz.", "Wpłaty", "Wypłaty"],
+                       [[t["token"], str(t["avg_hold_hours"]), str(t["min_hold_hours"]),
+                         str(t["deposit_count"]), str(t["withdrawal_count"])]
+                        for t in d_va["token_velocities"]])
+
+    # ── 16. Fee analysis ──
+    d_fee = fr.get("fee_analysis", {})
+    if d_fee and d_fee.get("fee_paying_tx_count", 0) > 0:
+        doc.add_heading("16. Analiza opłat", level=1)
+        add_kv_table([
+            ("TX z opłatami", d_fee["fee_paying_tx_count"]),
+            ("Opłaty BNB", f"{d_fee.get('bnb_fee_count', 0)} ({d_fee.get('bnb_fee_ratio', 0)}%)"),
+        ])
+        fees_d = d_fee.get("total_fees_by_token", {})
+        if fees_d:
+            add_data_table(["Token", "Suma"],
+                           [[tok, f"{val:.8f}"] for tok, val in fees_d.items()])
+
+    # ── 17. Network analysis ──
+    d_na = fr.get("network_analysis", {})
+    if d_na and d_na.get("networks"):
+        doc.add_heading("17. Analiza sieci blockchain", level=1)
+        add_data_table(["Sieć", "Wpłaty", "Wypłaty", "TX", "Wol. wpłat", "Wol. wypłat"],
+                       [[n["network"], str(n["deposits"]), str(n["withdrawals"]),
+                         str(n["total_tx"]), f"{n['dep_volume']:.4f}", f"{n['wd_volume']:.4f}"]
+                        for n in d_na["networks"]])
+
+    # ── 18. Extended security ──
+    d_es = fr.get("extended_security", {})
+    if d_es:
+        doc.add_heading("18. Rozszerzona analiza bezpieczeństwa", level=1)
+        add_kv_table([
+            ("Kraje logowań", ", ".join(d_es.get("login_countries", []))),
+            ("Podejrzane dni VPN", d_es.get("vpn_suspect_days", 0)),
+            ("API Trading", "Tak" if d_es.get("api_trading_enabled") else "Nie"),
+            ("Sub-konto", "Tak" if d_es.get("has_sub_account") else "Nie"),
+        ])
+        vpn_d = d_es.get("vpn_suspects", [])
+        if vpn_d:
+            add_data_table(["Data", "Kraje", "Ilość", "Loginy"],
+                           [[v["date"], ", ".join(v.get("countries", [])),
+                             str(v["country_count"]), str(v["login_count"])] for v in vpn_d])
+
+    # ── 19. Transakcje ──
     txs = r.get("transactions", [])
     if txs:
-        doc.add_heading("9. Transakcje", level=1)
+        doc.add_heading("19. Transakcje", level=1)
         doc.add_paragraph(f"Łącznie: {len(txs)}")
         tx_rows = []
         for tx in txs:
