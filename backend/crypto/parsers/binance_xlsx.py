@@ -186,20 +186,39 @@ def _parse_customer_info(df) -> Dict[str, Any]:
         "anti-phishing code": "anti_phishing_code",
     }
 
+    # Build set of all known labels for collision detection
+    _ALL_LABELS = set(_LABEL_MAP.keys())
+
     # ---- 3. Scan rows: look for label-value pairs
-    # Strategy A: label in column i, value in column i+1 (same row)
-    # Strategy B: label in row i, value in row i+1 (same column)
+    # The sheet typically has a header row with labels (User ID, Email, Mobile, ...)
+    # and the next row has the corresponding values (12345, adam@..., +48...).
+    # Strategy: first try value BELOW (same column, next row).
+    #           Only use value to the RIGHT if it's NOT another known label.
     for ri, vals in enumerate(all_rows):
         for ci, cell in enumerate(vals):
             cell_lower = cell.lower().strip().rstrip(":")
-            if cell_lower in _LABEL_MAP:
-                key = _LABEL_MAP[cell_lower]
-                # Try value to the right (same row)
-                if ci + 1 < len(vals) and vals[ci + 1]:
-                    meta.setdefault(key, vals[ci + 1])
-                # Try value below (next row, same column)
-                elif ri + 1 < len(all_rows) and ci < len(all_rows[ri + 1]) and all_rows[ri + 1][ci]:
-                    meta.setdefault(key, all_rows[ri + 1][ci])
+            if cell_lower not in _LABEL_MAP:
+                continue
+            key = _LABEL_MAP[cell_lower]
+
+            # Strategy A: value below (next row, same column) — preferred
+            val_below = ""
+            if ri + 1 < len(all_rows) and ci < len(all_rows[ri + 1]):
+                val_below = all_rows[ri + 1][ci]
+
+            # Strategy B: value to the right (same row, next column)
+            val_right = ""
+            if ci + 1 < len(vals):
+                candidate = vals[ci + 1]
+                # Only use if it's NOT another label name
+                if candidate and candidate.lower().strip().rstrip(":") not in _ALL_LABELS:
+                    val_right = candidate
+
+            # Prefer below (header→data row pattern), fallback to right
+            if val_below:
+                meta.setdefault(key, val_below)
+            elif val_right:
+                meta.setdefault(key, val_right)
 
     # ---- 4. Fallback: row with numeric user ID (original heuristic)
     for vals in all_rows:

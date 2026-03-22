@@ -1899,12 +1899,12 @@
   function _renderAccountInfo(r) {
     const fr = r.forensic_report || {};
     const ai = fr.account_info || {};
-    // Show card if ANY customer info field is present
-    const hasAny = Object.values(ai).some(v => v);
+    // Show card only if at least one field has real data
+    const hasAny = Object.values(ai).some(v => v && String(v).trim());
     if (!hasAny) { _hide("crypto_account_card"); return; }
     _show("crypto_account_card");
 
-    let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;font-size:13px">';
+    // Render as vertical table — each field on its own row, label: value
     const fields = [
       ["User ID", ai.user_id],
       ["Imię i nazwisko", ai.holder_name],
@@ -1934,10 +1934,14 @@
       ["API Trading", ai.api_trading],
       ["Kod anti-phishing", ai.anti_phishing_code],
     ];
+
+    let html = '<table class="data-table" style="width:100%;max-width:600px;font-size:13px"><tbody>';
     for (const [label, val] of fields) {
-      if (val) html += `<div><b>${_esc(label)}:</b> ${_esc(String(val))}</div>`;
+      if (val && String(val).trim()) {
+        html += `<tr><th style="width:180px;text-align:left;padding:4px 12px 4px 0;white-space:nowrap">${_esc(label)}</th><td style="padding:4px 0;word-break:break-all">${_esc(String(val))}</td></tr>`;
+      }
     }
-    html += '</div>';
+    html += '</tbody></table>';
 
     // Show any remaining unknown fields from account_info
     const knownKeys = new Set([
@@ -1948,13 +1952,13 @@
       "sub_account","margin_enabled","futures_enabled","api_trading",
       "anti_phishing_code"
     ]);
-    const extra = Object.entries(ai).filter(([k,v]) => !knownKeys.has(k) && v);
+    const extra = Object.entries(ai).filter(([k,v]) => !knownKeys.has(k) && v && String(v).trim());
     if (extra.length) {
-      html += '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;font-size:13px">';
+      html += '<table class="data-table" style="width:100%;max-width:600px;font-size:13px;margin-top:8px"><tbody>';
       for (const [k, v] of extra) {
-        html += `<div><b>${_esc(k)}:</b> ${_esc(String(v))}</div>`;
+        html += `<tr><th style="width:180px;text-align:left;padding:4px 12px 4px 0">${_esc(k)}</th><td style="padding:4px 0">${_esc(String(v))}</td></tr>`;
       }
-      html += '</div>';
+      html += '</tbody></table>';
     }
 
     // User IDs across sheets
