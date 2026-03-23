@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="cam" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#05657c"/><stop offset="100%" stop-color="#5628a5"/></linearGradient><filter id="s3d_camera"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#05657c" stroke-width="1" fill="none" opacity="0.22"/>
+<!-- body -->
+<path d="M4 16h8l3-6h18l3 6h8v24a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V16z" stroke="url(#cam)" stroke-width="2.5" fill="none"/>
+<!-- lens outer -->
+<circle cx="24" cy="28" r="10" stroke="url(#cam)" stroke-width="2.3" fill="none" fill-opacity="0.09" filter="url(#s3d_camera)"/>
+<!-- lens inner -->
+<circle cx="24" cy="28" r="5" stroke="#05657c" stroke-width="1.7" fill="#05657c" fill-opacity="0.09"/>
+<!-- lens dot -->
+<circle cx="24" cy="28" r="1.5" fill="#5628a5" opacity=".4"/>
+<!-- flash -->
+<circle cx="38" cy="16" r="2" stroke="#5628a5" stroke-width="1.2" fill="#5628a5" fill-opacity="0.22"/>
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>
