@@ -45,6 +45,103 @@
   var SS_TTS       = 'aria_hud_tts';
   var SS_GREETED   = 'aria_hud_greeted';
 
+  /* ---- Browser compatibility check ---- */
+  function _checkBrowserCompat() {
+    var issues = [];
+    var warnings = [];
+
+    // Detect browser
+    var ua = navigator.userAgent || '';
+    var isEdge = /Edg\//.test(ua);
+    var isOldEdge = /Edge\//.test(ua) && !/Edg\//.test(ua); // EdgeHTML (pre-Chromium)
+    var edgeVersion = 0;
+    var edgeMatch = ua.match(/Edg\/(\d+)/);
+    if (edgeMatch) edgeVersion = parseInt(edgeMatch[1], 10);
+
+    // Critical: Old EdgeHTML (pre-Chromium, before Edge 79)
+    if (isOldEdge) {
+      issues.push('Przeglądarka Edge Legacy (EdgeHTML) nie jest wspierana. Wymagany Edge 80+ (Chromium).');
+    }
+
+    // Fetch + ReadableStream (needed for SSE streaming)
+    if (typeof fetch === 'undefined') {
+      issues.push('Brak obsługi Fetch API — chat ARIA nie będzie działać.');
+    } else if (typeof ReadableStream === 'undefined') {
+      issues.push('Brak obsługi ReadableStream — streaming odpowiedzi niedostępny.');
+    }
+
+    // sessionStorage (needed for session persistence)
+    try {
+      sessionStorage.setItem('_aria_test', '1');
+      sessionStorage.removeItem('_aria_test');
+    } catch (e) {
+      warnings.push('sessionStorage zablokowany — historia czatu nie będzie zapamiętana między stronami.');
+    }
+
+    // Audio API (needed for TTS)
+    if (typeof Audio === 'undefined') {
+      warnings.push('Brak obsługi Audio API — TTS będzie niedostępny.');
+    }
+
+    // URL.createObjectURL (needed for TTS audio blobs)
+    if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+      warnings.push('Brak URL.createObjectURL — TTS audio niedostępne.');
+    }
+
+    // TextDecoder (needed for SSE stream decoding)
+    if (typeof TextDecoder === 'undefined') {
+      issues.push('Brak obsługi TextDecoder — dekodowanie odpowiedzi SSE niemożliwe.');
+    }
+
+    // Optional chaining polyfill detection — test if eval of `({})?.x` works
+    try {
+      // We don't use eval to test — if we got here, the script already parsed
+      // so optional chaining must be supported (syntax error would prevent loading)
+    } catch (e) {
+      // This won't actually catch since it's a parse-time error
+    }
+
+    // Edge-specific notes
+    if (isEdge && edgeVersion > 0 && edgeVersion < 80) {
+      issues.push('Edge ' + edgeVersion + ' jest za stary. Wymagana wersja 80+.');
+    } else if (isEdge && edgeVersion >= 80 && edgeVersion < 105) {
+      warnings.push('Edge ' + edgeVersion + ' — niektóre efekty wizualne wycieczki mogą nie działać (CSS :has). Zalecana aktualizacja do Edge 105+.');
+    }
+
+    return {
+      ok: issues.length === 0,
+      issues: issues,
+      warnings: warnings,
+      browser: isOldEdge ? 'Edge Legacy' : isEdge ? 'Edge ' + edgeVersion : ua.match(/Chrome\/(\d+)/)?.[0] || ua.match(/Firefox\/(\d+)/)?.[0] || 'Unknown'
+    };
+  }
+
+  function _showCompatBanner(result) {
+    if (result.ok && result.warnings.length === 0) return;
+
+    var banner = document.createElement('div');
+    banner.className = 'aria-msg system';
+    banner.style.cssText = 'text-align:left;max-width:100%;font-size:10px;line-height:1.5;';
+
+    var lines = [];
+    lines.push('⚙ DIAGNOSTYKA (' + result.browser + ')');
+
+    if (!result.ok) {
+      result.issues.forEach(function (i) { lines.push('✗ ' + i); });
+    }
+    result.warnings.forEach(function (w) { lines.push('⚠ ' + w); });
+
+    if (result.ok) {
+      lines.push('— HUD powinien działać. Jeśli nadal nie działa, sprawdź konsolę (F12 → Console).');
+    } else {
+      lines.push('— Zaktualizuj przeglądarkę lub użyj Chrome/Edge 80+/Firefox 100+.');
+    }
+
+    banner.textContent = lines.join('\n');
+    banner.style.whiteSpace = 'pre-wrap';
+    return banner;
+  }
+
   /* ---- Init ---- */
   function init() {
     AriaHUD.$trigger       = document.getElementById('aria-trigger');
@@ -59,7 +156,20 @@
     AriaHUD.$statusState   = document.getElementById('aria-st-state');
     AriaHUD.$statusDot     = document.getElementById('aria-status-dot');
 
-    if (!AriaHUD.$trigger || !AriaHUD.$hud) return;
+    if (!AriaHUD.$trigger || !AriaHUD.$hud) {
+      console.warn('ARIA HUD: brak elementów #aria-trigger lub #aria-hud w DOM. HUD nie został załadowany.');
+      return;
+    }
+
+    // Run browser compatibility check
+    var compat = _checkBrowserCompat();
+    AriaHUD._compat = compat;
+    if (!compat.ok) {
+      console.error('ARIA HUD: wykryto problemy z kompatybilnością przeglądarki:', compat.issues);
+    }
+    if (compat.warnings.length > 0) {
+      console.warn('ARIA HUD: ostrzeżenia kompatybilności:', compat.warnings);
+    }
 
     // Set CSS custom property for user label in chat bubbles
     var userName = (window.__ariaUser && window.__ariaUser.name) || 'OP';
@@ -371,6 +481,8 @@
     setOpen(!AriaHUD.open);
   }
 
+  var _compatShown = false;
+
   function setOpen(state) {
     AriaHUD.open = state;
     if (AriaHUD.$hud) {
@@ -379,6 +491,15 @@
     if (state) {
       if (AriaHUD.$input) {
         setTimeout(function () { AriaHUD.$input.focus(); }, 300);
+      }
+      // Show compatibility banner once if there are issues
+      if (!_compatShown && AriaHUD._compat && (!AriaHUD._compat.ok || AriaHUD._compat.warnings.length > 0)) {
+        _compatShown = true;
+        var banner = _showCompatBanner(AriaHUD._compat);
+        if (banner && AriaHUD.$messages) {
+          AriaHUD.$messages.appendChild(banner);
+          AriaHUD.$messages.scrollTop = AriaHUD.$messages.scrollHeight;
+        }
       }
       // Play spoken welcome on first open this session
       if (!AriaHUD.greeted) {
@@ -1531,6 +1652,7 @@
     // Restore parents
     _tourElevatedParents.forEach(function (p) {
       p.el.style.zIndex = p.orig;
+      p.el.classList.remove('aria-tour-modal-parent');
     });
     _tourElevatedParents = [];
     // Remove mocks from previous step
@@ -1647,6 +1769,10 @@
         if (cs.position !== 'static' || cs.zIndex !== 'auto' || parent.classList.contains('modal-panel') || parent.classList.contains('modal-overlay')) {
           _tourElevatedParents.push({ el: parent, orig: origZ });
           parent.style.zIndex = '8003';
+          // Add class for :has() fallback (Edge <105 compat)
+          if (parent.classList.contains('modal-overlay')) {
+            parent.classList.add('aria-tour-modal-parent');
+          }
         }
         parent = parent.parentElement;
         depth++;
@@ -1860,10 +1986,20 @@
   }
 
   /* ---- Boot ---- */
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+  try {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  } catch (bootErr) {
+    console.error('ARIA HUD: błąd inicjalizacji:', bootErr);
+    // Try to show error on the trigger button as a visual cue
+    var trig = document.getElementById('aria-trigger');
+    if (trig) {
+      trig.title = 'ARIA HUD — błąd inicjalizacji: ' + (bootErr.message || bootErr);
+      trig.style.opacity = '0.4';
+    }
   }
 
   window.AriaHUD = AriaHUD;
