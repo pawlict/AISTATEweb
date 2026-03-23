@@ -1778,6 +1778,40 @@ def project_write_file(project_id: str, path: Path, content: str) -> None:
         tmp.replace(path)
 
 
+def _clear_stale_results(pdir: Path, meta: dict) -> None:
+    """Remove old transcription/diarization/translation results when audio changes."""
+    stale_files = [
+        "transcript.txt", "transcript_segments.json",
+        "diarized.txt", "diarized_segments.json",
+        "waveform_peaks.json",
+    ]
+    for fn in stale_files:
+        fp = pdir / fn
+        if fp.exists():
+            try:
+                fp.unlink()
+            except OSError:
+                pass
+    # Also remove any .enc versions (encrypted projects)
+    for fn in stale_files:
+        fp = pdir / (fn + ".enc")
+        if fp.exists():
+            try:
+                fp.unlink()
+            except OSError:
+                pass
+    # Reset flags in metadata
+    meta.pop("has_transcript", None)
+    meta.pop("has_diarized", None)
+    meta.pop("transcript_lang", None)
+    meta.pop("transcript_engine", None)
+    meta.pop("transcript_model", None)
+    meta.pop("diarization_engine", None)
+    meta.pop("diarization_model", None)
+    meta.pop("num_speakers", None)
+    log.info("Cleared stale results for project in %s (new audio uploaded)", pdir.name)
+
+
 def save_upload(project_id: str, upload: UploadFile) -> Path:
     pdir = project_path(project_id)
     fname = safe_filename(upload.filename or "audio")
@@ -1789,8 +1823,12 @@ def save_upload(project_id: str, upload: UploadFile) -> Path:
         with dst.open("wb") as f:
             shutil.copyfileobj(upload.file, f)
     meta = read_project_meta(project_id)
+    old_audio = meta.get("audio_file", "")
     meta["audio_file"] = fname
     meta["updated_at"] = now_iso()
+    # Clear stale results if audio file changed
+    if old_audio and old_audio != fname:
+        _clear_stale_results(pdir, meta)
     write_project_meta(project_id, meta)
     # Pre-generate waveform peaks in background so they're ready when user opens transcription
     def _gen_peaks():
