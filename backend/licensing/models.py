@@ -35,6 +35,7 @@ class LicenseInfo:
     """Parsed and validated license information."""
 
     license_id: str = ""
+    name: str = ""
     email: str = ""
     plan: str = "community"
     issued: Optional[date] = None
@@ -79,6 +80,7 @@ class LicenseInfo:
     def to_dict(self) -> dict:
         return {
             "license_id": self.license_id,
+            "name": self.name,
             "email": self.email,
             "plan": self.plan,
             "issued": self.issued.isoformat() if self.issued else None,
