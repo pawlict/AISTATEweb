@@ -43,7 +43,7 @@
 
 .trigger-pulse {
   position: absolute;
-  inset: -4px;
+  top: -4px; right: -4px; bottom: -4px; left: -4px;
   border-radius: 50%;
   border: 2px solid var(--aria-cyan);
   opacity: 0;
@@ -122,6 +122,7 @@
   display: flex;
   flex-direction: column;
   background: rgba(7, 12, 17, 0.97);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(0, 212, 200, 0.25);
   border-radius: 6px;
@@ -144,7 +145,7 @@
 #aria-hud::after {
   content: '';
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   pointer-events: none;
   border-radius: 6px;
   background: repeating-linear-gradient(
@@ -668,7 +669,7 @@
 /* Semi-transparent overlay behind spotlight */
 .aria-tour-overlay {
   position: fixed;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   background: rgba(0, 0, 0, 0.55);
   z-index: 8000;
   pointer-events: none;
@@ -728,12 +729,16 @@ div.aria-tour-active:not(.modal-panel) {
   z-index: 8502 !important;
 }
 
-/* Modal panels during tour should be above overlay */
-.modal-overlay:has(.aria-tour-active) {
+/* Modal panels during tour should be above overlay.
+   Uses .aria-tour-modal-parent class added via JS for Edge/older browser compat
+   (CSS :has() not supported in Edge <105). */
+.modal-overlay:has(.aria-tour-active),
+.modal-overlay.aria-tour-modal-parent {
   z-index: 8100 !important;
   display: block !important;
 }
-.modal-overlay:has(.aria-tour-active) .modal-panel {
+.modal-overlay:has(.aria-tour-active) .modal-panel,
+.modal-overlay.aria-tour-modal-parent .modal-panel {
   z-index: 8200 !important;
 }
 

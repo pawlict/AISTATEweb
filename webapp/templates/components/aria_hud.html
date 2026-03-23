@@ -83,3 +83,36 @@
   };
 </script>
 <script src="/static/aria_hud.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script>
+  // Fallback: detect if aria_hud.js failed to load/parse (e.g. old browser without optional chaining)
+  if (typeof window.AriaHUD === 'undefined' || !window.AriaHUD) {
+    (function() {
+      var trig = document.getElementById('aria-trigger');
+      var hud = document.getElementById('aria-hud');
+      if (!trig) return;
+      trig.title = 'ARIA HUD — niekompatybilna przeglądarka';
+      trig.style.opacity = '0.35';
+      trig.addEventListener('click', function() {
+        if (!hud) return;
+        hud.classList.remove('hidden');
+        var msgs = document.getElementById('aria-messages');
+        if (msgs && !msgs.querySelector('.aria-compat-err')) {
+          var d = document.createElement('div');
+          d.className = 'aria-msg error aria-compat-err';
+          d.style.whiteSpace = 'pre-wrap';
+          var ua = navigator.userAgent || '';
+          var info = 'ARIA HUD — BŁĄD INICJALIZACJI\n\n';
+          info += 'Skrypt aria_hud.js nie załadował się poprawnie.\n';
+          info += 'Prawdopodobne przyczyny:\n';
+          info += '• Za stara wersja przeglądarki (wymagany Edge 80+, Chrome 80+, Firefox 74+)\n';
+          info += '• Rozszerzenie blokujące JavaScript (uBlock, NoScript)\n';
+          info += '• Tryb prywatny z zablokowanym sessionStorage\n\n';
+          info += 'Przeglądarka: ' + ua + '\n\n';
+          info += 'Sprawdź konsolę błędów: F12 → Console';
+          d.textContent = info;
+          msgs.appendChild(d);
+        }
+      });
+    })();
+  }
+</script>
