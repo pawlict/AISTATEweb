@@ -331,6 +331,16 @@ async function saveAriaSetting(key, value) {
     if (r.ok) {
       var st = document.getElementById('ariaSettingsStatus');
       if (st) { st.textContent = 'Zapisano.'; setTimeout(function(){ st.textContent=''; }, 2000); }
+      // ARIA HUD is conditionally loaded in base.html — reload needed to show/hide it
+      if (key === 'aria_enabled') {
+        var st2 = document.getElementById('ariaSettingsStatus');
+        if (st2) st2.textContent = value ? 'Włączono ARIA — przeładowanie strony...' : 'Wyłączono ARIA — przeładowanie strony...';
+        setTimeout(function() { location.reload(); }, 800);
+      }
+    } else {
+      var st = document.getElementById('ariaSettingsStatus');
+      if (st) { st.textContent = 'Błąd zapisu (' + r.status + ')'; setTimeout(function(){ st.textContent=''; }, 4000); }
+      console.error('saveAriaSetting: HTTP', r.status);
     }
   } catch(e) { console.error('saveAriaSetting', e); }
 }
