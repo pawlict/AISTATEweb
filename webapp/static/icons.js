@@ -264,6 +264,11 @@
            '<path d="M9.5 14c1 1 4 1 5 0" ' + _s("purple-ice") + " " + _w(1.2) + " " + S + ' fill="none"/>' +
            '<path d="M8 5V3M16 5V3M12 17v3M10 20h4" ' + _s("purple-ice") + " " + _w(1.2) + " " + S + ' fill="none"/>';
   };
+  icons.projects = function () {
+    return '<path d="M3 5h6l2 2h9a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H3a1.5 1.5 0 0 1-1.5-1.5V6.5A1.5 1.5 0 0 1 3 5z" ' + _s("sky-purple") + " " + _w(1.4) + ' fill="none"/>' +
+           '<line x1="7" y1="12" x2="17" y2="12" ' + _s("sky-purple") + " " + _w(.8) + ' opacity=".3"/>' +
+           '<line x1="7" y1="14.5" x2="14" y2="14.5" ' + _s("sky-purple") + " " + _w(.8) + ' opacity=".25"/>';
+  };
   icons.diarization = function () {
     return '<circle cx="8" cy="7" r="3" ' + _s("sky-cyan") + " " + _w(1.4) + ' fill="none"/>' +
            '<path d="M3 19v-1a5 5 0 0 1 5-5h0" ' + _s("sky-cyan") + " " + _w(1.4) + " " + S + ' fill="none"/>' +

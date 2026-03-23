@@ -3738,6 +3738,18 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
   background: rgba(0,212,255,.10);
   border-color: rgba(0,212,255,.3);
 }
+/* SVG icon images — brighten on dark background */
+[data-theme="dark"] .pill-icon img,
+[data-theme="dark"] .toolbar-group-label img,
+[data-theme="dark"] img[src*="/static/icons/"]{
+  filter: brightness(1.7) saturate(1.15);
+}
+[data-theme="dark"] .pill-icon:hover img{
+  filter: brightness(2.0) saturate(1.2);
+}
+[data-theme="dark"] .pill-icon:has(input:checked) img{
+  filter: brightness(2.2) saturate(1.25);
+}
 [data-theme="dark"] .sp-card:hover{
   background: rgba(74,158,237,.08);
 }
