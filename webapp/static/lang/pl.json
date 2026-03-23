@@ -849,7 +849,7 @@
   "auth.banned_message": "Twoje konto zostało zablokowane przez administratora.",
   "auth.banned_contact": "Skontaktuj się z administratorem w celu odblokowania.",
   "auth.back_to_login": "Powrót do logowania",
-  "nav.users": "Użytkownicy",
+  "nav.users": "Ustawienia",
   "users.title": "Zarządzanie użytkownikami",
   "users.subtitle": "Twórz, edytuj, banuj i usuwaj użytkowników. Przypisuj role i resetuj hasła.",
   "users.add": "Dodaj użytkownika",

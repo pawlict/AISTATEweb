@@ -849,7 +849,7 @@
   "auth.banned_message": "Your account has been banned by an administrator.",
   "auth.banned_contact": "Contact an administrator to get unbanned.",
   "auth.back_to_login": "Back to login",
-  "nav.users": "Users",
+  "nav.users": "Settings",
   "users.title": "User Management",
   "users.subtitle": "Create, edit, ban and delete users. Assign roles and reset passwords.",
   "users.add": "Add user",
