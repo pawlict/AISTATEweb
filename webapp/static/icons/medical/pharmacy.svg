@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="pha" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#036949"/><stop offset="100%" stop-color="#05657c"/></linearGradient><filter id="s3d_pharmacy"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#036949" stroke-width="1" fill="none" opacity="0.22"/>
+<path d="M18 42h12" stroke="url(#pha)" stroke-width="2.3" filter="url(#s3d_pharmacy)"/>
+<path d="M20 42v-8l-4-10v-6h16v6l-4 10v8" stroke="url(#pha)" stroke-width="2.3" fill="none"/>
+<line x1="16" y1="18" x2="32" y2="18" stroke="url(#pha)" stroke-width="1.7" opacity=".3"/>
+<path d="M24 8c3 0 5 2 5 4s-5 4-5 4-5-2-5-4 2-4 5-4" stroke="#036949" stroke-width="1.7" fill="#036949" fill-opacity="0.12"/>
+<line x1="24" y1="4" x2="24" y2="12" stroke="#036949" stroke-width="1.7" opacity=".4"/>
+
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

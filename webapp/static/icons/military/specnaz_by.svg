@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="by" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#9a1a1a"/><stop offset="100%" stop-color="#0e592a"/></linearGradient><filter id="s3d_specnaz_"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#9a1a1a" stroke-width="1" fill="none" opacity="0.22"/>
+<!-- shield -->
+<path d="M24 4L8 12v14c0 10 7 14 16 16 9-2 16-6 16-16V12z" stroke="url(#by)" stroke-width="2.5" fill="none" filter="url(#s3d_specnaz_)"/>
+<!-- flag: red top, green bottom -->
+<rect x="14" y="13" width="20" height="8" rx="0" stroke="none" fill="#9a1a1a" fill-opacity="0.3"/>
+<rect x="14" y="21" width="20" height="6" rx="0" stroke="none" fill="#0e592a" fill-opacity="0.3"/>
+<!-- ornament pattern (left side, like BY flag) -->
+<path d="M11 16v12" stroke="#9a1a1a" stroke-width="1.7" opacity=".3"/>
+<path d="M11 18h2 M11 22h2 M11 26h2" stroke="#9a1a1a" stroke-width="1" opacity="0.38"/>
+<!-- crossed swords -->
+<line x1="18" y1="34" x2="30" y2="28" stroke="#0e592a" stroke-width="2.1" opacity=".5"/>
+<line x1="30" y1="34" x2="18" y2="28" stroke="#9a1a1a" stroke-width="2.1" opacity=".5"/>
+<circle cx="24" cy="31" r="2.5" stroke="url(#by)" stroke-width="1.2" fill="url(#by)" fill-opacity="0.15"/>
+
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>
