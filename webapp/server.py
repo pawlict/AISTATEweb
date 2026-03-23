@@ -3451,7 +3451,7 @@ def api_get_security_settings(request: Request) -> Any:
 
 
 @app.post("/api/settings/security")
-def api_save_security_settings(request: Request, payload: Dict[str, Any]) -> Any:
+def api_save_security_settings(request: Request, payload: Dict[str, Any] = Body(...)) -> Any:
     """Save security/ARIA settings (admin only)."""
     user = getattr(request.state, "user", None)
     if user and not user.is_admin and not user.is_superadmin:
