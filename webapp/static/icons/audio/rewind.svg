@@ -1,8 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
 
-<defs><linearGradient id="arw" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#00d4ff" stroke-width="1" fill="none" opacity="0.15" stroke-linecap="round"/>
-<polygon points="24 14 10 24 24 34" stroke="url(#arw)" stroke-width="2" fill="none"/>
-<polygon points="38 14 24 24 38 34" stroke="url(#arw)" stroke-width="2" fill="none"/>
-<text x="24" y="44" text-anchor="middle" font-size="7" fill="#00d4ff" font-weight="700" opacity=".35">-3s</text>
+<defs><linearGradient id="arw" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0891b2"/><stop offset="100%" stop-color="#1d4ed8"/></linearGradient><filter id="s3d_rewind"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#0891b2" stroke-width="1" fill="none" opacity="0.22" stroke-linecap="round"/>
+<polygon points="24 14 10 24 24 34" stroke="url(#arw)" stroke-width="2.3" fill="none"/>
+<polygon points="38 14 24 24 38 34" stroke="url(#arw)" stroke-width="2.3" fill="none"/>
+<text x="24" y="44" text-anchor="middle" font-size="7" fill="#0891b2" font-weight="700" opacity=".35">-3s</text>
 
+<path d="M12 10c5-4 14-6 22-2" stroke="white" stroke-width="0.8" opacity=".15" fill="none"/>
 </svg>

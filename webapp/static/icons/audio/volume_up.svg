@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
 
-<defs><linearGradient id="avu" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7ee8fa"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#7ee8fa" stroke-width="1" fill="none" opacity="0.15" stroke-linecap="round"/>
-<polygon points="18 16 12 20 6 20 6 28 12 28 18 32" stroke="url(#avu)" stroke-width="2" fill="none"/>
-<path d="M24 18a6 6 0 0 1 0 12" stroke="url(#avu)" stroke-width="2" fill="none" stroke-linecap="round"/>
-<path d="M28 12a12 12 0 0 1 0 24" stroke="url(#avu)" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".4"/>
-<path d="M32 7a18 18 0 0 1 0 34" stroke="url(#avu)" stroke-width="1.2" fill="none" stroke-linecap="round" opacity=".25"/>
+<defs><linearGradient id="avu" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0e7490"/><stop offset="100%" stop-color="#0891b2"/></linearGradient><filter id="s3d_volume_u"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#0e7490" stroke-width="1" fill="none" opacity="0.22" stroke-linecap="round"/>
+<polygon points="18 16 12 20 6 20 6 28 12 28 18 32" stroke="url(#avu)" stroke-width="2.3" fill="none"/>
+<path d="M24 18a6 6 0 0 1 0 12" stroke="url(#avu)" stroke-width="2.3" fill="none" stroke-linecap="round" filter="url(#s3d_volume_u)"/>
+<path d="M28 12a12 12 0 0 1 0 24" stroke="url(#avu)" stroke-width="1.7" fill="none" stroke-linecap="round" opacity=".4"/>
+<path d="M32 7a18 18 0 0 1 0 34" stroke="url(#avu)" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.38"/>
 
+<path d="M12 10c5-4 14-6 22-2" stroke="white" stroke-width="0.8" opacity=".15" fill="none"/>
 </svg>
