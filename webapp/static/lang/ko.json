@@ -812,7 +812,7 @@
   "auth.banned_contact": "차단 해제를 위해 관리자에게 문의하세요.",
   "auth.back_to_login": "로그인으로 돌아가기",
   "nav.users": "설정",
-  "users.title": "사용자 관리",
+  "users.title": "설정 관리",
   "users.subtitle": "사용자 생성, 편집, 차단 및 삭제. 역할 할당 및 비밀번호 재설정.",
   "users.add": "사용자 추가",
   "users.col_username": "사용자 이름",
