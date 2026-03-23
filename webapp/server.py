@@ -3450,6 +3450,48 @@ def api_get_security_settings(request: Request) -> Any:
     }
 
 
+@app.post("/api/settings/security")
+def api_save_security_settings(request: Request, payload: Dict[str, Any]) -> Any:
+    """Save security/ARIA settings (admin only)."""
+    user = getattr(request.state, "user", None)
+    if user and not user.is_admin and not user.is_superadmin:
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    s = load_settings()
+    # Security settings
+    if "account_lockout_threshold" in payload:
+        s.account_lockout_threshold = max(0, int(payload["account_lockout_threshold"]))
+    if "account_lockout_duration" in payload:
+        s.account_lockout_duration = max(1, int(payload["account_lockout_duration"]))
+    if "password_policy" in payload:
+        pp = str(payload["password_policy"])
+        if pp in ("none", "basic", "medium", "strong"):
+            s.password_policy = pp
+    if "password_expiry_days" in payload:
+        s.password_expiry_days = max(0, int(payload["password_expiry_days"]))
+    # Encryption policy
+    if "encryption_enabled" in payload:
+        s.encryption_enabled = bool(payload["encryption_enabled"])
+    if "encryption_method" in payload:
+        em = str(payload["encryption_method"])
+        if em in ("light", "standard", "maximum"):
+            s.encryption_method = em
+    if "encryption_force_new_projects" in payload:
+        s.encryption_force_new_projects = bool(payload["encryption_force_new_projects"])
+    # ARIA HUD settings
+    if "aria_enabled" in payload:
+        s.aria_enabled = bool(payload["aria_enabled"])
+    if "aria_tts_enabled" in payload:
+        s.aria_tts_enabled = bool(payload["aria_tts_enabled"])
+    if "aria_voice" in payload:
+        av = str(payload["aria_voice"])
+        if av in ("pl_PL-gosia-medium", "pl_PL-darkman-medium"):
+            s.aria_voice = av
+    if "aria_model" in payload:
+        s.aria_model = str(payload["aria_model"]).strip()
+    save_settings(s)
+    return {"ok": True}
+
+
 # ---------- API: Encryption management ----------
 
 @app.get("/api/encryption/policy")
