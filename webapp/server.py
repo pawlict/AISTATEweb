@@ -65,6 +65,7 @@ from webapp.routers import messages as messages_router
 from webapp.routers import workspaces as workspaces_router
 from webapp.routers import crypto as crypto_router
 from webapp.routers import updates as updates_router
+from webapp.routers import licensing as licensing_router
 from webapp.routers import aria as aria_router
 
 try:
@@ -4810,6 +4811,19 @@ updates_router.init(
     restart_manager=RESTART_MANAGER,
 )
 app.include_router(updates_router.router)
+
+# Licensing router
+licensing_router.init(app_log_fn=app_log)
+app.include_router(licensing_router.router)
+
+# Load license at startup
+try:
+    from backend.licensing.validator import load_license as _load_lic
+    _lic = _load_lic()
+    app_log(f"License loaded: plan={_lic.plan} id={_lic.license_id} expires={_lic.expires or 'perpetual'}")
+except Exception as _lic_err:
+    import logging as _lic_lg
+    _lic_lg.getLogger("aistate").warning("License load: %s", _lic_err)
 
 def _read_custom_models() -> Dict[str, List[str]]:
     """Read user-added custom model ids grouped by category from global settings."""

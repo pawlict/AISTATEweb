@@ -22,6 +22,9 @@
     <button class="users-tab" data-panel="systemPanel">
       System <span class="en">System</span>
     </button>
+    <button class="users-tab" data-panel="licensePanel">
+      Licencja <span class="en">License</span>
+    </button>
     {% endif %}
   </div>
 
@@ -596,6 +599,95 @@
     </div>
 
   </div>
+
+  <!-- Panel: License (superadmin) -->
+  <div id="licensePanel" class="users-panel" style="display:none;">
+
+    <div style="display:flex;gap:1.2rem;flex-wrap:wrap;align-items:flex-start;">
+
+      <!-- LEFT: License status -->
+      <div style="flex:1 1 380px;max-width:560px;">
+        <h4 style="margin:0 0 .6rem;font-size:.85rem;">
+          Status licencji <span class="en">License status</span>
+        </h4>
+
+        <div id="lic_status_card" style="padding:.8rem 1rem;background:var(--panel2,#f8f9fa);border:1px solid var(--border,#e0e3e8);border-radius:8px;">
+          <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+            <span id="lic_status_icon" style="font-size:1.3rem;">&#9989;</span>
+            <div>
+              <div style="font-weight:700;font-size:.88rem;">
+                <span id="lic_plan_name">Community</span>
+              </div>
+              <div style="font-size:.74rem;color:var(--muted,#888);" id="lic_status_text">Aktywna</div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .8rem;font-size:.78rem;margin-top:.5rem;">
+            <div style="color:var(--muted,#888);">ID licencji <span class="en">License ID</span></div>
+            <div id="lic_id" style="font-weight:600;">COMMUNITY</div>
+
+            <div style="color:var(--muted,#888);">E-mail</div>
+            <div id="lic_email" style="font-weight:600;">&mdash;</div>
+
+            <div style="color:var(--muted,#888);">Wa&#380;no&#347;&#263; <span class="en">Validity</span></div>
+            <div id="lic_expires" style="font-weight:600;">Bezterminowa <span class="en">Perpetual</span></div>
+
+            <div style="color:var(--muted,#888);">Aktualizacje do <span class="en">Updates until</span></div>
+            <div id="lic_updates_until" style="font-weight:600;">Bezterminowe <span class="en">Perpetual</span></div>
+
+            <div style="color:var(--muted,#888);">Wystawiona <span class="en">Issued</span></div>
+            <div id="lic_issued" style="font-weight:600;">&mdash;</div>
+          </div>
+        </div>
+
+        <!-- Activate key -->
+        <div class="hr" style="margin:1rem 0;"></div>
+        <h4 style="margin:0 0 .5rem;font-size:.85rem;">
+          Klucz licencyjny <span class="en">License key</span>
+        </h4>
+        <p style="color:var(--muted,#888);font-size:.76rem;margin:0 0 .5rem;">
+          Wpisz lub wklej klucz licencyjny otrzymany od dostawcy.
+          <span class="en">Enter or paste the license key from the vendor.</span>
+        </p>
+        <div style="display:flex;gap:.4rem;align-items:flex-start;">
+          <textarea id="lic_key_input" rows="3" placeholder="AIST-eyJsa..." style="flex:1;font-size:.78rem;font-family:monospace;padding:.5rem;border-radius:6px;border:1px solid var(--border,#ccc);resize:vertical;"></textarea>
+        </div>
+        <div style="margin-top:.5rem;display:flex;gap:.4rem;align-items:center;">
+          <button id="lic_activate_btn" class="btn" style="font-size:.82rem;">
+            Aktywuj klucz <span class="en">Activate key</span>
+          </button>
+          <button id="lic_remove_btn" class="btn" style="font-size:.82rem;background:transparent;border:1px solid var(--border,#ccc);color:var(--muted,#888);">
+            Usu&#324; licencj&#281; <span class="en">Remove license</span>
+          </button>
+          <span id="lic_action_msg" style="font-size:.78rem;"></span>
+        </div>
+      </div>
+
+      <!-- RIGHT: Features -->
+      <div style="flex:1 1 300px;max-width:420px;">
+        <h4 style="margin:0 0 .6rem;font-size:.85rem;">
+          Dost&#281;pne funkcje <span class="en">Available features</span>
+        </h4>
+        <div id="lic_features_list" style="padding:.6rem .8rem;background:var(--panel2,#f8f9fa);border:1px solid var(--border,#e0e3e8);border-radius:8px;">
+          <div style="font-size:.78rem;color:var(--muted,#888);">&#321;adowanie...</div>
+        </div>
+
+        <div class="hr" style="margin:1rem 0;"></div>
+        <div style="font-size:.76rem;color:var(--muted,#888);line-height:1.5;">
+          <b>Informacja <span class="en">Info</span></b><br>
+          Licencja kontroluje dost&#281;p do funkcji aplikacji.
+          Plan <b>Community</b> zapewnia pe&#322;ny dost&#281;p do wszystkich
+          aktualnie dost&#281;pnych funkcji. W przysz&#322;o&#347;ci nowe,
+          zaawansowane funkcje mog&#261; wymaga&#263; planu <b>Pro</b> lub <b>Enterprise</b>.
+          <span class="en">The license controls access to app features.
+          The Community plan provides full access to all currently available features.
+          In the future, advanced features may require a Pro or Enterprise plan.</span>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
   {% endif %}
 
 </div>
@@ -1022,6 +1114,7 @@
 <script src="/static/users.js?v={{ app_version }}&_={{ static_ts }}"></script>
 {% if user and user.is_superadmin %}
 <script src="/static/admin_update.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/admin_license.js?v={{ app_version }}&_={{ static_ts }}"></script>
 {% endif %}
 {% if user and user.is_superadmin %}
 <script>
