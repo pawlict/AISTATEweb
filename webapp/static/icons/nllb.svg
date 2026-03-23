@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
-
-<defs><linearGradient id="gsv" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#05657c"/><stop offset="100%" stop-color="#143697"/></linearGradient><filter id="s3d_save_pag"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#05657c" stroke-width="1" fill="none" opacity="0.3" stroke-linecap="round"/>
-<path d="M38 42H10a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4h22l10 10v22a4 4 0 0 1-4 4z" stroke="url(#gsv)" stroke-width="2.5" fill="none" filter="url(#s3d_save_pag)"/>
-<path d="M14 6v8h16V6" stroke="url(#gsv)" stroke-width="1.7" fill="none" opacity=".4"/>
-<rect x="12" y="26" width="24" height="12" rx="2" stroke="url(#gsv)" stroke-width="1.7" fill="none" opacity=".3"/>
-
-<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
-</svg>

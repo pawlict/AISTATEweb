@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
-<defs><linearGradient id="dtx" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#94a3b8"/><stop offset="100%" stop-color="#0891b2"/></linearGradient><filter id="s3d_doc_txt"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#94a3b8" stroke-width="1" fill="none" opacity="0.22" stroke-linecap="round"/>
-<path d="M12 6h16l10 10v22a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4z" stroke="url(#dtx)" stroke-width="2.3" fill="none" filter="url(#s3d_doc_txt)"/>
-<path d="M28 6v10h10" stroke="url(#dtx)" stroke-width="1.7" fill="none" opacity=".4"/>
-<text x="24" y="32" text-anchor="middle" font-size="9" fill="#94a3b8" font-weight="800" opacity=".45">TXT</text>
-
-<path d="M12 10c5-4 14-6 22-2" stroke="white" stroke-width="0.8" opacity=".15" fill="none"/>
-</svg>
