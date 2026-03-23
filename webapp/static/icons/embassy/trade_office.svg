@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="to" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#059669"/><stop offset="100%" stop-color="#1d4ed8"/></linearGradient><filter id="s3d_trade_of"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#059669" stroke-width="1" fill="none" opacity="0.22"/>
+<path d="M4 22h10l4-4h4" stroke="url(#to)" stroke-width="2.3" fill="none" filter="url(#s3d_trade_of)"/>
+<path d="M44 22h-10l-4-4h-4" stroke="url(#to)" stroke-width="2.3" fill="none"/>
+<path d="M14 22c2 6 6 8 10 8s8-2 10-8" stroke="url(#to)" stroke-width="2.5" fill="none"/>
+<path d="M18 30l-4 8" stroke="url(#to)" stroke-width="2.3" fill="none" opacity=".4"/>
+<path d="M30 30l4 8" stroke="url(#to)" stroke-width="2.3" fill="none" opacity=".4"/>
+<circle cx="24" cy="14" r="3" stroke="#059669" stroke-width="1.7" fill="#059669" fill-opacity="0.15"/>
+
+<path d="M12 10c5-4 14-6 22-2" stroke="white" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

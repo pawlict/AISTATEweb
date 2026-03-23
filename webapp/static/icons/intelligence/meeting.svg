@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="mt" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#475569"/><stop offset="100%" stop-color="#1d4ed8"/></linearGradient><filter id="s3d_meeting"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#475569" stroke-width="1" fill="none" opacity="0.22"/>
+<!-- left person -->
+<circle cx="12" cy="14" r="5" stroke="url(#mt)" stroke-width="2.3" fill="none" fill-opacity="0.09" filter="url(#s3d_meeting)"/>
+<path d="M4 38v-8c0-5 3-8 8-8s8 3 8 8v8" stroke="url(#mt)" stroke-width="2.3" fill="none"/>
+<!-- right person -->
+<circle cx="36" cy="14" r="5" stroke="url(#mt)" stroke-width="2.3" fill="none"/>
+<path d="M28 38v-8c0-5 3-8 8-8s8 3 8 8v8" stroke="url(#mt)" stroke-width="2.3" fill="none"/>
+<!-- speech exchange -->
+<path d="M18 18l4 2-4 2" stroke="#0891b2" stroke-width="1.7" fill="none" opacity=".4"/>
+<path d="M30 18l-4 2 4 2" stroke="#7c3aed" stroke-width="1.7" fill="none" opacity=".4"/>
+<!-- table -->
+<line x1="18" y1="42" x2="30" y2="42" stroke="url(#mt)" stroke-width="2.9"/>
+<line x1="24" y1="38" x2="24" y2="42" stroke="url(#mt)" stroke-width="2.3"/>
+
+<path d="M12 10c5-4 14-6 22-2" stroke="white" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

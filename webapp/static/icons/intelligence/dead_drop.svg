@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="dd" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#475569"/><stop offset="100%" stop-color="#4d7c0f"/></linearGradient><filter id="s3d_dead_dro"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#475569" stroke-width="1" fill="none" opacity="0.22"/>
+<!-- park bench -->
+<line x1="6" y1="28" x2="42" y2="28" stroke="url(#dd)" stroke-width="2.9"/>
+<line x1="6" y1="34" x2="42" y2="34" stroke="url(#dd)" stroke-width="2.9"/>
+<line x1="10" y1="24" x2="10" y2="40" stroke="url(#dd)" stroke-width="2.3"/>
+<line x1="38" y1="24" x2="38" y2="40" stroke="url(#dd)" stroke-width="2.3"/>
+<!-- hidden package under bench -->
+<rect x="18" y="36" width="10" height="7" rx="1.5" stroke="#4d7c0f" stroke-width="2.1" fill="#4d7c0f" fill-opacity="0.12" stroke-dasharray="3 2"/>
+<text x="23" y="42" font-size="7" fill="#4d7c0f" font-weight="800" opacity=".4">?</text>
+<!-- location pin -->
+<path d="M24 6c-3 0-5 2-5 5 0 3.5 5 8 5 8s5-4.5 5-8c0-3-2-5-5-5z" stroke="#dc2626" stroke-width="1.7" fill="#dc2626" fill-opacity="0.15"/>
+<circle cx="24" cy="11" r="1.5" fill="#dc2626" opacity=".3"/>
+
+<path d="M12 10c5-4 14-6 22-2" stroke="white" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

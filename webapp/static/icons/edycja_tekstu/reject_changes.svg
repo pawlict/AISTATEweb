@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="rc" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#dc2626"/><stop offset="100%" stop-color="#ea580c"/></linearGradient><filter id="s3d_reject_c"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#dc2626" stroke-width="1" fill="none" opacity="0.22"/>
+<!-- document -->
+<rect x="4" y="4" width="28" height="36" rx="3" stroke="url(#rc)" stroke-width="2.3" fill="none"/>
+<!-- text lines with corrections -->
+<line x1="10" y1="12" x2="26" y2="12" stroke="url(#rc)" stroke-width="1.7" opacity="0.38"/>
+<line x1="10" y1="18" x2="22" y2="18" stroke="#dc2626" stroke-width="1.7" opacity=".35"/>
+<line x1="10" y1="18" x2="22" y2="18" stroke="#dc2626" stroke-width="0.8" opacity=".5"/>
+<line x1="10" y1="22" x2="20" y2="22" stroke="#059669" stroke-width="1.7" opacity=".35"/>
+<line x1="10" y1="28" x2="26" y2="28" stroke="url(#rc)" stroke-width="1.7" opacity="0.3"/>
+<line x1="10" y1="34" x2="22" y2="34" stroke="url(#rc)" stroke-width="1.7" opacity="0.22"/>
+<!-- X mark badge -->
+<circle cx="36" cy="32" r="10" stroke="#dc2626" stroke-width="2.5" fill="#0a0a12" fill-opacity=".9" filter="url(#s3d_reject_c)"/>
+<line x1="31" y1="27" x2="41" y2="37" stroke="#dc2626" stroke-width="3.2"/>
+<line x1="41" y1="27" x2="31" y2="37" stroke="#dc2626" stroke-width="3.2"/>
+<path d="M12 10c5-4 14-6 22-2" stroke="white" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>
