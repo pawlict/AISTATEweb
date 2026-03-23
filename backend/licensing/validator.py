@@ -116,6 +116,7 @@ def parse_license_key(key_string: str) -> LicenseInfo:
 
     info = LicenseInfo(
         license_id=payload.get("lid", ""),
+        name=payload.get("name", ""),
         email=payload.get("email", ""),
         plan=payload.get("plan", "community"),
         issued=_parse_date(payload.get("issued")),
