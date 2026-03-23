@@ -139,8 +139,30 @@ def main() -> int:
     progress(5)
     eprint(f"translate: init NLLB model='{nllb_model}' mode={mode}")
 
-    # Load translator
-    tr = HybridTranslator(nllb_model=nllb_model)
+    # Load translator — the most common failure point (model not cached, VRAM, etc.)
+    try:
+        tr = HybridTranslator(nllb_model=nllb_model)
+    except Exception as e1:
+        # Model might not be cached locally and TRANSFORMERS_OFFLINE=1 blocks download.
+        # Retry with online mode enabled so the model can be fetched from HuggingFace.
+        eprint(f"translate: offline load failed ({e1}), retrying with online download...")
+        os.environ.pop("TRANSFORMERS_OFFLINE", None)
+        os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+        try:
+            tr = HybridTranslator(nllb_model=nllb_model)
+            eprint("translate: model loaded successfully after online retry")
+        except Exception as e2:
+            err_msg = str(e2)
+            eprint(f"translate: FAILED to load NLLB model '{nllb_model}': {err_msg}")
+            # Return structured error so the frontend can show a meaningful message
+            print(json.dumps({
+                "ok": False,
+                "error": f"Nie udało się załadować modelu NLLB '{nllb_model}': {err_msg}",
+                "error_code": "MODEL_LOAD_FAILED",
+                "hint": "Upewnij się, że model został pobrany (Ustawienia → Modele NLLB). "
+                        "Przy pierwszym użyciu trybu dokładnego wymagany jest większy model.",
+            }, ensure_ascii=False))
+            return 1
 
     # Optional glossary (term dictionary)
     glossary: Dict[str, Any] = {}
