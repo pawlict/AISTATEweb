@@ -22,11 +22,26 @@ ALL_FEATURES: List[str] = [
     "update_panel",
 ]
 
+# Community features — current modules, always free
+COMMUNITY_FEATURES: List[str] = [
+    "transcription",
+    "diarization",
+    "translation",
+    "analysis",
+    "chat",
+    "tts",
+    "tts_kokoro",
+    "sound_detection",
+    "batch_processing",
+    "advanced_reports",
+    "update_panel",
+]
+
 # Plans and their default feature sets
 PLAN_FEATURES = {
-    "community": ALL_FEATURES.copy(),  # everything unlocked when LICENSING_ENABLED=False
-    "pro": ALL_FEATURES.copy(),
-    "enterprise": ALL_FEATURES.copy(),
+    "community": COMMUNITY_FEATURES.copy(),
+    "pro": ["all"],       # all current + future features
+    "enterprise": ["all"],  # all current + future + priority support
 }
 
 
@@ -96,7 +111,7 @@ class LicenseInfo:
 
 
 def default_community_license() -> LicenseInfo:
-    """Return a default 'community' license with everything unlocked."""
+    """Return a default 'community' license with current modules unlocked."""
     return LicenseInfo(
         license_id="COMMUNITY",
         email="",
@@ -104,5 +119,5 @@ def default_community_license() -> LicenseInfo:
         issued=date.today(),
         expires=None,         # perpetual
         updates_until=None,   # perpetual
-        features=ALL_FEATURES.copy(),
+        features=COMMUNITY_FEATURES.copy(),
     )

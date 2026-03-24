@@ -13,4 +13,4 @@ from __future__ import annotations
 
 # Base64-encoded Ed25519 public key (32 bytes → 44 chars base64)
 # Replace this placeholder with your real public key.
-PUBLIC_KEY_B64: str = "PLACEHOLDER_REPLACE_WITH_REAL_PUBLIC_KEY_BASE64"
+PUBLIC_KEY_B64: str = "eGRmyqP46DoJgl6HWYJVTinHzrx+aHjK6vKi9aBs3kw="

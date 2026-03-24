@@ -1,0 +1,226 @@
+{
+  "parser_id": "ident_tmobile",
+  "parser_version": "1.0",
+  "format_variant": "",
+  "columns": [
+    {
+      "logical_name": "msisdn",
+      "expected_headers": [
+        "msisdn"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "contract_status",
+      "expected_headers": [
+        "status kontraktu"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "contract_type",
+      "expected_headers": [
+        "typ kontraktu"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "sim",
+      "expected_headers": [
+        "sim"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "imsi",
+      "expected_headers": [
+        "imsi"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "activation",
+      "expected_headers": [
+        "aktywacja msisdn",
+        "aktywacja"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "deactivation",
+      "expected_headers": [
+        "wyłączenie msisdn",
+        "wylaczenie msisdn",
+        "wyłączenie"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "name",
+      "expected_headers": [
+        "abonent"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "pesel",
+      "expected_headers": [
+        "pesel"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "document",
+      "expected_headers": [
+        "nr dokumentu tożsamości",
+        "nr dokumentu tozsamosci",
+        "nr dokumentu"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "subscriber_from",
+      "expected_headers": [
+        "abonent od"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "subscriber_to",
+      "expected_headers": [
+        "abonent do"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "city",
+      "expected_headers": [
+        "miejscowość",
+        "miejscowosc"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "zip",
+      "expected_headers": [
+        "kod"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "street",
+      "expected_headers": [
+        "ulica"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "street_nr",
+      "expected_headers": [
+        "nr"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "corr_city",
+      "expected_headers": [
+        "koresp. miasto"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "corr_zip",
+      "expected_headers": [
+        "koresp. kod"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "corr_street",
+      "expected_headers": [
+        "koresp. ulica"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "corr_nr",
+      "expected_headers": [
+        "koresp. nr"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "email",
+      "expected_headers": [
+        "email"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    }
+  ],
+  "header_detection": [],
+  "notes": "Auto-generated from identification.py (ident_tmobile)",
+  "created_at": "2026-03-24T19:03:45.061080+00:00"
+}

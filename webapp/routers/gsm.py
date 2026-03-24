@@ -549,15 +549,21 @@ async def gsm_smart_import(
                     from backend.gsm.identification import IdentificationStore
                     store = IdentificationStore()
                     id_file_results = []
+                    all_drift_warnings = []
+                    all_drift_report_ids = []
                     for sf in scan_result.identification_files:
                         try:
-                            count = store.load_file(sf.path)
+                            count, parse_result = store.load_file(sf.path)
                             id_file_results.append({
                                 "filename": sf.filename,
                                 "operator": sf.operator,
                                 "status": "ok",
                                 "records_loaded": count,
                             })
+                            if parse_result.warnings:
+                                all_drift_warnings.extend(parse_result.warnings)
+                            if parse_result.drift_report_ids:
+                                all_drift_report_ids.extend(parse_result.drift_report_ids)
                         except Exception as e:
                             id_file_results.append({
                                 "filename": sf.filename,
@@ -572,6 +578,8 @@ async def gsm_smart_import(
                         "files": id_file_results,
                         "lookup": lookup_map,
                         "crossref": crossref,
+                        "drift_warnings": all_drift_warnings,
+                        "drift_report_ids": all_drift_report_ids,
                     }
                 return JSONResponse(confirm_resp)
 
@@ -662,15 +670,21 @@ async def gsm_smart_import(
             store = IdentificationStore()
 
             id_file_results = []
+            all_drift_warnings_id = []
+            all_drift_report_ids_id = []
             for sf in scan_result.identification_files:
                 try:
-                    count = store.load_file(sf.path)
+                    count, parse_result = store.load_file(sf.path)
                     id_file_results.append({
                         "filename": sf.filename,
                         "operator": sf.operator,
                         "status": "ok",
                         "records_loaded": count,
                     })
+                    if parse_result.warnings:
+                        all_drift_warnings_id.extend(parse_result.warnings)
+                    if parse_result.drift_report_ids:
+                        all_drift_report_ids_id.extend(parse_result.drift_report_ids)
                     _app_log(f"[GSM] Identification: {sf.filename} ({sf.operator}) — {count} records")
                 except Exception as e:
                     id_file_results.append({
@@ -700,6 +714,8 @@ async def gsm_smart_import(
                 "files": id_file_results,
                 "lookup": lookup_map,
                 "crossref": crossref,
+                "drift_warnings": all_drift_warnings_id,
+                "drift_report_ids": all_drift_report_ids_id,
             }
 
             # Track identification files as source files

@@ -24,9 +24,9 @@ const ANALYST_TAGS = {
   legitimate: { label: "Poprawny",   labelEn: "Legitimate", color: "#15803d", bg: "rgba(21,128,61,.10)" },
   suspicious: { label: "Podejrzany", labelEn: "Suspicious", color: "#dc2626", bg: "rgba(220,38,38,.10)" },
   monitoring: { label: "Obserwacja", labelEn: "Monitoring", color: "#ea580c", bg: "rgba(234,88,12,.10)" },
-  custom1:    { label: "Własny 1",   labelEn: "Custom 1",   color: "#8b5cf6", bg: "rgba(139,92,246,.12)", custom: true },
-  custom2:    { label: "Własny 2",   labelEn: "Custom 2",   color: "#0d9488", bg: "rgba(13,148,136,.12)", custom: true },
-  custom3:    { label: "Własny 3",   labelEn: "Custom 3",   color: "#ec4899", bg: "rgba(236,72,153,.12)", custom: true },
+  custom1:    { label: "Własny 1",   labelEn: "Custom 1",   color: "#ffff00", bg: "rgba(255,255,0,.15)", custom: true },
+  custom2:    { label: "Własny 2",   labelEn: "Custom 2",   color: "#7fff00", bg: "rgba(127,255,0,.15)", custom: true },
+  custom3:    { label: "Własny 3",   labelEn: "Custom 3",   color: "#b8860b", bg: "rgba(184,134,11,.15)", custom: true },
   custom4:    { label: "Własny 4",   labelEn: "Custom 4",   color: "#6366f1", bg: "rgba(99,102,241,.12)", custom: true },
 };
 
@@ -47,7 +47,15 @@ const _REF_ICONS = {
   crypto_anomaly:     "/static/icons/status/warning.svg",
   crypto_wallet:      "/static/icons/bezpieczenstwo/shield.svg",
   crypto_token:       "/static/icons/inne/pin.svg",
+  // Transcription & Diarization
+  tr_block:           "/static/icons/dokumenty/doc_txt.svg",
+  di_block:           "/static/icons/dokumenty/doc_txt.svg",
 };
+
+// ────────── Helper: note icon path (filled vs empty) ──────────
+function _noteIconSrc(hasNote) {
+  return hasNote ? "/static/icons/pliki/notes_filled.svg" : "/static/icons/pliki/notes.svg";
+}
 
 // ────────── Helper: short unique ID ──────────
 function _noteId() {
@@ -132,6 +140,7 @@ class AnalystNotesManager {
     this._globalTa?.addEventListener("input", () => {
       this.notes.global = this._globalTa.value;
       this._scheduleSave();
+      if (this.onNoteChange) this.onNoteChange(null);
     });
 
     // Tag filter
@@ -198,6 +207,10 @@ class AnalystNotesManager {
     }
     if (this._globalTa) this._globalTa.value = this.notes.global;
     this._renderItems();
+    // Notify after initial load so icons update
+    if (this.onNoteChange && (this.notes.global || this.notes.items.length)) {
+      this.onNoteChange(null);
+    }
   }
 
   _scheduleSave() {
@@ -243,7 +256,7 @@ class AnalystNotesManager {
 
     let html = "";
     for (const it of items) {
-      const iconSrc = _REF_ICONS[it.ref?.type] || "/static/icons/dokumenty/notes.svg";
+      const iconSrc = _REF_ICONS[it.ref?.type] || "/static/icons/pliki/notes.svg";
       const tagsHtml = (it.tags || []).map(t => {
         const td = ANALYST_TAGS[t];
         if (!td) return "";

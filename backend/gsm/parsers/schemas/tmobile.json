@@ -1,0 +1,265 @@
+{
+  "parser_id": "tmobile",
+  "parser_version": "1.1",
+  "format_variant": "",
+  "columns": [
+    {
+      "logical_name": "msisdn",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^msisdn$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "imei",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^imei$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "imsi",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^imsi$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "date",
+      "expected_headers": [],
+      "regex_patterns": [
+        "data\\s*i\\s*godz",
+        "data\\s*(?:i\\s*czas)?(?:\\s*po[łl][aą]czenia)?",
+        "data\\s*(?:rozp|wykon|zdarz)"
+      ],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "callee",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^rozm[óo]wca$",
+        "numer\\s*b\\b",
+        "numer\\s*(?:wywo[łl]|docel|po[łl][aą]cz)",
+        "msisdn\\s*b",
+        "numer\\s*odbiorcy"
+      ],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "related_number",
+      "expected_headers": [],
+      "regex_patterns": [
+        "nr\\s*powi[aą]zany"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "duration",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^d[łl]ugo[śs][ćc]$",
+        "czas\\s*trwania"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "direction",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^kierunek$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "data_sent",
+      "expected_headers": [],
+      "regex_patterns": [
+        "dane\\s*wys[łl]ane"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "service",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^us[łl]uga$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "system",
+      "expected_headers": [],
+      "regex_patterns": [
+        "system\\s*obs[łl]uguj"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "public_ip",
+      "expected_headers": [],
+      "regex_patterns": [
+        "publiczne\\s*ip"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_x",
+      "expected_headers": [],
+      "regex_patterns": [
+        "bts\\s*x"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_y",
+      "expected_headers": [],
+      "regex_patterns": [
+        "bts\\s*y"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ci",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^ci$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "lac",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^lac$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "azimuth",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^azymut$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "beam",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^wi[aą]zka$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_r",
+      "expected_headers": [],
+      "regex_patterns": [
+        "bts\\s*r"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_code",
+      "expected_headers": [],
+      "regex_patterns": [
+        "bts\\s*kod"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_city",
+      "expected_headers": [],
+      "regex_patterns": [
+        "bts\\s*miasto"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_street",
+      "expected_headers": [],
+      "regex_patterns": [
+        "bts\\s*ulica"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "country",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^kraj$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "operator",
+      "expected_headers": [],
+      "regex_patterns": [
+        "^operator$"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    }
+  ],
+  "header_detection": [
+    "rozm[óo]wca",
+    "nr\\s*powi[aą]zany",
+    "system\\s*obs[łl]uguj",
+    "bts\\s*miasto",
+    "t-mobile",
+    "tmobile",
+    "ptc\\b"
+  ],
+  "notes": "Auto-generated from TMobileParser",
+  "created_at": "2026-03-24T19:03:44.944247+00:00"
+}

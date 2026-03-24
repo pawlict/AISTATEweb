@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs>
+<linearGradient id="sn" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a16207"/><stop offset="100%" stop-color="#854d0e"/></linearGradient>
+<linearGradient id="snf" x1="50%" y1="0%" x2="50%" y2="100%"><stop offset="0%" stop-color="#a16207" stop-opacity=".18"/><stop offset="100%" stop-color="#854d0e" stop-opacity=".06"/></linearGradient>
+<filter id="s3d_notes"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-color="#854d0e" flood-opacity=".35"/></filter>
+</defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#a16207" stroke-width="1.2" fill="none" opacity=".25"/>
+<path d="M6 6h36v28l-10 10H6z" stroke="url(#sn)" stroke-width="2.5" fill="url(#snf)" filter="url(#s3d_notes)"/>
+<path d="M32 34v10l10-10H32z" stroke="url(#sn)" stroke-width="1.8" fill="#a16207" fill-opacity=".15"/>
+<rect x="16" y="2" width="16" height="7" rx="1" stroke="#854d0e" stroke-width="1.2" fill="#a16207" fill-opacity=".08"/>
+<line x1="12" y1="16" x2="36" y2="16" stroke="url(#sn)" stroke-width="1.8" opacity=".55"/>
+<line x1="12" y1="22" x2="32" y2="22" stroke="url(#sn)" stroke-width="1.8" opacity=".45"/>
+<line x1="12" y1="28" x2="28" y2="28" stroke="url(#sn)" stroke-width="1.8" opacity=".4"/>
+<line x1="12" y1="34" x2="24" y2="34" stroke="url(#sn)" stroke-width="1.8" opacity=".35"/>
+<path d="M10 8c5-3 16-4 24-1" stroke="#d1d5db" stroke-width="1" opacity=".2" fill="none"/>
+</svg>

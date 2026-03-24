@@ -117,7 +117,7 @@
           </div>
         </div>
         <div class="toolbar-group">
-          <label class="toolbar-group-label"><img src="/static/icons/dokumenty/notes.svg" alt="" draggable="false"> Notatka</label>
+          <label class="toolbar-group-label"><img src="/static/icons/pliki/notes.svg" alt="" draggable="false"> Notatka</label>
           <div class="toolbar-group-controls">
             <button class="btn pill-icon" id="gsm_note_btn" title="Generuj notatkę analityczną (DOCX)"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOCX" draggable="false"></button>
           </div>
@@ -302,7 +302,7 @@
 
   <!-- AML Analysis content -->
   <div class="analysis-tab-content" id="aml_content" style="display:none">
-  <div class="analyst-panel-layout">
+  <div class="analyst-panel-layout" id="aml_results" style="display:none">
 
     <!-- Panel analityczny (collapsible left sidebar) -->
     <aside class="analyst-panel collapsed" id="aml_analyst_panel">
@@ -312,7 +312,7 @@
       <div class="analyst-panel-body">
         <div class="analyst-panel-header">
           <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
-            <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+            <img src="/static/icons/pliki/notes.svg" alt="" width="16" height="16" draggable="false">
             <span data-i18n="analyst_panel.title">Panel analityczny</span>
           </div>
           <button class="analyst-panel-toggle-inner" id="aml_panel_collapse" title="Zwiń panel">
@@ -623,7 +623,7 @@
 
   <!-- GSM Analysis content -->
   <div class="analysis-tab-content" id="gsm_content" style="display:none">
-  <div class="analyst-panel-layout">
+  <div class="analyst-panel-layout" id="gsm_results" style="display:none">
 
     <!-- Panel analityczny (collapsible left sidebar) -->
     <aside class="analyst-panel collapsed" id="gsm_analyst_panel">
@@ -633,7 +633,7 @@
       <div class="analyst-panel-body">
         <div class="analyst-panel-header">
           <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
-            <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+            <img src="/static/icons/pliki/notes.svg" alt="" width="16" height="16" draggable="false">
             <span data-i18n="analyst_panel.title">Panel analityczny</span>
           </div>
           <button class="analyst-panel-toggle-inner" id="gsm_panel_collapse" title="Zwiń panel">
@@ -1014,6 +1014,9 @@
         </div>
       </div>
 
+      <!-- Identification drift banner (adaptive column matching) -->
+      <div id="gsm_ident_drift_container" style="display:none"></div>
+
       <!-- Warnings -->
       <div class="card" style="display:none">
         <div class="h2">Ostrzeżenia parsera</div>
@@ -1203,7 +1206,7 @@
         <div class="analyst-panel-body">
           <div class="analyst-panel-header">
             <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
-              <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+              <img src="/static/icons/pliki/notes.svg" alt="" width="16" height="16" draggable="false">
               <span data-i18n="analyst_panel.title">Panel analityczny</span>
             </div>
             <button class="analyst-panel-toggle-inner" id="crypto_panel_collapse" title="Zwiń panel">
@@ -1543,9 +1546,9 @@
             <button type="button" class="analyst-tag-btn" data-tag="legitimate"><span class="analyst-tag-dot" style="background:#15803d"></span> <span class="analyst-tag-label">Poprawny</span></button>
             <button type="button" class="analyst-tag-btn" data-tag="suspicious"><span class="analyst-tag-dot" style="background:#dc2626"></span> <span class="analyst-tag-label">Podejrzany</span></button>
             <button type="button" class="analyst-tag-btn" data-tag="monitoring"><span class="analyst-tag-dot" style="background:#ea580c"></span> <span class="analyst-tag-label">Obserwacja</span></button>
-            <button type="button" class="analyst-tag-btn" data-tag="custom1"><span class="analyst-tag-dot" style="background:#8b5cf6"></span> <span class="analyst-tag-label" data-editable="1">Własny 1</span></button>
-            <button type="button" class="analyst-tag-btn" data-tag="custom2"><span class="analyst-tag-dot" style="background:#0d9488"></span> <span class="analyst-tag-label" data-editable="1">Własny 2</span></button>
-            <button type="button" class="analyst-tag-btn" data-tag="custom3"><span class="analyst-tag-dot" style="background:#ec4899"></span> <span class="analyst-tag-label" data-editable="1">Własny 3</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom1"><span class="analyst-tag-dot" style="background:#ffff00"></span> <span class="analyst-tag-label" data-editable="1">Własny 1</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom2"><span class="analyst-tag-dot" style="background:#7fff00"></span> <span class="analyst-tag-label" data-editable="1">Własny 2</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom3"><span class="analyst-tag-dot" style="background:#b8860b"></span> <span class="analyst-tag-label" data-editable="1">Własny 3</span></button>
             <button type="button" class="analyst-tag-btn" data-tag="custom4"><span class="analyst-tag-dot" style="background:#6366f1"></span> <span class="analyst-tag-label" data-editable="1">Własny 4</span></button>
           </div>
           <div class="note-editor-hint" style="margin-top:2px;font-size:10px;color:var(--text-muted,#94a3b8)">Kliknij dwukrotnie nazwę własnego tagu aby zmienić</div>

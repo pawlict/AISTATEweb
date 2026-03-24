@@ -23,4 +23,4 @@ from __future__ import annotations
 # Set to True when you are ready to enforce licensing.
 # While False, the app works without restrictions.
 # ============================================================
-LICENSING_ENABLED: bool = False
+LICENSING_ENABLED: bool = True

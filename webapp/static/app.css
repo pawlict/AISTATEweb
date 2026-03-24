@@ -2867,9 +2867,9 @@ button.pill-icon:hover{
 .analyst-tag-badge[data-tag="legitimate"]{background:rgba(21,128,61,.10);color:#15803d}
 .analyst-tag-badge[data-tag="suspicious"]{background:rgba(220,38,38,.10);color:#dc2626}
 .analyst-tag-badge[data-tag="monitoring"]{background:rgba(234,88,12,.10);color:#ea580c}
-.analyst-tag-badge[data-tag="custom1"]{background:rgba(139,92,246,.12);color:#8b5cf6}
-.analyst-tag-badge[data-tag="custom2"]{background:rgba(13,148,136,.12);color:#0d9488}
-.analyst-tag-badge[data-tag="custom3"]{background:rgba(236,72,153,.12);color:#ec4899}
+.analyst-tag-badge[data-tag="custom1"]{background:rgba(255,255,0,.15);color:#cccc00}
+.analyst-tag-badge[data-tag="custom2"]{background:rgba(127,255,0,.15);color:#5cb300}
+.analyst-tag-badge[data-tag="custom3"]{background:rgba(184,134,11,.15);color:#b8860b}
 .analyst-tag-badge[data-tag="custom4"]{background:rgba(99,102,241,.12);color:#6366f1}
 
 /* Note modal overlay (shared) */
@@ -2994,7 +2994,7 @@ button.pill-icon:hover{
 }
 .analyst-note-marker:hover{opacity:.85}
 .analyst-note-marker.has-note{opacity:1;filter:drop-shadow(0 0 2px rgba(234,179,8,.5))}
-.analyst-note-marker.has-note img{filter:saturate(2) brightness(1.15)}
+.analyst-note-marker.has-note img{filter:none}
 
 /* Panel search */
 .analyst-panel-search-input{width:100%;font-size:12px;padding:5px 8px;border-radius:6px;margin-top:4px}

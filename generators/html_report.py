@@ -41,7 +41,7 @@ def _ui_labels(ui_lang: str) -> Dict[str, str]:
             "models": "Model",
             "speakers": "Speakers",
             "segments": "Segments",
-            "talk": "Talk time",
+            "talk": "Recording time",
             "nonverbal": "Non-verbal",
             "export": "Export format",
             "logs": "LOGS",
@@ -54,9 +54,9 @@ def _ui_labels(ui_lang: str) -> Dict[str, str]:
         "processed": "Przetworzono",
         "file": "Plik",
         "models": "Model",
-        "speakers": "Liczba speakerów",
+        "speakers": "Liczba mówców",
         "segments": "Segmenty",
-        "talk": "Czas mówienia",
+        "talk": "Czas nagrania",
         "nonverbal": "Non-verbal",
         "export": "Format eksportu",
         "logs": "LOGI",
@@ -248,7 +248,12 @@ def generate_html_report(data: Dict[str, Any], logs: bool = False, output_path: 
 
     models_line = f"Whisper: {whisper_model} | {L['export'].split()[0] if False else ('Język' if not str(ui_lang).lower().startswith('en') else 'Language')}: {language} | pyannote: {pyannote_model}".strip()
 
-    talk_line = ", ".join([f"{k}={v}" for k, v in speaker_times.items()]) if speaker_times else ""
+    # Recording time: prefer audio_duration, fallback to speaker_times
+    talk_line = audio_duration if audio_duration else (", ".join([f"{k}={v}" for k, v in speaker_times.items()]) if speaker_times else "")
+
+    # Auto-detect speakers count from parsed segments if not provided
+    if not speakers_count and speakers_seen:
+        speakers_count = str(len(speakers_seen))
 
     style = f"""
     <style>
@@ -370,7 +375,6 @@ def generate_html_report(data: Dict[str, Any], logs: bool = False, output_path: 
 
   <div class="meta-card">
     <div class="meta-title">{_esc(title)}</div>
-    <div class="meta-line"><span class="k">{_esc(L["author"])}:</span> {_esc(author)}</div>
     <div class="meta-line"><span class="k">{_esc(L["processed"])}:</span> {_esc(dt)}</div>
     <div class="meta-line"><span class="k">{_esc(L["file"])}:</span> {_esc(file_line)}</div>
     <div class="meta-line"><span class="k">{_esc(L["models"])}:</span> {_esc(f"Whisper: {whisper_model} | {lang_label}: {language} | pyannote: {pyannote_model}")}</div>
@@ -388,7 +392,7 @@ def generate_html_report(data: Dict[str, Any], logs: bool = False, output_path: 
     {logs_html}
   </div>
 
-  <div class="footer">{_esc(L['generated'])}: {_esc(program_name)} {_esc(version)} • {_esc(L['author'])}: {_esc(author)} • {_esc(L['license'])}: {_esc(lic)} • AS IS</div>
+  <div class="footer">{_esc(L['generated'])}: {_esc(program_name)} {_esc(version)} • {_esc(L['author'])}: {_esc(author)} • {_esc(L['license'])}: {_esc(lic)}</div>
 
 </body>
 </html>

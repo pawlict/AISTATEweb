@@ -36,6 +36,178 @@ log = logging.getLogger("aistate.gsm.identification")
 
 
 # ---------------------------------------------------------------------------
+# Column definitions for adaptive matching (per operator)
+# ---------------------------------------------------------------------------
+
+_ORANGE_ID_COLUMNS: Dict[str, List[str]] = {
+    "msisdn": ["identyfikator usługi", "identyfikator uslugi", "identyfikator"],
+    "oper": ["oper"],
+    "ru": ["ru"],
+    "activation": ["data akt.", "data akt", "data aktywacji"],
+    "deactivation": ["data dezakt.", "data dezakt", "data dezaktywacji"],
+    "type": ["typ"],
+    "name": ["abonent"],
+    "pesel_nip": ["pesel/regon/nip", "pesel", "pesel/nip"],
+    "zip": ["kod"],
+    "miasto": ["miasto"],
+    "street": ["ulica nr", "ulica"],
+    "main_number": ["numer główny", "numer glowny"],
+}
+
+_PLAY_ID_COLUMNS: Dict[str, List[str]] = {
+    "msisdn": ["msisdn_pstn", "msisdn"],
+    "sim": ["sim_numer", "sim"],
+    "imsi": ["imsi"],
+    "pesel": ["pesel"],
+    "regon": ["regon"],
+    "nip": ["nip"],
+    "first_name": ["imie"],
+    "last_name": ["nazwisko"],
+    "company_name": ["nazwa"],
+    "address": ["adres"],
+    "first_login": ["pierwsze_logowanie"],
+    "notes": ["uwagi"],
+    "service": ["usluga"],
+    "tariff": ["taryfa"],
+    "doc_number": ["nr_dokumentu"],
+    "doc_type": ["typ_dokumentu"],
+    "email": ["email_kontaktowy"],
+    "phone_contact": ["telefon_kontaktowy"],
+    "date_from": ["data_od"],
+    "date_to": ["data_do"],
+    "log_datetime": ["data_i_godzina_log"],
+    "bts_x": ["bts_x_log"],
+    "bts_y": ["bts_y_log"],
+    "bts_azimuth": ["azym_log"],
+    "bts_beam": ["beam_width_log"],
+    "bts_range": ["range_log"],
+}
+
+_PLUS_ID_COLUMNS: Dict[str, List[str]] = {
+    "parametr": ["parametr"],
+    "msisdn": ["msisdn"],
+    "pesel": ["pesel"],
+    "sim": ["sim"],
+    "doc_number": ["numer dokumentu", "nr_dokumentu"],
+    "doc_type": ["typ dokumentu", "typ_dokumentu"],
+    "nip": ["nip"],
+    "msisdn_type": ["typ msisdn", "typ"],
+    "valid_from": ["ważne od", "wazne od"],
+    "valid_to": ["ważne do", "wazne do"],
+    "name": ["imię i nazwisko/nazwa", "imie i nazwisko/nazwa", "imie i nazwisko", "nazwisko", "nazwa"],
+    "address": ["adres"],
+    "status": ["status"],
+}
+
+_TMOBILE_ID_COLUMNS: Dict[str, List[str]] = {
+    "msisdn": ["msisdn"],
+    "contract_status": ["status kontraktu"],
+    "contract_type": ["typ kontraktu"],
+    "sim": ["sim"],
+    "imsi": ["imsi"],
+    "activation": ["aktywacja msisdn", "aktywacja"],
+    "deactivation": ["wyłączenie msisdn", "wylaczenie msisdn", "wyłączenie"],
+    "name": ["abonent"],
+    "pesel": ["pesel"],
+    "document": ["nr dokumentu tożsamości", "nr dokumentu tozsamosci", "nr dokumentu"],
+    "subscriber_from": ["abonent od"],
+    "subscriber_to": ["abonent do"],
+    "city": ["miejscowość", "miejscowosc"],
+    "zip": ["kod"],
+    "street": ["ulica"],
+    "street_nr": ["nr"],
+    "corr_city": ["koresp. miasto"],
+    "corr_zip": ["koresp. kod"],
+    "corr_street": ["koresp. ulica"],
+    "corr_nr": ["koresp. nr"],
+    "email": ["email"],
+}
+
+# Critical columns per operator (without these, parsing fails)
+_IDENT_CRITICAL: Dict[str, List[str]] = {
+    "ident_orange": ["msisdn", "name"],
+    "ident_play": ["msisdn"],
+    "ident_plus": ["msisdn"],
+    "ident_tmobile": ["msisdn", "name"],
+}
+
+
+@dataclass
+class IdentificationParseResult:
+    """Result of parsing an identification file — records + adaptive warnings."""
+    records: List = field(default_factory=list)  # List[SubscriberIdentification]
+    warnings: List[str] = field(default_factory=list)
+    drift_report_ids: List[str] = field(default_factory=list)
+
+
+def _build_col_map_from_header(
+    header: List[str],
+    column_defs: Dict[str, List[str]],
+) -> Dict[str, int]:
+    """Build col_map from header row using column definitions.
+
+    For each logical column, tries exact match (case-insensitive) against
+    all expected header strings.
+    """
+    col_map: Dict[str, int] = {}
+    header_lower = [h.lower().strip() for h in header]
+    for logical, expected_list in column_defs.items():
+        for exp in expected_list:
+            exp_lower = exp.lower()
+            for i, h in enumerate(header_lower):
+                if h == exp_lower:
+                    col_map[logical] = i
+                    break
+            if logical in col_map:
+                break
+    return col_map
+
+
+def _adaptive_fallback(
+    parser_id: str,
+    header: List[str],
+    col_map: Dict[str, int],
+    critical_cols: List[str],
+    filename: str = "",
+) -> Tuple[Dict[str, int], List[str], List[str]]:
+    """Try adaptive matching if critical columns are missing.
+
+    Returns: (augmented_col_map, warnings, drift_report_ids)
+    """
+    warnings: List[str] = []
+    drift_ids: List[str] = []
+
+    missing_critical = [c for c in critical_cols if c not in col_map]
+    if not missing_critical:
+        return col_map, warnings, drift_ids
+
+    try:
+        from .parsers.adaptive_mapper import AdaptiveColumnMapper
+        mapper = AdaptiveColumnMapper()
+        header_lower = [h.lower().strip() for h in header]
+        # Lower auto-accept threshold for identification (column names vary more)
+        col_map, validation = mapper.build_adaptive_col_map(
+            parser_id, "", header_lower, col_map, filename=filename,
+            auto_accept_threshold=0.55,  # lower than billing (0.85) — show to user for review
+        )
+        warnings.extend(mapper.format_warnings(validation, parser_id))
+        if validation.match_type in ("drift", "partial"):
+            # Collect drift report ID if one was created
+            try:
+                from .parsers.drift_reporter import DriftReporter
+                reporter = DriftReporter()
+                pending = reporter.list_reports(parser_id=parser_id, status="pending")
+                if pending:
+                    drift_ids.append(pending[-1].report_id)
+            except Exception:
+                pass
+    except Exception as exc:
+        log.warning("Adaptive fallback failed for %s: %s", parser_id, exc)
+
+    return col_map, warnings, drift_ids
+
+
+# ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
 
@@ -268,8 +440,8 @@ def _title_case(s: str) -> str:
 # Orange parser (XLSX)
 # ---------------------------------------------------------------------------
 
-def _parse_orange_xlsx(file_path: Path) -> List[SubscriberIdentification]:
-    """Parse Orange '7. DANE OSOBOWE' identification XLSX.
+def _parse_orange_xlsx(file_path: Path) -> IdentificationParseResult:
+    """Parse Orange '7. DANE OSOBOWE' identification XLSX with adaptive matching.
 
     Structure:
         Row 1:  "7. DANE OSOBOWE"
@@ -280,7 +452,7 @@ def _parse_orange_xlsx(file_path: Path) -> List[SubscriberIdentification]:
     """
     import openpyxl
 
-    results: List[SubscriberIdentification] = []
+    result = IdentificationParseResult()
     wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
 
     for sheet_name in wb.sheetnames:
@@ -331,6 +503,14 @@ def _parse_orange_xlsx(file_path: Path) -> List[SubscriberIdentification]:
                     col_map["street"] = ci
             elif h == "NUMER G" or "GŁÓWNY" in h or "GLOWNY" in h:
                 col_map["main_number"] = ci
+
+        # Adaptive fallback if critical columns missing
+        critical = _IDENT_CRITICAL.get("ident_orange", [])
+        col_map, drift_warns, drift_ids = _adaptive_fallback(
+            "ident_orange", [h.lower() for h in header], col_map, critical, file_path.name,
+        )
+        result.warnings.extend(drift_warns)
+        result.drift_report_ids.extend(drift_ids)
 
         def _cell(row, key):
             idx = col_map.get(key)
@@ -385,7 +565,7 @@ def _parse_orange_xlsx(file_path: Path) -> List[SubscriberIdentification]:
             # Parse name parts
             first_name, last_name = _parse_name_parts(name, "orange")
 
-            results.append(SubscriberIdentification(
+            result.records.append(SubscriberIdentification(
                 number=msisdn,
                 name=name,
                 first_name=first_name,
@@ -404,26 +584,21 @@ def _parse_orange_xlsx(file_path: Path) -> List[SubscriberIdentification]:
             ))
 
     wb.close()
-    return results
+    return result
 
 
 # ---------------------------------------------------------------------------
 # Play parser (CSV, semicolon, cp1250, ="" quoting)
 # ---------------------------------------------------------------------------
 
-def _parse_play_csv(file_path: Path) -> List[SubscriberIdentification]:
-    """Parse Play identification CSV.
+def _parse_play_csv(file_path: Path) -> IdentificationParseResult:
+    """Parse Play identification CSV with adaptive column matching.
 
     - Semicolon-delimited
     - Encoding: cp1250 (Polish Windows)
     - Values wrapped in ="" quoting: ="value"
-    - Header: DATA_OD;DATA_DO;MSISDN_PSTN;SIM_NUMER;IMSI;PESEL;REGON;NIP;
-              IMIE;NAZWISKO;NAZWA;ADRES;PIERWSZE_LOGOWANIE;UWAGI;USLUGA;TARYFA;
-              ID_USLUGI;ID_LACZA;NR_DOKUMENTU;TYP_DOKUMENTU;ADRES_MAC;
-              SKRZYNKA_POCZTOWA;TELEFON_KONTAKTOWY;EMAIL_KONTAKTOWY;
-              DATA_I_GODZINA_LOG;BTS_X_LOG;BTS_Y_LOG;AZYM_LOG;BEAM_WIDTH_LOG;RANGE_LOG
     """
-    results: List[SubscriberIdentification] = []
+    result = IdentificationParseResult()
 
     # Try encodings
     content = None
@@ -436,7 +611,7 @@ def _parse_play_csv(file_path: Path) -> List[SubscriberIdentification]:
 
     if content is None:
         log.error("Play ID: cannot decode %s", file_path)
-        return results
+        return result
 
     # Strip ="" quoting
     def strip_eq(val: str) -> str:
@@ -449,16 +624,28 @@ def _parse_play_csv(file_path: Path) -> List[SubscriberIdentification]:
 
     reader = csv.reader(io.StringIO(content), delimiter=";")
     header = None
+    col_map: Dict[str, int] = {}
 
     for row_idx, row in enumerate(reader):
         if not row:
             continue
 
-        # Find header row
+        # Find header row (adaptive: detect by multiple Play-specific columns)
         if header is None:
             cleaned = [strip_eq(c).upper().strip() for c in row]
-            if any("MSISDN" in c for c in cleaned):
+            _play_markers = ("MSISDN", "IMSI", "PESEL", "USLUGA", "TARYFA", "UWAGI", "NR_DOKUMENTU", "DATA_OD")
+            _play_hits = sum(1 for m in _play_markers if any(m in c for c in cleaned))
+            if _play_hits >= 3:
                 header = cleaned
+                # Build col_map using column definitions
+                col_map = _build_col_map_from_header(header, _PLAY_ID_COLUMNS)
+                # Adaptive fallback if critical columns missing
+                critical = _IDENT_CRITICAL.get("ident_play", [])
+                col_map, drift_warns, drift_ids = _adaptive_fallback(
+                    "ident_play", header, col_map, critical, file_path.name,
+                )
+                result.warnings.extend(drift_warns)
+                result.drift_report_ids.extend(drift_ids)
                 continue
             else:
                 continue
@@ -466,7 +653,7 @@ def _parse_play_csv(file_path: Path) -> List[SubscriberIdentification]:
         # Parse data row
         cells = [strip_eq(c) for c in row]
 
-        # Legend/footer detection — stop on summary/legend markers
+        # Legend/footer detection
         first_cell = cells[0].upper().strip() if cells else ""
         if first_cell and any(marker in first_cell for marker in (
             "KONIEC", "LEGENDA", "UWAGI", "OBJAŚNIEN", "OBJASN",
@@ -475,22 +662,21 @@ def _parse_play_csv(file_path: Path) -> List[SubscriberIdentification]:
             break
 
         def _col(name):
-            """Get column value by header name (partial match)."""
-            for i, h in enumerate(header):
-                if name in h:
-                    return cells[i] if i < len(cells) else ""
-            return ""
+            idx = col_map.get(name)
+            if idx is None or idx >= len(cells):
+                return ""
+            return cells[idx]
 
-        msisdn_raw = _col("MSISDN")
+        msisdn_raw = _col("msisdn")
         if not msisdn_raw:
             continue
         msisdn = normalise_msisdn(msisdn_raw)
         if not msisdn:
             continue
 
-        imie = _col("IMIE")
-        nazwisko = _col("NAZWISKO")
-        nazwa = _col("NAZWA")
+        imie = _col("first_name")
+        nazwisko = _col("last_name")
+        nazwa = _col("company_name")
         name = ""
         first_name = ""
         last_name = ""
@@ -502,11 +688,11 @@ def _parse_play_csv(file_path: Path) -> List[SubscriberIdentification]:
             name = nazwa
             first_name, last_name = _parse_name_parts(nazwa, "play")
 
-        pesel = _col("PESEL")
-        nip = _col("NIP")
-        regon = _col("REGON")
+        pesel = _col("pesel")
+        nip = _col("nip")
+        regon = _col("regon")
 
-        address_raw = _col("ADRES")
+        address_raw = _col("address")
         # Play uses "Adres glowny: ... | Adres korespondencyjny: ..."
         address = address_raw.split("|")[0].strip()
         if address.lower().startswith("adres glowny:"):
@@ -530,16 +716,16 @@ def _parse_play_csv(file_path: Path) -> List[SubscriberIdentification]:
         if addr_match:
             city = addr_match.group(1).strip()
 
-        sim = _col("SIM")
-        imsi = _col("IMSI")
-        service = _col("USLUGA")
-        tariff = _col("TARYFA")
-        doc_nr = _col("NR_DOKUMENTU")
-        doc_type = _col("TYP_DOKUMENTU")
-        uwagi = _col("UWAGI")
-        data_od = _col("DATA_OD")
-        data_do = _col("DATA_DO")
-        email = _col("EMAIL")
+        sim = _col("sim")
+        imsi = _col("imsi")
+        service = _col("service")
+        tariff = _col("tariff")
+        doc_nr = _col("doc_number")
+        doc_type = _col("doc_type")
+        uwagi = _col("notes")
+        data_od = _col("date_from")
+        data_do = _col("date_to")
+        email = _col("email")
 
         # Determine contract type from TARYFA/USLUGA
         contract_type = ""
@@ -552,7 +738,7 @@ def _parse_play_csv(file_path: Path) -> List[SubscriberIdentification]:
             elif "mvno" in tl:
                 contract_type = "MVNO"
 
-        results.append(SubscriberIdentification(
+        result.records.append(SubscriberIdentification(
             number=msisdn,
             name=name,
             first_name=first_name,
@@ -578,22 +764,16 @@ def _parse_play_csv(file_path: Path) -> List[SubscriberIdentification]:
             source_operator="play",
         ))
 
-    return results
+    return result
 
 
 # ---------------------------------------------------------------------------
 # Plus parser (CSV, comma, utf-8-sig)
 # ---------------------------------------------------------------------------
 
-def _parse_plus_csv(file_path: Path) -> List[SubscriberIdentification]:
-    """Parse Plus (Polkomtel) identification CSV.
-
-    - Comma-delimited
-    - Encoding: utf-8-sig
-    - Header: Parametr,MSISDN,PESEL,SIM,Numer dokumentu,Typ dokumentu,NIP,
-              Typ MSISDN,Ważne od,Ważne do,Imię i Nazwisko/Nazwa,Adres,Status
-    """
-    results: List[SubscriberIdentification] = []
+def _parse_plus_csv(file_path: Path) -> IdentificationParseResult:
+    """Parse Plus (Polkomtel) identification CSV with adaptive column matching."""
+    result = IdentificationParseResult()
 
     content = None
     for enc in ("utf-8-sig", "utf-8", "cp1250", "latin-1"):
@@ -605,20 +785,30 @@ def _parse_plus_csv(file_path: Path) -> List[SubscriberIdentification]:
 
     if content is None:
         log.error("Plus ID: cannot decode %s", file_path)
-        return results
+        return result
 
     reader = csv.reader(io.StringIO(content), delimiter=",")
     header = None
+    col_map: Dict[str, int] = {}
 
     for row_idx, row in enumerate(reader):
         if not row:
             continue
 
-        # Find header row
+        # Find header row (adaptive: detect by multiple Plus-specific columns)
         if header is None:
             cleaned = [c.strip().upper() for c in row]
-            if any("MSISDN" in c for c in cleaned):
+            _plus_markers = ("MSISDN", "PESEL", "NIP", "STATUS", "PARAMETR", "ADRES", "NUMER DOKUMENTU")
+            _plus_hits = sum(1 for m in _plus_markers if any(m in c for c in cleaned))
+            if _plus_hits >= 3:
                 header = cleaned
+                col_map = _build_col_map_from_header(header, _PLUS_ID_COLUMNS)
+                critical = _IDENT_CRITICAL.get("ident_plus", [])
+                col_map, drift_warns, drift_ids = _adaptive_fallback(
+                    "ident_plus", header, col_map, critical, file_path.name,
+                )
+                result.warnings.extend(drift_warns)
+                result.drift_report_ids.extend(drift_ids)
                 continue
             else:
                 continue
@@ -634,52 +824,41 @@ def _parse_plus_csv(file_path: Path) -> List[SubscriberIdentification]:
             break
 
         def _col(name):
-            for i, h in enumerate(header):
-                if name in h:
-                    return cells[i] if i < len(cells) else ""
-            return ""
+            idx = col_map.get(name)
+            if idx is None or idx >= len(cells):
+                return ""
+            return cells[idx]
 
-        msisdn_raw = _col("MSISDN")
+        msisdn_raw = _col("msisdn")
         if not msisdn_raw:
-            # Try "Parametr" column
-            msisdn_raw = _col("PARAMETR")
+            msisdn_raw = _col("parametr")
         if not msisdn_raw:
             continue
         msisdn = normalise_msisdn(msisdn_raw)
         if not msisdn:
             continue
 
-        name = _col("NAZWISKO") or _col("NAZWA")
-        if not name:
-            # Try "Imię i Nazwisko" combined column
-            for i, h in enumerate(header):
-                if "NAZWISK" in h or "NAZWA" in h:
-                    name = cells[i] if i < len(cells) else ""
-                    break
-
-        # Parse name parts
+        name = _col("name")
         first_name, last_name = _parse_name_parts(name, "plus")
 
-        pesel = _col("PESEL")
-        nip = _col("NIP")
-        sim = _col("SIM")
-        doc_nr = _col("NUMER DOKUMENTU") or _col("NR_DOKUMENTU")
-        doc_type = _col("TYP DOKUMENTU") or _col("TYP_DOKUMENTU")
-        msisdn_type = _col("TYP MSISDN") or _col("TYP")
-        valid_from = _col("OD")
-        valid_to = _col("DO")
-        address = _col("ADRES")
-        status = _col("STATUS")
+        pesel = _col("pesel")
+        nip = _col("nip")
+        sim = _col("sim")
+        doc_nr = _col("doc_number")
+        doc_type = _col("doc_type")
+        msisdn_type = _col("msisdn_type")
+        valid_from = _col("valid_from")
+        valid_to = _col("valid_to")
+        address = _col("address")
+        status = _col("status")
 
-        # Extract city from address (e.g. "UL. TRAKTOROWA 126 91-204 ŁÓDŹ POL")
+        # Extract city from address
         city = ""
         addr_match = re.search(r'\d{2}-\d{3}\s+(.+?)(?:\s+POL\s*$|\s*$)', address, re.IGNORECASE)
         if addr_match:
             city = addr_match.group(1).strip()
-            # Remove trailing country code
             city = re.sub(r'\s+POL\s*$', '', city, flags=re.IGNORECASE).strip()
 
-        # Determine contract type from msisdn_type
         contract_type = ""
         if msisdn_type:
             mt = msisdn_type.lower()
@@ -688,7 +867,7 @@ def _parse_plus_csv(file_path: Path) -> List[SubscriberIdentification]:
             elif "post" in mt:
                 contract_type = "Postpaid"
 
-        results.append(SubscriberIdentification(
+        result.records.append(SubscriberIdentification(
             number=msisdn,
             name=name,
             first_name=first_name,
@@ -709,7 +888,7 @@ def _parse_plus_csv(file_path: Path) -> List[SubscriberIdentification]:
             source_operator="plus",
         ))
 
-    return results
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -766,8 +945,8 @@ def _read_tmobile_content(file_path: Path) -> Optional[List[List[str]]]:
     return None
 
 
-def _parse_tmobile(file_path: Path) -> List[SubscriberIdentification]:
-    """Parse T-Mobile identification file (CSV or XLSX).
+def _parse_tmobile(file_path: Path) -> IdentificationParseResult:
+    """Parse T-Mobile identification file (CSV or XLSX) with adaptive matching.
 
     Header columns:
         Status kontraktu | Typ kontraktu | SIM | IMSI | MSISDN |
@@ -777,11 +956,11 @@ def _parse_tmobile(file_path: Path) -> List[SubscriberIdentification]:
         Koresp. miasto | Koresp. kod | Koresp. ulica | Koresp. nr |
         Koresp. od | Koresp. do | EMAIL | EMAIL Od | EMAIL Do
     """
-    results: List[SubscriberIdentification] = []
+    result = IdentificationParseResult()
 
     rows = _read_tmobile_content(file_path)
     if not rows:
-        return results
+        return result
 
     # Find header row — contains "MSISDN" and "Abonent" and "PESEL"
     header_idx = None
@@ -793,7 +972,7 @@ def _parse_tmobile(file_path: Path) -> List[SubscriberIdentification]:
 
     if header_idx is None:
         log.warning("T-Mobile ID: header row not found in %s", file_path)
-        return results
+        return result
 
     header = [c.strip().upper() for c in rows[header_idx]]
 
@@ -847,6 +1026,14 @@ def _parse_tmobile(file_path: Path) -> List[SubscriberIdentification]:
             col_map["corr_nr"] = ci
         elif h_norm == "EMAIL":
             col_map["email"] = ci
+
+    # Adaptive fallback if critical columns missing
+    critical = _IDENT_CRITICAL.get("ident_tmobile", [])
+    col_map, drift_warns, drift_ids = _adaptive_fallback(
+        "ident_tmobile", [h.lower() for h in header], col_map, critical, file_path.name,
+    )
+    result.warnings.extend(drift_warns)
+    result.drift_report_ids.extend(drift_ids)
 
     def _cell(row_data, key):
         idx = col_map.get(key)
@@ -935,7 +1122,7 @@ def _parse_tmobile(file_path: Path) -> List[SubscriberIdentification]:
         if contract_type:
             sub_type = contract_type
 
-        results.append(SubscriberIdentification(
+        result.records.append(SubscriberIdentification(
             number=msisdn,
             name=name,
             first_name=first_name,
@@ -957,7 +1144,7 @@ def _parse_tmobile(file_path: Path) -> List[SubscriberIdentification]:
             source_operator="tmobile",
         ))
 
-    return results
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1034,14 +1221,26 @@ def detect_id_format(file_path: Path) -> Optional[str]:
         if "STATUS KONTRAKTU" in extended_lines and "PESEL" in extended_lines:
             return "tmobile"
 
-        # Play: semicolon-delimited, has MSISDN_PSTN
+        # Play: semicolon-delimited, has MSISDN_PSTN or Play-specific columns
         if "MSISDN_PSTN" in first_lines and ";" in first_lines[:500]:
             return "play"
+        # Play adaptive: semicolon + ="" quoting + Play-specific columns
+        if ";" in first_lines[:500] and '="' in first_lines[:500]:
+            play_markers = ("USLUGA", "TARYFA", "UWAGI", "DATA_OD", "TYP_DOKUMENTU", "NR_DOKUMENTU")
+            play_hits = sum(1 for m in play_markers if m in first_lines)
+            if play_hits >= 2:
+                return "play"
 
-        # Plus: comma-delimited, has "Typ MSISDN" or "Ważne od"
+        # Plus: comma-delimited, has "Typ MSISDN" or "Ważne od" or Plus-specific columns
         if ("TYP MSISDN" in first_lines or "WAŻNE OD" in first_lines
                 or "WAZNE OD" in first_lines):
             return "plus"
+        # Plus adaptive: comma + Plus-specific columns
+        if "," in first_lines[:500] and ";" not in first_lines[:200]:
+            plus_markers = ("NUMER DOKUMENTU", "TYP DOKUMENTU", "STATUS", "PARAMETR")
+            plus_hits = sum(1 for m in plus_markers if m in first_lines)
+            if plus_hits >= 2:
+                return "plus"
 
         # Fallback: check for MSISDN header with comma delimiter
         # (but not if it looks like T-Mobile metadata with semicolons)
@@ -1062,15 +1261,15 @@ def detect_id_format(file_path: Path) -> Optional[str]:
     return None
 
 
-def parse_identification_file(file_path: Path) -> List[SubscriberIdentification]:
+def parse_identification_file(file_path: Path) -> IdentificationParseResult:
     """Auto-detect format and parse an identification file.
 
-    Returns list of SubscriberIdentification records.
+    Returns IdentificationParseResult with records, warnings, and drift report IDs.
     """
     fmt = detect_id_format(file_path)
     if fmt is None:
         log.warning("Cannot detect format of identification file: %s", file_path)
-        return []
+        return IdentificationParseResult()
 
     log.info("Parsing identification file: %s (format: %s)", file_path.name, fmt)
 
@@ -1083,7 +1282,7 @@ def parse_identification_file(file_path: Path) -> List[SubscriberIdentification]
     elif fmt == "tmobile":
         return _parse_tmobile(file_path)
     else:
-        return []
+        return IdentificationParseResult()
 
 
 # ---------------------------------------------------------------------------
@@ -1164,11 +1363,15 @@ class IdentificationStore:
     def files_loaded(self) -> List[str]:
         return list(self._files_loaded)
 
-    def load_file(self, file_path: Path) -> int:
-        """Parse and load an identification file. Returns number of records loaded."""
-        records = parse_identification_file(file_path)
+    def load_file(self, file_path: Path) -> Tuple[int, IdentificationParseResult]:
+        """Parse and load an identification file.
+
+        Returns (records_loaded, parse_result) where parse_result contains
+        warnings and drift_report_ids for adaptive column matching.
+        """
+        parse_result = parse_identification_file(file_path)
         count = 0
-        for rec in records:
+        for rec in parse_result.records:
             if rec.number:
                 if rec.number not in self._records:
                     self._records[rec.number] = []
@@ -1177,16 +1380,19 @@ class IdentificationStore:
         self._files_loaded.append(file_path.name)
         log.info("Loaded %d identification records from %s (total MSISDNs: %d)",
                  count, file_path.name, len(self._records))
-        return count
+        return count, parse_result
 
-    def load_files(self, file_paths: List[Path]) -> int:
-        """Load multiple identification files."""
+    def load_files(self, file_paths: List[Path]) -> Tuple[int, List[IdentificationParseResult]]:
+        """Load multiple identification files. Returns (total_records, list_of_parse_results)."""
         total = 0
+        all_results: List[IdentificationParseResult] = []
         for fp in file_paths:
-            total += self.load_file(fp)
-        return total
+            count, parse_result = self.load_file(fp)
+            total += count
+            all_results.append(parse_result)
+        return total, all_results
 
-    def load_path(self, path: Path) -> int:
+    def load_path(self, path: Path) -> Tuple[int, List[IdentificationParseResult]]:
         """Load identification from a file, ZIP archive, or folder.
 
         Supports:
@@ -1194,21 +1400,23 @@ class IdentificationStore:
         - ZIP archive (.zip) — extracts and parses all supported files inside
         - Directory — recursively finds and parses all supported files
 
-        Returns number of records loaded.
+        Returns (total_records, list_of_parse_results).
         """
         import tempfile
         import zipfile
 
         _ID_EXTENSIONS = {".csv", ".xlsx", ".xls"}
         path = Path(path)
+        all_results: List[IdentificationParseResult] = []
 
         if not path.exists():
             log.error("Identification path does not exist: %s", path)
-            return 0
+            return 0, all_results
 
         # Single file
         if path.is_file() and path.suffix.lower() in _ID_EXTENSIONS:
-            return self.load_file(path)
+            count, pr = self.load_file(path)
+            return count, [pr]
 
         # ZIP archive
         if path.is_file() and path.suffix.lower() == ".zip":
@@ -1219,7 +1427,7 @@ class IdentificationStore:
                         zf.extractall(tmpdir)
                 except (zipfile.BadZipFile, Exception) as e:
                     log.error("Failed to extract ZIP %s: %s", path, e)
-                    return 0
+                    return 0, all_results
 
                 tmp_path = Path(tmpdir)
                 for fp in sorted(tmp_path.rglob("*")):
@@ -1228,11 +1436,13 @@ class IdentificationStore:
                         if any(part.startswith(".") or part.startswith("__") for part in fp.parts):
                             continue
                         try:
-                            total += self.load_file(fp)
+                            count, pr = self.load_file(fp)
+                            total += count
+                            all_results.append(pr)
                         except Exception as e:
                             log.warning("Error loading %s from ZIP: %s", fp.name, e)
             log.info("ZIP %s: loaded %d records total", path.name, total)
-            return total
+            return total, all_results
 
         # Directory
         if path.is_dir():
@@ -1242,14 +1452,16 @@ class IdentificationStore:
                     if any(part.startswith(".") or part.startswith("__") for part in fp.parts):
                         continue
                     try:
-                        total += self.load_file(fp)
+                        count, pr = self.load_file(fp)
+                        total += count
+                        all_results.append(pr)
                     except Exception as e:
                         log.warning("Error loading %s: %s", fp.name, e)
             log.info("Directory %s: loaded %d records total", path.name, total)
-            return total
+            return total, all_results
 
         log.warning("Unsupported identification path: %s", path)
-        return 0
+        return 0, all_results
 
     def lookup(self, number: str) -> Optional[SubscriberIdentification]:
         """Look up best identification by phone number.

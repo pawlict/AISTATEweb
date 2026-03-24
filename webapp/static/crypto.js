@@ -867,7 +867,7 @@
     const notesMgr = _cryptoNotesMgr;
     function _noteMarker(txId) {
       const has = notesMgr && notesMgr.hasNote("crypto_transaction", "transaction_id", txId);
-      return `<td style="padding:0 2px;text-align:center;width:22px"><span class="analyst-note-marker${has ? " has-note" : ""}" data-note-txid="${_esc(txId)}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="13" height="13" draggable="false"></span></td>`;
+      return `<td style="padding:0 2px;text-align:center;width:22px"><span class="analyst-note-marker${has ? " has-note" : ""}" data-note-txid="${_esc(txId)}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(has)}" alt="" width="13" height="13" draggable="false"></span></td>`;
     }
 
     if (isExchange) {
@@ -1041,7 +1041,7 @@
       html += `<div style="display:flex;align-items:center;gap:2px;flex-shrink:0;border-left:1px solid var(--border);padding-left:8px;margin-left:4px">`;
       // Note marker
       const _hn = _cryptoNotesMgr && _cryptoNotesMgr.hasNote("crypto_anomaly", "anomaly_type", cat.type);
-      html += `<span class="analyst-note-marker${_hn ? " has-note" : ""}" data-note-anomaly="${cat.type}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false"></span>`;
+      html += `<span class="analyst-note-marker${_hn ? " has-note" : ""}" data-note-anomaly="${cat.type}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(_hn)}" alt="" width="16" height="16" draggable="false"></span>`;
       if (hasItems) {
         if (items.length > VISIBLE) {
           html += _makeIcon(_IC_EXPAND, "Rozwiń / zwiń listę", "crypto-anom-toggle") + " ";

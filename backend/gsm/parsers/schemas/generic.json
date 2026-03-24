@@ -1,0 +1,220 @@
+{
+  "parser_id": "generic",
+  "parser_version": "1.0",
+  "format_variant": "",
+  "columns": [
+    {
+      "logical_name": "date",
+      "expected_headers": [],
+      "regex_patterns": [
+        "data",
+        "date",
+        "czas\\s*po[łl]",
+        "data\\s*po[łl][aą]czenia",
+        "data\\s*i\\s*czas",
+        "data\\s*rozm",
+        "data\\s*rozpocz"
+      ],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "time",
+      "expected_headers": [],
+      "regex_patterns": [
+        "godzina",
+        "czas\\s*rozp",
+        "time",
+        "godz"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "caller",
+      "expected_headers": [],
+      "regex_patterns": [
+        "numer\\s*a\\b",
+        "numer\\s*dzwoni[aą]cego",
+        "calling",
+        "msisdn\\s*a",
+        "numer\\s*nadawcy"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "callee",
+      "expected_headers": [],
+      "regex_patterns": [
+        "numer\\s*b\\b",
+        "numer\\s*wywo[łl]",
+        "called",
+        "msisdn\\s*b",
+        "numer\\s*odbiorcy",
+        "numer\\s*docelowy",
+        "numer\\s*po[łl][aą]czenia"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "record_type",
+      "expected_headers": [],
+      "regex_patterns": [
+        "typ\\s*po[łl][aą]czenia",
+        "typ\\s*zdarzenia",
+        "rodzaj",
+        "us[łl]uga",
+        "type",
+        "kierunek"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "duration",
+      "expected_headers": [],
+      "regex_patterns": [
+        "czas\\s*trwania",
+        "duration",
+        "d[łl]ugo[śs][ćc]",
+        "czas\\s*po[łl]"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "cost",
+      "expected_headers": [],
+      "regex_patterns": [
+        "koszt",
+        "op[łl]ata",
+        "kwota",
+        "netto",
+        "cena",
+        "nale[żz]no",
+        "warto[śs][ćc]"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "cost_gross",
+      "expected_headers": [],
+      "regex_patterns": [
+        "brutto",
+        "z\\s*vat",
+        "gross"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "location",
+      "expected_headers": [],
+      "regex_patterns": [
+        "lokalizacja",
+        "location",
+        "bts",
+        "stacja",
+        "cell",
+        "adres\\s*bts"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "network",
+      "expected_headers": [],
+      "regex_patterns": [
+        "sie[ćc]\\s*docelowa",
+        "sie[ćc]",
+        "operator",
+        "network"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "imsi",
+      "expected_headers": [],
+      "regex_patterns": [
+        "imsi"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "imei",
+      "expected_headers": [],
+      "regex_patterns": [
+        "imei"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "data_volume",
+      "expected_headers": [],
+      "regex_patterns": [
+        "(?:ilo[śs][ćc]|obj[ęe]to[śs][ćc]|wolumen)\\s*(?:danych|kb|mb|gb)",
+        "transfer",
+        "volume",
+        "dane\\s*\\("
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "roaming",
+      "expected_headers": [],
+      "regex_patterns": [
+        "roaming",
+        "kraj",
+        "country"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "lac",
+      "expected_headers": [],
+      "regex_patterns": [
+        "lac\\b",
+        "location\\s*area"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "cell_id",
+      "expected_headers": [],
+      "regex_patterns": [
+        "cell\\s*id",
+        "cid\\b"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    }
+  ],
+  "header_detection": [],
+  "notes": "Auto-generated from GenericBillingParser",
+  "created_at": "2026-03-24T19:03:45.040921+00:00"
+}

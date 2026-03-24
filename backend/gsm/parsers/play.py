@@ -122,14 +122,24 @@ def _parse_coord(text: str) -> Optional[float]:
         return None
 
 
+def _strip_eq(val: str) -> str:
+    """Strip ="" quoting from Play CSV cells: ='value' or ="value" → value."""
+    v = val.strip()
+    if v.startswith('="') and v.endswith('"'):
+        return v[2:-1]
+    if v.startswith("='") and v.endswith("'"):
+        return v[2:-1]
+    return v
+
+
 def _get(row: List[Any], idx: Optional[int]) -> str:
-    """Get cell value as cleaned string."""
+    """Get cell value as cleaned string, stripping ="" quoting."""
     if idx is None or idx >= len(row):
         return ""
     val = row[idx]
     if val is None:
         return ""
-    return str(val).strip()
+    return _strip_eq(str(val).strip())
 
 
 def _is_phone(text: str) -> bool:
@@ -138,6 +148,26 @@ def _is_phone(text: str) -> bool:
         return False
     digits = re.sub(r"[\s\-\+\(\)\.]+", "", text)
     return bool(re.match(r"^\d{7,15}$", digits))
+
+
+def _valid_imei(text: str) -> str:
+    """Return IMEI only if it looks valid (14-15 digits). Otherwise empty."""
+    if not text:
+        return ""
+    digits = re.sub(r"[^\d]", "", text)
+    if 14 <= len(digits) <= 15:
+        return digits
+    return ""
+
+
+def _valid_imsi(text: str) -> str:
+    """Return IMSI only if it looks valid (15 digits, starts with MCC). Otherwise empty."""
+    if not text:
+        return ""
+    digits = re.sub(r"[^\d]", "", text)
+    if len(digits) == 15:
+        return digits
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -360,8 +390,8 @@ class PlayParser(BillingParser):
                 sub_street = _get(row, col_map.get("ui_street"))
                 sub_mcc = _get(row, col_map.get("ui_mcc"))
                 sub_mnc = _get(row, col_map.get("ui_mnc"))
-                sub_imsi = _get(row, col_map.get("ui_imsi"))
-                sub_imei = _get(row, col_map.get("ui_imei"))
+                sub_imsi = _valid_imsi(_get(row, col_map.get("ui_imsi")))
+                sub_imei = _valid_imei(_get(row, col_map.get("ui_imei")))
             else:
                 # Subscriber is UW (other party)
                 sub_lac = _get(row, col_map.get("uw_lac"))
@@ -376,8 +406,8 @@ class PlayParser(BillingParser):
                 sub_street = _get(row, col_map.get("uw_street"))
                 sub_mcc = _get(row, col_map.get("uw_mcc"))
                 sub_mnc = _get(row, col_map.get("uw_mnc"))
-                sub_imsi = _get(row, col_map.get("uw_imsi"))
-                sub_imei = _get(row, col_map.get("uw_imei"))
+                sub_imsi = _valid_imsi(_get(row, col_map.get("uw_imsi")))
+                sub_imei = _valid_imei(_get(row, col_map.get("uw_imei")))
 
             # Build location string
             location = ""

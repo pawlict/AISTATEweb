@@ -1,0 +1,367 @@
+{
+  "parser_id": "play",
+  "parser_version": "1.1",
+  "format_variant": "",
+  "columns": [
+    {
+      "logical_name": "datetime",
+      "expected_headers": [
+        "data_i_godz_polacz"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "duration",
+      "expected_headers": [
+        "czas_trwania"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "service_type",
+      "expected_headers": [
+        "rodzaj_uslugi"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_msisdn",
+      "expected_headers": [
+        "ui_msisdn"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_imei",
+      "expected_headers": [
+        "ui_imei"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_imsi",
+      "expected_headers": [
+        "ui_imsi"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_lac",
+      "expected_headers": [
+        "ui_lac"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_cid",
+      "expected_headers": [
+        "ui_cid"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_lon",
+      "expected_headers": [
+        "ui_dlug_geog"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_lat",
+      "expected_headers": [
+        "ui_szer_geog"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_azimuth",
+      "expected_headers": [
+        "ui_azymut"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_beam",
+      "expected_headers": [
+        "ui_wiazka"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_range",
+      "expected_headers": [
+        "ui_zasieg"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_postal",
+      "expected_headers": [
+        "ui_bts_kod_pocztowy"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_city",
+      "expected_headers": [
+        "ui_bts_miejscowosc"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_street",
+      "expected_headers": [
+        "ui_bts_ulica"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_mcc",
+      "expected_headers": [
+        "ui_mcc"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ui_mnc",
+      "expected_headers": [
+        "ui_mnc"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_msisdn",
+      "expected_headers": [
+        "uw_msisdn"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_imei",
+      "expected_headers": [
+        "uw_imei"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_imsi",
+      "expected_headers": [
+        "uw_imsi"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_lac",
+      "expected_headers": [
+        "uw_lac"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_cid",
+      "expected_headers": [
+        "uw_cid"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_lon",
+      "expected_headers": [
+        "uw_dlug_geog"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_lat",
+      "expected_headers": [
+        "uw_szer_geog"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_azimuth",
+      "expected_headers": [
+        "uw_azymut"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_beam",
+      "expected_headers": [
+        "uw_wiazka"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_range",
+      "expected_headers": [
+        "uw_zasieg"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_postal",
+      "expected_headers": [
+        "uw_bts_kod_pocztowy"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_city",
+      "expected_headers": [
+        "uw_bts_miejscowosc"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_street",
+      "expected_headers": [
+        "uw_bts_ulica"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_mcc",
+      "expected_headers": [
+        "uw_mcc"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "uw_mnc",
+      "expected_headers": [
+        "uw_mnc"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "forwarded",
+      "expected_headers": [
+        "przek_msisdn"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ip_port",
+      "expected_headers": [
+        "internet_ip_port"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    }
+  ],
+  "header_detection": [
+    "data_i_godz_polacz",
+    "rodzaj_uslugi",
+    "ui_msisdn",
+    "uw_msisdn",
+    "ui_lac",
+    "ui_cid"
+  ],
+  "notes": "Auto-generated from PlayParser",
+  "created_at": "2026-03-24T19:03:44.906234+00:00"
+}

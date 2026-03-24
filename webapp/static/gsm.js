@@ -1712,6 +1712,10 @@
       if (data.identification && data.identification.lookup) {
         Object.assign(St.idMap, data.identification.lookup);
       }
+      // Show drift banner if format changes detected
+      if (data.identification) {
+        _renderIdentDriftBanner(data.identification);
+      }
 
       // Process billing
       if (data.billing) {
@@ -1805,6 +1809,7 @@
         if (data.identification && data.identification.lookup) {
           Object.assign(St.idMap, data.identification.lookup);
         }
+        if (data.identification) _renderIdentDriftBanner(data.identification);
 
         // Copy files to a stable Array (FileList may become stale if input resets)
         const filesCopy = Array.from(files);
@@ -1845,6 +1850,7 @@
         const idCount = data.identification.total_records || 0;
         _addLog("info", `Identyfikacja: ${idCount} rekordów załadowanych`);
       }
+      if (data.identification) _renderIdentDriftBanner(data.identification);
 
       // Process billing data
       if (data.billing) {
@@ -2086,9 +2092,11 @@
     if (!wrap) return;
     wrap.style.display = "";
 
-    // Hide empty state
+    // Hide empty state, show results
     const empty = QS("#gsm_empty_state");
     if (empty) empty.style.display = "none";
+    const gsmResults = QS("#gsm_results");
+    if (gsmResults) gsmResults.style.display = "";
 
     // Render in stages, yielding to the browser between each
     const stages = [
@@ -2260,12 +2268,15 @@
     const dualImei = an.dual_imei || null;
 
     // ── Build IMEI ↔ IMSI map from individual records ──
+    // Validate: IMEI must be 14-15 digits, IMSI must be 15 digits
+    const _validImei = v => { const d = (v || "").replace(/\D/g, ""); return d.length >= 14 && d.length <= 15 ? d : ""; };
+    const _validImsi = v => { const d = (v || "").replace(/\D/g, ""); return d.length === 15 ? d : ""; };
     const imeiImsiMap = {};   // imei → Set of imsi
     const imsiImeiMap = {};   // imsi → Set of imei
     if (records && records.length) {
       for (const r of records) {
-        const imei = (r.imei || "").trim();
-        const imsi = (r.imsi || "").trim();
+        const imei = _validImei(r.imei);
+        const imsi = _validImsi(r.imsi);
         if (!imei) continue;
         if (!imeiImsiMap[imei]) imeiImsiMap[imei] = new Set();
         if (imsi) imeiImsiMap[imei].add(imsi);
@@ -2277,12 +2288,12 @@
     }
 
     // ── Collect all known IMEI / IMSI (from records + subscriber header) ──
-    const allImeis = new Set(devList.map(d => d.imei).filter(Boolean));
-    if (sub.imei) allImeis.add(sub.imei.trim());
+    const allImeis = new Set(devList.map(d => _validImei(d.imei)).filter(Boolean));
+    if (sub.imei) { const v = _validImei(sub.imei); if (v) allImeis.add(v); }
 
     const allImsis = new Set();
     for (const s of Object.values(imeiImsiMap)) s.forEach(v => allImsis.add(v));
-    if (sub.imsi) allImsis.add(sub.imsi.trim());
+    if (sub.imsi) { const v = _validImsi(sub.imsi); if (v) allImsis.add(v); }
 
     // Nothing at all → hide card
     if (allImeis.size === 0 && allImsis.size === 0) {
@@ -2350,7 +2361,7 @@
         }
         const _devHasNote = _devNotesMgr && _devNotesMgr.hasNote("gsm_device", "imei", d.imei);
         html += `<tr>
-          <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_devHasNote ? " has-note" : ""}" data-note-imei="${d.imei || ""}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>
+          <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_devHasNote ? " has-note" : ""}" data-note-imei="${d.imei || ""}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(_devHasNote)}" alt="" width="14" height="14" draggable="false"></span></td>
           <td>${imeiHtml}</td>
           <td>${imsiStr}</td>
           <td>${d.known ? `<strong>${name}</strong>` : name}</td>
@@ -2460,11 +2471,16 @@
 
     if (findings.length) {
       for (const f of findings) {
-        const cls = f.type === "phone_change" ? "gsm-anomaly-medium" : "gsm-anomaly-high";
+        const cls = f.type === "phone_change" ? "gsm-anomaly-medium" : (f.type === "sim_change" ? "gsm-anomaly-high" : "gsm-anomaly-medium");
         html += `<div class="gsm-anomaly ${cls}" style="margin-bottom:4px">${f.msg}</div>`;
       }
+    } else if (logicalDevices > 1 || nImsi > 1) {
+      // Multiple devices or SIMs but no specific findings — show summary without "no changes"
+      const devMsg = logicalDevices > 1 ? `${logicalDevices} urządzeń` : "jednego urządzenia";
+      const simMsg = nImsi > 1 ? `${nImsi} kartami SIM` : "jedną kartą SIM";
+      html += `<div class="gsm-anomaly gsm-anomaly-medium" style="margin-bottom:4px">W okresie analizy używano ${devMsg}${dualImei ? " (dual-modem)" : ""} z ${simMsg}.</div>`;
     } else {
-      html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:4px">Brak zmian — w całym okresie używano ${logicalDevices === 1 ? "jednego urządzenia" : logicalDevices + " urządzeń"}${dualImei ? " (dual-modem)" : ""} z ${nImsi === 1 ? "jedną kartą SIM" : nImsi + " kartami SIM"}. Nie wykryto zmian telefonów ani kart SIM.</div>`;
+      html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:4px">Brak zmian — w całym okresie używano jednego urządzenia${dualImei ? " (dual-modem)" : ""} z jedną kartą SIM. Nie wykryto zmian telefonów ani kart SIM.</div>`;
     }
     html += "</div>";
 
@@ -2587,7 +2603,7 @@
       for (const c of a.top_contacts.slice(0, 20)) {
         const _tcHn = _tcNm && _tcNm.hasNote("gsm_contact", "number", c.number);
         html += `<tr>
-          <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_tcHn ? " has-note" : ""}" data-note-contact="${c.number}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>
+          <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_tcHn ? " has-note" : ""}" data-note-contact="${c.number}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(_tcHn)}" alt="" width="14" height="14" draggable="false"></span></td>
           <td><code>${c.number}</code></td>
           <td>${_idCell(c.number)}</td>
           <td>${_fmt(c.total_interactions)}</td>
@@ -3319,7 +3335,7 @@
         // Note marker
         const _nm = window._gsmNotesMgr;
         const _hn = _nm && _nm.hasNote("gsm_anomaly", "anomaly_type", cat.type);
-        html += `<span class="analyst-note-marker${_hn ? " has-note" : ""}" data-note-anomaly="${cat.type}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false"></span>`;
+        html += `<span class="analyst-note-marker${_hn ? " has-note" : ""}" data-note-anomaly="${cat.type}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(_hn)}" alt="" width="16" height="16" draggable="false"></span>`;
         if (hasItems) {
           // Expand / collapse (only if >5 items)
           if (items.length > VISIBLE) {
@@ -4786,7 +4802,7 @@
         const _nx = card.x + CW - _nSize - 1;
         const _ny = card.y + 1;
         svg += `<g class="gsm-graph-note-marker" data-number="${c.number}" style="cursor:pointer;opacity:${_nOpacity}">
-          <image href="/static/icons/dokumenty/notes.svg" x="${_nx}" y="${_ny}" width="${_nSize}" height="${_nSize}" />
+          <image href="${_noteIconSrc(_ghn)}" x="${_nx}" y="${_ny}" width="${_nSize}" height="${_nSize}" />
         </g>`;
       }
       svg += `</g>`;
@@ -5141,7 +5157,7 @@
       const rowIdx = r.raw_row != null ? r.raw_row : "";
       const hasNote = _notesMgr && _notesMgr.hasNote("gsm_record", "record_idx", rowIdx);
       let rh = `<tr data-row="${rowIdx}"${rowStyle}>`;
-      rh += `<td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${hasNote ? " has-note" : ""}" data-note-row="${rowIdx}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>`;
+      rh += `<td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${hasNote ? " has-note" : ""}" data-note-row="${rowIdx}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(hasNote)}" alt="" width="14" height="14" draggable="false"></span></td>`;
       for (const col of cols) {
         rh += `<td>${col.renderCell(r)}</td>`;
       }
@@ -5531,7 +5547,7 @@
         : "\u2014";
       const _snHn = _snNm && _snNm.hasNote("gsm_special_number", "number", s.number);
       tbl += `<tr>
-        <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_snHn ? " has-note" : ""}" data-note-special="${s.number}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span></td>
+        <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_snHn ? " has-note" : ""}" data-note-special="${s.number}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(_snHn)}" alt="" width="14" height="14" draggable="false"></span></td>
         <td><code>${s.number}</code></td>
         <td><span class="gsm-sn-badge ${cls}">${cat}</span></td>
         <td>${s.label || "\u2014"}</td>
@@ -5748,7 +5764,7 @@
     }
     if (count > 1) html += ` <span class="gsm-chip-count">${count}×</span>`;
     // Note marker — SVG icon, always visible (darker), filled when has note
-    html += `<span class="gsm-chip-note${hasNote ? ' has-note' : ''}" data-note-number="${_escAttr(num)}" title="Notatka"><img src="/static/icons/dokumenty/notes.svg" alt="" width="14" height="14" draggable="false"></span>`;
+    html += `<span class="gsm-chip-note${hasNote ? ' has-note' : ''}" data-note-number="${_escAttr(num)}" title="Notatka"><img src="${_noteIconSrc(hasNote)}" alt="" width="14" height="14" draggable="false"></span>`;
     html += `</span>`;
     return html;
   }
@@ -5886,6 +5902,16 @@
       if (!num) return;
       const hasNote = nm.hasNote("gsm_contact", "number", num);
       marker.style.opacity = hasNote ? "1" : "0";
+      const img = marker.querySelector("image");
+      if (img) img.setAttribute("href", _noteIconSrc(hasNote));
+    });
+
+    // 8. Swap all note marker icons (filled vs empty)
+    document.querySelectorAll(".analyst-note-marker img, .gsm-chip-note img").forEach(img => {
+      const parent = img.closest(".analyst-note-marker, .gsm-chip-note");
+      if (!parent) return;
+      const hasNote = parent.classList.contains("has-note");
+      img.src = _noteIconSrc(hasNote);
     });
   }
 
@@ -6027,7 +6053,7 @@
         const fields = [note.text, note.label].filter(Boolean);
         if (fields.some(f => f.toLowerCase().includes(q))) {
           results.push({
-            icon: "/static/icons/dokumenty/notes.svg",
+            icon: "/static/icons/pliki/notes.svg",
             text: `${note.label || "Notatka"}: ${(note.text || "").slice(0, 60)}`,
             tooltip: `${note.label || "Notatka"}: ${note.text || ""}${note.tag ? " [" + note.tag + "]" : ""}`,
             loc: "Notatka",
@@ -9488,6 +9514,86 @@
     el.parentElement.style.display = "";
     el.innerHTML = warnings.map(w => `<div class="gsm-warning">${w}</div>`).join("");
   }
+
+  /**
+   * Render identification drift banner — shows when operator changed column format.
+   * User can approve or reject adaptive mappings.
+   */
+  function _renderIdentDriftBanner(identData) {
+    const container = QS("#gsm_ident_drift_container");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const warnings = identData && identData.drift_warnings;
+    const reportIds = identData && identData.drift_report_ids;
+    if (!warnings || !warnings.length) {
+      container.style.display = "none";
+      return;
+    }
+    container.style.display = "";
+
+    let html = `<div class="card warning" style="margin-bottom:12px;border-left:4px solid #f59e0b;padding:16px">`;
+    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">`;
+    html += `<img src="/static/icons/status/warning.svg" width="18" height="18" alt="">`;
+    html += `<strong style="font-size:14px">Zmiana formatu pliku identyfikacji</strong>`;
+    html += `</div>`;
+    html += `<div style="font-size:13px;margin-bottom:8px">Wykryto zmienione nazwy kolumn. System adaptacyjny dopasował dane automatycznie:</div>`;
+    html += `<div style="font-size:12px;margin-bottom:10px">`;
+    for (const w of warnings) {
+      // Format: "  header -> logical (pewnosc: 92%, metoda: semantic)"
+      const m = w.match(/^\s*(.+?)\s*->\s*(.+?)\s*\(pewnosc:\s*(\d+)%/);
+      if (m) {
+        const conf = parseInt(m[3], 10);
+        const icon = conf >= 85 ? "✅" : "⚠️";
+        const cls = conf >= 85 ? "color:#16a34a" : "color:#f59e0b;font-weight:600";
+        html += `<div style="padding:3px 0">${icon} <code>${m[1].trim()}</code> → <code>${m[2].trim()}</code> <span style="${cls}">${conf}%</span>${conf < 85 ? " (wymaga potwierdzenia)" : " (auto)"}</div>`;
+      } else {
+        html += `<div style="padding:2px 0;opacity:0.8">${w}</div>`;
+      }
+    }
+    html += `</div>`;
+
+    // Action buttons
+    if (reportIds && reportIds.length) {
+      html += `<div style="display:flex;gap:8px;margin-top:8px">`;
+      html += `<button class="btn btn-sm" onclick="_gsmApproveDrift(this, '${reportIds[0]}')" style="font-size:12px;padding:4px 12px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer">Zatwierdź mapowania</button>`;
+      html += `<button class="btn btn-sm" onclick="_gsmRejectDrift(this, '${reportIds[0]}')" style="font-size:12px;padding:4px 12px;background:#dc2626;color:#fff;border:none;border-radius:4px;cursor:pointer">Odrzuć</button>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+    container.innerHTML = html;
+  }
+
+  // Global handlers for drift approve/reject
+  window._gsmApproveDrift = async function(btn, reportId) {
+    try {
+      btn.disabled = true;
+      const r = await fetch("/api/gsm/drift/reports/" + reportId + "/approve", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({confirmed_mappings: {}, apply_to_parser: false}),
+      });
+      if (r.ok) {
+        const container = QS("#gsm_ident_drift_container");
+        if (container) container.innerHTML = '<div class="card success" style="border-left:4px solid #16a34a;padding:12px;font-size:13px;margin-bottom:12px">✅ Mapowania zatwierdzone — schemat zaktualizowany.</div>';
+        setTimeout(() => { if (container) container.style.display = "none"; }, 5000);
+      }
+    } catch (e) { console.warn("Drift approve error:", e); }
+  };
+  window._gsmRejectDrift = async function(btn, reportId) {
+    try {
+      btn.disabled = true;
+      const r = await fetch("/api/gsm/drift/reports/" + reportId + "/reject", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({}),
+      });
+      if (r.ok) {
+        const container = QS("#gsm_ident_drift_container");
+        if (container) { container.innerHTML = ""; container.style.display = "none"; }
+      }
+    } catch (e) { console.warn("Drift reject error:", e); }
+  };
 
   function _typeLabel(t) {
     const map = {

@@ -38,6 +38,12 @@ logs/
 *.backup
 *.dump
 
+# Update packages (built .zip files)
+Updates/
+
+# Model cache (downloaded ML models — too large for git)
+backend/models_cache/
+
 # Developer-only tools (license key generator — never distribute)
 scripts/keygen.py
 

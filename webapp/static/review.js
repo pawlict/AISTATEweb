@@ -977,7 +977,7 @@
       const _notesMgr = window._amlNotesMgr || null;
       const _hasNote = _notesMgr && _notesMgr.hasNote("aml_transaction", "transaction_id", tx.id);
       html += `<tr class="${rowClass}" data-txid="${_esc(tx.id)}">
-        <td style="padding:0 2px;text-align:center;width:22px"><span class="analyst-note-marker${_hasNote ? " has-note" : ""}" data-note-txid="${_esc(tx.id)}" title="Notatka (Ctrl+M)"><img src="/static/icons/dokumenty/notes.svg" alt="" width="13" height="13" draggable="false"></span></td>
+        <td style="padding:0 2px;text-align:center;width:22px"><span class="analyst-note-marker${_hasNote ? " has-note" : ""}" data-note-txid="${_esc(tx.id)}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(_hasNote)}" alt="" width="13" height="13" draggable="false"></span></td>
         <td class="rv-col-date rv-col-frozen-l">${_esc(tx.booking_date || "")}</td>
         <td class="rv-col-date">${_esc(tx.tx_date || "")}</td>
         <td class="rv-col-type">${_esc(tx.bank_category || "")}</td>

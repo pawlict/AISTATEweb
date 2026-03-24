@@ -271,7 +271,7 @@
     background: rgba(33,150,243,.08);
   }
 
-  .seg-note-icon {
+  .analyst-note-marker {
     display: inline-block;
     margin-left: 8px;
     cursor: pointer;
@@ -280,14 +280,17 @@
     vertical-align: middle;
   }
 
-  .seg-note-icon:hover {
+  .analyst-note-marker:hover {
     opacity: 1;
   }
 
-  .seg-note-icon.has-note {
+  .analyst-note-marker.has-note {
     opacity: 1;
-    color: #2196F3;
-    font-weight: bold;
+    filter: drop-shadow(0 0 2px rgba(234,179,8,.5));
+  }
+
+  .analyst-note-marker.has-note img {
+    filter: none;
   }
 
   /* Notatka tooltip (dymek) */
@@ -406,14 +409,12 @@
             <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="tr_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
             <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="tr_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
             <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="tr_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
-            <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes"><input type="checkbox" id="tr_include_notes" value="1"><img src="/static/icons/dokumenty/markdown.svg" alt="Notatki" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes"><input type="checkbox" id="tr_include_notes" value="1"><img src="/static/icons/pliki/notes.svg" alt="Notatki" draggable="false"></label>
             <button class="btn pill-icon" id="tr_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
           </div>
         </div>
       </div>
 
-      <!-- Optional: direct transcript download link (kept for compatibility) -->
-      <a class="btn secondary" id="tr_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
 
     </div>
   </div>
@@ -434,10 +435,68 @@
 
     <div class="hr"></div>
 
-    <!-- 2-kolumnowy layout: Wynik + Notatki (EXACT COPY from diarization) -->
-  <div style="display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start">
-    <!-- Lewa kolumna: Wynik transkrypcji -->
-    <div>
+    <!-- Layout: Wynik transkrypcji + Panel analityczny -->
+  <div class="analyst-panel-layout">
+
+    <!-- Panel analityczny (collapsible sidebar) -->
+    <aside class="analyst-panel collapsed" id="tr_analyst_panel">
+      <button class="analyst-panel-toggle" id="tr_panel_toggle" title="Panel analityczny">
+        <img src="/static/icons/akcje/sidebar_expand.svg" alt="" width="18" height="18" draggable="false">
+      </button>
+      <div class="analyst-panel-body">
+        <div class="analyst-panel-header">
+          <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
+            <img src="/static/icons/pliki/notes.svg" alt="" width="16" height="16" draggable="false">
+            <span>Panel analityczny</span>
+          </div>
+          <button class="analyst-panel-toggle-inner" id="tr_panel_collapse" title="Zwiń panel">
+            <img src="/static/icons/akcje/sidebar_collapse.svg" alt="" width="16" height="16" draggable="false">
+          </button>
+        </div>
+
+        <!-- Global note -->
+        <div class="analyst-panel-section">
+          <div class="analyst-panel-label">
+            <img src="/static/icons/inne/pin.svg" alt="" width="14" height="14" draggable="false">
+            <span>Notatka globalna</span>
+          </div>
+          <textarea class="analyst-panel-global-ta input" id="tr_analyst_global_note" placeholder="Notatka do całej transkrypcji..."></textarea>
+        </div>
+
+        <div class="analyst-panel-divider"></div>
+
+        <!-- Item notes -->
+        <div class="analyst-panel-section analyst-panel-items-section">
+          <div class="analyst-panel-label" style="display:flex;align-items:center;justify-content:space-between">
+            <span style="display:flex;align-items:center;gap:5px">
+              <img src="/static/icons/projekty/project_tag.svg" alt="" width="14" height="14" draggable="false">
+              <span>Notatki do elementów</span>
+            </span>
+            <span class="analyst-panel-count" id="tr_notes_count">0</span>
+          </div>
+          <!-- Tag filter -->
+          <div class="analyst-panel-tag-filter" id="tr_tag_filter">
+            <select class="input mini-select" id="tr_tag_filter_select" style="font-size:12px">
+              <option value="">Wszystkie</option>
+              <option value="neutral">Neutralny</option>
+              <option value="legitimate">Poprawny</option>
+              <option value="suspicious">Podejrzany</option>
+              <option value="monitoring">Obserwacja</option>
+              <option value="custom1">Własny 1</option>
+              <option value="custom2">Własny 2</option>
+              <option value="custom3">Własny 3</option>
+              <option value="custom4">Własny 4</option>
+            </select>
+          </div>
+          <div class="analyst-panel-items" id="tr_notes_list">
+            <div class="analyst-panel-empty">Brak notatek. Użyj Ctrl+M aby dodać.</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content: Wynik transkrypcji -->
+    <div class="analyst-panel-main">
       <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="tr.result.title"><i data-icon="document" data-size="16"></i> Wynik transkrypcji</div>
       <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
       <div id="tr_audio_player"></div>
@@ -450,46 +509,56 @@
       </div>
     </div>
 
-    <!-- Prawa kolumna: Notatki (EXACT COPY from diarization) -->
-    <div class="notes-panel">
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title"><i data-icon="notes" data-size="16"></i> Notatki</div>
-      
-      <!-- Notatka globalna -->
-      <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title"><i data-icon="globe" data-size="16"></i> Notatka globalna</div>
-        <textarea id="tr_notes_global" placeholder="Notatka do całej transkrypcji (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:13px;resize:vertical;background:var(--panel,#fff);color:var(--text,inherit)"></textarea>
-        <div class="small" style="margin-top:4px;opacity:0.7" data-i18n="notes.autosave"><i data-icon="success" data-size="12"></i> Auto-save</div>
-      </div>
-
-      <div class="hr" style="margin:12px 0"></div>
-
-      <!-- Notatki do bloków -->
-      <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title"><i data-icon="pin" data-size="16"></i> Notatki do bloków</div>
-        <div id="tr_block_notes_list" class="block-notes-list">
-          <div class="small" style="opacity:0.6;text-align:center;padding:20px" data-i18n-html="notes.blocks.empty_html">
-            ${t("notes.blocks.empty_html")}
-          </div>
-        </div>
-      </div>
-
-      <div class="small" style="margin-top:10px;color:#999">Notatki zapisywane automatycznie</div>
-    </div>
-  </div>
-
-
+  </div><!-- /analyst-panel-layout -->
 
   </div>
 
 </div>
-<!-- Tooltip for note preview on hover -->
-<div class="note-tooltip" id="tr_note_tooltip"></div>
+
+<!-- Note editor modal (shared) -->
+<div class="analyst-note-overlay" id="analyst_note_overlay" style="display:none">
+  <div class="analyst-note-modal">
+    <div class="analyst-note-header">
+      <h3 id="analyst_note_modal_title">Nowa notatka</h3>
+      <button class="note-editor-close" id="analyst_note_close">&times;</button>
+    </div>
+    <div class="analyst-note-body">
+      <div class="analyst-note-element-label" id="analyst_note_element_label"></div>
+      <div class="analyst-note-field">
+        <div class="label">Notatka</div>
+        <textarea class="input" id="analyst_note_text" style="min-height:100px" placeholder=""></textarea>
+      </div>
+      <div class="analyst-note-field">
+        <div class="label">Tagi</div>
+        <div class="analyst-note-tags" id="analyst_note_tags">
+          <button type="button" class="analyst-tag-btn" data-tag="neutral"><span class="analyst-tag-dot" style="background:#60a5fa"></span> <span class="analyst-tag-label">Neutralny</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="legitimate"><span class="analyst-tag-dot" style="background:#15803d"></span> <span class="analyst-tag-label">Poprawny</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="suspicious"><span class="analyst-tag-dot" style="background:#dc2626"></span> <span class="analyst-tag-label">Podejrzany</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="monitoring"><span class="analyst-tag-dot" style="background:#ea580c"></span> <span class="analyst-tag-label">Obserwacja</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="custom1"><span class="analyst-tag-dot" style="background:#ffff00"></span> <span class="analyst-tag-label" data-editable="1">Własny 1</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="custom2"><span class="analyst-tag-dot" style="background:#7fff00"></span> <span class="analyst-tag-label" data-editable="1">Własny 2</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="custom3"><span class="analyst-tag-dot" style="background:#b8860b"></span> <span class="analyst-tag-label" data-editable="1">Własny 3</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="custom4"><span class="analyst-tag-dot" style="background:#6366f1"></span> <span class="analyst-tag-label" data-editable="1">Własny 4</span></button>
+        </div>
+        <div class="note-editor-hint" style="margin-top:2px;font-size:10px;color:var(--text-muted,#94a3b8)">Kliknij dwukrotnie nazwę własnego tagu aby zmienić</div>
+      </div>
+      <div class="note-editor-hint">Ctrl+Enter = zapisz</div>
+    </div>
+    <div class="note-editor-footer">
+      <button class="note-btn note-btn-danger" id="analyst_note_delete" style="display:none">Usuń</button>
+      <span style="flex:1"></span>
+      <button class="note-btn" id="analyst_note_cancel">Anuluj</button>
+      <button class="note-btn note-btn-primary" id="analyst_note_save">Zapisz</button>
+    </div>
+  </div>
+</div>
 
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/audio_player.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/seg_tools.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/analyst_notes.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script>
 "use strict";
 
@@ -730,7 +799,7 @@ function trWireEditor(segEl, idx, ed){
         const timeDiv = segEl.querySelector(".seg-time");
         if(timeDiv){
           // Rebuild time display with speaker
-          const noteIcon = timeDiv.querySelector(".seg-note-icon");
+          const noteIcon = timeDiv.querySelector(".analyst-note-marker");
           const noteIconHtml = noteIcon ? noteIcon.outerHTML : '';
           if(seg.speaker){
             timeDiv.innerHTML = `${trFormatTime(seg.start)} → ${trFormatTime(seg.end)} <strong>${seg.speaker}</strong>${noteIconHtml}`;
@@ -738,7 +807,7 @@ function trWireEditor(segEl, idx, ed){
             timeDiv.innerHTML = `${trFormatTime(seg.start)} → ${trFormatTime(seg.end)}${noteIconHtml}`;
           }
           // Re-bind note icon
-          const newIcon = timeDiv.querySelector(".seg-note-icon");
+          const newIcon = timeDiv.querySelector(".analyst-note-marker");
           if(newIcon) trBindNoteIconEvents(newIcon, idx);
         }
 
@@ -961,10 +1030,11 @@ function trOpenBlockNoteEditor(idx){
     // Update icon
     const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
     if(segEl){
-      const icon = segEl.querySelector(".seg-note-icon");
+      const icon = segEl.querySelector(".analyst-note-marker");
       if(icon){
-        if(trHasBlockNote(idx)) icon.classList.add("has-note");
-        else icon.classList.remove("has-note");
+        icon.classList.add("has-note");
+        var img = icon.querySelector("img");
+        if(img) img.src = "/static/icons/pliki/notes_filled.svg";
       }
     }
     trRenderBlockNotesList();
@@ -974,8 +1044,12 @@ function trOpenBlockNoteEditor(idx){
     delete TR.notes.blocks[idx];
     const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
     if(segEl){
-      const icon = segEl.querySelector(".seg-note-icon");
-      if(icon) icon.classList.remove("has-note");
+      const icon = segEl.querySelector(".analyst-note-marker");
+      if(icon){
+        icon.classList.remove("has-note");
+        var img = icon.querySelector("img");
+        if(img) img.src = "/static/icons/pliki/notes.svg";
+      }
     }
     trRenderBlockNotesList();
     scheduleAutoSave();
@@ -1058,7 +1132,7 @@ function trRenderBlockNotesList(){
   if(notes.length === 0){
     list.innerHTML = `<div class="small" style="opacity:0.6;text-align:center;padding:20px">
       Brak notatek do bloków.<br>
-      Kliknij <img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
+      Kliknij <img src="/static/icons/pliki/notes.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
     </div>`;
     return;
   }
@@ -1093,7 +1167,7 @@ function trDeleteBlockNote(idx){
 
   const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
   if(segEl){
-    const icon = segEl.querySelector(".seg-note-icon");
+    const icon = segEl.querySelector(".analyst-note-marker");
     if(icon) icon.classList.remove("has-note");
   }
 
@@ -1219,12 +1293,43 @@ function trRender(){
     d.className = "seg";
     d.dataset.idx = String(idx);
     
-    // Note icon
+    // Note icon (analyst notes system)
+    const _hasNote = trHasBlockNote(idx) || (window._trNotesMgr && window._trNotesMgr.hasNote("tr_block", "block_idx", idx));
     const noteIcon = document.createElement("span");
-    noteIcon.className = "seg-note-icon" + (trHasBlockNote(idx) ? " has-note" : "");
-    noteIcon.innerHTML = '<img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" alt="Notatka">';
-    noteIcon.title = trHasBlockNote(idx) ? "Ma notatkę - kliknij aby edytować" : "Dodaj notatkę";
-    trBindNoteIconEvents(noteIcon, idx);
+    noteIcon.className = "analyst-note-marker" + (_hasNote ? " has-note" : "");
+    noteIcon.innerHTML = _hasNote
+      ? '<img src="/static/icons/pliki/notes_filled.svg" width="19" height="19" alt="Notatka">'
+      : '<img src="/static/icons/pliki/notes.svg" width="19" height="19" alt="Notatka">';
+    noteIcon.title = _hasNote ? "Ma notatkę - kliknij aby edytować" : "Dodaj notatkę (Ctrl+M)";
+    noteIcon.style.cursor = "pointer";
+    noteIcon.setAttribute("data-note-block", idx);
+    noteIcon.addEventListener("click", function(ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      if (window._trNotesMgr) {
+        var mgr = window._trNotesMgr;
+        // Check if note already exists for this block
+        var existing = (mgr.notes.items || []).find(function(it) {
+          return it.ref && it.ref.type === "tr_block" && it.ref.block_idx === idx;
+        });
+        if (existing) {
+          mgr.openNoteModal(existing);
+        } else {
+          // Temporarily override getContext to provide block context
+          var origCtx = mgr.getContext;
+          var seg = (TR.segments || [])[idx];
+          var label = "Blok #" + (idx + 1);
+          if (seg) label += " [" + trFormatTime(seg.start) + "] " + (seg.text || "").slice(0, 40);
+          mgr.getContext = function() {
+            return { label: label, icon: "/static/icons/pliki/notes.svg", ref: { type: "tr_block", block_idx: idx } };
+          };
+          mgr.openNoteModal();
+          mgr.getContext = origCtx;
+        }
+      } else {
+        trOpenBlockNoteEditor(idx);
+      }
+    });
     
     const timeDiv = document.createElement("div");
     timeDiv.className = "seg-time";
@@ -1988,7 +2093,23 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
         trSetRawTextarea();
         scheduleAutoSave();
       },
-      getNotes: function () { return TR.notes; },
+      getNotes: function () {
+        // Merge old notes + analyst notes for waveform markers
+        var merged = { global: (TR.notes && TR.notes.global) || "", blocks: {} };
+        if (TR.notes && TR.notes.blocks) {
+          for (var k in TR.notes.blocks) merged.blocks[k] = TR.notes.blocks[k];
+        }
+        // Add analyst notes (new system)
+        if (window._trNotesMgr && window._trNotesMgr.notes) {
+          if (window._trNotesMgr.notes.global) merged.global = merged.global || window._trNotesMgr.notes.global;
+          (window._trNotesMgr.notes.items || []).forEach(function(it) {
+            if (it.ref && it.ref.type === "tr_block" && typeof it.ref.block_idx === "number") {
+              merged.blocks[String(it.ref.block_idx)] = it.text || "(notatka)";
+            }
+          });
+        }
+        return merged;
+      },
       setNotes: function (n) {
         TR.notes = n;
         trRenderBlockNotesList();
@@ -1999,6 +2120,60 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
     });
     // Initial afterRender if segments already loaded
     if (TR.segments && TR.segments.length) segTools.afterRender();
+  }
+
+  // ── Initialize analyst notes panel ──
+  if (typeof AnalystNotesManager === "function" && AISTATE.projectId) {
+    window._trNotesMgr = new AnalystNotesManager({
+      mode: "tr",
+      projectId: AISTATE.projectId,
+      onNavigate: function (ref) {
+        // Navigate to block
+        if (ref && typeof ref.block_idx === "number") {
+          var blocks = document.querySelectorAll("#tr_blocks .seg-block");
+          var target = blocks[ref.block_idx];
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+            target.style.outline = "2px solid var(--accent,#2563eb)";
+            setTimeout(function () { target.style.outline = ""; }, 2000);
+          }
+        }
+      },
+      getContext: function () {
+        // Return context for currently focused block (if any)
+        var focused = document.querySelector("#tr_blocks .seg-block.focused, #tr_blocks .seg-block:hover");
+        if (!focused) return null;
+        var idx = Array.from(document.querySelectorAll("#tr_blocks .seg-block")).indexOf(focused);
+        if (idx < 0) return null;
+        var seg = (TR.segments || [])[idx];
+        var label = "Blok #" + (idx + 1);
+        if (seg) {
+          var timeStr = trFormatTime(seg.start);
+          var textPreview = (seg.text || "").slice(0, 40);
+          label = "Blok #" + (idx + 1) + " [" + timeStr + "] " + textPreview;
+        }
+        return {
+          label: label,
+          icon: "/static/icons/pliki/notes.svg",
+          ref: { type: "tr_block", block_idx: idx }
+        };
+      },
+      onNoteChange: function () {
+        // Refresh note icons on blocks
+        trRender();
+        // Update waveform markers
+        if (typeof segTools !== "undefined" && segTools.afterRender) segTools.afterRender();
+        // Swap toolbar/panel icon: filled if any notes exist
+        var mgr = window._trNotesMgr;
+        var hasAny = mgr && ((mgr.notes.global && mgr.notes.global.trim()) || (mgr.notes.items && mgr.notes.items.length > 0));
+        var src = hasAny ? "/static/icons/pliki/notes_filled.svg" : "/static/icons/pliki/notes.svg";
+        var panelIcon = document.querySelector("#tr_analyst_panel .analyst-panel-header img");
+        if (panelIcon) panelIcon.src = src;
+        var toggleIcon = document.querySelector("#tr_panel_toggle img");
+        if (toggleIcon) toggleIcon.src = src;
+      }
+    });
+    window._trNotesMgr.init();
   }
 })();
 </script>

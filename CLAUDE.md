@@ -188,6 +188,35 @@ Workers are invoked by `TaskManager` as separate Python processes. They:
 - `.env` or any credentials files
 - `data_www/` — user project data
 
+## Licensing & Monetization Strategy (WAŻNE — zapamiętaj na przyszłe sesje)
+
+### Plany licencyjne
+- **Community** (bezpłatna) — wszystkie obecne moduły: transkrypcja, diaryzacja, tłumaczenie, chat LLM, analiza LLM, analiza GSM, analiza AML, TTS podstawowy. Poprawki i ulepszenia istniejących modułów ZAWSZE w Community.
+- **Pro** (płatna) — nowe moduły dodawane w przyszłości. Dostarczone jako skompilowane .pyd/.so (Cython) w osobnych paczkach — kod źródłowy Python NIE trafia do klienta bez Pro.
+- **Enterprise** (płatna) — Pro + przyszłe udogodnienia (do ustalenia).
+
+### Model dystrybucji modułów Pro (hybrydowy)
+- Community: pełny kod źródłowy Python (obecne moduły)
+- Pro: osobne paczki z modułami skompilowanymi Cython → .pyd (Windows) / .so (Linux)
+- Cel: średniopojętny hacker NIE może odblokować Pro, bo kod źródłowy nie istnieje w Community
+- Istniejące moduły (GSM, AML, transkrypcja, diaryzacja, tłumaczenie, chat) → Community na zawsze
+- Nowe moduły → Pro (jako skompilowane pluginy)
+
+### Licencjonowanie — status wdrożenia
+- System licencjonowania (`backend/licensing/`) — zaimplementowany, ale `LICENSING_ENABLED = False`
+- Klucze Ed25519 (podpis kryptograficzny) — gotowe
+- Feature gating (`@require_feature`) — gotowy dekorator
+- Keygen GUI — `D:\AISTATEwebprodukcja\Tools\keygen.py`
+- Klucz prywatny — `D:\AISTATEwebprodukcja\Security\keys\aistate_private_key.pem`
+- TODO: Włączyć licencjonowanie (`LICENSING_ENABLED = True`), community plan = bez klucza (wszystko odblokowane)
+
+### Produkcja — struktura folderów
+- `D:\AISTATEwebprodukcja\Git\` — czysty kod do GitHub
+- `D:\AISTATEwebprodukcja\Tools\` — keygen.py, build_update.py, publish.py + pliki .bat
+- `D:\AISTATEwebprodukcja\Security\` — klucze prywatne/publiczne, licencje
+- `D:\AISTATEwebprodukcja\Updates\` — zbudowane paczki .zip aktualizacji
+- Backup automatyczny → OneDrive (`C:\Users\tomas\OneDrive\AISTATEwebprodukcja\`)
+
 ## License
 
 MIT (main project). NLLB-200 models are CC-BY-NC 4.0 (non-commercial only). See `THIRD_PARTY_NOTICES.md` for full dependency licensing.

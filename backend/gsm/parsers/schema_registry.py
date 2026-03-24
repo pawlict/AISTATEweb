@@ -93,6 +93,11 @@ _CRITICAL_COLUMNS: Dict[str, List[str]] = {
     "orange": ["date"],
     "orange_retencja": ["date", "ident"],
     "generic": ["date"],
+    # Identification parsers
+    "ident_orange": ["msisdn", "name"],
+    "ident_play": ["msisdn"],
+    "ident_plus": ["msisdn"],
+    "ident_tmobile": ["msisdn", "name"],
 }
 
 
@@ -335,6 +340,38 @@ class SchemaRegistry:
             ))
         except ImportError as e:
             log.warning("Cannot import GenericBillingParser: %s", e)
+
+        # ── Identification parsers ──
+        try:
+            from ..identification import (
+                _ORANGE_ID_COLUMNS, _PLAY_ID_COLUMNS,
+                _PLUS_ID_COLUMNS, _TMOBILE_ID_COLUMNS,
+            )
+            for pid, col_dict in [
+                ("ident_orange", _ORANGE_ID_COLUMNS),
+                ("ident_play", _PLAY_ID_COLUMNS),
+                ("ident_plus", _PLUS_ID_COLUMNS),
+                ("ident_tmobile", _TMOBILE_ID_COLUMNS),
+            ]:
+                crit = set(_CRITICAL_COLUMNS.get(pid, []))
+                cols = []
+                for logical, expected_list in col_dict.items():
+                    cols.append(ColumnSchema(
+                        logical_name=logical,
+                        expected_headers=[h.lower() for h in expected_list],
+                        regex_patterns=[],
+                        required=logical in crit,
+                    ))
+                schema = ParserSchema(
+                    parser_id=pid,
+                    parser_version="1.0",
+                    columns=cols,
+                    notes=f"Auto-generated from identification.py ({pid})",
+                )
+                self.save_schema(schema)
+                schemas.append(schema)
+        except ImportError as e:
+            log.warning("Cannot import identification columns: %s", e)
 
         log.info("Bootstrapped %d parser schemas", len(schemas))
         return schemas

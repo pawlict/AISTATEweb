@@ -22,6 +22,7 @@
   var statusIcon    = document.getElementById("lic_status_icon");
   var statusText    = document.getElementById("lic_status_text");
   var licId         = document.getElementById("lic_id");
+  var licName       = document.getElementById("lic_name");
   var licEmail      = document.getElementById("lic_email");
   var licExpires    = document.getElementById("lic_expires");
   var licUpdates    = document.getElementById("lic_updates_until");
@@ -63,6 +64,7 @@
 
     // Details
     licId.textContent = lic.license_id || "\u2014";
+    if (licName) licName.textContent = lic.name || "\u2014";
     licEmail.textContent = lic.email || "\u2014";
 
     if (lic.is_perpetual || lic.expires === null) {

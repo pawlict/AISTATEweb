@@ -22,6 +22,24 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from .parsers.base import BillingRecord, BillingParseResult, BillingSummary
 from .imei_db import lookup_imei, DeviceInfo
 
+_RE_NON_DIGIT = re.compile(r"\D")
+
+
+def _valid_imei(val: str) -> str:
+    """Return IMEI only if valid (14-15 digits), else empty."""
+    if not val:
+        return ""
+    d = _RE_NON_DIGIT.sub("", val.strip())
+    return d if 14 <= len(d) <= 15 else ""
+
+
+def _valid_imsi(val: str) -> str:
+    """Return IMSI only if valid (15 digits), else empty."""
+    if not val:
+        return ""
+    d = _RE_NON_DIGIT.sub("", val.strip())
+    return d if len(d) == 15 else ""
+
 # ── SIM registration database (lazy-loaded) ──
 _sim_reg_cache: Optional[Dict[str, dict]] = None
 
@@ -567,11 +585,11 @@ def _identify_devices(
     """Identify devices from unique IMEI numbers found in records and subscriber info."""
     seen_imeis: Dict[str, Dict[str, Any]] = {}
 
-    # Collect unique IMEIs with usage stats
+    # Collect unique IMEIs with usage stats (validate: 14-15 digits only)
     for r in records:
-        if not r.imei:
+        imei = _valid_imei(r.imei)
+        if not imei:
             continue
-        imei = r.imei.strip()
         if imei not in seen_imeis:
             seen_imeis[imei] = {
                 "imei": imei,
@@ -589,7 +607,7 @@ def _identify_devices(
 
     # Also check subscriber IMEI (may not appear in individual records)
     if subscriber and hasattr(subscriber, "imei") and subscriber.imei:
-        imei = subscriber.imei.strip()
+        imei = _valid_imei(subscriber.imei)
         if imei and imei not in seen_imeis:
             seen_imeis[imei] = {
                 "imei": imei,
@@ -647,19 +665,20 @@ def _detect_imei_changes(records: List[BillingRecord]) -> List[Dict[str, str]]:
     last_imei_by_group: Dict[str, str] = {}  # group → last seen IMEI
 
     for r in sorted(records, key=lambda r: r.datetime):
-        if not r.imei:
+        imei = _valid_imei(r.imei)
+        if not imei:
             continue
         group = _classify_record_group(r.record_type)
         last = last_imei_by_group.get(group, "")
-        if r.imei != last:
+        if imei != last:
             if last:
                 changes.append({
                     "date": r.date,
                     "old_imei": last,
-                    "new_imei": r.imei,
+                    "new_imei": imei,
                     "group": group,
                 })
-            last_imei_by_group[group] = r.imei
+            last_imei_by_group[group] = imei
 
     return changes
 
@@ -678,12 +697,13 @@ def _detect_dual_imei(records: List[BillingRecord]) -> Optional[Dict[str, Any]]:
     data_imeis: Dict[str, int] = {}
 
     for r in records:
-        if not r.imei:
+        imei = _valid_imei(r.imei)
+        if not imei:
             continue
         if r.record_type == "DATA":
-            data_imeis[r.imei] = data_imeis.get(r.imei, 0) + 1
+            data_imeis[imei] = data_imeis.get(imei, 0) + 1
         else:
-            voice_imeis[r.imei] = voice_imeis.get(r.imei, 0) + 1
+            voice_imeis[imei] = voice_imeis.get(imei, 0) + 1
 
     if not voice_imeis or not data_imeis:
         return None

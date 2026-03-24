@@ -6580,7 +6580,7 @@ def api_get_notes_diarization(project_id: str) -> Any:
 
 # ---------- API: analysis notes (GSM / AML) — global + items with tags ----------
 
-_VALID_NOTE_TAGS = {"neutral", "legitimate", "suspicious", "monitoring"}
+_VALID_NOTE_TAGS = {"neutral", "legitimate", "suspicious", "monitoring", "custom1", "custom2", "custom3", "custom4"}
 
 
 def _clean_analysis_note_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -6704,6 +6704,34 @@ def api_get_notes_aml(project_id: str) -> Any:
     return _get_analysis_notes(project_id, "notes_aml")
 
 
+@app.post("/api/projects/{project_id}/notes/tr")
+def api_save_notes_tr(project_id: str, request: Request) -> Any:
+    """Save transcription notes (global + items with tags/refs)."""
+    import asyncio
+    payload = asyncio.run(request.json())
+    return _save_analysis_notes(project_id, "notes_tr", payload)
+
+
+@app.get("/api/projects/{project_id}/notes/tr")
+def api_get_notes_tr(project_id: str) -> Any:
+    """Get transcription notes."""
+    return _get_analysis_notes(project_id, "notes_tr")
+
+
+@app.post("/api/projects/{project_id}/notes/di")
+def api_save_notes_di(project_id: str, request: Request) -> Any:
+    """Save diarization notes (global + items with tags/refs)."""
+    import asyncio
+    payload = asyncio.run(request.json())
+    return _save_analysis_notes(project_id, "notes_di", payload)
+
+
+@app.get("/api/projects/{project_id}/notes/di")
+def api_get_notes_di(project_id: str) -> Any:
+    """Get diarization notes."""
+    return _get_analysis_notes(project_id, "notes_di")
+
+
 # Dodaj endpoint do zapisu transkrypcji (text/plain)
 # Ten endpoint pozwala na wysyłanie zwykłego tekstu zamiast JSON
 @app.post("/api/projects/{project_id}/save/transcript")
@@ -6776,11 +6804,14 @@ def api_generate_transcription_report(project_id: str, format: str = "pdf", incl
 def _gather_report_notes(meta: Dict[str, Any], notes_key: str) -> Dict[str, Any] | None:
     """Read notes from project meta for inclusion in reports.
 
+    Merges old format (notes_transcription/notes_diarization with {global, blocks})
+    and new analyst format (notes_tr/notes_di with {global, items}).
+
     Returns {"global": str, "blocks": {idx_str: str}} or None.
     """
     notes = meta.get(notes_key) or meta.get("notes") or {}
     if not isinstance(notes, dict):
-        return None
+        notes = {}
     global_note = str(notes.get("global") or "").strip()
     blocks_raw = notes.get("blocks") or {}
     blocks: Dict[str, str] = {}
@@ -6789,6 +6820,39 @@ def _gather_report_notes(meta: Dict[str, Any], notes_key: str) -> Dict[str, Any]
             txt = str(v or "").strip()
             if txt:
                 blocks[str(k)] = txt
+
+    # Also check new analyst notes (notes_tr / notes_di)
+    analyst_key_map = {
+        "notes_transcription": "notes_tr",
+        "notes_diarization": "notes_di",
+    }
+    analyst_key = analyst_key_map.get(notes_key, "")
+    if analyst_key:
+        analyst = meta.get(analyst_key) or {}
+        if isinstance(analyst, dict):
+            ag = str(analyst.get("global") or "").strip()
+            if ag and not global_note:
+                global_note = ag
+            elif ag and global_note:
+                global_note = global_note + "\n\n" + ag
+            # Convert analyst items to blocks format
+            for item in (analyst.get("items") or []):
+                if not isinstance(item, dict):
+                    continue
+                ref = item.get("ref") or {}
+                block_idx = ref.get("block_idx")
+                if block_idx is not None:
+                    txt = str(item.get("text") or "").strip()
+                    tags = item.get("tags") or []
+                    if tags:
+                        txt = "[" + ", ".join(tags) + "] " + txt
+                    if txt:
+                        key = str(block_idx)
+                        if key in blocks:
+                            blocks[key] = blocks[key] + " | " + txt
+                        else:
+                            blocks[key] = txt
+
     if not global_note and not blocks:
         return None
     return {"global": global_note, "blocks": blocks}
@@ -6986,9 +7050,16 @@ def api_delete_project(project_id: str, wipe_method: str = "none") -> Any:
 
 # ---------- API: reports ----------
 
+def _fmt_duration_hhmmss(dur_s: float) -> str:
+    """Format seconds as HH:MM:SS."""
+    h = int(dur_s // 3600)
+    m = int((dur_s % 3600) // 60)
+    s = int(dur_s % 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
 def _probe_audio_basic(path: Path) -> tuple[str, str]:
-    """Best-effort: duration/specs for WAV via stdlib wave; otherwise file size only."""
-    import wave
+    """Best-effort: duration/specs for audio files. Tries soundfile, then wave, then ffprobe."""
     size_b = 0
     try:
         size_b = path.stat().st_size
@@ -6999,17 +7070,50 @@ def _probe_audio_basic(path: Path) -> tuple[str, str]:
     duration = ""
     specs = size_mb
 
+    # Try soundfile first (supports WAV, FLAC, OGG, etc.)
     try:
+        import soundfile as sf
+        info = sf.info(str(path))
+        dur_s = info.duration
+        if dur_s > 0:
+            duration = _fmt_duration_hhmmss(dur_s)
+            specs2 = f"{info.channels}ch {info.samplerate}Hz"
+            specs = (specs2 + ((" • " + size_mb) if size_mb else "")).strip(" •")
+            return duration, specs
+    except Exception:
+        pass
+
+    # Fallback: wave stdlib (WAV only)
+    try:
+        import wave
         with wave.open(str(path), "rb") as wf:
             fr = wf.getframerate()
             n = wf.getnframes()
             ch = wf.getnchannels()
             dur_s = (n / float(fr)) if fr else 0.0
-            duration = f"{dur_s:.1f}s"
+            duration = _fmt_duration_hhmmss(dur_s)
             specs2 = f"{ch}ch {fr}Hz"
             specs = (specs2 + ((" • " + size_mb) if size_mb else "")).strip(" •")
+            return duration, specs
     except Exception:
         pass
+
+    # Fallback: ffprobe for MP3 and other formats
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration,channels,sample_rate",
+             "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts = result.stdout.strip().split(",")
+            if parts:
+                dur_s = float(parts[0])
+                duration = _fmt_duration_hhmmss(dur_s)
+    except Exception:
+        pass
+
     return duration, specs
 
 
@@ -7160,9 +7264,10 @@ def _collect_report_data(project_id: str, export_formats: List[str], include_log
         "whisper_model": getattr(s, "whisper_model", "") or "",
         "language": "auto",
         "pyannote_model": "pyannote.audio",
-        "speakers_count": "",
+        "speakers_count": str(len(meta.get("speaker_map") or {})) if meta.get("speaker_map") else "",
         "segments_count": len(diarized_lines) if diarized_lines else len(transcript_lines),
         "speaker_times": {},
+        "audio_duration": audio_duration,
         "transcript": diarized_lines or transcript_lines,
         "raw_transcript": transcript_lines,
         "non_verbal": [],

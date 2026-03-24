@@ -405,7 +405,7 @@
     background: rgba(33,150,243,.08);
   }
 
-  .seg-note-icon {
+  .analyst-note-marker {
     display: inline-block;
     margin-left: 8px;
     cursor: pointer;
@@ -414,17 +414,21 @@
     vertical-align: middle;
   }
 
-  .seg-note-icon:hover {
+  .analyst-note-marker:hover {
     opacity: 0.7;
   }
 
-  .seg-note-icon.has-note {
+  .analyst-note-marker.has-note {
     opacity: 1;
-    filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(1350%) hue-rotate(196deg) brightness(100%) contrast(95%);
+    filter: drop-shadow(0 0 2px rgba(234,179,8,.5));
   }
 
-  .seg-note-icon.has-note:hover {
-    filter: brightness(0) saturate(100%) invert(30%) sepia(93%) saturate(1800%) hue-rotate(196deg) brightness(95%) contrast(100%);
+  .analyst-note-marker.has-note img {
+    filter: none;
+  }
+
+  .analyst-note-marker.has-note:hover {
+    filter: drop-shadow(0 0 3px rgba(234,179,8,.7));
   }
   /* Notatka tooltip (dymek) */
   .note-tooltip{
@@ -612,13 +616,12 @@
             <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="di_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
             <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="di_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
             <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="di_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
-            <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes"><input type="checkbox" id="di_include_notes" value="1"><img src="/static/icons/dokumenty/markdown.svg" alt="Notatki" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes"><input type="checkbox" id="di_include_notes" value="1"><img src="/static/icons/pliki/notes.svg" alt="Notatki" draggable="false"></label>
             <button class="btn pill-icon" id="di_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
           </div>
         </div>
       </div>
 
-      <a class="btn secondary" id="di_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
 
     </div>
   </div>
@@ -665,6 +668,69 @@
       </div>
     </div>
 
+    <!-- Layout: Nazwy mówców + Wynik diaryzacji + Panel analityczny -->
+    <div class="analyst-panel-layout">
+
+      <!-- Panel analityczny (collapsible sidebar) -->
+      <aside class="analyst-panel collapsed" id="di_analyst_panel">
+        <button class="analyst-panel-toggle" id="di_panel_toggle" title="Panel analityczny">
+          <img src="/static/icons/akcje/sidebar_expand.svg" alt="" width="18" height="18" draggable="false">
+        </button>
+        <div class="analyst-panel-body">
+          <div class="analyst-panel-header">
+            <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
+              <img src="/static/icons/pliki/notes.svg" alt="" width="16" height="16" draggable="false">
+              <span>Panel analityczny</span>
+            </div>
+            <button class="analyst-panel-toggle-inner" id="di_panel_collapse" title="Zwiń panel">
+              <img src="/static/icons/akcje/sidebar_collapse.svg" alt="" width="16" height="16" draggable="false">
+            </button>
+          </div>
+
+          <!-- Global note -->
+          <div class="analyst-panel-section">
+            <div class="analyst-panel-label">
+              <img src="/static/icons/inne/pin.svg" alt="" width="14" height="14" draggable="false">
+              <span>Notatka globalna</span>
+            </div>
+            <textarea class="analyst-panel-global-ta input" id="di_analyst_global_note" placeholder="Notatka do całej diaryzacji..."></textarea>
+          </div>
+
+          <div class="analyst-panel-divider"></div>
+
+          <!-- Item notes -->
+          <div class="analyst-panel-section analyst-panel-items-section">
+            <div class="analyst-panel-label" style="display:flex;align-items:center;justify-content:space-between">
+              <span style="display:flex;align-items:center;gap:5px">
+                <img src="/static/icons/projekty/project_tag.svg" alt="" width="14" height="14" draggable="false">
+                <span>Notatki do elementów</span>
+              </span>
+              <span class="analyst-panel-count" id="di_notes_count">0</span>
+            </div>
+            <!-- Tag filter -->
+            <div class="analyst-panel-tag-filter" id="di_tag_filter">
+              <select class="input mini-select" id="di_tag_filter_select" style="font-size:12px">
+                <option value="">Wszystkie</option>
+                <option value="neutral">Neutralny</option>
+                <option value="legitimate">Poprawny</option>
+                <option value="suspicious">Podejrzany</option>
+                <option value="monitoring">Obserwacja</option>
+                <option value="custom1">Własny 1</option>
+                <option value="custom2">Własny 2</option>
+                <option value="custom3">Własny 3</option>
+                <option value="custom4">Własny 4</option>
+              </select>
+            </div>
+            <div class="analyst-panel-items" id="di_notes_list">
+              <div class="analyst-panel-empty">Brak notatek. Użyj Ctrl+M aby dodać.</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main content -->
+      <div class="analyst-panel-main">
+
     <!-- Speaker mapping -->
     <div class="subcard">
       <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.speakers.title"><i data-icon="transcription" data-size="16"></i> Nazwy mówców</div>
@@ -679,11 +745,6 @@
     </div>
 
     <div class="hr"></div>
-
-    <!-- Result + Notes layout (unchanged) -->
-    <div style="display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start">
-      <!-- Left: diarization result -->
-      <div>
         <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.result.title"><i data-icon="document" data-size="16"></i> Wynik diaryzacji</div>
         <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
         <div id="di_audio_player"></div>
@@ -696,40 +757,56 @@
         </div>
       </div>
 
-      <!-- Right: Notes (unchanged) -->
-      <div class="notes-panel">
-        <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title"><i data-icon="notes" data-size="16"></i> Notatki</div>
-
-        <div class="notes-section">
-          <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title"><i data-icon="globe" data-size="16"></i> Notatka globalna</div>
-          <textarea id="di_notes_global" placeholder="Notatka do całej diaryzacji (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:13px;resize:vertical;background:var(--panel,#fff);color:var(--text,inherit)"></textarea>
-          <div class="small" style="margin-top:4px;opacity:0.7" data-i18n="notes.autosave">Auto-save <i data-icon="success" data-size="12"></i></div>
-        </div>
-
-        <div class="hr" style="margin:12px 0"></div>
-
-        <div class="notes-section">
-          <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title"><i data-icon="pin" data-size="16"></i> Notatki do bloków</div>
-          <div id="di_block_notes_list" class="block-notes-list">
-            <div class="small" style="opacity:0.6;text-align:center;padding:20px" data-i18n-html="notes.blocks.empty_html">
-              ${t("notes.blocks.empty_html")}
-            </div>
-          </div>
-        </div>
-
-        <div class="small" style="margin-top:6px;color:#999">Notatki zapisywane automatycznie</div>
-
-      </div>
-    </div>
+    </div><!-- /analyst-panel-layout -->
 
   </div>
 
 </div>
+
+<!-- Note editor modal (shared) -->
+<div class="analyst-note-overlay" id="analyst_note_overlay" style="display:none">
+  <div class="analyst-note-modal">
+    <div class="analyst-note-header">
+      <h3 id="analyst_note_modal_title">Nowa notatka</h3>
+      <button class="note-editor-close" id="analyst_note_close">&times;</button>
+    </div>
+    <div class="analyst-note-body">
+      <div class="analyst-note-element-label" id="analyst_note_element_label"></div>
+      <div class="analyst-note-field">
+        <div class="label">Notatka</div>
+        <textarea class="input" id="analyst_note_text" style="min-height:100px" placeholder=""></textarea>
+      </div>
+      <div class="analyst-note-field">
+        <div class="label">Tagi</div>
+        <div class="analyst-note-tags" id="analyst_note_tags">
+          <button type="button" class="analyst-tag-btn" data-tag="neutral"><span class="analyst-tag-dot" style="background:#60a5fa"></span> <span class="analyst-tag-label">Neutralny</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="legitimate"><span class="analyst-tag-dot" style="background:#15803d"></span> <span class="analyst-tag-label">Poprawny</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="suspicious"><span class="analyst-tag-dot" style="background:#dc2626"></span> <span class="analyst-tag-label">Podejrzany</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="monitoring"><span class="analyst-tag-dot" style="background:#ea580c"></span> <span class="analyst-tag-label">Obserwacja</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="custom1"><span class="analyst-tag-dot" style="background:#ffff00"></span> <span class="analyst-tag-label" data-editable="1">Własny 1</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="custom2"><span class="analyst-tag-dot" style="background:#7fff00"></span> <span class="analyst-tag-label" data-editable="1">Własny 2</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="custom3"><span class="analyst-tag-dot" style="background:#b8860b"></span> <span class="analyst-tag-label" data-editable="1">Własny 3</span></button>
+          <button type="button" class="analyst-tag-btn" data-tag="custom4"><span class="analyst-tag-dot" style="background:#6366f1"></span> <span class="analyst-tag-label" data-editable="1">Własny 4</span></button>
+        </div>
+        <div class="note-editor-hint" style="margin-top:2px;font-size:10px;color:var(--text-muted,#94a3b8)">Kliknij dwukrotnie nazwę własnego tagu aby zmienić</div>
+      </div>
+      <div class="note-editor-hint">Ctrl+Enter = zapisz</div>
+    </div>
+    <div class="note-editor-footer">
+      <button class="note-btn note-btn-danger" id="analyst_note_delete" style="display:none">Usuń</button>
+      <span style="flex:1"></span>
+      <button class="note-btn" id="analyst_note_cancel">Anuluj</button>
+      <button class="note-btn note-btn-primary" id="analyst_note_save">Zapisz</button>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/audio_player.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/seg_tools.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/analyst_notes.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script>
 "use strict";
 
@@ -958,7 +1035,7 @@ function renderBlockNotesList() {
     container.innerHTML = `
       <div class="small" style="opacity:0.6;text-align:center;padding:20px;">
         Brak notatek do bloków.<br>
-        Kliknij <img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
+        Kliknij <img src="/static/icons/pliki/notes.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
       </div>
     `;
     return;
@@ -1096,10 +1173,10 @@ function updateBlockNoteIconInSeg(idx) {
   const seg = document.querySelector(`.seg[data-idx="${idx}"]`);
   if (!seg) return;
   
-  let icon = seg.querySelector('.seg-note-icon');
+  let icon = seg.querySelector('.analyst-note-marker');
   if (!icon) {
     icon = document.createElement('span');
-    icon.className = 'seg-note-icon';
+    icon.className = 'analyst-note-marker';
     bindNoteIconEvents(icon, idx);
     const timeEl = seg.querySelector('.seg-time');
     if (timeEl) {
@@ -1108,13 +1185,13 @@ function updateBlockNoteIconInSeg(idx) {
   }
   
   if (hasBlockNote(idx)) {
-    icon.innerHTML = '<img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" alt="Notatka">';
+    icon.innerHTML = '<img src="/static/icons/pliki/notes_filled.svg" width="19" height="19" alt="Notatka">';
     icon.classList.add('has-note');
     icon.title = 'Ma notatkę - kliknij aby edytować';
   } else {
-    icon.innerHTML = '<img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" alt="Notatka">';
+    icon.innerHTML = '<img src="/static/icons/pliki/notes.svg" width="19" height="19" alt="Notatka">';
     icon.classList.remove('has-note');
-    icon.title = 'Dodaj notatkę';
+    icon.title = 'Dodaj notatkę (Ctrl+M)';
   }
 }
 
@@ -1711,12 +1788,41 @@ function diRender(){
     d.className = "seg " + getSpeakerColor(seg.speaker);
     d.dataset.idx = String(idx);
     
-    // Ikona notatki
+    // Ikona notatki (analyst notes system)
+    const _hasNote = hasBlockNote(idx) || (window._diNotesMgr && window._diNotesMgr.hasNote("di_block", "block_idx", idx));
     const noteIcon = document.createElement('span');
-    noteIcon.className = 'seg-note-icon' + (hasBlockNote(idx) ? ' has-note' : '');
-    noteIcon.innerHTML = '<img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" alt="Notatka">';
-    noteIcon.title = hasBlockNote(idx) ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę';
-    bindNoteIconEvents(noteIcon, idx);
+    noteIcon.className = 'analyst-note-marker' + (_hasNote ? ' has-note' : '');
+    noteIcon.innerHTML = _hasNote
+      ? '<img src="/static/icons/pliki/notes_filled.svg" width="19" height="19" alt="Notatka">'
+      : '<img src="/static/icons/pliki/notes.svg" width="19" height="19" alt="Notatka">';
+    noteIcon.title = _hasNote ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę (Ctrl+M)';
+    noteIcon.style.cursor = 'pointer';
+    noteIcon.setAttribute('data-note-block', idx);
+    noteIcon.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      if (window._diNotesMgr) {
+        var mgr = window._diNotesMgr;
+        var existing = (mgr.notes.items || []).find(function(it) {
+          return it.ref && it.ref.type === 'di_block' && it.ref.block_idx === idx;
+        });
+        if (existing) {
+          mgr.openNoteModal(existing);
+        } else {
+          var origCtx = mgr.getContext;
+          var seg = (DI.segments || [])[idx];
+          var label = 'Blok #' + (idx + 1);
+          if (seg) label += ' [' + formatTime(seg.start) + '] ' + seg.speaker + ': ' + (seg.text || '').slice(0, 40);
+          mgr.getContext = function() {
+            return { label: label, icon: '/static/icons/pliki/notes.svg', ref: { type: 'di_block', block_idx: idx } };
+          };
+          mgr.openNoteModal();
+          mgr.getContext = origCtx;
+        }
+      } else {
+        editBlockNote(idx);
+      }
+    });
     
     const timeDiv = document.createElement('div');
     timeDiv.className = 'seg-time';
@@ -3041,7 +3147,21 @@ document.getElementById('di_file_input').addEventListener('change', async functi
         diSetRawTextarea();
         scheduleAutoSave();
       },
-      getNotes: function () { return DI.notes; },
+      getNotes: function () {
+        var merged = { global: (DI.notes && DI.notes.global) || "", blocks: {} };
+        if (DI.notes && DI.notes.blocks) {
+          for (var k in DI.notes.blocks) merged.blocks[k] = DI.notes.blocks[k];
+        }
+        if (window._diNotesMgr && window._diNotesMgr.notes) {
+          if (window._diNotesMgr.notes.global) merged.global = merged.global || window._diNotesMgr.notes.global;
+          (window._diNotesMgr.notes.items || []).forEach(function(it) {
+            if (it.ref && it.ref.type === "di_block" && typeof it.ref.block_idx === "number") {
+              merged.blocks[String(it.ref.block_idx)] = it.text || "(notatka)";
+            }
+          });
+        }
+        return merged;
+      },
       setNotes: function (n) {
         DI.notes = n;
         renderBlockNotesList();
@@ -3051,6 +3171,53 @@ document.getElementById('di_file_input').addEventListener('change', async functi
     });
     // Initial afterRender if segments already loaded
     if (DI.segments && DI.segments.length) segTools.afterRender();
+  }
+
+  // ── Initialize analyst notes panel ──
+  if (typeof AnalystNotesManager === "function" && AISTATE.projectId) {
+    window._diNotesMgr = new AnalystNotesManager({
+      mode: "di",
+      projectId: AISTATE.projectId,
+      onNavigate: function (ref) {
+        if (ref && typeof ref.block_idx === "number") {
+          var blocks = document.querySelectorAll("#di_blocks .seg-block");
+          var target = blocks[ref.block_idx];
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+            target.style.outline = "2px solid var(--accent,#2563eb)";
+            setTimeout(function () { target.style.outline = ""; }, 2000);
+          }
+        }
+      },
+      getContext: function () {
+        var focused = document.querySelector("#di_blocks .seg-block.focused, #di_blocks .seg-block:hover");
+        if (!focused) return null;
+        var idx = Array.from(document.querySelectorAll("#di_blocks .seg-block")).indexOf(focused);
+        if (idx < 0) return null;
+        var seg = (DI.segments || [])[idx];
+        var label = "Blok #" + (idx + 1);
+        if (seg) {
+          label += " [" + formatTime(seg.start) + "] " + seg.speaker + ": " + (seg.text || "").slice(0, 40);
+        }
+        return {
+          label: label,
+          icon: "/static/icons/pliki/notes.svg",
+          ref: { type: "di_block", block_idx: idx }
+        };
+      },
+      onNoteChange: function () {
+        renderSegments();
+        if (typeof segTools !== "undefined" && segTools.afterRender) segTools.afterRender();
+        var mgr = window._diNotesMgr;
+        var hasAny = mgr && ((mgr.notes.global && mgr.notes.global.trim()) || (mgr.notes.items && mgr.notes.items.length > 0));
+        var src = hasAny ? "/static/icons/pliki/notes_filled.svg" : "/static/icons/pliki/notes.svg";
+        var panelIcon = document.querySelector("#di_analyst_panel .analyst-panel-header img");
+        if (panelIcon) panelIcon.src = src;
+        var toggleIcon = document.querySelector("#di_panel_toggle img");
+        if (toggleIcon) toggleIcon.src = src;
+      }
+    });
+    window._diNotesMgr.init();
   }
 })();
 </script>

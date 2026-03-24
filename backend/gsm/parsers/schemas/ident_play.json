@@ -1,0 +1,272 @@
+{
+  "parser_id": "ident_play",
+  "parser_version": "1.0",
+  "format_variant": "",
+  "columns": [
+    {
+      "logical_name": "msisdn",
+      "expected_headers": [
+        "msisdn_pstn",
+        "msisdn"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "sim",
+      "expected_headers": [
+        "sim_numer",
+        "sim"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "imsi",
+      "expected_headers": [
+        "imsi"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "pesel",
+      "expected_headers": [
+        "pesel"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "regon",
+      "expected_headers": [
+        "regon"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "nip",
+      "expected_headers": [
+        "nip"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "first_name",
+      "expected_headers": [
+        "imie"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "last_name",
+      "expected_headers": [
+        "nazwisko"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "company_name",
+      "expected_headers": [
+        "nazwa"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "address",
+      "expected_headers": [
+        "adres"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "first_login",
+      "expected_headers": [
+        "pierwsze_logowanie"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "notes",
+      "expected_headers": [
+        "uwagi"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "service",
+      "expected_headers": [
+        "usluga"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "tariff",
+      "expected_headers": [
+        "taryfa"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "doc_number",
+      "expected_headers": [
+        "nr_dokumentu"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "doc_type",
+      "expected_headers": [
+        "typ_dokumentu"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "email",
+      "expected_headers": [
+        "email_kontaktowy"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "phone_contact",
+      "expected_headers": [
+        "telefon_kontaktowy"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "date_from",
+      "expected_headers": [
+        "data_od"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "date_to",
+      "expected_headers": [
+        "data_do"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "log_datetime",
+      "expected_headers": [
+        "data_i_godzina_log"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_x",
+      "expected_headers": [
+        "bts_x_log"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_y",
+      "expected_headers": [
+        "bts_y_log"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_azimuth",
+      "expected_headers": [
+        "azym_log"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_beam",
+      "expected_headers": [
+        "beam_width_log"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "bts_range",
+      "expected_headers": [
+        "range_log"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    }
+  ],
+  "header_detection": [],
+  "notes": "Auto-generated from identification.py (ident_play)",
+  "created_at": "2026-03-24T19:03:45.040921+00:00"
+}

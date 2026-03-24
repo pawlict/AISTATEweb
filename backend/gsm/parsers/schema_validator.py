@@ -92,6 +92,37 @@ _SEMANTIC_GROUPS: Dict[str, List[str]] = {
         "dane", "transfer", "objetosc", "wolumen", "volume",
         "internet", "gprs", "lte",
     ],
+    # ── Identification-specific groups ──
+    "subscriber_name": [
+        "abonent", "nazwisko", "imie", "imie i nazwisko", "nazwa",
+        "nazwa firmy", "name", "subscriber", "uzytkownik", "wlasciciel",
+    ],
+    "personal_id": [
+        "pesel", "nip", "regon", "pesel/regon/nip", "pesel regon nip",
+    ],
+    "address": [
+        "adres", "ulica", "miasto", "miejscowosc", "kod", "kod pocztowy",
+        "nr", "nr domu", "ulica nr",
+    ],
+    "document": [
+        "nr dokumentu", "numer dokumentu", "typ dokumentu",
+        "nr dokumentu tozsamosci", "document", "seria i nr",
+    ],
+    "sim_iccid": [
+        "sim", "sim numer", "iccid", "numer karty sim",
+    ],
+    "activation": [
+        "data akt", "data aktywacji", "aktywacja", "aktywacja msisdn",
+        "wazne od", "abonent od", "data od",
+    ],
+    "deactivation": [
+        "data dezakt", "data dezaktywacji", "wylaczenie", "wylaczenie msisdn",
+        "wazne do", "abonent do", "data do",
+    ],
+    "contract": [
+        "status kontraktu", "typ kontraktu", "typ msisdn",
+        "status", "kontrakt", "taryfa", "usluga",
+    ],
 }
 
 
@@ -321,9 +352,15 @@ class SchemaValidator:
                 m["confidence"] for m in result.fuzzy_matches.values()
             ) / max(len(result.fuzzy_matches), 1)
             result.confidence = avg_conf
-        elif matched_required > 0:
+        elif matched_required > 0 or result.fuzzy_matches:
             result.match_type = "partial"
-            result.confidence = matched_required / max(total_required, 1)
+            if result.fuzzy_matches:
+                avg_conf = sum(
+                    m["confidence"] for m in result.fuzzy_matches.values()
+                ) / max(len(result.fuzzy_matches), 1)
+                result.confidence = avg_conf
+            else:
+                result.confidence = matched_required / max(total_required, 1)
         else:
             result.match_type = "failed"
             result.confidence = 0.0
