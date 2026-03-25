@@ -20,6 +20,7 @@ ALL_FEATURES: List[str] = [
     "batch_processing",
     "advanced_reports",
     "update_panel",
+    "va",
 ]
 
 # Community features — current modules, always free

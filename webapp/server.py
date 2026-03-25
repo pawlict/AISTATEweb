@@ -67,6 +67,7 @@ from webapp.routers import crypto as crypto_router
 from webapp.routers import updates as updates_router
 from webapp.routers import licensing as licensing_router
 from webapp.routers import aria as aria_router
+from webapp.routers import modules as modules_router
 
 try:
     from markdown import markdown as md_to_html  # type: ignore
@@ -4895,6 +4896,29 @@ app.include_router(updates_router.router)
 # Licensing router
 licensing_router.init(app_log_fn=app_log)
 app.include_router(licensing_router.router)
+
+# Modules router (addon management)
+modules_router.init(projects_dir=PROJECTS_DIR, app_log_fn=app_log)
+app.include_router(modules_router.router)
+
+# Auto-discover and register installed PRO modules
+def _load_plugins():
+    """Load installed aistateweb.plugins entry points."""
+    import importlib.metadata
+    try:
+        eps = importlib.metadata.entry_points(group="aistateweb.plugins")
+    except Exception:
+        eps = []
+    for ep in eps:
+        try:
+            register_fn = ep.load()
+            ok = register_fn(app, projects_dir=PROJECTS_DIR, app_log_fn=app_log)
+            if ok:
+                app_log(f"[plugins] Loaded module: {ep.name}")
+        except Exception as e:
+            app_log(f"[plugins] Failed to load {ep.name}: {e}")
+
+_load_plugins()
 
 # Load license at startup
 try:
