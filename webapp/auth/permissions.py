@@ -59,6 +59,11 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
         "api_prefixes": ["/api/users", "/api/auth/audit", "/api/auth/password-blacklist", "/api/health"],
         "api_keywords": ["settings/security"],
     },
+    "va": {
+        "pages": ["/va"],
+        "api_prefixes": ["/api/va/"],
+        "api_keywords": [],
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -68,10 +73,10 @@ MODULES: Dict[str, Dict[str, List[str]]] = {
 ROLE_MODULES: Dict[str, List[str]] = {
     "Transkryptor":   ["projects", "transcription", "diarization"],
     "Lingwista":      ["projects", "translation"],
-    "Analityk":       ["projects", "analysis"],
+    "Analityk":       ["projects", "analysis", "va"],
     "Dialogista":     ["projects", "chat"],
-    "Strateg":        ["projects", "translation", "analysis", "chat"],
-    "Mistrz Sesji":   ["projects", "transcription", "diarization", "translation", "analysis", "chat"],
+    "Strateg":        ["projects", "translation", "analysis", "chat", "va"],
+    "Mistrz Sesji":   ["projects", "transcription", "diarization", "translation", "analysis", "chat", "va"],
 }
 
 ADMIN_ROLE_MODULES: Dict[str, List[str]] = {

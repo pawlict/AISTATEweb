@@ -177,6 +177,27 @@
           <span class="nav-label" data-i18n="nav.analysis">Analiza</span>
         </a>
         {% endif %}
+        {% if va_pro_installed|default(false) and (not multiuser or 'va' in user_modules) %}
+        <a href="/va" data-icon="va" class="{{ 'active' if active=='va' else '' }}" data-i18n-title="nav.va">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gva" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
+              <circle cx="14" cy="14" r="4" stroke="url(#gva)" stroke-width="2" fill="none"/>
+              <circle cx="34" cy="14" r="4" stroke="url(#gva)" stroke-width="2" fill="none"/>
+              <circle cx="14" cy="34" r="4" stroke="url(#gva)" stroke-width="2" fill="none"/>
+              <circle cx="34" cy="34" r="4" stroke="url(#gva)" stroke-width="2" fill="none"/>
+              <circle cx="24" cy="24" r="3" stroke="url(#gva)" stroke-width="2" fill="#10b981" fill-opacity=".15"/>
+              <line x1="17" y1="16" x2="21" y2="21" stroke="url(#gva)" stroke-width="1.5" opacity=".5"/>
+              <line x1="31" y1="16" x2="27" y2="21" stroke="url(#gva)" stroke-width="1.5" opacity=".5"/>
+              <line x1="17" y1="32" x2="21" y2="27" stroke="url(#gva)" stroke-width="1.5" opacity=".5"/>
+              <line x1="31" y1="32" x2="27" y2="27" stroke="url(#gva)" stroke-width="1.5" opacity=".5"/>
+              <line x1="14" y1="18" x2="14" y2="30" stroke="url(#gva)" stroke-width="1" opacity=".3"/>
+              <line x1="18" y1="14" x2="30" y2="14" stroke="url(#gva)" stroke-width="1" opacity=".3"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.va">Visual Analysis</span>
+        </a>
+        {% endif %}
         {% if not multiuser or 'chat' in user_modules %}
         <a href="/chat" data-icon="chat" class="{{ 'active' if active=='chat' else '' }}" data-i18n-title="nav.chat">
           <span class="nav-icon" aria-hidden="true">

@@ -2500,6 +2500,7 @@ def render_page(request: Request, tpl: str, title: str, active: str, current_pro
             "user_modules": user_modules,
             "aria_enabled": getattr(settings, "aria_enabled", False),
             "aria_tts_enabled": getattr(settings, "aria_tts_enabled", True),
+            "va_pro_installed": _loaded_plugins.get("va_pro", False),
             **ctx,
         },
     )
@@ -4902,6 +4903,8 @@ modules_router.init(projects_dir=PROJECTS_DIR, app_log_fn=app_log)
 app.include_router(modules_router.router)
 
 # Auto-discover and register installed PRO modules
+_loaded_plugins: Dict[str, bool] = {}
+
 def _load_plugins():
     """Load installed aistateweb.plugins entry points."""
     import importlib.metadata
@@ -4913,12 +4916,25 @@ def _load_plugins():
         try:
             register_fn = ep.load()
             ok = register_fn(app, projects_dir=PROJECTS_DIR, app_log_fn=app_log)
+            _loaded_plugins[ep.name] = bool(ok)
             if ok:
                 app_log(f"[plugins] Loaded module: {ep.name}")
         except Exception as e:
+            _loaded_plugins[ep.name] = False
             app_log(f"[plugins] Failed to load {ep.name}: {e}")
 
 _load_plugins()
+
+# --- VA Pro page route (only when plugin is installed) ---
+if _loaded_plugins.get("va_pro"):
+    # Add plugin templates dir to Jinja2 search path
+    _va_tpl_dir = getattr(app.state, "va_pro_templates_dir", None)
+    if _va_tpl_dir and Path(_va_tpl_dir).is_dir():
+        TEMPLATES.env.loader.searchpath.append(_va_tpl_dir)
+
+    @app.get("/va", response_class=HTMLResponse)
+    def page_va(request: Request) -> Any:
+        return render_page(request, "va.html", "Visual Analysis", "va")
 
 # Load license at startup
 try:
