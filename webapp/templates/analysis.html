@@ -160,6 +160,46 @@
       </div>
     </div>
 
+    {% if va_pro_installed|default(false) %}
+    <!-- VA toolbar items (hidden by default, shown when Visual tab active) -->
+    <div class="analysis-toolbar-right" id="visual_toolbar_items" style="display:none">
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="va_import_toolbar_btn" title="Import data (CSV, JSON, XLSX)"><img src="/static/icons/pliki/file_import.svg" alt="Import" draggable="false"></button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="va_export_toolbar_btn" title="Export"><img src="/static/icons/pliki/file_export.svg" alt="Export" draggable="false"></button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="va_ai_analyze_toolbar_btn" title="AI Analysis"><img src="/static/icons/akcje/generate_ai.svg" alt="AI" draggable="false"></button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-section">
+        <div class="analysis-models">
+          <div class="analysis-model">
+            <label class="small" for="va_model_deep" data-i18n="analysis.model_llm">Model LLM</label>
+            <select class="input mini-select" id="va_model_deep" disabled>
+              <option data-i18n="analysis.models_loading">Loading…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-section">
+        <div class="toolbar-group" id="va_report_formats">
+          <label class="toolbar-group-label"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> <span data-i18n="va.report">Raport</span></label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="HTML"><input type="checkbox" name="va_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+            <label class="pill pill-icon" title="DOCX"><input type="checkbox" name="va_report_fmt" value="docx"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOCX" draggable="false"></label>
+            <label class="pill pill-icon" title="PNG"><input type="checkbox" name="va_report_fmt" value="png"><img src="/static/icons/dokumenty/doc_txt.svg" alt="PNG" draggable="false"></label>
+            <button class="btn pill-icon" id="va_report_save_btn" title="Export report"><img src="/static/icons/pliki/file_save.svg" alt="Save" draggable="false"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
   </div>
 
   <!-- Tab bar -->
@@ -176,6 +216,11 @@
     <button class="analysis-tab" data-tab="crypto" id="tab_crypto">
       <span class="analysis-tab-icon"><i data-icon="link" data-size="14"></i></span> Analiza Crypto
     </button>
+    {% if va_pro_installed|default(false) %}
+    <button class="analysis-tab" data-tab="visual" id="tab_visual">
+      <span class="analysis-tab-icon"><i data-icon="git-branch" data-size="14"></i></span> <span data-i18n="va.tab_title">Analiza Wizualna</span>
+    </button>
+    {% endif %}
   </div>
 
   <!-- LLM Analysis content (existing) -->
@@ -1526,6 +1571,13 @@
 
   </div><!-- /crypto_content -->
 
+  {% if va_pro_installed|default(false) %}
+  <!-- Visual Analysis content (VA Pro plugin — DOM created dynamically by va.js) -->
+  <div class="analysis-tab-content" id="visual_content" style="display:none">
+    <div id="va_mount_point" style="width:100%;height:100%;position:relative"></div>
+  </div>
+  {% endif %}
+
   <!-- Note editor modal (shared by GSM and AML) -->
   <div class="analyst-note-overlay" id="analyst_note_overlay" style="display:none">
     <div class="analyst-note-modal">
@@ -1620,6 +1672,11 @@
 <script src="/static/review.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/gsm.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/crypto.js?v={{ app_version }}&_={{ static_ts }}"></script>
+{% if va_pro_installed|default(false) %}
+<link rel="stylesheet" href="/static/va-pro/va.css?v={{ app_version }}&_={{ static_ts }}">
+<script src="https://unpkg.com/cytoscape@3.30.4/dist/cytoscape.min.js"></script>
+<script src="/static/va-pro/va.js?v={{ app_version }}&_={{ static_ts }}"></script>
+{% endif %}
 <script>
 (async()=>{
   try{
@@ -1632,11 +1689,13 @@
     const toolbar = document.getElementById('analysis_toolbar');
     const sidebarToggle = document.getElementById('analysis_sidebar_toggle');
 
-    const allContents = [llmContent, amlContent, gsmContent, cryptoContent];
+    const visualContent = document.getElementById('visual_content');
+    const allContents = [llmContent, amlContent, gsmContent, cryptoContent, visualContent].filter(Boolean);
     const llmToolbar = ['analysis_models','analysis_report_formats','an_generate_btn','an_report_save_btn'];
     const amlToolbarEl = document.getElementById('aml_toolbar_items');
     const gsmToolbarEl = document.getElementById('gsm_toolbar_items');
     const cryptoToolbarEl = document.getElementById('crypto_toolbar_items');
+    const visualToolbarEl = document.getElementById('visual_toolbar_items');
 
     tabs.forEach(tab => {
       tab.addEventListener('click', async () => {
@@ -1646,7 +1705,7 @@
 
         // Save active tab per project so it restores on next open
         const _pid = (typeof AISTATE !== 'undefined' && AISTATE && AISTATE.projectId) || '';
-        if(_pid && ['aml','gsm','crypto'].includes(which)){
+        if(_pid && ['aml','gsm','crypto','visual'].includes(which)){
           localStorage.setItem('aistate_analysis_tab_' + _pid, which);
         } else if(_pid && which === 'llm'){
           localStorage.removeItem('aistate_analysis_tab_' + _pid);
@@ -1657,6 +1716,7 @@
         if(amlToolbarEl) amlToolbarEl.style.display = 'none';
         if(gsmToolbarEl) gsmToolbarEl.style.display = 'none';
         if(cryptoToolbarEl) cryptoToolbarEl.style.display = 'none';
+        if(visualToolbarEl) visualToolbarEl.style.display = 'none';
 
         if(which === 'llm'){
           llmContent.style.display = '';
@@ -1683,6 +1743,12 @@
             if(cryptoToolbarEl) cryptoToolbarEl.style.display = '';
             if(window.CryptoManager && !window.CryptoManager._initialized){
               await CryptoManager.init();
+            }
+          } else if(which === 'visual'){
+            if(visualContent) visualContent.style.display = '';
+            if(visualToolbarEl) visualToolbarEl.style.display = '';
+            if(window.VisualManager && !window.VisualManager._initialized){
+              await VisualManager.init();
             }
           }
         }
@@ -1718,7 +1784,7 @@
     // 1. Saved tab from previous session (most specific)
     // 2. Subproject type mapping (finance → aml)
     let autoTab = '';
-    if(savedTab && ['aml','gsm','crypto'].includes(savedTab)){
+    if(savedTab && ['aml','gsm','crypto','visual'].includes(savedTab)){
       autoTab = savedTab;
     } else if(spType === 'finance'){
       autoTab = 'aml';

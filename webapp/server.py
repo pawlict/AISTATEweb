@@ -4925,16 +4925,7 @@ def _load_plugins():
 
 _load_plugins()
 
-# --- VA Pro page route (only when plugin is installed) ---
-if _loaded_plugins.get("va_pro"):
-    # Add plugin templates dir to Jinja2 search path
-    _va_tpl_dir = getattr(app.state, "va_pro_templates_dir", None)
-    if _va_tpl_dir and Path(_va_tpl_dir).is_dir():
-        TEMPLATES.env.loader.searchpath.append(_va_tpl_dir)
-
-    @app.get("/va", response_class=HTMLResponse)
-    def page_va(request: Request) -> Any:
-        return render_page(request, "va.html", "Visual Analysis", "va")
+# VA Pro plugin handles its own static/lang mounts via register()
 
 # Load license at startup
 try:

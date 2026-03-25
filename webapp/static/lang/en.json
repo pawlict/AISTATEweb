@@ -340,6 +340,8 @@
   "nav.admin_panel": "Admin Panel",
   "nav.analysis": "Analysis",
   "nav.va": "Visual Analysis",
+  "va.tab_title": "Visual Analysis",
+  "va.report": "Report",
   "nav.asr_settings": "ASR Settings",
   "nav.diarization": "Diarization",
   "nav.info": "Info",

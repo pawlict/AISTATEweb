@@ -311,6 +311,8 @@
   "nav.admin_panel": "관리자 패널",
   "nav.analysis": "분석",
   "nav.va": "시각적 분석",
+  "va.tab_title": "시각적 분석",
+  "va.report": "보고서",
   "nav.asr_settings": "ASR 설정",
   "nav.diarization": "화자분리",
   "nav.info": "정보",
