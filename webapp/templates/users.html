@@ -25,6 +25,9 @@
     <button class="users-tab" data-panel="licensePanel">
       Licencja <span class="en">License</span>
     </button>
+    <button class="users-tab" data-panel="modulesPanel">
+      Moduły <span class="en">Modules</span>
+    </button>
     {% endif %}
   </div>
 
@@ -691,6 +694,60 @@
     </div>
 
   </div>
+
+  <!-- Panel: Modules (superadmin) -->
+  <div id="modulesPanel" class="users-panel" style="display:none;">
+
+    <h4 style="margin:0 0 .5rem;font-size:.85rem;">
+      Moduły dodatkowe <span class="en">Addon Modules</span>
+    </h4>
+    <p style="color:var(--muted,#888);font-size:.78rem;margin:0 0 1rem;line-height:1.5;">
+      Zainstaluj lub odinstaluj moduły rozszerzające funkcjonalność systemu.
+      Moduły wymagają odpowiedniej licencji (Pro lub wyższej).
+      <span class="en">Install or uninstall modules that extend system functionality.
+      Modules require an appropriate license (Pro or higher).</span>
+    </p>
+
+    <!-- Module cards container -->
+    <div id="mod_list" style="display:flex;flex-direction:column;gap:.8rem;">
+      <div style="font-size:.78rem;color:var(--muted,#888);text-align:center;padding:1.5rem;">
+        Ładowanie modułów... <span class="en">Loading modules...</span>
+      </div>
+    </div>
+
+    <div class="hr" style="margin:1.2rem 0;"></div>
+
+    <!-- Manual .whl upload -->
+    <h4 style="margin:0 0 .5rem;font-size:.85rem;">
+      Instalacja z pliku <span class="en">Install from file</span>
+    </h4>
+    <p style="color:var(--muted,#888);font-size:.76rem;margin:0 0 .6rem;">
+      Przeciągnij plik .whl z modułem lub kliknij aby wybrać.
+      <span class="en">Drag a .whl module file or click to select.</span>
+    </p>
+
+    <div id="mod_dropzone" style="padding:18px;border:2px dashed var(--border,#ccc);border-radius:10px;text-align:center;cursor:pointer;transition:border-color .2s;background:var(--panel2,#f8f9fa);max-width:560px;">
+      <div style="font-size:22px;opacity:.5;margin-bottom:4px;">&#128230;</div>
+      <div style="font-size:.76rem;color:var(--muted,#888);">
+        Przeciągnij plik .whl tutaj lub kliknij aby wybrać
+        <span class="en">Drag a .whl file here or click to select</span>
+      </div>
+      <input type="file" id="mod_file" accept=".whl" style="display:none" />
+    </div>
+
+    <!-- Upload progress -->
+    <div id="mod_uploading" style="display:none;margin-top:.6rem;max-width:560px;">
+      <div style="font-size:.78rem;color:var(--muted,#888);">Instalowanie modułu... <span class="en">Installing module...</span></div>
+      <div style="margin-top:4px;height:4px;background:var(--border,#e0e3e8);border-radius:2px;overflow:hidden;">
+        <div id="mod_progress_bar" style="width:0%;height:100%;background:var(--accent,#4a6cf7);transition:width .3s;"></div>
+      </div>
+    </div>
+
+    <!-- Success / error messages -->
+    <div id="mod_success" style="display:none;margin-top:.6rem;font-size:.82rem;color:#27ae60;max-width:560px;padding:.5rem .7rem;background:rgba(39,174,96,.08);border-radius:6px;"></div>
+    <div id="mod_error" style="display:none;margin-top:.6rem;font-size:.82rem;color:#e74c3c;max-width:560px;padding:.5rem .7rem;background:rgba(231,76,60,.08);border-radius:6px;"></div>
+
+  </div>
   {% endif %}
 
 </div>
@@ -1118,6 +1175,7 @@
 {% if user and user.is_superadmin %}
 <script src="/static/admin_update.js?v={{ app_version }}&_={{ static_ts }}"></script>
 <script src="/static/admin_license.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/admin_modules.js?v={{ app_version }}&_={{ static_ts }}"></script>
 {% endif %}
 {% if user and user.is_superadmin %}
 <script>
