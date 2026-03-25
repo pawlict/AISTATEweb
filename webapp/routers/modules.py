@@ -32,7 +32,7 @@ KNOWN_MODULES: Dict[str, Dict[str, Any]] = {
         "required_feature": "va",
         "required_plan": "pro",
         "icon": "🔗",
-        "version_available": "1.0.0",
+        "version_available": "1.1.0",
     },
 }
 
@@ -66,6 +66,20 @@ def _is_module_installed(import_name: str) -> bool:
 
 
 def _get_installed_version(package_name: str) -> Optional[str]:
+    """Get installed version, bypassing importlib.metadata cache."""
+    # Use pip show as a reliable source (no caching issues)
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "show", package_name],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if line.startswith("Version:"):
+                    return line.split(":", 1)[1].strip()
+    except Exception:
+        pass
+    # Fallback to importlib.metadata
     try:
         return importlib.metadata.version(package_name)
     except importlib.metadata.PackageNotFoundError:
