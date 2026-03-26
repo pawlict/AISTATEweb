@@ -3206,7 +3206,7 @@ document.getElementById('di_file_input').addEventListener('change', async functi
         };
       },
       onNoteChange: function () {
-        renderSegments();
+        diRender();
         if (typeof segTools !== "undefined" && segTools.afterRender) segTools.afterRender();
         var mgr = window._diNotesMgr;
         var hasAny = mgr && ((mgr.notes.global && mgr.notes.global.trim()) || (mgr.notes.items && mgr.notes.items.length > 0));
