@@ -27,11 +27,13 @@ def build_crypto_prompt(
     chain: str = "",
     user_prompt: str = "",
     source_type: str = "blockchain",
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Build a structured prompt for LLM analysis of crypto transactions."""
     if source_type == "exchange":
         return _build_exchange_prompt(
             txs, alerts, risk_score, risk_reasons, source, user_prompt,
+            metadata=metadata,
         )
     return _build_blockchain_prompt(
         txs, wallets, alerts, risk_score, risk_reasons, source, chain, user_prompt,
@@ -47,6 +49,7 @@ def _build_exchange_prompt(
     risk_reasons: Optional[List[str]],
     source: str,
     user_prompt: str,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     lines: List[str] = []
 
@@ -69,6 +72,22 @@ def _build_exchange_prompt(
     if dates:
         lines.append(f"- Okres: {min(dates)[:10]} — {max(dates)[:10]}")
     lines.append("")
+
+    # Account holder info (from parser metadata)
+    meta = metadata or {}
+    holder = meta.get("account_holder")
+    if holder:
+        lines.append("## Dane właściciela konta")
+        lines.append(f"- Imię i nazwisko: {holder}")
+        if meta.get("street"):
+            lines.append(f"- Ulica: {meta['street']}")
+        if meta.get("city"):
+            lines.append(f"- Miejscowość: {meta['city']}")
+        if meta.get("postal_code"):
+            lines.append(f"- Kod pocztowy: {meta['postal_code']}")
+        if meta.get("country"):
+            lines.append(f"- Kraj: {meta['country']}")
+        lines.append("")
 
     # Token portfolio
     token_stats: Dict[str, Dict[str, Any]] = {}

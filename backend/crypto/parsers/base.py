@@ -126,3 +126,4 @@ class ParsedCryptoData:
     contracts: List[SmartContractInfo] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     raw_row_count: int = 0
+    metadata: Dict[str, Any] = field(default_factory=dict)  # parser-specific metadata (holder, address, etc.)

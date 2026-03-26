@@ -219,6 +219,7 @@ def run_crypto_pipeline(
         source=parsed.source,
         chain=parsed.chain,
         source_type=source_type,
+        metadata=parsed.metadata,
     )
 
     # 9. Summary statistics
@@ -329,6 +330,7 @@ def run_crypto_pipeline(
         "source": parsed.source,
         "source_type": source_type,
         "chain": parsed.chain,
+        "metadata": parsed.metadata,
         "filename": filename or path.name,
         "tx_count": len(txs),
         "wallet_count": len(wallets),
