@@ -83,11 +83,20 @@ class _PortfolioPosition:
 class _ParsedMeta:
     """Metadata extracted from the PDF header."""
     account_holder: str = ""
-    address: str = ""
+    street: str = ""
+    city: str = ""
+    postal_code: str = ""
+    country: str = ""
     period_from: str = ""  # YYYY-MM-DD
     period_to: str = ""    # YYYY-MM-DD
     generated_date: str = ""
     entity: str = "Revolut Digital Assets Europe Ltd"
+
+    @property
+    def address(self) -> str:
+        """Full address as a single string."""
+        parts = [p for p in (self.street, self.postal_code, self.city, self.country) if p]
+        return ", ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -234,34 +243,98 @@ def _extract_revolut_crypto_data(
     transactions: List[_RawCryptoRow] = []
 
     # --- Extract metadata from header ---
-    full_head = "\n".join(lines[:20])
-
-    # Account holder: line after "Revolut Digital Assets Europe Ltd"
-    for i, line in enumerate(lines[:15]):
-        if "revolut digital assets" in line.lower():
-            meta.entity = line
-            # Next lines: holder name, address, city, postal, country
-            if i + 1 < len(lines):
-                meta.account_holder = lines[i + 1]
-            if i + 2 < len(lines):
-                meta.address = lines[i + 2]
+    # The header layout varies between Revolut PDF versions.  We scan
+    # lines before "Zestawienie pozycji" and classify each line by
+    # content rather than relying on a fixed order.
+    header_end = 0
+    for idx, ln in enumerate(lines[:30]):
+        if "zestawienie pozycji" in ln.lower():
+            header_end = idx
             break
+    if not header_end:
+        header_end = min(20, len(lines))
 
-    # Period: "16 cze 2020 - 26 mar 2026"
-    m = _RE_PERIOD.search(full_head)
-    if m:
-        d1, m1, y1 = int(m.group(1)), _PL_MONTHS.get(m.group(2).lower(), 1), int(m.group(3))
-        d2, m2, y2 = int(m.group(4)), _PL_MONTHS.get(m.group(5).lower(), 1), int(m.group(6))
-        meta.period_from = f"{y1}-{m1:02d}-{d1:02d}"
-        meta.period_to = f"{y2}-{m2:02d}-{d2:02d}"
+    header_lines = lines[:header_end]
 
-    # Generated date
-    for line in lines[:5]:
-        if "wygenerowano" in line.lower():
-            ts, ds = _parse_pl_datetime(line)
+    # Classify header lines
+    _skip_kw = {"wyciąg", "wygenerowano", "revolut digital assets",
+                "zestawienie", "symbol", "token"}
+    unclassified: List[str] = []
+
+    for ln in header_lines:
+        ll = ln.lower().strip()
+
+        # Entity
+        if "revolut digital assets" in ll:
+            meta.entity = ln.strip()
+            continue
+
+        # Generated date
+        if ll.startswith("wygenerowano"):
+            ts, ds = _parse_pl_datetime(ln)
             if ds:
                 meta.generated_date = ds
-            break
+            continue
+
+        # Period line (may be standalone "Okres" or "Okres 1 mar 2026 - 26 mar 2026")
+        pm = _RE_PERIOD.search(ln)
+        if pm:
+            d1, m1, y1 = int(pm.group(1)), _PL_MONTHS.get(pm.group(2).lower(), 1), int(pm.group(3))
+            d2, m2, y2 = int(pm.group(4)), _PL_MONTHS.get(pm.group(5).lower(), 1), int(pm.group(6))
+            meta.period_from = f"{y1}-{m1:02d}-{d1:02d}"
+            meta.period_to = f"{y2}-{m2:02d}-{d2:02d}"
+            continue
+
+        # Skip pure keyword lines
+        if ll in ("okres", "wyciąg z konta kryptowalutowego", "wyciag z konta kryptowalutowego"):
+            continue
+
+        # "Nazwa konta" line — may contain holder name again
+        if ll.startswith("nazwa konta"):
+            # "Nazwa konta Tomasz Pawlicki" — extract name if we don't have one yet
+            name_part = ln.strip()[len("Nazwa konta"):].strip()
+            if name_part and not meta.account_holder:
+                meta.account_holder = name_part
+            continue
+
+        # Postal code: 5 digits or NN-NNN pattern
+        if re.match(r"^\d{2}-?\d{3}$", ll):
+            meta.postal_code = ln.strip()
+            continue
+
+        # Country code (2 uppercase letters)
+        if re.match(r"^[A-Z]{2}$", ln.strip()):
+            meta.country = ln.strip()
+            continue
+
+        # Skip known noise
+        if any(kw in ll for kw in _skip_kw):
+            continue
+
+        # Remaining lines: holder name, street, city (in order of appearance)
+        unclassified.append(ln.strip())
+
+    # Assign unclassified lines: first = holder, second = street, third = city
+    if len(unclassified) >= 1 and not meta.account_holder:
+        meta.account_holder = unclassified[0]
+    if len(unclassified) >= 2:
+        meta.street = unclassified[1]
+    if len(unclassified) >= 3:
+        meta.city = unclassified[2]
+
+    # If holder was found but street wasn't, check if we have extra lines
+    if meta.account_holder and not meta.street and len(unclassified) >= 2:
+        meta.street = unclassified[1]
+
+    # Fallback: scan full header for period if not found above
+    if not meta.period_from:
+        full_head = "\n".join(header_lines)
+        pm = _RE_PERIOD.search(full_head)
+        if pm:
+            d1, m1, y1 = int(pm.group(1)), _PL_MONTHS.get(pm.group(2).lower(), 1), int(pm.group(3))
+            d2, m2, y2 = int(pm.group(4)), _PL_MONTHS.get(pm.group(5).lower(), 1), int(pm.group(6))
+            meta.period_from = f"{y1}-{m1:02d}-{d1:02d}"
+            meta.period_to = f"{y2}-{m2:02d}-{d2:02d}"
 
     # --- Identify sections by scanning lines ---
     section = "header"
@@ -273,6 +346,7 @@ def _extract_revolut_crypto_data(
         "ZRX", "ENJ", "MANA", "SAND", "AXS", "FLR", "APE", "OP", "ARB",
         "PEPE", "BONK", "WIF", "FET", "RENDER", "INJ", "TIA", "SEI",
         "SUI", "APT", "STX", "IMX", "GALA", "LRC", "GRT", "1INCH",
+        "ENA", "TON", "HBAR", "ONDO", "ETC", "FLOKI", "LMWR",
     }
 
     _RODZAJ_TX = {"kupno", "sprzedaż", "sprzedaz", "przelew wychodzący", "przelew wychodzacy"}
@@ -587,6 +661,18 @@ def parse_revolut_crypto_pdf(path: Path) -> ParsedCryptoData:
         source="revolut_crypto",
         source_type="exchange",
         chain="",
+        metadata={
+            "account_holder": meta.account_holder,
+            "street": meta.street,
+            "city": meta.city,
+            "postal_code": meta.postal_code,
+            "country": meta.country,
+            "address": meta.address,
+            "entity": meta.entity,
+            "period_from": meta.period_from,
+            "period_to": meta.period_to,
+            "generated_date": meta.generated_date,
+        },
     )
 
     crypto_txs: List[CryptoTransaction] = []

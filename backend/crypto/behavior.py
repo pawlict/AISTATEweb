@@ -134,8 +134,8 @@ def _compute_metrics(txs: List[CryptoTransaction]) -> Dict[str, Any]:
         type_counts[tx.tx_type] += 1
     m["type_counts"] = dict(type_counts)
 
-    swap_count = type_counts.get("swap", 0)
-    deposit_count = type_counts.get("deposit", 0) + type_counts.get("fiat_deposit", 0)
+    swap_count = type_counts.get("swap", 0) + type_counts.get("buy", 0) + type_counts.get("sell", 0)
+    deposit_count = type_counts.get("deposit", 0) + type_counts.get("fiat_deposit", 0) + type_counts.get("buy", 0)
     withdrawal_count = type_counts.get("withdrawal", 0) + type_counts.get("fiat_withdrawal", 0)
     m["swap_count"] = swap_count
     m["deposit_count"] = deposit_count
@@ -148,7 +148,7 @@ def _compute_metrics(txs: List[CryptoTransaction]) -> Dict[str, Any]:
             unique_tokens.add(tx.token)
     m["unique_tokens"] = len(unique_tokens)
 
-    # ── Amount statistics ──
+    # ── Amount statistics (raw token quantities) ──
     amounts = [float(tx.amount) for tx in txs if tx.amount > 0]
     if amounts:
         m["avg_amount"] = sum(amounts) / len(amounts)
@@ -161,6 +161,29 @@ def _compute_metrics(txs: List[CryptoTransaction]) -> Dict[str, Any]:
         m["max_amount"] = 0
         m["total_volume"] = 0
         m["large_tx_count"] = 0
+
+    # ── Fiat-equivalent values (from parser raw dict) ──
+    # Parsers like Revolut Crypto store fiat_value/wartosc alongside token amounts.
+    # This enables value-accurate profiling (13M SHIB ≠ whale if worth only ~500 PLN).
+    fiat_values: List[float] = []
+    for tx in txs:
+        fv = tx.raw.get("fiat_value") or tx.raw.get("wartosc")
+        if fv:
+            try:
+                fiat_values.append(abs(float(fv)))
+            except (ValueError, TypeError):
+                pass
+    if fiat_values:
+        m["avg_fiat_value"] = sum(fiat_values) / len(fiat_values)
+        m["max_fiat_value"] = max(fiat_values)
+        m["total_fiat_volume"] = sum(fiat_values)
+        fiat_large_thr = m["avg_fiat_value"] * 10
+        m["large_fiat_tx_count"] = sum(1 for v in fiat_values if v > fiat_large_thr)
+    else:
+        m["avg_fiat_value"] = 0
+        m["max_fiat_value"] = 0
+        m["total_fiat_volume"] = 0
+        m["large_fiat_tx_count"] = 0
 
     # ── Daily activity ──
     daily_tx: Dict[str, int] = defaultdict(int)
@@ -179,9 +202,9 @@ def _compute_metrics(txs: List[CryptoTransaction]) -> Dict[str, Any]:
         dt = _parse_ts(tx.timestamp)
         if not dt or not tx.token:
             continue
-        if tx.tx_type in ("deposit", "swap") and tx.raw.get("side", "") in ("BUY", ""):
+        if tx.tx_type in ("deposit", "swap", "buy") and tx.raw.get("side", "") in ("BUY", ""):
             buy_times[tx.token].append(dt)
-        elif tx.tx_type in ("withdrawal", "swap") and tx.raw.get("side", "") == "SELL":
+        elif tx.tx_type in ("withdrawal", "swap", "sell") and tx.raw.get("side", "") in ("SELL", ""):
             sell_times[tx.token].append(dt)
 
     holding_periods = []
@@ -208,7 +231,8 @@ def _compute_metrics(txs: List[CryptoTransaction]) -> Dict[str, Any]:
 
     # ── Staking / rewards ──
     staking_count = sum(1 for tx in txs if tx.category in ("staking_reward", "earn", "savings_interest",
-                                                            "interest", "cashback", "referral_bonus"))
+                                                            "interest", "cashback", "referral_bonus")
+                        or tx.tx_type in ("staking_reward", "learn_reward"))
     m["staking_reward_count"] = staking_count
 
     # ── Card / spending ──
@@ -430,31 +454,54 @@ def _score_whale(m: Dict[str, Any]) -> Tuple[float, List[str]]:
     score = 0.0
     reasons = []
 
-    max_amount = m.get("max_amount", 0)
-    avg_amount = m.get("avg_amount", 0)
-    large_count = m.get("large_tx_count", 0)
-    total_volume = m.get("total_volume", 0)
+    max_fiat = m.get("max_fiat_value", 0)
+    total_fiat = m.get("total_fiat_volume", 0)
+    large_fiat_count = m.get("large_fiat_tx_count", 0)
 
-    # These thresholds are relative — whale detection works for both BTC and stablecoins
-    if max_amount > 100000:
-        score += 30
-        reasons.append(f"Bardzo duża transakcja: {max_amount:,.2f}")
-    elif max_amount > 10000:
-        score += 15
-        reasons.append(f"Duża transakcja: {max_amount:,.2f}")
+    if max_fiat > 0:
+        # ── Fiat-based whale detection (accurate across all tokens) ──
+        if max_fiat > 50000:
+            score += 30
+            reasons.append(f"Bardzo duża transakcja: {max_fiat:,.0f} PLN")
+        elif max_fiat > 10000:
+            score += 15
+            reasons.append(f"Duża transakcja: {max_fiat:,.0f} PLN")
 
-    if large_count > 5:
-        score += 20
-        reasons.append(f"Wiele dużych transakcji ({large_count})")
+        if large_fiat_count > 5:
+            score += 20
+            reasons.append(f"Wiele dużych transakcji ({large_fiat_count})")
 
-    if total_volume > 1000000:
-        score += 25
-        reasons.append(f"Całkowity wolumen: {total_volume:,.2f}")
-    elif total_volume > 100000:
-        score += 10
+        if total_fiat > 500000:
+            score += 25
+            reasons.append(f"Całkowity wolumen fiat: {total_fiat:,.0f} PLN")
+        elif total_fiat > 100000:
+            score += 10
+    else:
+        # ── Fallback: raw token amounts (no fiat data available) ──
+        max_amount = m.get("max_amount", 0)
+        large_count = m.get("large_tx_count", 0)
+        total_volume = m.get("total_volume", 0)
+
+        if max_amount > 100000:
+            score += 30
+            reasons.append(f"Bardzo duża transakcja: {max_amount:,.2f}")
+        elif max_amount > 10000:
+            score += 15
+            reasons.append(f"Duża transakcja: {max_amount:,.2f}")
+
+        if large_count > 5:
+            score += 20
+            reasons.append(f"Wiele dużych transakcji ({large_count})")
+
+        if total_volume > 1000000:
+            score += 25
+            reasons.append(f"Całkowity wolumen: {total_volume:,.2f}")
+        elif total_volume > 100000:
+            score += 10
 
     tx_per_day = m.get("tx_per_day", 0)
-    if tx_per_day < 2 and large_count > 3:
+    effective_large = large_fiat_count if max_fiat > 0 else m.get("large_tx_count", 0)
+    if tx_per_day < 2 and effective_large > 3:
         score += 10
         reasons.append("Rzadkie, ale duże transakcje")
 
@@ -465,14 +512,16 @@ def _score_institutional(m: Dict[str, Any]) -> Tuple[float, List[str]]:
     score = 0.0
     reasons = []
 
-    total_volume = m.get("total_volume", 0)
+    total_fiat = m.get("total_fiat_volume", 0)
+    total_volume = total_fiat if total_fiat > 0 else m.get("total_volume", 0)
+    volume_label = "PLN" if total_fiat > 0 else "jednostek"
     activity_ratio = m.get("activity_ratio", 0)
     tx_per_day = m.get("tx_per_day", 0)
     swap_count = m.get("swap_count", 0)
 
     if total_volume > 500000 and activity_ratio > 0.5:
         score += 30
-        reasons.append(f"Wysoki wolumen ({total_volume:,.0f}) z regularną aktywnością ({activity_ratio * 100:.0f}% dni)")
+        reasons.append(f"Wysoki wolumen ({total_volume:,.0f} {volume_label}) z regularną aktywnością ({activity_ratio * 100:.0f}% dni)")
 
     if m.get("uses_leverage") and swap_count > 100:
         score += 20
@@ -671,7 +720,9 @@ def profile_user_behavior(
                  "swap_count", "total_volume", "avg_holding_hours",
                  "uses_leverage", "staking_reward_count", "large_tx_count",
                  "rapid_sequence_count", "same_day_buy_sell_count",
-                 "privacy_coin_tx_count", "internal_transfer_count"]:
+                 "privacy_coin_tx_count", "internal_transfer_count",
+                 "avg_fiat_value", "max_fiat_value", "total_fiat_volume",
+                 "large_fiat_tx_count", "deposit_count", "withdrawal_count"]:
         if key in metrics:
             display_metrics[key] = metrics[key]
 

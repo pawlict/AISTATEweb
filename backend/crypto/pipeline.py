@@ -201,10 +201,13 @@ def run_crypto_pipeline(
     # 6. Generate charts (mode-aware)
     charts = generate_all_charts(txs, source_type=source_type)
 
-    # 7. Build flow graph (blockchain only — exchange data has no addresses)
+    # 7. Build flow graph
     graph: Dict[str, Any] = {"nodes": [], "edges": [], "stats": {"total_nodes": 0, "total_edges": 0}}
     if source_type == "blockchain":
         graph = build_crypto_graph(txs)
+    else:
+        from .graph import build_exchange_flow_graph
+        graph = build_exchange_flow_graph(txs)
 
     # 8. Build LLM prompt (mode-aware)
     llm_prompt = build_crypto_prompt(
@@ -216,6 +219,7 @@ def run_crypto_pipeline(
         source=parsed.source,
         chain=parsed.chain,
         source_type=source_type,
+        metadata=parsed.metadata,
     )
 
     # 9. Summary statistics
@@ -227,6 +231,42 @@ def run_crypto_pipeline(
         float(tx.amount) for tx in txs
         if tx.tx_type in ("withdrawal",) and (tx.from_address or source_type == "exchange")
     )
+
+    # Fiat flow summary (from parser-provided fiat values)
+    fiat_summary: Dict[str, Any] = {}
+    _fiat_buys = []
+    _fiat_sells = []
+    _fiat_transfers = []
+    for tx in txs:
+        fv_str = tx.raw.get("fiat_value") or tx.raw.get("wartosc")
+        if not fv_str:
+            continue
+        try:
+            fv = abs(float(fv_str))
+        except (ValueError, TypeError):
+            continue
+        fc = tx.raw.get("fiat_currency") or tx.raw.get("currency", "PLN")
+        tt = tx.tx_type.lower()
+        if tt == "buy":
+            _fiat_buys.append(fv)
+        elif tt == "sell":
+            _fiat_sells.append(fv)
+        elif tt == "withdrawal":
+            _fiat_transfers.append(fv)
+
+    if _fiat_buys or _fiat_sells or _fiat_transfers:
+        total_buy = sum(_fiat_buys)
+        total_sell = sum(_fiat_sells)
+        total_transfer = sum(_fiat_transfers)
+        fiat_summary = {
+            "total_buy_fiat": round(total_buy, 2),
+            "total_sell_fiat": round(total_sell, 2),
+            "total_transfer_out_fiat": round(total_transfer, 2),
+            "net_fiat": round(total_sell - total_buy - total_transfer, 2),
+            "buy_count": len(_fiat_buys),
+            "sell_count": len(_fiat_sells),
+            "transfer_count": len(_fiat_transfers),
+        }
 
     # Token breakdown
     tokens: Dict[str, Dict[str, Any]] = {}
@@ -290,6 +330,7 @@ def run_crypto_pipeline(
         "source": parsed.source,
         "source_type": source_type,
         "chain": parsed.chain,
+        "metadata": parsed.metadata,
         "filename": filename or path.name,
         "tx_count": len(txs),
         "wallet_count": len(wallets),
@@ -305,6 +346,7 @@ def run_crypto_pipeline(
         "charts": charts,
         "graph": graph,
         "exchange_meta": exchange_meta,
+        "fiat_summary": fiat_summary,
         "wallets": [
             {
                 "address": w.address,
