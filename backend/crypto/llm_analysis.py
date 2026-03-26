@@ -119,17 +119,63 @@ def _build_exchange_prompt(
         lines.append(f"## Konta: {', '.join(sorted(accounts))}")
         lines.append("")
 
+    # Fiat flow summary (from parser-provided fiat values)
+    _buy_fiat_total = 0.0
+    _sell_fiat_total = 0.0
+    _transfer_fiat_total = 0.0
+    for tx in txs:
+        fv_str = tx.raw.get("fiat_value") or tx.raw.get("wartosc")
+        if not fv_str:
+            continue
+        try:
+            fv = abs(float(fv_str))
+        except (ValueError, TypeError):
+            continue
+        tt = tx.tx_type.lower()
+        if tt == "buy":
+            _buy_fiat_total += fv
+        elif tt == "sell":
+            _sell_fiat_total += fv
+        elif tt == "withdrawal":
+            _transfer_fiat_total += fv
+
+    if _buy_fiat_total or _sell_fiat_total or _transfer_fiat_total:
+        net = _sell_fiat_total - _buy_fiat_total - _transfer_fiat_total
+        lines.append("## Podsumowanie przepływów fiatowych")
+        lines.append(f"- Kupno krypto za fiat: {_buy_fiat_total:,.2f} PLN")
+        lines.append(f"- Sprzedaż krypto na fiat: {_sell_fiat_total:,.2f} PLN")
+        lines.append(f"- Transfery na zewnątrz (wartość fiat): {_transfer_fiat_total:,.2f} PLN")
+        lines.append(f"- **Bilans netto: {net:+,.2f} PLN**")
+        lines.append("")
+
+    # Deposits / Buys (fiat entering crypto)
+    deposits = [tx for tx in txs if tx.tx_type in ("buy", "deposit")]
+    if deposits:
+        lines.append("## Wpłaty / Zakupy krypto")
+        lines.append("| Data | Token | Ilość | Wartość fiat | Opłata |")
+        lines.append("|---|---|---|---|---|")
+        for tx in deposits[:30]:
+            fv = tx.raw.get("fiat_value", tx.raw.get("wartosc", "?"))
+            fc = tx.raw.get("fiat_currency", tx.raw.get("currency", ""))
+            fee = tx.raw.get("oplaty", "0")
+            lines.append(f"| {tx.timestamp[:10]} | {tx.token} | {float(tx.amount):.6f} | {fv} {fc} | {fee} |")
+        if len(deposits) > 30:
+            lines.append(f"  ... i {len(deposits) - 30} więcej")
+        lines.append("")
+
     # Withdrawals (crypto leaving exchange)
     withdrawals = [tx for tx in txs if tx.tx_type == "withdrawal"]
     if withdrawals:
         lines.append("## Wypłaty krypto z giełdy")
-        lines.append("| Data | Token | Kwota | Uwagi |")
-        lines.append("|---|---|---|---|")
-        for tx in withdrawals[:20]:
+        lines.append("| Data | Token | Kwota | Wartość fiat | Uwagi |")
+        lines.append("|---|---|---|---|---|")
+        for tx in withdrawals[:30]:
+            fv = tx.raw.get("fiat_value", tx.raw.get("wartosc", "?"))
+            fc = tx.raw.get("fiat_currency", tx.raw.get("currency", ""))
             notes = tx.raw.get("notes", "")
-            lines.append(f"| {tx.timestamp[:10]} | {tx.token} | {float(tx.amount):.8f} | {notes} |")
-        if len(withdrawals) > 20:
-            lines.append(f"  ... i {len(withdrawals) - 20} więcej")
+            lines.append(f"| {tx.timestamp[:10]} | {tx.token} | {float(tx.amount):.8f} | {fv} {fc} | {notes} |")
+        if len(withdrawals) > 30:
+            lines.append(f"  ... i {len(withdrawals) - 30} więcej")
         lines.append("")
 
     # Risk

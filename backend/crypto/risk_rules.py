@@ -368,8 +368,17 @@ def _classify_blockchain(txs: List[CryptoTransaction]) -> List[CryptoTransaction
                         tags.append("defi")
                         score += 5
 
-        # High-value transaction
-        if float(tx.amount) > 10:  # > 10 BTC/ETH is significant
+        # High-value transaction (prefer fiat value when available)
+        fiat_val_str = tx.raw.get("fiat_value") or tx.raw.get("wartosc")
+        if fiat_val_str:
+            try:
+                fv = abs(float(fiat_val_str))
+                if fv > 15000:
+                    tags.append("high_value_fiat")
+                    score += 15
+            except (ValueError, TypeError):
+                pass
+        elif float(tx.amount) > 10:  # > 10 BTC/ETH is significant
             tags.append("high_value")
             score += 15
 
@@ -408,10 +417,26 @@ def _classify_exchange(txs: List[CryptoTransaction]) -> List[CryptoTransaction]:
             tags.append("meme_coin")
             score += 5
 
-        # Large fiat movement
+        # Large fiat movement (fiat token on exchange like Binance)
         if tx.token in _FIAT and float(tx.amount) > 5000:
             tags.append("high_value_fiat")
             score += 15
+
+        # High-value crypto transaction based on fiat equivalent
+        # Parsers like Revolut Crypto store fiat_value in raw dict
+        fiat_val_str = tx.raw.get("fiat_value") or tx.raw.get("wartosc")
+        if fiat_val_str and tx.token not in _FIAT:
+            try:
+                fv = abs(float(fiat_val_str))
+                if fv > 15000:  # > 15k PLN — GIIF reporting threshold
+                    if "high_value_fiat" not in tags:
+                        tags.append("high_value_fiat")
+                    score += 20
+                elif fv > 5000:
+                    tags.append("notable_value")
+                    score += 5
+            except (ValueError, TypeError):
+                pass
 
         # Withdrawal (funds leaving exchange = higher risk)
         if tx.tx_type == "withdrawal":

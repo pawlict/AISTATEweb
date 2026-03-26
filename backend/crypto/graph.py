@@ -134,6 +134,121 @@ def build_crypto_graph(
     }
 
 
+def build_exchange_flow_graph(
+    txs: List[CryptoTransaction],
+) -> Dict[str, Any]:
+    """Build a flow graph for exchange/custodial data (Cytoscape.js format).
+
+    Unlike blockchain graphs (address→address), exchange data shows logical
+    flows: FIAT → TOKEN → EXTERNAL, with fiat values on edges.
+
+    Node types:
+    - ``fiat``  — fiat currency pool (PLN, EUR, USD)
+    - ``token`` — crypto token pool (BTC, ETH, XRP…)
+    - ``external`` — funds leaving the exchange (withdrawals)
+    - ``staking`` — staking/reward income
+    """
+    edge_agg: Dict[tuple, Dict[str, Any]] = {}
+    node_meta: Dict[str, Dict[str, Any]] = {}
+
+    def _ensure_node(nid: str, ntype: str, label: str) -> None:
+        if nid not in node_meta:
+            node_meta[nid] = {"type": ntype, "label": label, "total_in": 0.0, "total_out": 0.0, "count": 0}
+
+    for tx in txs:
+        tt = tx.tx_type.lower()
+        token = tx.token or "UNKNOWN"
+        fv_str = tx.raw.get("fiat_value") or tx.raw.get("wartosc")
+        fc = tx.raw.get("fiat_currency") or tx.raw.get("currency", "PLN")
+        try:
+            fiat_val = abs(float(fv_str)) if fv_str else 0.0
+        except (ValueError, TypeError):
+            fiat_val = 0.0
+
+        token_id = f"TOKEN:{token}"
+        fiat_id = f"FIAT:{fc}"
+
+        if tt == "buy":
+            # FIAT → TOKEN
+            _ensure_node(fiat_id, "fiat", fc)
+            _ensure_node(token_id, "token", token)
+            key = (fiat_id, token_id)
+            edge_label = f"Kupno {token}"
+        elif tt == "sell":
+            # TOKEN → FIAT
+            _ensure_node(token_id, "token", token)
+            _ensure_node(fiat_id, "fiat", fc)
+            key = (token_id, fiat_id)
+            edge_label = f"Sprzedaż {token}"
+        elif tt == "withdrawal":
+            # TOKEN → EXTERNAL
+            _ensure_node(token_id, "token", token)
+            _ensure_node("EXTERNAL", "external", "Portfele zewnętrzne")
+            key = (token_id, "EXTERNAL")
+            edge_label = f"Wypłata {token}"
+        elif tt in ("staking_reward", "learn_reward"):
+            # STAKING → TOKEN
+            _ensure_node("STAKING", "staking", "Staking / Nagrody")
+            _ensure_node(token_id, "token", token)
+            key = ("STAKING", token_id)
+            edge_label = f"Nagroda {token}"
+        else:
+            continue
+
+        if key not in edge_agg:
+            edge_agg[key] = {"amount": 0.0, "count": 0, "label": edge_label, "risk_tags": set()}
+        edge_agg[key]["amount"] += fiat_val
+        edge_agg[key]["count"] += 1
+        edge_agg[key]["risk_tags"].update(tx.risk_tags or [])
+
+        # Update node totals
+        node_meta[key[0]]["total_out"] += fiat_val
+        node_meta[key[0]]["count"] += 1
+        node_meta[key[1]]["total_in"] += fiat_val
+        node_meta[key[1]]["count"] += 1
+
+    # Build Cytoscape nodes
+    nodes = []
+    for nid, meta in node_meta.items():
+        nodes.append({
+            "data": {
+                "id": nid,
+                "label": meta["label"],
+                "type": meta["type"],
+                "risk_level": "low",
+                "total_in": round(meta["total_in"], 2),
+                "total_out": round(meta["total_out"], 2),
+                "tx_count": meta["count"],
+                "risk_tags": [],
+            }
+        })
+
+    # Build Cytoscape edges
+    edges = []
+    for (src, tgt), info in sorted(edge_agg.items(), key=lambda x: -x[1]["amount"]):
+        has_risk = bool(info["risk_tags"] & _RISK_LABELS)
+        edges.append({
+            "data": {
+                "source": src,
+                "target": tgt,
+                "amount": round(info["amount"], 2),
+                "count": info["count"],
+                "token": info["label"],
+                "risk": has_risk,
+                "risk_tags": list(info["risk_tags"]),
+            }
+        })
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "stats": {
+            "total_nodes": len(nodes),
+            "total_edges": len(edges),
+        },
+    }
+
+
 def _shorten(addr: str) -> str:
     if len(addr) > 18:
         return addr[:8] + "…" + addr[-6:]

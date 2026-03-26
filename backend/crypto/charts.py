@@ -38,6 +38,7 @@ def generate_all_charts(
             "balance_timeline": _exchange_balance_timeline(txs),
             "token_breakdown": _token_breakdown(txs),
             "fiat_flow": _fiat_flow(txs),
+            "fiat_value_timeline": _fiat_value_timeline(txs),
             "top_operations": _top_operations(txs),
         })
     else:
@@ -134,6 +135,46 @@ def _fiat_flow(txs: List[CryptoTransaction]) -> Dict[str, Any]:
         "labels": months,
         "deposits": [round(deposits.get(m, 0), 2) for m in months],
         "withdrawals": [round(withdrawals.get(m, 0), 2) for m in months],
+    }
+
+
+def _fiat_value_timeline(txs: List[CryptoTransaction]) -> Dict[str, Any]:
+    """Monthly cumulative fiat value of buy/sell/transfer operations.
+
+    Uses ``fiat_value``/``wartosc`` from ``tx.raw`` (set by parsers like
+    Revolut Crypto) to show money flows in PLN/USD/EUR over time.
+    Falls back to an empty chart when no fiat values are available.
+    """
+    monthly_buy: Dict[str, float] = defaultdict(float)
+    monthly_sell: Dict[str, float] = defaultdict(float)
+    monthly_transfer: Dict[str, float] = defaultdict(float)
+
+    for tx in txs:
+        fv_str = tx.raw.get("fiat_value") or tx.raw.get("wartosc")
+        if not fv_str:
+            continue
+        try:
+            fv = abs(float(fv_str))
+        except (ValueError, TypeError):
+            continue
+        month = tx.timestamp[:7] if tx.timestamp else "?"
+        tt = tx.tx_type.lower()
+        if tt == "buy":
+            monthly_buy[month] += fv
+        elif tt == "sell":
+            monthly_sell[month] += fv
+        elif tt == "withdrawal":
+            monthly_transfer[month] += fv
+
+    months = sorted(set(list(monthly_buy.keys()) + list(monthly_sell.keys()) + list(monthly_transfer.keys())))
+    if not months:
+        return {"labels": [], "buy": [], "sell": [], "transfer_out": []}
+
+    return {
+        "labels": months,
+        "buy": [round(monthly_buy.get(m, 0), 2) for m in months],
+        "sell": [round(monthly_sell.get(m, 0), 2) for m in months],
+        "transfer_out": [round(monthly_transfer.get(m, 0), 2) for m in months],
     }
 
 
