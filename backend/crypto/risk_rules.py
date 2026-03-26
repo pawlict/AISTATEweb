@@ -25,6 +25,7 @@ _CONFIG_DIR = Path(__file__).parent / "config"
 
 _SANCTIONED: Optional[Dict[str, Any]] = None
 _KNOWN_CONTRACTS: Optional[Dict[str, Any]] = None
+_KNOWN_TOKENS: Optional[Dict[str, Any]] = None
 
 
 def _load_sanctioned() -> Dict[str, Any]:
@@ -47,6 +48,72 @@ def _load_known_contracts() -> Dict[str, Any]:
         else:
             _KNOWN_CONTRACTS = {"contracts": {}, "protocols": {}}
     return _KNOWN_CONTRACTS
+
+
+def _load_known_tokens() -> Dict[str, Any]:
+    """Load token database (TOP 200 + user additions)."""
+    global _KNOWN_TOKENS
+    if _KNOWN_TOKENS is None:
+        p = _CONFIG_DIR / "known_tokens.json"
+        if p.exists():
+            _KNOWN_TOKENS = json.loads(p.read_text(encoding="utf-8"))
+        else:
+            _KNOWN_TOKENS = {"tokens": {}}
+    return _KNOWN_TOKENS
+
+
+def lookup_token(symbol: str) -> Optional[Dict[str, Any]]:
+    """Look up a token in the known tokens database.
+
+    Returns token info dict or ``None`` if unknown.
+    """
+    db = _load_known_tokens()
+    return db.get("tokens", {}).get(symbol.upper())
+
+
+def classify_tokens(txs: List[CryptoTransaction]) -> Dict[str, Dict[str, Any]]:
+    """Classify all tokens used in transactions as known or unknown.
+
+    Returns ``{symbol: {known: bool, name: str, ...}}`` for each unique token.
+    """
+    db = _load_known_tokens()
+    tokens_db = db.get("tokens", {})
+    result: Dict[str, Dict[str, Any]] = {}
+
+    for tx in txs:
+        sym = (tx.token or "").upper()
+        if not sym or sym in result:
+            continue
+        info = tokens_db.get(sym)
+        if info:
+            result[sym] = {
+                "known": True,
+                "name": info.get("name", sym),
+                "rank": info.get("rank", 0),
+                "category": info.get("category", ""),
+                "alert_level": info.get("alert_level", "NORMAL"),
+                "description": info.get("description", ""),
+                "risk_note": info.get("risk_note", ""),
+            }
+        else:
+            # Token name from parser raw data (e.g., Revolut provides it)
+            token_name = ""
+            for t in txs:
+                if (t.token or "").upper() == sym:
+                    token_name = t.raw.get("token_name", "")
+                    if token_name:
+                        break
+            result[sym] = {
+                "known": False,
+                "name": token_name or sym,
+                "rank": 0,
+                "category": "unknown",
+                "alert_level": "MEDIUM",
+                "description": "",
+                "risk_note": "Token spoza bazy TOP 200 — wymaga dodatkowej weryfikacji.",
+            }
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +504,12 @@ def _classify_exchange(txs: List[CryptoTransaction]) -> List[CryptoTransaction]:
                     score += 5
             except (ValueError, TypeError):
                 pass
+
+        # Unknown token (not in TOP 200 database)
+        sym = (tx.token or "").upper()
+        if sym and sym not in _FIAT and not lookup_token(sym):
+            tags.append("unknown_token")
+            score += 10
 
         # Withdrawal (funds leaving exchange = higher risk)
         if tx.tx_type == "withdrawal":

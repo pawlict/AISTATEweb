@@ -1,0 +1,1615 @@
+{
+  "version": "2026-03-26",
+  "source": "TOP 200 by market cap + user additions",
+  "token_count": 201,
+  "tokens": {
+    "BTC": {
+      "name": "Bitcoin",
+      "rank": 1,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Największa kryptowaluta proof-of-work; często traktowana jako cyfrowe złoto i aktywo bazowe całego rynku.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ETH": {
+      "name": "Ethereum",
+      "rank": 2,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Główny aktyw Ethereum, najważniejszej platformy smart kontraktów i aplikacji DeFi/NFT.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USDT": {
+      "name": "Tether",
+      "rank": 3,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Największy stablecoin dolarowy, szeroko używany jako para rozliczeniowa na giełdach.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "BNB": {
+      "name": "BNB",
+      "rank": 4,
+      "category": "exchange / trading",
+      "alert_level": "NORMAL",
+      "description": "Token ekosystemu BNB Chain i Binance, używany do opłat, utility i usług giełdowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "XRP": {
+      "name": "XRP",
+      "rank": 5,
+      "category": "payments / transfers",
+      "alert_level": "NORMAL",
+      "description": "Aktyw wykorzystywany głównie w infrastrukturze szybkich transferów i rozliczeń transgranicznych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USDC": {
+      "name": "USDC",
+      "rank": 6,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Stablecoin dolarowy emitowany w modelu zgodnym z regulacjami i szeroko używany w DeFi oraz instytucjach.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "SOL": {
+      "name": "Solana",
+      "rank": 7,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Natywny token Solany, szybkiej sieci smart kontraktów o dużym znaczeniu dla DeFi i memecoinów.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "TRX": {
+      "name": "TRON",
+      "rank": 8,
+      "category": "payments / transfers",
+      "alert_level": "NORMAL",
+      "description": "Token sieci TRON, popularnej w transferach stablecoinów i prostych płatnościach on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FIGR_HELOC": {
+      "name": "Figure Heloc",
+      "rank": 9,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Figure Heloc to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "DOGE": {
+      "name": "Dogecoin",
+      "rank": 10,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Klasyczny memecoin, którego wartość w dużym stopniu zależy od sentymentu społeczności.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "USDS": {
+      "name": "USDS",
+      "rank": 11,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "USDS to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "WBT": {
+      "name": "WhiteBIT Coin",
+      "rank": 12,
+      "category": "exchange / trading",
+      "alert_level": "NORMAL",
+      "description": "WhiteBIT Coin to token powiązany z giełdą lub infrastrukturą tradingową; zwykle daje utility, rabaty lub funkcje w ekosystemie.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ADA": {
+      "name": "Cardano",
+      "rank": 13,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Natywny token Cardano, sieci smart kontraktów rozwijanej w podejściu badawczym.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "HYPE": {
+      "name": "Hyperliquid",
+      "rank": 14,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token giełdy/protokołu Hyperliquid używany w handlu i ekosystemie tradingowym.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "BCH": {
+      "name": "Bitcoin Cash",
+      "rank": 15,
+      "category": "payments / transfers",
+      "alert_level": "NORMAL",
+      "description": "Fork Bitcoina nastawiony na płatności i większą przepustowość on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "LEO": {
+      "name": "LEO Token",
+      "rank": 16,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "LEO Token to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "LINK": {
+      "name": "Chainlink",
+      "rank": 17,
+      "category": "oracle / data",
+      "alert_level": "NORMAL",
+      "description": "Najbardziej rozpoznawalny token oracle, dostarczający dane zewnętrzne do smart kontraktów.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "XMR": {
+      "name": "Monero",
+      "rank": 18,
+      "category": "privacy coin",
+      "alert_level": "HIGH",
+      "description": "Najbardziej rozpoznawalna privacy coin; domyślnie utrudnia analizę nadawcy, odbiorcy i kwoty.",
+      "risk_note": "ALERT: privacy coin o bardzo wysokiej prywatności. Podwyższone ryzyko AML/KYC/compliance; na części regulowanych giełd dostęp i pary fiat bywają ograniczane lub wycofywane."
+    },
+    "USDE": {
+      "name": "Ethena USDe",
+      "rank": 19,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Ethena USDe to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "XLM": {
+      "name": "Stellar",
+      "rank": 20,
+      "category": "payments / transfers",
+      "alert_level": "NORMAL",
+      "description": "Token sieci Stellar używany do szybkich i tanich transferów wartości.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "CC": {
+      "name": "Canton",
+      "rank": 21,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Canton to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USD1": {
+      "name": "USD1",
+      "rank": 22,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "USD1 to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "DAI": {
+      "name": "Dai",
+      "rank": 23,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Dai to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "LTC": {
+      "name": "Litecoin",
+      "rank": 24,
+      "category": "payments / transfers",
+      "alert_level": "NORMAL",
+      "description": "Starsza kryptowaluta płatnicza, technicznie zbliżona do Bitcoina, często używana jako szybki środek transferu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "RAIN": {
+      "name": "Rain",
+      "rank": 25,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Rain to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "HBAR": {
+      "name": "Hedera",
+      "rank": 26,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token sieci Hedera, wykorzystywany w aplikacjach enterprise i usługach rejestrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "AVAX": {
+      "name": "Avalanche",
+      "rank": 27,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Avalanche, sieci smart kontraktów znanej z podsieci i niskich opóźnień.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "PYUSD": {
+      "name": "PayPal USD",
+      "rank": 28,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "PayPal USD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "M": {
+      "name": "MemeCore",
+      "rank": 29,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "MemeCore to memecoin napędzany głównie społecznością, narracją i spekulacją, zwykle o wysokiej zmienności.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "ZEC": {
+      "name": "Zcash",
+      "rank": 30,
+      "category": "privacy coin",
+      "alert_level": "HIGH",
+      "description": "Privacy coin z mechanizmami prywatnych i publicznych transferów.",
+      "risk_note": "ALERT: aktywo z cechami privacy lub utrudnioną analizą. Podwyższone ryzyko AML/KYC/compliance; możliwe ograniczenia notowań i par fiat na części giełd."
+    },
+    "SUI": {
+      "name": "Sui",
+      "rank": 31,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token sieci Sui, nastawionej na wysoką wydajność i nowoczesny model obiektowy.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "SHIB": {
+      "name": "Shiba Inu",
+      "rank": 32,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Rozpoznawalny memecoin z rozbudowanym ekosystemem społecznościowym.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "TAO": {
+      "name": "Bittensor",
+      "rank": 33,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Token projektu Bittensor, łączącego sieci blockchain z rynkiem modeli i zasobów AI.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "TON": {
+      "name": "Toncoin",
+      "rank": 34,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token sieci TON, silnie kojarzonej z ekosystemem Telegrama.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "CRO": {
+      "name": "Cronos",
+      "rank": 35,
+      "category": "payments / transfers",
+      "alert_level": "NORMAL",
+      "description": "Cronos koncentruje się na płatnościach, transferach wartości albo infrastrukturze rozliczeń.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "WLFI": {
+      "name": "World Liberty Financial",
+      "rank": 36,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "World Liberty Financial to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USYC": {
+      "name": "Circle USYC",
+      "rank": 37,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Circle USYC to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "XAUT": {
+      "name": "Tether Gold",
+      "rank": 38,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Token dający ekspozycję na fizyczne złoto w modelu on-chain.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "MNT": {
+      "name": "Mantle",
+      "rank": 39,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Token Mantle, ekosystemu warstwy 2 i narzędzi on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "PAXG": {
+      "name": "PAX Gold",
+      "rank": 40,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Token reprezentujący ekspozycję na fizyczne złoto.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "UNI": {
+      "name": "Uniswap",
+      "rank": 41,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token governance giełdy zdecentralizowanej Uniswap.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "DOT": {
+      "name": "Polkadot",
+      "rank": 42,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Polkadot, ekosystemu łańcuchów współpracujących i parachainów.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "BUIDL": {
+      "name": "BlackRock USD Institutional Digital Liquidity Fund",
+      "rank": 43,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "BlackRock USD Institutional Digital Liquidity Fund to tokenizowany fundusz lub instrument rynku pieniężnego / skarbowego z segmentu RWA.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "PI": {
+      "name": "Pi Network",
+      "rank": 44,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Pi Network to natywny aktyw sieci bazowej lub ważnej warstwy infrastrukturalnej blockchain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USDG": {
+      "name": "Global Dollar",
+      "rank": 45,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Global Dollar to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "OKB": {
+      "name": "OKB",
+      "rank": 46,
+      "category": "exchange / trading",
+      "alert_level": "NORMAL",
+      "description": "OKB to token powiązany z giełdą lub infrastrukturą tradingową; zwykle daje utility, rabaty lub funkcje w ekosystemie.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USDF": {
+      "name": "Falcon USD",
+      "rank": 47,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Falcon USD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "SKY": {
+      "name": "Sky",
+      "rank": 48,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Sky to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ASTER": {
+      "name": "Aster",
+      "rank": 49,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Aster to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "AAVE": {
+      "name": "Aave",
+      "rank": 50,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token jednego z najważniejszych protokołów pożyczkowych DeFi.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "NEAR": {
+      "name": "NEAR Protocol",
+      "rank": 51,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token sieci NEAR, platformy smart kontraktów z naciskiem na użyteczność i skalowanie.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "HTX": {
+      "name": "HTX DAO",
+      "rank": 52,
+      "category": "exchange / trading",
+      "alert_level": "NORMAL",
+      "description": "HTX DAO to token powiązany z giełdą lub infrastrukturą tradingową; zwykle daje utility, rabaty lub funkcje w ekosystemie.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "PEPE": {
+      "name": "Pepe",
+      "rank": 53,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Popularny memecoin oparty na narracji internetowej i spekulacji.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "RLUSD": {
+      "name": "Ripple USD",
+      "rank": 54,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Ripple USD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "BGB": {
+      "name": "Bitget Token",
+      "rank": 55,
+      "category": "exchange / trading",
+      "alert_level": "NORMAL",
+      "description": "Bitget Token to token powiązany z giełdą lub infrastrukturą tradingową; zwykle daje utility, rabaty lub funkcje w ekosystemie.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "BFUSD": {
+      "name": "BFUSD",
+      "rank": 56,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "BFUSD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "USDY": {
+      "name": "Ondo US Dollar Yield",
+      "rank": 57,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Token dochodowy powiązany z ekspozycją na aktywa dolarowe / rentowność.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "ONDO": {
+      "name": "Ondo",
+      "rank": 58,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token ekosystemu Ondo, silnie kojarzonego z tokenizacją aktywów rzeczywistych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ETC": {
+      "name": "Ethereum Classic",
+      "rank": 59,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Natywny token Ethereum Classic, zachowującego historyczny łańcuch po podziale Ethereum.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ICP": {
+      "name": "Internet Computer",
+      "rank": 60,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Internet Computer, projektu rozwijającego zdecentralizowaną infrastrukturę aplikacyjną.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "SIREN": {
+      "name": "Siren",
+      "rank": 61,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Siren to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "GT": {
+      "name": "Gate",
+      "rank": 62,
+      "category": "exchange / trading",
+      "alert_level": "NORMAL",
+      "description": "Gate to token powiązany z giełdą lub infrastrukturą tradingową; zwykle daje utility, rabaty lub funkcje w ekosystemie.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "QNT": {
+      "name": "Quant",
+      "rank": 63,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Token Quant, kojarzony z interoperacyjnością i łączeniem systemów rozproszonych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "JTRSY": {
+      "name": "Janus Henderson Anemoy Treasury Fund",
+      "rank": 64,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Janus Henderson Anemoy Treasury Fund to tokenizowany fundusz lub instrument rynku pieniężnego / skarbowego z segmentu RWA.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "PUMP": {
+      "name": "Pump.fun",
+      "rank": 65,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Pump.fun to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "KCS": {
+      "name": "KuCoin",
+      "rank": 66,
+      "category": "exchange / trading",
+      "alert_level": "NORMAL",
+      "description": "KuCoin to token powiązany z giełdą lub infrastrukturą tradingową; zwykle daje utility, rabaty lub funkcje w ekosystemie.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "POL": {
+      "name": "POL (ex-MATIC)",
+      "rank": 67,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "POL (ex-MATIC) to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "KAS": {
+      "name": "Kaspa",
+      "rank": 68,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Kaspy, szybkiej sieci proof-of-work o architekturze DAG.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "EUTBL": {
+      "name": "Spiko EU T-Bills Money Market Fund",
+      "rank": 69,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Spiko EU T-Bills Money Market Fund to tokenizowany fundusz lub instrument rynku pieniężnego / skarbowego z segmentu RWA.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "RENDER": {
+      "name": "Render",
+      "rank": 70,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Token rynku rozproszonej mocy GPU/renderingu, używany także w narracji AI.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "WLD": {
+      "name": "Worldcoin",
+      "rank": 71,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Token Worldcoin, projektu tożsamości cyfrowej i dystrybucji proof-of-personhood.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "NEXO": {
+      "name": "NEXO",
+      "rank": 72,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "NEXO to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "MORPHO": {
+      "name": "Morpho",
+      "rank": 73,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Morpho to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USDTB": {
+      "name": "USDtb",
+      "rank": 74,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "USDtb to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "ATOM": {
+      "name": "Cosmos Hub",
+      "rank": 75,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Cosmos Hub, wykorzystywany w ekosystemie interoperacyjnych łańcuchów.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ENA": {
+      "name": "Ethena",
+      "rank": 76,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token Ethena, projektu syntetycznego dolara i strategii delta-neutral.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "APT": {
+      "name": "Aptos",
+      "rank": 77,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Aptos, wysokowydajnej sieci smart kontraktów opartej o język Move.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USDD": {
+      "name": "USDD",
+      "rank": 78,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "USDD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "NIGHT": {
+      "name": "Midnight",
+      "rank": 79,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Midnight to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ALGO": {
+      "name": "Algorand",
+      "rank": 80,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Algorand, sieci nastawionej na szybkie i tanie rozliczenia.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USTB": {
+      "name": "Superstate Short Duration U.S. Government Securities Fund (USTB)",
+      "rank": 81,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Superstate Short Duration U.S. Government Securities Fund (USTB) to tokenizowany fundusz lub instrument rynku pieniężnego / skarbowego z segmentu RWA.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "TRUMP": {
+      "name": "Official Trump",
+      "rank": 82,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Official Trump to memecoin napędzany głównie społecznością, narracją i spekulacją, zwykle o wysokiej zmienności.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "HASH": {
+      "name": "Provenance Blockchain",
+      "rank": 83,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Provenance Blockchain to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FLR": {
+      "name": "Flare",
+      "rank": 84,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Flare to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FIL": {
+      "name": "Filecoin",
+      "rank": 85,
+      "category": "storage / infra",
+      "alert_level": "NORMAL",
+      "description": "Token Filecoin, rynku zdecentralizowanego przechowywania danych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "BDX": {
+      "name": "Beldex",
+      "rank": 86,
+      "category": "privacy coin",
+      "alert_level": "HIGH",
+      "description": "Token Beldex, projektu z orientacją na prywatność i komunikację/utility.",
+      "risk_note": "ALERT: aktywo z cechami privacy lub utrudnioną analizą. Podwyższone ryzyko AML/KYC/compliance; możliwe ograniczenia notowań i par fiat na części giełd."
+    },
+    "XDC": {
+      "name": "XDC Network",
+      "rank": 87,
+      "category": "payments / transfers",
+      "alert_level": "NORMAL",
+      "description": "Token XDC Network, infrastruktury kierowanej m.in. do zastosowań biznesowych i trade finance.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "OUSG": {
+      "name": "OUSG",
+      "rank": 88,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "OUSG to tokenizowany fundusz lub instrument rynku pieniężnego / skarbowego z segmentu RWA.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "VET": {
+      "name": "VeChain",
+      "rank": 89,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Token VeChain, ekosystemu śledzenia łańcucha dostaw i danych logistycznych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "YLDS": {
+      "name": "YLDS",
+      "rank": 90,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "YLDS to tokenizowany fundusz lub instrument rynku pieniężnego / skarbowego z segmentu RWA.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "GHO": {
+      "name": "GHO",
+      "rank": 91,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "GHO to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "ARB": {
+      "name": "Arbitrum",
+      "rank": 92,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Arbitrum, ważnej warstwy 2 dla Ethereum.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USD0": {
+      "name": "Usual USD",
+      "rank": 93,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Usual USD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "STABLE": {
+      "name": "Stable",
+      "rank": 94,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Stable to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FET": {
+      "name": "Artificial Superintelligence Alliance",
+      "rank": 95,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Token Artificial Superintelligence Alliance, projektu z pogranicza AI i agentów autonomicznych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ZRO": {
+      "name": "LayerZero",
+      "rank": 96,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token LayerZero, infrastruktury komunikacji międzyłańcuchowej.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "BONK": {
+      "name": "Bonk",
+      "rank": 97,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Memecoin zbudowany wokół ekosystemu Solany.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "JUP": {
+      "name": "Jupiter",
+      "rank": 98,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token Jupiter, ważnego agregatora płynności i swapów w ekosystemie Solany.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "JST": {
+      "name": "JUST",
+      "rank": 99,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "JUST to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "TUSD": {
+      "name": "TrueUSD",
+      "rank": 100,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "TrueUSD to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FTN": {
+      "name": "Fasttoken",
+      "rank": 101,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Fasttoken to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "A7A5": {
+      "name": "A7A5",
+      "rank": 102,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "A7A5 to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "CAKE": {
+      "name": "PancakeSwap",
+      "rank": 103,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "PancakeSwap to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "VIRTUAL": {
+      "name": "Virtuals Protocol",
+      "rank": 104,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Virtuals Protocol to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "PENGU": {
+      "name": "Pudgy Penguins",
+      "rank": 105,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Pudgy Penguins to memecoin napędzany głównie społecznością, narracją i spekulacją, zwykle o wysokiej zmienności.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "STX": {
+      "name": "Stacks",
+      "rank": 106,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Stacks, ekosystemu rozszerzającego funkcje Bitcoina o smart-kontrakty.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "EURC": {
+      "name": "EURC",
+      "rank": 107,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "EURC to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ETHFI": {
+      "name": "Ether.fi",
+      "rank": 108,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Ether.fi to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "DASH": {
+      "name": "Dash",
+      "rank": 109,
+      "category": "privacy coin",
+      "alert_level": "HIGH",
+      "description": "Kryptowaluta płatnicza z historią funkcji prywatności i szybkich płatności.",
+      "risk_note": "ALERT: aktywo z cechami privacy lub utrudnioną analizą. Podwyższone ryzyko AML/KYC/compliance; możliwe ograniczenia notowań i par fiat na części giełd."
+    },
+    "XTZ": {
+      "name": "Tezos",
+      "rank": 110,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Tezos, sieci smart kontraktów z on-chain governance.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "JAAA": {
+      "name": "Janus Henderson Anemoy AAA CLO Fund",
+      "rank": 111,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Janus Henderson Anemoy AAA CLO Fund to tokenizowany fundusz lub instrument rynku pieniężnego / skarbowego z segmentu RWA.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "SEI": {
+      "name": "Sei",
+      "rank": 112,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token sieci Sei, budowanej pod szybki handel i aplikacje o wysokiej wydajności.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FDUSD": {
+      "name": "First Digital USD",
+      "rank": 113,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "First Digital USD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "DCR": {
+      "name": "Decred",
+      "rank": 114,
+      "category": "privacy coin",
+      "alert_level": "HIGH",
+      "description": "Kryptowaluta z mechanizmami governance i elementami prywatności.",
+      "risk_note": "ALERT: aktywo z cechami privacy lub utrudnioną analizą. Podwyższone ryzyko AML/KYC/compliance; możliwe ograniczenia notowań i par fiat na części giełd."
+    },
+    "KITE": {
+      "name": "Kite",
+      "rank": 115,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Kite to natywny aktyw sieci bazowej lub ważnej warstwy infrastrukturalnej blockchain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "CHZ": {
+      "name": "Chiliz",
+      "rank": 116,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Token Chiliz, używany w tokenach kibicowskich i ekosystemie sportowym.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "PRIME": {
+      "name": "PRIME",
+      "rank": 117,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "PRIME to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USX": {
+      "name": "USX",
+      "rank": 118,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "USX to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "DEXE": {
+      "name": "DeXe",
+      "rank": 119,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "DeXe to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "KAU": {
+      "name": "Kinesis Gold",
+      "rank": 120,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Kinesis Gold to token powiązany z metalem szlachetnym albo ekspozycją na aktywo materialne.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "NFT": {
+      "name": "AINFT",
+      "rank": 121,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "AINFT to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "SUN": {
+      "name": "Sun Token",
+      "rank": 122,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Sun Token to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "CRV": {
+      "name": "Curve DAO",
+      "rank": 123,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token Curve, protokołu DEX specjalizującego się w stablecoinach i aktywach powiązanych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "GNO": {
+      "name": "Gnosis",
+      "rank": 124,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token Gnosis, ekosystemu infrastruktury Ethereum i narzędzi multisig/prediction.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ADI": {
+      "name": "ADI",
+      "rank": 125,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "ADI to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "RIVER": {
+      "name": "River",
+      "rank": 126,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "River to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "BTT": {
+      "name": "BitTorrent",
+      "rank": 127,
+      "category": "storage / infra",
+      "alert_level": "NORMAL",
+      "description": "BitTorrent wspiera infrastrukturę przechowywania danych, dystrybucji treści albo warstwę techniczną sieci.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USDAI": {
+      "name": "USDai",
+      "rank": 128,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "USDai to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "CFX": {
+      "name": "Conflux",
+      "rank": 129,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Conflux to natywny aktyw sieci bazowej lub ważnej warstwy infrastrukturalnej blockchain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "AERO": {
+      "name": "Aerodrome Finance",
+      "rank": 130,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Aerodrome Finance to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "INJ": {
+      "name": "Injective",
+      "rank": 131,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token Injective, sieci/protokołu nastawionego na zaawansowane rynki DeFi.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "VVV": {
+      "name": "Venice Token",
+      "rank": 132,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Venice Token to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "KAIA": {
+      "name": "Kaia",
+      "rank": 133,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Kaia to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "TIA": {
+      "name": "Celestia",
+      "rank": 134,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Celestia, modułowej warstwy dostępności danych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FLOKI": {
+      "name": "FLOKI",
+      "rank": 135,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Memecoin rozwijany w modelu społecznościowym z dodatkowymi utility w ekosystemie.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "BSV": {
+      "name": "Bitcoin SV",
+      "rank": 136,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Bitcoin SV to natywny aktyw sieci bazowej lub ważnej warstwy infrastrukturalnej blockchain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FRAX": {
+      "name": "Legacy Frax Dollar",
+      "rank": 137,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Legacy Frax Dollar to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "SPX": {
+      "name": "SPX6900",
+      "rank": 138,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "SPX6900 to memecoin napędzany głównie społecznością, narracją i spekulacją, zwykle o wysokiej zmienności.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "JASMY": {
+      "name": "JasmyCoin",
+      "rank": 139,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Token Jasmy, projektu łączącego blockchain z danymi i IoT.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "APEPE": {
+      "name": "Ape and Pepe",
+      "rank": 140,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Ape and Pepe to memecoin napędzany głównie społecznością, narracją i spekulacją, zwykle o wysokiej zmienności.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "GRT": {
+      "name": "The Graph",
+      "rank": 141,
+      "category": "oracle / data",
+      "alert_level": "NORMAL",
+      "description": "The Graph to projekt dostarczający dane zewnętrzne lub warstwę indeksacji dla aplikacji blockchain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FO": {
+      "name": "Official FO",
+      "rank": 142,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Official FO to memecoin napędzany głównie społecznością, narracją i spekulacją, zwykle o wysokiej zmienności.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "CRVUSD": {
+      "name": "crvUSD",
+      "rank": 143,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "crvUSD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "MON": {
+      "name": "Monad",
+      "rank": 144,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Monad to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "KAG": {
+      "name": "Kinesis Silver",
+      "rank": 145,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Kinesis Silver to token powiązany z metalem szlachetnym albo ekspozycją na aktywo materialne.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "SYRUP": {
+      "name": "Maple Finance",
+      "rank": 146,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Maple Finance to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "2Z": {
+      "name": "DoubleZero",
+      "rank": 147,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "DoubleZero to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "IOTA": {
+      "name": "IOTA",
+      "rank": 148,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "IOTA to natywny aktyw sieci bazowej lub ważnej warstwy infrastrukturalnej blockchain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "OHM": {
+      "name": "Olympus",
+      "rank": 149,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Olympus to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "LDO": {
+      "name": "Lido DAO",
+      "rank": 150,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token Lido DAO, kluczowego protokołu liquid stakingu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "BTSE": {
+      "name": "BTSE Token",
+      "rank": 151,
+      "category": "exchange / trading",
+      "alert_level": "NORMAL",
+      "description": "BTSE Token to token powiązany z giełdą lub infrastrukturą tradingową; zwykle daje utility, rabaty lub funkcje w ekosystemie.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "OP": {
+      "name": "Optimism",
+      "rank": 152,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token Optimism, warstwy 2 dla Ethereum.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "LIT": {
+      "name": "Lighter",
+      "rank": 153,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Lighter to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USTBL": {
+      "name": "Spiko US T-Bills Money Market Fund",
+      "rank": 154,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Spiko US T-Bills Money Market Fund to tokenizowany fundusz lub instrument rynku pieniężnego / skarbowego z segmentu RWA.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "ENS": {
+      "name": "Ethereum Name Service",
+      "rank": 155,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Token Ethereum Name Service, systemu nazw domenowych dla Ethereum.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ZBCN": {
+      "name": "Zebec Network",
+      "rank": 156,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Zebec Network to natywny aktyw sieci bazowej lub ważnej warstwy infrastrukturalnej blockchain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "9BIT": {
+      "name": "The9bit",
+      "rank": 157,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "The9bit to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "PYTH": {
+      "name": "Pyth Network",
+      "rank": 158,
+      "category": "oracle / data",
+      "alert_level": "NORMAL",
+      "description": "Token oracle dostarczającego dane rynkowe w czasie bliskim rzeczywistemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "XPL": {
+      "name": "Plasma",
+      "rank": 159,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Plasma to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "HNT": {
+      "name": "Helium",
+      "rank": 160,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Helium to natywny aktyw sieci bazowej lub ważnej warstwy infrastrukturalnej blockchain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "UDS": {
+      "name": "Undeads Games",
+      "rank": 161,
+      "category": "gaming / metaverse",
+      "alert_level": "NORMAL",
+      "description": "Undeads Games to token projektu gamingowego, metaverse lub rozrywki cyfrowej.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "USDA": {
+      "name": "USDa",
+      "rank": 162,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "USDa to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "AUSD": {
+      "name": "AUSD",
+      "rank": 163,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "AUSD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "IP": {
+      "name": "Story",
+      "rank": 164,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Story to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "B": {
+      "name": "BUILDon",
+      "rank": 165,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "BUILDon to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "TEL": {
+      "name": "Telcoin",
+      "rank": 166,
+      "category": "gaming / metaverse",
+      "alert_level": "NORMAL",
+      "description": "Telcoin to token projektu gamingowego, metaverse lub rozrywki cyfrowej.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "LUNC": {
+      "name": "Terra Luna Classic",
+      "rank": 167,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Terra Luna Classic, pozostałość po historycznym ekosystemie Terra.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "BCAP": {
+      "name": "Blockchain Capital",
+      "rank": 168,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Blockchain Capital to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "SAND": {
+      "name": "The Sandbox",
+      "rank": 169,
+      "category": "gaming / metaverse",
+      "alert_level": "NORMAL",
+      "description": "Token projektu The Sandbox z segmentu metaverse/gaming.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "XCN": {
+      "name": "Onyxcoin",
+      "rank": 170,
+      "category": "payments / transfers",
+      "alert_level": "NORMAL",
+      "description": "Onyxcoin koncentruje się na płatnościach, transferach wartości albo infrastrukturze rozliczeń.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "TWT": {
+      "name": "Trust Wallet",
+      "rank": 171,
+      "category": "exchange / trading",
+      "alert_level": "NORMAL",
+      "description": "Token Trust Wallet, portfela i ekosystemu self-custody.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "STRK": {
+      "name": "Starknet",
+      "rank": 172,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token Starknet, warstwy 2 opartej na zk-rollupach.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "PENDLE": {
+      "name": "Pendle",
+      "rank": 173,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token protokołu obrotu przyszłą rentownością i yieldem w DeFi.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "AB": {
+      "name": "AB",
+      "rank": 174,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "AB to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "PC0000031": {
+      "name": "Tradable NA Rent Financing Platform SSTN",
+      "rank": 175,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Tradable NA Rent Financing Platform SSTN to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "REAL": {
+      "name": "RealLink",
+      "rank": 176,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "RealLink to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "VSN": {
+      "name": "Vision",
+      "rank": 177,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "Vision to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "WIF": {
+      "name": "dogwifhat",
+      "rank": 178,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Popularny memecoin w ekosystemie Solany.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "NEO": {
+      "name": "NEO",
+      "rank": 179,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Starsza platforma smart kontraktów z chińskimi korzeniami.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "NUSD": {
+      "name": "Neutrl USD",
+      "rank": 180,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Neutrl USD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "REUSD": {
+      "name": "Re Protocol reUSD",
+      "rank": 181,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Re Protocol reUSD to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "BORG": {
+      "name": "SwissBorg",
+      "rank": 182,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "SwissBorg to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "COMP": {
+      "name": "Compound",
+      "rank": 183,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token governance protokołu pożyczkowego Compound.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "AXS": {
+      "name": "Axie Infinity",
+      "rank": 184,
+      "category": "gaming / metaverse",
+      "alert_level": "NORMAL",
+      "description": "Token gry Axie Infinity i jej gospodarki on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FARTCOIN": {
+      "name": "Fartcoin",
+      "rank": 185,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Fartcoin to memecoin napędzany głównie społecznością, narracją i spekulacją, zwykle o wysokiej zmienności.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "WFI": {
+      "name": "WeFi",
+      "rank": 186,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "WeFi to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "ZK": {
+      "name": "ZKsync",
+      "rank": 187,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token ZKsync, warstwy 2 Ethereum bazującej na technologii zero-knowledge.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "GRASS": {
+      "name": "Grass",
+      "rank": 188,
+      "category": "AI / compute",
+      "alert_level": "NORMAL",
+      "description": "Grass to token projektu z obszaru AI, obliczeń, agentów lub monetyzacji danych/zasobów cyfrowych.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "WAL": {
+      "name": "Walrus",
+      "rank": 189,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Walrus to natywny aktyw sieci bazowej lub ważnej warstwy infrastrukturalnej blockchain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FF": {
+      "name": "Falcon Finance",
+      "rank": 190,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Falcon Finance to token protokołu DeFi lub narzędzie utility/governance używane w usługach finansowych on-chain.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "MX": {
+      "name": "MX",
+      "rank": 191,
+      "category": "exchange / trading",
+      "alert_level": "NORMAL",
+      "description": "MX to token powiązany z giełdą lub infrastrukturą tradingową; zwykle daje utility, rabaty lub funkcje w ekosystemie.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "MANA": {
+      "name": "Decentraland",
+      "rank": 192,
+      "category": "gaming / metaverse",
+      "alert_level": "NORMAL",
+      "description": "Decentraland to token projektu gamingowego, metaverse lub rozrywki cyfrowej.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "KOGE": {
+      "name": "KOGE",
+      "rank": 193,
+      "category": "utility / governance",
+      "alert_level": "NORMAL",
+      "description": "KOGE to token utility/governance projektu blockchain, używany do opłat, zarządzania lub funkcji ekosystemu.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "S": {
+      "name": "Sonic",
+      "rank": 194,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token Sonic, nowej generacji infrastruktury sieciowej z szybkim execution layer.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FDIT": {
+      "name": "Fidelity Digital Interest Token",
+      "rank": 195,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Fidelity Digital Interest Token to tokenizowany fundusz lub instrument rynku pieniężnego / skarbowego z segmentu RWA.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "THETA": {
+      "name": "Theta Network",
+      "rank": 196,
+      "category": "L1 / infrastructure",
+      "alert_level": "NORMAL",
+      "description": "Token sieci Theta, infrastruktury do dystrybucji wideo i treści.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "SATUSD": {
+      "name": "Satoshi Stablecoin",
+      "rank": 197,
+      "category": "stablecoin / RWA",
+      "alert_level": "MEDIUM",
+      "description": "Satoshi Stablecoin to stablecoin lub token dolarowy używany głównie do rozliczeń, parkowania wartości i transferów między rynkami.",
+      "risk_note": "Uwaga: istotne są ryzyka emitenta, rezerw, wykupu oraz zgodności regulacyjnej."
+    },
+    "RAY": {
+      "name": "Raydium",
+      "rank": 198,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token Raydium, DEX i warstwy płynności w ekosystemie Solany.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "FT": {
+      "name": "Flying Tulip",
+      "rank": 199,
+      "category": "memecoin",
+      "alert_level": "MEDIUM",
+      "description": "Flying Tulip to memecoin napędzany głównie społecznością, narracją i spekulacją, zwykle o wysokiej zmienności.",
+      "risk_note": "Uwaga: bardzo wysoka zmienność, duża zależność od sentymentu i narracji rynkowej."
+    },
+    "CVX": {
+      "name": "Convex Finance",
+      "rank": 200,
+      "category": "DeFi / utility",
+      "alert_level": "NORMAL",
+      "description": "Token Convex Finance, narzędzia optymalizacji yieldu wokół ekosystemu Curve.",
+      "risk_note": "brak szczególnego alertu compliance poza standardowym ryzykiem rynkowym."
+    },
+    "LMWR": {
+      "name": "LimeWire",
+      "rank": 999,
+      "category": "social / media",
+      "alert_level": "MEDIUM",
+      "description": "Token projektu LimeWire, związanego z gospodarką treści cyfrowych, społecznością i narzędziami AI/media.",
+      "risk_note": "Uwaga: token spoza bieżącego TOP 200; niższa kapitalizacja zwykle oznacza większe ryzyko płynności i skoków ceny."
+    }
+  }
+}
