@@ -260,6 +260,19 @@ def run_aml_pipeline(
     ocr_used = False
     ocr_confidence = 0.0
 
+    # --- Check for Revolut crypto statement (handled by crypto parser) ---
+    if _parse_result is None:
+        try:
+            from backend.crypto.parsers.revolut_crypto_pdf import (
+                is_revolut_crypto_pdf,
+                parse_revolut_crypto_for_aml,
+            )
+            if is_revolut_crypto_pdf(pdf_path):
+                _log("Wykryto wyciąg Revolut Crypto — uruchamiam parser kryptowalutowy...")
+                _parse_result = parse_revolut_crypto_for_aml(pdf_path)
+        except Exception as exc:
+            log.debug("Revolut crypto detection skipped: %s", exc)
+
     if _parse_result is not None:
         # Multi-statement mode: ParseResult provided externally
         parse_result = _parse_result

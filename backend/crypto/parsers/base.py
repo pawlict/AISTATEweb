@@ -32,6 +32,8 @@ _SOURCE_TYPE_MAP: Dict[str, str] = {
     "electrum": "blockchain",
     "metamask": "blockchain",
     "trezor": "blockchain",
+    # Revolut Digital Assets
+    "revolut_crypto": "exchange",
 }
 
 
