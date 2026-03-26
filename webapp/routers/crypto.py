@@ -574,6 +574,55 @@ def _resc(s) -> str:
             .replace('"', "&quot;"))
 
 
+_TX_TYPE_DESCRIPTIONS: Dict[str, str] = {
+    "deposit": "Wpłata środków na giełdę z zewnętrznego portfela lub konta bankowego",
+    "withdraw": "Wypłata środków z giełdy na zewnętrzny portfel lub konto bankowe",
+    "withdrawal": "Wypłata środków z giełdy na zewnętrzny portfel lub konto bankowe",
+    "buy": "Zakup kryptowaluty za inną walutę (fiat lub krypto)",
+    "sell": "Sprzedaż kryptowaluty za inną walutę (fiat lub krypto)",
+    "swap": "Wymiana jednej kryptowaluty na inną bezpośrednio",
+    "trade": "Transakcja handlowa — kupno lub sprzedaż na rynku giełdowym",
+    "transfer": "Przeniesienie środków między własnymi kontami/portfelami na giełdzie",
+    "send": "Wysłanie środków do innego użytkownika lub na zewnętrzny adres",
+    "receive": "Otrzymanie środków od innego użytkownika lub z zewnętrznego adresu",
+    "staking": "Zablokowanie kryptowaluty w celu uzyskania nagród (oprocentowanie)",
+    "staking_reward": "Nagroda otrzymana za udział w stakingu (oprocentowanie krypto)",
+    "learn_reward": "Nagroda za ukończenie kursu edukacyjnego na platformie",
+    "unstaking": "Odblokowanie wcześniej zablokowanych środków ze stakingu",
+    "earn": "Program oszczędnościowy/inwestycyjny — odsetki od zdeponowanych środków",
+    "distribution": "Dystrybucja tokenów — airdrop, nagroda lub podział zysku",
+    "airdrop": "Darmowe tokeny otrzymane w ramach promocji lub dystrybucji projektu",
+    "fee": "Opłata transakcyjna pobrana przez giełdę lub sieć blockchain",
+    "commission": "Prowizja pobrana przez giełdę za wykonanie transakcji",
+    "funding": "Opłata za utrzymanie pozycji futures/margin (funding rate)",
+    "futures": "Transakcja na kontrakcie terminowym (futures) — instrumenty pochodne",
+    "margin": "Transakcja z dźwignią finansową (pożyczone środki)",
+    "liquidation": "Przymusowe zamknięcie pozycji z powodu niewystarczającego zabezpieczenia",
+    "convert": "Konwersja jednej kryptowaluty na inną po aktualnym kursie",
+    "p2p": "Transakcja peer-to-peer — bezpośrednia wymiana między użytkownikami",
+    "otc": "Transakcja OTC (Over-The-Counter) — poza rynkiem giełdowym, zwykle duże kwoty",
+    "nft": "Transakcja związana z NFT (Non-Fungible Token) — unikalne tokeny cyfrowe",
+    "mint": "Utworzenie nowego tokena lub NFT na blockchainie",
+    "burn": "Trwałe zniszczenie/usunięcie tokenów z obiegu (zmniejszenie podaży)",
+    "bridge": "Transfer kryptowaluty między różnymi blockchainami przez most (bridge)",
+    "wrap": "Zamiana tokena na jego opakowaną wersję kompatybilną z innym blockchainem",
+    "unwrap": "Zamiana opakowanego tokena z powrotem na oryginał",
+    "loan": "Pożyczka kryptowalutowa — wypożyczenie lub zaciągnięcie pożyczki",
+    "repayment": "Spłata pożyczki kryptowalutowej",
+    "collateral": "Środki zablokowane jako zabezpieczenie pożyczki lub pozycji margin",
+    "savings": "Środki ulokowane w programie oszczędnościowym giełdy",
+    "launchpad": "Udział w sprzedaży nowego tokena (IEO/IDO) na platformie giełdy",
+    "referral": "Premia/nagroda za polecenie giełdy innym użytkownikom",
+    "cashback": "Zwrot części opłaty transakcyjnej lub zakupu",
+    "dust_conversion": "Zamiana niewielkich resztek tokenów (dust) na jedną kryptowalutę",
+    "incoming": "Transakcja przychodząca — środki otrzymane na portfel",
+    "outgoing": "Transakcja wychodząca — środki wysłane z portfela",
+    "contract_call": "Wywołanie smart kontraktu na blockchainie (np. interakcja z DeFi)",
+    "approval": "Udzielenie zgody smart kontraktowi na zarządzanie tokenami",
+    "self_transfer": "Transfer do samego siebie — przeniesienie między własnymi adresami",
+}
+
+
 def _build_crypto_report_html(r: Dict[str, Any]) -> str:
     """Build a standalone HTML report with logical section ordering.
 
@@ -617,9 +666,10 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
 
     # ── I. Identyfikacja ──
     sn += 1
+    meta = r.get("metadata", {}) or {}
     id_rows = []
     for label, val in [
-        ("Właściciel konta", ai.get("holder_name")),
+        ("Właściciel konta", ai.get("holder_name") or meta.get("account_holder")),
         ("Imię", ai.get("first_name")),
         ("Nazwisko", ai.get("last_name")),
         ("User ID", ai.get("user_id")),
@@ -627,12 +677,12 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         ("Telefon", ai.get("phone")),
         ("Data urodzenia", ai.get("date_of_birth")),
         ("Płeć", ai.get("gender")),
-        ("Kraj zamieszkania", ai.get("country")),
+        ("Kraj zamieszkania", ai.get("country") or meta.get("country")),
         ("Narodowość", ai.get("nationality")),
-        ("Adres zamieszkania", ai.get("physical_address")),
-        ("Miasto", ai.get("city")),
+        ("Adres zamieszkania", ai.get("physical_address") or meta.get("street")),
+        ("Miasto", ai.get("city") or meta.get("city")),
         ("Województwo/Stan", ai.get("state")),
-        ("Kod pocztowy", ai.get("zip_code")),
+        ("Kod pocztowy", ai.get("zip_code") or meta.get("postal_code")),
         ("Poziom KYC", ai.get("kyc_level")),
         ("Poziom VIP", ai.get("vip_level")),
         ("Data rejestracji", ai.get("registration_date")),
@@ -1102,6 +1152,30 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         note = f'<p class="muted">Wyświetlono {min(len(txs), 500)} z {total} transakcji.</p>' if total > 500 else ""
         sections.append(f'<h2>{sn}. Transakcje</h2><table class="data-table"><thead><tr><th>Data</th><th>Typ</th><th>Token</th><th>Kwota</th><th>Od</th><th>Do/Kontrahent</th><th>Ryzyko</th><th>Tagi</th></tr></thead><tbody>{rows}</tbody></table>{note}')
 
+    # ── Stopka: Słownik typów transakcji ──
+    used_types: set = set()
+    for tx in r.get("transactions", []):
+        tt = tx.get("tx_type", "")
+        if tt:
+            used_types.add(tt.lower())
+        cat = tx.get("category", "")
+        if cat:
+            used_types.add(cat.lower())
+
+    legend_rows = ""
+    for tt in sorted(used_types):
+        desc = _TX_TYPE_DESCRIPTIONS.get(tt)
+        if desc:
+            legend_rows += f"<tr><td><strong>{_resc(tt)}</strong></td><td>{_resc(desc)}</td></tr>"
+
+    if legend_rows:
+        sn += 1
+        sections.append(
+            f'<h2>{sn}. Słownik typów transakcji</h2>'
+            f'<table class="data-table"><thead><tr><th style="width:180px">Typ</th>'
+            f'<th>Opis</th></tr></thead><tbody>{legend_rows}</tbody></table>'
+        )
+
     body = "\n".join(sections)
 
     return f"""<!DOCTYPE html>
@@ -1159,9 +1233,10 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
     em = r.get("exchange_meta", {}) or {}
     bs = r.get("binance_summary", {}) or {}
 
+    meta = r.get("metadata", {}) or {}
     lines.append("--- IDENTYFIKACJA ---")
     for label, val in [
-        ("Właściciel", ai.get("holder_name")),
+        ("Właściciel", ai.get("holder_name") or meta.get("account_holder")),
         ("Imię", ai.get("first_name")),
         ("Nazwisko", ai.get("last_name")),
         ("User ID", ai.get("user_id")),
@@ -1169,12 +1244,12 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
         ("Telefon", ai.get("phone")),
         ("Data urodzenia", ai.get("date_of_birth")),
         ("Płeć", ai.get("gender")),
-        ("Kraj", ai.get("country")),
+        ("Kraj", ai.get("country") or meta.get("country")),
         ("Narodowość", ai.get("nationality")),
-        ("Adres", ai.get("physical_address")),
-        ("Miasto", ai.get("city")),
+        ("Adres", ai.get("physical_address") or meta.get("street")),
+        ("Miasto", ai.get("city") or meta.get("city")),
         ("Województwo/Stan", ai.get("state")),
-        ("Kod pocztowy", ai.get("zip_code")),
+        ("Kod pocztowy", ai.get("zip_code") or meta.get("postal_code")),
         ("KYC Level", ai.get("kyc_level")),
         ("VIP Level", ai.get("vip_level")),
         ("Data rejestracji", ai.get("registration_date")),
@@ -1382,6 +1457,24 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
             lines.append(f"  {ts}  {tx.get('tx_type', ''):<12} {tx.get('token', ''):<6} {tx.get('amount', 0):>14.4f}  {tx.get('counterparty', '') or tx.get('to', '') or ''}")
         lines.append("")
 
+    # Słownik typów transakcji
+    used_types: set = set()
+    for tx in r.get("transactions", []):
+        tt = tx.get("tx_type", "")
+        if tt:
+            used_types.add(tt.lower())
+        cat = tx.get("category", "")
+        if cat:
+            used_types.add(cat.lower())
+    legend = [(tt, _TX_TYPE_DESCRIPTIONS[tt]) for tt in sorted(used_types) if tt in _TX_TYPE_DESCRIPTIONS]
+    if legend:
+        lines.append("-" * 70)
+        lines.append("SŁOWNIK TYPÓW TRANSAKCJI")
+        lines.append("-" * 70)
+        for tt, desc in legend:
+            lines.append(f"  {tt:<20} — {desc}")
+        lines.append("")
+
     lines.append("=" * 70)
     lines.append("Wygenerowano przez AISTATE Crypto Analysis Module")
     lines.append("=" * 70)
@@ -1462,19 +1555,21 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
                         run.font.size = Pt(9)
 
     # ── 1. Identyfikacja ──
+    meta = r.get("metadata", {}) or {}
     doc.add_heading("1. Identyfikacja podmiotu", level=1)
     add_kv_table([
-        ("Właściciel konta", ai.get("holder_name")),
+        ("Właściciel konta", ai.get("holder_name") or meta.get("account_holder")),
         ("Imię", ai.get("first_name")),
         ("Nazwisko", ai.get("last_name")),
         ("User ID", ai.get("user_id")),
         ("Email", ai.get("email")),
         ("Telefon", ai.get("phone")),
         ("Data urodzenia", ai.get("date_of_birth")),
-        ("Kraj", ai.get("country")),
+        ("Kraj", ai.get("country") or meta.get("country")),
         ("Narodowość", ai.get("nationality")),
-        ("Adres", ai.get("physical_address")),
-        ("Miasto", ai.get("city")),
+        ("Adres", ai.get("physical_address") or meta.get("street")),
+        ("Miasto", ai.get("city") or meta.get("city")),
+        ("Kod pocztowy", ai.get("zip_code") or meta.get("postal_code")),
         ("KYC Level", ai.get("kyc_level")),
         ("VIP Level", ai.get("vip_level")),
         ("Data rejestracji", ai.get("registration_date")),
@@ -1720,6 +1815,21 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
             tx_rows.append([ts, tx.get("tx_type", ""), tx.get("token", ""),
                             f"{tx.get('amount', 0):.4f}", cp])
         add_data_table(["Data", "Typ", "Token", "Kwota", "Kontrahent/Do"], tx_rows)
+
+    # ── Słownik typów transakcji ──
+    used_types: set = set()
+    for tx in r.get("transactions", []):
+        tt = tx.get("tx_type", "")
+        if tt:
+            used_types.add(tt.lower())
+        cat = tx.get("category", "")
+        if cat:
+            used_types.add(cat.lower())
+
+    legend_items = [(tt, _TX_TYPE_DESCRIPTIONS[tt]) for tt in sorted(used_types) if tt in _TX_TYPE_DESCRIPTIONS]
+    if legend_items:
+        doc.add_heading("Słownik typów transakcji", level=1)
+        add_data_table(["Typ", "Opis"], legend_items)
 
     # Footer
     doc.add_paragraph("")
