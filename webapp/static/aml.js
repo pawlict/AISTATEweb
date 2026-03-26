@@ -96,6 +96,7 @@
     const progressDiv = QS("#aml_progress .progress");
     if(progressDiv) progressDiv.classList.remove("indeterminate");
     _hide("aml_results");
+    _hide("aml_results_data");
     if(!St.batchMode) _hide("aml_batch_panel");
     const histCard = QS("#aml_history_card");
     if(histCard && St.history.length) _show("aml_history_card");
@@ -109,6 +110,7 @@
     // Keep the logo visible during loading (e.g. restoring saved project)
     _show("aml_empty_state");
     _hide("aml_results");
+    _hide("aml_results_data");
     _hide("aml_history_card");
     if(!St.batchMode) _hide("aml_batch_panel");
   }
@@ -119,13 +121,15 @@
     if(progressDiv) progressDiv.classList.remove("indeterminate");
     _hide("aml_empty_state");
     _show("aml_results");
+    _show("aml_results_data");
     _hide("aml_history_card");
     _hide("aml_batch_panel");
   }
 
   function _showBatchPanel(){
-    _hide("aml_results");
+    _hide("aml_results_data");
     _hide("aml_history_card");
+    _show("aml_results");
     _show("aml_batch_panel");
   }
 
