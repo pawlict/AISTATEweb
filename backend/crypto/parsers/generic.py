@@ -394,7 +394,8 @@ def _detect_crypto_pdf_format(lines: List[str]) -> str:
     head = "\n".join(lines[:30]).lower()
     if "binance" in head:
         return "binance_pdf"
-    # Future: add more exchange PDF formats here
+    if "revolut" in head and ("digital assets" in head or "kryptowalut" in head):
+        return "revolut_crypto"
     return ""
 
 
@@ -629,6 +630,9 @@ def parse_crypto_file(path: Path) -> ParsedCryptoData:
                 result.wallets = _build_wallets(txs)
                 log.info(f"Parsed {len(txs)} transactions from binance_pdf ({path.name})")
                 return result
+            elif pdf_fmt == "revolut_crypto":
+                from .revolut_crypto_pdf import parse_revolut_crypto_pdf
+                return parse_revolut_crypto_pdf(path)
             else:
                 result.errors.append("Nierozpoznany format PDF giełdy kryptowalutowej.")
                 return result
