@@ -1,0 +1,149 @@
+{
+  "parser_id": "ident_plus",
+  "parser_version": "1.0",
+  "format_variant": "",
+  "columns": [
+    {
+      "logical_name": "parametr",
+      "expected_headers": [
+        "parametr"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "msisdn",
+      "expected_headers": [
+        "msisdn"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "pesel",
+      "expected_headers": [
+        "pesel"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "sim",
+      "expected_headers": [
+        "sim"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "doc_number",
+      "expected_headers": [
+        "numer dokumentu",
+        "nr_dokumentu"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "doc_type",
+      "expected_headers": [
+        "typ dokumentu",
+        "typ_dokumentu"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "nip",
+      "expected_headers": [
+        "nip"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "msisdn_type",
+      "expected_headers": [
+        "typ msisdn",
+        "typ"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "valid_from",
+      "expected_headers": [
+        "ważne od",
+        "wazne od"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "valid_to",
+      "expected_headers": [
+        "ważne do",
+        "wazne do"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "name",
+      "expected_headers": [
+        "imię i nazwisko/nazwa",
+        "imie i nazwisko/nazwa",
+        "imie i nazwisko",
+        "nazwisko",
+        "nazwa"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "address",
+      "expected_headers": [
+        "adres"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "status",
+      "expected_headers": [
+        "status"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    }
+  ],
+  "header_detection": [],
+  "notes": "Auto-generated from identification.py (ident_plus)",
+  "created_at": "2026-03-24T19:03:45.056550+00:00"
+}

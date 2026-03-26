@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="mln" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#05657c"/><stop offset="100%" stop-color="#5628a5"/></linearGradient><filter id="s3d_language"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#05657c" stroke-width="1" fill="none" opacity="0.18" stroke-linecap="round"/><circle cx="24" cy="24" r="18" stroke="url(#mln)" stroke-width="2.3" fill="none" fill-opacity="0.09" filter="url(#s3d_language)"/><text x="24" y="29" text-anchor="middle" font-size="12" fill="#05657c" font-weight="800" opacity=".45">PL</text>
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

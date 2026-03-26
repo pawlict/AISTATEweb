@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="chat-page">
+
+  <div class="card chat-toolbar">
+    <div class="chat-toolbar-left">
+      <div class="h1" style="margin:0"><i data-icon="chat" data-size="40"></i> <span data-i18n="chat.title">Chat LLM</span></div>
+    </div>
+    <div class="chat-toolbar-right">
+      <label class="small" for="chat_model" data-i18n="chat.model">Model</label>
+      <select class="input mini-select" id="chat_model" style="width:auto;min-width:180px">
+        <option data-i18n="chat.models_loading">Ładowanie…</option>
+      </select>
+      <button class="btn secondary" id="chat_new_btn" title="Nowa rozmowa" data-i18n-title="chat.new_conversation">
+        <span data-i18n="chat.new">Nowa rozmowa</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="chat-container">
+    <!-- Sidebar: conversation settings -->
+    <aside class="chat-sidebar" id="chat_sidebar">
+      <section class="card chat-sidecard">
+        <div class="chat-sidehdr">
+          <div class="h2" data-i18n="chat.settings">Ustawienia</div>
+        </div>
+        <div class="chat-sidebody">
+          <div class="form-group">
+            <label class="label" for="chat_system_prompt" data-i18n="chat.system_prompt">Prompt systemowy</label>
+            <textarea class="input" id="chat_system_prompt" rows="4" placeholder="Opcjonalnie: określ rolę asystenta…" data-i18n-placeholder="chat.system_prompt_placeholder"></textarea>
+          </div>
+          <div class="form-group" style="margin-top:10px">
+            <label class="label" for="chat_temperature" data-i18n="chat.temperature">Temperatura</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="range" id="chat_temperature" min="0" max="1.5" step="0.1" value="0.7" style="flex:1">
+              <span class="small" id="chat_temp_val">0.7</span>
+            </div>
+          </div>
+          <div class="hr"></div>
+          <div class="form-group">
+            <label class="label" data-i18n="chat.history">Historia</label>
+            <div id="chat_history_list" class="chat-history-list">
+              <div class="small" data-i18n="chat.no_conversations">Brak rozmów</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Main chat area -->
+    <div class="chat-main">
+      <div class="card chat-messages-card">
+        <div class="chat-messages" id="chat_messages">
+          <div class="chat-welcome" id="chat_welcome">
+            <div class="chat-welcome-icon"><i data-icon="robot" data-size="32"></i></div>
+            <div class="h2" data-i18n="chat.welcome_title">Rozpocznij rozmowę</div>
+            <div class="small" data-i18n="chat.welcome_desc">Wybierz model i napisz wiadomość, aby rozpocząć czat z lokalnym LLM.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card chat-input-card" id="chat_input_card">
+        <div class="chat-attach-preview" id="chat_attach_preview" style="display:none"></div>
+        <div class="chat-input-row">
+          <button class="btn secondary chat-attach-btn" id="chat_attach_btn"
+                  title="Załącz plik" data-i18n-title="chat.attach_file">
+            <svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:middle">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"
+                    stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <input type="file" id="chat_file_input" multiple style="display:none"
+                 accept=".txt,.md,.pdf,.docx,.xlsx,.pptx,.csv,.json,.xml,.png,.jpg,.jpeg,.gif,.webp">
+          <textarea class="input chat-input" id="chat_input" rows="6"
+                    placeholder="Napisz wiadomość…"
+                    data-i18n-placeholder="chat.input_placeholder"></textarea>
+          <button class="btn chat-send-btn" id="chat_send_btn" data-i18n-title="chat.send">
+            <svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:middle">
+              <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" fill="none"/>
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" fill="none"/>
+            </svg>
+          </button>
+          <button class="btn secondary chat-stop-btn" id="chat_stop_btn" style="display:none" data-i18n-title="chat.stop">
+            <span data-i18n="chat.stop">Stop</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/chat.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script>
+  (async () => {
+    await initChat();
+    applyI18n();
+  })();
+</script>
+{% endblock %}

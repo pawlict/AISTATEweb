@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+def main() -> None:
+    # Ensure project root is on sys.path so "webapp.server" is always importable
+    project_root = str(Path(__file__).resolve().parent)
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+    host = os.environ.get("AISTATEWEB_HOST") or os.environ.get("AISTATEWWW_HOST") or "127.0.0.1"
+    port = int(os.environ.get("AISTATEWEB_PORT") or os.environ.get("AISTATEWWW_PORT") or "8000")
+    try:
+        import uvicorn
+    except Exception:
+        print("Brak uvicorn. Zainstaluj: pip install -r requirements.txt", file=sys.stderr)
+        raise
+    reload = os.environ.get("AISTATEWEB_DEV", "").lower() in ("1", "true", "yes")
+    uvicorn.run("webapp.server:app", host=host, port=port, reload=reload)
+
+if __name__ == "__main__":
+    main()

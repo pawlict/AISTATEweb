@@ -1,0 +1,19 @@
+{
+  "_comment": "Known sanctioned/mixer addresses. Update manually from OFAC SDN list.",
+  "addresses": {
+    "0x8589427373d6d84e98730d7795d8f6f8731fda16": {"entity": "Tornado Cash", "reason": "OFAC sanctioned mixer", "chain": "ethereum"},
+    "0xd90e2f925da726b50c4ed8d0fb90ad053324f31b": {"entity": "Tornado Cash", "reason": "OFAC sanctioned mixer", "chain": "ethereum"},
+    "0x722122df12d4e14e13ac3b6895a86e84145b6967": {"entity": "Tornado Cash", "reason": "OFAC sanctioned mixer", "chain": "ethereum"},
+    "0xdd4c48c0b24039969fc16d1cdf626eab821d3384": {"entity": "Tornado Cash", "reason": "OFAC sanctioned mixer", "chain": "ethereum"},
+    "0xba214c1c1928a32bffe790263e38b4af9bfcd659": {"entity": "Tornado Cash", "reason": "OFAC sanctioned mixer", "chain": "ethereum"},
+    "0xb1c8094b234dce6e03f10a5b673c1d8c69739a00": {"entity": "Tornado Cash", "reason": "OFAC sanctioned mixer", "chain": "ethereum"},
+    "0x12d66f87a04a9e220743712ce6d9bb1b5616b8fc": {"entity": "Tornado Cash", "reason": "OFAC sanctioned mixer", "chain": "ethereum"},
+    "0x47ce0c6ed5b0ce3d3a51fdb1c52dc66a7c3c2936": {"entity": "Tornado Cash", "reason": "OFAC sanctioned mixer", "chain": "ethereum"},
+    "0x910cbd523d972eb0a6f4cae4618ad62622b39dbf": {"entity": "Tornado Cash", "reason": "OFAC sanctioned mixer", "chain": "ethereum"},
+    "0xa160cdab225685da1d56aa342ad8841c3b53f291": {"entity": "Tornado Cash", "reason": "OFAC sanctioned mixer", "chain": "ethereum"}
+  },
+  "entities": {
+    "tornado_cash": {"name": "Tornado Cash", "type": "mixer", "chains": ["ethereum"], "sanctioned_by": "OFAC"},
+    "blender_io": {"name": "Blender.io", "type": "mixer", "chains": ["bitcoin"], "sanctioned_by": "OFAC"}
+  }
+}

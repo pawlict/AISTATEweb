@@ -1,0 +1,118 @@
+{# A.R.I.A. HUD — Analytical Response & Intelligence Assistant overlay #}
+
+<link rel="stylesheet" href="/static/aria_hud.css?v={{ app_version }}&_={{ static_ts }}"/>
+
+<!-- Trigger button (hexagonal) -->
+<button id="aria-trigger" title="A.R.I.A. — Asystent analityczny">
+  <div class="trigger-pulse"></div>
+  <svg id="aria-hex-svg" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+    <polygon class="hex-bg" points="28,2 52,15 52,41 28,54 4,41 4,15"/>
+    <g id="aria-logo-group">
+      <text class="aria-label-ai" x="28" y="24">AI</text>
+      <text class="aria-label-name" x="28" y="36">ARIA</text>
+    </g>
+    <g id="aria-wave-group" style="display:none">
+      <rect class="wbar" x="10" y="18" width="2.5" height="20" rx="1"/>
+      <rect class="wbar" x="15" y="18" width="2.5" height="20" rx="1"/>
+      <rect class="wbar" x="20" y="18" width="2.5" height="20" rx="1"/>
+      <rect class="wbar" x="25" y="18" width="2.5" height="20" rx="1"/>
+      <rect class="wbar" x="30" y="18" width="2.5" height="20" rx="1"/>
+      <rect class="wbar" x="35" y="18" width="2.5" height="20" rx="1"/>
+      <rect class="wbar" x="40" y="18" width="2.5" height="20" rx="1"/>
+    </g>
+  </svg>
+</button>
+
+<!-- HUD Panel -->
+<div id="aria-hud" class="hidden">
+  <!-- Corner brackets -->
+  <div class="aria-corner tl"></div>
+  <div class="aria-corner tr"></div>
+  <div class="aria-corner bl"></div>
+  <div class="aria-corner br"></div>
+  <!-- Resize handle -->
+  <div class="aria-resize-handle" id="aria-resize"></div>
+
+  <!-- Header -->
+  <div class="aria-header">
+    <div id="aria-status-dot" class="aria-status-dot"></div>
+    <div class="aria-header-title">A.R.I.A.</div>
+    <button class="aria-close-btn" title="Wyczyść historię" onclick="AriaHUD.clearHistory()" style="font-size:12px;">&#8634;</button>
+    <button id="aria-close" class="aria-close-btn" title="Zamknij">&times;</button>
+  </div>
+
+  <!-- Status line -->
+  <div class="aria-statusline">
+    <span id="aria-st-ses">SES:—</span>
+    <span id="aria-st-msg">MSG:0</span>
+    <span id="aria-st-model">MDL:—</span>
+    <span id="aria-st-state">INIT</span>
+  </div>
+
+  <!-- Messages -->
+  <div id="aria-messages" class="aria-messages"></div>
+
+  <!-- Hint chips -->
+  <div id="aria-hints" class="aria-hints"></div>
+
+  <!-- Input row -->
+  <div class="aria-inputrow">
+    <span class="aria-input-prefix">{{ (user.display_name or user.username or 'OP') if user else 'OP' }}&gt;</span>
+    <textarea id="aria-input" class="aria-input" rows="1" placeholder="Zapytaj ARIA..."></textarea>
+    <button id="aria-send" class="aria-send-btn" title="Wyślij">&#9654;</button>
+    <button id="aria-tts-toggle" class="aria-tts-btn active" title="TTS aktywny">&#128266;</button>
+  </div>
+</div>
+
+<!-- User context for ARIA greeting -->
+<script>
+  window.__ariaUser = {
+    {% if user %}
+    name: {{ (user.display_name or user.username or 'Operator')|tojson }},
+    role: {{ (user.role or '')|tojson }},
+    adminRoles: {{ (user.admin_roles or [])|tojson }},
+    isAdmin: {{ 'true' if user.is_admin else 'false' }},
+    isSuperadmin: {{ 'true' if user.is_superadmin else 'false' }}
+    {% else %}
+    name: 'Operator',
+    role: '',
+    adminRoles: [],
+    isAdmin: true,
+    isSuperadmin: true
+    {% endif %}
+  };
+</script>
+<script src="/static/aria_hud.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script>
+  // Fallback: detect if aria_hud.js failed to load/parse (e.g. old browser without optional chaining)
+  if (typeof window.AriaHUD === 'undefined' || !window.AriaHUD) {
+    (function() {
+      var trig = document.getElementById('aria-trigger');
+      var hud = document.getElementById('aria-hud');
+      if (!trig) return;
+      trig.title = 'ARIA HUD — niekompatybilna przeglądarka';
+      trig.style.opacity = '0.35';
+      trig.addEventListener('click', function() {
+        if (!hud) return;
+        hud.classList.remove('hidden');
+        var msgs = document.getElementById('aria-messages');
+        if (msgs && !msgs.querySelector('.aria-compat-err')) {
+          var d = document.createElement('div');
+          d.className = 'aria-msg error aria-compat-err';
+          d.style.whiteSpace = 'pre-wrap';
+          var ua = navigator.userAgent || '';
+          var info = 'ARIA HUD — BŁĄD INICJALIZACJI\n\n';
+          info += 'Skrypt aria_hud.js nie załadował się poprawnie.\n';
+          info += 'Prawdopodobne przyczyny:\n';
+          info += '• Za stara wersja przeglądarki (wymagany Edge 80+, Chrome 80+, Firefox 74+)\n';
+          info += '• Rozszerzenie blokujące JavaScript (uBlock, NoScript)\n';
+          info += '• Tryb prywatny z zablokowanym sessionStorage\n\n';
+          info += 'Przeglądarka: ' + ua + '\n\n';
+          info += 'Sprawdź konsolę błędów: F12 → Console';
+          d.textContent = info;
+          msgs.appendChild(d);
+        }
+      });
+    })();
+  }
+</script>

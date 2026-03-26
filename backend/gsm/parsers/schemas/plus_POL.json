@@ -1,0 +1,191 @@
+{
+  "parser_id": "plus",
+  "parser_version": "1.3",
+  "format_variant": "POL",
+  "columns": [
+    {
+      "logical_name": "parametr",
+      "expected_headers": [
+        "parametr"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "type",
+      "expected_headers": [
+        "usługa/typ",
+        "usluga/typ"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "a_msisdn",
+      "expected_headers": [
+        "a msisdn"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "b_msisdn",
+      "expected_headers": [
+        "b msisdn"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "c_msisdn",
+      "expected_headers": [
+        "c msisdn"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "a_imei",
+      "expected_headers": [
+        "a imei/a esn"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "b_imei",
+      "expected_headers": [
+        "b imei/b esn"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "c_imei",
+      "expected_headers": [
+        "c imei/c esn"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "a_imsi",
+      "expected_headers": [
+        "a imsi"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "b_imsi",
+      "expected_headers": [
+        "b imsi"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "c_imsi",
+      "expected_headers": [
+        "c imsi"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "start",
+      "expected_headers": [
+        "początek",
+        "poczatek"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "end",
+      "expected_headers": [
+        "koniec"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "a_bts",
+      "expected_headers": [
+        "a bts address"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "b_bts",
+      "expected_headers": [
+        "b bts address"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "c_bts",
+      "expected_headers": [
+        "c bts address"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "gcr",
+      "expected_headers": [
+        "gcr"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    }
+  ],
+  "header_detection": [
+    "us[łl]uga/typ",
+    "\\ba\\s+msisdn\\b",
+    "\\bb\\s+msisdn\\b",
+    "\\ba\\s+bts\\s+address\\b",
+    "\\bgcr\\b",
+    "\\bbts\\s+address\\b",
+    "\\bczas\\s+trwania\\b",
+    "\\bparametr\\b"
+  ],
+  "notes": "Auto-generated from PlusParser",
+  "created_at": "2026-03-24T19:03:44.890609+00:00"
+}

@@ -1,0 +1,1034 @@
+[
+  {
+    "name": "Ambasada USA w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2246,
+    "lon": 21.0277,
+    "desc": "Ambasada Stanów Zjednoczonych w Warszawie, al. Ujazdowskie.",
+    "country": "USA"
+  },
+  {
+    "name": "Ambasada Niemiec w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2223,
+    "lon": 21.0244,
+    "desc": "Ambasada Republiki Federalnej Niemiec w Warszawie.",
+    "country": "Niemcy"
+  },
+  {
+    "name": "Ambasada Francji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2228,
+    "lon": 21.0256,
+    "desc": "Ambasada Francji w Warszawie, ul. Piękna.",
+    "country": "Francja"
+  },
+  {
+    "name": "Ambasada Wielkiej Brytanii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2274,
+    "lon": 21.0207,
+    "desc": "Ambasada Wielkiej Brytanii w Warszawie, ul. Kawalerii.",
+    "country": "Wielka Brytania"
+  },
+  {
+    "name": "Ambasada Włoch w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2175,
+    "lon": 21.0278,
+    "desc": "Ambasada Włoch w Warszawie, pl. Dąbrowskiego.",
+    "country": "Włochy"
+  },
+  {
+    "name": "Ambasada Hiszpanii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2153,
+    "lon": 21.0195,
+    "desc": "Ambasada Hiszpanii w Warszawie.",
+    "country": "Hiszpania"
+  },
+  {
+    "name": "Ambasada Rosji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.221,
+    "lon": 21.016,
+    "desc": "Ambasada Federacji Rosyjskiej w Warszawie, ul. Belwederska (ograniczone operacje).",
+    "country": "Rosja"
+  },
+  {
+    "name": "Ambasada Ukrainy w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2256,
+    "lon": 21.0153,
+    "desc": "Ambasada Ukrainy w Warszawie, al. Szucha.",
+    "country": "Ukraina"
+  },
+  {
+    "name": "Ambasada Chin w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2128,
+    "lon": 21.0397,
+    "desc": "Ambasada Chińskiej Republiki Ludowej w Warszawie, ul. Bonifraterska.",
+    "country": "Chiny"
+  },
+  {
+    "name": "Ambasada Japonii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2157,
+    "lon": 21.0316,
+    "desc": "Ambasada Japonii w Warszawie, ul. Szwoleżerów.",
+    "country": "Japonia"
+  },
+  {
+    "name": "Ambasada Korei Południowej w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2115,
+    "lon": 21.0283,
+    "desc": "Ambasada Republiki Korei w Warszawie.",
+    "country": "Korea Południowa"
+  },
+  {
+    "name": "Ambasada Indii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2152,
+    "lon": 21.0221,
+    "desc": "Ambasada Indii w Warszawie.",
+    "country": "Indie"
+  },
+  {
+    "name": "Ambasada Turcji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.219,
+    "lon": 21.022,
+    "desc": "Ambasada Turcji w Warszawie.",
+    "country": "Turcja"
+  },
+  {
+    "name": "Ambasada Izraela w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2262,
+    "lon": 21.0295,
+    "desc": "Ambasada Izraela w Warszawie, ul. Krzywickiego.",
+    "country": "Izrael"
+  },
+  {
+    "name": "Ambasada Kanady w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2221,
+    "lon": 21.0259,
+    "desc": "Ambasada Kanady w Warszawie, ul. Matejki.",
+    "country": "Kanada"
+  },
+  {
+    "name": "Ambasada Australii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.234,
+    "lon": 21.003,
+    "desc": "Ambasada Australii w Warszawie, ul. Nowogrodzka.",
+    "country": "Australia"
+  },
+  {
+    "name": "Ambasada Austrii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2248,
+    "lon": 21.0224,
+    "desc": "Ambasada Austrii w Warszawie, ul. Gagarina.",
+    "country": "Austria"
+  },
+  {
+    "name": "Ambasada Belgii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2178,
+    "lon": 21.024,
+    "desc": "Ambasada Belgii w Warszawie.",
+    "country": "Belgia"
+  },
+  {
+    "name": "Ambasada Holandii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2264,
+    "lon": 21.0219,
+    "desc": "Ambasada Holandii w Warszawie, ul. Kawalerii.",
+    "country": "Holandia"
+  },
+  {
+    "name": "Ambasada Szwecji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2267,
+    "lon": 21.023,
+    "desc": "Ambasada Szwecji w Warszawie, ul. Bagatela.",
+    "country": "Szwecja"
+  },
+  {
+    "name": "Ambasada Norwegii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2235,
+    "lon": 21.0262,
+    "desc": "Ambasada Norwegii w Warszawie.",
+    "country": "Norwegia"
+  },
+  {
+    "name": "Ambasada Danii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2218,
+    "lon": 21.0251,
+    "desc": "Ambasada Danii w Warszawie.",
+    "country": "Dania"
+  },
+  {
+    "name": "Ambasada Finlandii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2195,
+    "lon": 21.0209,
+    "desc": "Ambasada Finlandii w Warszawie.",
+    "country": "Finlandia"
+  },
+  {
+    "name": "Ambasada Czech w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2242,
+    "lon": 21.0238,
+    "desc": "Ambasada Republiki Czeskiej w Warszawie, ul. Koszykowa.",
+    "country": "Czechy"
+  },
+  {
+    "name": "Ambasada Słowacji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.218,
+    "lon": 21.025,
+    "desc": "Ambasada Słowacji w Warszawie, ul. Litewska.",
+    "country": "Słowacja"
+  },
+  {
+    "name": "Ambasada Węgier w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2203,
+    "lon": 21.0267,
+    "desc": "Ambasada Węgier w Warszawie, ul. Chopina.",
+    "country": "Węgry"
+  },
+  {
+    "name": "Ambasada Rumunii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2195,
+    "lon": 21.0225,
+    "desc": "Ambasada Rumunii w Warszawie.",
+    "country": "Rumunia"
+  },
+  {
+    "name": "Ambasada Bułgarii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2166,
+    "lon": 21.0244,
+    "desc": "Ambasada Bułgarii w Warszawie, al. Ujazdowskie.",
+    "country": "Bułgaria"
+  },
+  {
+    "name": "Ambasada Litwy w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2234,
+    "lon": 21.0218,
+    "desc": "Ambasada Litwy w Warszawie, al. Szucha.",
+    "country": "Litwa"
+  },
+  {
+    "name": "Ambasada Łotwy w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.22,
+    "lon": 21.0235,
+    "desc": "Ambasada Łotwy w Warszawie.",
+    "country": "Łotwa"
+  },
+  {
+    "name": "Ambasada Estonii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2212,
+    "lon": 21.021,
+    "desc": "Ambasada Estonii w Warszawie.",
+    "country": "Estonia"
+  },
+  {
+    "name": "Ambasada Gruzji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2255,
+    "lon": 21.0175,
+    "desc": "Ambasada Gruzji w Warszawie.",
+    "country": "Gruzja"
+  },
+  {
+    "name": "Ambasada Brazylii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2192,
+    "lon": 21.0278,
+    "desc": "Ambasada Brazylii w Warszawie, ul. Puławska.",
+    "country": "Brazylia"
+  },
+  {
+    "name": "Ambasada Meksyku w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2165,
+    "lon": 21.029,
+    "desc": "Ambasada Meksyku w Warszawie.",
+    "country": "Meksyk"
+  },
+  {
+    "name": "Ambasada Arabii Saudyjskiej w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2125,
+    "lon": 21.034,
+    "desc": "Ambasada Arabii Saudyjskiej w Warszawie.",
+    "country": "Arabia Saudyjska"
+  },
+  {
+    "name": "Ambasada ZEA w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2135,
+    "lon": 21.0315,
+    "desc": "Ambasada Zjednoczonych Emiratów Arabskich w Warszawie.",
+    "country": "ZEA"
+  },
+  {
+    "name": "Ambasada Egiptu w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2186,
+    "lon": 21.021,
+    "desc": "Ambasada Egiptu w Warszawie, ul. Alzacka.",
+    "country": "Egipt"
+  },
+  {
+    "name": "Ambasada RPA w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2145,
+    "lon": 21.0305,
+    "desc": "Ambasada Republiki Południowej Afryki w Warszawie.",
+    "country": "RPA"
+  },
+  {
+    "name": "Ambasada Serbii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.22,
+    "lon": 21.018,
+    "desc": "Ambasada Serbii w Warszawie.",
+    "country": "Serbia"
+  },
+  {
+    "name": "Ambasada Chorwacji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.223,
+    "lon": 21.019,
+    "desc": "Ambasada Chorwacji w Warszawie.",
+    "country": "Chorwacja"
+  },
+  {
+    "name": "Ambasada Grecji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2215,
+    "lon": 21.0195,
+    "desc": "Ambasada Grecji w Warszawie, ul. Górskiego.",
+    "country": "Grecja"
+  },
+  {
+    "name": "Ambasada Portugalii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2188,
+    "lon": 21.0262,
+    "desc": "Ambasada Portugalii w Warszawie.",
+    "country": "Portugalia"
+  },
+  {
+    "name": "Ambasada Irlandii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2245,
+    "lon": 21.0175,
+    "desc": "Ambasada Irlandii w Warszawie, ul. Mysia.",
+    "country": "Irlandia"
+  },
+  {
+    "name": "Ambasada Szwajcarii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.223,
+    "lon": 21.0265,
+    "desc": "Ambasada Szwajcarii w Warszawie, al. Ujazdowskie.",
+    "country": "Szwajcaria"
+  },
+  {
+    "name": "Konsulat Generalny Niemiec w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0614,
+    "lon": 19.9366,
+    "desc": "Konsulat Generalny Niemiec w Krakowie, ul. Stolarska.",
+    "country": "Niemcy"
+  },
+  {
+    "name": "Konsulat Generalny Niemiec we Wrocławiu",
+    "type": "konsulat_obcy",
+    "lat": 51.1079,
+    "lon": 17.0385,
+    "desc": "Konsulat Generalny Niemiec we Wrocławiu.",
+    "country": "Niemcy"
+  },
+  {
+    "name": "Konsulat Generalny Niemiec w Gdańsku",
+    "type": "konsulat_obcy",
+    "lat": 54.352,
+    "lon": 18.6466,
+    "desc": "Konsulat Generalny Niemiec w Gdańsku.",
+    "country": "Niemcy"
+  },
+  {
+    "name": "Konsulat Generalny USA w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0567,
+    "lon": 19.9319,
+    "desc": "Konsulat Generalny USA w Krakowie, ul. Stolarska.",
+    "country": "USA"
+  },
+  {
+    "name": "Konsulat Generalny Francji w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0622,
+    "lon": 19.9378,
+    "desc": "Konsulat Generalny Francji w Krakowie.",
+    "country": "Francja"
+  },
+  {
+    "name": "Konsulat Generalny Ukrainy w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0665,
+    "lon": 19.9422,
+    "desc": "Konsulat Generalny Ukrainy w Krakowie, obsługa diaspory ukraińskiej.",
+    "country": "Ukraina"
+  },
+  {
+    "name": "Konsulat Generalny Ukrainy w Lublinie",
+    "type": "konsulat_obcy",
+    "lat": 51.2465,
+    "lon": 22.5684,
+    "desc": "Konsulat Generalny Ukrainy w Lublinie, wschodnia Polska.",
+    "country": "Ukraina"
+  },
+  {
+    "name": "Konsulat Generalny Ukrainy w Gdańsku",
+    "type": "konsulat_obcy",
+    "lat": 54.3521,
+    "lon": 18.6466,
+    "desc": "Konsulat Generalny Ukrainy w Gdańsku.",
+    "country": "Ukraina"
+  },
+  {
+    "name": "Konsulat Generalny Wielkiej Brytanii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0601,
+    "lon": 19.9352,
+    "desc": "Konsulat Wielkiej Brytanii w Krakowie.",
+    "country": "Wielka Brytania"
+  },
+  {
+    "name": "Konsulat Generalny Czech w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0618,
+    "lon": 19.934,
+    "desc": "Konsulat Czech w Krakowie, współpraca przygraniczna.",
+    "country": "Czechy"
+  },
+  {
+    "name": "Konsulat Austrii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0596,
+    "lon": 19.9371,
+    "desc": "Konsulat Honorowy Austrii w Krakowie.",
+    "country": "Austria"
+  },
+  {
+    "name": "Konsulat Włoch we Wrocławiu",
+    "type": "konsulat_obcy",
+    "lat": 51.1094,
+    "lon": 17.0347,
+    "desc": "Konsulat Honorowy Włoch we Wrocławiu.",
+    "country": "Włochy"
+  },
+  {
+    "name": "Konsulat Rosji w Gdańsku",
+    "type": "konsulat_obcy",
+    "lat": 54.3519,
+    "lon": 18.6462,
+    "desc": "Konsulat Generalny Rosji w Gdańsku (ograniczone operacje).",
+    "country": "Rosja"
+  },
+  {
+    "name": "Konsulat Rosji w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0573,
+    "lon": 19.9355,
+    "desc": "Konsulat Generalny Rosji w Krakowie (ograniczone operacje).",
+    "country": "Rosja"
+  },
+  {
+    "name": "Konsulat Norwegii w Gdańsku",
+    "type": "konsulat_obcy",
+    "lat": 54.3525,
+    "lon": 18.648,
+    "desc": "Konsulat Honorowy Norwegii w Gdańsku.",
+    "country": "Norwegia"
+  },
+  {
+    "name": "Konsulat Szwecji w Gdańsku",
+    "type": "konsulat_obcy",
+    "lat": 54.353,
+    "lon": 18.6475,
+    "desc": "Konsulat Honorowy Szwecji w Gdańsku.",
+    "country": "Szwecja"
+  },
+  {
+    "name": "Konsulat Danii w Gdańsku",
+    "type": "konsulat_obcy",
+    "lat": 54.3516,
+    "lon": 18.6459,
+    "desc": "Konsulat Honorowy Danii w Gdańsku.",
+    "country": "Dania"
+  },
+  {
+    "name": "Konsulat Litwy w Sejnach",
+    "type": "konsulat_obcy",
+    "lat": 54.1113,
+    "lon": 23.3534,
+    "desc": "Konsulat Litwy w Sejnach, współpraca przygraniczna.",
+    "country": "Litwa"
+  },
+  {
+    "name": "Konsulat Węgier w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0585,
+    "lon": 19.9365,
+    "desc": "Konsulat Honorowy Węgier w Krakowie.",
+    "country": "Węgry"
+  },
+  {
+    "name": "Konsulat Belgii w Poznaniu",
+    "type": "konsulat_obcy",
+    "lat": 52.4064,
+    "lon": 16.9252,
+    "desc": "Konsulat Honorowy Belgii w Poznaniu.",
+    "country": "Belgia"
+  },
+  {
+    "name": "Konsulat Hiszpanii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0608,
+    "lon": 19.9348,
+    "desc": "Konsulat Honorowy Hiszpanii w Krakowie.",
+    "country": "Hiszpania"
+  },
+  {
+    "name": "Ambasada Albanii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.216,
+    "lon": 21.0185,
+    "desc": "Ambasada Albanii w Warszawie.",
+    "country": "Albania"
+  },
+  {
+    "name": "Ambasada Algierii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2142,
+    "lon": 21.031,
+    "desc": "Ambasada Algierii w Warszawie.",
+    "country": "Algieria"
+  },
+  {
+    "name": "Ambasada Argentyny w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2198,
+    "lon": 21.0285,
+    "desc": "Ambasada Argentyny w Warszawie.",
+    "country": "Argentyna"
+  },
+  {
+    "name": "Ambasada Azerbejdżanu w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2175,
+    "lon": 21.031,
+    "desc": "Ambasada Azerbejdżanu w Warszawie.",
+    "country": "Azerbejdżan"
+  },
+  {
+    "name": "Ambasada Białorusi w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.224,
+    "lon": 21.0165,
+    "desc": "Ambasada Białorusi w Warszawie, ul. Wiertnicza (ograniczone operacje).",
+    "country": "Białoruś"
+  },
+  {
+    "name": "Ambasada Kolumbii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2155,
+    "lon": 21.0295,
+    "desc": "Ambasada Kolumbii w Warszawie.",
+    "country": "Kolumbia"
+  },
+  {
+    "name": "Ambasada Cypru w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.217,
+    "lon": 21.0265,
+    "desc": "Ambasada Cypru w Warszawie.",
+    "country": "Cypr"
+  },
+  {
+    "name": "Ambasada Filipin w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.213,
+    "lon": 21.0325,
+    "desc": "Ambasada Filipin w Warszawie.",
+    "country": "Filipiny"
+  },
+  {
+    "name": "Ambasada Indonezji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2148,
+    "lon": 21.0345,
+    "desc": "Ambasada Indonezji w Warszawie.",
+    "country": "Indonezja"
+  },
+  {
+    "name": "Ambasada Iraku w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.217,
+    "lon": 21.018,
+    "desc": "Ambasada Iraku w Warszawie.",
+    "country": "Irak"
+  },
+  {
+    "name": "Ambasada Iranu w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.223,
+    "lon": 21.017,
+    "desc": "Ambasada Iranu w Warszawie.",
+    "country": "Iran"
+  },
+  {
+    "name": "Ambasada Jordanii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.214,
+    "lon": 21.029,
+    "desc": "Ambasada Jordanii w Warszawie.",
+    "country": "Jordania"
+  },
+  {
+    "name": "Ambasada Kazachstanu w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2158,
+    "lon": 21.035,
+    "desc": "Ambasada Kazachstanu w Warszawie.",
+    "country": "Kazachstan"
+  },
+  {
+    "name": "Ambasada Kuby w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.22,
+    "lon": 21.0165,
+    "desc": "Ambasada Kuby w Warszawie, ul. Rejtana.",
+    "country": "Kuba"
+  },
+  {
+    "name": "Ambasada Libanu w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2165,
+    "lon": 21.0315,
+    "desc": "Ambasada Libanu w Warszawie.",
+    "country": "Liban"
+  },
+  {
+    "name": "Ambasada Malezji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2155,
+    "lon": 21.034,
+    "desc": "Ambasada Malezji w Warszawie.",
+    "country": "Malezja"
+  },
+  {
+    "name": "Ambasada Maroka w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2162,
+    "lon": 21.0295,
+    "desc": "Ambasada Maroka w Warszawie.",
+    "country": "Maroko"
+  },
+  {
+    "name": "Ambasada Mołdawii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2155,
+    "lon": 21.021,
+    "desc": "Ambasada Mołdawii w Warszawie.",
+    "country": "Mołdawia"
+  },
+  {
+    "name": "Ambasada Nigerii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.214,
+    "lon": 21.0335,
+    "desc": "Ambasada Nigerii w Warszawie.",
+    "country": "Nigeria"
+  },
+  {
+    "name": "Ambasada Pakistanu w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2175,
+    "lon": 21.03,
+    "desc": "Ambasada Pakistanu w Warszawie.",
+    "country": "Pakistan"
+  },
+  {
+    "name": "Ambasada Peru w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2168,
+    "lon": 21.0275,
+    "desc": "Ambasada Peru w Warszawie.",
+    "country": "Peru"
+  },
+  {
+    "name": "Ambasada Słowenii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2182,
+    "lon": 21.02,
+    "desc": "Ambasada Słowenii w Warszawie.",
+    "country": "Słowenia"
+  },
+  {
+    "name": "Ambasada Tajlandii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2152,
+    "lon": 21.033,
+    "desc": "Ambasada Tajlandii w Warszawie.",
+    "country": "Tajlandia"
+  },
+  {
+    "name": "Ambasada Tunezji w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2148,
+    "lon": 21.028,
+    "desc": "Ambasada Tunezji w Warszawie.",
+    "country": "Tunezja"
+  },
+  {
+    "name": "Ambasada Uzbekistanu w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2138,
+    "lon": 21.0355,
+    "desc": "Ambasada Uzbekistanu w Warszawie.",
+    "country": "Uzbekistan"
+  },
+  {
+    "name": "Ambasada Wietnamu w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2295,
+    "lon": 21.0285,
+    "desc": "Ambasada Wietnamu w Warszawie, ul. Resorowa.",
+    "country": "Wietnam"
+  },
+  {
+    "name": "Ambasada Czarnogóry w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2158,
+    "lon": 21.019,
+    "desc": "Ambasada Czarnogóry w Warszawie.",
+    "country": "Czarnogóra"
+  },
+  {
+    "name": "Ambasada Macedonii Północnej w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2172,
+    "lon": 21.0205,
+    "desc": "Ambasada Macedonii Północnej w Warszawie.",
+    "country": "Macedonia Północna"
+  },
+  {
+    "name": "Ambasada Bośni i Hercegowiny w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2185,
+    "lon": 21.0175,
+    "desc": "Ambasada Bośni i Hercegowiny w Warszawie.",
+    "country": "Bośnia i Hercegowina"
+  },
+  {
+    "name": "Ambasada Armenii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.216,
+    "lon": 21.02,
+    "desc": "Ambasada Armenii w Warszawie.",
+    "country": "Armenia"
+  },
+  {
+    "name": "Ambasada Chile w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.2172,
+    "lon": 21.0268,
+    "desc": "Ambasada Chile w Warszawie.",
+    "country": "Chile"
+  },
+  {
+    "name": "Ambasada Luksemburga w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.219,
+    "lon": 21.0235,
+    "desc": "Ambasada Luksemburga w Warszawie.",
+    "country": "Luksemburg"
+  },
+  {
+    "name": "Ambasada Islandii w Warszawie",
+    "type": "ambasada_obca",
+    "lat": 52.221,
+    "lon": 21.023,
+    "desc": "Ambasada Islandii w Warszawie.",
+    "country": "Islandia"
+  },
+  {
+    "name": "Konsulat Generalny Ukrainy we Wrocławiu",
+    "type": "konsulat_obcy",
+    "lat": 51.1045,
+    "lon": 17.0295,
+    "desc": "Konsulat Generalny Ukrainy we Wrocławiu.",
+    "country": "Ukraina"
+  },
+  {
+    "name": "Konsulat Generalny Ukrainy w Poznaniu",
+    "type": "konsulat_obcy",
+    "lat": 52.4082,
+    "lon": 16.934,
+    "desc": "Konsulat Generalny Ukrainy w Poznaniu.",
+    "country": "Ukraina"
+  },
+  {
+    "name": "Konsulat Generalny Francji we Wrocławiu",
+    "type": "konsulat_obcy",
+    "lat": 51.1065,
+    "lon": 17.031,
+    "desc": "Konsulat Honorowy Francji we Wrocławiu.",
+    "country": "Francja"
+  },
+  {
+    "name": "Konsulat USA w Poznaniu",
+    "type": "konsulat_obcy",
+    "lat": 52.4055,
+    "lon": 16.9285,
+    "desc": "Konsulat USA w Poznaniu, współpraca handlowa.",
+    "country": "USA"
+  },
+  {
+    "name": "Konsulat Włoch w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0625,
+    "lon": 19.9355,
+    "desc": "Konsulat Honorowy Włoch w Krakowie.",
+    "country": "Włochy"
+  },
+  {
+    "name": "Konsulat Japonii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0594,
+    "lon": 19.938,
+    "desc": "Konsulat Honorowy Japonii w Krakowie.",
+    "country": "Japonia"
+  },
+  {
+    "name": "Konsulat Korei Południowej w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0605,
+    "lon": 19.9375,
+    "desc": "Konsulat Honorowy Korei Południowej w Krakowie.",
+    "country": "Korea Południowa"
+  },
+  {
+    "name": "Konsulat Brazylii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0598,
+    "lon": 19.9362,
+    "desc": "Konsulat Honorowy Brazylii w Krakowie.",
+    "country": "Brazylia"
+  },
+  {
+    "name": "Konsulat Turcji w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0612,
+    "lon": 19.9345,
+    "desc": "Konsulat Honorowy Turcji w Krakowie.",
+    "country": "Turcja"
+  },
+  {
+    "name": "Konsulat Grecji w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0589,
+    "lon": 19.937,
+    "desc": "Konsulat Honorowy Grecji w Krakowie.",
+    "country": "Grecja"
+  },
+  {
+    "name": "Konsulat Generalny Wielkiej Brytanii we Wrocławiu",
+    "type": "konsulat_obcy",
+    "lat": 51.1058,
+    "lon": 17.0325,
+    "desc": "Konsulat Honorowy Wielkiej Brytanii we Wrocławiu.",
+    "country": "Wielka Brytania"
+  },
+  {
+    "name": "Konsulat Generalny Niemiec w Opolu",
+    "type": "konsulat_obcy",
+    "lat": 50.6751,
+    "lon": 17.9213,
+    "desc": "Konsulat Honorowy Niemiec w Opolu, mniejszość niemiecka.",
+    "country": "Niemcy"
+  },
+  {
+    "name": "Konsulat Szwajcarii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0615,
+    "lon": 19.934,
+    "desc": "Konsulat Honorowy Szwajcarii w Krakowie.",
+    "country": "Szwajcaria"
+  },
+  {
+    "name": "Konsulat Holandii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0592,
+    "lon": 19.9385,
+    "desc": "Konsulat Honorowy Holandii w Krakowie.",
+    "country": "Holandia"
+  },
+  {
+    "name": "Konsulat Finlandii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.06,
+    "lon": 19.935,
+    "desc": "Konsulat Honorowy Finlandii w Krakowie.",
+    "country": "Finlandia"
+  },
+  {
+    "name": "Konsulat Rumunii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0583,
+    "lon": 19.9358,
+    "desc": "Konsulat Honorowy Rumunii w Krakowie.",
+    "country": "Rumunia"
+  },
+  {
+    "name": "Konsulat Meksyku w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.061,
+    "lon": 19.933,
+    "desc": "Konsulat Honorowy Meksyku w Krakowie.",
+    "country": "Meksyk"
+  },
+  {
+    "name": "Konsulat Indii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0605,
+    "lon": 19.9342,
+    "desc": "Konsulat Honorowy Indii w Krakowie.",
+    "country": "Indie"
+  },
+  {
+    "name": "Konsulat Irlandii we Wrocławiu",
+    "type": "konsulat_obcy",
+    "lat": 51.107,
+    "lon": 17.034,
+    "desc": "Konsulat Honorowy Irlandii we Wrocławiu.",
+    "country": "Irlandia"
+  },
+  {
+    "name": "Konsulat Słowacji w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0575,
+    "lon": 19.9388,
+    "desc": "Konsulat Honorowy Słowacji w Krakowie, współpraca przygraniczna.",
+    "country": "Słowacja"
+  },
+  {
+    "name": "Konsulat Australii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.059,
+    "lon": 19.9365,
+    "desc": "Konsulat Honorowy Australii w Krakowie.",
+    "country": "Australia"
+  },
+  {
+    "name": "Konsulat Kanady w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0603,
+    "lon": 19.9338,
+    "desc": "Konsulat Honorowy Kanady w Krakowie.",
+    "country": "Kanada"
+  },
+  {
+    "name": "Konsulat Austrii we Wrocławiu",
+    "type": "konsulat_obcy",
+    "lat": 51.1062,
+    "lon": 17.0355,
+    "desc": "Konsulat Honorowy Austrii we Wrocławiu.",
+    "country": "Austria"
+  },
+  {
+    "name": "Konsulat Generalny Czech w Katowicach",
+    "type": "konsulat_obcy",
+    "lat": 50.2649,
+    "lon": 19.0238,
+    "desc": "Konsulat Generalny Czech w Katowicach, współpraca przygraniczna.",
+    "country": "Czechy"
+  },
+  {
+    "name": "Konsulat Belgii w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.058,
+    "lon": 19.9375,
+    "desc": "Konsulat Honorowy Belgii w Krakowie.",
+    "country": "Belgia"
+  },
+  {
+    "name": "Konsulat Izraela w Krakowie",
+    "type": "konsulat_obcy",
+    "lat": 50.0615,
+    "lon": 19.936,
+    "desc": "Konsulat Honorowy Izraela w Krakowie — pamięć Holokaustu.",
+    "country": "Izrael"
+  },
+  {
+    "name": "Konsulat Chin w Gdańsku",
+    "type": "konsulat_obcy",
+    "lat": 54.3505,
+    "lon": 18.649,
+    "desc": "Konsulat Honorowy ChRL w Gdańsku.",
+    "country": "Chiny"
+  },
+  {
+    "name": "Konsulat Wielkiej Brytanii w Poznaniu",
+    "type": "konsulat_obcy",
+    "lat": 52.407,
+    "lon": 16.931,
+    "desc": "Konsulat Honorowy Wielkiej Brytanii w Poznaniu.",
+    "country": "Wielka Brytania"
+  },
+  {
+    "name": "Konsulat Wielkiej Brytanii w Łodzi",
+    "type": "konsulat_obcy",
+    "lat": 51.7592,
+    "lon": 19.456,
+    "desc": "Konsulat Honorowy Wielkiej Brytanii w Łodzi.",
+    "country": "Wielka Brytania"
+  },
+  {
+    "name": "Konsulat Wielkiej Brytanii w Szczecinie",
+    "type": "konsulat_obcy",
+    "lat": 53.4285,
+    "lon": 14.5528,
+    "desc": "Konsulat Honorowy Wielkiej Brytanii w Szczecinie.",
+    "country": "Wielka Brytania"
+  },
+  {
+    "name": "Konsulat Wielkiej Brytanii w Lublinie",
+    "type": "konsulat_obcy",
+    "lat": 51.247,
+    "lon": 22.565,
+    "desc": "Konsulat Honorowy Wielkiej Brytanii w Lublinie.",
+    "country": "Wielka Brytania"
+  }
+]

@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="{{ (user.language or 'pl') if (multiuser and user) else 'pl' }}" data-theme="{{ (user.theme or 'light') if (multiuser and user) else 'light' }}">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="light dark">
+  <title>{{ title }} — {{ app_name }}</title>
+  <script>
+    /* Apply theme early to prevent flash of wrong colors */
+    (function(){
+      var t = localStorage.getItem('aistate_ui_theme');
+      if (t && (t === 'dark' || t === 'light')) {
+        document.documentElement.setAttribute('data-theme', t);
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/app.css?v={{ app_version }}&_={{ static_ts }}"/>
+  <style>
+    /* Bilingual mode: when EN is active, hide .pl-text wrappers and show .en at full size */
+    html.lang-en .pl-text { display: none !important; }
+    html.lang-en br.pl-text { display: none !important; }
+    html.lang-en .en { font-size: inherit !important; color: inherit !important; font-style: normal !important; }
+    /* When PL is active (no .lang-en class), hide .en subtitles completely */
+    html:not(.lang-en) .en { display: none !important; }
+  </style>
+  <script src="/static/icons.js?v={{ app_version }}&_={{ static_ts }}"></script>
+  <script src="/static/ui.js?v={{ app_version }}&_={{ static_ts }}"></script>
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar_brand">
+      <button id="sidebar_toggle" class="sidebar-toggle" type="button" aria-label="Toggle sidebar" data-i18n-title="sidebar.collapse">
+        <span class="sidebar-toggle-ico" aria-hidden="true">
+          <!-- collapse (when expanded) -->
+          <svg class="ico-collapse" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <defs><linearGradient id="scol" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
+            <rect x="4" y="6" width="14" height="36" rx="3" stroke="url(#scol)" stroke-width="2" fill="url(#scol)" fill-opacity=".06"/>
+            <rect x="4" y="6" width="40" height="36" rx="3" stroke="url(#scol)" stroke-width="2" fill="none"/>
+            <line x1="18" y1="6" x2="18" y2="42" stroke="url(#scol)" stroke-width="1.2" opacity=".35"/>
+            <path d="M34 18l-8 6 8 6" stroke="#00d4ff" stroke-width="2.5" fill="none"/>
+            <line x1="9" y1="14" x2="13" y2="14" stroke="#00d4ff" stroke-width="1.5" opacity=".35"/>
+            <line x1="9" y1="20" x2="13" y2="20" stroke="#00d4ff" stroke-width="1.5" opacity=".25"/>
+            <line x1="9" y1="26" x2="13" y2="26" stroke="#00d4ff" stroke-width="1.5" opacity=".2"/>
+          </svg>
+          <!-- expand (when collapsed) -->
+          <svg class="ico-expand" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <defs><linearGradient id="sexp" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
+            <rect x="4" y="6" width="8" height="36" rx="3" stroke="url(#sexp)" stroke-width="2" fill="url(#sexp)" fill-opacity=".08"/>
+            <rect x="4" y="6" width="40" height="36" rx="3" stroke="url(#sexp)" stroke-width="2" fill="none"/>
+            <line x1="12" y1="6" x2="12" y2="42" stroke="url(#sexp)" stroke-width="1.2" opacity=".35"/>
+            <path d="M24 18l8 6-8 6" stroke="#00d4ff" stroke-width="2.5" fill="none"/>
+            <circle cx="8" cy="16" r="1.5" fill="#00d4ff" opacity=".3"/>
+            <circle cx="8" cy="24" r="1.5" fill="#00d4ff" opacity=".25"/>
+            <circle cx="8" cy="32" r="1.5" fill="#00d4ff" opacity=".2"/>
+          </svg>
+        </span>
+      </button>
+
+      <div class="brand-top">
+        <div class="logo logo-lg">
+          <img src="/static/logo.png" alt="AISTATEweb logo"/>
+        </div>
+        <div class="brand-text">
+          <div class="brand-name">{{ app_name }}</div>
+          <div class="brand-ver">{{ app_version }}</div>
+        </div>
+      </div>
+
+      {% if not multiuser %}
+      <div class="user-badge-lang" id="singleUserLang" style="display:flex;justify-content:center;gap:.3rem;margin:.5rem 0;">
+        <button class="lang-chip" data-lang="pl">PL</button>
+        <button class="lang-chip" data-lang="en">EN</button>
+        <button class="lang-chip" data-lang="ko">KO</button>
+      </div>
+      <div class="user-badge-theme" id="singleUserTheme">
+        <button class="theme-chip" data-theme="light" title="Jasny / Light">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+        <button class="theme-chip" data-theme="dark" title="Ciemny / Dark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+      {% endif %}
+
+      {% if multiuser and user %}
+      <div class="user-badge" id="userBadge">
+        <div class="user-badge-role">{% if user.is_superadmin %}Główny Opiekun{% elif user.role %}{{ user.role }}{% elif user.admin_roles %}{{ user.admin_roles|join(', ') }}{% else %}—{% endif %}</div>
+        <div class="user-badge-name">{{ user.display_name or user.username }}</div>
+        <!-- Collapsed-only: logout icon -->
+        <button class="user-badge-compact-logout" id="btnLogoutCompact" type="button" title="Wyloguj / Logout">
+          <svg viewBox="0 0 48 48" width="20" height="20" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <defs><linearGradient id="mlo" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ef4444"/><stop offset="100%" stop-color="#f97316"/></linearGradient></defs>
+            <path d="M16 40H10a4 4 0 0 1-4-4V12a4 4 0 0 1 4-4h6" stroke="url(#mlo)" stroke-width="2" fill="none"/>
+            <path d="M24 24h18" stroke="url(#mlo)" stroke-width="2.5"/>
+            <path d="M36 18l6 6-6 6" stroke="url(#mlo)" stroke-width="2" fill="none"/>
+          </svg>
+        </button>
+        <div class="user-badge-menu" id="userBadgeMenu" style="display:none;">
+          <div class="user-badge-lang" id="userLangSwitch">
+            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'pl' }}" data-lang="pl">PL</button>
+            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'en' }}" data-lang="en">EN</button>
+            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'ko' }}" data-lang="ko">KO</button>
+          </div>
+          <div class="user-badge-theme" id="userThemeSwitch">
+            <button class="theme-chip{{ ' active' if (user.theme or 'light') == 'light' }}" data-theme="light" title="Jasny / Light">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            </button>
+            <button class="theme-chip{{ ' active' if (user.theme or 'light') == 'dark' }}" data-theme="dark" title="Ciemny / Dark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+          </div>
+          <button class="user-badge-btn" id="btnChangePassword" data-i18n="auth.change_password">Zmień hasło</button>
+          <button class="user-badge-btn user-badge-logout" id="btnLogout" data-i18n="auth.logout">Wyloguj</button>
+        </div>
+      </div>
+      {% endif %}
+
+      <nav class="nav">
+        {% if not multiuser or 'projects' in user_modules %}
+        <a href="/projects" data-icon="projects" class="{{ 'active' if active == 'projects' else '' }}" data-i18n-title="nav.new_project">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gp" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs>
+              <path d="M6 10h12l4 4h18a3 3 0 0 1 3 3v20a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V13a3 3 0 0 1 3-3z" stroke="url(#gp)" stroke-width="2.2" fill="none"/>
+              <line x1="14" y1="24" x2="34" y2="24" stroke="url(#gp)" stroke-width="1.2" opacity=".3"/>
+              <line x1="14" y1="29" x2="28" y2="29" stroke="url(#gp)" stroke-width="1.2" opacity=".25"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.new_project">Projekty</span>
+        </a>
+        {% endif %}
+        {% if not multiuser or 'transcription' in user_modules %}
+        <a href="/transcription" data-icon="transcription" class="{{ 'active' if active=='transcription' else '' }}" data-i18n-title="nav.transcription">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gt" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
+              <rect x="19" y="6" width="10" height="18" rx="5" stroke="url(#gt)" stroke-width="2.2" fill="none"/>
+              <path d="M13 22v2a11 11 0 0 0 22 0v-2" stroke="url(#gt)" stroke-width="2" fill="none"/>
+              <line x1="24" y1="35" x2="24" y2="40" stroke="url(#gt)" stroke-width="2"/>
+              <line x1="18" y1="40" x2="30" y2="40" stroke="url(#gt)" stroke-width="2"/>
+              <line x1="7" y1="16" x2="7" y2="22" stroke="#00d4ff" stroke-width="1.5" opacity=".35"/>
+              <line x1="10" y1="13" x2="10" y2="25" stroke="#00d4ff" stroke-width="1.5" opacity=".25"/>
+              <line x1="38" y1="14" x2="38" y2="24" stroke="#a855f7" stroke-width="1.5" opacity=".25"/>
+              <line x1="41" y1="17" x2="41" y2="21" stroke="#a855f7" stroke-width="1.5" opacity=".35"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.transcription">Transcription</span>
+        </a>
+        {% endif %}
+        {% if not multiuser or 'diarization' in user_modules %}
+        <a href="/diarization" data-icon="diarization" class="{{ 'active' if active=='diarization' else '' }}" data-i18n-title="nav.diarization">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gd" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7ee8fa"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+              <circle cx="16" cy="14" r="6" stroke="url(#gd)" stroke-width="2" fill="none"/>
+              <circle cx="34" cy="14" r="6" stroke="url(#gd)" stroke-width="2" fill="none"/>
+              <path d="M6 38v-2a10 10 0 0 1 10-10h0" stroke="url(#gd)" stroke-width="2" fill="none"/>
+              <path d="M26 26h2a10 10 0 0 1 10 10v2" stroke="url(#gd)" stroke-width="2" fill="none"/>
+              <path d="M22 18 Q25 14 28 18" stroke="#00d4ff" stroke-width="1.2" fill="none" opacity=".3"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.diarization">Diarization</span>
+        </a>
+        {% endif %}
+        {% if not multiuser or 'analysis' in user_modules %}
+        <a href="/analysis" data-icon="analysis" class="{{ 'active' if active=='analysis' else '' }}" data-i18n-title="nav.analysis">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="ga" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#ec4899"/></linearGradient></defs>
+              <rect x="6" y="6" width="36" height="34" rx="4" stroke="url(#ga)" stroke-width="2" fill="none"/>
+              <polyline points="12 32 18 22 24 26 30 14 36 18" stroke="url(#ga)" stroke-width="2.5" fill="none"/>
+              <circle cx="12" cy="32" r="2" fill="#a855f7" opacity=".5"/>
+              <circle cx="30" cy="14" r="2" fill="#ec4899" opacity=".6"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.analysis">Analiza</span>
+        </a>
+        {% endif %}
+        {% if not multiuser or 'chat' in user_modules %}
+        <a href="/chat" data-icon="chat" class="{{ 'active' if active=='chat' else '' }}" data-i18n-title="nav.chat">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gc" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7ee8fa"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
+              <path d="M40 28a4 4 0 0 1-4 4H16l-8 8V10a4 4 0 0 1 4-4h24a4 4 0 0 1 4 4z" stroke="url(#gc)" stroke-width="2.2" fill="none"/>
+              <circle cx="16" cy="19" r="2" fill="#7ee8fa" opacity=".5"/>
+              <circle cx="24" cy="19" r="2" fill="#00d4ff" opacity=".5"/>
+              <circle cx="32" cy="19" r="2" fill="#3b82f6" opacity=".5"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.chat">Chat LLM</span>
+        </a>
+        {% endif %}
+        {% if not multiuser or 'translation' in user_modules %}
+        <a href="/translation" data-icon="translation" class="{{ 'active' if active=='translation' else '' }}" data-i18n-title="nav.translation">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gtr" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#10b981"/></linearGradient></defs>
+              <circle cx="24" cy="22" r="14" stroke="url(#gtr)" stroke-width="2" fill="none"/>
+              <ellipse cx="24" cy="22" rx="7" ry="14" stroke="url(#gtr)" stroke-width="1.3" fill="none" opacity=".5"/>
+              <line x1="10" y1="22" x2="38" y2="22" stroke="url(#gtr)" stroke-width="1.2" opacity=".4"/>
+              <path d="M8 38L16 38" stroke="#00d4ff" stroke-width="1.8" opacity=".5"/>
+              <path d="M14 36L16 38L14 40" stroke="#00d4ff" stroke-width="1.5" fill="none" opacity=".5"/>
+              <path d="M40 38L32 38" stroke="#10b981" stroke-width="1.8" opacity=".5"/>
+              <path d="M34 36L32 38L34 40" stroke="#10b981" stroke-width="1.5" fill="none" opacity=".5"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.translation">Tłumaczenie</span>
+        </a>
+        {% endif %}
+        <a href="/info" data-icon="info" class="{{ 'active' if active=='info' else '' }}" data-i18n-title="nav.info">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gi" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7ee8fa"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+              <polygon points="24 4 42 14 42 34 24 44 6 34 6 14" stroke="url(#gi)" stroke-width="2.2" fill="none"/>
+              <path d="M6 24L16 24L19 16L22 32L25 18L28 28L30 24L42 24" stroke="#00d4ff" stroke-width="1.5" fill="none" opacity=".3"/>
+              <circle cx="24" cy="16" r="2.2" fill="#00d4ff" opacity=".7"/>
+              <line x1="24" y1="21" x2="24" y2="34" stroke="url(#gi)" stroke-width="3"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.info">Info</span>
+        </a>
+        {% if not multiuser or 'admin_settings' in user_modules %}
+        <div class="nav-section" data-i18n="nav.admin_panel">Panel Administracyjny</div>
+        <a href="/admin" data-icon="gpu" class="{{ 'active' if active=='admin' else '' }}" data-i18n-title="nav.admin">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#c026d3"/></linearGradient></defs>
+              <rect x="5" y="5" width="38" height="26" rx="3" stroke="url(#gad)" stroke-width="2.2" fill="none"/>
+              <rect x="10" y="14" width="4" height="12" rx="1" stroke="#00d4ff" stroke-width="1" fill="#00d4ff" fill-opacity=".15"/>
+              <rect x="16" y="10" width="4" height="16" rx="1" stroke="#00d4ff" stroke-width="1" fill="#00d4ff" fill-opacity=".2"/>
+              <rect x="22" y="12" width="4" height="14" rx="1" stroke="#c026d3" stroke-width="1" fill="#c026d3" fill-opacity=".15"/>
+              <rect x="28" y="8" width="4" height="18" rx="1" stroke="#c026d3" stroke-width="1" fill="#c026d3" fill-opacity=".2"/>
+              <rect x="34" y="15" width="4" height="11" rx="1" stroke="#a855f7" stroke-width="1" fill="#a855f7" fill-opacity=".12"/>
+              <line x1="24" y1="31" x2="24" y2="37" stroke="url(#gad)" stroke-width="2"/>
+              <line x1="16" y1="37" x2="32" y2="37" stroke="url(#gad)" stroke-width="2"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.admin">Ustawienia GPU</span>
+        </a>
+        <a href="/llm-settings" data-icon="llm" class="{{ 'active' if active=='llm_settings' else '' }}" data-i18n-title="nav.llm_settings">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gllm" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+              <rect x="8" y="8" width="32" height="32" rx="6" stroke="url(#gllm)" stroke-width="2.2" fill="none"/>
+              <circle cx="18" cy="18" r="3" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".12"/>
+              <circle cx="30" cy="18" r="3" stroke="#a855f7" stroke-width="1.5" fill="#a855f7" fill-opacity=".12"/>
+              <circle cx="18" cy="30" r="3" stroke="#a855f7" stroke-width="1.5" fill="#a855f7" fill-opacity=".12"/>
+              <circle cx="30" cy="30" r="3" stroke="#00d4ff" stroke-width="1.5" fill="#00d4ff" fill-opacity=".12"/>
+              <circle cx="24" cy="24" r="2.5" stroke="url(#gllm)" stroke-width="1.5" fill="none"/>
+              <line x1="20.5" y1="19.5" x2="22" y2="22" stroke="#00d4ff" stroke-width="1" opacity=".4"/>
+              <line x1="27.5" y1="19.5" x2="26" y2="22" stroke="#a855f7" stroke-width="1" opacity=".4"/>
+              <line x1="20.5" y1="28.5" x2="22" y2="26" stroke="#a855f7" stroke-width="1" opacity=".4"/>
+              <line x1="27.5" y1="28.5" x2="26" y2="26" stroke="#00d4ff" stroke-width="1" opacity=".4"/>
+              <line x1="4" y1="16" x2="8" y2="16" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+              <line x1="4" y1="24" x2="8" y2="24" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+              <line x1="4" y1="32" x2="8" y2="32" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+              <line x1="40" y1="16" x2="44" y2="16" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+              <line x1="40" y1="24" x2="44" y2="24" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+              <line x1="40" y1="32" x2="44" y2="32" stroke="url(#gllm)" stroke-width="1.5" opacity=".4"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.llm_settings">Ustawienia LLM</span>
+        </a>
+        <a href="/asr-settings" data-icon="asr" class="{{ 'active' if active=='asr_settings' else '' }}" data-i18n-title="nav.asr_settings">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gasr" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
+              <path d="M8 30V22a16 16 0 0 1 32 0v8" stroke="url(#gasr)" stroke-width="2.2" fill="none"/>
+              <rect x="4" y="28" width="8" height="12" rx="3" stroke="url(#gasr)" stroke-width="2" fill="none"/>
+              <rect x="36" y="28" width="8" height="12" rx="3" stroke="url(#gasr)" stroke-width="2" fill="none"/>
+              <line x1="18" y1="24" x2="18" y2="30" stroke="#00d4ff" stroke-width="1.5" opacity=".35"/>
+              <line x1="21" y1="22" x2="21" y2="32" stroke="#00d4ff" stroke-width="1.5" opacity=".3"/>
+              <line x1="24" y1="20" x2="24" y2="34" stroke="#3b82f6" stroke-width="1.5" opacity=".35"/>
+              <line x1="27" y1="22" x2="27" y2="32" stroke="#3b82f6" stroke-width="1.5" opacity=".3"/>
+              <line x1="30" y1="24" x2="30" y2="30" stroke="#3b82f6" stroke-width="1.5" opacity=".35"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.asr_settings">Ustawienia ASR</span>
+        </a>
+        <a href="/nllb-settings" data-icon="nllb" class="{{ 'active' if active=='nllb_settings' else '' }}" data-i18n-title="nav.nllb_settings">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gnllb" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="50%" stop-color="#a855f7"/><stop offset="100%" stop-color="#ec4899"/></linearGradient></defs>
+              <circle cx="24" cy="22" r="15" stroke="url(#gnllb)" stroke-width="2.2" fill="none"/>
+              <ellipse cx="24" cy="22" rx="7.5" ry="15" stroke="url(#gnllb)" stroke-width="1.2" fill="none" opacity=".4"/>
+              <line x1="9" y1="22" x2="39" y2="22" stroke="url(#gnllb)" stroke-width="1" opacity=".35"/>
+              <path d="M11 14h26" stroke="url(#gnllb)" stroke-width="0.8" opacity=".2"/>
+              <path d="M11 30h26" stroke="url(#gnllb)" stroke-width="0.8" opacity=".2"/>
+              <text x="24" y="24.5" text-anchor="middle" font-size="8" fill="#00d4ff" font-weight="900" opacity=".35">AI</text>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.nllb_settings">Ustawienia NLLB</span>
+        </a>
+        <a href="/tts-settings" data-icon="tts" class="{{ 'active' if active=='tts_settings' else '' }}" data-i18n-title="nav.tts_settings">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gtts" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7ee8fa"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs>
+              <polygon points="20 14 12 20 4 20 4 30 12 30 20 36" stroke="url(#gtts)" stroke-width="2.2" fill="none"/>
+              <path d="M26 18a8 8 0 0 1 0 14" stroke="url(#gtts)" stroke-width="2" fill="none"/>
+              <path d="M31 12a14 14 0 0 1 0 26" stroke="url(#gtts)" stroke-width="2" fill="none"/>
+              <path d="M36 7a20 20 0 0 1 0 36" stroke="url(#gtts)" stroke-width="1.5" fill="none" opacity=".4"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.tts_settings">Ustawienia TTS</span>
+        </a>
+        <a href="/bts-settings" data-icon="bts" class="{{ 'active' if active=='bts_settings' else '' }}" data-i18n-title="nav.bts_settings">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gbts" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f97316"/><stop offset="100%" stop-color="#ef4444"/></linearGradient></defs>
+              <circle cx="24" cy="20" r="3" fill="url(#gbts)" opacity=".8"/>
+              <path d="M24 5v12" stroke="url(#gbts)" stroke-width="2.5"/>
+              <path d="M18 10l6-5 6 5" stroke="url(#gbts)" stroke-width="2" fill="none"/>
+              <path d="M14 14l10-9 10 9" stroke="url(#gbts)" stroke-width="1.5" fill="none" opacity=".5"/>
+              <path d="M24 23v8" stroke="url(#gbts)" stroke-width="2"/>
+              <path d="M18 31h12" stroke="url(#gbts)" stroke-width="2"/>
+              <rect x="16" y="33" width="16" height="10" rx="2" stroke="url(#gbts)" stroke-width="1.5" fill="none"/>
+              <circle cx="12" cy="38" r="2" fill="url(#gbts)" opacity=".4"/>
+              <circle cx="36" cy="36" r="2" fill="url(#gbts)" opacity=".4"/>
+              <path d="M14 38l2-2" stroke="url(#gbts)" stroke-width="1" opacity=".4"/>
+              <path d="M34 36l-2 0" stroke="url(#gbts)" stroke-width="1" opacity=".4"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.bts_settings">Ustawienia BTS</span>
+        </a>
+        <a href="/crypto-settings" data-icon="crypto" class="{{ 'active' if active=='crypto_settings' else '' }}" data-i18n-title="nav.crypto_settings">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gcry" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#ef4444"/></linearGradient></defs>
+              <circle cx="24" cy="24" r="16" stroke="url(#gcry)" stroke-width="2.2" fill="none"/>
+              <path d="M20 16h8l-2 6h4l-8 12 2-8h-4l2-6" stroke="url(#gcry)" stroke-width="1.8" fill="none" opacity=".9"/>
+              <circle cx="24" cy="24" r="8" stroke="url(#gcry)" stroke-width="1" fill="none" opacity=".25"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.crypto_settings">Ustawienia Crypto</span>
+        </a>
+        <a href="/logs" data-icon="logs" class="{{ 'active' if active=='logs' else '' }}" data-i18n-title="nav.logs">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="glg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+              <rect x="4" y="6" width="40" height="34" rx="4" stroke="url(#glg)" stroke-width="2" fill="none"/>
+              <line x1="4" y1="14" x2="44" y2="14" stroke="url(#glg)" stroke-width="1" opacity=".25"/>
+              <circle cx="9" cy="10" r="1.5" fill="#ef4444" opacity=".5"/>
+              <circle cx="14" cy="10" r="1.5" fill="#eab308" opacity=".5"/>
+              <circle cx="19" cy="10" r="1.5" fill="#10b981" opacity=".5"/>
+              <path d="M12 22l5 4-5 4" stroke="#10b981" stroke-width="2" fill="none"/>
+              <line x1="22" y1="30" x2="36" y2="30" stroke="#00d4ff" stroke-width="2"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.logs">Logi</span>
+        </a>
+        {% endif %}
+        {% if multiuser and 'user_mgmt' in user_modules %}
+        <a href="/users" data-icon="users" class="{{ 'active' if active=='users' else '' }}" data-i18n-title="nav.users">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <defs><linearGradient id="gu" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
+              <circle cx="24" cy="14" r="7" stroke="url(#gu)" stroke-width="2.2" fill="none"/>
+              <path d="M10 40v-2a14 14 0 0 1 28 0v2" stroke="url(#gu)" stroke-width="2.2" fill="none"/>
+              <path d="M36 8L36 14Q36 18 40 20Q44 18 44 14L44 8L40 6z" stroke="#00d4ff" stroke-width="1.2" fill="none" opacity=".3"/>
+            </svg>
+          </span>
+          <span class="nav-label" data-i18n="nav.users">Ustawienia</span>
+        </a>
+        {% endif %}
+      </nav>
+    </div>
+  </aside>
+
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<!-- Welcome modal (first launch) -->
+<div id="welcomeModal" class="welcome-overlay" style="display:none;">
+  <div class="welcome-box">
+    <div class="welcome-logo"><img src="/static/logo.png" alt="Logo" style="height:202px;"/></div>
+    <h2 class="welcome-title" id="welcomeTitle"></h2>
+    <div class="welcome-body" id="welcomeBody"></div>
+    <div class="welcome-footer">
+      <label class="welcome-check">
+        <input type="checkbox" id="welcomeDontShow"/>
+        <span id="welcomeCheckLabel"></span>
+      </label>
+      <button class="welcome-btn" id="welcomeClose"></button>
+    </div>
+  </div>
+</div>
+<style>
+  .welcome-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:1rem;}
+  .welcome-box{background:var(--card-bg,#fff);border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.15);max-width:580px;width:100%;padding:2rem 2.2rem;position:relative;max-height:90vh;overflow-y:auto;}
+  .welcome-logo{text-align:center;margin-bottom:.8rem;}
+  .welcome-title{text-align:center;font-size:1.3rem;margin:0 0 1.2rem;color:var(--text,#1a1a2e);line-height:1.3;font-family:inherit;}
+  .welcome-body{font-size:1rem;line-height:1.7;color:var(--text,#333);font-family:inherit;text-align:justify;}
+  .welcome-body p{margin:.7rem 0;}
+  .welcome-body .author{color:var(--accent,#4a6cf7);font-weight:600;}
+  .welcome-body .email{color:var(--accent,#4a6cf7);font-weight:500;text-decoration:none;}
+  .welcome-body .email:hover{text-decoration:underline;}
+  .welcome-body .legal{color:var(--muted,#888);font-style:italic;}
+  .welcome-body .closing{font-weight:600;margin-top:.8rem;color:var(--text,#1a1a2e);}
+  .welcome-body .sign{margin-top:.3rem;color:var(--muted,#888);}
+  .welcome-footer{display:flex;align-items:center;justify-content:space-between;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border,#e0e3e8);}
+  .welcome-check{display:flex;align-items:center;gap:.4rem;font-size:.82rem;color:var(--muted,#666);cursor:pointer;}
+  .welcome-check input{margin:0;}
+  .welcome-btn{padding:.5rem 1.4rem;border:none;border-radius:8px;background:var(--accent,#4a6cf7);color:#fff;font-size:.9rem;font-weight:600;cursor:pointer;transition:opacity .2s;}
+  .welcome-btn:hover{opacity:.85;}
+
+  /* Call Center message modal */
+  .ccmsg-overlay{position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:1rem;}
+  .ccmsg-box{background:var(--card-bg,#fff);border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.15);max-width:540px;width:100%;padding:1.5rem 1.8rem;position:relative;max-height:85vh;overflow-y:auto;}
+  .ccmsg-badge{display:inline-block;background:#e74c3c;color:#fff;font-size:.65rem;font-weight:700;padding:.1rem .4rem;border-radius:8px;margin-left:.4rem;vertical-align:middle;}
+  .ccmsg-subject{font-size:1.1rem;font-weight:700;margin:0 0 .2rem;color:var(--text,#1a1a2e);}
+  .ccmsg-meta{font-size:.78rem;color:var(--muted,#888);margin-bottom:.8rem;}
+  .ccmsg-content{font-size:.92rem;line-height:1.6;color:var(--text,#333);margin-bottom:1rem;border-left:3px solid var(--accent,#4a6cf7);padding-left:.8rem;}
+  .ccmsg-content ul,.ccmsg-content ol{margin:.3rem 0 .3rem 1.2rem;}
+  .ccmsg-footer{display:flex;align-items:center;justify-content:flex-end;gap:.5rem;padding-top:.8rem;border-top:1px solid var(--border,#e0e3e8);}
+  .ccmsg-btn-read{padding:.45rem 1.2rem;border:none;border-radius:8px;background:#27ae60;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer;}
+  .ccmsg-btn-read:hover{opacity:.85;}
+  .ccmsg-btn-next{padding:.45rem 1rem;border:1px solid var(--border,#ddd);border-radius:8px;background:none;color:var(--text,#333);font-size:.85rem;cursor:pointer;}
+  .ccmsg-counter{font-size:.76rem;color:var(--muted,#888);flex:1;}
+</style>
+
+<!-- Call Center message modal (shown on app open for unread messages) -->
+<div id="ccMsgModal" class="ccmsg-overlay" style="display:none;">
+  <div class="ccmsg-box">
+    <div style="text-align:center;margin-bottom:.6rem;">
+      <span style="font-size:.9rem;font-weight:600;color:var(--accent,#4a6cf7);">Call Center</span>
+      <span class="ccmsg-badge" id="ccMsgBadge"></span>
+    </div>
+    <h3 class="ccmsg-subject" id="ccMsgSubject"></h3>
+    <div class="ccmsg-meta" id="ccMsgMeta"></div>
+    <div class="ccmsg-content" id="ccMsgContent"></div>
+    <div class="ccmsg-footer">
+      <span class="ccmsg-counter" id="ccMsgCounter"></span>
+      <button class="ccmsg-btn-read" id="ccMsgRead"></button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script>
+  /* Bilingual mode: wrap Polish text nodes next to .en spans in <span class="pl-text"> so CSS can toggle them */
+  function applyBilingualMode(){
+    var lang = (localStorage.getItem('aistate_ui_lang') || 'pl');
+    var isEn = (lang === 'en');
+    document.documentElement.classList.toggle('lang-en', isEn);
+    document.querySelectorAll('.en').forEach(function(enSpan){
+      if (enSpan.dataset.bwrap) return;
+      enSpan.dataset.bwrap = '1';
+      var parent = enSpan.parentNode;
+      if (!parent) return;
+      Array.from(parent.childNodes).forEach(function(node){
+        if (node === enSpan) return;
+        if (node.nodeType === 3 && node.textContent.trim()) {
+          var w = document.createElement('span');
+          w.className = 'pl-text';
+          parent.insertBefore(w, node);
+          w.appendChild(node);
+        } else if (node.tagName === 'BR' && !node.classList.contains('en')) {
+          node.classList.add('pl-text');
+        }
+      });
+    });
+  }
+</script>
+<script>
+  (async()=>{
+    {% if multiuser and user %}
+    /* Sync user's server-side language to localStorage only on first visit
+       (login.html already sets it; language switcher maintains it thereafter) */
+    if (!localStorage.getItem('aistate_ui_lang')) {
+      localStorage.setItem('aistate_ui_lang', '{{ user.language or "pl" }}');
+    }
+    /* Sync user's server-side theme to localStorage */
+    if (!localStorage.getItem('aistate_ui_theme')) {
+      localStorage.setItem('aistate_ui_theme', '{{ user.theme or "light" }}');
+      document.documentElement.setAttribute('data-theme', '{{ user.theme or "light" }}');
+    }
+    {% endif %}
+    await initI18n();
+    await refreshCurrentProjectInfo();
+    applyI18n();
+    applyBilingualMode();
+    initSidebar();
+    _injectProjectBanner();
+    _updateNavProjectLabels();
+
+    /* Welcome modal — shows once per browser session (login).
+       Permanently dismissed via checkbox. Per-user keys in multi-user mode. */
+    (function(){
+      var _uid = '{{ user.user_id if multiuser and user else "" }}';
+      var _dismissKey = _uid ? 'aistate_welcome_dismissed_' + _uid : 'aistate_welcome_dismissed';
+      var _shownKey  = _uid ? 'aistate_welcome_shown_' + _uid  : 'aistate_welcome_shown';
+      if (localStorage.getItem(_dismissKey)) return;
+      if (sessionStorage.getItem(_shownKey)) return;
+      sessionStorage.setItem(_shownKey, '1');
+      var lang = localStorage.getItem('aistate_ui_lang') || 'pl';
+      var title, body, checkLabel, btnLabel;
+      if (lang === 'en') {
+        title = 'Welcome to AI S.T.A.T.E.';
+        body = '<p><b>AI S.T.A.T.E.</b> (Artificial Intelligence Speech-To-Analysis-Translation-Engine) is a web platform that combines transcription, diarization, translation, and content analysis into a single project-based workflow. The tool supports report generation and automates repetitive steps so you can focus on interpreting the data \u2014 AI takes care of the rest.</p>'
+          + '<p>The project is authored by <span class="author">pawlict</span>. If you notice a problem or want to submit a suggestion, write to: <a href="mailto:pawlict@proton.me" class="email">pawlict@proton.me</a>.</p>'
+          + '<p>AISTATE is built with practical applications in mind, including OSINT and research work. I\u2019m glad you chose this solution.</p>'
+          + '<p class="legal">Remember to comply with the law and protect your data \u2014 AISTATE is meant to help, but it does not replace your thinking or objective judgment.</p>'
+          + '<p class="closing">Happy working!</p>'
+          + '<p class="sign"><em>The Author</em></p>';
+        checkLabel = 'Don\u2019t show this again';
+        btnLabel = 'Get started';
+      } else {
+        title = 'Witaj w AI S.T.A.T.E.';
+        body = '<p><b>AI S.T.A.T.E.</b> (Artificial Intelligence Speech\u2011To\u2011Analysis\u2011Translation\u2011Engine) to platforma webowa, kt\u00f3ra \u0142\u0105czy transkrypcj\u0119, diaryzacj\u0119, t\u0142umaczenia i analiz\u0119 tre\u015bci w jednym, projektowym workflow. Narz\u0119dzie wspiera generowanie raport\u00f3w i automatyzuje powtarzalne kroki, aby\u015b m\u00f3g\u0142 skupi\u0107 si\u0119 na interpretacji danych \u2014 reszt\u0105 zajmie si\u0119 AI.</p>'
+          + '<p>Autorem projektu jest <span class="author">pawlict</span>. Je\u015bli zauwa\u017cysz problem lub chcesz zg\u0142osi\u0107 sugesti\u0119, napisz na: <a href="mailto:pawlict@proton.me" class="email">pawlict@proton.me</a>.</p>'
+          + '<p>AISTATE powstaje z my\u015bl\u0105 o praktycznym zastosowaniu w analizie materia\u0142\u00f3w, w tym OSINT oraz pracy badawczej. Mi\u0142o mi, \u017ce wybra\u0142e\u015b w\u0142a\u015bnie to rozwi\u0105zanie.</p>'
+          + '<p class="legal">Pami\u0119taj o zgodno\u015bci z prawem i ochronie danych \u2014 AISTATE ma pomaga\u0107, ale nie zast\u0119puje Twojego my\u015blenia ani obiektywnej oceny.</p>'
+          + '<p class="closing">Owocnej pracy!</p>'
+          + '<p class="sign"><em>Autor</em></p>';
+        checkLabel = 'Nie pokazuj ponownie';
+        btnLabel = 'Rozpocznij';
+      }
+      var modal = document.getElementById('welcomeModal');
+      document.getElementById('welcomeTitle').textContent = title;
+      document.getElementById('welcomeBody').innerHTML = body;
+      document.getElementById('welcomeCheckLabel').textContent = checkLabel;
+      var closeBtn = document.getElementById('welcomeClose');
+      closeBtn.textContent = btnLabel;
+      modal.style.display = 'flex';
+      function closeWelcome(){
+        if (document.getElementById('welcomeDontShow').checked) {
+          localStorage.setItem(_dismissKey, '1');
+        }
+        modal.style.display = 'none';
+      }
+      closeBtn.addEventListener('click', closeWelcome);
+      modal.addEventListener('click', function(e){ if (e.target === modal) closeWelcome(); });
+    })();
+
+    {% if multiuser and user %}
+    /* Call Center: check for unread messages on every page load */
+    (function(){
+      var _ccUnread = [];
+      var _ccIdx = 0;
+
+      function showCcMsg() {
+        if (_ccIdx >= _ccUnread.length) {
+          document.getElementById('ccMsgModal').style.display = 'none';
+          return;
+        }
+        var msg = _ccUnread[_ccIdx];
+        var lang = localStorage.getItem('aistate_ui_lang') || 'pl';
+        document.getElementById('ccMsgBadge').textContent = _ccUnread.length;
+        document.getElementById('ccMsgSubject').textContent = msg.subject || '';
+        var dt = msg.created_at ? msg.created_at.replace('T',' ').slice(0,16) : '';
+        var metaText = lang === 'en'
+          ? 'From: ' + (msg.author_name || '?') + ' \u2014 ' + dt
+          : 'Od: ' + (msg.author_name || '?') + ' \u2014 ' + dt;
+        document.getElementById('ccMsgMeta').textContent = metaText;
+        document.getElementById('ccMsgContent').innerHTML = msg.content || '';
+        var counterText = (_ccIdx + 1) + ' / ' + _ccUnread.length;
+        document.getElementById('ccMsgCounter').textContent = counterText;
+        var readBtn = document.getElementById('ccMsgRead');
+        if (_ccIdx < _ccUnread.length - 1) {
+          readBtn.textContent = lang === 'en' ? 'Read \u2192 Next' : 'Przeczytane \u2192 Dalej';
+        } else {
+          readBtn.textContent = lang === 'en' ? 'Read \u2714' : 'Przeczytane \u2714';
+        }
+        document.getElementById('ccMsgModal').style.display = 'flex';
+      }
+
+      fetch('/api/messages/unread').then(function(r){ return r.json(); }).then(function(data){
+        if (data.status !== 'ok' || !data.messages || data.messages.length === 0) return;
+        _ccUnread = data.messages;
+        _ccIdx = 0;
+        /* Wait for welcome modal to close (if visible), then show messages */
+        var wm = document.getElementById('welcomeModal');
+        function tryShow() {
+          if (wm && wm.style.display !== 'none') {
+            setTimeout(tryShow, 500);
+            return;
+          }
+          showCcMsg();
+        }
+        tryShow();
+      }).catch(function(){});
+
+      document.getElementById('ccMsgRead').addEventListener('click', function(){
+        var msg = _ccUnread[_ccIdx];
+        if (msg) {
+          fetch('/api/messages/' + msg.message_id + '/read', {
+            method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}'
+          }).catch(function(){});
+        }
+        _ccIdx++;
+        showCcMsg();
+      });
+    })();
+
+    /* Single-user language switcher */
+    (function(){
+      var wrap = document.getElementById('singleUserLang');
+      if (!wrap) return;
+      var curLang = localStorage.getItem('aistate_ui_lang') || 'pl';
+      wrap.querySelectorAll('.lang-chip').forEach(function(b){ b.classList.toggle('active', b.dataset.lang === curLang); });
+      wrap.querySelectorAll('.lang-chip').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var lang = btn.dataset.lang;
+          localStorage.setItem('aistate_ui_lang', lang);
+          /* Also persist to backend settings so server-rendered pages use correct language */
+          fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ui_language: lang}),
+          }).finally(function(){ location.reload(); });
+        });
+      });
+    })();
+
+    /* Single-user theme switcher */
+    (function(){
+      var wrap = document.getElementById('singleUserTheme');
+      if (!wrap) return;
+      var curTheme = localStorage.getItem('aistate_ui_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', curTheme);
+      wrap.querySelectorAll('.theme-chip').forEach(function(b){ b.classList.toggle('active', b.dataset.theme === curTheme); });
+      wrap.querySelectorAll('.theme-chip').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var theme = btn.dataset.theme;
+          localStorage.setItem('aistate_ui_theme', theme);
+          document.documentElement.setAttribute('data-theme', theme);
+          wrap.querySelectorAll('.theme-chip').forEach(function(b){ b.classList.toggle('active', b.dataset.theme === theme); });
+        });
+      });
+    })();
+
+    // User badge toggle
+    (function(){
+      var badge = document.getElementById('userBadge');
+      var menu = document.getElementById('userBadgeMenu');
+      if (badge && menu) {
+        badge.addEventListener('click', function(e) {
+          if (e.target.closest('.user-badge-btn') || e.target.closest('.lang-chip') || e.target.closest('.theme-chip')) return;
+          // Don't open menu when sidebar is collapsed
+          if (document.body.classList.contains('sidebar-collapsed')) return;
+          menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        });
+      }
+      /* Language switcher — save to account, update localStorage, reload */
+      document.querySelectorAll('#userLangSwitch .lang-chip').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          e.preventDefault();
+          var lang = btn.dataset.lang;
+          localStorage.setItem('aistate_ui_lang', lang);
+          /* Update chip UI immediately */
+          document.querySelectorAll('#userLangSwitch .lang-chip').forEach(function(b) { b.classList.toggle('active', b.dataset.lang === lang); });
+          /* Save to user account (fire-and-forget), then reload */
+          fetch('/api/auth/language', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({language: lang}),
+          }).finally(function() {
+            location.reload();
+          });
+        });
+      });
+      /* Theme switcher — save to account, apply immediately (no reload needed) */
+      document.querySelectorAll('#userThemeSwitch .theme-chip').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          e.preventDefault();
+          var theme = btn.dataset.theme;
+          localStorage.setItem('aistate_ui_theme', theme);
+          document.documentElement.setAttribute('data-theme', theme);
+          /* Update chip UI immediately */
+          document.querySelectorAll('#userThemeSwitch .theme-chip').forEach(function(b) { b.classList.toggle('active', b.dataset.theme === theme); });
+          /* Save to user account (fire-and-forget) */
+          fetch('/api/auth/theme', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({theme: theme}),
+          });
+        });
+      });
+      function _clearProjectState() {
+        ['aistate_project_id','aistate_audio_file','aistate_workspace_id','aistate_subproject_name','aistate_last_task_id'].forEach(function(k){ localStorage.removeItem(k); });
+      }
+      var logoutBtn = document.getElementById('btnLogout');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', async function() {
+          await fetch('/api/auth/logout', {method:'POST'});
+          _clearProjectState();
+          location.href = '/login';
+        });
+      }
+      var logoutCompact = document.getElementById('btnLogoutCompact');
+      if (logoutCompact) {
+        logoutCompact.addEventListener('click', async function(e) {
+          e.stopPropagation();
+          await fetch('/api/auth/logout', {method:'POST'});
+          _clearProjectState();
+          location.href = '/login';
+        });
+      }
+      var changePwBtn = document.getElementById('btnChangePassword');
+      if (changePwBtn) {
+        changePwBtn.addEventListener('click', function() {
+          var cur = prompt(t('auth.current_password_prompt') !== 'auth.current_password_prompt' ? t('auth.current_password_prompt') : 'Aktualne hasło:');
+          if (!cur) return;
+          var nw = prompt(t('auth.new_password_prompt') !== 'auth.new_password_prompt' ? t('auth.new_password_prompt') : 'Nowe hasło (min. 6 znaków):');
+          if (!nw || nw.length < 6) { showToast('Hasło musi mieć min. 6 znaków / Password must be at least 6 characters', 'warning'); return; }
+          fetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({current_password: cur, new_password: nw}),
+          }).then(r => r.json()).then(d => {
+            if (d.status === 'ok') showToast('Hasło zmienione / Password changed', 'success');
+            else showToast(d.message || 'Error', 'error');
+          }).catch(() => showToast('Connection error', 'error'));
+        });
+      }
+    })();
+    {% endif %}
+  })();
+</script>
+{% block scripts %}{% endblock %}
+{% if aria_enabled is defined and aria_enabled %}
+{% include "components/aria_hud.html" %}
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><filter id="s3d_drag"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#313b49" stroke-width="1" fill="none" opacity="0.18" stroke-linecap="round"/><circle cx="18" cy="12" r="2.5" fill="#313b49" opacity=".5"/><circle cx="30" cy="12" r="2.5" fill="#313b49" opacity=".5"/><circle cx="18" cy="24" r="2.5" fill="#05657c" opacity=".4"/><circle cx="30" cy="24" r="2.5" fill="#05657c" opacity=".4"/><circle cx="18" cy="36" r="2.5" fill="#313b49" opacity=".5"/><circle cx="30" cy="36" r="2.5" fill="#313b49" opacity=".5"/>
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

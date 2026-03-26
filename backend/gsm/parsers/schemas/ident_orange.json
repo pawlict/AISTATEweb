@@ -1,0 +1,140 @@
+{
+  "parser_id": "ident_orange",
+  "parser_version": "1.0",
+  "format_variant": "",
+  "columns": [
+    {
+      "logical_name": "msisdn",
+      "expected_headers": [
+        "identyfikator usługi",
+        "identyfikator uslugi",
+        "identyfikator"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "oper",
+      "expected_headers": [
+        "oper"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "ru",
+      "expected_headers": [
+        "ru"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "activation",
+      "expected_headers": [
+        "data akt.",
+        "data akt",
+        "data aktywacji"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "deactivation",
+      "expected_headers": [
+        "data dezakt.",
+        "data dezakt",
+        "data dezaktywacji"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "type",
+      "expected_headers": [
+        "typ"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "name",
+      "expected_headers": [
+        "abonent"
+      ],
+      "regex_patterns": [],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "pesel_nip",
+      "expected_headers": [
+        "pesel/regon/nip",
+        "pesel",
+        "pesel/nip"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "zip",
+      "expected_headers": [
+        "kod"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "miasto",
+      "expected_headers": [
+        "miasto"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "street",
+      "expected_headers": [
+        "ulica nr",
+        "ulica"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "main_number",
+      "expected_headers": [
+        "numer główny",
+        "numer glowny"
+      ],
+      "regex_patterns": [],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    }
+  ],
+  "header_detection": [],
+  "notes": "Auto-generated from identification.py (ident_orange)",
+  "created_at": "2026-03-24T19:03:45.040921+00:00"
+}

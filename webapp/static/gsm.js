@@ -1,0 +1,14640 @@
+/**
+ * GSM Billing Analysis module.
+ *
+ * Handles XLSX upload, parsing via /api/gsm/parse, result display,
+ * BTS geolocation map, and BTS admin panel.
+ */
+(function () {
+  "use strict";
+
+  const QS = (sel, root = document) => root.querySelector(sel);
+  const QSA = (sel, root = document) => root.querySelectorAll(sel);
+
+  /** Safely extract an error detail string from an API response. */
+  function _detailStr(data) {
+    const raw = data.detail || data.error || data.message;
+    if (!raw) return JSON.stringify(data);
+    if (typeof raw === "string") return raw;
+    try { return JSON.stringify(raw); } catch (_) { return String(raw); }
+  }
+
+  /* ── state ─────────────────────────────────────────────── */
+  const St = {
+    analyzing: false,
+    lastResult: null,
+    filename: "",
+    map: null,          // Leaflet map instance
+    mapLayers: {},      // Named layer groups
+    leafletLoaded: false,
+    /* Identification lookup: normalised MSISDN → {label, type, name, ...} */
+    idMap: {},
+    /* Timeline state — v4 */
+    tlAllRecords: [],     // all valid geo_records sorted by datetime
+    tlAllWaypoints: [],   // global waypoints across all days
+    tlDays: [],           // sorted unique dates
+    tlDayBoundaries: [],  // [{day, startIdx, endIdx}] for each day
+    tlIdx: 0,             // current position in tlAllWaypoints
+    tlPlaying: false,
+    tlSpeed: 1,           // 1×, 2×, 5×, 10×
+    tlTimer: null,        // fallback timer handle
+    tlAnimFrame: null,    // requestAnimationFrame handle
+    tlMarker: null,       // Leaflet marker (divIcon with mode emoji)
+    tlVisitedTrail: null, // faint visited path polyline
+    tlFullRoute: null,    // full route polyline (gray dashed)
+    tlRouteDots: null,    // layerGroup for waypoint dots
+    tlFadeSegments: [],   // fading trail segments (Marauder's Map)
+    tlTrailCoords: [],    // accumulated [lat,lon] for visited trail
+    tlSavedZoom: null,    // zoom level before timeline play
+    /* Heatmap state */
+    hmData: null,          // {grid, months, maxTotal}
+    hmActiveCell: null,    // {hour, dow} — active filter cell
+    hmMonth: "all",        // selected month filter
+    hmType: "all",         // selected type filter: all, calls, sms, data
+    /* Column & filter state */
+    columnOrder: null,       // array of column keys (user-ordered); null = use defaults
+    columnHidden: {},        // { colKey: true } for hidden columns
+    columnFilters: {},       // { colKey: { mode, value, ... } } active filters
+    columnSort: null,        // { key, dir } — current sort column
+    /* Area selection state */
+    areaSelectMode: null,     // null | "circle" | "rect"
+    areaSelectLayer: null,    // temporary Leaflet shape while drawing
+    areaSelectOrigin: null,   // L.LatLng — mousedown start point
+    areaHighlights: null,     // L.layerGroup with highlighted markers
+    areaShape: null,          // persistent Leaflet shape (circle/rect) after selection
+    areaLocations: [],        // cached uniqueLocations for selection queries
+    overlayMilitary: null,    // L.layerGroup — military overlay markers
+    overlayAirports: null,    // L.layerGroup — civilian airport overlay markers
+    overlayDiplomacy: null,   // L.layerGroup — diplomatic posts overlay
+    overlayMilitaryData: null,// cached JSON data
+    overlayAirportsData: null,// cached JSON data
+    overlayDiplomacyData: null,// cached JSON data
+  };
+
+  /* ── Column definitions ─────────────────────────────────── */
+
+  /**
+   * Each column definition:
+   *  key         — unique id matching BillingRecord field path
+   *  label       — display name (Polish)
+   *  type        — "text" | "categorical" | "numeric" | "boolean"
+   *  defaultVisible — shown by default
+   *  getValue    — fn(record) → raw value for filtering / sorting
+   *  renderCell  — fn(record) → HTML string for table cell
+   *  categoryValues — fn(records) → [{value,label,count}] for categorical
+   *  unit        — optional unit label for numeric columns
+   */
+  const _COL_DEFS = [
+    {
+      key: "context_label", label: "Kontekst", type: "categorical", defaultVisible: false,
+      getValue: r => {
+        const hl = St._anomalyHighlight;
+        if (!hl) return "";
+        if (hl.anomalyRecords && hl.anomalyRecords.has(r)) return "ANOMALIA";
+        if (hl.contextRecords && hl.contextRecords.has(r)) return "KONTEKST";
+        return "";
+      },
+      renderCell: r => {
+        const hl = St._anomalyHighlight;
+        if (!hl) return "";
+        if (hl.anomalyRecords && hl.anomalyRecords.has(r))
+          return '<span style="font-size:9px;font-weight:700;color:rgba(220,38,38,.7);letter-spacing:.5px;text-transform:uppercase">ANOMALIA</span>';
+        if (hl.contextRecords && hl.contextRecords.has(r))
+          return '<span style="font-size:9px;font-weight:700;color:rgba(37,99,235,.65);letter-spacing:.5px;text-transform:uppercase">KONTEKST</span>';
+        return "";
+      },
+      categoryValues: recs => {
+        const vals = ["ANOMALIA", "KONTEKST"];
+        return vals.map(v => ({ value: v, label: v, count: recs.filter(r => {
+          const hl = St._anomalyHighlight;
+          if (!hl) return false;
+          if (v === "ANOMALIA") return hl.anomalyRecords && hl.anomalyRecords.has(r);
+          return hl.contextRecords && hl.contextRecords.has(r);
+        }).length }));
+      },
+    },
+    {
+      key: "datetime", label: "Data i czas", type: "text", defaultVisible: true,
+      getValue: r => r.datetime || "",
+      renderCell: r => r.datetime || "",
+    },
+    {
+      key: "date", label: "Data", type: "text", defaultVisible: false,
+      getValue: r => r.date || "",
+      renderCell: r => r.date || "",
+    },
+    {
+      key: "time", label: "Godzina", type: "text", defaultVisible: false,
+      getValue: r => r.time || "",
+      renderCell: r => r.time || "",
+    },
+    {
+      key: "record_type", label: "Typ", type: "categorical", defaultVisible: true,
+      getValue: r => r.record_type || "",
+      renderCell: r => {
+        const t = r.record_type || "";
+        return `<span class="gsm-type gsm-type-${t}">${_typeLabel(t)}</span>`;
+      },
+      categoryValues: recs => {
+        const counts = {};
+        for (const r of recs) { const v = r.record_type || ""; counts[v] = (counts[v] || 0) + 1; }
+        return Object.keys(counts).sort().map(v => ({ value: v, label: _typeLabel(v), count: counts[v] }));
+      },
+    },
+    {
+      key: "direction", label: "Kierunek", type: "categorical", defaultVisible: true,
+      getValue: r => (r.extra || {}).direction || "",
+      renderCell: r => (r.extra || {}).direction || "",
+      categoryValues: recs => {
+        const counts = {};
+        for (const r of recs) { const v = (r.extra || {}).direction || ""; if (v) counts[v] = (counts[v] || 0) + 1; }
+        return Object.keys(counts).sort().map(v => ({ value: v, label: v, count: counts[v] }));
+      },
+    },
+    {
+      key: "callee", label: "Numer (MSISDN B)", type: "text", defaultVisible: true,
+      getValue: r => r.callee || "",
+      renderCell: r => r.callee ? `<code>${r.callee}</code>` : "—",
+    },
+    {
+      key: "caller", label: "Numer dzwoniącego", type: "text", defaultVisible: false,
+      getValue: r => r.caller || "",
+      renderCell: r => r.caller ? `<code>${r.caller}</code>` : "—",
+    },
+    {
+      key: "identification", label: "Identyfikacja", type: "text", defaultVisible: true,
+      getValue: r => { const info = _idLookup(r.callee); return info ? info.label : ""; },
+      renderCell: r => _idCell(r.callee),
+    },
+    {
+      key: "duration_seconds", label: "Czas trwania", type: "numeric", defaultVisible: true, unit: "s",
+      getValue: r => r.duration_seconds || 0,
+      renderCell: r => r.duration_seconds ? _dur(r.duration_seconds) : "—",
+    },
+    {
+      key: "data_volume_kb", label: "Dane (KB)", type: "numeric", defaultVisible: false, unit: "KB",
+      getValue: r => r.data_volume_kb || 0,
+      renderCell: r => r.data_volume_kb ? _fmt(Math.round(r.data_volume_kb)) + " KB" : "—",
+    },
+    {
+      key: "location", label: "Lokalizacja", type: "text", defaultVisible: true,
+      getValue: r => r.location || "",
+      renderCell: r => r.location || "—",
+    },
+    {
+      key: "location_lac", label: "LAC", type: "text", defaultVisible: false,
+      getValue: r => r.location_lac || "",
+      renderCell: r => r.location_lac || "—",
+    },
+    {
+      key: "location_cell_id", label: "Cell ID", type: "text", defaultVisible: false,
+      getValue: r => r.location_cell_id || "",
+      renderCell: r => r.location_cell_id || "—",
+    },
+    {
+      key: "network", label: "Sieć", type: "categorical", defaultVisible: true,
+      getValue: r => r.network || "",
+      renderCell: r => r.network || "—",
+      categoryValues: recs => {
+        const counts = {};
+        for (const r of recs) { const v = r.network || ""; if (v) counts[v] = (counts[v] || 0) + 1; }
+        return Object.keys(counts).sort().map(v => ({ value: v, label: v, count: counts[v] }));
+      },
+    },
+    {
+      key: "roaming", label: "Roaming", type: "boolean", defaultVisible: false,
+      getValue: r => r.roaming ? "Tak" : "Nie",
+      renderCell: r => r.roaming ? "Tak" : "Nie",
+      categoryValues: () => [
+        { value: "Tak", label: "Tak", count: 0 },
+        { value: "Nie", label: "Nie", count: 0 },
+      ],
+    },
+    {
+      key: "roaming_country", label: "Kraj roamingu", type: "text", defaultVisible: false,
+      getValue: r => r.roaming_country || "",
+      renderCell: r => r.roaming_country || "—",
+    },
+    {
+      key: "imsi", label: "IMSI", type: "text", defaultVisible: false,
+      getValue: r => r.imsi || "",
+      renderCell: r => r.imsi ? `<code>${r.imsi}</code>` : "—",
+    },
+    {
+      key: "imei", label: "IMEI", type: "text", defaultVisible: false,
+      getValue: r => r.imei || "",
+      renderCell: r => r.imei ? `<code>${r.imei}</code>` : "—",
+    },
+    {
+      key: "bts_lat", label: "BTS szerokość", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_lat || "",
+      renderCell: r => (r.extra || {}).bts_lat || "—",
+    },
+    {
+      key: "bts_lon", label: "BTS długość", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_lon || "",
+      renderCell: r => (r.extra || {}).bts_lon || "—",
+    },
+    {
+      key: "bts_city", label: "BTS miasto", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_city || "",
+      renderCell: r => (r.extra || {}).bts_city || "—",
+    },
+    {
+      key: "bts_street", label: "BTS ulica", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_street || "",
+      renderCell: r => (r.extra || {}).bts_street || "—",
+    },
+    {
+      key: "azimuth", label: "Azymut", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).azimuth || "",
+      renderCell: r => (r.extra || {}).azimuth || "—",
+    },
+    {
+      key: "bts_code", label: "BTS kod", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).bts_code || "",
+      renderCell: r => (r.extra || {}).bts_code || "—",
+    },
+    {
+      key: "range_km", label: "Zasięg (km)", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).range_km || "",
+      renderCell: r => (r.extra || {}).range_km || "—",
+    },
+    {
+      key: "service", label: "Usługa", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).service || "",
+      renderCell: r => (r.extra || {}).service || "—",
+    },
+    {
+      key: "nr_powiazany", label: "Nr powiązany", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).nr_powiazany || "",
+      renderCell: r => {
+        const v = (r.extra || {}).nr_powiazany || "";
+        return v ? `<code>${v}</code>` : "—";
+      },
+    },
+    {
+      key: "system", label: "System", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).system || "",
+      renderCell: r => (r.extra || {}).system || "—",
+    },
+    {
+      key: "public_ip", label: "Publiczne IP", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).public_ip || "",
+      renderCell: r => (r.extra || {}).public_ip || "—",
+    },
+    {
+      key: "roaming_mcc_mnc", label: "Roaming MCC/MNC", type: "text", defaultVisible: false,
+      getValue: r => (r.extra || {}).roaming_mcc_mnc || "",
+      renderCell: r => (r.extra || {}).roaming_mcc_mnc || "—",
+    },
+  ];
+
+  const _COL_MAP = {};
+  for (const c of _COL_DEFS) _COL_MAP[c.key] = c;
+
+  /** Get visible columns in current order. */
+  function _visibleColumns() {
+    const order = St.columnOrder || _COL_DEFS.map(c => c.key);
+    return order.filter(k => !St.columnHidden[k] && _COL_MAP[k]).map(k => _COL_MAP[k]);
+  }
+
+  /** Initialize column order + visibility from defaults (called once). */
+  function _initColumns() {
+    if (!St.columnOrder) {
+      St.columnOrder = _COL_DEFS.map(c => c.key);
+      St.columnHidden = {};
+      for (const c of _COL_DEFS) {
+        if (!c.defaultVisible) St.columnHidden[c.key] = true;
+      }
+    }
+  }
+
+  /* ── Filter engine ──────────────────────────────────────── */
+
+  /** Text filter modes. */
+  const _TEXT_FILTERS = [
+    { id: "contains",    label: "Fragment",     desc: "grep -i \"tekst\"" },
+    { id: "exact",       label: "Zgodność",     desc: "grep -x \"wartość\"" },
+    { id: "exclude",     label: "Odrzucenie",   desc: "grep -xv \"wartość\"" },
+    { id: "not_contains",label: "Wykluczenie",  desc: "grep -vi \"tekst\"" },
+    { id: "starts",      label: "Początek",     desc: "grep \"^tekst\"" },
+    { id: "ends",        label: "Zakończenie",  desc: "grep \"tekst$\"" },
+    { id: "regex",       label: "Wzorzec",      desc: "grep -E \"regex\"" },
+  ];
+
+  /** Numeric filter modes. */
+  const _NUM_FILTERS = [
+    { id: "eq",    label: "Równe (=)",          symbol: "=" },
+    { id: "neq",   label: "Różne od (≠)",       symbol: "≠" },
+    { id: "gt",    label: "Większe niż (>)",     symbol: ">" },
+    { id: "lt",    label: "Mniejsze niż (<)",    symbol: "<" },
+    { id: "gte",   label: "Większe lub równe (≥)", symbol: "≥" },
+    { id: "lte",   label: "Mniejsze lub równe (≤)", symbol: "≤" },
+    { id: "range", label: "Zakres (od — do)",    symbol: "↔" },
+    { id: "regex", label: "Wzorzec (grep)",      symbol: "~" },
+  ];
+
+  /**
+   * Test a single value against a filter.
+   * @param {string|number} val — raw value from getValue()
+   * @param {object} filter — { mode, value, value2?, ignoreCase?, checkedValues? }
+   * @param {object} colDef — column definition
+   * @returns {boolean}
+   */
+  function _testFilter(val, filter, colDef) {
+    // Categorical / boolean checkbox filter
+    if (filter.checkedValues) {
+      const sv = String(val);
+      // If using categoryValues from colDef, match against value; for display match against label
+      return filter.checkedValues.has(sv);
+    }
+
+    const fv = filter.value || "";
+    if (!fv && filter.mode !== "range") return true; // empty filter = pass
+
+    // Numeric filters
+    if (colDef.type === "numeric" && filter.mode !== "regex") {
+      const numVal = typeof val === "number" ? val : parseFloat(val);
+      if (isNaN(numVal)) return false;
+      const numFv = parseFloat(fv);
+      switch (filter.mode) {
+        case "eq":  return numVal === numFv;
+        case "neq": return numVal !== numFv;
+        case "gt":  return numVal > numFv;
+        case "lt":  return numVal < numFv;
+        case "gte": return numVal >= numFv;
+        case "lte": return numVal <= numFv;
+        case "range": {
+          const lo = parseFloat(fv);
+          const hi = parseFloat(filter.value2 || "");
+          if (isNaN(lo) || isNaN(hi)) return true;
+          return numVal >= lo && numVal <= hi;
+        }
+        default: return true;
+      }
+    }
+
+    // Text filters
+    const sv = String(val);
+    const ic = filter.ignoreCase !== false;
+    const a = ic ? sv.toLowerCase() : sv;
+    const b = ic ? fv.toLowerCase() : fv;
+    switch (filter.mode) {
+      case "exact":        return a === b;
+      case "exclude":      return a !== b;
+      case "contains":     return a.includes(b);
+      case "not_contains": return !a.includes(b);
+      case "starts":       return a.startsWith(b);
+      case "ends":         return a.endsWith(b);
+      case "regex": {
+        try {
+          const rx = new RegExp(fv, ic ? "i" : "");
+          return rx.test(sv);
+        } catch (_) { return true; }
+      }
+      default: return true;
+    }
+  }
+
+  /** Apply all active column filters + global search to records. Returns filtered array. */
+  function _applyColumnFilters(records) {
+    const keys = Object.keys(St.columnFilters);
+    const searchTerm = (St._recordsSearch || "").toLowerCase();
+    if (!keys.length && !searchTerm) return records;
+    const visCols = _visibleColumns();
+    return records.filter(r => {
+      // Column filters
+      for (const k of keys) {
+        const colDef = _COL_MAP[k];
+        if (!colDef) continue;
+        const val = colDef.getValue(r);
+        if (!_testFilter(val, St.columnFilters[k], colDef)) return false;
+      }
+      // Global search across all visible columns
+      if (searchTerm) {
+        let found = false;
+        for (const col of visCols) {
+          const val = String(col.getValue(r) || "").toLowerCase();
+          if (val.includes(searchTerm)) { found = true; break; }
+        }
+        if (!found) return false;
+      }
+      return true;
+    });
+  }
+
+  /** Count active column filters. */
+  function _activeFilterCount() {
+    return Object.keys(St.columnFilters).length;
+  }
+
+  /* ── Column Filter Dropdown UI ──────────────────────────── */
+
+  let _openFilterDropdown = null; // reference to open dropdown element
+
+  function _closeFilterDropdown() {
+    if (_openFilterDropdown) {
+      _openFilterDropdown.remove();
+      _openFilterDropdown = null;
+    }
+    document.removeEventListener("mousedown", _onFilterOutsideClick, true);
+  }
+
+  function _onFilterOutsideClick(e) {
+    if (_openFilterDropdown && !_openFilterDropdown.contains(e.target)) {
+      // Don't close if clicking on the header that opened it
+      if (e.target.closest && e.target.closest(".gsm-col-filter-btn")) return;
+      _closeFilterDropdown();
+    }
+  }
+
+  /**
+   * Open a filter dropdown for a column.
+   * @param {string} colKey — column key
+   * @param {HTMLElement} anchor — the th element to anchor below
+   */
+  function _openColFilter(colKey, anchor) {
+    _closeFilterDropdown();
+    _closeColumnPanel();
+
+    const colDef = _COL_MAP[colKey];
+    if (!colDef) return;
+
+    const drop = document.createElement("div");
+    drop.className = "gsm-filter-dropdown";
+
+    const existing = St.columnFilters[colKey] || null;
+    const records = St.lastResult ? St.lastResult.records : [];
+
+    if (colDef.type === "categorical" || colDef.type === "boolean") {
+      _buildCategoryFilterUI(drop, colDef, existing, records);
+    } else if (colDef.type === "numeric") {
+      _buildNumericFilterUI(drop, colDef, existing);
+    } else {
+      _buildTextFilterUI(drop, colDef, existing);
+    }
+
+    document.body.appendChild(drop);
+    _openFilterDropdown = drop;
+
+    // Position
+    const rect = anchor.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + 4;
+    // Keep within viewport
+    const dw = drop.offsetWidth;
+    if (left + dw > window.innerWidth - 8) left = window.innerWidth - dw - 8;
+    if (left < 4) left = 4;
+    drop.style.left = left + "px";
+    drop.style.top = top + "px";
+
+    setTimeout(() => document.addEventListener("mousedown", _onFilterOutsideClick, true), 0);
+  }
+
+  /** Build text filter UI inside dropdown. */
+  function _buildTextFilterUI(drop, colDef, existing) {
+    const mode = existing ? existing.mode : "contains";
+    const val = existing ? (existing.value || "") : "";
+    const ic = existing ? existing.ignoreCase !== false : true;
+
+    drop.innerHTML = `
+      <div class="gsm-fd-header">Filtr: ${colDef.label}<button class="gsm-fd-close" title="Zamknij">✕</button></div>
+      <div class="gsm-fd-body">
+        <label class="gsm-fd-label">Typ filtra</label>
+        <div class="gsm-fd-modes">${_TEXT_FILTERS.map(f =>
+          `<label class="gsm-fd-radio"><input type="radio" name="fmode" value="${f.id}" ${f.id === mode ? "checked" : ""}><span>${f.label}</span><span class="gsm-fd-grep">${f.desc}</span></label>`
+        ).join("")}</div>
+        <label class="gsm-fd-label" style="margin-top:8px">Wartość</label>
+        <input type="text" class="gsm-fd-input" value="${_escAttr(val)}" placeholder="Wpisz wartość...">
+        <label class="gsm-fd-check"><input type="checkbox" ${ic ? "checked" : ""}> Ignoruj wielkość liter</label>
+      </div>
+      <div class="gsm-fd-footer">
+        <button class="gsm-fd-apply">Zastosuj</button>
+        <button class="gsm-fd-clear">Wyczyść</button>
+      </div>`;
+
+    drop.querySelector(".gsm-fd-close").onclick = () => _closeFilterDropdown();
+    drop.querySelector(".gsm-fd-apply").onclick = () => {
+      const selMode = drop.querySelector('input[name="fmode"]:checked').value;
+      const selVal = drop.querySelector(".gsm-fd-input").value;
+      const selIc = drop.querySelector(".gsm-fd-check input").checked;
+      if (selVal.trim()) {
+        St.columnFilters[colDef.key] = { mode: selMode, value: selVal, ignoreCase: selIc };
+      } else {
+        delete St.columnFilters[colDef.key];
+      }
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+    drop.querySelector(".gsm-fd-clear").onclick = () => {
+      delete St.columnFilters[colDef.key];
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+    // Auto-focus input
+    setTimeout(() => drop.querySelector(".gsm-fd-input").focus(), 50);
+  }
+
+  /** Build numeric filter UI inside dropdown. */
+  function _buildNumericFilterUI(drop, colDef, existing) {
+    const mode = existing ? existing.mode : "gt";
+    const val = existing ? (existing.value || "") : "";
+    const val2 = existing ? (existing.value2 || "") : "";
+    const unit = colDef.unit || "";
+
+    drop.innerHTML = `
+      <div class="gsm-fd-header">Filtr: ${colDef.label}<button class="gsm-fd-close" title="Zamknij">✕</button></div>
+      <div class="gsm-fd-body">
+        <label class="gsm-fd-label">Typ filtra</label>
+        <div class="gsm-fd-modes">${_NUM_FILTERS.map(f =>
+          `<label class="gsm-fd-radio"><input type="radio" name="fmode" value="${f.id}" ${f.id === mode ? "checked" : ""}><span>${f.label}</span></label>`
+        ).join("")}</div>
+        <label class="gsm-fd-label" style="margin-top:8px">Wartość ${unit ? "(" + unit + ")" : ""}</label>
+        <div class="gsm-fd-num-row">
+          <input type="number" class="gsm-fd-input gsm-fd-num1" value="${_escAttr(val)}" placeholder="Wartość" step="any">
+          <input type="number" class="gsm-fd-input gsm-fd-num2" value="${_escAttr(val2)}" placeholder="Do" step="any" style="display:${mode === "range" ? "" : "none"}">
+        </div>
+      </div>
+      <div class="gsm-fd-footer">
+        <button class="gsm-fd-apply">Zastosuj</button>
+        <button class="gsm-fd-clear">Wyczyść</button>
+      </div>`;
+
+    // Show/hide range second input
+    drop.querySelectorAll('input[name="fmode"]').forEach(radio => {
+      radio.onchange = () => {
+        drop.querySelector(".gsm-fd-num2").style.display = radio.value === "range" ? "" : "none";
+      };
+    });
+
+    drop.querySelector(".gsm-fd-close").onclick = () => _closeFilterDropdown();
+    drop.querySelector(".gsm-fd-apply").onclick = () => {
+      const selMode = drop.querySelector('input[name="fmode"]:checked').value;
+      const selVal = drop.querySelector(".gsm-fd-num1").value;
+      const selVal2 = drop.querySelector(".gsm-fd-num2").value;
+      if (selMode === "regex") {
+        if (selVal.trim()) {
+          St.columnFilters[colDef.key] = { mode: "regex", value: selVal, ignoreCase: true };
+        } else {
+          delete St.columnFilters[colDef.key];
+        }
+      } else if (selVal.trim() || (selMode === "range" && selVal2.trim())) {
+        St.columnFilters[colDef.key] = { mode: selMode, value: selVal, value2: selVal2 };
+      } else {
+        delete St.columnFilters[colDef.key];
+      }
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+    drop.querySelector(".gsm-fd-clear").onclick = () => {
+      delete St.columnFilters[colDef.key];
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+    setTimeout(() => drop.querySelector(".gsm-fd-num1").focus(), 50);
+  }
+
+  /** Build categorical / boolean filter UI inside dropdown. */
+  function _buildCategoryFilterUI(drop, colDef, existing, records) {
+    // Compute category values from actual data
+    let cats = [];
+    if (colDef.categoryValues) {
+      cats = colDef.categoryValues(records);
+    }
+    // For boolean with real counts
+    if (colDef.type === "boolean" && cats.length) {
+      const counts = { Tak: 0, Nie: 0 };
+      for (const r of records) {
+        const v = colDef.getValue(r);
+        counts[v] = (counts[v] || 0) + 1;
+      }
+      cats = [
+        { value: "Tak", label: "Tak", count: counts["Tak"] || 0 },
+        { value: "Nie", label: "Nie", count: counts["Nie"] || 0 },
+      ];
+    }
+
+    const checkedSet = existing && existing.checkedValues ? existing.checkedValues : null;
+    const allChecked = !checkedSet; // all checked by default when no filter
+
+    // Also allow text filter below checkboxes
+    const textMode = existing && existing.mode ? existing.mode : "";
+    const textVal = existing && existing.value && !existing.checkedValues ? existing.value : "";
+
+    drop.innerHTML = `
+      <div class="gsm-fd-header">Filtr: ${colDef.label}<button class="gsm-fd-close" title="Zamknij">✕</button></div>
+      <div class="gsm-fd-body">
+        <label class="gsm-fd-check gsm-fd-select-all"><input type="checkbox" ${allChecked ? "checked" : ""}> Zaznacz wszystkie</label>
+        <div class="gsm-fd-cats">${cats.map(c => {
+          const chk = allChecked || (checkedSet && checkedSet.has(c.value));
+          return `<label class="gsm-fd-check gsm-fd-cat-item"><input type="checkbox" value="${_escAttr(c.value)}" ${chk ? "checked" : ""}><span>${c.label}</span><span class="gsm-fd-cat-count">(${c.count})</span></label>`;
+        }).join("")}</div>
+        <div class="gsm-fd-separator">— lub wyszukaj tekstowo —</div>
+        <div class="gsm-fd-modes gsm-fd-modes-sm">${_TEXT_FILTERS.filter(f => ["starts","ends","regex"].includes(f.id)).map(f =>
+          `<label class="gsm-fd-radio"><input type="radio" name="fmode" value="${f.id}" ${f.id === textMode ? "checked" : ""}><span>${f.label}</span></label>`
+        ).join("")}</div>
+        <input type="text" class="gsm-fd-input gsm-fd-cat-text" value="${_escAttr(textVal)}" placeholder="Wpisz wartość...">
+      </div>
+      <div class="gsm-fd-footer">
+        <button class="gsm-fd-apply">Zastosuj</button>
+        <button class="gsm-fd-clear">Wyczyść</button>
+      </div>`;
+
+    // Select all toggle
+    const selAll = drop.querySelector(".gsm-fd-select-all input");
+    const catBoxes = drop.querySelectorAll(".gsm-fd-cat-item input");
+    selAll.onchange = () => {
+      catBoxes.forEach(cb => cb.checked = selAll.checked);
+    };
+    catBoxes.forEach(cb => {
+      cb.onchange = () => {
+        const total = catBoxes.length;
+        const checked = [...catBoxes].filter(x => x.checked).length;
+        selAll.checked = checked === total;
+        selAll.indeterminate = checked > 0 && checked < total;
+      };
+    });
+
+    drop.querySelector(".gsm-fd-close").onclick = () => _closeFilterDropdown();
+    drop.querySelector(".gsm-fd-apply").onclick = () => {
+      const textInput = drop.querySelector(".gsm-fd-cat-text").value.trim();
+      const modeRadio = drop.querySelector('input[name="fmode"]:checked');
+
+      if (textInput && modeRadio) {
+        // Text filter mode takes precedence
+        St.columnFilters[colDef.key] = { mode: modeRadio.value, value: textInput, ignoreCase: true };
+      } else {
+        // Checkbox mode
+        const checked = [...catBoxes].filter(x => x.checked).map(x => x.value);
+        if (checked.length === catBoxes.length || checked.length === 0) {
+          // All or none = no filter
+          delete St.columnFilters[colDef.key];
+        } else {
+          St.columnFilters[colDef.key] = { checkedValues: new Set(checked) };
+        }
+      }
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+    drop.querySelector(".gsm-fd-clear").onclick = () => {
+      delete St.columnFilters[colDef.key];
+      _closeFilterDropdown();
+      _refilterRecords();
+    };
+  }
+
+  function _escAttr(s) { return String(s).replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
+
+  /* ── Column Visibility Panel ────────────────────────────── */
+
+  let _openColumnPanel = null;
+
+  function _closeColumnPanel() {
+    if (_openColumnPanel) {
+      _openColumnPanel.remove();
+      _openColumnPanel = null;
+    }
+    document.removeEventListener("mousedown", _onColPanelOutsideClick, true);
+  }
+
+  function _onColPanelOutsideClick(e) {
+    if (_openColumnPanel && !_openColumnPanel.contains(e.target)) {
+      if (e.target.closest && e.target.closest("#gsm_columns_btn")) return;
+      _closeColumnPanel();
+    }
+  }
+
+  function _openColumnsPanel(anchor) {
+    _closeColumnPanel();
+    _closeFilterDropdown();
+    _initColumns();
+
+    const panel = document.createElement("div");
+    panel.className = "gsm-col-panel";
+
+    const order = St.columnOrder || _COL_DEFS.map(c => c.key);
+
+    let html = `<div class="gsm-fd-header">Widoczne kolumny<button class="gsm-fd-close" title="Zamknij">✕</button></div>`;
+    html += `<div class="gsm-col-panel-list">`;
+    for (const k of order) {
+      const col = _COL_MAP[k];
+      if (!col) continue;
+      const visible = !St.columnHidden[k];
+      html += `<div class="gsm-col-panel-item" draggable="true" data-key="${k}">
+        <span class="gsm-col-drag-handle" title="Przeciągnij">☰</span>
+        <label class="gsm-col-panel-check"><input type="checkbox" data-key="${k}" ${visible ? "checked" : ""}> ${col.label}</label>
+      </div>`;
+    }
+    html += `</div>`;
+    html += `<div class="gsm-fd-footer"><button class="gsm-col-show-all">Pokaż wszystkie</button><button class="gsm-col-defaults">Domyślne</button></div>`;
+    panel.innerHTML = html;
+
+    document.body.appendChild(panel);
+    _openColumnPanel = panel;
+
+    // Position
+    const rect = anchor.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + 4;
+    const pw = panel.offsetWidth;
+    if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+    if (left < 4) left = 4;
+    panel.style.left = left + "px";
+    panel.style.top = top + "px";
+
+    // Close button
+    panel.querySelector(".gsm-fd-close").onclick = () => _closeColumnPanel();
+
+    // Checkbox changes
+    panel.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.onchange = () => {
+        const key = cb.dataset.key;
+        if (cb.checked) {
+          delete St.columnHidden[key];
+        } else {
+          St.columnHidden[key] = true;
+        }
+        _refilterRecords();
+      };
+    });
+
+    // Show all
+    panel.querySelector(".gsm-col-show-all").onclick = () => {
+      St.columnHidden = {};
+      panel.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+      _refilterRecords();
+    };
+
+    // Defaults
+    panel.querySelector(".gsm-col-defaults").onclick = () => {
+      St.columnOrder = _COL_DEFS.map(c => c.key);
+      St.columnHidden = {};
+      for (const c of _COL_DEFS) { if (!c.defaultVisible) St.columnHidden[c.key] = true; }
+      _closeColumnPanel();
+      _refilterRecords();
+    };
+
+    // Drag & drop reordering
+    let dragKey = null;
+    const listEl = panel.querySelector(".gsm-col-panel-list");
+    listEl.addEventListener("dragstart", e => {
+      const item = e.target.closest(".gsm-col-panel-item");
+      if (!item) return;
+      dragKey = item.dataset.key;
+      item.classList.add("gsm-col-dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    listEl.addEventListener("dragend", e => {
+      const item = e.target.closest(".gsm-col-panel-item");
+      if (item) item.classList.remove("gsm-col-dragging");
+      dragKey = null;
+      listEl.querySelectorAll(".gsm-col-panel-item").forEach(el => el.classList.remove("gsm-col-drag-over"));
+    });
+    listEl.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const target = e.target.closest(".gsm-col-panel-item");
+      if (target) {
+        listEl.querySelectorAll(".gsm-col-panel-item").forEach(el => el.classList.remove("gsm-col-drag-over"));
+        target.classList.add("gsm-col-drag-over");
+      }
+    });
+    listEl.addEventListener("drop", e => {
+      e.preventDefault();
+      const target = e.target.closest(".gsm-col-panel-item");
+      if (!target || !dragKey) return;
+      const targetKey = target.dataset.key;
+      if (dragKey === targetKey) return;
+      // Reorder in St.columnOrder
+      const order = St.columnOrder;
+      const fromIdx = order.indexOf(dragKey);
+      const toIdx = order.indexOf(targetKey);
+      if (fromIdx === -1 || toIdx === -1) return;
+      order.splice(fromIdx, 1);
+      order.splice(toIdx, 0, dragKey);
+      // Reorder DOM
+      const dragEl = listEl.querySelector(`.gsm-col-panel-item[data-key="${dragKey}"]`);
+      if (fromIdx < toIdx) {
+        target.after(dragEl);
+      } else {
+        target.before(dragEl);
+      }
+      listEl.querySelectorAll(".gsm-col-panel-item").forEach(el => el.classList.remove("gsm-col-drag-over"));
+      _refilterRecords();
+    });
+
+    setTimeout(() => document.addEventListener("mousedown", _onColPanelOutsideClick, true), 0);
+  }
+
+  /* ── Filter Chips Bar ───────────────────────────────────── */
+
+  function _renderFilterChips() {
+    const bar = QS("#gsm_filter_chips");
+    if (!bar) return;
+    const keys = Object.keys(St.columnFilters);
+    if (!keys.length) {
+      bar.style.display = "none";
+      return;
+    }
+    bar.style.display = "";
+    let html = '<span class="gsm-fc-label">Filtry kolumn:</span>';
+    for (const k of keys) {
+      const colDef = _COL_MAP[k];
+      if (!colDef) continue;
+      const f = St.columnFilters[k];
+      let desc = "";
+      if (f.checkedValues) {
+        const vals = [...f.checkedValues];
+        desc = vals.length <= 2 ? vals.join(", ") : vals.slice(0, 2).join(", ") + "…";
+      } else if (f.mode === "range") {
+        desc = `${f.value || "?"} — ${f.value2 || "?"}`;
+      } else {
+        const modeLabel = [..._TEXT_FILTERS, ..._NUM_FILTERS].find(m => m.id === f.mode);
+        desc = (modeLabel ? (modeLabel.symbol || modeLabel.label) + " " : "") + `"${f.value || ""}"`;
+      }
+      html += `<span class="gsm-fc-chip" data-key="${k}">${colDef.label}: ${desc} <button class="gsm-fc-remove" data-key="${k}" title="Usuń filtr">✕</button></span>`;
+    }
+    html += `<button class="gsm-fc-clear-all" title="Wyczyść wszystkie filtry kolumn">Wyczyść ▿</button>`;
+    bar.innerHTML = html;
+
+    // Bind chip remove buttons
+    bar.querySelectorAll(".gsm-fc-remove").forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        delete St.columnFilters[btn.dataset.key];
+        _refilterRecords();
+      };
+    });
+    bar.querySelector(".gsm-fc-clear-all").onclick = () => {
+      St.columnFilters = {};
+      _refilterRecords();
+    };
+  }
+
+  /* ── Re-filter and re-render records ────────────────────── */
+
+  /** The "source" records currently fed into the table (may already be pre-filtered by heatmap/map/analysis). */
+  let _currentSourceRecords = null;
+  let _currentSourceTruncated = false;
+  let _currentSourceTotal = 0;
+
+  /** Central re-filter: apply column filters over current source and re-render. */
+  function _refilterRecords() {
+    const src = _currentSourceRecords || (St.lastResult ? St.lastResult.records : []);
+    const filtered = _applyColumnFilters(src);
+    const total = _currentSourceTotal || (St.lastResult ? St.lastResult.record_count : 0);
+
+    _renderFilterChips();
+    _renderRecordsTable(filtered, false, filtered.length);
+  }
+
+  /* ── helpers ────────────────────────────────────────────── */
+  function _fmt(n) {
+    if (n == null) return "—";
+    return Number(n).toLocaleString("pl-PL");
+  }
+
+  function _dur(sec) {
+    if (!sec) return "0s";
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (d > 0 || h >= 100) {
+      const totalD = Math.floor(sec / 86400);
+      const remH = Math.floor((sec % 86400) / 3600);
+      return `${totalD}d ${remH}h ${m}m ${s}s`;
+    }
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  function _el(tag, cls, html) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html) e.innerHTML = html;
+    return e;
+  }
+
+  /* ── Pinned BTS cards system ──────────────────────────── */
+
+  /** All currently pinned cards. Each entry: { id, card, tether, latlng, loc } */
+  const _pinnedCards = [];
+  let _pinnedCardIdCounter = 0;
+  let _pinnedAutoFilter = true; // auto-filter Records when single card open
+
+  /** SVG icons for card buttons */
+  const _PIN_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18 8l-2.6 2.6a2 2 0 0 0-.5 1V14a1 1 0 0 1-1 1H10a1 1 0 0 1-1-1v-2.4a2 2 0 0 0-.5-1L6 8"/><path d="M12 15v7"/></svg>`;
+  const _CLOSE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+  /**
+   * Build record detail rows HTML for a pinned card.
+   * Shows date, phone number, and interaction type+direction.
+   */
+  function _buildRecordRows(records) {
+    if (!records || !records.length) return '<div class="small muted">Brak rekordów.</div>';
+
+    let html = '';
+    for (const r of records) {
+      const dt = r.datetime || r.date || "";
+      const num = r.callee || "—";
+      const label = _typeLabel(r.record_type);
+      html += `<div class="gsm-pc-rec">` +
+        `<span class="gsm-pc-dt">${dt}</span>` +
+        `<span class="gsm-pc-num">${num}</span>` +
+        `<span class="gsm-pc-type"><span class="gsm-type gsm-type-${r.record_type}">${label}</span></span>` +
+        `</div>`;
+    }
+    return html;
+  }
+
+  /**
+   * Create and show a pinned card for a BTS location.
+   *
+   * @param {L.LatLng|{lat,lon}} latlng  BTS coordinates
+   * @param {Object} loc                 Location data (city, street, records, types, etc.)
+   * @param {Object} [opts]              Extra options
+   * @param {boolean} [opts.pinned=false] Start pinned
+   */
+  function _openPinnedCard(latlng, loc, opts = {}) {
+    if (!St.map) return;
+    const map = St.map;
+    const container = map.getContainer();
+    const id = ++_pinnedCardIdCounter;
+
+    // Convert latlng to Leaflet LatLng if needed
+    const ll = latlng.lat !== undefined && latlng.lng !== undefined
+      ? latlng : L.latLng(latlng.lat, latlng.lon || latlng.lng);
+
+    // ── Build card DOM ──
+    const card = document.createElement("div");
+    card.className = "gsm-pinned-card";
+    card.dataset.pcId = id;
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "gsm-pinned-card-header";
+
+    const title = document.createElement("span");
+    title.className = "gsm-pinned-card-title";
+    title.textContent = `${loc.city || "BTS"}${loc.street ? ", " + loc.street : ""}`;
+
+    const pinBtn = document.createElement("button");
+    pinBtn.className = "gsm-pinned-card-btn";
+    pinBtn.innerHTML = _PIN_SVG;
+    pinBtn.title = "Przypnij kartę";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "gsm-pinned-card-btn";
+    closeBtn.innerHTML = _CLOSE_SVG;
+    closeBtn.title = "Zamknij";
+
+    header.appendChild(title);
+    header.appendChild(pinBtn);
+    header.appendChild(closeBtn);
+
+    // Body
+    const body = document.createElement("div");
+    body.className = "gsm-pinned-card-body";
+
+    // Summary section
+    const count = loc.records ? loc.records.length : 0;
+    const typeList = loc.types
+      ? Object.entries(loc.types).map(([t, n]) => `${_typeLabel(t)}: ${n}`).join(", ")
+      : "";
+    const firstDt = loc.records && loc.records.length ? loc.records[0].datetime : "";
+    const lastDt = loc.records && loc.records.length ? loc.records[loc.records.length - 1].datetime : "";
+
+    let summaryHtml = `<div class="gsm-pc-summary">`;
+    summaryHtml += `<b>${count}</b> rekordów${typeList ? ` (${typeList})` : ""}<br>`;
+    if (firstDt) summaryHtml += `${firstDt} — ${lastDt}<br>`;
+    if (loc.azimuth != null) summaryHtml += `Azymut: ${loc.azimuth}° `;
+    if (loc.radio) summaryHtml += `${loc.radio} `;
+    if (loc.range_m) summaryHtml += `${(loc.range_m / 1000).toFixed(1)} km `;
+    summaryHtml += `<br><span class="small muted">LAC: ${loc.lac || "?"}, CID: ${loc.cid || "?"}</span>`;
+    summaryHtml += `</div>`;
+
+    // Record detail rows
+    summaryHtml += _buildRecordRows(loc.records || []);
+
+    body.innerHTML = summaryHtml;
+
+    // Resize handle
+    const resizeHandle = document.createElement("div");
+    resizeHandle.className = "gsm-pinned-card-resize";
+
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(resizeHandle);
+
+    // Position card near the point on screen
+    const point = map.latLngToContainerPoint(ll);
+    let cardX = point.x + 18;
+    let cardY = point.y - 40;
+    // Clamp within container
+    const cRect = container.getBoundingClientRect();
+    if (cardX + 260 > cRect.width) cardX = point.x - 270;
+    if (cardY < 10) cardY = 10;
+    card.style.left = cardX + "px";
+    card.style.top = cardY + "px";
+    // Default width for body scroll
+    card.style.width = "300px";
+    card.style.maxHeight = "340px";
+
+    // Track offset from marker so card moves with the map
+    let _cardOffsetX = cardX - point.x;
+    let _cardOffsetY = cardY - point.y;
+
+    container.appendChild(card);
+
+    // ── Tether line (SVG overlay) ──
+    let tetherSvg = container.querySelector(".gsm-pinned-tether-svg");
+    if (!tetherSvg) {
+      tetherSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      tetherSvg.classList.add("gsm-pinned-tether-svg");
+      tetherSvg.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;overflow:visible";
+      container.appendChild(tetherSvg);
+    }
+    const tetherLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    tetherLine.setAttribute("stroke", "#64748b");
+    tetherLine.setAttribute("stroke-width", "1.5");
+    tetherLine.setAttribute("stroke-dasharray", "5 4");
+    tetherLine.dataset.pcId = id;
+    tetherSvg.appendChild(tetherLine);
+
+    function _updateTether() {
+      const pt = map.latLngToContainerPoint(ll);
+      const cx = parseFloat(card.style.left) + card.offsetWidth / 2;
+      const cy = parseFloat(card.style.top) + card.offsetHeight / 2;
+      tetherLine.setAttribute("x1", pt.x);
+      tetherLine.setAttribute("y1", pt.y);
+      tetherLine.setAttribute("x2", cx);
+      tetherLine.setAttribute("y2", cy);
+    }
+    _updateTether();
+
+    // Move card with the map (maintain geo-relative offset)
+    const _onMapMove = () => {
+      const pt = map.latLngToContainerPoint(ll);
+      card.style.left = (pt.x + _cardOffsetX) + "px";
+      card.style.top = (pt.y + _cardOffsetY) + "px";
+      _updateTether();
+    };
+    map.on("move", _onMapMove);
+
+    // ── Card state ──
+    const entry = {
+      id,
+      card,
+      tetherLine,
+      latlng: ll,
+      loc,
+      pinned: !!opts.pinned,
+      _onMapMove,
+    };
+    _pinnedCards.push(entry);
+
+    // Update pin button visual
+    function _updatePinVisual() {
+      pinBtn.classList.toggle("active", entry.pinned);
+      pinBtn.title = entry.pinned ? "Odepnij kartę" : "Przypnij kartę";
+    }
+    _updatePinVisual();
+
+    // ── Pin button ──
+    pinBtn.onclick = (e) => {
+      e.stopPropagation();
+      entry.pinned = !entry.pinned;
+      _updatePinVisual();
+      _syncPinnedFilter();
+    };
+
+    // ── Close button ──
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      _closePinnedCard(id);
+    };
+
+    // ── Drag (header) ──
+    let dragOx, dragOy;
+    header.addEventListener("mousedown", (e) => {
+      if (e.target.closest(".gsm-pinned-card-btn")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      dragOx = e.clientX - parseFloat(card.style.left);
+      dragOy = e.clientY - parseFloat(card.style.top);
+      function onMove(ev) {
+        card.style.left = (ev.clientX - dragOx) + "px";
+        card.style.top = (ev.clientY - dragOy) + "px";
+        _updateTether();
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        // Recalculate offset so card keeps new position on map pan
+        const pt = map.latLngToContainerPoint(ll);
+        _cardOffsetX = parseFloat(card.style.left) - pt.x;
+        _cardOffsetY = parseFloat(card.style.top) - pt.y;
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+
+    // ── Resize (bottom-right handle) ──
+    resizeHandle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startW = card.offsetWidth;
+      const startH = card.offsetHeight;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      function onMove(ev) {
+        card.style.width = Math.max(200, startW + ev.clientX - startX) + "px";
+        card.style.maxHeight = Math.max(80, startH + ev.clientY - startY) + "px";
+        _updateTether();
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+
+    // Prevent map interactions when interacting with card
+    card.addEventListener("mousedown", (e) => e.stopPropagation());
+    card.addEventListener("dblclick", (e) => e.stopPropagation());
+    card.addEventListener("wheel", (e) => e.stopPropagation());
+
+    // If this is the only card and not pinned yet, auto-filter Records
+    if (_pinnedCards.length === 1 && _pinnedAutoFilter) {
+      _filterRecordsByPinnedCards();
+    }
+    _syncPinnedFilter();
+
+    return entry;
+  }
+
+  /** Close and remove a pinned card by id */
+  function _closePinnedCard(id) {
+    const idx = _pinnedCards.findIndex(c => c.id === id);
+    if (idx === -1) return;
+    const entry = _pinnedCards[idx];
+
+    // Remove DOM
+    entry.card.remove();
+    entry.tetherLine.remove();
+
+    // Remove map listener — use stored map ref or fall back to St.map
+    const mapRef = entry._mapRef || St.map;
+    if (mapRef) mapRef.off("move", entry._onMapMove);
+
+    _pinnedCards.splice(idx, 1);
+
+    // Clean up tether SVG if no more cards on this map container
+    if (!_pinnedCards.length) {
+      const svg = mapRef && mapRef.getContainer().querySelector(".gsm-pinned-tether-svg");
+      if (svg) svg.remove();
+    }
+
+    _syncPinnedFilter();
+  }
+
+  /** Close all pinned cards */
+  function _closeAllPinnedCards() {
+    while (_pinnedCards.length) {
+      _closePinnedCard(_pinnedCards[0].id);
+    }
+  }
+
+  /** Sync record table filter based on pinned cards */
+  function _syncPinnedFilter() {
+    const pinned = _pinnedCards.filter(c => c.pinned);
+    if (pinned.length > 0) {
+      _filterRecordsByPinnedCards();
+    } else if (_pinnedCards.length === 1) {
+      // Single unpinned card — light filter
+      _filterRecordsByPinnedCards();
+    } else if (_pinnedCards.length === 0) {
+      // No cards — clear filter
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    }
+  }
+
+  /** Filter the main Records table to show only records from pinned/open card locations */
+  function _filterRecordsByPinnedCards() {
+    const cards = _pinnedCards.filter(c => c.pinned);
+    const active = cards.length ? cards : _pinnedCards;
+    if (!active.length || !St.lastResult) return;
+
+    // Collect all raw_row IDs from active cards
+    const rowSet = new Set();
+    for (const entry of active) {
+      if (entry.loc && entry.loc.records) {
+        for (const r of entry.loc.records) {
+          if (r.raw_row != null) rowSet.add(r.raw_row);
+        }
+      }
+    }
+
+    const allRecs = St.lastResult.records || [];
+    const filtered = allRecs.filter(r => rowSet.has(r.raw_row));
+    const labels = active.map(c => c.loc.city || "BTS").join(" + ");
+    const filterText = `📌 ${labels} — ${filtered.length} rek.`;
+
+    _setRecordsFilter(filterText, () => {
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(filtered, false, filtered.length);
+  }
+
+  /**
+   * Open a pinned card for a BTS marker click. Replaces the default Leaflet popup.
+   * If clicked BTS already has an open card, close it (toggle).
+   */
+  function _handleBtsClick(latlng, loc) {
+    // Check if card for this location already exists
+    const existing = _pinnedCards.find(c =>
+      c.latlng.lat === (latlng.lat || latlng.lat) &&
+      c.latlng.lng === (latlng.lng || latlng.lon)
+    );
+    if (existing) {
+      // If unpinned and only card, close it
+      if (!existing.pinned && _pinnedCards.length === 1) {
+        _closePinnedCard(existing.id);
+        return;
+      }
+      // If pinned, just unpin and close
+      _closePinnedCard(existing.id);
+      return;
+    }
+
+    // If there's already an unpinned card, close it before opening new one
+    const unpinned = _pinnedCards.filter(c => !c.pinned);
+    for (const u of unpinned) {
+      _closePinnedCard(u.id);
+    }
+
+    _openPinnedCard(latlng, loc);
+  }
+
+  /**
+   * Open a pinned card for an overlay marker click (military, airports, diplomacy, KML, user points).
+   * Uses the same pinned-card infrastructure as BTS cards.
+   *
+   * @param {L.LatLng|{lat,lon}} latlng  Marker coordinates
+   * @param {Object} info                Overlay data: { name, desc, type, color, icon, layer, lat, lon, extra }
+   * @param {L.Map} [mapInst]            Map instance (defaults to St.map)
+   */
+  function _openOverlayPinnedCard(latlng, info, mapInst) {
+    const map = mapInst || St.map;
+    if (!map) return;
+    const container = map.getContainer();
+    const id = ++_pinnedCardIdCounter;
+
+    const ll = latlng.lat !== undefined && latlng.lng !== undefined
+      ? latlng : L.latLng(latlng.lat, latlng.lon || latlng.lng);
+
+    // ── Build card DOM ──
+    const card = document.createElement("div");
+    card.className = "gsm-pinned-card";
+    card.dataset.pcId = id;
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "gsm-pinned-card-header";
+
+    const title = document.createElement("span");
+    title.className = "gsm-pinned-card-title";
+    title.textContent = info.name || "Lokalizacja";
+    if (info.color) title.style.color = info.color;
+
+    const pinBtn = document.createElement("button");
+    pinBtn.className = "gsm-pinned-card-btn";
+    pinBtn.innerHTML = _PIN_SVG;
+    pinBtn.title = "Przypnij kartę";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "gsm-pinned-card-btn";
+    closeBtn.innerHTML = _CLOSE_SVG;
+    closeBtn.title = "Zamknij";
+
+    header.appendChild(title);
+    header.appendChild(pinBtn);
+    header.appendChild(closeBtn);
+
+    // Body
+    const body = document.createElement("div");
+    body.className = "gsm-pinned-card-body";
+
+    let html = '<div class="gsm-pc-summary">';
+    if (info.type) html += `<span class="gsm-type" style="display:inline-block;margin-bottom:4px">${info.type}</span><br>`;
+    if (info.desc) html += `<span>${info.desc}</span><br>`;
+    html += `<span class="small muted">${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}</span>`;
+    if (info.layer) html += `<br><span class="small muted">Warstwa: ${info.layer}</span>`;
+    if (info.extra) html += `<br>${info.extra}`;
+    html += '</div>';
+
+    body.innerHTML = html;
+
+    // Resize handle
+    const resizeHandle = document.createElement("div");
+    resizeHandle.className = "gsm-pinned-card-resize";
+
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(resizeHandle);
+
+    // Position
+    const point = map.latLngToContainerPoint(ll);
+    let cardX = point.x + 18;
+    let cardY = point.y - 40;
+    const cRect = container.getBoundingClientRect();
+    if (cardX + 260 > cRect.width) cardX = point.x - 270;
+    if (cardY < 10) cardY = 10;
+    card.style.left = cardX + "px";
+    card.style.top = cardY + "px";
+    card.style.width = "280px";
+    card.style.maxHeight = "300px";
+
+    let _cardOffsetX = cardX - point.x;
+    let _cardOffsetY = cardY - point.y;
+
+    container.appendChild(card);
+
+    // ── Tether line ──
+    let tetherSvg = container.querySelector(".gsm-pinned-tether-svg");
+    if (!tetherSvg) {
+      tetherSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      tetherSvg.classList.add("gsm-pinned-tether-svg");
+      tetherSvg.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;overflow:visible";
+      container.appendChild(tetherSvg);
+    }
+    const tetherLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    tetherLine.setAttribute("stroke", info.color || "#64748b");
+    tetherLine.setAttribute("stroke-width", "1.5");
+    tetherLine.setAttribute("stroke-dasharray", "5 4");
+    tetherLine.dataset.pcId = id;
+    tetherSvg.appendChild(tetherLine);
+
+    function _updateTether() {
+      const pt = map.latLngToContainerPoint(ll);
+      const cx = parseFloat(card.style.left) + card.offsetWidth / 2;
+      const cy = parseFloat(card.style.top) + card.offsetHeight / 2;
+      tetherLine.setAttribute("x1", pt.x);
+      tetherLine.setAttribute("y1", pt.y);
+      tetherLine.setAttribute("x2", cx);
+      tetherLine.setAttribute("y2", cy);
+    }
+    _updateTether();
+
+    const _onMapMove = () => {
+      const pt = map.latLngToContainerPoint(ll);
+      card.style.left = (pt.x + _cardOffsetX) + "px";
+      card.style.top = (pt.y + _cardOffsetY) + "px";
+      _updateTether();
+    };
+    map.on("move", _onMapMove);
+
+    // ── Card state ──
+    const entry = {
+      id, card, tetherLine, latlng: ll,
+      loc: { city: info.name || "Lokalizacja" },  // for _syncPinnedFilter label
+      pinned: false, _onMapMove, _isOverlay: true, _mapRef: map,
+    };
+    _pinnedCards.push(entry);
+
+    function _updatePinVisual() {
+      pinBtn.classList.toggle("active", entry.pinned);
+      pinBtn.title = entry.pinned ? "Odepnij kartę" : "Przypnij kartę";
+    }
+    _updatePinVisual();
+
+    pinBtn.onclick = (e) => { e.stopPropagation(); entry.pinned = !entry.pinned; _updatePinVisual(); };
+    closeBtn.onclick = (e) => { e.stopPropagation(); _closePinnedCard(id); };
+
+    // Drag
+    let dragOx, dragOy;
+    header.addEventListener("mousedown", (e) => {
+      if (e.target.closest(".gsm-pinned-card-btn")) return;
+      e.preventDefault(); e.stopPropagation();
+      dragOx = e.clientX - parseFloat(card.style.left);
+      dragOy = e.clientY - parseFloat(card.style.top);
+      function onMove(ev) {
+        card.style.left = (ev.clientX - dragOx) + "px";
+        card.style.top = (ev.clientY - dragOy) + "px";
+        _updateTether();
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        const pt = map.latLngToContainerPoint(ll);
+        _cardOffsetX = parseFloat(card.style.left) - pt.x;
+        _cardOffsetY = parseFloat(card.style.top) - pt.y;
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+
+    // Resize
+    resizeHandle.addEventListener("mousedown", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const startW = card.offsetWidth, startH = card.offsetHeight;
+      const startX = e.clientX, startY = e.clientY;
+      function onMove(ev) {
+        card.style.width = Math.max(180, startW + ev.clientX - startX) + "px";
+        card.style.maxHeight = Math.max(60, startH + ev.clientY - startY) + "px";
+        _updateTether();
+      }
+      function onUp() { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+
+    card.addEventListener("mousedown", (e) => e.stopPropagation());
+    card.addEventListener("dblclick", (e) => e.stopPropagation());
+    card.addEventListener("wheel", (e) => e.stopPropagation());
+
+    return entry;
+  }
+
+  /**
+   * Handle overlay marker click — toggle pinned card (like BTS).
+   */
+  function _handleOverlayClick(latlng, info, mapInst) {
+    const ll = latlng.lat !== undefined && latlng.lng !== undefined
+      ? latlng : L.latLng(latlng.lat, latlng.lon || latlng.lng);
+
+    const existing = _pinnedCards.find(c =>
+      Math.abs(c.latlng.lat - ll.lat) < 0.00001 &&
+      Math.abs(c.latlng.lng - ll.lng) < 0.00001
+    );
+    if (existing) {
+      _closePinnedCard(existing.id);
+      return;
+    }
+
+    // Close unpinned overlay cards before opening a new one
+    const unpinned = _pinnedCards.filter(c => !c.pinned && c._isOverlay);
+    for (const u of unpinned) _closePinnedCard(u.id);
+
+    _openOverlayPinnedCard(latlng, info, mapInst);
+  }
+
+  /* ── log — redirect to browser console ──────────────────── */
+  function _addLog(level, msg) {
+    const ts = new Date().toLocaleTimeString("pl-PL");
+    const prefix = `[GSM ${ts}]`;
+    if (level === "error") console.error(prefix, msg);
+    else if (level === "warn") console.warn(prefix, msg);
+    else console.log(prefix, msg);
+  }
+
+  /* ── OSRM road routing helper ─────────────────────────── */
+  async function _fetchOSRMRoute(fromLat, fromLon, toLat, toLon) {
+    // Uses the free OSRM demo server to get real road geometry
+    // Returns array of [lat, lon] or null on failure
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson`;
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (data.code !== "Ok" || !data.routes || !data.routes.length) return null;
+      const coords = data.routes[0].geometry.coordinates;
+      // GeoJSON: [lon, lat] → Leaflet: [lat, lon]
+      return coords.map(c => [c[1], c[0]]);
+    } catch (e) {
+      console.warn("[OSRM] Route fetch failed:", e);
+      return null;
+    }
+  }
+
+  /* ── Leaflet loader ────────────────────────────────────── */
+  function _loadLeaflet() {
+    return new Promise((resolve) => {
+      if (St.leafletLoaded || window.L) { St.leafletLoaded = true; resolve(); return; }
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(css);
+      const js = document.createElement("script");
+      js.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      js.onload = () => { St.leafletLoaded = true; resolve(); };
+      js.onerror = () => {
+        // Fallback: try local tiles API without Leaflet (show placeholder)
+        console.warn("Leaflet CDN unavailable — map will use fallback mode");
+        resolve();
+      };
+      document.head.appendChild(js);
+    });
+  }
+
+  /* ── smart import ──────────────────────────────────────── */
+
+  /**
+   * Smart import: upload file(s), auto-detect billing/identification/ZIP.
+   * Replaces old _uploadAndParse + _uploadIdentification.
+   */
+  /**
+   * Show subscriber conflict dialog when multi-subscriber detected.
+   * User picks one subscriber → re-submits import with selected_msisdn.
+   */
+  /**
+   * Show file confirmation dialog — lets user approve/reject individual
+   * billing files before analysis. Handles both same-subscriber
+   * complementary files (POL+TD) and multi-subscriber scenarios.
+   */
+  function _showFileConfirmation(grouping, originalFiles) {
+    const subs = grouping.subscribers || {};
+    const undetected = grouping.undetected_files || [];
+    const reason = grouping.confirmation_reason || "";
+    const msisdns = Object.keys(subs);
+
+    // Build dialog HTML
+    let title, desc;
+    if (reason === "multi_subscriber") {
+      title = `\u26A0\uFE0F Wykryto bilingi ${msisdns.length} r\u00F3\u017Cnych abonent\u00F3w`;
+      desc = `Przes\u0142ane pliki zawieraj\u0105 bilingi r\u00F3\u017Cnych os\u00F3b. Mo\u017Cesz wybra\u0107 konkretnego abonenta lub zatwierdzić wszystkie pliki.`;
+    } else if (reason === "complementary_files") {
+      const cnt = Object.values(subs).reduce((a, b) => a + b.length, 0) + undetected.length;
+      title = `\uD83D\uDCC2 Wykryto ${cnt} uzupe\u0142niaj\u0105cych si\u0119 plik\u00F3w`;
+      desc = `Pliki nale\u017C\u0105 do tego samego abonenta i uzupe\u0142niaj\u0105 si\u0119 (np. po\u0142\u0105czenia + transmisja danych). Zatwierd\u017A lub odrzuć poszczeg\u00F3lne pliki:`;
+    } else {
+      title = `\u2753 Potwierdzenie plik\u00F3w do analizy`;
+      desc = `Wybierz pliki, kt\u00F3re maj\u0105 zosta\u0107 uwzgl\u0119dnione w analizie:`;
+    }
+
+    let body = "";
+
+    // Group files by subscriber for display
+    for (const msisdn of msisdns) {
+      const files = subs[msisdn];
+      if (msisdns.length > 1) {
+        body += `<div style="margin:8px 0 4px;font-weight:600;font-size:13px;color:var(--text)">
+          \uD83D\uDCF1 ${msisdn}</div>`;
+      }
+      for (const f of files) {
+        const subtype = f.file_subtype ? ` \u2014 ${f.file_subtype === 'pol' ? 'Po\u0142\u0105czenia/SMS' : f.file_subtype === 'td' ? 'Transmisja danych' : f.file_subtype}` : "";
+        const conf = f.confidence >= 0.8 ? '\u2705' : f.confidence > 0 ? '\u26A0\uFE0F' : '\u2753';
+        body += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
+          background:var(--bg-card,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:6px;cursor:pointer;
+          transition:background .1s" onmouseover="this.style.background='var(--bg-hover,#f1f5f9)'"
+          onmouseout="this.style.background='var(--bg-card,#f8fafc)'">
+          <input type="checkbox" class="_fc_file" data-filename="${f.filename}" data-msisdn="${msisdn}" checked
+            style="width:16px;height:16px;accent-color:#2563eb">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:500">${conf} ${f.filename}${subtype}</div>
+            <div style="font-size:11px;color:#64748b">${f.detail || f.operator_id || ''}</div>
+          </div>
+        </label>`;
+      }
+    }
+
+    // Undetected files
+    for (const f of undetected) {
+      body += `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;
+        background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;cursor:pointer">
+        <input type="checkbox" class="_fc_file" data-filename="${f.filename}" data-msisdn="" checked
+          style="width:16px;height:16px;accent-color:#d97706">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500">\u2753 ${f.filename}</div>
+          <div style="font-size:11px;color:#92400e">${f.detail || 'Nie rozpoznano abonenta'}</div>
+        </div>
+      </label>`;
+    }
+
+    // Use native <dialog> so #gsm_results DOM is never destroyed
+    let dlg = QS("#_fc_dialog");
+    if (dlg) dlg.remove();
+    dlg = document.createElement("dialog");
+    dlg.id = "_fc_dialog";
+    dlg.style.cssText = "max-width:520px;width:92vw;border-radius:12px;border:1px solid var(--border,#e2e8f0);padding:0;box-shadow:0 8px 32px rgba(0,0,0,.18)";
+    dlg.innerHTML = `<form method="dialog" style="padding:16px">
+      <h3 style="margin:0 0 8px;color:${reason === 'multi_subscriber' ? '#dc2626' : '#2563eb'}">${title}</h3>
+      <p style="margin:0 0 16px;color:#64748b;font-size:13px">${desc}</p>
+      ${body}
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button type="button" class="btn btn-sm" id="_fc_cancel" style="color:#64748b">Anuluj</button>
+        <button type="button" class="btn btn-primary btn-sm" id="_fc_confirm">\u2705 Zatwierd\u017A i analizuj</button>
+      </div>
+    </form>`;
+    document.body.appendChild(dlg);
+
+    // Bind confirm button
+    const confirmBtn = dlg.querySelector("#_fc_confirm");
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", () => {
+        const checked = [];
+        dlg.querySelectorAll("._fc_file:checked").forEach(cb => {
+          checked.push(cb.dataset.filename);
+        });
+        if (!checked.length) {
+          _addLog("error", "Nie wybrano \u017Cadnego pliku.");
+          return;
+        }
+        _addLog("info", `Zatwierdzone pliki: ${checked.join(", ")}`);
+        dlg.close();
+        dlg.remove();
+        _reimportWithConfirmedFiles(originalFiles, checked);
+      });
+    }
+
+    // Bind cancel
+    const cancelBtn = dlg.querySelector("#_fc_cancel");
+    if (cancelBtn) {
+      cancelBtn.addEventListener("click", () => {
+        dlg.close();
+        dlg.remove();
+        _addLog("info", "Anulowano import.");
+      });
+    }
+
+    dlg.showModal();
+  }
+
+  /**
+   * Re-submit import with user-confirmed file list.
+   */
+  async function _reimportWithConfirmedFiles(files, confirmedFilenames) {
+    if (St.analyzing) return;
+    St.analyzing = true;
+
+    const progress = QS("#gsm_progress");
+    const status = QS("#gsm_status");
+    const bar = QS("#gsm_bar");
+    const results = QS("#gsm_results");
+
+    if (progress) progress.style.display = "";
+    if (status) status.textContent = `Przetwarzanie ${confirmedFilenames.length} plik\u00F3w\u2026`;
+    if (bar) bar.style.width = "40%";
+    if (results) results.style.display = "none";
+
+    // Build FormData — only include files whose names are in confirmedFilenames
+    const fd = new FormData();
+    const fileArr = Array.from(files);
+    let appended = 0;
+    for (const f of fileArr) {
+      if (f && f.name) {
+        fd.append("files", f);
+        appended++;
+      }
+    }
+    if (!appended) {
+      _addLog("error", "Pliki stały się niedostępne — prześlij je ponownie.");
+      if (status) status.textContent = "Błąd: pliki niedostępne";
+      St.analyzing = false;
+      return;
+    }
+    fd.append("confirmed_files", JSON.stringify(confirmedFilenames));
+
+    try {
+      const resp = await fetch("/api/gsm/import", { method: "POST", body: fd });
+      const data = await resp.json();
+
+      if (bar) bar.style.width = "100%";
+
+      if (data.status !== "ok") {
+        const detail = _detailStr(data);
+        if (status) status.textContent = `B\u0142\u0105d: ${detail}`;
+        _addLog("error", detail);
+        St.analyzing = false;
+        return;
+      }
+
+      // Log scan results
+      const sc = data.scan || {};
+      _addLog("info", `Skanowanie: ${sc.billing_count || 0} biling\u00F3w`);
+
+      // Process identification
+      if (data.identification && data.identification.lookup) {
+        Object.assign(St.idMap, data.identification.lookup);
+      }
+      // Show drift banner if format changes detected
+      if (data.identification) {
+        _renderIdentDriftBanner(data.identification);
+      }
+
+      // Process billing
+      if (data.billing) {
+        const bd = data.billing;
+        if (bd.status === "ok") {
+          St.lastResult = bd;
+          St.filename = bd.filename || St.filename;
+          if (status) status.textContent = "Gotowe";
+          const merged = bd.merged_files ? ` (scalono: ${bd.merged_files.join(" + ")})` : "";
+          _addLog("info", `Biling: ${bd.record_count || 0} rekord\u00F3w (${bd.operator || "?"})${merged}`);
+          await _renderResults(bd);
+        } else {
+          const detail = bd.detail || "B\u0142\u0105d parsowania bilingu";
+          _addLog("error", `Biling: ${detail}`);
+          if (status) status.textContent = `B\u0142\u0105d bilingu: ${detail}`;
+        }
+      }
+
+      setTimeout(() => { if (progress) progress.style.display = "none"; }, 800);
+      await _saveToProject();
+
+    } catch (e) {
+      console.error("GSM re-import error:", e);
+      if (status) status.textContent = `B\u0142\u0105d: ${e.message}`;
+      _addLog("error", e.message);
+    } finally {
+      St.analyzing = false;
+    }
+  }
+
+  async function _smartImport(files) {
+    if (St.analyzing || !files || !files.length) return;
+    St.analyzing = true;
+
+    const fileNames = Array.from(files).map(f => f.name);
+    St.filename = fileNames[0];
+
+    const progress = QS("#gsm_progress");
+    const status = QS("#gsm_status");
+    const bar = QS("#gsm_bar");
+    const results = QS("#gsm_results");
+
+    if (progress) progress.style.display = "";
+    if (status) status.textContent = `Wczytywanie ${files.length} pliku(ów)…`;
+    if (bar) bar.style.width = "20%";
+    if (results) results.style.display = "none";
+
+    const fd = new FormData();
+    for (const f of files) {
+      fd.append("files", f);
+    }
+
+    try {
+      if (status) status.textContent = "Skanowanie i klasyfikacja plików…";
+      if (bar) bar.style.width = "40%";
+
+      const resp = await fetch("/api/gsm/import", { method: "POST", body: fd });
+
+      if (bar) bar.style.width = "80%";
+
+      // Handle non-JSON responses
+      let data;
+      const contentType = resp.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await resp.json();
+      } else {
+        const text = await resp.text();
+        console.error("GSM: non-JSON response:", resp.status, text.slice(0, 500));
+        const detail = `HTTP ${resp.status}: ${text.slice(0, 200)}`;
+        if (status) status.textContent = `Błąd: ${detail}`;
+        _addLog("error", detail);
+        St.analyzing = false;
+        return;
+      }
+
+      if (bar) bar.style.width = "100%";
+
+      // --- File confirmation dialog (multi-file, multi-subscriber, uncertainty) ---
+      if (data.status === "confirm_files") {
+        if (status) status.textContent = "Wymagane potwierdzenie plików";
+        const reason = (data.subscriber_grouping || {}).confirmation_reason || "";
+        if (reason === "multi_subscriber") {
+          _addLog("warn", "Przesłane pliki zawierają bilingi więcej niż jednego abonenta.");
+        } else if (reason === "complementary_files") {
+          _addLog("info", "Wykryto uzupełniające się pliki billingowe tego samego abonenta.");
+        } else {
+          _addLog("warn", "Wymagane potwierdzenie plików do analizy.");
+        }
+
+        // Process identification if returned
+        if (data.identification && data.identification.lookup) {
+          Object.assign(St.idMap, data.identification.lookup);
+        }
+        if (data.identification) _renderIdentDriftBanner(data.identification);
+
+        // Copy files to a stable Array (FileList may become stale if input resets)
+        const filesCopy = Array.from(files);
+        _showFileConfirmation(data.subscriber_grouping, filesCopy);
+        St.analyzing = false;
+        if (progress) progress.style.display = "none";
+        return;
+      }
+
+      if (data.status !== "ok") {
+        const detail = _detailStr(data);
+        console.error("GSM import error:", detail);
+        if (status) status.textContent = `Błąd: ${detail}`;
+        _addLog("error", detail);
+        St.analyzing = false;
+        return;
+      }
+
+      // Log scan results
+      const sc = data.scan || {};
+      _addLog("info", `Skanowanie: ${sc.total_files || 0} plików — `
+        + `${sc.billing_count || 0} bilingów, `
+        + `${sc.identification_count || 0} identyfikacji, `
+        + `${sc.unknown_count || 0} nierozpoznanych`
+        + (sc.zips_extracted ? `, ${sc.zips_extracted} ZIP rozp.` : ""));
+
+      // Log each scanned file
+      for (const sf of (sc.files || [])) {
+        const icon = sf.file_type === "billing" ? "📊" :
+                     sf.file_type === "identification" ? "🔍" :
+                     sf.file_type === "skipped" ? "⏭" : "❓";
+        _addLog("info", `  ${icon} ${sf.filename}: ${sf.detail || sf.file_type}`);
+      }
+
+      // Process identification data
+      if (data.identification && data.identification.lookup) {
+        Object.assign(St.idMap, data.identification.lookup);
+        const idCount = data.identification.total_records || 0;
+        _addLog("info", `Identyfikacja: ${idCount} rekordów załadowanych`);
+      }
+      if (data.identification) _renderIdentDriftBanner(data.identification);
+
+      // Process billing data
+      if (data.billing) {
+        const bd = data.billing;
+        if (bd.status === "ok") {
+          St.lastResult = bd;
+          St.filename = bd.filename || St.filename;
+          if (status) status.textContent = "Gotowe";
+          _addLog("info", `Biling: ${bd.record_count || 0} rekordów (${bd.operator || "?"})`);
+          await _renderResults(bd);
+        } else {
+          const detail = bd.detail || "Błąd parsowania bilingu";
+          _addLog("error", `Biling: ${detail}`);
+          if (status) status.textContent = `Błąd bilingu: ${detail}`;
+        }
+      } else if (!data.identification) {
+        // No billing and no identification found
+        if (status) status.textContent = "Nie znaleziono bilingów ani identyfikacji";
+        _addLog("warn", "Nie znaleziono plików bilingów ani identyfikacji w przesłanych danych");
+      } else {
+        // Only identification, no billing
+        if (status) status.textContent = "Załadowano identyfikację (brak bilingu)";
+        // Re-render if we already had billing loaded
+        if (St.lastResult) {
+          _renderDevices(St.lastResult.analysis, St.lastResult.records, St.lastResult.subscriber);
+          _renderAnalysis(St.lastResult.analysis);
+          _renderAnomalies(St.lastResult.analysis);
+          _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+        }
+      }
+
+      // Extra billings warning
+      if (data.extra_billings && data.extra_billings.length) {
+        _addLog("warn", `Dodatkowe bilingi (nie przetworzone): ${data.extra_billings.join(", ")}`);
+      }
+
+      setTimeout(() => {
+        if (progress) progress.style.display = "none";
+      }, 800);
+
+      // Auto-save to project (awaited to ensure it completes before navigation)
+      await _saveToProject();
+
+    } catch (e) {
+      console.error("GSM import error:", e);
+      const msg = e.message || String(e);
+      if (status) status.textContent = `Błąd: ${msg}`;
+      _addLog("error", msg);
+    } finally {
+      St.analyzing = false;
+    }
+  }
+
+  /* ── identification lookup helpers ─────────────────────── */
+
+  /**
+   * Normalise a phone number to 11-digit format (48XXXXXXXXX) to match
+   * the backend normalisation used by IdentificationStore.
+   */
+  function _normMsisdn(raw) {
+    if (!raw) return "";
+    let d = raw.replace(/\D/g, "");
+    if (d.length === 9) d = "48" + d;
+    if (d.length > 11 && d.startsWith("48")) d = d.slice(0, 11);
+    return d;
+  }
+
+  /**
+   * Look up a phone number in the identification map.
+   * Returns an object { label, type, css } or null.
+   */
+  function _idLookup(number) {
+    if (!number || !Object.keys(St.idMap).length) return null;
+    const n = _normMsisdn(number);
+    const rec = St.idMap[n];
+    if (!rec) return null;
+    const cssMap = {
+      person: "gsm-id-person",
+      company: "gsm-id-company",
+      other_operator: "gsm-id-other",
+      not_found: "gsm-id-notfound",
+      unknown: "gsm-id-unknown",
+    };
+    return {
+      label: rec.label || "",
+      type: rec.type || "unknown",
+      css: cssMap[rec.type] || "gsm-id-unknown",
+      rec: rec,
+    };
+  }
+
+  /**
+   * Build a rich tooltip text from all identification fields.
+   */
+  function _idTooltipText(rec) {
+    if (!rec) return "";
+    const lines = [];
+    const _f = (label, val) => { if (val) lines.push(`${label}: ${val}`); };
+    _f("Imię", rec.first_name);
+    _f("Nazwisko", rec.last_name);
+    _f("Nazwa", rec.name);
+    _f("PESEL", rec.pesel);
+    _f("NIP", rec.nip);
+    _f("REGON", rec.regon);
+    _f("Nr dokumentu", rec.document_number);
+    _f("Adres", rec.address);
+    _f("Miasto", rec.city);
+    _f("Adres korespond.", rec.correspondence_address);
+    _f("E-mail", rec.email);
+    _f("Operator", rec.operator);
+    _f("Typ umowy", rec.contract_type);
+    _f("Typ usługi", rec.service_type);
+    _f("Taryfa", rec.tariff);
+    _f("Status", rec.status);
+    _f("Aktywacja", rec.activation_date);
+    _f("Dezaktywacja", rec.deactivation_date);
+    _f("SIM", rec.sim);
+    _f("IMSI", rec.imsi);
+    _f("Typ abonenta", rec.subscriber_type);
+    _f("Uwagi", rec.notes);
+    return lines.join("\n");
+  }
+
+  /**
+   * Build a short display label: "Imię Nazwisko (PESEL)" or fallback to rec.label.
+   */
+  function _idShortLabel(rec) {
+    if (!rec) return "";
+    const parts = [];
+    if (rec.first_name) parts.push(rec.first_name);
+    if (rec.last_name) parts.push(rec.last_name);
+    if (parts.length === 0 && rec.name) parts.push(rec.name);
+    let label = parts.join(" ");
+    if (rec.pesel) label += ` (${rec.pesel})`;
+    return label || rec.label || "";
+  }
+
+  /**
+   * Render an identification cell value with rich hover tooltip (chmurka).
+   */
+  function _idCell(number) {
+    const info = _idLookup(number);
+    if (!info) return '<span class="muted">—</span>';
+    const rec = info.rec;
+    const displayLabel = _idShortLabel(rec);
+    const tooltip = _idTooltipText(rec);
+    const escaped = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    return `<span class="${info.css} gsm-id-tip" data-id-tip="${escaped}">${displayLabel}</span>`;
+  }
+
+  /* ── floating identification tooltip (chmurka) ─────────── */
+  let _idTipEl = null;
+  function _ensureIdTip() {
+    if (_idTipEl) return _idTipEl;
+    _idTipEl = document.createElement("div");
+    _idTipEl.className = "gsm-id-tooltip";
+    _idTipEl.style.display = "none";
+    document.body.appendChild(_idTipEl);
+    return _idTipEl;
+  }
+
+  document.addEventListener("mouseover", (e) => {
+    const span = e.target.closest(".gsm-id-tip[data-id-tip]");
+    if (!span) return;
+    const tip = _ensureIdTip();
+    const text = span.getAttribute("data-id-tip");
+    if (!text) return;
+    // Render as HTML table rows
+    const lines = text.split("\n").filter(Boolean);
+    let html = '<table class="gsm-id-tooltip-tbl">';
+    for (const line of lines) {
+      const idx = line.indexOf(": ");
+      if (idx > 0) {
+        html += `<tr><td class="gsm-id-tooltip-key">${line.slice(0, idx)}</td><td>${line.slice(idx + 2)}</td></tr>`;
+      } else {
+        html += `<tr><td colspan="2">${line}</td></tr>`;
+      }
+    }
+    html += "</table>";
+    tip.innerHTML = html;
+    tip.style.display = "block";
+    // Position near the element
+    const rect = span.getBoundingClientRect();
+    let left = rect.left + window.scrollX;
+    let top = rect.bottom + window.scrollY + 4;
+    // Keep within viewport
+    requestAnimationFrame(() => {
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+      if (left < 4) left = 4;
+      if (top + th > window.innerHeight + window.scrollY - 8) {
+        top = rect.top + window.scrollY - th - 4;
+      }
+      tip.style.left = left + "px";
+      tip.style.top = top + "px";
+    });
+  });
+
+  document.addEventListener("mouseout", (e) => {
+    const span = e.target.closest(".gsm-id-tip[data-id-tip]");
+    if (!span) return;
+    if (_idTipEl) _idTipEl.style.display = "none";
+  });
+
+  /* ── render ─────────────────────────────────────────────── */
+
+  /** Yield to the browser's main thread so the UI stays responsive. */
+  function _yieldToUI() {
+    return new Promise(resolve => setTimeout(resolve, 0));
+  }
+
+  /** Show/update/hide a rendering progress overlay. */
+  function _renderProgress(step, total, label) {
+    let bar = QS("#gsm_render_progress");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "gsm_render_progress";
+      bar.className = "gsm-render-progress";
+      bar.innerHTML = '<div class="gsm-render-progress-inner"><div class="gsm-render-progress-bar"></div><span class="gsm-render-progress-label"></span></div>';
+      const wrap = QS("#gsm_results");
+      if (wrap) wrap.prepend(bar);
+    }
+    const pct = Math.round((step / total) * 100);
+    const fill = bar.querySelector(".gsm-render-progress-bar");
+    const lbl = bar.querySelector(".gsm-render-progress-label");
+    if (fill) fill.style.width = pct + "%";
+    if (lbl) lbl.textContent = label || `Renderowanie… ${pct}%`;
+    bar.style.display = "";
+  }
+
+  function _hideRenderProgress() {
+    const bar = QS("#gsm_render_progress");
+    if (bar) bar.style.display = "none";
+  }
+
+  async function _renderResults(data) {
+    const wrap = QS("#gsm_results");
+    if (!wrap) return;
+    wrap.style.display = "";
+
+    // Hide empty state, show results
+    const empty = QS("#gsm_empty_state");
+    if (empty) empty.style.display = "none";
+    const gsmResults = QS("#gsm_results");
+    if (gsmResults) gsmResults.style.display = "";
+
+    // Render in stages, yielding to the browser between each
+    const stages = [
+      { fn: () => _renderInfo(data),                              label: "Informacje o bilingu…" },
+      { fn: () => _renderSummary(data.summary),                   label: "Podsumowanie…" },
+      { fn: () => _renderDevices(data.analysis, data.records, data.subscriber), label: "Urządzenia…" },
+      { fn: () => _renderAnalysis(data.analysis),                 label: "Analiza kontaktów…" },
+      { fn: () => _renderAnomalies(data.analysis),                label: "Wykrywanie anomalii…" },
+      { fn: () => _renderRecords(data.records, data.records_truncated, data.record_count), label: "Rekordy…" },
+      { fn: () => _renderSpecialNumbers(data.analysis ? data.analysis.special_numbers : []), label: "Numery specjalne…" },
+      { fn: () => _renderActivityCharts(data.analysis),           label: "Wykresy aktywności…" },
+      { fn: () => { St.hmActiveCell = null; _buildHeatmapData(data.records); _renderHeatmap(); }, label: "Mapa cieplna…" },
+      { fn: () => _renderMap(data.geolocation),                   label: "Mapa BTS…", async: true },
+      { fn: () => _renderOvernightStays(data.analysis),           label: "Nocowania…" },
+      { fn: () => _renderWarnings(data.warnings),                 label: "Ostrzeżenia…" },
+    ];
+
+    const total = stages.length;
+    for (let i = 0; i < total; i++) {
+      _renderProgress(i, total, stages[i].label);
+      await _yieldToUI();
+      try {
+        if (stages[i].async) {
+          await stages[i].fn();
+        } else {
+          stages[i].fn();
+        }
+      } catch (err) {
+        console.warn("[GSM] Stage", stages[i].label, "error:", err);
+      }
+    }
+
+    _renderProgress(total, total, "Finalizacja…");
+    await _yieldToUI();
+    _bindCardScreenshotButtons();
+    _applySectionLayout();
+    _hideRenderProgress();
+  }
+
+  function _renderInfo(data) {
+    const grid = QS("#gsm_info_grid");
+    if (!grid) return;
+
+    const sub = data.subscriber || {};
+    const meta = sub.extra || {};
+
+    // Parser version label
+    const parserVer = data.parser_version ? ` <span style="font-size:11px;opacity:.6">(parser v${data.parser_version})</span>` : "";
+
+    // Source files list (all billing + identification files used)
+    const srcFiles = data.source_files || [];
+    let filesHtml;
+    if (srcFiles.length > 1) {
+      const items = srcFiles.map(sf => {
+        const icon = sf.type === "billing" ? "\uD83D\uDCCA" : sf.type === "identification" ? "\uD83D\uDD0D" : "\uD83D\uDCC1";
+        const op = sf.operator ? ` <span style="opacity:.6">(${sf.operator})</span>` : "";
+        const notProc = sf.processed === false ? ' <span style="color:#f97316;font-size:11px">[nie przetw.]</span>' : "";
+        return `<div style="font-size:13px;line-height:1.6">${icon} ${sf.filename}${op}${notProc}</div>`;
+      });
+      filesHtml = items.join("");
+    } else {
+      filesHtml = data.filename || "\u2014";
+    }
+
+    // Subscriber identification info
+    const subNorm = _normMsisdn(sub.msisdn || "");
+    const subIdRec = subNorm && St.idMap && St.idMap[subNorm] ? St.idMap[subNorm] : null;
+    let subscriberHtml = "\u2014";
+    if (subIdRec) {
+      const fn = subIdRec.first_name || "";
+      const ln = subIdRec.last_name || "";
+      const name = (fn + " " + ln).trim() || subIdRec.name || "";
+      const isCo = subIdRec.type === "company" || !!(subIdRec.nip && subIdRec.nip.length >= 10);
+      const typeIcon = isCo ? "\u{1F3E2} " : "";
+      let idParts = [];
+      if (name) idParts.push(`<strong>${typeIcon}${_escHtml(name)}</strong>`);
+      if (subIdRec.pesel) idParts.push(`PESEL: <code>${subIdRec.pesel}</code>`);
+      if (subIdRec.nip) idParts.push(`NIP: <code>${subIdRec.nip}</code>`);
+      if (subIdRec.regon) idParts.push(`REGON: <code>${subIdRec.regon}</code>`);
+      if (subIdRec.address) idParts.push(_escHtml(subIdRec.address));
+      if (subIdRec.document_number) idParts.push(`Dok.: ${_escHtml(subIdRec.document_number)}`);
+      if (subIdRec.contract_type) idParts.push(subIdRec.contract_type);
+      if (subIdRec.tariff) idParts.push(subIdRec.tariff);
+      subscriberHtml = idParts.join(" &middot; ");
+    }
+
+    const rows = [
+      ["Pliki \u017ar\u00f3d\u0142owe", filesHtml],
+      ["Operator", (data.operator || "") + parserVer],
+      ["MSISDN", sub.msisdn || "\u2014"],
+      ["Abonent", subscriberHtml],
+    ];
+    if (meta.signature) rows.push(["Sygnatura", meta.signature]);
+    if (meta.order_id) rows.push(["Nr zlecenia", meta.order_id]);
+    if (meta.query_name) rows.push(["Zapytanie", meta.query_name]);
+
+    grid.innerHTML = rows
+      .map(([k, v]) => `<div class="gsm-info-label">${k}</div><div class="gsm-info-value">${v || "\u2014"}</div>`)
+      .join("");
+  }
+
+  function _dataSize(kb) {
+    if (!kb) return "0 KB";
+    if (kb < 1024) return kb.toFixed(1) + " KB";
+    const mb = kb / 1024;
+    if (mb < 1024) return mb.toFixed(1) + " MB";
+    return (mb / 1024).toFixed(2) + " GB";
+  }
+
+  function _renderSummary(s) {
+    const el = QS("#gsm_summary_grid");
+    if (!el || !s) return;
+
+    // Use call-only duration if available, fall back to total for older data
+    const callDur = s.call_duration_seconds != null ? s.call_duration_seconds : s.total_duration_seconds;
+
+    el.innerHTML = `
+      <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${_fmt(s.total_records)}</div>
+        <div class="gsm-stat-label">Rekordy</div>
+      </div>
+      <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${_fmt(s.calls_out + s.calls_in)}</div>
+        <div class="gsm-stat-label">Po\u0142\u0105czenia (${_fmt(s.calls_out)}\u2191 ${_fmt(s.calls_in)}\u2193)</div>
+      </div>
+      <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${_dur(callDur)}</div>
+        <div class="gsm-stat-label">Czas rozm\u00f3w (${_fmt(s.calls_out)}\u2191 ${_fmt(s.calls_in)}\u2193)</div>
+      </div>
+      <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${_fmt(s.sms_out + s.sms_in)}</div>
+        <div class="gsm-stat-label">SMS (${_fmt(s.sms_out)}\u2191 ${_fmt(s.sms_in)}\u2193)</div>
+      </div>
+      <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${_fmt(s.mms_out + s.mms_in)}</div>
+        <div class="gsm-stat-label">MMS (${_fmt(s.mms_out)}\u2191 ${_fmt(s.mms_in)}\u2193)</div>
+      </div>
+      <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${_dataSize(s.total_data_kb)}</div>
+        <div class="gsm-stat-label">Dane (${_fmt(s.data_sessions)} sesji)</div>
+      </div>
+      <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${_fmt(s.unique_contacts)}</div>
+        <div class="gsm-stat-label">Unikalne kontakty</div>
+      </div>
+      <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${s.period_from || "\u2014"}</div>
+        <div class="gsm-stat-label">Okres od</div>
+      </div>
+      <div class="gsm-stat-card">
+        <div class="gsm-stat-value">${s.period_to || "\u2014"}</div>
+        <div class="gsm-stat-label">Okres do</div>
+      </div>
+      ${s.roaming_records ? `<div class="gsm-stat-card"><div class="gsm-stat-value">${_fmt(s.roaming_records)}</div><div class="gsm-stat-label">Roaming</div></div>` : ""}
+    `;
+  }
+
+  /* ── Devices card (IMEI / IMSI analysis) ────────────────── */
+
+  function _renderDevices(analysis, records, subscriber) {
+    const card = QS("#gsm_devices_card");
+    const el   = QS("#gsm_devices_body");
+    if (!el) return;
+
+    const sub = subscriber || {};
+    const an = analysis || {};
+    const devList = an.devices || [];
+    const imeiChanges = an.imei_changes || [];
+    const dualImei = an.dual_imei || null;
+
+    // ── Build IMEI ↔ IMSI map from individual records ──
+    // Validate: IMEI must be 14-15 digits, IMSI must be 15 digits
+    const _validImei = v => { const d = (v || "").replace(/\D/g, ""); return d.length >= 14 && d.length <= 15 ? d : ""; };
+    const _validImsi = v => { const d = (v || "").replace(/\D/g, ""); return d.length === 15 ? d : ""; };
+    const imeiImsiMap = {};   // imei → Set of imsi
+    const imsiImeiMap = {};   // imsi → Set of imei
+    if (records && records.length) {
+      for (const r of records) {
+        const imei = _validImei(r.imei);
+        const imsi = _validImsi(r.imsi);
+        if (!imei) continue;
+        if (!imeiImsiMap[imei]) imeiImsiMap[imei] = new Set();
+        if (imsi) imeiImsiMap[imei].add(imsi);
+        if (imsi) {
+          if (!imsiImeiMap[imsi]) imsiImeiMap[imsi] = new Set();
+          imsiImeiMap[imsi].add(imei);
+        }
+      }
+    }
+
+    // ── Collect all known IMEI / IMSI (from records + subscriber header) ──
+    const allImeis = new Set(devList.map(d => _validImei(d.imei)).filter(Boolean));
+    if (sub.imei) { const v = _validImei(sub.imei); if (v) allImeis.add(v); }
+
+    const allImsis = new Set();
+    for (const s of Object.values(imeiImsiMap)) s.forEach(v => allImsis.add(v));
+    if (sub.imsi) { const v = _validImsi(sub.imsi); if (v) allImsis.add(v); }
+
+    // Nothing at all → hide card
+    if (allImeis.size === 0 && allImsis.size === 0) {
+      if (card) card.style.display = "none";
+      return;
+    }
+    if (card) card.style.display = "";
+
+    // Set of IMEI values that are part of the dual-IMEI device (voice + data)
+    const dualImeiSet = new Set();
+    if (dualImei) {
+      dualImeiSet.add(dualImei.voice_imei);
+      dualImeiSet.add(dualImei.data_imei);
+    }
+
+    const typeMap = { smartphone: "Smartfon", tablet: "Tablet", modem: "Modem", feature_phone: "Telefon", smartwatch: "Smartwatch" };
+    let html = "";
+
+    // ── Dual-IMEI detection info box ──
+    if (dualImei) {
+      html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:12px;border-left:3px solid #2563eb">
+        <strong>📱 Wykryto urządzenie z dwoma modemami</strong> (dual-modem / eSIM)<br>
+        <span style="font-size:12px">Połączenia i SMS używają innego IMEI niż transmisja danych.
+        To normalne zachowanie współczesnych telefonów — <strong>nie jest to zmiana urządzenia</strong>.</span>
+        <div style="margin-top:6px;font-size:12px;display:flex;gap:16px;flex-wrap:wrap">
+          <span>📞 Głos/SMS: <code>${dualImei.voice_imei}</code> <span class="muted">(${_fmt(dualImei.voice_records)} rek.)</span></span>
+          <span>📡 Dane: <code>${dualImei.data_imei}</code> <span class="muted">(${_fmt(dualImei.data_records)} rek.)</span></span>
+        </div>
+      </div>`;
+    }
+
+    // ── Devices table (if we have device analysis data) ──
+    const _devNotesMgr = window._gsmNotesMgr || null;
+    if (devList.length) {
+      html += `<table class="gsm-table"><thead><tr>
+        <th style="width:24px;padding:0"></th><th>IMEI</th><th>IMSI</th><th>Urządzenie</th><th>Typ</th><th>Producent</th><th>Alokacja TAC</th><th>Domena</th><th>Rekordy</th><th>Okres</th>
+      </tr></thead><tbody>`;
+      for (const d of devList) {
+        const name = d.display_name || (d.brand ? `<span class="muted">${d.brand} (model nieznany)</span>` : '<span class="muted">nieznane</span>');
+        const typeName = typeMap[d.type] || d.type || "—";
+        const period = d.first_seen ? (d.first_seen === d.last_seen ? d.first_seen : `${d.first_seen} – ${d.last_seen}`) : "—";
+        const imsis = imeiImsiMap[d.imei];
+        const imsiStr = imsis && imsis.size ? [...imsis].map(s => `<code>${s}</code>`).join(", ") : (sub.imsi ? `<code>${sub.imsi}</code>` : '<span class="muted">—</span>');
+        // Indicate voice/data domain if dual-IMEI
+        let domain = "—";
+        if (dualImei && d.imei === dualImei.voice_imei) domain = "📞 Głos/SMS";
+        else if (dualImei && d.imei === dualImei.data_imei) domain = "📡 Dane";
+        // IMEI display with Luhn check digit visualization
+        let imeiHtml = "?";
+        if (d.imei) {
+          if (d.luhn_computed && d.imei.length === 15) {
+            // Mark computed check digit with distinct style
+            imeiHtml = `<code>${d.imei.slice(0, 14)}</code><code style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:3px;padding:0 2px;margin-left:1px;font-weight:700" title="Cyfra kontrolna Luhn — wyliczona (oryginał: ${d.original_length} cyfr)">${d.imei[14]}</code>`;
+          } else {
+            imeiHtml = `<code>${d.imei}</code>`;
+          }
+        }
+        // Brand country / origin
+        const brandCountry = d.brand_country ? `<span class="muted" style="font-size:11px">${d.brand_country}</span>` : '<span class="muted">—</span>';
+        // TAC allocation country (Reporting Body)
+        let tacCountry = "—";
+        if (d.country) {
+          tacCountry = `${d.country}`;
+          if (d.reporting_body) tacCountry += ` <span class="muted" style="font-size:11px">(${d.reporting_body})</span>`;
+        }
+        const _devHasNote = _devNotesMgr && _devNotesMgr.hasNote("gsm_device", "imei", d.imei);
+        html += `<tr>
+          <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_devHasNote ? " has-note" : ""}" data-note-imei="${d.imei || ""}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(_devHasNote)}" alt="" width="14" height="14" draggable="false"></span></td>
+          <td>${imeiHtml}</td>
+          <td>${imsiStr}</td>
+          <td>${d.known ? `<strong>${name}</strong>` : name}</td>
+          <td>${typeName}</td>
+          <td>${brandCountry}</td>
+          <td style="font-size:12px">${tacCountry}</td>
+          <td style="font-size:12px">${domain}</td>
+          <td>${_fmt(d.record_count)}</td>
+          <td>${period}</td>
+        </tr>`;
+      }
+      html += "</tbody></table>";
+    } else {
+      // No device analysis — show subscriber-level IMEI/IMSI
+      html += `<div class="gsm-info-grid" style="margin-bottom:8px">`;
+      if (sub.imei) {
+        const dev = sub.device || {};
+        const devName = dev.display_name ? ` <span class="gsm-device-badge">${dev.display_name}</span>` : (dev.brand ? ` <span class="gsm-device-badge muted">${dev.brand} (model nieznany)</span>` : "");
+        // Luhn check digit visualization
+        let imeiDisplay;
+        if (dev.luhn_computed && sub.imei.length === 15) {
+          imeiDisplay = `<code>${sub.imei.slice(0, 14)}</code><code style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:3px;padding:0 2px;margin-left:1px;font-weight:700" title="Cyfra kontrolna Luhn — wyliczona (oryginał: ${dev.original_length} cyfr)">${sub.imei[14]}</code>`;
+        } else {
+          imeiDisplay = `<code>${sub.imei}</code>`;
+        }
+        let countryInfo = "";
+        if (dev.country) {
+          countryInfo += ` <span class="muted" style="font-size:11px">Alokacja: ${dev.country}`;
+          if (dev.reporting_body) countryInfo += ` (${dev.reporting_body})`;
+          countryInfo += `</span>`;
+        }
+        if (dev.brand_country) {
+          countryInfo += ` <span class="muted" style="font-size:11px">| Producent: ${dev.brand_country}</span>`;
+        }
+        html += `<div class="gsm-info-label">IMEI</div><div class="gsm-info-value">${imeiDisplay}${devName}${countryInfo}</div>`;
+      }
+      if (sub.imsi) {
+        html += `<div class="gsm-info-label">IMSI</div><div class="gsm-info-value"><code>${sub.imsi}</code></div>`;
+      }
+      html += `</div>`;
+    }
+
+    // ── IMEI changes timeline (limited with slider) ──
+    if (imeiChanges && imeiChanges.length) {
+      const IMEI_INIT = 5;
+      const total = imeiChanges.length;
+      html += `<div style="margin-top:12px"><div class="h3" style="margin-bottom:6px">Zmiany IMEI <span class="muted" style="font-weight:400;font-size:12px">(${total})</span></div>`;
+      for (let i = 0; i < total; i++) {
+        const ch = imeiChanges[i];
+        const oldDev = ch.old_device ? ` (${ch.old_device})` : "";
+        const newDev = ch.new_device ? ` (${ch.new_device})` : "";
+        const grp = ch.group === "data" ? " [dane]" : ch.group === "voice" ? " [głos]" : "";
+        const hide = i >= IMEI_INIT ? ' style="display:none"' : "";
+        html += `<div class="gsm-anomaly gsm-anomaly-medium _imei_ch"${hide}>${ch.date || ""}${grp}: ${ch.old_imei || "?"}${oldDev} → ${ch.new_imei || "?"}${newDev}</div>`;
+      }
+      if (total > IMEI_INIT) {
+        html += `<div style="margin-top:8px;display:flex;align-items:center;gap:10px;font-size:12px">
+          <span class="muted">Widoczne:</span>
+          <input type="range" id="_imei_slider" min="${IMEI_INIT}" max="${total}" value="${IMEI_INIT}"
+            style="flex:1;max-width:220px;accent-color:#2563eb">
+          <span id="_imei_slider_val">${IMEI_INIT} / ${total}</span>
+        </div>`;
+      }
+      html += "</div>";
+    }
+
+    // ── IMEI / IMSI relationship analysis ──
+    const nImei = allImeis.size;
+    const nImsi = allImsis.size;
+    const findings = [];
+
+    // Multiple IMEIs for one IMSI → phone changes (same SIM, different phones)
+    // BUT skip if both IMEIs belong to dual-IMEI device (same device, different modems)
+    for (const [imsi, imeis] of Object.entries(imsiImeiMap)) {
+      if (imeis.size > 1) {
+        const imeiArr = [...imeis];
+        const allDual = dualImei && imeiArr.every(i => dualImeiSet.has(i));
+        if (!allDual) {
+          const nonDual = dualImei ? imeiArr.filter(i => !dualImeiSet.has(i)) : imeiArr;
+          if (nonDual.length > 1 || !dualImei) {
+            findings.push({
+              type: "phone_change",
+              msg: `IMSI <code>${imsi}</code> — wykryto <strong>${imeis.size} różnych IMEI</strong> (${imeiArr.map(i => `<code>${i}</code>`).join(", ")}). Abonent zmieniał telefony korzystając z tej samej karty SIM.`
+            });
+          }
+        }
+      }
+    }
+    // One IMEI with multiple IMSIs → SIM changes (same phone, different SIMs)
+    // BUT skip if both are from the same dual-IMEI device (voice IMSI ≠ data IMSI is normal)
+    for (const [imei, imsis] of Object.entries(imeiImsiMap)) {
+      if (imsis.size > 1) {
+        const isDualDevice = dualImeiSet.has(imei);
+        if (!isDualDevice) {
+          findings.push({
+            type: "sim_change",
+            msg: `IMEI <code>${imei}</code> — wykryto <strong>${imsis.size} różnych IMSI</strong> (${[...imsis].map(s => `<code>${s}</code>`).join(", ")}). W tym urządzeniu zmieniano karty SIM.`
+          });
+        }
+      }
+    }
+
+    html += `<div style="margin-top:12px"><div class="h3" style="margin-bottom:6px">Analiza IMEI / IMSI</div>`;
+    // Count "logical" devices — if dual-IMEI, count those 2 IMEIs as 1 device
+    const logicalDevices = dualImei ? nImei - 1 : nImei;
+    html += `<div style="margin-bottom:8px;font-size:13px">Unikalne IMEI: <strong>${nImei}</strong>${dualImei ? ` (${logicalDevices} urz. fizyczne — 2 IMEI = 1 dual-modem)` : ""} &nbsp;|&nbsp; Unikalne IMSI: <strong>${nImsi}</strong></div>`;
+
+    if (findings.length) {
+      for (const f of findings) {
+        const cls = f.type === "phone_change" ? "gsm-anomaly-medium" : (f.type === "sim_change" ? "gsm-anomaly-high" : "gsm-anomaly-medium");
+        html += `<div class="gsm-anomaly ${cls}" style="margin-bottom:4px">${f.msg}</div>`;
+      }
+    } else if (logicalDevices > 1 || nImsi > 1) {
+      // Multiple devices or SIMs but no specific findings — show summary without "no changes"
+      const devMsg = logicalDevices > 1 ? `${logicalDevices} urządzeń` : "jednego urządzenia";
+      const simMsg = nImsi > 1 ? `${nImsi} kartami SIM` : "jedną kartą SIM";
+      html += `<div class="gsm-anomaly gsm-anomaly-medium" style="margin-bottom:4px">W okresie analizy używano ${devMsg}${dualImei ? " (dual-modem)" : ""} z ${simMsg}.</div>`;
+    } else {
+      html += `<div class="gsm-anomaly gsm-anomaly-low" style="margin-bottom:4px">Brak zmian — w całym okresie używano jednego urządzenia${dualImei ? " (dual-modem)" : ""} z jedną kartą SIM. Nie wykryto zmian telefonów ani kart SIM.</div>`;
+    }
+    html += "</div>";
+
+    // ── Identyfikacja innych numerów abonenta ──
+    // Check if the subscriber's PESEL/NIP/name is associated with other phone numbers in idMap
+    {
+      const idMap = St.idMap || {};
+      const subMsisdn = St.lastResult && St.lastResult.subscriber ? (St.lastResult.subscriber.msisdn || "") : "";
+      const subNorm = _normMsisdn(subMsisdn);
+      // Get the subscriber's identification record
+      const subIdRec = subNorm && idMap[subNorm] ? idMap[subNorm] : null;
+      // Collect identifiers to match: PESEL, NIP, full name
+      const subPesel = subIdRec && subIdRec.pesel ? subIdRec.pesel : "";
+      const subNip = subIdRec && subIdRec.nip ? subIdRec.nip : "";
+      const subName = subIdRec ? (subIdRec.name || "").trim().toLowerCase() : "";
+
+      const otherNumbers = []; // { msisdn, rec, matchBy }
+      if (subPesel || subNip || subName) {
+        for (const [msisdn, rec] of Object.entries(idMap)) {
+          if (msisdn === subNorm) continue; // skip self
+          if (!rec) continue;
+          let matchBy = "";
+          if (subPesel && rec.pesel === subPesel) {
+            matchBy = "PESEL";
+          } else if (subNip && rec.nip === subNip) {
+            matchBy = "NIP";
+          } else if (subName && subName.length > 3 && (rec.name || "").trim().toLowerCase() === subName) {
+            matchBy = "nazwa";
+          }
+          if (matchBy) {
+            otherNumbers.push({ msisdn, rec, matchBy });
+          }
+        }
+      }
+
+      html += `<div style="margin-top:14px"><div class="h3" style="margin-bottom:6px">Identyfikacja innych numer\u00F3w abonenta</div>`;
+      if (otherNumbers.length > 0) {
+        html += `<div style="margin-bottom:6px;font-size:13px;color:#d97706"><strong>${otherNumbers.length}</strong> ${otherNumbers.length === 1 ? "inny numer" : "inne numery"} powiązane z tym abonentem w danych identyfikacyjnych</div>`;
+        html += `<table class="gsm-table" style="font-size:12px"><thead><tr>`;
+        html += `<th>Numer</th><th>Imi\u0119 Nazwisko / Firma</th><th>PESEL / NIP</th><th>Operator</th><th>Dopasowanie</th>`;
+        html += `</tr></thead><tbody>`;
+        for (const o of otherNumbers) {
+          const r = o.rec;
+          const isCompany = r.type === "company" || !!(r.nip && r.nip.length >= 10);
+          const nameParts = [];
+          if (r.first_name) nameParts.push(r.first_name);
+          if (r.last_name) nameParts.push(r.last_name);
+          const nameStr = nameParts.length ? nameParts.join(" ") : (r.name || "\u2014");
+          const idStr = isCompany
+            ? (r.nip ? `NIP: ${r.nip}` : (r.regon ? `REGON: ${r.regon}` : "\u2014"))
+            : (r.pesel || "\u2014");
+          const typeIcon = isCompany ? "\u{1F3E2} " : "";
+          const tooltip = _idTooltipText(r);
+          const tipEsc = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+          const matchBadge = `<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 6px;font-size:11px">${o.matchBy}</span>`;
+          html += `<tr>`;
+          html += `<td><code>+${o.msisdn}</code></td>`;
+          html += `<td class="gsm-id-tip" data-id-tip="${tipEsc}">${typeIcon}${_escHtml(nameStr)}</td>`;
+          html += `<td>${idStr}</td>`;
+          html += `<td>${_escHtml(r.operator || "\u2014")}</td>`;
+          html += `<td>${matchBadge}</td>`;
+          html += `</tr>`;
+        }
+        html += `</tbody></table>`;
+      } else {
+        html += `<div class="small muted" style="padding:4px 0">Nie znaleziono innych numer\u00F3w powiązanych z tym abonentem w danych identyfikacyjnych. `;
+        if (!subIdRec) {
+          html += `Brak danych identyfikacyjnych dla numeru abonenta.`;
+        } else if (!subPesel && !subNip) {
+          html += `Abonent nie posiada PESEL ani NIP w danych identyfikacyjnych — dopasowanie tylko po nazwie.`;
+        }
+        html += `</div>`;
+      }
+      html += "</div>";
+    }
+
+    el.innerHTML = html;
+
+    // Bind IMEI changes slider
+    const slider = el.querySelector("#_imei_slider");
+    if (slider) {
+      const valSpan = el.querySelector("#_imei_slider_val");
+      const items = el.querySelectorAll("._imei_ch");
+      slider.addEventListener("input", () => {
+        const show = parseInt(slider.value, 10);
+        items.forEach((it, idx) => { it.style.display = idx < show ? "" : "none"; });
+        if (valSpan) valSpan.textContent = `${show} / ${items.length}`;
+      });
+    }
+
+    // Bind device note markers
+    if (_devNotesMgr) {
+      el.querySelectorAll(".analyst-note-marker[data-note-imei]").forEach(marker => {
+        marker.addEventListener("click", function(e) {
+          e.stopPropagation();
+          const imei = this.getAttribute("data-note-imei");
+          if (!imei) return;
+          const dev = devList.find(d => d.imei === imei);
+          const devName = dev && dev.display_name ? dev.display_name : "nieznane";
+          const label = "Urządzenie: IMEI " + imei.slice(-6) + " (" + devName + ")";
+          const ref = { type: "gsm_device", imei: imei, snapshot: { display_name: devName } };
+          _devNotesMgr.openNoteForElement(label, "phone", ref);
+        });
+      });
+    }
+  }
+
+  function _renderAnalysis(a) {
+    const el = QS("#gsm_analysis_body");
+    if (!el || !a) return;
+
+    let html = "";
+
+    // Top contacts
+    const _tcNm = window._gsmNotesMgr || null;
+    if (a.top_contacts && a.top_contacts.length) {
+      html += `<div class="gsm-section"><div class="h3">Top kontakty</div><table class="gsm-table"><thead><tr>
+        <th style="width:24px;padding:0"></th><th>Numer</th><th>Identyfikacja</th><th>Interakcje</th><th>Rozmowy ↑</th><th>Rozmowy ↓</th><th>SMS ↑</th><th>SMS ↓</th><th>Czas rozmów</th><th>Aktywne dni</th>
+      </tr></thead><tbody>`;
+      for (const c of a.top_contacts.slice(0, 20)) {
+        const _tcHn = _tcNm && _tcNm.hasNote("gsm_contact", "number", c.number);
+        html += `<tr>
+          <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_tcHn ? " has-note" : ""}" data-note-contact="${c.number}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(_tcHn)}" alt="" width="14" height="14" draggable="false"></span></td>
+          <td><code>${c.number}</code></td>
+          <td>${_idCell(c.number)}</td>
+          <td>${_fmt(c.total_interactions)}</td>
+          <td>${_fmt(c.calls_out)}</td><td>${_fmt(c.calls_in)}</td>
+          <td>${_fmt(c.sms_out)}</td><td>${_fmt(c.sms_in)}</td>
+          <td>${_dur(c.total_duration_seconds)}</td>
+          <td>${c.active_days}</td>
+        </tr>`;
+      }
+      html += "</tbody></table>";
+      html += "</div>";
+    }
+
+    // Stats
+    if (a.avg_call_duration || a.longest_call_seconds) {
+      html += `<div class="gsm-section"><div class="h3">Statystyki połączeń</div><div class="gsm-stats-row">`;
+      html += `<span>Śr. czas: <b>${_dur(Math.round(a.avg_call_duration || 0))}</b></span>`;
+      html += `<span>Mediana: <b>${_dur(Math.round(a.median_call_duration || 0))}</b></span>`;
+      html += `<span>Najdłuższe: <b>${_dur(a.longest_call_seconds || 0)}</b> (${a.longest_call_contact || "—"})</span>`;
+      if (a.busiest_date) html += `<span>Najaktywniejszy dzień: <b>${a.busiest_date}</b> (${a.busiest_date_count} zdarzeń)</span>`;
+      html += `</div></div>`;
+    }
+
+    el.innerHTML = html || '<div class="small muted">Brak danych do analizy.</div>';
+
+    // Bind contact note markers
+    if (_tcNm) {
+      el.querySelectorAll(".analyst-note-marker[data-note-contact]").forEach(marker => {
+        marker.addEventListener("click", function(e) {
+          e.stopPropagation();
+          const num = this.getAttribute("data-note-contact");
+          if (!num) return;
+          const info = _idLookup(num);
+          const label = "Kontakt: " + (info && info.label ? info.label + " (" + num + ")" : num);
+          const ref = { type: "gsm_contact", number: num };
+          _tcNm.openNoteForElement(label, "user", ref);
+        });
+      });
+    }
+
+    // Render contact relationship graph (SVG) — separate card
+    const graphCard = QS("#gsm_graph_card");
+    if (a.top_contacts && a.top_contacts.length && graphCard) {
+      graphCard.style.display = "";
+      St._graphContacts = a.top_contacts;
+      const msisdn = (St.lastResult && St.lastResult.subscriber)
+        ? St.lastResult.subscriber.msisdn || "" : "";
+      St._graphMsisdn = msisdn;
+      const topN = parseInt(QS("#gsm_graph_top_n")?.value || "10");
+      _renderContactGraph(a.top_contacts.slice(0, topN), msisdn);
+
+      // Wire top-N selector
+      const topSel = QS("#gsm_graph_top_n");
+      if (topSel) topSel.onchange = () => {
+        const n = parseInt(topSel.value);
+        QS("#gsm_graph_filter").value = "all";
+        // Reset manual resize so auto-scaling can adapt to new count
+        const gc = QS("#gsm_graph_card");
+        if (gc) { delete gc.dataset.userResized; gc.style.height = ""; }
+        _renderContactGraph(St._graphContacts.slice(0, n), St._graphMsisdn);
+      };
+      // Wire type filter
+      const filtSel = QS("#gsm_graph_filter");
+      if (filtSel) filtSel.onchange = () => _applyGraphFilter(filtSel.value);
+    } else if (graphCard) {
+      graphCard.style.display = "none";
+    }
+  }
+
+  /* ── Anomalies card ──────────────────────────────────────── */
+
+  // Canonical category definitions — always shown, always in this order
+  const _ANOMALY_CATS = [
+    { type: "long_call",        label: "D\u0142ugie po\u0142\u0105czenia",               desc: "Po\u0142\u0105czenia trwaj\u0105ce ponad zadany pr\u00F3g czasowy", configurable: true },
+    { type: "late_night_calls", label: "Po\u0142\u0105czenia g\u0142osowe w nocy",       desc: "Rozmowy telefoniczne mi\u0119dzy 00:00 a 05:00 (d\u0142u\u017Csze ni\u017C 10 sek.)" },
+    { type: "night_activity",   label: "Wysoka aktywno\u015B\u0107 nocna",          desc: "Ponad 30% wszystkich zdarze\u0144 (po\u0142\u0105czenia, SMS, dane) przypada na godziny 23:00\u201305:00" },
+    { type: "night_movement",   label: "Przemieszczanie nocne",           desc: "Zmiana stacji BTS mi\u0119dzy kolejnymi zdarzeniami nocnymi (23:00\u201305:00) \u2014 wskazuje na ruch urz\u0105dzenia w nocy" },
+    { type: "burst_activity",   label: "Nag\u0142y wzrost aktywno\u015Bci",         desc: "Co najmniej 20 rekord\u00F3w (po\u0142\u0105czenia/SMS) w ci\u0105gu 30 minut \u2014 mo\u017Ce wskazywa\u0107 na masowe wysy\u0142anie SMS, automatyczne systemy lub intensywn\u0105 komunikacj\u0119" },
+    { type: "premium_number",   label: "Numery premium / p\u0142atne",        desc: "Kontakty z numerami o podwy\u017Cszonej op\u0142acie (70x, 80x)" },
+    { type: "roaming",          label: "Aktywno\u015B\u0107 w sieciach zagranicznych", desc: "Rekordy z flag\u0105 roamingu lub z sieci\u0105 zagraniczn\u0105. Szczeg\u00F3\u0142y wyjazd\u00F3w \u2014 patrz sekcja \u201EPrzekroczenia granic\u201D" },
+    { type: "foreign_contacts", label: "Interakcje z numerami zagranicznymi", desc: "Po\u0142\u0105czenia i SMS z numerami zagranicznymi (spoza Polski). Dla ka\u017Cdego kraju podano liczb\u0119 interakcji i numery." },
+    { type: "foreigners",       label: "Obcokrajowcy", desc: "Kontakty zidentyfikowane jako potencjalni obcokrajowcy \u2014 na podstawie numeru, danych identyfikacyjnych (PESEL, dokument) i heurystyki nazwiskowej." },
+    { type: "forwarded_calls",  label: "Przekierowania po\u0142\u0105cze\u0144",         desc: "Po\u0142\u0105czenia przekierowane na inny numer. Obsługiwane parsery: Plus, Play, T-Mobile." },
+    { type: "one_time_contacts",label: "Jednorazowe kontakty",            desc: "Numery telefon\u00F3w z kt\u00F3rymi by\u0142 dok\u0142adnie jeden kontakt w ca\u0142ym okresie bilingu" },
+    { type: "satellite_numbers",label: "Numery satelitarne",              desc: "Po\u0142\u0105czenia z numerami telefon\u00F3w satelitarnych (Iridium, Inmarsat, Thuraya, Globalstar i in.)" },
+    { type: "social_media",     label: "Konta spo\u0142eczno\u015Bciowe / komunikatory", desc: "Nazwy komunikator\u00F3w i platform spo\u0142eczno\u015Bciowych wykryte w polach bilingu (WhatsApp, Telegram, Viber, Facebook, VKontakte, WeChat i in.)" },
+    { type: "inactivity_gap",   label: "Brak aktywno\u015Bci", desc: "Okresy bez \u017Cadnego zdarzenia (po\u0142\u0105czenia, SMS, dane). Podano ostatni i pierwszy kontakt.", configurable: true },
+    { type: "meeting_after_call", label: "Spotkanie po po\u0142\u0105czeniu", desc: "Po\u0142\u0105czenie przychodz\u0105ce, po kt\u00F3rym telefon pozostaje w tym samym BTS bez aktywno\u015Bci \u2014 mo\u017Cliwe spotkanie.", configurable: true },
+  ];
+
+  // ── Inactivity gap: configurable threshold (default 12h) ──
+  let _inactivityThresholdH = 12;
+
+  // ── Long call: configurable threshold (default 1h = 60 min) ──
+  let _longCallThresholdMin = 60;
+
+  /**
+   * Detect long calls from records on the frontend.
+   * Overrides backend _detect_long_calls (respects custom threshold).
+   */
+  function _detectLongCalls(minMinutes) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!records.length) return [];
+    const thresholdSec = minMinutes * 60;
+    const items = [];
+    for (const r of records) {
+      if (!r.duration_seconds || r.duration_seconds <= thresholdSec) continue;
+      const rt = (r.record_type || "").toUpperCase();
+      if (!rt.includes("CALL") && !rt.includes("VOICE") && !rt.includes("ROZMOW") && !rt.includes("POŁ")) continue;
+      items.push({
+        contact: r.callee || r.caller || "nieznany",
+        duration_min: Math.round(r.duration_seconds / 60),
+        date: r.date || "",
+        time: r.time || "",
+      });
+    }
+    return items;
+  }
+
+  /**
+   * Detect inactivity gaps from records on the frontend.
+   * Same logic as backend _detect_inactivity_gaps but in JS.
+   */
+  function _detectInactivityGaps(minHours) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!records.length) return [];
+
+    // Parse datetime and sort
+    const parsed = [];
+    for (const r of records) {
+      if (!r.datetime && (!r.date || !r.time)) continue;
+      const dtStr = r.datetime || (r.date + " " + r.time);
+      const dt = new Date(dtStr.replace(" ", "T"));
+      if (isNaN(dt.getTime())) continue;
+      parsed.push({ dt, r });
+    }
+    if (parsed.length < 2) return [];
+    parsed.sort((a, b) => a.dt - b.dt);
+
+    const thresholdMs = minHours * 3600 * 1000;
+    const items = [];
+    for (let i = 1; i < parsed.length; i++) {
+      const prev = parsed[i - 1];
+      const curr = parsed[i];
+      const gapMs = curr.dt - prev.dt;
+      if (gapMs >= thresholdMs) {
+        items.push({
+          gap_hours: Math.round(gapMs / 3600000 * 10) / 10,
+          last_date: prev.r.date || "",
+          last_time: prev.r.time || "",
+          last_contact: prev.r.callee || prev.r.caller || "\u2014",
+          last_type: prev.r.record_type || "",
+          first_date: curr.r.date || "",
+          first_time: curr.r.time || "",
+          first_contact: curr.r.callee || curr.r.caller || "\u2014",
+          first_type: curr.r.record_type || "",
+        });
+      }
+    }
+    return items;
+  }
+
+  // ── Meeting after call: configurable window (default 60 min) ──
+  let _meetingWindowMin = 60;
+
+  /**
+   * Detect "meeting after call" pattern:
+   * 1. Incoming call (any)
+   * 2. After the call, within windowMin minutes:
+   *    - max 1 other event (allows a single SMS notification)
+   *    - phone stays on same BTS (no cell_id / lac change)
+   * Returns list of detected meeting patterns.
+   */
+  function _detectMeetingAfterCall(windowMin) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!records.length) return [];
+
+    // Parse datetime and sort
+    const parsed = [];
+    for (const r of records) {
+      if (!r.datetime && (!r.date || !r.time)) continue;
+      const dtStr = r.datetime || (r.date + " " + r.time);
+      const dt = new Date(dtStr.replace(" ", "T"));
+      if (isNaN(dt.getTime())) continue;
+      parsed.push({ dt, r });
+    }
+    if (parsed.length < 2) return [];
+    parsed.sort((a, b) => a.dt - b.dt);
+
+    const windowMs = windowMin * 60 * 1000;
+    const items = [];
+
+    for (let i = 0; i < parsed.length; i++) {
+      const entry = parsed[i];
+      const rec = entry.r;
+
+      // Check if this is an incoming call
+      const rt = (rec.record_type || "").toUpperCase();
+      const isIncoming = rt.includes("INCOMING") || rt.includes("PRZYCHODZĄCE") || rt.includes("PRZYCHODZACE")
+        || (rt.includes("CALL") && (rec.direction || "").toUpperCase() === "IN")
+        || rt.includes("MT_CALL") || rt.includes("VOICE_MT");
+      if (!isIncoming) continue;
+
+      // Get BTS info from this record
+      const triggerBts = rec.cell_id || rec.lac || rec.bts_address || "";
+
+      // Look at records within the window after this call
+      const windowEnd = entry.dt.getTime() + windowMs;
+      let eventCount = 0;
+      let btsChanged = false;
+      let silenceEnd = null; // first record AFTER the window (or end of data)
+
+      for (let j = i + 1; j < parsed.length; j++) {
+        const next = parsed[j];
+        if (next.dt.getTime() > windowEnd) {
+          silenceEnd = next;
+          break;
+        }
+        eventCount++;
+        // Check BTS change
+        if (triggerBts) {
+          const nextBts = next.r.cell_id || next.r.lac || next.r.bts_address || "";
+          if (nextBts && nextBts !== triggerBts) {
+            btsChanged = true;
+            break;
+          }
+        }
+      }
+
+      // Conditions: max 1 event in window AND no BTS change
+      if (eventCount <= 1 && !btsChanged) {
+        const dur = rec.duration_seconds || rec.duration || 0;
+        const durStr = dur > 0 ? `${dur}s` : "0s (nieodebrane)";
+        const silenceMin = silenceEnd
+          ? Math.round((silenceEnd.dt - entry.dt) / 60000)
+          : Math.round((windowEnd - entry.dt.getTime()) / 60000);
+        items.push({
+          date: rec.date || "",
+          time: rec.time || "",
+          caller: rec.caller || rec.callee || "\u2014",
+          duration: durStr,
+          duration_s: typeof dur === "number" ? dur : 0,
+          bts: triggerBts || "\u2014",
+          silence_min: silenceMin,
+          events_in_window: eventCount,
+          next_date: silenceEnd ? (silenceEnd.r.date || "") : "",
+          next_time: silenceEnd ? (silenceEnd.r.time || "") : "",
+        });
+      }
+    }
+    return items;
+  }
+
+  // ── Phone prefix → country lookup (longest-match, sorted by prefix length desc) ──
+  const _PHONE_PREFIXES = [
+    ["+1242","BS","Bahamy"],["+1246","BB","Barbados"],["+1264","AI","Anguilla"],
+    ["+1268","AG","Antigua i Barbuda"],["+1284","VG","Bryt. Wyspy Dziewicze"],
+    ["+1340","VI","Wyspy Dziewicze USA"],["+1345","KY","Kajmany"],
+    ["+1441","BM","Bermudy"],["+1473","GD","Grenada"],["+1649","TC","Turks i Caicos"],
+    ["+1658","JM","Jamajka"],["+1664","MS","Montserrat"],["+1670","MP","Mariany Północne"],
+    ["+1671","GU","Guam"],["+1684","AS","Samoa Amerykańskie"],["+1721","SX","Sint Maarten"],
+    ["+1758","LC","Saint Lucia"],["+1767","DM","Dominika"],
+    ["+1784","VC","Saint Vincent"],["+1787","PR","Portoryko"],
+    ["+1809","DO","Dominikana"],["+1829","DO","Dominikana"],["+1849","DO","Dominikana"],
+    ["+1868","TT","Trynidad i Tobago"],["+1869","KN","Saint Kitts i Nevis"],
+    ["+1876","JM","Jamajka"],["+1939","PR","Portoryko"],
+    ["+993","TM","Turkmenistan"],["+992","TJ","Tadżykistan"],["+998","UZ","Uzbekistan"],
+    ["+996","KG","Kirgistan"],["+995","GE","Gruzja"],["+994","AZ","Azerbejdżan"],
+    ["+977","NP","Nepal"],["+976","MN","Mongolia"],["+975","BT","Bhutan"],
+    ["+974","QA","Katar"],["+973","BH","Bahrajn"],["+972","IL","Izrael"],
+    ["+971","AE","ZEA"],["+970","PS","Palestyna"],["+968","OM","Oman"],
+    ["+967","YE","Jemen"],["+966","SA","Arabia Saudyjska"],["+965","KW","Kuwejt"],
+    ["+964","IQ","Irak"],["+963","SY","Syria"],["+962","JO","Jordania"],
+    ["+961","LB","Liban"],["+960","MV","Malediwy"],
+    ["+886","TW","Tajwan"],["+880","BD","Bangladesz"],["+856","LA","Laos"],
+    ["+855","KH","Kambodża"],["+853","MO","Makau"],["+852","HK","Hongkong"],
+    ["+850","KP","Korea Północna"],
+    ["+692","MH","Wyspy Marshalla"],["+691","FM","Mikronezja"],["+690","TK","Tokelau"],
+    ["+689","PF","Polinezja Francuska"],["+688","TV","Tuvalu"],
+    ["+687","NC","Nowa Kaledonia"],["+686","KI","Kiribati"],["+685","WS","Samoa"],
+    ["+683","NU","Niue"],["+682","CK","Wyspy Cooka"],["+681","WF","Wallis i Futuna"],
+    ["+680","PW","Palau"],["+679","FJ","Fidżi"],["+678","VU","Vanuatu"],
+    ["+677","SB","Wyspy Salomona"],["+676","TO","Tonga"],["+675","PG","Papua-Nowa Gwinea"],
+    ["+674","NR","Nauru"],["+673","BN","Brunei"],["+672","NF","Norfolk"],
+    ["+670","TL","Timor Wschodni"],
+    ["+599","CW","Curaçao"],["+598","UY","Urugwaj"],["+597","SR","Surinam"],
+    ["+596","MQ","Martynika"],["+595","PY","Paragwaj"],["+594","GF","Gujana Francuska"],
+    ["+593","EC","Ekwador"],["+592","GY","Gujana"],["+591","BO","Boliwia"],
+    ["+590","GP","Gwadelupa"],
+    ["+509","HT","Haiti"],["+508","PM","Saint-Pierre i Miquelon"],["+507","PA","Panama"],
+    ["+506","CR","Kostaryka"],["+505","NI","Nikaragua"],["+504","HN","Honduras"],
+    ["+503","SV","Salwador"],["+502","GT","Gwatemala"],["+501","BZ","Belize"],
+    ["+500","FK","Falklandy"],
+    ["+423","LI","Liechtenstein"],["+421","SK","Słowacja"],["+420","CZ","Czechy"],
+    ["+389","MK","Macedonia Północna"],["+387","BA","Bośnia i Hercegowina"],
+    ["+386","SI","Słowenia"],["+385","HR","Chorwacja"],["+383","XK","Kosowo"],
+    ["+382","ME","Czarnogóra"],["+381","RS","Serbia"],["+380","UA","Ukraina"],
+    ["+378","SM","San Marino"],["+377","MC","Monako"],["+376","AD","Andora"],
+    ["+375","BY","Białoruś"],["+374","AM","Armenia"],["+373","MD","Mołdawia"],
+    ["+372","EE","Estonia"],["+371","LV","Łotwa"],["+370","LT","Litwa"],
+    ["+359","BG","Bułgaria"],["+358","FI","Finlandia"],["+357","CY","Cypr"],
+    ["+356","MT","Malta"],["+355","AL","Albania"],["+354","IS","Islandia"],
+    ["+353","IE","Irlandia"],["+352","LU","Luksemburg"],["+351","PT","Portugalia"],
+    ["+350","GI","Gibraltar"],
+    ["+299","GL","Grenlandia"],["+298","FO","Wyspy Owcze"],["+297","AW","Aruba"],
+    ["+291","ER","Erytrea"],
+    ["+269","KM","Komory"],["+268","SZ","Eswatini"],["+267","BW","Botswana"],
+    ["+266","LS","Lesotho"],["+265","MW","Malawi"],["+264","NA","Namibia"],
+    ["+263","ZW","Zimbabwe"],["+262","RE","Reunion"],["+261","MG","Madagaskar"],
+    ["+260","ZM","Zambia"],["+258","MZ","Mozambik"],["+257","BI","Burundi"],
+    ["+256","UG","Uganda"],["+255","TZ","Tanzania"],["+254","KE","Kenia"],
+    ["+253","DJ","Dżibuti"],["+252","SO","Somalia"],["+251","ET","Etiopia"],
+    ["+250","RW","Rwanda"],["+249","SD","Sudan"],["+248","SC","Seszele"],
+    ["+247","SH","Wniebowstąpienia"],["+246","IO","BIOT"],
+    ["+245","GW","Gwinea Bissau"],["+244","AO","Angola"],
+    ["+243","CD","DR Konga"],["+242","CG","Kongo"],["+241","GA","Gabon"],
+    ["+240","GQ","Gwinea Równikowa"],["+239","ST","Wyspy Świętego Tomasza"],
+    ["+238","CV","Republika Zielonego Przylądka"],["+237","CM","Kamerun"],
+    ["+236","CF","Rep. Środkowoafrykańska"],["+235","TD","Czad"],
+    ["+234","NG","Nigeria"],["+233","GH","Ghana"],["+232","SL","Sierra Leone"],
+    ["+231","LR","Liberia"],["+230","MU","Mauritius"],["+229","BJ","Benin"],
+    ["+228","TG","Togo"],["+227","NE","Niger"],["+226","BF","Burkina Faso"],
+    ["+225","CI","Wybrzeże Kości Słoniowej"],["+224","GN","Gwinea"],
+    ["+223","ML","Mali"],["+222","MR","Mauretania"],["+221","SN","Senegal"],
+    ["+220","GM","Gambia"],["+218","LY","Libia"],["+216","TN","Tunezja"],
+    ["+213","DZ","Algieria"],["+212","MA","Maroko"],["+211","SS","Sudan Południowy"],
+    ["+98","IR","Iran"],["+95","MM","Mjanma"],["+94","LK","Sri Lanka"],
+    ["+93","AF","Afganistan"],["+92","PK","Pakistan"],["+91","IN","Indie"],
+    ["+90","TR","Turcja"],["+86","CN","Chiny"],["+84","VN","Wietnam"],
+    ["+82","KR","Korea Południowa"],["+81","JP","Japonia"],
+    ["+66","TH","Tajlandia"],["+65","SG","Singapur"],["+64","NZ","Nowa Zelandia"],
+    ["+63","PH","Filipiny"],["+62","ID","Indonezja"],["+61","AU","Australia"],
+    ["+60","MY","Malezja"],["+58","VE","Wenezuela"],["+57","CO","Kolumbia"],
+    ["+56","CL","Chile"],["+55","BR","Brazylia"],["+54","AR","Argentyna"],
+    ["+53","CU","Kuba"],["+52","MX","Meksyk"],["+51","PE","Peru"],
+    ["+49","DE","Niemcy"],
+    ["+47","NO","Norwegia"],["+46","SE","Szwecja"],["+45","DK","Dania"],
+    ["+44","GB","Wielka Brytania"],["+43","AT","Austria"],["+41","CH","Szwajcaria"],
+    ["+40","RO","Rumunia"],["+39","IT","Włochy"],["+36","HU","Węgry"],
+    ["+34","ES","Hiszpania"],["+33","FR","Francja"],["+32","BE","Belgia"],
+    ["+31","NL","Holandia"],["+30","GR","Grecja"],
+    ["+27","ZA","RPA"],["+20","EG","Egipt"],
+    ["+77","KZ","Kazachstan"],["+7","RU","Rosja"],
+    ["+1","US","USA / Kanada"],
+  ];
+
+  /** Identify country by phone number prefix (longest match). Returns {iso, name} or null. */
+  function _countryByPrefix(number) {
+    if (!number || !number.startsWith("+")) return null;
+    for (const [pfx, iso, name] of _PHONE_PREFIXES) {
+      if (number.startsWith(pfx)) return { iso, name };
+    }
+    return null;
+  }
+
+  // ── Foreigner detection (hybrid: number + ID data + name heuristics) ──
+
+  // Polish surname suffixes (common patterns)
+  const _PL_SURNAME_SUFFIXES = [
+    "owski", "owska", "ewski", "ewska", "inski", "inska", "ynski", "ynska",
+    "ski", "ska", "cki", "cka", "dzki", "dzka",
+    "wicz", "ewicz", "owicz", "icz",
+    "czyk", "czak", "czuk",
+    "iak", "iak", "niak", "wiak",
+    "orek", "urek", "arek",
+    "kowski", "kowska",
+    "owski", "owska",
+  ];
+
+  // Polish first names (top ~400, both male and female)
+  const _PL_FIRST_NAMES = new Set([
+    // Male
+    "adam", "adrian", "aleksander", "andrzej", "antoni", "arkadiusz", "artur",
+    "bartlomiej", "bartosz", "bogdan", "boguslaw", "borys", "bronislaw",
+    "cezary", "czeslaw", "damian", "daniel", "dariusz", "dawid", "dominik",
+    "edmund", "edward", "emil", "eugeniusz",
+    "filip", "franciszek", "fryderyk",
+    "gabriel", "grzegorz", "gustaw",
+    "henryk", "hubert",
+    "igor", "ireneusz",
+    "jacek", "jakub", "jan", "janusz", "jaroslaw", "jerzy", "jozef", "julian", "juliusz",
+    "kacper", "kajetan", "kamil", "karol", "kazimierz", "konrad", "krystian", "krzysztof",
+    "lech", "leon", "leszek", "lukasz",
+    "maciej", "marcin", "marek", "marian", "mariusz", "mateusz", "michal", "mieczyslaw", "milosz", "miroslaw",
+    "nikodem", "norbert",
+    "olaf", "olgierd", "oskar",
+    "patryk", "pawel", "piotr", "przemyslaw",
+    "radoslaw", "rafal", "remigiusz", "robert", "roman", "ryszard",
+    "sebastian", "seweryn", "slawomir", "stanislaw", "stefan", "sylwester", "szymon",
+    "tadeusz", "tomasz", "teodor",
+    "waldemar", "wiktor", "wieslaw", "witold", "wladyslaw", "wlodzimierz", "wojciech",
+    "zbigniew", "zdzislaw", "zenon", "zygmunt",
+    // Female
+    "agata", "agnieszka", "aleksandra", "alicja", "alina", "amelia", "anastazja", "anna", "antonina",
+    "barbara", "beata", "blanka", "bogumila", "bozena",
+    "cecylia", "celina",
+    "danuta", "daria", "diana", "dominika", "dorota",
+    "edyta", "elzbieta", "emilia", "ewa", "ewelina",
+    "gabriela", "grazyna",
+    "halina", "hanna", "helena",
+    "ilona", "inga", "irena", "iwona", "izabela",
+    "jadwiga", "janina", "joanna", "jolanta", "julia", "justyna",
+    "kalina", "kamila", "karolina", "katarzyna", "kazimiera", "kinga", "klaudia", "kornelia", "krystyna",
+    "laura", "lena", "lidia", "liliana", "lucyna", "ludmila",
+    "magdalena", "maja", "malgorzata", "maria", "mariola", "marlena", "marta", "martyna", "michalina", "milena", "miroslawa", "monika",
+    "natalia", "nadia", "nina", "natasza",
+    "olga", "oliwia",
+    "patrycja", "paulina",
+    "regina", "renata", "roksana", "roma", "rozalia",
+    "sandra", "sara", "stanislawa", "stefania", "sylwia",
+    "tamara", "tatiana", "teresa",
+    "urszula",
+    "wanda", "weronika", "wiktoria", "wieslawa", "wioletta",
+    "zofia", "zuzanna", "zyta",
+  ]);
+
+  // Non-Polish name patterns (foreign indicators)
+  const _FOREIGN_NAME_PATTERNS = [
+    // Arabic/Turkish
+    { re: /\b(mohammed|muhammad|ahmed|ali|hassan|hussein|ibrahim|mustafa|omar|yusuf|fatima|abdel|abd|bin|bint)\b/i, origin: "arabskie" },
+    // Ukrainian
+    { re: /\b(oleksandr|oleksiy|dmytro|volodymyr|sergiy|andriy|vasyl|mykola|oksana|tetyana|nataliya|svitlana|yaroslav|bohdan|taras|zoryana|halyna|lyubov)\b/i, origin: "ukrai\u0144skie" },
+    // Belarusian
+    { re: /\b(aliaksandr|aliaksei|uladzimir|zmitser|ryhor|viktar|vasil|mikola|alena|natallia|sviatlana|tatsiana|yanka|kastus|ales|hanna|liudmila|veranika)\b/i, origin: "bia\u0142oruskie" },
+    // Russian
+    { re: /\b(aleksandr|aleksei|dmitriy|vladimir|sergei|andrei|nikolai|mikhail|ivan|boris|yuri|oleg|viktor|tatiana|natalya|svetlana|elena|olga|irina|anastasia|ekaterina)\b/i, origin: "rosyjskie" },
+    // Eastern European surname suffixes
+    { re: /(enko|chuk|yuk|ova|ov|ovich|evich|ievna|ivna|evna|sky|skaya)$/i, origin: "wschodnie" },
+    // Vietnamese
+    { re: /\b(nguyen|tran|pham|hoang|huynh|vo|dang|bui|duong|ngo)\b/i, origin: "wietnamskie" },
+    // Chinese
+    { re: /\b(wang|zhang|chen|huang|zhou|yang|zhao|liu|xu|sun|wu|zhu|lin|hu|guo|ma|luo|he|tang|xiao|zheng|song|yu|cao|deng|han|peng|feng|xie|lu|wei|jiang|shen|han|ding|liang|pan|du|tian|fan|yan|qian|ren|gu|shi|dai|ye|cui|lv|su|cheng|dong|jia|xia|fu)\b/i, origin: "chi\u0144skie" },
+    // Indian
+    { re: /\b(singh|kumar|patel|sharma|gupta|chauhan|verma|yadav|mehta|joshi|agarwal|das|nair|reddy|rao|pillai|iyer|khan|bhat|malhotra|kapoor|srivastava|saxena|mishra|pandey|dubey|tiwari|bajaj|chopra|seth|gill)\b/i, origin: "indyjskie" },
+    // Georgian
+    { re: /(shvili|dze|adze|iani|uri)$/i, origin: "gruzi\u0144skie" },
+    // Armenian
+    { re: /(yan|ian|ants|ents|unts)$/i, origin: "ormia\u0144skie" },
+  ];
+
+  /**
+   * Detect potential foreigners from identification data (St.idMap) + billing records.
+   *
+   * Hybrid approach:
+   * Level 1: Foreign phone number (non-+48) with identification data
+   * Level 2: Identification data without PESEL or with foreign document
+   * Level 3: Name heuristics (non-Polish name patterns)
+   *
+   * Returns list of detected items with confidence levels.
+   */
+  function _detectForeigners() {
+    const idMap = St.idMap || {};
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!Object.keys(idMap).length) return [];
+
+    // Collect all unique foreign numbers from records
+    const foreignNumbers = new Set();
+    for (const r of records) {
+      for (const num of [r.callee, r.caller]) {
+        if (!num) continue;
+        if (num.startsWith("+") && !num.startsWith("+48") && num.length > 8) {
+          foreignNumbers.add(num);
+        }
+      }
+    }
+
+    const items = [];
+    const seen = new Set(); // avoid duplicates
+
+    for (const [msisdn, rec] of Object.entries(idMap)) {
+      if (!rec || !rec.name) continue;
+      const name = (rec.name || "").trim();
+      if (!name || name.length < 2) continue;
+
+      // Skip "not found" type entries
+      if (rec.type === "not_found" || rec.type === "other_operator") continue;
+
+      const key = msisdn;
+      if (seen.has(key)) continue;
+
+      // ── Identify if this is a company ──
+      const isCompany = rec.type === "company"
+        || !!(rec.nip && rec.nip.length >= 10)
+        || !!(rec.regon && rec.regon.length >= 9);
+
+      const signals = [];
+      let confidence = 0;
+
+      // ── Level 1: Foreign number ──
+      const normNum = "+" + msisdn.replace(/^\+/, "");
+      const isPolishNum = normNum.startsWith("+48") || (!normNum.startsWith("+") || normNum.length <= 8);
+      const isForeignNum = !isPolishNum;
+
+      // Country identification for foreign numbers
+      let countryInfo = null;
+      if (isForeignNum) {
+        countryInfo = _countryByPrefix(normNum);
+      }
+
+      if (isForeignNum || foreignNumbers.has(normNum)) {
+        const countryLabel = countryInfo ? countryInfo.name : null;
+        signals.push(countryLabel ? `numer zagraniczny (${countryLabel})` : "numer zagraniczny");
+        confidence += 40;
+      }
+
+      // ── Skip companies with NIP/REGON + Polish number — not foreigners ──
+      if (isCompany && isPolishNum && (rec.nip || rec.regon)) {
+        continue; // Polish company — brak PESEL is expected, not a foreigner signal
+      }
+
+      // ── Level 2: No PESEL ──
+      const hasPesel = !!(rec.pesel && rec.pesel.length >= 11);
+      if (!hasPesel && !isForeignNum) {
+        if (isCompany) {
+          // Companies without PESEL but without NIP/REGON on Polish number — mild signal
+          if (!rec.nip && !rec.regon) {
+            signals.push("firma bez PESEL/NIP/REGON");
+            confidence += 10;
+          }
+          // else: company with NIP or REGON but foreign number — handled above
+        } else {
+          // Person without PESEL on Polish number
+          signals.push("brak PESEL");
+          confidence += 20;
+        }
+      }
+
+      // ── Verify number against known country prefixes ──
+      if (!isForeignNum && !isPolishNum) {
+        // Number doesn't start with + and isn't a standard 9-digit Polish number
+        // Check if it could be an unrecognized format
+        if (normNum.length > 9 && !normNum.startsWith("+48")) {
+          const prefixCheck = _countryByPrefix(normNum);
+          if (!prefixCheck) {
+            signals.push("numer nie pasuje do żadnego kierunkowego");
+            confidence += 15;
+          }
+        }
+      }
+
+      // ── Level 3: Name heuristics ──
+      const nameLower = name.toLowerCase()
+        .replace(/\u0105/g, "a").replace(/\u0107/g, "c").replace(/\u0119/g, "e")
+        .replace(/\u0142/g, "l").replace(/\u0144/g, "n").replace(/\u00f3/g, "o")
+        .replace(/\u015b/g, "s").replace(/\u017a/g, "z").replace(/\u017c/g, "z");
+      const nameParts = nameLower.split(/\s+/);
+
+      // Skip name heuristics for companies
+      if (!isCompany) {
+        // Check if first name is Polish
+        const firstName = nameParts[0] || "";
+        const isPolishFirstName = _PL_FIRST_NAMES.has(firstName);
+
+        // Check if surname has Polish suffix
+        const surname = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+        const hasPolishSuffix = _PL_SURNAME_SUFFIXES.some(suf => surname.endsWith(suf));
+
+        // Check for foreign patterns
+        let foreignOrigin = "";
+        for (const pat of _FOREIGN_NAME_PATTERNS) {
+          if (pat.re.test(nameLower)) {
+            foreignOrigin = pat.origin;
+            break;
+          }
+        }
+
+        if (foreignOrigin) {
+          signals.push(`wzorzec ${foreignOrigin}`);
+          confidence += 35;
+        } else if (!isPolishFirstName && !hasPolishSuffix && nameParts.length >= 2) {
+          signals.push("imi\u0119/nazwisko nie pasuje do polskich wzorców");
+          confidence += 15;
+        }
+      }
+
+      // Only report if confidence > 25 (at least one strong signal)
+      if (confidence > 25) {
+        seen.add(key);
+        const confLabel = confidence >= 60 ? "high" : confidence >= 35 ? "medium" : "low";
+        items.push({
+          number: normNum.startsWith("+") ? normNum : "+" + normNum,
+          name: name,
+          pesel: rec.pesel || "",
+          nip: rec.nip || "",
+          regon: rec.regon || "",
+          address: rec.address || "",
+          city: rec.city || "",
+          signals: signals,
+          confidence: confLabel,
+          confidence_score: confidence,
+          foreign_number: isForeignNum,
+          foreign_origin: "",
+          country: countryInfo ? countryInfo.name : "",
+          country_iso: countryInfo ? countryInfo.iso : "",
+          is_company: isCompany,
+        });
+        // Backfill foreign_origin from name pattern signals
+        const lastItem = items[items.length - 1];
+        for (const s of signals) {
+          const m = s.match(/^wzorzec (.+)/);
+          if (m) { lastItem.foreign_origin = m[1]; break; }
+        }
+      }
+    }
+
+    // Sort by confidence descending
+    items.sort((a, b) => b.confidence_score - a.confidence_score);
+    return items;
+  }
+
+  function _renderAnomalies(a) {
+    const card = QS("#gsm_anomalies_card");
+    const body = QS("#gsm_anomalies_body");
+    if (!card || !body) return;
+
+    const raw = (a && a.anomalies) || [];
+    if (!raw.length) { card.style.display = "none"; return; }
+    card.style.display = "";
+
+    // Detect old flat format (entries without items array) and convert
+    const isOldFormat = raw.length > 0 && !raw[0].items && (raw[0].description || raw[0].contact);
+    const groupMap = {};
+    if (isOldFormat) {
+      for (const entry of raw) {
+        const t = entry.type || "unknown";
+        if (!groupMap[t]) groupMap[t] = { items: [], severity: entry.severity || "info" };
+        groupMap[t].items.push(entry);
+        if (entry.severity === "warning") groupMap[t].severity = "warning";
+      }
+    } else {
+      for (const g of raw) {
+        groupMap[g.type] = { items: g.items || [], severity: g.severity || "ok" };
+      }
+    }
+
+    // Override long_call with frontend-computed results (respects custom threshold)
+    {
+      const lcItems = _detectLongCalls(_longCallThresholdMin);
+      groupMap["long_call"] = {
+        items: lcItems,
+        severity: lcItems.length ? "info" : "ok",
+      };
+    }
+
+    // Override inactivity_gap with frontend-computed results (respects custom threshold)
+    {
+      const igItems = _detectInactivityGaps(_inactivityThresholdH);
+      groupMap["inactivity_gap"] = {
+        items: igItems,
+        severity: igItems.length ? "info" : "ok",
+      };
+    }
+
+    // Compute meeting_after_call on frontend
+    {
+      const macItems = _detectMeetingAfterCall(_meetingWindowMin);
+      groupMap["meeting_after_call"] = {
+        items: macItems,
+        severity: macItems.length ? "warning" : "ok",
+      };
+    }
+
+    // Compute foreigners anomaly on frontend (requires identification data)
+    {
+      const fItems = _detectForeigners();
+      groupMap["foreigners"] = {
+        items: fItems,
+        severity: fItems.length ? (fItems.some(it => it.confidence === "high") ? "warning" : "info") : "ok",
+      };
+    }
+
+    // Icon paths
+    const _IC_EXPAND = "/static/icons/akcje/expand_down.svg";
+    const _IC_COLLAPSE = "/static/icons/akcje/collapse_up.svg";
+    const _IC_PLUS5 = "/static/icons/akcje/plus5.svg";
+    const _ICON_SZ = 20;
+    const _makeIcon = (src, title, cls) =>
+      `<img src="${src}" width="${_ICON_SZ}" height="${_ICON_SZ}" title="${title}" class="${cls}" style="cursor:pointer;opacity:.65;transition:opacity .15s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.65">`;
+
+    const VISIBLE = 5;
+    const SCROLL_THRESHOLD = 50;
+
+    // Render ALL categories in canonical order
+    let html = '<div style="display:flex;flex-direction:column;gap:10px">';
+    for (const cat of _ANOMALY_CATS) {
+      const data = groupMap[cat.type] || { items: [], severity: "ok" };
+      const items = data.items;
+      const hasItems = items.length > 0;
+      const sev = hasItems ? (data.severity || "info") : "ok";
+      const sevColor = sev === "critical" ? "#dc2626" : sev === "warning" ? "#f97316" : sev === "info" ? "#3b82f6" : "#22c55e";
+      const sevIcon = sev === "critical" ? "\u2757" : sev === "warning" ? "\u26A0" : sev === "info" ? "\u2139" : "\u2713";
+
+      // ── Card container ──
+      html += `<div class="gsm-anomaly-card" data-anomaly-type="${cat.type}" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;border-left:3px solid ${sevColor};transition:background .15s,box-shadow .15s">`;
+
+      // ── Top bar: header row with name + count + action icons ──
+      html += `<div class="gsm-anomaly-bar" style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(${sev === 'critical' ? '220,38,38' : sev === 'warning' ? '249,115,22' : sev === 'info' ? '59,130,246' : '34,197,94'},.04)">`;
+      html += `<span style="color:${sevColor};font-size:15px;flex-shrink:0">${sevIcon}</span>`;
+      html += `<div style="flex:1;min-width:0">`;
+      html += `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><b>${cat.label}</b>`;
+      if (cat.type === "long_call") {
+        html += ` <span style="display:inline-flex;align-items:center;gap:3px;font-size:12px">>`
+          + `<input type="number" class="gsm-longcall-threshold" value="${_longCallThresholdMin}" min="1" max="999" step="5"`
+          + ` style="width:48px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--card-bg,#fff);color:var(--text)">`
+          + ` min</span>`;
+      } else if (cat.type === "inactivity_gap") {
+        html += ` <span style="display:inline-flex;align-items:center;gap:3px;font-size:12px">>`
+          + `<input type="number" class="gsm-inactivity-threshold" value="${_inactivityThresholdH}" min="1" max="999" step="1"`
+          + ` style="width:48px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--card-bg,#fff);color:var(--text)">`
+          + ` godz.</span>`;
+      } else if (cat.type === "meeting_after_call") {
+        html += ` <span style="display:inline-flex;align-items:center;gap:3px;font-size:12px">`
+          + `<input type="number" class="gsm-meeting-window" value="${_meetingWindowMin}" min="5" max="999" step="5"`
+          + ` style="width:48px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--card-bg,#fff);color:var(--text)">`
+          + ` min</span>`;
+      }
+      if (!hasItems) {
+        html += ` <span class="muted gsm-anom-count">\u2014 brak</span>`;
+      } else {
+        html += ` <span class="muted gsm-anom-count">(${items.length})</span>`;
+      }
+      html += `</div>`;
+      html += `<div class="small muted" style="margin-top:1px;line-height:1.3">${cat.desc}</div>`;
+      html += `</div>`; // end text block
+
+      // ── Action icons ──
+      {
+        html += `<div style="display:flex;align-items:center;gap:2px;flex-shrink:0;border-left:1px solid var(--border);padding-left:8px;margin-left:4px">`;
+        // Note marker
+        const _nm = window._gsmNotesMgr;
+        const _hn = _nm && _nm.hasNote("gsm_anomaly", "anomaly_type", cat.type);
+        html += `<span class="analyst-note-marker${_hn ? " has-note" : ""}" data-note-anomaly="${cat.type}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(_hn)}" alt="" width="16" height="16" draggable="false"></span>`;
+        if (hasItems) {
+          // Expand / collapse (only if >5 items)
+          if (items.length > VISIBLE) {
+            html += _makeIcon(_IC_EXPAND, "Rozwiń / zwiń listę", "gsm-anom-toggle") + " ";
+          }
+          // +5 context
+          html += _makeIcon(_IC_PLUS5, "+5 rekordów kontekstu", "gsm-anom-plus5");
+        }
+        html += `</div>`;
+      }
+      html += `</div>`; // end bar
+
+      // ── Items body ──
+      if (hasItems) {
+        const rendered = isOldFormat
+          ? _renderOldAnomalyItems(items)
+          : _renderAnomalyItems(cat.type, items);
+        const uid = `anom_exp_${cat.type}`;
+        const collapsedH = VISIBLE * 22;
+        const useScroll = items.length > SCROLL_THRESHOLD;
+        const maxExpandH = useScroll ? '300px' : 'none';
+        const overflowY = useScroll ? 'auto' : 'visible';
+        const needCollapse = items.length > VISIBLE;
+
+        html += `<div id="${uid}" data-collapsed-h="${collapsedH}" data-max-h="${maxExpandH}" data-overflow="${overflowY}" `
+          + `style="padding:4px 12px 8px;${needCollapse ? 'max-height:' + collapsedH + 'px;overflow:hidden;' : ''}transition:max-height .25s ease">`;
+        html += rendered;
+        html += `</div>`;
+      }
+
+      html += `</div>`; // end card
+    }
+    html += '</div>';
+    body.innerHTML = html;
+
+    // Pre-initialize anomaly mini-map in background (so tiles load early)
+    _initAnomalyMapIfNeeded();
+
+    // ── Expand / collapse via icon ──
+    body.querySelectorAll(".gsm-anom-toggle").forEach(icon => {
+      icon.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const card = this.closest(".gsm-anomaly-card");
+        if (!card) return;
+        const type = card.dataset.anomalyType;
+        const container = document.getElementById(`anom_exp_${type}`);
+        if (!container) return;
+        const isExpanded = container.dataset.expanded === "1";
+        if (isExpanded) {
+          container.style.maxHeight = container.dataset.collapsedH + "px";
+          container.style.overflowY = "hidden";
+          container.dataset.expanded = "0";
+          this.src = _IC_EXPAND;
+          this.title = "Rozwiń listę";
+        } else {
+          const maxH = container.dataset.maxH;
+          container.style.maxHeight = maxH === "none" ? container.scrollHeight + "px" : maxH;
+          container.style.overflowY = container.dataset.overflow;
+          container.dataset.expanded = "1";
+          this.src = _IC_COLLAPSE;
+          this.title = "Zwiń listę";
+        }
+      });
+    });
+
+    // ── +5 context records via icon ──
+    body.querySelectorAll(".gsm-anom-plus5").forEach(icon => {
+      icon.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const card = this.closest(".gsm-anomaly-card");
+        if (!card) return;
+        const type = card.dataset.anomalyType;
+        const data = groupMap[type];
+        if (!data || !data.items.length) return;
+        _anomalyContextFilter(type, data.items);
+      });
+    });
+
+    // ── Hover effect on anomaly cards with items ──
+    body.querySelectorAll(".gsm-anomaly-card").forEach(div => {
+      const hasData = (groupMap[div.dataset.anomalyType] || {items:[]}).items.length > 0;
+      if (!hasData) return;
+      div.style.cursor = "pointer";
+      div.addEventListener("mouseenter", () => {
+        div.style.background = "rgba(31,90,166,.04)";
+        div.style.boxShadow = "0 2px 8px rgba(15,23,42,.06)";
+      });
+      div.addEventListener("mouseleave", () => {
+        div.style.background = "";
+        div.style.boxShadow = "";
+      });
+    });
+
+    // ── Note markers on anomaly cards ──
+    body.querySelectorAll(".analyst-note-marker[data-note-anomaly]").forEach(marker => {
+      marker.addEventListener("click", function(e) {
+        e.stopPropagation();
+        const type = this.getAttribute("data-note-anomaly");
+        if (!type) return;
+        const catDef = _ANOMALY_CATS.find(c => c.type === type);
+        const label = catDef ? "Anomalia: " + catDef.label : "Anomalia: " + type;
+        const ref = { type: "gsm_anomaly", anomaly_type: type };
+        const mgr = window._gsmNotesMgr;
+        if (mgr) mgr.openNoteForElement(label, "warning", ref);
+      });
+    });
+
+    // ── Long call threshold input ──
+    const longCallInput = body.querySelector(".gsm-longcall-threshold");
+    if (longCallInput) {
+      longCallInput.addEventListener("click", e => e.stopPropagation());
+      longCallInput.addEventListener("dblclick", e => e.stopPropagation());
+
+      let _lcTimer = null;
+      longCallInput.addEventListener("input", () => {
+        clearTimeout(_lcTimer);
+        _lcTimer = setTimeout(() => {
+          const val = parseInt(longCallInput.value, 10);
+          if (!val || val < 1) return;
+          _longCallThresholdMin = val;
+
+          const newItems = _detectLongCalls(val);
+          groupMap["long_call"] = { items: newItems, severity: newItems.length ? "info" : "ok" };
+
+          const card = longCallInput.closest(".gsm-anomaly-card");
+          if (!card) return;
+          const countEl = card.querySelector(".gsm-anom-count");
+          if (countEl) {
+            countEl.textContent = newItems.length ? `(${newItems.length})` : "\u2014 brak";
+          }
+
+          const container = card.querySelector("[id^='anom_exp_']");
+          if (container) {
+            if (!newItems.length) {
+              container.innerHTML = "";
+              container.style.display = "none";
+            } else {
+              container.style.display = "";
+              container.innerHTML = _renderAnomalyItems("long_call", newItems);
+              const collapsedH = 5 * 22;
+              if (newItems.length > 5) {
+                container.style.maxHeight = collapsedH + "px";
+                container.style.overflowY = "hidden";
+                container.dataset.expanded = "0";
+              } else {
+                container.style.maxHeight = "none";
+                container.style.overflowY = "visible";
+              }
+            }
+          }
+
+          const sev = newItems.length ? "info" : "ok";
+          const sevColor = sev === "info" ? "#3b82f6" : "#22c55e";
+          card.style.borderLeftColor = sevColor;
+          const sevSpan = card.querySelector(".gsm-anomaly-bar > span");
+          if (sevSpan) {
+            sevSpan.style.color = sevColor;
+            sevSpan.textContent = sev === "info" ? "\u2139" : "\u2713";
+          }
+        }, 300);
+      });
+    }
+
+    // ── Inactivity threshold input ──
+    const thresholdInput = body.querySelector(".gsm-inactivity-threshold");
+    if (thresholdInput) {
+      // Prevent card click/dblclick when interacting with input
+      thresholdInput.addEventListener("click", e => e.stopPropagation());
+      thresholdInput.addEventListener("dblclick", e => e.stopPropagation());
+
+      let _igTimer = null;
+      thresholdInput.addEventListener("input", () => {
+        clearTimeout(_igTimer);
+        _igTimer = setTimeout(() => {
+          const val = parseInt(thresholdInput.value, 10);
+          if (!val || val < 1) return;
+          _inactivityThresholdH = val;
+
+          // Recalculate
+          const newItems = _detectInactivityGaps(val);
+          groupMap["inactivity_gap"] = { items: newItems, severity: newItems.length ? "info" : "ok" };
+
+          // Update count label
+          const card = thresholdInput.closest(".gsm-anomaly-card");
+          if (!card) return;
+          const countEl = card.querySelector(".gsm-anom-count");
+          if (countEl) {
+            countEl.textContent = newItems.length ? `(${newItems.length})` : "\u2014 brak";
+            countEl.className = newItems.length ? "muted gsm-anom-count" : "muted gsm-anom-count";
+          }
+
+          // Re-render items body
+          const container = card.querySelector("[id^='anom_exp_']");
+          if (container) {
+            if (!newItems.length) {
+              container.innerHTML = "";
+              container.style.display = "none";
+            } else {
+              container.style.display = "";
+              container.innerHTML = _renderAnomalyItems("inactivity_gap", newItems);
+              // Reset expand state
+              const collapsedH = 5 * 22;
+              if (newItems.length > 5) {
+                container.style.maxHeight = collapsedH + "px";
+                container.style.overflowY = "hidden";
+                container.dataset.expanded = "0";
+              } else {
+                container.style.maxHeight = "none";
+                container.style.overflowY = "visible";
+              }
+            }
+          }
+
+          // Update severity color on card
+          const sev = newItems.length ? "info" : "ok";
+          const sevColor = sev === "info" ? "#3b82f6" : "#22c55e";
+          card.style.borderLeftColor = sevColor;
+          const sevSpan = card.querySelector(".gsm-anomaly-bar > span");
+          if (sevSpan) {
+            sevSpan.style.color = sevColor;
+            sevSpan.textContent = sev === "info" ? "\u2139" : "\u2713";
+          }
+        }, 300);
+      });
+    }
+
+    // ── Meeting window input ──
+    const meetingInput = body.querySelector(".gsm-meeting-window");
+    if (meetingInput) {
+      meetingInput.addEventListener("click", e => e.stopPropagation());
+      meetingInput.addEventListener("dblclick", e => e.stopPropagation());
+
+      let _macTimer = null;
+      meetingInput.addEventListener("input", () => {
+        clearTimeout(_macTimer);
+        _macTimer = setTimeout(() => {
+          const val = parseInt(meetingInput.value, 10);
+          if (!val || val < 5) return;
+          _meetingWindowMin = val;
+
+          const newItems = _detectMeetingAfterCall(val);
+          groupMap["meeting_after_call"] = { items: newItems, severity: newItems.length ? "warning" : "ok" };
+
+          const card = meetingInput.closest(".gsm-anomaly-card");
+          if (!card) return;
+          const countEl = card.querySelector(".gsm-anom-count");
+          if (countEl) {
+            countEl.textContent = newItems.length ? `(${newItems.length})` : "\u2014 brak";
+          }
+
+          const container = card.querySelector("[id^='anom_exp_']");
+          if (container) {
+            if (!newItems.length) {
+              container.innerHTML = "";
+              container.style.display = "none";
+            } else {
+              container.style.display = "";
+              container.innerHTML = _renderAnomalyItems("meeting_after_call", newItems);
+              const collapsedH = 5 * 22;
+              if (newItems.length > 5) {
+                container.style.maxHeight = collapsedH + "px";
+                container.style.overflowY = "hidden";
+                container.dataset.expanded = "0";
+              } else {
+                container.style.maxHeight = "none";
+                container.style.overflowY = "visible";
+              }
+            }
+          }
+
+          const sev = newItems.length ? "warning" : "ok";
+          const sevColor = sev === "warning" ? "#f97316" : "#22c55e";
+          card.style.borderLeftColor = sevColor;
+          const sevSpan = card.querySelector(".gsm-anomaly-bar > span");
+          if (sevSpan) {
+            sevSpan.style.color = sevColor;
+            sevSpan.textContent = sev === "warning" ? "\u26A0" : "\u2713";
+          }
+        }, 300);
+      });
+    }
+
+    // ── Double-click on anomaly category → filter Records (unchanged) ──
+    body.addEventListener("dblclick", function(e) {
+      // Ignore clicks on action icons
+      if (e.target.closest(".gsm-anom-toggle, .gsm-anom-plus5")) return;
+      const div = e.target.closest("[data-anomaly-type]");
+      if (!div) return;
+      const type = div.dataset.anomalyType;
+      const data = groupMap[type];
+      if (!data || !data.items.length) return;
+      _anomalyGroupFilter(type, data.items);
+    });
+
+    // Single-click on anomaly card → update mini-map with BTS for that anomaly type
+    body.addEventListener("click", function(e) {
+      if (e.target.closest(".gsm-anom-toggle, .gsm-anom-plus5, .analyst-note-marker, input")) return;
+      const div = e.target.closest("[data-anomaly-type]");
+      if (!div) return;
+      const type = div.dataset.anomalyType;
+      const data = groupMap[type];
+      if (!data || !data.items.length) return;
+
+      // Highlight selected card
+      body.querySelectorAll(".gsm-anomaly-card").forEach(c => c.style.outline = "");
+      div.style.outline = "2px solid var(--brand-blue,#2563eb)";
+      div.style.outlineOffset = "-1px";
+
+      // Compute filtered records for this anomaly type (same logic as dblclick)
+      const records = St.lastResult ? St.lastResult.records : [];
+      const pred = _anomalyPredicate(type, data.items);
+      const filtered = records.filter(pred);
+      _updateAnomalyMap(type, filtered);
+      _renderAnomalyIdTable(type, data.items);
+    });
+  }
+
+  /** Filter Records by anomaly group — invoked on double-click. */
+  function _anomalyGroupFilter(type, items) {
+    St._anomalyHighlight = null;  // clear +5 highlighting
+    const records = St.lastResult ? St.lastResult.records : [];
+    let filtered = [];
+    let filterText = "";
+
+    switch (type) {
+      case "long_call":
+        filtered = records.filter(r => r.duration_seconds > 3600 && (r.record_type || "").includes("CALL"));
+        filterText = `Długie połączenia (>1h) — ${filtered.length} rek.`;
+        break;
+      case "late_night_calls":
+        filtered = records.filter(r => {
+          if (!r.time || !(r.record_type || "").includes("CALL")) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 0 && h < 5;
+        });
+        filterText = `Połączenia nocne (00:00–05:00) — ${filtered.length} rek.`;
+        break;
+      case "night_activity":
+        filtered = records.filter(r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        });
+        filterText = `Aktywność nocna (23:00–05:00) — ${filtered.length} rek.`;
+        break;
+      case "night_movement":
+        filtered = records.filter(r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        });
+        filterText = `Przemieszczanie nocne — ${filtered.length} rek.`;
+        break;
+      case "burst_activity":
+        if (items.length > 0) {
+          const b = items[0];
+          filtered = records.filter(r => {
+            if (r.date !== b.date) return false;
+            if (!b.time || !r.time) return true;
+            try {
+              const bp = b.time.split(":"), rp = r.time.split(":");
+              const bm = parseInt(bp[0]) * 60 + parseInt(bp[1]);
+              const rm = parseInt(rp[0]) * 60 + parseInt(rp[1]);
+              return rm >= bm && rm <= bm + (b.window_min || 30);
+            } catch (_) { return false; }
+          });
+          filterText = `Skok aktywności (${b.date} ${b.time}) — ${filtered.length} rek.`;
+        }
+        break;
+      case "premium_number": {
+        const nums = new Set(items.map(it => it.contact));
+        filtered = records.filter(r => nums.has(r.callee) || nums.has(r.caller));
+        filterText = `Numery premium — ${filtered.length} rek.`;
+        break;
+      }
+      case "roaming":
+        filtered = records.filter(r => r.roaming);
+        if (!filtered.length) {
+          filtered = records.filter(r => r.roaming || (r.network && !/orange|play|plus|t-mobile|polkomtel|p4|heyah/i.test(r.network)));
+        }
+        filterText = `Roaming — ${filtered.length} rek.`;
+        break;
+      case "foreign_contacts": {
+        const foreignNums = new Set(items.flatMap(it => it.numbers || []));
+        filtered = records.filter(r => foreignNums.has(r.callee) || foreignNums.has(r.caller));
+        filterText = `Numery zagraniczne — ${filtered.length} rek.`;
+        break;
+      }
+      case "one_time_contacts": {
+        const otNums = new Set(items.map(it => it.contact));
+        filtered = records.filter(r => otNums.has(r.callee) || otNums.has(r.caller));
+        filterText = `Jednorazowe kontakty — ${filtered.length} rek.`;
+        break;
+      }
+      case "satellite_numbers": {
+        const satNums = new Set(items.map(it => it.contact));
+        filtered = records.filter(r => satNums.has(r.callee) || satNums.has(r.caller));
+        filterText = `Numery satelitarne — ${filtered.length} rek.`;
+        break;
+      }
+      case "social_media": {
+        // Build a set of platform patterns to search in record fields
+        const smPlatforms = items.map(it => it.platform.toLowerCase());
+        filtered = records.filter(r => {
+          const txt = [r.callee, r.caller, r.network, r.raw_text || ""].join(" ").toLowerCase();
+          return smPlatforms.some(p => txt.includes(p));
+        });
+        filterText = `Konta społecznościowe — ${filtered.length} rek.`;
+        break;
+      }
+      case "meeting_after_call": {
+        // Build set of trigger records (incoming calls matching detected meetings)
+        const meetingDates = new Set(items.map(it => `${it.date}_${it.time}`));
+        filtered = records.filter(r => {
+          // Include the trigger call itself
+          if (meetingDates.has(`${r.date}_${r.time}`)) return true;
+          // Include records within the meeting window after each trigger
+          for (const it of items) {
+            if (r.date < it.date) continue;
+            const triggerStr = (it.date + " " + it.time).replace(" ", "T");
+            const triggerDt = new Date(triggerStr);
+            const recStr = ((r.datetime || r.date + " " + r.time) || "").replace(" ", "T");
+            const recDt = new Date(recStr);
+            if (!isNaN(triggerDt) && !isNaN(recDt)) {
+              const diff = recDt - triggerDt;
+              if (diff >= 0 && diff <= _meetingWindowMin * 60000) return true;
+            }
+          }
+          return false;
+        });
+        filterText = `Spotkanie po połączeniu — ${filtered.length} rek.`;
+        break;
+      }
+      case "foreigners": {
+        const fNums = new Set(items.map(it => {
+          const n = it.number.replace(/^\+/, "");
+          return n;
+        }));
+        filtered = records.filter(r => {
+          const callee = (r.callee || "").replace(/^\+/, "");
+          const caller = (r.caller || "").replace(/^\+/, "");
+          return fNums.has(callee) || fNums.has(caller);
+        });
+        filterText = `Obcokrajowcy — ${filtered.length} rek.`;
+        break;
+      }
+      case "forwarded_calls":
+        filtered = records.filter(r => r.record_type === "CALL_FORWARDED");
+        filterText = `Przekierowania połączeń — ${filtered.length} rek.`;
+        break;
+      case "inactivity_gap":
+        // Show records around gaps: last record before gap + first record after gap
+        if (items.length > 0) {
+          const gapDates = new Set();
+          for (const it of items) {
+            if (it.last_date) gapDates.add(it.last_date);
+            if (it.next_date) gapDates.add(it.next_date);
+          }
+          filtered = records.filter(r => gapDates.has(r.date));
+          filterText = `Przerwy w aktywności — ${filtered.length} rek. (dni graniczne)`;
+        }
+        break;
+      default:
+        filtered = records;
+        filterText = `${type} — ${filtered.length} rek.`;
+    }
+
+    // Clear heatmap filter state
+    St.hmActiveCell = null;
+    const hmBar = QS("#gsm_hm_filter_bar");
+    if (hmBar) hmBar.style.display = "none";
+
+    _setRecordsFilter(filterText, () => {
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(filtered, false, filtered.length);
+
+    const recCard = QS("#gsm_records_card");
+    if (recCard) {
+      recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      recCard.style.transition = "box-shadow .2s";
+      recCard.style.boxShadow = "0 0 0 3px var(--brand-blue,#2563eb)";
+      setTimeout(() => { recCard.style.boxShadow = ""; }, 1200);
+    }
+
+    // Update anomaly mini-map with BTS points from filtered records
+    _updateAnomalyMap(type, filtered);
+    _renderAnomalyIdTable(type, items);
+  }
+
+  // ── Anomaly mini-map ──
+  let _anomMapInstance = null;
+  let _anomMapMarkers = null;
+  let _anomMapReady = false;
+
+  /** Pre-initialize anomaly map when anomalies card becomes visible.
+   *  Called once from _renderAnomalies so tiles load in background. */
+  async function _initAnomalyMapIfNeeded() {
+    if (_anomMapReady || _anomMapInstance) return;
+    const container = QS("#gsm_anomaly_map_container");
+    if (!container || !window.L) return;
+    _anomMapInstance = L.map(container, {
+      zoomControl: true,
+      attributionControl: false,
+      preferCanvas: true,
+    });
+    _anomMapInstance.setView([52.0, 19.5], 6);
+    // Reuse same tile layer as main map (online/offline with badge)
+    await _addTileLayer(_anomMapInstance);
+    _anomMapMarkers = L.layerGroup().addTo(_anomMapInstance);
+    _anomMapReady = true;
+    setTimeout(() => { _anomMapInstance.invalidateSize(); }, 200);
+  }
+
+  async function _updateAnomalyMap(anomalyType, filteredRecords) {
+    const container = QS("#gsm_anomaly_map_container");
+    const titleEl = QS("#gsm_anomaly_map_title");
+    const statsEl = QS("#gsm_anomaly_map_stats");
+    if (!container) return;
+
+    // Wait for Leaflet
+    if (!window.L) {
+      if (!St.leafletLoaded) return;  // skip if Leaflet not loaded yet
+    }
+
+    // Ensure map is initialized
+    if (!_anomMapInstance) {
+      await _initAnomalyMapIfNeeded();
+    }
+    if (!_anomMapInstance) return;
+
+    // Build index of filtered records by raw_row for fast geo_record matching
+    const filteredRows = new Set();
+    const filteredDateTimes = new Set();
+    for (const r of filteredRecords) {
+      if (r.raw_row != null) filteredRows.add(r.raw_row);
+      // Fallback signature: date+time+callee (matches GeoRecord fields)
+      filteredDateTimes.add(`${r.date || ""}|${r.time || ""}|${r.callee || ""}`);
+    }
+
+    // Extract BTS points from geo_records — match by raw_row (primary) or date+time+callee (fallback)
+    const geo = St.lastResult && St.lastResult.geolocation;
+    const geoRecords = (geo && geo.geo_records) || [];
+    const points = new Map(); // key = "lat,lon" → { lat, lon, count, dates, city, street }
+
+    for (const gr of geoRecords) {
+      if (!gr.point || (!gr.point.lat && !gr.point.lon)) continue;
+      // Match: primary by raw_row, fallback by date+time+callee
+      const matchByRow = gr.raw_row != null && filteredRows.has(gr.raw_row);
+      const matchBySig = !matchByRow && filteredDateTimes.has(`${gr.date || ""}|${gr.time || ""}|${gr.callee || ""}`);
+      if (!matchByRow && !matchBySig) continue;
+
+      const lat = gr.point.lat;
+      const lon = gr.point.lon;
+      const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+      if (!points.has(key)) {
+        points.set(key, { lat, lon, count: 0, dates: new Set(),
+          city: gr.point.city || "", street: gr.point.street || "" });
+      }
+      const p = points.get(key);
+      p.count++;
+      if (gr.date) p.dates.add(gr.date);
+    }
+
+    // Second fallback: extract from record extra fields (bts_lat/bts_lon)
+    if (points.size === 0) {
+      for (const r of filteredRecords) {
+        const ex = r.extra || {};
+        const lat = parseFloat(ex.bts_lat || ex.bts_x || "");
+        const lon = parseFloat(ex.bts_lon || ex.bts_y || "");
+        if (isNaN(lat) || isNaN(lon) || (lat === 0 && lon === 0)) continue;
+        const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+        if (!points.has(key)) {
+          points.set(key, { lat, lon, count: 0, dates: new Set(),
+            city: ex.bts_city || "", street: ex.bts_street || "" });
+        }
+        const p = points.get(key);
+        p.count++;
+        if (r.date) p.dates.add(r.date);
+      }
+    }
+
+    // Update title and stats
+    const catLabel = (_ANOMALY_CATS.find(c => c.type === anomalyType) || {}).label || anomalyType;
+    if (titleEl) titleEl.textContent = `BTS: ${catLabel}`;
+    if (statsEl) statsEl.textContent = `${points.size} lokalizacji · ${filteredRecords.length} rek.`;
+
+    // Clear old markers
+    if (_anomMapMarkers) {
+      _anomMapMarkers.clearLayers();
+    }
+
+    if (points.size === 0) {
+      _anomMapInstance.setView([52.0, 19.5], 6);
+      if (statsEl) statsEl.textContent = "Brak danych BTS dla tej anomalii";
+      setTimeout(() => { _anomMapInstance.invalidateSize(); }, 100);
+      return;
+    }
+
+    // Add markers
+    const bounds = L.latLngBounds([]);
+    for (const [, p] of points) {
+      const radius = Math.min(Math.max(4, Math.log2(p.count + 1) * 3), 14);
+      const dateStr = [...p.dates].sort().join(", ");
+      const locInfo = [p.city, p.street].filter(Boolean).join(", ");
+      const popup = `<b>${p.count}× rekordów</b>${locInfo ? "<br>" + locInfo : ""}<br><span class="muted">${dateStr}</span>`;
+      const marker = L.circleMarker([p.lat, p.lon], {
+        radius: radius,
+        color: "#2563eb",
+        fillColor: "#3b82f6",
+        fillOpacity: 0.6,
+        weight: 1.5,
+      }).bindPopup(popup, { maxWidth: 220 });
+      _anomMapMarkers.addLayer(marker);
+      bounds.extend([p.lat, p.lon]);
+    }
+
+    // Fit bounds
+    if (bounds.isValid()) {
+      _anomMapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+    }
+
+    setTimeout(() => { _anomMapInstance.invalidateSize(); }, 100);
+  }
+
+  /** Render identification table under anomaly map for anomaly-related numbers */
+  function _renderAnomalyIdTable(anomalyType, items) {
+    const wrap = QS("#gsm_anomaly_id_table");
+    if (!wrap) return;
+    if (!items || !items.length) { wrap.innerHTML = ""; return; }
+
+    // Collect unique numbers from anomaly items
+    const numbers = new Set();
+    for (const it of items) {
+      if (it.number) numbers.add(it.number.replace(/^\+/, ""));
+      if (it.contact) numbers.add(it.contact);
+      if (it.numbers) it.numbers.forEach(n => numbers.add(n));
+    }
+
+    // Look up identification for each number
+    const rows = [];
+    for (const num of numbers) {
+      const info = _idLookup(num);
+      if (!info || !info.rec) continue;
+      const rec = info.rec;
+      const isCompany = rec.type === "company" || !!(rec.nip && rec.nip.length >= 10);
+      rows.push({ num, rec, isCompany });
+    }
+
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="small muted" style="padding:6px">Brak danych identyfikacyjnych dla numerów tej anomalii</div>';
+      return;
+    }
+
+    let html = '<table class="gsm-table" style="font-size:12px;margin-top:0"><thead><tr>';
+    html += '<th>Numer</th><th>Imię Nazwisko / Firma</th><th>PESEL / NIP</th>';
+    html += '</tr></thead><tbody>';
+    for (const r of rows) {
+      const rec = r.rec;
+      const nameParts = [];
+      if (rec.first_name) nameParts.push(rec.first_name);
+      if (rec.last_name) nameParts.push(rec.last_name);
+      const nameStr = nameParts.length ? nameParts.join(" ") : (rec.name || "—");
+      const idStr = r.isCompany
+        ? (rec.nip ? `NIP: ${rec.nip}` : (rec.regon ? `REGON: ${rec.regon}` : "—"))
+        : (rec.pesel || "—");
+      const typeIcon = r.isCompany ? "\u{1F3E2}" : "";
+      // Build tooltip
+      const tooltip = _idTooltipText(rec);
+      const tipEsc = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+      html += `<tr>`;
+      html += `<td><code>${r.num}</code></td>`;
+      html += `<td class="gsm-id-tip" data-id-tip="${tipEsc}">${typeIcon} ${_escHtml(nameStr)}</td>`;
+      html += `<td>${idStr}</td>`;
+      html += `</tr>`;
+    }
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  /** Render the anomaly Leaflet map to canvas (same approach as _renderMapToCanvas) */
+  async function _renderAnomalyMapToCanvas() {
+    if (!_anomMapInstance) return null;
+    const map = _anomMapInstance;
+    const container = QS("#gsm_anomaly_map_container");
+    if (!container) return null;
+
+    const scale = 2;
+    const size = map.getSize();
+    const w = size.x * scale;
+    const h = size.y * scale;
+
+    await _waitForTilesToLoad(map, 3000);
+
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext("2d");
+
+    // 1. Background
+    ctx.fillStyle = "#e8e8e8";
+    ctx.fillRect(0, 0, w, h);
+
+    // 2. Tile images
+    const containerRect = map.getContainer().getBoundingClientRect();
+    const tilePane = map.getPane("tilePane");
+    if (tilePane) {
+      const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
+      const tilePromises = [];
+      for (const img of tileImgs) {
+        if (!img.src) continue;
+        const rect = img.getBoundingClientRect();
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+        const tw = rect.width * scale;
+        const th = rect.height * scale;
+        tilePromises.push(
+          _fetchImageBitmap(img.src)
+            .then(bmp => ({ bmp, x, y, tw, th }))
+            .catch(() => null)
+        );
+      }
+      const tiles = await Promise.all(tilePromises);
+      for (const tile of tiles) {
+        if (!tile) continue;
+        ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
+        tile.bmp.close();
+      }
+    }
+
+    // 3. Overlay pane (circleMarkers)
+    const overlayPane = map.getPane("overlayPane");
+    if (overlayPane) {
+      const canvases = overlayPane.querySelectorAll("canvas");
+      for (const c of canvases) {
+        try {
+          const cRect = c.getBoundingClientRect();
+          ctx.drawImage(c,
+            (cRect.left - containerRect.left) * scale, (cRect.top - containerRect.top) * scale,
+            cRect.width * scale, cRect.height * scale);
+        } catch (_) {}
+      }
+    }
+
+    // 4. Marker pane
+    _drawPaneMarkers(ctx, map, "markerPane", scale);
+
+    return out;
+  }
+
+  /** Take a screenshot of the anomaly map (map + header + ID table) with watermark */
+  async function _takeAnomalyMapScreenshot() {
+    const wrap = QS("#gsm_anomaly_map_wrap");
+    if (!wrap || !_anomMapInstance) return;
+
+    const btn = QS("#gsm_anomaly_map_screenshot_btn");
+    if (btn) btn.disabled = true;
+
+    try {
+      // 1. Render the Leaflet map to canvas (tiles + markers)
+      const mapCanvas = await _renderAnomalyMapToCanvas();
+      if (!mapCanvas) {
+        _addLog("warn", "Nie udało się wyrenderować mapy anomalii");
+        return;
+      }
+
+      const scale = 2;
+
+      // 2. Render header via html2canvas
+      const header = QS("#gsm_anomaly_map_header");
+      let headerCanvas = null;
+      if (header) {
+        await _ensureHtml2Canvas();
+        // Hide screenshot button during capture
+        const hideEls = header.querySelectorAll(".gsm-card-screenshot-btn");
+        hideEls.forEach(el => el.style.display = "none");
+        headerCanvas = await html2canvas(header, { scale, backgroundColor: "#ffffff", logging: false });
+        hideEls.forEach(el => el.style.display = "");
+      }
+
+      // 3. Render ID table via html2canvas (if present)
+      const idTable = QS("#gsm_anomaly_id_table");
+      let tableCanvas = null;
+      if (idTable && idTable.innerHTML.trim()) {
+        await _ensureHtml2Canvas();
+        tableCanvas = await html2canvas(idTable, { scale, backgroundColor: "#ffffff", logging: false });
+      }
+
+      // 4. Compose: header + map + table
+      const headerH = headerCanvas ? headerCanvas.height : 0;
+      const tableH = tableCanvas ? tableCanvas.height : 0;
+      const totalW = mapCanvas.width;
+      const totalH = headerH + mapCanvas.height + tableH;
+
+      const composed = document.createElement("canvas");
+      composed.width = totalW;
+      composed.height = totalH;
+      const cctx = composed.getContext("2d");
+      cctx.fillStyle = "#ffffff";
+      cctx.fillRect(0, 0, totalW, totalH);
+
+      let yOff = 0;
+      if (headerCanvas) {
+        // Scale header to match map width
+        const hScaleX = totalW / headerCanvas.width;
+        cctx.drawImage(headerCanvas, 0, 0, totalW, headerCanvas.height * hScaleX);
+        yOff = Math.round(headerCanvas.height * hScaleX);
+      }
+      cctx.drawImage(mapCanvas, 0, yOff);
+      yOff += mapCanvas.height;
+      if (tableCanvas) {
+        const tScaleX = totalW / tableCanvas.width;
+        cctx.drawImage(tableCanvas, 0, yOff, totalW, tableCanvas.height * tScaleX);
+      }
+
+      // 5. Add watermark
+      const title = QS("#gsm_anomaly_map_title");
+      const titleText = title ? title.textContent : "Mapa anomalii";
+      const final = _drawWatermark(composed, [titleText, "© OpenStreetMap contributors"]);
+      if (!final) { _addLog("warn", "Nie udało się wyrenderować zrzutu"); return; }
+
+      // 6. Download
+      final.toBlob((blob) => {
+        if (!blob) return;
+        const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `GSM_anomaly_map_${ts}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zrzut mapy anomalii: ${filename}`);
+      }, "image/png");
+    } catch (e) {
+      _addLog("error", `Błąd zrzutu mapy anomalii: ${e.message}`);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /**
+   * Build a predicate function that tests whether a record matches
+   * the given anomaly type. Returns a function(record) → boolean.
+   */
+  function _anomalyPredicate(type, anomalyItems) {
+    switch (type) {
+      case "long_call":
+        return r => r.duration_seconds > 3600 && (r.record_type || "").includes("CALL");
+      case "late_night_calls":
+        return r => {
+          if (!r.time || !(r.record_type || "").includes("CALL")) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 0 && h < 5;
+        };
+      case "night_activity":
+        return r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        };
+      case "night_movement":
+        return r => {
+          if (!r.time) return false;
+          const h = parseInt(r.time.split(":")[0], 10);
+          return h >= 23 || h < 5;
+        };
+      case "burst_activity": {
+        if (!anomalyItems.length) return () => false;
+        const b = anomalyItems[0];
+        return r => {
+          if (r.date !== b.date) return false;
+          if (!b.time || !r.time) return true;
+          try {
+            const bp = b.time.split(":"), rp = r.time.split(":");
+            const bm = parseInt(bp[0]) * 60 + parseInt(bp[1]);
+            const rm = parseInt(rp[0]) * 60 + parseInt(rp[1]);
+            return rm >= bm && rm <= bm + (b.window_min || 30);
+          } catch (_) { return false; }
+        };
+      }
+      case "premium_number": {
+        const nums = new Set(anomalyItems.map(it => it.contact));
+        return r => nums.has(r.callee) || nums.has(r.caller);
+      }
+      case "roaming":
+        return r => r.roaming || (r.network && !/orange|play|plus|t-mobile|polkomtel|p4|heyah/i.test(r.network));
+      case "foreign_contacts": {
+        const fNums = new Set(anomalyItems.flatMap(it => it.numbers || []));
+        return r => fNums.has(r.callee) || fNums.has(r.caller);
+      }
+      case "forwarded_calls":
+        return r => r.record_type === "CALL_FORWARDED";
+      case "one_time_contacts": {
+        const otNums = new Set(anomalyItems.map(it => it.contact));
+        return r => otNums.has(r.callee) || otNums.has(r.caller);
+      }
+      case "satellite_numbers": {
+        const satNums = new Set(anomalyItems.map(it => it.contact));
+        return r => satNums.has(r.callee) || satNums.has(r.caller);
+      }
+      case "social_media": {
+        const smPlatforms = anomalyItems.map(it => it.platform.toLowerCase());
+        return r => {
+          const txt = [r.callee, r.caller, r.network, r.raw_text || ""].join(" ").toLowerCase();
+          return smPlatforms.some(p => txt.includes(p));
+        };
+      }
+      case "foreigners": {
+        const frNums = new Set(anomalyItems.map(it => (it.number || "").replace(/^\+/, "")));
+        return r => {
+          const callee = (r.callee || "").replace(/^\+/, "");
+          const caller = (r.caller || "").replace(/^\+/, "");
+          return frNums.has(callee) || frNums.has(caller);
+        };
+      }
+      case "inactivity_gap": {
+        const gapDates = new Set();
+        for (const it of anomalyItems) {
+          if (it.last_date) gapDates.add(it.last_date);
+          if (it.next_date) gapDates.add(it.next_date);
+        }
+        return r => gapDates.has(r.date);
+      }
+      default:
+        return () => false;
+    }
+  }
+
+  /**
+   * +5 context filter: show anomaly records plus 5 records before/after each,
+   * with color coding (red = anomaly, blue = context).
+   */
+  function _anomalyContextFilter(type, anomalyItems) {
+    const allRecords = St.lastResult ? St.lastResult.records : [];
+    if (!allRecords.length) return;
+
+    const isAnomaly = _anomalyPredicate(type, anomalyItems);
+
+    // Step 1: Find anomaly indices by running predicate on every record
+    const anomalyIndices = new Set();
+    for (let i = 0; i < allRecords.length; i++) {
+      if (isAnomaly(allRecords[i])) {
+        anomalyIndices.add(i);
+      }
+    }
+
+    if (!anomalyIndices.size) return;
+
+    // Step 2: Collect context indices (+5 before, +5 after each anomaly)
+    const contextIndices = new Set();
+    for (const idx of anomalyIndices) {
+      for (let d = 1; d <= 5; d++) {
+        const before = idx - d;
+        const after = idx + d;
+        if (before >= 0 && !anomalyIndices.has(before)) contextIndices.add(before);
+        if (after < allRecords.length && !anomalyIndices.has(after)) contextIndices.add(after);
+      }
+    }
+
+    // Step 3: Merge, sort by original position, build result
+    const allIndices = [...anomalyIndices, ...contextIndices].sort((a, b) => a - b);
+    const resultRecords = allIndices.map(i => allRecords[i]);
+
+    // Step 4: Build highlighting sets keyed by record object reference.
+    // .filter() and [...].sort() preserve object references, so WeakSet works.
+    const anomalyRecords = new Set();
+    const contextRecords = new Set();
+    for (const idx of allIndices) {
+      if (anomalyIndices.has(idx)) {
+        anomalyRecords.add(allRecords[idx]);
+      } else {
+        contextRecords.add(allRecords[idx]);
+      }
+    }
+
+    St._anomalyHighlight = {
+      anomalyRecords: anomalyRecords,
+      contextRecords: contextRecords,
+    };
+
+    // Auto-show context_label column
+    if (St.columnHidden) St.columnHidden["context_label"] = false;
+    // Ensure it's in the column order
+    if (St.columnOrder && !St.columnOrder.includes("context_label")) {
+      St.columnOrder.unshift("context_label");
+    }
+
+    const anomCount = anomalyIndices.size;
+    const ctxCount = contextIndices.size;
+    const filterText = `+5 kontekst: ${anomCount} anomalii + ${ctxCount} kontekstu = ${resultRecords.length} rek.`;
+
+    // Clear heatmap filter state
+    St.hmActiveCell = null;
+    const hmBar = QS("#gsm_hm_filter_bar");
+    if (hmBar) hmBar.style.display = "none";
+
+    _setRecordsFilter(filterText, () => {
+      St._anomalyHighlight = null;
+      // Auto-hide context_label column
+      if (St.columnHidden) St.columnHidden["context_label"] = true;
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(resultRecords, false, resultRecords.length);
+
+    const recCard = QS("#gsm_records_card");
+    if (recCard) {
+      recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      recCard.style.transition = "box-shadow .2s";
+      recCard.style.boxShadow = "0 0 0 3px var(--brand-blue,#2563eb)";
+      setTimeout(() => { recCard.style.boxShadow = ""; }, 1200);
+    }
+  }
+
+  /** Render old-format anomaly items (just description text). */
+  function _renderOldAnomalyItems(items) {
+    let html = '<div style="display:flex;flex-direction:column;gap:3px;font-size:13px">';
+    for (const it of items) {
+      html += `<div>${it.description || ""}</div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function _renderAnomalyItems(type, items) {
+    let html = '<div style="display:flex;flex-direction:column;gap:3px;font-size:13px">';
+
+    if (type === "long_call") {
+      for (const it of items) {
+        html += `<div><code>${it.contact}</code> — ${it.duration_min} min (${it.date} ${it.time})</div>`;
+      }
+    } else if (type === "late_night_calls") {
+      for (const it of items) {
+        html += `<div><code>${it.contact}</code> — ${it.direction}, ${it.duration_min} min (${it.date} ${it.time})</div>`;
+      }
+    } else if (type === "night_activity") {
+      for (const it of items) {
+        html += `<div>${it.ratio_pct}% zdarzeń w godzinach 23:00–05:00</div>`;
+      }
+    } else if (type === "night_movement") {
+      for (const it of items) {
+        html += `<div>${it.date} ${it.time_from} → ${it.time_to}: <span class="muted">${it.bts_from} → ${it.bts_to}</span>`;
+        if (it.contact) html += ` (kontakt: <code>${it.contact}</code>)`;
+        html += `</div>`;
+      }
+    } else if (type === "burst_activity") {
+      for (const it of items) {
+        html += `<div>${it.count} rekordów w ${it.window_min} min — ${it.date} od ${it.time}</div>`;
+      }
+    } else if (type === "premium_number") {
+      for (const it of items) {
+        html += `<div><code>${it.contact}</code> — ${it.count}× (${it.dates.join(", ")})</div>`;
+      }
+    } else if (type === "roaming") {
+      for (const it of items) {
+        const nets = it.networks && it.networks.length ? ` [${it.networks.join(", ")}]` : "";
+        const name = _countryName(it.country) || it.country;
+        // Show country name; if country code differs from displayed name, show raw code
+        const raw = (it.country && it.country !== name) ? ` <span class="muted">(${it.country})</span>` : "";
+        // Show MCC:MNC codes if available
+        const mcc = it.mcc_mnc && it.mcc_mnc.length ? ` <span class="muted">MCC:MNC ${it.mcc_mnc.join(", ")}</span>` : "";
+        html += `<div><b>${name}</b>${raw} \u2014 ${it.count} rekord\u00F3w, ${it.period}${nets}${mcc}</div>`;
+      }
+    } else if (type === "foreign_contacts") {
+      for (const it of items) {
+        const flag = it.critical ? " \u26A0\uFE0F" : "";
+        const nums = (it.numbers || []).slice(0, 5).map(n => `<code>${n}</code>`).join(", ");
+        const more = (it.numbers || []).length > 5 ? ` (+${it.numbers.length - 5} wi\u0119cej)` : "";
+        const critStyle = it.critical ? "background:rgba(220,38,38,.06);padding:4px 6px;border-radius:4px;margin:2px 0" : "";
+        // SIM registration badge
+        let simBadge = "";
+        if (it.sim_registration === "not_required") {
+          simBadge = ` <span style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:3px;padding:1px 5px;font-size:11px;font-weight:600" title="${it.sim_note || "Kraj bez rejestracji SIM"}">BRAK REJ. SIM</span>`;
+        } else if (it.sim_registration === "partial") {
+          simBadge = ` <span style="background:#e0f2fe;color:#0c4a6e;border:1px solid #7dd3fc;border-radius:3px;padding:1px 5px;font-size:11px" title="${it.sim_note || "Częściowy obowiązek rejestracji"}">cz\u0119\u015Bc. rej.</span>`;
+        }
+        html += `<div style="${critStyle}">`;
+        html += `<b>${it.country}${flag}</b> (${it.country_code})${simBadge} \u2014 ${it.count} interakcji`;
+        html += ` (\u2191${it.outgoing} \u2193${it.incoming}), ${it.period}<br>`;
+        html += `<span style="font-size:12px;opacity:.8">Numery: ${nums}${more}</span>`;
+        html += `</div>`;
+      }
+    } else if (type === "forwarded_calls") {
+      for (const it of items) {
+        const fwdTo = it.forwarded_to ? ` \u2192 <code>${it.forwarded_to}</code>` : "";
+        const dur = it.duration_min ? `, ${it.duration_min} min` : "";
+        const loc = it.location ? ` <span class="muted">[${it.location}]</span>` : "";
+        html += `<div>${it.date} ${it.time} \u2014 <code>${it.contact || "?"}</code>${fwdTo}${dur}${loc}</div>`;
+      }
+    } else if (type === "one_time_contacts") {
+      for (const it of items) {
+        const typeLabel = (it.record_type || "").replace(/_/g, " ");
+        html += `<div><code>${it.contact}</code> — ${typeLabel} (${it.date})</div>`;
+      }
+    } else if (type === "satellite_numbers") {
+      for (const it of items) {
+        const confBadge = it.confidence === "high" ? "\u{1F7E2}" : it.confidence === "medium" ? "\u{1F7E1}" : "\u{1F534}";
+        const dates = it.dates && it.dates.length ? ` (${it.dates.join(", ")})` : "";
+        html += `<div>${confBadge} <code>${it.contact}</code> — <b>${it.operator || "?"}</b> [${it.confidence || "?"}] ${it.count}\u00D7${dates}</div>`;
+      }
+    } else if (type === "social_media") {
+      for (const it of items) {
+        const catShort = (it.category || "").replace(/\s*\/\s*/g, "/");
+        const dates = it.dates && it.dates.length > 0 ? it.dates.join(", ") : "";
+        const types = it.record_types && it.record_types.length ? it.record_types.map(t => t.replace(/_/g, " ")).join(", ") : "";
+        const contacts = it.unique_contacts > 0 ? `, ${it.unique_contacts} kontakt${it.unique_contacts === 1 ? "" : it.unique_contacts < 5 ? "y" : "\u00F3w"}` : "";
+        html += `<div><b>${it.platform}</b> <span class="muted">[${catShort}]</span> — ${it.count}\u00D7${contacts}`;
+        if (types) html += ` <span class="muted">(${types})</span>`;
+        if (dates) html += `<div class="small muted" style="margin-left:12px">${dates}</div>`;
+        html += `</div>`;
+      }
+    } else if (type === "inactivity_gap") {
+      for (const it of items) {
+        const lastType = (it.last_type || "").replace(/_/g, " ");
+        const firstType = (it.first_type || "").replace(/_/g, " ");
+        html += `<div style="margin-bottom:4px">`;
+        html += `<b>${it.gap_hours}h</b> przerwy: `;
+        html += `ostatni \u2014 ${it.last_date} ${it.last_time} <code>${it.last_contact}</code> <span class="muted">(${lastType})</span>`;
+        html += ` \u2192 pierwszy \u2014 ${it.first_date} ${it.first_time} <code>${it.first_contact}</code> <span class="muted">(${firstType})</span>`;
+        html += `</div>`;
+      }
+    } else if (type === "meeting_after_call") {
+      for (const it of items) {
+        const missed = it.duration_s === 0 ? ' <span style="color:#dc2626;font-weight:600">nieodebrane</span>' : ` (${it.duration})`;
+        html += `<div style="margin-bottom:4px">`;
+        html += `<b>${it.date} ${it.time}</b> \u2014 `;
+        html += `<code>${it.caller}</code>${missed}`;
+        html += ` \u2192 <b>${it.silence_min} min</b> ciszy`;
+        if (it.events_in_window > 0) html += ` (${it.events_in_window} zdarze\u0144 w oknie)`;
+        html += ` \u2014 BTS: <span class="muted">${it.bts}</span>`;
+        if (it.next_date) html += ` \u2192 nast\u0119pna aktywno\u015B\u0107: ${it.next_date} ${it.next_time}`;
+        html += `</div>`;
+      }
+    } else if (type === "foreigners") {
+      for (const it of items) {
+        const confBadge = it.confidence === "high"
+          ? '<span style="background:#fecaca;color:#991b1b;border-radius:3px;padding:1px 5px;font-size:11px;font-weight:600">WYSOKI</span>'
+          : it.confidence === "medium"
+          ? '<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 5px;font-size:11px;font-weight:600">ŚREDNI</span>'
+          : '<span style="background:#e0f2fe;color:#0c4a6e;border-radius:3px;padding:1px 5px;font-size:11px">NISKI</span>';
+        const signalStr = it.signals.join(", ");
+        // Identity details — PESEL / NIP / REGON
+        let idParts = [];
+        if (it.pesel) idParts.push(`PESEL: <code>${it.pesel}</code>`);
+        else idParts.push("<b>brak PESEL</b>");
+        if (it.nip) idParts.push(`NIP: <code>${it.nip}</code>`);
+        if (it.regon) idParts.push(`REGON: <code>${it.regon}</code>`);
+        const idInfo = idParts.join(" | ");
+        const addrInfo = it.city ? ` | ${it.city}` : (it.address ? ` | ${it.address.substring(0, 40)}` : "");
+        // Country badge
+        const countryBadge = it.country
+          ? ` <span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 5px;font-size:10px">\u{1F30D} ${it.country}</span>`
+          : "";
+        // Origin badge (name heuristic)
+        const originBadge = it.foreign_origin ? ` <span class="muted">[${it.foreign_origin}]</span>` : "";
+        // Company badge
+        const companyBadge = it.is_company ? ' <span style="background:#f3e8ff;color:#7c3aed;border-radius:3px;padding:1px 5px;font-size:10px">\u{1F3E2} firma</span>' : "";
+        html += `<div style="margin-bottom:5px;padding:3px 6px;border-radius:4px;background:rgba(249,115,22,.04)">`;
+        html += `${confBadge} <code>${it.number}</code>${countryBadge}${companyBadge} \u2014 <b>${it.name}</b>${originBadge}`;
+        html += `<div style="font-size:11px;margin-top:2px"><span class="muted">Sygnały:</span> ${signalStr} | ${idInfo}${addrInfo}</div>`;
+        html += `</div>`;
+      }
+    } else {
+      for (const it of items) {
+        html += `<div>${it.description || JSON.stringify(it)}</div>`;
+      }
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  /* ── Contact relationship graph (SVG) ──────────────────── */
+
+  function _renderContactGraph(contacts, msisdn) {
+    const wrap = QS("#gsm_contact_graph");
+    if (!wrap || !contacts || !contacts.length) return;
+
+    const N = contacts.length;
+    const trunc = (s, max) => s.length > max ? s.slice(0, max - 1) + "\u2026" : s;
+
+    // ── Layout: two rows of cards (top + bottom) around centered subscriber ──
+    const topN = Math.ceil(N / 2);
+    const botN = N - topN;
+    const maxPerRow = Math.max(topN, botN);
+    const CW = 115, CH = 106, CGAP = 10;
+    const W = Math.max(maxPerRow * (CW + CGAP) - CGAP + 30, 460);
+
+    // Auto-scale card width — capped at 1/3 of Records card width
+    const graphCard = QS("#gsm_graph_card");
+    if (graphCard && !graphCard.dataset.userResized) {
+      const recordsCard = QS("#gsm_records_card");
+      const maxW = recordsCard ? Math.round(recordsCard.offsetWidth / 3) : Infinity;
+      const pct = Math.min(100, Math.max(33, maxPerRow * 11 + 2));
+      graphCard.style.width = pct + "%";
+      if (maxW < Infinity) graphCard.style.maxWidth = maxW + "px";
+    }
+    const CARD_Y_TOP = 22;
+    const SUB_Y = CARD_Y_TOP + CH + 70;
+    const CARD_Y_BOT = SUB_Y + 70;
+    const H = botN > 0 ? CARD_Y_BOT + CH + 8 : SUB_Y + 60;
+    const CX = W / 2;
+
+    // SVG icons (compact)
+    // Generic person (unknown gender — no PESEL)
+    const personIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
+      <path d="M-6.5 5 Q-6.5 0 0 -0.5 Q6.5 0 6.5 5" fill="none" stroke-width="1.2"/>`;
+    // Male icon — broader shoulders, shorter hair
+    const maleIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
+      <path d="M-7 5 Q-7 -0.5 0 -1 Q7 -0.5 7 5" fill="none" stroke-width="1.2"/>
+      <line x1="5" y1="-8" x2="8" y2="-11" stroke-width="1" stroke-linecap="round"/>
+      <line x1="6" y1="-11" x2="8" y2="-11" stroke-width="1" stroke-linecap="round"/>
+      <line x1="8" y1="-11" x2="8" y2="-9" stroke-width="1" stroke-linecap="round"/>`;
+    // Female icon — narrower shoulders, longer hair accent
+    const femaleIcon = `<circle cx="0" cy="-5" r="3.8" fill="none" stroke-width="1.2"/>
+      <path d="M-6 5 Q-6 0 0 -0.5 Q6 0 6 5" fill="none" stroke-width="1.2"/>
+      <line x1="5.5" y1="-7" x2="5.5" y2="-3" stroke-width="1" stroke-linecap="round"/>
+      <line x1="3.5" y1="-3" x2="7.5" y2="-3" stroke-width="1" stroke-linecap="round"/>`;
+    const companyIcon = `<rect x="-5" y="-7" width="10" height="13" rx="1" fill="none" stroke-width="1.1"/>
+      <line x1="-2.5" y1="-3" x2="-2.5" y2="-1" stroke-width="0.9"/>
+      <line x1="0" y1="-3" x2="0" y2="-1" stroke-width="0.9"/>
+      <line x1="2.5" y1="-3" x2="2.5" y2="-1" stroke-width="0.9"/>
+      <line x1="-2.5" y1="1.5" x2="-2.5" y2="3.5" stroke-width="0.9"/>
+      <line x1="0" y1="1.5" x2="0" y2="3.5" stroke-width="0.9"/>
+      <line x1="2.5" y1="1.5" x2="2.5" y2="3.5" stroke-width="0.9"/>`;
+    // Subscriber icons (with phone symbol) — generic, male, female
+    const subscriberIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
+      <path d="M-9 6 Q-9 0 -3 -0.5 Q3 0 3 6" fill="none" stroke-width="1.4"/>
+      <rect x="6" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
+      <circle cx="8.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+    const subscriberMaleIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
+      <path d="M-9.5 6 Q-9.5 -0.5 -3 -1 Q3.5 -0.5 3.5 6" fill="none" stroke-width="1.4"/>
+      <line x1="2" y1="-8" x2="5" y2="-11" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="3" y1="-11" x2="5" y2="-11" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="5" y1="-11" x2="5" y2="-9" stroke-width="1.1" stroke-linecap="round"/>
+      <rect x="7" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
+      <circle cx="9.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+    const subscriberFemaleIcon = `<circle cx="-3" cy="-5" r="4.2" fill="none" stroke-width="1.4"/>
+      <path d="M-8.5 6 Q-8.5 0 -3 -0.5 Q2.5 0 2.5 6" fill="none" stroke-width="1.4"/>
+      <line x1="2.5" y1="-7" x2="2.5" y2="-3" stroke-width="1.1" stroke-linecap="round"/>
+      <line x1="0.5" y1="-3" x2="4.5" y2="-3" stroke-width="1.1" stroke-linecap="round"/>
+      <rect x="7" y="-7" width="5" height="10" rx="1.2" fill="none" stroke-width="1.1"/>
+      <circle cx="9.5" cy="0.5" r="0.7" fill="currentColor"/>`;
+
+    // Determine gender from PESEL: 10th digit (index 9) — odd=male, even=female
+    const _genderFromPesel = (pesel) => {
+      if (!pesel || pesel.length < 10) return "unknown";
+      const d = parseInt(pesel.charAt(9), 10);
+      if (isNaN(d)) return "unknown";
+      return d % 2 === 1 ? "male" : "female";
+    };
+    const _pickPersonIcon = (rec) => {
+      if (!rec || !rec.pesel) return personIcon;
+      return _genderFromPesel(rec.pesel) === "female" ? femaleIcon : maleIcon;
+    };
+    const _pickSubscriberIcon = (rec) => {
+      if (!rec || !rec.pesel) return subscriberIcon;
+      return _genderFromPesel(rec.pesel) === "female" ? subscriberFemaleIcon : subscriberMaleIcon;
+    };
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
+      style="width:100%;height:auto;font-family:system-ui,-apple-system,sans-serif">`;
+
+    svg += `<defs>
+      <marker id="gsm_arrow_out" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0.5,0.5 L6,2.5 L0.5,4.5" fill="#34c759" stroke="none"/>
+      </marker>
+      <marker id="gsm_arrow_in" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0.5,0.5 L6,2.5 L0.5,4.5" fill="#ff4d4f" stroke="none"/>
+      </marker>
+      <marker id="gsm_arrow_fwd" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0.5,0.5 L6,2.5 L0.5,4.5" fill="#f59e0b" stroke="none"/>
+      </marker>
+      <filter id="gsm_card_shadow" x="-4%" y="-4%" width="108%" height="116%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.07"/>
+      </filter>
+    </defs>`;
+
+    // Legend (top-right, single line)
+    const legX = W - 260;
+    svg += `<line x1="${legX}" y1="10" x2="${legX + 18}" y2="10" stroke="#34c759" stroke-width="1.5" stroke-linecap="round" marker-end="url(#gsm_arrow_out)"/>
+    <text x="${legX + 23}" y="13" font-size="7.5" fill="var(--text-muted,#64748b)">Wychodz\u0105ce</text>
+    <line x1="${legX + 82}" y1="10" x2="${legX + 100}" y2="10" stroke="#ff4d4f" stroke-width="1.5" stroke-linecap="round" marker-end="url(#gsm_arrow_in)"/>
+    <text x="${legX + 105}" y="13" font-size="7.5" fill="var(--text-muted,#64748b)">Przychodz\u0105ce</text>
+    <line x1="${legX + 170}" y1="10" x2="${legX + 188}" y2="10" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" marker-end="url(#gsm_arrow_fwd)"/>
+    <text x="${legX + 193}" y="13" font-size="7.5" fill="var(--text-muted,#64748b)">Przekierowane</text>`;
+
+    // Card positions helper
+    const cardPositions = (count, y) => {
+      const totalW = count * CW + (count - 1) * CGAP;
+      const startX = (W - totalW) / 2;
+      return Array.from({ length: count }, (_, i) => ({ x: startX + i * (CW + CGAP), y }));
+    };
+    const topCards = cardPositions(topN, CARD_Y_TOP);
+    const botCards = cardPositions(botN, CARD_Y_BOT);
+    const allCards = [...topCards.map((p, i) => ({ ...p, i, c: contacts[i], isTop: true })),
+                      ...botCards.map((p, j) => ({ ...p, i: topN + j, c: contacts[topN + j], isTop: false }))];
+
+    // ── Subscriber card dimensions (rectangular, wider than contact cards) ──
+    const SUB_W = 200, SUB_H = 62;
+    const SUB_X = CX - SUB_W / 2;
+    // Compute total OUT/IN across all displayed contacts
+    let subTotalOut = 0, subTotalIn = 0, subTotalFwd = 0;
+    let subCallsOut = 0, subCallsIn = 0, subSmsOut = 0, subSmsIn = 0, subFwd = 0;
+    for (const card of allCards) {
+      subCallsOut += card.c.calls_out || 0;
+      subSmsOut   += card.c.sms_out   || 0;
+      subCallsIn  += card.c.calls_in  || 0;
+      subSmsIn    += card.c.sms_in    || 0;
+      subFwd      += card.c.calls_fwd || 0;
+    }
+    subTotalOut = subCallsOut + subSmsOut;
+    subTotalIn  = subCallsIn  + subSmsIn;
+    subTotalFwd = subFwd;
+
+    // ── Straight-line arrows — behind cards ──
+    const EDGE_GAP = 6;
+    const SEP = 3;
+
+    for (const card of allCards) {
+      const c = card.c, idx = card.i;
+      const cardCX = card.x + CW / 2;
+      const cardEdgeY = card.isTop ? card.y + CH : card.y;
+      const outAll = (c.calls_out || 0) + (c.sms_out || 0);
+      const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
+      const inAll = (c.calls_in || 0) + (c.sms_in || 0);
+      const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
+      const fwdAll = c.calls_fwd || 0;
+
+      // Direction from subscriber to card & perpendicular
+      const dx = cardCX - CX, dy = cardEdgeY - SUB_Y;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      const nx = dx / len, ny = dy / len;
+      const perpX = -ny, perpY = nx;
+
+      // Endpoints: A near subscriber rect edge, B near card edge
+      // Clamp to subscriber rectangle boundary
+      const _clampToRect = (cx, cy, rw, rh, tgtX, tgtY) => {
+        const ddx = tgtX - cx, ddy = tgtY - cy;
+        const hw = rw / 2, hh = rh / 2;
+        if (ddx === 0 && ddy === 0) return { x: cx, y: cy - hh };
+        const sx = Math.abs(ddx) > 0.01 ? hw / Math.abs(ddx) : 1e9;
+        const sy = Math.abs(ddy) > 0.01 ? hh / Math.abs(ddy) : 1e9;
+        const s = Math.min(sx, sy);
+        return { x: cx + ddx * s, y: cy + ddy * s };
+      };
+      const subEdge = _clampToRect(CX, SUB_Y, SUB_W + 4, SUB_H + 4, cardCX, cardEdgeY);
+      const ax = subEdge.x, ay = subEdge.y;
+      const bx = cardCX - nx * EDGE_GAP, by = cardEdgeY - ny * EDGE_GAP;
+
+      // OUT: A→B shifted +perp (green, arrow at card end)
+      if (outAll > 0) {
+        const x1 = ax + perpX * SEP, y1 = ay + perpY * SEP;
+        const x2 = bx + perpX * SEP, y2 = by + perpY * SEP;
+        svg += `<line class="gsm-graph-edge" data-edge="out" data-idx="${idx}" data-number="${c.number}"
+          x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+          stroke="#34c759" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
+          marker-end="url(#gsm_arrow_out)"
+          data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}" data-fwd="0"/>`;
+      }
+      // IN: B→A shifted −perp (red, arrow at subscriber end)
+      if (inAll > 0) {
+        const x1 = bx - perpX * SEP, y1 = by - perpY * SEP;
+        const x2 = ax - perpX * SEP, y2 = ay - perpY * SEP;
+        svg += `<line class="gsm-graph-edge" data-edge="in" data-idx="${idx}" data-number="${c.number}"
+          x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+          stroke="#ff4d4f" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
+          marker-end="url(#gsm_arrow_in)"
+          data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}" data-fwd="0"/>`;
+      }
+      // FWD: A→B shifted +2*perp (orange, arrow at card end)
+      if (fwdAll > 0) {
+        const x1 = ax + perpX * SEP * 2.5, y1 = ay + perpY * SEP * 2.5;
+        const x2 = bx + perpX * SEP * 2.5, y2 = by + perpY * SEP * 2.5;
+        svg += `<line class="gsm-graph-edge" data-edge="fwd" data-idx="${idx}" data-number="${c.number}"
+          x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+          stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" opacity="0.7"
+          marker-end="url(#gsm_arrow_fwd)"
+          data-all="${fwdAll}" data-calls="${fwdAll}" data-sms="0" data-fwd="${fwdAll}"/>`;
+      }
+    }
+
+    // ── Contact cards ──
+    for (const card of allCards) {
+      const c = card.c, idx = card.i;
+      const info = _idLookup(c.number);
+      const isCompany = info && info.type === "company";
+      const rec = info && info.rec ? info.rec : null;
+      const icon = isCompany ? companyIcon : _pickPersonIcon(rec);
+      const gender = _genderFromPesel(rec && rec.pesel);
+      const color = isCompany ? "#7c3aed" : (gender === "female" ? "#d946ef" : gender === "male" ? "#2563eb" : "#64748b");
+      // Build name + PESEL lines from identification record
+      let idNameLine = "";
+      let idPeselLine = "";
+      if (rec) {
+        const parts = [];
+        if (rec.first_name) parts.push(rec.first_name);
+        if (rec.last_name) parts.push(rec.last_name);
+        if (parts.length === 0 && rec.name) parts.push(rec.name);
+        idNameLine = trunc(parts.join(" "), 18);
+        if (rec.pesel) idPeselLine = rec.pesel;
+        else if (rec.nip) idPeselLine = "NIP: " + rec.nip;
+      } else if (info && info.label) {
+        idNameLine = trunc(info.label, 18);
+      }
+      const outAll = (c.calls_out || 0) + (c.sms_out || 0);
+      const outCalls = c.calls_out || 0, outSms = c.sms_out || 0;
+      const inAll = (c.calls_in || 0) + (c.sms_in || 0);
+      const inCalls = c.calls_in || 0, inSms = c.sms_in || 0;
+      const fwdAll2 = c.calls_fwd || 0;
+      const bw = CW - 8;
+      const icx = card.x + CW / 2;
+
+      svg += `<g class="gsm-graph-node" data-idx="${idx}" data-number="${c.number}" style="cursor:pointer"
+        title="2\u00d7LPM \u2192 filtruj rekordy">`;
+      svg += `<rect class="gsm-graph-node-bg" x="${card.x}" y="${card.y}" width="${CW}" height="${CH}"
+        rx="7" fill="var(--bg-card,#fff)" stroke="var(--border,#e2e8f0)" stroke-width="0.8" filter="url(#gsm_card_shadow)"/>`;
+      // Icon
+      svg += `<g transform="translate(${icx},${card.y + 13})" stroke="${color}" fill="none" color="${color}">${icon}</g>`;
+      // Full phone number
+      svg += `<text x="${icx}" y="${card.y + 30}" text-anchor="middle" font-size="7.5" font-weight="500" fill="var(--text,#334155)">${c.number}</text>`;
+      // Identification: name line + PESEL line (or editable placeholder)
+      if (idNameLine) {
+        const nameColor = isCompany ? '#7c3aed' : '#2563eb';
+        svg += `<text class="gsm-graph-id-label gsm-graph-id-edit" data-number="${c.number}" x="${icx}" y="${card.y + 38}" text-anchor="middle" font-size="6.5" fill="${nameColor}" font-style="italic" style="cursor:text">${idNameLine}</text>`;
+        if (idPeselLine) {
+          svg += `<text x="${icx}" y="${card.y + 46}" text-anchor="middle" font-size="5.8" fill="var(--text-muted,#64748b)">${idPeselLine}</text>`;
+        }
+      } else {
+        svg += `<text class="gsm-graph-id-label gsm-graph-id-empty" data-number="${c.number}" x="${icx}" y="${card.y + 39}" text-anchor="middle" font-size="6.5" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
+      }
+      // OUT badge
+      const by1 = card.y + 52;
+      svg += `<g data-elabel="out" data-idx="${idx}" data-all="${outAll}" data-calls="${outCalls}" data-sms="${outSms}" data-fwd="0"
+        ${outAll === 0 ? 'style="display:none"' : ""}>
+        <rect x="${card.x + 4}" y="${by1}" width="${bw}" height="12" rx="3" fill="#dcfce7"/>
+        <text x="${card.x + 9}" y="${by1 + 9}" font-size="6.5" font-weight="700" fill="#16a34a">OUT</text>
+        <text x="${card.x + CW - 6}" y="${by1 + 9}" font-size="7.5" font-weight="600" fill="#16a34a" text-anchor="end">${outAll}</text>
+      </g>`;
+      // IN badge
+      const by2 = card.y + 66;
+      svg += `<g data-elabel="in" data-idx="${idx}" data-all="${inAll}" data-calls="${inCalls}" data-sms="${inSms}" data-fwd="0"
+        ${inAll === 0 ? 'style="display:none"' : ""}>
+        <rect x="${card.x + 4}" y="${by2}" width="${bw}" height="12" rx="3" fill="#fee2e2"/>
+        <text x="${card.x + 9}" y="${by2 + 9}" font-size="6.5" font-weight="700" fill="#dc2626">IN</text>
+        <text x="${card.x + CW - 6}" y="${by2 + 9}" font-size="7.5" font-weight="600" fill="#dc2626" text-anchor="end">${inAll}</text>
+      </g>`;
+      // FWD badge (orange)
+      const by3 = card.y + 80;
+      svg += `<g data-elabel="fwd" data-idx="${idx}" data-all="${fwdAll2}" data-calls="${fwdAll2}" data-sms="0" data-fwd="${fwdAll2}"
+        ${fwdAll2 === 0 ? 'style="display:none"' : ""}>
+        <rect x="${card.x + 4}" y="${by3}" width="${bw}" height="12" rx="3" fill="#fed7aa"/>
+        <text x="${card.x + 9}" y="${by3 + 9}" font-size="6.5" font-weight="700" fill="#d97706">FWD</text>
+        <text x="${card.x + CW - 6}" y="${by3 + 9}" font-size="7.5" font-weight="600" fill="#d97706" text-anchor="end">${fwdAll2}</text>
+      </g>`;
+      // Note marker (small notes icon in top-right corner)
+      {
+        const _gnm = window._gsmNotesMgr;
+        const _ghn = _gnm && _gnm.hasNote("gsm_contact", "number", c.number);
+        const _nOpacity = _ghn ? "1" : "0";
+        const _nSize = 11;
+        const _nx = card.x + CW - _nSize - 1;
+        const _ny = card.y + 1;
+        svg += `<g class="gsm-graph-note-marker" data-number="${c.number}" style="cursor:pointer;opacity:${_nOpacity}">
+          <image href="${_noteIconSrc(_ghn)}" x="${_nx}" y="${_ny}" width="${_nSize}" height="${_nSize}" />
+        </g>`;
+      }
+      svg += `</g>`;
+    }
+
+    // ── Subscriber node (two-column: left=icon+number+name, right=OUT/IN/FWD) ──
+    const subLabel = msisdn || "Abonent";
+    const subInfo = msisdn ? _idLookup(msisdn) : null;
+    // Build subscriber name + PESEL from identification record
+    const subRec = subInfo && subInfo.rec ? subInfo.rec : null;
+    let subNameLine = "";
+    let subPeselLine = "";
+    if (subRec) {
+      const sp = [];
+      if (subRec.first_name) sp.push(subRec.first_name);
+      if (subRec.last_name) sp.push(subRec.last_name);
+      if (sp.length === 0 && subRec.name) sp.push(subRec.name);
+      subNameLine = trunc(sp.join(" "), 22);
+      if (subRec.pesel) subPeselLine = subRec.pesel;
+      else if (subRec.nip) subPeselLine = "NIP: " + subRec.nip;
+    } else if (subInfo && subInfo.label) {
+      subNameLine = trunc(subInfo.label, 22);
+    }
+    const subTop = SUB_Y - SUB_H / 2;
+    const badgeW = 72;  // badge width on right side
+    const badgeX = SUB_X + SUB_W - badgeW - 6;  // right-aligned badges
+
+    svg += `<g style="cursor:default">`;
+    // Card background
+    svg += `<rect x="${SUB_X}" y="${subTop}" width="${SUB_W}" height="${SUB_H}"
+      rx="8" fill="var(--bg-card,#fff)" stroke="#2563eb" stroke-width="1.8" filter="url(#gsm_card_shadow)"/>`;
+    // ── Left column: icon + number + name + PESEL ──
+    // Subscriber icon (gender-aware, vertically centered in left area)
+    const subGenderIcon = _pickSubscriberIcon(subRec);
+    const subGender = _genderFromPesel(subRec && subRec.pesel);
+    const subIconColor = subGender === "female" ? "#d946ef" : "#2563eb";
+    svg += `<g transform="translate(${SUB_X + 16},${subTop + SUB_H / 2})" stroke="${subIconColor}" fill="none" color="${subIconColor}">${subGenderIcon}</g>`;
+    // Phone number
+    svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 - (subPeselLine ? 8 : 4)}" font-size="8.5" font-weight="600" fill="var(--text,#334155)">${subLabel}</text>`;
+    // Identification: name line
+    if (subNameLine) {
+      svg += `<text class="gsm-graph-sub-id" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + (subPeselLine ? 2 : 8)}" font-size="7" font-weight="500" fill="#2563eb" font-style="italic">${subNameLine}</text>`;
+      if (subPeselLine) {
+        svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 11}" font-size="6.5" fill="var(--text-muted,#64748b)">${subPeselLine}</text>`;
+      }
+    } else if (msisdn) {
+      svg += `<text class="gsm-graph-sub-id gsm-graph-sub-id-empty" data-number="${msisdn}" x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 8}" font-size="7" fill="var(--text-muted,#94a3b8)" font-style="italic" style="cursor:text">\u270E dodaj nazw\u0119</text>`;
+    } else {
+      svg += `<text x="${SUB_X + 32}" y="${subTop + SUB_H / 2 + 8}" font-size="7" fill="var(--text-muted,#64748b)">Abonent</text>`;
+    }
+    // ── Right column: OUT / IN / FWD badges ──
+    // OUT badge
+    const sby1 = subTop + 8;
+    svg += `<g data-sub-label="out" data-all="${subTotalOut}" data-calls="${subCallsOut}" data-sms="${subSmsOut}" data-fwd="0">
+      <rect x="${badgeX}" y="${sby1}" width="${badgeW}" height="14" rx="3" fill="#dcfce7"/>
+      <text x="${badgeX + 5}" y="${sby1 + 10}" font-size="7" font-weight="700" fill="#16a34a">OUT</text>
+      <text x="${badgeX + badgeW - 5}" y="${sby1 + 10}" font-size="8" font-weight="600" fill="#16a34a" text-anchor="end">${subTotalOut}</text>
+    </g>`;
+    // IN badge
+    const sby2 = subTop + 24;
+    svg += `<g data-sub-label="in" data-all="${subTotalIn}" data-calls="${subCallsIn}" data-sms="${subSmsIn}" data-fwd="0">
+      <rect x="${badgeX}" y="${sby2}" width="${badgeW}" height="14" rx="3" fill="#fee2e2"/>
+      <text x="${badgeX + 5}" y="${sby2 + 10}" font-size="7" font-weight="700" fill="#dc2626">IN</text>
+      <text x="${badgeX + badgeW - 5}" y="${sby2 + 10}" font-size="8" font-weight="600" fill="#dc2626" text-anchor="end">${subTotalIn}</text>
+    </g>`;
+    // FWD badge (orange)
+    const sby3 = subTop + 40;
+    svg += `<g data-sub-label="fwd" data-all="${subTotalFwd}" data-calls="${subTotalFwd}" data-sms="0" data-fwd="${subTotalFwd}"
+      ${subTotalFwd === 0 ? 'style="display:none"' : ""}>
+      <rect x="${badgeX}" y="${sby3}" width="${badgeW}" height="14" rx="3" fill="#fed7aa"/>
+      <text x="${badgeX + 5}" y="${sby3 + 10}" font-size="7" font-weight="700" fill="#d97706">FWD</text>
+      <text x="${badgeX + badgeW - 5}" y="${sby3 + 10}" font-size="8" font-weight="600" fill="#d97706" text-anchor="end">${subTotalFwd}</text>
+    </g>`;
+    svg += `</g>`;
+
+    svg += "</svg>";
+    wrap.innerHTML = svg;
+
+    // ── Hover highlight ──
+    wrap.querySelectorAll(".gsm-graph-node").forEach(g => {
+      g.addEventListener("mouseenter", () => {
+        const idx = g.dataset.idx;
+        const bg = g.querySelector(".gsm-graph-node-bg");
+        if (bg) { bg.setAttribute("stroke", "var(--primary,#2563eb)"); bg.setAttribute("stroke-width", "1.8"); }
+        wrap.querySelectorAll(`.gsm-graph-edge[data-idx="${idx}"]`).forEach(e => {
+          e.dataset._origSw = e.getAttribute("stroke-width");
+          e.dataset._origOp = e.getAttribute("opacity");
+          e.setAttribute("opacity", "1"); e.setAttribute("stroke-width", "2.5");
+        });
+      });
+      g.addEventListener("mouseleave", () => {
+        const idx = g.dataset.idx;
+        const bg = g.querySelector(".gsm-graph-node-bg");
+        if (bg) { bg.setAttribute("stroke", "var(--border,#e2e8f0)"); bg.setAttribute("stroke-width", "0.8"); }
+        wrap.querySelectorAll(`.gsm-graph-edge[data-idx="${idx}"]`).forEach(e => {
+          e.setAttribute("opacity", e.dataset._origOp || "0.7");
+          if (e.dataset._origSw) e.setAttribute("stroke-width", e.dataset._origSw);
+        });
+      });
+      // Double-click → filter Records
+      g.addEventListener("dblclick", () => {
+        const num = g.dataset.number;
+        if (!num) return;
+        const allRecs = St.lastResult ? St.lastResult.records : [];
+        const filtered = allRecs.filter(r => r.callee === num);
+        const info = _idLookup(num);
+        const label = info && info.label ? info.label : num;
+        _setRecordsFilter(`${label} \u2014 ${filtered.length} rek.`, () => {
+          _clearRecordsFilter();
+          if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+        });
+        _renderRecords(filtered, false, filtered.length);
+        QS("#gsm_records_card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+
+    // ── Inline editing helper — overlays <input> on SVG text element ──
+    function _startInlineEdit(textEl, number) {
+      if (!wrap || !number) return;
+      // Remove any existing inline input
+      wrap.querySelectorAll(".gsm-inline-input").forEach(el => el.remove());
+      wrap.style.position = "relative";
+
+      const wrapRect = wrap.getBoundingClientRect();
+      const textRect = textEl.getBoundingClientRect();
+      const existing = _idLookup(number);
+      const currentVal = existing && existing.label ? existing.label : "";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = currentVal;
+      input.placeholder = "Wpisz nazw\u0119\u2026";
+      input.className = "gsm-inline-input";
+      const inputW = Math.max(textRect.width + 30, 110);
+      input.style.cssText = `
+        position:absolute;
+        left:${textRect.left - wrapRect.left - (inputW - textRect.width) / 2}px;
+        top:${textRect.top - wrapRect.top - 3}px;
+        width:${inputW}px; height:20px;
+        font-size:11px; text-align:center;
+        border:1.5px solid var(--primary,#2563eb); border-radius:5px;
+        outline:none; background:var(--bg-card,#fff); color:var(--text,#334155);
+        padding:0 6px; z-index:10;
+        box-shadow:0 2px 10px rgba(0,0,0,0.18);
+      `;
+      wrap.appendChild(input);
+      input.focus();
+      if (currentVal) input.select();
+
+      let saved = false;
+      const save = () => {
+        if (saved) return; saved = true;
+        const name = input.value.trim();
+        if (input.parentNode) input.remove();
+        if (!name) return;
+        const norm = _normMsisdn(number);
+        St.idMap[norm] = { label: name, type: St.idMap[norm]?.type || "person" };
+        _saveToProject();
+        const topSel = QS("#gsm_graph_top_n");
+        const n = parseInt(topSel?.value || "10");
+        _renderContactGraph(St._graphContacts.slice(0, n), St._graphMsisdn);
+      };
+      const cancel = () => { saved = true; if (input.parentNode) input.remove(); };
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); save(); }
+        if (e.key === "Escape") { e.preventDefault(); cancel(); }
+      });
+      input.addEventListener("blur", () => setTimeout(save, 80));
+    }
+
+    // ── Note markers on graph nodes ──
+    wrap.querySelectorAll(".gsm-graph-node").forEach(g => {
+      const noteMarker = g.querySelector(".gsm-graph-note-marker");
+      if (!noteMarker) return;
+      // Show on hover
+      g.addEventListener("mouseenter", () => { noteMarker.style.opacity = "1"; });
+      g.addEventListener("mouseleave", () => {
+        const _gnm2 = window._gsmNotesMgr;
+        const hasN = _gnm2 && _gnm2.hasNote("gsm_contact", "number", g.dataset.number);
+        noteMarker.style.opacity = hasN ? "1" : "0";
+      });
+      // Click on note marker
+      noteMarker.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const num = g.dataset.number;
+        if (!num) return;
+        const _gnm3 = window._gsmNotesMgr;
+        if (!_gnm3) return;
+        const info = _idLookup(num);
+        const label = "Kontakt (graf): " + (info && info.label ? info.label + " (" + num + ")" : num);
+        const ref = { type: "gsm_contact", number: num };
+        _gnm3.openNoteForElement(label, "user", ref);
+      });
+    });
+
+    // ── Click on contact label (empty or existing) → inline edit ──
+    wrap.querySelectorAll(".gsm-graph-id-empty, .gsm-graph-id-edit").forEach(txt => {
+      txt.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const num = txt.dataset.number;
+        if (num) _startInlineEdit(txt, num);
+      });
+    });
+
+    // ── Click on subscriber label (empty or existing) → inline edit ──
+    wrap.querySelectorAll(".gsm-graph-sub-id").forEach(txt => {
+      txt.style.cursor = "text";
+      txt.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const num = txt.dataset.number || msisdn;
+        if (num) _startInlineEdit(txt, num);
+      });
+    });
+  }
+
+  /** Apply type filter (all/calls/sms) to the contact graph arrows + labels. */
+  function _applyGraphFilter(mode) {
+    const wrap = QS("#gsm_contact_graph");
+    if (!wrap) return;
+    // Update arrow visibility & thickness
+    wrap.querySelectorAll("[data-edge]").forEach(path => {
+      const val = parseInt(path.dataset[mode] || "0");
+      path.style.display = val > 0 ? "" : "none";
+      // Keep stroke-width in the 1.2–2px range
+      const sw = Math.min(2, Math.max(1.2, 1.2 + Math.log2(Math.max(val, 1)) * 0.15));
+      path.setAttribute("stroke-width", sw.toFixed(1));
+    });
+    // Update card badges (<g data-elabel> with two <text> children: label + number)
+    wrap.querySelectorAll("[data-elabel]").forEach(badge => {
+      const val = parseInt(badge.dataset[mode] || "0");
+      badge.style.display = val > 0 ? "" : "none";
+      // Update the LAST text child (the number), keep the first ("OUT"/"IN")
+      const texts = badge.querySelectorAll("text");
+      if (texts.length >= 2) texts[texts.length - 1].textContent = val;
+      else if (texts.length === 1) texts[0].textContent = val;
+    });
+    // Update subscriber OUT/IN badges (sum visible contacts)
+    wrap.querySelectorAll("[data-sub-label]").forEach(badge => {
+      const val = parseInt(badge.dataset[mode] || "0");
+      badge.style.display = val > 0 ? "" : "none";
+      const texts = badge.querySelectorAll("text");
+      if (texts.length >= 2) texts[texts.length - 1].textContent = val;
+    });
+  }
+
+  /**
+   * Main entry point for rendering records.
+   * Stores source records, applies column filters, and renders.
+   */
+  function _renderRecords(records, truncated, totalCount) {
+    _initColumns();
+    _currentSourceRecords = records;
+    _currentSourceTruncated = truncated;
+    _currentSourceTotal = totalCount;
+
+    // Show search input when records exist
+    const searchInput = QS("#gsm_records_search");
+    if (searchInput) {
+      searchInput.style.display = (records && records.length) ? "" : "none";
+    }
+
+    const filtered = _applyColumnFilters(records || []);
+    _renderFilterChips();
+    _renderRecordsTable(filtered, truncated && !Object.keys(St.columnFilters).length, Object.keys(St.columnFilters).length ? filtered.length : totalCount);
+  }
+
+  /**
+   * Low-level table renderer (called by _renderRecords and _refilterRecords).
+   */
+  function _renderRecordsTable(records, truncated, totalCount) {
+    const el = QS("#gsm_records_body");
+    if (!el) return;
+
+    const hasColFilter = _activeFilterCount() > 0;
+    const hasSearch = !!(St._recordsSearch);
+    const srcTotal = _currentSourceTotal || totalCount || 0;
+
+    if (!records || !records.length) {
+      el.innerHTML = '<div class="small muted">Brak rekordów.</div>';
+      const countLabel = QS("#gsm_records_count");
+      if (countLabel) countLabel.textContent = (hasColFilter || hasSearch) ? `Wynik: 0 z ${_fmt(srcTotal)}` : `Łącznie: 0`;
+      return;
+    }
+
+    const countLabel = QS("#gsm_records_count");
+    if (countLabel) {
+      if (hasColFilter || hasSearch) {
+        countLabel.textContent = `Wynik: ${_fmt(records.length)} z ${_fmt(srcTotal)}`;
+      } else {
+        countLabel.textContent = truncated ? `Łącznie: ${records.length} z ${_fmt(totalCount)}` : `Łącznie: ${_fmt(totalCount)}`;
+      }
+    }
+
+    const cols = _visibleColumns();
+
+    // Sort if active
+    let sorted = records;
+    if (St.columnSort) {
+      const colDef = _COL_MAP[St.columnSort.key];
+      if (colDef) {
+        sorted = [...records].sort((a, b) => {
+          let va = colDef.getValue(a), vb = colDef.getValue(b);
+          if (colDef.type === "numeric") {
+            va = typeof va === "number" ? va : parseFloat(va) || 0;
+            vb = typeof vb === "number" ? vb : parseFloat(vb) || 0;
+            return St.columnSort.dir === "asc" ? va - vb : vb - va;
+          }
+          va = String(va).toLowerCase();
+          vb = String(vb).toLowerCase();
+          const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+          return St.columnSort.dir === "asc" ? cmp : -cmp;
+        });
+      }
+    }
+
+    // Note marker: check if AnalystNotesManager is available
+    const _notesMgr = window._gsmNotesMgr || null;
+
+    let html = `<table class="gsm-table gsm-table-adv"><thead><tr>`;
+    // Note column header (narrow)
+    html += `<th style="width:24px;min-width:24px;padding:0"></th>`;
+    for (const col of cols) {
+      const hasFilter = !!St.columnFilters[col.key];
+      const sortDir = St.columnSort && St.columnSort.key === col.key ? St.columnSort.dir : null;
+      const sortIcon = sortDir === "asc" ? " ↑" : sortDir === "desc" ? " ↓" : "";
+      html += `<th class="${hasFilter ? "gsm-th-filtered" : ""}" data-col="${col.key}">
+        <span class="gsm-th-content">
+          <span class="gsm-th-label" title="Kliknij aby sortować">${col.label}${sortIcon}</span>
+          <button class="gsm-col-filter-btn${hasFilter ? " active" : ""}" data-col="${col.key}" title="Filtruj kolumnę">▿</button>
+        </span>
+      </th>`;
+    }
+    html += `</tr></thead><tbody>`;
+
+    const hl = St._anomalyHighlight || null;
+
+    // Chunked rendering: render first batch immediately, rest lazily
+    const INITIAL_BATCH = 200;
+    const LAZY_BATCH = 500;
+    const totalRows = sorted.length;
+
+    function _buildRowHtml(r) {
+      let rowStyle = "";
+      if (hl) {
+        if (hl.anomalyRecords && hl.anomalyRecords.has(r)) {
+          rowStyle = ' style="background:rgba(239,68,68,.12)"';
+        } else if (hl.contextRecords && hl.contextRecords.has(r)) {
+          rowStyle = ' style="background:rgba(59,130,246,.10)"';
+        }
+      }
+      const rowIdx = r.raw_row != null ? r.raw_row : "";
+      const hasNote = _notesMgr && _notesMgr.hasNote("gsm_record", "record_idx", rowIdx);
+      let rh = `<tr data-row="${rowIdx}"${rowStyle}>`;
+      rh += `<td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${hasNote ? " has-note" : ""}" data-note-row="${rowIdx}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(hasNote)}" alt="" width="14" height="14" draggable="false"></span></td>`;
+      for (const col of cols) {
+        rh += `<td>${col.renderCell(r)}</td>`;
+      }
+      rh += `</tr>`;
+      return rh;
+    }
+
+    // Build first batch
+    const firstBatch = Math.min(INITIAL_BATCH, totalRows);
+    for (let i = 0; i < firstBatch; i++) {
+      html += _buildRowHtml(sorted[i]);
+    }
+    html += "</tbody></table>";
+    if (truncated) {
+      html += `<div class="small muted" style="margin-top:8px">Pokazano ${records.length} z ${_fmt(totalCount)} rekordów.</div>`;
+    }
+    if (totalRows > INITIAL_BATCH) {
+      html += `<div id="gsm_records_lazy_status" class="small muted" style="margin-top:4px;color:var(--brand-blue,#2563eb)">Ładowanie pozostałych ${_fmt(totalRows - INITIAL_BATCH)} wierszy…</div>`;
+    }
+    el.innerHTML = html;
+
+    // Lazy-load remaining rows in chunks (non-blocking)
+    if (totalRows > INITIAL_BATCH) {
+      const tbody = el.querySelector("tbody");
+      let offset = INITIAL_BATCH;
+      const _appendChunk = () => {
+        if (!tbody || !tbody.isConnected) return; // table was replaced
+        const end = Math.min(offset + LAZY_BATCH, totalRows);
+        let chunk = "";
+        for (let i = offset; i < end; i++) {
+          chunk += _buildRowHtml(sorted[i]);
+        }
+        tbody.insertAdjacentHTML("beforeend", chunk);
+        offset = end;
+        if (offset < totalRows) {
+          const status = QS("#gsm_records_lazy_status");
+          if (status) status.textContent = `Ładowanie wierszy… ${_fmt(offset)} / ${_fmt(totalRows)}`;
+          requestAnimationFrame(() => setTimeout(_appendChunk, 0));
+        } else {
+          const status = QS("#gsm_records_lazy_status");
+          if (status) status.remove();
+          // Bind note markers for lazy-loaded rows
+          if (_notesMgr) {
+            _bindNoteMarkers(el, sorted);
+          }
+        }
+      };
+      requestAnimationFrame(() => setTimeout(_appendChunk, 0));
+    }
+
+    // Bind header interactions
+    el.querySelectorAll(".gsm-col-filter-btn").forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const colKey = btn.dataset.col;
+        const th = btn.closest("th");
+        _openColFilter(colKey, th);
+      };
+    });
+    el.querySelectorAll(".gsm-th-label").forEach(label => {
+      label.onclick = () => {
+        const colKey = label.closest("th").dataset.col;
+        if (St.columnSort && St.columnSort.key === colKey) {
+          St.columnSort.dir = St.columnSort.dir === "asc" ? "desc" : "asc";
+        } else {
+          St.columnSort = { key: colKey, dir: "asc" };
+        }
+        _refilterRecords();
+      };
+      label.style.cursor = "pointer";
+    });
+
+    // Bind column drag-and-drop reordering on headers
+    _bindColumnDragDrop(el);
+
+    // Bind note markers using event delegation (works for lazy-loaded rows too)
+    _bindNoteMarkers(el, sorted);
+  }
+
+  /** Bind note marker clicks via event delegation on container. */
+  function _bindNoteMarkers(container, sortedRecords) {
+    const _notesMgr = window._gsmNotesMgr || null;
+    if (!_notesMgr) return;
+    // Remove previous delegated handler if any
+    if (container._noteHandler) container.removeEventListener("click", container._noteHandler);
+    const handler = (e) => {
+      const marker = e.target.closest(".analyst-note-marker[data-note-row]");
+      if (!marker) return;
+      e.stopPropagation();
+      const rowIdx = parseInt(marker.getAttribute("data-note-row"), 10);
+      if (isNaN(rowIdx)) return;
+      const rec = sortedRecords.find(r => r.raw_row === rowIdx);
+      if (!rec) return;
+      const label = _buildRecordNoteLabel(rec);
+      const ref = { type: "gsm_record", record_idx: rowIdx, snapshot: { caller: rec.caller || "", callee: rec.callee || "", datetime: rec.datetime || "" } };
+      _notesMgr.openNoteForElement(label, "phone", ref);
+    };
+    container.addEventListener("click", handler);
+    container._noteHandler = handler;
+  }
+
+  /* ── Column drag & drop (custom mouse events) ────────── */
+
+  let _colDrag = null; // active drag state
+
+  function _bindColumnDragDrop(container) {
+    const ths = container.querySelectorAll("thead th[data-col]");
+    ths.forEach(th => {
+      th.addEventListener("mousedown", e => _colDragStart(e, th, container));
+      th.style.cursor = "grab";
+    });
+  }
+
+  function _colDragStart(e, th, container) {
+    // Ignore right-click, filter button clicks
+    if (e.button !== 0) return;
+    if (e.target.closest(".gsm-col-filter-btn")) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const colKey = th.dataset.col;
+    const THRESHOLD = 5;
+    let dragging = false;
+
+    function onMove(ev) {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+
+      if (!dragging) {
+        if (Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return;
+        // Start drag
+        dragging = true;
+        _colDragBegin(th, colKey, container, startX);
+      }
+      _colDragMove(ev.clientX);
+    }
+
+    function onUp(ev) {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      if (dragging) {
+        _colDragEnd();
+      }
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
+  function _colDragBegin(th, colKey, container, startX) {
+    // Collect header rects
+    const thead = container.querySelector("thead");
+    const allThs = Array.from(thead.querySelectorAll("th[data-col]"));
+    const rects = allThs.map(el => ({ el, key: el.dataset.col, rect: el.getBoundingClientRect() }));
+
+    // Ghost element
+    const ghost = document.createElement("div");
+    ghost.className = "gsm-col-drag-ghost";
+    ghost.textContent = th.textContent.replace(/[▿↑↓]/g, "").trim();
+    const thRect = th.getBoundingClientRect();
+    ghost.style.width = thRect.width + "px";
+    ghost.style.left = thRect.left + "px";
+    ghost.style.top = (thRect.top - 4) + "px";
+    document.body.appendChild(ghost);
+
+    // Drop indicator line
+    const indicator = document.createElement("div");
+    indicator.className = "gsm-col-drop-indicator";
+    document.body.appendChild(indicator);
+
+    // Dim source column
+    th.classList.add("gsm-th-dragging");
+
+    _colDrag = {
+      colKey,
+      th,
+      ghost,
+      indicator,
+      container,
+      rects,
+      allThs,
+      startX,
+      offsetX: startX - thRect.left,
+      dropIndex: -1,
+    };
+
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+  }
+
+  function _colDragMove(clientX) {
+    if (!_colDrag) return;
+    const { ghost, indicator, rects, colKey, offsetX } = _colDrag;
+
+    // Move ghost
+    ghost.style.left = (clientX - offsetX) + "px";
+
+    // Find drop position
+    let dropIdx = -1;
+    let indicatorLeft = 0;
+    const sourceIdx = rects.findIndex(r => r.key === colKey);
+
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i].rect;
+      const mid = r.left + r.width / 2;
+      if (clientX < mid) {
+        dropIdx = i;
+        indicatorLeft = r.left - 2;
+        break;
+      }
+    }
+    if (dropIdx === -1) {
+      // After last column
+      dropIdx = rects.length;
+      const last = rects[rects.length - 1].rect;
+      indicatorLeft = last.right - 2;
+    }
+
+    // Don't show indicator if drop would result in no change
+    if (dropIdx === sourceIdx || dropIdx === sourceIdx + 1) {
+      indicator.style.display = "none";
+    } else {
+      const headerTop = rects[0].rect.top;
+      const headerBottom = rects[0].rect.bottom;
+      indicator.style.display = "";
+      indicator.style.left = indicatorLeft + "px";
+      indicator.style.top = (headerTop - 4) + "px";
+      indicator.style.height = (headerBottom - headerTop + 8) + "px";
+    }
+
+    _colDrag.dropIndex = dropIdx;
+  }
+
+  function _colDragEnd() {
+    if (!_colDrag) return;
+    const { colKey, ghost, indicator, th, dropIndex, rects } = _colDrag;
+
+    // Cleanup DOM
+    ghost.remove();
+    indicator.remove();
+    th.classList.remove("gsm-th-dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+
+    const sourceIdx = rects.findIndex(r => r.key === colKey);
+
+    // Apply reorder if position changed
+    if (dropIndex !== -1 && dropIndex !== sourceIdx && dropIndex !== sourceIdx + 1) {
+      const visibleKeys = rects.map(r => r.key);
+      // Remove from old position
+      visibleKeys.splice(sourceIdx, 1);
+      // Insert at new position (adjust index if after source)
+      const insertAt = dropIndex > sourceIdx ? dropIndex - 1 : dropIndex;
+      visibleKeys.splice(insertAt, 0, colKey);
+
+      // Rebuild full columnOrder: keep hidden columns in their relative positions,
+      // but reorder visible ones according to new order
+      const hiddenKeys = (St.columnOrder || []).filter(k => St.columnHidden[k]);
+      // Merge: visible in new order, hidden appended at end
+      St.columnOrder = [...visibleKeys, ...hiddenKeys];
+
+      _refilterRecords();
+    }
+
+    _colDrag = null;
+  }
+
+  /* ── special numbers ──────────────────────────────────── */
+
+  const _SN_CAT_LABELS = {
+    voicemail: "Poczta g\u0142osowa",
+    service: "Us\u0142uga operatora",
+    emergency: "Nr alarmowy",
+    premium: "Nr premium",
+    toll_free: "Nr bezp\u0142atny",
+    short_code: "Kod kr\u00F3tki",
+    international: "Zagraniczny",
+    info: "Informacja",
+    operator_sms: "SMS operatora",
+    commercial_sms: "SMS komercyjny",
+    alphanumeric: "ID alfanumeryczny",
+    ussd: "Kod steruj\u0105cy",
+  };
+  const _SN_CAT_CLS = {
+    voicemail: "gsm-sn-voicemail",
+    service: "gsm-sn-service",
+    emergency: "gsm-sn-emergency",
+    premium: "gsm-sn-premium",
+    toll_free: "gsm-sn-tollfree",
+    short_code: "gsm-sn-short",
+    international: "gsm-sn-intl",
+    info: "gsm-sn-info",
+    operator_sms: "gsm-sn-operator",
+    commercial_sms: "gsm-sn-commercial",
+    alphanumeric: "gsm-sn-alpha",
+    ussd: "gsm-sn-ussd",
+  };
+
+  // State for special numbers filtering
+  let _snAllData = [];
+  let _snFilterCat = "";  // "" = all
+  let _snFilterText = "";
+
+  function _renderSpecialNumbers(specials) {
+    const el = QS("#gsm_special_numbers_body");
+    if (!el) return;
+    const card = el.closest(".card");
+
+    if (!specials || !specials.length) {
+      if (card) card.style.display = "none";
+      return;
+    }
+    if (card) card.style.display = "";
+
+    _snAllData = specials;
+    _snFilterCat = "";
+    _snFilterText = "";
+
+    // Collect unique categories present in data
+    const cats = [...new Set(specials.map(s => s.category))].sort();
+
+    // Build filter bar
+    let filterHtml = `<div class="gsm-sn-filters" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">`;
+    filterHtml += `<select id="gsm_sn_cat_filter" style="font-size:12px;padding:4px 8px;border:1px solid var(--border,#e2e8f0);border-radius:6px;background:var(--bg-secondary,#f8fafc);color:var(--text,#334155);cursor:pointer">`;
+    filterHtml += `<option value="">Wszystkie kategorie (${specials.length})</option>`;
+    for (const c of cats) {
+      const cnt = specials.filter(s => s.category === c).length;
+      filterHtml += `<option value="${c}">${_SN_CAT_LABELS[c] || c} (${cnt})</option>`;
+    }
+    filterHtml += `</select>`;
+    filterHtml += `<input id="gsm_sn_text_filter" type="text" placeholder="Szukaj numeru lub opisu\u2026" style="font-size:12px;padding:4px 8px;border:1px solid var(--border,#e2e8f0);border-radius:6px;flex:1;min-width:140px;max-width:280px;background:var(--bg-secondary,#f8fafc);color:var(--text,#334155)">`;
+    filterHtml += `<span id="gsm_sn_count" class="gsm-sn-count" style="margin:0">\u0141\u0105cznie: ${specials.length}</span>`;
+    filterHtml += `</div>`;
+
+    el.innerHTML = filterHtml + `<div id="gsm_sn_table_wrap" class="gsm-sn-container"></div>`;
+
+    _snRebuildTable(specials);
+
+    // Wire up filter events
+    const catSel = QS("#gsm_sn_cat_filter");
+    const textInp = QS("#gsm_sn_text_filter");
+    if (catSel) catSel.addEventListener("change", _snApplyFilters);
+    if (textInp) textInp.addEventListener("input", _snApplyFilters);
+  }
+
+  function _snApplyFilters() {
+    const catSel = QS("#gsm_sn_cat_filter");
+    const textInp = QS("#gsm_sn_text_filter");
+    _snFilterCat = catSel ? catSel.value : "";
+    _snFilterText = textInp ? textInp.value.trim().toLowerCase() : "";
+
+    let filtered = _snAllData;
+    if (_snFilterCat) {
+      filtered = filtered.filter(s => s.category === _snFilterCat);
+    }
+    if (_snFilterText) {
+      filtered = filtered.filter(s =>
+        (s.number || "").toLowerCase().includes(_snFilterText) ||
+        (s.label || "").toLowerCase().includes(_snFilterText) ||
+        (_SN_CAT_LABELS[s.category] || "").toLowerCase().includes(_snFilterText)
+      );
+    }
+    const countEl = QS("#gsm_sn_count");
+    if (countEl) countEl.textContent = `Wynik: ${filtered.length} z ${_snAllData.length}`;
+    _snRebuildTable(filtered);
+  }
+
+  function _snRebuildTable(items) {
+    const wrap = QS("#gsm_sn_table_wrap");
+    if (!wrap) return;
+
+    if (!items.length) {
+      wrap.innerHTML = `<div style="padding:12px;color:var(--text-muted);font-size:13px">Brak wynik\u00F3w dla wybranych filtr\u00F3w</div>`;
+      return;
+    }
+
+    const _snNm = window._gsmNotesMgr || null;
+    let tbl = `<table class="gsm-table"><thead><tr>
+      <th style="width:24px;padding:0"></th><th>Numer</th><th>Kategoria</th><th>Opis</th><th>Interakcje</th><th>Czas rozm\u00F3w</th><th>Okres</th>
+    </tr></thead><tbody>`;
+
+    for (const s of items) {
+      const cat = _SN_CAT_LABELS[s.category] || s.category;
+      const cls = _SN_CAT_CLS[s.category] || "";
+      const period = s.first_date
+        ? (s.first_date === s.last_date ? s.first_date : `${s.first_date} \u2013 ${s.last_date}`)
+        : "\u2014";
+      const _snHn = _snNm && _snNm.hasNote("gsm_special_number", "number", s.number);
+      tbl += `<tr>
+        <td style="padding:0 2px;text-align:center"><span class="analyst-note-marker${_snHn ? " has-note" : ""}" data-note-special="${s.number}" title="Notatka (Ctrl+M)"><img src="${_noteIconSrc(_snHn)}" alt="" width="14" height="14" draggable="false"></span></td>
+        <td><code>${s.number}</code></td>
+        <td><span class="gsm-sn-badge ${cls}">${cat}</span></td>
+        <td>${s.label || "\u2014"}</td>
+        <td>${_fmt(s.interactions)}</td>
+        <td>${_dur(s.total_duration_seconds || 0)}</td>
+        <td>${period}</td>
+      </tr>`;
+    }
+    tbl += "</tbody></table>";
+    wrap.innerHTML = tbl;
+
+    // Bind special number note markers
+    if (_snNm) {
+      wrap.querySelectorAll(".analyst-note-marker[data-note-special]").forEach(marker => {
+        marker.addEventListener("click", function(e) {
+          e.stopPropagation();
+          const num = this.getAttribute("data-note-special");
+          if (!num) return;
+          const sn = items.find(x => x.number === num);
+          const label = "Nr specjalny: " + num + (sn && sn.label ? " (" + sn.label.slice(0, 30) + ")" : "");
+          const ref = { type: "gsm_special_number", number: num, snapshot: { category: sn ? sn.category : "", label: sn ? sn.label : "" } };
+          _snNm.openNoteForElement(label, "phone", ref);
+        });
+      });
+    }
+  }
+
+  /* ── activity charts — grouped bars (Rozmowy / SMS / Dane) ── */
+
+  function _buildGroupedBars(groups, typeFilter) {
+    const tf = typeFilter || "all";
+    const allVals = groups.flatMap(g => {
+      if (tf === "calls") return [g.calls || 0];
+      if (tf === "sms") return [g.sms || 0];
+      if (tf === "data") return [g.data || 0];
+      return [g.calls || 0, g.sms || 0, g.data || 0];
+    });
+    const maxVal = Math.max(1, ...allVals);
+    let html = '';
+    for (const g of groups) {
+      const c = g.calls || 0, s = g.sms || 0, d = g.data || 0;
+      const pctC = Math.round((c / maxVal) * 100);
+      const pctS = Math.round((s / maxVal) * 100);
+      const pctD = Math.round((d / maxVal) * 100);
+      const showC = tf === "all" || tf === "calls";
+      const showS = tf === "all" || tf === "sms";
+      const showD = tf === "all" || tf === "data";
+      html += `<div class="gsm-bar-group gsm-bar-clickable" data-slot="${_escAttr(g.label)}">
+        <div class="gsm-bar-group-bars">
+          ${showC ? `<div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-calls" style="height:${Math.max(pctC, 3)}%" title="${g.label} Rozmowy: ${c}"><span class="gsm-bar-val">${c || ''}</span></div></div>` : ''}
+          ${showS ? `<div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-sms" style="height:${Math.max(pctS, 3)}%" title="${g.label} SMS/MMS: ${s}"><span class="gsm-bar-val">${s || ''}</span></div></div>` : ''}
+          ${showD ? `<div class="gsm-bar-wrap"><div class="gsm-bar gsm-bar-data" style="height:${Math.max(pctD, 3)}%" title="${g.label} Dane: ${d}"><span class="gsm-bar-val">${d || ''}</span></div></div>` : ''}
+        </div>
+        <div class="gsm-bar-label">${g.label}</div>
+      </div>`;
+    }
+    return html;
+  }
+
+  function _buildAnomalies(anomalies) {
+    if (!anomalies || !anomalies.length) return '';
+    const items = anomalies.filter(a => a.period_type !== "summary");
+    const summaries = anomalies.filter(a => a.period_type === "summary");
+    let html = '';
+    if (items.length) {
+      html += '<div class="gsm-chart-anomalies">';
+      for (const a of items) {
+        const icon = a.ratio > 1 ? '&#9650;' : '&#9660;';
+        const cls = a.ratio > 1 ? 'gsm-anomaly-up' : 'gsm-anomaly-down';
+        html += `<div class="gsm-chart-anomaly-item ${cls}"><span class="gsm-chart-anomaly-icon">${icon}</span> ${a.description}</div>`;
+      }
+      html += '</div>';
+    }
+    if (summaries.length) {
+      html += '<div class="gsm-chart-summary-block">';
+      for (const s of summaries) html += `<div>${s.description}</div>`;
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function _nightTotalBars(d, typeFilter) {
+    const hours = [22, 23, 0, 1, 2, 3, 4, 5];
+    const hc = d.hourly_calls || {}, hs = d.hourly_sms || {}, hd = d.hourly_data || {};
+    return _buildGroupedBars(hours.map(h => ({
+      label: `${String(h).padStart(2, "0")}:00`,
+      calls: hc[h] || 0, sms: hs[h] || 0, data: hd[h] || 0,
+    })), typeFilter);
+  }
+
+  function _weekendTotalBars(d, typeFilter) {
+    const sc = d.seg_calls || {}, ss = d.seg_sms || {}, sd = d.seg_data || {};
+    return _buildGroupedBars([
+      { label: "Pt wieczór", calls: sc.fri_evening || 0, sms: ss.fri_evening || 0, data: sd.fri_evening || 0 },
+      { label: "Sobota",     calls: sc.saturday || 0,    sms: ss.saturday || 0,    data: sd.saturday || 0 },
+      { label: "Niedziela",  calls: sc.sunday || 0,      sms: ss.sunday || 0,      data: sd.sunday || 0 },
+      { label: "Pn rano",    calls: sc.mon_morning || 0, sms: ss.mon_morning || 0, data: sd.mon_morning || 0 },
+    ], typeFilter);
+  }
+
+  function _bucketTypeBars(bucket, typeFilter) {
+    return _buildGroupedBars([{
+      label: "Łącznie",
+      calls: bucket.calls || 0,
+      sms: bucket.sms || 0,
+      data: bucket.data || 0,
+    }], typeFilter);
+  }
+
+  /* ── activity charts — extract contacts from records ── */
+
+  function _isNightRecord(r) {
+    if (!r.time) return false;
+    const h = parseInt(r.time.split(":")[0], 10);
+    return h >= 22 || h <= 5;
+  }
+
+  function _isWeekendRecord(r) {
+    if (!r.datetime) return false;
+    const dt = new Date(r.datetime.replace(" ", "T"));
+    if (isNaN(dt.getTime())) return false;
+    const jsDay = dt.getDay(); // 0=Sun..6=Sat
+    const h = dt.getHours();
+    // Friday evening (20:00+)
+    if (jsDay === 5 && h >= 20) return true;
+    // Saturday all day
+    if (jsDay === 6) return true;
+    // Sunday all day
+    if (jsDay === 0) return true;
+    // Monday morning (before 6:00)
+    if (jsDay === 1 && h < 6) return true;
+    return false;
+  }
+
+  /** Night slot labels → hour ranges for filtering records */
+  const _NIGHT_SLOTS = {
+    "22:00": [22], "23:00": [23], "00:00": [0], "01:00": [1],
+    "02:00": [2], "03:00": [3], "04:00": [4], "05:00": [5],
+  };
+  /** Weekend slot labels → predicate fns */
+  function _weekendSlotPredicate(slotLabel) {
+    const map = {
+      "Pt wieczór": (dt) => dt.getDay() === 5 && dt.getHours() >= 20,
+      "Sobota": (dt) => dt.getDay() === 6,
+      "Niedziela": (dt) => dt.getDay() === 0,
+      "Pn rano": (dt) => dt.getDay() === 1 && dt.getHours() < 6,
+    };
+    return map[slotLabel] || null;
+  }
+
+  function _extractActivityContacts(chartId, typeFilter, slotLabel) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    if (!records.length) return [];
+    const tf = typeFilter || "all";
+    const counts = {};
+    for (const r of records) {
+      // Base period filter
+      if (chartId === "night") {
+        if (!_isNightRecord(r)) continue;
+        // Slot filter for night
+        if (slotLabel && _NIGHT_SLOTS[slotLabel]) {
+          const h = parseInt(r.time.split(":")[0], 10);
+          if (!_NIGHT_SLOTS[slotLabel].includes(h)) continue;
+        }
+      } else {
+        if (!_isWeekendRecord(r)) continue;
+        // Slot filter for weekend
+        if (slotLabel) {
+          const pred = _weekendSlotPredicate(slotLabel);
+          if (pred) {
+            const dt = new Date(r.datetime.replace(" ", "T"));
+            if (isNaN(dt.getTime()) || !pred(dt)) continue;
+          }
+        }
+      }
+      // Type filter
+      const cat = _hmCategory(r.record_type);
+      if (tf !== "all" && cat !== tf) continue;
+      const num = r.callee || r.caller || "";
+      if (!num) continue;
+      if (!counts[num]) counts[num] = { calls: 0, sms: 0, data: 0, total: 0 };
+      counts[num].total++;
+      if (cat === "calls") counts[num].calls++;
+      else if (cat === "sms") counts[num].sms++;
+      else if (cat === "data") counts[num].data++;
+    }
+    return Object.entries(counts)
+      .map(([num, c]) => ({ number: num, ...c }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  /** Build a normalized contact chip. Used by both activity charts and heatmap unique numbers. */
+  function _buildContactChip(num, count, chartId, parts) {
+    const idInfo = _idLookup(num);
+    const rec = idInfo && idInfo.rec ? idInfo.rec : null;
+    const shortLabel = rec ? _idShortLabel(rec) : "";
+    const tooltip = rec ? _idTooltipText(rec) : "";
+    const tooltipEsc = tooltip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    const info = parts || "";
+    const titleAttr = tooltip ? tooltipEsc : (idInfo ? `${num} (${idInfo.label})` : num);
+    // Check if contact has a tag via notes
+    const _nm = window._gsmNotesMgr;
+    const noteItem = _nm && _nm.getNoteForRef && _nm.getNoteForRef("gsm_contact", "number", num);
+    const hasNote = !!noteItem;
+    const tagColor = (noteItem && noteItem.tags && noteItem.tags.length) ? _noteTagColor(noteItem.tags[0]) : "";
+    const borderStyle = tagColor ? `border-color:${tagColor}` : "";
+
+    let html = `<span class="gsm-contact-chip gsm-id-tip" data-number="${_escAttr(num)}" data-chart="${chartId || ''}" data-id-tip="${titleAttr}" ${borderStyle ? `style="${borderStyle}"` : ''}>`;
+    html += `<code>${num}</code>`;
+    if (shortLabel) {
+      html += ` <span class="gsm-chip-id">${_escHtml(shortLabel)}</span>`;
+    } else if (idInfo) {
+      html += ` <span class="gsm-chip-id">${_escHtml(idInfo.label)}</span>`;
+    }
+    if (count > 1) html += ` <span class="gsm-chip-count">${count}×</span>`;
+    // Note marker — SVG icon, always visible (darker), filled when has note
+    html += `<span class="gsm-chip-note${hasNote ? ' has-note' : ''}" data-note-number="${_escAttr(num)}" title="Notatka"><img src="${_noteIconSrc(hasNote)}" alt="" width="14" height="14" draggable="false"></span>`;
+    html += `</span>`;
+    return html;
+  }
+
+  /** Get color for note tag name. */
+  function _noteTagColor(tag) {
+    const map = {
+      neutral: "#64748b",
+      legitimate: "#22c55e",
+      suspicious: "#ef4444",
+      monitoring: "#eab308",
+      custom1: "#8b5cf6",
+      custom2: "#0d9488",
+      custom3: "#ec4899",
+      custom4: "#6366f1",
+    };
+    return map[tag] || "";
+  }
+
+  /** Get tag color for a number from notes manager. Returns "" if none. */
+  function _getNumberTagColor(number) {
+    const nm = window._gsmNotesMgr;
+    if (!nm) return "";
+    const note = nm.getNoteForRef("gsm_contact", "number", number);
+    if (!note || !note.tags || !note.tags.length) return "";
+    return _noteTagColor(note.tags[0]);
+  }
+
+  /**
+   * Refresh tag borders & note markers across ALL visible GSM views.
+   * Called after a note is added/edited/deleted.
+   */
+  function _refreshTagBorders() {
+    const nm = window._gsmNotesMgr;
+    if (!nm) return;
+
+    // 1. Contact chips (heatmap unique numbers, night/weekend activity)
+    document.querySelectorAll(".gsm-contact-chip").forEach(chip => {
+      const num = chip.dataset.number;
+      if (!num) return;
+      const color = _getNumberTagColor(num);
+      chip.style.borderColor = color || "";
+      const noteIcon = chip.querySelector(".gsm-chip-note");
+      if (noteIcon) {
+        const hasNote = nm.hasNote("gsm_contact", "number", num);
+        noteIcon.classList.toggle("has-note", hasNote);
+      }
+    });
+
+    // 2. Records table — highlight rows where callee/caller has tag
+    document.querySelectorAll("#gsm_records_card .gsm-table tbody tr").forEach(row => {
+      const rowIdx = row.dataset.row;
+      // Find the callee number from the row's code element
+      const codeEl = row.querySelector("td code");
+      const num = codeEl ? codeEl.textContent.trim() : "";
+      const color = num ? _getNumberTagColor(num) : "";
+      if (color) {
+        row.style.outline = `2px solid ${color}`;
+        row.style.outlineOffset = "-1px";
+        row.style.borderRadius = "4px";
+      } else {
+        row.style.outline = "";
+        row.style.outlineOffset = "";
+        row.style.borderRadius = "";
+      }
+      // Update note marker
+      const marker = row.querySelector(".analyst-note-marker[data-note-row]");
+      if (marker && rowIdx != null) {
+        const rec = St.lastResult?.records?.[parseInt(rowIdx, 10)];
+        if (rec) {
+          const hasNote = nm.hasNote("gsm_record", "raw_row", rec.raw_row);
+          marker.classList.toggle("has-note", hasNote);
+        }
+      }
+    });
+
+    // 3. Top contacts table
+    document.querySelectorAll(".analyst-note-marker[data-note-contact]").forEach(marker => {
+      const num = marker.dataset.noteContact;
+      const hasNote = nm.hasNote("gsm_contact", "number", num);
+      marker.classList.toggle("has-note", hasNote);
+      // Highlight entire row
+      const row = marker.closest("tr");
+      if (row) {
+        const color = _getNumberTagColor(num);
+        if (color) {
+          row.style.outline = `2px solid ${color}`;
+          row.style.outlineOffset = "-1px";
+          row.style.borderRadius = "4px";
+        } else {
+          row.style.outline = "";
+          row.style.outlineOffset = "";
+          row.style.borderRadius = "";
+        }
+      }
+    });
+
+    // 4. Devices table
+    document.querySelectorAll(".analyst-note-marker[data-note-imei]").forEach(marker => {
+      const imei = marker.dataset.noteImei;
+      const hasNote = nm.hasNote("gsm_device", "imei", imei);
+      marker.classList.toggle("has-note", hasNote);
+    });
+
+    // 5. Anomalies
+    document.querySelectorAll(".analyst-note-marker[data-note-anomaly]").forEach(marker => {
+      const type = marker.dataset.noteAnomaly;
+      const hasNote = nm.hasNote("gsm_anomaly", "type", type);
+      marker.classList.toggle("has-note", hasNote);
+    });
+
+    // 6. Special numbers table
+    document.querySelectorAll(".analyst-note-marker[data-note-special]").forEach(marker => {
+      const num = marker.dataset.noteSpecial;
+      const hasNote = nm.hasNote("gsm_special_number", "number", num);
+      marker.classList.toggle("has-note", hasNote);
+      const row = marker.closest("tr");
+      if (row) {
+        const color = _getNumberTagColor(num);
+        if (color) {
+          row.style.outline = `2px solid ${color}`;
+          row.style.outlineOffset = "-1px";
+          row.style.borderRadius = "4px";
+        } else {
+          row.style.outline = "";
+          row.style.outlineOffset = "";
+          row.style.borderRadius = "";
+        }
+      }
+    });
+
+    // 7. Contact graph note markers
+    document.querySelectorAll(".gsm-graph-note-marker").forEach(marker => {
+      const num = marker.dataset.number;
+      if (!num) return;
+      const hasNote = nm.hasNote("gsm_contact", "number", num);
+      marker.style.opacity = hasNote ? "1" : "0";
+      const img = marker.querySelector("image");
+      if (img) img.setAttribute("href", _noteIconSrc(hasNote));
+    });
+
+    // 8. Swap all note marker icons (filled vs empty)
+    document.querySelectorAll(".analyst-note-marker img, .gsm-chip-note img").forEach(img => {
+      const parent = img.closest(".analyst-note-marker, .gsm-chip-note");
+      if (!parent) return;
+      const hasNote = parent.classList.contains("has-note");
+      img.src = _noteIconSrc(hasNote);
+    });
+  }
+
+  /* ── Panel search — global project search ── */
+
+  let _panelSearchTimer = null;
+
+  function _initPanelSearch() {
+    const input = QS("#gsm_panel_search");
+    if (!input) return;
+    input.addEventListener("input", () => {
+      clearTimeout(_panelSearchTimer);
+      _panelSearchTimer = setTimeout(() => _doPanelSearch(input.value.trim()), 200);
+    });
+  }
+
+  function _doPanelSearch(query) {
+    const container = QS("#gsm_panel_search_results");
+    if (!container) return;
+
+    if (!query || query.length < 2) {
+      container.style.display = "none";
+      container.innerHTML = "";
+      return;
+    }
+
+    const q = query.toLowerCase();
+    const results = [];
+    const MAX = 100;
+
+    // 1. Records
+    const records = St.lastResult ? St.lastResult.records : [];
+    for (let i = 0; i < records.length && results.length < MAX; i++) {
+      const r = records[i];
+      const fields = [r.callee, r.caller, r.record_type, r.date, r.time, r.location, r.network, r.imei].filter(Boolean);
+      const match = fields.find(f => String(f).toLowerCase().includes(q));
+      if (match) {
+        const tipParts = [r.callee, r.caller, r.record_type, r.date, r.time, r.duration, r.location, r.network, r.imei].filter(Boolean);
+        results.push({
+          icon: "/static/icons/komunikacja/phone.svg",
+          text: `${r.callee || "—"} · ${r.record_type || ""} · ${r.date || ""} ${r.time || ""}`,
+          tooltip: tipParts.join(" · "),
+          loc: `Rekord #${r.raw_row != null ? r.raw_row : i}`,
+          action: "record",
+          index: i,
+          raw_row: r.raw_row,
+          matchField: match,
+        });
+      }
+    }
+
+    // 2. Top contacts
+    const analysis = St.lastResult ? St.lastResult.analysis : null;
+    if (analysis && analysis.top_contacts) {
+      for (const c of analysis.top_contacts) {
+        if (results.length >= MAX) break;
+        const idInfo = _idLookup(c.number);
+        const fields = [c.number, idInfo ? idInfo.label : ""];
+        if (fields.some(f => f.toLowerCase().includes(q))) {
+          const tipC = [`Numer: ${c.number}`, idInfo ? `Opis: ${idInfo.label}` : "", `Interakcje: ${c.total_interactions || 0}`, c.calls != null ? `Połączenia: ${c.calls}` : "", c.sms != null ? `SMS: ${c.sms}` : ""].filter(Boolean).join(" · ");
+          results.push({
+            icon: "/static/icons/uzytkownicy/user.svg",
+            text: `${c.number}${idInfo ? " · " + idInfo.label : ""} · ${c.total_interactions || 0} interakcji`,
+            tooltip: tipC,
+            loc: "Top kontakty",
+            action: "contact",
+            number: c.number,
+            matchField: c.number,
+          });
+        }
+      }
+    }
+
+    // 3. Devices
+    if (analysis && analysis.devices) {
+      for (const d of analysis.devices) {
+        if (results.length >= MAX) break;
+        const fields = [d.imei, d.imsi, d.device_name, d.device_type].filter(Boolean);
+        if (fields.some(f => String(f).toLowerCase().includes(q))) {
+          const tipD = [d.imei ? `IMEI: ${d.imei}` : "", d.imsi ? `IMSI: ${d.imsi}` : "", d.device_name ? `Urządzenie: ${d.device_name}` : "", d.device_type ? `Typ: ${d.device_type}` : ""].filter(Boolean).join(" · ");
+          results.push({
+            icon: "/static/icons/komunikacja/phone.svg",
+            text: `IMEI: ${d.imei || "—"} · ${d.device_name || ""}`,
+            tooltip: tipD,
+            loc: "Urządzenia",
+            action: "device",
+            imei: d.imei,
+            matchField: fields.find(f => String(f).toLowerCase().includes(q)),
+          });
+        }
+      }
+    }
+
+    // 4. Anomalies
+    if (analysis && analysis.anomalies) {
+      for (const a of analysis.anomalies) {
+        if (results.length >= MAX) break;
+        const desc = a.description || "";
+        const type = a.type || "";
+        if (desc.toLowerCase().includes(q) || type.toLowerCase().includes(q)) {
+          results.push({
+            icon: "/static/icons/status/warning.svg",
+            text: desc.slice(0, 80),
+            tooltip: desc,
+            loc: "Anomalia",
+            action: "anomaly",
+            type: a.type,
+            matchField: desc,
+          });
+        }
+      }
+    }
+
+    // 5. Special numbers
+    if (St._snAllData || window._snAllData) {
+      const specials = _snAllData || [];
+      for (const s of specials) {
+        if (results.length >= MAX) break;
+        const fields = [s.number, s.label, s.category].filter(Boolean);
+        if (fields.some(f => f.toLowerCase().includes(q))) {
+          results.push({
+            icon: "/static/icons/komunikacja/phone.svg",
+            text: `${s.number} · ${s.label || ""} · ${_SN_CAT_LABELS[s.category] || s.category}`,
+            tooltip: `Numer: ${s.number} · Opis: ${s.label || "—"} · Kategoria: ${_SN_CAT_LABELS[s.category] || s.category}`,
+            loc: "Nr specjalny",
+            action: "special",
+            number: s.number,
+            matchField: fields.find(f => f.toLowerCase().includes(q)),
+          });
+        }
+      }
+    }
+
+    // 6. Notes
+    const nm = window._gsmNotesMgr;
+    if (nm && nm.notes && nm.notes.items) {
+      for (const note of nm.notes.items) {
+        if (results.length >= MAX) break;
+        const fields = [note.text, note.label].filter(Boolean);
+        if (fields.some(f => f.toLowerCase().includes(q))) {
+          results.push({
+            icon: "/static/icons/pliki/notes.svg",
+            text: `${note.label || "Notatka"}: ${(note.text || "").slice(0, 60)}`,
+            tooltip: `${note.label || "Notatka"}: ${note.text || ""}${note.tag ? " [" + note.tag + "]" : ""}`,
+            loc: "Notatka",
+            action: "note",
+            noteId: note.id,
+            ref: note.ref,
+            matchField: fields.find(f => f.toLowerCase().includes(q)),
+          });
+        }
+      }
+      // Also search global note
+      if (nm.notes.global && nm.notes.global.toLowerCase().includes(q)) {
+        results.push({
+          icon: "/static/icons/inne/pin.svg",
+          text: nm.notes.global.slice(0, 80),
+          loc: "Notatka globalna",
+          action: "global_note",
+          matchField: nm.notes.global,
+        });
+      }
+    }
+
+    // Render results
+    _renderPanelSearchResults(container, results, q);
+  }
+
+  function _highlightMatch(text, query) {
+    if (!text || !query) return _escHtml(text || "");
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx < 0) return _escHtml(text);
+    const before = text.slice(0, idx);
+    const match = text.slice(idx, idx + query.length);
+    const after = text.slice(idx + query.length);
+    return _escHtml(before) + "<mark>" + _escHtml(match) + "</mark>" + _escHtml(after);
+  }
+
+  // Global tooltip element (appended to body, escapes all overflow clipping)
+  let _searchTooltipEl = null;
+  function _getSearchTooltip() {
+    if (!_searchTooltipEl) {
+      _searchTooltipEl = document.createElement("div");
+      _searchTooltipEl.className = "analyst-search-tooltip";
+      document.body.appendChild(_searchTooltipEl);
+    }
+    return _searchTooltipEl;
+  }
+
+  function _renderPanelSearchResults(container, results, query) {
+    if (!results.length) {
+      container.style.display = "";
+      container.innerHTML = `<div class="analyst-search-header"><span>Brak wyników</span></div>`;
+      return;
+    }
+    container.style.display = "";
+    let html = `<div class="analyst-search-header"><span>Łącznie: ${results.length} wyników</span></div>`;
+    for (const r of results) {
+      const tip = r.tooltip || r.text;
+      html += `<div class="analyst-search-item" data-tip="${_escAttr(tip)}" data-action='${_escAttr(JSON.stringify({ action: r.action, index: r.index, raw_row: r.raw_row, number: r.number, imei: r.imei, type: r.type, noteId: r.noteId, ref: r.ref }))}'>`;
+      html += `<img class="analyst-search-icon" src="${r.icon}" alt="" width="16" height="16" draggable="false" onerror="this.style.display='none'">`;
+      html += `<div class="analyst-search-text-wrap">`;
+      html += `<span class="analyst-search-text">${_highlightMatch(r.text, query)}</span>`;
+      html += `<span class="analyst-search-loc">${_escHtml(r.loc)}</span>`;
+      html += `</div>`;
+      html += `</div>`;
+    }
+    container.innerHTML = html;
+
+    // Bind clicks + tooltip hover
+    const tipEl = _getSearchTooltip();
+    container.querySelectorAll(".analyst-search-item").forEach(el => {
+      el.addEventListener("click", () => {
+        try {
+          const data = JSON.parse(el.dataset.action);
+          _navigateToSearchResult(data);
+        } catch (e) { /* ignore */ }
+      });
+      el.addEventListener("mouseenter", () => {
+        const tipText = el.dataset.tip;
+        if (!tipText) return;
+        tipEl.textContent = tipText;
+        const rect = el.getBoundingClientRect();
+        // Try placing to the right of the panel
+        let left = rect.right + 8;
+        let top = rect.top;
+        // If it overflows right edge, place to the left
+        if (left + 300 > window.innerWidth) {
+          left = rect.left - 310;
+          if (left < 0) left = 8;
+        }
+        // Keep within viewport vertically
+        if (top + 120 > window.innerHeight) top = window.innerHeight - 130;
+        if (top < 4) top = 4;
+        tipEl.style.left = left + "px";
+        tipEl.style.top = top + "px";
+        tipEl.style.display = "block";
+      });
+      el.addEventListener("mouseleave", () => { tipEl.style.display = "none"; });
+    });
+  }
+
+  function _navigateToSearchResult(data) {
+    switch (data.action) {
+      case "record": {
+        // Scroll to records card, highlight that record
+        const records = St.lastResult ? St.lastResult.records : [];
+        const idx = data.index;
+        if (idx != null && records[idx]) {
+          const rec = records[idx];
+          _setRecordsFilter(`Szukaj: rekord #${data.raw_row != null ? data.raw_row : idx}`, () => {
+            _clearRecordsFilter();
+            if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+          });
+          _renderRecords([rec], false, 1);
+        }
+        const recCard = QS("#gsm_records_card");
+        if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+      case "contact": {
+        // Filter records to this contact and scroll
+        const records = St.lastResult ? St.lastResult.records : [];
+        const filtered = records.filter(r => r.callee === data.number || r.caller === data.number);
+        _setRecordsFilter(`Szukaj: ${data.number} — ${filtered.length} rek.`, () => {
+          _clearRecordsFilter();
+          if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+        });
+        _renderRecords(filtered, false, filtered.length);
+        const recCard = QS("#gsm_records_card");
+        if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+      case "device": {
+        const analysisCard = QS("#gsm_analysis_card");
+        if (analysisCard) analysisCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+      case "anomaly": {
+        const anomCard = QS("#gsm_anomalies_card");
+        if (anomCard) anomCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+      case "special": {
+        const snCard = QS("#gsm_sn_card");
+        if (snCard) snCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        // Fill the search box in special numbers
+        const snInput = QS("#gsm_sn_text_filter");
+        if (snInput) {
+          snInput.value = data.number || "";
+          snInput.dispatchEvent(new Event("input"));
+        }
+        break;
+      }
+      case "note": {
+        // Navigate via notes manager if ref exists
+        if (data.ref && window._gsmNotesMgr && window._gsmNotesMgr.onNavigate) {
+          window._gsmNotesMgr.onNavigate(data.ref);
+        }
+        break;
+      }
+      case "global_note": {
+        // Focus global note textarea
+        const ta = QS("#gsm_analyst_global_note");
+        if (ta) ta.focus();
+        break;
+      }
+    }
+  }
+
+  function _buildActivityContacts(chartId, typeFilter, slotLabel) {
+    const contacts = _extractActivityContacts(chartId, typeFilter, slotLabel);
+    if (!contacts.length) return '<div class="gsm-chart-no-contacts small muted" style="padding:8px 0">Brak kontaktów w tym okresie</div>';
+    const totalNums = contacts.length;
+    const singleCount = contacts.filter(c => c.total === 1).length;
+    let html = '';
+    // Slot filter bar — separate block above the unique numbers panel
+    if (slotLabel) {
+      html += `<div class="gsm-slot-filter-bar" style="margin-bottom:6px"><span class="small">Filtr: <b>${_escHtml(slotLabel)}</b> — ${totalNums} numerów</span><button class="gsm-slot-filter-clear" title="Wyczyść filtr przedziału">✕</button></div>`;
+    }
+    // Unique numbers panel — separate visual block
+    html += `<div class="gsm-contacts-panel">`;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">`;
+    html += `<span class="h3" style="margin:0;font-size:13px">Unikatowe numery</span>`;
+    html += `<span class="small muted">${totalNums} ${totalNums === 1 ? "numer" : (totalNums < 5 ? "numery" : "numerów")}`;
+    if (singleCount > 0) html += ` · <b>${singleCount}</b> pojedynczych (1×)`;
+    html += `</span></div>`;
+    html += '<div class="gsm-chart-contacts">';
+    for (const c of contacts) {
+      const parts = [];
+      if (c.calls) parts.push(`${c.calls} rozm.`);
+      if (c.sms) parts.push(`${c.sms} sms`);
+      if (c.data) parts.push(`${c.data} dane`);
+      html += _buildContactChip(c.number, c.total, chartId, parts.join(", "));
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  /** Re-bind all interactive elements inside a card's contacts wrap. */
+  function _rebindCardContacts(card) {
+    if (!card) return;
+    _bindContactChipClicks(card);
+    // Slot filter clear button (re-bound after every innerHTML update)
+    card.querySelectorAll(".gsm-slot-filter-clear").forEach(btn => {
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        card._activeSlot = null;
+        const chartId = card.dataset.chartId;
+        const typeSel = card.querySelector(".gsm-type-select");
+        const tf = typeSel ? typeSel.value : "calls";
+        const contactsWrap = QS(`[data-contacts="${chartId}"]`, card);
+        if (contactsWrap) {
+          contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, null);
+          _rebindCardContacts(card);
+        }
+        card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.remove("gsm-bar-active"));
+      });
+    });
+  }
+
+  function _bindActivityContactClicks(card) {
+    if (!card) return;
+    // Bar click → slot filter
+    card.querySelectorAll(".gsm-bar-clickable").forEach(el => {
+      el.style.cursor = "pointer";
+      el.addEventListener("click", function() {
+        const slot = el.dataset.slot;
+        const chartId = card.dataset.chartId;
+        const typeSel = card.querySelector(".gsm-type-select");
+        const tf = typeSel ? typeSel.value : "calls";
+        const contactsWrap = QS(`[data-contacts="${chartId}"]`, card);
+        if (!contactsWrap) return;
+        // Toggle: if same slot clicked again, clear
+        if (card._activeSlot === slot) {
+          card._activeSlot = null;
+          contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, null);
+          _rebindCardContacts(card);
+          card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.remove("gsm-bar-active"));
+          return;
+        }
+        card._activeSlot = slot;
+        contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, slot);
+        _rebindCardContacts(card);
+        // Highlight active bar
+        card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.toggle("gsm-bar-active", b.dataset.slot === slot));
+      });
+    });
+    // Initial binding
+    _rebindCardContacts(card);
+  }
+
+  /** Bind click events on normalized contact chips. */
+  function _bindContactChipClicks(container) {
+    if (!container) return;
+    container.querySelectorAll(".gsm-contact-chip").forEach(el => {
+      el.addEventListener("click", function(e) {
+        // Note marker click
+        if (e.target.closest(".gsm-chip-note")) {
+          const num = el.dataset.number;
+          const _nm = window._gsmNotesMgr;
+          if (_nm) {
+            const label = "Kontakt: " + num;
+            const ref = { type: "gsm_contact", number: num };
+            _nm.openNoteForElement(label, "phone", ref);
+          }
+          return;
+        }
+        const num = el.dataset.number;
+        const chartId = el.dataset.chart;
+        // Get current slot and type filter from the parent card
+        const card = el.closest("[data-chart-id]");
+        const slotLabel = card ? card._activeSlot || null : null;
+        const typeSel = card ? card.querySelector(".gsm-type-select") : null;
+        const typeFilter = typeSel ? typeSel.value : "all";
+        _filterRecordsByContact(num, chartId, slotLabel, typeFilter);
+      });
+    });
+  }
+
+  function _filterRecordsByContact(number, chartId, slotLabel, typeFilter) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    const tf = typeFilter || "all";
+    const filtered = records.filter(r => {
+      // Number match
+      if (r.callee !== number && r.caller !== number) return false;
+      // Period filter
+      if (chartId === "night") {
+        if (!_isNightRecord(r)) return false;
+        // Slot filter for night
+        if (slotLabel && _NIGHT_SLOTS[slotLabel]) {
+          const h = parseInt(r.time.split(":")[0], 10);
+          if (!_NIGHT_SLOTS[slotLabel].includes(h)) return false;
+        }
+      } else if (chartId === "weekend") {
+        if (!_isWeekendRecord(r)) return false;
+        // Slot filter for weekend
+        if (slotLabel) {
+          const pred = _weekendSlotPredicate(slotLabel);
+          if (pred) {
+            const dt = new Date((r.datetime || "").replace(" ", "T"));
+            if (isNaN(dt.getTime()) || !pred(dt)) return false;
+          }
+        }
+      }
+      // Type filter
+      if (tf !== "all") {
+        const cat = _hmCategory(r.record_type);
+        if (cat !== tf) return false;
+      }
+      return true;
+    });
+    const chartLabels = { night: "nocna", weekend: "weekendowa" };
+    const chartLabel = chartLabels[chartId] || "";
+    const prefix = chartLabel ? `Akt. ${chartLabel}` : "Nr";
+    const slotInfo = slotLabel ? ` [${slotLabel}]` : "";
+    const typeLabels = { calls: "poł.", sms: "SMS", data: "dane" };
+    const typeInfo = tf !== "all" && typeLabels[tf] ? ` (${typeLabels[tf]})` : "";
+    const filterText = `${prefix}${slotInfo}: ${number}${typeInfo} — ${filtered.length} rek.`;
+    _setRecordsFilter(filterText, () => {
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(filtered, false, filtered.length);
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function _renderActivityCharts(analysis) {
+    const row = QS("#gsm_activity_row");
+    if (!row) return;
+
+    // Remove previously injected night/weekend chart cards (keep heatmap card)
+    row.querySelectorAll("[data-chart-id]").forEach(el => el.remove());
+
+    if (!analysis) return;
+
+    const night = analysis.night_activity;
+    const weekend = analysis.weekend_activity;
+
+    if (night && night.total_records) {
+      row.insertAdjacentHTML("beforeend",
+        _renderOneChart("night", "Aktywność nocna", "22:00–6:00", night, _nightTotalBars));
+    }
+    if (weekend && weekend.total_records) {
+      row.insertAdjacentHTML("beforeend",
+        _renderOneChart("weekend", "Aktywność weekendowa", "Pt 20:00–Pn 6:00", weekend, _weekendTotalBars));
+    }
+
+    // Wire period and type selectors
+    row.querySelectorAll("[data-chart-id] .gsm-period-select, [data-chart-id] .gsm-type-select").forEach(sel => {
+      sel.onchange = () => _onChartFilterChange(sel, analysis);
+    });
+
+    // Update legend to match default type filter (calls)
+    row.querySelectorAll("[data-chart-id]").forEach(card => {
+      const legend = card.querySelector(".gsm-chart-legend");
+      if (legend) {
+        legend.querySelectorAll(".gsm-legend-item").forEach((item, i) => {
+          item.style.display = i === 0 ? "" : "none"; // default = calls only
+        });
+      }
+      _bindActivityContactClicks(card);
+    });
+
+    _bindCardScreenshotButtons(row);
+
+    // Add drag handles to all chart cards for sub-element reordering
+    row.querySelectorAll(".gsm-chart-card").forEach(el => {
+      if (el.querySelector(".gsm-sub-drag-handle")) return; // already added
+      const cid = el.dataset.chartId || (el.id === "gsm_heatmap_card" ? "heatmap" : null);
+      if (!cid) return;
+      if (!el.dataset.chartId) el.dataset.chartId = cid; // normalize
+      const handle = document.createElement("div");
+      handle.className = "gsm-sub-drag-handle";
+      handle.title = "Przeciągnij aby zmienić kolejność";
+      handle.innerHTML = "⠿";
+      el.style.position = "relative";
+      el.prepend(handle);
+      el.draggable = true;
+    });
+    _bindSubelementDrag(row, "activity");
+    _applySubelementLayout();
+  }
+
+  /** Bind drag & drop for sub-elements within a section container. */
+  function _bindSubelementDrag(container, sectionId) {
+    let dragEl = null;
+    let placeholder = null;
+    container.addEventListener("dragstart", e => {
+      const handle = e.target.closest(".gsm-sub-drag-handle");
+      const card = e.target.closest(".gsm-chart-card");
+      if (!handle && !card) return;
+      if (!handle) { e.preventDefault(); return; } // only drag from handle
+      dragEl = card || handle.closest(".gsm-chart-card");
+      if (!dragEl) return;
+      dragEl.classList.add("gsm-sub-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      placeholder = document.createElement("div");
+      placeholder.className = "gsm-sub-placeholder";
+      placeholder.style.width = dragEl.offsetWidth + "px";
+      placeholder.style.height = dragEl.offsetHeight + "px";
+      requestAnimationFrame(() => {
+        if (dragEl && dragEl.parentNode) dragEl.parentNode.insertBefore(placeholder, dragEl.nextSibling);
+      });
+    });
+    container.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (!placeholder) return;
+      const target = e.target.closest(".gsm-chart-card");
+      if (!target || target === dragEl) return;
+      const rect = target.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      if (e.clientX < midX) {
+        target.parentNode.insertBefore(placeholder, target);
+      } else {
+        target.parentNode.insertBefore(placeholder, target.nextSibling);
+      }
+    });
+    container.addEventListener("dragend", () => {
+      if (dragEl) dragEl.classList.remove("gsm-sub-dragging");
+      if (placeholder && placeholder.parentNode) placeholder.remove();
+      dragEl = null;
+      placeholder = null;
+    });
+    container.addEventListener("drop", e => {
+      e.preventDefault();
+      if (!dragEl || !placeholder) return;
+      placeholder.parentNode.insertBefore(dragEl, placeholder);
+      placeholder.remove();
+      placeholder = null;
+      dragEl.classList.remove("gsm-sub-dragging");
+      // Save new order
+      const cards = [...container.querySelectorAll(".gsm-chart-card")];
+      const newOrder = cards.map(c => c.dataset.chartId).filter(Boolean);
+      _saveSubelementOrder(sectionId, newOrder);
+      dragEl = null;
+    });
+  }
+
+  function _renderOneChart(id, title, subtitle, d, buildTotalBars) {
+    const weeklyKeys = Object.keys(d.weekly || {});
+    const monthlyKeys = Object.keys(d.monthly || {});
+
+    const camSvg = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="cam-g-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1096f4"/><stop offset="100%" stop-color="#8426a4"/></linearGradient></defs><path d="M4 8h3l2-3h6l2 3h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" stroke="url(#cam-g-${id})" fill="none"/><circle cx="12" cy="14" r="4" stroke="url(#cam-g-${id})" fill="none"/></svg>`;
+    let html = `<div class="gsm-chart-card" data-chart-id="${id}">
+      <div class="gsm-chart-header">
+        <div class="h3" style="display:inline-flex;align-items:center;gap:6px">${title} <span class="small muted">(${subtitle})</span>
+          <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="[data-chart-id='${id}']" data-name="${id}" title="Zrób zrzut">
+            ${camSvg}
+          </button>
+        </div>
+        <div class="gsm-chart-selects">
+          <select class="gsm-type-select" data-chart="${id}">
+            <option value="all">Wszystkie</option>
+            <option value="calls" selected>Połączenia</option>
+            <option value="sms">SMS/MMS</option>
+            <option value="data">Sesje danych</option>
+          </select>
+          <select class="gsm-period-select" data-chart="${id}">
+            <option value="total" selected>Łącznie</option>`;
+    if (weeklyKeys.length > 1) {
+      html += `<optgroup label="Tygodnie">`;
+      for (const k of weeklyKeys) html += `<option value="week:${k}">Tyg. ${k} (${d.weekly[k].records})</option>`;
+      html += `</optgroup>`;
+    }
+    if (monthlyKeys.length > 1) {
+      html += `<optgroup label="Miesiące">`;
+      for (const k of monthlyKeys) html += `<option value="month:${k}">${k} (${d.monthly[k].records})</option>`;
+      html += `</optgroup>`;
+    }
+    html += `</select></div></div>`;
+
+    html += `<div class="gsm-chart-legend">
+      <span class="gsm-legend-item"><span class="gsm-legend-dot gsm-bar-calls"></span>Rozmowy</span>
+      <span class="gsm-legend-item"><span class="gsm-legend-dot gsm-bar-sms"></span>SMS/MMS</span>
+      <span class="gsm-legend-item"><span class="gsm-legend-dot gsm-bar-data"></span>Dane</span>
+    </div>`;
+
+    html += `<div class="gsm-bar-chart" data-bars="${id}">${buildTotalBars(d, "calls")}</div>`;
+    html += `<div class="gsm-chart-contacts-wrap" data-contacts="${id}">${_buildActivityContacts(id, "calls")}</div>`;
+    html += `</div>`;
+    return html;
+  }
+
+  function _onChartFilterChange(selectEl, analysis) {
+    const card = selectEl.closest(".gsm-chart-card");
+    if (!card) return;
+    const chartId = card.dataset.chartId;
+    const periodSel = card.querySelector(".gsm-period-select");
+    const typeSel = card.querySelector(".gsm-type-select");
+    const val = periodSel ? periodSel.value : "total";
+    const tf = typeSel ? typeSel.value : "calls";
+    const barContainer = QS(`[data-bars="${chartId}"]`, card);
+    const contactsWrap = QS(`[data-contacts="${chartId}"]`, card);
+    if (!barContainer) return;
+
+    const src = chartId === "night" ? analysis.night_activity : analysis.weekend_activity;
+    if (!src) return;
+
+    // Update legend visibility
+    const legend = card.querySelector(".gsm-chart-legend");
+    if (legend) {
+      legend.querySelectorAll(".gsm-legend-item").forEach((item, i) => {
+        const cats = ["calls", "sms", "data"];
+        item.style.display = (tf === "all" || tf === cats[i]) ? "" : "none";
+      });
+    }
+
+    if (val === "total") {
+      barContainer.innerHTML = chartId === "night" ? _nightTotalBars(src, tf) : _weekendTotalBars(src, tf);
+    } else {
+      let bucket = null;
+      if (val.startsWith("week:")) bucket = (src.weekly || {})[val.slice(5)];
+      else if (val.startsWith("month:")) bucket = (src.monthly || {})[val.slice(6)];
+      if (!bucket) return;
+
+      if (chartId === "night" && bucket.hourly_calls) {
+        const hours = [22, 23, 0, 1, 2, 3, 4, 5];
+        const hc = bucket.hourly_calls || {}, hs = bucket.hourly_sms || {}, hd = bucket.hourly_data || {};
+        barContainer.innerHTML = _buildGroupedBars(hours.map(h => ({
+          label: `${String(h).padStart(2, "0")}:00`,
+          calls: hc[h] || hc[String(h)] || 0,
+          sms: hs[h] || hs[String(h)] || 0,
+          data: hd[h] || hd[String(h)] || 0,
+        })), tf);
+      } else if (chartId === "weekend" && bucket.fri_evening != null) {
+        const sc = bucket.seg_calls || {}, ss = bucket.seg_sms || {}, sd = bucket.seg_data || {};
+        barContainer.innerHTML = _buildGroupedBars([
+          { label: "Pt wieczór", calls: sc.fri_evening || 0, sms: ss.fri_evening || 0, data: sd.fri_evening || 0 },
+          { label: "Sobota",     calls: sc.saturday || 0,    sms: ss.saturday || 0,    data: sd.saturday || 0 },
+          { label: "Niedziela",  calls: sc.sunday || 0,      sms: ss.sunday || 0,      data: sd.sunday || 0 },
+          { label: "Pn rano",    calls: sc.mon_morning || 0, sms: ss.mon_morning || 0, data: sd.mon_morning || 0 },
+        ], tf);
+      } else {
+        barContainer.innerHTML = _bucketTypeBars(bucket, tf);
+      }
+    }
+
+    // Reset slot filter on type/period change
+    card._activeSlot = null;
+    card.querySelectorAll(".gsm-bar-clickable").forEach(b => b.classList.remove("gsm-bar-active"));
+
+    // Update contacts section
+    if (contactsWrap) {
+      contactsWrap.innerHTML = _buildActivityContacts(chartId, tf, null);
+      _bindActivityContactClicks(card);
+    }
+  }
+
+  /* ── BTS Map ─────────────────────────────────────────────── */
+
+  async function _renderMap(geo) {
+    const card = QS("#gsm_map_card");
+    if (!card) return;
+
+    // Show debug info in log
+    if (geo && geo.debug) {
+      const d = geo.debug;
+      _addLog("info", `[Geolokalizacja] Rekordy: ${geo.total_records}, ` +
+        `z koordynatami BTS: ${d.has_direct_coords}, ` +
+        `z LAC/CID: ${d.has_lac_cid}, ` +
+        `bez danych: ${d.no_location_data}`);
+      _addLog("info", `[Geolokalizacja] Zlokalizowane: ${geo.geolocated_records} ` +
+        `(z bilingu: ${d.resolved_billing}, z bazy BTS: ${d.resolved_bts_db}, ` +
+        `nieznalezione w bazie: ${d.lookup_miss})`);
+      if (d.lookup_miss > 0 && d.resolved_bts_db === 0 && d.has_lac_cid > 0) {
+        _addLog("warn", `[Geolokalizacja] Żaden rekord z LAC/CID nie znalazł dopasowania w bazie BTS! ` +
+          `Sprawdź czy baza OpenCelliD jest pobrana. Przykładowe LAC/CID: ${(d.sample_lac_cid || []).join(", ")}`);
+      }
+      if (d.coord_rejected) {
+        _addLog("warn", `[Geolokalizacja] Odrzucono ${d.coord_rejected} współrzędnych (poza zakresem)`);
+      }
+      if (d.sample_raw_bts && d.sample_raw_bts.length) {
+        _addLog("info", `[Geolokalizacja] Surowe BTS X/Y: ${d.sample_raw_bts.join("; ")}`);
+      }
+      if (d.sample_coords && d.sample_coords.length) {
+        _addLog("info", `[Geolokalizacja] Przykładowe koordynaty: ${d.sample_coords.join("; ")}`);
+      }
+    }
+
+    if (!geo || !geo.geolocated_records || geo.geolocated_records === 0) {
+      // Show card with diagnostic message if we have debug info
+      if (geo && geo.debug && geo.debug.has_lac_cid > 0) {
+        card.style.display = "";
+        const container = QS("#gsm_map_container");
+        if (container) {
+          const d = geo.debug;
+          container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">
+            <div style="text-align:center;max-width:500px">
+              <div style="font-size:24px;margin-bottom:8px">Brak danych lokalizacyjnych</div>
+              <div class="small" style="margin-bottom:8px">Znaleziono ${d.has_lac_cid} rekordów z LAC/CID, ale żaden nie pasuje do bazy BTS.</div>
+              <div class="small">Pobierz bazę OpenCelliD w <a href="/bts-settings" style="color:var(--accent)">ustawieniach BTS</a>, aby umożliwić geolokalizację.</div>
+              ${d.sample_lac_cid && d.sample_lac_cid.length ? `<div class="small muted" style="margin-top:8px;font-family:monospace;font-size:11px">Przykładowe: ${d.sample_lac_cid.join(", ")}</div>` : ""}
+            </div>
+          </div>`;
+        }
+      } else {
+        card.style.display = "none";
+      }
+      return;
+    }
+
+    card.style.display = "";
+    const statsEl = QS("#gsm_map_stats");
+    if (statsEl) {
+      statsEl.textContent = `${geo.geolocated_records}/${geo.total_records} zlokalizowanych, ${geo.unique_cells} komórek`;
+    }
+
+    await _loadLeaflet();
+
+    if (!window.L) {
+      // Fallback — no Leaflet
+      const container = QS("#gsm_map_container");
+      if (container) {
+        container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">
+          <div style="text-align:center">
+            <div style="font-size:24px;margin-bottom:8px">Mapa niedostępna</div>
+            <div class="small">Nie udało się załadować biblioteki Leaflet. Sprawdź połączenie internetowe lub dodaj mapę offline (MBTiles).</div>
+          </div>
+        </div>`;
+      }
+      return;
+    }
+
+    await _initMap(geo);
+    _renderClusters(geo);
+    _initTimeline(geo);
+
+    // Screenshot button
+    const screenshotBtn = QS("#gsm_map_screenshot_btn");
+    if (screenshotBtn) screenshotBtn.onclick = () => _takeMapScreenshot();
+
+    // Area selection buttons (circle / rectangle)
+    const selectCircleBtn = QS("#gsm_select_circle_btn");
+    const selectRectBtn = QS("#gsm_select_rect_btn");
+    if (selectCircleBtn) selectCircleBtn.onclick = () => _enterAreaSelectMode("circle");
+    if (selectRectBtn) selectRectBtn.onclick = () => _enterAreaSelectMode("rect");
+
+    // ── Floating layer panel ──
+    const coverageOpts = QS("#gsm_coverage_opts");
+    const covBillingCb = QS("#gsm_cov_billing");
+    const covOtherCb = QS("#gsm_cov_other");
+
+    // Build exclude list once from billing data
+    _otherBtsExcludeSet = _buildExcludeSet(geo);
+
+    // Panel collapse/expand toggle
+    const layerPanel = QS("#gsm_layer_panel");
+    const lpToggle = QS("#gsm_lp_header_toggle");
+    if (lpToggle && layerPanel) {
+      lpToggle.onclick = () => layerPanel.classList.toggle("collapsed");
+    }
+
+    // Layer radio buttons (replace old select)
+    const layerRadios = document.querySelectorAll('input[name="gsm_map_layer"]');
+    for (const radio of layerRadios) {
+      radio.onchange = () => {
+        if (!radio.checked) return;
+        const layer = radio.value;
+        _closeAllPinnedCards();
+        _switchMapLayer(layer, geo);
+        // Update active class on items
+        for (const item of document.querySelectorAll(".gsm-lp-item[data-layer]")) {
+          item.classList.toggle("active", item.dataset.layer === layer);
+        }
+        // Show/hide coverage sub-options
+        if (coverageOpts) coverageOpts.style.display = layer === "coverage" ? "" : "none";
+        // Disable other BTS when switching away from coverage
+        if (layer !== "coverage") {
+          _otherBtsEnabled = false;
+          _removeOtherBts();
+        } else if (covOtherCb && covOtherCb.checked) {
+          _otherBtsEnabled = true;
+          _loadOtherBts();
+        }
+      };
+    }
+
+    // Coverage billing checkbox — toggle billing coverage layer
+    if (covBillingCb) {
+      covBillingCb.onchange = () => {
+        if (!St.map || !St.mapLayers.coverage) return;
+        if (covBillingCb.checked) {
+          St.mapLayers.coverage.addTo(St.map);
+        } else {
+          St.map.removeLayer(St.mapLayers.coverage);
+        }
+      };
+    }
+
+    // Coverage other BTS checkbox — toggle dynamic nearby BTS
+    if (covOtherCb) {
+      covOtherCb.onchange = () => {
+        _otherBtsEnabled = covOtherCb.checked;
+        if (_otherBtsEnabled) {
+          _loadOtherBts();
+        } else {
+          _removeOtherBts();
+        }
+      };
+    }
+
+    // Coverage mode radio buttons — switch between full/flat/outline
+    document.querySelectorAll('input[name="gsm_cov_mode"]').forEach(radio => {
+      radio.onchange = () => {
+        if (!St.map || !St._covLocations) return;
+        const mode = radio.value;
+        // Remove old coverage layer
+        if (St.mapLayers.coverage) {
+          St.map.removeLayer(St.mapLayers.coverage);
+        }
+        // Clean up flat pane opacity if switching away from flat
+        const flatPane = St.map.getPane("coverageFlat");
+        if (flatPane) flatPane.style.opacity = "";
+        // Build new layer
+        St.mapLayers.coverage = _buildCoverageLayer(St._covLocations, mode);
+        // Add to map if billing checkbox is checked
+        const billingCb = QS("#gsm_cov_billing");
+        if (!billingCb || billingCb.checked) {
+          St.mapLayers.coverage.addTo(St.map);
+        }
+      };
+    });
+
+    // ── Map overlay checkboxes (military / airports / diplomacy) ──
+    const milCb = QS("#gsm_overlay_military");
+    const airCb = QS("#gsm_overlay_airports");
+    const dipCb = QS("#gsm_overlay_diplomacy");
+    if (milCb) milCb.onchange = () => _toggleOverlay("military", milCb.checked);
+    if (airCb) airCb.onchange = () => _toggleOverlay("airports", airCb.checked);
+    if (dipCb) dipCb.onchange = () => _toggleOverlay("diplomacy", dipCb.checked);
+
+    // Load KML user overlays into layer panel
+    _loadKmlOverlayCheckboxes();
+
+    // Reload other BTS on map move/zoom (debounced)
+    if (St.map) {
+      St.map.on("moveend", () => {
+        if (_otherBtsEnabled) _scheduleOtherBtsReload();
+      });
+    }
+  }
+
+  /* ── Map screenshot ──────────────────────────────────── */
+
+  let _html2canvasLoaded = false;
+
+  async function _ensureHtml2Canvas() {
+    if (_html2canvasLoaded || window.html2canvas) {
+      _html2canvasLoaded = true;
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+      s.onload = () => { _html2canvasLoaded = true; resolve(); };
+      s.onerror = () => reject(new Error("Nie udało się załadować html2canvas"));
+      document.head.appendChild(s);
+    });
+  }
+
+  /**
+   * Draw a transparent watermark line below the source canvas.
+   * "AISTATEweb" in brand gradient, extra parts + date in gray.
+   * No background bar — suitable for print and Word embedding.
+   * @param {HTMLCanvasElement} srcCanvas
+   * @param {string[]} [extraParts] - additional text segments after the brand name
+   * @returns {HTMLCanvasElement} final canvas with watermark row appended
+   */
+  function _drawWatermark(srcCanvas, extraParts) {
+    const w = srcCanvas.width;
+    const barH = Math.round(Math.max(32, w * 0.032));
+    const fontSize = Math.round(barH * 0.44);
+    const totalH = srcCanvas.height + barH;
+
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = totalH;
+    const ctx = out.getContext("2d");
+
+    // Draw source content
+    ctx.drawImage(srcCanvas, 0, 0);
+
+    // White background for watermark row (print-friendly)
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, srcCanvas.height, w, barH);
+
+    // Subtle top separator
+    ctx.fillStyle = "rgba(0,0,0,0.08)";
+    ctx.fillRect(0, srcCanvas.height, w, 1);
+
+    ctx.textBaseline = "middle";
+    const cy = srcCanvas.height + barH / 2;
+    const pad = Math.round(barH * 0.45);
+
+    // "AI" in navy, "STATE" in brand-blue, "web" in sky
+    const parts = [
+      { text: "AI", color: "#0d1350" },
+      { text: "STATE", color: "#2946b7" },
+      { text: "web", color: "#1096f4" },
+    ];
+    let lx = pad;
+    ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+    for (const p of parts) {
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, lx, cy);
+      lx += ctx.measureText(p.text).width;
+    }
+
+    // Date (always present)
+    const now = new Date();
+    const dateStr = now.toLocaleString("pl-PL", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const grayColor = "rgba(0,0,0,0.38)";
+
+    ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = grayColor;
+
+    // Extra parts (layer name, copyright, etc.)
+    if (extraParts && extraParts.length) {
+      for (const part of extraParts) {
+        ctx.fillText(`  |  ${part}`, lx, cy);
+        lx += ctx.measureText(`  |  ${part}`).width;
+      }
+    }
+
+    // Date on the right
+    const dateW = ctx.measureText(dateStr).width;
+    ctx.fillText(dateStr, w - pad - dateW, cy);
+
+    return out;
+  }
+
+  /**
+   * Compose a map screenshot directly from Leaflet internals.
+   * html2canvas cannot reliably capture cross-origin tile <img> elements,
+   * so we manually draw tiles, then overlay canvas/SVG layers on top.
+   */
+  /**
+   * Render the Leaflet map (tiles + overlays + markers + watermark) to a Canvas.
+   * Reusable by both "Zrób zrzut" button and note chart capture.
+   * @returns {Promise<HTMLCanvasElement>} watermarked canvas
+   */
+  async function _renderMapToCanvas() {
+    const container = QS("#gsm_map_container");
+    if (!container || !St.map) return null;
+
+    const map = St.map;
+    const scale = 2;
+    const size = map.getSize();
+    const w = size.x * scale;
+    const h = size.y * scale;
+
+    await _waitForTilesToLoad(map, 3000);
+
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext("2d");
+
+    // 1. Background
+    ctx.fillStyle = "#e8e8e8";
+    ctx.fillRect(0, 0, w, h);
+
+    // 2. Tile images
+    const containerRect = map.getContainer().getBoundingClientRect();
+    const tilePane = map.getPane("tilePane");
+    if (tilePane) {
+      const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
+      const tilePromises = [];
+      for (const img of tileImgs) {
+        if (!img.src) continue;
+        const rect = img.getBoundingClientRect();
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+        const tw = rect.width * scale;
+        const th = rect.height * scale;
+        tilePromises.push(
+          _fetchImageBitmap(img.src)
+            .then(bmp => ({ bmp, x, y, tw, th }))
+            .catch(() => null)
+        );
+      }
+      const tiles = await Promise.all(tilePromises);
+      for (const tile of tiles) {
+        if (!tile) continue;
+        ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
+        tile.bmp.close();
+      }
+    }
+
+    // 3. MapLibre GL canvas
+    if (St._maplibreLayer) {
+      try {
+        const glMap = St._maplibreLayer.getMaplibreMap();
+        if (glMap) {
+          glMap.triggerRepaint();
+          await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const glCanvas = glMap.getCanvas();
+          if (glCanvas) {
+            const mlRect = glCanvas.getBoundingClientRect();
+            const cRect = map.getContainer().getBoundingClientRect();
+            ctx.drawImage(glCanvas,
+              (mlRect.left - cRect.left) * scale, (mlRect.top - cRect.top) * scale,
+              mlRect.width * scale, mlRect.height * scale);
+          }
+        }
+      } catch (e) {
+        _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
+      }
+    } else {
+      const maplibreCanvas = container.querySelector(".maplibregl-canvas, .mapboxgl-canvas");
+      if (maplibreCanvas) {
+        try {
+          const mlRect = maplibreCanvas.getBoundingClientRect();
+          const cRect = map.getContainer().getBoundingClientRect();
+          ctx.drawImage(maplibreCanvas,
+            (mlRect.left - cRect.left) * scale, (mlRect.top - cRect.top) * scale,
+            mlRect.width * scale, mlRect.height * scale);
+        } catch (e) {
+          _addLog("warn", "Nie udało się skopiować canvasu MapLibre: " + e.message);
+        }
+      }
+    }
+
+    // 4. Overlay pane (circles, polylines, polygons)
+    const overlayPane = map.getPane("overlayPane");
+    if (overlayPane) {
+      const canvases = overlayPane.querySelectorAll("canvas");
+      for (const c of canvases) {
+        try {
+          const cRect = c.getBoundingClientRect();
+          ctx.drawImage(c,
+            (cRect.left - containerRect.left) * scale, (cRect.top - containerRect.top) * scale,
+            cRect.width * scale, cRect.height * scale);
+        } catch (_) {}
+      }
+      const svgs = overlayPane.querySelectorAll("svg");
+      for (const svg of svgs) {
+        try {
+          const svgRect = svg.getBoundingClientRect();
+          const svgData = new XMLSerializer().serializeToString(svg);
+          const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+          const svgUrl = URL.createObjectURL(svgBlob);
+          const svgImg = new Image();
+          await new Promise((resolve) => {
+            svgImg.onload = resolve;
+            svgImg.onerror = resolve;
+            svgImg.src = svgUrl;
+          });
+          ctx.drawImage(svgImg,
+            (svgRect.left - containerRect.left) * scale, (svgRect.top - containerRect.top) * scale,
+            svgRect.width * scale, svgRect.height * scale);
+          URL.revokeObjectURL(svgUrl);
+        } catch (_) {}
+      }
+    }
+
+    // 5. Shadow pane
+    _drawPaneMarkers(ctx, map, "shadowPane", scale);
+
+    // 6. Marker pane
+    _drawPaneMarkers(ctx, map, "markerPane", scale);
+
+    // 6b. Pinned BTS cards + tether lines
+    const tetherSvg = container.querySelector(".gsm-pinned-tether-svg");
+    if (tetherSvg) {
+      const lines = tetherSvg.querySelectorAll("line");
+      for (const ln of lines) {
+        const x1 = parseFloat(ln.getAttribute("x1")) * scale;
+        const y1 = parseFloat(ln.getAttribute("y1")) * scale;
+        const x2 = parseFloat(ln.getAttribute("x2")) * scale;
+        const y2 = parseFloat(ln.getAttribute("y2")) * scale;
+        ctx.save();
+        ctx.strokeStyle = ln.getAttribute("stroke") || "#64748b";
+        ctx.lineWidth = parseFloat(ln.getAttribute("stroke-width") || 1.5) * scale;
+        ctx.setLineDash([5 * scale, 4 * scale]);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    const pinnedCardEls = container.querySelectorAll(".gsm-pinned-card");
+    const popupPane = map.getPane("popupPane");
+    const openPopups = popupPane ? popupPane.querySelectorAll(".leaflet-popup") : [];
+    if (pinnedCardEls.length > 0 || openPopups.length > 0) {
+      await _ensureHtml2Canvas();
+      for (const card of pinnedCardEls) {
+        try {
+          const cardCanvas = await window.html2canvas(card, {
+            scale: scale, backgroundColor: null, logging: false, useCORS: true,
+          });
+          const cardLeft = parseFloat(card.style.left || 0) * scale;
+          const cardTop = parseFloat(card.style.top || 0) * scale;
+          ctx.drawImage(cardCanvas, cardLeft, cardTop);
+        } catch (e) {
+          _addLog("warn", "Nie udało się narysować karty BTS: " + e.message);
+        }
+      }
+      for (const popup of openPopups) {
+        try {
+          const popupCanvas = await window.html2canvas(popup, {
+            scale: scale, backgroundColor: null, logging: false, useCORS: true,
+          });
+          const pRect = popup.getBoundingClientRect();
+          ctx.drawImage(popupCanvas,
+            (pRect.left - containerRect.left) * scale, (pRect.top - containerRect.top) * scale);
+        } catch (_) {}
+      }
+    }
+
+    // 7. Watermark
+    const activeRadio = QS('input[name="gsm_map_layer"]:checked');
+    const activeItem = activeRadio ? activeRadio.closest(".gsm-lp-item") : null;
+    const layerLabel = activeItem ? activeItem.textContent.trim() : "";
+    const extraParts = [];
+    if (layerLabel) extraParts.push(layerLabel);
+    extraParts.push("© OpenStreetMap contributors");
+
+    return _drawWatermark(out, extraParts);
+  }
+
+  async function _takeMapScreenshot() {
+    const container = QS("#gsm_map_container");
+    if (!container || !St.map) return;
+    const btn = QS("#gsm_map_screenshot_btn");
+    if (btn) btn.disabled = true;
+
+    try {
+      const final = await _renderMapToCanvas();
+      if (!final) {
+        _addLog("warn", "Nie udało się wyrenderować mapy");
+        return;
+      }
+
+      // Download
+      const now = new Date();
+      final.toBlob((blob) => {
+        if (!blob) {
+          _addLog("warn", "Nie udało się utworzyć zdjęcia mapy");
+          return;
+        }
+        const activeR = QS('input[name="gsm_map_layer"]:checked');
+        const layerName = activeR ? activeR.value : "mapa";
+        const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `BTS_${layerName}_${ts}.png`;
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zdjęcie mapy: ${filename}`);
+      }, "image/png");
+    } catch (e) {
+      _addLog("error", `Błąd zdjęcia mapy: ${e.message}`);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /**
+   * Fetch an image URL via fetch() and return an ImageBitmap (CORS-safe).
+   * Falls back to loading via <img crossOrigin="anonymous"> if fetch fails.
+   */
+  async function _fetchImageBitmap(url) {
+    // Try fetch first (best for CORS)
+    try {
+      const resp = await fetch(url, { mode: "cors" });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        return createImageBitmap(blob);
+      }
+    } catch (_) { /* fall through to img approach */ }
+
+    // Fallback: load via <img crossOrigin> — works for same-origin and CORS-enabled servers
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        createImageBitmap(img).then(resolve).catch(reject);
+      };
+      img.onerror = () => reject(new Error("img load failed"));
+      img.src = url;
+    });
+  }
+
+  /** Wait for all visible tile images to finish loading (with timeout) */
+  function _waitForTilesToLoad(map, timeoutMs) {
+    return new Promise((resolve) => {
+      const tilePane = map.getPane("tilePane");
+      if (!tilePane) { resolve(); return; }
+
+      const check = () => {
+        const imgs = tilePane.querySelectorAll("img.leaflet-tile");
+        for (const img of imgs) {
+          if (img.src && !img.complete) return false;
+        }
+        return true;
+      };
+
+      if (check()) { resolve(); return; }
+
+      const deadline = Date.now() + timeoutMs;
+      const interval = setInterval(() => {
+        if (check() || Date.now() > deadline) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+    });
+  }
+
+  /** Parse Leaflet's CSS transform (translate3d / translate) to {x, y} pixels */
+  function _getLeafletPaneOffset(el) {
+    const t = el.style.transform || window.getComputedStyle(el).transform;
+    if (!t || t === "none") return { x: 0, y: 0 };
+    // translate3d(Xpx, Ypx, 0px) or matrix(...)
+    const m3d = t.match(/translate3d\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/);
+    if (m3d) return { x: parseFloat(m3d[1]), y: parseFloat(m3d[2]) };
+    const mat = t.match(/matrix\(\s*[\d.e+-]+\s*,\s*[\d.e+-]+\s*,\s*[\d.e+-]+\s*,\s*[\d.e+-]+\s*,\s*(-?[\d.e+-]+)\s*,\s*(-?[\d.e+-]+)/);
+    if (mat) return { x: parseFloat(mat[1]), y: parseFloat(mat[2]) };
+    return { x: 0, y: 0 };
+  }
+
+  /**
+   * Draw marker images AND divIcon HTML markers from a Leaflet pane onto a canvas.
+   * L.divIcon markers render as <div> elements (often with emoji text content),
+   * while standard L.icon markers render as <img> elements.
+   */
+  function _drawPaneMarkers(ctx, map, paneName, scale) {
+    const pane = map.getPane(paneName);
+    if (!pane) return;
+    const containerRect = map.getContainer().getBoundingClientRect();
+
+    // 1) Draw <img> based markers (standard L.icon)
+    const imgs = pane.querySelectorAll("img");
+    for (const img of imgs) {
+      if (!img.complete || !img.naturalWidth) continue;
+      try {
+        const rect = img.getBoundingClientRect();
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+        const iw = rect.width * scale;
+        const ih = rect.height * scale;
+        ctx.drawImage(img, x, y, iw, ih);
+      } catch (_) {}
+    }
+
+    // 2) Draw L.divIcon markers (overlays, KML layers — rendered as <div> with emoji/text)
+    const divIcons = pane.querySelectorAll(".leaflet-marker-icon");
+    for (const div of divIcons) {
+      // Skip if it's an <img> element (already handled above)
+      if (div.tagName === "IMG") continue;
+      try {
+        const rect = div.getBoundingClientRect();
+        // Skip markers outside the visible map area
+        if (rect.width === 0 || rect.height === 0) continue;
+        if (rect.right < containerRect.left || rect.left > containerRect.right) continue;
+        if (rect.bottom < containerRect.top || rect.top > containerRect.bottom) continue;
+
+        const x = (rect.left - containerRect.left) * scale;
+        const y = (rect.top - containerRect.top) * scale;
+
+        // Extract text content (emoji) from the divIcon
+        const span = div.querySelector("span");
+        const text = span ? span.textContent.trim() : div.textContent.trim();
+        if (!text) continue;
+
+        // Draw the emoji/text at the marker position
+        const fontSize = Math.round((span ? parseFloat(getComputedStyle(span).fontSize) : 16) * scale);
+        ctx.font = `${fontSize}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const cx = x + (rect.width * scale) / 2;
+        const cy = y + (rect.height * scale) / 2;
+        ctx.fillText(text, cx, cy);
+      } catch (_) {}
+    }
+  }
+
+  /* ── Generic card screenshot ───────────────────────────── */
+
+  // Elements to hide in card screenshots (filters, selects, resize handles, screenshot buttons)
+  const _SCREENSHOT_HIDE_SELECTORS = [
+    ".gsm-period-select", "select", ".gsm-hm-filter-bar", ".gsm-filter-chips",
+    ".gsm-col-filter-btn", ".gsm-card-screenshot-btn", ".gsm-map-screenshot-btn",
+    ".gsm-graph-resize", ".gsm-records-resize",
+  ].join(",");
+
+  async function _takeCardScreenshot(btn) {
+    const targetSel = btn.dataset.target;
+    const name = btn.dataset.name || "screenshot";
+    const card = document.querySelector(targetSel);
+    if (!card) return;
+    btn.disabled = true;
+
+    try {
+      await _ensureHtml2Canvas();
+
+      const cardCanvas = await window.html2canvas(card, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: getComputedStyle(card).backgroundColor || "#fff",
+        scale: 2,
+        logging: false,
+        onclone: (doc, clonedCard) => {
+          // Hide filter/select/resize elements in the clone
+          clonedCard.querySelectorAll(_SCREENSHOT_HIDE_SELECTORS).forEach(el => {
+            el.style.display = "none";
+          });
+        },
+      });
+
+      const out = _drawWatermark(cardCanvas);
+
+      out.toBlob((blob) => {
+        if (!blob) return;
+        const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `GSM_${name}_${ts}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zrzut: ${filename}`);
+      }, "image/png");
+    } catch (e) {
+      _addLog("error", `Błąd zrzutu: ${e.message}`);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Bind all card screenshot buttons (called after render)
+  function _bindCardScreenshotButtons(root) {
+    (root || document).querySelectorAll(".gsm-card-screenshot-btn").forEach(btn => {
+      if (btn._screenshotBound) return;
+      btn._screenshotBound = true;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        _takeCardScreenshot(btn);
+      };
+    });
+  }
+
+  async function _initMap(geo) {
+    const container = QS("#gsm_map_container");
+    if (!container || !window.L) return;
+
+    // Destroy existing map
+    if (St.map) {
+      try { St.map.remove(); } catch(e) { /* ignore */ }
+      St.map = null;
+      St._maplibreLayer = null;
+    }
+
+    const map = L.map(container, {
+      zoomControl: true,
+      attributionControl: true,
+      preferCanvas: true,  // render vectors to <canvas> (better screenshot capture)
+    });
+    St.map = map;
+
+    // Load tiles first, then add markers
+    await _addTileLayer(map);
+
+    // Add markers
+    _addAllPoints(map, geo);
+  }
+
+  async function _addTileLayer(map) {
+    // Fetch user preference
+    let mapSource = "auto";
+    try {
+      const sResp = await fetch("/api/settings");
+      const sData = await sResp.json();
+      mapSource = sData.map_source || "auto";
+    } catch (e) { /* default auto */ }
+
+    // Force online mode
+    if (mapSource === "online") {
+      _addOnlineTileLayer(map);
+      return;
+    }
+
+    // Check offline tiles availability
+    let info = null;
+    try {
+      const resp = await fetch("/api/gsm/tiles/info");
+      info = await resp.json();
+    } catch (e) { /* ignore */ }
+
+    const offlineAvailable = info && info.available;
+    const fmt = offlineAvailable ? (info.format || "pbf") : "";
+
+    // If forced offline but no tiles — show warning, add empty layer
+    if (mapSource === "offline" && !offlineAvailable) {
+      _addLog("warn", "Mapa offline wymuszona, ale brak pliku MBTiles — mapa będzie pusta");
+      _setMapBadge(map, "OFFLINE — brak MBTiles", "#f97316");
+      return;
+    }
+
+    // Use offline if available (auto or forced offline)
+    if (offlineAvailable) {
+      const isRaster = (fmt === "png" || fmt === "jpg" || fmt === "jpeg" || fmt === "webp");
+      if (isRaster) {
+        L.tileLayer("/api/gsm/tiles/{z}/{x}/{y}", {
+          maxZoom: parseInt(info.maxzoom) || 18,
+          minZoom: parseInt(info.minzoom) || 0,
+          crossOrigin: true,
+          attribution: "Offline map | OpenStreetMap",
+        }).addTo(map);
+        _addLog("info", "Używam mapy offline — raster (" + fmt.toUpperCase() + ")");
+        _setMapBadge(map, "OFFLINE — " + fmt.toUpperCase(), "#22c55e");
+        return;
+      }
+      if (fmt === "pbf") {
+        // Vector PBF tiles via maplibre-gl rendered to a Leaflet layer
+        await _addPbfVectorLayer(map, info);
+        return;
+      }
+    }
+
+    // Fallback: online
+    _addOnlineTileLayer(map);
+  }
+
+  function _addOnlineTileLayer(map) {
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      crossOrigin: true,
+      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+    _addLog("info", "Używam mapy online (OpenStreetMap)");
+    _setMapBadge(map, "ONLINE", "#3b82f6");
+  }
+
+  /* ── MapLibre GL JS loader (for PBF vector tiles) ────── */
+
+  function _loadMapLibre() {
+    return new Promise((resolve) => {
+      if (window.maplibregl) { resolve(true); return; }
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css";
+      document.head.appendChild(css);
+      // Also add Leaflet-MapLibre plugin
+      const js1 = document.createElement("script");
+      js1.src = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";
+      js1.onload = () => {
+        const js2 = document.createElement("script");
+        js2.src = "https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js";
+        js2.onload = () => resolve(true);
+        js2.onerror = () => { console.warn("Leaflet-MapLibre plugin unavailable"); resolve(false); };
+        document.head.appendChild(js2);
+      };
+      js1.onerror = () => { console.warn("MapLibre GL JS CDN unavailable"); resolve(false); };
+      document.head.appendChild(js1);
+    });
+  }
+
+  async function _addPbfVectorLayer(map, info) {
+    const loaded = await _loadMapLibre();
+    if (!loaded || !window.maplibregl || !L.maplibreGL) {
+      _addLog("warn", "MapLibre GL JS niedostępne — fallback na mapę online");
+      _addOnlineTileLayer(map);
+      return;
+    }
+
+    const maxZoom = parseInt(info.maxzoom) || 14;
+    const minZoom = parseInt(info.minzoom) || 0;
+
+    // OSM Bright-like style for offline PBF tiles served from local API
+    const style = {
+      version: 8,
+      name: "Offline PBF",
+      sources: {
+        openmaptiles: {
+          type: "vector",
+          tiles: [window.location.origin + "/api/gsm/tiles/{z}/{x}/{y}"],
+          minzoom: minZoom,
+          maxzoom: maxZoom,
+        },
+      },
+      glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
+      layers: [
+        // Background
+        { id: "background", type: "background", paint: { "background-color": "#f8f4f0" } },
+        // Water
+        { id: "water", type: "fill", source: "openmaptiles", "source-layer": "water",
+          paint: { "fill-color": "#a0c8f0" } },
+        // Landcover
+        { id: "landcover-grass", type: "fill", source: "openmaptiles", "source-layer": "landcover",
+          filter: ["==", "class", "grass"],
+          paint: { "fill-color": "#d8e8c8", "fill-opacity": 0.6 } },
+        { id: "landcover-wood", type: "fill", source: "openmaptiles", "source-layer": "landcover",
+          filter: ["==", "class", "wood"],
+          paint: { "fill-color": "#aed1a0", "fill-opacity": 0.6 } },
+        // Landuse
+        { id: "landuse-residential", type: "fill", source: "openmaptiles", "source-layer": "landuse",
+          filter: ["==", "class", "residential"],
+          paint: { "fill-color": "#e8e0d8", "fill-opacity": 0.5 } },
+        { id: "landuse-commercial", type: "fill", source: "openmaptiles", "source-layer": "landuse",
+          filter: ["in", "class", "commercial", "retail"],
+          paint: { "fill-color": "#f2dad9", "fill-opacity": 0.4 } },
+        { id: "landuse-industrial", type: "fill", source: "openmaptiles", "source-layer": "landuse",
+          filter: ["==", "class", "industrial"],
+          paint: { "fill-color": "#ebdbe8", "fill-opacity": 0.4 } },
+        // Park
+        { id: "park", type: "fill", source: "openmaptiles", "source-layer": "park",
+          paint: { "fill-color": "#d8e8c8", "fill-opacity": 0.6 } },
+        // Buildings
+        { id: "building", type: "fill", source: "openmaptiles", "source-layer": "building",
+          minzoom: 13,
+          paint: { "fill-color": "#d9d0c9", "fill-outline-color": "#b9b0a9" } },
+        // Roads
+        { id: "road-motorway", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "motorway"],
+          paint: { "line-color": "#e892a2", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1, 14, 5] } },
+        { id: "road-trunk", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "trunk"],
+          paint: { "line-color": "#f9b29c", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 14, 4] } },
+        { id: "road-primary", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "primary"],
+          paint: { "line-color": "#fcd6a4", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 14, 3] } },
+        { id: "road-secondary", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "secondary"],
+          paint: { "line-color": "#f7fabf", "line-width": ["interpolate", ["linear"], ["zoom"], 7, 0.3, 14, 2.5] } },
+        { id: "road-minor", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["in", "class", "tertiary", "minor", "service", "path"],
+          minzoom: 10,
+          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 1.5] } },
+        // Railway
+        { id: "railway", type: "line", source: "openmaptiles", "source-layer": "transportation",
+          filter: ["==", "class", "rail"],
+          paint: { "line-color": "#bbb", "line-width": 1, "line-dasharray": [3, 3] } },
+        // Boundaries
+        { id: "boundary-country", type: "line", source: "openmaptiles", "source-layer": "boundary",
+          filter: ["==", "admin_level", 2],
+          paint: { "line-color": "#9e9cab", "line-width": 1.5 } },
+        // Place labels
+        { id: "place-city", type: "symbol", source: "openmaptiles", "source-layer": "place",
+          filter: ["==", "class", "city"],
+          layout: { "text-field": "{name:latin}", "text-size": 14, "text-font": ["Open Sans Bold"] },
+          paint: { "text-color": "#333", "text-halo-color": "#fff", "text-halo-width": 1.5 } },
+        { id: "place-town", type: "symbol", source: "openmaptiles", "source-layer": "place",
+          filter: ["==", "class", "town"],
+          layout: { "text-field": "{name:latin}", "text-size": 12, "text-font": ["Open Sans Regular"] },
+          paint: { "text-color": "#555", "text-halo-color": "#fff", "text-halo-width": 1 } },
+        { id: "place-village", type: "symbol", source: "openmaptiles", "source-layer": "place",
+          filter: ["==", "class", "village"],
+          minzoom: 10,
+          layout: { "text-field": "{name:latin}", "text-size": 10, "text-font": ["Open Sans Regular"] },
+          paint: { "text-color": "#666", "text-halo-color": "#fff", "text-halo-width": 1 } },
+        // Road labels
+        { id: "road-label", type: "symbol", source: "openmaptiles", "source-layer": "transportation_name",
+          minzoom: 12,
+          layout: {
+            "text-field": "{name:latin}",
+            "text-size": 10,
+            "text-font": ["Open Sans Regular"],
+            "symbol-placement": "line",
+          },
+          paint: { "text-color": "#666", "text-halo-color": "#fff", "text-halo-width": 1 } },
+      ],
+    };
+
+    try {
+      const glLayer = L.maplibreGL({
+        style: style,
+        attribution: "Offline map (PBF) | OpenStreetMap",
+        // preserveDrawingBuffer must be inside maplibreOptions — the plugin
+        // passes this object to the MapLibre GL Map constructor via Object.assign.
+        maplibreOptions: {
+          preserveDrawingBuffer: true,
+        },
+      }).addTo(map);
+      // Store reference for screenshot use (triggerRepaint + getCanvas)
+      St._maplibreLayer = glLayer;
+      _addLog("info", "Używam mapy offline — wektor (PBF) via MapLibre GL");
+      _setMapBadge(map, "OFFLINE — PBF", "#22c55e");
+    } catch (e) {
+      console.error("MapLibre GL layer error:", e);
+      _addLog("warn", "Błąd MapLibre GL — fallback na mapę online");
+      _addOnlineTileLayer(map);
+    }
+  }
+
+  /* ── Map badge (source indicator) ────────────────────── */
+
+  function _setMapBadge(map, text, color) {
+    if (!map || !map.getContainer) return;
+    const container = map.getContainer();
+    // Remove old badge
+    const old = container.querySelector(".gsm-map-badge");
+    if (old) old.remove();
+    // Create badge
+    const badge = document.createElement("div");
+    badge.className = "gsm-map-badge";
+    badge.style.cssText = "position:absolute;top:10px;right:10px;z-index:1000;" +
+      "padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;" +
+      "color:#fff;pointer-events:none;opacity:0.85;" +
+      "background:" + color + ";";
+    badge.textContent = text;
+    container.style.position = "relative";
+    container.appendChild(badge);
+  }
+
+  function _addAllPoints(map, geo) {
+    const points = (geo.geo_records || []).filter(r => r.point && (r.point.lat || r.point.lon));
+
+    console.log("[GSM Map] geo_records total:", (geo.geo_records || []).length,
+                "with valid points:", points.length);
+
+    if (!points.length) {
+      _addLog("warn", `Mapa: brak punktów do wyświetlenia (geo_records: ${(geo.geo_records || []).length})`);
+      return;
+    }
+
+    // Clear existing layers
+    Object.values(St.mapLayers).forEach(lg => { if (map.hasLayer(lg)) map.removeLayer(lg); });
+    St.mapLayers = {};
+
+    const typeColors = {
+      CALL_OUT: "#3b82f6",
+      CALL_IN: "#22c55e",
+      SMS_OUT: "#a855f7",
+      SMS_IN: "#ec4899",
+      DATA: "#f97316",
+      VOICEMAIL: "#6b7280",
+      OTHER: "#6b7280",
+    };
+
+    // ── Group points by unique BTS location ──
+    // Many records share the same BTS (lat/lon). Group them to avoid
+    // rendering 20k+ overlapping markers.
+    const locationMap = new Map(); // key: "lat,lon" → { lat, lon, records: [], ... }
+    for (const r of points) {
+      const p = r.point;
+      // Round to ~10m precision for grouping (4 decimal places)
+      const key = `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`;
+      if (!locationMap.has(key)) {
+        locationMap.set(key, {
+          lat: p.lat, lon: p.lon,
+          city: p.city || "", street: p.street || "",
+          azimuth: p.azimuth,
+          range_m: p.range_m || null,
+          radio: p.radio || "",
+          lac: p.lac, cid: p.cid,
+          records: [],
+          types: {},
+        });
+      }
+      const loc = locationMap.get(key);
+      loc.records.push(r);
+      loc.types[r.record_type] = (loc.types[r.record_type] || 0) + 1;
+    }
+
+    const uniqueLocations = Array.from(locationMap.values());
+    St.areaLocations = uniqueLocations;
+    _addLog("info", `Mapa: ${points.length} rekordów → ${uniqueLocations.length} unikalnych lokalizacji BTS`);
+
+    // ── Unique locations layer (main view) ──
+    const allGroup = L.layerGroup();
+    for (const loc of uniqueLocations) {
+      const count = loc.records.length;
+      // Size based on record count: min 4, max 14
+      const radius = Math.min(14, Math.max(4, 3 + Math.log2(count) * 2));
+      // Dominant type determines color
+      const dominantType = Object.entries(loc.types)
+        .sort((a, b) => b[1] - a[1])[0][0];
+      const color = typeColors[dominantType] || "#6b7280";
+
+      const marker = L.circleMarker([loc.lat, loc.lon], {
+        radius: radius,
+        fillColor: color,
+        color: "#fff",
+        weight: 1.5,
+        fillOpacity: 0.75,
+      });
+
+      // Click → open pinned card (replaces popup)
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        _handleBtsClick(L.latLng(loc.lat, loc.lon), loc);
+      });
+
+      // Double-click → filter Records by this BTS location
+      marker.on("dblclick", () => {
+        const rowSet = new Set(loc.records.map(r => r.raw_row));
+        const allRecs = St.lastResult ? St.lastResult.records : [];
+        const filtered = allRecs.filter(r => rowSet.has(r.raw_row));
+        const label = loc.city || "BTS";
+        const filterText = `${label} — ${filtered.length} rek.`;
+        _setRecordsFilter(filterText, () => {
+          _clearRecordsFilter();
+          if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+        });
+        _renderRecords(filtered, false, filtered.length);
+        const recCard = QS("#gsm_records_card");
+        if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+
+      allGroup.addLayer(marker);
+    }
+    St.mapLayers.all = allGroup;
+    allGroup.addTo(map);
+
+    // ── Path / route layer (simplified — only large movements >2km) ──
+    const pathGroup = L.layerGroup();
+    if (geo.path && geo.path.length) {
+      // Filter only significant movements (> 2km) to avoid BTS noise
+      const significant = geo.path.filter(s => s.distance_m > 2000);
+      for (const seg of significant) {
+        const dist_km = (seg.distance_m / 1000).toFixed(1);
+        L.polyline(
+          [[seg.from_point.lat, seg.from_point.lon],
+           [seg.to_point.lat, seg.to_point.lon]],
+          { color: "#3b82f6", weight: 2, opacity: 0.3, dashArray: "4 4" }
+        ).bindPopup(`<b>Przemieszczenie</b><br>${dist_km} km<br>${seg.from_datetime} → ${seg.to_datetime}`)
+         .addTo(pathGroup);
+      }
+      if (significant.length) _addLog("info", `Trasa: ${significant.length} istotnych przemieszczeń (z ${geo.path.length})`);
+    }
+    St.mapLayers.path = pathGroup;
+    // Do NOT add path to map by default — it's a supplementary layer
+
+    // ── Clusters layer ──
+    const clusterGroup = L.layerGroup();
+    if (geo.clusters && geo.clusters.length) {
+      for (const c of geo.clusters) {
+        const color = c.label === "dom" ? "#22c55e" : c.label === "praca" ? "#3b82f6" : "#f97316";
+        const cityTag = c.city ? ` (${c.city})` : "";
+        const label = c.label === "dom" ? `DOM${cityTag}` : c.label === "praca" ? `PRACA${cityTag}` : `Lokalizacja${cityTag || ` (${c.record_count})`}`;
+
+        L.circle([c.lat, c.lon], {
+          radius: c.radius_m || 500,
+          fillColor: color,
+          color: color,
+          weight: 2,
+          fillOpacity: 0.15,
+        }).addTo(clusterGroup);
+
+        // Popup with enhanced info
+        const wdNames = ["Pn","Wt","Śr","Cz","Pt","Sb","Nd"];
+        let wdInfo = "";
+        if (c.weekday_counts) {
+          const parts = [];
+          for (let d = 0; d < 7; d++) {
+            const v = c.weekday_counts[d] || c.weekday_counts[String(d)] || 0;
+            if (v > 0) parts.push(`${wdNames[d]}:${v}`);
+          }
+          if (parts.length) wdInfo = `<br>Dni tyg.: ${parts.join(", ")}`;
+        }
+
+        L.marker([c.lat, c.lon], {
+          icon: L.divIcon({
+            className: "gsm-cluster-icon",
+            html: `<div style="background:${color};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;white-space:nowrap">${label}</div>`,
+            iconSize: null,
+          }),
+        }).bindPopup(`<b>${label}</b><br>
+          ${c.city || ""}${c.street ? ", " + c.street : ""}<br>
+          Rekordy: ${c.record_count}<br>
+          Unikalne dni: ${c.unique_days}<br>
+          Okres: ${c.first_seen} — ${c.last_seen}<br>
+          Godziny: ${(c.hours_active || []).join(", ")}
+          ${wdInfo}
+        `).addTo(clusterGroup);
+      }
+    }
+    St.mapLayers.clusters = clusterGroup;
+
+    // ── Coverage layer (BTS sector / circle coverage areas) ──
+    St._covLocations = uniqueLocations; // cache for mode switching
+    const covModeRadio = QS('input[name="gsm_cov_mode"]:checked');
+    const covMode = covModeRadio ? covModeRadio.value : "full";
+    St.mapLayers.coverage = _buildCoverageLayer(uniqueLocations, covMode);
+
+    // ── Trips layer (OSRM-routed roads between clusters) ──
+    const tripsGroup = L.layerGroup();
+    if (geo.trips && geo.trips.length && geo.clusters && geo.clusters.length) {
+      // Aggregate trips by from→to pair (bidirectional)
+      const tripPairs = {};
+      for (const t of geo.trips) {
+        // Treat A→B and B→A as same route pair for routing
+        const a = Math.min(t.from_cluster_idx, t.to_cluster_idx);
+        const b = Math.max(t.from_cluster_idx, t.to_cluster_idx);
+        const key = `${t.from_cluster_idx}_${t.to_cluster_idx}`;
+        const routeKey = `${a}_${b}`;
+        if (!tripPairs[key]) tripPairs[key] = { trips: [], from: t.from_cluster_idx, to: t.to_cluster_idx, routeKey };
+        tripPairs[key].trips.push(t);
+      }
+
+      // Route cache: routeKey → coords (to reuse A→B route for B→A)
+      const routeCache = {};
+
+      // Process trip pairs sequentially (to respect OSRM rate limits)
+      const pairList = Object.values(tripPairs);
+      _addLog("info", `Podróże: ${geo.trips.length} między klastrami, wyznaczam ${pairList.length} tras drogowych…`);
+
+      (async function() {
+        for (const pair of pairList) {
+          const fromC = geo.clusters.find(c => c.cluster_idx === pair.from);
+          const toC = geo.clusters.find(c => c.cluster_idx === pair.to);
+          if (!fromC || !toC) continue;
+
+          const count = pair.trips.length;
+          const avgDist = pair.trips.reduce((s, t) => s + t.distance_km, 0) / count;
+
+          // Try OSRM routing (with cache)
+          let routeCoords = routeCache[pair.routeKey] || null;
+          if (!routeCoords) {
+            routeCoords = await _fetchOSRMRoute(fromC.lat, fromC.lon, toC.lat, toC.lon);
+            if (routeCoords) {
+              routeCache[pair.routeKey] = routeCoords;
+            }
+          }
+
+          // Use routed path if available, fallback to straight line
+          const lineCoords = routeCoords || [[fromC.lat, fromC.lon], [toC.lat, toC.lon]];
+          const isRouted = !!routeCoords;
+          const line = L.polyline(lineCoords, {
+            color: "#8b5cf6",
+            weight: isRouted ? 4 : 3,
+            opacity: 0.75,
+            dashArray: isRouted ? null : "12 6",
+          });
+
+          // Build popup
+          const modeCounts = {};
+          pair.trips.forEach(t => { if (t.travel_mode) modeCounts[t.travel_mode] = (modeCounts[t.travel_mode]||0)+1; });
+          const modeStr = Object.entries(modeCounts).map(([m,n]) => `${_travelModeIcon(m)} ${_travelModeLabel(m)}: ${n}`).join(", ");
+          const sampleTrip = pair.trips[0];
+          const estCarStr = sampleTrip.est_car_minutes ? `${_formatHours(sampleTrip.est_car_minutes / 60)}` : "";
+          const estFlightStr = sampleTrip.est_flight_minutes ? `${_formatHours(sampleTrip.est_flight_minutes / 60)}` : "";
+
+          let popupHtml = `<b>Podróż: ${fromC.city || "?"} → ${toC.city || "?"}</b><br>
+            ${count} ${count === 1 ? "podróż" : "podróży"}, ~${avgDist.toFixed(0)} km${isRouted ? " (trasa drogowa)" : ""}<br>`;
+          if (modeStr) popupHtml += `${modeStr}<br>`;
+          if (estCarStr) popupHtml += `Szac. samochód: ~${estCarStr}`;
+          if (estFlightStr) popupHtml += ` | Szac. lot: ~${estFlightStr}`;
+          if (estCarStr || estFlightStr) popupHtml += `<br>`;
+          for (const t of pair.trips.slice(0, 5)) {
+            const icon = _travelModeIcon(t.travel_mode);
+            popupHtml += `<div class="small muted">${icon} ${t.depart_datetime} → ${t.arrive_datetime} (${t.distance_km} km, ${t.duration_minutes} min)</div>`;
+          }
+          if (pair.trips.length > 5) {
+            popupHtml += `<div class="small muted">...i ${pair.trips.length - 5} więcej</div>`;
+          }
+          line.bindPopup(popupHtml);
+          tripsGroup.addLayer(line);
+
+          // Midpoint label
+          const mid = routeCoords
+            ? routeCoords[Math.floor(routeCoords.length / 2)]
+            : [(fromC.lat + toC.lat) / 2, (fromC.lon + toC.lon) / 2];
+          const arrowIcon = L.divIcon({
+            className: "gsm-trip-arrow-icon",
+            html: `<div style="background:#8b5cf6;color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:bold;white-space:nowrap">${_travelModeIcon(sampleTrip.travel_mode)} ${count}×</div>`,
+            iconSize: null,
+          });
+          L.marker(mid, { icon: arrowIcon }).addTo(tripsGroup);
+        }
+        _addLog("info", `Trasy drogowe: ${Object.keys(routeCache).length} wyznaczonych (OSRM)`);
+      })();
+    }
+    St.mapLayers.trips = tripsGroup;
+
+    // ── Border crossings layer ──
+    const borderGroup = L.layerGroup();
+    if (geo.border_crossings && geo.border_crossings.length) {
+      for (const bc of geo.border_crossings) {
+        // Departure point: use backend coords, fallback to cluster lookup
+        let depLat = bc.last_domestic_lat || 0;
+        let depLon = bc.last_domestic_lon || 0;
+        if (!depLat && bc.last_domestic_city) {
+          const cl = geo.clusters.find(c => c.city === bc.last_domestic_city);
+          if (cl) { depLat = cl.lat; depLon = cl.lon; }
+        }
+        // Return point: same logic
+        let retLat = bc.first_return_lat || 0;
+        let retLon = bc.first_return_lon || 0;
+        if (!retLat && bc.first_return_city) {
+          const cl = geo.clusters.find(c => c.city === bc.first_return_city);
+          if (cl) { retLat = cl.lat; retLon = cl.lon; }
+        }
+
+        const mode = bc.border_travel_mode || "unknown";
+        const modeIcon = mode === "plane" ? "✈️" : mode === "car" ? "🚗" : mode === "walk" ? "🚶" : "❓";
+        const modeLabel = mode === "plane" ? "Samolot" : mode === "car" ? "Samochód" : mode === "walk" ? "Pieszo" : "Nieznany";
+        const countries = (bc.roaming_countries || []);
+        const countryNames = countries.map(c => _countryName(c)).join(", ");
+        const depDate = (bc.last_domestic_datetime || "").slice(0, 10);
+        const retDate = (bc.first_return_datetime || "").slice(0, 10);
+        const lineColor = mode === "plane" ? "#8b5cf6" : mode === "car" ? "#3b82f6" : "#f97316";
+
+        // Last 24h domestic path before departure
+        const path24h = bc.last_24h_path || [];
+        if (path24h.length >= 2) {
+          const pathCoords = path24h.map(p => [p.lat, p.lon]);
+          L.polyline(pathCoords, {
+            color: "#3b82f6", weight: 3, opacity: 0.7,
+          }).bindPopup(
+            `<b>Ostatnie 24h w Polsce</b><br>` +
+            `${path24h.length} punktów BTS<br>` +
+            `${path24h[0].datetime} → ${path24h[path24h.length - 1].datetime}`
+          ).addTo(borderGroup);
+
+          // Small dots along the path
+          for (const p of path24h) {
+            L.circleMarker([p.lat, p.lon], {
+              radius: 4, fillColor: "#3b82f6", color: "#fff", weight: 1, fillOpacity: 0.8,
+            }).bindPopup(
+              `${p.datetime}<br>${p.city || ""}`
+            ).addTo(borderGroup);
+          }
+        }
+
+        // Departure marker (red) — last BTS before leaving
+        if (depLat) {
+          L.circleMarker([depLat, depLon], {
+            radius: 10, fillColor: "#ef4444", color: "#fff", weight: 2.5, fillOpacity: 0.95,
+          }).bindPopup(
+            `<b>Ostatni punkt w Polsce</b><br>` +
+            `${bc.last_domestic_datetime || "?"}<br>` +
+            `${bc.last_domestic_city || ""}<br>` +
+            `<b>${modeIcon} ${modeLabel}</b>`
+          ).addTo(borderGroup);
+        }
+
+        // Return marker (green) — only if returned
+        if (retLat && bc.first_return_datetime) {
+          L.circleMarker([retLat, retLon], {
+            radius: 9, fillColor: "#22c55e", color: "#fff", weight: 2, fillOpacity: 0.9,
+          }).bindPopup(
+            `<b>Powrót do Polski</b><br>` +
+            `${bc.first_return_datetime}<br>` +
+            `${bc.first_return_city || ""}`
+          ).addTo(borderGroup);
+        }
+
+        // Lines to each country center
+        for (const cc of countries) {
+          const center = _COUNTRY_CENTERS[cc];
+          if (!center) continue;
+          const [cLat, cLon] = center;
+          const cName = _countryName(cc);
+
+          // Country center marker (flag-style label)
+          L.marker([cLat, cLon], {
+            icon: L.divIcon({
+              className: "gsm-border-country-icon",
+              html: `<div style="background:${lineColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;white-space:nowrap;text-align:center">${cName}</div>`,
+              iconSize: null,
+            }),
+          }).bindPopup(
+            `<b>${cName}</b><br>` +
+            `Pobyt: ${depDate} → ${retDate || "?"}<br>` +
+            `Nieobecność: ${_formatHours(bc.absence_hours)}<br>` +
+            `${bc.roaming_records ? bc.roaming_records + " rekordów roamingu" : ""}`
+          ).addTo(borderGroup);
+
+          // Line from departure to country center
+          if (depLat) {
+            const lineStyle = mode === "plane"
+              ? { color: lineColor, weight: 2.5, opacity: 0.7, dashArray: "8 6" }
+              : { color: lineColor, weight: 2.5, opacity: 0.7 };
+
+            // Build curved line for plane, straight for others
+            let lineCoords;
+            if (mode === "plane") {
+              lineCoords = _buildArcCoords(depLat, depLon, cLat, cLon, 20);
+            } else {
+              lineCoords = [[depLat, depLon], [cLat, cLon]];
+            }
+
+            L.polyline(lineCoords, lineStyle)
+              .bindPopup(
+                `<b>${modeIcon} ${bc.last_domestic_city || "PL"} → ${cName}</b><br>` +
+                `Wyjazd: ${depDate}<br>Powrót: ${retDate || "brak danych"}<br>` +
+                `Nieobecność: ${_formatHours(bc.absence_hours)}`
+              ).addTo(borderGroup);
+
+            // Travel mode icon on the midpoint of the line
+            const midIdx = Math.floor(lineCoords.length / 2);
+            const midPt = lineCoords[midIdx];
+            L.marker(midPt, {
+              icon: L.divIcon({
+                className: "gsm-border-mode-icon",
+                html: `<div style="font-size:18px;text-align:center;line-height:1">${modeIcon}</div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+              }),
+            }).addTo(borderGroup);
+
+            // Date labels near departure and midpoint
+            const dateLabelDep = L.marker([depLat, depLon], {
+              icon: L.divIcon({
+                className: "gsm-border-date",
+                html: `<div style="background:rgba(239,68,68,0.9);color:#fff;padding:1px 5px;border-radius:6px;font-size:9px;white-space:nowrap;transform:translateY(-18px)">${depDate}</div>`,
+                iconSize: null,
+              }),
+            }).addTo(borderGroup);
+
+            if (retDate) {
+              const retPt = retLat ? [retLat, retLon] : [cLat, cLon];
+              L.marker(retPt, {
+                icon: L.divIcon({
+                  className: "gsm-border-date",
+                  html: `<div style="background:rgba(34,197,94,0.9);color:#fff;padding:1px 5px;border-radius:6px;font-size:9px;white-space:nowrap;transform:translateY(-18px)">${retDate}</div>`,
+                  iconSize: null,
+                }),
+              }).addTo(borderGroup);
+            }
+          }
+        }
+
+        // If no roaming countries but we have coords, draw a dashed line to indicate unknown destination
+        if (!countries.length && depLat && retLat) {
+          L.polyline([[depLat, depLon], [retLat, retLon]], {
+            color: "#9ca3af", weight: 2, opacity: 0.5, dashArray: "6 4",
+          }).bindPopup(
+            `<b>Przerwa w aktywności</b><br>` +
+            `${depDate} → ${retDate}<br>` +
+            `Nieobecność: ${_formatHours(bc.absence_hours)}`
+          ).addTo(borderGroup);
+        }
+      }
+    }
+    St.mapLayers.border = borderGroup;
+
+    // Fit bounds using unique locations (much smaller than all points)
+    const boundsCoords = uniqueLocations.map(loc => [loc.lat, loc.lon]);
+    if (boundsCoords.length) {
+      map.fitBounds(boundsCoords, { padding: [30, 30], maxZoom: 14 });
+    }
+  }
+
+  function _switchMapLayer(layer, geo) {
+    if (!St.map) return;
+    const map = St.map;
+    _clearAreaSelection();
+    _exitAreaSelectMode();
+
+    // Remove all custom layers
+    Object.values(St.mapLayers).forEach(lg => {
+      if (map.hasLayer(lg)) map.removeLayer(lg);
+    });
+
+    if (layer === "all") {
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+      if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+    }
+    if (layer === "path") {
+      if (St.mapLayers.path) St.mapLayers.path.addTo(map);
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+    }
+    if (layer === "clusters") {
+      if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+    }
+    if (layer === "trips") {
+      if (St.mapLayers.trips) St.mapLayers.trips.addTo(map);
+      if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+    }
+    if (layer === "border") {
+      if (St.mapLayers.border) St.mapLayers.border.addTo(map);
+      if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+    }
+    if (layer === "coverage") {
+      const billingCb = QS("#gsm_cov_billing");
+      if (St.mapLayers.coverage && (!billingCb || billingCb.checked)) {
+        St.mapLayers.coverage.addTo(map);
+      }
+      if (St.mapLayers.coverageOther && _otherBtsEnabled) {
+        St.mapLayers.coverageOther.addTo(map);
+      }
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+    }
+    if (layer === "heatmap") {
+      if (St.mapLayers.all) St.mapLayers.all.addTo(map);
+    }
+    if (layer === "timeline") {
+      if (St.mapLayers.timeline) St.mapLayers.timeline.addTo(map);
+      if (St.mapLayers.clusters) St.mapLayers.clusters.addTo(map);
+    }
+  }
+
+  /* ── Dynamic "Other BTS" layer ── */
+
+  /** Zoom-based radius and limit for nearby BTS queries */
+  function _nearbyParams(zoom) {
+    if (zoom >= 16) return { radius: 0.003, limit: 50 };
+    if (zoom >= 15) return { radius: 0.005, limit: 60 };
+    if (zoom >= 13) return { radius: 0.015, limit: 80 };
+    if (zoom >= 11) return { radius: 0.04,  limit: 100 };
+    return { radius: 0.1, limit: 80 };
+  }
+
+  /** Build exclude set from billing locations (LAC:CID pairs) for client-side filtering */
+  function _buildExcludeSet(geo) {
+    const seen = new Set();
+    if (geo && geo.geo_records) {
+      for (const r of geo.geo_records) {
+        if (r.point && r.point.lac && r.point.cid) {
+          seen.add(`${r.point.lac}:${r.point.cid}`);
+        }
+      }
+    }
+    return seen;
+  }
+
+  let _otherBtsDebounce = null;
+  let _otherBtsEnabled = false;
+  let _otherBtsExcludeSet = new Set();
+
+  /** Fetch and render nearby BTS stations on the map */
+  async function _loadOtherBts() {
+    if (!St.map || !_otherBtsEnabled) return;
+    const map = St.map;
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const params = _nearbyParams(zoom);
+
+    const countEl = QS("#gsm_cov_other_count");
+
+    try {
+      const url = `/api/gsm/bts/nearby?lat=${center.lat.toFixed(6)}&lon=${center.lng.toFixed(6)}&radius_deg=${params.radius}&limit=${params.limit}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.status !== "ok" || !data.stations) {
+        if (countEl) countEl.textContent = "";
+        return;
+      }
+      // Filter out billing stations client-side
+      if (_otherBtsExcludeSet.size > 0) {
+        data.stations = data.stations.filter(s => !_otherBtsExcludeSet.has(`${s.lac}:${s.cid}`));
+      }
+
+      // Remove old layer
+      if (St.mapLayers.coverageOther) {
+        map.removeLayer(St.mapLayers.coverageOther);
+      }
+
+      const otherGroup = L.layerGroup();
+      const defaultRange = { "GSM": 5000, "UMTS": 3000, "LTE": 2000, "5G NR": 1000 };
+      const color = "#2563eb"; // blue for "other" BTS
+
+      for (const s of data.stations) {
+        const range = s.range_m || defaultRange[s.radio] || 2000;
+
+        // Small blue marker
+        L.circleMarker([s.lat, s.lon], {
+          radius: 4,
+          fillColor: color,
+          color: "#fff",
+          weight: 1.2,
+          fillOpacity: 0.7,
+        }).bindPopup(
+          `<b>${s.city || "BTS"}${s.street ? ", " + s.street : ""}</b><br>` +
+          `${s.radio ? "Technologia: " + s.radio + "<br>" : ""}` +
+          `${s.azimuth != null ? "Azymut: " + s.azimuth + "°<br>" : ""}` +
+          `Zasięg: ${(range / 1000).toFixed(1)} km<br>` +
+          `<span class="small muted">LAC: ${s.lac}, CID: ${s.cid}</span><br>` +
+          `<span class="small muted">Źródło: ${s.source || "?"}</span>`
+        ).addTo(otherGroup);
+
+        // Coverage visualization
+        if (s.azimuth != null) {
+          // Dashed circle behind sector
+          L.circle([s.lat, s.lon], {
+            radius: range,
+            fillColor: color,
+            color: color,
+            weight: 0.8,
+            fillOpacity: 0.04,
+            dashArray: "4 6",
+          }).addTo(otherGroup);
+
+          // Sector
+          const beamWidth = s.radio === "5G NR" ? 30 : s.radio === "LTE" ? 45 : 60;
+          const startAngle = s.azimuth - beamWidth / 2;
+          const endAngle = s.azimuth + beamWidth / 2;
+          const sectorCoords = _buildSectorCoords(s.lat, s.lon, range, startAngle, endAngle, 24);
+          L.polygon(sectorCoords, {
+            fillColor: color,
+            color: color,
+            weight: 1,
+            fillOpacity: 0.10,
+            dashArray: "3 4",
+          }).addTo(otherGroup);
+        } else {
+          // Omnidirectional circle
+          L.circle([s.lat, s.lon], {
+            radius: range,
+            fillColor: color,
+            color: color,
+            weight: 1,
+            fillOpacity: 0.08,
+            dashArray: "3 4",
+          }).addTo(otherGroup);
+        }
+      }
+
+      St.mapLayers.coverageOther = otherGroup;
+      otherGroup.addTo(map);
+      if (countEl) countEl.textContent = data.stations.length ? `(${data.stations.length} stacji)` : "";
+    } catch (e) {
+      _addLog("warn", `Błąd ładowania innych BTS: ${e.message}`);
+      if (countEl) countEl.textContent = "";
+    }
+  }
+
+  /** Schedule a debounced reload of other BTS */
+  function _scheduleOtherBtsReload() {
+    if (_otherBtsDebounce) clearTimeout(_otherBtsDebounce);
+    _otherBtsDebounce = setTimeout(_loadOtherBts, 400);
+  }
+
+  /** Remove the other BTS layer from the map */
+  function _removeOtherBts() {
+    if (St.map && St.mapLayers.coverageOther) {
+      St.map.removeLayer(St.mapLayers.coverageOther);
+      delete St.mapLayers.coverageOther;
+    }
+    const countEl = QS("#gsm_cov_other_count");
+    if (countEl) countEl.textContent = "";
+  }
+
+  /* ── Hour mini-bar chart (for cluster tiles) ── */
+  function _hourMiniChart(hour_counts) {
+    if (!hour_counts || !Object.keys(hour_counts).length) return "";
+    const maxVal = Math.max(1, ...Object.values(hour_counts));
+    let bars = "";
+    for (let h = 0; h < 24; h++) {
+      const v = hour_counts[h] || hour_counts[String(h)] || 0;
+      const pct = Math.round((v / maxVal) * 100);
+      const isNight = [22,23,0,1,2,3,4,5,6].includes(h);
+      const isWork = [8,9,10,11,12,13,14,15,16].includes(h);
+      const barColor = isNight ? "#22c55e" : isWork ? "#3b82f6" : "#f97316";
+      bars += `<div title="${String(h).padStart(2,'0')}:00 — ${v}" style="width:${100/24}%;height:${Math.max(pct,4)}%;background:${barColor};opacity:0.7;border-radius:1px"></div>`;
+    }
+    return `<div style="display:flex;align-items:flex-end;height:28px;gap:1px;margin-top:6px" title="Rozkład godzinowy">${bars}</div>`;
+  }
+
+  /* ── Weekday pattern label ── */
+  function _weekdayLabel(weekday_counts) {
+    if (!weekday_counts || !Object.keys(weekday_counts).length) return "";
+    const dayNames = ["Pn","Wt","Śr","Cz","Pt","Sb","Nd"];
+    let weekdayTotal = 0, weekendTotal = 0;
+    for (let d = 0; d < 7; d++) {
+      const v = weekday_counts[d] || weekday_counts[String(d)] || 0;
+      if (d < 5) weekdayTotal += v; else weekendTotal += v;
+    }
+    const total = weekdayTotal + weekendTotal;
+    if (!total) return "";
+    const wdRatio = weekdayTotal / total;
+    if (wdRatio > 0.85) return `<span class="small muted" style="display:block;margin-top:2px">głównie Pn–Pt</span>`;
+    if (wdRatio < 0.4) return `<span class="small muted" style="display:block;margin-top:2px">głównie weekendy</span>`;
+    // Show day distribution
+    const topDays = [];
+    for (let d = 0; d < 7; d++) {
+      const v = weekday_counts[d] || weekday_counts[String(d)] || 0;
+      if (v > 0) topDays.push({d, v, name: dayNames[d]});
+    }
+    topDays.sort((a,b) => b.v - a.v);
+    return `<span class="small muted" style="display:block;margin-top:2px">${topDays.slice(0,3).map(x => x.name).join(", ")}</span>`;
+  }
+
+  function _renderClusters(geo) {
+    const wrap = QS("#gsm_cluster_info");
+    const list = QS("#gsm_cluster_list");
+    if (!wrap || !list) return;
+
+    if (!geo.clusters || !geo.clusters.length) {
+      wrap.style.display = "none";
+      return;
+    }
+    wrap.style.display = "";
+
+    // Build trip index: cluster_idx → list of trips from/to
+    const tripIndex = {};
+    for (const t of (geo.trips || [])) {
+      if (!tripIndex[t.from_cluster_idx]) tripIndex[t.from_cluster_idx] = [];
+      tripIndex[t.from_cluster_idx].push(t);
+    }
+
+    let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">';
+    const maxTiles = 10;
+    // Sort: dom first, then praca, then other, then tranzyt last
+    const _labelOrder = { "dom": 0, "praca": 1, "": 2, "frequent": 2, "tranzyt": 3 };
+    const sortedClusters = [...geo.clusters].sort((a, b) => {
+      const oa = _labelOrder[a.label] ?? 2;
+      const ob = _labelOrder[b.label] ?? 2;
+      if (oa !== ob) return oa - ob;
+      return b.record_count - a.record_count;
+    });
+    const shownClusters = sortedClusters.slice(0, maxTiles);
+
+    for (let ci = 0; ci < shownClusters.length; ci++) {
+      const c = shownClusters[ci];
+      const isTransit = c.label === "tranzyt";
+      const color = c.label === "dom" ? "#22c55e" : c.label === "praca" ? "#3b82f6" : isTransit ? "#9ca3af" : "#f97316";
+      const cityTag = c.city ? ` (${c.city})` : "";
+      const label = c.label === "dom" ? `DOM${cityTag}` : c.label === "praca" ? `PRACA${cityTag}` : isTransit ? `\u23F3 TRANZYT${cityTag}` : `Lokalizacja${cityTag}`;
+      const streetStr = c.street || "";
+
+      const transitStyle = isTransit ? "opacity:.65;border-style:dashed" : "";
+      html += `<div style="border:2px solid ${color};border-radius:12px;padding:10px 14px;min-width:180px;max-width:240px;${transitStyle}">
+        <div style="color:${color};font-weight:bold;margin-bottom:4px">${label}</div>
+        ${streetStr ? `<div class="small">${streetStr}</div>` : ""}
+        <div class="small muted">${_fmt(c.record_count)} rekordów, ${c.unique_days} dni</div>
+        <div class="small muted">${c.first_seen} — ${c.last_seen}</div>
+        ${_weekdayLabel(c.weekday_counts)}
+        ${_hourMiniChart(c.hour_counts)}
+      </div>`;
+
+      // Trip arrows to next clusters
+      const tripsFrom = tripIndex[c.cluster_idx] || [];
+      if (tripsFrom.length > 0 && ci < shownClusters.length - 1) {
+        // Count unique destination clusters, collect travel modes
+        const destCounts = {};
+        for (const t of tripsFrom) {
+          if (!destCounts[t.to_cluster_idx]) destCounts[t.to_cluster_idx] = { count: 0, dist: t.distance_km, city: t.to_city, modes: {} };
+          destCounts[t.to_cluster_idx].count++;
+          if (t.travel_mode) destCounts[t.to_cluster_idx].modes[t.travel_mode] = (destCounts[t.to_cluster_idx].modes[t.travel_mode] || 0) + 1;
+        }
+        const destList = Object.values(destCounts);
+        const totalTrips = destList.reduce((s, d) => s + d.count, 0);
+        // Collect dominant mode icons
+        const allModes = {};
+        destList.forEach(d => { Object.entries(d.modes).forEach(([m,n]) => { allModes[m] = (allModes[m]||0)+n; }); });
+        const modeIcons = Object.keys(allModes).map(m => _travelModeIcon(m)).filter(Boolean).join(" ");
+        if (totalTrips > 0) {
+          html += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 4px;color:var(--text-muted)">
+            <div style="font-size:18px">${modeIcons || "→"}</div>
+            <div class="small" style="white-space:nowrap">${totalTrips} ${totalTrips === 1 ? "podróż" : "podróży"}</div>
+          </div>`;
+        }
+      }
+    }
+    html += '</div>';
+
+    // Home/work summary
+    if (geo.home_cluster) {
+      html += `<div class="small" style="margin-top:8px"><b style="color:#22c55e">DOM:</b> ${geo.home_cluster.city || "—"}${geo.home_cluster.street ? ", " + geo.home_cluster.street : ""}</div>`;
+    }
+    if (geo.work_cluster) {
+      html += `<div class="small"><b style="color:#3b82f6">PRACA:</b> ${geo.work_cluster.city || "—"}${geo.work_cluster.street ? ", " + geo.work_cluster.street : ""}</div>`;
+    }
+
+    list.innerHTML = html;
+
+    // Render border crossings below clusters
+    _renderBorderCrossings(geo);
+  }
+
+  /* ── Border crossings + Overnight stays (side by side) ── */
+  function _renderBorderCrossings(geo) {
+    _renderTravelSections(geo, null);
+  }
+
+  function _renderOvernightStays(analysis) {
+    _renderTravelSections(null, analysis);
+  }
+
+  /**
+   * Render border crossings (left) and overnight stays (right) in a
+   * two-column grid, analogous to night/weekend activity charts.
+   * Either argument may be null — the function merges with previously
+   * rendered data stored on the DOM container.
+   */
+  function _renderTravelSections(geo, analysis) {
+    // Use a hidden scratch element to cache data between calls
+    let _cache = _renderTravelSections._cache || (_renderTravelSections._cache = {});
+    if (geo) _cache.geo = geo;
+    if (analysis) _cache.analysis = analysis;
+
+    const crossings = (_cache.geo && _cache.geo.border_crossings) || [];
+    const stays = (_cache.analysis && _cache.analysis.overnight_stays) || [];
+    const home = (_cache.analysis && _cache.analysis.overnight_stays_home) || "";
+
+    // ── Border crossings card ──
+    const borderCard = QS("#gsm_border_card");
+    const borderList = QS("#gsm_border_list");
+    if (borderCard && borderList) {
+      if (!crossings.length) {
+        borderCard.style.display = "none";
+      } else {
+        borderCard.style.display = "";
+        let bHtml = '<div style="display:flex;flex-direction:column;gap:8px">';
+        for (let i = 0; i < crossings.length; i++) {
+          const bc = crossings[i];
+          const absence = _formatHours(bc.absence_hours);
+          const countries = (bc.roaming_countries || []).map(c => _countryName(c)).join(", ");
+          const confirmed = bc.roaming_confirmed
+            ? `<span style="color:#22c55e" title="Potwierdzone danymi roamingu">✓ roaming</span>`
+            : `<span style="color:#f97316" title="Wykryte na podstawie przerwy w aktywności">⚠ przerwa</span>`;
+          bHtml += `<div data-bc-idx="${i}" class="gsm-travel-card" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+              <div><span style="color:#ef4444">●</span> <b>Wyjazd:</b> ${bc.last_domestic_datetime || "?"}${bc.last_domestic_city ? ` <span class="muted">(${bc.last_domestic_city})</span>` : ""}</div>
+              <div><span style="color:#22c55e">●</span> <b>Powrót:</b> ${bc.first_return_datetime || "brak danych"}${bc.first_return_city ? ` <span class="muted">(${bc.first_return_city})</span>` : ""}</div>
+            </div>
+            <div class="small" style="margin-top:4px">
+              Nieobecność: <b>${absence}</b>
+              ${countries ? ` · Kraje: <b>${countries}</b>` : ""}
+              ${bc.roaming_records ? ` · ${bc.roaming_records} rek. roamingu` : ""}
+              · ${confirmed}
+            </div>
+          </div>`;
+        }
+        bHtml += '</div>';
+        borderList.innerHTML = bHtml;
+        borderList.querySelectorAll("[data-bc-idx]").forEach(el => {
+          el.addEventListener("dblclick", () => {
+            const bc = crossings[parseInt(el.dataset.bcIdx)];
+            if (bc) _travelFilter("bc", bc);
+          });
+        });
+      }
+    }
+
+    // ── Overnight stays card ──
+    const overnightCard = QS("#gsm_overnight_card");
+    const overnightHeader = QS("#gsm_overnight_header");
+    const overnightList = QS("#gsm_overnight_list");
+    if (overnightCard && overnightList) {
+      if (!stays.length) {
+        overnightCard.style.display = "none";
+      } else {
+        overnightCard.style.display = "";
+        const totalNights = stays.reduce((s, v) => s + (v.nights || 0), 0);
+        const stayWord = stays.length === 1 ? "pobyt" : (stays.length < 5 ? "pobyty" : "pobytów");
+        const nightWord = totalNights === 1 ? "noc" : (totalNights < 5 ? "noce" : "nocy");
+        if (overnightHeader) {
+          overnightHeader.innerHTML = `Lokalizacja domowa: <b>${home}</b> — ${stays.length} ${stayWord} (${totalNights} ${nightWord})`;
+        }
+        let sHtml = '<div style="display:flex;flex-direction:column;gap:8px">';
+        for (let j = 0; j < stays.length; j++) {
+          const stay = stays[j];
+          const period = stay.start_date === stay.end_date ? stay.start_date : `${stay.start_date} – ${stay.end_date}`;
+          const locs = (stay.locations || []).join(", ");
+          let detailsHtml = "";
+          for (const d of (stay.details || [])) {
+            detailsHtml += `<div>${d.date}: ${d.last_time || ""} <span class="muted">(${d.location_evening || ""})</span> → ${d.first_time || ""} <span class="muted">(${d.location_morning || ""})</span></div>`;
+          }
+          sHtml += `<div data-stay-idx="${j}" class="gsm-travel-card" style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-secondary);cursor:pointer" title="2×LPM → filtruj rekordy">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+              <div><b>${period}</b></div>
+              <div>${stay.nights} ${stay.nights === 1 ? "noc" : (stay.nights < 5 ? "noce" : "nocy")}</div>
+              <div class="muted">${locs}</div>
+            </div>
+            <div class="small" style="margin-top:4px">${detailsHtml}</div>
+          </div>`;
+        }
+        sHtml += '</div>';
+        overnightList.innerHTML = sHtml;
+        overnightList.querySelectorAll("[data-stay-idx]").forEach(el => {
+          el.addEventListener("dblclick", () => {
+            const stay = stays[parseInt(el.dataset.stayIdx)];
+            if (stay) _travelFilter("stay", stay);
+          });
+        });
+      }
+    }
+  }
+
+  /** Filter Records by border crossing or overnight stay date range. */
+  function _travelFilter(type, data) {
+    const records = St.lastResult ? St.lastResult.records : [];
+    let filtered, filterText;
+
+    if (type === "bc") {
+      // Border crossing: filter by datetime range
+      const from = _parseDt(data.last_domestic_datetime);
+      const to = _parseDt(data.first_return_datetime);
+      filtered = records.filter(r => {
+        if (!r.datetime) return false;
+        const t = _parseDt(r.datetime);
+        return t >= from && t <= to;
+      });
+      const countries = (data.roaming_countries || []).map(c => _countryName(c)).join(", ");
+      const fromDate = (data.last_domestic_datetime || "").slice(0, 10);
+      const toDate = (data.first_return_datetime || "").slice(0, 10);
+      const period = fromDate === toDate ? fromDate : `${fromDate} – ${toDate}`;
+      filterText = `Wyjazd: ${period}${countries ? ` (${countries})` : ""} — ${filtered.length} rek.`;
+    } else {
+      // Overnight stay: filter by date range (start_date to end_date inclusive)
+      filtered = records.filter(r => {
+        if (!r.date) return false;
+        return r.date >= data.start_date && r.date <= data.end_date;
+      });
+      const period = data.start_date === data.end_date
+        ? data.start_date
+        : `${data.start_date} – ${data.end_date}`;
+      const locs = (data.locations || []).join(", ");
+      filterText = `Nocleg: ${period}${locs ? ` (${locs})` : ""} — ${filtered.length} rek.`;
+    }
+
+    // Clear any active heatmap filter state
+    St.hmActiveCell = null;
+    const hmBar = QS("#gsm_hm_filter_bar");
+    if (hmBar) hmBar.style.display = "none";
+
+    // Show filter badge in Records header
+    _setRecordsFilter(filterText, () => _clearTravelFilter());
+
+    // Render filtered records
+    _renderRecords(filtered, false, filtered.length);
+
+    // Scroll to Records card
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** Clear travel filter and restore original records. */
+  function _clearTravelFilter() {
+    _clearRecordsFilter();
+    if (St.lastResult) {
+      _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    }
+  }
+
+  function _formatHours(h) {
+    if (!h || h <= 0) return "—";
+    if (h < 1) return `${Math.round(h * 60)} min`;
+    const days = Math.floor(h / 24);
+    const hrs = Math.round(h % 24);
+    if (days > 0) return `${days}d ${hrs}h`;
+    return `${hrs}h`;
+  }
+
+  /* ── Travel mode label / icon ── */
+  function _travelModeLabel(mode) {
+    if (mode === "car") return "samochód";
+    if (mode === "plane") return "samolot";
+    if (mode === "bts_hop") return "przeskok BTS";
+    return "";
+  }
+  function _travelModeIcon(mode) {
+    if (mode === "car") return "\uD83D\uDE97";
+    if (mode === "plane") return "\u2708\uFE0F";
+    return "";
+  }
+
+  /**
+   * Build a curved arc between two points (great-circle-like visual).
+   * Used for plane routes — adds a visible bulge to the line.
+   */
+  function _buildArcCoords(lat1, lon1, lat2, lon2, segments) {
+    const coords = [];
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const lat = lat1 + (lat2 - lat1) * t;
+      const lon = lon1 + (lon2 - lon1) * t;
+      // Add parabolic bulge perpendicular to the line
+      const bulge = Math.sin(t * Math.PI) * 0.15 * Math.sqrt(
+        Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2)
+      );
+      // Perpendicular direction: rotate 90°
+      const dx = lon2 - lon1;
+      const dy = lat2 - lat1;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      coords.push([lat + (-dx / len) * bulge, lon + (dy / len) * bulge]);
+    }
+    return coords;
+  }
+
+  /**
+   * Build polygon coords for a sector (pie-slice) on the map.
+   * Returns array of [lat,lon] pairs forming a closed polygon.
+   */
+  function _buildSectorCoords(lat, lon, radiusM, startAngle, endAngle, segments) {
+    const coords = [[lat, lon]]; // center point
+    const step = (endAngle - startAngle) / segments;
+    for (let i = 0; i <= segments; i++) {
+      const angle = startAngle + step * i;
+      const pt = _offsetByAzimuth(lat, lon, angle, radiusM);
+      coords.push([pt.lat, pt.lon]);
+    }
+    coords.push([lat, lon]); // close polygon
+    return coords;
+  }
+
+  /**
+   * Build the BTS coverage layer group in the specified mode.
+   * @param {Array} locations - uniqueLocations from geo data
+   * @param {string} mode - "full" | "flat" | "outline"
+   * @returns {L.LayerGroup}
+   */
+  function _buildCoverageLayer(locations, mode) {
+    const coverageGroup = L.layerGroup();
+    const _defaultRange = { "GSM": 5000, "UMTS": 3000, "LTE": 2000, "5G NR": 1000 };
+    const radioColors = { "GSM": "#ef4444", "UMTS": "#f97316", "LTE": "#3b82f6", "5G NR": "#8b5cf6" };
+
+    // For "flat" mode: create a custom pane with CSS opacity so overlapping
+    // shapes don't accumulate darkness. Shapes are drawn opaque (fillOpacity=1)
+    // but the entire pane gets a single global opacity.
+    let flatPane = null;
+    if (mode === "flat" && St.map) {
+      const paneName = "coverageFlat";
+      if (!St.map.getPane(paneName)) {
+        St.map.createPane(paneName);
+      }
+      flatPane = St.map.getPane(paneName);
+      flatPane.style.opacity = "0.25";
+      flatPane.style.zIndex = "350"; // below markers (400) above tiles (200)
+    }
+    const flatOpts = flatPane ? { pane: "coverageFlat" } : {};
+
+    for (const loc of locations) {
+      const range = loc.range_m || _defaultRange[loc.radio] || 2000;
+      const count = loc.records.length;
+      const color = radioColors[loc.radio] || "#6b7280";
+      const baseOpacity = Math.min(0.55, 0.20 + Math.log2(count + 1) * 0.06);
+
+      if (mode === "outline") {
+        // Outline only — no fill
+        if (loc.azimuth != null) {
+          L.circle([loc.lat, loc.lon], {
+            radius: range, fill: false, color: color, weight: 1, dashArray: "4 5",
+          }).addTo(coverageGroup);
+          const beamWidth = loc.radio === "5G NR" ? 30 : loc.radio === "LTE" ? 45 : 60;
+          const sectorCoords = _buildSectorCoords(loc.lat, loc.lon, range,
+            loc.azimuth - beamWidth / 2, loc.azimuth + beamWidth / 2, 24);
+          L.polygon(sectorCoords, {
+            fill: false, color: color, weight: 1.5,
+          }).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        } else {
+          L.circle([loc.lat, loc.lon], {
+            radius: range, fill: false, color: color, weight: 1.5,
+          }).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        }
+      } else if (mode === "flat") {
+        // Flat mode — shapes drawn opaque, pane has global opacity
+        if (loc.azimuth != null) {
+          L.circle([loc.lat, loc.lon], Object.assign({
+            radius: range, fillColor: color, color: color,
+            weight: 1, fillOpacity: 0.35, dashArray: "4 5",
+          }, flatOpts)).addTo(coverageGroup);
+          const beamWidth = loc.radio === "5G NR" ? 30 : loc.radio === "LTE" ? 45 : 60;
+          const sectorCoords = _buildSectorCoords(loc.lat, loc.lon, range,
+            loc.azimuth - beamWidth / 2, loc.azimuth + beamWidth / 2, 24);
+          L.polygon(sectorCoords, Object.assign({
+            fillColor: color, color: color, weight: 1.5, fillOpacity: 0.8,
+          }, flatOpts)).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        } else {
+          L.circle([loc.lat, loc.lon], Object.assign({
+            radius: range, fillColor: color, color: color,
+            weight: 1.5, fillOpacity: 0.7,
+          }, flatOpts)).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        }
+      } else {
+        // Full mode — original behavior (opacity per shape, stacking)
+        if (loc.azimuth != null) {
+          L.circle([loc.lat, loc.lon], {
+            radius: range, fillColor: color, color: color,
+            weight: 1, fillOpacity: baseOpacity * 0.25, dashArray: "4 5",
+          }).addTo(coverageGroup);
+          const beamWidth = loc.radio === "5G NR" ? 30 : loc.radio === "LTE" ? 45 : 60;
+          const sectorCoords = _buildSectorCoords(loc.lat, loc.lon, range,
+            loc.azimuth - beamWidth / 2, loc.azimuth + beamWidth / 2, 24);
+          L.polygon(sectorCoords, {
+            fillColor: color, color: color, weight: 1.5, fillOpacity: baseOpacity,
+          }).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        } else {
+          L.circle([loc.lat, loc.lon], {
+            radius: range, fillColor: color, color: color,
+            weight: 1.5, fillOpacity: baseOpacity * 0.8,
+          }).on("click", ((covLoc) => (e) => {
+            L.DomEvent.stopPropagation(e);
+            _handleBtsClick(L.latLng(covLoc.lat, covLoc.lon), covLoc);
+          })(loc)).addTo(coverageGroup);
+        }
+      }
+    }
+    return coverageGroup;
+  }
+
+  /* ── Country code → full Polish name mapping ── */
+  const _COUNTRY_NAMES = {
+    // Europa
+    PL:"Polska",DE:"Niemcy",CZ:"Czechy",SK:"S\u0142owacja",UA:"Ukraina",
+    BY:"Bia\u0142oru\u015B",LT:"Litwa",RU:"Rosja",AT:"Austria",CH:"Szwajcaria",
+    FR:"Francja",GB:"Wielka Brytania",IT:"W\u0142ochy",ES:"Hiszpania",
+    NL:"Holandia",BE:"Belgia",DK:"Dania",SE:"Szwecja",NO:"Norwegia",
+    FI:"Finlandia",PT:"Portugalia",IE:"Irlandia",HU:"W\u0119gry",RO:"Rumunia",
+    BG:"Bu\u0142garia",HR:"Chorwacja",SI:"S\u0142owenia",RS:"Serbia",BA:"Bo\u015Bnia i Hercegowina",
+    ME:"Czarnog\u00F3ra",MK:"Macedonia P\u00F3\u0142nocna",AL:"Albania",GR:"Grecja",TR:"Turcja",
+    EE:"Estonia",LV:"\u0141otwa",LU:"Luksemburg",MT:"Malta",CY:"Cypr",
+    IS:"Islandia",MD:"Mo\u0142dawia",XK:"Kosowo",MC:"Monako",AD:"Andora",
+    VA:"Watykan",SM:"San Marino",LI:"Liechtenstein",GI:"Gibraltar",
+    FO:"Wyspy Owcze",GL:"Grenlandia",GE:"Gruzja",AM:"Armenia",AZ:"Azerbejd\u017Can",
+    // Ameryka P\u00F3\u0142nocna i \u015Arodkowa
+    US:"USA",CA:"Kanada",MX:"Meksyk",PR:"Portoryko",JM:"Jamajka",
+    CU:"Kuba",HT:"Haiti",DO:"Rep. Dominika\u0144ska",TT:"Trynidad i Tobago",
+    BB:"Barbados",BS:"Bahamy",GT:"Gwatemala",SV:"Salwador",HN:"Honduras",
+    NI:"Nikaragua",CR:"Kostaryka",PA:"Panama",BZ:"Belize",
+    // Ameryka Po\u0142udniowa
+    BR:"Brazylia",AR:"Argentyna",CL:"Chile",CO:"Kolumbia",PE:"Peru",
+    VE:"Wenezuela",EC:"Ekwador",BO:"Boliwia",PY:"Paragwaj",UY:"Urugwaj",
+    GY:"Gujana",SR:"Surinam",
+    // Bliski Wsch\u00F3d
+    AE:"Zjedn. Emiraty Arabskie",SA:"Arabia Saudyjska",IL:"Izrael",
+    JO:"Jordania",LB:"Liban",SY:"Syria",IQ:"Irak",IR:"Iran",
+    KW:"Kuwejt",BH:"Bahrajn",QA:"Katar",OM:"Oman",YE:"Jemen",
+    // Azja
+    IN:"Indie",PK:"Pakistan",BD:"Bangladesz",LK:"Sri Lanka",NP:"Nepal",
+    AF:"Afganistan",MM:"Mjanma",KZ:"Kazachstan",UZ:"Uzbekistan",
+    TJ:"Tad\u017Cykistan",KG:"Kirgistan",TM:"Turkmenistan",MN:"Mongolia",
+    CN:"Chiny",JP:"Japonia",KR:"Korea Po\u0142udniowa",KP:"Korea P\u00F3\u0142nocna",
+    TW:"Tajwan",HK:"Hongkong",MO:"Makau",
+    VN:"Wietnam",TH:"Tajlandia",MY:"Malezja",SG:"Singapur",ID:"Indonezja",
+    PH:"Filipiny",KH:"Kambod\u017Ca",LA:"Laos",BN:"Brunei",TL:"Timor Wschodni",
+    BT:"Bhutan",MV:"Malediwy",
+    // Oceania
+    AU:"Australia",NZ:"Nowa Zelandia",FJ:"Fid\u017Ci",PG:"Papua-Nowa Gwinea",
+    WS:"Samoa",TO:"Tonga",
+    // Afryka
+    EG:"Egipt",MA:"Maroko",DZ:"Algieria",TN:"Tunezja",LY:"Libia",
+    ZA:"RPA",NG:"Nigeria",GH:"Ghana",KE:"Kenia",TZ:"Tanzania",
+    ET:"Etiopia",UG:"Uganda",RW:"Rwanda",SD:"Sudan",SS:"Sudan Po\u0142udniowy",
+    AO:"Angola",MZ:"Mozambik",ZW:"Zimbabwe",ZM:"Zambia",MW:"Malawi",
+    NA:"Namibia",BW:"Botswana",MG:"Madagaskar",SN:"Senegal",CI:"Wybrze\u017Ce Ko\u015Bci S\u0142oniowej",
+    CM:"Kamerun",CD:"Kongo (DR)",CG:"Kongo",GA:"Gabon",ML:"Mali",
+    BF:"Burkina Faso",NE:"Niger",TD:"Czad",SO:"Somalia",DJ:"D\u017Cibuti",
+    ER:"Erytrea",BI:"Burundi",LS:"Lesotho",SZ:"Eswatini",GM:"Gambia",
+    GN:"Gwinea",SL:"Sierra Leone",LR:"Liberia",TG:"Togo",BJ:"Benin",
+    MU:"Mauritius",MR:"Mauretania",SC:"Seszele",CV:"Republika Zielonego Przyl\u0105dka",
+    CF:"Rep. \u015Arodkowoafryka\u0144ska",GQ:"Gwinea R\u00F3wnikowa",
+  };
+
+  /* ── Country center coordinates (approx geographic center) ── */
+  const _COUNTRY_CENTERS = {
+    PL:[52.07,19.48],DE:[51.16,10.45],CZ:[49.82,15.47],SK:[48.67,19.70],
+    UA:[48.38,31.17],BY:[53.71,27.95],LT:[55.17,23.88],RU:[55.75,37.62],
+    AT:[47.52,14.55],CH:[46.82,8.23],FR:[46.23,2.21],GB:[55.38,-3.44],
+    IT:[41.87,12.57],ES:[40.46,-3.75],NL:[52.13,5.29],BE:[50.50,4.47],
+    DK:[56.26,9.50],SE:[60.13,18.64],NO:[60.47,8.47],FI:[61.92,25.75],
+    PT:[39.40,-8.22],IE:[53.14,-7.69],HU:[47.16,19.50],RO:[45.94,24.97],
+    BG:[42.73,25.49],HR:[45.10,15.20],SI:[46.15,14.99],RS:[44.02,21.01],
+    BA:[43.92,17.68],ME:[42.71,19.37],MK:[41.51,21.75],AL:[41.15,20.17],
+    GR:[39.07,21.82],TR:[38.96,35.24],EE:[58.60,25.01],LV:[56.88,24.60],
+    LU:[49.82,6.13],MT:[35.94,14.38],CY:[35.13,33.43],IS:[64.96,-19.02],
+    MD:[47.41,28.37],XK:[42.60,20.90],US:[37.09,-95.71],CA:[56.13,-106.35],
+    MC:[43.73,7.42],AD:[42.55,1.57],VA:[41.90,12.45],SM:[43.94,12.46],
+    LI:[47.17,9.51],GI:[36.14,-5.35],FO:[62.01,-6.77],GL:[71.71,-42.60],
+    GE:[42.32,43.36],AM:[40.07,44.53],AZ:[40.14,47.58],
+    MX:[23.63,-102.55],JM:[18.11,-77.30],CU:[21.52,-77.78],
+    BR:[-14.24,-51.93],AR:[-38.42,-63.62],CL:[-35.68,-71.54],
+    CO:[4.57,-74.30],PE:[-9.19,-75.02],VE:[6.42,-66.59],
+    AE:[23.42,53.85],SA:[23.89,45.08],IL:[31.05,34.85],
+    JO:[30.59,36.24],LB:[33.85,35.86],IQ:[33.22,43.68],IR:[32.43,53.69],
+    KW:[29.31,47.48],QA:[25.35,51.18],OM:[21.47,55.98],BH:[26.07,50.56],
+    IN:[20.59,78.96],PK:[30.38,69.35],BD:[23.68,90.36],NP:[28.39,84.12],
+    KZ:[48.02,66.92],UZ:[41.38,64.59],MN:[46.86,103.85],
+    CN:[35.86,104.20],JP:[36.20,138.25],KR:[35.91,127.77],
+    TW:[23.70,121.00],HK:[22.40,114.11],
+    VN:[14.06,108.28],TH:[15.87,100.99],MY:[4.21,101.98],SG:[1.35,103.82],
+    ID:[-0.79,113.92],PH:[12.88,121.77],
+    AU:[-25.27,133.78],NZ:[-40.90,174.89],
+    EG:[26.82,30.80],MA:[31.79,-7.09],ZA:[-30.56,22.94],
+    NG:[9.08,8.68],KE:[-0.02,37.91],TZ:[-6.37,34.89],ET:[9.15,40.49],
+  };
+  function _countryName(code) {
+    if (!code) return "";
+    const up = code.toUpperCase().trim();
+    return _COUNTRY_NAMES[up] || up;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+   *  Timeline Player v4 — smooth animation, mode icons,
+   *  fading Marauder trail, year-spanning global slider
+   * ══════════════════════════════════════════════════════════ */
+
+  /** Haversine distance in meters. */
+  function _haversineDist(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2
+            + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+            * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  /**
+   * Offset a lat/lon point along a compass bearing by `distMeters`.
+   * Used to estimate user position from BTS tower + azimuth.
+   */
+  function _offsetByAzimuth(lat, lon, azimuthDeg, distMeters) {
+    const R = 6371000;
+    const bearing = azimuthDeg * Math.PI / 180;
+    const latRad = lat * Math.PI / 180;
+    const lonRad = lon * Math.PI / 180;
+    const d = distMeters / R;
+    const newLat = Math.asin(
+      Math.sin(latRad) * Math.cos(d) + Math.cos(latRad) * Math.sin(d) * Math.cos(bearing)
+    );
+    const newLon = lonRad + Math.atan2(
+      Math.sin(bearing) * Math.sin(d) * Math.cos(latRad),
+      Math.cos(d) - Math.sin(latRad) * Math.sin(newLat)
+    );
+    return { lat: newLat * 180 / Math.PI, lon: newLon * 180 / Math.PI };
+  }
+
+  /** Parse datetime string to ms timestamp. */
+  function _parseDt(s) {
+    if (!s) return 0;
+    const d = new Date(s.replace(" ", "T"));
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+
+  /** Travel mode emoji. */
+  function _modeEmoji(mode) {
+    if (mode === "walk") return "\uD83D\uDEB6";
+    if (mode === "car") return "\uD83D\uDE97";
+    if (mode === "plane") return "\u2708\uFE0F";
+    return "\uD83D\uDCCD";
+  }
+
+  /** Calculate smooth animation duration (ms) based on distance between waypoints. */
+  function _calcAnimDuration(distMeters) {
+    if (distMeters < 500)   return 700;
+    if (distMeters < 2000)  return 1000;
+    if (distMeters < 10000) return 1400;
+    if (distMeters < 50000) return 1800;
+    return 2200;
+  }
+
+  /**
+   * Build waypoints: deduplicate consecutive same-BTS records,
+   * adjust position using azimuth (shift toward user),
+   * then remove BTS oscillation (A→B→A within short time/distance).
+   * Finally, calculate travel mode for each waypoint.
+   */
+  function _buildWaypoints(recs) {
+    if (!recs.length) return [];
+
+    // Step 1: merge consecutive records at same BTS
+    const merged = [];
+    let cur = {
+      lat: recs[0].point.lat, lon: recs[0].point.lon,
+      btsLat: recs[0].point.lat, btsLon: recs[0].point.lon,
+      city: recs[0].point.city || "", street: recs[0].point.street || "",
+      firstDt: recs[0].datetime, lastDt: recs[0].datetime,
+      count: 1, records: [recs[0]],
+      azimuths: recs[0].point.azimuth != null ? [recs[0].point.azimuth] : [],
+    };
+    for (let i = 1; i < recs.length; i++) {
+      const r = recs[i];
+      const same = Math.abs(r.point.lat - cur.btsLat) < 0.0005
+                && Math.abs(r.point.lon - cur.btsLon) < 0.0005;
+      if (same) {
+        cur.count++;
+        cur.lastDt = r.datetime;
+        cur.records.push(r);
+        if (r.point.city && !cur.city) cur.city = r.point.city;
+        if (r.point.street && !cur.street) cur.street = r.point.street;
+        if (r.point.azimuth != null) cur.azimuths.push(r.point.azimuth);
+      } else {
+        merged.push(cur);
+        cur = {
+          lat: r.point.lat, lon: r.point.lon,
+          btsLat: r.point.lat, btsLon: r.point.lon,
+          city: r.point.city || "", street: r.point.street || "",
+          firstDt: r.datetime, lastDt: r.datetime,
+          count: 1, records: [r],
+          azimuths: r.point.azimuth != null ? [r.point.azimuth] : [],
+        };
+      }
+    }
+    merged.push(cur);
+
+    // Step 1b: Adjust position using average azimuth
+    for (const wp of merged) {
+      if (wp.azimuths.length > 0) {
+        let sinSum = 0, cosSum = 0;
+        for (const az of wp.azimuths) {
+          sinSum += Math.sin(az * Math.PI / 180);
+          cosSum += Math.cos(az * Math.PI / 180);
+        }
+        const avgAz = (Math.atan2(sinSum, cosSum) * 180 / Math.PI + 360) % 360;
+        const offset = _offsetByAzimuth(wp.btsLat, wp.btsLon, avgAz, 400);
+        wp.lat = offset.lat;
+        wp.lon = offset.lon;
+      }
+    }
+
+    // Step 2: remove BTS oscillations (A→B→A where B is brief & close)
+    if (merged.length < 3) return _addTravelModes(merged);
+    const filtered = [merged[0]];
+    for (let i = 1; i < merged.length - 1; i++) {
+      const prev = filtered[filtered.length - 1];
+      const curr = merged[i];
+      const next = merged[i + 1];
+      const prevNextDist = _haversineDist(prev.lat, prev.lon, next.lat, next.lon);
+      const prevCurrDist = _haversineDist(prev.lat, prev.lon, curr.lat, curr.lon);
+      if (prevNextDist < 500 && curr.count <= 2 && prevCurrDist < 3000) {
+        prev.count += curr.count;
+        prev.lastDt = curr.lastDt;
+        prev.records = prev.records.concat(curr.records);
+        continue;
+      }
+      filtered.push(curr);
+    }
+    filtered.push(merged[merged.length - 1]);
+    return _addTravelModes(filtered);
+  }
+
+  /** Add travelMode to each waypoint based on speed to next waypoint. */
+  function _addTravelModes(wps) {
+    for (let i = 0; i < wps.length; i++) {
+      if (i < wps.length - 1) {
+        const curr = wps[i];
+        const next = wps[i + 1];
+        const dist = _haversineDist(curr.lat, curr.lon, next.lat, next.lon);
+        const t1 = _parseDt(curr.lastDt);
+        const t2 = _parseDt(next.firstDt);
+        if (t1 && t2 && t2 > t1) {
+          const hours = (t2 - t1) / 3600000;
+          const speed = (dist / 1000) / hours;
+          curr.travelMode = speed < 7 ? "walk" : speed < 250 ? "car" : "plane";
+          curr.speedKmh = speed;
+        } else {
+          curr.travelMode = dist > 100000 ? "plane" : dist > 2000 ? "car" : "walk";
+          curr.speedKmh = 0;
+        }
+        curr.distToNext = dist;
+      } else {
+        wps[i].travelMode = "stationary";
+        wps[i].speedKmh = 0;
+        wps[i].distToNext = 0;
+      }
+    }
+    return wps;
+  }
+
+  // ── Fading trail constants ──
+  const FADE_COUNT = 18;
+  const FADE_DECAY = 0.80;
+
+  function _initTimeline(geo) {
+    const wrap = QS("#gsm_timeline_wrap");
+    if (!wrap || !St.map) return;
+
+    // Filter and sort records with valid coordinates + datetime
+    const recs = (geo.geo_records || []).filter(r =>
+      r.point && r.point.lat && r.point.lon && r.datetime
+    );
+    recs.sort((a, b) => (a.datetime < b.datetime ? -1 : a.datetime > b.datetime ? 1 : 0));
+    if (recs.length < 2) { wrap.style.display = "none"; return; }
+
+    St.tlAllRecords = recs;
+
+    // Extract unique days
+    const daySet = new Set();
+    for (const r of recs) {
+      const d = (r.datetime || "").substring(0, 10);
+      if (d.length === 10) daySet.add(d);
+    }
+    St.tlDays = Array.from(daySet).sort();
+
+    // Build global waypoints: per-day build, then concatenate
+    St.tlAllWaypoints = [];
+    St.tlDayBoundaries = [];
+    for (const day of St.tlDays) {
+      const dayRecs = recs.filter(r => (r.datetime || "").startsWith(day));
+      const startIdx = St.tlAllWaypoints.length;
+      const dayWps = _buildWaypoints(dayRecs);
+      for (const wp of dayWps) wp.day = day;
+      St.tlAllWaypoints = St.tlAllWaypoints.concat(dayWps);
+      St.tlDayBoundaries.push({
+        day: day,
+        startIdx: startIdx,
+        endIdx: St.tlAllWaypoints.length - 1,
+      });
+    }
+
+    if (St.tlAllWaypoints.length < 2) { wrap.style.display = "none"; return; }
+
+    St.tlIdx = 0;
+    St.tlPlaying = false;
+    St.tlSpeed = 1;
+    St.tlSavedZoom = null;
+    _tlClearTimer();
+
+    // Create timeline layer group
+    const tlGroup = L.layerGroup();
+    St.mapLayers.timeline = tlGroup;
+
+    // Full route polyline (entire range, very thin gray dashed)
+    const allCoords = St.tlAllWaypoints.map(w => [w.lat, w.lon]);
+    St.tlFullRoute = L.polyline(allCoords, {
+      color: "#94a3b8", weight: 1.5, opacity: 0.2, dashArray: "4 6",
+    });
+    St.tlFullRoute.addTo(tlGroup);
+
+    // Visited trail — faint line showing the full visited path so far
+    St.tlTrailCoords = [[St.tlAllWaypoints[0].lat, St.tlAllWaypoints[0].lon]];
+    St.tlVisitedTrail = L.polyline(St.tlTrailCoords, {
+      color: "#2563eb", weight: 2, opacity: 0.12,
+    });
+    St.tlVisitedTrail.addTo(tlGroup);
+
+    // Fading trail segments (Marauder's Map effect)
+    St.tlFadeSegments = [];
+
+    // Waypoint dots along the route (subtle)
+    St.tlRouteDots = L.layerGroup();
+    for (let i = 0; i < St.tlAllWaypoints.length; i++) {
+      const w = St.tlAllWaypoints[i];
+      const dotColor = w.count > 10 ? "#3b82f6" : w.count > 3 ? "#60a5fa" : "#cbd5e1";
+      const dotR = Math.min(5, Math.max(1.5, 0.5 + Math.log2(w.count)));
+      L.circleMarker([w.lat, w.lon], {
+        radius: dotR, color: dotColor, fillColor: dotColor,
+        fillOpacity: 0.3, weight: 0.5,
+      }).bindTooltip(
+        `${(w.firstDt || "").substring(11, 16)} \u00B7 ${w.count} rek.` +
+        (w.city ? `<br>${w.city}` : ""),
+        { direction: "top", opacity: 0.9 }
+      ).addTo(St.tlRouteDots);
+    }
+    tlGroup.addLayer(St.tlRouteDots);
+
+    // Marker — L.marker with divIcon showing mode emoji
+    const firstWp = St.tlAllWaypoints[0];
+    St.tlMarker = L.marker([firstWp.lat, firstWp.lon], {
+      icon: L.divIcon({
+        className: "gsm-tl-marker-icon",
+        html: '<div class="gsm-tl-marker">' + _modeEmoji("stationary") + '</div>',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      }),
+      zIndexOffset: 1000,
+    });
+    St.tlMarker.addTo(tlGroup);
+    St.tlMarker.bindPopup("");
+
+    wrap.style.display = "";
+
+    // Slider setup (global — covers all waypoints across all days)
+    const slider = QS("#gsm_tl_slider");
+    if (slider) {
+      slider.min = 0;
+      slider.max = St.tlAllWaypoints.length - 1;
+      slider.value = 0;
+    }
+
+    // Build month strip for quick navigation
+    _buildMonthStrip();
+
+    // Draw global density bar
+    _drawDensityBar(recs);
+
+    // Initial labels
+    _timelineUpdateLabels();
+
+    // ── Wire up controls ──
+    const playBtn = QS("#gsm_tl_play");
+    if (playBtn) {
+      playBtn.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (St.tlPlaying) _timelinePause(); else _timelinePlay();
+      };
+    }
+
+    const speedBtn = QS("#gsm_tl_speed");
+    if (speedBtn) {
+      speedBtn.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const speeds = [1, 2, 5, 10];
+        const idx = speeds.indexOf(St.tlSpeed);
+        St.tlSpeed = speeds[(idx + 1) % speeds.length];
+        speedBtn.textContent = St.tlSpeed + "\u00D7";
+      };
+    }
+
+    if (slider) {
+      slider.onmousedown = slider.ontouchstart = function () {
+        if (St.tlPlaying) _timelinePause();
+      };
+      slider.oninput = function () {
+        _timelineSeek(parseInt(this.value));
+      };
+    }
+
+    const canvas = QS("#gsm_tl_density");
+    if (canvas) {
+      canvas.onclick = function (e) {
+        if (St.tlPlaying) _timelinePause();
+        const rect = canvas.getBoundingClientRect();
+        const ratio = (e.clientX - rect.left) / rect.width;
+        const idx = Math.round(ratio * Math.max(0, St.tlAllWaypoints.length - 1));
+        _timelineSeek(Math.max(0, Math.min(idx, St.tlAllWaypoints.length - 1)));
+      };
+    }
+
+    const prevDay = QS("#gsm_tl_prev_day");
+    const nextDay = QS("#gsm_tl_next_day");
+    if (prevDay) prevDay.onclick = function () { _timelineJumpDay(-1); };
+    if (nextDay) nextDay.onclick = function () { _timelineJumpDay(1); };
+
+    console.log("[GSM Timeline v4]", recs.length, "records,",
+      St.tlAllWaypoints.length, "waypoints,", St.tlDays.length, "days");
+  }
+
+  /** Build month navigation strip. */
+  function _buildMonthStrip() {
+    const el = QS("#gsm_tl_months");
+    if (!el || !St.tlAllWaypoints.length) return;
+
+    const monthMap = new Map();
+    for (let i = 0; i < St.tlAllWaypoints.length; i++) {
+      const m = (St.tlAllWaypoints[i].firstDt || "").substring(0, 7);
+      if (m.length === 7 && !monthMap.has(m)) monthMap.set(m, i);
+    }
+    if (monthMap.size <= 1) { el.style.display = "none"; return; }
+
+    const mNames = ["Sty","Lut","Mar","Kwi","Maj","Cze","Lip","Sie","Wrz","Pa\u017A","Lis","Gru"];
+    var html = "";
+    for (const [key, firstIdx] of monthMap) {
+      const parts = key.split("-");
+      html += '<button class="gsm-tl-month-chip" data-idx="' + firstIdx + '">' +
+              mNames[parseInt(parts[1]) - 1] + "'" + parts[0].slice(2) + '</button>';
+    }
+    el.innerHTML = html;
+
+    QSA(".gsm-tl-month-chip", el).forEach(function (btn) {
+      btn.onclick = function () {
+        if (St.tlPlaying) _timelinePause();
+        _timelineSeek(parseInt(btn.dataset.idx));
+      };
+    });
+  }
+
+  /** Highlight current month in strip. */
+  function _updateMonthHighlight() {
+    var el = QS("#gsm_tl_months");
+    if (!el || !St.tlAllWaypoints.length) return;
+    var wp = St.tlAllWaypoints[St.tlIdx];
+    if (!wp) return;
+    var curMonth = (wp.firstDt || "").substring(0, 7);
+    QSA(".gsm-tl-month-chip", el).forEach(function (btn) {
+      var idx = parseInt(btn.dataset.idx);
+      var btnMonth = (St.tlAllWaypoints[idx] && St.tlAllWaypoints[idx].firstDt || "").substring(0, 7);
+      if (btnMonth === curMonth) btn.classList.add("active");
+      else btn.classList.remove("active");
+    });
+  }
+
+  function _tlClearTimer() {
+    if (St.tlTimer) { clearInterval(St.tlTimer); St.tlTimer = null; }
+    if (St.tlAnimFrame) { cancelAnimationFrame(St.tlAnimFrame); St.tlAnimFrame = null; }
+  }
+
+  /** Jump to next/prev day from current position. */
+  function _timelineJumpDay(dir) {
+    if (!St.tlAllWaypoints.length) return;
+    if (St.tlPlaying) _timelinePause();
+
+    var curDay = St.tlAllWaypoints[St.tlIdx].day;
+    var curDayIdx = St.tlDays.indexOf(curDay);
+    var newDayIdx = curDayIdx + dir;
+    if (newDayIdx < 0 || newDayIdx >= St.tlDays.length) return;
+
+    var boundary = St.tlDayBoundaries[newDayIdx];
+    if (!boundary) return;
+    _timelineSeek(boundary.startIdx);
+
+    // Fit map to the new day's bounds
+    var dayWps = St.tlAllWaypoints.slice(boundary.startIdx, boundary.endIdx + 1);
+    if (dayWps.length && St.map) {
+      var bounds = dayWps.map(function (w) { return [w.lat, w.lon]; });
+      St.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+    }
+  }
+
+  function _timelinePlay() {
+    if (!St.tlAllWaypoints.length) return;
+    if (St.tlIdx >= St.tlAllWaypoints.length - 1) _timelineSeek(0);
+
+    St.tlPlaying = true;
+    var playBtn = QS("#gsm_tl_play");
+    if (playBtn) playBtn.textContent = "\u23F8";
+
+    // Ensure timeline layer visible
+    if (St.map && St.mapLayers.timeline && !St.map.hasLayer(St.mapLayers.timeline)) {
+      St.mapLayers.timeline.addTo(St.map);
+    }
+
+    _tlClearTimer();
+    // Start smooth animation loop
+    St._tlAnimating = false;
+    St.tlAnimFrame = requestAnimationFrame(_timelineAnimLoop);
+  }
+
+  function _timelinePause() {
+    St.tlPlaying = false;
+    _tlClearTimer();
+    var playBtn = QS("#gsm_tl_play");
+    if (playBtn) playBtn.textContent = "\u25B6";
+
+    // Snap marker to current waypoint position
+    if (St.tlMarker && St.tlAllWaypoints[St.tlIdx]) {
+      var wp = St.tlAllWaypoints[St.tlIdx];
+      St.tlMarker.setLatLng([wp.lat, wp.lon]);
+    }
+  }
+
+  /** Smooth animation loop using requestAnimationFrame.
+   *  Interpolates marker position between consecutive waypoints. */
+  function _timelineAnimLoop(now) {
+    if (!St.tlPlaying) return;
+
+    if (St.tlIdx >= St.tlAllWaypoints.length - 1) {
+      _timelinePause();
+      return;
+    }
+
+    // Start new animation segment if not currently animating
+    if (!St._tlAnimating) {
+      St._tlAnimating = true;
+      St._tlAnimStart = now;
+      var curr = St.tlAllWaypoints[St.tlIdx];
+      var next = St.tlAllWaypoints[St.tlIdx + 1];
+      St._tlAnimFrom = [curr.lat, curr.lon];
+      St._tlAnimTo = [next.lat, next.lon];
+      var dist = _haversineDist(curr.lat, curr.lon, next.lat, next.lon);
+      St._tlAnimDuration = Math.max(80, _calcAnimDuration(dist) / St.tlSpeed);
+    }
+
+    var elapsed = now - St._tlAnimStart;
+    var t = Math.min(1, elapsed / St._tlAnimDuration);
+
+    // Ease-in-out for smooth movement
+    var ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+    var lat = St._tlAnimFrom[0] + (St._tlAnimTo[0] - St._tlAnimFrom[0]) * ease;
+    var lon = St._tlAnimFrom[1] + (St._tlAnimTo[1] - St._tlAnimFrom[1]) * ease;
+
+    if (St.tlMarker) St.tlMarker.setLatLng([lat, lon]);
+
+    // Intermediate trail: draw partial line during animation
+    if (t >= 1) {
+      // Arrived at next waypoint
+      St._tlAnimating = false;
+      St.tlIdx++;
+      _onWaypointArrived(St.tlIdx);
+    }
+
+    St.tlAnimFrame = requestAnimationFrame(_timelineAnimLoop);
+  }
+
+  /** Called when animation reaches a new waypoint. */
+  function _onWaypointArrived(idx) {
+    var wp = St.tlAllWaypoints[idx];
+    if (!wp) return;
+
+    // Add fading trail segment
+    if (idx > 0) {
+      var prev = St.tlAllWaypoints[idx - 1];
+      _addFadeSegment([prev.lat, prev.lon], [wp.lat, wp.lon]);
+    }
+
+    // Update visited trail (faint full path)
+    St.tlTrailCoords.push([wp.lat, wp.lon]);
+    if (St.tlVisitedTrail) St.tlVisitedTrail.setLatLngs(St.tlTrailCoords);
+
+    // Update marker icon based on travel mode
+    _updateMarkerMode(wp);
+
+    // Update slider
+    var slider = QS("#gsm_tl_slider");
+    if (slider) slider.value = idx;
+
+    // Update labels
+    _timelineUpdateLabels();
+    _timelineUpdatePopup(wp);
+    _updateMonthHighlight();
+
+    // Follow map
+    _timelineFollowMap([wp.lat, wp.lon]);
+  }
+
+  /** Update marker emoji to match travel mode. */
+  function _updateMarkerMode(wp) {
+    if (!St.tlMarker) return;
+    var emoji = _modeEmoji(wp.travelMode || "stationary");
+    var iconEl = St.tlMarker.getElement();
+    if (iconEl) {
+      var inner = iconEl.querySelector(".gsm-tl-marker");
+      if (inner) inner.textContent = emoji;
+    }
+    // Also update mode label in controls
+    var modeEl = QS("#gsm_tl_mode_icon");
+    if (modeEl) {
+      modeEl.textContent = emoji;
+      var labels = { walk: "pieszo", car: "samoch\u00F3d", plane: "samolot", stationary: "" };
+      modeEl.title = labels[wp.travelMode] || "";
+    }
+  }
+
+  /** Add a fading trail segment (Marauder's Map effect). */
+  function _addFadeSegment(from, to) {
+    if (!St.mapLayers.timeline) return;
+    var seg = L.polyline([from, to], {
+      color: "#2563eb", weight: 4, opacity: 0.9, lineCap: "round",
+    });
+    seg.addTo(St.mapLayers.timeline);
+    St.tlFadeSegments.push(seg);
+    _updateFadeOpacities();
+    // Remove oldest segments beyond limit
+    while (St.tlFadeSegments.length > FADE_COUNT) {
+      var old = St.tlFadeSegments.shift();
+      St.mapLayers.timeline.removeLayer(old);
+    }
+  }
+
+  /** Update opacity of all fade segments (newest=bright, oldest=faint). */
+  function _updateFadeOpacities() {
+    var n = St.tlFadeSegments.length;
+    for (var i = 0; i < n; i++) {
+      var age = n - 1 - i; // 0 = newest
+      var opacity = 0.9 * Math.pow(FADE_DECAY, age);
+      St.tlFadeSegments[i].setStyle({ opacity: Math.max(0.04, opacity) });
+    }
+  }
+
+  /** Clear all fading trail segments. */
+  function _clearFadeSegments() {
+    if (!St.mapLayers.timeline) return;
+    for (var i = 0; i < St.tlFadeSegments.length; i++) {
+      St.mapLayers.timeline.removeLayer(St.tlFadeSegments[i]);
+    }
+    St.tlFadeSegments = [];
+  }
+
+  /** Rebuild fading segments around a given index (for seek). */
+  function _rebuildFadeSegments(upToIdx) {
+    _clearFadeSegments();
+    var start = Math.max(1, upToIdx - FADE_COUNT + 1);
+    for (var i = start; i <= upToIdx; i++) {
+      var prev = St.tlAllWaypoints[i - 1];
+      var curr = St.tlAllWaypoints[i];
+      var seg = L.polyline(
+        [[prev.lat, prev.lon], [curr.lat, curr.lon]],
+        { color: "#2563eb", weight: 4, opacity: 0.9, lineCap: "round" }
+      );
+      seg.addTo(St.mapLayers.timeline);
+      St.tlFadeSegments.push(seg);
+    }
+    _updateFadeOpacities();
+  }
+
+  /** Seek to a specific global waypoint index (slider-driven). */
+  function _timelineSeek(idx) {
+    idx = Math.max(0, Math.min(idx, St.tlAllWaypoints.length - 1));
+    St.tlIdx = idx;
+    St._tlAnimating = false; // reset animation state
+
+    if (!St.tlAllWaypoints.length) return;
+    var wp = St.tlAllWaypoints[idx];
+    var latlng = [wp.lat, wp.lon];
+
+    if (St.tlMarker) St.tlMarker.setLatLng(latlng);
+
+    // Rebuild visited trail up to idx
+    var coords = [];
+    for (var i = 0; i <= idx; i++) {
+      coords.push([St.tlAllWaypoints[i].lat, St.tlAllWaypoints[i].lon]);
+    }
+    St.tlTrailCoords = coords;
+    if (St.tlVisitedTrail) St.tlVisitedTrail.setLatLngs(coords);
+
+    // Rebuild fading segments
+    _rebuildFadeSegments(idx);
+
+    // Update marker mode
+    _updateMarkerMode(wp);
+
+    var slider = QS("#gsm_tl_slider");
+    if (slider && parseInt(slider.value) !== idx) slider.value = idx;
+
+    _timelineUpdateLabels();
+    _timelineUpdatePopup(wp);
+    _updateMonthHighlight();
+
+    // Pan map to marker position
+    if (St.map) {
+      var bounds = St.map.getBounds();
+      if (!bounds.contains(latlng)) {
+        St.map.panTo(latlng, { animate: true, duration: 0.3 });
+      }
+    }
+
+    // Ensure timeline layer visible
+    if (St.map && St.mapLayers.timeline && !St.map.hasLayer(St.mapLayers.timeline)) {
+      St.mapLayers.timeline.addTo(St.map);
+    }
+  }
+
+  /** Pan map to keep marker visible (with inner padding). */
+  function _timelineFollowMap(latlng) {
+    if (!St.map) return;
+    var bounds = St.map.getBounds();
+    var padLat = (bounds.getNorth() - bounds.getSouth()) * 0.25;
+    var padLng = (bounds.getEast() - bounds.getWest()) * 0.25;
+    var inner = L.latLngBounds(
+      [bounds.getSouth() + padLat, bounds.getWest() + padLng],
+      [bounds.getNorth() - padLat, bounds.getEast() - padLng]
+    );
+    if (!inner.contains(latlng)) {
+      St.map.panTo(latlng, { animate: true, duration: 0.4 });
+    }
+  }
+
+  function _timelineUpdateLabels() {
+    var dtLabel = QS("#gsm_tl_datetime");
+    var counter = QS("#gsm_tl_counter");
+    var dayLabel = QS("#gsm_tl_day_label");
+    var dayInfo = QS("#gsm_tl_day_info");
+
+    if (!St.tlAllWaypoints.length) return;
+    var wp = St.tlAllWaypoints[St.tlIdx];
+
+    if (dtLabel) {
+      var date = (wp.firstDt || "").substring(0, 10);
+      var t1 = (wp.firstDt || "").substring(11, 16);
+      if (wp.count > 1 && wp.firstDt !== wp.lastDt) {
+        var t2 = (wp.lastDt || "").substring(11, 16);
+        dtLabel.textContent = date + " " + t1 + "\u2014" + t2;
+      } else {
+        dtLabel.textContent = date + " " + t1;
+      }
+    }
+
+    if (counter) counter.textContent = (St.tlIdx + 1) + " / " + St.tlAllWaypoints.length;
+
+    if (dayLabel) {
+      var day = wp.day || (wp.firstDt || "").substring(0, 10);
+      var parts = day.split("-");
+      var dayNames = ["Nd","Pn","Wt","\u015Ar","Cz","Pt","Sb"];
+      try {
+        var dt = new Date(day + "T00:00:00");
+        dayLabel.textContent = dayNames[dt.getDay()] + " " + parts[2] + "." + parts[1] + "." + parts[0];
+      } catch(e) { dayLabel.textContent = day; }
+    }
+
+    if (dayInfo) {
+      var curDay = wp.day;
+      var boundary = null;
+      for (var b = 0; b < St.tlDayBoundaries.length; b++) {
+        if (St.tlDayBoundaries[b].day === curDay) { boundary = St.tlDayBoundaries[b]; break; }
+      }
+      var dayCount = boundary ? (boundary.endIdx - boundary.startIdx + 1) : 0;
+      var dayIdx = St.tlDays.indexOf(curDay);
+      dayInfo.textContent = dayCount + " pkt \u00B7 dzie\u0144 " + (dayIdx + 1) + "/" + St.tlDays.length;
+    }
+  }
+
+  function _timelineUpdatePopup(wp) {
+    if (!St.tlMarker) return;
+    var loc = [wp.city, wp.street].filter(Boolean).join(", ")
+              || wp.lat.toFixed(4) + ", " + wp.lon.toFixed(4);
+    var t1 = (wp.firstDt || "").substring(11, 16);
+    var timeRange = (wp.count > 1 && wp.firstDt !== wp.lastDt)
+      ? t1 + " \u2014 " + (wp.lastDt || "").substring(11, 16)
+      : t1;
+    var types = {};
+    for (var ri = 0; ri < wp.records.length; ri++) {
+      var rt = wp.records[ri].record_type;
+      if (rt) types[rt] = (types[rt] || 0) + 1;
+    }
+    var typeStr = Object.entries(types).map(function (e) { return _typeLabel(e[0]) + ": " + e[1]; }).join(", ");
+    var modeStr = wp.travelMode ? " " + _modeEmoji(wp.travelMode) : "";
+    var speedStr = wp.speedKmh > 0 ? " ~" + Math.round(wp.speedKmh) + " km/h" : "";
+    St.tlMarker.setPopupContent(
+      "<b>" + loc + "</b><br>" + timeRange + " \u00B7 " + wp.count + " rek." + modeStr + speedStr + (typeStr ? "<br>" + typeStr : "")
+    );
+  }
+
+  function _drawDensityBar(recs) {
+    var canvas = QS("#gsm_tl_density");
+    if (!canvas || !recs.length) return;
+
+    var rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(rect.width, 300);
+    canvas.height = 24;
+    var ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    var numBuckets = Math.min(canvas.width, 500);
+    var buckets = [];
+    for (var bi = 0; bi < numBuckets; bi++) buckets.push({ count: 0, hours: [] });
+
+    for (var i = 0; i < recs.length; i++) {
+      var bIdx = Math.min(Math.floor((i / recs.length) * numBuckets), numBuckets - 1);
+      buckets[bIdx].count++;
+      var dt = recs[i].datetime || "";
+      var m = dt.match(/(\d{2}):\d{2}/);
+      if (m) buckets[bIdx].hours.push(parseInt(m[1]));
+    }
+
+    var maxCount = 1;
+    for (var j = 0; j < numBuckets; j++) { if (buckets[j].count > maxCount) maxCount = buckets[j].count; }
+    var colW = canvas.width / numBuckets;
+
+    for (var b = 0; b < numBuckets; b++) {
+      if (buckets[b].count === 0) continue;
+      var h = Math.max(2, (buckets[b].count / maxCount) * canvas.height);
+      var avgH = buckets[b].hours.length
+        ? Math.round(buckets[b].hours.reduce(function (s, v) { return s + v; }, 0) / buckets[b].hours.length) : 12;
+      ctx.fillStyle = (avgH >= 22 || avgH < 6) ? "#1e3a5f"
+                    : avgH < 10 ? "#f97316" : avgH < 18 ? "#22c55e" : "#8b5cf6";
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(b * colW, canvas.height - h, colW, h);
+    }
+    ctx.globalAlpha = 1.0;
+  }
+
+
+  function _renderWarnings(warnings) {
+    const el = QS("#gsm_warnings_body");
+    if (!el) return;
+    if (!warnings || !warnings.length) {
+      el.parentElement.style.display = "none";
+      return;
+    }
+    el.parentElement.style.display = "";
+    el.innerHTML = warnings.map(w => `<div class="gsm-warning">${w}</div>`).join("");
+  }
+
+  /**
+   * Render identification drift banner — shows when operator changed column format.
+   * User can approve or reject adaptive mappings.
+   */
+  function _renderIdentDriftBanner(identData) {
+    const container = QS("#gsm_ident_drift_container");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const warnings = identData && identData.drift_warnings;
+    const reportIds = identData && identData.drift_report_ids;
+    if (!warnings || !warnings.length) {
+      container.style.display = "none";
+      return;
+    }
+    container.style.display = "";
+
+    let html = `<div class="card warning" style="margin-bottom:12px;border-left:4px solid #f59e0b;padding:16px">`;
+    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">`;
+    html += `<img src="/static/icons/status/warning.svg" width="18" height="18" alt="">`;
+    html += `<strong style="font-size:14px">Zmiana formatu pliku identyfikacji</strong>`;
+    html += `</div>`;
+    html += `<div style="font-size:13px;margin-bottom:8px">Wykryto zmienione nazwy kolumn. System adaptacyjny dopasował dane automatycznie:</div>`;
+    html += `<div style="font-size:12px;margin-bottom:10px">`;
+    for (const w of warnings) {
+      // Format: "  header -> logical (pewnosc: 92%, metoda: semantic)"
+      const m = w.match(/^\s*(.+?)\s*->\s*(.+?)\s*\(pewnosc:\s*(\d+)%/);
+      if (m) {
+        const conf = parseInt(m[3], 10);
+        const icon = conf >= 85 ? "✅" : "⚠️";
+        const cls = conf >= 85 ? "color:#16a34a" : "color:#f59e0b;font-weight:600";
+        html += `<div style="padding:3px 0">${icon} <code>${m[1].trim()}</code> → <code>${m[2].trim()}</code> <span style="${cls}">${conf}%</span>${conf < 85 ? " (wymaga potwierdzenia)" : " (auto)"}</div>`;
+      } else {
+        html += `<div style="padding:2px 0;opacity:0.8">${w}</div>`;
+      }
+    }
+    html += `</div>`;
+
+    // Action buttons
+    if (reportIds && reportIds.length) {
+      html += `<div style="display:flex;gap:8px;margin-top:8px">`;
+      html += `<button class="btn btn-sm" onclick="_gsmApproveDrift(this, '${reportIds[0]}')" style="font-size:12px;padding:4px 12px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer">Zatwierdź mapowania</button>`;
+      html += `<button class="btn btn-sm" onclick="_gsmRejectDrift(this, '${reportIds[0]}')" style="font-size:12px;padding:4px 12px;background:#dc2626;color:#fff;border:none;border-radius:4px;cursor:pointer">Odrzuć</button>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+    container.innerHTML = html;
+  }
+
+  // Global handlers for drift approve/reject
+  window._gsmApproveDrift = async function(btn, reportId) {
+    try {
+      btn.disabled = true;
+      const r = await fetch("/api/gsm/drift/reports/" + reportId + "/approve", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({confirmed_mappings: {}, apply_to_parser: false}),
+      });
+      if (r.ok) {
+        const container = QS("#gsm_ident_drift_container");
+        if (container) container.innerHTML = '<div class="card success" style="border-left:4px solid #16a34a;padding:12px;font-size:13px;margin-bottom:12px">✅ Mapowania zatwierdzone — schemat zaktualizowany.</div>';
+        setTimeout(() => { if (container) container.style.display = "none"; }, 5000);
+      }
+    } catch (e) { console.warn("Drift approve error:", e); }
+  };
+  window._gsmRejectDrift = async function(btn, reportId) {
+    try {
+      btn.disabled = true;
+      const r = await fetch("/api/gsm/drift/reports/" + reportId + "/reject", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({}),
+      });
+      if (r.ok) {
+        const container = QS("#gsm_ident_drift_container");
+        if (container) { container.innerHTML = ""; container.style.display = "none"; }
+      }
+    } catch (e) { console.warn("Drift reject error:", e); }
+  };
+
+  function _typeLabel(t) {
+    const map = {
+      CALL_OUT: "Rozmowa ↑", CALL_IN: "Rozmowa ↓", CALL_FORWARDED: "Przekierowanie",
+      SMS_OUT: "SMS ↑", SMS_IN: "SMS ↓", MMS_OUT: "MMS ↑", MMS_IN: "MMS ↓",
+      DATA: "Dane", USSD: "USSD", VOICEMAIL: "Poczta gł.", OTHER: "Inne",
+    };
+    return map[t] || t;
+  }
+
+  /* ── heatmap: hour × day-of-week grid ─────────────────── */
+
+  const _DOW_LABELS = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"];
+  const _DOW_SHORT  = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
+  const _MONTH_NAMES = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
+                         "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
+
+  /** Map JS getDay() (0=Sun..6=Sat) → our index (0=Mon..6=Sun). */
+  function _jsDowToIdx(jsDay) {
+    return jsDay === 0 ? 6 : jsDay - 1;
+  }
+
+  /** Classify record_type to category. */
+  function _hmCategory(rt) {
+    if (!rt) return null;
+    if (rt.startsWith("CALL")) return "calls";
+    if (rt === "SMS_OUT" || rt === "SMS_IN" || rt === "MMS_OUT" || rt === "MMS_IN") return "sms";
+    if (rt === "DATA") return "data";
+    return null;
+  }
+
+  /** Build heatmap grid from records. */
+  function _buildHeatmapData(records) {
+    if (!records || !records.length) { St.hmData = null; return; }
+
+    // Init 24×7 grid
+    const grid = [];
+    for (let h = 0; h < 24; h++) {
+      grid[h] = [];
+      for (let d = 0; d < 7; d++) {
+        grid[h][d] = { calls: 0, sms: 0, data: 0, total: 0 };
+      }
+    }
+
+    const monthsSet = new Set();
+    const monthFilter = St.hmMonth !== "all" ? St.hmMonth : null;
+
+    for (const r of records) {
+      if (!r.datetime) continue;
+      // Parse "YYYY-MM-DD HH:MM:SS" or similar
+      const dt = new Date(r.datetime.replace(" ", "T"));
+      if (isNaN(dt.getTime())) continue;
+
+      const ym = r.datetime.slice(0, 7); // "YYYY-MM"
+      monthsSet.add(ym);
+
+      if (monthFilter && ym !== monthFilter) continue;
+
+      const hour = dt.getHours();
+      const dow = _jsDowToIdx(dt.getDay());
+      const cat = _hmCategory(r.record_type);
+      if (!cat) continue;
+
+      grid[hour][dow][cat]++;
+      grid[hour][dow].total++;
+    }
+
+    // Find max for heatmap scaling
+    let maxTotal = 0;
+    for (let h = 0; h < 24; h++)
+      for (let d = 0; d < 7; d++)
+        if (grid[h][d].total > maxTotal) maxTotal = grid[h][d].total;
+
+    const months = Array.from(monthsSet).sort();
+
+    St.hmData = { grid, months, maxTotal };
+  }
+
+  /** Render the heatmap table HTML. */
+  function _renderHeatmap() {
+    const card = QS("#gsm_heatmap_card");
+    const body = QS("#gsm_heatmap_body");
+    if (!body) return;
+
+    if (!St.hmData || !St.hmData.maxTotal) {
+      if (card) card.style.display = "none";
+      return;
+    }
+    if (card) card.style.display = "";
+
+    const { grid } = St.hmData;
+    const ac = St.hmActiveCell;  // legacy single cell (or null)
+    const activeCells = St.hmActiveCells || [];  // multi-select set
+    const typeKey = St.hmType || "all";  // all, calls, sms, data
+
+    // Compute max for the selected type (for heatmap color scaling)
+    let typeMax = 0;
+    for (let h = 0; h < 24; h++)
+      for (let d = 0; d < 7; d++) {
+        const v = typeKey === "all" ? grid[h][d].total : (grid[h][d][typeKey] || 0);
+        if (v > typeMax) typeMax = v;
+      }
+
+    // Heatmap color per type
+    const colorMap = { all: "37,99,235", calls: "22,163,74", sms: "234,88,12", data: "124,58,237" };
+    const rgb = colorMap[typeKey] || colorMap.all;
+
+    // table-layout:fixed — narrow hour col + 7 equal day cols
+    let html = '<table class="gsm-heatmap" style="width:100%"><thead><tr><th class="gsm-hm-hour"></th>';
+    for (const d of _DOW_LABELS) html += `<th>${d}</th>`;
+    html += "</tr></thead><tbody>";
+
+    for (let h = 0; h < 24; h++) {
+      const hShort = String(h).padStart(2, "0") + "–" + String(h + 1 === 24 ? 0 : h + 1).padStart(2, "0");
+      const hLabel = String(h).padStart(2, "0") + ":00–" + String(h + 1 === 24 ? 0 : h + 1).padStart(2, "0") + ":00";
+      html += `<tr><td class="gsm-hm-hour" title="${hLabel}">${hShort}</td>`;
+
+      for (let d = 0; d < 7; d++) {
+        const c = grid[h][d];
+        const val = typeKey === "all" ? c.total : (c[typeKey] || 0);
+        const opacity = val > 0 && typeMax > 0 ? (val / typeMax) * 0.65 + 0.08 : 0;
+        const bg = val > 0 ? `background-color:rgba(${rgb},${opacity.toFixed(3)})` : "";
+        const isActive = activeCells.some(c => c.hour === h && c.dow === d)
+          || (ac && ac.hour === h && ac.dow === d);
+        const cls = isActive ? " gsm-hm-active" : "";
+
+        // Tooltip — always show full breakdown
+        const parts = [];
+        if (c.calls) parts.push(`${c.calls} rozm.`);
+        if (c.sms) parts.push(`${c.sms} SMS`);
+        if (c.data) parts.push(`${c.data} dane`);
+        const tip = `${_DOW_LABELS[d]} ${hLabel}: ${parts.join(", ") || "brak"}`;
+
+        html += `<td data-hour="${h}" data-dow="${d}" class="${cls}" style="${bg}" title="${tip}">${val || ""}</td>`;
+      }
+      html += "</tr>";
+    }
+    html += "</tbody></table>";
+    body.innerHTML = html;
+
+    // Event delegation — click on cell (supports Ctrl+click multi-select)
+    const table = body.querySelector("table");
+    if (table) {
+      table.onclick = (e) => {
+        const td = e.target.closest("td[data-hour]");
+        if (!td) return;
+        const hour = parseInt(td.dataset.hour, 10);
+        const dow = parseInt(td.dataset.dow, 10);
+
+        if (e.ctrlKey || e.metaKey) {
+          // Ctrl+click: toggle this cell in multi-select (don't scroll yet)
+          _heatmapMultiToggle(hour, dow);
+        } else {
+          // Normal click: single-cell filter (original behavior)
+          St.hmActiveCells = [];
+          _heatmapFilter(hour, dow);
+        }
+      };
+
+      // When Ctrl is released, apply the accumulated multi-select filter
+      const _onKeyUp = (e) => {
+        if ((e.key === "Control" || e.key === "Meta") && St.hmActiveCells && St.hmActiveCells.length) {
+          _heatmapApplyMultiFilter();
+        }
+      };
+      // Store handler ref for cleanup; use capture on document
+      if (St._hmKeyUpHandler) document.removeEventListener("keyup", St._hmKeyUpHandler);
+      St._hmKeyUpHandler = _onKeyUp;
+      document.addEventListener("keyup", _onKeyUp);
+    }
+
+    // Month selector
+    _initHeatmapMonthSelector();
+  }
+
+  /** Populate the month <select> and wire the type <select>. */
+  function _initHeatmapMonthSelector() {
+    const sel = QS("#gsm_hm_month");
+    if (sel && St.hmData) {
+      // Rebuild options
+      sel.innerHTML = '<option value="all">Cały okres</option>';
+      for (const ym of St.hmData.months) {
+        const [y, m] = ym.split("-");
+        const label = `${_MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
+        sel.innerHTML += `<option value="${ym}">${label}</option>`;
+      }
+
+      // Restore selection
+      sel.value = St.hmMonth;
+      if (sel.value !== St.hmMonth) sel.value = "all";
+
+      sel.onchange = () => {
+        St.hmMonth = sel.value;
+        St.hmActiveCell = null;
+        _clearHeatmapFilter();
+        _buildHeatmapData(St.lastResult ? St.lastResult.records : []);
+        _renderHeatmap();
+      };
+    }
+
+    // Type selector
+    const typeSel = QS("#gsm_hm_type");
+    if (typeSel) {
+      typeSel.value = St.hmType || "all";
+      typeSel.onchange = () => {
+        St.hmType = typeSel.value;
+        // Re-render heatmap with different type key
+        _renderHeatmap();
+        // Re-apply active cell filter if any (type changes what records match)
+        if (St.hmActiveCell) {
+          _heatmapFilter(St.hmActiveCell.hour, St.hmActiveCell.dow, true);
+        }
+      };
+    }
+  }
+
+  /* ── Map overlays (military / airports / diplomacy) ─────────────── */
+
+  const _OVERLAY_TYPE_ICONS = {
+    // Military type → emoji
+    brygada: "⚔️", dywizja: "⚔️", pulk: "🎯", batalion: "🎯",
+    lotnisko_wojskowe: "✈️", baza_morska: "⚓", centrum: "🏛️",
+    poligon: "💥", jednostka: "🪖", baza: "🏗️", dywizjon: "🎯",
+  };
+  const _OVERLAY_TYPE_COLORS = {
+    brygada: "#b91c1c", dywizja: "#991b1b", pulk: "#dc2626",
+    batalion: "#ef4444", lotnisko_wojskowe: "#7c3aed",
+    baza_morska: "#0369a1", centrum: "#b45309", poligon: "#65a30d",
+    jednostka: "#e11d48", baza: "#be123c", dywizjon: "#f97316",
+  };
+  const _DIPLOMACY_TYPE_ICONS = {
+    ambasada_rp: "🇵🇱", konsulat_rp: "🇵🇱", konsulat_honorowy_rp: "🇵🇱",
+    stale_przedstawicielstwo_rp: "🇵🇱", instytut_polski: "🇵🇱", biuro_ataszatu_rp: "🇵🇱",
+    ambasada_obca: "🏛️", konsulat_obcy: "🏛️",
+  };
+  const _DIPLOMACY_TYPE_COLORS = {
+    ambasada_rp: "#dc2626", konsulat_rp: "#ea580c", konsulat_honorowy_rp: "#d97706",
+    stale_przedstawicielstwo_rp: "#7c3aed", instytut_polski: "#0891b2", biuro_ataszatu_rp: "#be123c",
+    ambasada_obca: "#059669", konsulat_obcy: "#0d9488",
+  };
+
+  async function _toggleOverlay(which, show) {
+    if (!St.map) return;
+    const keyMap = { military: "overlayMilitary", airports: "overlayAirports", diplomacy: "overlayDiplomacy" };
+    const dataMap = { military: "overlayMilitaryData", airports: "overlayAirportsData", diplomacy: "overlayDiplomacyData" };
+    const urlMap = {
+      military: "/static/data/poland_military.json",
+      airports: "/static/data/poland_airports.json",
+      diplomacy: "/static/data/poland_diplomacy.json",
+    };
+    const cbMap = { military: "#gsm_overlay_military", airports: "#gsm_overlay_airports", diplomacy: "#gsm_overlay_diplomacy" };
+    const layerKey = keyMap[which];
+    const dataKey = dataMap[which];
+    const url = urlMap[which];
+
+    if (!show) {
+      if (St[layerKey]) { St.map.removeLayer(St[layerKey]); }
+      return;
+    }
+
+    // Load data if not cached
+    if (!St[dataKey]) {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        St[dataKey] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować danych: ${err.message}`);
+        const cb = QS(cbMap[which]);
+        if (cb) cb.checked = false;
+        return;
+      }
+    }
+
+    // Build layer group if needed
+    if (!St[layerKey]) {
+      const group = L.layerGroup();
+      const data = St[dataKey];
+
+      if (which === "military") {
+        for (const item of data) {
+          const icon = _OVERLAY_TYPE_ICONS[item.type] || "🪖";
+          const color = _OVERLAY_TYPE_COLORS[item.type] || "#b91c1c";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          m.bindTooltip(`<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.desc || "", type: item.type || "", color }
+          ));
+          m.addTo(group);
+        }
+      } else if (which === "diplomacy") {
+        for (const item of data) {
+          const icon = _DIPLOMACY_TYPE_ICONS[item.type] || "🏛️";
+          const color = _DIPLOMACY_TYPE_COLORS[item.type] || "#059669";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          const countryTag = item.country ? ` <span class="small" style="color:#6b7280">(${item.country})</span>` : "";
+          m.bindTooltip(`<b style="color:${color}">${item.name}</b>${countryTag}<br><span class="small">${item.desc || ""}</span>`, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.desc || "", type: item.type || "", color, extra: countryTag ? `<span class="small muted">Kraj: ${item.country}</span>` : "" }
+          ));
+          m.addTo(group);
+        }
+      } else {
+        // Airports
+        for (const item of data) {
+          const label = item.iata ? `${item.iata}` : "";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">✈️</span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          const tooltipHtml = `<b style="color:#2563eb">${item.name}</b>`
+            + (label ? `<br><span class="small" style="color:#6b7280">${label} — ${item.city}</span>` : `<br><span class="small">${item.city}</span>`);
+          m.bindTooltip(tooltipHtml, {
+            direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip"
+          });
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.city || "", type: label ? `✈️ ${label}` : "Lotnisko", color: "#2563eb" }
+          ));
+          m.addTo(group);
+        }
+      }
+      St[layerKey] = group;
+    }
+
+    St[layerKey].addTo(St.map);
+  }
+
+  /* ── KML user overlays ─────────────────────────────────── */
+
+  // Store: { overlayId: L.layerGroup }
+  if (!St._kmlLayers) St._kmlLayers = {};
+  if (!St._kmlData) St._kmlData = {};
+
+  async function _loadKmlOverlayCheckboxes() {
+    const container = QS("#gsm_kml_overlays");
+    if (!container) return;
+
+    try {
+      const resp = await fetch("/api/gsm/overlays");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const items = (data && data.overlays) ? data.overlays : [];
+
+      if (!items.length) {
+        container.innerHTML = "";
+        return;
+      }
+
+      container.innerHTML = items.map(ov => {
+        const checked = St._kmlLayers[ov.id] && St.map && St.map.hasLayer(St._kmlLayers[ov.id]) ? " checked" : "";
+        const safeName = String(ov.name || ov.id).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return `<label class="gsm-lp-item">
+          <input type="checkbox" data-kml-id="${ov.id}"${checked}> <span style="color:#8b5cf6">&#9679;</span> ${safeName}
+        </label>`;
+      }).join("");
+
+      // Bind events
+      container.querySelectorAll("input[data-kml-id]").forEach(cb => {
+        cb.onchange = () => _toggleKmlOverlay(cb.dataset.kmlId, cb.checked);
+      });
+    } catch (e) {
+      // silent
+    }
+  }
+
+  async function _toggleKmlOverlay(overlayId, show) {
+    if (!St.map) return;
+
+    if (!show) {
+      if (St._kmlLayers[overlayId]) {
+        St.map.removeLayer(St._kmlLayers[overlayId]);
+      }
+      return;
+    }
+
+    // Load data if not cached
+    if (!St._kmlData[overlayId]) {
+      try {
+        const resp = await fetch(`/api/gsm/overlays/${overlayId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        St._kmlData[overlayId] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować warstwy KML: ${err.message}`);
+        const cb = QS(`input[data-kml-id="${overlayId}"]`);
+        if (cb) cb.checked = false;
+        return;
+      }
+    }
+
+    // Build layer group if needed
+    if (!St._kmlLayers[overlayId]) {
+      const group = L.layerGroup();
+      const data = St._kmlData[overlayId];
+      const points = data.points || [];
+      const layerName = data.name || overlayId;
+
+      for (const pt of points) {
+        if (pt.lat == null || pt.lon == null) continue;
+        const divIcon = L.divIcon({
+          className: "gsm-overlay-marker",
+          html: '<span style="font-size:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">📍</span>',
+          iconSize: [22, 22],
+          iconAnchor: [11, 22],
+        });
+        const m = L.marker([pt.lat, pt.lon], { icon: divIcon, interactive: true });
+        const safeName = String(pt.name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const safeDesc = String(pt.desc || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        m.bindTooltip(
+          `<b style="color:#8b5cf6">${safeName}</b>` +
+          (safeDesc ? `<br><span class="small">${safeDesc}</span>` : "") +
+          `<br><span class="small muted">${layerName}</span>`,
+          { direction: "top", offset: [0, -14], className: "gsm-overlay-tooltip" }
+        );
+        m.on("click", () => _handleOverlayClick(
+          { lat: pt.lat, lon: pt.lon },
+          { name: pt.name || "", desc: pt.desc || "", color: "#8b5cf6", layer: layerName }
+        ));
+        m.addTo(group);
+      }
+      St._kmlLayers[overlayId] = group;
+    }
+
+    St._kmlLayers[overlayId].addTo(St.map);
+  }
+
+  /* ── Area selection (circle / rectangle) ─────────────── */
+
+  function _enterAreaSelectMode(mode) {
+    if (!St.map) return;
+    // If same mode active, cancel it
+    if (St.areaSelectMode === mode) {
+      _exitAreaSelectMode();
+      return;
+    }
+    // Cancel any previous mode
+    _exitAreaSelectMode();
+    St.areaSelectMode = mode;
+
+    // Toggle button active state
+    const circleBtn = QS("#gsm_select_circle_btn");
+    const rectBtn = QS("#gsm_select_rect_btn");
+    if (circleBtn) circleBtn.classList.toggle("btn-active", mode === "circle");
+    if (rectBtn) rectBtn.classList.toggle("btn-active", mode === "rect");
+
+    // Disable map drag so drawing doesn't pan
+    St.map.dragging.disable();
+    // Change cursor
+    const mapEl = St.map.getContainer();
+    mapEl.style.cursor = "crosshair";
+
+    // Disable ALL vector layer interactivity during area select
+    // (coverage polygons, path lines, overlay markers, etc. can steal mouse events)
+    _setOverlayInteractive(false);
+    _setAllLayersInteractive(false);
+
+    // Bind events
+    St.map.on("mousedown", _areaMouseDown);
+    document.addEventListener("keydown", _areaEscHandler);
+  }
+
+  function _exitAreaSelectMode() {
+    if (!St.map) return;
+    St.areaSelectMode = null;
+    St.areaSelectOrigin = null;
+
+    // Remove temp drawing layer
+    if (St.areaSelectLayer) {
+      St.map.removeLayer(St.areaSelectLayer);
+      St.areaSelectLayer = null;
+    }
+
+    // Reset buttons only if no active area filter (keep pressed while filter active)
+    if (!St.areaShape) {
+      const circleBtn = QS("#gsm_select_circle_btn");
+      const rectBtn = QS("#gsm_select_rect_btn");
+      if (circleBtn) circleBtn.classList.remove("btn-active");
+      if (rectBtn) rectBtn.classList.remove("btn-active");
+    }
+
+    // Re-enable map drag
+    St.map.dragging.enable();
+    const mapEl = St.map.getContainer();
+    mapEl.style.cursor = "";
+
+    // Re-enable all layer interactivity
+    _setOverlayInteractive(true);
+    _setAllLayersInteractive(true);
+
+    // Unbind events
+    St.map.off("mousedown", _areaMouseDown);
+    St.map.off("mousemove", _areaMouseMove);
+    St.map.off("mouseup", _areaMouseUp);
+    document.removeEventListener("keydown", _areaEscHandler);
+  }
+
+  /** Enable/disable overlay markers during area select so they don't steal mouse events */
+  function _setOverlayInteractive(enabled) {
+    for (const key of ["overlayMilitary", "overlayAirports", "overlayDiplomacy"]) {
+      const group = St[key];
+      if (!group) continue;
+      group.eachLayer(marker => {
+        const el = marker.getElement && marker.getElement();
+        if (el) el.style.pointerEvents = enabled ? "" : "none";
+      });
+    }
+  }
+
+  /** Enable/disable interactivity on ALL map vector layers (coverage, path, clusters, etc.)
+   *  so they don't steal mouse events during area selection drawing.
+   *  Works with both canvas and SVG renderer by disabling pointer-events on the
+   *  overlay pane and toggling Leaflet's internal interactive flag on each layer. */
+  function _setAllLayersInteractive(enabled) {
+    if (!St.map) return;
+    // Disable pointer-events on the overlay pane (canvas or SVG) to prevent hit detection
+    const pane = St.map.getPane("overlayPane");
+    if (pane) pane.style.pointerEvents = enabled ? "" : "none";
+  }
+
+  function _areaEscHandler(e) {
+    if (e.key === "Escape") _exitAreaSelectMode();
+  }
+
+  function _areaMouseDown(e) {
+    if (!St.areaSelectMode) return;
+    if (e.originalEvent) {
+      L.DomEvent.stopPropagation(e.originalEvent);
+      L.DomEvent.preventDefault(e.originalEvent);
+    }
+    St.areaSelectOrigin = e.latlng;
+
+    St.map.on("mousemove", _areaMouseMove);
+    St.map.on("mouseup", _areaMouseUp);
+  }
+
+  function _areaMouseMove(e) {
+    if (!St.areaSelectMode || !St.areaSelectOrigin) return;
+
+    // Remove previous temp shape
+    if (St.areaSelectLayer) {
+      St.map.removeLayer(St.areaSelectLayer);
+      St.areaSelectLayer = null;
+    }
+
+    const style = { color: "#a855f7", weight: 2, dashArray: "6 4", fillColor: "#a855f7", fillOpacity: 0.08 };
+
+    if (St.areaSelectMode === "circle") {
+      const radius = St.areaSelectOrigin.distanceTo(e.latlng);
+      St.areaSelectLayer = L.circle(St.areaSelectOrigin, { ...style, radius }).addTo(St.map);
+    } else {
+      const bounds = L.latLngBounds(St.areaSelectOrigin, e.latlng);
+      St.areaSelectLayer = L.rectangle(bounds, style).addTo(St.map);
+    }
+  }
+
+  function _areaMouseUp(e) {
+    if (!St.areaSelectMode || !St.areaSelectOrigin) return;
+    if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
+
+    const endLatLng = e.latlng;
+    const mode = St.areaSelectMode;
+    const origin = St.areaSelectOrigin;
+
+    // Min drag threshold: 10px to avoid accidental clicks
+    const p1 = St.map.latLngToContainerPoint(origin);
+    const p2 = St.map.latLngToContainerPoint(endLatLng);
+    const dist = p1.distanceTo(p2);
+    if (dist < 10) {
+      // Too small — ignore, keep mode active for another try
+      if (St.areaSelectLayer) { St.map.removeLayer(St.areaSelectLayer); St.areaSelectLayer = null; }
+      St.areaSelectOrigin = null;
+      St.map.off("mousemove", _areaMouseMove);
+      St.map.off("mouseup", _areaMouseUp);
+      return;
+    }
+
+    // Find BTS locations inside the drawn shape
+    let insideLocations;
+    if (mode === "circle") {
+      const radius = origin.distanceTo(endLatLng);
+      insideLocations = St.areaLocations.filter(loc =>
+        origin.distanceTo(L.latLng(loc.lat, loc.lon)) <= radius
+      );
+    } else {
+      const bounds = L.latLngBounds(origin, endLatLng);
+      insideLocations = St.areaLocations.filter(loc =>
+        bounds.contains(L.latLng(loc.lat, loc.lon))
+      );
+    }
+
+    // Remove temp drawing layer (will be replaced by persistent shape)
+    if (St.areaSelectLayer) { St.map.removeLayer(St.areaSelectLayer); St.areaSelectLayer = null; }
+    _exitAreaSelectMode();
+
+    if (!insideLocations.length) {
+      _addLog("info", `Zaznaczenie ${mode === "circle" ? "koła" : "prostokąta"}: brak punktów BTS w obszarze`);
+      return;
+    }
+
+    // Clear any previous selection
+    _clearAreaSelection();
+
+    // Create persistent shape on map (stays until user clicks it or clears filter)
+    const persistStyle = { color: "#a855f7", weight: 2, dashArray: "6 4", fillColor: "#a855f7", fillOpacity: 0.06, interactive: true };
+    if (mode === "circle") {
+      const radius = origin.distanceTo(endLatLng);
+      St.areaShape = L.circle(origin, { ...persistStyle, radius }).addTo(St.map);
+    } else {
+      const bounds = L.latLngBounds(origin, endLatLng);
+      St.areaShape = L.rectangle(bounds, persistStyle).addTo(St.map);
+    }
+    // Mark the used button as active (persistent indicator that filter is on)
+    const circleBtn = QS("#gsm_select_circle_btn");
+    const rectBtn = QS("#gsm_select_rect_btn");
+    if (circleBtn) circleBtn.classList.toggle("btn-active", mode === "circle");
+    if (rectBtn) rectBtn.classList.toggle("btn-active", mode === "rect");
+
+    // Click on the shape = remove selection & clear filters
+    St.areaShape.on("click", (e) => {
+      if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
+      _clearAreaSelection();
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    // Cursor hint on hover
+    St.areaShape.on("mouseover", () => { St.map.getContainer().style.cursor = "pointer"; });
+    St.areaShape.on("mouseout", () => { St.map.getContainer().style.cursor = ""; });
+
+    // Highlight selected BTS markers
+    _highlightBtsLocations(insideLocations);
+
+    // Collect all records from selected locations and filter table (match by raw_row for uniqueness)
+    const rowSet = new Set();
+    for (const loc of insideLocations) {
+      for (const r of loc.records) rowSet.add(r.raw_row);
+    }
+    const allRecs = St.lastResult ? St.lastResult.records : [];
+    const filtered = allRecs.filter(r => rowSet.has(r.raw_row));
+    console.log("[GSM Area] insideLocations:", insideLocations.length,
+      "geoRecords in area:", rowSet.size, "allRecs:", allRecs.length, "filtered:", filtered.length,
+      "sample rowSet:", [...rowSet].slice(0, 5), "sample allRecs raw_row:", allRecs.slice(0, 5).map(r => r.raw_row));
+
+    const label = mode === "circle" ? "Koło" : "Prostokąt";
+    const filterText = `${label}: ${insideLocations.length} BTS — ${filtered.length} rek.`;
+    _setRecordsFilter(filterText, () => {
+      _clearAreaSelection();
+      _clearRecordsFilter();
+      if (St.lastResult) _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    });
+    _renderRecords(filtered, false, filtered.length);
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    _addLog("info", `Zaznaczenie ${label.toLowerCase()}: ${insideLocations.length} lokalizacji BTS, ${filtered.length} rekordów`);
+  }
+
+  /** Add highlight rings around selected BTS markers */
+  function _highlightBtsLocations(locations) {
+    _clearAreaHighlights();
+    const group = L.layerGroup();
+    for (const loc of locations) {
+      L.circleMarker([loc.lat, loc.lon], {
+        radius: 18,
+        color: "#f59e0b",
+        weight: 2.5,
+        fillColor: "#f59e0b",
+        fillOpacity: 0.12,
+        dashArray: "4 3",
+      }).addTo(group);
+    }
+    St.areaHighlights = group;
+    if (St.map) group.addTo(St.map);
+  }
+
+  /** Remove area selection highlights */
+  function _clearAreaHighlights() {
+    if (St.areaHighlights && St.map) {
+      St.map.removeLayer(St.areaHighlights);
+      St.areaHighlights = null;
+    }
+  }
+
+  /** Remove persistent shape + highlights (full area selection cleanup) */
+  function _clearAreaSelection() {
+    _clearAreaHighlights();
+    if (St.areaShape && St.map) {
+      St.map.removeLayer(St.areaShape);
+      St.areaShape = null;
+    }
+    // Reset button active state (filter cleared)
+    const circleBtn = QS("#gsm_select_circle_btn");
+    const rectBtn = QS("#gsm_select_rect_btn");
+    if (circleBtn) circleBtn.classList.remove("btn-active");
+    if (rectBtn) rectBtn.classList.remove("btn-active");
+  }
+
+  /* ── Records filter badge helpers ────────────────────── */
+
+  /** Show an active filter in the Records header. */
+  function _setRecordsFilter(text, onClear) {
+    const badgeText = QS("#gsm_records_filter_text");
+    const clearBtn = QS("#gsm_records_filter_clear");
+    if (badgeText) {
+      badgeText.textContent = text;
+      badgeText.classList.remove("muted");
+      badgeText.style.color = "var(--brand-blue,#2563eb)";
+    }
+    if (clearBtn) {
+      clearBtn.style.display = "";
+      clearBtn.onclick = onClear;
+    }
+  }
+
+  /** Reset the filter badge to "brak". */
+  function _clearRecordsFilter() {
+    St._anomalyHighlight = null;  // clear +5 row coloring
+    const badgeText = QS("#gsm_records_filter_text");
+    const clearBtn = QS("#gsm_records_filter_clear");
+    if (badgeText) {
+      badgeText.textContent = "brak";
+      badgeText.classList.add("muted");
+      badgeText.style.color = "";
+    }
+    if (clearBtn) clearBtn.style.display = "none";
+  }
+
+  /** Filter records by clicked heatmap cell. skipToggle=true to re-apply without toggling off. */
+  function _heatmapFilter(hour, dow, skipToggle) {
+    // Toggle off if clicking same cell (unless re-applying from selector change)
+    if (!skipToggle && St.hmActiveCell && St.hmActiveCell.hour === hour && St.hmActiveCell.dow === dow) {
+      _clearHeatmapFilter();
+      return;
+    }
+
+    St.hmActiveCell = { hour, dow };
+
+    // Filter records
+    const records = St.lastResult ? St.lastResult.records : [];
+    const monthFilter = St.hmMonth !== "all" ? St.hmMonth : null;
+    const typeFilter = St.hmType !== "all" ? St.hmType : null;
+
+    const filtered = records.filter(r => {
+      if (!r.datetime) return false;
+      const dt = new Date(r.datetime.replace(" ", "T"));
+      if (isNaN(dt.getTime())) return false;
+      if (monthFilter && r.datetime.slice(0, 7) !== monthFilter) return false;
+      if (typeFilter && _hmCategory(r.record_type) !== typeFilter) return false;
+      return dt.getHours() === hour && _jsDowToIdx(dt.getDay()) === dow;
+    });
+
+    // Update heatmap visuals
+    _renderHeatmap();
+
+    // Build filter label
+    const hLabel = String(hour).padStart(2, "0") + ":00–" + String(hour + 1 === 24 ? 0 : hour + 1).padStart(2, "0") + ":00";
+    const typeLabels = { all: "", calls: " · Połączenia", sms: " · SMS/MMS", data: " · Dane" };
+    const filterText = `${_DOW_LABELS[dow]} ${hLabel}${typeLabels[St.hmType] || ""} — ${filtered.length} rek.`;
+
+    // Show filter bar under heatmap
+    const bar = QS("#gsm_hm_filter_bar");
+    const label = QS("#gsm_hm_filter_label");
+    if (bar) bar.style.display = "flex";
+    if (label) label.textContent = `Filtr: ${filterText}`;
+
+    // Show filter badge in Records header
+    _setRecordsFilter(filterText, () => _clearHeatmapFilter());
+
+    // Wire heatmap bar clear button
+    const clearBtn = QS("#gsm_hm_filter_clear");
+    if (clearBtn) clearBtn.onclick = () => _clearHeatmapFilter();
+
+    // Render filtered records and unique numbers panel
+    _renderRecords(filtered, false, filtered.length);
+    _renderUniqueNumbers(filtered);
+
+    // Scroll to Records card
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** Toggle a cell in multi-select mode (Ctrl+click). Does not scroll or filter records yet. */
+  function _heatmapMultiToggle(hour, dow) {
+    if (!St.hmActiveCells) St.hmActiveCells = [];
+
+    // Clear single-cell mode
+    St.hmActiveCell = null;
+
+    const idx = St.hmActiveCells.findIndex(c => c.hour === hour && c.dow === dow);
+    if (idx >= 0) {
+      // Deselect
+      St.hmActiveCells.splice(idx, 1);
+    } else {
+      // Add to selection
+      St.hmActiveCells.push({ hour, dow });
+    }
+
+    // Re-render heatmap to show updated highlights (no record filtering yet)
+    _renderHeatmap();
+
+    // Update filter bar to show how many cells are selected
+    const bar = QS("#gsm_hm_filter_bar");
+    const label = QS("#gsm_hm_filter_label");
+    if (St.hmActiveCells.length) {
+      if (bar) bar.style.display = "flex";
+      if (label) label.textContent = `Zaznaczono ${St.hmActiveCells.length} pól (puść Ctrl aby filtrować)`;
+    } else {
+      _clearHeatmapFilter();
+    }
+  }
+
+  /** Apply the accumulated multi-cell filter when Ctrl is released. */
+  function _heatmapApplyMultiFilter() {
+    const cells = St.hmActiveCells || [];
+    if (!cells.length) return;
+
+    // Filter records matching ANY of the selected cells
+    const records = St.lastResult ? St.lastResult.records : [];
+    const monthFilter = St.hmMonth !== "all" ? St.hmMonth : null;
+    const typeFilter = St.hmType !== "all" ? St.hmType : null;
+
+    const filtered = records.filter(r => {
+      if (!r.datetime) return false;
+      const dt = new Date(r.datetime.replace(" ", "T"));
+      if (isNaN(dt.getTime())) return false;
+      if (monthFilter && r.datetime.slice(0, 7) !== monthFilter) return false;
+      if (typeFilter && _hmCategory(r.record_type) !== typeFilter) return false;
+      const rHour = dt.getHours();
+      const rDow = _jsDowToIdx(dt.getDay());
+      return cells.some(c => c.hour === rHour && c.dow === rDow);
+    });
+
+    // Build filter label
+    const typeLabels = { all: "", calls: " · Połączenia", sms: " · SMS/MMS", data: " · Dane" };
+    const cellLabels = cells.map(c => {
+      const hLabel = String(c.hour).padStart(2, "0") + ":00";
+      return `${_DOW_LABELS[c.dow]} ${hLabel}`;
+    });
+    const filterText = `${cells.length} pól (${cellLabels.slice(0, 3).join(", ")}${cells.length > 3 ? "…" : ""})${typeLabels[St.hmType] || ""} — ${filtered.length} rek.`;
+
+    // Show filter bar
+    const bar = QS("#gsm_hm_filter_bar");
+    const label = QS("#gsm_hm_filter_label");
+    if (bar) bar.style.display = "flex";
+    if (label) label.textContent = `Filtr: ${filterText}`;
+
+    // Show filter badge in Records header
+    _setRecordsFilter(filterText, () => _clearHeatmapFilter());
+
+    // Wire clear button
+    const clearBtn = QS("#gsm_hm_filter_clear");
+    if (clearBtn) clearBtn.onclick = () => _clearHeatmapFilter();
+
+    // Render filtered records and unique numbers panel
+    _renderRecords(filtered, false, filtered.length);
+    _renderUniqueNumbers(filtered);
+
+    // Scroll to Records card
+    const recCard = QS("#gsm_records_card");
+    if (recCard) recCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /**
+   * Show panel with all numbers from filtered records, grouped by occurrence count.
+   * Numbers appearing only 1× are highlighted (potential one-off contacts).
+   * Records without a callee (DATA sessions, VOICEMAIL etc.) are counted separately.
+   */
+  function _renderUniqueNumbers(filteredRecords) {
+    const container = QS("#gsm_hm_unique_numbers");
+    if (!container) return;
+
+    if (!filteredRecords || !filteredRecords.length) {
+      container.style.display = "none";
+      return;
+    }
+
+    // Count occurrences of each number (callee) in filtered records
+    const numberCounts = {};
+    const numberTypes = {};  // number → { record_type: count }
+    let noCallee = 0;  // records without a number (DATA, VOICEMAIL etc.)
+
+    for (const r of filteredRecords) {
+      const num = r.callee;
+      if (!num || num === "—" || num === "") {
+        noCallee++;
+        continue;
+      }
+      numberCounts[num] = (numberCounts[num] || 0) + 1;
+      if (!numberTypes[num]) numberTypes[num] = {};
+      numberTypes[num][r.record_type] = (numberTypes[num][r.record_type] || 0) + 1;
+    }
+
+    const allNums = Object.entries(numberCounts);
+    if (!allNums.length) {
+      // All records are DATA/VOICEMAIL without callee
+      if (noCallee > 0) {
+        container.style.display = "";
+        container.innerHTML = `<div class="small muted">Brak numerów w ${noCallee} ${noCallee === 1 ? "rekordzie" : "rekordach"} (sesje danych / poczta głosowa)</div>`;
+      } else {
+        container.style.display = "none";
+      }
+      return;
+    }
+
+    // Sort: single-occurrence first, then by count ascending
+    allNums.sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]));
+
+    const singleCount = allNums.filter(([, c]) => c === 1).length;
+    const totalNums = allNums.length;
+
+    container.style.display = "";
+
+    let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">`;
+    html += `<span class="h3" style="margin:0;font-size:13px">Unikatowe numery</span>`;
+    html += `<span class="small muted">${totalNums} ${totalNums === 1 ? "numer" : (totalNums < 5 ? "numery" : "numerów")}`;
+    if (singleCount > 0) html += ` · <b>${singleCount}</b> pojedynczych (1×)`;
+    if (noCallee > 0) html += ` · ${noCallee} bez numeru`;
+    html += `</span></div>`;
+
+    html += '<div class="gsm-chart-contacts">';
+    for (const [num, count] of allNums) {
+      const types = numberTypes[num] || {};
+      const typeEntries = Object.entries(types);
+      const typeTag = typeEntries.map(([t, n]) => `${_typeLabel(t)}: ${n}`).join(", ");
+      html += _buildContactChip(num, count, "heatmap", typeTag);
+    }
+    html += '</div>';
+
+    container.innerHTML = html;
+
+    // Bind clicks on normalized contact chips
+    _bindContactChipClicks(container);
+  }
+
+  /** Clear heatmap filter and restore original records. */
+  function _clearHeatmapFilter() {
+    St.hmActiveCell = null;
+    St.hmActiveCells = [];
+
+    // Hide heatmap filter bar and unique numbers panel
+    const bar = QS("#gsm_hm_filter_bar");
+    const uniqPanel = QS("#gsm_hm_unique_numbers");
+    if (uniqPanel) uniqPanel.style.display = "none";
+    if (bar) bar.style.display = "none";
+
+    // Reset Records filter badge
+    _clearRecordsFilter();
+
+    // Re-render heatmap (remove active highlight)
+    _renderHeatmap();
+
+    // Restore original records
+    if (St.lastResult) {
+      _renderRecords(St.lastResult.records, St.lastResult.records_truncated, St.lastResult.record_count);
+    }
+  }
+
+  /* ── project persistence ──────────────────────────────── */
+
+  /**
+   * Get current project ID from AISTATE global.
+   */
+  function _getProjectId() {
+    return (typeof AISTATE !== "undefined" && AISTATE && AISTATE.projectId)
+      ? String(AISTATE.projectId) : "";
+  }
+
+  /**
+   * Save GSM state (billing + identification) to the current project.
+   * Called automatically after a successful smart import.
+   * Ensures a project is selected (prompts if not).
+   */
+  async function _saveToProject() {
+    let pid = _getProjectId();
+
+    // If no project is selected, ask the user to pick/create one
+    if (!pid && typeof requireProjectId === "function") {
+      try {
+        pid = await requireProjectId("gsm");
+      } catch (e) {
+        _addLog("warn", "Nie wybrano projektu — dane GSM nie zostały zapisane");
+        return;
+      }
+    }
+    if (!pid) {
+      _addLog("warn", "Brak projektu — dane GSM nie zostały zapisane");
+      return;
+    }
+
+    const payload = {};
+
+    // Include billing data
+    if (St.lastResult) {
+      payload.billing = St.lastResult;
+    }
+
+    // Include identification map
+    if (Object.keys(St.idMap).length > 0) {
+      payload.identification = { lookup: St.idMap };
+    }
+
+    if (!payload.billing && !payload.identification) return;
+
+    // Remember active analysis tab for project auto-restore
+    localStorage.setItem("aistate_analysis_tab_" + pid, "gsm");
+
+    try {
+      const resp = await fetch(`/api/gsm/${encodeURIComponent(pid)}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (resp.ok) {
+        _addLog("info", "💾 Dane GSM zapisane w projekcie");
+      } else {
+        const data = await resp.json().catch(() => ({}));
+        _addLog("error", `Błąd zapisu GSM: ${data.detail || resp.status}`);
+      }
+    } catch (e) {
+      _addLog("error", `Błąd zapisu GSM: ${e.message || e}`);
+    }
+  }
+
+  /* ── loading progress on empty state ─────────────────── */
+
+  function _showLoadingOverlay(text) {
+    const progress = QS("#gsm_progress");
+    const status = QS("#gsm_status");
+    const bar = QS("#gsm_bar");
+    const progressDiv = progress ? progress.querySelector(".progress") : null;
+
+    if (status) status.textContent = text || "Ładowanie…";
+    if (progressDiv) progressDiv.classList.add("indeterminate");
+    if (bar) bar.style.width = "30%";
+    if (progress) progress.style.display = "";
+  }
+
+  function _hideLoadingOverlay() {
+    const progress = QS("#gsm_progress");
+    const bar = QS("#gsm_bar");
+    const progressDiv = progress ? progress.querySelector(".progress") : null;
+
+    if (progressDiv) progressDiv.classList.remove("indeterminate");
+    if (bar) bar.style.width = "0%";
+    if (progress) progress.style.display = "none";
+  }
+
+  /**
+   * Load GSM state from the current project.
+   * Called on GsmManager.init() to auto-restore data.
+   * Shows a progress indicator over the empty state while loading.
+   */
+  async function _loadFromProject() {
+    const pid = _getProjectId();
+    if (!pid) {
+      console.log("[GSM] No project ID — skip auto-load");
+      return false;
+    }
+
+    _showLoadingOverlay("Ładowanie danych GSM z projektu…");
+
+    try {
+      const resp = await fetch(`/api/gsm/${encodeURIComponent(pid)}/load`);
+      if (!resp.ok) {
+        console.warn("[GSM] Load failed:", resp.status);
+        _hideLoadingOverlay();
+        return false;
+      }
+
+      const data = await resp.json();
+      if (!data.has_data) {
+        _hideLoadingOverlay();
+        return false;
+      }
+
+      // Restore identification map
+      if (data.identification && data.identification.lookup) {
+        St.idMap = data.identification.lookup;
+      }
+
+      // Restore billing data and render
+      if (data.billing) {
+        St.lastResult = data.billing;
+        St.filename = data.billing.filename || "";
+        _showLoadingOverlay("Renderowanie wyników…");
+        await _renderResults(data.billing);
+        _hideLoadingOverlay();
+        // Remember active analysis tab for project auto-restore
+        if (pid) localStorage.setItem("aistate_analysis_tab_" + pid, "gsm");
+        const idCount = Object.keys(St.idMap).length;
+        _addLog("info",
+          `Przywrócono dane GSM z projektu: ${data.billing.record_count || 0} rekordów`
+          + (idCount ? `, ${idCount} identyfikacji` : "")
+          + ` (${data.billing.operator || "?"})`);
+        return true;
+      }
+
+      _hideLoadingOverlay();
+      return false;
+    } catch (e) {
+      console.warn("[GSM] Load error:", e);
+      _hideLoadingOverlay();
+      _addLog("warn", `Nie udało się wczytać danych GSM: ${e.message || e}`);
+      return false;
+    }
+  }
+
+  /* ── Standalone map (no billing data) ─────────────────── */
+
+  let _smapInstance = null;      // Leaflet map
+  let _smapBtsLayer = null;      // BTS layer group
+  let _smapBtsEnabled = false;
+  let _smapOverlays = {};        // { military: L.layerGroup, ... }
+  let _smapOverlayData = {};     // cached data
+  let _smapKmlLayers = {};
+  let _smapKmlData = {};
+  let _smapDebounce = null;
+
+  async function _openStandaloneMap() {
+    const overlay = QS("#gsm_standalone_map_overlay");
+    if (!overlay) return;
+    overlay.style.display = "";
+
+    await _loadLeaflet();
+    if (!window.L) { _addLog("error", "Nie udało się załadować Leaflet"); return; }
+
+    const container = QS("#gsm_smap_container");
+    if (!container) return;
+
+    // Destroy previous instance
+    if (_smapInstance) {
+      try { _smapInstance.remove(); } catch(e) {}
+      _smapInstance = null;
+      _smapBtsLayer = null;
+      _smapBtsEnabled = false;
+      _smapOverlays = {};
+      _smapKmlLayers = {};
+    }
+
+    const map = L.map(container, {
+      zoomControl: true,
+      attributionControl: true,
+      preferCanvas: true,
+    }).setView([52.0, 19.5], 7);  // Poland center
+
+    _smapInstance = map;
+
+    // Add tiles (reuse logic)
+    await _addTileLayer(map);
+
+    // Layer panel toggle
+    const lpHeader = QS("#gsm_smap_lp_header_toggle");
+    if (lpHeader) {
+      lpHeader.onclick = () => {
+        const panel = QS("#gsm_smap_layer_panel");
+        if (panel) panel.classList.toggle("collapsed");
+      };
+    }
+
+    // Layer radio buttons
+    const layerRadios = document.querySelectorAll('input[name="gsm_smap_layer"]');
+    layerRadios.forEach(r => {
+      r.onchange = () => {
+        // Update active class
+        document.querySelectorAll('#gsm_smap_layer_panel label[data-layer]').forEach(l => l.classList.remove("active"));
+        const parentLabel = r.closest("label");
+        if (parentLabel) parentLabel.classList.add("active");
+
+        if (r.value === "general") {
+          _smapBtsEnabled = false;
+          if (_smapBtsLayer) { map.removeLayer(_smapBtsLayer); _smapBtsLayer = null; }
+        } else if (r.value === "bts_coverage") {
+          _smapBtsEnabled = true;
+          _loadSmapBts();
+        }
+      };
+    });
+
+    // BTS loading on move/zoom
+    map.on("moveend", () => {
+      if (!_smapBtsEnabled) return;
+      clearTimeout(_smapDebounce);
+      _smapDebounce = setTimeout(() => _loadSmapBts(), 300);
+    });
+
+    // Overlay checkboxes
+    const ovMil = QS("#gsm_smap_overlay_military");
+    const ovAir = QS("#gsm_smap_overlay_airports");
+    const ovDip = QS("#gsm_smap_overlay_diplomacy");
+    if (ovMil) { ovMil.checked = false; ovMil.onchange = () => _toggleSmapOverlay("military", ovMil.checked); }
+    if (ovAir) { ovAir.checked = false; ovAir.onchange = () => _toggleSmapOverlay("airports", ovAir.checked); }
+    if (ovDip) { ovDip.checked = false; ovDip.onchange = () => _toggleSmapOverlay("diplomacy", ovDip.checked); }
+
+    // Load KML overlay checkboxes
+    _loadSmapKmlCheckboxes();
+
+    // Screenshot button
+    const ssBtn = QS("#gsm_smap_screenshot_btn");
+    if (ssBtn) {
+      ssBtn.onclick = () => _takeSmapScreenshot();
+    }
+
+    // Edit mode button
+    const editBtn = QS("#gsm_smap_edit_btn");
+    if (editBtn) {
+      editBtn.onclick = () => _toggleSmapEditMode();
+    }
+
+    // Add layer button
+    const addLayerBtn = QS("#gsm_smap_add_layer_btn");
+    if (addLayerBtn) {
+      addLayerBtn.onclick = () => _smapCreateLayer();
+    }
+
+    // Close button
+    const closeBtn = QS("#gsm_smap_close_btn");
+    if (closeBtn) {
+      closeBtn.onclick = () => _closeStandaloneMap();
+    }
+
+    // ESC key
+    overlay._escHandler = (e) => {
+      if (e.key === "Escape") {
+        // Close location dialog first if open
+        const locDialog = QS("#gsm_location_dialog");
+        if (locDialog && locDialog.open) { locDialog.close(); return; }
+        const lyDialog = QS("#gsm_layer_dialog");
+        if (lyDialog && lyDialog.open) { lyDialog.close(); return; }
+        _closeStandaloneMap();
+      }
+    };
+    document.addEventListener("keydown", overlay._escHandler);
+
+    // Load user layers
+    _smapLoadUserLayers();
+
+    // Force map to recalculate size after overlay is visible
+    setTimeout(() => map.invalidateSize(), 100);
+  }
+
+  function _closeStandaloneMap() {
+    const overlay = QS("#gsm_standalone_map_overlay");
+    if (overlay) {
+      overlay.style.display = "none";
+      if (overlay._escHandler) {
+        document.removeEventListener("keydown", overlay._escHandler);
+        overlay._escHandler = null;
+      }
+    }
+    // Reset edit mode
+    _smapEditMode = false;
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.style.display = "none";
+    const editBtn = QS("#gsm_smap_edit_btn");
+    if (editBtn) editBtn.style.background = "";
+    const container = QS("#gsm_smap_container");
+    if (container) container.style.cursor = "";
+
+    if (_smapInstance) {
+      try { _smapInstance.remove(); } catch(e) {}
+      _smapInstance = null;
+      _smapBtsLayer = null;
+      _smapBtsEnabled = false;
+      _smapOverlays = {};
+      _smapKmlLayers = {};
+    }
+    _smapUserLayers = {};
+    _smapActiveLayerId = null;
+    _smapEditingPoint = null;
+  }
+
+  /** Load nearby BTS for standalone map */
+  async function _loadSmapBts() {
+    if (!_smapInstance || !_smapBtsEnabled) return;
+    const map = _smapInstance;
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const params = _nearbyParams(zoom);
+
+    try {
+      const url = `/api/gsm/bts/nearby?lat=${center.lat.toFixed(6)}&lon=${center.lng.toFixed(6)}&radius_deg=${params.radius}&limit=${params.limit}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.status !== "ok" || !data.stations) return;
+
+      // Remove old layer
+      if (_smapBtsLayer) { map.removeLayer(_smapBtsLayer); }
+
+      const group = L.layerGroup();
+      const defaultRange = { "GSM": 5000, "UMTS": 3000, "LTE": 2000, "5G NR": 1000 };
+      const color = "#2563eb";
+
+      for (const s of data.stations) {
+        const range = s.range_m || defaultRange[s.radio] || 2000;
+        L.circleMarker([s.lat, s.lon], {
+          radius: 4,
+          fillColor: color,
+          color: "#fff",
+          weight: 1.2,
+          fillOpacity: 0.7,
+        }).bindPopup(
+          `<b>${s.city || "BTS"}${s.street ? ", " + s.street : ""}</b><br>` +
+          `${s.radio ? "Technologia: " + s.radio + "<br>" : ""}` +
+          `LAC: ${s.lac || "?"} / CID: ${s.cid || "?"}<br>` +
+          `Zasięg: ~${(range/1000).toFixed(1)} km`
+        ).addTo(group);
+      }
+      group.addTo(map);
+      _smapBtsLayer = group;
+    } catch (e) {
+      console.warn("[GSM] Standalone BTS load error:", e);
+    }
+  }
+
+  /** Toggle overlay on standalone map */
+  async function _toggleSmapOverlay(which, show) {
+    if (!_smapInstance) return;
+    const urlMap = {
+      military: "/static/data/poland_military.json",
+      airports: "/static/data/poland_airports.json",
+      diplomacy: "/static/data/poland_diplomacy.json",
+    };
+
+    if (!show) {
+      if (_smapOverlays[which]) { _smapInstance.removeLayer(_smapOverlays[which]); }
+      return;
+    }
+
+    // Load data if not cached
+    if (!_smapOverlayData[which]) {
+      try {
+        const resp = await fetch(urlMap[which]);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        _smapOverlayData[which] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować nakładki: ${err.message}`);
+        return;
+      }
+    }
+
+    // Build layer
+    if (!_smapOverlays[which]) {
+      const group = L.layerGroup();
+      const data = _smapOverlayData[which];
+
+      if (which === "military") {
+        for (const item of data) {
+          const icon = _OVERLAY_TYPE_ICONS[item.type] || "🪖";
+          const color = _OVERLAY_TYPE_COLORS[item.type] || "#b91c1c";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [24, 24], iconAnchor: [12, 12],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          m.bindTooltip(
+            `<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`,
+            { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
+          );
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.desc || "", type: item.type || "", color },
+            _smapInstance
+          ));
+          m.addTo(group);
+        }
+      } else if (which === "diplomacy") {
+        for (const item of data) {
+          const icon = _DIPLOMACY_TYPE_ICONS[item.type] || "🏛️";
+          const color = _DIPLOMACY_TYPE_COLORS[item.type] || "#059669";
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${icon}</span>`,
+            iconSize: [22, 22], iconAnchor: [11, 11],
+          });
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          m.bindTooltip(
+            `<b style="color:${color}">${item.name}</b><br><span class="small">${item.desc || ""}</span>`,
+            { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
+          );
+          const countryTag = item.country ? `<span class="small muted">Kraj: ${item.country}</span>` : "";
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.desc || "", type: item.type || "", color, extra: countryTag },
+            _smapInstance
+          ));
+          m.addTo(group);
+        }
+      } else {
+        // Airports
+        for (const item of data) {
+          const divIcon = L.divIcon({
+            className: "gsm-overlay-marker",
+            html: `<span style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">✈️</span>`,
+            iconSize: [24, 24], iconAnchor: [12, 12],
+          });
+          const label = item.iata ? `${item.iata}` : "";
+          const m = L.marker([item.lat, item.lon], { icon: divIcon, interactive: true });
+          m.bindTooltip(
+            `<b style="color:#2563eb">${item.name}</b>` +
+            (label ? `<br><span class="small" style="color:#6b7280">${label} — ${item.city}</span>` : `<br><span class="small">${item.city}</span>`),
+            { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" }
+          );
+          m.on("click", () => _handleOverlayClick(
+            { lat: item.lat, lon: item.lon },
+            { name: item.name, desc: item.city || "", type: label ? `✈️ ${label}` : "Lotnisko", color: "#2563eb" },
+            _smapInstance
+          ));
+          m.addTo(group);
+        }
+      }
+      _smapOverlays[which] = group;
+    }
+
+    _smapOverlays[which].addTo(_smapInstance);
+  }
+
+  /** Load KML overlay checkboxes for standalone map */
+  async function _loadSmapKmlCheckboxes() {
+    const container = QS("#gsm_smap_kml_overlays");
+    if (!container) return;
+
+    try {
+      const resp = await fetch("/api/gsm/overlays");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const items = (data && data.overlays) ? data.overlays : [];
+      if (!items.length) { container.innerHTML = ""; return; }
+
+      container.innerHTML = items.map(ov => {
+        const safeName = String(ov.name || ov.id).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return `<label class="gsm-lp-item">
+          <input type="checkbox" data-smap-kml-id="${ov.id}"> <span style="color:#8b5cf6">&#9679;</span> ${safeName}
+        </label>`;
+      }).join("");
+
+      container.querySelectorAll("input[data-smap-kml-id]").forEach(cb => {
+        cb.onchange = () => _toggleSmapKml(cb.dataset.smapKmlId, cb.checked);
+      });
+    } catch (e) { /* silent */ }
+  }
+
+  /** Toggle KML overlay on standalone map */
+  async function _toggleSmapKml(overlayId, show) {
+    if (!_smapInstance) return;
+
+    if (!show) {
+      if (_smapKmlLayers[overlayId]) { _smapInstance.removeLayer(_smapKmlLayers[overlayId]); }
+      return;
+    }
+
+    if (!_smapKmlData[overlayId]) {
+      try {
+        const resp = await fetch(`/api/gsm/overlays/${overlayId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        _smapKmlData[overlayId] = await resp.json();
+      } catch (err) {
+        _addLog("error", `Nie udało się załadować KML: ${err.message}`);
+        return;
+      }
+    }
+
+    if (!_smapKmlLayers[overlayId]) {
+      const group = L.layerGroup();
+      const data = _smapKmlData[overlayId];
+      const points = data.points || [];
+      const lines = data.lines || [];
+      const polygons = data.polygons || [];
+      const defaultColor = "#8b5cf6";
+
+      for (const pt of points) {
+        if (!pt.lat || !pt.lon) continue;
+        const c = pt.color || defaultColor;
+        L.circleMarker([pt.lat, pt.lon], {
+          radius: 5, fillColor: c, color: "#fff", weight: 1, fillOpacity: 0.8,
+        }).bindPopup(pt.name ? `<b>${pt.name}</b>${pt.desc ? "<br>" + pt.desc : ""}` : "").addTo(group);
+      }
+      for (const ln of lines) {
+        if (!ln.coords || !ln.coords.length) continue;
+        L.polyline(ln.coords.map(c => [c[1], c[0]]), {
+          color: ln.color || defaultColor, weight: 2, opacity: 0.8,
+        }).addTo(group);
+      }
+      for (const pg of polygons) {
+        if (!pg.coords || !pg.coords.length) continue;
+        L.polygon(pg.coords.map(c => [c[1], c[0]]), {
+          color: pg.color || defaultColor, fillColor: pg.color || defaultColor, weight: 1, fillOpacity: 0.2,
+        }).addTo(group);
+      }
+      _smapKmlLayers[overlayId] = group;
+    }
+
+    _smapKmlLayers[overlayId].addTo(_smapInstance);
+  }
+
+  /** Screenshot for standalone map (reuses existing helpers) */
+  async function _takeSmapScreenshot() {
+    if (!_smapInstance) return;
+    const btn = QS("#gsm_smap_screenshot_btn");
+    if (btn) btn.disabled = true;
+
+    try {
+      const map = _smapInstance;
+      const scale = 2;
+      const size = map.getSize();
+      const w = size.x * scale;
+      const h = size.y * scale;
+
+      await _waitForTilesToLoad(map, 3000);
+
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext("2d");
+
+      ctx.fillStyle = "#e8e8e8";
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw tile images (use getBoundingClientRect for correct positioning)
+      const containerRect = map.getContainer().getBoundingClientRect();
+      const tilePane = map.getPane("tilePane");
+      if (tilePane) {
+        const tileImgs = tilePane.querySelectorAll("img.leaflet-tile");
+        const tilePromises = [];
+        for (const img of tileImgs) {
+          if (!img.src) continue;
+          const rect = img.getBoundingClientRect();
+          const x = (rect.left - containerRect.left) * scale;
+          const y = (rect.top - containerRect.top) * scale;
+          const tw = rect.width * scale;
+          const th = rect.height * scale;
+          tilePromises.push(
+            _fetchImageBitmap(img.src)
+              .then(bmp => ({ bmp, x, y, tw, th }))
+              .catch(() => null)
+          );
+        }
+        const tiles = await Promise.all(tilePromises);
+        for (const tile of tiles) {
+          if (!tile) continue;
+          ctx.drawImage(tile.bmp, tile.x, tile.y, tile.tw, tile.th);
+          tile.bmp.close();
+        }
+      }
+
+      // Draw MapLibre GL canvas (for PBF vector tiles)
+      const smapContainer = QS("#gsm_smap_container");
+      const maplibreCanvas = smapContainer ? smapContainer.querySelector(".maplibregl-canvas, .mapboxgl-canvas") : null;
+      if (maplibreCanvas) {
+        try {
+          const mlRect = maplibreCanvas.getBoundingClientRect();
+          ctx.drawImage(maplibreCanvas,
+            (mlRect.left - containerRect.left) * scale,
+            (mlRect.top - containerRect.top) * scale,
+            mlRect.width * scale, mlRect.height * scale);
+        } catch (e) {
+          console.warn("[GSM] Standalone MapLibre canvas capture failed:", e);
+        }
+      }
+
+      // Draw overlay pane canvases (circleMarkers, polylines)
+      const overlayPane = map.getPane("overlayPane");
+      if (overlayPane) {
+        const canvases = overlayPane.querySelectorAll("canvas");
+        for (const c of canvases) {
+          try {
+            const cRect = c.getBoundingClientRect();
+            ctx.drawImage(c,
+              (cRect.left - containerRect.left) * scale,
+              (cRect.top - containerRect.top) * scale,
+              cRect.width * scale, cRect.height * scale);
+          } catch (_) {}
+        }
+      }
+
+      // Draw marker panes
+      _drawPaneMarkers(ctx, map, "shadowPane", scale);
+      _drawPaneMarkers(ctx, map, "markerPane", scale);
+
+      // Watermark
+      const activeRadio = QS('input[name="gsm_smap_layer"]:checked');
+      const activeItem = activeRadio ? activeRadio.closest(".gsm-lp-item") : null;
+      const layerLabel = activeItem ? activeItem.textContent.trim() : "Mapa";
+      const extraParts = [layerLabel, "© OpenStreetMap contributors"];
+      const final = _drawWatermark(out, extraParts);
+
+      // Download
+      const now = new Date();
+      final.toBlob((blob) => {
+        if (!blob) return;
+        const ts = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `mapa_${ts}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        _addLog("info", `Zapisano zrzut mapy: ${filename}`);
+      }, "image/png");
+    } catch (err) {
+      console.error("[GSM] Standalone map screenshot error:", err);
+      _addLog("error", "Nie udało się zrobić zrzutu mapy: " + err.message);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /* ── Map edit mode ─────────────────────────────────────── */
+
+  let _smapEditMode = false;
+  let _smapUserLayers = {};       // { overlayId: { data, leafletGroup, markers[] } }
+  let _smapActiveLayerId = null;  // currently selected user layer for editing
+  let _smapEditingPoint = null;   // { layerId, pointIndex } — point being edited
+
+  /* ── Polygon drawing state ────────────────────────────── */
+  let _smapDrawingPolygon = false;
+  let _smapPolygonPoints = [];       // [{lat, lng}]
+  let _smapPolygonMarkers = [];      // L.circleMarker for each vertex
+  let _smapPolygonPolyline = null;   // L.polyline showing edges
+  let _smapPolygonGuideLine = null;  // L.polyline from last point to cursor
+  let _smapContextMenu = null;       // DOM element for context menu
+
+  function _toggleSmapEditMode() {
+    _smapEditMode = !_smapEditMode;
+    const btn = QS("#gsm_smap_edit_btn");
+    const indicator = QS("#gsm_smap_edit_indicator");
+    const container = QS("#gsm_smap_container");
+
+    if (btn) btn.style.background = _smapEditMode ? "var(--accent,#4a6cf7)" : "";
+    if (btn) btn.style.borderRadius = _smapEditMode ? "8px" : "";
+    if (indicator) indicator.style.display = _smapEditMode ? "" : "none";
+    if (container) container.style.cursor = _smapEditMode ? "crosshair" : "";
+
+    if (_smapEditMode && _smapInstance) {
+      _smapInstance.on("click", _smapOnMapClick);
+    } else if (_smapInstance) {
+      _smapInstance.off("click", _smapOnMapClick);
+      _smapHideContextMenu();
+      if (_smapDrawingPolygon) _smapCancelPolygonDraw();
+    }
+  }
+
+  function _smapOnMapClick(e) {
+    if (!_smapEditMode || !_smapInstance) return;
+    if (!_smapActiveLayerId) {
+      // Auto-select the only user layer, or auto-create one
+      const userLayerIds = Object.keys(_smapUserLayers);
+      if (userLayerIds.length === 1) {
+        _smapActiveLayerId = userLayerIds[0];
+        _smapRefreshUserLayersList();
+      } else if (userLayerIds.length === 0) {
+        _smapAutoCreateLayerThenClick(e);
+        return;
+      } else {
+        _smapShowToast("Wybierz warstwę w panelu po lewej przed dodaniem elementów");
+        return;
+      }
+    }
+
+    // If currently drawing a polygon, add vertex
+    if (_smapDrawingPolygon) {
+      _smapPolygonAddVertex(e.latlng);
+      return;
+    }
+
+    // Show context menu with options
+    _smapShowContextMenu(e);
+  }
+
+  /* ── Context menu for edit mode (Leaflet popup) ──────────── */
+
+  function _smapShowContextMenu(e) {
+    _smapHideContextMenu();
+    const latlng = e.latlng;
+
+    const html = `<div style="min-width:140px;margin:-4px -8px;font-size:13px">
+      <div class="gsm-ctx-item" data-action="point" style="padding:7px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;border-radius:6px 6px 0 0">
+        <span style="font-size:15px">\ud83d\udccd</span><span>Dodaj punkt</span>
+      </div>
+      <div class="gsm-ctx-item" data-action="polygon" style="padding:7px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;border-radius:0 0 6px 6px">
+        <span style="font-size:15px">\u2b21</span><span>Zr\u00f3b obrys</span>
+      </div>
+    </div>`;
+
+    const popup = L.popup({ closeButton: false, className: "gsm-edit-ctx-popup", offset: [0, 0], autoPan: false })
+      .setLatLng(latlng)
+      .setContent(html)
+      .openOn(_smapInstance);
+
+    _smapContextMenu = popup;
+
+    // Bind actions after popup opens
+    setTimeout(() => {
+      const popupEl = popup.getElement();
+      if (!popupEl) return;
+      popupEl.querySelectorAll(".gsm-ctx-item").forEach(el => {
+        el.onmouseenter = () => { el.style.background = "rgba(74,108,247,.1)"; };
+        el.onmouseleave = () => { el.style.background = ""; };
+        el.onclick = (ev) => {
+          ev.stopPropagation();
+          L.DomEvent.stopPropagation(ev);
+          const action = el.getAttribute("data-action");
+          _smapHideContextMenu();
+          if (action === "point") {
+            _openLocationDialog({ type: "point", isNew: true, layerId: _smapActiveLayerId, lat: latlng.lat, lon: latlng.lng, name: "", desc: "", color: "#e63946", icon: "" });
+          } else if (action === "polygon") {
+            _smapStartPolygonDraw(latlng);
+          }
+        };
+      });
+    }, 50);
+  }
+
+  function _smapHideContextMenu() {
+    if (_smapContextMenu) {
+      try { _smapInstance.closePopup(_smapContextMenu); } catch (_) {}
+      _smapContextMenu = null;
+    }
+  }
+
+  /** Auto-create a default layer then re-fire the click */
+  async function _smapAutoCreateLayerThenClick(originalEvent) {
+    try {
+      const resp = await fetch("/api/gsm/overlays/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Moja warstwa" }),
+      });
+      const data = await resp.json();
+      if (data.status === "ok") {
+        _smapUserLayers[data.id] = {
+          data: { name: data.name, points: [], polygons: [], user_layer: true },
+          leafletGroup: null, markers: [],
+        };
+        _smapActiveLayerId = data.id;
+        _smapRefreshUserLayersList();
+        _smapShowToast("Utworzono warstwę: " + data.name);
+        // Re-process the original click now that a layer is active
+        _smapOnMapClick(originalEvent);
+      }
+    } catch (err) {
+      _smapShowToast("Nie udało się utworzyć warstwy");
+    }
+  }
+
+  /** Show a brief toast message on the map */
+  function _smapShowToast(msg) {
+    const container = QS("#gsm_smap_container");
+    if (!container) return;
+    // Remove existing toast
+    const old = container.querySelector(".gsm-smap-toast");
+    if (old) old.remove();
+    const toast = document.createElement("div");
+    toast.className = "gsm-smap-toast";
+    toast.textContent = msg;
+    toast.style.cssText = "position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:9200;background:var(--card-bg,#fff);color:var(--text,#222);border:1px solid var(--border,#ddd);border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.15);padding:8px 18px;font-size:13px;font-weight:500;pointer-events:none;opacity:1;transition:opacity .4s";
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = "0"; }, 2500);
+    setTimeout(() => { toast.remove(); }, 3000);
+  }
+
+  /* ── Polygon drawing ─────────────────────────────────────── */
+
+  function _smapStartPolygonDraw(startLatLng) {
+    _smapDrawingPolygon = true;
+    _smapPolygonPoints = [];
+    _smapPolygonMarkers = [];
+    _smapPolygonPolyline = null;
+    _smapPolygonGuideLine = null;
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.textContent = "Rysowanie obrysu \u2014 kliknij aby doda\u0107 wierzcho\u0142ki, kliknij pierwszy punkt aby zamkn\u0105\u0107";
+    const container = QS("#gsm_smap_container");
+    if (container) container.style.cursor = "crosshair";
+    _smapPolygonGuideLine = L.polyline([], { color: "#4a6cf7", weight: 2, dashArray: "6,4", opacity: 0.7 }).addTo(_smapInstance);
+    _smapInstance.on("mousemove", _smapPolygonMouseMove);
+    document.addEventListener("keydown", _smapPolygonEscHandler);
+    _smapPolygonAddVertex(startLatLng);
+  }
+
+  function _smapPolygonMouseMove(e) {
+    if (!_smapDrawingPolygon || !_smapPolygonGuideLine || !_smapPolygonPoints.length) return;
+    const lastPt = _smapPolygonPoints[_smapPolygonPoints.length - 1];
+    _smapPolygonGuideLine.setLatLngs([[lastPt.lat, lastPt.lng], [e.latlng.lat, e.latlng.lng]]);
+  }
+
+  function _smapPolygonEscHandler(e) { if (e.key === "Escape") _smapCancelPolygonDraw(); }
+
+  function _smapPolygonAddVertex(latlng) {
+    if (_smapPolygonPoints.length >= 3) {
+      const firstPt = _smapPolygonPoints[0];
+      const firstPixel = _smapInstance.latLngToContainerPoint(L.latLng(firstPt.lat, firstPt.lng));
+      const clickPixel = _smapInstance.latLngToContainerPoint(latlng);
+      const dist = Math.sqrt(Math.pow(firstPixel.x - clickPixel.x, 2) + Math.pow(firstPixel.y - clickPixel.y, 2));
+      if (dist < 15) { _smapFinishPolygonDraw(); return; }
+    }
+    _smapPolygonPoints.push({ lat: latlng.lat, lng: latlng.lng });
+    const isFirst = _smapPolygonPoints.length === 1;
+    const marker = L.circleMarker([latlng.lat, latlng.lng], {
+      radius: isFirst ? 8 : 5, fillColor: isFirst ? "#22c55e" : "#4a6cf7",
+      color: "#fff", weight: 2, fillOpacity: 0.9, interactive: true,
+    }).addTo(_smapInstance);
+    if (isFirst) {
+      marker.bindTooltip("Kliknij tutaj aby zamkn\u0105\u0107 obrys", { direction: "top", offset: [0, -10], className: "gsm-overlay-tooltip" });
+      marker.on("click", (e) => { L.DomEvent.stopPropagation(e); if (_smapPolygonPoints.length >= 3) _smapFinishPolygonDraw(); });
+    }
+    _smapPolygonMarkers.push(marker);
+    const latLngs = _smapPolygonPoints.map(p => [p.lat, p.lng]);
+    if (_smapPolygonPolyline) { _smapPolygonPolyline.setLatLngs(latLngs); }
+    else { _smapPolygonPolyline = L.polyline(latLngs, { color: "#4a6cf7", weight: 2, opacity: 0.8 }).addTo(_smapInstance); }
+  }
+
+  function _smapFinishPolygonDraw() {
+    _smapInstance.off("mousemove", _smapPolygonMouseMove);
+    document.removeEventListener("keydown", _smapPolygonEscHandler);
+    if (_smapPolygonGuideLine) { _smapInstance.removeLayer(_smapPolygonGuideLine); _smapPolygonGuideLine = null; }
+    if (_smapPolygonPolyline) { _smapInstance.removeLayer(_smapPolygonPolyline); _smapPolygonPolyline = null; }
+    for (const m of _smapPolygonMarkers) _smapInstance.removeLayer(m);
+    _smapPolygonMarkers = [];
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.textContent = "Tryb edycji";
+    const coords = _smapPolygonPoints.map(p => [p.lat, p.lng]);
+    _smapDrawingPolygon = false;
+    _openLocationDialog({ type: "polygon", isNew: true, layerId: _smapActiveLayerId, coords, name: "", desc: "", fillColor: "#4a6cf7", icon: "" });
+  }
+
+  function _smapCancelPolygonDraw() {
+    _smapInstance.off("mousemove", _smapPolygonMouseMove);
+    document.removeEventListener("keydown", _smapPolygonEscHandler);
+    if (_smapPolygonGuideLine) { _smapInstance.removeLayer(_smapPolygonGuideLine); _smapPolygonGuideLine = null; }
+    if (_smapPolygonPolyline) { _smapInstance.removeLayer(_smapPolygonPolyline); _smapPolygonPolyline = null; }
+    for (const m of _smapPolygonMarkers) _smapInstance.removeLayer(m);
+    _smapPolygonMarkers = []; _smapPolygonPoints = []; _smapDrawingPolygon = false;
+    const indicator = QS("#gsm_smap_edit_indicator");
+    if (indicator) indicator.textContent = "Tryb edycji";
+    _addLog("info", "Anulowano rysowanie obrysu");
+  }
+
+  /* ── Polygon CRUD ────────────────────────────────────────── */
+
+  function _smapAddPolygon(layerId, polygon) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    if (!layer.data.polygons) layer.data.polygons = [];
+    layer.data.polygons.push(polygon);
+    _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
+  }
+
+  function _smapUpdatePolygon(layerId, idx, polygon, targetLayerId) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer || !layer.data.polygons) return;
+    if (targetLayerId && targetLayerId !== layerId) {
+      layer.data.polygons.splice(idx, 1);
+      _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
+      _smapAddPolygon(targetLayerId, polygon);
+    } else {
+      layer.data.polygons[idx] = polygon;
+      _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
+    }
+  }
+
+  function _smapDeletePolygon(layerId, idx) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer || !layer.data.polygons) return;
+    layer.data.polygons.splice(idx, 1);
+    _smapRebuildLayerMarkers(layerId); _smapSaveLayer(layerId);
+  }
+
+  // --- Icon preview helper: handles both path-based and raw SVG icons ---
+  function _smapUpdateIconPreview(iconValue) {
+    const preview = QS("#gsm_loc_icon_preview");
+    if (!preview) return;
+    if (!iconValue) {
+      preview.innerHTML = '<span class="muted small">—</span>';
+      return;
+    }
+    if (iconValue.startsWith("/static/")) {
+      preview.innerHTML = `<img src="${iconValue}" style="width:32px;height:32px;object-fit:contain">`;
+    } else {
+      preview.innerHTML = iconValue;
+      const svg = preview.querySelector("svg");
+      if (svg) { svg.style.width = "28px"; svg.style.height = "28px"; }
+    }
+  }
+
+  // --- Category label translations ---
+  const _iconCategoryLabels = {
+    embassy: "Ambasada",
+    fire: "Straż pożarna",
+    intelligence: "Wywiad",
+    justice: "Wymiar sprawiedliwości",
+    medical: "Medyczny",
+    military: "Wojskowy",
+    national_security: "Bezpieczeństwo",
+    police: "Policja",
+  };
+
+  // --- Icon picker: fetch categories from API and render grid ---
+  let _mapIconsCache = null;
+  async function _smapLoadIconPicker() {
+    const body = QS("#gsm_loc_icon_picker_body");
+    if (!body) return;
+    if (_mapIconsCache) {
+      _smapRenderIconPicker(_mapIconsCache);
+      return;
+    }
+    body.innerHTML = '<span class="muted small">Ładowanie ikon…</span>';
+    try {
+      const resp = await fetch("/api/gsm/map-icons");
+      const data = await resp.json();
+      if (data.status === "ok" && data.categories) {
+        _mapIconsCache = data.categories;
+        _smapRenderIconPicker(data.categories);
+      } else {
+        body.innerHTML = '<span class="muted small">Brak ikon</span>';
+      }
+    } catch (e) {
+      body.innerHTML = '<span class="muted small">Błąd ładowania ikon</span>';
+    }
+  }
+
+  function _smapRenderIconPicker(categories) {
+    const body = QS("#gsm_loc_icon_picker_body");
+    if (!body) return;
+    body.innerHTML = "";
+    for (const cat of categories) {
+      const label = _iconCategoryLabels[cat.category] || cat.category;
+      const header = document.createElement("div");
+      header.style.cssText = "font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 3px;color:var(--text-secondary,#666)";
+      header.textContent = label;
+      body.appendChild(header);
+
+      const grid = document.createElement("div");
+      grid.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px";
+      for (const ic of cat.icons) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.title = ic.name.replace(/_/g, " ");
+        btn.style.cssText = "width:38px;height:38px;border:1px solid var(--border,#ddd);border-radius:6px;background:var(--bg-card,#fff);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:3px;transition:border-color .15s";
+        btn.innerHTML = `<img src="${ic.path}" style="width:28px;height:28px;object-fit:contain">`;
+        btn.onmouseenter = () => { btn.style.borderColor = "var(--primary,#4361ee)"; };
+        btn.onmouseleave = () => { btn.style.borderColor = "var(--border,#ddd)"; };
+        btn.onclick = () => {
+          const iconData = QS("#gsm_loc_icon_data");
+          const iconClearBtn = QS("#gsm_loc_icon_clear_btn");
+          const picker = QS("#gsm_loc_icon_picker");
+          if (iconData) iconData.value = ic.path;
+          _smapUpdateIconPreview(ic.path);
+          if (iconClearBtn) iconClearBtn.style.display = "";
+          if (picker) picker.style.display = "none";
+        };
+        grid.appendChild(btn);
+      }
+      body.appendChild(grid);
+    }
+  }
+
+  /* ── Unified location dialog (point & polygon) ──────────── */
+  function _openLocationDialog(opts) {
+    const dialog = QS("#gsm_location_dialog");
+    if (!dialog) return;
+
+    const isPoint = opts.type === "point";
+
+    // --- Element refs ---
+    const title = QS("#gsm_loc_title");
+    const typeLabel = QS("#gsm_loc_type_label");
+    const nameEl = QS("#gsm_loc_name");
+    const descEl = QS("#gsm_loc_desc");
+    const latEl = QS("#gsm_loc_lat");
+    const lonEl = QS("#gsm_loc_lon");
+    const pointSection = QS("#gsm_loc_point_section");
+    const polygonSection = QS("#gsm_loc_polygon_section");
+    const vertexInfo = QS("#gsm_loc_vertex_count");
+    const colorEl = QS("#gsm_loc_color");
+    const colorLabel = QS("#gsm_loc_color_label");
+    const layerSel = QS("#gsm_loc_layer_select");
+    const delBtn = QS("#gsm_loc_delete_btn");
+    const iconData = QS("#gsm_loc_icon_data");
+    const iconFile = QS("#gsm_loc_icon_file");
+    const iconUploadBtn = QS("#gsm_loc_icon_upload_btn");
+    const iconClearBtn = QS("#gsm_loc_icon_clear_btn");
+    const iconPickBtn = QS("#gsm_loc_icon_pick_btn");
+    const iconPicker = QS("#gsm_loc_icon_picker");
+
+    // --- Title & type badge ---
+    if (title) title.textContent = opts.isNew ? "Nowa Lokalizacja" : "Edycja Lokalizacji";
+    if (typeLabel) {
+      typeLabel.textContent = isPoint ? "Punkt" : "Obrys";
+      typeLabel.style.background = isPoint ? "var(--accent,#4a6cf7)" : "#059669";
+    }
+
+    // --- Show/hide type-specific sections ---
+    if (pointSection) pointSection.style.display = isPoint ? "" : "none";
+    if (polygonSection) polygonSection.style.display = isPoint ? "none" : "";
+    if (colorLabel) colorLabel.textContent = isPoint ? "Kolor" : "Kolor wypełnienia";
+
+    // --- Populate common fields ---
+    if (nameEl) nameEl.value = opts.name || "";
+    if (descEl) descEl.value = opts.desc || "";
+    const currentColor = opts.fillColor || opts.color || (isPoint ? "#e63946" : "#4a6cf7");
+    if (colorEl) colorEl.value = currentColor;
+
+    if (isPoint) {
+      if (latEl) latEl.value = (opts.lat != null) ? opts.lat.toFixed(6) : "";
+      if (lonEl) lonEl.value = (opts.lon != null) ? opts.lon.toFixed(6) : "";
+    }
+    if (!isPoint && vertexInfo) {
+      vertexInfo.textContent = `${(opts.coords || []).length} wierzchołków`;
+    }
+
+    if (delBtn) {
+      delBtn.style.display = opts.isNew ? "none" : "";
+      delBtn.textContent = isPoint ? "Usuń punkt" : "Usuń obrys";
+    }
+
+    // --- Icon state ---
+    const iconVal = opts.icon || "";
+    if (iconData) iconData.value = iconVal;
+    _smapUpdateIconPreview(iconVal);
+    if (iconClearBtn) iconClearBtn.style.display = iconVal ? "" : "none";
+    if (iconPicker) iconPicker.style.display = "none";
+
+    if (iconPickBtn) {
+      iconPickBtn.onclick = async () => {
+        if (!iconPicker) return;
+        const wasOpen = iconPicker.style.display !== "none";
+        iconPicker.style.display = wasOpen ? "none" : "";
+        if (!wasOpen) await _smapLoadIconPicker();
+      };
+    }
+
+    if (iconUploadBtn && iconFile) {
+      iconUploadBtn.onclick = () => iconFile.click();
+      iconFile.value = "";
+      iconFile.onchange = () => {
+        const file = iconFile.files && iconFile.files[0];
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith(".svg") && file.type !== "image/svg+xml") {
+          _addLog("warn", "Tylko pliki SVG są obsługiwane"); return;
+        }
+        if (file.size > 50000) {
+          _addLog("warn", "Plik SVG zbyt duży (max 50 KB)"); return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          let svgText = ev.target.result;
+          svgText = svgText.replace(/<script[\s\S]*?<\/script>/gi, "");
+          if (iconData) iconData.value = svgText;
+          _smapUpdateIconPreview(svgText);
+          if (iconClearBtn) iconClearBtn.style.display = "";
+          if (iconPicker) iconPicker.style.display = "none";
+        };
+        reader.readAsText(file);
+      };
+    }
+    if (iconClearBtn) {
+      iconClearBtn.onclick = () => {
+        if (iconData) iconData.value = "";
+        _smapUpdateIconPreview("");
+        iconClearBtn.style.display = "none";
+        if (iconPicker) iconPicker.style.display = "none";
+      };
+    }
+
+    // --- Layer dropdown ---
+    if (layerSel) {
+      layerSel.innerHTML = "";
+      for (const [id, layer] of Object.entries(_smapUserLayers)) {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = layer.data.name;
+        if (id === opts.layerId) opt.selected = true;
+        layerSel.appendChild(opt);
+      }
+    }
+
+    if (isPoint) {
+      _smapEditingPoint = opts.isNew ? null : { layerId: opts.layerId, pointIndex: opts.pointIndex };
+    }
+
+    // --- Submit ---
+    const form = dialog.querySelector("form");
+    const submitHandler = (e) => {
+      e.preventDefault();
+      form.removeEventListener("submit", submitHandler);
+      const iconValue = iconData ? iconData.value.trim() : "";
+      const targetLayer = layerSel ? layerSel.value : opts.layerId;
+
+      if (isPoint) {
+        const point = {
+          name: nameEl ? nameEl.value.trim() : "",
+          desc: descEl ? descEl.value.trim() : "",
+          lat: parseFloat(latEl ? latEl.value : opts.lat),
+          lon: parseFloat(lonEl ? lonEl.value : opts.lon),
+          color: colorEl ? colorEl.value : "#e63946",
+          icon: iconValue,
+        };
+        if (opts.isNew) _smapAddPoint(targetLayer, point);
+        else _smapUpdatePoint(opts.layerId, opts.pointIndex, point, targetLayer);
+      } else {
+        const polygon = {
+          name: nameEl ? nameEl.value.trim() : "",
+          desc: descEl ? descEl.value.trim() : "",
+          coords: opts.coords,
+          fillColor: colorEl ? colorEl.value : "#4a6cf7",
+          icon: iconValue,
+        };
+        if (opts.isNew) _smapAddPolygon(targetLayer, polygon);
+        else _smapUpdatePolygon(opts.layerId, opts.polygonIndex, polygon, targetLayer);
+      }
+      dialog.close();
+    };
+    form.addEventListener("submit", submitHandler);
+
+    const cancelBtn = QS("#gsm_loc_cancel_btn");
+    const cancelHandler = () => {
+      cancelBtn.removeEventListener("click", cancelHandler);
+      form.removeEventListener("submit", submitHandler);
+      dialog.close();
+    };
+    if (cancelBtn) cancelBtn.addEventListener("click", cancelHandler);
+
+    if (delBtn && !opts.isNew) {
+      const delHandler = () => {
+        delBtn.removeEventListener("click", delHandler);
+        form.removeEventListener("submit", submitHandler);
+        if (isPoint) _smapDeletePoint(opts.layerId, opts.pointIndex);
+        else _smapDeletePolygon(opts.layerId, opts.polygonIndex);
+        dialog.close();
+      };
+      delBtn.addEventListener("click", delHandler);
+    }
+
+    dialog.showModal();
+  }
+
+  function _smapAddPoint(layerId, point) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    layer.data.points.push(point);
+    _smapRebuildLayerMarkers(layerId);
+    _smapSaveLayer(layerId);
+  }
+
+  function _smapUpdatePoint(layerId, idx, point, targetLayerId) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+
+    if (targetLayerId !== layerId) {
+      // Move to different layer
+      layer.data.points.splice(idx, 1);
+      _smapRebuildLayerMarkers(layerId);
+      _smapSaveLayer(layerId);
+      _smapAddPoint(targetLayerId, point);
+    } else {
+      layer.data.points[idx] = point;
+      _smapRebuildLayerMarkers(layerId);
+      _smapSaveLayer(layerId);
+    }
+  }
+
+  function _smapDeletePoint(layerId, idx) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    layer.data.points.splice(idx, 1);
+    _smapRebuildLayerMarkers(layerId);
+    _smapSaveLayer(layerId);
+  }
+
+  function _smapRebuildLayerMarkers(layerId) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer || !_smapInstance) return;
+
+    // Remove old group
+    if (layer.leafletGroup) {
+      _smapInstance.removeLayer(layer.leafletGroup);
+    }
+
+    const group = L.layerGroup();
+    layer.markers = [];
+
+    layer.data.points.forEach((pt, idx) => {
+      const color = pt.color || "#e63946";
+      let marker;
+
+      if (pt.icon) {
+        // Icon marker — either a static path or raw SVG, shown on white circle with border
+        let innerHtml;
+        if (pt.icon.startsWith("/static/")) {
+          innerHtml = `<img src="${pt.icon}" style="width:22px;height:22px;object-fit:contain">`;
+        } else {
+          innerHtml = pt.icon.replace(/<svg/,
+            '<svg style="width:22px;height:22px"');
+        }
+        const iconHtml = `<div style="width:32px;height:32px;background:#fff;border:2px solid ${pt.color || '#555'};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.3)">${innerHtml}</div>`;
+        const divIcon = L.divIcon({
+          className: "gsm-user-point-icon",
+          html: iconHtml,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        });
+        marker = L.marker([pt.lat, pt.lon], { icon: divIcon, interactive: true });
+      } else {
+        // Default circle marker
+        marker = L.circleMarker([pt.lat, pt.lon], {
+          radius: 7,
+          fillColor: color,
+          color: "#fff",
+          weight: 2,
+          fillOpacity: 0.9,
+        });
+      }
+
+      marker.bindTooltip(
+        `<b style="color:${color}">${pt.name || "Punkt"}</b>${pt.desc ? "<br><span class='small'>" + pt.desc + "</span>" : ""}`,
+        { direction: "top", offset: [0, pt.icon ? -16 : -8], className: "gsm-overlay-tooltip" }
+      );
+
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (_smapEditMode) {
+          _openLocationDialog({
+            type: "point", isNew: false,
+            layerId: layerId, pointIndex: idx,
+            lat: pt.lat, lon: pt.lon,
+            name: pt.name, desc: pt.desc,
+            color: pt.color || "#e63946",
+            icon: pt.icon || "",
+          });
+        } else {
+          _handleOverlayClick(
+            { lat: pt.lat, lon: pt.lon },
+            { name: pt.name || "Punkt", desc: pt.desc || "", color, layer: layer.data.name || layerId },
+            _smapInstance
+          );
+        }
+      });
+
+      marker.addTo(group);
+      layer.markers.push(marker);
+    });
+
+    // Render polygons
+    const polygons = layer.data.polygons || [];
+    polygons.forEach((pg, idx) => {
+      const fillColor = pg.fillColor || "#4a6cf7";
+      const poly = L.polygon(pg.coords, { color: fillColor, fillColor, weight: 2, fillOpacity: 0.3, interactive: true });
+      poly.bindTooltip(
+        `<b style="color:${fillColor}">${pg.name || "Obrys"}</b>${pg.desc ? "<br><span class='small'>" + pg.desc + "</span>" : ""}`,
+        { direction: "center", className: "gsm-overlay-tooltip" }
+      );
+      poly.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (_smapEditMode) {
+          _openLocationDialog({ type: "polygon", isNew: false, layerId, polygonIndex: idx, coords: pg.coords, name: pg.name || "", desc: pg.desc || "", fillColor, icon: pg.icon || "" });
+        } else {
+          const center = poly.getBounds().getCenter();
+          _handleOverlayClick(
+            { lat: center.lat, lon: center.lng },
+            { name: pg.name || "Obrys", desc: pg.desc || "", color: fillColor, layer: layer.data.name || layerId, extra: `<span class="small muted">Wierzchołki: ${pg.coords.length}</span>` },
+            _smapInstance
+          );
+        }
+      });
+      poly.addTo(group);
+    });
+
+    group.addTo(_smapInstance);
+    layer.leafletGroup = group;
+
+    // Update layer panel count
+    _smapRefreshUserLayersList();
+  }
+
+  async function _smapSaveLayer(layerId) {
+    const layer = _smapUserLayers[layerId];
+    if (!layer) return;
+    try {
+      await fetch(`/api/gsm/overlays/${layerId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: layer.data.name,
+          points: layer.data.points,
+          polygons: layer.data.polygons || [],
+        }),
+      });
+    } catch (e) {
+      _addLog("error", "Nie udało się zapisać warstwy: " + e.message);
+    }
+  }
+
+  /** Load user layers list and render checkboxes */
+  async function _smapLoadUserLayers() {
+    try {
+      const resp = await fetch("/api/gsm/overlays");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const items = (data && data.overlays) ? data.overlays : [];
+
+      // Load full data for user layers (or all KML layers that can be shown)
+      for (const ov of items) {
+        if (_smapUserLayers[ov.id]) continue; // already loaded
+        try {
+          const r = await fetch(`/api/gsm/overlays/${ov.id}`);
+          const d = await r.json();
+          if (d.status === "ok") {
+            _smapUserLayers[ov.id] = {
+              data: { name: d.name, points: d.points || [], polygons: d.polygons || [], user_layer: d.user_layer || false },
+              leafletGroup: null,
+              markers: [],
+            };
+          }
+        } catch (_) {}
+      }
+      _smapRefreshUserLayersList();
+    } catch (e) {
+      console.warn("[GSM] Failed to load user layers:", e);
+    }
+  }
+
+  function _smapRefreshUserLayersList() {
+    const container = QS("#gsm_smap_user_layers");
+    if (!container) return;
+
+    const entries = Object.entries(_smapUserLayers);
+    if (!entries.length) {
+      container.innerHTML = '<span class="small muted" style="padding:4px 0;display:block">Brak warstw. Kliknij "+ Nowa".</span>';
+      return;
+    }
+
+    container.innerHTML = entries.map(([id, layer]) => {
+      const isActive = _smapActiveLayerId === id;
+      const ptCount = layer.data.points.length;
+      const pgCount = (layer.data.polygons || []).length;
+      const count = pgCount > 0 ? `${ptCount}p, ${pgCount}o` : ptCount;
+      const isVisible = layer.leafletGroup && _smapInstance && _smapInstance.hasLayer(layer.leafletGroup);
+      const safeName = String(layer.data.name).replace(/</g, "&lt;");
+      return `<div class="gsm-lp-item" style="display:flex;align-items:center;gap:4px;padding:2px 0${isActive ? ";background:rgba(74,108,247,.08);border-radius:6px" : ""}">
+        <input type="checkbox" data-user-layer-id="${id}"${isVisible ? " checked" : ""} style="margin:0">
+        <span class="small" style="flex:1;cursor:pointer;font-weight:${isActive ? 600 : 400}" data-select-layer="${id}">${safeName} <span class="muted">(${count})</span></span>
+        <button class="btn mini" data-export-layer="${id}" title="Eksport KML" style="font-size:10px;padding:0 4px">KML</button>
+        <button class="btn mini danger" data-delete-layer="${id}" title="Usuń warstwę" style="font-size:10px;padding:0 4px">&times;</button>
+      </div>`;
+    }).join("");
+
+    // Bind events
+    container.querySelectorAll("input[data-user-layer-id]").forEach(cb => {
+      cb.onchange = () => {
+        const id = cb.dataset.userLayerId;
+        if (cb.checked) {
+          _smapRebuildLayerMarkers(id);
+        } else {
+          const layer = _smapUserLayers[id];
+          if (layer && layer.leafletGroup && _smapInstance) {
+            _smapInstance.removeLayer(layer.leafletGroup);
+          }
+        }
+      };
+    });
+
+    container.querySelectorAll("[data-select-layer]").forEach(el => {
+      el.onclick = () => {
+        _smapActiveLayerId = el.dataset.selectLayer;
+        _smapRefreshUserLayersList();
+      };
+    });
+
+    container.querySelectorAll("[data-export-layer]").forEach(el => {
+      el.onclick = () => {
+        const id = el.dataset.exportLayer;
+        window.open(`/api/gsm/overlays/${id}/export/kml`, "_blank");
+      };
+    });
+
+    container.querySelectorAll("[data-delete-layer]").forEach(el => {
+      el.onclick = async () => {
+        const id = el.dataset.deleteLayer;
+        if (!confirm("Usunąć warstwę?")) return;
+        const layer = _smapUserLayers[id];
+        if (layer && layer.leafletGroup && _smapInstance) {
+          _smapInstance.removeLayer(layer.leafletGroup);
+        }
+        delete _smapUserLayers[id];
+        if (_smapActiveLayerId === id) _smapActiveLayerId = null;
+        try { await fetch(`/api/gsm/overlays/${id}`, { method: "DELETE" }); } catch (_) {}
+        _smapRefreshUserLayersList();
+      };
+    });
+  }
+
+  async function _smapCreateLayer() {
+    const dialog = QS("#gsm_layer_dialog");
+    if (!dialog) return;
+
+    const nameInput = QS("#gsm_layer_name");
+    if (nameInput) nameInput.value = "";
+
+    const form = dialog.querySelector("form");
+    const submitHandler = async (e) => {
+      e.preventDefault();
+      form.removeEventListener("submit", submitHandler);
+      const name = nameInput ? nameInput.value.trim() : "";
+      if (!name) { dialog.close(); return; }
+
+      try {
+        const resp = await fetch("/api/gsm/overlays/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        const data = await resp.json();
+        if (data.status === "ok") {
+          _smapUserLayers[data.id] = {
+            data: { name: data.name, points: [], polygons: [], user_layer: true },
+            leafletGroup: null,
+            markers: [],
+          };
+          _smapActiveLayerId = data.id;
+          _smapRefreshUserLayersList();
+          _addLog("info", `Utworzono warstwę: ${data.name}`);
+        }
+      } catch (err) {
+        _addLog("error", "Nie udało się utworzyć warstwy: " + err.message);
+      }
+      dialog.close();
+    };
+    form.addEventListener("submit", submitHandler);
+
+    const cancelBtn = QS("#gsm_layer_cancel_btn");
+    const cancelHandler = () => {
+      cancelBtn.removeEventListener("click", cancelHandler);
+      form.removeEventListener("submit", submitHandler);
+      dialog.close();
+    };
+    if (cancelBtn) cancelBtn.addEventListener("click", cancelHandler);
+
+    dialog.showModal();
+  }
+
+  /* ── GSM Toolbar: model loading, generate, report ──────── */
+
+  let _gsmModelsLoaded = false;
+
+  async function _loadGsmModels() {
+    if (_gsmModelsLoaded) return;
+    try {
+      const resp = await fetch("/api/models/list");
+      if (!resp.ok) return;
+      const list = await resp.json();
+      const deep = Array.isArray(list && list.deep) ? list.deep.filter(m => m && m.installed) : [];
+      const sel = QS("#gsm_model_deep");
+      if (!sel) return;
+      sel.innerHTML = "";
+      if (!deep.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "Brak zainstalowanych modeli";
+        sel.appendChild(opt);
+        sel.disabled = true;
+        return;
+      }
+      deep.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m.id;
+        opt.textContent = (m.display_name || m.id) + (m.vram ? ` • ${m.vram}` : "");
+        sel.appendChild(opt);
+      });
+      sel.disabled = false;
+      _gsmModelsLoaded = true;
+    } catch (e) {
+      console.warn("[GSM] Failed to load models:", e);
+    }
+  }
+
+  let _gsmLlmRunning = false;
+
+  async function _gsmGenerate() {
+    const modelSel = QS("#gsm_model_deep");
+    const model = modelSel ? modelSel.value : "";
+    if (!model) {
+      _addLog("warn", "Nie wybrano modelu LLM. Zainstaluj model w ustawieniach.");
+      return;
+    }
+    if (!St.lastResult) {
+      _addLog("warn", "Brak danych GSM do analizy. Wczytaj biling.");
+      return;
+    }
+    if (_gsmLlmRunning) return;
+    _gsmLlmRunning = true;
+
+    const userPrompt = (QS("#gsm_user_prompt") || {}).value || "";
+    const statusEl = QS("#gsm_llm_status");
+    const progressWrap = QS("#gsm_llm_progress");
+    const progBar = QS("#gsm_llm_prog_bar");
+    const progText = QS("#gsm_llm_prog_text");
+    const resultWrap = QS("#gsm_llm_result");
+    const textEl = QS("#gsm_llm_text");
+    const genBtn = QS("#gsm_generate_btn");
+
+    // Show progress, hide previous result
+    if (statusEl) statusEl.style.display = "none";
+    if (progressWrap) progressWrap.style.display = "";
+    if (progBar) progBar.style.width = "5%";
+    if (progText) progText.textContent = "Łączenie z Ollama...";
+    if (resultWrap) resultWrap.style.display = "none";
+    if (textEl) textEl.innerHTML = "";
+    if (genBtn) genBtn.disabled = true;
+
+    // Ensure data is saved to project first
+    try { await _saveToProject(); } catch (_) {}
+
+    // Get project ID
+    const projectId = _getProjectId();
+
+    const params = new URLSearchParams({
+      model,
+      user_prompt: userPrompt,
+      project_id: projectId,
+    });
+
+    _addLog("info", `Generowanie analizy GSM z modelem: ${model}`);
+
+    try {
+      const resp = await fetch(`/api/gsm/llm-stream?${params}`);
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let chunks = 0;
+
+      if (resultWrap) resultWrap.style.display = "";
+      if (progText) progText.textContent = "Generowanie...";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        // Process SSE lines
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6));
+            if (ev.error) {
+              if (textEl) textEl.textContent = `Błąd: ${ev.error}`;
+              _addLog("error", `LLM: ${ev.error}`);
+              break;
+            }
+            if (ev.chunk) {
+              chunks++;
+              if (textEl) textEl.innerHTML += ev.chunk
+                .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                .replace(/\n/g, "<br>");
+              // Animate progress bar (logarithmic approach to 95%)
+              const pct = Math.min(95, 5 + 90 * (1 - 1 / (1 + chunks * 0.02)));
+              if (progBar) progBar.style.width = pct + "%";
+            }
+            if (ev.done) {
+              if (progBar) progBar.style.width = "100%";
+              if (progText) progText.textContent = "Gotowe";
+              _addLog("info", `Analiza GSM wygenerowana (${chunks} fragmentów)`);
+              setTimeout(() => {
+                if (progressWrap) progressWrap.style.display = "none";
+              }, 1500);
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      _addLog("error", `LLM GSM: ${e.message || e}`);
+      if (progText) progText.textContent = `Błąd: ${e.message || e}`;
+      if (textEl) textEl.textContent = `Nie udało się wygenerować analizy: ${e.message || e}`;
+      if (resultWrap) resultWrap.style.display = "";
+    } finally {
+      _gsmLlmRunning = false;
+      if (genBtn) genBtn.disabled = false;
+      if (!QS("#gsm_llm_result")?.style.display || QS("#gsm_llm_result")?.style.display === "none") {
+        if (statusEl) statusEl.style.display = "";
+      }
+    }
+  }
+
+  function _saveGsmReport() {
+    const checked = QSA('input[name="gsm_report_fmt"]:checked');
+    const formats = Array.from(checked).map(cb => cb.value);
+    if (!formats.length) {
+      _addLog("warn", "Nie wybrano formatu raportu.");
+      return;
+    }
+    if (!St.lastResult) {
+      _addLog("warn", "Brak danych GSM do raportu. Wczytaj biling.");
+      return;
+    }
+    _showReportContentDialog(formats);
+  }
+
+  /**
+   * Show report content selection dialog.
+   * Loads section definitions from API, shows grouped checkboxes + placeholder fields.
+   */
+  async function _showReportContentDialog(formats) {
+    // Load section definitions from backend
+    let sectionsData;
+    try {
+      const resp = await fetch("/api/gsm/report/sections");
+      const json = await resp.json();
+      if (json.status !== "ok") throw new Error(json.detail || "Błąd");
+      sectionsData = json;
+    } catch (e) {
+      _addLog("error", "Nie udało się załadować sekcji raportu: " + e.message);
+      return;
+    }
+
+    const groups = sectionsData.groups || [];
+    const placeholderDefs = sectionsData.placeholders || [];
+
+    // Load saved values from localStorage
+    const savedPlaceholders = JSON.parse(localStorage.getItem("gsm_report_placeholders") || "{}");
+    const savedSections = JSON.parse(localStorage.getItem("gsm_report_sections") || "null");
+    const savedProfileId = localStorage.getItem("report_profile_id") || "";
+
+    // Determine primary format label
+    const fmtPriority = ["docx", "html", "txt"];
+    const primaryFmt = fmtPriority.find(f => formats.includes(f)) || formats[0];
+    const fmtLabel = primaryFmt.toUpperCase();
+
+    // Build dialog HTML
+    const dlg = document.createElement("dialog");
+    dlg.className = "gsm-report-dialog";
+    dlg.style.cssText = "max-width:680px;width:90vw;max-height:85vh;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:0;overflow:hidden;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
+
+    let placeholderHtml = "";
+    if (formats.includes("docx")) {
+      placeholderHtml = `
+        <details class="rpt-details" open>
+          <summary class="rpt-summary">Dane nagłówka dokumentu (DOCX)</summary>
+          <div class="rpt-placeholders" style="display:grid;grid-template-columns:140px 1fr;gap:8px;padding:12px;">
+            ${placeholderDefs.map(p => `
+              <label style="font-size:13px;align-self:center;">${_escHtml(p.label)}:</label>
+              ${p.type === "date"
+                ? `<input type="date" class="input rpt-ph" data-key="${_escHtml(p.key)}" value="${_escHtml(savedPlaceholders[p.key] || p.default || new Date().toISOString().slice(0,10))}" style="font-size:13px;padding:4px 8px;">`
+                : `<input type="text" class="input rpt-ph" data-key="${_escHtml(p.key)}" value="${_escHtml(savedPlaceholders[p.key] || p.default || "")}" placeholder="${_escHtml(p.label)}" style="font-size:13px;padding:4px 8px;">`
+              }
+            `).join("")}
+          </div>
+        </details>
+      `;
+    }
+
+    let sectionsHtml = "";
+    for (const group of groups) {
+      const groupId = "rptg_" + group.name.replace(/\s/g, "_");
+      const sectionCheckboxes = group.sections.map(s => {
+        const isChecked = savedSections ? savedSections.includes(s.key) : s.checked;
+        return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0 2px 20px;">
+          <input type="checkbox" class="rpt-sec" data-key="${_escHtml(s.key)}" ${isChecked ? "checked" : ""}>
+          ${_escHtml(s.label)}
+        </label>`;
+      }).join("");
+
+      sectionsHtml += `
+        <div class="rpt-group" style="margin-bottom:6px;">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;padding:4px 0;cursor:pointer;">
+            <input type="checkbox" class="rpt-grp-cb" data-group="${groupId}" checked
+              onchange="this.closest('.rpt-group').querySelectorAll('.rpt-sec').forEach(c=>c.checked=this.checked)">
+            ${_escHtml(group.name)}
+          </label>
+          <div class="rpt-group-items">${sectionCheckboxes}</div>
+        </div>
+      `;
+    }
+
+    dlg.innerHTML = `
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border-color,#ddd);display:flex;align-items:center;justify-content:space-between;">
+        <h3 style="margin:0;font-size:16px;">Generuj raport GSM — ${fmtLabel}${formats.length > 1 ? " + " + (formats.length - 1) + " inne" : ""}</h3>
+        <button class="btn" id="rpt_close_x" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;" title="Zamknij">&times;</button>
+      </div>
+      <div style="overflow-y:auto;max-height:calc(85vh - 120px);padding:16px 20px;">
+        ${placeholderHtml}
+        <details class="rpt-details" open>
+          <summary class="rpt-summary">Wybierz sekcje raportu</summary>
+          <div style="padding:8px 0;">
+            ${sectionsHtml}
+          </div>
+        </details>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid var(--border-color,#ddd);display:flex;gap:8px;justify-content:space-between;align-items:center;">
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm" id="rpt_select_all">Zaznacz wszystko</button>
+          <button class="btn btn-sm" id="rpt_deselect_all">Odznacz</button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" id="rpt_cancel" style="min-width:80px;">Anuluj</button>
+          <button class="btn btn-primary" id="rpt_generate" style="min-width:120px;">Generuj raport</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dlg);
+    dlg.showModal();
+
+    // Close handlers
+    dlg.querySelector("#rpt_close_x").onclick = () => { dlg.close(); dlg.remove(); };
+    dlg.querySelector("#rpt_cancel").onclick = () => { dlg.close(); dlg.remove(); };
+
+    // Select all / deselect
+    dlg.querySelector("#rpt_select_all").onclick = () => {
+      dlg.querySelectorAll(".rpt-sec, .rpt-grp-cb").forEach(c => c.checked = true);
+    };
+    dlg.querySelector("#rpt_deselect_all").onclick = () => {
+      dlg.querySelectorAll(".rpt-sec, .rpt-grp-cb").forEach(c => c.checked = false);
+    };
+
+    // Generate button
+    dlg.querySelector("#rpt_generate").onclick = async () => {
+      // Collect selected sections
+      const selectedSections = [];
+      dlg.querySelectorAll(".rpt-sec:checked").forEach(cb => {
+        selectedSections.push(cb.dataset.key);
+      });
+      if (!selectedSections.length) {
+        alert("Wybierz co najmniej jedną sekcję.");
+        return;
+      }
+
+      // Collect placeholders
+      const phValues = {};
+      dlg.querySelectorAll(".rpt-ph").forEach(inp => {
+        phValues[inp.dataset.key] = inp.value;
+      });
+
+      // Save to localStorage
+      localStorage.setItem("gsm_report_placeholders", JSON.stringify(phValues));
+      localStorage.setItem("gsm_report_sections", JSON.stringify(selectedSections));
+
+      // Get LLM narrative if available
+      const llmTextEl = QS("#gsm_llm_text");
+      const llmNarrative = llmTextEl ? llmTextEl.textContent.trim() : "";
+
+      // Disable button and show progress
+      const genBtn = dlg.querySelector("#rpt_generate");
+      genBtn.disabled = true;
+      genBtn.textContent = "Generowanie...";
+
+      try {
+        const projectId = _getProjectId();
+        const resp = await fetch("/api/gsm/report/generate", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            project_id: projectId,
+            formats: formats,
+            sections: selectedSections,
+            placeholders: phValues,
+            profile_id: savedProfileId,
+            llm_narrative: llmNarrative,
+          }),
+        });
+        const json = await resp.json();
+        if (json.status !== "ok") {
+          throw new Error(_detailStr(json));
+        }
+
+        // Show download links
+        const reports = json.reports || [];
+        dlg.close();
+        dlg.remove();
+
+        if (reports.length) {
+          _showReportDownloads(reports);
+        }
+        _addLog("info", `Wygenerowano ${reports.length} raport(ów) GSM.`);
+
+      } catch (e) {
+        _addLog("error", "Błąd generowania raportu: " + e.message);
+        genBtn.disabled = false;
+        genBtn.textContent = "Generuj raport";
+      }
+    };
+  }
+
+  /**
+   * Show download links for generated reports.
+   */
+  function _showReportDownloads(reports) {
+    const dlg = document.createElement("dialog");
+    dlg.style.cssText = "max-width:500px;width:90vw;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:20px;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
+
+    const links = reports.filter(r => r.download_url).map(r => {
+      const sizeKb = r.size_bytes ? ` (${(r.size_bytes / 1024).toFixed(1)} KB)` : "";
+      return `<a href="${_escHtml(r.download_url)}" download class="btn" style="display:inline-flex;align-items:center;gap:6px;margin:4px;padding:8px 16px;text-decoration:none;">
+        ${_escHtml(r.format.toUpperCase())}${sizeKb}
+      </a>`;
+    }).join("");
+
+    const errors = reports.filter(r => r.error).map(r =>
+      `<div style="color:var(--danger,#dc2626);font-size:13px;">${_escHtml(r.format)}: ${_escHtml(r.error)}</div>`
+    ).join("");
+
+    dlg.innerHTML = `
+      <h3 style="margin:0 0 12px;">Raporty wygenerowane</h3>
+      <div style="margin-bottom:12px;">${links}</div>
+      ${errors}
+      <div style="text-align:right;margin-top:16px;">
+        <button class="btn" onclick="this.closest('dialog').close();this.closest('dialog').remove();">Zamknij</button>
+      </div>
+    `;
+
+    document.body.appendChild(dlg);
+    dlg.showModal();
+  }
+
+  function _escHtml(str) {
+    if (!str) return "";
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  /* ── Analytical Note Generation ─────────────────────────── */
+
+  async function _showNoteDialog() {
+    if (!St.lastResult) {
+      _addLog("warn", "Brak danych GSM. Wczytaj biling przed generowaniem notatki.");
+      return;
+    }
+
+    // Load available models for LLM variant
+    let noteModels = [];
+    try {
+      const resp = await fetch("/api/gsm/note/models");
+      const json = await resp.json();
+      if (json.status === "ok") noteModels = (json.models || []).filter(m => m.installed);
+    } catch (e) {
+      console.warn("[GSM] Failed to load note models:", e);
+    }
+
+    // Load available templates
+    let noteTemplates = [];
+    try {
+      const tResp = await fetch("/api/gsm/note/templates");
+      const tJson = await tResp.json();
+      if (tJson.status === "ok") noteTemplates = tJson.templates || [];
+    } catch (e) {
+      console.warn("[GSM] Failed to load note templates:", e);
+    }
+
+    // Load saved values
+    const savedNote = JSON.parse(localStorage.getItem("gsm_note_placeholders") || "{}");
+
+    const dlg = document.createElement("dialog");
+    dlg.className = "gsm-note-dialog";
+    dlg.style.cssText = "max-width:700px;width:92vw;max-height:88vh;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:0;overflow:hidden;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
+
+    // Model options HTML
+    const groupLabel = g => g === "deep" ? "Głęboka analiza" : g === "proofreading" ? "Korekta językowa" : g;
+    const modelOptions = noteModels.length
+      ? noteModels.map(m => {
+          const active = m.active ? " ★" : "";
+          return `<option value="${_escHtml(m.id)}">${_escHtml(m.display_name)}${m.vram ? " • " + _escHtml(m.vram) : ""} (${_escHtml(groupLabel(m.group))})${active}</option>`;
+        }).join("")
+      : '<option value="">Brak zainstalowanych modeli</option>';
+
+    dlg.innerHTML = `
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border-color,#ddd);display:flex;align-items:center;justify-content:space-between;">
+        <h3 style="margin:0;font-size:16px;">📋 Generuj notatkę analityczną GSM</h3>
+        <button class="btn" id="note_close_x" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;" title="Zamknij">&times;</button>
+      </div>
+      <div style="overflow-y:auto;max-height:calc(88vh - 120px);padding:16px 20px;">
+
+        <!-- Template selection -->
+        <div style="margin-bottom:16px;">
+          <label style="font-weight:600;font-size:14px;display:block;margin-bottom:8px;">Szablon notatki:</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select class="input" id="note_template_select" style="flex:1;font-size:13px;padding:5px 8px;">
+              <option value="__builtin__">Wbudowany (domyślny)</option>
+            </select>
+            <button class="btn" id="note_edit_template" style="font-size:12px;white-space:nowrap;padding:5px 12px;" title="Edytuj szablon">✏️ Edytuj szablon</button>
+          </div>
+        </div>
+
+        <!-- Variant selection -->
+        <div style="margin-bottom:16px;">
+          <label style="font-weight:600;font-size:14px;display:block;margin-bottom:8px;">Wariant notatki:</label>
+          <div style="display:flex;gap:12px;">
+            <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;border:2px solid var(--border-color,#ccc);border-radius:8px;cursor:pointer;flex:1;transition:border-color .15s;" class="note-variant-label">
+              <input type="radio" name="note_variant" value="data" checked class="note-variant-radio">
+              <div>
+                <div style="font-weight:600;font-size:13px;">Notatka danych</div>
+                <div style="font-size:11px;color:var(--text-secondary,#666);">Tylko dane liczbowe, bez LLM (~1s)</div>
+              </div>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;border:2px solid var(--border-color,#ccc);border-radius:8px;cursor:pointer;flex:1;transition:border-color .15s;" class="note-variant-label">
+              <input type="radio" name="note_variant" value="llm" class="note-variant-radio">
+              <div>
+                <div style="font-weight:600;font-size:13px;">Notatka analityczna (LLM)</div>
+                <div style="font-size:11px;color:var(--text-secondary,#666);">Wnioskowanie behawioralne (~30-60s)</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- LLM Model selector (hidden by default) -->
+        <div id="note_llm_section" style="display:none;margin-bottom:16px;padding:12px;background:var(--bg-secondary,#f8f9fa);border-radius:8px;">
+          <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">Model LLM:</label>
+          <select class="input" id="note_llm_model" style="width:100%;font-size:13px;" ${noteModels.length ? "" : "disabled"}>
+            ${modelOptions}
+          </select>
+          ${!noteModels.length ? '<div style="color:var(--danger,#dc2626);font-size:12px;margin-top:4px;">Zainstaluj model w ustawieniach (Głęboka analiza lub Korekta językowa).</div>' : ''}
+        </div>
+
+        <!-- User metadata fields -->
+        <details class="rpt-details" open style="margin-bottom:16px;">
+          <summary style="font-weight:600;font-size:14px;cursor:pointer;padding:6px 0;">Dane nagłówkowe</summary>
+          <div style="display:grid;grid-template-columns:140px 1fr;gap:8px;padding:12px 0;">
+            <label style="font-size:13px;align-self:center;">Miejscowość:</label>
+            <input type="text" class="input note-ph" data-key="miejscowosc" value="${_escHtml(savedNote.miejscowosc || "")}" placeholder="np. Białystok" style="font-size:13px;padding:4px 8px;">
+
+            <label style="font-size:13px;align-self:center;">Data sporządzenia:</label>
+            <input type="text" class="input note-ph" data-key="data_sporzadzenia" value="${_escHtml(savedNote.data_sporzadzenia || new Date().toLocaleDateString("pl-PL"))}" style="font-size:13px;padding:4px 8px;">
+
+            <label style="font-size:13px;align-self:center;">Sygnatura sprawy:</label>
+            <input type="text" class="input note-ph" data-key="sygnatura_sprawy" value="${_escHtml(savedNote.sygnatura_sprawy || "")}" placeholder="np. RSD-1234/2025" style="font-size:13px;padding:4px 8px;">
+
+            <label style="font-size:13px;align-self:center;">Analityk:</label>
+            <input type="text" class="input note-ph" data-key="analityk" value="${_escHtml(savedNote.analityk || "")}" placeholder="Imię i nazwisko" style="font-size:13px;padding:4px 8px;">
+
+            <label style="font-size:13px;align-self:center;">Podpis:</label>
+            <input type="text" class="input note-ph" data-key="podpis" value="${_escHtml(savedNote.podpis || "")}" placeholder="Podpis / stopień" style="font-size:13px;padding:4px 8px;">
+          </div>
+        </details>
+
+        <!-- Table data selection -->
+        <details class="rpt-details" open style="margin-bottom:16px;">
+          <summary style="font-weight:600;font-size:14px;cursor:pointer;padding:6px 0;">Osadź tabele danych</summary>
+          <div style="padding:8px 0;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-table-cb" data-table="stats" checked>
+              Statystyki aktywności (połączenia, SMS, dane)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-table-cb" data-table="contacts" checked>
+              Najczęstsze kontakty (top 10)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-table-cb" data-table="anomalies" checked>
+              Wykryte anomalie
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-table-cb" data-table="locations">
+              Lokalizacje BTS (top 15)
+            </label>
+            <div style="font-size:11px;color:var(--text-secondary,#666);margin-top:6px;">
+              Zaznaczone tabele zostaną wstawione w odpowiednich sekcjach notatki.
+            </div>
+          </div>
+        </details>
+
+        <!-- Chart screenshots selection -->
+        <details class="rpt-details" style="margin-bottom:16px;">
+          <summary style="font-weight:600;font-size:14px;cursor:pointer;padding:6px 0;">Osadź wykresy (zrzuty ekranowe)</summary>
+          <div style="padding:8px 0;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="top_contacts" checked>
+              Top kontakty (graf)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="activity" checked>
+              Rozkład aktywności
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="night_activity" checked>
+              Aktywność nocna
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="weekend_activity" checked>
+              Aktywność weekendowa
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="anomaly_map" checked>
+              Mapa anomalii BTS
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+              <input type="checkbox" class="note-chart-cb" data-chart="map_bts" checked>
+              Mapa lokalizacji BTS
+            </label>
+            <div style="font-size:11px;color:var(--text-secondary,#666);margin-top:6px;">
+              Zaznaczone wykresy zostaną przechwycone jako zrzuty ekranowe i osadzone w notatce DOCX.
+            </div>
+          </div>
+        </details>
+
+        <!-- Progress indicator (hidden) -->
+        <div id="note_progress" style="display:none;padding:12px;background:var(--bg-secondary,#f8f9fa);border-radius:8px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="spinner" style="width:16px;height:16px;border:2px solid var(--border-color);border-top-color:var(--accent,#2563eb);border-radius:50%;animation:spin 1s linear infinite;"></div>
+            <span id="note_progress_text" style="font-size:13px;">Generowanie notatki...</span>
+          </div>
+          <div style="margin-top:8px;height:4px;background:var(--border-color,#ddd);border-radius:2px;overflow:hidden;">
+            <div id="note_progress_bar" style="height:100%;background:var(--accent,#2563eb);width:0%;transition:width .3s;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid var(--border-color,#ddd);display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn" id="note_cancel" style="min-width:80px;">Anuluj</button>
+        <button class="btn btn-primary" id="note_generate" style="min-width:140px;">Generuj notatkę</button>
+      </div>
+      <style>
+        .note-variant-label:has(.note-variant-radio:checked) {
+          border-color: var(--accent, #2563eb) !important;
+          background: color-mix(in srgb, var(--accent, #2563eb) 6%, transparent);
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      </style>
+    `;
+
+    document.body.appendChild(dlg);
+    dlg.showModal();
+
+    // Populate template selector
+    const tplSelect = dlg.querySelector("#note_template_select");
+    if (tplSelect && noteTemplates.length) {
+      tplSelect.innerHTML = "";
+      const savedTplId = localStorage.getItem("gsm_note_template_id") || "";
+      for (const t of noteTemplates) {
+        const opt = document.createElement("option");
+        opt.value = t.id;
+        opt.textContent = t.name + (t.default ? " ★" : "") + (t.builtin ? "" : ` (${t.section_count} bloków)`);
+        if (t.id === savedTplId || (!savedTplId && t.default)) opt.selected = true;
+        tplSelect.appendChild(opt);
+      }
+    }
+
+    // Edit template button
+    dlg.querySelector("#note_edit_template").onclick = async () => {
+      const selectedId = tplSelect ? tplSelect.value : "__builtin__";
+      dlg.close(); dlg.remove();
+      await _showTemplateEditor(selectedId);
+    };
+
+    // Close handlers
+    dlg.querySelector("#note_close_x").onclick = () => { dlg.close(); dlg.remove(); };
+    dlg.querySelector("#note_cancel").onclick = () => { dlg.close(); dlg.remove(); };
+
+    // Variant toggle — show/hide LLM section
+    dlg.querySelectorAll('.note-variant-radio').forEach(radio => {
+      radio.onchange = () => {
+        const llmSection = dlg.querySelector("#note_llm_section");
+        if (llmSection) llmSection.style.display = radio.value === "llm" && radio.checked ? "" : "none";
+      };
+    });
+
+    // Generate button
+    dlg.querySelector("#note_generate").onclick = async () => {
+      const variant = dlg.querySelector('input[name="note_variant"]:checked')?.value || "data";
+      const model = dlg.querySelector("#note_llm_model")?.value || "";
+
+      if (variant === "llm" && !model) {
+        alert("Wybierz model LLM dla wariantu analitycznego.");
+        return;
+      }
+
+      // Collect user placeholders
+      const phValues = {};
+      dlg.querySelectorAll(".note-ph").forEach(inp => {
+        phValues[inp.dataset.key] = inp.value;
+      });
+
+      // Save to localStorage
+      localStorage.setItem("gsm_note_placeholders", JSON.stringify(phValues));
+
+      // Show progress
+      const genBtn = dlg.querySelector("#note_generate");
+      const progressEl = dlg.querySelector("#note_progress");
+      const progressText = dlg.querySelector("#note_progress_text");
+      const progressBar = dlg.querySelector("#note_progress_bar");
+      genBtn.disabled = true;
+      genBtn.textContent = "Generowanie...";
+      if (progressEl) progressEl.style.display = "";
+
+      try {
+        // Capture chart screenshots
+        const chartImages = {};
+        const selectedCharts = [];
+        dlg.querySelectorAll(".note-chart-cb:checked").forEach(cb => {
+          selectedCharts.push(cb.dataset.chart);
+        });
+
+        if (selectedCharts.length > 0) {
+          if (progressText) progressText.textContent = "Przechwytywanie wykresów...";
+          if (progressBar) progressBar.style.width = "10%";
+
+          for (const chartName of selectedCharts) {
+            try {
+              const b64 = await _captureChartScreenshot(chartName);
+              if (b64) chartImages[chartName] = b64;
+            } catch (e) {
+              console.warn(`[GSM] Chart capture failed for ${chartName}:`, e);
+            }
+          }
+        }
+
+        // Collect selected tables
+        const selectedTables = [];
+        dlg.querySelectorAll(".note-table-cb:checked").forEach(cb => {
+          selectedTables.push(cb.dataset.table);
+        });
+
+        if (progressText) progressText.textContent = variant === "llm" ? "Generowanie analizy LLM..." : "Generowanie notatki...";
+        if (progressBar) progressBar.style.width = "30%";
+
+        // Build request
+        const projectId = _getProjectId();
+        const templateId = tplSelect ? tplSelect.value : "__builtin__";
+        localStorage.setItem("gsm_note_template_id", templateId);
+        const payload = {
+          project_id: projectId,
+          variant: variant,
+          model: model,
+          placeholders: phValues,
+          chart_images: chartImages,
+          tables: selectedTables,
+          template_id: templateId,
+        };
+
+        const resp = await fetch("/api/gsm/note/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (progressBar) progressBar.style.width = "90%";
+
+        const json = await resp.json();
+        if (json.status !== "ok") {
+          throw new Error(json.detail || "Błąd generowania notatki");
+        }
+
+        if (progressBar) progressBar.style.width = "100%";
+
+        dlg.close();
+        dlg.remove();
+
+        // Show download link
+        const note = json.note;
+        if (note && note.download_url) {
+          _showNoteDownload(note);
+        }
+
+        const variantLabel = variant === "llm" ? "analityczną (LLM)" : "danych";
+        _addLog("info", `Wygenerowano notatkę ${variantLabel}: ${note.filename}`);
+
+      } catch (e) {
+        _addLog("error", "Błąd generowania notatki: " + e.message);
+        genBtn.disabled = false;
+        genBtn.textContent = "Generuj notatkę";
+        if (progressEl) progressEl.style.display = "none";
+      }
+    };
+  }
+
+  /* ── Template Editor ──────────────────────────────────────── */
+
+  async function _showTemplateEditor(initialTplId) {
+    // Load full template + marker catalogue
+    let tpl = null;
+    let markerCatalogue = [];
+    let fieldCatalogue = [];
+    const tplId = initialTplId || "__builtin__";
+
+    try {
+      const endpoint = tplId === "__builtin__"
+        ? "/api/gsm/note/templates/builtin"
+        : `/api/gsm/note/templates/${encodeURIComponent(tplId)}`;
+      const resp = await fetch(endpoint);
+      const json = await resp.json();
+      if (json.status === "ok") {
+        tpl = json.template;
+        markerCatalogue = json.marker_catalogue || [];
+        fieldCatalogue = json.field_catalogue || [];
+      }
+    } catch (e) {
+      console.warn("[GSM] Failed to load template:", e);
+    }
+
+    if (!tpl) {
+      _addLog("error", "Nie udało się załadować szablonu.");
+      return;
+    }
+
+    // Load template list for the selector
+    let allTemplates = [];
+    try {
+      const r = await fetch("/api/gsm/note/templates");
+      const j = await r.json();
+      if (j.status === "ok") allTemplates = j.templates || [];
+    } catch (e) {}
+
+    // Deep-copy sections for editing
+    let sections = JSON.parse(JSON.stringify(tpl.sections || []));
+    let currentTplId = tpl.id;
+    let currentTplName = tpl.name || "Wbudowany";
+    let currentIsDefault = tpl.default || false;
+    let isBuiltin = tpl.builtin || false;
+
+    const dlg = document.createElement("dialog");
+    dlg.style.cssText = "max-width:800px;width:95vw;max-height:92vh;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:0;overflow:hidden;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
+
+    function _renderEditor() {
+      const tplCount = allTemplates.filter(t => !t.builtin).length;
+      const tplOptions = allTemplates.map(t =>
+        `<option value="${_escHtml(t.id)}" ${t.id === currentTplId ? "selected" : ""}>${_escHtml(t.name)}${t.default ? " ★" : ""}${t.builtin ? " (wbudowany)" : ""}</option>`
+      ).join("");
+
+      dlg.innerHTML = `
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border-color,#ddd);display:flex;align-items:center;justify-content:space-between;">
+          <h3 style="margin:0;font-size:15px;">✏️ Edytor szablonu notatki</h3>
+          <button id="tpled_close_x" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;" title="Zamknij">&times;</button>
+        </div>
+        <div class="note-tpl-editor" style="padding:12px 20px;">
+          <div class="note-tpl-header">
+            <select class="note-tpl-select" id="tpled_select">${tplOptions}</select>
+            <input type="text" class="note-tpl-name" id="tpled_name" value="${_escHtml(currentTplName)}" placeholder="Nazwa szablonu" ${isBuiltin ? "disabled" : ""}>
+            <span class="note-tpl-star ${currentIsDefault ? "active" : ""}" id="tpled_star" title="Ustaw jako domyślny">★</span>
+            <span class="note-tpl-counter">${tplCount}/${5} szablonów</span>
+          </div>
+          <div class="note-tpl-toolbar">
+            <button data-cmd="bold" title="Pogrubienie"><b>B</b></button>
+            <button data-cmd="italic" title="Kursywa"><i>I</i></button>
+            <span style="width:1px;height:18px;background:var(--border-color,#ccc);margin:0 4px;"></span>
+            <span class="note-tpl-field-picker-wrap" style="position:relative;">
+              <button id="tpled_field_btn" class="note-tpl-field-btn" title="Wstaw pole danych do tekstu">{{ }} Wstaw pole ▾</button>
+              <div id="tpled_field_dropdown" class="note-tpl-field-dropdown" style="display:none;"></div>
+            </span>
+          </div>
+          <div class="note-tpl-body" id="tpled_body"></div>
+          <div class="note-tpl-add-bar" id="tpled_add_bar">
+            <button data-add="text" title="Dodaj blok tekstowy">+ Tekst</button>
+          </div>
+          <div class="note-tpl-footer">
+            <div class="btn-group">
+              <button class="btn" id="tpled_cancel">Anuluj</button>
+              ${!isBuiltin ? `<button class="btn btn-danger" id="tpled_delete" style="font-size:12px;">Usuń</button>` : ""}
+            </div>
+            <div class="btn-group">
+              <button class="btn" id="tpled_save_as" style="font-size:12px;">Zapisz jako nowy...</button>
+              <button class="btn btn-primary" id="tpled_save" ${isBuiltin ? "disabled" : ""}>Zapisz</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Populate sections
+      _renderSections();
+
+      // Populate add-bar with markers not yet in the template
+      _renderAddBar();
+
+      // -- Events --
+      dlg.querySelector("#tpled_close_x").onclick = () => { dlg.close(); dlg.remove(); _showNoteDialog(); };
+      dlg.querySelector("#tpled_cancel").onclick = () => { dlg.close(); dlg.remove(); _showNoteDialog(); };
+
+      // Toolbar
+      dlg.querySelectorAll(".note-tpl-toolbar button[data-cmd]").forEach(btn => {
+        btn.onmousedown = (e) => {
+          e.preventDefault();
+          document.execCommand(btn.dataset.cmd, false, null);
+        };
+      });
+
+      // Field picker dropdown
+      const fieldBtn = dlg.querySelector("#tpled_field_btn");
+      const fieldDrop = dlg.querySelector("#tpled_field_dropdown");
+      if (fieldBtn && fieldDrop) {
+        _buildFieldDropdown(fieldDrop, fieldCatalogue);
+        fieldBtn.onclick = (e) => {
+          e.stopPropagation();
+          const open = fieldDrop.style.display !== "none";
+          fieldDrop.style.display = open ? "none" : "";
+        };
+        // Close on outside click
+        dlg.addEventListener("click", (e) => {
+          if (!e.target.closest(".note-tpl-field-picker-wrap")) {
+            fieldDrop.style.display = "none";
+          }
+        });
+      }
+
+      // Star (default toggle)
+      dlg.querySelector("#tpled_star").onclick = async () => {
+        currentIsDefault = !currentIsDefault;
+        dlg.querySelector("#tpled_star").classList.toggle("active", currentIsDefault);
+        if (currentIsDefault && currentTplId && currentTplId !== "__builtin__") {
+          try { await fetch("/api/gsm/note/templates/default", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ template_id: currentTplId }) }); } catch (e) {}
+        }
+      };
+
+      // Template selector
+      dlg.querySelector("#tpled_select").onchange = async (e) => {
+        const newId = e.target.value;
+        dlg.close(); dlg.remove();
+        await _showTemplateEditor(newId);
+      };
+
+      // Save
+      const saveBtn = dlg.querySelector("#tpled_save");
+      if (saveBtn) saveBtn.onclick = () => _doSave(false);
+
+      // Save As
+      dlg.querySelector("#tpled_save_as").onclick = () => _doSave(true);
+
+      // Delete
+      const delBtn = dlg.querySelector("#tpled_delete");
+      if (delBtn) delBtn.onclick = async () => {
+        if (!confirm("Usunąć szablon \"" + currentTplName + "\"?")) return;
+        try {
+          await fetch(`/api/gsm/note/templates/${encodeURIComponent(currentTplId)}`, { method: "DELETE" });
+          _addLog("info", `Usunięto szablon: ${currentTplName}`);
+          dlg.close(); dlg.remove();
+          await _showTemplateEditor("__builtin__");
+        } catch (e) {
+          _addLog("error", "Błąd usuwania szablonu: " + e.message);
+        }
+      };
+    }
+
+    function _collectSections() {
+      const bodyEl = dlg.querySelector("#tpled_body");
+      if (!bodyEl) return sections;
+      const newSections = [];
+      bodyEl.querySelectorAll(".note-tpl-section").forEach(sec => {
+        const sType = sec.dataset.stype;
+        const sId = sec.dataset.sid;
+        if (sType === "text") {
+          const contentEl = sec.querySelector(".note-tpl-text");
+          newSections.push({ id: sId, type: "text", content: contentEl ? contentEl.innerHTML : "" });
+        } else if (sType === "marker") {
+          newSections.push({ id: sId, type: "marker", key: sec.dataset.key });
+        }
+      });
+      sections = newSections;
+      return newSections;
+    }
+
+    async function _doSave(saveAsNew) {
+      _collectSections();
+      const name = dlg.querySelector("#tpled_name")?.value || "Nowy szablon";
+
+      let tplData;
+      if (saveAsNew || isBuiltin) {
+        const newName = saveAsNew ? prompt("Nazwa nowego szablonu:", name) : name;
+        if (!newName) return;
+        tplData = {
+          id: "",
+          name: newName,
+          default: currentIsDefault,
+          sections: sections,
+        };
+      } else {
+        tplData = {
+          id: currentTplId,
+          name: name,
+          default: currentIsDefault,
+          sections: sections,
+        };
+      }
+
+      try {
+        const resp = await fetch("/api/gsm/note/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ template: tplData }),
+        });
+        const json = await resp.json();
+        if (json.status !== "ok") throw new Error(json.message || "Błąd zapisu");
+        const saved = json.template;
+        _addLog("info", `Zapisano szablon: ${saved.name}`);
+        dlg.close(); dlg.remove();
+        await _showTemplateEditor(saved.id);
+      } catch (e) {
+        _addLog("error", "Błąd zapisu szablonu: " + e.message);
+        alert("Błąd: " + e.message);
+      }
+    }
+
+    function _renderSections() {
+      const bodyEl = dlg.querySelector("#tpled_body");
+      if (!bodyEl) return;
+      bodyEl.innerHTML = "";
+
+      sections.forEach((sec, idx) => {
+        const div = document.createElement("div");
+        div.className = "note-tpl-section";
+        div.dataset.stype = sec.type;
+        div.dataset.sid = sec.id || `s_${idx}`;
+        div.draggable = true;
+
+        if (sec.type === "marker") {
+          const mInfo = markerCatalogue.find(m => m.key === sec.key) || {};
+          div.dataset.key = sec.key;
+          div.innerHTML = `
+            <span class="note-tpl-section-handle">⠿</span>
+            <div class="note-tpl-section-content">
+              <span class="note-tpl-marker" data-mtype="${_escHtml(mInfo.type || "data")}">${_escHtml(mInfo.label || sec.key)}</span>
+            </div>
+            <div class="note-tpl-section-actions"><button data-action="remove" title="Usuń blok">✕</button></div>
+          `;
+        } else {
+          div.innerHTML = `
+            <span class="note-tpl-section-handle">⠿</span>
+            <div class="note-tpl-section-content">
+              <div class="note-tpl-text" contenteditable="true" data-placeholder="Wpisz tekst...">${sec.content || ""}</div>
+            </div>
+            <div class="note-tpl-section-actions"><button data-action="remove" title="Usuń blok">✕</button></div>
+          `;
+        }
+
+        // Remove button
+        div.querySelector("[data-action='remove']").onclick = () => {
+          _collectSections();
+          sections = sections.filter(s => s.id !== div.dataset.sid);
+          _renderSections();
+          _renderAddBar();
+        };
+
+        // Drag & drop
+        div.addEventListener("dragstart", (e) => {
+          div.classList.add("dragging");
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", div.dataset.sid);
+        });
+        div.addEventListener("dragend", () => {
+          div.classList.remove("dragging");
+          bodyEl.querySelectorAll(".note-tpl-section").forEach(s => {
+            s.classList.remove("drag-over-top", "drag-over-bottom");
+          });
+        });
+        div.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          const rect = div.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          const isTop = e.clientY < mid;
+          div.classList.toggle("drag-over-top", isTop);
+          div.classList.toggle("drag-over-bottom", !isTop);
+        });
+        div.addEventListener("dragleave", () => {
+          div.classList.remove("drag-over-top", "drag-over-bottom");
+        });
+        div.addEventListener("drop", (e) => {
+          e.preventDefault();
+          div.classList.remove("drag-over-top", "drag-over-bottom");
+          const draggedId = e.dataTransfer.getData("text/plain");
+          if (!draggedId || draggedId === div.dataset.sid) return;
+          _collectSections();
+          const draggedIdx = sections.findIndex(s => s.id === draggedId);
+          const targetIdx = sections.findIndex(s => s.id === div.dataset.sid);
+          if (draggedIdx < 0 || targetIdx < 0) return;
+          const [dragged] = sections.splice(draggedIdx, 1);
+          const rect = div.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          const insertIdx = e.clientY < mid ? targetIdx : targetIdx + 1;
+          const adjustedIdx = draggedIdx < targetIdx ? insertIdx - 1 : insertIdx;
+          sections.splice(Math.max(0, adjustedIdx), 0, dragged);
+          _renderSections();
+        });
+
+        bodyEl.appendChild(div);
+      });
+    }
+
+    function _renderAddBar() {
+      const bar = dlg.querySelector("#tpled_add_bar");
+      if (!bar) return;
+      // Keep "Add text" button, add marker buttons for missing markers
+      const usedKeys = new Set(sections.filter(s => s.type === "marker").map(s => s.key));
+      bar.innerHTML = '<button data-add="text" title="Dodaj blok tekstowy">+ Tekst</button>';
+      for (const m of markerCatalogue) {
+        if (!usedKeys.has(m.key)) {
+          const btn = document.createElement("button");
+          btn.textContent = `+ ${m.label}`;
+          btn.title = `Dodaj: ${m.label}`;
+          btn.onclick = () => {
+            _collectSections();
+            sections.push({ id: `s_${Date.now()}`, type: "marker", key: m.key });
+            _renderSections();
+            _renderAddBar();
+            // Scroll to bottom
+            const bodyEl = dlg.querySelector("#tpled_body");
+            if (bodyEl) bodyEl.scrollTop = bodyEl.scrollHeight;
+          };
+          bar.appendChild(btn);
+        }
+      }
+      // Add text button
+      bar.querySelector("[data-add='text']").onclick = () => {
+        _collectSections();
+        sections.push({ id: `s_${Date.now()}`, type: "text", content: "" });
+        _renderSections();
+        // Focus last text block
+        const bodyEl = dlg.querySelector("#tpled_body");
+        if (bodyEl) {
+          bodyEl.scrollTop = bodyEl.scrollHeight;
+          const lastText = bodyEl.querySelector(".note-tpl-section:last-child .note-tpl-text");
+          if (lastText) lastText.focus();
+        }
+      };
+    }
+
+    // Render and show dialog
+    _renderEditor();
+    document.body.appendChild(dlg);
+    dlg.showModal();
+  }
+
+  /* ── Field picker: grouped dropdown for inserting {{ placeholders }} ────── */
+
+  function _buildFieldDropdown(container, catalogue) {
+    if (!catalogue || !catalogue.length) {
+      container.innerHTML = '<div style="padding:8px 12px;color:var(--text-secondary,#888);font-size:12px;">Brak pól</div>';
+      return;
+    }
+    // Group fields by category
+    const groups = [];
+    const groupMap = {};
+    for (const f of catalogue) {
+      const g = f.group || "Inne";
+      if (!groupMap[g]) {
+        groupMap[g] = [];
+        groups.push(g);
+      }
+      groupMap[g].push(f);
+    }
+
+    let html = '<div class="note-tpl-field-list">';
+    for (const gName of groups) {
+      html += `<div class="note-tpl-field-group-label">${_escHtml(gName)}</div>`;
+      for (const f of groupMap[gName]) {
+        html += `<button class="note-tpl-field-item" data-field="${_escHtml(f.key)}" title="${_escHtml(f.desc || "")}">`;
+        html += `<span class="note-tpl-field-item-label">${_escHtml(f.label)}</span>`;
+        html += `<code class="note-tpl-field-item-key">{{ ${_escHtml(f.key)} }}</code>`;
+        html += `</button>`;
+      }
+    }
+    html += '</div>';
+    container.innerHTML = html;
+
+    // Click handler: insert field at cursor in last focused text block
+    container.querySelectorAll(".note-tpl-field-item").forEach(btn => {
+      btn.onmousedown = (e) => {
+        e.preventDefault();  // keep focus in contenteditable
+      };
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const fieldKey = btn.dataset.field;
+        _insertFieldAtCursor(container.closest("dialog"), `{{ ${fieldKey} }}`);
+        container.style.display = "none";
+      };
+    });
+  }
+
+  function _insertFieldAtCursor(dlg, text) {
+    // Try to insert at current selection (if inside a contenteditable text block)
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const ancestor = range.commonAncestorContainer;
+      // Check if the cursor is inside a .note-tpl-text contenteditable
+      const textBlock = ancestor.nodeType === 1
+        ? ancestor.closest(".note-tpl-text")
+        : ancestor.parentElement?.closest(".note-tpl-text");
+      if (textBlock && dlg && dlg.contains(textBlock)) {
+        range.deleteContents();
+        range.insertNode(document.createTextNode(text));
+        // Move cursor after inserted text
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+    }
+
+    // Fallback: find the last text block in the editor and append there
+    if (dlg) {
+      const textBlocks = dlg.querySelectorAll(".note-tpl-text[contenteditable]");
+      if (textBlocks.length > 0) {
+        const last = textBlocks[textBlocks.length - 1];
+        last.focus();
+        // Append at end
+        last.innerHTML += text;
+        // Move cursor to end
+        const r = document.createRange();
+        r.selectNodeContents(last);
+        r.collapse(false);
+        const s = window.getSelection();
+        s.removeAllRanges();
+        s.addRange(r);
+      }
+    }
+  }
+
+  function _showNoteDownload(note) {
+    const dlg = document.createElement("dialog");
+    dlg.style.cssText = "max-width:450px;width:90vw;border-radius:12px;border:1px solid var(--border-color,#ccc);padding:20px;background:var(--bg-primary,#fff);color:var(--text-primary,#222);";
+
+    const sizeKb = note.size_bytes ? ` (${(note.size_bytes / 1024).toFixed(1)} KB)` : "";
+    const variantLabel = note.variant === "llm" ? "Notatka analityczna (LLM)" : "Notatka danych";
+
+    dlg.innerHTML = `
+      <h3 style="margin:0 0 12px;">📋 ${_escHtml(variantLabel)}</h3>
+      <p style="font-size:13px;margin:0 0 16px;color:var(--text-secondary,#666);">Notatka została wygenerowana pomyślnie.</p>
+      <a href="${_escHtml(note.download_url)}" download class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;padding:10px 20px;text-decoration:none;">
+        Pobierz DOCX${sizeKb}
+      </a>
+      <div style="text-align:right;margin-top:16px;">
+        <button class="btn" onclick="this.closest('dialog').close();this.closest('dialog').remove();">Zamknij</button>
+      </div>
+    `;
+
+    document.body.appendChild(dlg);
+    dlg.showModal();
+  }
+
+  /**
+   * Capture a chart/card screenshot as base64 PNG string.
+   * Maps chart names to DOM selectors.
+   */
+  async function _captureChartScreenshot(chartName) {
+    const selectorMap = {
+      "top_contacts": "#gsm_graph_card",
+      "activity": "#gsm_heatmap_card",
+      "night_activity": "[data-chart-id='night']",
+      "weekend_activity": "[data-chart-id='weekend']",
+      "map_bts": "#gsm_map_container",
+      "anomaly_map": "#gsm_anomaly_map_wrap",
+    };
+
+    const chartLabels = {
+      "top_contacts": "Top kontakty",
+      "activity": "Rozkład aktywności",
+      "night_activity": "Aktywność nocna",
+      "weekend_activity": "Aktywność weekendowa",
+      "map_bts": "Mapa BTS",
+      "anomaly_map": "Mapa anomalii BTS",
+    };
+
+    const selectors = selectorMap[chartName];
+    if (!selectors) return null;
+
+    // Try each selector (some charts may have alternate selectors)
+    let el = null;
+    for (const sel of selectors.split(",")) {
+      el = document.querySelector(sel.trim());
+      if (el) break;
+    }
+    if (!el) {
+      console.warn(`[GSM] Chart element not found for ${chartName}: ${selectors}`);
+      return null;
+    }
+
+    // For anomaly map, use the dedicated Leaflet rendering pipeline
+    if (chartName === "anomaly_map" && _anomMapInstance) {
+      try {
+        const mapCanvas = await _renderAnomalyMapToCanvas();
+        if (mapCanvas) {
+          const watermarked = _drawWatermark(mapCanvas, ["Mapa anomalii BTS", "© OpenStreetMap"]);
+          return watermarked.toDataURL("image/png").split(",")[1];
+        }
+      } catch (e) {
+        console.warn("[GSM] Anomaly map rendering failed:", e);
+      }
+      return null;
+    }
+
+    // For maps, use the full map rendering pipeline (tiles, overlays, markers, watermark)
+    if (chartName === "map_bts") {
+      try {
+        const mapCanvas = await _renderMapToCanvas();
+        if (mapCanvas) {
+          return mapCanvas.toDataURL("image/png").split(",")[1]; // base64 only
+        }
+      } catch (e) {
+        console.warn("[GSM] Map rendering failed, fallback to html2canvas:", e);
+      }
+    }
+
+    // Use html2canvas
+    await _ensureHtml2Canvas();
+    if (!window.html2canvas) return null;
+
+    try {
+      const canvas = await window.html2canvas(el, {
+        useCORS: true,
+        allowTaint: true,
+        scale: 2,
+        backgroundColor: getComputedStyle(document.body).getPropertyValue("--bg-primary") || "#ffffff",
+        logging: false,
+        onclone: (doc, clonedEl) => {
+          // Hide filter/select/resize elements in the clone
+          clonedEl.querySelectorAll(_SCREENSHOT_HIDE_SELECTORS).forEach(e => {
+            e.style.display = "none";
+          });
+        },
+      });
+
+      // Apply watermark (same as "Zrób zrzut" button)
+      const label = chartLabels[chartName] || chartName;
+      const watermarked = _drawWatermark(canvas, [label]);
+
+      return watermarked.toDataURL("image/png").split(",")[1]; // base64 only
+    } catch (e) {
+      console.warn(`[GSM] html2canvas failed for ${chartName}:`, e);
+      return null;
+    }
+  }
+
+  function _blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /* ── Section Layout Manager ──────────────────────────────── */
+
+  const _SECTION_DEFS = [
+    { id: "info",           label: "Informacje o bilingu" },
+    { id: "summary",        label: "Podsumowanie" },
+    { id: "devices",        label: "Urządzenia" },
+    { id: "anomalies",      label: "Anomalie" },
+    { id: "analysis",       label: "Analiza" },
+    { id: "special_numbers", label: "Numery specjalne" },
+    { id: "graph",          label: "Graf kontaktów" },
+    { id: "records",        label: "Rekordy" },
+    { id: "activity",       label: "Wykresy aktywności" },
+    { id: "map",            label: "Mapa BTS" },
+    { id: "clusters",       label: "Wykryte lokalizacje" },
+    { id: "border",         label: "Przekroczenia granic" },
+    { id: "overnight",      label: "Nocowanie poza domem" },
+    { id: "user_prompt",    label: "Pytanie / instrukcja LLM" },
+    { id: "llm",            label: "Analiza narracyjna (LLM)" },
+  ];
+  const _SECTION_MAP = {};
+  for (const s of _SECTION_DEFS) _SECTION_MAP[s.id] = s;
+  const _DEFAULT_SECTION_ORDER = _SECTION_DEFS.map(s => s.id);
+
+  /**
+   * Auto-discover sections from DOM that aren't in _SECTION_DEFS.
+   * This allows future applets, anomalies, and data panels to appear
+   * in the Visual Layout Editor automatically.
+   */
+  function _discoverDynamicSections() {
+    const wrap = QS("#gsm_results");
+    if (!wrap) return;
+    wrap.querySelectorAll("[data-section-id]").forEach(el => {
+      const id = el.dataset.sectionId;
+      if (_SECTION_MAP[id]) return; // already known
+      // Extract label from first .h2 element or fallback to id
+      const h2 = el.querySelector(".h2");
+      const label = h2 ? h2.textContent.trim() : id.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const def = { id, label };
+      _SECTION_DEFS.push(def);
+      _SECTION_MAP[id] = def;
+      _DEFAULT_SECTION_ORDER.push(id);
+    });
+  }
+
+  /**
+   * Auto-discover sub-elements within a section (chart cards, applet panels, etc.).
+   * Looks for children with [data-chart-id] or [data-sub-id] attributes.
+   */
+  function _discoverDynamicSubelements() {
+    const wrap = QS("#gsm_results");
+    if (!wrap) return;
+    wrap.querySelectorAll("[data-section-id]").forEach(sectionEl => {
+      const sid = sectionEl.dataset.sectionId;
+      // Find sub-elements by data-chart-id or data-sub-id attributes
+      const subEls = sectionEl.querySelectorAll("[data-chart-id], [data-sub-id]");
+      if (subEls.length < 2) return; // no point in drag-reorder for 0-1 items
+      if (_SUBELEMENT_DEFS[sid]) {
+        // Merge any new sub-elements not already defined
+        const existing = new Set(_SUBELEMENT_DEFS[sid].map(d => d.id));
+        subEls.forEach(el => {
+          const subId = el.dataset.chartId || el.dataset.subId;
+          if (subId && !existing.has(subId)) {
+            const subLabel = el.querySelector(".h2, .gsm-chart-title, [class*='title']")?.textContent?.trim() || subId;
+            _SUBELEMENT_DEFS[sid].push({ id: subId, label: subLabel });
+            existing.add(subId);
+          }
+        });
+      } else {
+        // Create new sub-element definition
+        const items = [];
+        const seen = new Set();
+        subEls.forEach(el => {
+          const subId = el.dataset.chartId || el.dataset.subId;
+          if (subId && !seen.has(subId)) {
+            const subLabel = el.querySelector(".h2, .gsm-chart-title, [class*='title']")?.textContent?.trim() || subId;
+            items.push({ id: subId, label: subLabel });
+            seen.add(subId);
+          }
+        });
+        if (items.length >= 2) _SUBELEMENT_DEFS[sid] = items;
+      }
+    });
+  }
+  const _LS_LAYOUT_KEY = "gsm_section_layout";
+  const _LS_HIDDEN_KEY = "gsm_section_hidden";
+  const _LS_GRID_KEY   = "gsm_section_grid";
+  const _LS_SUBELM_KEY = "gsm_subelement_order";
+  const _LS_PRESETS_KEY = "gsm_layout_presets";
+
+  /** Return project-scoped localStorage key when project context available. */
+  function _lsKey(base) {
+    const pid = _getProjectId();
+    return pid ? base + "_p_" + pid : base;
+  }
+
+  /* ── Layout Presets ────────────────────────────────────── */
+  const _BUILTIN_PRESETS = [
+    {
+      name: "Domyślny",
+      icon: "box",
+      desc: "Standardowa kolejność sekcji",
+      order: [..._DEFAULT_SECTION_ORDER],
+      hidden: {},
+      grid: { enabled: false, columns: 2, spans: {} },
+      sub: {},
+    },
+    {
+      name: "Analityczny",
+      icon: "analysis",
+      desc: "Analiza i anomalie na górze, mapa na dole",
+      order: ["info","anomalies","analysis","summary","records","activity","graph","special_numbers","devices","map","clusters","border","overnight","user_prompt","llm"],
+      hidden: {},
+      grid: { enabled: true, columns: 2, spans: { records: 2, graph: 2, anomalies: 2, activity: 2 } },
+      sub: {},
+    },
+    {
+      name: "Mapa i lokalizacje",
+      icon: "globe",
+      desc: "Mapa, klastry i granice na górze",
+      order: ["map","clusters","border","overnight","info","records","activity","anomalies","analysis","graph","summary","devices","special_numbers","user_prompt","llm"],
+      hidden: {},
+      grid: { enabled: true, columns: 2, spans: { map: 2, records: 2, activity: 2 } },
+      sub: {},
+    },
+    {
+      name: "Kompaktowy",
+      icon: "settings",
+      desc: "Tylko kluczowe sekcje, reszta ukryta",
+      order: ["info","summary","anomalies","records","activity","map","analysis","graph","clusters","border","overnight","devices","special_numbers","user_prompt","llm"],
+      hidden: { devices: true, special_numbers: true, user_prompt: true, overnight: true, border: true },
+      grid: { enabled: true, columns: 2, spans: { records: 2, map: 2, anomalies: 2, activity: 2 } },
+      sub: {},
+    },
+  ];
+
+  function _getUserPresets() {
+    try {
+      const raw = localStorage.getItem(_LS_PRESETS_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (_) {}
+    return [];
+  }
+
+  function _saveUserPresets(presets) {
+    try { localStorage.setItem(_LS_PRESETS_KEY, JSON.stringify(presets)); } catch (_) {}
+  }
+
+  function _applyPreset(preset) {
+    const lk = _lsKey(_LS_LAYOUT_KEY);
+    const hk = _lsKey(_LS_HIDDEN_KEY);
+    const gk = _lsKey(_LS_GRID_KEY);
+    const sk = _lsKey(_LS_SUBELM_KEY);
+    localStorage.setItem(lk, JSON.stringify(preset.order || _DEFAULT_SECTION_ORDER));
+    localStorage.setItem(hk, JSON.stringify(preset.hidden || {}));
+    localStorage.setItem(gk, JSON.stringify(preset.grid || { enabled: false, columns: 2, spans: {} }));
+    if (preset.sub && Object.keys(preset.sub).length) {
+      localStorage.setItem(sk, JSON.stringify(preset.sub));
+    } else {
+      localStorage.removeItem(sk);
+    }
+    _applySectionLayout();
+  }
+
+  function _exportLayoutConfig() {
+    return {
+      version: 1,
+      name: "Custom Layout",
+      timestamp: new Date().toISOString(),
+      order: _getSectionOrder(),
+      hidden: _getSectionHidden(),
+      grid: _getGridSettings(),
+      sub: (() => { try { const r = localStorage.getItem(_lsKey(_LS_SUBELM_KEY)); return r ? JSON.parse(r) : {}; } catch(_){return {};} })(),
+    };
+  }
+
+  function _importLayoutConfig(config) {
+    if (!config || config.version !== 1 || !Array.isArray(config.order)) {
+      throw new Error("Nieprawidłowy format konfiguracji układu");
+    }
+    _applyPreset(config);
+  }
+
+  /* Sub-element definitions for sections with draggable inner blocks */
+  const _SUBELEMENT_DEFS = {
+    activity: [
+      { id: "heatmap",  label: "Rozkład aktywności" },
+      { id: "night",    label: "Aktywność nocna" },
+      { id: "weekend",  label: "Aktywność weekendowa" },
+    ],
+  };
+
+  function _getSubelementOrder(sectionId) {
+    try {
+      const raw = localStorage.getItem(_lsKey(_LS_SUBELM_KEY));
+      if (raw) {
+        const all = JSON.parse(raw);
+        if (all[sectionId]) return all[sectionId];
+      }
+    } catch (_) {}
+    const def = _SUBELEMENT_DEFS[sectionId];
+    return def ? def.map(d => d.id) : [];
+  }
+
+  function _saveSubelementOrder(sectionId, order) {
+    try {
+      const raw = localStorage.getItem(_lsKey(_LS_SUBELM_KEY));
+      const all = raw ? JSON.parse(raw) : {};
+      all[sectionId] = order;
+      localStorage.setItem(_lsKey(_LS_SUBELM_KEY), JSON.stringify(all));
+    } catch (_) {}
+  }
+
+  /** Reorder sub-elements inside sections with defined sub-element ordering. */
+  function _applySubelementLayout() {
+    const wrap = QS("#gsm_results");
+    if (!wrap) return;
+    for (const sid of Object.keys(_SUBELEMENT_DEFS)) {
+      const sectionEl = wrap.querySelector(`[data-section-id="${sid}"]`);
+      if (!sectionEl) continue;
+      const order = _getSubelementOrder(sid);
+      const subEls = {};
+      sectionEl.querySelectorAll("[data-chart-id], [data-sub-id]").forEach(el => {
+        const subId = el.dataset.chartId || el.dataset.subId;
+        if (subId) subEls[subId] = el;
+      });
+      // Special case: heatmap card may lack data-chart-id
+      if (sid === "activity") {
+        const heatmap = sectionEl.querySelector("#gsm_heatmap_card");
+        if (heatmap && !heatmap.dataset.chartId) {
+          heatmap.dataset.chartId = "heatmap";
+          subEls["heatmap"] = heatmap;
+        }
+      }
+      let prev = null;
+      for (const subId of order) {
+        const el = subEls[subId];
+        if (!el) continue;
+        if (prev) {
+          prev.after(el);
+        } else {
+          // Find the container — use the section element itself or a sub-container
+          const container = sectionEl.querySelector(".gsm-charts-row") || sectionEl;
+          container.prepend(el);
+        }
+        prev = el;
+      }
+    }
+  }
+
+  /* Default column spans for grid mode (sections that benefit from full width) */
+  const _DEFAULT_GRID_SPANS = {
+    records: 2, graph: 2, map: 2, activity: 2, anomalies: 2
+  };
+
+  function _getGridSettings() {
+    try {
+      const raw = localStorage.getItem(_lsKey(_LS_GRID_KEY));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          enabled: !!parsed.enabled,
+          columns: parsed.columns || 2,
+          spans: parsed.spans || { ..._DEFAULT_GRID_SPANS }
+        };
+      }
+    } catch (_) {}
+    return { enabled: false, columns: 2, spans: { ..._DEFAULT_GRID_SPANS } };
+  }
+
+  function _saveGridSettings(gs) {
+    try { localStorage.setItem(_lsKey(_LS_GRID_KEY), JSON.stringify(gs)); } catch (_) {}
+  }
+
+  function _getSectionOrder() {
+    try {
+      const raw = localStorage.getItem(_lsKey(_LS_LAYOUT_KEY));
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (Array.isArray(saved) && saved.length) {
+          const set = new Set(saved);
+          const merged = [...saved];
+          for (const id of _DEFAULT_SECTION_ORDER) {
+            if (!set.has(id)) merged.push(id);
+          }
+          return merged.filter(id => _SECTION_MAP[id]);
+        }
+      }
+    } catch (_) {}
+    return [..._DEFAULT_SECTION_ORDER];
+  }
+
+  function _saveSectionOrder(order) {
+    try { localStorage.setItem(_lsKey(_LS_LAYOUT_KEY), JSON.stringify(order)); } catch (_) {}
+  }
+
+  function _getSectionHidden() {
+    try {
+      const raw = localStorage.getItem(_lsKey(_LS_HIDDEN_KEY));
+      if (raw) {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === "object") return obj;
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  function _saveSectionHidden(hidden) {
+    try { localStorage.setItem(_lsKey(_LS_HIDDEN_KEY), JSON.stringify(hidden)); } catch (_) {}
+  }
+
+  /** Reorder and show/hide DOM children of #gsm_results according to saved layout. */
+  function _applySectionLayout() {
+    const wrap = QS("#gsm_results");
+    if (!wrap) return;
+    // Auto-discover new sections/sub-elements before applying layout
+    _discoverDynamicSections();
+    _discoverDynamicSubelements();
+    const order = _getSectionOrder();
+    const hidden = _getSectionHidden();
+    const gs = _getGridSettings();
+    const sectionEls = {};
+    wrap.querySelectorAll("[data-section-id]").forEach(el => {
+      sectionEls[el.dataset.sectionId] = el;
+    });
+    let prev = null;
+    for (const id of order) {
+      const el = sectionEls[id];
+      if (!el) continue;
+      // Apply user hide (add class, don't touch inline display which is used by render logic)
+      if (hidden[id]) {
+        el.classList.add("gsm-section-user-hidden");
+      } else {
+        el.classList.remove("gsm-section-user-hidden");
+      }
+      // Apply grid column span
+      if (gs.enabled) {
+        const span = (gs.spans && gs.spans[id]) || 1;
+        el.style.gridColumn = span >= gs.columns ? "1 / -1" : "auto";
+      } else {
+        el.style.gridColumn = "";
+      }
+      if (prev) {
+        prev.after(el);
+      } else {
+        wrap.prepend(el);
+      }
+      prev = el;
+    }
+    // Apply or remove grid layout on container
+    if (gs.enabled) {
+      wrap.classList.add("gsm-grid-layout");
+      wrap.style.setProperty("--gsm-grid-cols", gs.columns);
+    } else {
+      wrap.classList.remove("gsm-grid-layout");
+      wrap.style.removeProperty("--gsm-grid-cols");
+    }
+    // Apply sub-element ordering
+    _applySubelementLayout();
+  }
+
+  let _layoutPanelOpen = false;
+
+  /* ── Section icon map for visual editor ── */
+  const _SECTION_ICONS = {
+    info:            { icon: "info_circle", color: "#3b82f6", h: 1 },
+    summary:         { icon: "analysis",    color: "#8b5cf6", h: 1 },
+    devices:         { icon: "settings",    color: "#6366f1", h: 0.7 },
+    anomalies:       { icon: "warning",     color: "#ef4444", h: 1.6 },
+    analysis:        { icon: "document",    color: "#10b981", h: 1 },
+    special_numbers: { icon: "tag",         color: "#f59e0b", h: 0.7 },
+    graph:           { icon: "target",      color: "#06b6d4", h: 1.3 },
+    records:         { icon: "receipt",     color: "#64748b", h: 1.4 },
+    activity:        { icon: "lightning",   color: "#a855f7", h: 1.2 },
+    map:             { icon: "globe",       color: "#2563eb", h: 1.8 },
+    clusters:        { icon: "pin",         color: "#14b8a6", h: 0.8 },
+    border:          { icon: "flag",        color: "#f97316", h: 0.8 },
+    overnight:       { icon: "calendar",    color: "#6366f1", h: 0.8 },
+    user_prompt:     { icon: "edit",        color: "#78716c", h: 0.7 },
+    llm:             { icon: "brain",       color: "#ec4899", h: 1 },
+  };
+
+  function _openLayoutPanel(anchorBtn) {
+    if (_layoutPanelOpen) { _closeLayoutPanel(); return; }
+    _layoutPanelOpen = true;
+
+    // Auto-discover any new sections/sub-elements added to the DOM
+    _discoverDynamicSections();
+    _discoverDynamicSubelements();
+
+    // Create fullscreen overlay
+    const overlay = document.createElement("div");
+    overlay.className = "vle-overlay";
+    overlay.id = "gsm_layout_panel";
+
+    const order = _getSectionOrder();
+    const hidden = _getSectionHidden();
+    const gs = _getGridSettings();
+
+    // Build section card elements for the miniature work area
+    let cardsHtml = "";
+    for (const id of order) {
+      const def = _SECTION_MAP[id];
+      if (!def) continue;
+      const meta = _SECTION_ICONS[id] || { icon: "box", color: "#94a3b8", h: 1 };
+      const vis = !hidden[id];
+      const hFactor = meta.h || 1;
+      const span = (gs.spans && gs.spans[id]) || 1;
+      // Sub-elements indicator for sections with inner blocks
+      const subDefs = _SUBELEMENT_DEFS[id];
+      let subHtml = "";
+      if (subDefs && subDefs.length > 0) {
+        const subOrder = _getSubelementOrder(id);
+        const subItems = subOrder.map(sid => subDefs.find(d => d.id === sid)).filter(Boolean);
+        subHtml = `<div class="vle-sub-list" data-sub-section="${id}">
+          ${subItems.map((s, i) => `<div class="vle-sub-item" draggable="true" data-sub-id="${s.id}">
+            <span class="vle-sub-grip">⋮⋮</span>
+            <span class="vle-sub-num">${i + 1}</span>
+            <span class="vle-sub-name">${s.label}</span>
+          </div>`).join("")}
+        </div>`;
+      }
+
+      cardsHtml += `<div class="vle-card${vis ? "" : " vle-card-hidden"}${span >= 2 ? " vle-card-wide" : ""}${subDefs ? " vle-card-has-sub" : ""}" draggable="true" data-sid="${id}" data-span="${span}" style="--card-accent:${meta.color};--card-h:${hFactor}">
+        <div class="vle-card-grip">⠿</div>
+        <div class="vle-card-icon"><i data-icon="${meta.icon}" data-size="14"></i></div>
+        <div class="vle-card-info">
+          <span class="vle-card-name">${def.label}</span>
+          ${subDefs ? '<span class="vle-card-sub-badge">' + subDefs.length + ' elementów</span>' : ''}
+        </div>
+        <button class="vle-card-span${gs.enabled ? "" : " vle-span-disabled"}" data-span-sid="${id}" title="${span >= 2 ? "Pełna szerokość" : "Pół szerokości"}">
+          <svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="${span >= 2 ? 14 : 6}" height="10" rx="1.5" fill="currentColor" opacity=".7"/>${span < 2 ? '<rect x="8" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".2"/>' : ''}</svg>
+        </button>
+        <label class="vle-card-toggle" title="${vis ? "Ukryj" : "Pokaż"}">
+          <input type="checkbox" ${vis ? "checked" : ""} data-vis-sid="${id}">
+          <span class="vle-toggle-track"><span class="vle-toggle-thumb"></span></span>
+        </label>
+        ${subHtml}
+      </div>`;
+    }
+
+    overlay.innerHTML = `
+      <div class="vle-container">
+        <div class="vle-header">
+          <div class="vle-header-left">
+            <svg class="vle-logo" width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+            <span class="vle-title">Visual Layout Editor</span>
+            <span class="vle-badge">GSM Analysis</span>
+          </div>
+          <div class="vle-header-right">
+            <div class="vle-grid-toggle">
+              <button class="vle-btn vle-btn-ghost vle-grid-btn${gs.enabled ? " vle-grid-active" : ""}" id="vle_grid_toggle" title="Tryb siatki 2D">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+                Grid
+              </button>
+              <select class="vle-cols-select${gs.enabled ? "" : " vle-span-disabled"}" id="vle_cols_select" title="Liczba kolumn">
+                <option value="2"${gs.columns === 2 ? " selected" : ""}>2 kol.</option>
+                <option value="3"${gs.columns === 3 ? " selected" : ""}>3 kol.</option>
+              </select>
+            </div>
+            <div class="vle-header-sep"></div>
+            <div class="vle-presets-wrap" style="position:relative">
+              <button class="vle-btn vle-btn-ghost" id="vle_presets_btn" title="Szablony układów">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h8M2 12h10"/></svg>
+                Szablony
+              </button>
+              <div class="vle-presets-dropdown" id="vle_presets_dropdown"></div>
+            </div>
+            <button class="vle-btn vle-btn-ghost" id="vle_export" title="Eksportuj układ">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 11v3h12v-3"/></svg>
+            </button>
+            <button class="vle-btn vle-btn-ghost" id="vle_import" title="Importuj układ">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v3h12v-3"/></svg>
+            </button>
+            <div class="vle-header-sep"></div>
+            <button class="vle-btn vle-btn-ghost" id="vle_reset" title="Przywróć domyślny układ">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8a6 6 0 0111.47-2.47M14 8a6 6 0 01-11.47 2.47"/><path d="M2 3v3.5h3.5M14 13V9.5h-3.5"/></svg>
+              Reset
+            </button>
+            <button class="vle-btn vle-btn-close" id="vle_close" title="Zamknij">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="vle-body">
+          <!-- Miniature app wireframe -->
+          <div class="vle-miniature">
+            <!-- Sidebar wireframe -->
+            <div class="vle-mini-sidebar">
+              <div class="vle-mini-logo-block"></div>
+              <div class="vle-mini-nav-item vle-mini-nav-active"></div>
+              <div class="vle-mini-nav-item"></div>
+              <div class="vle-mini-nav-item"></div>
+              <div class="vle-mini-nav-item"></div>
+              <div class="vle-mini-nav-item"></div>
+              <div class="vle-mini-nav-spacer"></div>
+              <div class="vle-mini-nav-item"></div>
+              <div class="vle-mini-nav-item"></div>
+            </div>
+            <!-- Main content area -->
+            <div class="vle-mini-main">
+              <!-- Toolbar wireframe -->
+              <div class="vle-mini-toolbar">
+                <div class="vle-mini-tb-item"></div>
+                <div class="vle-mini-tb-item"></div>
+                <div class="vle-mini-tb-item vle-mini-tb-wide"></div>
+                <div class="vle-mini-tb-spacer"></div>
+                <div class="vle-mini-tb-item"></div>
+              </div>
+              <!-- Analyst panel (left) + work area -->
+              <div class="vle-mini-content">
+                <div class="vle-mini-analyst">
+                  <div class="vle-mini-ap-label"></div>
+                  <div class="vle-mini-ap-block"></div>
+                  <div class="vle-mini-ap-label"></div>
+                  <div class="vle-mini-ap-block"></div>
+                  <div class="vle-mini-ap-block vle-mini-ap-active"></div>
+                  <div class="vle-mini-ap-label"></div>
+                  <div class="vle-mini-ap-block"></div>
+                </div>
+                <!-- Work area with draggable cards -->
+                <div class="vle-mini-work" id="vle_work_area">
+                  <div class="vle-work-header">
+                    <span>Obszar roboczy</span>
+                    <span class="vle-work-hint">Przeciągnij karty aby zmienić kolejność</span>
+                  </div>
+                  <div class="vle-work-cards" id="vle_card_list">
+                    ${cardsHtml}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Info bar -->
+          <div class="vle-info-bar">
+            <span class="vle-info-text"><span class="vle-info-count" id="vle_visible_count">${order.filter(id => !hidden[id]).length}</span> / ${order.length} sekcji widocznych</span>
+            <span class="vle-info-sep"></span>
+            <span class="vle-info-text vle-info-muted">Przeciągnij karty w obszarze roboczym &bull; Przełącznikami włącz/wyłącz sekcje</span>
+            ${_getProjectId() ? '<span class="vle-info-sep"></span><span class="vle-info-text vle-info-project"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:-1px;margin-right:3px"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 3V1.5h6V3"/></svg>Układ per-projekt</span>' : ''}
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Trigger icons rendering if available
+    if (typeof window.aiReplaceEmojis === "function") window.aiReplaceEmojis(overlay);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      overlay.classList.add("vle-overlay-visible");
+    });
+
+    // Close handlers
+    const closeBtn = overlay.querySelector("#vle_close");
+    closeBtn.onclick = () => _closeLayoutPanel();
+    overlay.addEventListener("click", e => {
+      if (e.target === overlay) _closeLayoutPanel();
+    });
+    overlay.addEventListener("keydown", e => {
+      if (e.key === "Escape") _closeLayoutPanel();
+    });
+    closeBtn.focus();
+
+    // Apply grid mode to card list so VLE mirrors actual layout
+    const cardListEl = overlay.querySelector("#vle_card_list");
+    const _syncVleGrid = () => {
+      const g = _getGridSettings();
+      if (g.enabled) {
+        cardListEl.classList.add("vle-grid-mode");
+        cardListEl.style.setProperty("--vle-grid-cols", g.columns);
+      } else {
+        cardListEl.classList.remove("vle-grid-mode");
+        cardListEl.style.removeProperty("--vle-grid-cols");
+      }
+    };
+    _syncVleGrid();
+
+    // Debounced layout application — batch rapid changes
+    let _layoutTimer = null;
+    const _debouncedApply = () => {
+      if (_layoutTimer) clearTimeout(_layoutTimer);
+      _layoutTimer = setTimeout(() => { _applySectionLayout(); _layoutTimer = null; }, 150);
+    };
+
+    // Reset button
+    overlay.querySelector("#vle_reset").onclick = () => {
+      localStorage.removeItem(_lsKey(_LS_LAYOUT_KEY));
+      localStorage.removeItem(_lsKey(_LS_HIDDEN_KEY));
+      localStorage.removeItem(_lsKey(_LS_GRID_KEY));
+      localStorage.removeItem(_lsKey(_LS_SUBELM_KEY));
+      _applySectionLayout();
+      _closeLayoutPanel();
+    };
+
+    // Presets dropdown
+    const presetsBtn = overlay.querySelector("#vle_presets_btn");
+    const presetsDropdown = overlay.querySelector("#vle_presets_dropdown");
+    presetsBtn.onclick = () => {
+      const isOpen = presetsDropdown.classList.contains("vle-presets-open");
+      if (isOpen) { presetsDropdown.classList.remove("vle-presets-open"); return; }
+      // Build dropdown items
+      const userPresets = _getUserPresets();
+      const allPresets = [..._BUILTIN_PRESETS, ...userPresets];
+      let html = allPresets.map((p, i) => {
+        const isUser = i >= _BUILTIN_PRESETS.length;
+        return `<div class="vle-preset-item${isUser ? " vle-preset-user" : ""}" data-preset-idx="${i}">
+          <div class="vle-preset-icon"><i data-icon="${p.icon || "box"}" data-size="12"></i></div>
+          <div class="vle-preset-info">
+            <span class="vle-preset-name">${p.name}</span>
+            <span class="vle-preset-desc">${p.desc || ""}</span>
+          </div>
+          ${isUser ? '<button class="vle-preset-del" data-del-idx="' + i + '" title="Usuń">&times;</button>' : ""}
+        </div>`;
+      }).join("");
+      html += `<div class="vle-preset-sep"></div>
+        <div class="vle-preset-item vle-preset-save" id="vle_preset_save_current">
+          <div class="vle-preset-icon"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></svg></div>
+          <div class="vle-preset-info"><span class="vle-preset-name">Zapisz bieżący układ</span></div>
+        </div>`;
+      presetsDropdown.innerHTML = html;
+      if (typeof window.aiReplaceEmojis === "function") window.aiReplaceEmojis(presetsDropdown);
+      presetsDropdown.classList.add("vle-presets-open");
+      // Handle clicks
+      presetsDropdown.onclick = (ev) => {
+        const delBtn = ev.target.closest("[data-del-idx]");
+        if (delBtn) {
+          ev.stopPropagation();
+          const di = parseInt(delBtn.dataset.delIdx, 10);
+          const ui = di - _BUILTIN_PRESETS.length;
+          const up = _getUserPresets();
+          if (ui >= 0 && ui < up.length) { up.splice(ui, 1); _saveUserPresets(up); }
+          presetsDropdown.classList.remove("vle-presets-open");
+          return;
+        }
+        const saveBtn = ev.target.closest("#vle_preset_save_current");
+        if (saveBtn) {
+          const name = prompt("Nazwa szablonu:", "Mój układ");
+          if (!name) return;
+          const cfg = _exportLayoutConfig();
+          cfg.name = name;
+          cfg.icon = "edit";
+          cfg.desc = "Zapisano " + new Date().toLocaleDateString("pl-PL");
+          const up = _getUserPresets();
+          up.push(cfg);
+          _saveUserPresets(up);
+          presetsDropdown.classList.remove("vle-presets-open");
+          return;
+        }
+        const item = ev.target.closest("[data-preset-idx]");
+        if (!item) return;
+        const idx = parseInt(item.dataset.presetIdx, 10);
+        const preset = idx < _BUILTIN_PRESETS.length ? _BUILTIN_PRESETS[idx] : _getUserPresets()[idx - _BUILTIN_PRESETS.length];
+        if (preset) {
+          _applyPreset(preset);
+          _closeLayoutPanel();
+        }
+      };
+    };
+    // Close dropdown on outside click
+    overlay.addEventListener("click", e => {
+      if (!e.target.closest(".vle-presets-wrap")) {
+        presetsDropdown.classList.remove("vle-presets-open");
+      }
+    });
+
+    // Export button
+    overlay.querySelector("#vle_export").onclick = () => {
+      const cfg = _exportLayoutConfig();
+      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "gsm_layout_" + new Date().toISOString().slice(0, 10) + ".json";
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    // Import button
+    overlay.querySelector("#vle_import").onclick = () => {
+      const inp = document.createElement("input");
+      inp.type = "file";
+      inp.accept = ".json";
+      inp.onchange = () => {
+        const file = inp.files && inp.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const cfg = JSON.parse(reader.result);
+            _importLayoutConfig(cfg);
+            _closeLayoutPanel();
+          } catch (err) {
+            alert("Błąd importu: " + err.message);
+          }
+        };
+        reader.readAsText(file);
+      };
+      inp.click();
+    };
+
+    // Grid mode toggle
+    const gridBtn = overlay.querySelector("#vle_grid_toggle");
+    const colsSelect = overlay.querySelector("#vle_cols_select");
+    const _updateGridUI = (enabled) => {
+      overlay.querySelectorAll(".vle-card-span").forEach(b => b.classList.toggle("vle-span-disabled", !enabled));
+      colsSelect.classList.toggle("vle-span-disabled", !enabled);
+      gridBtn.classList.toggle("vle-grid-active", enabled);
+    };
+    gridBtn.onclick = () => {
+      const g = _getGridSettings();
+      g.enabled = !g.enabled;
+      _saveGridSettings(g);
+      _updateGridUI(g.enabled);
+      _syncVleGrid();
+      _debouncedApply();
+    };
+    colsSelect.onchange = () => {
+      const g = _getGridSettings();
+      g.columns = parseInt(colsSelect.value, 10) || 2;
+      _saveGridSettings(g);
+      _syncVleGrid();
+      _debouncedApply();
+    };
+
+    // Column span buttons
+    const cardList = overlay.querySelector("#vle_card_list");
+    cardList.addEventListener("click", e => {
+      const spanBtn = e.target.closest("[data-span-sid]");
+      if (!spanBtn) return;
+      const sid = spanBtn.dataset.spanSid;
+      const g = _getGridSettings();
+      if (!g.spans) g.spans = {};
+      const cur = g.spans[sid] || 1;
+      const next = cur >= 2 ? 1 : 2;
+      g.spans[sid] = next;
+      _saveGridSettings(g);
+      const card = spanBtn.closest(".vle-card");
+      if (card) {
+        card.dataset.span = next;
+        card.classList.toggle("vle-card-wide", next >= 2);
+      }
+      // Update the SVG inside span button
+      spanBtn.innerHTML = next >= 2
+        ? '<svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="14" height="10" rx="1.5" fill="currentColor" opacity=".7"/></svg>'
+        : '<svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".7"/><rect x="8" y="0" width="6" height="10" rx="1.5" fill="currentColor" opacity=".2"/></svg>';
+      spanBtn.title = next >= 2 ? "Pełna szerokość" : "Pół szerokości";
+      _debouncedApply();
+    });
+
+    // Visibility toggles
+    cardList.addEventListener("change", e => {
+      const cb = e.target.closest("[data-vis-sid]");
+      if (!cb) return;
+      const sid = cb.dataset.visSid;
+      const h = _getSectionHidden();
+      if (cb.checked) {
+        delete h[sid];
+      } else {
+        h[sid] = true;
+      }
+      _saveSectionHidden(h);
+      const card = cb.closest(".vle-card");
+      if (card) card.classList.toggle("vle-card-hidden", !cb.checked);
+      _debouncedApply();
+      // Update counter
+      const cnt = overlay.querySelector("#vle_visible_count");
+      if (cnt) {
+        const allCards = cardList.querySelectorAll(".vle-card");
+        const visibleCount = [...allCards].filter(c => !c.classList.contains("vle-card-hidden")).length;
+        cnt.textContent = visibleCount;
+      }
+    });
+
+    // Drag & drop reordering
+    let dragSid = null;
+    let dragEl = null;
+    let placeholder = null;
+
+    cardList.addEventListener("dragstart", e => {
+      // Skip if drag started from a sub-element item
+      if (e.target.closest(".vle-sub-item")) return;
+      const card = e.target.closest(".vle-card");
+      if (!card) return;
+      dragSid = card.dataset.sid;
+      dragEl = card;
+      card.classList.add("vle-card-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      // Create placeholder
+      placeholder = document.createElement("div");
+      placeholder.className = "vle-card-placeholder";
+      placeholder.style.height = card.offsetHeight + "px";
+      requestAnimationFrame(() => {
+        if (dragEl && dragEl.parentNode) {
+          dragEl.parentNode.insertBefore(placeholder, dragEl.nextSibling);
+        }
+      });
+    });
+
+    cardList.addEventListener("dragend", e => {
+      if (dragEl) dragEl.classList.remove("vle-card-dragging");
+      if (placeholder && placeholder.parentNode) placeholder.remove();
+      dragSid = null;
+      dragEl = null;
+      placeholder = null;
+    });
+
+    cardList.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (!placeholder) return;
+      const target = e.target.closest(".vle-card");
+      if (!target || target === dragEl) return;
+      const rect = target.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY < midY) {
+        target.parentNode.insertBefore(placeholder, target);
+      } else {
+        target.parentNode.insertBefore(placeholder, target.nextSibling);
+      }
+    });
+
+    cardList.addEventListener("drop", e => {
+      e.preventDefault();
+      if (!dragEl || !placeholder) return;
+      // Insert dragged element where placeholder is
+      placeholder.parentNode.insertBefore(dragEl, placeholder);
+      placeholder.remove();
+      placeholder = null;
+      dragEl.classList.remove("vle-card-dragging");
+      // Save new order
+      const items = [...cardList.querySelectorAll(".vle-card")];
+      const newOrder = items.map(el => el.dataset.sid);
+      _saveSectionOrder(newOrder);
+      _debouncedApply();
+      dragEl = null;
+      dragSid = null;
+    });
+
+    // Touch drag support for mobile
+    let touchDragEl = null;
+    let touchClone = null;
+    let touchStartY = 0;
+
+    cardList.addEventListener("touchstart", e => {
+      const grip = e.target.closest(".vle-card-grip");
+      if (!grip) return;
+      const card = grip.closest(".vle-card");
+      if (!card) return;
+      touchDragEl = card;
+      touchStartY = e.touches[0].clientY;
+      card.classList.add("vle-card-dragging");
+    }, { passive: true });
+
+    cardList.addEventListener("touchmove", e => {
+      if (!touchDragEl) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const elBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (!elBelow) return;
+      const target = elBelow.closest(".vle-card");
+      if (target && target !== touchDragEl) {
+        const rect = target.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (touch.clientY < midY) {
+          target.parentNode.insertBefore(touchDragEl, target);
+        } else {
+          target.parentNode.insertBefore(touchDragEl, target.nextSibling);
+        }
+      }
+    }, { passive: false });
+
+    cardList.addEventListener("touchend", e => {
+      if (!touchDragEl) return;
+      touchDragEl.classList.remove("vle-card-dragging");
+      const items = [...cardList.querySelectorAll(".vle-card")];
+      const newOrder = items.map(el => el.dataset.sid);
+      _saveSectionOrder(newOrder);
+      _debouncedApply();
+      touchDragEl = null;
+    }, { passive: true });
+
+    // ── Sub-element drag within VLE cards ──
+    overlay.querySelectorAll(".vle-sub-list").forEach(subList => {
+      const sectionId = subList.dataset.subSection;
+      if (!sectionId) return;
+      let subDragEl = null;
+      let subPlaceholder = null;
+
+      subList.addEventListener("dragstart", e => {
+        const item = e.target.closest(".vle-sub-item");
+        if (!item) return;
+        e.stopPropagation(); // don't trigger parent card drag
+        subDragEl = item;
+        item.classList.add("vle-sub-dragging");
+        e.dataTransfer.effectAllowed = "move";
+        subPlaceholder = document.createElement("div");
+        subPlaceholder.className = "vle-sub-placeholder-inner";
+        subPlaceholder.style.height = item.offsetHeight + "px";
+        requestAnimationFrame(() => {
+          if (subDragEl && subDragEl.parentNode) {
+            subDragEl.parentNode.insertBefore(subPlaceholder, subDragEl.nextSibling);
+          }
+        });
+      });
+
+      subList.addEventListener("dragover", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        if (!subPlaceholder) return;
+        const target = e.target.closest(".vle-sub-item");
+        if (!target || target === subDragEl) return;
+        const rect = target.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+          target.parentNode.insertBefore(subPlaceholder, target);
+        } else {
+          target.parentNode.insertBefore(subPlaceholder, target.nextSibling);
+        }
+      });
+
+      subList.addEventListener("dragend", () => {
+        if (subDragEl) subDragEl.classList.remove("vle-sub-dragging");
+        if (subPlaceholder && subPlaceholder.parentNode) subPlaceholder.remove();
+        subDragEl = null;
+        subPlaceholder = null;
+      });
+
+      subList.addEventListener("drop", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!subDragEl || !subPlaceholder) return;
+        subPlaceholder.parentNode.insertBefore(subDragEl, subPlaceholder);
+        subPlaceholder.remove();
+        subPlaceholder = null;
+        subDragEl.classList.remove("vle-sub-dragging");
+        // Save new sub-element order
+        const items = [...subList.querySelectorAll(".vle-sub-item")];
+        const newOrder = items.map(el => el.dataset.subId).filter(Boolean);
+        _saveSubelementOrder(sectionId, newOrder);
+        // Update numbering
+        items.forEach((el, i) => {
+          const numEl = el.querySelector(".vle-sub-num");
+          if (numEl) numEl.textContent = i + 1;
+        });
+        _debouncedApply();
+        subDragEl = null;
+      });
+    });
+  }
+
+  function _closeLayoutPanel() {
+    _layoutPanelOpen = false;
+    const overlay = QS("#gsm_layout_panel");
+    if (overlay) {
+      overlay.classList.remove("vle-overlay-visible");
+      overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
+      // Fallback if no transition
+      setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 350);
+    }
+  }
+
+  /* ── bindings ───────────────────────────────────────────── */
+  function _bind() {
+    const fileInput = QS("#gsm_file_input");
+    const uploadBtn = QS("#gsm_add_file_toolbar_btn");
+
+    if (uploadBtn) {
+      uploadBtn.onclick = () => { if (fileInput) fileInput.click(); };
+    }
+
+    // Folder input button
+    const folderInput = QS("#gsm_folder_input");
+    const folderBtn = QS("#gsm_add_folder_toolbar_btn");
+    if (folderBtn) {
+      folderBtn.onclick = () => { if (folderInput) folderInput.click(); };
+    }
+    if (folderInput) {
+      folderInput.onchange = () => {
+        if (folderInput.files && folderInput.files.length > 0) {
+          // Filter to supported file types from folder selection
+          const supported = [".xlsx", ".xls", ".csv", ".txt", ".zip"];
+          const filesCopy = Array.from(folderInput.files).filter(f => {
+            const ext = f.name.toLowerCase().replace(/^.*(\.\w+)$/, "$1");
+            return supported.includes(ext);
+          });
+          folderInput.value = "";
+          if (filesCopy.length > 0) {
+            _addLog("info", `Folder: znaleziono ${filesCopy.length} obsługiwanych plików`);
+            _smartImport(filesCopy);
+          } else {
+            _addLog("warn", "Folder: nie znaleziono obsługiwanych plików (.xlsx, .xls, .csv, .txt, .zip)");
+          }
+        }
+      };
+    }
+
+    // Standalone map button
+    const smapBtn = QS("#gsm_standalone_map_btn");
+    if (smapBtn) {
+      smapBtn.onclick = () => _openStandaloneMap();
+    }
+    if (fileInput) {
+      fileInput.onchange = () => {
+        if (fileInput.files && fileInput.files.length > 0) {
+          // Copy files to Array before clearing input (FileList becomes empty on clear)
+          const filesCopy = Array.from(fileInput.files);
+          fileInput.value = "";
+          _smartImport(filesCopy);
+        }
+      };
+    }
+
+    // (empty state has no button — upload via toolbar icon only)
+
+    // Columns manager button
+    const colsBtn = QS("#gsm_columns_btn");
+    if (colsBtn) {
+      colsBtn.onclick = () => _openColumnsPanel(colsBtn);
+    }
+
+    // Section layout manager button
+    const layoutBtn = QS("#gsm_layout_btn");
+    if (layoutBtn) {
+      layoutBtn.onclick = () => _openLayoutPanel(layoutBtn);
+    }
+
+    // Records global search input
+    const recSearch = QS("#gsm_records_search");
+    if (recSearch) {
+      recSearch.addEventListener("input", () => {
+        St._recordsSearch = recSearch.value.trim();
+        _refilterRecords();
+      });
+    }
+
+    // Records panel resize handle
+    const resizeHandle = QS("#gsm_records_resize");
+    if (resizeHandle) {
+      let startY = 0, startH = 0, wrap = null;
+      resizeHandle.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        wrap = resizeHandle.parentElement;
+        startY = e.clientY;
+        startH = wrap.offsetHeight;
+        const onMove = (ev) => {
+          const newH = Math.max(100, startH + (ev.clientY - startY));
+          wrap.style.height = newH + "px";
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+
+    // Graph card 2D resize handle (bottom-right corner)
+    const graphResize = QS("#gsm_graph_resize");
+    if (graphResize) {
+      graphResize.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const card = QS("#gsm_graph_card");
+        if (!card) return;
+        const startX = e.clientX, startY = e.clientY;
+        const startW = card.offsetWidth, startH = card.offsetHeight;
+        const onMove = (ev) => {
+          const newW = Math.max(320, startW + (ev.clientX - startX));
+          const newH = Math.max(200, startH + (ev.clientY - startY));
+          card.style.width = newW + "px";
+          card.style.maxWidth = newW + "px";
+          card.style.height = newH + "px";
+          card.dataset.userResized = "1";
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+
+    // Map card 2D resize handle (bottom-right corner)
+    const mapResize = QS("#gsm_map_resize");
+    if (mapResize) {
+      mapResize.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const card = QS("#gsm_map_card");
+        const mapCont = QS("#gsm_map_container");
+        if (!card || !mapCont) return;
+        const startX = e.clientX, startY = e.clientY;
+        const startW = card.offsetWidth, startH = card.offsetHeight;
+        const startMapH = mapCont.offsetHeight;
+        const onMove = (ev) => {
+          const dx = ev.clientX - startX, dy = ev.clientY - startY;
+          const newW = Math.max(400, startW + dx);
+          const newH = Math.max(300, startH + dy);
+          const newMapH = Math.max(200, startMapH + dy);
+          card.style.width = newW + "px";
+          card.style.maxWidth = newW + "px";
+          card.style.height = newH + "px";
+          mapCont.style.height = newMapH + "px";
+          if (St.map) St.map.invalidateSize();
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          if (St.map) St.map.invalidateSize();
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+
+    // Anomaly map screenshot button
+    const anomMapScreenBtn = QS("#gsm_anomaly_map_screenshot_btn");
+    if (anomMapScreenBtn) {
+      anomMapScreenBtn.onclick = (e) => { e.stopPropagation(); _takeAnomalyMapScreenshot(); };
+    }
+
+    // Anomaly map resize handle (bottom-right corner — changes width of the map wrap)
+    const anomMapResize = QS("#gsm_anomaly_map_resize");
+    if (anomMapResize) {
+      anomMapResize.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const wrap = QS("#gsm_anomaly_map_wrap");
+        const mapCont = QS("#gsm_anomaly_map_container");
+        if (!wrap) return;
+        const startX = e.clientX, startY = e.clientY;
+        const startW = wrap.offsetWidth, startH = wrap.offsetHeight;
+        const startMapH = mapCont ? mapCont.offsetHeight : 350;
+        const onMove = (ev) => {
+          const dx = ev.clientX - startX, dy = ev.clientY - startY;
+          const newW = Math.max(300, startW + dx);
+          const newH = Math.max(300, startH + dy);
+          const newMapH = Math.max(200, startMapH + dy);
+          wrap.style.width = newW + "px";
+          wrap.style.flex = "none";
+          wrap.style.height = newH + "px";
+          if (mapCont) mapCont.style.height = newMapH + "px";
+          if (_anomMapInstance) _anomMapInstance.invalidateSize();
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          if (_anomMapInstance) _anomMapInstance.invalidateSize();
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+
+    // GSM toolbar: Analizuj + Raport
+    const gsmGenBtn = QS("#gsm_generate_btn");
+    if (gsmGenBtn) gsmGenBtn.onclick = _gsmGenerate;
+    const gsmSaveBtn = QS("#gsm_report_save_btn");
+    if (gsmSaveBtn) gsmSaveBtn.onclick = _saveGsmReport;
+    const gsmNoteBtn = QS("#gsm_note_btn");
+    if (gsmNoteBtn) gsmNoteBtn.onclick = _showNoteDialog;
+
+    // Lazy-load models for GSM toolbar
+    _loadGsmModels();
+  }
+
+  /* ── Note label builder ────────────────────────────── */
+
+  const _RECORD_TYPE_ICONS = {
+    CALL_OUT: "\u{1F4DE}", CALL_IN: "\u{1F4DE}",
+    SMS_OUT: "\u{1F4AC}", SMS_IN: "\u{1F4AC}",
+    MMS_OUT: "\u{1F4AC}", MMS_IN: "\u{1F4AC}",
+    DATA: "\u{1F4F6}", USSD: "\u2699",
+  };
+
+  function _buildRecordNoteLabel(rec) {
+    if (!rec) return "";
+    const icon = _RECORD_TYPE_ICONS[rec.record_type] || "";
+    const caller = (rec.caller || "").slice(-9);
+    const callee = (rec.callee || "").slice(-9);
+    const time = (rec.time || "").slice(0, 5);
+    const date = rec.date || "";
+    let label = icon ? icon + " " : "";
+    if (caller && callee) {
+      label += caller + " \u2192 " + callee;
+    } else if (caller || callee) {
+      label += caller || callee;
+    }
+    if (time) label += ", " + time;
+    if (date) label += " (" + date + ")";
+    return label;
+  }
+
+  function _gsmGetNoteContext() {
+    // Try to get context from focused/selected row in records table
+    const focused = document.querySelector("#gsm_records_body tr.gsm-row-selected, #gsm_records_body tr:hover");
+    if (focused) {
+      const rowIdx = parseInt(focused.getAttribute("data-row"), 10);
+      if (!isNaN(rowIdx) && St.lastResult) {
+        const allRecs = St.lastResult.records || [];
+        const rec = allRecs.find(r => r.raw_row === rowIdx);
+        if (rec) {
+          return {
+            label: _buildRecordNoteLabel(rec),
+            icon: "phone",
+            ref: { type: "gsm_record", record_idx: rowIdx, snapshot: { caller: rec.caller || "", callee: rec.callee || "", datetime: rec.datetime || "" } },
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  function _gsmNavigateToRef(ref) {
+    if (!ref) return;
+    if (ref.type === "gsm_record" && ref.record_idx != null) {
+      const row = document.querySelector(`#gsm_records_body tr[data-row="${ref.record_idx}"]`);
+      if (row) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        row.style.transition = "background .2s";
+        row.style.background = "rgba(74,108,247,.15)";
+        setTimeout(() => { row.style.background = ""; }, 2000);
+      }
+    } else if (ref.type === "gsm_anomaly" && ref.anomaly_type) {
+      const card = document.querySelector(`.gsm-anomaly-card[data-anomaly-type="${ref.anomaly_type}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.style.transition = "box-shadow .2s";
+        card.style.boxShadow = "0 0 0 2px rgba(74,108,247,.4)";
+        setTimeout(() => { card.style.boxShadow = ""; }, 2000);
+      }
+    } else if (ref.type === "gsm_device" && ref.imei) {
+      const devCard = QS("#gsm_devices_card");
+      if (devCard) devCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (ref.type === "gsm_contact" && ref.number) {
+      // Try graph first
+      const graphNode = document.querySelector(`.gsm-graph-node[data-number="${ref.number}"]`);
+      if (graphNode) {
+        const graphCard = QS("#gsm_graph_card");
+        if (graphCard) graphCard.scrollIntoView({ behavior: "smooth", block: "center" });
+        const bg = graphNode.querySelector(".gsm-graph-node-bg");
+        if (bg) {
+          bg.setAttribute("stroke", "#2563eb"); bg.setAttribute("stroke-width", "2.5");
+          setTimeout(() => { bg.setAttribute("stroke", "var(--border,#e2e8f0)"); bg.setAttribute("stroke-width", "0.8"); }, 2000);
+        }
+      } else {
+        const analysisBody = QS("#gsm_analysis_body");
+        if (analysisBody) analysisBody.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    } else if (ref.type === "gsm_special_number") {
+      const snBody = QS("#gsm_special_numbers_body");
+      if (snBody) {
+        const card = snBody.closest(".card");
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  }
+
+  /* ── public manager ─────────────────────────────────────── */
+  window.GsmManager = {
+    _initialized: false,
+    async init() {
+      if (this._initialized) return;
+      this._initialized = true;
+      _bind();
+
+      // Initialize analyst notes panel
+      const pid = _getProjectId();
+      if (pid && window.AnalystNotesManager) {
+        window._gsmNotesMgr = new AnalystNotesManager({
+          mode: "gsm",
+          projectId: pid,
+          onNavigate: _gsmNavigateToRef,
+          getContext: _gsmGetNoteContext,
+          onNoteChange: _refreshTagBorders,
+        });
+        await window._gsmNotesMgr.init();
+      }
+
+      // Initialize panel search
+      _initPanelSearch();
+
+      // Auto-load saved GSM data from the current project
+      try {
+        await _loadFromProject();
+      } catch (e) {
+        console.warn("[GSM] Auto-load failed:", e);
+      }
+    },
+  };
+})();

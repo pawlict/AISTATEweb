@@ -1,0 +1,568 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Callable, Optional
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+
+from webapp.auth.passwords import hash_password, validate_password_strength
+from webapp.auth.user_store import UserStore, UserRecord
+from webapp.auth.session_store import SessionStore
+from webapp.auth.audit_store import AuditStore
+from webapp.auth.permissions import ALL_USER_ROLES, ALL_ADMIN_ROLES, ROLE_MODULES, ADMIN_ROLE_MODULES, get_user_modules
+from webapp.auth.recovery_phrase import generate_and_hash
+
+router = APIRouter(prefix="/api/users", tags=["users"])
+
+_user_store: Optional[UserStore] = None
+_session_store: Optional[SessionStore] = None
+_audit_store: Optional[AuditStore] = None
+_app_log_fn: Optional[Callable] = None
+_get_settings: Optional[Callable] = None
+
+
+def init(
+    user_store: UserStore,
+    session_store: SessionStore,
+    app_log_fn: Callable,
+    audit_store: Optional[AuditStore] = None,
+    get_settings: Optional[Callable] = None,
+) -> None:
+    global _user_store, _session_store, _app_log_fn, _audit_store, _get_settings
+    _user_store = user_store
+    _session_store = session_store
+    _app_log_fn = app_log_fn
+    _audit_store = audit_store
+    _get_settings = get_settings
+
+
+def _pw_policy() -> str:
+    if _get_settings:
+        return getattr(_get_settings(), "password_policy", "basic")
+    return "basic"
+
+
+def _require_access_guard(request: Request) -> Optional[JSONResponse]:
+    """Check that the requester is Strażnik Dostępu or Główny Opiekun."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
+    if not user.is_admin:
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    if not user.is_superadmin and "Strażnik Dostępu" not in (user.admin_roles or []):
+        return JSONResponse({"status": "error", "message": "Access Guard role required"}, status_code=403)
+    return None
+
+
+def _user_to_dict(u: UserRecord) -> dict:
+    return {
+        "user_id": u.user_id,
+        "username": u.username,
+        "display_name": u.display_name,
+        "role": u.role,
+        "is_admin": u.is_admin,
+        "admin_roles": u.admin_roles,
+        "is_superadmin": u.is_superadmin,
+        "banned": u.banned,
+        "banned_until": u.banned_until,
+        "ban_reason": u.ban_reason,
+        "show_ban_expiry": getattr(u, "show_ban_expiry", True),
+        "pending": u.pending,
+        "pending_role": u.pending_role,
+        "created_at": u.created_at,
+        "created_by": u.created_by,
+        "last_login": u.last_login,
+        "language": u.language or "pl",
+        "modules": get_user_modules(u.role, u.is_admin, u.admin_roles, u.is_superadmin),
+        "failed_login_count": getattr(u, "failed_login_count", 0),
+        "locked_until": getattr(u, "locked_until", None),
+        "password_changed_at": getattr(u, "password_changed_at", None),
+        "has_recovery_phrase": bool(getattr(u, "recovery_phrase_hash", None)),
+    }
+
+
+@router.get("")
+async def list_users(request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+    users = _user_store.list_users()
+    # Hide phantom 'admin' users created by single-user mode (no password, role='admin', not a real admin)
+    multiuser = getattr(request.state, "multiuser", False)
+    if multiuser:
+        users = [u for u in users if not (
+            u.username == "admin" and not u.password_hash and not u.is_admin and not u.is_superadmin
+        )]
+    return JSONResponse({"status": "ok", "users": [_user_to_dict(u) for u in users]})
+
+
+@router.get("/roles")
+async def list_roles(request: Request) -> JSONResponse:
+    """Return available role names for the UI."""
+    err = _require_access_guard(request)
+    if err:
+        return err
+    caller = getattr(request.state, "user", None)
+    return JSONResponse({
+        "status": "ok",
+        "user_roles": ALL_USER_ROLES,
+        "admin_roles": ALL_ADMIN_ROLES,
+        "role_modules": {r: mods for r, mods in ROLE_MODULES.items()},
+        "admin_role_modules": {r: mods for r, mods in ADMIN_ROLE_MODULES.items()},
+        "caller_is_superadmin": bool(caller and caller.is_superadmin),
+    })
+
+
+@router.post("")
+async def create_user(request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    username = (body.get("username") or "").strip()
+    display_name = (body.get("display_name") or username).strip()
+    password = body.get("password") or ""
+    role = body.get("role")
+    is_admin = bool(body.get("is_admin", False))
+    admin_roles = body.get("admin_roles") or []
+
+    caller = getattr(request.state, "user", None)
+
+    # Only an existing superadmin can create another superadmin
+    is_superadmin = bool(body.get("is_superadmin", False))
+    if is_superadmin:
+        if not caller or not caller.is_superadmin:
+            return JSONResponse({"status": "error", "message": "Only Główny Opiekun can create another Główny Opiekun"}, status_code=403)
+        is_admin = True  # superadmin implies admin
+
+    if not username:
+        return JSONResponse({"status": "error", "message": "Username required"}, status_code=400)
+    if len(password) < 6:
+        return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
+
+    # Password policy: admins always require "strong" (12+ chars, uppercase, lowercase, digit, special)
+    pw_policy = "strong" if is_admin else _pw_policy()
+    pw_err = validate_password_strength(password, pw_policy)
+    if pw_err:
+        msg = pw_err
+        if is_admin:
+            msg += " (wymóg dla kont administratorów / admin account requirement)"
+        return JSONResponse({"status": "error", "message": msg}, status_code=400)
+
+    if not is_admin and role not in ALL_USER_ROLES:
+        return JSONResponse({"status": "error", "message": f"Invalid role: {role}"}, status_code=400)
+    if is_admin:
+        for ar in admin_roles:
+            if ar not in ALL_ADMIN_ROLES:
+                return JSONResponse({"status": "error", "message": f"Invalid admin role: {ar}"}, status_code=400)
+
+    # Generate recovery phrase
+    phrase, phrase_hash, phrase_hint = generate_and_hash()
+
+    try:
+        rec = UserRecord(
+            username=username,
+            display_name=display_name,
+            password_hash=hash_password(password),
+            role=role if not is_admin else None,
+            is_admin=is_admin,
+            admin_roles=admin_roles if is_admin else [],
+            is_superadmin=is_superadmin,
+            created_by=caller.user_id if caller else "system",
+            # password_changed_at intentionally NOT set — forces password change on first login
+            recovery_phrase_hash=phrase_hash,
+            recovery_phrase_hint=phrase_hint,
+            recovery_phrase_pending=phrase,  # shown to user at first login, not to admin
+        )
+        rec = _user_store.create_user(rec)
+    except ValueError as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=409)
+
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' created user '{username}' with role '{role or admin_roles}'")
+    if _audit_store:
+        _audit_store.log_event("user_created", user_id=rec.user_id, username=username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    result = _user_to_dict(rec)
+    # Recovery phrase is NOT returned to the admin — it will be shown to the user at first login
+    return JSONResponse({"status": "ok", "user": result}, status_code=201)
+
+
+@router.put("/{user_id}")
+async def update_user(user_id: str, request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    # Cannot edit superadmin unless you ARE superadmin
+    caller = getattr(request.state, "user", None)
+    if existing.is_superadmin and (not caller or not caller.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Cannot modify Główny Opiekun"}, status_code=403)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    updates: dict = {}
+
+    if "display_name" in body:
+        updates["display_name"] = (body["display_name"] or "").strip()
+    if "role" in body:
+        role = body["role"]
+        if role and role not in ALL_USER_ROLES:
+            return JSONResponse({"status": "error", "message": f"Invalid role: {role}"}, status_code=400)
+        updates["role"] = role
+    if "is_admin" in body:
+        updates["is_admin"] = bool(body["is_admin"])
+    if "admin_roles" in body:
+        for ar in body["admin_roles"]:
+            if ar not in ALL_ADMIN_ROLES:
+                return JSONResponse({"status": "error", "message": f"Invalid admin role: {ar}"}, status_code=400)
+        updates["admin_roles"] = body["admin_roles"]
+    if "is_superadmin" in body:
+        new_sa = bool(body["is_superadmin"])
+        if not caller or not caller.is_superadmin:
+            return JSONResponse({"status": "error", "message": "Only Główny Opiekun can change superadmin status"}, status_code=403)
+        # Prevent demoting the last superadmin
+        if existing.is_superadmin and not new_sa:
+            all_users = _user_store.list_users()
+            sa_count = sum(1 for u in all_users if u.is_superadmin)
+            if sa_count <= 1:
+                return JSONResponse({"status": "error", "message": "Nie można usunąć ostatniego Głównego Opiekuna / Cannot remove the last superadmin"}, status_code=400)
+        updates["is_superadmin"] = new_sa
+        if new_sa:
+            updates["is_admin"] = True
+    if "password" in body and body["password"]:
+        if len(body["password"]) < 6:
+            return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
+        # Admins always require "strong" policy; check after-update admin status
+        will_be_admin = updates.get("is_admin", existing.is_admin) or updates.get("is_superadmin", existing.is_superadmin)
+        pw_policy = "strong" if will_be_admin else _pw_policy()
+        pw_err = validate_password_strength(body["password"], pw_policy)
+        if pw_err:
+            msg = pw_err
+            if will_be_admin:
+                msg += " (wymóg dla kont administratorów / admin account requirement)"
+            return JSONResponse({"status": "error", "message": msg}, status_code=400)
+        updates["password_hash"] = hash_password(body["password"])
+        updates["password_changed_at"] = datetime.now().isoformat()
+
+    try:
+        updated = _user_store.update_user(user_id, updates)
+    except ValueError as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=409)
+
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' updated user '{existing.username}'")
+
+    return JSONResponse({"status": "ok", "user": _user_to_dict(updated)})
+
+
+@router.delete("/{user_id}")
+async def delete_user(user_id: str, request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store and _session_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    caller = getattr(request.state, "user", None)
+    if caller and caller.user_id == user_id:
+        return JSONResponse({"status": "error", "message": "Cannot delete yourself"}, status_code=403)
+
+    if existing.is_superadmin:
+        if not caller or not caller.is_superadmin:
+            return JSONResponse({"status": "error", "message": "Cannot delete Główny Opiekun"}, status_code=403)
+        # Prevent deleting the last superadmin
+        all_users = _user_store.list_users()
+        sa_count = sum(1 for u in all_users if u.is_superadmin)
+        if sa_count <= 1:
+            return JSONResponse({"status": "error", "message": "Nie można usunąć ostatniego Głównego Opiekuna / Cannot delete the last superadmin"}, status_code=403)
+
+    _session_store.delete_user_sessions(user_id)
+    _user_store.delete_user(user_id)
+
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' deleted user '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("user_deleted", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/{user_id}/ban")
+async def ban_user(user_id: str, request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store and _session_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+    if existing.is_superadmin:
+        return JSONResponse({"status": "error", "message": "Cannot ban Główny Opiekun"}, status_code=403)
+
+    caller = getattr(request.state, "user", None)
+    if caller and caller.user_id == user_id:
+        return JSONResponse({"status": "error", "message": "Cannot ban yourself"}, status_code=403)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    reason = body.get("reason", "")
+    until = body.get("until")  # ISO datetime string or None
+    show_ban_expiry = bool(body.get("show_ban_expiry", True))
+
+    _user_store.update_user(user_id, {
+        "banned": True,
+        "banned_until": until,
+        "ban_reason": reason,
+        "show_ban_expiry": show_ban_expiry,
+    })
+
+    # Immediately invalidate all sessions
+    removed = _session_store.delete_user_sessions(user_id)
+
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' banned '{existing.username}' (reason: {reason}, sessions removed: {removed})")
+    if _audit_store:
+        _audit_store.log_event("user_banned", user_id=user_id, username=existing.username,
+                               detail=f"reason: {reason}", actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    return JSONResponse({"status": "ok", "sessions_removed": removed})
+
+
+@router.post("/{user_id}/unban")
+async def unban_user(user_id: str, request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    _user_store.update_user(user_id, {"banned": False, "banned_until": None, "ban_reason": None, "show_ban_expiry": True})
+
+    caller = getattr(request.state, "user", None)
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' unbanned '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("user_unbanned", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/{user_id}/approve")
+async def approve_user(user_id: str, request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    if not existing.pending:
+        return JSONResponse({"status": "error", "message": "User is not pending"}, status_code=400)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    role = body.get("role")
+    is_admin = bool(body.get("is_admin", False))
+    admin_roles = body.get("admin_roles") or []
+    is_superadmin = bool(body.get("is_superadmin", False))
+
+    if is_superadmin:
+        caller = getattr(request.state, "user", None)
+        if not caller or not caller.is_superadmin:
+            return JSONResponse({"status": "error", "message": "Only Główny Opiekun can grant superadmin"}, status_code=403)
+        is_admin = True
+
+    if not is_admin and (not role or role not in ALL_USER_ROLES):
+        return JSONResponse({"status": "error", "message": f"Invalid role: {role}"}, status_code=400)
+    if is_admin:
+        for ar in admin_roles:
+            if ar not in ALL_ADMIN_ROLES:
+                return JSONResponse({"status": "error", "message": f"Invalid admin role: {ar}"}, status_code=400)
+
+    updates: dict = {
+        "pending": False,
+        "pending_role": None,
+        "role": role if not is_admin else None,
+        "is_admin": is_admin,
+        "admin_roles": admin_roles if is_admin else [],
+        "is_superadmin": is_superadmin,
+    }
+
+    updated = _user_store.update_user(user_id, updates)
+
+    caller = getattr(request.state, "user", None)
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' approved user '{existing.username}' with role '{role or admin_roles}'")
+    if _audit_store:
+        _audit_store.log_event("user_approved", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    return JSONResponse({"status": "ok", "user": _user_to_dict(updated)})
+
+
+@router.post("/{user_id}/reject")
+async def reject_user(user_id: str, request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    if not existing.pending:
+        return JSONResponse({"status": "error", "message": "User is not pending"}, status_code=400)
+
+    _user_store.delete_user(user_id)
+
+    caller = getattr(request.state, "user", None)
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' rejected pending user '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("user_rejected", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/{user_id}/reset-password")
+async def reset_password(user_id: str, request: Request) -> JSONResponse:
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    new_pass = body.get("new_password") or ""
+    if len(new_pass) < 6:
+        return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
+
+    # Password policy: admins always require "strong"
+    target_is_admin = existing.is_admin or existing.is_superadmin
+    pw_policy = "strong" if target_is_admin else _pw_policy()
+    pw_err = validate_password_strength(new_pass, pw_policy)
+    if pw_err:
+        msg = pw_err
+        if target_is_admin:
+            msg += " (wymóg dla kont administratorów / admin account requirement)"
+        return JSONResponse({"status": "error", "message": msg}, status_code=400)
+
+    _user_store.update_user(user_id, {
+        "password_hash": hash_password(new_pass),
+        "password_reset_requested": False,
+        "password_reset_requested_at": None,
+        "password_changed_at": datetime.now().isoformat(),
+    })
+
+    caller = getattr(request.state, "user", None)
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' reset password for '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("password_reset", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/{user_id}/unlock")
+async def unlock_user(user_id: str, request: Request) -> JSONResponse:
+    """Admin endpoint: manually unlock a locked account."""
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    _user_store.update_user(user_id, {"locked_until": None, "failed_login_count": 0})
+
+    caller = getattr(request.state, "user", None)
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' unlocked '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("account_unlocked", user_id=user_id, username=existing.username,
+                               detail="manual unlock by admin",
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/{user_id}/reset-phrase")
+async def reset_recovery_phrase(user_id: str, request: Request) -> JSONResponse:
+    """Admin endpoint: reset a user's recovery phrase.
+
+    Generates a new 12-word phrase. The plaintext is stored temporarily
+    in recovery_phrase_pending and shown to the user once at next login (60s window).
+    """
+    err = _require_access_guard(request)
+    if err:
+        return err
+    assert _user_store
+
+    existing = _user_store.get_user(user_id)
+    if existing is None:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    # Generate new phrase
+    phrase, phrase_hash, phrase_hint = generate_and_hash()
+
+    _user_store.update_user(user_id, {
+        "recovery_phrase_hash": phrase_hash,
+        "recovery_phrase_hint": phrase_hint,
+        "recovery_phrase_pending": phrase,
+    })
+
+    caller = getattr(request.state, "user", None)
+    if _app_log_fn:
+        _app_log_fn(f"Users: '{caller.username if caller else '?'}' reset recovery phrase for '{existing.username}'")
+    if _audit_store:
+        _audit_store.log_event("recovery_phrase_reset", user_id=user_id, username=existing.username,
+                               actor_id=caller.user_id if caller else "", actor_name=caller.username if caller else "")
+
+    return JSONResponse({"status": "ok"})

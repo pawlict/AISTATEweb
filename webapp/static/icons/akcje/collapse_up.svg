@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="clu" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#5628a5"/><stop offset="100%" stop-color="#05657c"/></linearGradient><filter id="s3d_collapse"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#5628a5" stroke-width="1" fill="none" opacity="0.22"/>
+<!-- top bar -->
+<line x1="8" y1="8" x2="40" y2="8" stroke="url(#clu)" stroke-width="2.9"/>
+<!-- bottom bar -->
+<line x1="8" y1="40" x2="40" y2="40" stroke="url(#clu)" stroke-width="2.9"/>
+<!-- top arrow pointing down (toward center) -->
+<path d="M24 13v8" stroke="#5628a5" stroke-width="3.2" filter="url(#s3d_collapse)"/>
+<path d="M19 17l5 5 5-5" stroke="#5628a5" stroke-width="3.2" fill="none"/>
+<!-- bottom arrow pointing up (toward center) -->
+<path d="M24 35v-8" stroke="#5628a5" stroke-width="3.2"/>
+<path d="M19 31l5-5 5 5" stroke="#5628a5" stroke-width="3.2" fill="none"/>
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

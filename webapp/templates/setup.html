@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Setup — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ app_version }}&_={{ static_ts }}"/>
+  <style>
+    body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
+    .setup-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 520px; }
+    .setup-logo { text-align: center; margin-bottom: 1.5rem; }
+    .setup-logo img { height: 64px; }
+    .setup-logo h1 { font-size: 1.3rem; margin: .5rem 0 0; }
+    .setup-logo .ver { font-size: .75rem; color: var(--muted, #888); }
+    .step { display: none; }
+    .step.active { display: block; }
+    h2 { font-size: 1.1rem; margin: 0 0 .3rem; color: var(--text, #1a1a2e); }
+    .sub { font-size: .9rem; margin-bottom: 1rem; color: var(--muted, #666); }
+    .mode-options { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .mode-card { flex: 1; padding: 1.2rem; border: 2px solid var(--border, #d0d5dd); border-radius: 12px; cursor: pointer; text-align: center; transition: border-color .2s, box-shadow .2s; }
+    .mode-card:hover, .mode-card.selected { border-color: var(--accent, #4a6cf7); box-shadow: 0 0 0 3px rgba(74,108,247,.15); }
+    .mode-card h3 { margin: 0 0 .3rem; font-size: 1rem; }
+    .mode-card p { margin: 0; font-size: .8rem; color: var(--muted, #888); }
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .3rem; }
+    .field input { width: 100%; padding: .55rem .7rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .95rem; box-sizing: border-box; }
+    .field input:focus { border-color: var(--accent, #4a6cf7); outline: none; }
+    .btn { padding: .65rem 1.5rem; border: none; border-radius: 8px; background: var(--accent, #4a6cf7); color: #fff; font-size: .95rem; font-weight: 600; cursor: pointer; }
+    .btn:hover { opacity: .9; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-secondary { background: var(--border, #d0d5dd); color: var(--text, #1a1a2e); }
+    .btn-row { display: flex; gap: .75rem; justify-content: flex-end; margin-top: 1.5rem; }
+    .error { color: #e74c3c; font-size: .85rem; margin-top: .5rem; min-height: 1.2em; }
+    .migrate-list { max-height: 300px; overflow-y: auto; margin: 1rem 0; }
+    .migrate-item { display: flex; align-items: center; gap: .5rem; padding: .4rem 0; border-bottom: 1px solid var(--border, #eee); font-size: .9rem; }
+    .migrate-item input[type=checkbox] { margin: 0; }
+    .success-msg { text-align: center; padding: 2rem 0; }
+    .success-msg h2 { color: #27ae60; }
+    .lang-switch { display: flex; justify-content: center; gap: .3rem; margin-bottom: 1rem; }
+    .lang-btn { padding: .25rem .6rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 6px; background: transparent; cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--muted, #888); transition: all .2s; }
+    .lang-btn.active { background: var(--accent, #4a6cf7); color: #fff; border-color: var(--accent, #4a6cf7); }
+    .lang-btn:hover:not(.active) { border-color: var(--accent, #4a6cf7); color: var(--accent, #4a6cf7); }
+    html:not(.lang-en) .en { display: none !important; }
+    html.lang-en .pl { display: none !important; }
+    .mode-card.restore-card { border-color: #f59e0b; }
+    .mode-card.restore-card:hover, .mode-card.restore-card.selected { border-color: #d97706; box-shadow: 0 0 0 3px rgba(245,158,11,.2); }
+    .backup-list { max-height: 280px; overflow-y: auto; margin: 1rem 0; }
+    .backup-item { display: flex; align-items: center; gap: .7rem; padding: .6rem .8rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; margin-bottom: .5rem; cursor: pointer; transition: border-color .2s, background .15s; font-size: .88rem; }
+    .backup-item:hover { background: rgba(74,108,247,.04); }
+    .backup-item.selected { border-color: var(--accent, #4a6cf7); background: rgba(74,108,247,.06); }
+    .backup-item .bi-name { font-weight: 600; }
+    .backup-item .bi-meta { font-size: .78rem; color: var(--muted, #888); }
+    .backup-manual { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border, #eee); }
+    .backup-manual label { font-size: .85rem; font-weight: 600; }
+    .backup-manual input { width: 100%; padding: .5rem .7rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .9rem; box-sizing: border-box; margin-top: .3rem; }
+    .restore-progress { text-align: center; padding: 1.5rem 0; display: none; }
+    .restore-progress .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border, #d0d5dd); border-top-color: var(--accent, #4a6cf7); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="setup-card">
+    <div class="setup-logo">
+      <img src="/static/logo.png" alt="Logo"/>
+      <h1>{{ app_name }}</h1>
+      <div class="ver">{{ app_version }}</div>
+    </div>
+
+    <div class="lang-switch">
+      <button class="lang-btn active" data-lang="pl" id="langPl">PL</button>
+      <button class="lang-btn" data-lang="en" id="langEn">EN</button>
+      <button class="lang-btn" data-lang="ko" id="langKo">KO</button>
+    </div>
+
+    <!-- Step 1: Mode Selection -->
+    <div class="step active" id="step1">
+      <h2><span class="pl">Tryb pracy</span><span class="en">Operating mode</span></h2>
+      <p class="sub"><span class="pl">Wybierz tryb pracy aplikacji. Tej decyzji nie można łatwo cofnąć.</span><span class="en">Choose the application operating mode. This decision cannot be easily reversed.</span></p>
+      <div class="mode-options">
+        <div class="mode-card" data-mode="single" id="modeSingle">
+          <h3><span class="pl">Pojedynczy użytkownik</span><span class="en">Single user</span></h3>
+          <p><span class="pl">Bez logowania, pełny dostęp do wszystkich modułów. Idealny do pracy indywidualnej.</span><span class="en">No login, full access to all modules. Ideal for individual use.</span></p>
+        </div>
+        <div class="mode-card" data-mode="multi" id="modeMulti">
+          <h3><span class="pl">Wielu użytkowników</span><span class="en">Multiple users</span></h3>
+          <p><span class="pl">Logowanie, role, kontrola dostępu do modułów. Wymaga utworzenia administratora.</span><span class="en">Login, roles, module access control. Requires creating an administrator.</span></p>
+        </div>
+        <div class="mode-card restore-card" data-mode="restore" id="modeRestore">
+          <h3><span class="pl">Przywróć po awarii</span><span class="en">Restore after failure</span></h3>
+          <p><span class="pl">Przywróć bazę danych, użytkowników i pliki z pełnego backupu.</span><span class="en">Restore database, users and files from a full backup.</span></p>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="step1Next" disabled><span class="pl">Dalej</span><span class="en">Next</span></button>
+      </div>
+      <div class="error" id="step1Error"></div>
+    </div>
+
+    <!-- Step 2: Admin Account (multi only) -->
+    <div class="step" id="step2">
+      <h2><span class="pl">Utwórz Głównego Opiekuna</span><span class="en">Create Main Guardian</span></h2>
+      <p class="sub"><span class="pl">Pierwszy administrator ma pełne uprawnienia: Architekt Funkcji + Strażnik Dostępu. Nie może być zbanowany.</span><span class="en">The first administrator has full permissions: Function Architect + Access Guardian. Cannot be banned.</span></p>
+      <div class="field">
+        <label for="adminUsername"><span class="pl">Nazwa użytkownika</span><span class="en">Username</span></label>
+        <input type="text" id="adminUsername" autocomplete="off" data-ph-pl="np. admin" data-ph-en="e.g. admin" placeholder="np. admin"/>
+      </div>
+      <div class="field">
+        <label for="adminDisplayName"><span class="pl">Wyświetlana nazwa</span><span class="en">Display name</span></label>
+        <input type="text" id="adminDisplayName" autocomplete="off" data-ph-pl="np. Jan Kowalski" data-ph-en="e.g. John Smith" placeholder="np. Jan Kowalski"/>
+      </div>
+      <div class="field">
+        <label for="adminPassword"><span class="pl">Hasło (min. 12 znaków)</span><span class="en">Password (min. 12 chars)</span></label>
+        <input type="password" id="adminPassword" autocomplete="new-password"/>
+      </div>
+      <div class="field">
+        <label for="adminPassword2"><span class="pl">Powtórz hasło</span><span class="en">Confirm password</span></label>
+        <input type="password" id="adminPassword2" autocomplete="new-password"/>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="step2Back"><span class="pl">Wstecz</span><span class="en">Back</span></button>
+        <button class="btn" id="step2Next"><span class="pl">Utwórz konto</span><span class="en">Create account</span></button>
+      </div>
+      <div class="error" id="step2Error"></div>
+    </div>
+
+    <!-- Step 3: Project Migration (multi only, if projects exist) -->
+    <div class="step" id="step3">
+      <h2><span class="pl">Migracja projektów</span><span class="en">Project migration</span></h2>
+      <p class="sub"><span class="pl">Znaleziono istniejące projekty. Przypisz je do Głównego Opiekuna lub pomiń (możesz to zrobić później).</span><span class="en">Existing projects found. Assign them to Main Guardian or skip (you can do this later).</span></p>
+      <div>
+        <label style="font-size:.85rem;cursor:pointer;">
+          <input type="checkbox" id="migrateSelectAll" checked/> <span class="pl">Zaznacz wszystkie</span><span class="en">Select all</span>
+        </label>
+      </div>
+      <div class="migrate-list" id="migrateList"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="step3Skip"><span class="pl">Pomiń</span><span class="en">Skip</span></button>
+        <button class="btn" id="step3Migrate"><span class="pl">Przypisz do Głównego Opiekuna</span><span class="en">Assign to Main Guardian</span></button>
+      </div>
+      <div class="error" id="step3Error"></div>
+    </div>
+
+    <!-- Step 5: Restore from Backup -->
+    <div class="step" id="step5">
+      <h2><span class="pl">Przywracanie z backupu</span><span class="en">Restore from backup</span></h2>
+      <p class="sub"><span class="pl">Wybierz backup do przywrócenia lub podaj ścieżkę ręcznie.</span><span class="en">Select a backup to restore or enter a path manually.</span></p>
+
+      <div id="backupListWrap">
+        <div id="backupListLoading" style="text-align:center;padding:1rem;color:var(--muted,#888)">
+          <span class="pl">Szukanie backupów...</span><span class="en">Searching for backups...</span>
+        </div>
+        <div class="backup-list" id="backupList" style="display:none"></div>
+        <div id="backupListEmpty" style="display:none;text-align:center;padding:1rem;color:var(--muted,#888)">
+          <span class="pl">Nie znaleziono backupów w katalogu domyślnym.</span><span class="en">No backups found in default directory.</span>
+        </div>
+      </div>
+
+      <div class="backup-manual">
+        <label><span class="pl">Lub podaj ścieżkę do katalogu backupu:</span><span class="en">Or enter backup directory path:</span></label>
+        <input type="text" id="backupManualPath" data-ph-pl="np. /home/user/backups/full_20260228_120000" data-ph-en="e.g. /home/user/backups/full_20260228_120000" placeholder="np. /home/user/backups/full_20260228_120000"/>
+      </div>
+
+      <div class="restore-progress" id="restoreProgress">
+        <div class="spinner"></div>
+        <p style="margin-top:.8rem;color:var(--muted,#888)"><span class="pl">Przywracanie danych... To może potrwać chwilę.</span><span class="en">Restoring data... This may take a moment.</span></p>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="step5Back"><span class="pl">Wstecz</span><span class="en">Back</span></button>
+        <button class="btn" id="step5Restore" disabled><span class="pl">Przywróć</span><span class="en">Restore</span></button>
+      </div>
+      <div class="error" id="step5Error"></div>
+    </div>
+
+    <!-- Step 4: Done -->
+    <div class="step" id="step4">
+      <div class="success-msg">
+        <h2><span class="pl">Gotowe!</span><span class="en">Done!</span></h2>
+        <p style="font-size:.95rem;" id="doneMsg"><span class="pl">Konfiguracja zakończona.</span><span class="en">Configuration complete.</span></p>
+        <div class="btn-row" style="justify-content:center;margin-top:1.5rem;">
+          <button class="btn" id="doneBtn"><span class="pl">Przejdź do aplikacji</span><span class="en">Go to application</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  /* Language toggle */
+  var curLang = localStorage.getItem('aistate_ui_lang') || 'pl';
+
+  function txt(pl, en) { return curLang === 'en' ? en : pl; }
+
+  function applyLang(lang) {
+    curLang = lang;
+    localStorage.setItem('aistate_ui_lang', lang);
+    document.querySelectorAll('.lang-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.lang === lang); });
+    document.documentElement.classList.toggle('lang-en', lang === 'en');
+    document.querySelectorAll('[data-ph-pl]').forEach(function(el) {
+      el.placeholder = lang === 'en' ? el.dataset.phEn : el.dataset.phPl;
+    });
+  }
+  document.querySelectorAll('.lang-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { applyLang(btn.dataset.lang); });
+  });
+  applyLang(curLang);
+
+  let selectedMode = null;
+  let createdAdminId = null;
+
+  // Step 1: Mode selection
+  document.querySelectorAll('.mode-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      selectedMode = card.dataset.mode;
+      document.getElementById('step1Next').disabled = false;
+    });
+  });
+
+  function showStep(n) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById('step' + n).classList.add('active');
+  }
+
+  document.getElementById('step1Next').addEventListener('click', async () => {
+    const errEl = document.getElementById('step1Error');
+    errEl.textContent = '';
+    try {
+      const res = await fetch('/api/setup/mode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ mode: selectedMode }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
+
+      if (selectedMode === 'restore') {
+        showStep(5);
+        loadBackupList();
+        return;
+      } else if (selectedMode === 'single') {
+        document.getElementById('doneMsg').innerHTML =
+          '<span class="pl">Tryb pojedynczego użytkownika \u2014 brak zmian w aplikacji.</span>' +
+          '<span class="en">Single user mode \u2014 no changes to the application.</span>';
+        showStep(4);
+      } else {
+        showStep(2);
+      }
+    } catch (e) {
+      errEl.textContent = txt('Błąd połączenia', 'Connection error');
+    }
+  });
+
+  // Step 2: Admin creation
+  document.getElementById('step2Back').addEventListener('click', () => showStep(1));
+
+  document.getElementById('step2Next').addEventListener('click', async () => {
+    const errEl = document.getElementById('step2Error');
+    errEl.textContent = '';
+    const username = document.getElementById('adminUsername').value.trim();
+    const display_name = document.getElementById('adminDisplayName').value.trim() || username;
+    const password = document.getElementById('adminPassword').value;
+    const password2 = document.getElementById('adminPassword2').value;
+
+    if (!username) { errEl.textContent = txt('Podaj nazwę użytkownika', 'Enter a username'); return; }
+    if (password.length < 12) { errEl.textContent = txt('Hasło musi mieć min. 12 znaków', 'Password must be at least 12 characters'); return; }
+    if (password !== password2) { errEl.textContent = txt('Hasła nie są identyczne', 'Passwords do not match'); return; }
+
+    try {
+      const res = await fetch('/api/setup/admin', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ username, display_name, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
+      createdAdminId = data.user_id;
+
+      // Check if there are existing projects
+      const projRes = await fetch('/api/setup/projects');
+      const projData = await projRes.json();
+      if (projData.projects && projData.projects.length > 0) {
+        renderMigrationList(projData.projects);
+        showStep(3);
+      } else {
+        showStep(4);
+      }
+    } catch (e) {
+      errEl.textContent = txt('Błąd połączenia', 'Connection error');
+    }
+  });
+
+  // Step 3: Migration
+  function renderMigrationList(projects) {
+    const list = document.getElementById('migrateList');
+    list.innerHTML = '';
+    projects.forEach(p => {
+      const div = document.createElement('div');
+      div.className = 'migrate-item';
+      div.innerHTML = '<input type="checkbox" checked data-pid="' + p.project_id + '"/> '
+        + '<span>' + (p.name || p.project_id) + '</span>';
+      list.appendChild(div);
+    });
+  }
+
+  document.getElementById('migrateSelectAll').addEventListener('change', function() {
+    document.querySelectorAll('#migrateList input[type=checkbox]').forEach(cb => {
+      cb.checked = this.checked;
+    });
+  });
+
+  document.getElementById('step3Skip').addEventListener('click', () => showStep(4));
+
+  document.getElementById('step3Migrate').addEventListener('click', async () => {
+    const errEl = document.getElementById('step3Error');
+    errEl.textContent = '';
+    const assignments = {};
+    document.querySelectorAll('#migrateList input[type=checkbox]:checked').forEach(cb => {
+      assignments[cb.dataset.pid] = createdAdminId;
+    });
+
+    try {
+      const res = await fetch('/api/setup/migrate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ assignments }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.message || 'Error'; return; }
+      document.getElementById('doneMsg').innerHTML =
+        '<span class="pl">Zmigranowano ' + data.migrated + ' projektów. Konfiguracja zakończona.</span>' +
+        '<span class="en">Migrated ' + data.migrated + ' projects. Configuration complete.</span>';
+      showStep(4);
+    } catch (e) {
+      errEl.textContent = txt('Błąd połączenia', 'Connection error');
+    }
+  });
+
+  // Step 5: Restore from backup
+  let selectedBackupPath = null;
+
+  async function loadBackupList() {
+    const listEl = document.getElementById('backupList');
+    const loadingEl = document.getElementById('backupListLoading');
+    const emptyEl = document.getElementById('backupListEmpty');
+    const restoreBtn = document.getElementById('step5Restore');
+    selectedBackupPath = null;
+    restoreBtn.disabled = true;
+    loadingEl.style.display = '';
+    listEl.style.display = 'none';
+    emptyEl.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/setup/backups');
+      const data = await res.json();
+      loadingEl.style.display = 'none';
+      const backups = data.backups || [];
+      if (!backups.length) {
+        emptyEl.style.display = '';
+        return;
+      }
+      listEl.style.display = '';
+      listEl.innerHTML = '';
+      backups.forEach(b => {
+        const div = document.createElement('div');
+        div.className = 'backup-item';
+        div.dataset.path = b.path || '';
+        const date = b.created ? new Date(b.created).toLocaleString() : '—';
+        const size = b.size_mb ? b.size_mb.toFixed(1) + ' MB' : '';
+        const comps = (b.components || []).join(', ');
+        div.innerHTML = '<div><div class="bi-name">' + (b.name || '?') + '</div>'
+          + '<div class="bi-meta">' + date + (size ? ' — ' + size : '') + (comps ? ' (' + comps + ')' : '') + '</div></div>';
+        div.addEventListener('click', () => {
+          listEl.querySelectorAll('.backup-item').forEach(i => i.classList.remove('selected'));
+          div.classList.add('selected');
+          selectedBackupPath = div.dataset.path;
+          document.getElementById('backupManualPath').value = '';
+          restoreBtn.disabled = false;
+        });
+        listEl.appendChild(div);
+      });
+    } catch (e) {
+      loadingEl.style.display = 'none';
+      emptyEl.style.display = '';
+      emptyEl.innerHTML = '<span style="color:#e74c3c">' + txt('Błąd ładowania backupów', 'Failed to load backups') + '</span>';
+    }
+  }
+
+  // Manual path input enables restore button
+  document.getElementById('backupManualPath').addEventListener('input', function() {
+    const restoreBtn = document.getElementById('step5Restore');
+    if (this.value.trim()) {
+      selectedBackupPath = this.value.trim();
+      document.querySelectorAll('.backup-item').forEach(i => i.classList.remove('selected'));
+      restoreBtn.disabled = false;
+    } else if (!document.querySelector('.backup-item.selected')) {
+      restoreBtn.disabled = true;
+    }
+  });
+
+  document.getElementById('step5Back').addEventListener('click', () => showStep(1));
+
+  document.getElementById('step5Restore').addEventListener('click', async () => {
+    const errEl = document.getElementById('step5Error');
+    const progressEl = document.getElementById('restoreProgress');
+    const restoreBtn = document.getElementById('step5Restore');
+    errEl.textContent = '';
+
+    const path = selectedBackupPath || document.getElementById('backupManualPath').value.trim();
+    if (!path) {
+      errEl.textContent = txt('Wybierz backup lub podaj ścieżkę', 'Select a backup or enter a path');
+      return;
+    }
+
+    restoreBtn.disabled = true;
+    progressEl.style.display = '';
+
+    try {
+      const res = await fetch('/api/setup/restore', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ path: path }),
+      });
+      const data = await res.json();
+      progressEl.style.display = 'none';
+
+      if (!res.ok) {
+        errEl.textContent = data.error || data.message || 'Error';
+        restoreBtn.disabled = false;
+        return;
+      }
+
+      const restored = (data.restored || []).join(', ') || 'all';
+      document.getElementById('doneMsg').innerHTML =
+        '<span class="pl">Przywrócono: ' + restored + '. Uruchom ponownie serwer.</span>' +
+        '<span class="en">Restored: ' + restored + '. Please restart the server.</span>';
+      showStep(4);
+    } catch (e) {
+      progressEl.style.display = 'none';
+      errEl.textContent = txt('Błąd połączenia', 'Connection error');
+      restoreBtn.disabled = false;
+    }
+  });
+
+  // Step 4: Done
+  document.getElementById('doneBtn').addEventListener('click', () => {
+    if (selectedMode === 'multi') {
+      location.href = '/login';
+    } else {
+      location.href = '/';
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,9791 @@
+
+from __future__ import annotations
+
+import io
+import asyncio
+import json
+import os
+import shutil
+import sys
+import threading
+import time
+import tempfile
+import uuid
+import zipfile
+from dataclasses import dataclass, asdict, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from collections import deque
+
+from fastapi import FastAPI, File, Form, UploadFile, Request, HTTPException, Body
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
+
+from backend.settings import APP_NAME, APP_VERSION, AUTHOR_EMAIL
+from backend.settings_store import load_settings, save_settings, _local_config_dir
+from backend.legacy_adapter import diarize_text_simple
+from backend.prompts.manager import PromptManager
+
+# --- Multi-user auth system ---
+from webapp.auth.deployment_store import DeploymentStore
+from webapp.auth.user_store import UserStore
+from webapp.auth.session_store import SessionStore
+from webapp.auth.permissions import (
+    get_user_modules, is_route_allowed,
+    PUBLIC_ROUTES, PUBLIC_PREFIXES,
+)
+from webapp.routers import auth as auth_router
+from webapp.routers import users as users_router
+from webapp.routers import setup as setup_router
+
+# Analysis: documents + Ollama
+from backend.document_processor import extract_text, DocumentProcessingError, SUPPORTED_EXTS
+from backend.ollama_client import OllamaClient, OllamaError, quick_analyze, deep_analyze, stream_analyze
+
+# Analysis report generator (HTML/DOCX/MD)
+from backend.report_generator import save_report, ReportSaveError
+
+# Financial intelligence pipeline
+from backend.finance.pipeline import run_finance_pipeline, run_multi_statement_pipeline, build_enriched_prompt as build_finance_enriched_prompt
+from backend.models_info import MODELS_INFO, MODELS_GROUPS, DEFAULT_MODELS
+
+from generators import generate_txt_report, generate_html_report, generate_pdf_report
+
+# Routers (refactored modules)
+from webapp.routers import chat as chat_router
+from webapp.routers import admin as admin_router
+from webapp.routers import tasks as tasks_router
+from webapp.routers import aml as aml_router
+from webapp.routers import gsm as gsm_router
+from webapp.routers import report_profiles as report_profiles_router
+from webapp.routers import messages as messages_router
+from webapp.routers import workspaces as workspaces_router
+from webapp.routers import crypto as crypto_router
+from webapp.routers import updates as updates_router
+from webapp.routers import licensing as licensing_router
+from webapp.routers import aria as aria_router
+from webapp.routers import modules as modules_router
+
+try:
+    from markdown import markdown as md_to_html  # type: ignore
+except Exception:  # pragma: no cover
+    md_to_html = None
+
+
+ROOT = Path(__file__).resolve().parents[1]
+TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
+
+DATA_DIR = Path(os.environ.get("AISTATEWEB_DATA_DIR") or os.environ.get("AISTATEWWW_DATA_DIR") or os.environ.get("AISTATE_DATA_DIR") or str(ROOT / "data_www")).resolve()
+PROJECTS_DIR = DATA_DIR / "projects"
+PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+PROMPTS = PromptManager(PROJECTS_DIR)
+
+# --- Multi-user auth stores ---
+from webapp.auth.message_store import MessageStore
+from webapp.auth.audit_store import AuditStore
+
+from webapp.auth.passwords import init_blacklist
+
+_AUTH_CONFIG_DIR = _local_config_dir()
+DEPLOYMENT_STORE = DeploymentStore(_AUTH_CONFIG_DIR)
+USER_STORE = UserStore(_AUTH_CONFIG_DIR)
+SESSION_STORE = SessionStore(_AUTH_CONFIG_DIR)
+MESSAGE_STORE = MessageStore(_AUTH_CONFIG_DIR)
+AUDIT_STORE = AuditStore(_AUTH_CONFIG_DIR)
+PASSWORD_BLACKLIST = init_blacklist(_AUTH_CONFIG_DIR)
+
+from webapp.auth.workspace_store import WorkspaceStore
+WORKSPACE_STORE = WorkspaceStore()
+
+
+def _get_session_timeout() -> int:
+    """Read configurable session timeout (hours) from settings."""
+    try:
+        s = load_settings()
+        return int(getattr(s, "session_timeout_hours", 8) or 8)
+    except Exception:
+        return 8
+
+# ---------------------------
+# Admin file logs (persistent)
+# ---------------------------
+# These logs are NOT stored inside projects. They are intended for administrators.
+# Default location: AISTATEweb/backend/logs/YYYY-MM-DD/aistateHH-HH.log
+# Override with env var: AISTATEWEB_ADMIN_LOG_DIR
+
+ADMIN_LOG_DIR = Path(os.environ.get("AISTATEWEB_ADMIN_LOG_DIR") or str(ROOT / "backend" / "logs")).resolve()
+
+class _AdminFileLogger:
+    """Hourly file logger with per-day folders (simple, dependency-free).
+
+    Output example:
+      backend/logs/2026-01-17/aistate14-15.log
+      backend/logs/2026-01-17/aistate_user14-15.log  (paired audit log)
+    """
+
+    def __init__(self, root_dir: Path, prefix: str = "aistate", pair: Optional["_AdminFileLogger"] = None) -> None:
+        self.root_dir = Path(root_dir)
+        self._prefix = prefix
+        self._pair = pair
+        self._lock = threading.Lock()
+        self._cur_key: Optional[str] = None
+        self._fh: Optional[io.TextIOWrapper] = None
+
+    def _target_path(self, dt: datetime) -> Path:
+        date_str = dt.strftime("%Y-%m-%d")
+        h0 = dt.hour
+        h1 = (dt + timedelta(hours=1)).hour
+        folder = self.root_dir / date_str
+        return folder / f"{self._prefix}{h0:02d}-{h1:02d}.log"
+
+    def _ensure_pair(self, dt: datetime) -> None:
+        """Ensure the paired logger also has a file for this hour."""
+        if not self._pair:
+            return
+        try:
+            pair_path = self._pair._target_path(dt)
+            if not pair_path.exists():
+                pair_path.parent.mkdir(parents=True, exist_ok=True)
+                pair_path.write_text("No events\n", encoding="utf-8")
+        except Exception:
+            pass
+
+    def write_line(self, line: str) -> None:
+        line = (line or "").rstrip("\n")
+        if not line:
+            return
+
+        dt = datetime.now()
+        key = dt.strftime("%Y-%m-%d_%H")
+
+        try:
+            with self._lock:
+                if self._fh is None or self._cur_key != key:
+                    try:
+                        if self._fh:
+                            self._fh.flush()
+                            self._fh.close()
+                    except Exception:
+                        pass
+
+                    path = self._target_path(dt)
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    # If file only has "No events" placeholder, overwrite it
+                    mode = "a"
+                    if path.exists():
+                        try:
+                            content = path.read_text(encoding="utf-8").strip()
+                            if content == "No events":
+                                mode = "w"
+                        except Exception:
+                            pass
+                    self._fh = open(path, mode, encoding="utf-8", errors="replace")
+                    self._cur_key = key
+
+                    # Ensure paired log file exists for this hour
+                    self._ensure_pair(dt)
+
+                assert self._fh is not None
+                self._fh.write(line + "\n")
+                self._fh.flush()
+        except Exception:
+            # Never break app flow because of logging.
+            return
+
+    def ensure_file_for_hour(self, dt: Optional[datetime] = None) -> None:
+        """Create the file for the current hour if it doesn't exist (with 'No events' placeholder)."""
+        dt = dt or datetime.now()
+        try:
+            path = self._target_path(dt)
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("No events\n", encoding="utf-8")
+        except Exception:
+            pass
+
+
+# System log writes to aistateHH-HH.log, audit log writes to aistate_userHH-HH.log.
+# They are "paired" — when one creates a new hourly file, the other is also created.
+AUDIT_FILE_LOG = _AdminFileLogger(ADMIN_LOG_DIR, prefix="aistate_user")
+ADMIN_FILE_LOG = _AdminFileLogger(ADMIN_LOG_DIR, prefix="aistate", pair=AUDIT_FILE_LOG)
+AUDIT_FILE_LOG._pair = ADMIN_FILE_LOG
+AUDIT_STORE._file_logger = AUDIT_FILE_LOG
+
+# Ollama client (local LLM). Used by Analysis endpoints.
+OLLAMA = OllamaClient()
+
+# Ollama model install tasks (background pulls).
+# Stored so the UI can query /api/ollama/install/status and the Logs tab can show progress.
+# Shape:
+#   {"status": "idle|running|done|error", "progress": int(0..100), "stage": str, "scope": "quick|deep|unknown", "error": str|None, "started_at": iso, "updated_at": iso}
+OLLAMA_INSTALL_TASKS: Dict[str, Dict[str, Any]] = {}
+_OLLAMA_INSTALL_LOCK = threading.Lock()
+
+def _set_install_state(model: str, **updates: Any) -> None:
+    with _OLLAMA_INSTALL_LOCK:
+        st = OLLAMA_INSTALL_TASKS.get(model) or {
+            "status": "idle",
+            "progress": 0,
+            "stage": "",
+            "scope": "unknown",
+            "error": None,
+            "started_at": None,
+            "updated_at": None,
+        }
+        st.update(updates)
+        st["updated_at"] = now_iso()
+        OLLAMA_INSTALL_TASKS[model] = st
+
+def _ollama_pull_stream(model: str, base_url: str) -> None:
+    """Pull model using Ollama HTTP API: POST {base}/api/pull with stream=true.
+
+    Streams JSON lines with fields like: status, completed, total.
+    """
+    import urllib.request
+
+    url = base_url.rstrip("/") + "/api/pull"
+    payload = json.dumps({"name": model, "stream": True}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, method="POST", headers={"Content-Type": "application/json"})
+
+    last_logged_bucket = -1
+    last_stage = None
+
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        for raw in resp:
+            line = raw.decode("utf-8", errors="ignore").strip()
+            if not line:
+                continue
+            try:
+                evt = json.loads(line)
+            except Exception:
+                evt = {"status": line}
+
+            stage = str(evt.get("status") or evt.get("message") or "").strip()
+            completed = evt.get("completed")
+            total = evt.get("total")
+
+            progress = None
+            if isinstance(completed, (int, float)) and isinstance(total, (int, float)) and total:
+                try:
+                    progress = int((float(completed) / float(total)) * 100)
+                    progress = max(0, min(100, progress))
+                except Exception:
+                    progress = None
+
+            if stage and stage != last_stage:
+                last_stage = stage
+                _set_install_state(model, stage=stage)
+                app_log(f"Ollama pull stage: model={model} | {stage}")
+
+            if progress is not None:
+                _set_install_state(model, progress=progress)
+                # log every 5% to avoid log spam
+                bucket = progress // 5
+                if bucket != last_logged_bucket:
+                    last_logged_bucket = bucket
+                    app_log(f"Ollama pull progress: model={model} | {progress}%")
+
+            if evt.get("error"):
+                raise RuntimeError(str(evt["error"])[:4000])
+
+def _ollama_install_worker(model: str, scope: str = "unknown") -> None:
+    """Background worker to install/pull a model.
+
+    Important: it continues even if user leaves the Settings tab (server-side thread).
+    Also: it logs progress to the system Logs tab.
+    """
+    base_url = os.getenv("OLLAMA_HOST") or "http://127.0.0.1:11434"
+    _set_install_state(model, status="running", progress=0, stage="starting", scope=scope, error=None, started_at=now_iso())
+    app_log(f"Ollama install requested: model={model}, scope={scope}")
+
+    try:
+        # Preferred: streaming HTTP pull (gives progress).
+        try:
+            _ollama_pull_stream(model, base_url=base_url)
+        except Exception as e:
+            # Fallback to client ensure_model (best-effort) if streaming pull fails.
+            app_log(f"Ollama pull stream failed: model={model} | {e} | fallback to ensure_model()")
+            asyncio.run(OLLAMA.ensure_model(model))
+
+        _set_install_state(model, status="done", progress=100, stage="done", error=None)
+        app_log(f"Ollama install done: model={model}, scope={scope}")
+    except Exception as e:
+        _set_install_state(model, status="error", error=str(e)[:4000], stage="error")
+        app_log(f"Ollama install error: model={model}, scope={scope} | {e}")
+
+
+# ---------- Helpers: default name + secure delete (best-effort) ----------
+from datetime import datetime, timedelta
+
+def default_project_name() -> str:
+    # Default name: AISTATE_YYYY-MM-DD (editable in UI)
+    return f"AISTATE_{datetime.now().date().isoformat()}"
+
+def _overwrite_path_bytes(path: Path, pattern: bytes, chunk_size: int = 1024 * 1024) -> None:
+    size = path.stat().st_size
+    if size <= 0:
+        return
+    with open(path, "r+b", buffering=0) as f:
+        remaining = size
+        if not pattern:
+            raise ValueError("Empty overwrite pattern")
+        buf = (pattern * (chunk_size // len(pattern) + 1))[:chunk_size]
+        while remaining > 0:
+            n = min(chunk_size, remaining)
+            f.write(buf[:n])
+            remaining -= n
+        f.flush()
+        os.fsync(f.fileno())
+
+def _overwrite_path_random(path: Path, passes: int = 1, chunk_size: int = 1024 * 1024) -> None:
+    size = path.stat().st_size
+    if size <= 0:
+        return
+    for _ in range(passes):
+        with open(path, "r+b", buffering=0) as f:
+            remaining = size
+            while remaining > 0:
+                n = min(chunk_size, remaining)
+                f.write(os.urandom(n))
+                remaining -= n
+            f.flush()
+            os.fsync(f.fileno())
+
+def _gutmann_patterns() -> List[bytes]:
+    # Gutmann 35-pass sequence (classic). Patterns for passes 5-31 are based on Gutmann's table.
+    # Passes 1-4 and 32-35 are random.
+    # Source: Peter Gutmann, USENIX Security '96. citeturn0search2
+    P: List[bytes] = []
+    P.append(b"\x55")
+    P.append(b"\xAA")
+    P.append(bytes([0x92, 0x49, 0x24]))
+    P.append(bytes([0x49, 0x24, 0x92]))
+    P.append(bytes([0x24, 0x92, 0x49]))
+    P.extend([bytes([x]) for x in [
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99,
+        0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF
+    ]])
+    P.append(bytes([0x92, 0x49, 0x24]))
+    P.append(bytes([0x49, 0x24, 0x92]))
+    P.append(bytes([0x24, 0x92, 0x49]))
+    P.append(bytes([0x6D, 0xB6, 0xDB]))
+    P.append(bytes([0xB6, 0xDB, 0x6D]))
+    P.append(bytes([0xDB, 0x6D, 0xB6]))
+    return P  # 27 pattern passes
+
+def secure_delete_project_dir(pdir: Path, method: str) -> None:
+    # Best-effort file wiping inside project directory, then removal.
+    # NOTE: On SSD/VM/CoW filesystems, overwriting may not guarantee secure erase.
+    # For HMG IS5 Enhanced (0x00, 0xFF, Random) see e.g. LSoft KillDisk manual. citeturn0search31
+    method = (method or "none").lower().strip()
+
+    if method == "none":
+        shutil.rmtree(pdir)
+        return
+
+    files = [fp for fp in pdir.rglob("*") if fp.is_file()]
+
+    if method == "random1":
+        for fp in files:
+            try:
+                _overwrite_path_random(fp, passes=1)
+            except Exception:
+                pass
+            try:
+                fp.unlink()
+            except Exception:
+                pass
+
+    elif method == "hmg_is5":
+        for fp in files:
+            try:
+                _overwrite_path_bytes(fp, b"\x00")
+                _overwrite_path_bytes(fp, b"\xFF")
+                _overwrite_path_random(fp, passes=1)
+            except Exception:
+                pass
+            try:
+                fp.unlink()
+            except Exception:
+                pass
+
+    elif method == "gutmann":
+        patterns = _gutmann_patterns()
+        for fp in files:
+            try:
+                _overwrite_path_random(fp, passes=4)
+                for pat in patterns:
+                    _overwrite_path_bytes(fp, pat)
+                _overwrite_path_random(fp, passes=4)
+            except Exception:
+                pass
+            try:
+                fp.unlink()
+            except Exception:
+                pass
+
+    else:
+        shutil.rmtree(pdir)
+        return
+
+    shutil.rmtree(pdir, ignore_errors=True)
+
+
+WHISPER_MODELS = [
+    # NOTE: OpenAI Whisper also exposes a "turbo" model (optimized large-v3 variant)
+    # which is very fast for transcription tasks.
+    "tiny", "base", "small", "medium", "large", "turbo", "large-v2", "large-v3",
+]
+
+# Optional ASR engines: Whisper / NVIDIA NeMo / pyannote
+# NOTE: We do not persist defaults yet (per user request) — selection is UI-only.
+NEMO_MODELS = [
+    # English (fast / lightweight)
+    "nvidia/stt_en_conformer_ctc_small",
+    # English (highest accuracy)
+    "nvidia/stt_en_conformer_transducer_large",
+    # Multilingual (best overall; strong Polish)
+    "nvidia/stt_multilingual_fastconformer_hybrid_large_pc",
+]
+
+# NeMo diarization models (speaker diarization / embeddings)
+# NOTE: These are UI-only presets for caching in ASR Settings.
+NEMO_DIARIZATION_MODELS = [
+    # MSDD diarization (telephonic) – best quality for overlap + multi-language
+    "diar_msdd_telephonic",
+]
+
+PYANNOTE_PIPELINES = [
+    "pyannote/speaker-diarization-community-1",
+    "pyannote/speaker-diarization-3.1",
+    "pyannote/speaker-diarization",
+]
+
+
+# --- NLLB translation models (offline via HuggingFace cache) ---
+# These are UI presets for the Translation "Fast" / "Accurate" modes.
+NLLB_FAST_MODELS = [
+    # Best speed/size ratio
+    "facebook/nllb-200-distilled-600M",
+    # Better quality while still reasonably fast
+    "facebook/nllb-200-distilled-1.3B",
+]
+
+NLLB_ACCURATE_MODELS = [
+    # Higher quality (full)
+    "facebook/nllb-200-1.3B",
+    # Highest quality (very large)
+    "facebook/nllb-200-3.3B",
+]
+
+
+def now_iso() -> str:
+    import datetime as _dt
+    return _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def safe_filename(name: str) -> str:
+    # best-effort sanitization for uploads
+    name = name.replace("\\", "_").replace("/", "_")
+    return "".join(c for c in name if c.isalnum() or c in "._- ").strip()[:180] or "audio"
+
+
+@dataclass
+class TaskState:
+    task_id: str
+    kind: str
+    project_id: str
+    status: str = "queued"  # queued|running|done|error
+    progress: int = 0
+    logs: List[str] = field(default_factory=list)
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    started_at: str = field(default_factory=now_iso)
+    finished_at: Optional[str] = None
+
+    def add_log(self, line: str) -> None:
+        line = line.rstrip("\n")
+        if not line:
+            return
+        self.logs.append(line)
+        # Persist logs for administrators (separate from project logs)
+        try:
+            for _ln in str(line).splitlines() or []:
+                _ln = (_ln or "").rstrip("\n")
+                if not _ln:
+                    continue
+                if self.task_id == "system":
+                    ADMIN_FILE_LOG.write_line(_ln)
+                else:
+                    ADMIN_FILE_LOG.write_line(f"{now_iso()} | task={self.task_id} kind={self.kind} project={self.project_id} | {_ln}")
+        except Exception:
+            pass
+
+        # keep last N lines to avoid memory blow-up
+        if len(self.logs) > 2000:
+            self.logs = self.logs[-2000:]
+
+
+class TaskManager:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._tasks: Dict[str, TaskState] = {}
+
+        # Track running subprocess handles for optional cancellation from Admin panel.
+        self._procs: Dict[str, Any] = {}
+        self._procs_lock = threading.Lock()
+
+        # A persistent "system" task to collect server-side application events.
+        # This lets the Logs tab show more than just worker stderr.
+        sys_task = TaskState(
+            task_id="system",
+            kind="system",
+            project_id="-",
+            status="running",
+            progress=0,
+        )
+        self._tasks[sys_task.task_id] = sys_task
+
+    def system_log(self, msg: str) -> None:
+        """Append an application-level log line (English only)."""
+        try:
+            t = self.get("system")
+            t.add_log(f"{now_iso()} | {msg}")
+        except Exception:
+            # Best-effort: never break the request because of logging.
+            pass
+
+    def create_task(self, kind: str, project_id: str) -> TaskState:
+        """Create an in-memory task (used for async/streaming operations)."""
+        task_id = uuid.uuid4().hex
+        t = TaskState(task_id=task_id, kind=kind, project_id=project_id, status="running", progress=0)
+        self._set(t)
+        t.add_log(f"Task started: kind={kind}, project_id={project_id}, task_id={task_id}")
+        try:
+            self.system_log(f"Task started: {kind} (project_id={project_id}, task_id={task_id})")
+        except Exception:
+            pass
+        return t
+
+    def create_queued_task(self, kind: str, project_id: str, task_id: Optional[str] = None) -> TaskState:
+        """Create a queued task placeholder (used by the GPU Resource Manager)."""
+        tid = task_id or uuid.uuid4().hex
+        t = TaskState(task_id=tid, kind=kind, project_id=project_id, status="queued", progress=0)
+        self._set(t)
+        t.add_log(f"Task queued: kind={kind}, project_id={project_id}, task_id={tid}")
+        try:
+            self.system_log(f"Task queued: {kind} (project_id={project_id}, task_id={tid})")
+        except Exception:
+            pass
+        return t
+
+    def cancel_task(self, task_id: str, reason: str = "Canceled by admin") -> bool:
+        """Try to cancel a queued/running task. Best-effort."""
+        try:
+            t = self.get(task_id)
+        except KeyError:
+            return False
+
+        # If there's an active subprocess, terminate it.
+        with getattr(self, "_procs_lock", threading.Lock()):
+            p = getattr(self, "_procs", {}).get(task_id)
+
+        if p is not None:
+            try:
+                p.terminate()
+                t.add_log("Task cancellation requested (terminate).")
+                try:
+                    self.system_log(f"Task cancel requested: {t.kind} (task_id={task_id})")
+                except Exception:
+                    pass
+                # SIGKILL fallback if SIGTERM doesn't work within 5s
+                def _force_kill() -> None:
+                    try:
+                        p.wait(timeout=5)
+                    except Exception:
+                        try:
+                            p.kill()
+                            t.add_log("Process did not exit after SIGTERM, sent SIGKILL.")
+                        except Exception:
+                            pass
+                threading.Thread(target=_force_kill, daemon=True).start()
+                return True
+            except Exception as e:
+                t.add_log(f"Task cancellation failed: {e}")
+                return False
+
+        # Otherwise: mark as error if still queued/running
+        if t.status in ("queued", "running"):
+            t.status = "error"
+            t.error = reason
+            t.finished_at = now_iso()
+            t.add_log(reason)
+            try:
+                self.system_log(f"Task canceled: {t.kind} (task_id={task_id})")
+            except Exception:
+                pass
+            return True
+        return False
+
+    def start_subprocess_with_id(
+        self,
+        task_id: str,
+        kind: str,
+        project_id: str,
+        cmd: List[str],
+        cwd: Path,
+        env: Optional[Dict[str, str]] = None,
+    ) -> TaskState:
+        """Start a subprocess but reuse a pre-created task_id (queued placeholder)."""
+        import subprocess
+
+        try:
+            t = self.get(task_id)
+            # Keep existing logs (queue history), but reset state for run.
+            t.kind = kind
+            t.project_id = project_id
+            t.status = "running"
+            t.progress = 0
+            t.error = None
+            t.result = None
+            t.finished_at = None
+        except KeyError:
+            t = TaskState(task_id=task_id, kind=kind, project_id=project_id, status="running", progress=0)
+            self._set(t)
+
+        t.add_log(f"Task started: kind={kind}, project_id={project_id}, task_id={task_id}")
+        try:
+            self.system_log(f"Task started: {kind} (project_id={project_id}, task_id={task_id})")
+        except Exception:
+            pass
+
+        proc_env = os.environ.copy()
+        if env:
+            proc_env.update(env)
+
+        def _redact_cmd(argv: List[str]) -> str:
+            out: List[str] = []
+            skip_next = False
+            for a in argv:
+                if skip_next:
+                    out.append("******")
+                    skip_next = False
+                    continue
+                if a in ("--hf_token", "--token", "--hf-token"):
+                    out.append(a)
+                    skip_next = True
+                    continue
+                if "hf_" in a and len(a) > 20:
+                    out.append("******")
+                else:
+                    out.append(a)
+            return " ".join(out)
+
+        t.add_log(f"Command: {_redact_cmd(cmd)}")
+
+        p = subprocess.Popen(
+            cmd,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            env=proc_env,
+        )
+
+        # Track proc for optional cancellation
+        try:
+            with self._procs_lock:
+                self._procs[task_id] = p
+        except Exception:
+            pass
+
+        stdout_buf: List[str] = []
+
+        def read_stderr() -> None:
+            assert p.stderr is not None
+            for line in p.stderr:
+                line = line.rstrip("\n")
+                # Progress markers from workers: "PROGRESS: <0-100>"
+                if line.startswith("PROGRESS"):
+                    try:
+                        pct = int(line.split(":")[-1].strip())
+                        t.progress = max(0, min(100, pct))
+                    except Exception:
+                        pass
+                    continue
+
+                if line.strip():
+                    t.add_log(line)
+                    try:
+                        if t.task_id != "system":
+                            self.system_log(f"[{kind}:{task_id[:8]}] {line}")
+                    except Exception:
+                        pass
+            t.add_log("(stderr stream closed)")
+
+        def read_stdout() -> None:
+            assert p.stdout is not None
+            for line in p.stdout:
+                s = line.rstrip("\n")
+                if s.strip().startswith("{") or s.strip().startswith("["):
+                    stdout_buf.append(line)
+                else:
+                    if s.strip():
+                        t.add_log(f"STDOUT: {s}")
+                        try:
+                            if t.task_id != "system" and s.strip():
+                                self.system_log(f"[{kind}:{task_id[:8]}] STDOUT: {s}")
+                        except Exception:
+                            pass
+            t.add_log("(stdout stream closed)")
+
+        th1 = threading.Thread(target=read_stderr, daemon=True)
+        th2 = threading.Thread(target=read_stdout, daemon=True)
+        th1.start()
+        th2.start()
+
+
+        def finalize() -> None:
+            try:
+                rc = p.wait()
+            except Exception as e:
+                t.status = "error"
+                t.error = f"Failed to wait for subprocess: {e}"
+                t.finished_at = now_iso()
+                return
+
+            # Try to release proc handle
+            try:
+                with self._procs_lock:
+                    self._procs.pop(task_id, None)
+            except Exception:
+                pass
+
+            th1.join(timeout=1)
+            th2.join(timeout=1)
+            t.finished_at = now_iso()
+
+            out = "".join(stdout_buf).strip()
+            if rc != 0:
+                t.status = "error"
+                t.error = f"Worker exited with code {rc}"
+                if out:
+                    t.add_log("STDOUT (tail): " + out[-2000:])
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> ERROR (exit code {rc})")
+                except Exception:
+                    pass
+                return
+
+            # Parse JSON result
+            try:
+                data = json.loads(out) if out else {}
+                t.status = "done"
+                t.result = data if isinstance(data, dict) else {"data": data}
+
+                # If this was an ASR install/predownload, rescan caches so UI updates without manual refresh.
+                try:
+                    if isinstance(kind, str) and (kind.startswith("asr_predownload_") or kind.startswith("asr_install_")):
+                        scan_and_persist_asr_model_cache()
+                except Exception as e:
+                    try:
+                        t.add_log(f"ASR rescan failed: {e}")
+                    except Exception:
+                        pass
+
+                # If this was an NLLB install/predownload, rescan caches so UI updates.
+                try:
+                    if isinstance(kind, str) and (kind.startswith("nllb_predownload_") or kind.startswith("nllb_install_")):
+                        scan_and_persist_nllb_model_cache()
+                except Exception as e:
+                    try:
+                        t.add_log(f"NLLB rescan failed: {e}")
+                    except Exception:
+                        pass
+
+                # If transcription, persist Whisper's detected language to project meta.
+                try:
+                    if isinstance(kind, str) and kind.startswith("transcribe") and isinstance(data, dict):
+                        det = data.get("detected_lang")
+                        if det and project_id and project_id != "-":
+                            meta = read_project_meta(project_id)
+                            meta["detected_lang"] = str(det)
+                            write_project_meta(project_id, meta)
+                except Exception:
+                    pass
+
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE")
+                except Exception:
+                    pass
+            except Exception as e:
+                # Try to recover JSON from stdout (in case of garbage output)
+                import re as _re
+                
+                recovered = None
+                try:
+                    # Try multiple recovery strategies
+                    # 1. Find last JSON object (allow garbage before it)
+                    matches = list(_re.finditer(r"(\{[\s\S]*?\})\s*$", out))
+                    if matches:
+                        recovered = json.loads(matches[-1].group(1))
+                    
+                    # 2. If that fails, try line-by-line from end
+                    if recovered is None:
+                        lines = out.strip().splitlines()
+                        for line in reversed(lines):
+                            line = line.strip()
+                            if line.startswith('{') and line.endswith('}'):
+                                try:
+                                    recovered = json.loads(line)
+                                    break
+                                except Exception:
+                                    continue
+                except Exception:
+                    recovered = None
+                
+                if isinstance(recovered, dict):
+                    t.status = "done"
+                    t.result = recovered
+                    try:
+                        self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE (recovered JSON)")
+                    except Exception:
+                        pass
+                else:
+                    t.status = "error"
+                    t.error = f"Invalid JSON from worker: {e}"
+                    t.add_log("STDOUT (tail): " + out[-2000:])
+                    try:
+                        self.system_log(f"Task finished: {kind} (task_id={task_id}) -> ERROR (invalid JSON)")
+                    except Exception:
+                        pass
+
+        threading.Thread(target=finalize, daemon=True).start()
+        return t
+
+    def list_tasks(self) -> List[TaskState]:
+        with self._lock:
+            tasks = list(self._tasks.values())
+            system = [t for t in tasks if t.task_id == "system"]
+            rest = [t for t in tasks if t.task_id != "system"][::-1]
+            return system + rest
+
+    def get(self, task_id: str) -> TaskState:
+        with self._lock:
+            if task_id not in self._tasks:
+                raise KeyError(task_id)
+            return self._tasks[task_id]
+
+    def clear(self) -> None:
+        with self._lock:
+            # Clear all tasks and reset the persistent system log task.
+            self._tasks.clear()
+            self._tasks["system"] = TaskState(
+                task_id="system",
+                kind="system",
+                project_id="-",
+                status="running",
+                progress=0,
+            )
+
+    def _set(self, t: TaskState) -> None:
+        with self._lock:
+            self._tasks[t.task_id] = t
+
+    def start_subprocess(
+        self,
+        kind: str,
+        project_id: str,
+        cmd: List[str],
+        cwd: Path,
+        env: Optional[Dict[str, str]] = None,
+    ) -> TaskState:
+        import subprocess
+
+        task_id = uuid.uuid4().hex
+        t = TaskState(task_id=task_id, kind=kind, project_id=project_id, status="running", progress=0)
+        self._set(t)
+
+        # Task header (always visible even if worker is quiet for a while)
+        t.add_log(f"Task started: kind={kind}, project_id={project_id}, task_id={task_id}")
+        try:
+            self.system_log(f"Task started: {kind} (project_id={project_id}, task_id={task_id})")
+        except Exception:
+            pass
+
+        proc_env = os.environ.copy()
+        if env:
+            proc_env.update(env)
+
+        # Redact obvious secrets (HF token) from command line in logs.
+        def _redact_cmd(argv: List[str]) -> str:
+            out: List[str] = []
+            skip_next = False
+            for a in argv:
+                if skip_next:
+                    out.append("***")
+                    skip_next = False
+                    continue
+                if a in ("--hf_token", "--token", "--api_key", "--apikey", "--key"):
+                    out.append(a)
+                    skip_next = True
+                    continue
+                out.append(a)
+            return " ".join(out)
+
+        t.add_log(f"Command: {_redact_cmd(cmd)}")
+
+        p = subprocess.Popen(
+            cmd,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+
+        stdout_buf: List[str] = []
+
+        def read_stderr() -> None:
+            assert p.stderr is not None
+            for line in p.stderr:
+                line = line.rstrip("\n")
+                # Progress markers from workers:
+                # transcribe_worker: "PROGRESS: 12"
+                # voice_worker: "PROGRESS:12"
+                if line.startswith("PROGRESS"):
+                    try:
+                        pct = int(line.split(":")[-1].strip())
+                        t.progress = max(0, min(100, pct))
+                    except Exception:
+                        pass
+                else:
+                    t.add_log(line)
+                    try:
+                        if t.task_id != "system" and line.strip():
+                            self.system_log(f"[{kind}:{task_id[:8]}] {line}")
+                    except Exception:
+                        pass
+
+            # Always flush a final marker for readability.
+            t.add_log("(stderr stream closed)")
+
+        def read_stdout() -> None:
+            assert p.stdout is not None
+            for line in p.stdout:
+                s = line.rstrip("\n")
+                # Worker stdout should end with JSON. Any other stdout lines
+                # are treated as logs (many libs print to stdout).
+                if s.strip().startswith("{") or s.strip().startswith("["):
+                    stdout_buf.append(line)
+                else:
+                    if s.strip():
+                        t.add_log(f"STDOUT: {s}")
+                        try:
+                            if t.task_id != "system" and s.strip():
+                                self.system_log(f"[{kind}:{task_id[:8]}] STDOUT: {s}")
+                        except Exception:
+                            pass
+
+            t.add_log("(stdout stream closed)")
+
+        th1 = threading.Thread(target=read_stderr, daemon=True)
+        th2 = threading.Thread(target=read_stdout, daemon=True)
+        th1.start()
+        th2.start()
+
+
+        def finalize() -> None:
+            rc = p.wait()
+            th1.join(timeout=1)
+            th2.join(timeout=1)
+            t.finished_at = now_iso()
+
+            out = "".join(stdout_buf).strip()
+            if rc != 0:
+                t.status = "error"
+                t.error = f"Process exited with code {rc}"
+                if out:
+                    t.add_log("STDOUT (last): " + out[-2000:])
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> ERROR (rc={rc})")
+                except Exception:
+                    pass
+                return
+
+            def _asr_rescan() -> None:
+                try:
+                    if isinstance(kind, str) and (kind.startswith("asr_predownload_") or kind.startswith("asr_install_")):
+                        scan_and_persist_asr_model_cache()
+                except Exception as e:
+                    try:
+                        t.add_log(f"ASR rescan failed: {e}")
+                    except Exception:
+                        pass
+
+            def _nllb_rescan() -> None:
+                try:
+                    if isinstance(kind, str) and (kind.startswith("nllb_predownload_") or kind.startswith("nllb_install_")):
+                        scan_and_persist_nllb_model_cache()
+                except Exception as e:
+                    try:
+                        t.add_log(f"NLLB rescan failed: {e}")
+                    except Exception:
+                        pass
+
+            # parse JSON result
+            if not out:
+                t.result = {}
+                t.status = "done"
+                t.progress = 100
+                _asr_rescan()
+                _nllb_rescan()
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE")
+                except Exception:
+                    pass
+                return
+
+            # Be robust: if stdout contains any accidental extra output,
+            # try to recover the last JSON object from the stream.
+            try:
+                t.result = json.loads(out)
+                t.status = "done"
+                t.progress = 100
+                try:
+                    _persist_task_outputs(t)
+                except Exception as e:
+                    t.add_log(f"PERSIST ERROR: {e}")
+                _asr_rescan()
+                _nllb_rescan()
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE")
+                except Exception:
+                    pass
+            except Exception as e:
+                import re as _re
+
+                recovered = None
+                try:
+                    # Try multiple recovery strategies
+                    # 1. Find last JSON object (allow garbage before it)
+                    matches = list(_re.finditer(r"(\{[\s\S]*?\})\s*$", out))
+                    if matches:
+                        recovered = json.loads(matches[-1].group(1))
+                    
+                    # 2. If that fails, try line-by-line from end
+                    if recovered is None:
+                        lines = out.strip().splitlines()
+                        for line in reversed(lines):
+                            line = line.strip()
+                            if line.startswith('{') and line.endswith('}'):
+                                try:
+                                    recovered = json.loads(line)
+                                    break
+                                except Exception:
+                                    continue
+                except Exception:
+                    recovered = None
+
+                if isinstance(recovered, dict):
+                    t.result = recovered
+                    t.status = "done"
+                    t.progress = 100
+                    try:
+                        _persist_task_outputs(t)
+                    except Exception as e:
+                        t.add_log(f"PERSIST ERROR: {e}")
+                    _asr_rescan()
+                    _nllb_rescan()
+                    try:
+                        self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE (recovered JSON)")
+                    except Exception:
+                        pass
+                else:
+                    t.status = "error"
+                    t.error = f"Invalid JSON from worker: {e}"
+                    # Keep a tail for debugging (avoid huge payloads)
+                    t.add_log("STDOUT (tail): " + out[-2000:])
+                    try:
+                        self.system_log(f"Task finished: {kind} (task_id={task_id}) -> ERROR (invalid JSON)")
+                    except Exception:
+                        pass
+
+        threading.Thread(target=finalize, daemon=True).start()
+        return t
+
+    def start_python_fn(self, kind: str, project_id: str, fn, *args, task_id_override: 'Optional[str]' = None, **kwargs) -> TaskState:
+        task_id = str(task_id_override or uuid.uuid4().hex)
+        t = None
+        if task_id_override:
+            try:
+                t = self.get(task_id)
+            except Exception:
+                t = None
+        if t is None:
+            t = TaskState(task_id=task_id, kind=kind, project_id=project_id, status="running", progress=0)
+            self._set(t)
+        else:
+            # Reuse existing task object (best-effort)
+            t.kind = kind
+            t.project_id = project_id
+            t.status = "running"
+            t.progress = 0
+            t.error = None
+            t.result = None
+            t.started_at = now_iso()
+            t.finished_at = None
+
+        # Task header
+        t.add_log(f"Task started: kind={kind}, project_id={project_id}, task_id={task_id}")
+        try:
+            self.system_log(f"Task started: {kind} (project_id={project_id}, task_id={task_id})")
+        except Exception:
+            pass
+
+        def run() -> None:
+            try:
+                def log_cb(msg: str) -> None:
+                    t.add_log(str(msg))
+                def progress_cb(pct: int) -> None:
+                    t.progress = max(0, min(100, int(pct)))
+
+                # Only pass callbacks if the function supports them.
+                import inspect
+
+                call_kwargs = dict(kwargs)
+                try:
+                    sig = inspect.signature(fn)
+                    params = sig.parameters
+                    accepts_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+                    if accepts_varkw or "log_cb" in params:
+                        call_kwargs.setdefault("log_cb", log_cb)
+                    if accepts_varkw or "progress_cb" in params:
+                        call_kwargs.setdefault("progress_cb", progress_cb)
+                except Exception:
+                    # If introspection fails, try best-effort with callbacks.
+                    call_kwargs.setdefault("log_cb", log_cb)
+                    call_kwargs.setdefault("progress_cb", progress_cb)
+
+                try:
+                    res = fn(*args, **call_kwargs)
+                except TypeError:
+                    # Fallback: some callables reject unexpected kwargs.
+                    res = fn(*args)
+                t.result = res if isinstance(res, dict) else {"result": res}
+                t.status = "done"
+                t.progress = 100
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> DONE")
+                except Exception:
+                    pass
+            except Exception as e:
+                import traceback
+                t.status = "error"
+                t.error = str(e)
+                t.add_log(traceback.format_exc())
+                try:
+                    self.system_log(f"Task finished: {kind} (task_id={task_id}) -> ERROR: {e}")
+                except Exception:
+                    pass
+            finally:
+                t.finished_at = now_iso()
+
+        threading.Thread(target=run, daemon=True).start()
+        return t
+
+
+TASKS = TaskManager()
+
+
+def app_log(msg: str) -> None:
+    """Server-side app log (English only). Visible in Logs tab as "system" task."""
+    try:
+        TASKS.system_log(msg)
+    except Exception:
+        pass
+
+
+
+# ---------------------------
+# GPU Resource Manager (Admin)
+# ---------------------------
+
+@dataclass
+class _GPUJob:
+    # Common fields
+    task_id: str
+    kind: str
+    project_id: str
+    created_at: str
+    priority: int = 0  # higher = more important
+
+    # Subprocess job fields
+    cmd: Optional[List[str]] = None
+    cwd: Optional[Path] = None
+    env: Dict[str, str] = field(default_factory=dict)
+
+    # Python function job fields
+    fn: Any = None
+    args: List[Any] = field(default_factory=list)
+    kwargs: Dict[str, Any] = field(default_factory=dict)
+
+    assigned_device: Optional[str] = None  # "gpu:0" / "cpu"
+    status: str = "queued"  # queued|running|done|error
+
+
+class GPUResourceManager:
+    """
+    Lightweight in-process scheduler that queues GPU-heavy jobs and starts them
+    only when a slot is available. This prevents VRAM spikes and keeps the UI responsive.
+
+    Design goals:
+    - single GPU (desktop) works out of the box
+    - scalable: multi-GPU servers (CUDA_VISIBLE_DEVICES per job)
+    - multi-user: queue + concurrency limits (slots per GPU / CPU slots)
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._jobs: List[_GPUJob] = []
+        self._running: Dict[str, int] = {}  # device -> count
+        self._gpus: List[Dict[str, Any]] = []
+        self._cuda_available: bool = False
+
+        # runtime config (persisted in global settings via _get/_save_gpu_rm_settings)
+        self.gpu_mem_fraction: float = 0.85
+        self.gpu_slots_per_gpu: int = 1
+        self.cpu_slots: int = 1
+        self.enabled: bool = True
+
+        # Job priorities are configured per feature area (admin-facing).
+        # Higher value = higher priority.
+        self.category_priorities: Dict[str, int] = {
+            "transcription": 300,
+            "diarization": 200,
+            "translation": 180,
+            "analysis_quick": 140,
+            "analysis": 120,
+            "sound_detection": 100,
+            "tts": 80,
+            "chat": 60,
+        }
+
+        self._stop = False
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def apply_config(self, cfg: Dict[str, Any]) -> None:
+        with self._lock:
+            self.gpu_mem_fraction = float(cfg.get("gpu_mem_fraction", self.gpu_mem_fraction))
+            self.gpu_slots_per_gpu = int(cfg.get("gpu_slots_per_gpu", self.gpu_slots_per_gpu))
+            self.cpu_slots = int(cfg.get("cpu_slots", self.cpu_slots))
+            self.enabled = bool(cfg.get("enabled", self.enabled))
+
+            # Optional per-category priorities (persisted in global settings)
+            pr = cfg.get("priorities")
+            if isinstance(pr, dict):
+                merged = dict(self.category_priorities)
+                for k, v in pr.items():
+                    ks = str(k)
+                    if ks not in merged:
+                        continue
+                    try:
+                        merged[ks] = int(v)
+                    except Exception:
+                        continue
+                self.category_priorities = merged
+
+    def _detect_gpus(self) -> None:
+        # Best-effort; do not crash if torch is missing.
+        gpus: List[Dict[str, Any]] = []
+        cuda_ok = False
+        try:
+            import torch  # type: ignore
+
+            cuda_ok = bool(torch.cuda.is_available())
+            if cuda_ok:
+                n = int(torch.cuda.device_count())
+                for i in range(n):
+                    props = torch.cuda.get_device_properties(i)
+                    gpus.append({
+                        "id": i,
+                        "name": getattr(props, "name", f"cuda:{i}"),
+                        "total_vram_bytes": int(getattr(props, "total_memory", 0)),
+                    })
+        except Exception:
+            cuda_ok = False
+            gpus = []
+
+        with self._lock:
+            self._cuda_available = cuda_ok
+            self._gpus = gpus
+
+    def _available_devices(self) -> List[str]:
+        # Return device identifiers that still have free slots.
+        # Note: we always include CPU if it has free slots, even when GPUs exist.
+        # Actual dispatch policy is enforced in _loop (some job kinds may be GPU-only).
+        with self._lock:
+            if not self.enabled:
+                return []
+
+            out: List[str] = []
+
+            # GPU slots (if available)
+            if self._cuda_available and self._gpus:
+                for g in self._gpus:
+                    dev = f"gpu:{g['id']}"
+                    running = int(self._running.get(dev, 0))
+                    if running < max(1, self.gpu_slots_per_gpu):
+                        out.append(dev)
+
+            # CPU slot (trackable even when GPU exists)
+            running_cpu = int(self._running.get("cpu", 0))
+            if running_cpu < max(1, self.cpu_slots):
+                out.append("cpu")
+
+            return out
+
+    def _prio(self, kind: str) -> int:
+        """Resolve scheduling priority from job kind using category mapping."""
+        k = str(kind or "")
+        cat = ""
+        if k.startswith("transcribe"):
+            cat = "transcription"
+        elif k.startswith("diarize"):
+            cat = "diarization"
+        elif k.startswith("translate_"):
+            cat = "translation"
+        elif k.startswith("analysis_quick"):
+            cat = "analysis_quick"
+        elif k.startswith("analysis"):
+            cat = "analysis"
+        elif k.startswith("sound_detection"):
+            cat = "sound_detection"
+        elif k.startswith("tts"):
+            cat = "tts"
+        elif k.startswith("chat"):
+            cat = "chat"
+
+        try:
+            return int(self.category_priorities.get(cat, 50))
+        except Exception:
+            return 50
+
+    def enqueue_subprocess(
+        self,
+        kind: str,
+        project_id: str,
+        cmd: List[str],
+        cwd: Path,
+        env: Optional[Dict[str, str]] = None,
+        task_id_override: Optional[str] = None,
+    ) -> TaskState:
+        # Always create a queued placeholder so the UI can poll immediately.
+        t = TASKS.create_queued_task(kind=kind, project_id=project_id, task_id=task_id_override)
+        job = _GPUJob(
+            task_id=t.task_id,
+            kind=kind,
+            project_id=project_id,
+            created_at=now_iso(),
+            priority=self._prio(kind),
+            cmd=cmd,
+            cwd=cwd,
+            env=dict(env or {}),
+        )
+        with self._lock:
+            self._jobs.append(job)
+        t.add_log(f"Queued by GPU Resource Manager (prio={job.priority}).")
+        return t
+
+    def enqueue_python_fn(
+        self,
+        kind: str,
+        project_id: str,
+        fn,
+        *args,
+        task_id_override: Optional[str] = None,
+        **kwargs,
+    ) -> TaskState:
+        # Queue an in-process python callable (executed through TaskManager).
+        t = TASKS.create_queued_task(kind=kind, project_id=project_id, task_id=task_id_override)
+        job = _GPUJob(
+            task_id=t.task_id,
+            kind=kind,
+            project_id=project_id,
+            created_at=now_iso(),
+            priority=self._prio(kind),
+            fn=fn,
+            args=list(args),
+            kwargs=dict(kwargs),
+        )
+        with self._lock:
+            self._jobs.append(job)
+        t.add_log(f"Queued by GPU Resource Manager (python job, prio={job.priority}).")
+        return t
+
+    def cancel(self, task_id: str) -> bool:
+        # Cancel queued job if present, otherwise attempt to terminate running task.
+        with self._lock:
+            for i, j in enumerate(self._jobs):
+                if j.task_id == task_id and j.status == "queued":
+                    self._jobs.pop(i)
+                    TASKS.cancel_task(task_id, reason="Canceled (removed from GPU queue)")
+                    return True
+        # running: best-effort terminate
+        return TASKS.cancel_task(task_id, reason="Canceled by admin")
+
+    def status_snapshot(self) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "cuda_available": self._cuda_available,
+                "gpus": list(self._gpus),
+                "queue_size": len([j for j in self._jobs if j.status == "queued"]),
+                "running": dict(self._running),
+                "config": {
+                    "gpu_mem_fraction": self.gpu_mem_fraction,
+                    "gpu_slots_per_gpu": self.gpu_slots_per_gpu,
+                    "cpu_slots": self.cpu_slots,
+                    "enabled": self.enabled,
+                    "priorities": dict(self.category_priorities),
+                },
+            }
+
+    def jobs_snapshot(self) -> Dict[str, Any]:
+        rows: List[Dict[str, Any]] = []
+        with self._lock:
+            for j in self._jobs:
+                # reflect current task status (done/error) if it finished
+                try:
+                    st = TASKS.get(j.task_id).status
+                except Exception:
+                    st = j.status
+                device = j.assigned_device or "-"
+                job_type = "python" if j.fn is not None else "subprocess"
+                rows.append({
+                    "task_id": j.task_id,
+                    "kind": j.kind,
+                    "project_id": j.project_id,
+                    "created_at": j.created_at,
+                    "priority": j.priority,
+                    "job_type": job_type,
+                    "status": st,
+                    "device": device,
+                })
+        return {"jobs": rows}
+
+    def _mark_running(self, device: str, delta: int) -> None:
+        with self._lock:
+            self._running[device] = int(self._running.get(device, 0)) + int(delta)
+            if self._running[device] <= 0:
+                self._running.pop(device, None)
+
+    def _start_job(self, job: _GPUJob, device: str) -> None:
+        # Start either a queued subprocess job or a queued python callable.
+        # We keep slot accounting independent from job type.
+        job.status = "running"
+        job.assigned_device = device
+        self._mark_running(device, +1)
+
+        try:
+            TASKS.get(job.task_id).add_log(f"Assigned device: {device} (prio={job.priority})")
+        except Exception:
+            pass
+
+        try:
+            if job.fn is not None:
+                # Python job (e.g., quick/deep LLM) - run via TaskManager thread
+                # IMPORTANT: pass the first positional parameters positionally.
+                # Using kind=... plus *args can re-fill the same slot and causes:
+                #   TaskManager.start_python_fn() got multiple values for argument 'kind'
+                TASKS.start_python_fn(
+                    job.kind,
+                    job.project_id,
+                    job.fn,
+                    *list(job.args or []),
+                    task_id_override=job.task_id,
+                    **(job.kwargs or {}),
+                )
+            else:
+                # Subprocess job (e.g., Whisper / Pyannote)
+                if not job.cmd or not job.cwd:
+                    raise RuntimeError("Invalid subprocess job: missing cmd/cwd")
+
+                env = dict(job.env or {})
+                env["AISTATE_GPU_MEM_FRACTION"] = str(self.gpu_mem_fraction)
+                env["AISTATE_GPU_DEVICE"] = device
+
+                if device.startswith("gpu:"):
+                    gpu_id = device.split(":")[1]
+                    # isolate GPU
+                    env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+                    env["AISTATE_GPU_ID"] = str(gpu_id)
+                elif device == "cpu":
+                    # Explicitly hide GPUs so workers don't accidentally use CUDA
+                    env["CUDA_VISIBLE_DEVICES"] = ""
+
+                TASKS.start_subprocess_with_id(
+                    task_id=job.task_id,
+                    kind=job.kind,
+                    project_id=job.project_id,
+                    cmd=job.cmd,
+                    cwd=job.cwd,
+                    env=env,
+                )
+        except Exception as e:
+            # Mark task as failed and release slot immediately
+            try:
+                t = TASKS.get(job.task_id)
+                t.status = "error"
+                t.error = str(e)
+                t.finished_at = now_iso()
+                t.add_log(f"GPU RM start failed: {e}")
+            except Exception:
+                pass
+            job.status = "error"
+            self._mark_running(device, -1)
+            return
+
+        def watch_finish() -> None:
+            # Wait until task finishes, then free slot.
+            finished = False
+            for _ in range(60 * 60 * 24):  # up to 24h
+                try:
+                    st = TASKS.get(job.task_id).status
+                    if st in ("done", "error"):
+                        finished = True
+                        break
+                except Exception:
+                    break
+                time.sleep(1.0)
+            if not finished:
+                try:
+                    t = TASKS.get(job.task_id)
+                    t.status = "error"
+                    t.error = "Task stuck — forcibly freed after 24h timeout"
+                    t.finished_at = now_iso()
+                    t.add_log("GPU RM: 24h watchdog timeout — slot released")
+                    app_log(f"GPU RM watchdog: task {job.task_id} timed out after 24h on {device}")
+                except Exception:
+                    pass
+            self._mark_running(device, -1)
+
+        threading.Thread(target=watch_finish, daemon=True).start()
+
+    def _loop(self) -> None:
+
+        # periodic GPU refresh + dispatcher
+        self._detect_gpus()
+        last_gpu_refresh = time.time()
+
+        while not self._stop:
+            try:
+                # refresh GPU list every 10s
+                if time.time() - last_gpu_refresh > 10:
+                    self._detect_gpus()
+                    last_gpu_refresh = time.time()
+
+                devs = self._available_devices()
+                if not devs:
+                    time.sleep(0.5)
+                    continue
+
+                dispatched = 0
+                for dev in devs:
+                    # Find next queued job by priority (higher value wins). FIFO within same priority.
+                    with self._lock:
+                        nxt = None
+                        for j in self._jobs:
+                            if j.status != "queued":
+                                continue
+
+                            # When GPUs exist, reserve CPU slots for lightweight jobs
+                            # (translation). GPU-heavy jobs (ASR, diarization) stay on GPU.
+                            # When NO GPU exists, allow everything on CPU.
+                            if dev == "cpu" and self._cuda_available and self._gpus:
+                                k = str(j.kind)
+                                if not k.startswith("translate_"):
+                                    continue
+
+                            if (nxt is None) or (j.priority > nxt.priority):
+                                nxt = j
+                    if not nxt:
+                        break
+
+                    self._start_job(nxt, dev)
+                    dispatched += 1
+
+                if dispatched == 0:
+                    time.sleep(0.5)
+            except Exception as e:
+                try:
+                    app_log(f"GPUResourceManager loop error: {e}")
+                except Exception:
+                    pass
+                time.sleep(1.0)
+
+
+import re as _re
+
+_PROJECT_ID_RE = _re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
+
+
+def _validate_project_id(project_id: str) -> str:
+    """Validate project_id to prevent path traversal and illegal characters."""
+    pid = str(project_id or "").strip()
+    if not pid or not _PROJECT_ID_RE.match(pid):
+        raise HTTPException(status_code=400, detail="Nieprawidłowy identyfikator projektu.")
+    return pid
+
+
+def project_path(project_id: str) -> Path:
+    pid = _validate_project_id(project_id)
+    p = PROJECTS_DIR / pid
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def project_meta_path(project_id: str) -> Path:
+    return project_path(project_id) / "project.json"
+
+
+def read_project_meta(project_id: str) -> Dict[str, Any]:
+    path = project_meta_path(project_id)
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def write_project_meta(project_id: str, meta: Dict[str, Any]) -> None:
+    path = project_meta_path(project_id)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+
+
+def ensure_project(project_id: Optional[str]) -> str:
+    """Legacy: create project if missing. Used only by /api/projects/create and /api/projects/new."""
+    if project_id:
+        project_path(project_id)
+        meta = read_project_meta(project_id)
+        if not meta:
+            write_project_meta(project_id, {"project_id": project_id, "created_at": now_iso(), "name": "projekt"})
+        return project_id
+    new_id = uuid.uuid4().hex
+    project_path(new_id)
+    write_project_meta(new_id, {"project_id": new_id, "created_at": now_iso(), "name": "projekt"})
+    return new_id
+
+
+def require_existing_project(project_id: str) -> str:
+    """Validate that project_id is non-empty and the project directory exists.
+    Raises HTTPException 400/404 otherwise. Never auto-creates."""
+    pid = (project_id or "").strip()
+    if not pid:
+        raise HTTPException(status_code=400, detail="Brak project_id. Utwórz projekt przed rozpoczęciem pracy.")
+    pid = _validate_project_id(pid)
+    meta = read_project_meta(pid)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Projekt nie istnieje. Utwórz projekt w zakładce Projekty.")
+    return pid
+
+
+def _check_project_access(request: Request, project_id: str) -> None:
+    """Raise 403 if the current user doesn't own/share this project (multiuser only).
+
+    In single-user mode this is a no-op.  For admin users who are NOT the
+    owner, access is still denied — admins should use workspace-level APIs
+    when they need to manage other users' data.
+    """
+    multiuser = getattr(request.state, "multiuser", False)
+    if not multiuser:
+        return
+    user = getattr(request.state, "user", None)
+    if not user:
+        return
+    meta = read_project_meta(project_id)
+    if not meta:
+        return  # project doesn't exist — caller will handle 404
+    owner = meta.get("owner_id", "")
+    if owner == user.user_id:
+        return
+    shares = meta.get("shares") or []
+    shared_ids = [s.get("user_id") for s in shares if isinstance(s, dict)]
+    if user.user_id in shared_ids:
+        return
+    raise HTTPException(status_code=403, detail="Brak dostępu do tego projektu.")
+
+
+# ---------- Translation draft persistence (per-project) ----------
+
+def translation_draft_path(project_id: str) -> Path:
+    """Return path to translation draft file for a project."""
+    return project_path(project_id) / "translation_draft.json"
+
+
+def read_translation_draft(project_id: str) -> Dict[str, Any]:
+    path = translation_draft_path(project_id)
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def write_translation_draft(project_id: str, draft: Dict[str, Any]) -> None:
+    path = translation_draft_path(project_id)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(draft, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _is_project_encrypted(project_id: str) -> bool:
+    """Check if a project has encryption enabled."""
+    meta = read_project_meta(project_id)
+    enc = meta.get("encryption", {})
+    return bool(enc and enc.get("enabled"))
+
+
+def _get_project_io(project_id: str):
+    """Get a ProjectIO instance for the given project (lazy import)."""
+    from backend.encryption.project_io import ProjectIO
+    pdir = project_path(project_id)
+    return ProjectIO(pdir)
+
+
+def project_read_file(project_id: str, path: Path) -> str:
+    """Read a text file from a project, decrypting if necessary."""
+    if _is_project_encrypted(project_id):
+        return _get_project_io(project_id).read_text(path)
+    return path.read_text(encoding="utf-8")
+
+
+def project_write_file(project_id: str, path: Path, content: str) -> None:
+    """Write a text file to a project, encrypting if necessary."""
+    if _is_project_encrypted(project_id):
+        _get_project_io(project_id).write_text(path, content)
+    else:
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(path)
+
+
+def _clear_stale_results(pdir: Path, meta: dict) -> None:
+    """Remove old transcription/diarization/translation results when audio changes."""
+    stale_files = [
+        "transcript.txt", "transcript_segments.json",
+        "diarized.txt", "diarized_segments.json",
+        "waveform_peaks.json",
+    ]
+    for fn in stale_files:
+        fp = pdir / fn
+        if fp.exists():
+            try:
+                fp.unlink()
+            except OSError:
+                pass
+    # Also remove any .enc versions (encrypted projects)
+    for fn in stale_files:
+        fp = pdir / (fn + ".enc")
+        if fp.exists():
+            try:
+                fp.unlink()
+            except OSError:
+                pass
+    # Reset flags in metadata
+    meta.pop("has_transcript", None)
+    meta.pop("has_diarized", None)
+    meta.pop("transcript_lang", None)
+    meta.pop("transcript_engine", None)
+    meta.pop("transcript_model", None)
+    meta.pop("diarization_engine", None)
+    meta.pop("diarization_model", None)
+    meta.pop("num_speakers", None)
+    log.info("Cleared stale results for project in %s (new audio uploaded)", pdir.name)
+
+
+def save_upload(project_id: str, upload: UploadFile) -> Path:
+    pdir = project_path(project_id)
+    fname = safe_filename(upload.filename or "audio")
+    dst = pdir / fname
+    if _is_project_encrypted(project_id):
+        pio = _get_project_io(project_id)
+        pio.write_stream(dst, upload.file)
+    else:
+        with dst.open("wb") as f:
+            shutil.copyfileobj(upload.file, f)
+    meta = read_project_meta(project_id)
+    old_audio = meta.get("audio_file", "")
+    meta["audio_file"] = fname
+    meta["updated_at"] = now_iso()
+    # Clear stale results if audio file changed
+    if old_audio and old_audio != fname:
+        _clear_stale_results(pdir, meta)
+    write_project_meta(project_id, meta)
+    # Pre-generate waveform peaks in background so they're ready when user opens transcription
+    def _gen_peaks():
+        try:
+            _generate_waveform_peaks(project_id)
+        except Exception:
+            pass
+    threading.Thread(target=_gen_peaks, daemon=True).start()
+    return dst
+
+
+def require_existing_file(path: Path, msg: str) -> None:
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=400, detail=msg)
+
+
+app = FastAPI(title=f"{APP_NAME} Web", version=APP_VERSION)
+app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
+
+# --- Mount auth/setup/users routers ---
+auth_router.init(
+    user_store=USER_STORE,
+    session_store=SESSION_STORE,
+    deployment_store=DEPLOYMENT_STORE,
+    app_log_fn=app_log,
+    get_session_timeout=_get_session_timeout,
+    message_store=MESSAGE_STORE,
+    audit_store=AUDIT_STORE,
+    get_settings=load_settings,
+)
+app.include_router(auth_router.router)
+
+users_router.init(
+    user_store=USER_STORE,
+    session_store=SESSION_STORE,
+    app_log_fn=app_log,
+    audit_store=AUDIT_STORE,
+    get_settings=load_settings,
+)
+app.include_router(users_router.router)
+
+messages_router.init(
+    message_store=MESSAGE_STORE,
+    app_log_fn=app_log,
+)
+app.include_router(messages_router.router)
+
+setup_router.init(
+    user_store=USER_STORE,
+    deployment_store=DEPLOYMENT_STORE,
+    app_log_fn=app_log,
+    projects_dir=PROJECTS_DIR,
+)
+app.include_router(setup_router.router)
+
+# --- Mount routers (refactored modules) ---
+# Chat: inject ollama + log now; GPU_RM + TASKS injected later (after GPU_RM creation)
+chat_router.init(ollama_client=OLLAMA, app_log_fn=app_log, tasks=TASKS)
+app.include_router(chat_router.router)
+
+tasks_router.init(tasks_manager=TASKS)
+app.include_router(tasks_router.router)
+
+# AML/DB router (SQL-backed project management + AML analysis)
+app.include_router(aml_router.router)
+
+# GSM billing analysis router
+app.include_router(gsm_router.router)
+
+# Crypto analysis router
+app.include_router(crypto_router.router)
+
+# ARIA HUD — Analytical Response & Intelligence Assistant
+aria_router.init(ollama_client=OLLAMA, app_log_fn=app_log, get_settings=load_settings)
+app.include_router(aria_router.router)
+
+# Report profiles router
+app.include_router(report_profiles_router.router)
+
+# Workspaces router (project workspaces, subprojects, collaboration)
+workspaces_router.init(workspace_store=WORKSPACE_STORE, user_store=USER_STORE)
+app.include_router(workspaces_router.router)
+
+# Initialize SQLite database on startup
+try:
+    from backend.db.engine import init_db
+    init_db()
+    # Migrate legacy JSON auth data → SQLite (runs once, renames old files to .bak)
+    try:
+        DEPLOYMENT_STORE.migrate_from_json()
+        USER_STORE.migrate_from_json()
+        SESSION_STORE.migrate_from_json()
+        AUDIT_STORE.migrate_from_json()
+        MESSAGE_STORE.migrate_from_json()
+    except Exception as _mig_err:
+        import logging as _mig_lg
+        _mig_lg.getLogger("aistate").warning("Auth JSON→SQLite migration: %s", _mig_err)
+    # Migrate file-based projects → workspaces (one-time, idempotent)
+    try:
+        # In multiuser mode, prefer a real superadmin over creating a phantom 'admin' user
+        _default_uid = None
+        if DEPLOYMENT_STORE.is_multiuser():
+            for _u in USER_STORE.list_users():
+                if getattr(_u, "is_superadmin", False):
+                    _default_uid = _u.user_id
+                    break
+        if not _default_uid and DEPLOYMENT_STORE.is_configured():
+            from backend.db.engine import get_default_user_id
+            _default_uid = get_default_user_id()
+        if _default_uid:
+            WORKSPACE_STORE.migrate_file_projects(PROJECTS_DIR, _default_uid)
+        # Cleanup: remove invalid memberships (ghost members, bad owners, etc.)
+        _cleaned = WORKSPACE_STORE.cleanup_migration_memberships()
+        if _cleaned:
+            import logging as _cl_lg
+            _cl_lg.getLogger("aistate").warning(
+                "=== WORKSPACE CLEANUP: Removed %d invalid memberships ===", _cleaned)
+        # Log current membership state for debugging
+        try:
+            from backend.db.engine import get_conn as _gc
+            with _gc() as _cc:
+                _total_members = _cc.execute("SELECT COUNT(*) as c FROM project_members").fetchone()["c"]
+                _total_ws = _cc.execute("SELECT COUNT(*) as c FROM project_workspaces WHERE status='active'").fetchone()["c"]
+                _total_sp = _cc.execute("SELECT COUNT(*) as c FROM subprojects").fetchone()["c"]
+                import logging as _st_lg
+                _st_lg.getLogger("aistate").info(
+                    "Workspace state: %d active workspaces, %d subprojects, %d memberships",
+                    _total_ws, _total_sp, _total_members)
+        except Exception:
+            pass
+    except Exception as _ws_err:
+        import logging as _ws_lg
+        _ws_lg.getLogger("aistate").warning("Workspace migration: %s", _ws_err)
+except Exception as _db_err:
+    import logging as _lg
+    _lg.getLogger("aistate").warning("DB init deferred: %s", _db_err)
+
+# Admin router is initialised later (after GPU_RM and helper functions are defined).
+# See: _mount_admin_router() below.
+
+
+# --- Security headers middleware ---
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+# --- Ensure UTF-8 across the app (templates + JSON + JS/CSS) ---
+@app.middleware("http")
+async def _force_utf8_charset(request: Request, call_next):
+    response = await call_next(request)
+    try:
+        ct = response.headers.get("content-type") or ""
+        ctl = ct.lower()
+        # Only add charset when missing and it's a text-like response
+        if ct and ("charset=" not in ctl) and (
+            ctl.startswith("text/")
+            or ctl.startswith("application/json")
+            or ctl.startswith("application/javascript")
+            or ctl.startswith("application/x-javascript")
+        ):
+            response.headers["content-type"] = f"{ct}; charset=utf-8"
+    except Exception:
+        pass
+    return response
+
+
+# --- Multi-user auth + authorization middleware ---
+@app.middleware("http")
+async def _auth_middleware(request: Request, call_next):
+    """Session check + route authorization for multi-user mode."""
+    path = request.url.path
+    request.state.user = None
+    request.state.multiuser = DEPLOYMENT_STORE.is_multiuser()
+
+    # In single-user mode, skip all auth
+    if not request.state.multiuser:
+        # If not configured at all, redirect to /setup
+        if not DEPLOYMENT_STORE.is_configured() and path not in ("/setup", "/static/app.css", "/static/logo.png") and not path.startswith("/static/") and not path.startswith("/api/setup/"):
+            if path.startswith("/api/"):
+                return JSONResponse({"status": "error", "message": "Setup required"}, status_code=503)
+            return RedirectResponse(url="/setup", status_code=302)
+        return await call_next(request)
+
+    # Multi-user mode — check public routes first
+    if path in PUBLIC_ROUTES:
+        return await call_next(request)
+    for prefix in PUBLIC_PREFIXES:
+        if path.startswith(prefix):
+            return await call_next(request)
+
+    # Setup page is always public
+    if path == "/setup":
+        return await call_next(request)
+
+    # If no users exist yet (setup incomplete), redirect to /setup
+    if not USER_STORE.has_users():
+        if path.startswith("/api/"):
+            return JSONResponse({"status": "error", "message": "Setup required"}, status_code=503)
+        return RedirectResponse(url="/setup", status_code=302)
+
+    # Check session cookie
+    token = request.cookies.get(SessionStore.COOKIE_NAME)
+    if not token:
+        if path.startswith("/api/"):
+            return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
+        return RedirectResponse(url="/login", status_code=302)
+
+    session = SESSION_STORE.get_session(token)
+    if session is None:
+        response = RedirectResponse(url="/login", status_code=302) if not path.startswith("/api/") else JSONResponse({"status": "error", "message": "Session expired"}, status_code=401)
+        response.delete_cookie(key=SessionStore.COOKIE_NAME, path="/")
+        return response
+
+    # Load user
+    user = USER_STORE.get_user(session["user_id"])
+    if user is None:
+        SESSION_STORE.delete_session(token)
+        response = RedirectResponse(url="/login", status_code=302) if not path.startswith("/api/") else JSONResponse({"status": "error", "message": "User not found"}, status_code=401)
+        response.delete_cookie(key=SessionStore.COOKIE_NAME, path="/")
+        return response
+
+    # Check ban
+    if user.banned:
+        if user.banned_until:
+            from datetime import datetime as _dt
+            try:
+                if _dt.now() > _dt.fromisoformat(user.banned_until):
+                    USER_STORE.update_user(user.user_id, {"banned": False, "banned_until": None, "ban_reason": None, "show_ban_expiry": True})
+                else:
+                    SESSION_STORE.delete_session(token)
+                    if path.startswith("/api/"):
+                        return JSONResponse({"status": "error", "message": "Account banned"}, status_code=403)
+                    from urllib.parse import urlencode as _ue
+                    _bp: dict = {}
+                    if user.ban_reason:
+                        _bp["reason"] = user.ban_reason
+                    if getattr(user, "show_ban_expiry", True) and user.banned_until:
+                        _bp["until"] = user.banned_until
+                    return RedirectResponse(url="/banned" + ("?" + _ue(_bp) if _bp else ""), status_code=302)
+            except ValueError:
+                pass
+        else:
+            SESSION_STORE.delete_session(token)
+            if path.startswith("/api/"):
+                return JSONResponse({"status": "error", "message": "Account banned"}, status_code=403)
+            from urllib.parse import urlencode as _ue2
+            _bp2: dict = {}
+            if user.ban_reason:
+                _bp2["reason"] = user.ban_reason
+            return RedirectResponse(url="/banned" + ("?" + _ue2(_bp2) if _bp2 else ""), status_code=302)
+
+    request.state.user = user
+
+    # ---- Must-change-password enforcement ----
+    # If the user has never changed their password (first login) or the
+    # password has expired, only allow the change-password flow and
+    # essential routes.  This closes a security gap where refreshing the
+    # page after login could bypass the client-side overlay.
+    _pw_changed = getattr(user, "password_changed_at", None)
+    _force_pw_change = not _pw_changed  # first login: password_changed_at is NULL
+    if _pw_changed and not _force_pw_change:
+        try:
+            from datetime import datetime as _dt2, timedelta as _td2
+            _s = load_settings()
+            _expiry_days = getattr(_s, "password_expiry_days", 0)
+            if _expiry_days and _expiry_days > 0:
+                _pw_dt = _dt2.fromisoformat(_pw_changed)
+                if _dt2.now() > _pw_dt + _td2(days=_expiry_days):
+                    _force_pw_change = True
+        except (ValueError, TypeError, AttributeError):
+            pass
+
+    if _force_pw_change:
+        _pw_allowed_exact = {
+            "/api/auth/change-password",
+            "/api/auth/me",
+            "/api/auth/logout",
+            "/api/auth/password-policy",
+            "/change-password",
+        }
+        if path not in _pw_allowed_exact and not path.startswith("/static/"):
+            if path.startswith("/api/"):
+                return JSONResponse(
+                    {"status": "error", "message": "Password change required", "code": "must_change_password"},
+                    status_code=403,
+                )
+            return RedirectResponse(url="/change-password", status_code=302)
+
+    # Authorization: check route access
+    user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles, user.is_superadmin)
+
+    # Common routes: /, /info, /api/auth/me, etc — allowed for any logged-in user
+    # Module-specific routes: checked against user's modules
+    if not is_route_allowed(path, user_modules):
+        if path.startswith("/api/"):
+            return JSONResponse({"status": "error", "message": "Access denied"}, status_code=403)
+        return RedirectResponse(url="/", status_code=302)
+
+    return await call_next(request)
+
+
+# --- Startup: send post-update Call Center message (once) ---
+@app.on_event("startup")
+async def _startup_post_update_message() -> None:
+    """If the app was just updated, send a Call Center notification to all users."""
+    try:
+        from backend.db.engine import get_system_config, set_system_config
+
+        # --- First-time intro message (sent once when update module is first available) ---
+        intro_sent = get_system_config("update_intro_sent", "")
+        if intro_sent != "1":
+            set_system_config("update_intro_sent", "1")
+            # Send the intro message about new update system
+            from webapp.auth.message_store import Message as _Msg
+            _intro = _Msg(
+                author_id="system",
+                author_name="AISTATEweb",
+                subject="Nowy system aktualizacji AISTATEweb",
+                content=(
+                    "<b>Zmiana sposobu aktualizacji systemu</b><br><br>"
+                    "Dotychczasowa metoda aktualizacji (r\u0119czne kopiowanie plik\u00f3w) zosta\u0142a zast\u0105piona "
+                    "wbudowanym panelem aktualizacji.<br><br>"
+                    "<b>Jak teraz wygl\u0105da proces aktualizacji:</b><br>"
+                    "1. Pobierz paczk\u0119 aktualizacji (plik .zip) ze strony dostawcy<br>"
+                    "2. Przejd\u017a do <b>Zarz\u0105dzanie u\u017cytkownikami \u2192 System \u2192 Aktualizacje</b><br>"
+                    "3. Kliknij <b>\u201eImportuj aktualizacj\u0119\u201d</b> i wska\u017c pobrany plik<br>"
+                    "4. System wy\u015bwietli informacje o nowej wersji oraz list\u0119 zmian<br>"
+                    "5. Kliknij <b>\u201eZainstaluj aktualizacj\u0119\u201d</b><br>"
+                    "6. Po instalacji system automatycznie zrestartuje si\u0119 po 5 minutach \u2014 "
+                    "w tym czasie mo\u017cesz klikn\u0105\u0107 <b>\u201eRestartuj teraz\u201d</b> lub <b>\u201eAnuluj restart\u201d</b> "
+                    "i zrestartowa\u0107 r\u0119cznie w dogodnym momencie<br><br>"
+                    "<b>Co z danymi?</b><br>"
+                    "Twoje projekty, nagrania, transkrypcje i ustawienia <b>nie zostan\u0105 naruszone</b> \u2014 "
+                    "aktualizacja dotyczy wy\u0142\u0105cznie kodu aplikacji. Je\u015bli nowa wersja wymaga migracji danych "
+                    "(np. zmiana formatu plik\u00f3w), zostanie ona przeprowadzona <b>automatycznie</b> podczas instalacji.<br><br>"
+                    "<b>Cofanie aktualizacji</b><br>"
+                    "W panelu aktualizacji dost\u0119pna jest historia zainstalowanych wersji. "
+                    "W razie problem\u00f3w mo\u017cesz w ka\u017cdej chwili przywr\u00f3ci\u0107 poprzedni\u0105 wersj\u0119 "
+                    "klikaj\u0105c <b>\u201ePrzywra\u0107 t\u0119 wersj\u0119\u201d</b>.<br><br>"
+                    "<b>Wa\u017cne:</b><br>"
+                    "\u2022 Nie kopiuj ju\u017c plik\u00f3w r\u0119cznie \u2014 korzystaj wy\u0142\u0105cznie z panelu aktualizacji<br>"
+                    "\u2022 Przed aktualizacj\u0105 nie musisz zatrzymywa\u0107 systemu \u2014 panel zrobi to za Ciebie<br>"
+                    "\u2022 Zalecamy wykonanie aktualizacji w momencie, gdy system nie jest intensywnie u\u017cywany"
+                ),
+                target_groups=["all"],
+            )
+            MESSAGE_STORE.create_message(_intro)
+            app_log("Update system intro message sent via Call Center")
+
+        # --- Post-update message (sent after each update via the panel) ---
+        pending = get_system_config("post_update_pending", "")
+        if pending != "1":
+            return
+
+        new_version = get_system_config("post_update_version", "")
+        changelog = get_system_config("post_update_changelog", "")
+
+        content = (
+            "<b>Zmiana sposobu aktualizacji systemu</b><br><br>"
+            "Dotychczasowa metoda aktualizacji (ręczne kopiowanie plików) została zastąpiona "
+            "wbudowanym panelem aktualizacji.<br><br>"
+            "<b>Jak teraz wygląda proces aktualizacji:</b><br>"
+            "1. Pobierz paczkę aktualizacji (plik .zip) ze strony dostawcy<br>"
+            "2. Przejdź do <b>Panel Administracyjny → Aktualizacje</b><br>"
+            "3. Kliknij <b>\u201eImportuj aktualizacj\u0119\u201d</b> i wskaż pobrany plik<br>"
+            "4. System wyświetli informacje o nowej wersji oraz listę zmian<br>"
+            "5. Kliknij <b>\u201eZainstaluj aktualizacj\u0119\u201d</b><br>"
+            "6. Po instalacji system automatycznie zrestartuje się po 5 minutach \u2014 "
+            "w tym czasie mo\u017cesz klikn\u0105\u0107 <b>\u201eRestartuj teraz\u201d</b> lub <b>\u201eAnuluj restart\u201d</b> "
+            "i zrestartować ręcznie w dogodnym momencie<br><br>"
+            "<b>Co z danymi?</b><br>"
+            "Twoje projekty, nagrania, transkrypcje i ustawienia <b>nie zostaną naruszone</b> — "
+            "aktualizacja dotyczy wyłącznie kodu aplikacji. Jeśli nowa wersja wymaga migracji danych "
+            "(np. zmiana formatu plików), zostanie ona przeprowadzona <b>automatycznie</b> podczas instalacji.<br><br>"
+            "<b>Cofanie aktualizacji</b><br>"
+            "W panelu aktualizacji dostępna jest historia zainstalowanych wersji. "
+            "W razie problemów możesz w każdej chwili przywrócić poprzednią wersję "
+            "klikaj\u0105c <b>\u201ePrzywró\u0107 t\u0119 wersj\u0119\u201d</b>.<br><br>"
+            "<b>Ważne:</b><br>"
+            "• Nie kopiuj już plików ręcznie — korzystaj wyłącznie z panelu aktualizacji<br>"
+            "• Przed aktualizacją nie musisz zatrzymywać systemu — panel zrobi to za Ciebie<br>"
+            "• Zalecamy wykonanie aktualizacji w momencie, gdy system nie jest intensywnie używany"
+        )
+
+        if new_version:
+            subject = f"Nowy system aktualizacji AISTATEweb (v{new_version})"
+        else:
+            subject = "Nowy system aktualizacji AISTATEweb"
+
+        if changelog:
+            content += f"<br><br><b>Co nowego w v{new_version}:</b><br>{changelog}"
+
+        from webapp.auth.message_store import Message
+        msg = Message(
+            author_id="system",
+            author_name="AISTATEweb",
+            subject=subject,
+            content=content,
+            target_groups=["all"],
+        )
+        MESSAGE_STORE.create_message(msg)
+
+        # Clear the flag
+        set_system_config("post_update_pending", "")
+        set_system_config("post_update_version", "")
+        set_system_config("post_update_changelog", "")
+
+        app_log(f"Post-update Call Center message sent for v{new_version}")
+    except Exception as e:
+        try:
+            app_log(f"Post-update message failed: {e}")
+        except Exception:
+            pass
+
+
+# --- Startup: autoscan ASR caches so the UI can label models as installed/uninstalled ---
+@app.on_event("startup")
+async def _startup_encryption_init() -> None:
+    """Initialize the encryption subsystem (lazy — only creates managers, does not unlock Master Key)."""
+    try:
+        from backend.encryption.project_io import init_encryption
+        init_encryption(_AUTH_CONFIG_DIR)
+    except Exception:
+        pass  # Encryption module not available or import error — non-fatal
+
+
+@app.on_event("startup")
+async def _startup_asr_autoscan() -> None:
+    def _run() -> None:
+        try:
+            scan_and_persist_asr_model_cache()
+        except Exception as e:
+            try:
+                app_log(f"ASR autoscan failed: {e}")
+            except Exception:
+                pass
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+@app.on_event("startup")
+async def _startup_nllb_autoscan() -> None:
+    """Autoscan NLLB model cache for the NLLB Settings UI."""
+    def _run() -> None:
+        try:
+            scan_and_persist_nllb_model_cache()
+        except Exception as e:
+            try:
+                app_log(f"NLLB autoscan failed: {e}")
+            except Exception:
+                pass
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+# --- Startup: auto-backup scheduler ---
+@app.on_event("startup")
+async def _startup_backup_scheduler() -> None:
+    """Start the auto-backup background scheduler."""
+    import json as _json
+    from datetime import datetime as _dt
+
+    _stop_event = threading.Event()
+
+    def _get_settings() -> dict:
+        try:
+            from backend.db.engine import get_system_config
+            raw = get_system_config("backup_settings", "{}")
+            return _json.loads(raw)
+        except Exception:
+            return {}
+
+    def _run_scheduler() -> None:
+        settings = _get_settings()
+
+        # Startup backup
+        if settings.get("backup_on_startup"):
+            try:
+                from backend.db.backup import backup_database
+                backup_database()
+                app_log("Startup DB backup completed")
+            except Exception as e:
+                app_log(f"Startup backup failed: {e}")
+
+        last_db_backup = time.time()
+        last_full_date = ""
+
+        while not _stop_event.is_set():
+            _stop_event.wait(60)  # check every minute
+            if _stop_event.is_set():
+                break
+
+            settings = _get_settings()
+            if not settings.get("auto_enabled"):
+                continue
+
+            now = time.time()
+            now_dt = _dt.utcnow()
+
+            # Periodic DB backup
+            db_hours = int(settings.get("auto_db_hours", 6))
+            if db_hours > 0 and (now - last_db_backup) >= db_hours * 3600:
+                try:
+                    from backend.db.backup import backup_database, rotate_backups
+                    backup_database()
+                    keep = int(settings.get("keep_count", 30))
+                    rotate_backups(keep)
+                    last_db_backup = now
+                    app_log(f"Auto DB backup completed (every {db_hours}h)")
+                except Exception as e:
+                    app_log(f"Auto DB backup failed: {e}")
+
+            # Daily full backup at specified time
+            full_time = settings.get("auto_full_time", "01:00")
+            today_str = now_dt.strftime("%Y-%m-%d")
+            current_time = now_dt.strftime("%H:%M")
+            if current_time == full_time and today_str != last_full_date:
+                try:
+                    from backend.db.backup import full_backup, rotate_backups
+                    full_backup()
+                    keep = int(settings.get("keep_count", 30))
+                    rotate_backups(keep)
+                    last_full_date = today_str
+                    app_log(f"Auto full backup completed (daily at {full_time})")
+                except Exception as e:
+                    app_log(f"Auto full backup failed: {e}")
+
+    def _reload(new_settings: dict) -> None:
+        """Called from API when settings change — just updates the flag."""
+        pass  # Scheduler re-reads settings every minute
+
+    # Register reload callback for API
+    try:
+        from webapp.routers.aml import set_backup_scheduler_reload
+        set_backup_scheduler_reload(_reload)
+    except Exception:
+        pass
+
+    threading.Thread(target=_run_scheduler, daemon=True, name="backup-scheduler").start()
+
+
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request) -> Any:
+    # Multi-user mode: skip Intro animation, go directly to projects
+    if getattr(request.state, "multiuser", False):
+        return RedirectResponse(url="/projects", status_code=302)
+
+    # Single-user mode: play Intro (once per browser session) then go to the app.
+    # We keep it client-side via sessionStorage so it doesn't require cookies.
+    html = """<!doctype html>
+<html lang=\"pl\"><head>
+  <meta charset=\"utf-8\"/>
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>
+  <title>AI S.T.A.T.E Web</title>
+  <meta http-equiv=\"cache-control\" content=\"no-cache\"/>
+  <meta http-equiv=\"pragma\" content=\"no-cache\"/>
+  <meta http-equiv=\"expires\" content=\"0\"/>
+</head><body>
+<script>
+  (function(){
+    // Default start page: Projects
+    var NEXT = '/projects';
+    try {
+      if (sessionStorage.getItem('aistate_intro_seen') === '1') {
+        location.replace(NEXT);
+      } else {
+        location.replace('/static/Intro.html?next=' + encodeURIComponent(NEXT));
+      }
+    } catch (e) {
+      // If storage is blocked, just show Intro and then continue.
+      location.replace('/static/Intro.html?next=' + encodeURIComponent(NEXT));
+    }
+  })();
+</script>
+</body></html>"""
+    return HTMLResponse(html)
+
+
+@app.get("/login", response_class=HTMLResponse)
+def page_login(request: Request) -> Any:
+    return TEMPLATES.TemplateResponse("login.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
+    })
+
+
+@app.get("/change-password", response_class=HTMLResponse)
+def page_change_password(request: Request) -> Any:
+    """Standalone page for forced password change (first login / expired)."""
+    return TEMPLATES.TemplateResponse("change_password.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
+    })
+
+
+@app.get("/setup", response_class=HTMLResponse)
+def page_setup(request: Request) -> Any:
+    return TEMPLATES.TemplateResponse("setup.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
+    })
+
+
+@app.get("/banned", response_class=HTMLResponse)
+def page_banned(request: Request) -> Any:
+    reason = request.query_params.get("reason", "")
+    until = request.query_params.get("until", "")
+    return TEMPLATES.TemplateResponse("banned.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
+        "reason": reason, "until": until,
+    })
+
+
+@app.get("/register", response_class=HTMLResponse)
+def page_register(request: Request) -> Any:
+    return TEMPLATES.TemplateResponse("register.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
+    })
+
+
+@app.get("/pending", response_class=HTMLResponse)
+def page_pending(request: Request) -> Any:
+    return TEMPLATES.TemplateResponse("pending.html", {
+        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+        "static_ts": int(time.time()),
+    })
+
+
+@app.get("/users", response_class=HTMLResponse)
+def page_users(request: Request) -> Any:
+    return render_page(request, "users.html", "Zarządzanie użytkownikami", "users")
+
+
+def render_page(request: Request, tpl: str, title: str, active: str, current_project: Optional[str] = None, **ctx: Any):
+    settings = load_settings()
+    # Multi-user context
+    multiuser = getattr(request.state, "multiuser", False)
+    user = getattr(request.state, "user", None)
+    user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles, user.is_superadmin) if user else []
+    resp = TEMPLATES.TemplateResponse(
+        tpl,
+        {
+            "request": request,
+            "title": title,
+            "active": active,
+            "app_name": APP_NAME,
+            "app_fullname": "Artificial Intelligence Speech‑To‑Analysis‑Translation‑Engine",
+            "app_version": APP_VERSION,
+            "static_ts": int(time.time()),
+            "whisper_models": WHISPER_MODELS,
+            "default_whisper_model": getattr(settings, "whisper_model", "large-v3") or "large-v3",
+            "nemo_models": NEMO_MODELS,
+            "nemo_diarization_models": NEMO_DIARIZATION_MODELS,
+            "pyannote_pipelines": PYANNOTE_PIPELINES,
+            "nllb_fast_models": NLLB_FAST_MODELS,
+            "nllb_accurate_models": NLLB_ACCURATE_MODELS,
+            "current_project": current_project,
+            "multiuser": multiuser,
+            "user": user,
+            "user_modules": user_modules,
+            "aria_enabled": getattr(settings, "aria_enabled", False),
+            "aria_tts_enabled": getattr(settings, "aria_tts_enabled", True),
+            **ctx,
+        },
+    )
+    # Prevent browser from caching HTML pages (ensures fresh static_ts on each load)
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+
+
+
+# --- Legacy Polish routes (compat) ---
+@app.get("/transkrypcja", include_in_schema=False)
+def legacy_transkrypcja():
+    return RedirectResponse(url="/transcription")
+
+@app.get("/nowy-projekt", include_in_schema=False)
+def legacy_nowy_projekt():
+    return RedirectResponse(url="/projects")
+
+@app.get("/diaryzacja", include_in_schema=False)
+def legacy_diaryzacja():
+    return RedirectResponse(url="/diarization")
+
+@app.get("/ustawienia", include_in_schema=False)
+def legacy_ustawienia():
+    return RedirectResponse(url="/settings")
+
+
+@app.get("/ustawienia-llm", include_in_schema=False)
+def legacy_ustawienia_llm():
+    return RedirectResponse(url="/llm-settings")
+
+@app.get("/logi", include_in_schema=False)
+def legacy_logi():
+    return RedirectResponse(url="/logs")
+
+@app.get("/zapis", include_in_schema=False)
+def legacy_zapis():
+    return RedirectResponse(url="/save")
+
+@app.get("/transcription", response_class=HTMLResponse)
+def page_transcribe(request: Request) -> Any:
+    return render_page(request, "transcription.html", "Transkrypcja", "transcription")
+
+
+@app.get("/new-project")
+def page_new_project_redirect(request: Request) -> Any:
+    return RedirectResponse(url="/projects", status_code=302)
+
+
+@app.get("/projects", response_class=HTMLResponse)
+def page_projects(request: Request) -> Any:
+    return render_page(request, "projects.html", "Projekty", "projects")
+
+
+@app.get("/projects/{workspace_id}", response_class=HTMLResponse)
+def page_workspace(request: Request, workspace_id: str) -> Any:
+    return render_page(request, "projects.html", "Projekt", "projects")
+
+
+@app.get("/diarization", response_class=HTMLResponse)
+def page_diarize(request: Request) -> Any:
+    return render_page(request, "diarization.html", "Diaryzacja", "diarization")
+
+
+
+@app.get("/chat", response_class=HTMLResponse)
+def page_chat(request: Request) -> Any:
+    return render_page(request, "chat.html", "Chat LLM", "chat")
+
+
+@app.get("/analysis", response_class=HTMLResponse)
+def page_analysis(request: Request) -> Any:
+    return render_page(request, "analysis.html", "Analiza", "analysis")
+
+
+@app.get("/analiza", response_class=HTMLResponse)
+def page_analiza(request: Request) -> Any:
+    return page_analysis(request)
+
+@app.get("/translation", response_class=HTMLResponse)
+def page_translation(request: Request) -> Any:
+    """Translation page"""
+    return render_page(request, "translation.html", "Tłumaczenie", "translation")
+
+@app.get("/settings", response_class=HTMLResponse)
+def page_settings(request: Request) -> Any:
+    s = load_settings()
+    return render_page(request, "settings.html", "Ustawienia", "settings", settings=s, data_dir=str(DATA_DIR))
+
+
+@app.get("/llm-settings", response_class=HTMLResponse)
+def page_llm_settings(request: Request) -> Any:
+    # Dedicated LLM/Ollama settings page (UI-only split from the general Settings tab)
+    return render_page(request, "llm_settings.html", "Ustawienia LLM", "llm_settings")
+
+
+@app.get("/asr-settings", response_class=HTMLResponse)
+def page_asr_settings(request: Request) -> Any:
+    # Admin panel: ASR engines (Whisper / NeMo / pyannote) management
+    s = load_settings()
+    return render_page(request, "asr_settings.html", "Ustawienia ASR", "asr_settings", settings=s)
+
+
+@app.get("/nllb-settings", response_class=HTMLResponse)
+def page_nllb_settings(request: Request) -> Any:
+    # Admin panel: NLLB translation models management
+    return render_page(request, "nllb_settings.html", "Ustawienia NLLB", "nllb_settings")
+
+
+@app.get("/tts-settings", response_class=HTMLResponse)
+def page_tts_settings(request: Request) -> Any:
+    # Admin panel: TTS engine management
+    return render_page(request, "tts_settings.html", "Ustawienia TTS", "tts_settings")
+
+
+@app.get("/bts-settings", response_class=HTMLResponse)
+def page_bts_settings(request: Request) -> Any:
+    # Admin panel: BTS geolocation database & offline map management
+    return render_page(request, "bts_settings.html", "Ustawienia BTS", "bts_settings")
+
+
+@app.get("/crypto-settings", response_class=HTMLResponse)
+def page_crypto_settings(request: Request) -> Any:
+    return render_page(request, "crypto_settings.html", "Ustawienia Crypto", "crypto_settings")
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def page_admin(request: Request) -> Any:
+    return render_page(request, "admin.html", "Ustawienia GPU", "admin")
+
+
+@app.get("/logs", response_class=HTMLResponse)
+def page_logs(request: Request) -> Any:
+    return render_page(request, "logs.html", "Logi", "logs")
+
+
+@app.get("/save", response_class=HTMLResponse)
+def page_save(request: Request) -> Any:
+    return render_page(request, "save.html", "Zapis", "save")
+
+
+@app.get("/info", response_class=HTMLResponse)
+def page_info(request: Request) -> Any:
+    # language priority:
+    # 1) explicit ?lang=en|pl|ko
+    # 2) logged-in user's language preference (multi-user mode)
+    # 3) UI language from global settings (single-user mode)
+    lang = (request.query_params.get("lang") or "").lower().strip()
+    if not lang:
+        user = getattr(request.state, "user", None)
+        if user and getattr(user, "language", ""):
+            lang = user.language.lower().strip()
+    if not lang:
+        try:
+            s = load_settings()
+            lang = (getattr(s, "ui_language", "") or "").lower().strip()
+        except Exception:
+            lang = ""
+    if not lang:
+        lang = "pl"
+
+    static_root = ROOT / "webapp" / "static"
+
+    # --- Resolve language-specific info file suffix ---
+    if lang.startswith("en"):
+        _info_suffix = "en"
+    elif lang.startswith("ko"):
+        _info_suffix = "ko"
+    else:
+        _info_suffix = "pl"
+
+    # --- Info tab ---
+    md_path = static_root / f"info_{_info_suffix}.md"
+    if not md_path.exists():
+        md_path = static_root / "info_pl.md"
+
+    source = str(md_path.relative_to(ROOT))
+    text = md_path.read_text(encoding="utf-8", errors="ignore")
+    text = text.replace("{APP_NAME}", APP_NAME).replace("{APP_VERSION}", APP_VERSION)
+
+    if md_to_html:
+        html = md_to_html(text, extensions=["fenced_code", "tables"])
+    else:
+        html = "<pre>" + text.replace("&", "&amp;").replace("<", "&lt;") + "</pre>"
+
+    # --- Manual tab ---
+    manual_path = static_root / f"info_manual_{_info_suffix}.md"
+    if not manual_path.exists():
+        manual_path = static_root / "info_manual_pl.md"
+
+    manual_html = ""
+    if manual_path.exists():
+        manual_text = manual_path.read_text(encoding="utf-8", errors="ignore")
+        manual_text = manual_text.replace("{APP_NAME}", APP_NAME).replace("{APP_VERSION}", APP_VERSION)
+        if md_to_html:
+            manual_html = md_to_html(manual_text, extensions=["fenced_code", "tables"])
+        else:
+            manual_html = "<pre>" + manual_text.replace("&", "&amp;").replace("<", "&lt;") + "</pre>"
+
+    return render_page(request, "info.html", "Info", "info", content=html, source=source, manual_content=manual_html)
+
+
+# ---------- API: translation (NLLB) ----------
+
+TRANSLATION_TMP_DIR = (DATA_DIR / "_tmp" / "translation").resolve()
+TRANSLATION_UPLOAD_DIR = (DATA_DIR / "_tmp" / "translation_uploads").resolve()
+TRANSLATION_TMP_DIR.mkdir(parents=True, exist_ok=True)
+TRANSLATION_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+TRANSLATION_DRAFTS_DIR = (DATA_DIR / "_tmp" / "translation_drafts").resolve()
+TRANSLATION_DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _safe_client_id(client_id: str) -> str:
+    cid = str(client_id or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", cid):
+        raise HTTPException(status_code=400, detail="Invalid client_id")
+    return cid
+
+
+def translation_global_draft_path(client_id: str) -> Path:
+    return TRANSLATION_DRAFTS_DIR / f"{_safe_client_id(client_id)}.json"
+
+
+def read_translation_global_draft(client_id: str) -> Dict[str, Any]:
+    path = translation_global_draft_path(client_id)
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def write_translation_global_draft(client_id: str, draft: Dict[str, Any]) -> None:
+    path = translation_global_draft_path(client_id)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(draft, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+
+
+
+def _nllb_model_installed(mode: str, model_id: str) -> bool:
+    mode = str(mode or "fast").lower().strip()
+    if mode not in ("fast", "accurate"):
+        mode = "fast"
+    model_id = str(model_id or "").strip()
+    if not model_id:
+        return False
+    try:
+        reg = _read_nllb_registry()
+        if not reg:
+            reg = scan_and_persist_nllb_model_cache()
+        return bool((reg.get(mode) or {}).get(model_id))
+    except Exception:
+        return False
+
+
+
+
+@app.get("/api/translation/draft/{client_id}")
+def api_get_translation_global_draft(client_id: str) -> Any:
+    """Load translation draft not tied to a project (fallback when localStorage quota is exceeded)."""
+    draft = read_translation_global_draft(client_id)
+    return {"draft": draft or None}
+
+
+@app.post("/api/translation/draft/{client_id}")
+async def api_save_translation_global_draft(client_id: str, request: Request) -> Any:
+    """Save translation draft not tied to a project (fallback when localStorage quota is exceeded)."""
+    payload = await request.json()
+    draft = payload.get("draft") if isinstance(payload, dict) else None
+    if draft is None:
+        draft = payload
+    if not isinstance(draft, dict):
+        raise HTTPException(status_code=400, detail="draft must be a JSON object (dict).")
+
+    if "saved_at" not in draft:
+        draft["saved_at"] = int(time.time() * 1000)
+
+    write_translation_global_draft(client_id, draft)
+    return {"ok": True}
+
+@app.post("/api/translation/upload")
+async def api_translation_upload(
+    file: UploadFile = File(...),
+    source_lang: str = Form("auto"),
+    target_langs: str = Form(""),
+    mode: str = Form("fast"),
+) -> Any:
+    """Upload document and extract text for translation input."""
+    if not file:
+        raise HTTPException(status_code=400, detail="Brak pliku")
+
+    # Save to temp
+    name = str(file.filename or "upload")
+    ext = (Path(name).suffix or "").lower()
+    upload_id = uuid.uuid4().hex
+    tmp_path = (TRANSLATION_UPLOAD_DIR / f"{upload_id}{ext}").resolve()
+    keep_original = ext in (".pptx", ".docx", ".doc", ".pdf")
+    try:
+        content = await file.read()
+        tmp_path.write_bytes(content)
+
+        # Extract using translation handlers (supports TXT/DOCX/PDF/SRT/PPTX)
+        from backend.translation.document_handlers import extract_text_from_file  # type: ignore
+
+        text = await run_in_threadpool(extract_text_from_file, tmp_path)
+        resp: dict = {"ok": True, "text": text, "filename": name, "ext": ext, "size": len(content)}
+        if keep_original:
+            resp["upload_id"] = upload_id
+
+        # Auto-detect source language from extracted text
+        try:
+            from backend.translation.language_detector import detect_language  # type: ignore
+            detected = await run_in_threadpool(detect_language, text)
+            if detected:
+                resp["detected_lang"] = detected
+        except Exception:
+            pass
+
+        return resp
+    except Exception as e:
+        app_log(f"Translation upload error: {e}")
+        keep_original = False  # cleanup on error
+        return {"ok": False, "error": "Nie udało się przetworzyć pliku."}
+    finally:
+        if not keep_original:
+            try:
+                tmp_path.unlink(missing_ok=True)  # type: ignore[arg-type]
+            except Exception:
+                pass
+
+
+@app.post("/api/translation/detect-language")
+async def api_translation_detect_language(request: Request) -> Any:
+    """Detect the language of provided text."""
+    body = await request.json()
+    text = str(body.get("text", "")).strip()
+    if len(text) < 10:
+        return {"detected_lang": None}
+    try:
+        from backend.translation.language_detector import detect_language  # type: ignore
+        detected = await run_in_threadpool(detect_language, text[:2000])
+        return {"detected_lang": detected}
+    except Exception:
+        return {"detected_lang": None}
+
+
+@app.post("/api/translation/export-to-original")
+async def api_translation_export_to_original(
+    upload_id: str = Form(...),
+    translated_text: str = Form(...),
+    original_filename: str = Form(""),
+    target_lang: str = Form(""),
+) -> Any:
+    """Inject translated text back into the original PPTX/DOCX/DOC/PDF, return the file.
+
+    File is named: <original_stem>_<LANG>.<ext>  (e.g. report_PL.pptx)
+    """
+    import io as _io
+    import re as _re
+    from urllib.parse import quote as _url_quote
+
+    uid = str(upload_id or "").strip()
+    if not _re.fullmatch(r"[a-f0-9]{32}", uid):
+        raise HTTPException(status_code=400, detail="Invalid upload_id")
+
+    # Find the kept original file
+    candidates = list(TRANSLATION_UPLOAD_DIR.glob(f"{uid}.*"))
+    if not candidates:
+        raise HTTPException(status_code=404, detail="Oryginalny plik nie został znaleziony (wygasł lub usunięty).")
+    original_path = candidates[0]
+    ext = original_path.suffix.lower()
+
+    text = str(translated_text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Brak przetłumaczonego tekstu.")
+
+    # --- Build download filename: <original_stem>_<LANG>.<ext> ---
+    _lang_suffix = ""
+    _tl = str(target_lang or "").strip().lower()
+    # Map common NLLB language names to short codes
+    _LANG_CODES = {
+        "polish": "PL", "english": "EN", "belarusian": "BY", "german": "DE", "french": "FR",
+        "spanish": "ES", "italian": "IT", "portuguese": "PT", "dutch": "NL",
+        "russian": "RU", "ukrainian": "UA", "czech": "CZ", "slovak": "SK",
+        "swedish": "SV", "danish": "DA", "norwegian": "NO", "finnish": "FI",
+        "hungarian": "HU", "romanian": "RO", "bulgarian": "BG", "croatian": "HR",
+        "serbian": "SR", "slovenian": "SI", "greek": "EL", "turkish": "TR",
+        "arabic": "AR", "chinese": "ZH", "japanese": "JA", "korean": "KO",
+        "hindi": "HI", "thai": "TH", "vietnamese": "VI", "indonesian": "ID",
+        "malay": "MS", "hebrew": "HE", "persian": "FA", "latvian": "LV",
+        "lithuanian": "LT", "estonian": "ET", "georgian": "KA",
+    }
+    if _tl:
+        _lang_suffix = "_" + _LANG_CODES.get(_tl, _tl[:3].upper())
+
+    _orig_fn = str(original_filename or "").strip()
+    if _orig_fn:
+        _base_stem = Path(_orig_fn).stem
+    else:
+        # Fallback: use "translation" as default name (UUID-based names are not user-friendly)
+        _base_stem = "translation"
+
+    try:
+        if ext == ".pptx":
+            from pptx import Presentation  # type: ignore
+
+            prs = Presentation(str(original_path))
+
+            # --- Step 1: count text blocks per slide from the original ---
+            # Each "text block" = non-empty paragraph in text_frame or non-empty table cell
+            slide_block_counts: list[int] = []
+            for slide in prs.slides:
+                count = 0
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        for para in shape.text_frame.paragraphs:
+                            if para.text.strip():
+                                count += 1
+                    if shape.has_table:
+                        for row in shape.table.rows:
+                            for cell in row.cells:
+                                if cell.text.strip():
+                                    count += 1
+                slide_block_counts.append(count)
+
+            # --- Step 2: strip marker lines from translated text ---
+            # Broad pattern: "--- <word> N ---" covers any language variant
+            _marker_re = _re.compile(
+                r"^-{2,}\s*\S+\s*\d+\s*-{2,}$",
+                _re.IGNORECASE,
+            )
+            flat_lines: list[str] = []
+            for line in text.split("\n"):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if _marker_re.match(stripped):
+                    continue  # skip marker
+                flat_lines.append(stripped)
+
+            # --- Step 3: map flat translated lines → slides by count ---
+            line_ptr = 0
+            for slide_idx, slide in enumerate(prs.slides):
+                if slide_idx >= len(slide_block_counts):
+                    break
+                expected = slide_block_counts[slide_idx]
+                # Grab the next `expected` lines from flat_lines
+                slide_lines = flat_lines[line_ptr : line_ptr + expected]
+                line_ptr += expected
+
+                sp = 0  # pointer within slide_lines
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        for para in shape.text_frame.paragraphs:
+                            if not para.text.strip():
+                                continue
+                            if sp < len(slide_lines):
+                                new_text = slide_lines[sp]
+                                sp += 1
+                                if para.runs:
+                                    para.runs[0].text = new_text
+                                    for run in para.runs[1:]:
+                                        run.text = ""
+                    if shape.has_table:
+                        for row in shape.table.rows:
+                            for cell in row.cells:
+                                if not cell.text.strip():
+                                    continue
+                                if sp < len(slide_lines):
+                                    new_text = slide_lines[sp]
+                                    sp += 1
+                                    # Preserve first paragraph formatting
+                                    if cell.text_frame and cell.text_frame.paragraphs:
+                                        p0 = cell.text_frame.paragraphs[0]
+                                        if p0.runs:
+                                            p0.runs[0].text = new_text
+                                            for run in p0.runs[1:]:
+                                                run.text = ""
+                                        else:
+                                            p0.text = new_text
+                                        # Clear extra paragraphs
+                                        for xp in cell.text_frame.paragraphs[1:]:
+                                            xp.text = ""
+                                    else:
+                                        cell.text = new_text
+
+            buf = _io.BytesIO()
+            prs.save(buf)
+            buf.seek(0)
+            _dl = f"{_base_stem}{_lang_suffix}.pptx"
+            _dl_ascii = _dl.encode("ascii", "replace").decode("ascii")
+            return StreamingResponse(
+                buf,
+                media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                headers={"Content-Disposition": f"attachment; filename=\"{_dl_ascii}\"; filename*=UTF-8''{_url_quote(_dl)}"},
+            )
+
+        elif ext in (".docx", ".doc", ".pdf"):
+            from docx import Document  # type: ignore
+            from docx.oxml.ns import qn as _qn  # type: ignore
+            from docx.table import Table as _DocxTable  # type: ignore
+            from docx.text.paragraph import Paragraph as _DocxParagraph  # type: ignore
+
+            # --- For .doc and .pdf: convert to .docx via LibreOffice first ---
+            _lo_convert_failed = False
+            if ext in (".doc", ".pdf"):
+                from backend.translation.document_handlers import DOCHandler  # type: ignore
+                try:
+                    docx_path = await run_in_threadpool(
+                        DOCHandler.convert_doc_to_docx, original_path
+                    )
+                except Exception as lo_err:
+                    if ext == ".pdf":
+                        # Fallback: build a fresh DOCX with translated text
+                        app_log(f"Export-to-original: LibreOffice PDF→DOCX failed ({lo_err}), using plain-DOCX fallback")
+                        _lo_convert_failed = True
+                    else:
+                        raise
+            else:
+                docx_path = original_path
+
+            # Strip page markers (--- Strona N ---) that come from PDF extraction
+            _marker_re = _re.compile(r"^-{2,}\s*\S+\s+\d+\s*-{2,}$", _re.IGNORECASE)
+            translated_paras = [
+                p for p in text.split("\n")
+                if p.strip() and not _marker_re.match(p.strip())
+            ]
+
+            if _lo_convert_failed:
+                # Fallback: create a clean DOCX containing just the translated text
+                doc = Document()
+                for para_text in translated_paras:
+                    doc.add_paragraph(para_text)
+            else:
+                doc = Document(str(docx_path))
+
+                ptr = 0
+
+                def _replace_para(para):
+                    nonlocal ptr
+                    if not para.text.strip():
+                        return
+                    if ptr >= len(translated_paras):
+                        return
+                    new_text = translated_paras[ptr]
+                    ptr += 1
+                    if para.runs:
+                        para.runs[0].text = new_text
+                        for run in para.runs[1:]:
+                            run.text = ""
+                    else:
+                        para.text = new_text
+
+                def _replace_table(table):
+                    nonlocal ptr
+                    for row in table.rows:
+                        for cell in row.cells:
+                            if not cell.text.strip():
+                                continue
+                            if ptr >= len(translated_paras):
+                                return
+                            new_text = translated_paras[ptr]
+                            ptr += 1
+                            if cell.paragraphs:
+                                p0 = cell.paragraphs[0]
+                                if p0.runs:
+                                    p0.runs[0].text = new_text
+                                    for run in p0.runs[1:]:
+                                        run.text = ""
+                                else:
+                                    p0.text = new_text
+                                for xp in cell.paragraphs[1:]:
+                                    for r in xp.runs:
+                                        r.text = ""
+
+                # --- Walk document in SAME order as extraction ---
+                # 1) Headers
+                for section in doc.sections:
+                    for hdr in (section.header, section.first_page_header):
+                        if hdr and not hdr.is_linked_to_previous:
+                            for p in hdr.paragraphs:
+                                _replace_para(p)
+
+                # 2) Body: paragraphs + tables in document order
+                for child in doc.element.body:
+                    if child.tag == _qn("w:p"):
+                        _replace_para(_DocxParagraph(child, doc))
+                    elif child.tag == _qn("w:tbl"):
+                        _replace_table(_DocxTable(child, doc))
+
+                # 3) Footers
+                for section in doc.sections:
+                    for ftr in (section.footer, section.first_page_footer):
+                        if ftr and not ftr.is_linked_to_previous:
+                            for p in ftr.paragraphs:
+                                _replace_para(p)
+
+            buf = _io.BytesIO()
+            doc.save(buf)
+            buf.seek(0)
+            _dl = f"{_base_stem}{_lang_suffix}.docx"
+            _dl_ascii = _dl.encode("ascii", "replace").decode("ascii")
+            return StreamingResponse(
+                buf,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                headers={"Content-Disposition": f"attachment; filename=\"{_dl_ascii}\"; filename*=UTF-8''{_url_quote(_dl)}"},
+            )
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Format {ext} nie obsługuje zapisu do oryginału.")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"Export-to-original error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd podczas zapisu do oryginału: {e}")
+
+
+@app.post("/api/translation/translate")
+async def api_translation_translate(
+    text: str = Form(...),
+    source_lang: str = Form("auto"),
+    target_langs: str = Form(""),
+    mode: str = Form("fast"),
+    nllb_model: str = Form(""),
+    generate_summary: str = Form("0"),
+    summary_detail: str = Form("5"),
+    use_glossary: str = Form("0"),
+    preserve_formatting: str = Form("1"),
+) -> Any:
+    """Start translation task (subprocess) and return a task id."""
+    t = str(text or "").strip()
+    if not t:
+        raise HTTPException(status_code=400, detail="Brak tekstu do przetłumaczenia")
+
+    mode = str(mode or "fast").lower().strip()
+    if mode not in ("fast", "accurate"):
+        mode = "fast"
+
+    model = str(nllb_model or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="Wybierz model NLLB")
+
+    if not _nllb_model_installed(mode, model):
+        raise HTTPException(status_code=400, detail="Wybrany model NLLB nie jest zainstalowany (Ustawienia NLLB)")
+
+    targets = [x.strip() for x in str(target_langs or "").split(",") if x.strip()]
+    if not targets:
+        raise HTTPException(status_code=400, detail="Wybierz przynajmniej jeden język docelowy")
+
+    gs = str(generate_summary or "0").lower().strip() in ("1", "true", "yes", "on")
+    ug = str(use_glossary or "0").lower().strip() in ("1", "true", "yes", "on")
+    pf = str(preserve_formatting or "1").lower().strip() in ("1", "true", "yes", "on")
+    try:
+        sd = int(summary_detail)
+    except Exception:
+        sd = 5
+    sd = max(1, min(10, sd))
+
+    payload_path = (TRANSLATION_TMP_DIR / f"translate_{uuid.uuid4().hex}.json").resolve()
+    payload = {
+        "text": t,
+        "source_lang": str(source_lang or "auto").lower().strip(),
+        "target_langs": targets,
+        "mode": mode,
+        "nllb_model": model,
+        "generate_summary": gs,
+        "summary_detail": sd,
+        "use_glossary": ug,
+        "preserve_formatting": pf,
+    }
+    payload_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    worker = ROOT / "backend" / "translation_worker.py"
+    require_existing_file(worker, "Brak translation_worker.py")
+
+    cmd = [
+        os.environ.get("PYTHON", __import__("sys").executable),
+        str(worker),
+        "--input", str(payload_path),
+    ]
+
+    env = {
+        # Prefer offline behaviour: if model is not cached, worker will fail fast.
+        "TRANSFORMERS_OFFLINE": os.environ.get("TRANSFORMERS_OFFLINE", "1"),
+        "HF_HUB_DISABLE_TELEMETRY": os.environ.get("HF_HUB_DISABLE_TELEMETRY", "1"),
+        # Ensure local imports (backend.*) work in subprocess even without PYTHONPATH set.
+        "PYTHONPATH": os.environ.get("PYTHONPATH", str(ROOT)),
+    }
+
+    app_log(f"Translation requested: mode={mode}, model={model}, targets={','.join(targets)}")
+    if GPU_RM.enabled:
+        task = GPU_RM.enqueue_subprocess(kind=f"translate_{mode}", project_id="-", cmd=cmd, cwd=ROOT, env=env)
+    else:
+        task = TASKS.start_subprocess(kind=f"translate_{mode}", project_id="-", cmd=cmd, cwd=ROOT, env=env)
+
+    # Best-effort cleanup of the temp payload file after task ends.
+    def _cleanup() -> None:
+        try:
+            for _ in range(3600):  # up to ~1h
+                try:
+                    tt = TASKS.get(task.task_id)
+                    if tt.status in ("done", "error"):
+                        break
+                except Exception:
+                    break
+                time.sleep(1)
+        finally:
+            try:
+                payload_path.unlink(missing_ok=True)  # type: ignore[arg-type]
+            except Exception:
+                pass
+
+    threading.Thread(target=_cleanup, daemon=True).start()
+    return {"task_id": task.task_id}
+
+
+@app.get("/api/translation/progress/{task_id}")
+def api_translation_progress(task_id: str) -> Any:
+    """Return translation task status in the format expected by translation.js."""
+    tid = str(task_id or "").strip()
+    if not tid:
+        raise HTTPException(status_code=400, detail="task_id required")
+    try:
+        t = TASKS.get(tid)
+    except Exception:
+        return {"status": "failed", "progress": 0, "error": "Unknown task"}
+
+    if t.status == "done":
+        result = t.result or {}
+        return {
+            "status": "completed",
+            "progress": 100,
+            "results": result.get("results") or {},
+            "summary": result.get("summary"),
+            "meta": {
+                "mode": result.get("mode"),
+                "nllb_model": result.get("nllb_model"),
+                "source_lang": result.get("source_lang"),
+                "detected_source_lang": result.get("detected_source_lang"),
+            },
+        }
+
+    if t.status == "error":
+        return {"status": "failed", "progress": int(t.progress or 0), "error": t.error or "Translation failed"}
+
+    # running
+    return {"status": "processing", "progress": int(t.progress or 0)}
+
+
+_NBSP = "\u00a0"  # non-breaking space
+
+
+def _typographic_cleanup(text: str) -> str:
+    """Apply Polish typography rules: prevent orphaned single-letter conjunctions.
+
+    Replaces space after single-letter Polish words (i, w, z, a, o, u, e, I, W, Z, A, O, U, E)
+    with a non-breaking space so they don't end up alone at the end of a line.
+    """
+    import re as _re
+    return _re.sub(r'(?<=\s)([iwzaoueIWZAOUE]) (?=\S)', r'\1' + _NBSP, text)
+
+
+def _typographic_cleanup_html(html_text: str) -> str:
+    """Same as _typographic_cleanup but uses &nbsp; for HTML output."""
+    import re as _re
+    return _re.sub(r'(?<=\s)([iwzaoueIWZAOUE]) (?=\S)', r'\1' + '&nbsp;', html_text)
+
+
+@app.post("/api/translation/export")
+async def api_translation_export(
+    text: str = Form(...),
+    format: str = Form("txt"),
+    filename: str = Form("translation"),
+    html: str = Form(""),
+) -> Any:
+    """Export translated text as TXT / HTML / DOCX.
+
+    Text is treated as markdown and rendered with proper formatting
+    (headings, bold, lists, tables, etc.) for HTML and DOCX exports.
+    Applies Polish typographic rules (justify, paragraph indent,
+    orphan prevention).
+    """
+    import io as _io
+    import re as _re
+    from pathlib import Path as _Path
+    import tempfile as _tmpmod
+
+    from urllib.parse import quote as _url_quote
+
+    fmt = str(format or "txt").lower().strip()
+    if fmt == "doc":
+        fmt = "docx"
+    name = (str(filename or "translation").strip() or "translation").replace("/", "_")
+    _name_ascii = name.encode("ascii", "replace").decode("ascii")
+
+    raw = (text or "").strip()
+
+    # ---- TXT: plain text with typographic cleanup ----
+    if fmt == "txt":
+        try:
+            cleaned = _typographic_cleanup(raw)
+        except Exception:
+            cleaned = raw
+        data = cleaned.encode("utf-8")
+        return StreamingResponse(
+            _io.BytesIO(data),
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=\"{_name_ascii}.txt\"; filename*=UTF-8''{_url_quote(name + '.txt')}"},
+        )
+
+    # ---- HTML: markdown → styled HTML document ----
+    if fmt == "html":
+        from backend.report_generator import _md_to_html
+
+        body_html = _typographic_cleanup_html(_md_to_html(raw))
+        out_html = f"""<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{name}</title>
+  <style>
+    body {{
+      font-family: 'Cambria', 'Georgia', 'Times New Roman', serif;
+      font-size: 14.5px;
+      line-height: 1.8;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 28px;
+      color: #1a1a1a;
+    }}
+    p {{
+      margin: 0 0 12px;
+      text-align: justify;
+      text-indent: 1.5em;
+      hyphens: auto;
+      -webkit-hyphens: auto;
+    }}
+    /* First paragraph after heading — no indent */
+    h1 + p, h2 + p, h3 + p, h4 + p {{ text-indent: 0; }}
+    h1, h2, h3, h4 {{
+      font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+      color: #1e3a5f;
+      margin: 24px 0 10px;
+    }}
+    ul, ol {{ margin: 8px 0 12px 1.5em; }}
+    li {{ margin-bottom: 4px; text-align: justify; }}
+    blockquote {{
+      border-left: 3px solid #cbd5e1;
+      margin: 12px 0;
+      padding: 6px 14px;
+      color: #475569;
+    }}
+    strong {{ font-weight: 700; }}
+    em {{ font-style: italic; }}
+    code {{ font-family: 'Consolas', monospace; font-size: 13px; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }}
+  </style>
+</head>
+<body>
+{body_html}
+</body>
+</html>"""
+        data = out_html.encode("utf-8")
+        return StreamingResponse(
+            _io.BytesIO(data),
+            media_type="text/html; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=\"{_name_ascii}.html\"; filename*=UTF-8''{_url_quote(name + '.html')}"},
+        )
+
+    # ---- DOCX: markdown → Word document ----
+    if fmt == "docx":
+        from backend.report_generator import save_docx_from_markdown
+
+        cleaned = _typographic_cleanup(raw)
+        with _tmpmod.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+            tmp_path = _Path(tmp.name)
+        try:
+            meta = {"generated_at": "", "project_id": "", "model": "", "template_ids": []}
+            save_docx_from_markdown(cleaned, tmp_path, title=name, meta=meta)
+            docx_bytes = tmp_path.read_bytes()
+        finally:
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+        return StreamingResponse(
+            _io.BytesIO(docx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f"attachment; filename=\"{_name_ascii}.docx\"; filename*=UTF-8''{_url_quote(name + '.docx')}"},
+        )
+
+    raise HTTPException(status_code=400, detail="Unsupported format")
+
+# ---------- API: settings ----------
+
+@app.get("/api/settings")
+def api_get_settings() -> Any:
+    s = load_settings()
+    return {
+        "hf_token_present": bool(getattr(s, "hf_token", "")),
+        "whisper_model": getattr(s, "whisper_model", "large-v3"),
+        "opencellid_token": getattr(s, "opencellid_token", ""),
+        "map_source": getattr(s, "map_source", "auto"),
+    }
+
+
+@app.post("/api/settings")
+def api_save_settings(payload: Dict[str, Any]) -> Any:
+    s = load_settings()
+    if "hf_token" in payload:
+        s.hf_token = str(payload.get("hf_token") or "")
+    if "whisper_model" in payload:
+        s.whisper_model = str(payload.get("whisper_model") or "large-v3")
+    if "opencellid_token" in payload:
+        s.opencellid_token = str(payload.get("opencellid_token") or "")
+    if "ui_language" in payload:
+        s.ui_language = str(payload.get("ui_language") or "pl")
+    # Security settings
+    if "account_lockout_threshold" in payload:
+        s.account_lockout_threshold = max(0, int(payload["account_lockout_threshold"]))
+    if "account_lockout_duration" in payload:
+        s.account_lockout_duration = max(1, int(payload["account_lockout_duration"]))
+    if "password_policy" in payload:
+        pp = str(payload["password_policy"])
+        if pp in ("none", "basic", "medium", "strong"):
+            s.password_policy = pp
+    if "password_expiry_days" in payload:
+        s.password_expiry_days = max(0, int(payload["password_expiry_days"]))
+    if "map_source" in payload:
+        ms = str(payload["map_source"])
+        if ms in ("auto", "offline", "online"):
+            s.map_source = ms
+    # Encryption policy settings
+    if "encryption_enabled" in payload:
+        s.encryption_enabled = bool(payload["encryption_enabled"])
+    if "encryption_method" in payload:
+        em = str(payload["encryption_method"])
+        if em in ("light", "standard", "maximum"):
+            s.encryption_method = em
+    if "encryption_force_new_projects" in payload:
+        s.encryption_force_new_projects = bool(payload["encryption_force_new_projects"])
+    # ARIA HUD settings
+    if "aria_enabled" in payload:
+        s.aria_enabled = bool(payload["aria_enabled"])
+    if "aria_tts_enabled" in payload:
+        s.aria_tts_enabled = bool(payload["aria_tts_enabled"])
+    if "aria_voice" in payload:
+        av = str(payload["aria_voice"])
+        if av in ("pl_PL-gosia-medium", "pl_PL-darkman-medium"):
+            s.aria_voice = av
+    if "aria_model" in payload:
+        s.aria_model = str(payload["aria_model"]).strip()
+    save_settings(s)
+    return {"ok": True}
+
+
+@app.get("/api/settings/security")
+def api_get_security_settings(request: Request) -> Any:
+    """Return security policy settings (admin only)."""
+    user = getattr(request.state, "user", None)
+    if user and not user.is_admin and not user.is_superadmin:
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    s = load_settings()
+    return {
+        "status": "ok",
+        "account_lockout_threshold": getattr(s, "account_lockout_threshold", 5),
+        "account_lockout_duration": getattr(s, "account_lockout_duration", 15),
+        "password_policy": getattr(s, "password_policy", "basic"),
+        "password_expiry_days": getattr(s, "password_expiry_days", 0),
+        "session_timeout_hours": getattr(s, "session_timeout_hours", 8),
+        "encryption_enabled": getattr(s, "encryption_enabled", False),
+        "encryption_method": getattr(s, "encryption_method", "standard"),
+        "encryption_force_new_projects": getattr(s, "encryption_force_new_projects", False),
+        "encryption_master_key_initialized": getattr(s, "encryption_master_key_initialized", False),
+        "aria_enabled": getattr(s, "aria_enabled", False),
+        "aria_voice": getattr(s, "aria_voice", "pl_PL-gosia-medium"),
+        "aria_tts_enabled": getattr(s, "aria_tts_enabled", True),
+        "aria_model": getattr(s, "aria_model", ""),
+    }
+
+
+@app.post("/api/settings/security")
+def api_save_security_settings(request: Request, payload: Dict[str, Any] = Body(...)) -> Any:
+    """Save security/ARIA settings (admin only)."""
+    user = getattr(request.state, "user", None)
+    if user and not user.is_admin and not user.is_superadmin:
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    s = load_settings()
+    # Security settings
+    if "account_lockout_threshold" in payload:
+        s.account_lockout_threshold = max(0, int(payload["account_lockout_threshold"]))
+    if "account_lockout_duration" in payload:
+        s.account_lockout_duration = max(1, int(payload["account_lockout_duration"]))
+    if "password_policy" in payload:
+        pp = str(payload["password_policy"])
+        if pp in ("none", "basic", "medium", "strong"):
+            s.password_policy = pp
+    if "password_expiry_days" in payload:
+        s.password_expiry_days = max(0, int(payload["password_expiry_days"]))
+    # Encryption policy
+    if "encryption_enabled" in payload:
+        s.encryption_enabled = bool(payload["encryption_enabled"])
+    if "encryption_method" in payload:
+        em = str(payload["encryption_method"])
+        if em in ("light", "standard", "maximum"):
+            s.encryption_method = em
+    if "encryption_force_new_projects" in payload:
+        s.encryption_force_new_projects = bool(payload["encryption_force_new_projects"])
+    # ARIA HUD settings
+    if "aria_enabled" in payload:
+        s.aria_enabled = bool(payload["aria_enabled"])
+    if "aria_tts_enabled" in payload:
+        s.aria_tts_enabled = bool(payload["aria_tts_enabled"])
+    if "aria_voice" in payload:
+        av = str(payload["aria_voice"])
+        if av in ("pl_PL-gosia-medium", "pl_PL-darkman-medium"):
+            s.aria_voice = av
+    if "aria_model" in payload:
+        s.aria_model = str(payload["aria_model"]).strip()
+    save_settings(s)
+    return {"ok": True}
+
+
+# ---------- API: Encryption management ----------
+
+@app.get("/api/encryption/policy")
+def api_encryption_policy(request: Request) -> Any:
+    """Return encryption policy for any authenticated user (needed by project creation UI)."""
+    s = load_settings()
+    return {
+        "status": "ok",
+        "encryption_enabled": getattr(s, "encryption_enabled", False),
+        "encryption_method": getattr(s, "encryption_method", "standard"),
+        "encryption_force_new_projects": getattr(s, "encryption_force_new_projects", False),
+        "encryption_master_key_initialized": getattr(s, "encryption_master_key_initialized", False),
+    }
+
+
+@app.post("/api/encryption/init-master-key")
+async def api_init_master_key(request: Request) -> Any:
+    """Initialize the Master Key (admin only, one-time operation)."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    admin_password = body.get("admin_password", "")
+    if not admin_password:
+        return JSONResponse({"status": "error", "message": "Admin password required"}, status_code=400)
+
+    from backend.encryption.project_io import init_encryption, get_managers
+    from backend.encryption.keys import MasterKeyManager
+    from webapp.auth.passwords import verify_password
+
+    # Verify admin password
+    if not verify_password(admin_password, user.password_hash):
+        return JSONResponse({"status": "error", "message": "Invalid admin password"}, status_code=403)
+
+    mkm, _ = init_encryption(_AUTH_CONFIG_DIR)
+    if mkm.is_initialized:
+        return JSONResponse({"status": "error", "message": "Master Key already initialized"}, status_code=409)
+
+    s = load_settings()
+    method = getattr(s, "encryption_method", "standard")
+    mkm.initialize(admin_password, method)
+
+    s.encryption_master_key_initialized = True
+    save_settings(s)
+    return {"status": "ok", "message": "Master Key initialized successfully"}
+
+
+@app.post("/api/encryption/backup-master-key")
+async def api_backup_master_key(request: Request) -> Any:
+    """Export Master Key backup (admin only)."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    admin_password = body.get("admin_password", "")
+    if not admin_password:
+        return JSONResponse({"status": "error", "message": "Admin password required"}, status_code=400)
+
+    from backend.encryption.project_io import init_encryption
+    from webapp.auth.passwords import verify_password
+
+    if not verify_password(admin_password, user.password_hash):
+        return JSONResponse({"status": "error", "message": "Invalid admin password"}, status_code=403)
+
+    mkm, _ = init_encryption(_AUTH_CONFIG_DIR)
+    try:
+        backup = mkm.export_backup(admin_password)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+    return {"status": "ok", "backup_key": backup}
+
+
+@app.post("/api/encryption/verify-master-key")
+async def api_verify_master_key(request: Request) -> Any:
+    """Verify admin can unlock the Master Key."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    admin_password = body.get("admin_password", "")
+
+    from backend.encryption.project_io import init_encryption
+    from webapp.auth.passwords import verify_password
+
+    if not verify_password(admin_password, user.password_hash):
+        return JSONResponse({"status": "error", "message": "Invalid admin password"}, status_code=403)
+
+    mkm, _ = init_encryption(_AUTH_CONFIG_DIR)
+    valid = mkm.verify(admin_password)
+    return {"status": "ok", "valid": valid}
+
+
+@app.post("/api/encryption/recovery-token")
+async def api_generate_recovery_token(request: Request) -> Any:
+    """Generate a one-time recovery token for a user (admin only)."""
+    user = getattr(request.state, "user", None)
+    if not user or (not user.is_admin and not user.is_superadmin):
+        return JSONResponse({"status": "error", "message": "Admin access required"}, status_code=403)
+    body = await request.json()
+    target_user_id = body.get("target_user_id", "")
+    if not target_user_id:
+        return JSONResponse({"status": "error", "message": "target_user_id required"}, status_code=400)
+
+    from backend.encryption.recovery import RecoveryTokenManager
+
+    rtm = RecoveryTokenManager(_AUTH_CONFIG_DIR)
+    token, record = rtm.generate_token(
+        admin_id=user.user_id,
+        target_user_id=target_user_id,
+    )
+    return {
+        "status": "ok",
+        "token": token,
+        "expires_at": record["expires_at"],
+    }
+
+
+@app.post("/api/encryption/recover")
+async def api_recover_project(request: Request) -> Any:
+    """Dual-control recovery: token + recovery phrase → re-wrap project keys."""
+    body = await request.json()
+    token = body.get("token", "")
+    recovery_phrase = body.get("recovery_phrase", "")
+    new_password = body.get("new_password", "")
+    target_user_id = body.get("user_id", "")
+
+    if not all([token, recovery_phrase, new_password, target_user_id]):
+        return JSONResponse(
+            {"status": "error", "message": "token, recovery_phrase, new_password, user_id required"},
+            status_code=400,
+        )
+
+    from backend.encryption.recovery import RecoveryTokenManager
+    from webapp.auth.recovery_phrase import verify_phrase
+    from webapp.auth.user_store import UserStore
+    from webapp.auth.passwords import hash_password
+
+    # Validate recovery token
+    rtm = RecoveryTokenManager(_AUTH_CONFIG_DIR)
+    token_record = rtm.validate_token(token, target_user_id)
+    if not token_record:
+        return JSONResponse({"status": "error", "message": "Invalid or expired token"}, status_code=403)
+
+    # Verify recovery phrase
+    us = UserStore(_AUTH_CONFIG_DIR)
+    target_user = us.get_user(target_user_id)
+    if not target_user:
+        return JSONResponse({"status": "error", "message": "User not found"}, status_code=404)
+
+    if not target_user.recovery_phrase_hash:
+        return JSONResponse({"status": "error", "message": "No recovery phrase set for this user"}, status_code=400)
+
+    if not verify_phrase(recovery_phrase, target_user.recovery_phrase_hash):
+        return JSONResponse({"status": "error", "message": "Invalid recovery phrase"}, status_code=403)
+
+    # Update password
+    new_hash = hash_password(new_password)
+    us.update_user(target_user_id, password_hash=new_hash)
+
+    # Invalidate the token
+    rtm.invalidate_token(token)
+
+    return {"status": "ok", "message": "Password reset and project keys recovered successfully"}
+
+
+# ---------- API: ASR engines (Whisper / NeMo / pyannote) ----------
+
+def _pkg_info(module_name: str) -> Dict[str, Any]:
+    import importlib
+    import importlib.util
+
+    try:
+        spec = importlib.util.find_spec(module_name)
+        if spec is None:
+            return {"installed": False, "version": None}
+    except Exception:
+        return {"installed": False, "version": None}
+
+    # Try to import for version
+    version = None
+    try:
+        mod = importlib.import_module(module_name)
+        version = getattr(mod, "__version__", None)
+    except Exception:
+        version = None
+    return {"installed": True, "version": version}
+
+
+
+
+# --- ASR model cache registry (installed/cached models) ---
+# We persist cache scan results under DATA_DIR/projects/_global/asr_models.json
+# so the UI can show “(not installed)” per-model and hide Install buttons when cached.
+ASR_REGISTRY_REL = Path("_global") / "asr_models.json"
+
+# NLLB model cache registry (installed/cached NLLB models)
+NLLB_REGISTRY_REL = Path("_global") / "nllb_models.json"
+
+
+def _asr_registry_path() -> Path:
+    p = (PROJECTS_DIR / ASR_REGISTRY_REL).resolve()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _read_asr_registry() -> Dict[str, Any]:
+    p = _asr_registry_path()
+    if not p.exists():
+        return {}
+    try:
+        obj = json.loads(p.read_text(encoding="utf-8"))
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_asr_registry(obj: Dict[str, Any]) -> None:
+    p = _asr_registry_path()
+    try:
+        p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        # best effort
+        pass
+
+
+def _nllb_registry_path() -> Path:
+    p = (PROJECTS_DIR / NLLB_REGISTRY_REL).resolve()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _read_nllb_registry() -> Dict[str, Any]:
+    p = _nllb_registry_path()
+    if not p.exists():
+        return {}
+    try:
+        obj = json.loads(p.read_text(encoding="utf-8"))
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_nllb_registry(obj: Dict[str, Any]) -> None:
+    p = _nllb_registry_path()
+    try:
+        p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        # best effort
+        pass
+
+
+def _cache_base_dir() -> Path:
+    # XDG compatible cache base
+    home = Path.home()
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    return Path(xdg).expanduser().resolve() if xdg else (home / ".cache")
+
+
+def _scan_whisper_cache() -> Dict[str, bool]:
+    base = _cache_base_dir() / "whisper"
+    stems = set()
+    if base.exists() and base.is_dir():
+        for p in base.glob("*.pt"):
+            stems.add(p.stem.lower())
+            stems.add(p.name.lower())
+    out: Dict[str, bool] = {}
+    for m in WHISPER_MODELS:
+        key = str(m).lower().strip()
+        if key == "turbo":
+            out[m] = ("large-v3-turbo" in stems) or ("turbo" in stems) or ("large-v3-turbo.pt" in stems) or ("turbo.pt" in stems)
+        else:
+            out[m] = (key in stems) or (f"{key}.pt" in stems)
+    return out
+
+
+def _scan_nemo_cache(model_ids: List[str]) -> Dict[str, bool]:
+    """Best-effort scan for cached NeMo models.
+
+    Why this is heuristic:
+    - NeMo historically cached pretrained models under ~/.cache/torch/NeMo/... as a *directory*
+      (often named after the model id, e.g. "diar_msdd_telephonic"), not always leaving a *.nemo file.
+    - Some environments override torch cache locations (TORCH_HOME).
+
+    We therefore scan for both:
+    - filenames with typical extensions (".nemo", ".ckpt", ".pt", ...)
+    - directory names that include the model short id
+    """
+
+
+    # Deterministic marker-based detection (written by backend/asr_worker.py)
+    # This avoids relying only on NeMo's internal cache structure.
+    marker_dir = (ROOT / "backend" / "models_cache" / "nemo").resolve()
+    marker_models = set()
+    if marker_dir.exists() and marker_dir.is_dir():
+        for mp in marker_dir.glob("*.json"):
+            try:
+                obj = json.loads(mp.read_text(encoding="utf-8"))
+                m = str(obj.get("model") or "").strip().lower()
+                if m:
+                    marker_models.add(m)
+                    marker_models.add(m.split("/")[-1])
+            except Exception:
+                # Fallback: use filename stem
+                marker_models.add(mp.stem.lower())
+
+    base = _cache_base_dir()
+
+    cand: List[Path] = []
+    torch_home = os.environ.get("TORCH_HOME")
+    if torch_home:
+        # torch hub style override
+        cand.append((Path(torch_home).expanduser().resolve() / "NeMo").resolve())
+
+    # Common NeMo locations
+    cand.extend([
+        base / "torch" / "NeMo",
+        base / "torch" / "nemo",
+        base / "nemo",
+        base / "NeMo",
+    ])
+
+    names: List[str] = []
+    exts = {".nemo", ".ckpt", ".pt", ".pth", ".onnx", ".yaml", ".yml", ".json"}
+
+    for d in cand:
+        if not (d.exists() and d.is_dir()):
+            continue
+        try:
+            for p in d.rglob("*"):
+                try:
+                    n = p.name.lower()
+                except Exception:
+                    continue
+
+                # Directory-based caches are common in NeMo.
+                if p.is_dir():
+                    names.append(n)
+                    continue
+
+                # File-based caches
+                suf = p.suffix.lower()
+                if suf in exts:
+                    names.append(n)
+                    try:
+                        names.append(p.stem.lower())
+                    except Exception:
+                        pass
+        except Exception:
+            continue
+
+    name_set = set(names)
+
+    out: Dict[str, bool] = {}
+    for mid in model_ids:
+        mid_s = str(mid)
+        short = mid_s.split("/")[-1].lower()
+        # Heuristic: NeMo caches usually include the short model name in filename
+        hit = (mid_s.lower() in marker_models) or (short in marker_models)
+        for n in name_set:
+            if short and short in n:
+                hit = True
+                break
+            # diarization model ids are already short
+            if mid_s.lower() in n:
+                hit = True
+                break
+        out[mid] = hit
+    return out
+
+
+def _hf_hub_dir() -> Path:
+    """Return HuggingFace Hub cache directory.
+
+    We prefer the resolved path used by huggingface_hub itself (HF_HUB_CACHE),
+    then fall back to env vars and common defaults.
+    """
+    # Preferred: ask huggingface_hub for its resolved cache path.
+    try:
+        from huggingface_hub.constants import HF_HUB_CACHE  # type: ignore
+        return Path(str(HF_HUB_CACHE)).expanduser().resolve()
+    except Exception:
+        pass
+
+    # Fallback: common env vars (older/newer naming).
+    for env in ("HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE"):
+        v = os.environ.get(env)
+        if v:
+            return Path(v).expanduser().resolve()
+
+    hf_home = os.environ.get("HF_HOME")
+    if hf_home:
+        return (Path(hf_home).expanduser() / "hub").resolve()
+
+    # Final fallback: typical default on Linux.
+    return (_cache_base_dir() / "huggingface" / "hub").resolve()
+
+
+def _scan_hf_pipelines(pipelines: List[str]) -> Dict[str, bool]:
+    """Best-effort scan for cached HuggingFace pipelines.
+
+    We combine two signals:
+    1) HF hub cache directory existence (fast heuristic).
+    2) Deterministic marker files written by backend/asr_worker.py after a successful
+       Pipeline.from_pretrained() call.
+
+    Markers make the UI robust when HF cache is moved via env vars or when the hub cache
+    layout differs between users.
+    """
+    hub = _hf_hub_dir()
+
+    # Marker-based detection (written by backend/asr_worker.py)
+    marker_dir = (ROOT / "backend" / "models_cache" / "pyannote").resolve()
+    marker_pipelines = set()
+    if marker_dir.exists() and marker_dir.is_dir():
+        for mp in marker_dir.glob("*.json"):
+            try:
+                obj = json.loads(mp.read_text(encoding="utf-8"))
+                pid = str(obj.get("pipeline") or obj.get("model") or obj.get("id") or "").strip()
+                if pid:
+                    marker_pipelines.add(pid)
+            except Exception:
+                continue
+
+    out: Dict[str, bool] = {}
+    for pid in pipelines:
+        s = str(pid)
+        ok = s in marker_pipelines
+
+        if "/" in s:
+            org, name = s.split("/", 1)
+            d = hub / f"models--{org}--{name}"
+            if d.exists() and d.is_dir():
+                ok = True
+
+        out[pid] = ok
+
+    return out
+
+
+def _scan_hf_models(model_ids: List[str]) -> Dict[str, bool]:
+    """Best-effort scan for cached HuggingFace models.
+
+    Signals:
+    1) Marker files written by backend/nllb_worker.py
+    2) HF hub cache directory existence
+    """
+    hub = _hf_hub_dir()
+
+    marker_dir = (ROOT / "backend" / "models_cache" / "nllb").resolve()
+    marker_models = set()
+    if marker_dir.exists() and marker_dir.is_dir():
+        for mp in marker_dir.glob("*.json"):
+            try:
+                obj = json.loads(mp.read_text(encoding="utf-8"))
+                mid = str(obj.get("model") or obj.get("id") or "").strip()
+                if mid:
+                    marker_models.add(mid)
+            except Exception:
+                continue
+
+    out: Dict[str, bool] = {}
+    for mid in model_ids:
+        s = str(mid)
+        ok = s in marker_models
+        if "/" in s:
+            org, name = s.split("/", 1)
+            d = hub / f"models--{org}--{name}"
+            if d.exists() and d.is_dir():
+                ok = True
+        out[mid] = ok
+    return out
+
+
+def scan_and_persist_nllb_model_cache() -> Dict[str, Any]:
+    # Scan all configured models and split into groups
+    all_ids = list(dict.fromkeys(list(NLLB_FAST_MODELS) + list(NLLB_ACCURATE_MODELS)))
+    scanned = _scan_hf_models(all_ids)
+    state = {
+        "fast": {m: bool(scanned.get(m)) for m in NLLB_FAST_MODELS},
+        "accurate": {m: bool(scanned.get(m)) for m in NLLB_ACCURATE_MODELS},
+        "last_scan": now_iso(),
+    }
+    _write_nllb_registry(state)
+    return state
+
+
+def scan_and_persist_asr_model_cache() -> Dict[str, Any]:
+    # Build full state map
+    state = {
+        "whisper": _scan_whisper_cache(),
+        "nemo": _scan_nemo_cache(NEMO_MODELS),
+        "nemo_diar": _scan_nemo_cache(NEMO_DIARIZATION_MODELS),
+        "pyannote": _scan_hf_pipelines(PYANNOTE_PIPELINES),
+        "last_scan": now_iso(),
+    }
+    _write_asr_registry(state)
+    return state
+
+@app.get("/api/asr/status")
+def api_asr_status() -> Any:
+    s = load_settings()
+    hf_token = getattr(s, "hf_token", "") or ""
+    return {
+        "whisper": _pkg_info("whisper"),
+        "nemo": _pkg_info("nemo"),
+        # NeMo diarization shares the same Python package as NeMo ASR
+        "nemo_diar": _pkg_info("nemo"),
+        "pyannote": _pkg_info("pyannote.audio"),
+        "hf_token_present": bool(hf_token),
+    }
+
+
+
+
+@app.get("/api/asr/models_state")
+def api_asr_models_state(refresh: int = 0) -> Any:
+    """Return per-model cached/installed state for ASR.
+
+    refresh=1 forces a filesystem scan (Whisper/NeMo/HF cache)."""
+    if refresh:
+        return scan_and_persist_asr_model_cache()
+    reg = _read_asr_registry()
+    if not reg:
+        reg = scan_and_persist_asr_model_cache()
+    return reg
+
+@app.get("/api/asr/installed/diarization")
+def api_asr_installed_diarization(refresh: int = 0) -> Any:
+    """Return *installed* diarization + ASR options for the UI.
+
+    This endpoint is used by the Diarization tab to avoid any on-the-fly downloads.
+    Users must install engines/models only in ASR Settings.
+
+    refresh=1 forces a filesystem cache scan (Whisper/NeMo/HF hub).
+    """
+    reg = api_asr_models_state(refresh=refresh)  # includes cached model state
+    status = api_asr_status()
+
+    def _installed_dict(d: Any) -> dict:
+        return d if isinstance(d, dict) else {}
+
+    reg_whisper = _installed_dict(reg.get('whisper'))
+    reg_nemo = _installed_dict(reg.get('nemo'))
+    reg_nemo_diar = _installed_dict(reg.get('nemo_diar'))
+    reg_pyannote = _installed_dict(reg.get('pyannote'))
+
+    # --- diarization engines ---
+    diar_engines = []
+
+    # Text/simple diarization is always available (built-in)
+    diar_engines.append({
+        'id': 'text',
+        'label': 'Text (simple)',
+        'installed': True,
+        'supports_language': False,
+        'models': [
+            {'id': 'simple', 'label': 'simple', 'installed': True, 'supports_language': False},
+        ],
+    })
+
+    # pyannote diarization (requires pyannote.audio). We keep the engine visible even
+    # when no pipelines are cached yet (so the UI can direct the user to ASR Settings).
+    py_pkg_ok = bool((status.get('pyannote') or {}).get('installed'))
+    py_models = [mid for mid, ok in reg_pyannote.items() if ok]
+    if py_pkg_ok:
+        diar_engines.append({
+            'id': 'pyannote',
+            'label': 'pyannote',
+            'installed': bool(py_models),
+            'supports_language': False,
+            'models': [
+                {'id': mid, 'label': mid, 'installed': True, 'supports_language': False}
+                for mid in py_models
+            ],
+        })
+
+    # NeMo diarization (requires nemo + diarization model cache)
+    nemo_pkg_ok = bool((status.get('nemo') or {}).get('installed'))
+    nd_models = [mid for mid, ok in reg_nemo_diar.items() if ok]
+    if nemo_pkg_ok and nd_models:
+        diar_engines.append({
+            'id': 'nemo_diar',
+            'label': 'NeMo diarization',
+            'installed': True,
+            'supports_language': False,
+            'models': [
+                {'id': mid, 'label': mid, 'installed': True, 'supports_language': False}
+                for mid in nd_models
+            ],
+        })
+
+    # --- ASR engines/models (installed only) ---
+    asr_engines = []
+    asr_models = {'whisper': [], 'nemo': []}
+
+    if bool((status.get('whisper') or {}).get('installed')):
+        asr_engines.append({'id': 'whisper', 'label': 'Whisper', 'installed': True, 'supports_language': True})
+        asr_models['whisper'] = [m for m, ok in reg_whisper.items() if ok]
+
+    if bool((status.get('nemo') or {}).get('installed')):
+        asr_engines.append({'id': 'nemo', 'label': 'NeMo', 'installed': True, 'supports_language': False})
+        asr_models['nemo'] = [m for m, ok in reg_nemo.items() if ok]
+
+    return {
+        'diarization_engines': diar_engines,
+        'asr_engines': asr_engines,
+        'asr_models': asr_models,
+        'hf_token_present': bool(status.get('hf_token_present')),
+        'last_scan': reg.get('last_scan'),
+    }
+
+@app.post("/api/asr/install")
+def api_asr_install(payload: Dict[str, Any] = Body(...)) -> Any:
+    comp = str(payload.get("component") or "").strip().lower()
+    if comp not in ("whisper", "nemo", "pyannote"):
+        raise HTTPException(status_code=400, detail="Invalid component")
+
+    worker = ROOT / "backend" / "asr_worker.py"
+    require_existing_file(worker, "Brak asr_worker.py")
+
+    cmd = [
+        os.environ.get("PYTHON", __import__("sys").executable),
+        str(worker),
+        "--action", "install",
+        "--component", comp,
+    ]
+
+    app_log(f"ASR install requested: component={comp}")
+    t = TASKS.start_subprocess(kind=f"asr_install_{comp}", project_id="-", cmd=cmd, cwd=ROOT)
+    return {"task_id": t.task_id}
+
+
+@app.post("/api/asr/predownload")
+def api_asr_predownload(payload: Dict[str, Any] = Body(...)) -> Any:
+    engine = str(payload.get("engine") or "").strip().lower()
+    if engine not in ("whisper", "nemo", "nemo_diar", "pyannote"):
+        raise HTTPException(status_code=400, detail="Invalid engine")
+
+    model = str(payload.get("model") or "").strip()
+    pipeline = str(payload.get("pipeline") or "").strip()
+
+    worker = ROOT / "backend" / "asr_worker.py"
+    require_existing_file(worker, "Brak asr_worker.py")
+
+    s = load_settings()
+    hf_token = getattr(s, "hf_token", "") or ""
+
+    cmd = [
+        os.environ.get("PYTHON", __import__("sys").executable),
+        str(worker),
+        "--action", "predownload",
+        "--engine", engine,
+    ]
+
+    if engine in ("whisper", "nemo", "nemo_diar"):
+        if not model:
+            raise HTTPException(status_code=400, detail="Missing model")
+        cmd += ["--model", model]
+    else:
+        # pyannote
+        pid = pipeline or (PYANNOTE_PIPELINES[0] if PYANNOTE_PIPELINES else "")
+        if not pid:
+            raise HTTPException(status_code=400, detail="Missing pipeline")
+        if not hf_token:
+            raise HTTPException(status_code=400, detail="Brak tokena HF. Ustaw go w Ustawieniach.")
+        cmd += ["--pipeline", pid, "--hf_token", hf_token]
+
+    app_log(f"ASR predownload requested: engine={engine}, model={model or '-'}, pipeline={pipeline or '-'}")
+    t = TASKS.start_subprocess(kind=f"asr_predownload_{engine}", project_id="-", cmd=cmd, cwd=ROOT)
+    return {"task_id": t.task_id}
+
+
+# ---------- API: Sound Detection models ----------
+
+SOUND_DETECTION_MODELS = {
+    "yamnet": {
+        "name": "YAMNet",
+        "size_mb": 14,
+        "classes": 521,
+        "framework": "tensorflow",
+        "speed": "fast",
+        "accuracy": "good",
+    },
+    "panns_cnn14": {
+        "name": "PANNs CNN14",
+        "size_mb": 300,
+        "classes": 527,
+        "framework": "pytorch",
+        "speed": "medium",
+        "accuracy": "high",
+    },
+    "panns_cnn6": {
+        "name": "PANNs CNN6",
+        "size_mb": 20,
+        "classes": 527,
+        "framework": "pytorch",
+        "speed": "fast",
+        "accuracy": "good",
+    },
+    "beats": {
+        "name": "BEATs",
+        "size_mb": 90,
+        "classes": 527,
+        "framework": "pytorch",
+        "speed": "slow",
+        "accuracy": "highest",
+    },
+}
+
+
+def _sound_detection_registry_path() -> Path:
+    return PROJECTS_DIR / "_global" / "sound_detection_models.json"
+
+
+def _read_sound_detection_registry() -> Dict[str, Any]:
+    p = _sound_detection_registry_path()
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _write_sound_detection_registry(data: Dict[str, Any]) -> None:
+    p = _sound_detection_registry_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def scan_sound_detection_models() -> Dict[str, bool]:
+    """Scan for installed sound detection models via marker files."""
+    cache_dir = ROOT / "backend" / "models_cache" / "sound_detection"
+    result = {}
+
+    for model_id in SOUND_DETECTION_MODELS:
+        marker = cache_dir / f"{model_id}.json"
+        result[model_id] = marker.exists()
+
+    # Persist to registry
+    reg = {"models": result, "last_scan": now_iso()}
+    _write_sound_detection_registry(reg)
+
+    return result
+
+
+@app.get("/api/sound-detection/status")
+def api_sound_detection_status() -> Any:
+    """Return dependency status for sound detection frameworks."""
+    return {
+        "tensorflow": _pkg_info("tensorflow"),
+        "tensorflow_hub": _pkg_info("tensorflow_hub"),
+        "panns_inference": _pkg_info("panns_inference"),
+        "transformers": _pkg_info("transformers"),
+    }
+
+
+@app.get("/api/sound-detection/models")
+def api_sound_detection_models() -> Any:
+    """Return available sound detection models with metadata."""
+    return SOUND_DETECTION_MODELS
+
+
+@app.get("/api/sound-detection/models_state")
+def api_sound_detection_models_state(refresh: int = 0) -> Any:
+    """Return cached model-state map for sound detection models."""
+    if refresh:
+        return scan_sound_detection_models()
+    reg = _read_sound_detection_registry()
+    if not reg or not reg.get("models"):
+        try:
+            return scan_sound_detection_models()
+        except Exception:
+            return {}
+    return reg.get("models", {})
+
+
+@app.post("/api/sound-detection/install")
+def api_sound_detection_install(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Install dependencies for a sound detection model."""
+    try:
+        model_id = str(payload.get("model") or "").strip()
+        app_log(f"Sound detection install requested: model='{model_id}'")
+
+        if not model_id:
+            raise HTTPException(status_code=400, detail="Nie podano modelu. Wybierz model z listy.")
+
+        if model_id not in SOUND_DETECTION_MODELS:
+            raise HTTPException(status_code=400, detail=f"Nieznany model: {model_id}")
+
+        worker = ROOT / "backend" / "sound_detection_worker.py"
+        if not worker.exists():
+            app_log(f"Worker not found: {worker}")
+            raise HTTPException(status_code=500, detail="Brak pliku sound_detection_worker.py")
+
+        cmd = [
+            os.environ.get("PYTHON", sys.executable),
+            str(worker),
+            "--action", "install",
+            "--model", model_id,
+        ]
+
+        app_log(f"Starting sound detection install task: cmd={cmd}")
+        t = TASKS.start_subprocess(kind=f"sound_detection_install_{model_id}", project_id="-", cmd=cmd, cwd=ROOT)
+        app_log(f"Sound detection install task started: task_id={t.task_id}")
+        return {"task_id": t.task_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"Sound detection install error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd instalacji: {e}")
+
+
+@app.post("/api/sound-detection/predownload")
+def api_sound_detection_predownload(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Download/cache a sound detection model."""
+    try:
+        model_id = str(payload.get("model") or "").strip()
+        app_log(f"Sound detection predownload requested: model='{model_id}'")
+
+        if not model_id:
+            raise HTTPException(status_code=400, detail="Nie podano modelu. Wybierz model z listy.")
+
+        if model_id not in SOUND_DETECTION_MODELS:
+            raise HTTPException(status_code=400, detail=f"Nieznany model: {model_id}")
+
+        worker = ROOT / "backend" / "sound_detection_worker.py"
+        if not worker.exists():
+            app_log(f"Worker not found: {worker}")
+            raise HTTPException(status_code=500, detail="Brak pliku sound_detection_worker.py")
+
+        cmd = [
+            os.environ.get("PYTHON", sys.executable),
+            str(worker),
+            "--action", "predownload",
+            "--model", model_id,
+        ]
+
+        app_log(f"Starting sound detection predownload task: cmd={cmd}")
+        t = TASKS.start_subprocess(kind=f"sound_detection_predownload_{model_id}", project_id="-", cmd=cmd, cwd=ROOT)
+        app_log(f"Sound detection predownload task started: task_id={t.task_id}")
+        return {"task_id": t.task_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"Sound detection predownload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd pobierania modelu: {e}")
+
+
+# ---------- API: TTS (Text-to-Speech) ----------
+
+TTS_ENGINES = {
+    "piper": {
+        "name": "Piper TTS",
+        "packages": ["piper-tts", "pathvalidate"],
+        "pip_check": "piper",
+        "size_mb": 30,
+        "languages": "~50",
+        "quality": "good",
+        "speed": "very_fast",
+        "license": "MIT",
+    },
+    "mms": {
+        "name": "MMS-TTS (Meta)",
+        "packages": ["transformers", "torch", "scipy"],
+        "pip_check": "transformers",
+        "size_mb": 30,
+        "languages": "1100+",
+        "quality": "ok",
+        "speed": "fast",
+        "license": "CC-BY-NC-4.0",
+    },
+    "kokoro": {
+        "name": "Kokoro TTS",
+        "packages": ["spacy>=3.7,<4.0", "kokoro>=0.3", "soundfile"],
+        "pip_check": "kokoro",
+        "size_mb": 82,
+        "languages": "9",
+        "quality": "very_good",
+        "speed": "very_fast",
+        "license": "Apache 2.0",
+    },
+}
+
+TTS_REGISTRY_REL = Path("_global") / "tts_models.json"
+
+
+def _tts_registry_path() -> Path:
+    return PROJECTS_DIR / TTS_REGISTRY_REL
+
+
+def _read_tts_registry() -> Dict[str, Any]:
+    p = _tts_registry_path()
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _write_tts_registry(data: Dict[str, Any]) -> None:
+    p = _tts_registry_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def scan_tts_models() -> Dict[str, Any]:
+    """Scan cache dir for downloaded TTS models and update registry."""
+    cache_dir = ROOT / "backend" / "models_cache" / "tts"
+    reg: Dict[str, Any] = {}
+
+    if cache_dir.exists():
+        for marker in cache_dir.glob("*.json"):
+            try:
+                info = json.loads(marker.read_text(encoding="utf-8"))
+                engine = info.get("engine", "")
+                key = marker.stem  # e.g. "piper_en_US-amy-medium", "mms_pol", "kokoro"
+                reg[key] = {
+                    "engine": engine,
+                    "downloaded": info.get("status") == "ready",
+                    "downloaded_at": info.get("downloaded_at", ""),
+                    **{k: v for k, v in info.items() if k not in ("status",)},
+                }
+            except Exception:
+                continue
+
+    _write_tts_registry(reg)
+    return reg
+
+
+@app.get("/api/tts/status")
+def api_tts_status() -> Any:
+    """Return dependency status for TTS engines."""
+    return {
+        "piper": _pkg_info("piper"),
+        "mms": {
+            "installed": _pkg_info("transformers").get("installed", False)
+            and _pkg_info("torch").get("installed", False),
+            "transformers": _pkg_info("transformers"),
+            "torch": _pkg_info("torch"),
+        },
+        "kokoro": _pkg_info("kokoro"),
+    }
+
+
+@app.get("/api/tts/engines")
+def api_tts_engines() -> Any:
+    """Return TTS engine definitions."""
+    return TTS_ENGINES
+
+
+@app.get("/api/tts/models_state")
+def api_tts_models_state(refresh: int = 0) -> Any:
+    """Return cached model-state map for TTS voices."""
+    if refresh:
+        return scan_tts_models()
+    reg = _read_tts_registry()
+    if not reg:
+        try:
+            reg = scan_tts_models()
+        except Exception:
+            reg = {}
+    return reg
+
+
+@app.post("/api/tts/install")
+def api_tts_install(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Install dependencies for a TTS engine."""
+    try:
+        engine = str(payload.get("engine") or "").strip()
+        app_log(f"TTS install requested: engine='{engine}'")
+
+        if engine not in TTS_ENGINES:
+            raise HTTPException(status_code=400, detail=f"Nieznany silnik TTS: {engine}")
+
+        worker = ROOT / "backend" / "tts_worker.py"
+        require_existing_file(worker, "Brak pliku tts_worker.py")
+
+        cmd = [
+            os.environ.get("PYTHON", sys.executable),
+            str(worker),
+            "--action", "install",
+            "--engine", engine,
+        ]
+
+        t = TASKS.start_subprocess(kind=f"tts_install_{engine}", project_id="-", cmd=cmd, cwd=ROOT)
+        return {"task_id": t.task_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"TTS install error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd instalacji TTS: {e}")
+
+
+@app.post("/api/tts/predownload")
+def api_tts_predownload(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Download/cache a TTS voice or model."""
+    try:
+        engine = str(payload.get("engine") or "").strip()
+        voice = str(payload.get("voice") or "").strip()
+        app_log(f"TTS predownload requested: engine='{engine}', voice='{voice}'")
+
+        if engine not in TTS_ENGINES:
+            raise HTTPException(status_code=400, detail=f"Nieznany silnik TTS: {engine}")
+
+        worker = ROOT / "backend" / "tts_worker.py"
+        require_existing_file(worker, "Brak pliku tts_worker.py")
+
+        cmd = [
+            os.environ.get("PYTHON", sys.executable),
+            str(worker),
+            "--action", "predownload",
+            "--engine", engine,
+        ]
+        if voice:
+            cmd += ["--voice", voice]
+
+        t = TASKS.start_subprocess(kind=f"tts_predownload_{engine}", project_id="-", cmd=cmd, cwd=ROOT)
+        return {"task_id": t.task_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"TTS predownload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd pobierania modelu TTS: {e}")
+
+
+@app.post("/api/tts/synthesize")
+def api_tts_synthesize(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Synthesize speech from text. Returns task_id; audio file served via /api/tts/audio/."""
+    try:
+        engine = str(payload.get("engine") or "piper").strip()
+        text = str(payload.get("text") or "").strip()
+        voice = str(payload.get("voice") or "").strip()
+        lang = str(payload.get("lang") or "").strip()
+        project_id = str(payload.get("project_id") or "-").strip()
+
+        if not text:
+            raise HTTPException(status_code=400, detail="Brak tekstu do syntezowania.")
+
+        if engine not in TTS_ENGINES:
+            raise HTTPException(status_code=400, detail=f"Nieznany silnik TTS: {engine}")
+
+        worker = ROOT / "backend" / "tts_worker.py"
+        require_existing_file(worker, "Brak pliku tts_worker.py")
+
+        # Generate unique output filename
+        import hashlib
+        text_hash = hashlib.md5(f"{engine}:{voice}:{text[:200]}".encode()).hexdigest()[:12]
+        tts_dir = ROOT / "backend" / "models_cache" / "tts" / "audio_cache"
+        tts_dir.mkdir(parents=True, exist_ok=True)
+        output_file = tts_dir / f"tts_{text_hash}.wav"
+
+        # If cached audio exists and is non-empty, return immediately
+        if output_file.exists() and output_file.stat().st_size > 44:
+            return {"status": "cached", "audio_url": f"/api/tts/audio/{output_file.name}"}
+
+        cmd = [
+            os.environ.get("PYTHON", sys.executable),
+            str(worker),
+            "--action", "synthesize",
+            "--engine", engine,
+            "--voice", voice,
+            "--lang", lang,
+            "--text", text,
+            "--output", str(output_file),
+        ]
+
+        if GPU_RM.enabled:
+            t = GPU_RM.enqueue_subprocess(kind="tts_synthesize", project_id=project_id, cmd=cmd, cwd=ROOT)
+        else:
+            t = TASKS.start_subprocess(kind="tts_synthesize", project_id=project_id, cmd=cmd, cwd=ROOT)
+
+        return {"task_id": t.task_id, "audio_url": f"/api/tts/audio/{output_file.name}"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_log(f"TTS synthesize error: {e}")
+        raise HTTPException(status_code=500, detail=f"Błąd syntezy mowy: {e}")
+
+
+@app.get("/api/tts/audio/{filename}")
+def api_tts_audio(filename: str) -> Any:
+    """Serve generated TTS audio file."""
+    from fastapi.responses import FileResponse
+
+    # Sanitize filename
+    safe = Path(filename).name
+    audio_dir = ROOT / "backend" / "models_cache" / "tts" / "audio_cache"
+    audio_path = audio_dir / safe
+
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    return FileResponse(str(audio_path), media_type="audio/wav", filename=safe)
+
+
+@app.get("/api/tts/voices")
+def api_tts_voices() -> Any:
+    """Return language-to-voice mapping for all TTS engines."""
+    # Import from worker to keep single source of truth
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "tts_worker", str(ROOT / "backend" / "tts_worker.py")
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return getattr(mod, "LANG_VOICE_MAP", {})
+    except Exception:
+        return {}
+
+
+# ---------- API: NLLB translation models ----------
+
+
+@app.get("/api/nllb/status")
+def api_nllb_status() -> Any:
+    """Return dependency status for NLLB (Transformers)."""
+    return {
+        "torch": _pkg_info("torch"),
+        "transformers": _pkg_info("transformers"),
+        "sentencepiece": _pkg_info("sentencepiece"),
+        "sacremoses": _pkg_info("sacremoses"),
+    }
+
+
+@app.get("/api/nllb/models_state")
+def api_nllb_models_state(refresh: int = 0) -> Any:
+    """Return cached model-state map for NLLB presets."""
+    if refresh:
+        return scan_and_persist_nllb_model_cache()
+    reg = _read_nllb_registry()
+    # If registry empty (first run), auto-scan.
+    if not reg:
+        try:
+            reg = scan_and_persist_nllb_model_cache()
+        except Exception:
+            reg = {}
+    return reg
+
+
+@app.post("/api/nllb/install_deps")
+def api_nllb_install_deps() -> Any:
+    worker = ROOT / "backend" / "nllb_worker.py"
+    require_existing_file(worker, "Brak nllb_worker.py")
+
+    cmd = [
+        os.environ.get("PYTHON", __import__("sys").executable),
+        str(worker),
+        "--action", "install_deps",
+    ]
+    app_log("NLLB deps install requested")
+    t = TASKS.start_subprocess(kind="nllb_install_deps", project_id="-", cmd=cmd, cwd=ROOT)
+    return {"task_id": t.task_id}
+
+
+@app.post("/api/nllb/predownload")
+def api_nllb_predownload(payload: Dict[str, Any] = Body(...)) -> Any:
+    mode = str(payload.get("mode") or "fast").strip().lower()
+    if mode not in ("fast", "accurate"):
+        raise HTTPException(status_code=400, detail="Invalid mode")
+
+    model = str(payload.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="Missing model")
+
+    allowed = set(list(NLLB_FAST_MODELS) + list(NLLB_ACCURATE_MODELS))
+    if model not in allowed:
+        raise HTTPException(status_code=400, detail="Unknown model")
+
+    worker = ROOT / "backend" / "nllb_worker.py"
+    require_existing_file(worker, "Brak nllb_worker.py")
+
+    cmd = [
+        os.environ.get("PYTHON", __import__("sys").executable),
+        str(worker),
+        "--action", "predownload",
+        "--mode", mode,
+        "--model", model,
+    ]
+    app_log(f"NLLB predownload requested: mode={mode}, model={model}")
+    t = TASKS.start_subprocess(kind=f"nllb_predownload_{mode}", project_id="-", cmd=cmd, cwd=ROOT)
+    return {"task_id": t.task_id}
+
+
+# ---------- API: global model settings (Ollama LLM) ----------
+
+GLOBAL_SETTINGS_REL = Path("_global") / "settings.json"
+
+
+def _global_settings_path() -> Path:
+    # Stored under DATA_DIR/projects/_global/settings.json
+    g = (PROJECTS_DIR / GLOBAL_SETTINGS_REL).resolve()
+    g.parent.mkdir(parents=True, exist_ok=True)
+    return g
+
+
+def _read_global_settings() -> Dict[str, Any]:
+    fp = _global_settings_path()
+    if not fp.exists():
+        return {}
+    try:
+        obj = json.loads(fp.read_text(encoding="utf-8"))
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_global_settings(obj: Dict[str, Any]) -> None:
+    fp = _global_settings_path()
+    fp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _get_analysis_settings() -> Dict[str, Any]:
+    """Return analysis-related flags from global settings."""
+    obj = _read_global_settings()
+    raw = obj.get("analysis") if isinstance(obj.get("analysis"), dict) else {}
+    quick_enabled = raw.get("quick_enabled")
+    if quick_enabled is None:
+        quick_enabled = True
+    return {"quick_enabled": bool(quick_enabled)}
+
+
+def _save_analysis_settings(patch: Dict[str, Any]) -> Dict[str, Any]:
+    """Persist analysis-related flags into global settings."""
+    obj = _read_global_settings()
+    raw = obj.get("analysis") if isinstance(obj.get("analysis"), dict) else {}
+    raw = dict(raw or {})
+
+    if "quick_enabled" in patch:
+        raw["quick_enabled"] = bool(patch.get("quick_enabled"))
+
+    obj["analysis"] = raw
+    _write_global_settings(obj)
+    return _get_analysis_settings()
+
+
+
+def _get_gpu_rm_settings() -> Dict[str, Any]:
+    """Load persisted GPU Resource Manager settings from global settings file."""
+    obj = _read_global_settings()
+    raw = obj.get("gpu_rm") if isinstance(obj, dict) else {}
+    if not isinstance(raw, dict):
+        raw = {}
+
+    # Priorities are configured per *feature area* (admin-facing), not per internal kind.
+    # Higher value means earlier dispatch.
+    # Default order: transcription > diarization > translation > analysis_quick > analysis > chat
+    default_prio = {
+        "transcription": 300,
+        "diarization": 200,
+        "translation": 180,
+        "analysis_quick": 140,
+        "analysis": 120,
+        "chat": 60,
+    }
+
+    # Backward compatible mapping from older per-kind keys.
+    pr = raw.get("priorities")
+    merged_prio = dict(default_prio)
+    if isinstance(pr, dict):
+        def _as_int(x, dv):
+            try:
+                return int(x)
+            except Exception:
+                return dv
+
+                # New keys (preferred)
+        if "transcription" in pr:
+            merged_prio["transcription"] = _as_int(pr.get("transcription"), merged_prio["transcription"])
+        if "diarization" in pr:
+            merged_prio["diarization"] = _as_int(pr.get("diarization"), merged_prio["diarization"])
+        if "translation" in pr:
+            merged_prio["translation"] = _as_int(pr.get("translation"), merged_prio["translation"])
+        if "analysis_quick" in pr:
+            merged_prio["analysis_quick"] = _as_int(pr.get("analysis_quick"), merged_prio["analysis_quick"])
+        if "analysis" in pr:
+            merged_prio["analysis"] = _as_int(pr.get("analysis"), merged_prio["analysis"])
+        if "chat" in pr:
+            merged_prio["chat"] = _as_int(pr.get("chat"), merged_prio["chat"])
+
+        # Old keys (migrate best-effort)
+        if "transcribe" in pr and "transcription" not in pr:
+            merged_prio["transcription"] = _as_int(pr.get("transcribe"), merged_prio["transcription"])
+        if "diarize_voice" in pr and "diarization" not in pr:
+            merged_prio["diarization"] = _as_int(pr.get("diarize_voice"), merged_prio["diarization"])
+        if ("translate_fast" in pr or "translate_accurate" in pr) and "translation" not in pr:
+            merged_prio["translation"] = _as_int(pr.get("translate_fast", pr.get("translate_accurate")), merged_prio["translation"])
+
+    return {
+        "enabled": bool(raw.get("enabled", True)),
+        "gpu_mem_fraction": float(raw.get("gpu_mem_fraction", 0.85)),
+        "gpu_slots_per_gpu": int(raw.get("gpu_slots_per_gpu", 1)),
+        "cpu_slots": int(raw.get("cpu_slots", 1)),
+        "priorities": merged_prio,
+    }
+
+
+def _save_gpu_rm_settings(cfg: Dict[str, Any]) -> None:
+    obj = _read_global_settings()
+    if not isinstance(obj, dict):
+        obj = {}
+
+    pr = cfg.get("priorities")
+    pr_out = None
+    if isinstance(pr, dict):
+        # Persist only admin-facing keys.
+        allow = {"transcription", "diarization", "translation", "analysis_quick", "analysis", "chat"}
+        pr_out = {}
+        for k in allow:
+            if k not in pr:
+                continue
+            try:
+                pr_out[k] = int(pr.get(k))
+            except Exception:
+                continue
+
+    payload = {
+        "enabled": bool(cfg.get("enabled", True)),
+        "gpu_mem_fraction": float(cfg.get("gpu_mem_fraction", 0.85)),
+        "gpu_slots_per_gpu": int(cfg.get("gpu_slots_per_gpu", 1)),
+        "cpu_slots": int(cfg.get("cpu_slots", 1)),
+    }
+    if pr_out is not None:
+        payload["priorities"] = pr_out
+
+    obj["gpu_rm"] = payload
+    _write_global_settings(obj)
+
+
+# Global singleton (used by transcription/diarization + Admin panel)
+GPU_RM = GPUResourceManager()
+GPU_RM.apply_config(_get_gpu_rm_settings())
+
+# Inject GPU_RM into chat router (deferred — GPU_RM created after initial mount)
+chat_router.init(ollama_client=OLLAMA, app_log_fn=app_log, gpu_rm=GPU_RM, tasks=TASKS)
+
+# Mount admin router now that GPU_RM is ready
+admin_router.init(
+    gpu_rm=GPU_RM,
+    get_gpu_rm_settings=_get_gpu_rm_settings,
+    save_gpu_rm_settings=_save_gpu_rm_settings,
+    app_log_fn=app_log,
+)
+app.include_router(admin_router.router)
+
+# Software update router
+from backend.updater.restart_manager import RestartManager
+RESTART_MANAGER = RestartManager()
+updates_router.init(
+    message_store=MESSAGE_STORE,
+    app_log_fn=app_log,
+    restart_manager=RESTART_MANAGER,
+)
+app.include_router(updates_router.router)
+
+# Licensing router
+licensing_router.init(app_log_fn=app_log)
+app.include_router(licensing_router.router)
+
+# Modules router (addon management)
+modules_router.init(projects_dir=PROJECTS_DIR, app_log_fn=app_log)
+app.include_router(modules_router.router)
+
+# Auto-discover and register installed PRO modules
+def _load_plugins():
+    """Load installed aistateweb.plugins entry points."""
+    import importlib.metadata
+    try:
+        eps = importlib.metadata.entry_points(group="aistateweb.plugins")
+    except Exception:
+        eps = []
+    for ep in eps:
+        try:
+            register_fn = ep.load()
+            ok = register_fn(app, projects_dir=PROJECTS_DIR, app_log_fn=app_log)
+            if ok:
+                app_log(f"[plugins] Loaded module: {ep.name}")
+        except Exception as e:
+            app_log(f"[plugins] Failed to load {ep.name}: {e}")
+
+_load_plugins()
+
+# Load license at startup
+try:
+    from backend.licensing.validator import load_license as _load_lic
+    _lic = _load_lic()
+    app_log(f"License loaded: plan={_lic.plan} id={_lic.license_id} expires={_lic.expires or 'perpetual'}")
+except Exception as _lic_err:
+    import logging as _lic_lg
+    _lic_lg.getLogger("aistate").warning("License load: %s", _lic_err)
+
+def _read_custom_models() -> Dict[str, List[str]]:
+    """Read user-added custom model ids grouped by category from global settings."""
+    obj = _read_global_settings()
+    raw = obj.get("custom_models") if isinstance(obj.get("custom_models"), dict) else {}
+    out: Dict[str, List[str]] = {}
+    for g in (DEFAULT_MODELS or {}).keys():
+        arr = raw.get(g)
+        if isinstance(arr, list):
+            cleaned = []
+            for x in arr:
+                s = str(x or "").strip()
+                if s and s not in cleaned:
+                    cleaned.append(s)
+            out[g] = cleaned
+        else:
+            out[g] = []
+    return out
+
+
+def _write_custom_models(custom_models: Dict[str, List[str]]) -> None:
+    """Persist custom model ids into global settings."""
+    obj = _read_global_settings()
+    obj["custom_models"] = custom_models
+    _write_global_settings(obj)
+
+
+def _get_model_settings() -> Dict[str, str]:
+    obj = _read_global_settings()
+    models = obj.get("models") if isinstance(obj.get("models"), dict) else {}
+    out: Dict[str, str] = {}
+    # Keep backward compatibility: always include quick/deep and ignore unknown keys.
+    for k, dv in (DEFAULT_MODELS or {}).items():
+        v = (models or {}).get(k)
+        v = str(v).strip() if v is not None else ""
+        out[k] = v or dv
+    # If older global settings contained only quick/deep, above will fill the rest.
+    return out
+
+
+
+
+
+# Admin GPU endpoints moved to webapp/routers/admin.py
+
+
+
+
+@app.get("/api/settings/analysis")
+async def api_get_analysis_settings() -> Any:
+    """Return analysis settings (feature flags)."""
+    return _get_analysis_settings()
+
+
+@app.post("/api/settings/analysis")
+async def api_save_analysis_settings(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Persist analysis settings (feature flags)."""
+    saved = _save_analysis_settings(payload or {})
+    app_log("Analysis settings saved: " + ", ".join([f"{k}={saved.get(k)}" for k in saved.keys()]))
+    return {"status": "saved", **saved}
+
+@app.get("/api/settings/models")
+async def api_get_model_settings() -> Any:
+    """Return saved global model selection.
+
+    Returns keys for all supported groups:
+      quick, deep, vision, translation, financial, specialized, proofreading
+    """
+    models = _get_model_settings()
+    # Keep a predictable place for defaults while preserving top-level keys.
+    return {**models, "defaults": DEFAULT_MODELS}
+
+
+@app.post("/api/settings/models")
+async def api_save_model_settings(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Persist global model selection.
+
+    Request can contain any subset of groups, e.g.:
+      {"quick":"...","deep":"...","proofreading":"..."}
+      {"vision":"..."}
+      {"quick":"...","deep":"...","translation":"...",...}
+    """
+    obj = _read_global_settings()
+    models = obj.get("models") if isinstance(obj.get("models"), dict) else {}
+    models = dict(models or {})
+
+    # Apply incoming changes (partial updates supported)
+    for k in (DEFAULT_MODELS or {}).keys():
+        if k not in payload:
+            continue
+        raw = payload.get(k)
+        val = "" if raw is None else str(raw).strip()
+        if not val:
+            # Treat empty value as "use default" (remove persisted override)
+            models.pop(k, None)
+        else:
+            models[k] = val
+
+    # Normalize: ensure every known key resolves to a non-empty model id
+    resolved = {}
+    for k, dv in (DEFAULT_MODELS or {}).items():
+        v = str(models.get(k) or "").strip() or dv
+        resolved[k] = v
+        models[k] = v
+
+    obj["models"] = models
+    _write_global_settings(obj)
+    app_log("Model settings saved: " + ", ".join([f"{k}={resolved.get(k)}" for k in resolved.keys()]))
+    return {"status": "saved", "models": resolved, **resolved, "defaults": DEFAULT_MODELS}
+
+
+@app.get("/api/models/info/{model_name:path}")
+async def api_model_info(model_name: str) -> Any:
+    """Return info for a specific model (catalog or custom)."""
+    name = str(model_name or "").strip()
+    info = MODELS_INFO.get(name)
+
+    out: Dict[str, Any] = {"id": name}
+    if info:
+        out.update(info)
+    else:
+        out.update({
+            "display_name": name,
+            "category": "custom",
+            "hardware": {},
+            "performance": {},
+            "use_cases": ["Custom model (added by user) – not in built-in catalog"],
+            "recommendation": (
+                "Model dodany ręcznie. Aplikacja nie ma wbudowanych metadanych (VRAM/szybkość/use-cases). \nJeśli chcesz widzieć szczegóły w panelu info, dopisz go do backend/models_info.py."
+            ),
+            "warning": "Custom model – brak metadanych w katalogu",
+            "capabilities": ["custom"],
+        })
+
+    # best-effort installed flag
+    try:
+        installed = await OLLAMA.list_model_names()
+    except Exception:
+        installed = []
+    out["installed"] = name in installed
+    return out
+@app.get("/api/models/custom")
+async def api_models_custom() -> Any:
+    """Return user-added custom models grouped by category."""
+    return {"custom_models": _read_custom_models()}
+
+
+@app.post("/api/models/custom")
+async def api_models_custom_add(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Add a custom model id to a selected group."""
+    group = str(payload.get("group") or "deep").strip()
+    model_id = str(payload.get("model_id") or payload.get("model") or "").strip()
+
+    if not model_id:
+        raise HTTPException(status_code=400, detail="Missing model_id")
+    if group not in (DEFAULT_MODELS or {}):
+        raise HTTPException(status_code=400, detail="Unknown group")
+
+    custom = _read_custom_models()
+    arr = list(custom.get(group) or [])
+    if model_id not in arr:
+        arr.append(model_id)
+    custom[group] = arr
+    _write_custom_models(custom)
+
+    return {"status": "ok", "custom_models": custom}
+
+
+@app.post("/api/models/custom/remove")
+async def api_models_custom_remove(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Remove a custom model id from a group."""
+    group = str(payload.get("group") or "deep").strip()
+    model_id = str(payload.get("model_id") or payload.get("model") or "").strip()
+
+    if not model_id:
+        raise HTTPException(status_code=400, detail="Missing model_id")
+    if group not in (DEFAULT_MODELS or {}):
+        raise HTTPException(status_code=400, detail="Unknown group")
+
+    custom = _read_custom_models()
+    arr = [x for x in (custom.get(group) or []) if str(x) != model_id]
+    custom[group] = arr
+    _write_custom_models(custom)
+
+    return {"status": "ok", "custom_models": custom}
+
+
+
+@app.get("/api/models/list")
+async def api_models_list() -> Any:
+    """Return recommended models grouped by category with install status.
+
+    Includes:
+    - built-in catalog models (MODELS_INFO / MODELS_GROUPS)
+    - user-added custom models (stored in global settings -> custom_models)
+    """
+    st = await OLLAMA.status()
+    installed: List[str] = []
+    if st.status == "online":
+        installed = st.models or []
+
+    # Ollama normalizes model names to lowercase; our catalog uses mixed case.
+    # Build a case-insensitive lookup set for reliable matching.
+    installed_lower = {m.lower() for m in installed}
+
+    custom = _read_custom_models()
+
+    def _entry(mid: str, category: str) -> Dict[str, Any]:
+        info = MODELS_INFO.get(mid) or {}
+        perf = info.get("performance") or {}
+        at = None
+        try:
+            at = (perf.get("analysis_time") or {}).get(category)
+        except Exception:
+            at = None
+
+        warning = str(info.get("warning") or "")
+        if not info:
+            warning = warning or "Custom model – brak metadanych w katalogu"
+
+        return {
+            "id": mid,
+            "display_name": str(info.get("display_name") or mid),
+            "installed": mid.lower() in installed_lower,
+            "default": bool((info.get("defaults") or {}).get(category)) if info else False,
+            "vram": str(((info.get("hardware") or {}).get("vram")) or ""),
+            "speed": str(at or ""),
+            "requires_multi_gpu": bool(info.get("requires_multi_gpu") or False) if info else False,
+            "warning": warning,
+        }
+
+    out: Dict[str, Any] = {}
+    for category, ids in (MODELS_GROUPS or {}).items():
+        all_ids: List[str] = []
+        for mid in (ids or []):
+            mid = str(mid or "").strip()
+            if mid and mid not in all_ids:
+                all_ids.append(mid)
+        for mid in (custom.get(category) or []):
+            mid = str(mid or "").strip()
+            if mid and mid not in all_ids:
+                all_ids.append(mid)
+        out[category] = [_entry(mid, category) for mid in all_ids]
+
+    # Preserve legacy keys (quick/deep) even if groups definition changes
+    out.setdefault("quick", [])
+    out.setdefault("deep", [])
+
+    out.update({
+        "ollama_status": st.status,
+        "ollama_version": st.version,
+        "ollama_url": getattr(OLLAMA, "base_url", "http://127.0.0.1:11434"),
+        "models_count": len(installed),
+        "custom_models": custom,
+    })
+    return out
+
+# ---------- API: projects ----------
+
+@app.post("/api/projects/create")
+async def api_create_project(
+    request: Request,
+    name: str = Form(...),
+    audio: Optional[UploadFile] = File(None),
+) -> Any:
+    # Create a new project with a user-provided name.
+    # Audio is optional: if provided, it becomes the project's source audio.
+    pid = ensure_project(None)
+    pname = str(name or "").strip() or default_project_name()
+    up_name = ""
+    try:
+        up_name = (audio.filename or "") if audio else ""
+    except Exception:
+        up_name = ""
+    app_log(f"Project create: project_id={pid}, name='{pname}', upload='{up_name}'")
+    meta = read_project_meta(pid)
+    meta["name"] = pname
+    meta["created_at"] = meta.get("created_at") or now_iso()
+    meta["updated_at"] = now_iso()
+    # Set owner in multi-user mode
+    user = getattr(request.state, "user", None)
+    uid = ""
+    if user and getattr(request.state, "multiuser", False):
+        uid = user.user_id
+        meta["owner_id"] = uid
+    if not uid:
+        from backend.db.engine import get_default_user_id
+        uid = get_default_user_id()
+        meta["owner_id"] = uid
+    write_project_meta(pid, meta)
+
+    audio_path: Optional[Path] = None
+    if audio and getattr(audio, "filename", None):
+        audio_path = save_upload(pid, audio)
+        size_b = 0
+        try:
+            size_b = audio_path.stat().st_size
+        except Exception:
+            size_b = 0
+        app_log(f"Project upload saved: project_id={pid}, file='{audio_path.name}', size_bytes={size_b}")
+
+    meta = read_project_meta(pid)
+    meta["updated_at"] = now_iso()
+    write_project_meta(pid, meta)
+
+    # Create workspace subproject in a PRIVATE workspace (not shared with anyone)
+    try:
+        ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
+        owned_ws = [w for w in ws_list if w.get("owner_id") == uid]
+        private_ws = [w for w in owned_ws if w.get("member_count", 99) <= 1]
+        ws = (private_ws[0] if private_ws
+              else WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty"))
+        WORKSPACE_STORE.create_subproject(
+            workspace_id=ws["id"],
+            name=pname,
+            subproject_type="analysis",
+            data_dir=f"projects/{pid}",
+            created_by=uid,
+        )
+    except Exception:
+        pass  # best-effort
+
+    return {
+        "project_id": pid,
+        "name": meta.get("name"),
+        "audio_file": meta.get("audio_file") or "",
+        "audio_path": str(audio_path.name) if audio_path else "",
+    }
+
+@app.post("/api/projects/{project_id}/upload_audio")
+async def api_upload_audio(project_id: str, audio: UploadFile = File(...)) -> Any:
+    """Upload an audio file to an existing project."""
+    meta = read_project_meta(project_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Project not found")
+    audio_path = save_upload(project_id, audio)
+    # Re-read meta since save_upload updates audio_file
+    meta = read_project_meta(project_id)
+    app_log(f"Audio upload: project_id={project_id}, file='{audio_path.name}'")
+    return {
+        "ok": True,
+        "audio_file": meta.get("audio_file", ""),
+        "project_id": project_id,
+    }
+
+
+@app.post("/api/projects/new")
+def api_new_project(request: Request) -> Any:
+    pid = ensure_project(None)
+    # Set owner in multi-user mode
+    user = getattr(request.state, "user", None)
+    uid = ""
+    if user and getattr(request.state, "multiuser", False):
+        uid = user.user_id
+    if not uid:
+        from backend.db.engine import get_default_user_id
+        uid = get_default_user_id()
+    meta = read_project_meta(pid)
+    meta["owner_id"] = uid
+    write_project_meta(pid, meta)
+
+    # Create workspace subproject in a PRIVATE workspace (not shared with anyone)
+    try:
+        ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
+        owned_ws = [w for w in ws_list if w.get("owner_id") == uid]
+        private_ws = [w for w in owned_ws if w.get("member_count", 99) <= 1]
+        ws = (private_ws[0] if private_ws
+              else WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty"))
+        WORKSPACE_STORE.create_subproject(
+            workspace_id=ws["id"],
+            name=meta.get("name", "projekt"),
+            subproject_type="analysis",
+            data_dir=f"projects/{pid}",
+            created_by=uid,
+        )
+    except Exception:
+        pass
+
+    return {"project_id": pid}
+
+
+# ---------- Auto-create project (background, no manual step) ----------
+
+_MODULE_NAME_MAP = {
+    "transcription": "Transkrypcja",
+    "diarization": "Diaryzacja",
+    "analysis": "Analiza",
+    "chat": "Chat",
+    "translation": "Tłumaczenie",
+}
+
+
+@app.post("/api/projects/auto-create")
+async def api_auto_create_project(request: Request) -> Any:
+    """Auto-create a file-based project AND a workspace subproject.
+
+    Called transparently by the frontend when the user starts an action
+    (diarization, transcription, analysis, chat, translation) without
+    having an active project.  The project is created in the background
+    with a name based on the module type and current date/time.
+    """
+    import traceback as _tb
+    app_log("[auto-create] endpoint HIT")
+    try:
+        body: Dict[str, Any] = {}
+        try:
+            body = await request.json()
+        except Exception as e:
+            app_log(f"[auto-create] body parse error (ok if no body): {e}")
+
+        module_type = str(body.get("type", "")).strip() or "analysis"
+        custom_name = str(body.get("name", "")).strip()
+        if custom_name:
+            project_name = custom_name
+        else:
+            label = _MODULE_NAME_MAP.get(module_type, module_type.capitalize())
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+            project_name = f"{label} {ts}"
+        app_log(f"[auto-create] module_type={module_type}, project_name='{project_name}'")
+
+        # 1) Create file-based project directory
+        app_log("[auto-create] step 1: ensure_project(None)")
+        pid = ensure_project(None)
+        app_log(f"[auto-create] step 1 done: pid={pid}")
+
+        meta = read_project_meta(pid)
+        meta["name"] = project_name
+        meta["created_at"] = meta.get("created_at") or now_iso()
+        meta["updated_at"] = now_iso()
+
+        # Set owner
+        user = getattr(request.state, "user", None)
+        uid = ""
+        if user and getattr(request.state, "multiuser", False):
+            uid = user.user_id
+            meta["owner_id"] = uid
+            app_log(f"[auto-create] multiuser owner: uid={uid}")
+        if not uid:
+            from backend.db.engine import get_default_user_id
+            uid = get_default_user_id()
+            meta["owner_id"] = uid
+            app_log(f"[auto-create] default owner: uid={uid}")
+
+        write_project_meta(pid, meta)
+        app_log(f"[auto-create] step 1 complete: meta written for pid={pid}")
+
+        # 2) Get or create user's OWN PRIVATE workspace (never use a shared one)
+        app_log(f"[auto-create] step 2: list_workspaces for uid={uid}")
+        workspaces = WORKSPACE_STORE.list_workspaces(uid, status="active")
+        app_log(f"[auto-create] step 2: found {len(workspaces)} workspaces")
+        owned = [w for w in workspaces if w.get("owner_id") == uid]
+        # Prefer a PRIVATE workspace (member_count <= 1 = only owner)
+        private = [w for w in owned if w.get("member_count", 99) <= 1]
+        if private:
+            ws = private[0]
+        elif owned:
+            app_log("[auto-create] step 2: all owned ws are shared — creating private ws")
+            ws = WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+        else:
+            app_log("[auto-create] step 2: no owned ws found — creating new ws")
+            ws = WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty")
+        app_log(f"[auto-create] step 2 done: ws_id={ws['id']}")
+
+        # 3) Create subproject pointing to the file-based project
+        uname = ""
+        if user:
+            uname = getattr(user, "display_name", "") or getattr(user, "username", "")
+
+        app_log(f"[auto-create] step 3: create_subproject in ws={ws['id']}")
+        WORKSPACE_STORE.create_subproject(
+            workspace_id=ws["id"],
+            name=project_name,
+            subproject_type=module_type,
+            data_dir=f"projects/{pid}",
+            created_by=uid,
+            user_name=uname,
+        )
+        app_log(f"[auto-create] step 3 done")
+
+        result = {
+            "project_id": pid,
+            "name": project_name,
+            "workspace_id": ws["id"],
+        }
+        app_log(f"[auto-create] SUCCESS: {result}")
+        return result
+
+    except Exception as e:
+        app_log(f"[auto-create] EXCEPTION: {type(e).__name__}: {e}\n{_tb.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Auto-create failed: {type(e).__name__}: {e}")
+
+
+@app.get("/api/debug/auto-create-check")
+async def api_debug_auto_create_check(request: Request) -> Any:
+    """Diagnostic endpoint: check if auto-create infrastructure works."""
+    from datetime import datetime as _dt
+    checks: Dict[str, Any] = {}
+
+    # 1. Check PROJECTS_DIR exists and is writable
+    checks["projects_dir"] = str(PROJECTS_DIR)
+    checks["projects_dir_exists"] = PROJECTS_DIR.exists()
+    checks["projects_dir_writable"] = os.access(str(PROJECTS_DIR), os.W_OK)
+
+    # 2. Check WORKSPACE_STORE
+    checks["workspace_store_type"] = type(WORKSPACE_STORE).__name__
+    checks["workspace_store_id"] = id(WORKSPACE_STORE)
+
+    # 3. Check user/auth state
+    user = getattr(request.state, "user", None)
+    checks["has_user"] = user is not None
+    checks["multiuser"] = getattr(request.state, "multiuser", False)
+    if user:
+        checks["user_id"] = getattr(user, "user_id", "?")
+        checks["username"] = getattr(user, "username", "?")
+    else:
+        try:
+            from backend.db.engine import get_default_user_id
+            checks["default_user_id"] = get_default_user_id()
+        except Exception as e:
+            checks["default_user_id_error"] = str(e)
+
+    # 4. Check ensure_project function
+    try:
+        test_pid = ensure_project(None)
+        checks["ensure_project_works"] = True
+        checks["test_pid"] = test_pid
+        meta = read_project_meta(test_pid)
+        checks["test_meta"] = meta
+        # Clean up: delete test project
+        import shutil as _shu
+        test_dir = PROJECTS_DIR / test_pid
+        if test_dir.exists():
+            _shu.rmtree(test_dir, ignore_errors=True)
+            checks["test_cleanup"] = "ok"
+    except Exception as e:
+        checks["ensure_project_works"] = False
+        checks["ensure_project_error"] = f"{type(e).__name__}: {e}"
+
+    # 5. Check workspace store
+    try:
+        from backend.db.engine import get_default_user_id
+        uid = get_default_user_id()
+        ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
+        checks["workspaces_count"] = len(ws_list)
+        if ws_list:
+            checks["first_workspace"] = {"id": ws_list[0]["id"], "name": ws_list[0].get("name", "")}
+    except Exception as e:
+        checks["workspace_list_error"] = f"{type(e).__name__}: {e}"
+
+    # 6. Check _MODULE_NAME_MAP
+    checks["module_name_map"] = _MODULE_NAME_MAP
+
+    # 7. Check datetime
+    checks["server_time"] = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 8. List existing projects
+    try:
+        existing = []
+        for p in sorted(PROJECTS_DIR.glob("*"))[:10]:
+            if p.is_dir() and not p.name.startswith("_"):
+                m = read_project_meta(p.name)
+                existing.append({"id": p.name, "name": (m or {}).get("name", "?"), "owner": (m or {}).get("owner_id", "")})
+        checks["existing_projects_sample"] = existing
+    except Exception as e:
+        checks["existing_projects_error"] = str(e)
+
+    return JSONResponse({"status": "ok", "checks": checks})
+
+
+@app.get("/api/admin/user-projects")
+def api_admin_user_projects(request: Request) -> Any:
+    """Return all projects and workspaces grouped by user. Superadmin only."""
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    # Build username lookup
+    all_users = USER_STORE.list_users()
+    uid_map: Dict[str, Dict[str, Any]] = {}
+    for u in all_users:
+        uid_map[u.user_id] = {
+            "user_id": u.user_id,
+            "username": u.username,
+            "display_name": u.display_name or u.username,
+            "role": u.role or "",
+            "is_admin": u.is_admin,
+            "is_superadmin": getattr(u, "is_superadmin", False),
+        }
+
+    # 1) File-based projects from disk
+    file_projects: Dict[str, List[Dict[str, Any]]] = {}  # owner_id -> [project...]
+    orphan_projects: List[Dict[str, Any]] = []
+    for p in PROJECTS_DIR.glob("*"):
+        if not p.is_dir() or p.name.startswith("_"):
+            continue
+        pid = p.name
+        meta = read_project_meta(pid)
+        # Calculate directory size
+        dir_size = 0
+        try:
+            for f in p.rglob("*"):
+                if f.is_file():
+                    dir_size += f.stat().st_size
+        except Exception:
+            pass
+        audio_file = meta.get("audio_file", "")
+        audio_size = 0
+        if audio_file:
+            audio_path = p / audio_file
+            try:
+                audio_size = audio_path.stat().st_size if audio_path.exists() else 0
+            except Exception:
+                pass
+        entry = {
+            "project_id": pid,
+            "name": meta.get("name", ""),
+            "created_at": meta.get("created_at", ""),
+            "updated_at": meta.get("updated_at", ""),
+            "audio_file": audio_file,
+            "audio_size": audio_size,
+            "has_transcript": bool(meta.get("has_transcript")),
+            "has_diarized": bool(meta.get("has_diarized")),
+            "dir_path": str(p),
+            "dir_size": dir_size,
+            "shares": meta.get("shares", []),
+            "owner_id": meta.get("owner_id", ""),
+        }
+        owner = meta.get("owner_id", "")
+        if owner:
+            file_projects.setdefault(owner, []).append(entry)
+        else:
+            orphan_projects.append(entry)
+
+    # 2) Workspaces from database
+    user_workspaces: Dict[str, List[Dict[str, Any]]] = {}  # owner_id -> [ws...]
+    try:
+        from backend.db.engine import get_conn
+        with get_conn() as conn:
+            ws_rows = conn.execute(
+                "SELECT * FROM project_workspaces WHERE status != 'deleted' ORDER BY updated_at DESC"
+            ).fetchall()
+            for r in ws_rows:
+                ws = dict(r)
+                ws_id = ws["id"]
+                owner_id = ws.get("owner_id", "")
+                # Members
+                members = []
+                mem_rows = conn.execute(
+                    "SELECT user_id, role, status FROM project_members WHERE workspace_id = ? AND status='accepted'",
+                    (ws_id,),
+                ).fetchall()
+                for mr in mem_rows:
+                    m = dict(mr)
+                    u_info = uid_map.get(m["user_id"])
+                    m["username"] = u_info["username"] if u_info else m["user_id"][:8]
+                    m["display_name"] = u_info["display_name"] if u_info else ""
+                    members.append(m)
+                # Subprojects
+                subprojects = []
+                sp_rows = conn.execute(
+                    "SELECT * FROM subprojects WHERE workspace_id = ? ORDER BY created_at",
+                    (ws_id,),
+                ).fetchall()
+                for sp in sp_rows:
+                    sp_dict = dict(sp)
+                    # Calculate subproject dir size
+                    data_dir = sp_dict.get("data_dir", "")
+                    sp_dir_size = 0
+                    sp_dir_path = ""
+                    if data_dir:
+                        sp_path = (PROJECTS_DIR.parent / data_dir).resolve()
+                        sp_dir_path = str(sp_path)
+                        try:
+                            for f in sp_path.rglob("*"):
+                                if f.is_file():
+                                    sp_dir_size += f.stat().st_size
+                        except Exception:
+                            pass
+                    sp_dict["dir_path"] = sp_dir_path
+                    sp_dict["dir_size"] = sp_dir_size
+                    subprojects.append(sp_dict)
+                ws_entry = {
+                    "id": ws_id,
+                    "name": ws.get("name", ""),
+                    "description": ws.get("description", ""),
+                    "color": ws.get("color", "#4a6cf7"),
+                    "status": ws.get("status", "active"),
+                    "created_at": ws.get("created_at", ""),
+                    "updated_at": ws.get("updated_at", ""),
+                    "owner_id": owner_id,
+                    "members": members,
+                    "subprojects": subprojects,
+                }
+                user_workspaces.setdefault(owner_id, []).append(ws_entry)
+    except Exception as e:
+        app_log(f"admin user-projects: workspace query failed: {e}")
+
+    # 3) Assemble per-user result
+    all_user_ids = set(file_projects.keys()) | set(user_workspaces.keys())
+    users_result = []
+    for uid in all_user_ids:
+        u_info = uid_map.get(uid, {
+            "user_id": uid, "username": uid[:8] + "...", "display_name": "",
+            "role": "", "is_admin": False, "is_superadmin": False,
+        })
+        fp = file_projects.get(uid, [])
+        ws = user_workspaces.get(uid, [])
+        total_size = sum(p["dir_size"] for p in fp)
+        total_size += sum(
+            sp["dir_size"]
+            for w in ws for sp in w.get("subprojects", [])
+        )
+        users_result.append({
+            "user": u_info,
+            "file_projects": fp,
+            "workspaces": ws,
+            "total_size": total_size,
+            "project_count": len(fp),
+            "workspace_count": len(ws),
+        })
+    users_result.sort(key=lambda x: x["total_size"], reverse=True)
+
+    return {
+        "status": "ok",
+        "users": users_result,
+        "orphan_projects": orphan_projects,
+    }
+
+
+@app.post("/api/admin/delete-workspace/{workspace_id}")
+async def api_admin_delete_workspace(workspace_id: str, request: Request) -> Any:
+    """Delete a workspace and all its subproject data. Superadmin only."""
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    body = await request.json()
+    wipe_method = (body.get("wipe_method") or "none").strip().lower()
+
+    ws = WORKSPACE_STORE.get_workspace(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Delete subproject data directories
+    subs = WORKSPACE_STORE.list_subprojects(workspace_id)
+    deleted_dirs = []
+    for sp in subs:
+        data_dir = sp.get("data_dir", "")
+        if data_dir:
+            sp_path = (PROJECTS_DIR.parent / data_dir).resolve()
+            if sp_path.exists() and sp_path.is_dir() and PROJECTS_DIR.resolve() in sp_path.parents:
+                try:
+                    secure_delete_project_dir(sp_path, wipe_method)
+                    deleted_dirs.append(str(sp_path))
+                except Exception as e:
+                    app_log(f"admin delete-workspace: wipe failed for {sp_path}: {e}")
+
+    # Hard-delete the workspace + all subprojects/members/invitations/activity from DB
+    WORKSPACE_STORE.hard_delete_workspace(workspace_id)
+
+    if AUDIT_STORE:
+        AUDIT_STORE.log_event(
+            "workspace_deleted_admin",
+            user_id=user.user_id, username=user.username,
+            detail=f"workspace={workspace_id} name={ws.get('name','')} wipe={wipe_method}",
+            actor_id=user.user_id, actor_name=user.username,
+        )
+    app_log(f"Admin '{user.username}' deleted workspace '{ws.get('name','')}' (id={workspace_id}, wipe={wipe_method})")
+
+    return {"status": "ok", "deleted_dirs": deleted_dirs}
+
+
+@app.post("/api/admin/delete-subproject/{subproject_id}")
+async def api_admin_delete_subproject(subproject_id: str, request: Request) -> Any:
+    """Delete a single subproject and its data. Superadmin only."""
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    body = await request.json()
+    wipe_method = (body.get("wipe_method") or "none").strip().lower()
+
+    sp = WORKSPACE_STORE.get_subproject(subproject_id)
+    if sp is None:
+        raise HTTPException(status_code=404, detail="Subproject not found")
+
+    # Delete data directory
+    data_dir = sp.get("data_dir", "")
+    if data_dir:
+        sp_path = (PROJECTS_DIR.parent / data_dir).resolve()
+        if sp_path.exists() and sp_path.is_dir() and PROJECTS_DIR.resolve() in sp_path.parents:
+            try:
+                secure_delete_project_dir(sp_path, wipe_method)
+            except Exception as e:
+                app_log(f"admin delete-subproject: wipe failed for {sp_path}: {e}")
+
+    # Hard-delete from DB
+    WORKSPACE_STORE.delete_subproject(subproject_id)
+
+    if AUDIT_STORE:
+        AUDIT_STORE.log_event(
+            "subproject_deleted_admin",
+            user_id=user.user_id, username=user.username,
+            detail=f"subproject={subproject_id} name={sp.get('name','')} wipe={wipe_method}",
+            actor_id=user.user_id, actor_name=user.username,
+        )
+    app_log(f"Admin '{user.username}' deleted subproject '{sp.get('name','')}' (id={subproject_id}, wipe={wipe_method})")
+
+    return {"status": "ok"}
+
+
+@app.post("/api/admin/delete-file-project/{project_id}")
+async def api_admin_delete_file_project(project_id: str, request: Request) -> Any:
+    """Delete a file-based (orphan/legacy) project. Superadmin only."""
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    body = await request.json()
+    wipe_method = (body.get("wipe_method") or "none").strip().lower()
+
+    pdir = (PROJECTS_DIR / project_id).resolve()
+    root = PROJECTS_DIR.resolve()
+    if root not in pdir.parents or not pdir.exists() or not pdir.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    try:
+        secure_delete_project_dir(pdir, wipe_method)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete error: {e}")
+
+    # Clean DB references: subprojects pointing to this data_dir + projects table
+    try:
+        from backend.db.engine import get_conn
+        data_dir_rel = f"projects/{project_id}"
+        with get_conn() as conn:
+            conn.execute("DELETE FROM subprojects WHERE data_dir = ?", (data_dir_rel,))
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    except Exception:
+        pass  # DB tables may not exist for pure file-based projects
+
+    if AUDIT_STORE:
+        AUDIT_STORE.log_event(
+            "project_deleted_admin",
+            user_id=user.user_id, username=user.username,
+            detail=f"file_project={project_id} wipe={wipe_method}",
+            actor_id=user.user_id, actor_name=user.username,
+        )
+    app_log(f"Admin '{user.username}' deleted file-project '{project_id}' (wipe={wipe_method})")
+
+    return {"status": "ok"}
+
+
+# =====================================================================
+# ISOLATION DIAGNOSTIC & REPAIR TOOL
+# =====================================================================
+
+@app.get("/api/admin/isolation-check")
+def api_admin_isolation_check(request: Request) -> Any:
+    """Show COMPLETE database state for diagnosing project leaks.
+
+    Access: superadmin only.
+    Open in browser: /api/admin/isolation-check
+    """
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    from backend.db.engine import get_conn
+
+    result: Dict[str, Any] = {"current_user": user.user_id, "username": user.username}
+
+    with get_conn() as conn:
+        # 1. All users
+        users = conn.execute("SELECT id, username, display_name, is_admin, is_superadmin FROM users").fetchall()
+        result["users"] = [dict(u) for u in users]
+
+        # 2. All workspaces
+        workspaces = conn.execute("SELECT * FROM project_workspaces ORDER BY created_at").fetchall()
+        result["workspaces"] = [dict(w) for w in workspaces]
+
+        # 3. All memberships (the likely leak source)
+        members = conn.execute(
+            """SELECT m.*, w.name as ws_name, w.owner_id as ws_owner_id, u.username
+               FROM project_members m
+               JOIN project_workspaces w ON w.id = m.workspace_id
+               LEFT JOIN users u ON u.id = m.user_id
+               ORDER BY m.workspace_id, m.role"""
+        ).fetchall()
+        result["memberships"] = [dict(m) for m in members]
+
+        # 4. All invitations
+        invitations = conn.execute(
+            """SELECT i.*, w.name as ws_name
+               FROM project_invitations i
+               JOIN project_workspaces w ON w.id = i.workspace_id
+               ORDER BY i.created_at"""
+        ).fetchall()
+        result["invitations"] = [dict(i) for i in invitations]
+
+        # 5. All subprojects
+        subprojects = conn.execute(
+            """SELECT s.*, w.name as ws_name, w.owner_id as ws_owner_id
+               FROM subprojects s
+               JOIN project_workspaces w ON w.id = s.workspace_id
+               ORDER BY s.workspace_id, s.created_at"""
+        ).fetchall()
+        result["subprojects"] = [dict(s) for s in subprojects]
+
+        # 6. Identify GHOST memberships (the actual problem)
+        ghosts = conn.execute(
+            """SELECT m.workspace_id, m.user_id, m.role, m.status,
+                      w.name as ws_name, w.owner_id as ws_real_owner,
+                      u.username as member_username, uo.username as owner_username
+               FROM project_members m
+               JOIN project_workspaces w ON w.id = m.workspace_id
+               LEFT JOIN users u ON u.id = m.user_id
+               LEFT JOIN users uo ON uo.id = w.owner_id
+               LEFT JOIN project_invitations i
+                 ON i.workspace_id = m.workspace_id
+                 AND i.invitee_id = m.user_id
+                 AND i.status = 'accepted'
+               WHERE m.user_id != w.owner_id
+                 AND i.id IS NULL"""
+        ).fetchall()
+        result["ghost_memberships"] = [dict(g) for g in ghosts]
+
+        # 7. File-based projects without correct owner_id
+        bad_files = []
+        if PROJECTS_DIR.exists():
+            for pdir in sorted(PROJECTS_DIR.iterdir()):
+                if not pdir.is_dir() or pdir.name.startswith("_"):
+                    continue
+                meta_file = pdir / "project.json"
+                if meta_file.exists():
+                    try:
+                        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                        owner_id = meta.get("owner_id", "")
+                        if not owner_id:
+                            bad_files.append({
+                                "project_id": pdir.name,
+                                "name": meta.get("name", "?"),
+                                "owner_id": owner_id,
+                                "issue": "MISSING owner_id"
+                            })
+                    except Exception:
+                        pass
+        result["file_projects_without_owner"] = bad_files
+
+        # 8. Summary
+        result["summary"] = {
+            "total_users": len(users),
+            "total_workspaces": len(workspaces),
+            "total_memberships": len(members),
+            "total_invitations": len(invitations),
+            "total_subprojects": len(subprojects),
+            "ghost_memberships_count": len(ghosts),
+            "file_projects_without_owner": len(bad_files),
+        }
+
+    return result
+
+
+@app.post("/api/admin/fix-isolation")
+async def api_admin_fix_isolation(request: Request) -> Any:
+    """NUCLEAR FIX: Remove ALL ghost memberships and reset workspace state.
+
+    Access: superadmin only.
+    This will:
+    1. Delete ALL project_members rows where user != workspace owner
+       AND no accepted invitation exists
+    2. Delete the migration sentinel to allow fresh re-migration
+    3. Fix any file-based projects with missing owner_id
+    4. Ensure each user has exactly one owned workspace
+    """
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Superadmin required")
+
+    from backend.db.engine import get_conn
+
+    actions = []
+
+    with get_conn() as conn:
+        # 1. Delete ALL ghost memberships
+        ghosts = conn.execute(
+            """SELECT m.workspace_id, m.user_id, m.role
+               FROM project_members m
+               JOIN project_workspaces w ON w.id = m.workspace_id
+               LEFT JOIN project_invitations i
+                 ON i.workspace_id = m.workspace_id
+                 AND i.invitee_id = m.user_id
+                 AND i.status = 'accepted'
+               WHERE m.user_id != w.owner_id
+                 AND i.id IS NULL"""
+        ).fetchall()
+        for g in ghosts:
+            conn.execute(
+                "DELETE FROM project_members WHERE workspace_id = ? AND user_id = ?",
+                (g["workspace_id"], g["user_id"]),
+            )
+            actions.append(f"Removed ghost: user={g['user_id'][:8]} from ws={g['workspace_id'][:8]} (role={g['role']})")
+
+        # 2. Delete bad 'owner' entries
+        bad_owners = conn.execute(
+            """SELECT m.workspace_id, m.user_id
+               FROM project_members m
+               JOIN project_workspaces w ON w.id = m.workspace_id
+               WHERE m.role = 'owner' AND m.user_id != w.owner_id"""
+        ).fetchall()
+        for b in bad_owners:
+            conn.execute(
+                "DELETE FROM project_members WHERE workspace_id = ? AND user_id = ? AND role = 'owner'",
+                (b["workspace_id"], b["user_id"]),
+            )
+            actions.append(f"Removed bad owner: user={b['user_id'][:8]} from ws={b['workspace_id'][:8]}")
+
+        # 3. Ensure each workspace has its real owner in members
+        missing = conn.execute(
+            """SELECT w.id, w.owner_id FROM project_workspaces w
+               LEFT JOIN project_members m
+                 ON m.workspace_id = w.id AND m.user_id = w.owner_id AND m.role = 'owner'
+               WHERE m.user_id IS NULL"""
+        ).fetchall()
+        from datetime import datetime
+        now = datetime.now().isoformat()
+        for m in missing:
+            conn.execute(
+                """INSERT OR IGNORE INTO project_members
+                   (workspace_id, user_id, role, invited_by, invited_at, accepted_at, status)
+                   VALUES (?, ?, 'owner', ?, ?, ?, 'accepted')""",
+                (m["id"], m["owner_id"], m["owner_id"], now, now),
+            )
+            actions.append(f"Re-inserted owner: user={m['owner_id'][:8]} into ws={m['id'][:8]}")
+
+    # 4. Fix file-based projects with missing owner_id
+    if PROJECTS_DIR.exists():
+        for pdir in sorted(PROJECTS_DIR.iterdir()):
+            if not pdir.is_dir() or pdir.name.startswith("_"):
+                continue
+            meta_file = pdir / "project.json"
+            if meta_file.exists():
+                try:
+                    meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                    if not meta.get("owner_id"):
+                        meta["owner_id"] = user.user_id
+                        meta_file.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+                        actions.append(f"Set owner_id on project {pdir.name[:8]} → {user.user_id[:8]}")
+                except Exception:
+                    pass
+
+    # 5. Delete migration sentinel to allow re-migration
+    sentinel = PROJECTS_DIR / "_workspace_migration_done"
+    if sentinel.exists():
+        sentinel.unlink()
+        actions.append("Deleted migration sentinel — will re-migrate on next restart")
+
+    app_log(f"Admin '{user.username}' ran fix-isolation: {len(actions)} actions")
+    return {"status": "ok", "actions": actions, "total": len(actions)}
+
+
+@app.get("/api/projects")
+def api_list_projects(request: Request) -> Any:
+    multiuser = getattr(request.state, "multiuser", False)
+    user = getattr(request.state, "user", None)
+
+    projects: List[Dict[str, Any]] = []
+    for p in PROJECTS_DIR.glob("*"):
+        if p.is_dir():
+            pid = p.name
+            meta = read_project_meta(pid)
+
+            # In multi-user mode, filter by ownership/sharing
+            # (admins are filtered too — they should only see their own projects)
+            if multiuser and user:
+                owner = meta.get("owner_id", "")
+                shares = meta.get("shares") or []
+                shared_user_ids = [s.get("user_id") for s in shares if isinstance(s, dict)]
+                if owner != user.user_id and user.user_id not in shared_user_ids:
+                    continue
+
+            entry = {
+                "project_id": pid,
+                "created_at": meta.get("created_at"),
+                "name": meta.get("name"),
+                "updated_at": meta.get("updated_at"),
+            }
+            if multiuser:
+                entry["owner_id"] = meta.get("owner_id", "")
+                entry["shares"] = meta.get("shares", [])
+            projects.append(entry)
+    projects.sort(key=lambda x: x.get("updated_at") or x.get("created_at") or "", reverse=True)
+    return {"projects": projects}
+
+
+# --- Project sharing endpoints ---
+
+@app.post("/api/projects/{project_id}/share")
+async def api_share_project(project_id: str, request: Request) -> Any:
+    """Share a project with another user. Only owner or admin can share."""
+    user = getattr(request.state, "user", None)
+    meta = read_project_meta(project_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    multiuser = getattr(request.state, "multiuser", False)
+    if not multiuser:
+        raise HTTPException(status_code=400, detail="Sharing only available in multi-user mode")
+
+    # Check ownership
+    if user and not user.is_admin and meta.get("owner_id") != user.user_id:
+        raise HTTPException(status_code=403, detail="Only owner or admin can share")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request")
+
+    target_username = (body.get("username") or "").strip()
+    permission = body.get("permission", "read")  # "read" or "edit"
+    if permission not in ("read", "edit"):
+        raise HTTPException(status_code=400, detail="Permission must be 'read' or 'edit'")
+
+    target_user = USER_STORE.get_by_username(target_username)
+    if target_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    shares = meta.get("shares") or []
+    # Remove existing share for this user if any
+    shares = [s for s in shares if s.get("user_id") != target_user.user_id]
+    shares.append({
+        "user_id": target_user.user_id,
+        "username": target_user.username,
+        "permission": permission,
+        "granted_at": now_iso(),
+        "granted_by": user.user_id if user else "system",
+    })
+    meta["shares"] = shares
+    write_project_meta(project_id, meta)
+    return {"status": "ok", "shares": shares}
+
+
+@app.post("/api/projects/{project_id}/unshare")
+async def api_unshare_project(project_id: str, request: Request) -> Any:
+    """Remove sharing for a user."""
+    user = getattr(request.state, "user", None)
+    meta = read_project_meta(project_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    multiuser = getattr(request.state, "multiuser", False)
+    if not multiuser:
+        raise HTTPException(status_code=400, detail="Sharing only available in multi-user mode")
+
+    if user and not user.is_admin and meta.get("owner_id") != user.user_id:
+        raise HTTPException(status_code=403, detail="Only owner or admin can unshare")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request")
+
+    target_user_id = body.get("user_id", "").strip()
+    shares = meta.get("shares") or []
+    meta["shares"] = [s for s in shares if s.get("user_id") != target_user_id]
+    write_project_meta(project_id, meta)
+    return {"status": "ok", "shares": meta["shares"]}
+
+
+@app.get("/api/projects/{project_id}/meta")
+def api_project_meta(request: Request, project_id: str) -> Any:
+    # Ensure the project exists and check access rights
+    project_path(project_id)
+    _check_project_access(request, project_id)
+    meta = read_project_meta(project_id)
+    # Return only JSON-serializable basic fields
+    return {
+        "project_id": project_id,
+        "created_at": meta.get("created_at"),
+        "updated_at": meta.get("updated_at"),
+        "name": meta.get("name"),
+        "audio_file": meta.get("audio_file") or "",
+        "has_transcript": bool(meta.get("has_transcript")),
+        "has_diarized": bool(meta.get("has_diarized")),
+    }
+
+
+@app.get("/api/projects/{project_id}/waveform")
+def api_waveform(project_id: str) -> Any:
+    """Return cached waveform peaks.  Generate on first request if missing."""
+    pdir = project_path(project_id)
+    peaks_path = pdir / "peaks.json"
+    if not peaks_path.exists():
+        ok = _generate_waveform_peaks(project_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Nie można wygenerować fali dźwiękowej")
+    try:
+        data = json.loads(peaks_path.read_text(encoding="utf-8"))
+        return JSONResponse(data)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Błąd odczytu peaks.json")
+
+
+@app.get("/api/projects/{project_id}/download/{filename}")
+def api_download(project_id: str, filename: str) -> Any:
+    path = _safe_child_path(project_path(project_id), filename)
+    require_existing_file(path, "Plik nie istnieje.")
+    return FileResponse(str(path), filename=path.name)
+
+
+@app.post("/api/projects/{project_id}/save_transcript")
+def api_save_transcript(project_id: str, payload: Dict[str, Any]) -> Any:
+    text = str(payload.get("text") or "")
+    app_log(f"Project save transcript: project_id={project_id}, chars={len(text)}")
+    path = project_path(project_id) / "transcript.txt"
+    path.write_text(text, encoding="utf-8")
+    meta = read_project_meta(project_id)
+    meta["has_transcript"] = True
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    return {"ok": True}
+
+
+@app.post("/api/projects/{project_id}/save_diarized")
+def api_save_diarized(project_id: str, payload: Dict[str, Any]) -> Any:
+    text = str(payload.get("text") or "")
+    app_log(f"Project save diarized: project_id={project_id}, chars={len(text)}")
+    path = project_path(project_id) / "diarized.txt"
+    path.write_text(text, encoding="utf-8")
+    meta = read_project_meta(project_id)
+    meta["has_diarized"] = True
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    return {"ok": True}
+
+
+@app.get("/api/projects/{project_id}/transcript_segments")
+def api_get_transcript_segments(project_id: str) -> Any:
+    """Get transcription segments with confidence scores."""
+    pdir = project_path(project_id)
+    segments_file = pdir / "transcript_segments.json"
+
+    if not segments_file.exists():
+        return {"segments": []}
+
+    try:
+        data = json.loads(segments_file.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return {"segments": data}
+        return {"segments": []}
+    except Exception as e:
+        app_log(f"Error reading transcript segments: {e}")
+        return {"segments": []}
+
+
+@app.get("/api/projects/{project_id}/diarized_segments")
+def api_get_diarized_segments(project_id: str) -> Any:
+    """Get diarization segments with confidence scores."""
+    pdir = project_path(project_id)
+    segments_file = pdir / "diarized_segments.json"
+
+    if not segments_file.exists():
+        return {"segments": []}
+
+    try:
+        data = json.loads(segments_file.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return {"segments": data}
+        return {"segments": []}
+    except Exception as e:
+        app_log(f"Error reading diarized segments: {e}")
+        return {"segments": []}
+
+
+@app.get("/api/projects/{project_id}/translation/draft")
+def api_get_translation_draft(project_id: str) -> Any:
+    """Load translation draft for a project.
+
+    Returns:
+      {"draft": {...}, "detected_lang": "pl"|null} or {"draft": null}
+    """
+    # Ensure the project exists
+    project_path(project_id)
+    draft = read_translation_draft(project_id)
+    # Include Whisper's detected language (if transcription ran) for auto source-lang
+    detected_lang = None
+    try:
+        meta = read_project_meta(project_id)
+        detected_lang = meta.get("detected_lang") or None
+    except Exception:
+        pass
+    return {"draft": draft or None, "detected_lang": detected_lang}
+
+
+@app.post("/api/projects/{project_id}/translation/draft")
+async def api_save_translation_draft(project_id: str, request: Request) -> Any:
+    """Save translation draft for a project.
+
+    Expects JSON:
+      {"draft": {...}}  (or directly a dict draft)
+    """
+    payload = await request.json()
+    draft = payload.get("draft") if isinstance(payload, dict) else None
+    if draft is None:
+        draft = payload
+    if not isinstance(draft, dict):
+        raise HTTPException(status_code=400, detail="draft must be a JSON object (dict).")
+
+    # Ensure the project exists
+    project_path(project_id)
+    # Add/update timestamp (non-breaking if frontend also sets it)
+    if "saved_at" not in draft:
+        draft["saved_at"] = int(time.time() * 1000)
+
+    write_translation_draft(project_id, draft)
+
+    meta = read_project_meta(project_id)
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+
+    return {"ok": True}
+
+
+
+@app.post("/api/projects/{project_id}/speaker_map")
+def api_save_speaker_map(project_id: str, payload: Dict[str, Any]) -> Any:
+    mapping = payload.get("mapping") or {}
+    if not isinstance(mapping, dict):
+        raise HTTPException(status_code=400, detail="mapping musi być obiektem JSON (dict).")
+    # keep only str->str
+    clean: Dict[str, str] = {}
+    for k, v in mapping.items():
+        if isinstance(k, str) and isinstance(v, str) and k.strip():
+            clean[k.strip()] = v.strip()
+    meta = read_project_meta(project_id)
+    meta["speaker_map"] = clean
+    app_log(f"Project save speaker map: project_id={project_id}, entries={len(clean)}")
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    return {"ok": True, "count": len(clean)}
+
+
+# ---------- API: notes (two-level: global + per-block) ----------
+
+@app.post("/api/projects/{project_id}/notes")
+def api_save_notes(project_id: str, payload: Dict[str, Any]) -> Any:
+    """Save notes to project (global + per-block).
+    
+    Structure:
+    {
+      "global": "Global note for entire conversation...",
+      "blocks": {
+        "0": "Note for block 0",
+        "3": "Note for block 3"
+      }
+    }
+    """
+    notes = payload.get("notes") or payload
+    
+    if not isinstance(notes, dict):
+        raise HTTPException(status_code=400, detail="notes must be a JSON object (dict).")
+    
+    # Validate structure
+    global_note = notes.get("global", "")
+    blocks = notes.get("blocks", {})
+    
+    if not isinstance(global_note, str):
+        global_note = ""
+    
+    if not isinstance(blocks, dict):
+        blocks = {}
+    
+    # Clean blocks: only str->str with non-empty values
+    clean_blocks: Dict[str, str] = {}
+    for k, v in blocks.items():
+        if isinstance(k, str) and isinstance(v, str) and v.strip():
+            clean_blocks[k.strip()] = v.strip()
+    
+    clean_notes = {
+        "global": global_note.strip(),
+        "blocks": clean_blocks
+    }
+    
+    # Save to project.json
+    meta = read_project_meta(project_id)
+    meta["notes"] = clean_notes
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    
+    app_log(f"Project save notes: project_id={project_id}, global_len={len(global_note)}, blocks={len(clean_blocks)}")
+    
+    return {
+        "ok": True,
+        "notes": clean_notes,
+        "blocks_count": len(clean_blocks)
+    }
+
+
+@app.get("/api/projects/{project_id}/notes")
+def api_get_notes(project_id: str) -> Any:
+    """Get notes from project.
+    
+    Returns:
+    {
+      "global": "...",
+      "blocks": {"0": "...", "3": "..."}
+    }
+    """
+    meta = read_project_meta(project_id)
+    notes = meta.get("notes", {})
+    
+    # Ensure proper structure
+    if not isinstance(notes, dict):
+        notes = {"global": "", "blocks": {}}
+    
+    notes.setdefault("global", "")
+    notes.setdefault("blocks", {})
+    
+    return notes
+
+
+@app.get("/api/projects/{project_id}/export.aistate")
+@app.get("/api/projects/{project_id}/export.zip")
+def api_export_project(project_id: str) -> Any:
+    """Export the whole project folder as a portable package.
+
+    NOTE: .aistate is a ZIP container with a custom extension.
+    For encrypted projects, files are exported as-is (still encrypted).
+    An encryption_manifest.json is included to indicate encryption status.
+    """
+    pdir = (PROJECTS_DIR / project_id).resolve()
+    root = PROJECTS_DIR.resolve()
+    if root not in pdir.parents or not pdir.exists() or not pdir.is_dir():
+        raise HTTPException(status_code=404, detail="Nie ma takiego projektu.")
+
+    _skip_suffixes = {".tmp", ".bak", ".pyc"}
+    _skip_dirs = {"__pycache__", ".cache"}
+
+    # Check if project is encrypted and add manifest
+    meta = read_project_meta(project_id)
+    enc_meta = meta.get("encryption", {})
+    is_encrypted = bool(enc_meta and enc_meta.get("enabled"))
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        for fp in pdir.rglob("*"):
+            if not fp.is_file():
+                continue
+            if fp.suffix.lower() in _skip_suffixes:
+                continue
+            if any(part in _skip_dirs for part in fp.relative_to(pdir).parts):
+                continue
+            z.write(fp, arcname=str(fp.relative_to(pdir)))
+
+        # Add encryption manifest if project is encrypted
+        if is_encrypted:
+            manifest = {
+                "encrypted": True,
+                "method": enc_meta.get("method", "standard"),
+                "version": enc_meta.get("version", 1),
+            }
+            z.writestr("encryption_manifest.json", json.dumps(manifest, indent=2))
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="project-{project_id}.aistate"'},
+    )
+
+
+def _safe_extract_zip(zf: zipfile.ZipFile, dst: Path) -> None:
+    """Protect against Zip Slip (path traversal)."""
+    dst = dst.resolve()
+    for member in zf.infolist():
+        name = member.filename
+        # Disallow absolute paths
+        if name.startswith("/") or name.startswith("\\"):
+            raise HTTPException(status_code=400, detail="Nieprawidłowa paczka (ścieżka absolutna).")
+        target = (dst / name).resolve()
+        if dst != target and dst not in target.parents:
+            raise HTTPException(status_code=400, detail="Nieprawidłowa paczka (path traversal).")
+    zf.extractall(dst)
+
+
+def _pick_extracted_root(tmp_dir: Path) -> Path:
+    # If archive contains a single top-level folder, use it; otherwise use tmp_dir.
+    entries = [p for p in tmp_dir.iterdir() if p.name not in ("__MACOSX", ".DS_Store")]
+    if len(entries) == 1 and entries[0].is_dir():
+        return entries[0]
+    return tmp_dir
+
+@app.post("/api/projects/{project_id}/notes/transcription")
+def api_save_notes_transcription(project_id: str, request: Request) -> Any:
+    """Save transcription-specific notes to project (global + per-block).
+    
+    Structure:
+    {
+      "global": "Global note for entire transcription...",
+      "blocks": {
+        "0": "Note for block 0",
+        "3": "Note for block 3"
+      }
+    }
+    """
+    import asyncio
+    payload = asyncio.run(request.json())
+    notes = payload.get("notes") or payload
+    
+    if not isinstance(notes, dict):
+        raise HTTPException(status_code=400, detail="notes must be a JSON object (dict).")
+    
+    # Validate structure
+    global_note = notes.get("global", "")
+    blocks = notes.get("blocks", {})
+    
+    if not isinstance(global_note, str):
+        global_note = ""
+    
+    if not isinstance(blocks, dict):
+        blocks = {}
+    
+    # Clean blocks: only str->str with non-empty values
+    clean_blocks: Dict[str, str] = {}
+    for k, v in blocks.items():
+        if isinstance(k, str) and isinstance(v, str) and v.strip():
+            clean_blocks[k.strip()] = v.strip()
+    
+    clean_notes = {
+        "global": global_note.strip(),
+        "blocks": clean_blocks
+    }
+    
+    # Save to project.json under "notes_transcription"
+    meta = read_project_meta(project_id)
+    meta["notes_transcription"] = clean_notes
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    
+    app_log(f"Project save transcription notes: project_id={project_id}, global_len={len(global_note)}, blocks={len(clean_blocks)}")
+    
+    return {
+        "ok": True,
+        "notes": clean_notes,
+        "blocks_count": len(clean_blocks)
+    }
+
+
+@app.get("/api/projects/{project_id}/notes/transcription")
+def api_get_notes_transcription(project_id: str) -> Any:
+    """Get transcription notes from project.
+    
+    Returns:
+    {
+      "global": "...",
+      "blocks": {"0": "...", "3": "..."}
+    }
+    """
+    meta = read_project_meta(project_id)
+    notes = meta.get("notes_transcription", {})
+    
+    # Ensure proper structure
+    if not isinstance(notes, dict):
+        notes = {"global": "", "blocks": {}}
+    
+    notes.setdefault("global", "")
+    notes.setdefault("blocks", {})
+    
+    return notes
+
+
+@app.get("/api/projects/{project_id}/sound_events")
+def api_get_sound_events(project_id: str) -> Any:
+    """Get detected sound events from project.
+
+    Returns:
+    {
+      "events": [
+        {"start": 12.5, "end": 13.1, "type": "dog", "label": "Dog bark", "confidence": 0.87},
+        ...
+      ],
+      "model": "yamnet",
+      "detected_at": "2024-01-15 10:30:00"
+    }
+    """
+    proj_dir = project_path(project_id)
+    events_file = proj_dir / "sound_events.json"
+
+    if not events_file.exists():
+        return {"events": [], "model": None, "detected_at": None}
+
+    try:
+        data = json.loads(events_file.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            # Old format: just list of events
+            return {"events": data, "model": None, "detected_at": None}
+        return data
+    except Exception as e:
+        app_log(f"Error reading sound events: {e}")
+        return {"events": [], "model": None, "detected_at": None}
+
+
+@app.post("/api/projects/{project_id}/notes/diarization")
+def api_save_notes_diarization(project_id: str, request: Request) -> Any:
+    """Save diarization-specific notes to project (global + per-block).
+    
+    Same structure as transcription notes.
+    """
+    import asyncio
+    payload = asyncio.run(request.json())
+    notes = payload.get("notes") or payload
+    
+    if not isinstance(notes, dict):
+        raise HTTPException(status_code=400, detail="notes must be a JSON object (dict).")
+    
+    # Validate structure
+    global_note = notes.get("global", "")
+    blocks = notes.get("blocks", {})
+    
+    if not isinstance(global_note, str):
+        global_note = ""
+    
+    if not isinstance(blocks, dict):
+        blocks = {}
+    
+    # Clean blocks: only str->str with non-empty values
+    clean_blocks: Dict[str, str] = {}
+    for k, v in blocks.items():
+        if isinstance(k, str) and isinstance(v, str) and v.strip():
+            clean_blocks[k.strip()] = v.strip()
+    
+    clean_notes = {
+        "global": global_note.strip(),
+        "blocks": clean_blocks
+    }
+    
+    # Save to project.json under "notes_diarization"
+    meta = read_project_meta(project_id)
+    meta["notes_diarization"] = clean_notes
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    
+    app_log(f"Project save diarization notes: project_id={project_id}, global_len={len(global_note)}, blocks={len(clean_blocks)}")
+    
+    return {
+        "ok": True,
+        "notes": clean_notes,
+        "blocks_count": len(clean_blocks)
+    }
+
+
+@app.get("/api/projects/{project_id}/notes/diarization")
+def api_get_notes_diarization(project_id: str) -> Any:
+    """Get diarization notes from project.
+    
+    Returns:
+    {
+      "global": "...",
+      "blocks": {"0": "...", "3": "..."}
+    }
+    """
+    meta = read_project_meta(project_id)
+    notes = meta.get("notes_diarization", {})
+    
+    # Ensure proper structure
+    if not isinstance(notes, dict):
+        notes = {"global": "", "blocks": {}}
+    
+    notes.setdefault("global", "")
+    notes.setdefault("blocks", {})
+    
+    return notes
+
+
+# ---------- API: analysis notes (GSM / AML) — global + items with tags ----------
+
+_VALID_NOTE_TAGS = {"neutral", "legitimate", "suspicious", "monitoring", "custom1", "custom2", "custom3", "custom4"}
+
+
+def _clean_analysis_note_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Validate and clean a single analysis note item."""
+    if not isinstance(item, dict):
+        return None
+    note_id = item.get("id", "")
+    if not isinstance(note_id, str) or not note_id.strip():
+        return None
+    label = item.get("label", "")
+    if not isinstance(label, str):
+        label = ""
+    text = item.get("text", "")
+    if not isinstance(text, str):
+        text = ""
+    icon = item.get("icon", "")
+    if not isinstance(icon, str):
+        icon = ""
+    # Tags: only allow predefined values
+    raw_tags = item.get("tags", [])
+    if not isinstance(raw_tags, list):
+        raw_tags = []
+    tags = [t for t in raw_tags if isinstance(t, str) and t in _VALID_NOTE_TAGS]
+    # Ref: must be dict with type
+    ref = item.get("ref", {})
+    if not isinstance(ref, dict) or not ref.get("type"):
+        ref = {}
+    created = item.get("created", "")
+    if not isinstance(created, str):
+        created = now_iso()
+    modified = item.get("modified", "")
+    if not isinstance(modified, str):
+        modified = now_iso()
+    # At least text or tags must exist
+    if not text.strip() and not tags:
+        return None
+    return {
+        "id": note_id.strip(),
+        "label": label.strip(),
+        "icon": icon.strip(),
+        "text": text.strip(),
+        "tags": tags,
+        "ref": ref,
+        "created": created,
+        "modified": modified,
+    }
+
+
+def _save_analysis_notes(project_id: str, key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Common helper: save analysis notes (global + items) under given key."""
+    notes = payload.get("notes") or payload
+
+    if not isinstance(notes, dict):
+        raise HTTPException(status_code=400, detail="notes must be a JSON object (dict).")
+
+    global_note = notes.get("global", "")
+    if not isinstance(global_note, str):
+        global_note = ""
+
+    raw_items = notes.get("items", [])
+    if not isinstance(raw_items, list):
+        raw_items = []
+
+    clean_items = []
+    for it in raw_items:
+        cleaned = _clean_analysis_note_item(it)
+        if cleaned:
+            clean_items.append(cleaned)
+
+    clean_notes = {
+        "global": global_note.strip(),
+        "items": clean_items,
+    }
+
+    meta = read_project_meta(project_id)
+    meta[key] = clean_notes
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+
+    app_log(f"Project save {key}: project_id={project_id}, global_len={len(global_note)}, items={len(clean_items)}")
+
+    return {"ok": True, "notes": clean_notes, "items_count": len(clean_items)}
+
+
+def _get_analysis_notes(project_id: str, key: str) -> Dict[str, Any]:
+    """Common helper: get analysis notes under given key."""
+    meta = read_project_meta(project_id)
+    notes = meta.get(key, {})
+    if not isinstance(notes, dict):
+        notes = {"global": "", "items": []}
+    notes.setdefault("global", "")
+    notes.setdefault("items", [])
+    return notes
+
+
+@app.post("/api/projects/{project_id}/notes/gsm")
+def api_save_notes_gsm(project_id: str, request: Request) -> Any:
+    """Save GSM analysis notes (global + items with tags/refs)."""
+    import asyncio
+    payload = asyncio.run(request.json())
+    return _save_analysis_notes(project_id, "notes_gsm", payload)
+
+
+@app.get("/api/projects/{project_id}/notes/gsm")
+def api_get_notes_gsm(project_id: str) -> Any:
+    """Get GSM analysis notes."""
+    return _get_analysis_notes(project_id, "notes_gsm")
+
+
+@app.post("/api/projects/{project_id}/notes/aml")
+def api_save_notes_aml(project_id: str, request: Request) -> Any:
+    """Save AML analysis notes (global + items with tags/refs)."""
+    import asyncio
+    payload = asyncio.run(request.json())
+    return _save_analysis_notes(project_id, "notes_aml", payload)
+
+
+@app.get("/api/projects/{project_id}/notes/aml")
+def api_get_notes_aml(project_id: str) -> Any:
+    """Get AML analysis notes."""
+    return _get_analysis_notes(project_id, "notes_aml")
+
+
+@app.post("/api/projects/{project_id}/notes/tr")
+def api_save_notes_tr(project_id: str, request: Request) -> Any:
+    """Save transcription notes (global + items with tags/refs)."""
+    import asyncio
+    payload = asyncio.run(request.json())
+    return _save_analysis_notes(project_id, "notes_tr", payload)
+
+
+@app.get("/api/projects/{project_id}/notes/tr")
+def api_get_notes_tr(project_id: str) -> Any:
+    """Get transcription notes."""
+    return _get_analysis_notes(project_id, "notes_tr")
+
+
+@app.post("/api/projects/{project_id}/notes/di")
+def api_save_notes_di(project_id: str, request: Request) -> Any:
+    """Save diarization notes (global + items with tags/refs)."""
+    import asyncio
+    payload = asyncio.run(request.json())
+    return _save_analysis_notes(project_id, "notes_di", payload)
+
+
+@app.get("/api/projects/{project_id}/notes/di")
+def api_get_notes_di(project_id: str) -> Any:
+    """Get diarization notes."""
+    return _get_analysis_notes(project_id, "notes_di")
+
+
+# Dodaj endpoint do zapisu transkrypcji (text/plain)
+# Ten endpoint pozwala na wysyłanie zwykłego tekstu zamiast JSON
+@app.post("/api/projects/{project_id}/save/transcript")
+async def api_save_transcript_text(project_id: str, request: Request) -> Any:
+    """Save transcript text (accepts text/plain).
+    
+    This is an alternative to /api/projects/{project_id}/save_transcript
+    that accepts plain text instead of JSON payload.
+    """
+    text = (await request.body()).decode("utf-8")
+    app_log(f"Project save transcript (text): project_id={project_id}, chars={len(text)}")
+    path = project_path(project_id) / "transcript.txt"
+    path.write_text(text, encoding="utf-8")
+    meta = read_project_meta(project_id)
+    meta["has_transcript"] = True
+    meta["updated_at"] = now_iso()
+    write_project_meta(project_id, meta)
+    return {"ok": True}
+
+
+# Dodaj endpoint do generowania raportów specyficznych dla transkrypcji
+@app.get("/api/projects/{project_id}/report/transcription")
+def api_generate_transcription_report(project_id: str, format: str = "pdf", include_logs: int = 0, include_notes: int = 0) -> Any:
+    """Generate report specifically for transcription (without diarization data).
+
+    Similar to /api/projects/{project_id}/report but focuses only on transcription.
+    """
+    project_path(project_id)  # ensure exists
+    fmt = (format or "").lower()
+    if fmt not in ("txt", "html", "pdf", "doc"):
+        raise HTTPException(status_code=400, detail="format must be txt|html|pdf|doc")
+
+    pdir = project_path(project_id)
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    out_name = f"transcription_report_{ts}.{fmt}"
+    out_path = pdir / out_name
+
+    app_log(f"Transcription report requested: project_id={project_id}, format={fmt}, include_logs={bool(include_logs)}, include_notes={bool(include_notes)}")
+
+    # Collect data similar to _collect_report_data but transcription-focused
+    data = _collect_transcription_report_data(project_id, export_formats=[fmt], include_logs=bool(include_logs), include_notes=bool(include_notes))
+
+    if fmt == "txt":
+        generate_txt_report(data, logs=bool(include_logs), output_path=str(out_path))
+        return FileResponse(str(out_path), filename=out_name)
+    if fmt == "html":
+        generate_html_report(data, logs=bool(include_logs), output_path=str(out_path))
+        return FileResponse(str(out_path), filename=out_name)
+    if fmt == "doc":
+        # Word-compatible HTML saved with .doc extension (opens in Word/LibreOffice).
+        generate_html_report(data, logs=bool(include_logs), output_path=str(out_path))
+        try:
+            html = out_path.read_text(encoding="utf-8", errors="ignore")
+            if 'xmlns:w="urn:schemas-microsoft-com:office:word"' not in html:
+                html = html.replace(
+                    '<html',
+                    '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"',
+                    1,
+                )
+                out_path.write_text(html, encoding="utf-8")
+        except Exception:
+            pass
+        return FileResponse(str(out_path), filename=out_name)
+    generate_pdf_report(data, logs=bool(include_logs), output_path=str(out_path))
+
+    _cleanup_old_reports(pdir, "transcription_report_")
+    return FileResponse(str(out_path), filename=out_name)
+
+
+def _gather_report_notes(meta: Dict[str, Any], notes_key: str) -> Dict[str, Any] | None:
+    """Read notes from project meta for inclusion in reports.
+
+    Merges old format (notes_transcription/notes_diarization with {global, blocks})
+    and new analyst format (notes_tr/notes_di with {global, items}).
+
+    Returns {"global": str, "blocks": {idx_str: str}} or None.
+    """
+    notes = meta.get(notes_key) or meta.get("notes") or {}
+    if not isinstance(notes, dict):
+        notes = {}
+    global_note = str(notes.get("global") or "").strip()
+    blocks_raw = notes.get("blocks") or {}
+    blocks: Dict[str, str] = {}
+    if isinstance(blocks_raw, dict):
+        for k, v in blocks_raw.items():
+            txt = str(v or "").strip()
+            if txt:
+                blocks[str(k)] = txt
+
+    # Also check new analyst notes (notes_tr / notes_di)
+    analyst_key_map = {
+        "notes_transcription": "notes_tr",
+        "notes_diarization": "notes_di",
+    }
+    analyst_key = analyst_key_map.get(notes_key, "")
+    if analyst_key:
+        analyst = meta.get(analyst_key) or {}
+        if isinstance(analyst, dict):
+            ag = str(analyst.get("global") or "").strip()
+            if ag and not global_note:
+                global_note = ag
+            elif ag and global_note:
+                global_note = global_note + "\n\n" + ag
+            # Convert analyst items to blocks format
+            for item in (analyst.get("items") or []):
+                if not isinstance(item, dict):
+                    continue
+                ref = item.get("ref") or {}
+                block_idx = ref.get("block_idx")
+                if block_idx is not None:
+                    txt = str(item.get("text") or "").strip()
+                    tags = item.get("tags") or []
+                    if tags:
+                        txt = "[" + ", ".join(tags) + "] " + txt
+                    if txt:
+                        key = str(block_idx)
+                        if key in blocks:
+                            blocks[key] = blocks[key] + " | " + txt
+                        else:
+                            blocks[key] = txt
+
+    if not global_note and not blocks:
+        return None
+    return {"global": global_note, "blocks": blocks}
+
+
+def _collect_transcription_report_data(project_id: str, export_formats: List[str], include_logs: bool, include_notes: bool = False) -> Dict[str, Any]:
+    """Collect data for transcription-specific report."""
+    meta = read_project_meta(project_id)
+    pdir = project_path(project_id)
+
+    audio_file = meta.get("audio_file") or ""
+    audio_duration = ""
+    audio_specs = ""
+    if audio_file:
+        ap = pdir / audio_file
+        if ap.exists():
+            audio_duration, audio_specs = _probe_audio_basic(ap)
+
+    transcript_lines: List[str] = []
+    if (pdir / "transcript.txt").exists():
+        transcript_lines = [ln.rstrip() for ln in (pdir / "transcript.txt").read_text(encoding="utf-8", errors="ignore").splitlines() if ln.strip()]
+
+    s = load_settings()
+    logs_text = ""
+    if include_logs:
+        parts = []
+        for t in TASKS.list_tasks():
+            if t.project_id == project_id and t.kind == "tr":
+                parts.append(f"=== TASK {t.task_id} (transcription) ===")
+                parts.extend(t.logs[-400:])
+                parts.append("")
+        logs_text = "\n".join(parts).strip()
+
+    # Gather notes if requested
+    notes_data = None
+    if include_notes:
+        notes_data = _gather_report_notes(meta, "notes_transcription")
+
+    data = {
+        "program_name": APP_NAME,
+        "program_version": APP_VERSION,
+        "author_email": AUTHOR_EMAIL,
+        "processed_at": now_iso(),
+        "audio_file": audio_file,
+        "audio_duration": audio_duration,
+        "audio_specs": audio_specs,
+        "whisper_model": getattr(s, "whisper_model", "") or "",
+        "language": meta.get("language", "auto"),
+        "segments_count": len(transcript_lines),
+        "transcript": transcript_lines,
+        "raw_transcript": transcript_lines,
+        "export_formats": export_formats,
+        "logs": logs_text,
+        "ui_language": "pl",
+        "section_title": "Transkrypcja",
+        "notes": notes_data,
+    }
+    return data
+
+@app.post("/api/projects/import")
+async def api_import_project(request: Request, file: UploadFile = File(...)) -> Any:
+    fname = (file.filename or "").lower()
+    if not fname.endswith(".aistate"):
+        raise HTTPException(status_code=400, detail="Plik musi mieć rozszerzenie .aistate")
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="aistate_import_"))
+    tmp_file = tmp_dir / "upload.aistate"
+    try:
+        # Stream upload to disk (avoid keeping whole audio in RAM)
+        with tmp_file.open("wb") as out:
+            shutil.copyfileobj(file.file, out)
+
+        extract_dir = tmp_dir / "extracted"
+        extract_dir.mkdir(parents=True, exist_ok=True)
+
+        with zipfile.ZipFile(str(tmp_file), "r") as zf:
+            _safe_extract_zip(zf, extract_dir)
+
+        extracted_root = _pick_extracted_root(extract_dir)
+
+        # Determine preferred project id (if present and unused)
+        preferred_id = None
+        pj = extracted_root / "project.json"
+        if pj.exists():
+            try:
+                meta = json.loads(pj.read_text(encoding="utf-8"))
+                if isinstance(meta, dict) and isinstance(meta.get("project_id"), str):
+                    preferred_id = meta.get("project_id").strip() or None
+            except Exception:
+                preferred_id = None
+
+        final_id = preferred_id
+        if not final_id or (PROJECTS_DIR / final_id).exists():
+            final_id = uuid.uuid4().hex
+
+        dest = (PROJECTS_DIR / final_id).resolve()
+        root = PROJECTS_DIR.resolve()
+        if root not in dest.parents:
+            raise HTTPException(status_code=400, detail="Nieprawidłowy docelowy katalog projektu.")
+        if dest.exists():
+            raise HTTPException(status_code=409, detail="Projekt o takim ID już istnieje.")
+
+        shutil.copytree(extracted_root, dest)
+
+        # Normalize project.json and set owner to current user
+        user = getattr(request.state, "user", None)
+        multiuser = getattr(request.state, "multiuser", False)
+        uid = user.user_id if (user and multiuser) else ""
+        if not uid:
+            from backend.db.engine import get_default_user_id
+            uid = get_default_user_id()
+
+        meta = read_project_meta(final_id)
+        meta["project_id"] = final_id
+        meta["owner_id"] = uid
+        meta["created_at"] = meta.get("created_at") or now_iso()
+        meta["updated_at"] = now_iso()
+
+        # Handle encryption: if imported project was encrypted, re-encrypt per current policy
+        # Check for encryption_manifest.json in the archive
+        imported_enc = meta.get("encryption", {})
+        manifest_path = dest / "encryption_manifest.json"
+        if manifest_path.exists():
+            try:
+                manifest_path.unlink()  # remove manifest from project dir (metadata only)
+            except Exception:
+                pass
+
+        # Re-encrypt per current admin policy if encryption is enabled
+        s = load_settings()
+        if getattr(s, "encryption_enabled", False):
+            try:
+                from backend.encryption.project_io import get_managers
+                _, pkm = get_managers()
+                method = getattr(s, "encryption_method", "standard")
+                _, enc_meta = pkm.create_project_key(final_id, method)
+                meta["encryption"] = enc_meta
+            except Exception:
+                pass  # encryption not initialized — skip
+        elif "encryption" in meta:
+            # Admin disabled encryption — remove encryption from imported project
+            del meta["encryption"]
+
+        write_project_meta(final_id, meta)
+
+        # Create workspace subproject in a PRIVATE workspace (not shared)
+        try:
+            ws_list = WORKSPACE_STORE.list_workspaces(uid, status="active")
+            owned = [w for w in ws_list if w.get("owner_id") == uid]
+            private = [w for w in owned if w.get("member_count", 99) <= 1]
+            ws = (private[0] if private
+                  else WORKSPACE_STORE.create_workspace(owner_id=uid, name="Moje projekty"))
+            project_name = meta.get("name") or final_id[:8]
+            WORKSPACE_STORE.create_subproject(
+                workspace_id=ws["id"],
+                name=project_name,
+                subproject_type="analysis",
+                data_dir=f"projects/{final_id}",
+                created_by=uid,
+            )
+        except Exception:
+            pass  # best-effort — file project was already created
+
+        return {"ok": True, "project_id": final_id}
+
+    except HTTPException:
+        raise
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Nieprawidłowa paczka .aistate (uszkodzony ZIP).")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Błąd importu: {e}")
+    finally:
+        try:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
+@app.delete("/api/projects/{project_id}")
+def api_delete_project(project_id: str, wipe_method: str = "none") -> Any:
+    pdir = (PROJECTS_DIR / project_id).resolve()
+    root = PROJECTS_DIR.resolve()
+    if root not in pdir.parents or not pdir.exists() or not pdir.is_dir():
+        raise HTTPException(status_code=404, detail="Nie ma takiego projektu.")
+
+    try:
+        secure_delete_project_dir(pdir, wipe_method)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Błąd usuwania projektu: {e}")
+
+    return {"ok": True}
+
+
+
+
+# ---------- API: reports ----------
+
+def _fmt_duration_hhmmss(dur_s: float) -> str:
+    """Format seconds as HH:MM:SS."""
+    h = int(dur_s // 3600)
+    m = int((dur_s % 3600) // 60)
+    s = int(dur_s % 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def _probe_audio_basic(path: Path) -> tuple[str, str]:
+    """Best-effort: duration/specs for audio files. Tries soundfile, then wave, then ffprobe."""
+    size_b = 0
+    try:
+        size_b = path.stat().st_size
+    except Exception:
+        pass
+    size_mb = f"{int(round(size_b / (1024*1024)))}MB" if size_b else ""
+
+    duration = ""
+    specs = size_mb
+
+    # Try soundfile first (supports WAV, FLAC, OGG, etc.)
+    try:
+        import soundfile as sf
+        info = sf.info(str(path))
+        dur_s = info.duration
+        if dur_s > 0:
+            duration = _fmt_duration_hhmmss(dur_s)
+            specs2 = f"{info.channels}ch {info.samplerate}Hz"
+            specs = (specs2 + ((" • " + size_mb) if size_mb else "")).strip(" •")
+            return duration, specs
+    except Exception:
+        pass
+
+    # Fallback: wave stdlib (WAV only)
+    try:
+        import wave
+        with wave.open(str(path), "rb") as wf:
+            fr = wf.getframerate()
+            n = wf.getnframes()
+            ch = wf.getnchannels()
+            dur_s = (n / float(fr)) if fr else 0.0
+            duration = _fmt_duration_hhmmss(dur_s)
+            specs2 = f"{ch}ch {fr}Hz"
+            specs = (specs2 + ((" • " + size_mb) if size_mb else "")).strip(" •")
+            return duration, specs
+    except Exception:
+        pass
+
+    # Fallback: ffprobe for MP3 and other formats
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration,channels,sample_rate",
+             "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts = result.stdout.strip().split(",")
+            if parts:
+                dur_s = float(parts[0])
+                duration = _fmt_duration_hhmmss(dur_s)
+    except Exception:
+        pass
+
+    return duration, specs
+
+
+WAVEFORM_NUM_PEAKS = 800  # Match canvas width in seg_tools.js
+
+
+def _generate_waveform_peaks(project_id: str) -> bool:
+    """Generate waveform peak amplitudes from project audio and save as peaks.json.
+
+    Uses soundfile (fast C library) for reading.  Falls back to wave stdlib.
+    Returns True if peaks.json was written successfully.
+    """
+    pdir = project_path(project_id)
+    meta = read_project_meta(project_id)
+    audio_file = meta.get("audio_file") or ""
+    if not audio_file:
+        return False
+    audio_path = pdir / audio_file
+    if not audio_path.exists():
+        return False
+
+    peaks_path = pdir / "peaks.json"
+    num_peaks = WAVEFORM_NUM_PEAKS
+
+    try:
+        # Try soundfile first (handles WAV, FLAC, OGG, etc.)
+        import soundfile as sf
+        import numpy as np
+        data, sr = sf.read(str(audio_path), dtype="float32", always_2d=True)
+        # Mix to mono
+        mono = np.mean(data, axis=1) if data.shape[1] > 1 else data[:, 0]
+        total = len(mono)
+        block = max(1, total // num_peaks)
+        peaks = []
+        for i in range(num_peaks):
+            start = i * block
+            end = min(start + block, total)
+            if start >= total:
+                peaks.append(0.0)
+            else:
+                peaks.append(float(np.max(np.abs(mono[start:end]))))
+        duration = total / sr if sr else 0.0
+    except Exception:
+        try:
+            # Fallback: stdlib wave (WAV only)
+            import wave
+            import struct
+            with wave.open(str(audio_path), "rb") as wf:
+                sr = wf.getframerate()
+                n = wf.getnframes()
+                ch = wf.getnchannels()
+                sw = wf.getsampwidth()
+                raw = wf.readframes(n)
+
+            # Decode to float samples
+            if sw == 2:
+                fmt = "<" + "h" * (n * ch)
+                samples = struct.unpack(fmt, raw)
+                scale = 32768.0
+            elif sw == 1:
+                fmt = "B" * (n * ch)
+                samples = struct.unpack(fmt, raw)
+                samples = [s - 128 for s in samples]
+                scale = 128.0
+            else:
+                return False
+
+            # Mix to mono
+            if ch > 1:
+                mono = [sum(samples[i:i + ch]) / ch for i in range(0, len(samples), ch)]
+            else:
+                mono = list(samples)
+
+            total = len(mono)
+            block = max(1, total // num_peaks)
+            peaks = []
+            for i in range(num_peaks):
+                start = i * block
+                end = min(start + block, total)
+                if start >= total:
+                    peaks.append(0.0)
+                else:
+                    mx = max(abs(mono[j]) for j in range(start, end))
+                    peaks.append(mx / scale)
+            duration = total / sr if sr else 0.0
+        except Exception:
+            return False
+
+    # Normalize peaks to 0..1
+    max_peak = max(peaks) if peaks else 1.0
+    if max_peak > 0:
+        peaks = [round(p / max_peak, 4) for p in peaks]
+
+    payload = {"peaks": peaks, "duration": round(duration, 3), "num_peaks": num_peaks}
+    try:
+        tmp = peaks_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        tmp.replace(peaks_path)
+    except Exception:
+        return False
+
+    return True
+
+
+def _collect_report_data(project_id: str, export_formats: List[str], include_logs: bool, include_notes: bool = False) -> Dict[str, Any]:
+    meta = read_project_meta(project_id)
+    pdir = project_path(project_id)
+
+    audio_file = meta.get("audio_file") or ""
+    audio_duration = ""
+    audio_specs = ""
+    if audio_file:
+        ap = pdir / audio_file
+        if ap.exists():
+            audio_duration, audio_specs = _probe_audio_basic(ap)
+
+    transcript_lines: List[str] = []
+    diarized_lines: List[str] = []
+    if (pdir / "transcript.txt").exists():
+        transcript_lines = [ln.rstrip() for ln in (pdir / "transcript.txt").read_text(encoding="utf-8", errors="ignore").splitlines() if ln.strip()]
+    if (pdir / "diarized.txt").exists():
+        diarized_lines = [ln.rstrip() for ln in (pdir / "diarized.txt").read_text(encoding="utf-8", errors="ignore").splitlines() if ln.strip()]
+
+    s = load_settings()
+    logs_text = ""
+    if include_logs:
+        parts = []
+        for t in TASKS.list_tasks():
+            if t.project_id == project_id:
+                parts.append(f"=== TASK {t.task_id} ({t.kind}) ===")
+                parts.extend(t.logs[-400:])
+                parts.append("")
+        logs_text = "\n".join(parts).strip()
+
+    # Gather notes if requested
+    notes_data = None
+    if include_notes:
+        notes_data = _gather_report_notes(meta, "notes_diarization")
+
+    data = {
+        "program_name": APP_NAME,
+        "program_version": APP_VERSION,
+        "author_email": AUTHOR_EMAIL,
+        "processed_at": now_iso(),
+        "audio_file": audio_file,
+        "audio_duration": audio_duration,
+        "audio_specs": audio_specs,
+        "whisper_model": getattr(s, "whisper_model", "") or "",
+        "language": "auto",
+        "pyannote_model": "pyannote.audio",
+        "speakers_count": str(len(meta.get("speaker_map") or {})) if meta.get("speaker_map") else "",
+        "segments_count": len(diarized_lines) if diarized_lines else len(transcript_lines),
+        "speaker_times": {},
+        "audio_duration": audio_duration,
+        "transcript": diarized_lines or transcript_lines,
+        "raw_transcript": transcript_lines,
+        "non_verbal": [],
+        "export_formats": export_formats,
+        "logs": logs_text,
+        "ui_language": "pl",
+        "theme": "",
+        "speaker_name_map": (meta.get("speaker_map") or {}),
+        "section_title": "Transkrypcja / Diaryzacja",
+        "notes": notes_data,
+    }
+    return data
+
+
+def _cleanup_old_reports(pdir: Path, prefix: str = "report_", keep: int = 10) -> None:
+    """Remove old report files, keeping the *keep* most recent per prefix."""
+    try:
+        candidates = sorted(
+            [f for f in pdir.iterdir() if f.is_file() and f.name.startswith(prefix)],
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+        for old in candidates[keep:]:
+            try:
+                old.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+@app.get("/api/projects/{project_id}/report")
+def api_generate_report(project_id: str, format: str = "pdf", include_logs: int = 0, include_notes: int = 0) -> Any:
+    project_path(project_id)  # ensure exists
+    fmt = (format or "").lower()
+    if fmt not in ("txt", "html", "pdf", "doc"):
+        raise HTTPException(status_code=400, detail="format must be txt|html|pdf|doc")
+
+    pdir = project_path(project_id)
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    out_name = f"report_{ts}.{fmt}"
+    out_path = pdir / out_name
+
+    app_log(f"Report requested: project_id={project_id}, format={fmt}, include_logs={bool(include_logs)}, include_notes={bool(include_notes)}")
+
+    data = _collect_report_data(project_id, export_formats=[fmt], include_logs=bool(include_logs), include_notes=bool(include_notes))
+
+    if fmt == "txt":
+        generate_txt_report(data, logs=bool(include_logs), output_path=str(out_path))
+        return FileResponse(str(out_path), filename=out_name)
+    if fmt == "html":
+        generate_html_report(data, logs=bool(include_logs), output_path=str(out_path))
+        return FileResponse(str(out_path), filename=out_name)
+    if fmt == "doc":
+        # Word-compatible: HTML saved as .doc (lightweight, opens in Word/LibreOffice).
+        generate_html_report(data, logs=bool(include_logs), output_path=str(out_path))
+        try:
+            html = out_path.read_text(encoding="utf-8", errors="ignore")
+            if 'xmlns:w="urn:schemas-microsoft-com:office:word"' not in html and '<html' in html:
+                html = html.replace(
+                    '<html',
+                    '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"',
+                    1,
+                )
+                out_path.write_text(html, encoding="utf-8")
+        except Exception:
+            pass
+        return FileResponse(str(out_path), filename=out_name)
+    generate_pdf_report(data, logs=bool(include_logs), output_path=str(out_path))
+
+    # Trim old reports (keep last 10 per prefix)
+    _cleanup_old_reports(pdir, "report_")
+    return FileResponse(str(out_path), filename=out_name)
+
+
+# Tasks endpoints moved to webapp/routers/tasks.py
+
+
+
+# ---------- API: prompts (system + user) ----------
+
+@app.get("/api/prompts/list")
+async def api_prompts_list() -> Any:
+    """Return all prompts (system + user)."""
+    return PROMPTS.list_all()
+
+
+@app.post("/api/prompts/create")
+async def api_prompts_create(data: Dict[str, Any] = Body(...)) -> Any:
+    """Create a new user prompt (stored in projects/_global/prompts)."""
+    try:
+        pid = PROMPTS.create_user_prompt(data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "created", "id": pid}
+
+
+@app.put("/api/prompts/{prompt_id}")
+async def api_prompts_update(prompt_id: str, updates: Dict[str, Any] = Body(...)) -> Any:
+    """Update an existing user prompt."""
+    try:
+        PROMPTS.update_user_prompt(prompt_id, updates)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Prompt not found.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "updated", "id": prompt_id}
+
+
+@app.delete("/api/prompts/{prompt_id}")
+async def api_prompts_delete(prompt_id: str) -> Any:
+    """Delete a user prompt."""
+    try:
+        PROMPTS.delete_user_prompt(prompt_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Prompt not found.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "deleted", "id": prompt_id}
+
+
+@app.get("/api/prompts/{prompt_id}/export")
+async def api_prompts_export(prompt_id: str) -> Any:
+    """Export a user prompt as a JSON file."""
+    try:
+        fp = PROMPTS.export_user_prompt_path(prompt_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Prompt not found.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return FileResponse(str(fp), media_type="application/json", filename=fp.name)
+
+
+@app.post("/api/prompts/import")
+async def api_prompts_import(file: UploadFile = File(...)) -> Any:
+    """Import a prompt from a JSON file (creates a new user prompt)."""
+    try:
+        raw = await file.read()
+        obj = json.loads(raw.decode("utf-8", errors="strict"))
+        if not isinstance(obj, dict):
+            raise ValueError("JSON must be an object.")
+        pid = PROMPTS.import_user_prompt(obj)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON file.")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File is not valid UTF-8.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "imported", "id": pid}
+
+
+
+# ---------- API: documents (project-level attachments) ----------
+
+def _documents_dir(project_id: str) -> Path:
+    pdir = project_path(project_id)
+    ddir = pdir / "documents"
+    ddir.mkdir(parents=True, exist_ok=True)
+    (ddir / ".cache").mkdir(parents=True, exist_ok=True)
+    return ddir
+
+
+def _doc_cache_paths(doc_path: Path) -> tuple[Path, Path]:
+    cache_dir = doc_path.parent / ".cache"
+    cache_txt = cache_dir / f"{doc_path.name}.txt"
+    cache_meta = cache_dir / f"{doc_path.name}.meta.json"
+    return cache_txt, cache_meta
+
+
+async def _extract_and_cache_document(doc_path: Path) -> Dict[str, Any]:
+    """Extract text and store cache files. Returns extraction summary."""
+    cache_txt, cache_meta = _doc_cache_paths(doc_path)
+
+    # cache hit if cache newer than doc and non-empty
+    if cache_txt.exists() and cache_txt.stat().st_mtime >= doc_path.stat().st_mtime and cache_txt.stat().st_size > 0:
+        try:
+            meta = json.loads(cache_meta.read_text(encoding="utf-8")) if cache_meta.exists() else {}
+        except Exception:
+            meta = {}
+        return {
+            "cached": True,
+            "cache_txt": str(cache_txt.name),
+            "chars": int(cache_txt.stat().st_size),
+            "metadata": meta,
+        }
+
+    # do extraction in threadpool (can be heavy)
+    try:
+        extracted = await run_in_threadpool(extract_text, doc_path)
+        cache_txt.write_text(extracted.text or "", encoding="utf-8")
+        cache_meta.write_text(json.dumps(extracted.metadata or {}, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {
+            "cached": False,
+            "cache_txt": str(cache_txt.name),
+            "chars": len(extracted.text or ""),
+            "metadata": extracted.metadata or {},
+        }
+    except DocumentProcessingError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Document processing failed: {e}")
+
+
+@app.post("/api/documents/upload")
+async def api_documents_upload(project_id: str = Form(""), file: UploadFile = File(...)) -> Any:
+    """Upload a document to a project and cache extracted text."""
+    project_id = require_existing_project(project_id)
+    ddir = _documents_dir(project_id)
+
+    original_name = safe_filename(file.filename or "document")
+    ext = Path(original_name).suffix.lower()
+    if ext and ext not in SUPPORTED_EXTS:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {ext}")
+
+    dst = ddir / original_name
+    raw = await file.read()
+    dst.write_bytes(raw)
+    app_log(f"Document upload: project_id={project_id}, file='{dst.name}', bytes={len(raw)}")
+
+    extraction = await _extract_and_cache_document(dst)
+    return {
+        "status": "uploaded",
+        "project_id": project_id,
+        "filename": dst.name,
+        "size": dst.stat().st_size,
+        "type": ext.lstrip("."),
+        "extraction": extraction,
+    }
+
+
+@app.get("/api/documents/{project_id}/list")
+async def api_documents_list(project_id: str) -> Any:
+    """List documents in a project."""
+    ddir = _documents_dir(project_id)
+    out: List[Dict[str, Any]] = []
+    for fp in sorted(ddir.iterdir()):
+        if fp.is_dir():
+            continue
+        if fp.name.startswith("."):
+            continue
+        cache_txt, _ = _doc_cache_paths(fp)
+        out.append(
+            {
+                "filename": fp.name,
+                "size": fp.stat().st_size,
+                "type": fp.suffix.lower().lstrip("."),
+                "cached": cache_txt.exists() and cache_txt.stat().st_size > 0,
+                "download_url": f"/api/documents/{project_id}/download/{fp.name}",
+            }
+        )
+    return out
+
+
+@app.get("/api/documents/{project_id}/download/{filename}")
+async def api_documents_download(project_id: str, filename: str) -> Any:
+    ddir = _documents_dir(project_id)
+    fname = safe_filename(filename)
+    path = (ddir / fname).resolve()
+    # ensure inside documents dir
+    if ddir.resolve() not in path.parents:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    require_existing_file(path, "Plik nie istnieje.")
+    return FileResponse(str(path), filename=fname)
+
+
+@app.delete("/api/documents/{project_id}/{filename}")
+async def api_documents_delete(project_id: str, filename: str) -> Any:
+    ddir = _documents_dir(project_id)
+    fname = safe_filename(filename)
+    path = (ddir / fname).resolve()
+    if ddir.resolve() not in path.parents:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # delete caches
+    cache_txt, cache_meta = _doc_cache_paths(path)
+    cache_txt.unlink(missing_ok=True)  # type: ignore[arg-type]
+    cache_meta.unlink(missing_ok=True)  # type: ignore[arg-type]
+    path.unlink(missing_ok=True)  # type: ignore[arg-type]
+    app_log(f"Document delete: project_id={project_id}, file='{fname}'")
+    return {"status": "deleted", "filename": fname}
+
+
+
+# ---------- API: Ollama (status/models) ----------
+
+@app.get("/api/ollama/status")
+async def api_ollama_status() -> Any:
+    st = await OLLAMA.status()
+    d = st.to_dict()
+    d["url"] = getattr(OLLAMA, "base_url", "http://127.0.0.1:11434")
+    d["models_count"] = len(d.get("models") or [])
+    return d
+
+
+@app.get("/api/ollama/models")
+async def api_ollama_models() -> Any:
+    """Return available Ollama models (best-effort raw list)."""
+    try:
+        models = await OLLAMA.list_models()
+        return models
+    except OllamaError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
+
+@app.post("/api/ollama/install")
+async def api_ollama_install(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Install (pull) an Ollama model in the background so the UI can offer an 'Install' button."""
+    model = str((payload or {}).get("model") or "").strip()
+    scope = str((payload or {}).get("scope") or "unknown").strip() or "unknown"
+    if not model:
+        raise HTTPException(status_code=400, detail="model required")
+
+    st = await OLLAMA.status()
+    if st.status != "online":
+        raise HTTPException(status_code=503, detail="Ollama offline. Start: ollama serve")
+
+    # If already installed, return ok.
+    try:
+        installed = await OLLAMA.list_model_names()
+    except Exception:
+        installed = []
+    if model in installed:
+        _set_install_state(model, status="done", progress=100, stage="already installed", scope=scope, error=None, started_at=now_iso())
+        app_log(f"Ollama install skipped (already installed): model={model}, scope={scope}")
+        return {"status": "done", "model": model, "scope": scope}
+
+    # If task is already running, do not start again.
+    if OLLAMA_INSTALL_TASKS.get(model, {}).get("status") == "running":
+        return {"status": "running", "model": model, "scope": scope}
+
+    # Start background pull
+    t = threading.Thread(target=_ollama_install_worker, args=(model, scope), daemon=True)
+    t.start()
+    return {"status": "started", "model": model, "scope": scope}
+
+
+@app.get("/api/ollama/install/status")
+async def api_ollama_install_status(model: str) -> Any:
+    """Return current install status for a model."""
+    mid = str(model or "").strip()
+    if not mid:
+        raise HTTPException(status_code=400, detail="model required")
+    return OLLAMA_INSTALL_TASKS.get(mid, {"status": "idle", "progress": 0, "stage": "", "scope": "unknown", "error": None})
+
+
+
+
+# ---------- API: analysis (quick + deep) ----------
+
+def _analysis_dir(project_id: str) -> Path:
+    adir = project_path(project_id) / "analysis"
+    adir.mkdir(parents=True, exist_ok=True)
+    (adir / "reports").mkdir(parents=True, exist_ok=True)
+    (adir / "prompts").mkdir(parents=True, exist_ok=True)
+    return adir
+
+
+def _analysis_reports_dir(project_id: str) -> Path:
+    return _analysis_dir(project_id) / "reports"
+
+
+def _analysis_ui_state_path(project_id: str) -> Path:
+    """Per-project UI state for Analysis tab (custom prompt, source checkboxes, etc.)."""
+    return _analysis_dir(project_id) / "ui_state.json"
+
+
+def _analysis_deep_task_state_path(project_id: str) -> Path:
+    """Per-project deep analysis task state (running task id + metadata)."""
+    return _analysis_dir(project_id) / "deep_task.json"
+
+
+def _analysis_deep_task_output_path(project_id: str) -> Path:
+    """Per-project streaming output for deep analysis (grows while task runs)."""
+    return _analysis_dir(project_id) / "deep_running.md"
+
+
+def _analysis_deep_latest_path(project_id: str) -> Path:
+    """Final (latest) deep analysis payload."""
+    return _analysis_dir(project_id) / "deep_latest.json"
+
+
+def _read_json_file(path: Path, default: Any) -> Any:
+    try:
+        if not path.exists():
+            return default
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def _write_json_file(path: Path, obj: Any) -> None:
+    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _safe_child_path(parent: Path, filename: str) -> Path:
+    """Resolve a child file path and prevent path traversal."""
+    fname = safe_filename(filename)
+    candidate = (parent / fname).resolve()
+    parent_res = parent.resolve()
+    if parent_res not in candidate.parents and candidate != parent_res:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    return candidate
+
+
+def _load_text_file(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+async def _gather_analysis_sources(project_id: str, include_sources: Dict[str, Any]) -> str:
+    """Load selected sources and return a combined string (best-effort)."""
+    pdir = project_path(project_id)
+    parts: List[str] = []
+
+    # transcript / diarization
+    if include_sources.get("transcript", True):
+        tp = pdir / "transcript.txt"
+        if tp.exists():
+            parts.append("## Transkrypcja\n" + _load_text_file(tp).strip())
+    if include_sources.get("diarization", True):
+        dp = pdir / "diarized.txt"
+        if dp.exists():
+            parts.append("## Diaryzacja\n" + _load_text_file(dp).strip())
+
+    # notes: prefer spec files if present, fallback to project.json fields
+    notes_global = ""
+    notes_blocks: Dict[str, str] = {}
+
+    # Spec filenames (if user created manually)
+    ng = pdir / "notes_global.txt"
+    nb = pdir / "notes_blocks.json"
+    if ng.exists():
+        notes_global = _load_text_file(ng)
+    if nb.exists():
+        try:
+            obj = json.loads(_load_text_file(nb))
+            if isinstance(obj, dict):
+                notes_blocks = {str(k): str(v) for k, v in obj.items() if str(v).strip()}
+        except Exception:
+            pass
+
+    # Project meta notes
+    meta = read_project_meta(project_id)
+    for key in ("notes", "notes_transcription", "notes_diarization"):
+        v = meta.get(key)
+        if isinstance(v, dict):
+            g = v.get("global")
+            b = v.get("blocks")
+            if isinstance(g, str) and g.strip():
+                notes_global += ("\n\n" if notes_global.strip() else "") + f"[{key}]\n" + g.strip()
+            if isinstance(b, dict):
+                for bk, bv in b.items():
+                    if isinstance(bv, str) and bv.strip():
+                        notes_blocks.setdefault(str(bk), bv.strip())
+
+    if include_sources.get("notes_global", False) and notes_global.strip():
+        parts.append("## Notatki globalne\n" + notes_global.strip())
+    if include_sources.get("notes_blocks", False) and notes_blocks:
+        # Keep it readable
+        blocks_md = "\n".join([f"- Blok {k}: {v}" for k, v in sorted(notes_blocks.items(), key=lambda x: x[0])])
+        parts.append("## Notatki do bloków\n" + blocks_md)
+
+    # Documents — auto-detect bank statements and enrich with structured data
+    docs = include_sources.get("documents") or []
+    if isinstance(docs, list) and docs:
+        ddir = _documents_dir(project_id)
+        for name in docs:
+            fname = safe_filename(str(name))
+            fp = (ddir / fname).resolve()
+            if ddir.resolve() not in fp.parents or not fp.exists():
+                continue
+            cache_txt, _ = _doc_cache_paths(fp)
+            if not cache_txt.exists() or cache_txt.stat().st_mtime < fp.stat().st_mtime:
+                # (re)extract
+                try:
+                    await _extract_and_cache_document(fp)
+                except Exception:
+                    pass
+            if cache_txt.exists() and cache_txt.stat().st_size > 0:
+                doc_text = _load_text_file(cache_txt).strip()
+                # Auto-detect bank statements and provide structured extraction
+                if fp.suffix.lower() == ".pdf":
+                    try:
+                        from backend.finance.detector import is_bank_statement as _is_stmt
+                        _detected, _score, _ = _is_stmt(doc_text[:10000])
+                        if _detected:
+                            from backend.finance.quick_extract import extract_bank_statement_quick
+                            quick_data = extract_bank_statement_quick(doc_text)
+                            structured = "\n".join([
+                                f"## Dokument: {fname} [WYCIĄG BANKOWY — dane wyodrębnione automatycznie]\n",
+                                f"- **Bank**: {quick_data.get('bank') or 'nierozpoznany'}",
+                                f"- **Właściciel**: {quick_data.get('wlasciciel_rachunku') or '—'}",
+                                f"- **IBAN**: {quick_data.get('nr_rachunku_iban') or '—'}",
+                                f"- **Okres**: {quick_data.get('okres') or '—'}",
+                                f"- **Waluta**: {quick_data.get('waluta') or 'PLN'}",
+                                f"- **Saldo początkowe**: {quick_data.get('saldo_poczatkowe') or '—'}",
+                                f"- **Saldo końcowe**: {quick_data.get('saldo_koncowe') or '—'}",
+                                f"- **Saldo dostępne**: {quick_data.get('saldo_dostepne') or '—'}",
+                                f"- **Suma uznań**: {quick_data.get('suma_uznan') or '—'}",
+                                f"- **Suma obciążeń**: {quick_data.get('suma_obciazen') or '—'}",
+                                f"- **Liczba transakcji**: {quick_data.get('liczba_transakcji') or '—'}",
+                                "",
+                                "**UWAGA**: Powyższe dane wyodrębnione regexem z nagłówka PDF. "
+                                "Dla pełnej analizy finansowej użyj trybu 'Analiza wyciągu bankowego'.",
+                                "",
+                                "### Surowy tekst dokumentu\n",
+                                doc_text[:50000],
+                            ])
+                            parts.append(structured)
+                            continue
+                    except Exception:
+                        pass
+                parts.append(f"## Dokument: {fname}\n" + doc_text)
+
+    # Cap size (avoid accidental huge prompts)
+    combined = "\n\n---\n\n".join([p for p in parts if p.strip()]).strip()
+    max_chars = int(include_sources.get("max_chars") or 200_000)
+    if len(combined) > max_chars:
+        combined = combined[:max_chars] + "\n\n[... ucięto materiał: przekroczono limit znaków ...]"
+    return combined
+
+
+async def _run_quick_analysis(project_id: str) -> Dict[str, Any]:
+    pdir = project_path(project_id)
+    adir = _analysis_dir(project_id)
+    qs_path = adir / "quick_summary.json"
+
+    # Prefer transcript; fallback to diarized
+    t = _load_text_file(pdir / "transcript.txt")
+    d = _load_text_file(pdir / "diarized.txt")
+    text = (t.strip() + "\n\n" + d.strip()).strip()
+
+    # Fallback: load text from uploaded documents
+    _source_type = "transcript"  # track source for prompt selection
+    if not text:
+        ddir = _documents_dir(project_id)
+        doc_parts: list[str] = []
+        if ddir.exists():
+            for fp in sorted(ddir.iterdir()):
+                if fp.is_dir() or fp.name.startswith("."):
+                    continue
+                cache_txt, _ = _doc_cache_paths(fp)
+                if not cache_txt.exists() or cache_txt.stat().st_mtime < fp.stat().st_mtime:
+                    try:
+                        await _extract_and_cache_document(fp)
+                    except Exception:
+                        continue
+                if cache_txt.exists() and cache_txt.stat().st_size > 0:
+                    doc_parts.append(_load_text_file(cache_txt).strip())
+        if doc_parts:
+            text = "\n\n---\n\n".join(doc_parts)
+            # Detect if this is a bank statement
+            from backend.finance.detector import is_bank_statement as _detect_bank_stmt
+            _is_bank, _, _ = _detect_bank_stmt(text[:10000])
+            _source_type = "bank_statement" if _is_bank else "document"
+
+    if not text:
+        raise HTTPException(status_code=400, detail="Brak źródeł do analizy (transkrypcja, diaryzacja lub dokumenty).")
+
+    t0 = time.time()
+
+    if _source_type == "bank_statement":
+        # Bank statement: use regex extractor (fast, accurate, no LLM needed)
+        from backend.finance.quick_extract import extract_bank_statement_quick
+        result = extract_bank_statement_quick(text)
+        model_sel = "regex"
+    else:
+        try:
+            model_sel = _get_model_settings().get("quick") or DEFAULT_MODELS["quick"]
+            result = await quick_analyze(OLLAMA, text, model=model_sel, source_type=_source_type)
+        except OllamaError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Quick analysis failed: {e}")
+
+    dt = time.time() - t0
+
+    qs_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Save metadata sidecar (model + timestamps) for UI display
+    try:
+        meta = {
+            "model": model_sel,
+            "generated_at": now_iso(),
+            "generation_time": round(dt, 2),
+        }
+        (adir / "quick_summary.meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    return {"status": "success", "result": result, "generation_time": round(dt, 2), "meta": meta if "meta" in locals() else None}
+
+
+def _quick_analysis_task_runner(project_id: str, log_cb=None, progress_cb=None) -> dict:
+    """Run quick analysis via TaskManager thread (GPU RM managed)."""
+    try:
+        if progress_cb:
+            progress_cb(5)
+        if log_cb:
+            log_cb("Quick analysis (GPU RM): starting")
+        res = asyncio.run(_run_quick_analysis(project_id))
+        if progress_cb:
+            progress_cb(100)
+        if log_cb:
+            log_cb("Quick analysis (GPU RM): done")
+        # _run_quick_analysis returns a response dict; we store it as result too
+        return res
+    except Exception as e:
+        if log_cb:
+            log_cb(f"Quick analysis (GPU RM) failed: {e}")
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Proofreading (language correction) endpoint
+# ---------------------------------------------------------------------------
+
+# Priority lists — first installed model wins.
+_PROOFREAD_PRIORITY_PL = [
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q8_0",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q6_K",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q5_K_M",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q4_K_M",
+    "PRIHLOP/PLLuM",                                # Polski LLM — natywny model PL
+    "qwen3:14b",
+    "qwen3:8b",
+]
+
+_PROOFREAD_PRIORITY_EN = [
+    "qwen3:14b",
+    "qwen3:8b",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q8_0",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q6_K",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q5_K_M",
+    "SpeakLeash/bielik-11b-v2.3-instruct:Q4_K_M",
+    "PRIHLOP/PLLuM",
+]
+
+
+def _pick_proofread_model(lang: str, installed: List[str], override: str = "") -> str:
+    """Select best available proofreading model.
+
+    If user override is set and installed, use it.
+    Otherwise walk the priority list for the requested language.
+    Comparison is case-insensitive (Ollama lowercases model names).
+    """
+    installed_lower = {m.lower() for m in installed}
+    if override and override.lower() in installed_lower:
+        return override
+    priority = _PROOFREAD_PRIORITY_PL if lang == "pl" else _PROOFREAD_PRIORITY_EN
+    for mid in priority:
+        if mid.lower() in installed_lower:
+            return mid
+    # absolute fallback
+    return DEFAULT_MODELS.get("proofreading", "qwen3:8b")
+
+
+@app.post("/api/proofreading/run")
+async def api_proofreading_run(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Run proofreading on user-provided text.
+
+    Request body:
+      text (str): text to proofread
+      lang (str): "pl" or "en"
+      notes (str, optional): additional user instructions
+      model (str, optional): explicit model override from frontend selector
+      mode (str, optional): "correct" (default) or "expand" (rewrite/expand text)
+    Returns:
+      corrected (str): corrected text (clean, no markup)
+      diff_html (str): HTML with <span class="pr-del"> and <span class="pr-ins"> markup
+      model (str): model used
+    """
+    text = str(payload.get("text") or "").strip()
+    lang = str(payload.get("lang") or "pl").strip().lower()
+    notes = str(payload.get("notes") or "").strip()
+    explicit_model = str(payload.get("model") or "").strip()
+    mode = str(payload.get("mode") or "correct").strip().lower()
+
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    if lang not in ("pl", "en"):
+        lang = "pl"
+    if mode not in ("correct", "expand"):
+        mode = "correct"
+
+    # Determine model
+    st = await OLLAMA.status()
+    installed: List[str] = []
+    if st.status == "online":
+        installed = st.models or []
+
+    # Frontend explicit model takes precedence, then global settings, then priority list
+    override = explicit_model or _get_model_settings().get("proofreading") or ""
+    model = _pick_proofread_model(lang, installed, override)
+
+    app_log(f"Proofreading: lang={lang}, model={model}, text_len={len(text)}")
+
+    # Build prompt based on mode.
+    # ----------------------------------------------------------------
+    # Architecture: single cohesive system message with structured sections.
+    # The style-specific rules arrive from the frontend in `notes` and
+    # are integrated as the "Styl korekty:" / "Proofreading style:" section.
+    # ----------------------------------------------------------------
+    if mode == "expand":
+        if lang == "pl":
+            system_msg = (
+                "Jesteś profesjonalnym redaktorem tekstu polskiego.\n\n"
+                "Twoje zadanie:\n"
+                "- rozwiń i wzbogać podany tekst\n"
+                "- rozbuduj zdania, dodaj szczegóły, synonimy, lepsze sformułowania\n"
+                "- zachowaj sens i kontekst oryginału\n"
+                "- popraw ewentualne błędy ortograficzne i gramatyczne\n"
+                "- zwracaj TYLKO rozszerzony tekst, bez komentarzy i wyjaśnień\n\n"
+                "Formatowanie:\n"
+                "- dziel tekst na logiczne akapity oddzielone pustą linią\n"
+                "- nie zostawiaj samotnych spójników (i, w, z, a, o) na końcu wiersza\n"
+                "- zachowuj markdown (##, **bold**, *italic*, listy) jeśli występuje"
+            )
+        else:
+            system_msg = (
+                "You are a professional English editor.\n\n"
+                "Your task:\n"
+                "- expand and enrich the given text\n"
+                "- elaborate on sentences, add details, synonyms, better phrasing\n"
+                "- preserve the meaning and context of the original\n"
+                "- fix any spelling and grammar errors\n"
+                "- return ONLY the expanded text, no comments or explanations\n\n"
+                "Formatting:\n"
+                "- divide text into logical paragraphs separated by blank lines\n"
+                "- preserve markdown (##, **bold**, *italic*, lists) if present"
+            )
+    else:
+        # Correction mode — the style-specific rules in `notes` define
+        # how aggressively to correct (light vs professional etc.)
+        if lang == "pl":
+            system_msg = (
+                "Jesteś korektorem języka polskiego na poziomie profesjonalnego redaktora.\n\n"
+                "Twoje zadanie:\n"
+                "- popraw ortografię, gramatykę, interpunkcję i składnię\n"
+                "- zachowuj oryginalne znaczenie tekstu\n"
+                "- zwracaj TYLKO poprawiony tekst, bez komentarzy i wyjaśnień\n\n"
+                "Formatowanie:\n"
+                "- dziel tekst na logiczne akapity oddzielone pustą linią\n"
+                "- nie zostawiaj samotnych spójników (i, w, z, a, o) na końcu wiersza\n"
+                "- zachowuj markdown (##, **bold**, *italic*, listy) jeśli występuje"
+            )
+        else:
+            system_msg = (
+                "You are an English proofreader at a professional editor level.\n\n"
+                "Your task:\n"
+                "- fix spelling, grammar, punctuation, and syntax\n"
+                "- preserve the original meaning of the text\n"
+                "- return ONLY the corrected text, no comments or explanations\n\n"
+                "Formatting:\n"
+                "- divide text into logical paragraphs separated by blank lines\n"
+                "- preserve markdown (##, **bold**, *italic*, lists) if present"
+            )
+
+    if notes:
+        system_msg += "\n\n" + notes
+
+    messages = [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": text},
+    ]
+
+    try:
+        resp = await OLLAMA.chat(model=model, messages=messages, options={"temperature": 0.3})
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Ollama error: {e}")
+
+    corrected = str((resp.get("message") or {}).get("content") or "").strip()
+    if not corrected:
+        raise HTTPException(status_code=500, detail="Model returned empty response")
+
+    # Build visual diff
+    diff_html = _build_proofread_diff(text, corrected)
+
+    return {
+        "status": "ok",
+        "corrected": corrected,
+        "diff_html": diff_html,
+        "model": model,
+        "lang": lang,
+    }
+
+
+def _build_proofread_diff(original: str, corrected: str) -> str:
+    """Build an HTML diff between original and corrected text.
+
+    Preserves paragraph structure: splits on double-newlines first,
+    then diffs word-by-word within each paragraph pair.
+    Output uses <p> tags for paragraph separation.
+    """
+    import difflib
+    import html as html_mod
+    import re
+
+    def _split_paragraphs(text: str) -> List[str]:
+        """Split text into paragraphs on double-newlines (or 2+ blank lines)."""
+        paras = re.split(r'\n\s*\n', text.strip())
+        return [p.strip() for p in paras if p.strip()]
+
+    def _diff_words(orig_text: str, corr_text: str) -> str:
+        """Word-level diff within a single paragraph."""
+        ow = orig_text.split()
+        cw = corr_text.split()
+        if not ow and not cw:
+            return ""
+        sm = difflib.SequenceMatcher(None, ow, cw)
+        parts: List[str] = []
+        for tag, i1, i2, j1, j2 in sm.get_opcodes():
+            if tag == "equal":
+                parts.append(html_mod.escape(" ".join(ow[i1:i2])))
+            elif tag == "delete":
+                parts.append(f'<span class="pr-del">{html_mod.escape(" ".join(ow[i1:i2]))}</span>')
+            elif tag == "insert":
+                parts.append(f'<span class="pr-ins">{html_mod.escape(" ".join(cw[j1:j2]))}</span>')
+            elif tag == "replace":
+                parts.append(f'<span class="pr-del">{html_mod.escape(" ".join(ow[i1:i2]))}</span>')
+                parts.append(f'<span class="pr-ins">{html_mod.escape(" ".join(cw[j1:j2]))}</span>')
+        return " ".join(parts)
+
+    orig_paras = _split_paragraphs(original)
+    corr_paras = _split_paragraphs(corrected)
+
+    # Match paragraphs using SequenceMatcher on paragraph level
+    sm = difflib.SequenceMatcher(None, orig_paras, corr_paras)
+    html_parts: List[str] = []
+
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            for p in orig_paras[i1:i2]:
+                html_parts.append(f"<p>{html_mod.escape(p)}</p>")
+        elif tag == "delete":
+            for p in orig_paras[i1:i2]:
+                html_parts.append(f'<p><span class="pr-del">{html_mod.escape(p)}</span></p>')
+        elif tag == "insert":
+            for p in corr_paras[j1:j2]:
+                html_parts.append(f'<p><span class="pr-ins">{html_mod.escape(p)}</span></p>')
+        elif tag == "replace":
+            # Pair up paragraphs for word-level diff where possible
+            oparas = orig_paras[i1:i2]
+            cparas = corr_paras[j1:j2]
+            max_len = max(len(oparas), len(cparas))
+            for idx in range(max_len):
+                op = oparas[idx] if idx < len(oparas) else ""
+                cp = cparas[idx] if idx < len(cparas) else ""
+                if op and cp:
+                    html_parts.append(f"<p>{_diff_words(op, cp)}</p>")
+                elif op:
+                    html_parts.append(f'<p><span class="pr-del">{html_mod.escape(op)}</span></p>')
+                else:
+                    html_parts.append(f'<p><span class="pr-ins">{html_mod.escape(cp)}</span></p>')
+
+    return "\n".join(html_parts)
+
+
+@app.get("/api/analysis/quick/{project_id}")
+async def api_analysis_get_quick(project_id: str) -> Any:
+    """Return cached quick summary if present."""
+    qs = _analysis_dir(project_id) / "quick_summary.json"
+    if not qs.exists():
+        raise HTTPException(status_code=404, detail="Brak szybkiej analizy")
+    try:
+        data = json.loads(qs.read_text(encoding="utf-8"))
+        meta_path = qs.with_name("quick_summary.meta.json")
+        meta = None
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:
+                meta = None
+        return {"status": "success", "result": data, "meta": meta}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Nie można odczytać quick_summary.json")
+
+
+@app.post("/api/analysis/quick")
+async def api_analysis_quick(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Run quick analysis (auto after transcription) and store quick_summary.json."""
+    project_id = str(payload.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id required")
+    app_log(f"Quick analysis requested: project_id={project_id}")
+
+    # If GPU RM is enabled, queue the LLM call so it does not overlap with transcription/diarization.
+    if GPU_RM.enabled:
+        t = GPU_RM.enqueue_python_fn("analysis_quick", project_id, _quick_analysis_task_runner, project_id)
+        return {"status": "queued", "task_id": t.task_id}
+
+    return await _run_quick_analysis(project_id)
+
+
+@app.post("/api/analysis/deep")
+async def api_analysis_deep(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Deep analysis (non-stream) - returns generated text.
+
+    Report saving/formatting is implemented in step 4.
+    """
+    project_id = str(payload.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id required")
+
+    template_ids = payload.get("template_ids") or []
+    if isinstance(template_ids, str):
+        template_ids = [t.strip() for t in template_ids.split(",") if t.strip()]
+    if not isinstance(template_ids, list):
+        template_ids = []
+
+    custom_prompt = payload.get("custom_prompt")
+    use_templates = payload.get("custom_prompt_use_templates")
+    if isinstance(use_templates, str):
+        use_templates = use_templates.strip().lower() not in ("0", "false", "no", "off")
+    elif isinstance(use_templates, bool):
+        use_templates = bool(use_templates)
+    else:
+        use_templates = True
+    if custom_prompt and not use_templates:
+        template_ids = []
+    model = str(payload.get("model") or _get_model_settings().get("deep") or DEFAULT_MODELS["deep"])
+    output_format = str(payload.get("output_format") or payload.get("format") or "").lower().strip()
+    title = str(payload.get("title") or payload.get("report_title") or "").strip() or None
+    include_sources = payload.get("include_sources") or {}
+    if not isinstance(include_sources, dict):
+        include_sources = {}
+    include_sources = {
+        "transcript": bool(include_sources.get("transcript", False)),
+        "diarization": bool(include_sources.get("diarization", False)),
+        "notes_global": bool(include_sources.get("notes_global", False)),
+        "notes_blocks": bool(include_sources.get("notes_blocks", False)),
+    }
+
+    # Result mode for deep analysis output
+    result_mode = str(payload.get("result_mode") or "replace").strip().lower()
+    if result_mode not in ("replace", "append"):
+        result_mode = "replace"
+    append_header = str(payload.get("append_header") or "")
+    if len(append_header) > 5000:
+        append_header = append_header[:5000]
+
+    if result_mode == "append":
+        base_content = ""
+        try:
+            dl = _analysis_deep_latest_path(project_id)
+            if dl.exists():
+                j = _read_json_file(dl, None)
+                if isinstance(j, dict):
+                    base_content = str(j.get("content") or "")
+        except Exception:
+            base_content = ""
+        if not base_content.strip():
+            result_mode = "replace"
+            append_header = ""
+        elif not append_header:
+            stamp = now_iso()[:16]
+            append_header = f"\n\n## Dodatkowa analiza ({stamp}, model={model})\n\n"
+
+    include_sources = {
+        "transcript": bool(include_sources.get("transcript", False)),
+        "diarization": bool(include_sources.get("diarization", False)),
+        "notes_global": bool(include_sources.get("notes_global", False)),
+        "notes_blocks": bool(include_sources.get("notes_blocks", False)),
+    }
+
+    # Result mode (append vs replace) + optional append header
+    result_mode = str(payload.get("result_mode") or "replace").strip().lower()
+    if result_mode not in ("replace", "append"):
+        result_mode = "replace"
+    append_header = str(payload.get("append_header") or "")
+    if len(append_header) > 5000:
+        append_header = append_header[:5000]
+
+    if result_mode == "append":
+        base_content = ""
+        dl = _analysis_deep_latest_path(project_id)
+        if dl.exists():
+            j = _read_json_file(dl, None)
+            if isinstance(j, dict) and isinstance(j.get("content"), str):
+                base_content = j.get("content") or ""
+        if not base_content.strip():
+            # No base analysis -> fall back to replace
+            result_mode = "replace"
+            append_header = ""
+        elif not append_header.strip():
+            stamp = now_iso()[:16]
+            append_header = f"\n\n## Dodatkowa analiza ({stamp}, model={model})\n\n"
+    include_sources = {
+        "transcript": bool(include_sources.get("transcript", False)),
+        "diarization": bool(include_sources.get("diarization", False)),
+        "notes_global": bool(include_sources.get("notes_global", False)),
+        "notes_blocks": bool(include_sources.get("notes_blocks", False)),
+    }
+
+    # Result mode (replace vs append). Append works only if there is an existing deep analysis.
+    result_mode = str(payload.get("result_mode") or "replace").strip().lower()
+    if result_mode not in ("replace", "append"):
+        result_mode = "replace"
+    append_header = str(payload.get("append_header") or "")
+    if len(append_header) > 5000:
+        append_header = append_header[:5000]
+    if result_mode == "append":
+        latest_p = _analysis_deep_latest_path(project_id)
+        latest = _read_json_file(latest_p, None) if latest_p.exists() else None
+        base_content = str(latest.get("content") or "") if isinstance(latest, dict) else ""
+        if not base_content.strip():
+            result_mode = "replace"
+            append_header = ""
+        elif not append_header.strip():
+            stamp = now_iso()[:16]
+            append_header = f"\n\n## Dodatkowa analiza ({stamp}, model={model})\n\n"
+
+    # Combine prompt templates
+    try:
+        instruction = PROMPTS.build_combined_prompt([str(x) for x in template_ids], str(custom_prompt) if custom_prompt else None)
+        for pid in template_ids:
+            try:
+                PROMPTS.bump_usage(str(pid))
+            except Exception:
+                pass
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid prompt selection: {e}")
+
+    sources_text = await _gather_analysis_sources(project_id, include_sources)
+    if not sources_text.strip():
+        raise HTTPException(status_code=400, detail="Brak źródeł do analizy")
+
+    final_prompt = (instruction.strip() + "\n\n---\n\n" if instruction.strip() else "") + "# Materiał źródłowy\n\n" + sources_text
+
+    # Keep a copy of the prompt used (for reproducibility)
+    adir = _analysis_dir(project_id)
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    (adir / "prompts" / f"deep_{ts}.md").write_text(final_prompt, encoding="utf-8")
+
+    t0 = time.time()
+    try:
+        text = await deep_analyze(
+            OLLAMA,
+            final_prompt,
+            model=model,
+            system="Jesteś ekspertem w analizie dokumentów i rozmów. Twórz raporty po polsku, jasno i strukturalnie.",
+            options={"temperature": 0.7, "num_ctx": 32768},
+        )
+    except OllamaError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deep analysis failed: {e}")
+    dt = time.time() - t0
+
+    # store last output
+    (adir / "deep_last.md").write_text(text, encoding="utf-8")
+
+    report_info: Optional[Dict[str, Any]] = None
+    if output_format:
+        try:
+            res = save_report(
+                reports_dir=_analysis_reports_dir(project_id),
+                content=text,
+                output_format=output_format,
+                title=title or ("_".join(template_ids) if template_ids else "Analiza"),
+                template_ids=[str(x) for x in template_ids],
+                project_id=project_id,
+                model=model,
+            )
+            download_url = f"/api/analysis/reports/{project_id}/download/{res.filename}"
+            report_info = {
+                "filename": res.filename,
+                "format": res.format,
+                "size_bytes": res.size_bytes,
+                "download_url": download_url,
+            }
+        except ReportSaveError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Report save failed: {e}")
+
+    # Persist last deep analysis result inside the project so it is visible after reload/export/import.
+    try:
+        adir = _analysis_dir(project_id)
+        deep_payload = {
+            "content": text,
+            "meta": {
+                "model": model,
+                "generated_at": now_iso(),
+                "generation_time": round(dt, 2),
+                "template_ids": [str(x) for x in template_ids],
+                "custom_prompt": str(custom_prompt).strip() if custom_prompt else None,
+                "custom_prompt_use_templates": bool(custom_prompt_use_templates) if custom_prompt else None,
+                "include_sources": include_sources,
+                "stream": False,
+            },
+            "report": report_info,
+        }
+        (adir / "deep_latest.json").write_text(json.dumps(deep_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "preview": text[:4000],
+        "content": text,
+        "generation_time": round(dt, 2),
+        "tokens_used": None,
+        "report": report_info,
+    }
+
+
+
+@app.get("/api/analysis/deep/{project_id}")
+async def api_analysis_get_deep(project_id: str) -> Any:
+    """Return last saved deep analysis if present (content + meta)."""
+    path = _analysis_dir(project_id) / "deep_latest.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Brak głębokiej analizy")
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Nie można odczytać deep_latest.json")
+    return {"status": "success", "result": obj}
+
+
+@app.get("/api/analysis/ui_state/{project_id}")
+async def api_analysis_get_ui_state(project_id: str) -> Any:
+    """Per-project Analysis tab UI state (custom prompt + sources).
+
+    Stored inside the project so it survives reload/export/import.
+    """
+    # Defaults: user explicitly chooses sources; transcript/diarization default OFF
+    defaults = {
+        "custom_prompt": "",
+        "custom_prompt_use_templates": True,
+        "selected_templates": [],
+        "selected_docs": [],
+        "result_mode": "replace",
+        "sources": {
+            "transcript": False,
+            "diarization": False,
+            "notes_global": False,
+            "notes_blocks": False,
+        },
+    }
+    path = _analysis_ui_state_path(project_id)
+    data = _read_json_file(path, defaults)
+    # Ensure keys exist
+    if not isinstance(data, dict):
+        data = defaults
+    data.setdefault("custom_prompt", "")
+    data.setdefault("custom_prompt_use_templates", True)
+    # New fields (backward compatible)
+    templates = data.get("selected_templates")
+    if not isinstance(templates, list):
+        templates = []
+    data["selected_templates"] = [str(x) for x in templates if x is not None]
+
+    docs = data.get("selected_docs")
+    if not isinstance(docs, list):
+        docs = []
+    data["selected_docs"] = [str(x) for x in docs if x is not None]
+    # result_mode is now fixed to append (no UI toggle)
+    data["result_mode"] = "append"
+    src = data.get("sources")
+    if not isinstance(src, dict):
+        src = {}
+    merged = dict(defaults["sources"])
+    merged.update({k: bool(src.get(k)) for k in merged.keys()})
+    data["sources"] = merged
+    return {"status": "success", "state": data}
+
+
+@app.post("/api/analysis/ui_state/{project_id}")
+async def api_analysis_save_ui_state(project_id: str, payload: Dict[str, Any] = Body(...)) -> Any:
+    """Persist Analysis tab UI state for a project."""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    state = {
+        "custom_prompt": str(payload.get("custom_prompt") or ""),
+        "custom_prompt_use_templates": bool(payload.get("custom_prompt_use_templates", True)),
+        "selected_templates": payload.get("selected_templates") if isinstance(payload.get("selected_templates"), list) else [],
+        "selected_docs": payload.get("selected_docs") if isinstance(payload.get("selected_docs"), list) else [],
+        "result_mode": "append",
+        "sources": payload.get("sources") if isinstance(payload.get("sources"), dict) else {},
+    }
+
+    # Normalize sources
+    norm_sources = {}
+    for k in ("transcript", "diarization", "notes_global", "notes_blocks"):
+        norm_sources[k] = bool((state.get("sources") or {}).get(k))
+    state["sources"] = norm_sources
+
+    # Normalize templates / docs
+    state["selected_templates"] = [str(x) for x in (state.get("selected_templates") or []) if str(x).strip()]
+    state["selected_docs"] = [str(x) for x in (state.get("selected_docs") or []) if str(x).strip()]
+    if state.get("result_mode") not in ("replace", "append"):
+        state["result_mode"] = "replace"
+
+    try:
+        _write_json_file(_analysis_ui_state_path(project_id), state)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cannot save ui_state: {e}")
+
+    return {"status": "saved", "state": state}
+
+
+def _persist_deep_task_state(project_id: str, state: Dict[str, Any]) -> None:
+    """Write deep task state for a project (best-effort)."""
+    try:
+        _write_json_file(_analysis_deep_task_state_path(project_id), state)
+    except Exception:
+        pass
+
+
+async def _run_deep_analysis_task(
+    *,
+    task_id: str,
+    project_id: str,
+    model: str,
+    template_ids: List[str],
+    custom_prompt: Optional[str],
+    custom_prompt_use_templates: bool,
+    include_sources: Dict[str, Any],
+    result_mode: str = "replace",
+    append_header: str = "",
+    log_cb=None,
+    progress_cb=None,
+) -> None:
+    """Background deep analysis task.
+
+    Streams output to project/analysis/deep_running.md so UI can reconnect/poll.
+    Persists final result to deep_latest.json.
+    """
+    adir = _analysis_dir(project_id)
+    out_path = _analysis_deep_task_output_path(project_id)
+
+    def _log(msg: str) -> None:
+        if log_cb:
+            try:
+                log_cb(msg)
+            except Exception:
+                pass
+
+    def _prog(p: float) -> None:
+        if progress_cb:
+            try:
+                progress_cb(p)
+            except Exception:
+                pass
+
+    # Combine prompt templates
+    try:
+        instruction = PROMPTS.build_combined_prompt([str(x) for x in template_ids], str(custom_prompt) if custom_prompt else None)
+        for pid in template_ids:
+            try:
+                PROMPTS.bump_usage(str(pid))
+            except Exception:
+                pass
+    except Exception as e:
+        raise RuntimeError(f"Invalid prompt selection: {e}")
+
+    # --- Finance pipeline: intercept when wyciag_bankowy template is selected ---
+    _finance_mode = "wyciag_bankowy" in [str(x) for x in template_ids]
+    _finance_prompt = None
+
+    if _finance_mode:
+        _log("Tryb analizy finansowej — uruchamiam pipeline...")
+        _prog(3)
+        docs = include_sources.get("documents") or []
+        ddir = _documents_dir(project_id)
+        finance_dir = project_path(project_id) / "finance"
+
+        # Collect all PDF paths with cached text
+        pdf_paths = []
+        for doc_name in docs:
+            fname = safe_filename(str(doc_name))
+            fp = (ddir / fname).resolve()
+            if not fp.exists() or fp.suffix.lower() != ".pdf":
+                continue
+
+            cache_txt_path, _ = _doc_cache_paths(fp)
+            cached_text = None
+            if cache_txt_path.exists():
+                try:
+                    cached_text = cache_txt_path.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    pass
+            pdf_paths.append((fp, cached_text))
+
+        if pdf_paths:
+            _log(f"Znaleziono {len(pdf_paths)} PDF-ów do analizy finansowej")
+
+            if len(pdf_paths) == 1:
+                # Single document — use simple pipeline
+                result = await run_in_threadpool(
+                    run_finance_pipeline,
+                    pdf_path=pdf_paths[0][0],
+                    cached_text=pdf_paths[0][1],
+                    save_dir=finance_dir,
+                    global_dir=PROJECTS_DIR,
+                    log_cb=_log,
+                )
+            else:
+                # Multiple documents — use multi-statement pipeline with behavioral analysis
+                result = await run_in_threadpool(
+                    run_multi_statement_pipeline,
+                    pdf_paths=pdf_paths,
+                    save_dir=finance_dir,
+                    global_dir=PROJECTS_DIR,
+                    log_cb=_log,
+                )
+
+            if result:
+                # LLM fallback for unclassified transactions (on primary result)
+                try:
+                    from backend.finance.llm_classifier import classify_with_llm
+                    llm_model = model
+                    llm_updated = await classify_with_llm(
+                        result["classified"],
+                        OLLAMA,
+                        model=llm_model,
+                        log_cb=_log,
+                    )
+                    if llm_updated:
+                        from backend.finance.scorer import compute_score as recompute_score
+                        result["score"] = recompute_score(result["classified"])
+                        _log(f"Score po LLM fallback: {result['score'].total_score}/100")
+                except Exception as e:
+                    _log(f"LLM fallback pominięty: {e}")
+
+                _finance_prompt = build_finance_enriched_prompt(
+                    result,
+                    original_instruction=instruction,
+                )
+                n_txns = len(result["classified"])
+                score_val = result["score"].total_score
+                behavioral = result.get("behavioral")
+                if behavioral:
+                    _log(f"Finance pipeline: {n_txns} transakcji, score={score_val}/100, "
+                         f"behavioral={behavioral.total_months} mies., trajektoria={behavioral.debt_trajectory}")
+                else:
+                    _log(f"Finance pipeline: {n_txns} transakcji, score={score_val}/100")
+
+        if not _finance_prompt:
+            _log("Nie wykryto wyciągu bankowego w dokumentach — przechodzę do standardowej analizy.")
+            _finance_mode = False
+
+    if _finance_mode and _finance_prompt:
+        final_prompt = _finance_prompt
+    else:
+        sources_text = await _gather_analysis_sources(project_id, include_sources)
+        if not sources_text.strip():
+            raise RuntimeError("Brak źródeł do analizy")
+        final_prompt = (instruction.strip() + "\n\n---\n\n" if instruction.strip() else "") + "# Materiał źródłowy\n\n" + sources_text
+
+    # keep reproducibility copy
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    (adir / "prompts" / f"deep_{ts}.md").write_text(final_prompt, encoding="utf-8")
+
+    # Persist task state
+    state = {
+        "task_id": task_id,
+        "project_id": project_id,
+        "model": model,
+        "template_ids": [str(x) for x in template_ids],
+        "custom_prompt": str(custom_prompt).strip() if custom_prompt else None,
+        "custom_prompt_use_templates": bool(custom_prompt_use_templates) if custom_prompt else None,
+        "include_sources": include_sources,
+        "result_mode": str(result_mode or "replace"),
+        "append_header": str(append_header or ""),
+        "status": "running",
+        "stage": "start",
+        "progress": 0,
+        "started_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    _persist_deep_task_state(project_id, state)
+
+    # Ensure model
+    _log(f"Deep analysis start (task_id={task_id})")
+    _log(f"Model: {model}")
+    state["stage"] = "ensure_model"
+    state["updated_at"] = now_iso()
+    _persist_deep_task_state(project_id, state)
+    _prog(2)
+    await OLLAMA.ensure_model(model)
+
+    # Stream output to file
+    t0 = time.time()
+    written = 0
+    # Optional prefix when appending additional analysis
+    prefix = ""
+    eff_mode = str(result_mode or "replace").strip().lower()
+    if eff_mode == "append":
+        base = ""
+        try:
+            dl = _analysis_deep_latest_path(project_id)
+            if dl.exists():
+                prev = _read_json_file(dl, None)
+                if isinstance(prev, dict) and prev.get("content"):
+                    base = str(prev.get("content") or "")
+        except Exception:
+            base = ""
+        if base.strip():
+            ah = str(append_header or "")
+            if not ah:
+                # Server-generated header fallback
+                stamp = now_iso()[:16]
+                ah = f"\n\n## Dodatkowa analiza ({stamp}, model={model})\n\n"
+            prefix = base + ah
+            state["result_mode"] = "append"
+            state["append_header"] = ah
+            _persist_deep_task_state(project_id, state)
+        else:
+            # Nothing to append to -> behave like replace
+            state["result_mode"] = "replace"
+            state["append_header"] = ""
+            _persist_deep_task_state(project_id, state)
+
+    out_path.write_text(prefix, encoding="utf-8")
+    written = len(prefix.encode("utf-8"))
+    state["stage"] = "generating"
+    state["updated_at"] = now_iso()
+    _persist_deep_task_state(project_id, state)
+
+    # Heuristic progress: based on output size.
+    # We keep progress between 5..95 while streaming, then 100 at the end.
+    def _estimate_progress(chars: int) -> int:
+        # 8k chars -> ~25%, 20k -> ~50%, 40k -> ~75%, 80k -> ~92%
+        if chars <= 0:
+            return 5
+        if chars < 8000:
+            return 5 + int(chars / 8000 * 20)
+        if chars < 20000:
+            return 25 + int((chars - 8000) / 12000 * 25)
+        if chars < 40000:
+            return 50 + int((chars - 20000) / 20000 * 25)
+        if chars < 80000:
+            return 75 + int((chars - 40000) / 40000 * 17)
+        return 92
+
+    if _finance_mode:
+        system_msg = (
+            "Jesteś doświadczonym analitykiem finansowym specjalizującym się w analizie wyciągów bankowych, "
+            "ocenie zdolności kredytowej i wykrywaniu anomalii transakcyjnych. "
+            "Tworzysz profesjonalne raporty po polsku. Dla każdego wniosku podajesz poziom pewności. "
+            "Zachowujesz ostrożność interpretacyjną — nie nadinterpretujesz danych."
+        )
+    else:
+        system_msg = "Jesteś ekspertem w analizie dokumentów i rozmów. Twórz raporty po polsku, jasno i strukturalnie."
+    msgs = [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": final_prompt},
+    ]
+
+    # Use large context by default for deep.
+    options = {"temperature": 0.7, "num_ctx": 32768}
+    if _finance_mode:
+        options["temperature"] = 0.4  # lower temp for factual financial analysis
+
+    # Try streaming with fallback to smaller context on failure
+    _ctx_sizes = [32768, 16384, 8192]
+    _stream_ok = False
+    for _ctx_attempt in _ctx_sizes:
+        options["num_ctx"] = _ctx_attempt
+        try:
+            with out_path.open("a", encoding="utf-8") as f:
+                async for chunk in OLLAMA.stream_chat(model=model, messages=msgs, options=options):
+                    if not chunk:
+                        continue
+                    f.write(chunk)
+                    f.flush()
+                    written += len(chunk)
+                    if written - state.get("_last_chars", 0) >= 300:
+                        state["_last_chars"] = written
+                        p = _estimate_progress(written)
+                        state["progress"] = p
+                        state["updated_at"] = now_iso()
+                        _persist_deep_task_state(project_id, {k: v for k, v in state.items() if not str(k).startswith("_")})
+                        _prog(p)
+            _stream_ok = True
+            break
+        except Exception as _stream_err:
+            if _ctx_attempt == _ctx_sizes[-1]:
+                raise  # last attempt, propagate error
+            _log(f"Ollama error z num_ctx={_ctx_attempt}: {_stream_err} — ponawiam z mniejszym kontekstem...")
+            # Reset output file for retry
+            out_path.write_text(prefix, encoding="utf-8")
+            written = len(prefix.encode("utf-8"))
+
+    dt = time.time() - t0
+    state["stage"] = "finalize"
+    state["progress"] = 98
+    state["updated_at"] = now_iso()
+    _persist_deep_task_state(project_id, {k: v for k, v in state.items() if not str(k).startswith("_")})
+    _prog(98)
+
+    # store last output
+    try:
+        (adir / "deep_last.md").write_text(_load_text_file(out_path), encoding="utf-8")
+    except Exception:
+        pass
+
+    # Persist deep_latest.json
+    try:
+        content = _load_text_file(out_path)
+        deep_payload = {
+            "content": content,
+            "meta": {
+                "model": model,
+                "generated_at": now_iso(),
+                "generation_time": round(dt, 2),
+                "template_ids": [str(x) for x in template_ids],
+                "custom_prompt": str(custom_prompt).strip() if custom_prompt else None,
+                "custom_prompt_use_templates": bool(custom_prompt_use_templates) if custom_prompt else None,
+                "include_sources": include_sources,
+                "stream": True,
+            },
+        }
+        (adir / "deep_latest.json").write_text(json.dumps(deep_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+    # finalize state
+    state = {
+        "task_id": task_id,
+        "project_id": project_id,
+        "model": model,
+        "template_ids": [str(x) for x in template_ids],
+        "status": "done",
+        "stage": "done",
+        "progress": 100,
+        "started_at": state.get("started_at"),
+        "finished_at": now_iso(),
+        "generation_time": round(dt, 2),
+    }
+    _persist_deep_task_state(project_id, state)
+    _prog(100)
+
+
+def _deep_task_runner(
+    *,
+    task_id: str,
+    proj_id: str,
+    model: str,
+    template_ids: List[str],
+    custom_prompt: Optional[str],
+    custom_prompt_use_templates: bool,
+    include_sources: Dict[str, Any],
+    result_mode: str = "replace",
+    append_header: str = "",
+    log_cb=None,
+    progress_cb=None,
+) -> None:
+    """Sync wrapper for TASKS.start_python_fn."""
+    asyncio.run(
+        _run_deep_analysis_task(
+            task_id=task_id,
+            project_id=proj_id,
+            model=model,
+            template_ids=template_ids,
+            custom_prompt=custom_prompt,
+            custom_prompt_use_templates=custom_prompt_use_templates,
+            include_sources=include_sources,
+            result_mode=result_mode,
+            append_header=append_header,
+            log_cb=log_cb,
+            progress_cb=progress_cb,
+        )
+    )
+
+
+@app.get("/api/analysis/task_state/{project_id}")
+async def api_analysis_task_state(project_id: str) -> Any:
+    """Return deep-analysis task state for a project (if running)."""
+    state = _read_json_file(_analysis_deep_task_state_path(project_id), None)
+    if not isinstance(state, dict) or not state.get("task_id"):
+        return {"status": "idle"}
+    task_id = str(state.get("task_id"))
+    task_obj = None
+    try:
+        task_obj = asdict(TASKS.get(task_id))
+    except KeyError:
+        task_obj = None
+    except Exception:
+        # best-effort
+        task_obj = None
+    return {"status": "ok", "state": state, "task": task_obj}
+
+
+@app.get("/api/analysis/task_output/{project_id}")
+async def api_analysis_task_output(project_id: str, request: Request) -> Any:
+    """Return incremental deep-analysis output for a project.
+
+    Query params:
+      from: byte offset (default 0)
+      max: max bytes to read (default 65536)
+    """
+    qp = request.query_params
+    try:
+        from_off = int(qp.get("from") or 0)
+    except Exception:
+        from_off = 0
+    try:
+        max_bytes = int(qp.get("max") or 65536)
+    except Exception:
+        max_bytes = 65536
+    max_bytes = max(1024, min(max_bytes, 1024 * 1024))  # clamp 1KB..1MB
+
+    path = _analysis_deep_task_output_path(project_id)
+    if not path.exists():
+        return {"chunk": "", "next": from_off, "eof": True}
+
+    try:
+        size = path.stat().st_size
+        if from_off < 0:
+            from_off = 0
+        if from_off > size:
+            from_off = size
+        with path.open("rb") as f:
+            f.seek(from_off)
+            raw = f.read(max_bytes)
+        nxt = from_off + len(raw)
+        # decode best-effort; offset is in bytes so we may split a UTF-8 char
+        chunk = raw.decode("utf-8", errors="ignore")
+        eof = nxt >= size
+        return {"chunk": chunk, "next": nxt, "eof": eof, "size": size}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cannot read output: {e}")
+
+
+@app.post("/api/analysis/start")
+async def api_analysis_start(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Start deep analysis as a background task.
+
+    This is more resilient than SSE streaming: switching tabs won't cancel the task.
+    """
+    project_id = str(payload.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id required")
+
+    # If already running for this project, return existing task
+    existing = _read_json_file(_analysis_deep_task_state_path(project_id), None)
+    if isinstance(existing, dict) and existing.get("task_id"):
+        ex_task_id = str(existing.get("task_id"))
+        try:
+            ex_task = TASKS.get(ex_task_id)
+            if ex_task and ex_task.status in ("running", "queued"):
+                return {"status": "already_running", "task_id": ex_task_id, "task": asdict(ex_task)}
+        except KeyError:
+            pass
+
+    template_ids = payload.get("template_ids") or []
+    if isinstance(template_ids, str):
+        template_ids = [t.strip() for t in template_ids.split(",") if t.strip()]
+    if not isinstance(template_ids, list):
+        template_ids = []
+
+    custom_prompt = payload.get("custom_prompt")
+    use_templates = payload.get("custom_prompt_use_templates")
+    if isinstance(use_templates, str):
+        use_templates = use_templates.strip().lower() not in ("0", "false", "no", "off")
+    elif isinstance(use_templates, bool):
+        use_templates = bool(use_templates)
+    else:
+        use_templates = True
+    if custom_prompt and not use_templates:
+        template_ids = []
+
+    model = str(payload.get("model") or _get_model_settings().get("deep") or DEFAULT_MODELS["deep"]).strip()
+    include_sources = payload.get("include_sources") or {}
+    if not isinstance(include_sources, dict):
+        include_sources = {}
+
+    # normalize sources flags (also keep selected documents list)
+    docs = include_sources.get("documents", [])
+    if isinstance(docs, str):
+        docs = [x.strip() for x in docs.split(",") if x.strip()]
+    if not isinstance(docs, list):
+        docs = []
+    docs = [str(x) for x in docs if x is not None and str(x).strip()]
+
+    include_sources = {
+        "transcript": bool(include_sources.get("transcript", False)),
+        "diarization": bool(include_sources.get("diarization", False)),
+        "notes_global": bool(include_sources.get("notes_global", False)),
+        "notes_blocks": bool(include_sources.get("notes_blocks", False)),
+        "documents": docs,
+    }
+    # Result mode: UI no longer exposes replace/append. Always append additional analysis
+    # when a base deep result exists; otherwise it automatically falls back to replace.
+    result_mode = "append"
+    append_header = str(payload.get("append_header") or "")
+    if len(append_header) > 5000:
+        append_header = append_header[:5000]
+
+    # Only allow append if there is an existing deep analysis
+    if result_mode == "append":
+        base_content = ""
+        dl = _analysis_deep_latest_path(project_id)
+        if dl.exists():
+            j = _read_json_file(dl, None)
+            if isinstance(j, dict):
+                base_content = str(j.get("content") or "")
+        if not base_content.strip():
+            result_mode = "replace"
+            append_header = ""
+        elif not append_header:
+            stamp = now_iso()[:16]
+            append_header = f"\n\n## Dodatkowa analiza ({stamp}, model={model})\n\n"
+
+    # Create a stable task id (also persisted to disk)
+    task_id = uuid.uuid4().hex
+
+    # Persist initial state so UI can immediately see it
+    _persist_deep_task_state(project_id, {
+        "task_id": task_id,
+        "project_id": project_id,
+        "model": model,
+        "template_ids": [str(x) for x in template_ids],
+        "custom_prompt": custom_prompt,
+        "custom_prompt_use_templates": bool(use_templates),
+        "include_sources": include_sources,
+        "result_mode": result_mode,
+        "append_header": append_header,
+        "status": "queued",
+        "stage": "queued",
+        "progress": 0,
+        "started_at": now_iso(),
+        "updated_at": now_iso(),
+    })
+
+    # Start background worker (GPU RM managed if enabled)
+    if GPU_RM.enabled:
+        GPU_RM.enqueue_python_fn(
+            "analysis",
+            project_id,
+            _deep_task_runner,
+            task_id_override=task_id,
+            task_id=task_id,
+            proj_id=project_id,
+            model=model,
+            template_ids=[str(x) for x in template_ids],
+            custom_prompt=str(custom_prompt).strip() if custom_prompt else None,
+            custom_prompt_use_templates=bool(use_templates),
+            include_sources=include_sources,
+            result_mode=result_mode,
+            append_header=append_header,
+        )
+    else:
+        TASKS.start_python_fn(
+            "analysis",
+            project_id,
+            _deep_task_runner,
+            task_id_override=task_id,
+            task_id=task_id,
+            proj_id=project_id,
+            model=model,
+            template_ids=[str(x) for x in template_ids],
+            custom_prompt=str(custom_prompt).strip() if custom_prompt else None,
+            custom_prompt_use_templates=bool(use_templates),
+            include_sources=include_sources,
+            result_mode=result_mode,
+            append_header=append_header,
+        )
+
+    return {"status": "started", "task_id": task_id}
+
+
+@app.get("/api/analysis/stream")
+async def api_analysis_stream(request: Request) -> Any:
+    """Streaming deep analysis (SSE). Designed for EventSource usage."""
+    qp = request.query_params
+    project_id = str(qp.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id required")
+
+    model = str(qp.get("model") or "").strip() or (_get_model_settings().get("deep") or DEFAULT_MODELS["deep"])
+    tids = str(qp.get("template_ids") or "").strip()
+    template_ids = [t.strip() for t in tids.split(",") if t.strip()]
+
+    # Optional: custom prompt for deep analysis (can be combined with selected templates)
+    custom_prompt = str(qp.get("custom_prompt") or "").strip()
+    use_templates = True
+    use_raw = str(qp.get("custom_prompt_use_templates") or "").strip().lower()
+    if use_raw in ("0", "false", "no", "off"):  # explicit disable
+        use_templates = False
+    elif use_raw in ("1", "true", "yes", "on"):  # explicit enable
+        use_templates = True
+    if custom_prompt and not use_templates:
+        # Ignore selected prompt templates when user wants custom-only instruction
+        template_ids = []
+
+    # Optional include_sources as JSON in query (best-effort)
+    include_sources: Dict[str, Any] = {"transcript": True, "diarization": True, "notes_global": True, "notes_blocks": True, "documents": []}
+    inc_raw = qp.get("include_sources")
+    if inc_raw:
+        try:
+            obj = json.loads(str(inc_raw))
+            if isinstance(obj, dict):
+                include_sources.update(obj)
+        except Exception:
+            pass
+
+    # Create a visible task (so the Logs tab can show progress for analysis).
+    task = TASKS.create_task(kind="analysis", project_id=project_id)
+
+    async def generate() -> Any:
+        """SSE generator: emits chunks + progress info."""
+
+        def _emit(*, chunk: str = "", done: bool = False, stage: str = "", progress: int | None = None) -> str:
+            payload: Dict[str, Any] = {"chunk": chunk, "done": done, "task_id": task.task_id}
+            if stage:
+                payload["stage"] = stage
+            if progress is not None:
+                payload["progress"] = int(progress)
+            return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+
+        # Helper: update task state
+        def _set(stage: str, pct: int) -> None:
+            task.progress = int(pct)
+            task.status = "running" if pct < 100 else "done"
+            if stage:
+                task.add_log(f"{pct}% | {stage}")
+
+        try:
+            _set("Preparing prompts and sources", 2)
+            yield _emit(stage="Przygotowanie…", progress=2)
+
+            # 1) Build instruction from templates
+            try:
+                instruction = PROMPTS.build_combined_prompt(template_ids, custom_prompt if custom_prompt else None)
+                for pid in template_ids:
+                    try:
+                        PROMPTS.bump_usage(str(pid))
+                    except Exception:
+                        pass
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid prompt selection: {e}")
+
+            _set("Gathering sources", 8)
+            yield _emit(stage="Zbieranie źródeł…", progress=8)
+
+            # 2) Gather sources text (transcript/diarization/notes/docs)
+            sources_text = await _gather_analysis_sources(project_id, include_sources)
+            if not sources_text.strip():
+                raise HTTPException(status_code=400, detail="Brak źródeł do analizy")
+
+            final_prompt = (instruction.strip() + "\n\n---\n\n" if instruction.strip() else "") + "# Materiał źródłowy\n\n" + sources_text
+
+            # Keep a copy of the prompt used (for reproducibility)
+            adir = _analysis_dir(project_id)
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            (adir / "prompts" / f"stream_{ts}.md").write_text(final_prompt, encoding="utf-8")
+
+            task.add_log(f"Model: {model}")
+            task.add_log(f"Templates: {','.join(template_ids) if template_ids else '-'}")
+            if custom_prompt:
+                task.add_log(f"Custom prompt: {len(custom_prompt)} chars (use_templates={use_templates})")
+            try:
+                task.add_log(f"Sources: {json.dumps(include_sources, ensure_ascii=False)}")
+            except Exception:
+                pass
+
+            # 3) Ensure model exists (auto-pull if missing)
+            _set("Ensuring Ollama model (auto-pull if missing)", 15)
+            yield _emit(stage="Sprawdzanie modelu Ollama…", progress=15)
+            ensure_res = await OLLAMA.ensure_model(model)
+            task.add_log(f"Ollama ensure_model: {ensure_res}")
+
+            # 4) Stream generation
+            _set("Generating", 20)
+            yield _emit(stage="Generowanie…", progress=20)
+
+            system_msg = "Jesteś ekspertem w analizie dokumentów i rozmów. Twórz raporty po polsku, jasno i strukturalnie."
+            options = {"temperature": 0.7, "num_ctx": 32768}
+
+            msgs = [{"role": "system", "content": system_msg}, {"role": "user", "content": final_prompt}]
+
+            chunks = []
+
+            chars = 0
+            last_pct = 20
+            last_log_bucket = 20
+            async for chunk in OLLAMA.stream_chat(model=model, messages=msgs, options=options):
+                if not isinstance(chunk, str) or not chunk:
+                    continue
+                chars += len(chunk)
+                chunks.append(chunk)
+                # Best-effort progress: grow with emitted characters, cap at 95%.
+                pct = min(95, 20 + int(chars / 400))
+                if pct != last_pct:
+                    task.progress = int(pct)
+                    last_pct = int(pct)
+                # log every ~5%
+                if last_pct - last_log_bucket >= 5:
+                    last_log_bucket = last_pct
+                    task.add_log(f"Progress: {last_pct}%")
+                yield _emit(chunk=chunk, done=False, stage="Generowanie…", progress=last_pct)
+
+
+            # Persist last deep analysis (stream) into project for reload/export/import.
+            try:
+                adir = _analysis_dir(project_id)
+                deep_payload = {
+                    "content": "".join(chunks),
+                    "meta": {
+                        "model": model,
+                        "generated_at": now_iso(),
+                        "template_ids": [str(x) for x in template_ids],
+                        "custom_prompt": custom_prompt if custom_prompt else None,
+                        "custom_prompt_use_templates": bool(custom_prompt_use_templates) if custom_prompt else None,
+                        "include_sources": include_sources,
+                        "stream": True,
+                    },
+                    "report": None,
+                }
+                (adir / "deep_latest.json").write_text(json.dumps(deep_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+                task.add_log(f"Saved deep_latest.json (model={model})")
+            except Exception as e:
+                task.add_log(f"WARNING: Failed to save deep_latest.json: {e}")
+
+            task.progress = 100
+            task.status = "done"
+            task.add_log("Done")
+            yield _emit(chunk="", done=True, stage="Zakończono.", progress=100)
+
+        except HTTPException as e:
+            task.status = "error"
+            task.progress = max(task.progress, 100)
+            task.error = str(e.detail)
+            task.add_log(f"ERROR: {e.detail}")
+            yield _emit(chunk=f"\n\n[ERROR] {e.detail}", done=True, stage="Błąd.", progress=task.progress)
+        except Exception as e:
+            task.status = "error"
+            task.progress = max(task.progress, 100)
+            task.error = str(e)
+            task.add_log(f"ERROR: {e}")
+            yield _emit(chunk=f"\n\n[ERROR] {e}", done=True, stage="Błąd.", progress=task.progress)
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.get("/api/analysis/reports/{project_id}/list")
+async def api_analysis_reports_list(project_id: str) -> Any:
+    """List saved analysis reports (best-effort)."""
+    rdir = _analysis_reports_dir(project_id)
+    items: List[Dict[str, Any]] = []
+    if not rdir.exists():
+        return {"reports": []}
+
+    for fp in sorted(rdir.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
+        if not fp.is_file():
+            continue
+        # hide metadata sidecars
+        if fp.name.endswith(".meta.json"):
+            continue
+        if fp.suffix.lower() not in (".md", ".html", ".docx"):
+            continue
+        try:
+            st = fp.stat()
+            items.append({
+                "filename": fp.name,
+                "format": fp.suffix.lstrip(".").lower(),
+                "size_bytes": st.st_size,
+                "modified_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime)),
+                "download_url": f"/api/analysis/reports/{project_id}/download/{fp.name}",
+            })
+        except Exception:
+            continue
+    return {"reports": items}
+
+
+@app.get("/api/analysis/reports/{project_id}/download/{filename}")
+async def api_analysis_reports_download(project_id: str, filename: str) -> Any:
+    rdir = _analysis_reports_dir(project_id)
+    path = _safe_child_path(rdir, filename)
+    require_existing_file(path, "Plik raportu nie istnieje.")
+    return FileResponse(str(path), filename=path.name)
+
+
+# --- Finance entity memory API ---
+
+def _finance_memory(project_id: str):
+    """Get EntityMemory instance for a project."""
+    from backend.finance.entity_memory import EntityMemory
+    finance_dir = project_path(project_id) / "finance"
+    global_dir = PROJECTS_DIR / "_global"
+    return EntityMemory(finance_dir, global_dir)
+
+
+@app.get("/api/finance/entities/{project_id}")
+def api_finance_entities_list(project_id: str, flagged: int = 0, entity_type: str = "") -> Any:
+    """List known entities for a project."""
+    mem = _finance_memory(project_id)
+    return mem.list_entities(
+        flagged_only=bool(flagged),
+        entity_type=entity_type or None,
+    )
+
+
+@app.post("/api/finance/entities/{project_id}/flag")
+def api_finance_entity_flag(project_id: str, payload: Dict[str, Any] = Body(...)) -> Any:
+    """Flag/unflag an entity in the intelligence memory."""
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return {"error": "name is required"}
+    entity_type = str(payload.get("entity_type") or "").strip()
+    notes = str(payload.get("notes") or "").strip()
+    flagged = bool(payload.get("flagged", True))
+    propagate = bool(payload.get("propagate_global", False))
+
+    mem = _finance_memory(project_id)
+    ent = mem.flag_entity(
+        name=name,
+        entity_type=entity_type,
+        notes=notes,
+        flagged=flagged,
+        propagate_global=propagate,
+    )
+    return ent.to_dict()
+
+
+@app.post("/api/finance/entities/{project_id}/unflag")
+def api_finance_entity_unflag(project_id: str, payload: Dict[str, Any] = Body(...)) -> Any:
+    """Remove flag from an entity."""
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return {"error": "name is required"}
+    mem = _finance_memory(project_id)
+    ent = mem.unflag_entity(name)
+    if ent:
+        return ent.to_dict()
+    return {"error": "entity not found"}
+
+
+@app.delete("/api/finance/entities/{project_id}/{entity_name}")
+def api_finance_entity_delete(project_id: str, entity_name: str) -> Any:
+    """Delete an entity from project memory."""
+    mem = _finance_memory(project_id)
+    if mem.delete_entity(entity_name):
+        return {"ok": True}
+    return {"error": "entity not found"}
+
+
+@app.get("/api/finance/parsed/{project_id}")
+def api_finance_parsed(project_id: str) -> Any:
+    """Get latest parsed finance data for a project."""
+    finance_dir = project_path(project_id) / "finance" / "parsed"
+    if not finance_dir.exists():
+        return {"files": []}
+    files = []
+    for f in sorted(finance_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            files.append({
+                "filename": f.name,
+                "bank": data.get("bank", ""),
+                "transactions": len(data.get("transactions", [])),
+                "score": data.get("score", {}).get("total_score"),
+            })
+        except Exception:
+            pass
+    return {"files": files}
+
+
+@app.post("/api/analysis/save")
+async def api_analysis_save(payload: Dict[str, Any] = Body(...)) -> Any:
+    """Save analysis content as TXT/HTML/DOC/DOCX/Markdown in projects/{id}/analysis/reports/."""
+    project_id = str(payload.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id required")
+
+    content = str(payload.get("content") or "")
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="content required")
+
+    output_format = str(payload.get("format") or payload.get("output_format") or "md").lower().strip()
+    title = str(payload.get("title") or payload.get("report_title") or "").strip() or None
+    model = str(payload.get("model") or "").strip() or (_get_model_settings().get("deep") or DEFAULT_MODELS["deep"])
+
+    template_ids = payload.get("template_ids") or []
+    if isinstance(template_ids, str):
+        template_ids = [t.strip() for t in template_ids.split(",") if t.strip()]
+    if not isinstance(template_ids, list):
+        template_ids = []
+
+    try:
+        res = save_report(
+            reports_dir=_analysis_reports_dir(project_id),
+            content=content,
+            output_format=output_format,
+            title=title or ("_".join([str(x) for x in template_ids]) if template_ids else "Analiza"),
+            template_ids=[str(x) for x in template_ids],
+            project_id=project_id,
+            model=model,
+        )
+    except ReportSaveError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report save failed: {e}")
+
+    download_url = f"/api/analysis/reports/{project_id}/download/{res.filename}"
+    return {
+        "status": "success",
+        "report": {
+            "filename": res.filename,
+            "format": res.format,
+            "size_bytes": res.size_bytes,
+            "download_url": download_url,
+        },
+        "preview": content[:4000],
+    }
+
+
+
+# ---------- API: transcribe / diarize ----------
+
+def _start_sound_detection(project_id: str, audio_path: str, model_id: str) -> Optional[str]:
+    """Start sound detection as a CPU task, queued through GPU_RM when available.
+
+    Returns task_id or None if model not installed.
+    """
+    # Check if model is installed
+    reg = _read_sound_detection_registry()
+    model_state = reg.get(model_id, {})
+    if not model_state.get("downloaded"):
+        app_log(f"Sound detection skipped: model '{model_id}' not installed")
+        return None
+
+    worker = ROOT / "backend" / "sound_detection_worker.py"
+    if not worker.exists():
+        app_log(f"Sound detection skipped: worker not found at {worker}")
+        return None
+
+    # Output file in project folder
+    proj_dir = project_path(project_id)
+    output_file = proj_dir / "sound_events.json"
+
+    cmd = [
+        os.environ.get("PYTHON", __import__("sys").executable),
+        str(worker),
+        "--action", "detect",
+        "--model", model_id,
+        "--audio", audio_path,
+        "--output", str(output_file),
+        "--threshold", "0.3",
+    ]
+
+    app_log(f"Sound detection requested: project_id={project_id}, model={model_id}")
+
+    # Route through GPU_RM queue so CPU-only machines don't get overloaded
+    # by concurrent detection + transcription/diarization processes.
+    if GPU_RM.enabled:
+        t = GPU_RM.enqueue_subprocess(kind="sound_detection", project_id=project_id, cmd=cmd, cwd=ROOT)
+    else:
+        t = TASKS.start_subprocess(kind="sound_detection", project_id=project_id, cmd=cmd, cwd=ROOT)
+    return t.task_id
+
+
+@app.post("/api/transcribe")
+async def api_transcribe(
+    project_id: str = Form(""),
+    lang: str = Form("auto"),
+    model: str = Form("large-v3"),
+    asr_engine: str = Form("whisper"),
+    audio: Optional[UploadFile] = File(None),
+    sound_detection_enabled: int = Form(0),
+    sound_detection_model: str = Form(""),
+) -> Any:
+    project_id = require_existing_project(project_id)
+    if audio is not None:
+        audio_path = save_upload(project_id, audio)
+    else:
+        meta = read_project_meta(project_id)
+        fname = str(meta.get("audio_file") or "")
+        if not fname:
+            raise HTTPException(status_code=400, detail="Brak pliku audio w projekcie. Wgraj plik.")
+        audio_path = project_path(project_id) / fname
+        require_existing_file(audio_path, "Plik audio z projektu nie istnieje.")
+
+    # Use existing worker script (subprocess) to keep server responsive
+    worker = ROOT / "backend" / "transcribe_worker.py"
+    require_existing_file(worker, "Brak transcribe_worker.py")
+
+    cmd = [
+        os.environ.get("PYTHON", __import__("sys").executable),
+        str(worker),
+        "--audio", str(audio_path),
+        "--engine", str(asr_engine or "whisper"),
+        "--model", model,
+        "--lang", lang,
+    ]
+    app_log(f"Transcription requested: project_id={project_id}, audio='{audio_path.name}', engine={asr_engine}, model={model}, lang={lang}")
+    if GPU_RM.enabled:
+        t = GPU_RM.enqueue_subprocess(kind="transcribe", project_id=project_id, cmd=cmd, cwd=ROOT)
+    else:
+        t = TASKS.start_subprocess(kind="transcribe", project_id=project_id, cmd=cmd, cwd=ROOT)
+
+    # Run sound detection in parallel (on CPU) if enabled
+    sound_task_id = None
+    if sound_detection_enabled and sound_detection_model:
+        sound_task_id = _start_sound_detection(project_id, str(audio_path), sound_detection_model)
+
+    return {"task_id": t.task_id, "project_id": project_id, "sound_detection_task_id": sound_task_id}
+
+
+@app.post("/api/diarize_voice")
+async def api_diarize_voice(
+    project_id: str = Form(""),
+    diar_engine: str = Form("pyannote"),
+    diar_model: str = Form(""),
+    lang: str = Form("auto"),
+    model: str = Form("large-v3"),
+    asr_engine: str = Form("whisper"),
+    audio: Optional[UploadFile] = File(None),
+    sound_detection_enabled: int = Form(0),
+    sound_detection_model: str = Form(""),
+) -> Any:
+    """Diarize voice (audio) using the selected diarization engine.
+
+    NOTE: Engines/models must be installed in ASR Settings.
+    """
+    project_id = require_existing_project(project_id)
+    if audio is not None:
+        audio_path = save_upload(project_id, audio)
+    else:
+        meta = read_project_meta(project_id)
+        fname = str(meta.get("audio_file") or "")
+        if not fname:
+            raise HTTPException(status_code=400, detail="Brak pliku audio w projekcie. Wgraj plik.")
+        audio_path = project_path(project_id) / fname
+        require_existing_file(audio_path, "Plik audio z projektu nie istnieje.")
+
+    diar_engine = str(diar_engine or "pyannote").strip().lower()
+    asr_engine = str(asr_engine or "whisper").strip().lower()
+
+    # Validate installed models to prevent auto-download outside ASR Settings
+    reg = _read_asr_registry()
+    if not reg:
+        reg = scan_and_persist_asr_model_cache()
+
+    def _reg_dict(key: str) -> dict:
+        d = reg.get(key)
+        return d if isinstance(d, dict) else {}
+
+    reg_whisper = _reg_dict('whisper')
+    reg_nemo = _reg_dict('nemo')
+    reg_nemo_diar = _reg_dict('nemo_diar')
+    reg_pyannote = _reg_dict('pyannote')
+
+    # ASR model must be installed
+    if asr_engine == 'whisper':
+        if not reg_whisper.get(model):
+            raise HTTPException(status_code=400, detail="Model Whisper nie jest zainstalowany. Zainstaluj go w Ustawieniach ASR.")
+    elif asr_engine == 'nemo':
+        if not reg_nemo.get(model):
+            raise HTTPException(status_code=400, detail="Model NeMo ASR nie jest zainstalowany. Zainstaluj go w Ustawieniach ASR.")
+    else:
+        raise HTTPException(status_code=400, detail="Nieznany silnik ASR")
+
+    # Diarization model must be installed (where applicable)
+    if diar_engine == 'pyannote':
+        if diar_model and not reg_pyannote.get(diar_model):
+            raise HTTPException(status_code=400, detail="Model pyannote nie jest zainstalowany. Zainstaluj go w Ustawieniach ASR.")
+    elif diar_engine == 'nemo_diar':
+        if diar_model and not reg_nemo_diar.get(diar_model):
+            raise HTTPException(status_code=400, detail="Model NeMo diarization nie jest zainstalowany. Zainstaluj go w Ustawieniach ASR.")
+    else:
+        raise HTTPException(status_code=400, detail="Nieznany silnik diaryzacji")
+
+    # HF token is required only for pyannote
+    s = load_settings()
+    hf_token = getattr(s, "hf_token", "") or ""
+    if diar_engine == 'pyannote' and not hf_token:
+        raise HTTPException(status_code=400, detail="Brak tokena HF. Ustaw go w Ustawieniach.")
+
+    worker = ROOT / "backend" / "voice_worker.py"
+    require_existing_file(worker, "Brak voice_worker.py")
+
+    cmd = [
+        os.environ.get("PYTHON", __import__("sys").executable),
+        str(worker),
+        "--audio", str(audio_path),
+        "--model", model,
+        "--lang", lang,
+        "--asr_engine", asr_engine,
+        "--diar_engine", diar_engine,
+        "--diar_model", (diar_model or ""),
+        "--hf_token", hf_token,
+    ]
+
+    app_log(
+        f"Voice diarization requested: project_id={project_id}, audio='{audio_path.name}', diar_engine={diar_engine}, diar_model={diar_model or '-'}, asr_engine={asr_engine}, model={model}, lang={lang}"
+    )
+
+    if GPU_RM.enabled:
+        t = GPU_RM.enqueue_subprocess(kind="diarize_voice", project_id=project_id, cmd=cmd, cwd=ROOT)
+    else:
+        t = TASKS.start_subprocess(kind="diarize_voice", project_id=project_id, cmd=cmd, cwd=ROOT)
+
+    # Run sound detection in parallel (on CPU) if enabled
+    sound_task_id = None
+    if sound_detection_enabled and sound_detection_model:
+        sound_task_id = _start_sound_detection(project_id, str(audio_path), sound_detection_model)
+
+    return {"task_id": t.task_id, "project_id": project_id, "sound_detection_task_id": sound_task_id}
+
+
+@app.post("/api/diarize_text")
+async def api_diarize_text(
+    project_id: str = Form(""),
+    text: str = Form(...),
+    speakers: int = Form(2),
+    method: str = Form("alternate"),
+    mapping_json: str = Form(""),
+) -> Any:
+    project_id = require_existing_project(project_id)
+    mapping: Dict[str, str] = {}
+    if mapping_json.strip():
+        try:
+            mapping = json.loads(mapping_json)
+            if not isinstance(mapping, dict):
+                mapping = {}
+        except Exception:
+            raise HTTPException(status_code=400, detail="Niepoprawny JSON mapowania mówców.")
+
+    speakers = max(1, min(50, int(speakers or 2)))
+    method = str(method or "alternate")
+
+    app_log(f"Text diarization requested: project_id={project_id}, speakers={speakers}, method={method}, input_chars={len(text or '')}")
+
+    def fn(txt: str, log_cb=None, progress_cb=None) -> Dict[str, Any]:
+        res = diarize_text_simple(txt, speakers=speakers, method=method, log_cb=log_cb, progress_cb=progress_cb)
+        out_text = str(res.get("text") or "")
+        # Optional mapping: replace "SPK1:" -> "Jan:" etc
+        if mapping:
+            if log_cb:
+                log_cb(f"Speaker mapping: applying {len(mapping)} replacements")
+            for k, v in mapping.items():
+                if not isinstance(k, str) or not isinstance(v, str):
+                    continue
+                # replace both "SPK1:" and "SPK1 " variants
+                out_text = out_text.replace(f"{k}:", f"{v}:")
+                out_text = out_text.replace(f"{k} ", f"{v} ")
+        return {"kind": "diarized_text", "text": out_text}
+
+    t = TASKS.start_python_fn("diarize_text", project_id, fn, text)
+    return {"task_id": t.task_id, "project_id": project_id}
+
+
+
+# ---------- post-processing: save default files when task done ----------
+# lightweight background watcher: for finished tasks, persist outputs into project folder
+# (keeps UI simple: download links point to stable filenames)
+_persist_lock = threading.Lock()
+_persisted: set[str] = set()
+
+
+def _persist_task_outputs(t: "TaskState") -> None:
+    """Persist finished task outputs into stable project files.
+    We also update project.json flags so UI can show what exists.
+    """
+    pdir = project_path(t.project_id)
+    meta = read_project_meta(t.project_id)
+    wrote_any = False
+    # Transcription
+    if t.kind == "transcribe" and isinstance(t.result, dict):
+        if ("text_ts" in t.result) or ("text" in t.result):
+            out_txt = str(t.result.get("text_ts") or t.result.get("text") or "")
+            (pdir / "transcript.txt").write_text(out_txt, encoding="utf-8")
+            meta["has_transcript"] = True
+            wrote_any = True
+            # Save segments with confidence as JSON for persistence
+            segments = t.result.get("segments")
+            if segments and isinstance(segments, list):
+                (pdir / "transcript_segments.json").write_text(
+                    json.dumps(segments, indent=2, ensure_ascii=False), encoding="utf-8"
+                )
+            # Generate waveform peaks (best-effort, runs once per project)
+            try:
+                peaks_path = pdir / "peaks.json"
+                if not peaks_path.exists():
+                    _generate_waveform_peaks(t.project_id)
+            except Exception:
+                pass
+            # Auto quick analysis (best-effort) similar to Whisper model auto-download.
+            _schedule_quick_analysis_background(t.project_id)
+    # Diarization
+    if t.kind in ("diarize_voice", "diarize_text") and isinstance(t.result, dict):
+        if "text" in t.result:
+            text_out = str(t.result.get("text") or "")
+            # Apply speaker_map if present (best-effort)
+            mapping = meta.get("speaker_map") or {}
+            if isinstance(mapping, dict) and mapping:
+                for k, v in mapping.items():
+                    if isinstance(k, str) and isinstance(v, str):
+                        text_out = text_out.replace(k, v)
+            (pdir / "diarized.txt").write_text(text_out, encoding="utf-8")
+            meta["has_diarized"] = True
+            wrote_any = True
+            # Save segments with confidence as JSON for persistence
+            segments = t.result.get("segments")
+            if segments and isinstance(segments, list):
+                (pdir / "diarized_segments.json").write_text(
+                    json.dumps(segments, indent=2, ensure_ascii=False), encoding="utf-8"
+                )
+    if wrote_any:
+        meta["updated_at"] = now_iso()
+        write_project_meta(t.project_id, meta)
+    else:
+        # still bump timestamp for completed tasks
+        meta["updated_at"] = now_iso()
+        write_project_meta(t.project_id, meta)
+
+
+def _schedule_quick_analysis_background(project_id: str) -> None:
+    """Run quick analysis in a daemon thread if quick_summary is missing/outdated.
+
+    If GPU RM is enabled, the job is queued as a python task so it won't overlap with transcription/diarization.
+    """
+    try:
+        if not _get_analysis_settings().get("quick_enabled", True):
+            return
+    except Exception:
+        pass
+
+    try:
+        pdir = project_path(project_id)
+        transcript = pdir / "transcript.txt"
+        if not transcript.exists():
+            return
+        qs = _analysis_dir(project_id) / "quick_summary.json"
+        if qs.exists() and qs.stat().st_mtime >= transcript.stat().st_mtime:
+            return
+    except Exception:
+        return
+
+    # Avoid duplicate queued/running quick jobs for the same project
+    try:
+        for t in TASKS.list_tasks():
+            if t.kind == "analysis_quick" and t.project_id == project_id and t.status in ("queued", "running"):
+                return
+    except Exception:
+        pass
+
+    if GPU_RM.enabled:
+        try:
+            GPU_RM.enqueue_python_fn("analysis_quick", project_id, _quick_analysis_task_runner, project_id)
+            return
+        except Exception as e:
+            try:
+                app_log(f"Auto quick analysis enqueue failed: project_id={project_id}, error={e}")
+            except Exception:
+                pass
+
+    def _runner() -> None:
+        try:
+            asyncio.run(_run_quick_analysis(project_id))
+            app_log(f"Auto quick analysis completed: project_id={project_id}")
+        except Exception as e:
+            # keep it silent-ish: quick analysis is optional
+            try:
+                app_log(f"Auto quick analysis skipped/failed: project_id={project_id}, error={e}")
+            except Exception:
+                pass
+
+    threading.Thread(target=_runner, daemon=True).start()
+
+
+# Chat, Admin and Tasks endpoints are in webapp/routers/ (chat.py, admin.py, tasks.py)
+
+
+def _persist_loop() -> None:
+
+    while True:
+        time.sleep(1.0)
+        tasks = TASKS.list_tasks()
+        for t in tasks:
+            if t.status != "done":
+                continue
+            key = t.task_id
+            with _persist_lock:
+                if key in _persisted:
+                    continue
+                _persisted.add(key)
+            try:
+                _persist_task_outputs(t)
+            except Exception as e:
+                # keep server running but leave a breadcrumb in task logs
+                try:
+                    t.add_log(f"PERSIST ERROR: {e}")
+                except Exception:
+                    pass
+
+threading.Thread(target=_persist_loop, daemon=True).start()

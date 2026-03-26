@@ -1,0 +1,197 @@
+{
+  "parser_id": "orange",
+  "parser_version": "1.0",
+  "format_variant": "",
+  "columns": [
+    {
+      "logical_name": "date",
+      "expected_headers": [],
+      "regex_patterns": [
+        "data\\s*(?:i\\s*czas)?(?:\\s*po[łl][aą]czenia)?",
+        "data\\s*(?:rozp|wykon|zdarz)"
+      ],
+      "required": true,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "time",
+      "expected_headers": [],
+      "regex_patterns": [
+        "godzina",
+        "czas\\s*rozp"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "caller",
+      "expected_headers": [],
+      "regex_patterns": [
+        "numer\\s*a\\b",
+        "numer\\s*dzwoni[aą]cego",
+        "msisdn\\s*a"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "callee",
+      "expected_headers": [],
+      "regex_patterns": [
+        "numer\\s*b\\b",
+        "numer\\s*(?:wywo[łl]|docel|po[łl][aą]cz)",
+        "msisdn\\s*b",
+        "numer\\s*odbiorcy"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "record_type",
+      "expected_headers": [],
+      "regex_patterns": [
+        "typ\\s*(?:po[łl][aą]czenia|zdarzenia|us[łl]ugi)",
+        "rodzaj",
+        "us[łl]uga",
+        "kierunek"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "duration",
+      "expected_headers": [],
+      "regex_patterns": [
+        "czas\\s*trwania",
+        "d[łl]ugo[śs][ćc]"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "cost",
+      "expected_headers": [],
+      "regex_patterns": [
+        "koszt(?:\\s*netto)?",
+        "kwota(?:\\s*netto)?",
+        "op[łl]ata",
+        "nale[żz]no[śs][ćc]"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "cost_gross",
+      "expected_headers": [],
+      "regex_patterns": [
+        "brutto",
+        "z\\s*vat"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "location",
+      "expected_headers": [],
+      "regex_patterns": [
+        "lokalizacja",
+        "adres\\s*bts",
+        "bts",
+        "stacja\\s*bazowa"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "lac",
+      "expected_headers": [],
+      "regex_patterns": [
+        "lac\\b"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "cell_id",
+      "expected_headers": [],
+      "regex_patterns": [
+        "cell\\s*id",
+        "cid\\b"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "network",
+      "expected_headers": [],
+      "regex_patterns": [
+        "sie[ćc]",
+        "operator"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "imsi",
+      "expected_headers": [],
+      "regex_patterns": [
+        "imsi"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "imei",
+      "expected_headers": [],
+      "regex_patterns": [
+        "imei"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "data_volume",
+      "expected_headers": [],
+      "regex_patterns": [
+        "(?:obj[ęe]to[śs][ćc]|ilo[śs][ćc]|wolumen)\\s*(?:danych)?",
+        "transfer"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    },
+    {
+      "logical_name": "roaming",
+      "expected_headers": [],
+      "regex_patterns": [
+        "roaming",
+        "kraj"
+      ],
+      "required": false,
+      "data_type": "str",
+      "description": ""
+    }
+  ],
+  "header_detection": [
+    "orange",
+    "orange\\s*polsk",
+    "ptk\\s*centertel",
+    "tp\\s*sa"
+  ],
+  "notes": "Auto-generated from OrangeParser",
+  "created_at": "2026-03-24T19:03:44.992123+00:00"
+}
