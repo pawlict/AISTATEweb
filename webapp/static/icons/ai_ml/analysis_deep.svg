@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="ad2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#5628a5"/><stop offset="100%" stop-color="#6623a3"/></linearGradient><filter id="s3d_analysis"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#5628a5" stroke-width="1" fill="none" opacity="0.22" stroke-linecap="round"/>
+<rect x="4" y="4" width="28" height="28" rx="4" stroke="url(#ad2)" stroke-width="2.3" fill="none"/>
+<polyline points="10 26 14 20 18 22 22 14 26 18 30 10" stroke="url(#ad2)" stroke-width="2.3" fill="none"/>
+<circle cx="14" cy="20" r="1.5" fill="#5628a5" opacity=".4"/>
+<circle cx="22" cy="14" r="1.5" fill="#6623a3" opacity=".4"/>
+<!-- magnifying glass = deep look -->
+<circle cx="37" cy="30" r="8" stroke="#5628a5" stroke-width="2.3" fill="none" fill-opacity="0.09" filter="url(#s3d_analysis)"/>
+<line x1="42.5" y1="35.5" x2="46" y2="39" stroke="#5628a5" stroke-width="2.9"/>
+<!-- layers inside magnifier = depth -->
+<line x1="33" y1="28" x2="41" y2="28" stroke="#6623a3" stroke-width="1.2" opacity=".4"/>
+<line x1="34" y1="31" x2="40" y2="31" stroke="#6623a3" stroke-width="1.2" opacity=".3"/>
+<line x1="35" y1="34" x2="39" y2="34" stroke="#6623a3" stroke-width="1.2" opacity="0.3"/>
+
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

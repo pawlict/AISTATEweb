@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="es" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#143697"/><stop offset="100%" stop-color="#313b49"/></linearGradient><filter id="s3d_embassy_"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#143697" stroke-width="1" fill="none" opacity="0.22"/>
+<!-- embassy building -->
+<rect x="8" y="18" width="32" height="24" rx="2" stroke="url(#es)" stroke-width="2.3" fill="none" fill-opacity="0.09" filter="url(#s3d_embassy_)"/>
+<path d="M8 18l16-10 16 10" stroke="url(#es)" stroke-width="2.3" fill="none"/>
+<!-- windows -->
+<rect x="14" y="24" width="5" height="5" rx="1" stroke="url(#es)" stroke-width="1" fill="none" opacity=".3"/>
+<rect x="29" y="24" width="5" height="5" rx="1" stroke="url(#es)" stroke-width="1" fill="none" opacity=".3"/>
+<!-- door -->
+<rect x="20" y="32" width="8" height="10" rx="1" stroke="url(#es)" stroke-width="1.7" fill="none"/>
+<!-- eye overlay -->
+<ellipse cx="24" cy="14" rx="8" ry="4" stroke="#5628a5" stroke-width="2.1" fill="none" opacity=".6"/>
+<circle cx="24" cy="14" r="2" stroke="#5628a5" stroke-width="1.2" fill="#5628a5" fill-opacity="0.22"/>
+<circle cx="24" cy="14" r="0.8" fill="#5628a5" opacity=".4"/>
+<!-- flag -->
+<line x1="38" y1="4" x2="38" y2="10" stroke="#313b49" stroke-width="1.7"/>
+<rect x="38" y="4" width="6" height="3" rx="0" stroke="#9a1a1a" stroke-width="1" fill="#9a1a1a" fill-opacity="0.3"/>
+
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

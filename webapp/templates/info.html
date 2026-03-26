@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="info-page">
+
+  <!-- Toolbar -->
+  <div class="card analysis-toolbar info-toolbar">
+    <div class="analysis-toolbar-left" data-no-project>
+      <div class="h1" style="margin:0"><i data-icon="info_circle" data-size="40"></i> <span data-i18n="info.title">Info</span></div>
+      <div class="small">{{ app_name }} {{ app_version }}</div>
+    </div>
+
+    <div class="analysis-toolbar-right">
+      <div class="toolbar-section">
+        <button class="btn pill-icon info-toolbar-btn active" data-info-tab="about" id="info_tab_about" title="Informacje" data-i18n-title="info.tab_about"><img src="/static/icons/status/info_alert.svg" alt="Info" draggable="false"></button>
+        <button class="btn pill-icon info-toolbar-btn" data-info-tab="manual" id="info_tab_manual" title="Instrukcja obsługi" data-i18n-title="info.tab_manual"><img src="/static/icons/inne/manual.svg" alt="Manual" draggable="false"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Content: About (Info) -->
+  <div class="info-tab-content" id="info_content_about">
+    <div class="card">
+      <div class="info-hero">
+        <div class="info-hero-title">{{ app_name }} — {{ app_fullname }}</div>
+        <div class="info-hero-version">{{ app_version }}</div>
+        <img class="info-hero-logo" src="/static/logo.png" alt="AISTATE Logo" style="max-height:288px;" />
+      </div>
+
+      <div class="info-source"><span data-i18n="info.source_prefix">Treść pochodzi z pliku</span> <code>{{ source }}</code>.</div>
+      <div class="hr"></div>
+
+      <div style="line-height:1.65">{{ content|safe }}</div>
+    </div>
+  </div>
+
+  <!-- Content: Manual -->
+  <div class="info-tab-content" id="info_content_manual" style="display:none">
+    <div class="card">
+      <div style="line-height:1.75">{{ manual_content|safe }}</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Sync Info page language with UI language from localStorage
+  (function(){
+    try{
+      const url = new URL(window.location.href);
+      const ls = (localStorage.getItem("aistate_ui_lang") || localStorage.getItem("ui_language") || localStorage.getItem("lang") || "").toLowerCase();
+      const wanted = ls.startsWith("en") ? "en" : ls.startsWith("ko") ? "ko" : ls.startsWith("pl") ? "pl" : "";
+      if (!wanted) return;
+      const current = (url.searchParams.get("lang") || "").toLowerCase();
+      if (current === wanted) return;
+      url.searchParams.set("lang", wanted);
+      window.location.replace(url.toString());
+    }catch(e){}
+  })();
+
+  // Toolbar icon switching
+  (function(){
+    const btns = document.querySelectorAll('.info-toolbar-btn[data-info-tab]');
+    const contents = {
+      about:  document.getElementById('info_content_about'),
+      manual: document.getElementById('info_content_manual')
+    };
+
+    btns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        btns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const which = btn.getAttribute('data-info-tab');
+        Object.entries(contents).forEach(([key, el]) => {
+          if (el) el.style.display = (key === which) ? '' : 'none';
+        });
+      });
+    });
+  })();
+</script>
+{% endblock %}

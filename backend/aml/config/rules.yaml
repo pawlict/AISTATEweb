@@ -1,0 +1,478 @@
+# AML Rules Configuration
+# Version: 1.0.0
+# Deterministic rules for transaction classification and risk scoring.
+# All patterns are case-insensitive regex.
+
+version: "1.0.0"
+
+# ============================================================
+# SCORING WEIGHTS (additive, 0-100 scale)
+# ============================================================
+scoring:
+  CRYPTO_RELATED: 25
+  GAMBLING: 30
+  LARGE_OUTLIER: 20
+  NEW_COUNTERPARTY_LARGE: 15
+  P2P_BURST: 15
+  CASH_CLUSTER: 10
+  CASH_INTENSIVE: 10
+  SPENDING_OVER_INCOME: 10
+  DEBT_COLLECTION: 15
+  PAYDAY_LOAN: 30
+  MIXER_SUSPECTED: 40
+  MONEY_MULE_PATTERN: 35
+  STRUCTURING_SUSPECTED: 30
+  DIGITAL_STORE: 15
+  PAYMENT_OPERATOR: 5
+  WHITELIST_MATCH: -10
+  BLACKLIST_MATCH: 30
+
+# ============================================================
+# CATEGORY RULES
+# Pattern → (category, subcategory)
+# ============================================================
+categories:
+  crypto:
+    exchange_polish:
+      - "\\bzonda\\b"
+      - "zonda\\.exchange"
+      - "zonda\\s*sp"
+      - "\\bbitbay\\b"
+      - "\\bkanga\\b"
+      - "kanga\\s*exchange"
+      - "\\bcoindeal\\b"
+      - "\\begera\\b"
+    exchange_global:
+      - "\\bbinance\\b"
+      - "\\bcoinbase\\b"
+      - "\\bbybit\\b"
+      - "\\bkraken\\b"
+      - "\\bbitget\\b"
+      - "\\bkucoin\\b"
+      - "gate\\.io"
+      - "crypto\\.com"
+      - "\\bbitstamp\\b"
+      - "\\bgemini\\b"
+      - "\\bokx\\b"
+      - "\\bhtx\\b"
+      - "\\bhuobi\\b"
+      - "\\bbitfinex\\b"
+      - "\\bbitpanda\\b"
+      - "\\bcoinmate\\b"
+      - "\\buphold\\b"
+      - "\\bnexo\\b"
+    payment_processor:
+      - "\\bsimplex\\b"
+      - "\\bmoonpay\\b"
+      - "\\btransak\\b"
+      - "ramp\\s*network"
+      - "\\bwyre\\b"
+      - "\\bbanxa\\b"
+      - "\\bpaybis\\b"
+      - "\\bchangelly\\b"
+    keyword:
+      - "kryptowalut"
+      - "bitcoin"
+      - "\\bbtc\\b"
+      - "\\beth\\b"
+      - "\\busdt\\b"
+      - "\\busdc\\b"
+      - "blockchain"
+      - "\\bdefi\\b"
+      - "\\bnft\\b"
+
+  gambling:
+    bookmaker:
+      - "\\bsts\\b"
+      - "sts\\.pl"
+      - "\\bbetclic\\b"
+      - "\\bfortuna\\b"
+      - "\\bsuperbet\\b"
+      - "\\blvbet\\b"
+      - "\\bbetfan\\b"
+      - "\\btotalbet\\b"
+      - "\\bbetsson\\b"
+      - "\\bunibet\\b"
+      - "\\bbet365\\b"
+      - "\\bnoblebet\\b"
+      - "\\bfuksiarz\\b"
+      - "\\bpzbuk\\b"
+      - "\\btotolotek\\b"
+      - "\\bforbet\\b"
+      - "\\bbetway\\b"
+      - "\\b1xbet\\b"
+      - "\\bpinnacle\\b"
+      - "\\bbwin\\b"
+      - "william\\s*hill"
+    casino:
+      - "casino"
+      - "kasyno"
+      - "\\bslot[sy]?\\b"
+      - "\\bpoker\\b"
+      - "total\\s*casino"
+      - "\\bruleta\\b"
+      - "\\b22bet\\b"
+    lottery:
+      - "\\blotto\\b"
+      - "toto.*lotek"
+      - "eurojackpot"
+      - "multi\\s*multi"
+      - "\\bzdrapk"
+      - "mini\\s*lotto"
+      - "\\bkeno\\b"
+    keyword:
+      - "bukmacher"
+      - "zakl?ad.*sport"
+      - "hazard"
+      - "gambling"
+      - "obstawianie"
+
+  loans:
+    payday:
+      # Well-known Polish payday lenders (top brands)
+      - "\\bvivus\\b"
+      - "\\bwonga\\b"
+      - "\\bprovident\\b"
+      - "\\bincredit\\b"
+      - "\\blendon\\b"
+      - "\\bsmartney\\b"
+      - "\\baasa\\b"
+      - "\\bferratum\\b"
+      - "\\bzaplo\\b"
+      - "\\bnetcredit\\b"
+      - "\\bfilarum\\b"
+      - "\\bsolcredit\\b"
+      - "\\balegotowka\\b"
+      - "\\bcashper\\b"
+      - "\\bwandoo\\b"
+      - "\\bprofi\\s*credit\\b"
+      - "\\beverest\\s*finanse\\b"
+      - "\\bmikrokasa\\b"
+      - "\\bhapipozyczk\\b"
+      - "\\bsupergrosz\\b"
+      - "\\bkuki\\b"
+      - "\\bextra\\s*portfel\\b"
+      - "\\bszybkasa\\b"
+      - "\\bekstrakasa\\b"
+      - "\\bpluskasa\\b"
+      - "\\bcapital\\s*service\\b"
+      - "\\bipf\\s*polska\\b"
+      - "\\bpaypo\\b"
+      - "\\btwisto\\b"
+      - "\\bavafin\\b"
+      # Generic payday loan keywords
+      - "pozyczkomat"
+      - "chwil[oó]wk"
+      - "szybka\\s*po[zż]yczk"
+      - "szybka\\s*got[oó]wk"
+      - "szybki\\s*kredyt"
+    installment:
+      - "\\brata\\b"
+      - "rat[ay]\\s*(kredyt|po[zż]yczk)"
+      - "spl?ata\\s*(kredyt|po[zż]yczk|rat)"
+      - "\\bleasing\\b"
+    mortgage:
+      - "kredyt\\s*mieszk"
+      - "kredyt\\s*hipotecz"
+      - "hipoteka"
+    debt_collection:
+      - "windykac"
+      - "komorni"
+      - "egzekuc"
+      - "kruk\\s*s\\.?a"
+      - "\\bbest\\s*s\\.?a\\b"
+      - "ultimo"
+      - "intrum"
+      - "hoist\\s*finance"
+
+  transfers:
+    salary:
+      - "wynagrodzeni"
+      - "pensj[aę]"
+      - "wypl?ata"
+      - "premia"
+    benefits:
+      - "\\bzus\\b"
+      - "\\bkrus\\b"
+      - "500\\s*plus"
+      - "800\\s*plus"
+      - "rodzinn"
+      - "alimenty"
+      - "stypend"
+    rent:
+      - "czynsz"
+      - "najem"
+      - "wynaj[eę]"
+      - "opl?ata.*mieszk"
+      - "wspo[lł]nota\\s*mieszk"
+      - "spo[lł]dzielni"
+    utilities:
+      - "energi[ae]|energa|tauron|\\bpge\\b|enea"
+      - "gaz.*pgnig|pgnig"
+      - "wod.*kan|wodoci[ąa]g|mpwik"
+    telecom:
+      - "\\borange\\b|t-mobile|plus.*gsm|\\bplay\\b|vectra"
+      - "\\bupc\\b|polsat.*box|canal.*plus"
+      - "netflix|spotify|\\bhbo\\b|disney"
+    insurance:
+      - "ubezpiecz|polisa|\\bpzu\\b|warta|ergo\\s*hestia"
+      - "allianz|aviva|generali|compensa|uniqa"
+
+  risky:
+    foreign_transfer:
+      - "western\\s*union"
+      - "moneygram"
+      - "ria\\s*money"
+      - "remitly"
+      - "wise.*transfer|transferwise"
+      - "przelew\\s*zagraniczny"
+    pawnshop:
+      - "lombard"
+      - "zastaw"
+      - "skup\\s*zl?ota"
+    p2p_lending:
+      - "\\bmintos\\b"
+      - "\\bbondora\\b"
+      - "\\btwino\\b"
+      - "\\bpeerberry\\b"
+    suspicious_services:
+      - "\\brevolut\\b.*przelew|przelew.*\\brevolut\\b"
+      - "\\bskrill\\b"
+      - "\\bneteller\\b"
+      - "\\bpaysera\\b"
+    mixer_suspected:
+      - "tornado.*cash"
+      - "mixer"
+      - "tumbler"
+      - "wasabi.*wallet"
+      - "coinjoin"
+    digital_store:
+      - "google\\s*play"
+      - "google\\s*\\*"
+      - "play\\s*store"
+      - "google\\s*(cloud|one|storage|workspace|ads)"
+      - "apple\\.com"
+      - "itunes"
+      - "app\\s*store"
+      - "apple\\s*(music|tv|arcade|icloud)"
+      - "steampowered"
+      - "\\bsteam\\b(?=.*(game|store|wallet|purchase|powered))"
+      - "epic\\s*games?"
+      - "playstation\\s*(store|network|plus)"
+      - "\\bpsn\\b"
+      - "xbox.*(store|game\\s*pass|live)"
+      - "nintendo\\s*(eshop|switch|store)"
+      - "gog\\.com"
+      - "humble\\s*bundle"
+      - "electronic\\s*arts"
+      - "\\broblox\\b"
+      - "\\bsupercell\\b"
+      - "\\btencent\\b"
+      - "\\bhoyoverse\\b"
+    payment_operator:
+      - "zen\\.com"
+      - "\\bzen\\b(?=.*(pay|card|kart|plat))"
+      - "\\bpayu\\b"
+      - "przelewy\\s*24"
+      - "\\btpay\\b"
+      - "\\bdotpay\\b"
+      - "\\bpaysafe\\b"
+      - "\\bpaysafecard\\b"
+      - "\\bmangopay\\b"
+      - "\\bimoje\\b"
+      - "\\bbluemedia\\b"
+      - "blue\\s*media"
+
+  # Everyday categories (no risk score, used for classification only)
+  everyday:
+    grocery:
+      - "\\bbiedronka\\b"
+      - "\\blidl\\b"
+      - "\\bkaufland\\b"
+      - "\\baldi\\b"
+      - "\\bnetto\\b"
+      - "\\bdino\\b"
+      - "\\bpolomarket\\b"
+      - "\\bstokrotka\\b"
+      - "\\bauchan\\b"
+      - "\\bcarrefour\\b"
+      - "\\btesco\\b"
+      - "\\bintermarche\\b"
+      - "\\bmakro\\b"
+      - "\\bselgros\\b"
+      - "\\bżabka\\b"
+      - "\\bzabka\\b"
+      - "\\bfreshmarket\\b"
+      - "\\bspar\\b"
+      - "\\blewiatan\\b"
+      - "\\bgroszek\\b"
+      - "\\btopaz\\b"
+      - "chata\\s*polska"
+      - "delikatesy\\s*centrum"
+      - "\\bfrisco\\b"
+      - "sklep\\s*spo[zż]ywcz"
+      - "\\bsupermarket\\b"
+      - "\\bhipermarket\\b"
+      - "\\bpiekarni[ae]\\b"
+      - "\\bcukierni[ae]\\b"
+    drugstore:
+      - "\\brossmann\\b"
+      - "\\bhebe\\b"
+      - "\\bdouglas\\b"
+      - "super[\\s-]*pharm"
+      - "drogeria\\s*natura"
+      - "\\bsephora\\b"
+      - "\\binglot\\b"
+      - "\\bdrogeri[ae]\\b"
+    fuel:
+      - "\\borlen\\b"
+      - "pkn\\s*orlen"
+      - "\\blotos\\b"
+      - "\\bshell\\b"
+      - "circle\\s*k"
+      - "amic\\s*energy"
+      - "\\bmoya\\b"
+      - "\\bhuzar\\b"
+      - "stacja\\s*(benzy|pali)"
+    hardware:
+      - "\\bcastorama\\b"
+      - "leroy\\s*merlin"
+      - "\\bbricomarche\\b"
+      - "\\bbricoman\\b"
+      - "merkury\\s*market"
+      - "psb\\s*mr[oó]wka"
+      - "sklep\\s*budowlan"
+      - "materia[łl]y\\s*budowlan"
+    gastronomy:
+      - "\\bmcdonald'?s?\\b"
+      - "\\bkfc\\b"
+      - "burger\\s*king"
+      - "\\bsubway\\b"
+      - "pizza\\s*hut"
+      - "\\bdomino'?s?\\b"
+      - "\\bstarbucks\\b"
+      - "costa\\s*coffee"
+      - "\\bpyszne\\b"
+      - "\\bwolt\\b"
+      - "uber\\s*eats?"
+      - "bolt\\s*food"
+      - "\\bglovo\\b"
+      - "\\brestauracj[aei]\\b"
+      - "\\bgastronomi[ae]\\b"
+      - "sto[łl][oó]wk[aei]"
+      - "\\bcatering\\b"
+      - "\\bkebab\\b"
+      - "\\bpizzeri[ae]\\b"
+      - "\\bkawiarni[ae]\\b"
+    clothing:
+      - "\\bpepco\\b"
+      - "\\breserved\\b"
+      - "\\bcropp\\b"
+      - "\\bsinsay\\b"
+      - "\\bmohito\\b"
+      - "h\\s*[&+]\\s*m"
+      - "\\bzara\\b"
+      - "\\bdeichmann\\b"
+      - "tk\\s*maxx"
+      - "new\\s*yorker"
+    health:
+      - "\\bapteka\\b"
+      - "dr[.\\s]*max"
+      - "\\bcefarm\\b"
+      - "\\bprzychodnia\\b"
+      - "\\bstomatolog"
+      - "\\bdentysta\\b"
+      - "\\brehabilitac"
+      - "\\bfizjoterap"
+    transport:
+      - "\\bbolt\\b(?!.*food)"
+      - "\\buber\\b(?!.*eats?)"
+      - "\\bpkp\\b"
+      - "\\bpolregio\\b"
+      - "\\bflixbus\\b"
+      - "\\bmpk\\b"
+      - "\\bztm\\b"
+      - "\\bparking\\b"
+      - "\\bryanair\\b"
+      - "wizz\\s*air"
+    p2p_transfer:
+      - "przelew\\s*na\\s*telefon"
+      - "blik\\s*p2p"
+      - "p\\.blik"
+
+# ============================================================
+# RISK DICTIONARY (additional patterns for risk tagging)
+# ============================================================
+risk_dictionary:
+  structuring:
+    - "przelew.*9\\s*[89]\\d{2}"
+    - "wpl?ata.*9\\s*[89]\\d{2}"
+  money_mule:
+    - "przelew.*dalej"
+    - "forward.*transfer"
+
+# ============================================================
+# URL DOMAIN CLASSIFICATION
+# ============================================================
+url_domains:
+  "lotto.pl":
+    category: "gambling"
+    subcategory: "lottery"
+  "www.lotto.pl":
+    category: "gambling"
+    subcategory: "lottery"
+  "sts.pl":
+    category: "gambling"
+    subcategory: "bookmaker"
+  "www.sts.pl":
+    category: "gambling"
+    subcategory: "bookmaker"
+  "betclic.pl":
+    category: "gambling"
+    subcategory: "bookmaker"
+  "fortuna.pl":
+    category: "gambling"
+    subcategory: "bookmaker"
+  "superbet.pl":
+    category: "gambling"
+    subcategory: "bookmaker"
+  "totalcasino.pl":
+    category: "gambling"
+    subcategory: "casino"
+  "zonda.exchange":
+    category: "crypto"
+    subcategory: "exchange_polish"
+  "www.zonda.exchange":
+    category: "crypto"
+    subcategory: "exchange_polish"
+  "bitbay.net":
+    category: "crypto"
+    subcategory: "exchange_polish"
+  "binance.com":
+    category: "crypto"
+    subcategory: "exchange_global"
+  "www.binance.com":
+    category: "crypto"
+    subcategory: "exchange_global"
+  "coinbase.com":
+    category: "crypto"
+    subcategory: "exchange_global"
+  "crypto.com":
+    category: "crypto"
+    subcategory: "exchange_global"
+  "skrill.com":
+    category: "risky"
+    subcategory: "suspicious_services"
+  "neteller.com":
+    category: "risky"
+    subcategory: "suspicious_services"
+
+# ============================================================
+# ANOMALY THRESHOLDS (used by baseline engine)
+# ============================================================
+anomaly:
+  outlier_zscore: 2.5          # z-score threshold for amount outlier
+  new_cp_large_pct: 0.3        # new counterparty + amount > 30% of monthly avg
+  p2p_burst_count: 5           # >5 P2P transfers in 7 days
+  cash_cluster_count: 3        # >3 cash operations in 3 days
+  spending_over_income_pct: 1.2  # monthly spend > 120% of income

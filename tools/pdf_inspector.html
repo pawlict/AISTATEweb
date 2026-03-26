@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>PDF Inspector — Bank Statement (Anonymized)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;padding:20px}
+h1{font-size:1.4rem;margin-bottom:12px;color:#00d4ff}
+.drop{border:2px dashed #444;border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:16px}
+.drop:hover,.drop.over{border-color:#00d4ff;background:rgba(0,212,255,.05)}
+.drop input{display:none}
+#status{margin:8px 0;font-size:.85rem;color:#aaa}
+#output{background:#111;border:1px solid #333;border-radius:8px;padding:12px;font-family:'Courier New',monospace;font-size:.72rem;white-space:pre-wrap;max-height:70vh;overflow:auto;line-height:1.4}
+
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;align-items:center}
+button{background:#00d4ff;color:#000;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:700}
+button:hover{background:#00b8d9}
+button.secondary{background:#444;color:#e0e0e0}
+button.secondary:hover{background:#555}
+button:disabled{opacity:.4;cursor:not-allowed}
+
+label{font-size:.85rem;display:flex;align-items:center;gap:4px;cursor:pointer}
+label input[type=checkbox]{accent-color:#00d4ff}
+
+.chunk-nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.chunk-nav span{font-size:.85rem;color:#aaa}
+.badge{background:#ff6b35;color:#fff;padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:700}
+
+.anon-legend{background:#1e1e3a;border:1px solid #333;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:.8rem;line-height:1.5}
+.anon-legend b{color:#00d4ff}
+
+.detected-info{background:#1a2e1a;border:1px solid #2a5a2a;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:.8rem;line-height:1.5}
+.detected-info b{color:#4dff4d}
+</style>
+</head>
+<body>
+<h1>PDF Inspector — wyciąg bankowy (z anonimizacją)</h1>
+
+<div class="drop" id="drop">
+  <p>Kliknij lub przeciągnij PDF tutaj</p>
+  <input type="file" id="file" accept=".pdf">
+</div>
+
+<div class="controls" id="controls" style="display:none">
+  <label><input type="checkbox" id="chkAnon" checked> Anonimizuj dane</label>
+  <label><input type="checkbox" id="chkCoords"> Pokaż współrzędne (debug)</label>
+  <label><input type="checkbox" id="chkCompact" checked> Tryb kompaktowy</label>
+</div>
+
+<div id="status"></div>
+
+<div class="anon-legend" id="legend" style="display:none">
+  <b>Legenda anonimizacji:</b><br>
+  Właściciel konta → <code>[WŁAŚCICIEL]</code> · Kontrahenci → <code>K***</code> ·
+  IBAN/konta → <code>XX••••1234</code> · Nr kart → <code>••••5678</code> ·
+  PESEL → <code>•••••••••••</code> · Adresy → <code>[ADRES]</code> ·
+  E-mail → <code>u***@***.pl</code> · Telefon → <code>+48•••••••••</code>
+</div>
+
+<div class="detected-info" id="detectedInfo" style="display:none"></div>
+
+<div class="chunk-nav" id="chunkNav" style="display:none">
+  <button class="secondary" id="prevChunk" onclick="showChunk(-1)">← Poprzedni</button>
+  <span id="chunkInfo"></span>
+  <button class="secondary" id="nextChunk" onclick="showChunk(1)">Następny →</button>
+  <button onclick="copyCurrentChunk()">Kopiuj ten fragment</button>
+  <button class="secondary" onclick="copyAllResult()">Kopiuj całość</button>
+</div>
+
+<button onclick="copyAllResult()" style="display:none" id="copyBtn">Kopiuj wynik do schowka</button>
+
+<pre id="output"></pre>
+
+<script>
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+const statusEl = document.getElementById('status');
+const output = document.getElementById('output');
+const copyBtn = document.getElementById('copyBtn');
+const controlsEl = document.getElementById('controls');
+const legendEl = document.getElementById('legend');
+const detectedInfoEl = document.getElementById('detectedInfo');
+const chunkNav = document.getElementById('chunkNav');
+const chunkInfo = document.getElementById('chunkInfo');
+const chkAnon = document.getElementById('chkAnon');
+const chkCoords = document.getElementById('chkCoords');
+const chkCompact = document.getElementById('chkCompact');
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let rawPages = [];
+let chunks = [];
+let currentChunk = 0;
+const CHUNK_SIZE = 12000;
+
+// ─── Owner data auto-detected from page 1 header ───
+let ownerTokens = [];   // individual words to mask (name parts, street name parts)
+let ownerPhrases = [];  // multi-word phrases to mask
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+chkAnon.addEventListener('change', rerender);
+chkCoords.addEventListener('change', rerender);
+chkCompact.addEventListener('change', rerender);
+
+// ─── Extract owner info from first page ───
+
+function extractOwnerData(pages) {
+  ownerTokens = [];
+  ownerPhrases = [];
+
+  if (!pages.length) return;
+
+  // Reconstruct first page text lines
+  const page1Lines = [];
+  for (const line of pages[0].lines) {
+    const sorted = [...line.items].sort((a, b) => a.x - b.x);
+    let txt = '';
+    let lastEnd = 0;
+    for (const item of sorted) {
+      const gap = item.x - lastEnd;
+      if (gap > 20) txt += '  |  ';
+      else if (gap > 5) txt += ' ';
+      txt += item.text;
+      lastEnd = item.x + item.w;
+    }
+    page1Lines.push(txt);
+  }
+
+  const fullPage1 = page1Lines.join('\n');
+
+  // Find the "Dane posiadacza" section — owner data is in the lines right after
+  // Typical ING format:
+  // "Dane posiadacza Dane rachunku"
+  // "NAZWISKO IMIE  |  Nazwa rachunku:  |  Nr rachunku/NRB:"
+  // "ULICA NR  |  KONTO Z LWEM ...  |  57..."
+  // "KOD MIASTO  |  Waluta rachunku:  |  ..."
+
+  let ownerName = '';
+  let ownerStreet = '';
+  let ownerCity = '';
+
+  const posiadaczIdx = page1Lines.findIndex(l => /dane posiadacza/i.test(l));
+  if (posiadaczIdx >= 0) {
+    // Next line is usually name
+    for (let i = posiadaczIdx + 1; i < Math.min(posiadaczIdx + 5, page1Lines.length); i++) {
+      const line = page1Lines[i];
+      // Split by separator to get first column
+      const col1 = line.split(/\s{2,}\|?\s{2,}/)[0].trim();
+      if (!col1) continue;
+
+      if (!ownerName) {
+        // First non-empty col1 after "Dane posiadacza" = name
+        ownerName = col1;
+      } else if (!ownerStreet) {
+        ownerStreet = col1;
+      } else if (!ownerCity) {
+        ownerCity = col1;
+      }
+    }
+  }
+
+  // Extract tokens from detected data
+  const addToken = (word) => {
+    const w = word.trim();
+    // Skip very short tokens, numbers-only, and common words
+    if (w.length < 3) return;
+    if (/^\d+$/.test(w)) return;
+    if (/^(kod|kraju|pl|pln)$/i.test(w)) return;
+    ownerTokens.push(w);
+  };
+
+  if (ownerName) {
+    ownerPhrases.push(ownerName);
+    ownerName.split(/\s+/).forEach(addToken);
+  }
+  if (ownerStreet) {
+    ownerPhrases.push(ownerStreet);
+    // Only add street name words (not the number)
+    ownerStreet.split(/\s+/).forEach(part => {
+      if (!/^\d/.test(part)) addToken(part);
+    });
+  }
+  if (ownerCity) {
+    // "92-780 ŁÓDŹ" — add city name
+    ownerPhrases.push(ownerCity);
+    ownerCity.split(/\s+/).forEach(part => {
+      if (!/^\d{2}-\d{3}$/.test(part)) addToken(part);
+    });
+  }
+
+  // Sort phrases longest first for replacement priority
+  ownerPhrases.sort((a, b) => b.length - a.length);
+
+  // Show what was detected
+  if (ownerName || ownerStreet) {
+    detectedInfoEl.style.display = '';
+    detectedInfoEl.innerHTML = '<b>Auto-wykryte dane właściciela (będą maskowane):</b><br>' +
+      (ownerName ? 'Imię i nazwisko: <code>' + ownerName + '</code><br>' : '') +
+      (ownerStreet ? 'Adres: <code>' + ownerStreet + '</code><br>' : '') +
+      (ownerCity ? 'Miasto: <code>' + ownerCity + '</code>' : '') +
+      '<br>Tokeny: <code>' + ownerTokens.join(', ') + '</code>';
+  } else {
+    detectedInfoEl.style.display = 'none';
+  }
+}
+
+// ─── Anonymization ───
+
+// Words that should NEVER be masked as names
+const SAFE_WORDS = new Set([
+  // Document structure
+  'numer','konto','saldo','kwota','waluta','operacja','strona','raport','wyciąg',
+  'data','opis','tytuł','nadawca','odbiorca','adres','rachunek','zlecenie',
+  'przelew','wpłata','wypłata','prowizja','opłata','zakup','zwrot','transakcja',
+  'bankomat','terminal','internet','mobilny','wewnętrzny','zewnętrzny',
+  'realizacja','zlecenia','stałego','własny','obcy','krajowy','zagraniczny',
+  'bank','polski','polska','spółka','firma','urząd','miasto','gmina',
+  'podatek','składka','ubezpieczenie','dochodowy','społeczne',
+  'biuro','centrum','punkt','sklep','hurtownia','detaliczny',
+  // Months / days
+  'styczeń','luty','marzec','kwiecień','maj','czerwiec',
+  'lipiec','sierpień','wrzesień','październik','listopad','grudzień',
+  'poniedziałek','wtorek','środa','czwartek','piątek','sobota','niedziela',
+  // Adjectives / prepositions
+  'nowy','stary','wielki','mały','duży','dobry','ostatni','pierwszy',
+  'przed','między','przez','według','razem','suma','końcowe',
+  'otwarcia','zamknięcia','początkowe','dostępne','zablokowane',
+  // Banking terms
+  'imię','nazwisko','faktura','płatność','termin','okres','rozliczenie',
+  'fundusz','emerytalny','inwestycyjny','powszechny',
+  'zakład','ubezpieczeń','społecznych','towarzystwo','ubezpieczeniowe',
+  'kredyt','lokata','oszczędności','depozyt','odsetki','kapitał',
+  'spółdzielnia','mieszkaniowa','wspólnota','zarząd','budynków',
+  'energia','wodociągi','ciepłownictwo','gazownictwo','telekomunikacja',
+  'informatyka','logistyka','transport','budownictwo','produkcja',
+  'super','extra','premium','standard','basic','plus','gold','silver',
+  // ING specific
+  'nazwa','rachunku','dane','posiadacza','waluta','limit','zadłużenia',
+  'suma','uznań','obciążeń','księgowania','kontrahenta','szczegóły',
+  'kartą','gotówki','własny','środków','pieniężne','zgromadzone',
+  'bankowym','podlegają','ochronie','gwarancyjnej','wysokości',
+  'równowartości','złotych','ramach','obowiązkowego','systemu',
+  'gwarantowania','depozytów','prowadzonego','bankowy','gwarancyjny',
+  'zgodnie','ustawą','systemie','przymusowej','restrukturyzacji',
+  'gwarantowana','obliczana','ulokowanych','wszystkich','rachunkach',
+  'jednego','deponenta','banku','przypadku','wspólnego','zastosowanie',
+  'każdego','deponentów','oddzielnie','szczegółowe','informacje',
+  'można','znaleźć','dokument','sporządzony','podstawie','ustawy',
+  'sierpnia','prawo','bankowe','roku','późniejszymi','zmianami',
+  'wygenerowany','elektronicznie','wymaga','pieczęci','podpisu',
+  'śląski','siedzibą','katowicach','sokolska',
+  'płatność','płatności','przelew','prowizja',
+  'operacyjno','rozliczeniowe',
+  'świadczenie','długoletnią','służbę',
+  'gospodarowanie','odpadami','kontrahenta',
+  'obiekt','telefon','ceska',
+  // Common company words
+  'spółka','akcyjna','ograniczoną','odpowiedzialnością',
+  'stacja','market','apteka','piekarnia','hotel','bistro',
+  'delikatesy','spożywcze','nabialowe','kwiaciarnia',
+  'hurtownia','gastronomia',
+]);
+
+function isSafeWord(word) {
+  return SAFE_WORDS.has(word.toLowerCase());
+}
+
+function anonymize(text) {
+  if (!chkAnon.checked) return text;
+  let t = text;
+
+  // 1) Owner phrases first (longest match)
+  for (const phrase of ownerPhrases) {
+    // Case-insensitive replace of the full phrase
+    const esc = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    t = t.replace(new RegExp(esc, 'gi'), '[WŁAŚCICIEL]');
+  }
+
+  // 2) Owner individual tokens (catch split-line references)
+  for (const token of ownerTokens) {
+    const esc = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Word boundary, case-insensitive
+    t = t.replace(new RegExp('\\b' + esc + '\\b', 'gi'), '[WŁAŚC.]');
+  }
+
+  // 3) IBAN (PL and international)
+  t = t.replace(/\b([A-Z]{2})\s?\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}\b/g,
+    (m) => { const d = m.replace(/\s/g,''); return d.slice(0,2) + '••••••••••••••••••••••' + d.slice(-4); });
+
+  // 4) Polish account numbers (26 digits, possibly with spaces)
+  t = t.replace(/\b(\d{2})[\s]?(\d{4})[\s]?(\d{4})[\s]?(\d{4})[\s]?(\d{4})[\s]?(\d{4})[\s]?(\d{4})\b/g,
+    (m) => { const d = m.replace(/\s/g,''); return d.slice(0,2) + '••••••••••••••••••••' + d.slice(-4); });
+
+  // 5) Card numbers (16 digits, also partial like 4246xx9674)
+  t = t.replace(/\b(\d{4})[\s-]?(\d{4})[\s-]?(\d{4})[\s-]?(\d{4})\b/g,
+    (m) => { const d = m.replace(/[\s-]/g,''); return '••••••••••••' + d.slice(-4); });
+  // Partial card numbers from bank (e.g. 4246xx9674)
+  t = t.replace(/\b\d{4}xx\d{4}\b/g, '••••xx••••');
+
+  // 6) PESEL (11 digits standalone)
+  t = t.replace(/\b\d{11}\b/g, '•••••••••••');
+
+  // 7) Email
+  t = t.replace(/\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\.([a-zA-Z]{2,})\b/g,
+    (m, user, domain, tld) => user[0] + '***@***.' + tld);
+
+  // 8) Phone (Polish formats)
+  t = t.replace(/(\+48[\s-]?)(\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d)/g,
+    '+48•••••••••');
+  t = t.replace(/\+48x{4,}x*\d*/g, '+48•••••••••');
+  t = t.replace(/\b(\d{3})[\s-](\d{3})[\s-](\d{3})\b/g, '•••-•••-•••');
+
+  // 9) Addresses: street + number (with or without ul./al. prefix)
+  t = t.replace(/\b(ul\.|al\.|os\.|pl\.)\s*[A-ZŁŚŻŹĆŃÓa-ząęółśżźćń]+(\s+[A-ZŁŚŻŹĆŃÓa-ząęółśżźćń]+)?\s+\d+[a-zA-Z]?(\/\d+[a-zA-Z]?)?\b/gi,
+    '[ADRES]');
+
+  // 10) Postal codes with city
+  t = t.replace(/\b\d{2}-\d{3}\s+[A-ZŁŚŻŹĆŃÓ][A-ZŁŚŻŹĆŃÓa-ząęółśżźćń]+\b/g, '[ADRES]');
+
+  // 11) Standalone postal codes
+  t = t.replace(/\b\d{2}-\d{3}\b/g, '[KOD]');
+
+  // 12) Names — ALL CAPS two-word names (NAZWISKO IMIE or IMIE NAZWISKO)
+  t = t.replace(/\b([A-ZŁŚŻŹĆŃÓ]{3,})\s+([A-ZŁŚŻŹĆŃÓ]{3,})\b/g,
+    (match, w1, w2) => {
+      if (isSafeWord(w1) || isSafeWord(w2)) return match;
+      // Check it's not a company/brand name pattern
+      if (/^(JMP|JAS|PKP|PZU|BNP|ING|WOG|OBI|KFC|PHU|ZPM)\b/.test(w1)) return match;
+      return w1[0] + '***' + ' ' + w2[0] + '***';
+    });
+
+  // 13) Names — Title Case two-word names
+  t = t.replace(/\b([A-ZŁŚŻŹĆŃÓ][a-ząęółśżźćń]{2,})\s+([A-ZŁŚŻŹĆŃÓ][a-ząęółśżźćń]{2,})\b/g,
+    (match, first, last) => {
+      if (isSafeWord(first) || isSafeWord(last)) return match;
+      return first[0] + '***' + ' ' + last[0] + '***';
+    });
+
+  // 14) Names after "Od " prefix (e.g. "Od TOMASZ PAWLICKI")
+  t = t.replace(/\bOd\s+([A-ZŁŚŻŹĆŃÓ][A-ZŁŚŻŹĆŃÓa-ząęółśżźćń]+)\s+([A-ZŁŚŻŹĆŃÓ][A-ZŁŚŻŹĆŃÓa-ząęółśżźćń]+)/g,
+    (match, f, l) => 'Od ' + f[0] + '*** ' + l[0] + '***');
+
+  // 15) Single first names in known contexts (after "odbiorcy:", "płatnika:", standalone line with just a name)
+  t = t.replace(/(odbiorcy:|płatnika:)\s*([A-ZŁŚŻŹĆŃÓ][a-ząęółśżźćń]{2,})\b/g,
+    (match, prefix, name) => {
+      if (isSafeWord(name)) return match;
+      return prefix + ' ' + name[0] + '***';
+    });
+
+  return t;
+}
+
+// ─── PDF parsing ───
+
+async function handleFile(file) {
+  if (!file) return;
+  statusEl.textContent = 'Ładowanie PDF: ' + file.name + ' (' + (file.size/1024).toFixed(0) + ' KB)...';
+  output.textContent = '';
+  rawPages = [];
+  controlsEl.style.display = 'flex';
+
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  const totalPages = pdf.numPages;
+
+  for (let p = 1; p <= totalPages; p++) {
+    const page = await pdf.getPage(p);
+    const textContent = await page.getTextContent();
+    const viewport = page.getViewport({scale: 1});
+
+    const items = textContent.items.map(item => ({
+      text: item.str,
+      x: Math.round(item.transform[4]),
+      y: Math.round(viewport.height - item.transform[5]),
+      w: Math.round(item.width),
+      h: Math.round(item.height),
+      font: item.fontName || ''
+    }));
+
+    items.sort((a, b) => a.y - b.y || a.x - b.x);
+
+    const lines = [];
+    let currentLine = null;
+    for (const item of items) {
+      if (!item.text.trim() && item.text !== ' ') continue;
+      if (!currentLine || Math.abs(item.y - currentLine.y) > 3) {
+        currentLine = { y: item.y, items: [] };
+        lines.push(currentLine);
+      }
+      currentLine.items.push(item);
+    }
+
+    rawPages.push({
+      pageNum: p,
+      totalPages,
+      width: viewport.width.toFixed(0),
+      height: viewport.height.toFixed(0),
+      lines
+    });
+
+    statusEl.textContent = 'Przetwarzanie... strona ' + p + '/' + totalPages;
+  }
+
+  // Auto-detect owner data from page 1
+  extractOwnerData(rawPages);
+
+  rerender();
+  statusEl.textContent = 'Gotowe! ' + totalPages + ' stron.';
+}
+
+// ─── Render output from parsed data ───
+
+function rerender() {
+  if (!rawPages.length) return;
+
+  const showCoords = chkCoords.checked;
+  const compact = chkCompact.checked;
+  const doAnon = chkAnon.checked;
+
+  legendEl.style.display = doAnon ? '' : 'none';
+  detectedInfoEl.style.display = (doAnon && ownerTokens.length) ? '' : 'none';
+
+  let result = '';
+
+  if (!compact) {
+    result += '=== Stron: ' + rawPages[rawPages.length-1].totalPages + ' ===\n\n';
+  }
+
+  for (const page of rawPages) {
+    if (!compact) {
+      result += '══════════════════════════════════════════\n';
+      result += '  STRONA ' + page.pageNum + '/' + page.totalPages + '\n';
+      result += '══════════════════════════════════════════\n\n';
+    } else {
+      result += '--- s.' + page.pageNum + ' ---\n';
+    }
+
+    if (showCoords) {
+      for (const line of page.lines) {
+        line.items.sort((a, b) => a.x - b.x);
+        const parts = line.items.map(it =>
+          '[x=' + it.x + ',w=' + it.w + '] "' + anonymize(it.text) + '"'
+        );
+        result += 'Y=' + line.y + ': ' + parts.join('  ') + '\n';
+      }
+      result += '\n';
+    }
+
+    // Reconstructed lines
+    for (const line of page.lines) {
+      line.items.sort((a, b) => a.x - b.x);
+      let lineText = '';
+      let lastEnd = 0;
+      for (const item of line.items) {
+        const gap = item.x - lastEnd;
+        if (gap > 20) lineText += '  |  ';
+        else if (gap > 5) lineText += ' ';
+        lineText += item.text;
+        lastEnd = item.x + item.w;
+      }
+
+      lineText = anonymize(lineText);
+
+      if (compact && !lineText.trim()) continue;
+      if (compact) {
+        lineText = lineText.replace(/\s{4,}/g, '  |  ');
+      }
+
+      result += lineText + '\n';
+    }
+
+    if (!compact) result += '\n';
+  }
+
+  buildChunks(result);
+}
+
+function buildChunks(fullText) {
+  chunks = [];
+  const lines = fullText.split('\n');
+  let chunk = '';
+
+  for (const line of lines) {
+    if (chunk.length + line.length + 1 > CHUNK_SIZE && chunk.length > 0) {
+      chunks.push(chunk);
+      chunk = '';
+    }
+    chunk += (chunk ? '\n' : '') + line;
+  }
+  if (chunk) chunks.push(chunk);
+
+  currentChunk = 0;
+
+  if (chunks.length > 1) {
+    chunkNav.style.display = 'flex';
+    copyBtn.style.display = 'none';
+    showCurrentChunk();
+  } else {
+    chunkNav.style.display = 'none';
+    copyBtn.style.display = '';
+    output.textContent = fullText;
+  }
+}
+
+function showCurrentChunk() {
+  output.textContent = chunks[currentChunk];
+  chunkInfo.innerHTML = 'Fragment <b>' + (currentChunk + 1) + '</b> / <b>' + chunks.length + '</b>' +
+    ' <span class="badge">' + (chunks[currentChunk].length/1000).toFixed(1) + 'k znaków</span>';
+  document.getElementById('prevChunk').disabled = currentChunk === 0;
+  document.getElementById('nextChunk').disabled = currentChunk === chunks.length - 1;
+}
+
+function showChunk(dir) {
+  currentChunk = Math.max(0, Math.min(chunks.length - 1, currentChunk + dir));
+  showCurrentChunk();
+}
+
+function copyCurrentChunk() {
+  const header = '[Fragment ' + (currentChunk + 1) + '/' + chunks.length + ']\n';
+  navigator.clipboard.writeText(header + chunks[currentChunk]).then(() => {
+    statusEl.textContent = 'Skopiowano fragment ' + (currentChunk + 1) + '/' + chunks.length + '!';
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+  });
+}
+
+function copyAllResult() {
+  const fullText = chunks.join('\n');
+  navigator.clipboard.writeText(fullText).then(() => {
+    statusEl.textContent = 'Skopiowano całość! (' + (fullText.length/1000).toFixed(1) + 'k znaków)';
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+  });
+}
+</script>
+</body>
+</html>

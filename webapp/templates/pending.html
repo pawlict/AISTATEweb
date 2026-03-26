@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Oczekiwanie na zatwierdzenie — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ app_version }}&_={{ static_ts }}"/>
+  <style>
+    body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
+    .pending-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 480px; text-align: center; }
+    .pending-card h1 { font-size: 1.2rem; margin: 0 0 .15rem; color: var(--text, #1a1a2e); }
+    .pending-icon { font-size: 3rem; margin-bottom: .5rem; }
+    .pending-card p { color: var(--muted, #666); font-size: .95rem; margin: .5rem 0; line-height: 1.5; }
+    .en { color: var(--muted, #999); font-size: .665rem; margin-top: .1rem; line-height: 1.4; font-style: italic; }
+    h1 + .en { font-size: .84rem; margin-bottom: .8rem; }
+    .approver-box { background: #f0f7ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: .75rem 1rem; margin: 1rem 0; color: #1e40af; font-size: .9rem; text-align: left; }
+    .approver-box .en { color: #6b8fc7; font-size: .63rem; }
+    .approver-label { font-weight: 600; margin-bottom: .25rem; }
+    .role-badges { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+    .role-badge { background: #dbeafe; color: #1e40af; padding: .3rem .7rem; border-radius: 6px; font-size: .85rem; font-weight: 600; }
+    .hint-block { font-size: .85rem; color: var(--muted, #999); margin-top: .5rem; }
+    .hint-block .en { font-size: .595rem; }
+    .pending-card a { display: inline-block; margin-top: 1.5rem; color: var(--accent, #4a6cf7); text-decoration: none; font-weight: 600; font-size: .9rem; }
+    .pending-card a .en { font-size: .63rem; font-weight: 400; display: block; }
+    .lang-switch { display: flex; justify-content: center; gap: .3rem; margin-bottom: 1rem; }
+    .lang-btn { padding: .25rem .6rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 6px; background: transparent; cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--muted, #888); transition: all .2s; }
+    .lang-btn.active { background: var(--accent, #4a6cf7); color: #fff; border-color: var(--accent, #4a6cf7); }
+    .lang-btn:hover:not(.active) { border-color: var(--accent, #4a6cf7); color: var(--accent, #4a6cf7); }
+  </style>
+</head>
+<body>
+  <div class="pending-card">
+    <div class="lang-switch">
+      <button class="lang-btn active" data-lang="pl" id="langPl">PL</button>
+      <button class="lang-btn" data-lang="en" id="langEn">EN</button>
+      <button class="lang-btn" data-lang="ko" id="langKo">KO</button>
+    </div>
+    <div class="pending-icon">&#9203;</div>
+    <h1>Konto oczekuje na zatwierdzenie</h1>
+    <div class="en">Account pending approval</div>
+
+    <p>Twoje konto zostało utworzone pomyślnie. Zanim będziesz mógł się zalogować, administrator musi zatwierdzić Twoje konto i przypisać rolę.</p>
+    <div class="en">Your account has been created successfully. Before you can log in, an administrator must approve your account and assign a role.</div>
+
+    <div class="approver-box" id="approverInfo">
+      <div class="approver-label">Zatwierdzenia konta dokonuje:</div>
+      <div class="en">Account approval is handled by:</div>
+      <div class="role-badges" id="approverRoles"></div>
+    </div>
+
+    <div class="hint-block">
+      <p>Po zatwierdzeniu będziesz mógł zalogować się używając swojego loginu i hasła.</p>
+      <div class="en">Once approved, you will be able to log in using your username and password.</div>
+    </div>
+
+    <a href="/login">
+      Powrót do logowania
+      <span class="en">Back to login</span>
+    </a>
+  </div>
+<script>
+(function(){
+  /* Language toggle */
+  var curLang = localStorage.getItem('aistate_ui_lang') || 'pl';
+  function applyLang(lang) {
+    curLang = lang;
+    localStorage.setItem('aistate_ui_lang', lang);
+    document.querySelectorAll('.lang-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.lang === lang); });
+    document.querySelectorAll('.en').forEach(function(el) {
+      if (lang === 'en') { el.style.fontStyle = 'normal'; el.style.fontWeight = '600'; }
+      else { el.style.fontStyle = ''; el.style.fontWeight = ''; }
+    });
+  }
+  document.querySelectorAll('.lang-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { applyLang(btn.dataset.lang); });
+  });
+  applyLang(curLang);
+
+  /* Role name → English translation */
+  var roleEN = {
+    'G\u0142\u00f3wny Opiekun': 'Main Guardian',
+    'Strażnik Dostępu': 'Access Guardian',
+    'Architekt Funkcji': 'Function Architect'
+  };
+
+  var params = new URLSearchParams(location.search);
+  var approvers = params.get('approvers');
+  var container = document.getElementById('approverRoles');
+
+  if (approvers) {
+    var list = approvers.split(',').map(function(s){ return s.trim(); });
+    list.forEach(function(role) {
+      var badge = document.createElement('div');
+      badge.className = 'role-badge';
+      badge.innerHTML = role + (roleEN[role] ? '<span class="en" style="display:block;font-weight:400;font-size:.6rem;margin-top:.1rem;">' + roleEN[role] + '</span>' : '');
+      container.appendChild(badge);
+    });
+  } else {
+    /* Default: show all approval roles */
+    ['Architekt Funkcji', 'Strażnik Dostępu'].forEach(function(role) {
+      var badge = document.createElement('div');
+      badge.className = 'role-badge';
+      badge.innerHTML = role + '<span class="en" style="display:block;font-weight:400;font-size:.6rem;margin-top:.1rem;">' + (roleEN[role] || '') + '</span>';
+      container.appendChild(badge);
+    });
+  }
+})();
+</script>
+</body>
+</html>

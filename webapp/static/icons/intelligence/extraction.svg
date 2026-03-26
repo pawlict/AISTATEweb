@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="ex" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a33d08"/><stop offset="100%" stop-color="#9a1a1a"/></linearGradient><filter id="s3d_extracti"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#a33d08" stroke-width="1" fill="none" opacity="0.22"/>
+<!-- helicopter body -->
+<ellipse cx="24" cy="18" rx="10" ry="5" stroke="url(#ex)" stroke-width="2.3" fill="none" fill-opacity="0.09" filter="url(#s3d_extracti)"/>
+<path d="M34 18l6 2v3l-6 1" stroke="url(#ex)" stroke-width="1.7" fill="none"/>
+<!-- rotor -->
+<line x1="24" y1="13" x2="24" y2="8" stroke="url(#ex)" stroke-width="2.3"/>
+<line x1="10" y1="8" x2="38" y2="8" stroke="url(#ex)" stroke-width="2.9"/>
+<!-- skids -->
+<line x1="18" y1="23" x2="16" y2="28" stroke="url(#ex)" stroke-width="1.7"/>
+<line x1="30" y1="23" x2="32" y2="28" stroke="url(#ex)" stroke-width="1.7"/>
+<line x1="12" y1="28" x2="36" y2="28" stroke="url(#ex)" stroke-width="1.7"/>
+<!-- person being extracted (arrow up) -->
+<path d="M24 44v-12" stroke="#a33d08" stroke-width="2.9"/>
+<path d="M20 36l4-4 4 4" stroke="#a33d08" stroke-width="2.9" fill="none"/>
+<circle cx="24" cy="44" r="2" stroke="#a33d08" stroke-width="1.7" fill="none" opacity=".4"/>
+
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

@@ -1,0 +1,2005 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  /* Unified styling matching diarization EXACTLY */
+  .blocklist {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .seg {
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border, #e0e0e0);
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text, inherit);
+  }
+
+  .seg:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+  }
+
+  .seg-active {
+    border-color: var(--accent, #2196F3);
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
+  }
+  
+  .seg-editing {
+    border-color: #ff9800;
+    box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.25);
+    transform: scale(1.015);
+  }
+  
+  .seg-editing:hover {
+    transform: scale(1.015);
+  }
+  
+  /* Inline editor INSIDE the clicked block (PPM) */
+  .seg-editor {
+    margin-top: 10px;
+    background: var(--panel, rgba(255,255,255,0.92));
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 12px;
+    padding: 10px;
+    backdrop-filter: blur(6px);
+    color: var(--text, inherit);
+  }
+  
+  .seg-editor .seg-editor-head {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom: 8px;
+  }
+  
+  .seg-editor .seg-editor-title {
+    font-weight: 800;
+    font-size: 13px;
+  }
+  
+  .seg-editor .seg-editor-meta {
+    font-size: 11px;
+    opacity: 0.75;
+    font-family: ui-monospace, monospace;
+    margin-top: 2px;
+  }
+  
+  .seg-editor .seg-editor-close {
+    border: 1px solid var(--border, #ddd);
+    background: var(--panel, #fff);
+    border-radius: 10px;
+    padding: 4px 10px;
+    cursor: pointer;
+    line-height: 1;
+    color: var(--text, inherit);
+  }
+
+  .seg-editor .seg-editor-close:hover {
+    border-color:#ff9800;
+    background:rgba(255,152,0,.1);
+  }
+  
+  .seg-editor .seg-editor-grid {
+    display:grid;
+    grid-template-columns: 1fr 220px;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  
+  @media (max-width: 900px) {
+    .seg-editor .seg-editor-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .seg-editor textarea {
+    width: 100%;
+    min-height: 86px;
+    padding: 10px;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 10px;
+    font-size: 13px;
+    resize: vertical;
+    background: var(--panel2, #fff);
+    color: var(--text, inherit);
+  }
+
+  .seg-editor .seg-speaker-input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 10px;
+    font-size: 13px;
+    background: var(--panel2, #fff);
+    color: var(--text, inherit);
+  }
+
+  .seg-editor .seg-audio-row {
+    display:flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+  }
+
+  .seg-editor .seg-audio-btn {
+    border: 1px solid var(--border, #ddd);
+    background: var(--panel, #fff);
+    border-radius: 12px;
+    padding: 6px 10px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+    color: var(--text, inherit);
+  }
+
+  .seg-editor .seg-audio-btn:hover {
+    border-color: var(--accent, #2196F3);
+    background: rgba(33,150,243,.08);
+  }
+
+  .seg-editor .seg-audio-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .seg-editor .seg-speed {
+    padding: 6px 8px;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 12px;
+    background: var(--panel2, #fff);
+    color: var(--text, inherit);
+  }
+  
+  .seg-editor .seg-audio-info {
+    margin-left:auto;
+    font-size: 11px;
+    opacity: 0.75;
+  }
+  
+  .seg-time {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 4px;
+    font-family: ui-monospace, monospace;
+  }
+  
+  .seg-speaker {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    background-color: #E3F2FD;
+  }
+  
+  .seg-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+  }
+  
+  /* Export panel styling */
+  .export-panel {
+    background: var(--panel2, #f0f4fa);
+    border: 1px solid var(--border, #ddd);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 14px;
+    display: none;
+  }
+
+  /* Notes panel (right column - sticky) */
+  .notes-panel {
+    background: var(--panel2, #f8f9fa);
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 12px;
+    padding: 16px;
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+  }
+
+  .notes-section {
+    margin-bottom: 12px;
+  }
+
+  .block-notes-list {
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--panel, white);
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 8px;
+    padding: 8px;
+  }
+
+  .block-note-item {
+    background: var(--panel2, #fff);
+    border: 1px solid var(--border, #ddd);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 12px;
+    color: var(--text, inherit);
+  }
+
+  .block-note-item:hover {
+    border-color: var(--accent, #2196F3);
+    box-shadow: 0 2px 6px rgba(33, 150, 243, 0.15);
+    transform: translateX(2px);
+  }
+
+  .block-note-item strong {
+    color: var(--accent, #2196F3);
+    font-weight: 700;
+  }
+
+  .block-note-preview {
+    color: var(--muted, #555);
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .block-note-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .block-note-actions button {
+    font-size: 11px;
+    padding: 3px 8px;
+    border: 1px solid var(--border, #ddd);
+    background: var(--panel, white);
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text, inherit);
+  }
+
+  .block-note-actions button:hover {
+    border-color: var(--accent, #2196F3);
+    background: rgba(33,150,243,.08);
+  }
+
+  .seg-note-icon {
+    display: inline-block;
+    margin-left: 8px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    vertical-align: middle;
+  }
+
+  .seg-note-icon:hover {
+    opacity: 1;
+  }
+
+  .seg-note-icon.has-note {
+    opacity: 1;
+    color: #2196F3;
+    font-weight: bold;
+  }
+
+  /* Notatka tooltip (dymek) */
+  .note-tooltip {
+    position: fixed;
+    z-index: 10001;
+    display: none;
+    max-width: 360px;
+    background: rgba(20,20,20,0.92);
+    color: #fff;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    line-height: 1.35;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.35);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+  }
+
+  .note-tooltip::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    transform: translateX(-50%);
+    border-width: 6px 6px 0 6px;
+    border-style: solid;
+    border-color: rgba(20,20,20,0.92) transparent transparent transparent;
+  }
+
+  /* Responsywność notatek */
+  @media (max-width: 1200px) {
+    div[style*="grid-template-columns:1fr 380px"] {
+      grid-template-columns: 1fr !important;
+    }
+    .notes-panel {
+      position: relative;
+      top: 0;
+      max-height: none;
+      margin-top: 16px;
+    }
+  }
+</style>
+
+<div class="analysis-page transcription-page">
+
+  <div class="card analysis-toolbar transcription-toolbar" id="tr_toolbar">
+    <div class="analysis-toolbar-left">
+      <div class="h1" style="margin:0"><i data-icon="transcription" data-size="40"></i> <span data-i18n="page.transcription.title">Transcription</span></div>
+    </div>
+
+    <div class="analysis-toolbar-right">
+
+      <!-- Sekcja 1: Plik -->
+      <div class="toolbar-section">
+        <input type="file" id="tr_file_input" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.mp4,.aac" style="display:none"/>
+        <button class="btn pill-icon" id="tr_add_file_btn" title="Dodaj plik audio do projektu" data-i18n-title="btn.add_audio_file"><img src="/static/icons/pliki/file_add_audio.svg" alt="Dodaj plik" draggable="false"></button>
+        <span class="small" id="tr_file_name" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.8"></span>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 2: Transkrybuj + Szukaj -->
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="tr_btn" title="Transkrybuj" data-i18n-title="btn.transcribe"><img src="/static/icons/akcje/generate_ai.svg" alt="Transkrybuj" draggable="false"></button>
+        <button class="btn pill-icon" id="tr_search_btn" title="Szukaj" data-i18n-title="btn.search" onclick="if(typeof segTools!=='undefined')segTools.openSearch()"><img src="/static/icons/akcje/search.svg" alt="Szukaj" draggable="false"></button>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 3: Modele / silniki -->
+      <div class="toolbar-section">
+        <div class="analysis-models">
+          <div class="analysis-model">
+            <label class="small" for="tr_engine" data-i18n="label.asr_engine">Silnik ASR</label>
+            <select class="input mini-select" id="tr_engine"></select>
+          </div>
+
+          <div class="analysis-model">
+            <label class="small" for="tr_model" data-i18n="label.asr_model">Model ASR</label>
+            <select class="input mini-select" id="tr_model"></select>
+          </div>
+
+          <div class="analysis-model">
+            <label class="small" for="tr_lang" data-i18n="label.language">Język</label>
+            <select class="input mini-select" id="tr_lang">
+            <option value="auto">auto</option>
+            <option value="pl">pl</option>
+            <option value="en">en</option>
+            <option value="de">de</option>
+            <option value="fr">fr</option>
+            <option value="es">es</option>
+            <option value="uk">uk</option>
+            <option value="ru">ru</option>
+          </select>
+          </div>
+        </div>
+
+        <!-- Sound Detection -->
+        <div class="analysis-format" id="tr_sound_detection_section" style="margin-top:8px">
+          <label class="pill"><input type="checkbox" id="tr_sound_detection_enabled" value="1"> <span data-i18n="label.sound_detection"><i data-icon="speaker" data-size="14"></i> Detekcja dźwięków</span></label>
+          <select class="input mini-select" id="tr_sound_detection_model" style="margin-left:6px;width:auto" disabled>
+          </select>
+        </div>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 4: Raport -->
+      <div class="toolbar-section">
+        <div class="toolbar-group" id="tr_report_formats">
+          <label class="toolbar-group-label" data-i18n="analysis.report"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="tr_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="tr_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="tr_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes"><input type="checkbox" id="tr_include_notes" value="1"><img src="/static/icons/dokumenty/markdown.svg" alt="Notatki" draggable="false"></label>
+            <button class="btn pill-icon" id="tr_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Optional: direct transcript download link (kept for compatibility) -->
+      <a class="btn secondary" id="tr_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
+
+    </div>
+  </div>
+
+  <div class="card" id="tr_content">
+
+    <div class="small" id="tr_asr_no_models" style="display:none" data-i18n-html="hint.asr_no_models_html">Brak zainstalowanych modeli ASR. Zainstaluj je w Panelu administracyjnym → Ustawienia ASR.</div>
+    <div class="small" id="tr_nemo_hint" style="display:none" data-i18n="hint.nemo_lang_note">W NeMo pole języka może być ignorowane (zależy od modelu).</div>
+
+    <div class="an-progress" id="tr_progress">
+      <div class="small">Status: <b id="tr_status">—</b> <span id="tr_pct">0%</span></div>
+      <div class="progress"><div id="tr_bar"></div></div>
+    </div>
+    <details id="tr_logs_details" style="margin-top:6px;display:none">
+      <summary class="small" style="cursor:pointer;user-select:none" data-i18n="logs.label.logs">Logi</summary>
+      <textarea id="tr_logs" readonly style="width:100%;min-height:120px;max-height:260px;font-size:11px;font-family:monospace;margin-top:4px;resize:vertical;background:var(--panel2,#fafafa);border:1px solid var(--border,#e0e0e0);border-radius:6px;padding:6px;color:var(--text,inherit)" data-i18n-placeholder="logs.placeholder" placeholder="Logi pojawią się tutaj…"></textarea>
+    </details>
+
+    <div class="hr"></div>
+
+    <!-- 2-kolumnowy layout: Wynik + Notatki (EXACT COPY from diarization) -->
+  <div style="display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start">
+    <!-- Lewa kolumna: Wynik transkrypcji -->
+    <div>
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="tr.result.title"><i data-icon="document" data-size="16"></i> Wynik transkrypcji</div>
+      <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
+      <div id="tr_audio_player"></div>
+      <div id="tr_blocks" class="blocklist" style="display:none"></div>
+      <!-- Sound events panel -->
+      <div id="tr_sound_events" class="sound-events-panel" style="display:none"></div>
+      <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…" data-i18n-placeholder="placeholder.result_here"></textarea>
+      <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
+        <i data-icon="info_circle" data-size="14"></i> <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
+      </div>
+    </div>
+
+    <!-- Prawa kolumna: Notatki (EXACT COPY from diarization) -->
+    <div class="notes-panel">
+      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title"><i data-icon="notes" data-size="16"></i> Notatki</div>
+      
+      <!-- Notatka globalna -->
+      <div class="notes-section">
+        <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title"><i data-icon="globe" data-size="16"></i> Notatka globalna</div>
+        <textarea id="tr_notes_global" placeholder="Notatka do całej transkrypcji (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:13px;resize:vertical;background:var(--panel,#fff);color:var(--text,inherit)"></textarea>
+        <div class="small" style="margin-top:4px;opacity:0.7" data-i18n="notes.autosave"><i data-icon="success" data-size="12"></i> Auto-save</div>
+      </div>
+
+      <div class="hr" style="margin:12px 0"></div>
+
+      <!-- Notatki do bloków -->
+      <div class="notes-section">
+        <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title"><i data-icon="pin" data-size="16"></i> Notatki do bloków</div>
+        <div id="tr_block_notes_list" class="block-notes-list">
+          <div class="small" style="opacity:0.6;text-align:center;padding:20px" data-i18n-html="notes.blocks.empty_html">
+            ${t("notes.blocks.empty_html")}
+          </div>
+        </div>
+      </div>
+
+      <div class="small" style="margin-top:10px;color:#999">Notatki zapisywane automatycznie</div>
+    </div>
+  </div>
+
+
+
+  </div>
+
+</div>
+<!-- Tooltip for note preview on hover -->
+<div class="note-tooltip" id="tr_note_tooltip"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/audio_player.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/seg_tools.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script>
+"use strict";
+
+// ========== Transcription State (EXACT COPY from diarization) ==========
+const TR = {
+  segments: [],
+  audio: null,
+  audioUrl: "",
+  activeIdx: -1,
+  endWatch: null,
+  edit: { active: false, idx: -1 },
+  notes: {
+    global: "",
+    blocks: {} // {idx: "note text"}
+  }
+};
+
+// ========== ASR presets (UI-only; installed models are filtered via /api/asr/models_state) ==========
+const TR_ASR_PRESETS = {
+  whisper: [{% for m in whisper_models %}"{{m}}"{% if not loop.last %}, {% endif %}{% endfor %}],
+  nemo: [{% for m in nemo_models %}"{{m}}"{% if not loop.last %}, {% endif %}{% endfor %}],
+};
+const TR_ASR_DEFAULTS = {
+  whisper: "{{ default_whisper_model }}",
+};
+
+// ========== Timestamp utilities ==========
+function trAudioUrl(){
+  const pid = AISTATE.projectId || "";
+  const f = AISTATE.audioFile || "";
+  if(!pid || !f) return "";
+  return `/api/projects/${pid}/download/${encodeURIComponent(f)}`;
+}
+
+function trParseTs(s){
+  const raw = String(s||"").trim();
+  if(!raw) return null;
+  if(/^[0-9]+(\.[0-9]+)?$/.test(raw)) return parseFloat(raw);
+  const parts = raw.split(":").map(p=>p.trim());
+  if(parts.length < 2 || parts.length > 3) return null;
+  let h=0, m=0, sec=0;
+  if(parts.length === 2){
+    m = parseInt(parts[0]||"0",10);
+    sec = parseFloat(parts[1]||"0");
+  } else {
+    h = parseInt(parts[0]||"0",10);
+    m = parseInt(parts[1]||"0",10);
+    sec = parseFloat(parts[2]||"0");
+  }
+  if([h,m,sec].some(x=>Number.isNaN(x))) return null;
+  return h*3600 + m*60 + sec;
+}
+
+function trFormatTime(sec){
+  const s = Math.max(0, Number(sec)||0);
+  const hh = Math.floor(s/3600);
+  const mm = Math.floor((s%3600)/60);
+  const ss = s - hh*3600 - mm*60;
+  const ssInt = Math.floor(ss);
+  const ms = Math.round((ss-ssInt)*1000);
+  const pad2 = (n)=>String(n).padStart(2,"0");
+  const pad3 = (n)=>String(n).padStart(3,"0");
+  return `${pad2(hh)}:${pad2(mm)}:${pad2(ssInt)}.${pad3(ms)}`;
+}
+
+function trSegmentsFromTextTs(textTs){
+  const out=[];
+  const lines = String(textTs||"").split(/\r?\n/);
+  for(const ln of lines){
+    const m = ln.match(/^\s*\[([^\]]+)\]\s*(.*)$/);
+    if(!m) continue;
+    const inside = m[1];
+    const rest = (m[2]||"").trim();
+    
+    // Check if there's a speaker label
+    let speaker = null;
+    let text = rest;
+    const speakerMatch = rest.match(/^([^:]{1,80}):\s*(.*)$/u);
+    if(speakerMatch){
+      speaker = speakerMatch[1];
+      text = speakerMatch[2];
+    }
+    
+    const parts = inside.split(/\s*[-—]\s*/);
+    if(parts.length !== 2) continue;
+    const s0 = trParseTs(parts[0]);
+    const s1 = trParseTs(parts[1]);
+    if(s0===null || s1===null) continue;
+    out.push({start: s0, end: s1, speaker: speaker, text: text});
+  }
+  return out;
+}
+
+function trBuildRawText(){
+  if(!TR.segments || !TR.segments.length) return (document.getElementById("tr_out").value||"");
+  return TR.segments.map(s=>{
+    const ts = `[${trFormatTime(s.start)} - ${trFormatTime(s.end)}]`;
+    if(s.speaker){
+      return `${ts} ${s.speaker}: ${s.text||""}`;
+    }
+    return `${ts} ${s.text||""}`;
+  }).join("\n");
+}
+
+function trSetRawTextarea(){
+  document.getElementById("tr_out").value = trBuildRawText();
+}
+
+// ========== Audio playback ==========
+function trHasAudio(){
+  return !!(AISTATE.projectId && AISTATE.audioFile);
+}
+
+function trEnsureAudio(){
+  if(!TR.audio || !TR.audioUrl) return false;
+  return true;
+}
+
+function trStopPlayback(){
+  if(TR.endWatch){ clearInterval(TR.endWatch); TR.endWatch=null; }
+  if(TR.audio){ try{ TR.audio.pause(); }catch(e){} }
+  if(TR.activeIdx>=0){
+    const old = document.querySelector(`#tr_blocks .seg[data-idx='${TR.activeIdx}']`);
+    if(old) old.classList.remove("seg-active");
+  }
+  TR.activeIdx = -1;
+}
+
+function trPlaySegment(idx, fromStart=true){
+  if(!TR.audio || !TR.audioUrl) return;
+  const seg = TR.segments[idx];
+  if(!seg) return;
+
+  trStopPlayback();
+  TR.activeIdx = idx;
+  const elSeg = document.querySelector(`#tr_blocks .seg[data-idx='${idx}']`);
+  if(elSeg) elSeg.classList.add("seg-active");
+
+  const endT = Math.max(0, Number(seg.end)||0);
+  const startT = Math.max(0, Number(seg.start)||0);
+  if(fromStart || TR.audio.currentTime < startT || TR.audio.currentTime > endT){
+    TR.audio.currentTime = startT;
+  }
+  TR.audio.play().catch(()=>{});
+
+  TR.endWatch = setInterval(()=>{
+    if(!TR.audio) return;
+    if(TR.audio.currentTime >= (endT - 0.05)){
+      try{ TR.audio.pause(); }catch(e){}
+      clearInterval(TR.endWatch);
+      TR.endWatch = null;
+    }
+  }, 150);
+}
+
+// ========== Inline editor (EXACT COPY from diarization) ==========
+function trBuildEditorEl(idx){
+  const seg = TR.segments[idx];
+  const ed = document.createElement("div");
+  ed.className = "seg-editor";
+  ed.innerHTML = `
+    <div class="seg-editor-head">
+      <div>
+        <div class="seg-editor-title">${aiIcon('edit',14)} Edycja bloku #${idx}</div>
+        <div class="seg-editor-meta">${trFormatTime(seg.start)} → ${trFormatTime(seg.end)}</div>
+      </div>
+      <button class="seg-editor-close" title="Zamknij (Esc)">${aiIcon('close',14)}</button>
+    </div>
+
+    <div class="seg-editor-grid">
+      <div>
+        <div class="small" style="margin-bottom:6px;opacity:0.75">Tekst (auto-save)</div>
+        <textarea class="seg-edit-text" placeholder="Edytuj treść bloku…"></textarea>
+      </div>
+      <div>
+        <div class="small" style="margin-bottom:6px;opacity:0.75">Mówca (dla tego bloku)</div>
+        <input class="seg-speaker-input" type="text" placeholder="np. Jan Kowalski" />
+        <div class="small" style="margin-top:6px;opacity:0.65">Zmiana dotyczy tylko tego bloku.</div>
+      </div>
+    </div>
+
+    <div class="seg-audio-row">
+      <button class="seg-audio-btn" data-act="playSeg" title="Play">${typeof aiIcon==='function'?aiIcon('play',16):''}</button>
+      <button class="seg-audio-btn" data-act="pause" title="Pause">${typeof aiIcon==='function'?aiIcon('pause',16):''}</button>
+      <button class="seg-audio-btn" data-act="stop" title="Stop">${typeof aiIcon==='function'?aiIcon('stop',16):''}</button>
+      <button class="seg-audio-btn" data-act="m3" title="-3s">${typeof aiIcon==='function'?aiIcon('skip_back_3',16):''}</button>
+      <button class="seg-audio-btn" data-act="p3" title="+3s">${typeof aiIcon==='function'?aiIcon('skip_fwd_3',16):''}</button>
+      <div class="seg-audio-info"></div>
+    </div>
+
+    <div class="small" style="margin-top:8px;opacity:0.7">${aiIcon('success',12)} Auto-save (tekst + mówca zapisują się automatycznie)</div>
+  `;
+  return ed;
+}
+
+function trWireEditor(segEl, idx, ed){
+  const seg = TR.segments[idx];
+  
+  // Close button
+  const closeBtn = ed.querySelector(".seg-editor-close");
+  if(closeBtn){
+    closeBtn.addEventListener("click", (ev)=>{
+      ev.preventDefault();
+      ev.stopPropagation();
+      trCloseInlineEditor();
+    });
+  }
+
+  // Text textarea
+  const ta = ed.querySelector(".seg-edit-text");
+  if(ta){
+    ta.value = seg.text || "";
+    let tmr = null;
+    ta.addEventListener("input", ()=>{
+      clearTimeout(tmr);
+      tmr = setTimeout(()=>{
+        seg.text = ta.value || "";
+        trSetRawTextarea();
+        scheduleAutoSave();
+      }, 120);
+    });
+  }
+
+  // Speaker input
+  const sp = ed.querySelector(".seg-speaker-input");
+  if(sp){
+    sp.value = seg.speaker || "";
+    let tmr2 = null;
+
+    function applySpeaker(){
+      let v = (sp.value || '').trim();
+      v = v.replace(/[:\n\r\t]+/g,' ').replace(/\s+/g,' ').trim();
+      if(v.length > 80) v = v.slice(0,80);
+      if(seg.speaker !== v){
+        seg.speaker = v || null;
+        
+        // Update visual
+        const timeDiv = segEl.querySelector(".seg-time");
+        if(timeDiv){
+          // Rebuild time display with speaker
+          const noteIcon = timeDiv.querySelector(".seg-note-icon");
+          const noteIconHtml = noteIcon ? noteIcon.outerHTML : '';
+          if(seg.speaker){
+            timeDiv.innerHTML = `${trFormatTime(seg.start)} → ${trFormatTime(seg.end)} <strong>${seg.speaker}</strong>${noteIconHtml}`;
+          } else {
+            timeDiv.innerHTML = `${trFormatTime(seg.start)} → ${trFormatTime(seg.end)}${noteIconHtml}`;
+          }
+          // Re-bind note icon
+          const newIcon = timeDiv.querySelector(".seg-note-icon");
+          if(newIcon) trBindNoteIconEvents(newIcon, idx);
+        }
+
+        trSetRawTextarea();
+        scheduleAutoSave();
+      }
+    }
+
+    sp.addEventListener("input", ()=>{
+      clearTimeout(tmr2);
+      tmr2 = setTimeout(applySpeaker, 160);
+    });
+    sp.addEventListener("blur", applySpeaker);
+  }
+
+  // Audio controls
+  const hasAudio = trHasAudio();
+  const info = ed.querySelector(".seg-audio-info");
+  if(info){
+    info.textContent = hasAudio ? ("Audio: " + (AISTATE.audioFile || "")) : "Brak audio w projekcie";
+  }
+
+  ed.querySelectorAll(".seg-audio-btn").forEach(btn=>{
+    btn.disabled = !hasAudio;
+    btn.addEventListener("click", (ev)=>{
+      ev.preventDefault();
+      ev.stopPropagation();
+      const act = btn.getAttribute("data-act") || "";
+
+      if(!trEnsureAudio()) return;
+
+      if(act === "playSeg"){
+        trPlaySegment(idx, true);
+      } else if(act === "pause"){
+        if(TR.audio) TR.audio.pause();
+      } else if(act === "stop"){
+        if(TR.audio){
+          TR.audio.pause();
+          TR.audio.currentTime = Math.max(0, seg.start||0);
+        }
+      } else if(act === "m3"){
+        if(TR.audio) TR.audio.currentTime = Math.max(0, TR.audio.currentTime - 3);
+      } else if(act === "p3"){
+        if(TR.audio) TR.audio.currentTime = Math.min(TR.audio.duration || 999999, TR.audio.currentTime + 3);
+      }
+    });
+  });
+
+  // Prevent editor from triggering hover playback
+  ed.addEventListener("mouseenter", (ev)=>{ ev.stopPropagation(); });
+  ed.addEventListener("mouseleave", (ev)=>{ ev.stopPropagation(); });
+}
+
+function trOpenInlineEditor(idx){
+  if(idx == null || idx < 0 || idx >= TR.segments.length) return;
+
+  // Toggle
+  if(TR.edit.active && TR.edit.idx === idx){
+    const existing = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"] .seg-editor textarea`);
+    if(existing){ try{ existing.focus(); }catch(e){} }
+    return;
+  }
+
+  trCloseInlineEditor();
+  TR.edit.active = true;
+  TR.edit.idx = idx;
+
+  // Stop hover playback
+  trStopPlayback();
+  try{ trHideNoteTooltip(); }catch(e){}
+
+  const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
+  if(!segEl) return;
+  segEl.classList.add("seg-editing");
+
+  // Hide original text
+  const txt = segEl.querySelector(".seg-text");
+  if(txt) txt.style.display = "none";
+
+  // Build editor
+  const ed = trBuildEditorEl(idx);
+  trWireEditor(segEl, idx, ed);
+
+  // Remove any previous editor (safety)
+  const prev = segEl.querySelector(".seg-editor");
+  if(prev) prev.remove();
+  segEl.appendChild(ed);
+
+  // Focus text
+  try{
+    const ta = ed.querySelector("textarea");
+    if(ta) ta.focus();
+  }catch(e){}
+}
+
+
+// If the global modal editor exists (app.js), route it to the inline editor on this page.
+// This ensures that right-click (PPM) editing behaves the the same as in diarization
+// (the editor appears directly inside the clicked block).
+try{
+  if (typeof window.openManualEditor === "function") {
+    window.openManualEditor = function(textarea, lineIndex){
+      try{
+        const raw = (lineIndex !== undefined && lineIndex !== null) ? String(lineIndex) : "-1";
+        const idx = parseInt(raw, 10);
+        if(!isNaN(idx) && idx >= 0){
+          trOpenInlineEditor(idx);
+          return;
+        }
+        // Fallback: derive index from the nearest segment element.
+        const seg = (textarea && textarea.closest) ? textarea.closest(".seg") : null;
+        if(seg){
+          const di = parseInt(seg.getAttribute("data-idx") || "-1", 10);
+          if(!isNaN(di) && di >= 0){
+            trOpenInlineEditor(di);
+          }
+        }
+      }catch(e){}
+    };
+  }
+}catch(e){}
+
+
+function trCloseInlineEditor(){
+  if(!TR.edit.active) return;
+
+  const idx = TR.edit.idx;
+  const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
+  if(segEl){
+    segEl.classList.remove("seg-editing");
+    const editor = segEl.querySelector(".seg-editor");
+    if(editor) editor.remove();
+    
+    // Show original text
+    const txt = segEl.querySelector(".seg-text");
+    if(txt){
+      txt.style.display = "";
+      txt.textContent = TR.segments[idx].text || "";
+    }
+  }
+
+  TR.edit.active = false;
+  TR.edit.idx = -1;
+}
+
+// ESC closes editor
+document.addEventListener("keydown", (ev)=>{
+  if(ev.key === "Escape" && TR.edit.active){
+    trCloseInlineEditor();
+  }
+});
+
+// Right-click on block -> open inline editor
+document.addEventListener("contextmenu", (ev)=>{
+  try{
+    const segEl = ev.target && ev.target.closest ? ev.target.closest(".seg") : null;
+    if(!segEl) return;
+    if(!segEl.closest || !segEl.closest("#tr_blocks")) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+    if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+
+    const idx = parseInt(segEl.getAttribute("data-idx") || "-1", 10);
+    if(!isNaN(idx) && idx >= 0){
+      trOpenInlineEditor(idx);
+    }
+    return false;
+  }catch(e){}
+}, true);
+
+// ========== Notes management (EXACT COPY from diarization) ==========
+function trHasBlockNote(idx){
+  return !!(TR.notes.blocks[idx] && TR.notes.blocks[idx].trim());
+}
+
+function trBindNoteIconEvents(icon, idx){
+  icon.addEventListener("click", (ev)=>{
+    ev.stopPropagation();
+    ev.preventDefault();
+    trOpenBlockNoteEditor(idx);
+  });
+  
+  icon.addEventListener("mouseenter", (ev)=>{
+    if(trHasBlockNote(idx)){
+      trShowNoteTooltip(ev, TR.notes.blocks[idx]);
+    }
+  });
+  
+  icon.addEventListener("mouseleave", ()=>{
+    trHideNoteTooltip();
+  });
+}
+
+function trShowNoteTooltip(ev, text){
+  const tooltip = document.getElementById("tr_note_tooltip");
+  if(!tooltip) return;
+  
+  tooltip.textContent = text;
+  tooltip.style.display = "block";
+  
+  const rect = ev.target.getBoundingClientRect();
+  tooltip.style.left = rect.left + "px";
+  tooltip.style.top = (rect.top - tooltip.offsetHeight - 10) + "px";
+}
+
+function trHideNoteTooltip(){
+  const tooltip = document.getElementById("tr_note_tooltip");
+  if(tooltip) tooltip.style.display = "none";
+}
+
+function trOpenBlockNoteEditor(idx){
+  const currentNote = TR.notes.blocks[idx] || "";
+  _openNoteModal(idx, currentNote, function(newText) {
+    if(newText && newText.trim()){
+      TR.notes.blocks[idx] = newText.trim();
+    } else {
+      delete TR.notes.blocks[idx];
+    }
+    // Update icon
+    const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
+    if(segEl){
+      const icon = segEl.querySelector(".seg-note-icon");
+      if(icon){
+        if(trHasBlockNote(idx)) icon.classList.add("has-note");
+        else icon.classList.remove("has-note");
+      }
+    }
+    trRenderBlockNotesList();
+    scheduleAutoSave();
+  }, function() {
+    // delete
+    delete TR.notes.blocks[idx];
+    const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
+    if(segEl){
+      const icon = segEl.querySelector(".seg-note-icon");
+      if(icon) icon.classList.remove("has-note");
+    }
+    trRenderBlockNotesList();
+    scheduleAutoSave();
+  });
+}
+
+/** Styled note editor modal (replaces browser prompt) */
+function _openNoteModal(idx, currentText, onSave, onDelete) {
+  var existing = document.querySelector('.note-editor-overlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.className = 'note-editor-overlay';
+
+  var hasExisting = !!(currentText && currentText.trim());
+  var title = hasExisting ? 'Edytuj notatkę — Blok #' + idx : 'Nowa notatka — Blok #' + idx;
+
+  overlay.innerHTML =
+    '<div class="note-editor-modal">' +
+      '<div class="note-editor-header">' +
+        '<h3>' + title + '</h3>' +
+        '<button class="note-editor-close" title="Zamknij">&times;</button>' +
+      '</div>' +
+      '<div class="note-editor-body">' +
+        '<textarea id="_note_editor_ta" placeholder="Wpisz notatkę do bloku…">' +
+          (currentText || '').replace(/</g, '&lt;') +
+        '</textarea>' +
+        '<div class="note-editor-hint">Ctrl+Enter = zapisz</div>' +
+      '</div>' +
+      '<div class="note-editor-footer">' +
+        (hasExisting ? '<button class="note-btn note-btn-danger" data-action="delete">Usuń notatkę</button>' : '') +
+        '<button class="note-btn" data-action="cancel">Anuluj</button>' +
+        '<button class="note-btn note-btn-primary" data-action="save">Zapisz</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+
+  var ta = document.getElementById('_note_editor_ta');
+  if (ta) {
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+
+  function close() { overlay.remove(); }
+  function save() {
+    var text = ta ? ta.value : '';
+    close();
+    if (onSave) onSave(text);
+  }
+
+  overlay.addEventListener('click', function(e) {
+    var action = e.target.getAttribute('data-action');
+    if (action === 'save') { save(); return; }
+    if (action === 'cancel') { close(); return; }
+    if (action === 'delete') {
+      close();
+      if (onDelete) onDelete();
+      return;
+    }
+    if (e.target === overlay || e.target.classList.contains('note-editor-close')) {
+      close();
+    }
+  });
+
+  if (ta) {
+    ta.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+    });
+  }
+}
+
+function trRenderBlockNotesList(){
+  const list = document.getElementById("tr_block_notes_list");
+  if(!list) return;
+  
+  const notes = Object.entries(TR.notes.blocks).filter(([k,v])=>v && v.trim());
+  
+  if(notes.length === 0){
+    list.innerHTML = `<div class="small" style="opacity:0.6;text-align:center;padding:20px">
+      Brak notatek do bloków.<br>
+      Kliknij <img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
+    </div>`;
+    return;
+  }
+  
+  list.innerHTML = notes.map(([idx, note])=>{
+    const preview = note.length > 60 ? note.substring(0,60) + "..." : note;
+    return `
+      <div class="block-note-item" data-idx="${idx}">
+        <strong>Blok #${idx}</strong>
+        <div class="block-note-preview">${preview}</div>
+        <div class="block-note-actions">
+          <button onclick="trScrollToBlock(${idx})">↓ Przejdź</button>
+          <button onclick="trOpenBlockNoteEditor(${idx})">${aiIcon('edit',14)} Edytuj</button>
+          <button onclick="trDeleteBlockNote(${idx})">${aiIcon('delete',14)} Usuń</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function trScrollToBlock(idx){
+  const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
+  if(segEl){
+    segEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    segEl.classList.add("seg-active");
+    setTimeout(()=>{ segEl.classList.remove("seg-active"); }, 2000);
+  }
+}
+
+function trDeleteBlockNote(idx){
+  delete TR.notes.blocks[idx];
+
+  const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
+  if(segEl){
+    const icon = segEl.querySelector(".seg-note-icon");
+    if(icon) icon.classList.remove("has-note");
+  }
+
+  trRenderBlockNotesList();
+  scheduleAutoSave();
+  if(typeof showToast === 'function') showToast('Notatka usunięta');
+}
+
+function trUpdateGlobalNote(){
+  const textarea = document.getElementById("tr_notes_global");
+  if(textarea){
+    TR.notes.global = textarea.value || "";
+    scheduleAutoSave();
+  }
+}
+
+async function trLoadNotesFromProject(){
+  if(!AISTATE.projectId) return;
+  
+  try{
+    const response = await fetch(`/api/projects/${AISTATE.projectId}/notes/transcription`);
+    if(response.ok){
+      const data = await response.json();
+      TR.notes.global = data.global || "";
+      TR.notes.blocks = data.blocks || {};
+      
+      const textarea = document.getElementById("tr_notes_global");
+      if(textarea) textarea.value = TR.notes.global;
+      
+      trRenderBlockNotesList();
+      trRender(); // Re-render to show note icons
+      console.log("Loaded notes from project");
+    }
+  }catch(e){
+    console.log("No saved notes in project (OK for new projects)");
+  }
+}
+
+async function trSaveNotesToProject(){
+  if(!AISTATE.projectId){
+    showToast("Brak aktywnego projektu", 'warning');
+    return;
+  }
+  
+  trUpdateGlobalNote();
+  
+  try{
+    const response = await fetch(`/api/projects/${AISTATE.projectId}/notes/transcription`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        global: TR.notes.global || "",
+        blocks: TR.notes.blocks || {}
+      })
+    });
+    
+    if(response.ok){
+      showToast("Notatki zapisane w projekcie", 2000);
+    } else {
+      throw new Error("Failed to save notes");
+    }
+  }catch(e){
+    showToast("Błąd zapisu notatek: " + e.message, 'error');
+    console.error("Save notes error:", e);
+  }
+}
+
+function trExportNotesAsJSON(){
+  const data = {
+    project_id: AISTATE.projectId,
+    timestamp: new Date().toISOString(),
+    notes: TR.notes
+  };
+  
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `transcription_notes_${Date.now()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ========== Rendering ==========
+function trRender(){
+  const blocks = document.getElementById("tr_blocks");
+  const ta = document.getElementById("tr_out");
+  const exportToggle = document.getElementById("tr_export_toggle");
+  
+  if(!TR.segments || TR.segments.length === 0){
+    blocks.style.display = "none";
+    ta.style.display = "block";
+    if(exportToggle) exportToggle.style.display = "none";
+    return;
+  }
+  
+  blocks.style.display = "flex";
+  ta.style.display = "none";
+  if(exportToggle) exportToggle.style.display = "inline-flex";
+  blocks.innerHTML = "";
+
+  TR.audioUrl = trAudioUrl();
+  if(TR.audioUrl){
+    if(!TR.audio){
+      // Use main player audio if available, otherwise create standalone
+      if(window._trPlayer && window._trPlayer.audio){
+        TR.audio = window._trPlayer.audio;
+      } else {
+        TR.audio = new Audio();
+        TR.audio.preload = "auto";
+      }
+    }
+    // Only update src if it differs (avoid resetting shared player audio)
+    if(!TR.audio.src || !TR.audio.src.endsWith(TR.audioUrl.replace(/^.*\//, '/'))){
+      TR.audio.src = TR.audioUrl;
+    }
+  }
+
+  TR.segments.forEach((seg, idx)=>{
+    const d = document.createElement("div");
+    d.className = "seg";
+    d.dataset.idx = String(idx);
+    
+    // Note icon
+    const noteIcon = document.createElement("span");
+    noteIcon.className = "seg-note-icon" + (trHasBlockNote(idx) ? " has-note" : "");
+    noteIcon.innerHTML = '<img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" alt="Notatka">';
+    noteIcon.title = trHasBlockNote(idx) ? "Ma notatkę - kliknij aby edytować" : "Dodaj notatkę";
+    trBindNoteIconEvents(noteIcon, idx);
+    
+    const timeDiv = document.createElement("div");
+    timeDiv.className = "seg-time";
+    if(seg.speaker){
+      timeDiv.innerHTML = `${trFormatTime(seg.start)} → ${trFormatTime(seg.end)} <strong>${seg.speaker}</strong>`;
+    } else {
+      timeDiv.innerHTML = `${trFormatTime(seg.start)} → ${trFormatTime(seg.end)}`;
+    }
+    timeDiv.appendChild(noteIcon);
+
+    // Confidence badge (if available)
+    if(typeof seg.confidence === "number"){
+      const conf = seg.confidence;
+      const badge = document.createElement("span");
+      badge.className = "seg-confidence";
+      if(conf >= 80) badge.classList.add("conf-high");
+      else if(conf >= 50) badge.classList.add("conf-mid");
+      else badge.classList.add("conf-low");
+      badge.textContent = (conf >= 80 ? "OK" : conf >= 50 ? "?" : "!") + " " + conf + "%";
+      badge.title = `Pewność: ${conf}%` + (seg.no_speech ? ` • Szum: ${seg.no_speech}%` : "");
+      timeDiv.appendChild(badge);
+    }
+
+    const textDiv = document.createElement("div");
+    textDiv.className = "seg-text";
+    textDiv.textContent = seg.text || "";
+
+    d.appendChild(timeDiv);
+    d.appendChild(textDiv);
+
+    blocks.appendChild(d);
+  });
+  
+  trSetRawTextarea();
+  trRenderBlockNotesList();
+
+  // Update seg_tools (search, waveform map, merge/split)
+  if (typeof segTools !== "undefined") {
+    try { segTools.afterRender(); } catch(e) { console.warn("segTools.afterRender:", e); }
+  }
+}
+
+// ========== Auto-save ==========
+let autoSaveTimer = null;
+
+function scheduleAutoSave(){
+  if(autoSaveTimer) clearTimeout(autoSaveTimer);
+  
+  autoSaveTimer = setTimeout(async ()=>{
+    if(!AISTATE.projectId) return;
+    
+    try{
+      // Save transcript
+      const response = await fetch(`/api/projects/${AISTATE.projectId}/save/transcript`, {
+        method: "POST",
+        headers: {"Content-Type": "text/plain"},
+        body: trBuildRawText()
+      });
+      
+      if(response.ok){
+        console.log("Auto-saved transcript");
+      }
+      
+      // Save notes
+      await trSaveNotesToProject();
+      
+    }catch(e){
+      console.error("Auto-save error:", e);
+    }
+  }, 2000);
+}
+
+// ========== Export reports (toolbar) ==========
+function trGetSelectedReportFormats(){
+  const out = [];
+  document.querySelectorAll('input[name="tr_report_fmt"]:checked').forEach(cb=>{
+    const v = String(cb.value||"").toLowerCase().trim();
+    if(v) out.push(v);
+  });
+  return out;
+}
+
+async function trSaveReports(){
+  const pid = AISTATE.projectId;
+  if(!pid){
+    showToast("Brak aktywnego projektu", 'warning');
+    return;
+  }
+
+  const text = (typeof trBuildRawText === "function") ? (trBuildRawText() || "") : (document.getElementById("tr_out")?.value || "");
+  if(!text.trim()){
+    showToast("Brak wyniku transkrypcji do wyeksportowania", 'warning');
+    return;
+  }
+
+  const formats = trGetSelectedReportFormats();
+  if(formats.length === 0){
+    showToast("Wybierz przynajmniej jeden format raportu", 'warning');
+    return;
+  }
+
+  // Ensure latest transcript is persisted in the project before generating reports.
+  try{
+    await fetch(`/api/projects/${pid}/save/transcript`, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain"},
+      body: text
+    });
+  }catch(e){ /* best-effort */ }
+
+  const btn = document.getElementById("tr_report_save_btn");
+  if(btn){
+    btn.disabled = true;
+  }
+
+  try{
+    const results = [];
+
+    const includeNotes = document.getElementById("tr_include_notes")?.checked ? 1 : 0;
+
+    for(const format of formats){
+      const url = `/api/projects/${pid}/report/transcription?format=${encodeURIComponent(format)}&include_logs=0&include_notes=${includeNotes}`;
+      const response = await fetch(url);
+
+      if(!response.ok){
+        const errorText = await response.text();
+        throw new Error(`${format.toUpperCase()}: ${errorText || "HTTP " + response.status}`);
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `transcription_report_${new Date().getTime()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      results.push(format.toUpperCase());
+
+      if(formats.length > 1 && format !== formats[formats.length - 1]){
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+    }
+
+    const message = results.length === 1
+      ? `Raport ${results[0]} wygenerowany`
+      : `Raporty wygenerowane: ${results.join(", ")}`;
+
+    showToast(message + " i zapisane w projekcie", 3000);
+
+  }catch(e){
+    showToast(`Błąd generowania raportu: ${e.message}`, 'error');
+    console.error("Report generation error:", e);
+
+  }finally{
+    if(btn){
+      btn.disabled = false;
+    }
+  }
+}
+
+// ========== Toast notification ==========
+function showToast(message, duration = 3000){
+  let toast = document.getElementById("tr_toast");
+  if(!toast){
+    toast = document.createElement("div");
+    toast.id = "tr_toast";
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(33, 150, 243, 0.95);
+      color: white;
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 10000;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    `;
+    document.body.appendChild(toast);
+  }
+  
+  toast.textContent = message;
+  toast.style.opacity = "1";
+  
+  setTimeout(()=>{
+    toast.style.opacity = "0";
+  }, duration);
+}
+
+// ========== Main initialization ==========
+function onDoneTranscribe(j){
+  if(j.result){
+    const segs = (j.result.segments && Array.isArray(j.result.segments)) ? j.result.segments : [];
+    if(segs.length){
+      TR.segments = segs.map(s=>({
+        start:Number(s.start)||0,
+        end:Number(s.end)||0,
+        speaker: s.speaker || null,
+        text:String(s.text||"").trim(),
+        confidence: typeof s.confidence === "number" ? s.confidence : null,
+        no_speech: typeof s.no_speech === "number" ? s.no_speech : null
+      }));
+      trRender();
+    } else {
+      const out = (j.result.text_ts || j.result.text || "");
+      const parsed = trSegmentsFromTextTs(out);
+      if(parsed.length){
+        TR.segments = parsed;
+        trRender();
+      } else {
+        if(out) document.getElementById("tr_out").value = out;
+      }
+    }
+    if(j.project_id){
+      const dl = document.getElementById("tr_download");
+      dl.href = `/api/projects/${j.project_id}/download/transcript.txt`;
+      dl.style.display = "inline-flex";
+    }
+  }
+  // Load sound events if sound detection was enabled
+  trLoadSoundEvents();
+}
+
+// Sound events storage and display
+let TR_SOUND_EVENTS = [];
+
+async function trLoadSoundEvents(autoMerge = true){
+  if(!AISTATE.projectId) return;
+  try{
+    const data = await api(`/api/projects/${AISTATE.projectId}/sound_events`);
+    TR_SOUND_EVENTS = data.events || [];
+    trRenderSoundEvents(data);
+    // Auto-merge sound events into transcript text
+    if(autoMerge && TR_SOUND_EVENTS.length && TR.segments.length){
+      trApplySoundEventsToText();
+    }
+  }catch(e){
+    console.log("No sound events:", e);
+    TR_SOUND_EVENTS = [];
+  }
+}
+
+function trRenderSoundEvents(data){
+  const container = document.getElementById("tr_sound_events");
+  if(!container) return;
+
+  const events = data.events || [];
+  if(!events.length){
+    container.innerHTML = '<div class="sound-events-empty" data-i18n="label.no_sound_events">Brak wykrytych dźwięków</div>';
+    container.style.display = "none";
+    return;
+  }
+
+  container.style.display = "block";
+
+  // Group events by type
+  const grouped = {};
+  events.forEach(e => {
+    const key = e.type || e.label || "unknown";
+    if(!grouped[key]) grouped[key] = [];
+    grouped[key].push(e);
+  });
+
+  let html = `<div class="sound-events-header">
+    <span data-i18n="label.detected_sounds">${aiIcon('speaker',14)} Wykryte dźwięki</span>
+    <span class="sound-events-model">(${data.model || "?"})</span>
+    <button type="button" class="btn mini" onclick="trApplySoundEventsToText()" title="Wstaw znaczniki dźwięków do tekstu" data-i18n-title="btn.insert_sound_markers">
+      ${aiIcon('notes',14)} Wstaw do tekstu
+    </button>
+  </div>`;
+  html += '<div class="sound-events-list">';
+
+  for(const [type, items] of Object.entries(grouped)){
+    const count = items.length;
+    const avgConf = Math.round(items.reduce((s,e)=>s+e.confidence,0)/count*100);
+    html += `<div class="sound-event-tag" data-type="${type}" onclick="trFilterSoundEvents('${type}')">
+      <span class="sound-event-icon">${trGetSoundIcon(type)}</span>
+      <span class="sound-event-label">${type}</span>
+      <span class="sound-event-count">${count}x</span>
+      <span class="sound-event-conf">${avgConf}%</span>
+    </div>`;
+  }
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function trGetSoundIcon(type){
+  const icons = {
+    dog: aiIcon('speaker',12), cat: aiIcon('speaker',12), bird: aiIcon('speaker',12),
+    cough: aiIcon('speaker',12), sneeze: aiIcon('speaker',12), laughter: aiIcon('speaker',12), crying: aiIcon('speaker',12), baby_cry: aiIcon('speaker',12),
+    speech: aiIcon('speaker',12), music: aiIcon('speaker',12), singing: aiIcon('speaker',12), tv: aiIcon('vision',12), radio: aiIcon('speaker',12),
+    vehicle: aiIcon('info_circle',12), engine: aiIcon('wrench',12), siren: aiIcon('warning',12), alarm: aiIcon('warning',12), bell: aiIcon('warning',12),
+    phone: aiIcon('speaker',12), door: aiIcon('speaker',12), knock: aiIcon('speaker',12), footsteps: aiIcon('speaker',12),
+    wind: aiIcon('speaker',12), rain: aiIcon('speaker',12), thunder: aiIcon('speaker',12), water: aiIcon('speaker',12),
+    noise: aiIcon('speaker',12)
+  };
+  return icons[type] || aiIcon('speaker',12);
+}
+
+// Polish translations for sound event labels
+const SOUND_LABELS_PL = {
+  dog: "szczek psa", cat: "miauczenie kota", bird: "śpiew ptaka",
+  cough: "kaszel", sneeze: "kichnięcie", laughter: "śmiech", crying: "płacz", baby_cry: "płacz dziecka",
+  speech: "rozmowa w tle", music: "muzyka w tle", singing: "śpiew", tv: "telewizor w tle", radio: "radio w tle",
+  vehicle: "przejeżdżający pojazd", engine: "dźwięk silnika", siren: "syrena", alarm: "alarm", bell: "dzwonek",
+  phone: "dzwonek telefonu", door: "dźwięk drzwi", knock: "pukanie", footsteps: "kroki",
+  wind: "wiatr", rain: "deszcz", thunder: "grzmot", water: "szum wody",
+  noise: "hałas w tle"
+};
+
+function trGetSoundLabelPL(type){
+  return SOUND_LABELS_PL[type] || type;
+}
+
+// Merge sound events into segment text based on timestamp overlap
+function trMergeSoundEventsIntoSegments(segments, soundEvents, minConfidence = 0.5){
+  if(!soundEvents || !soundEvents.length) return segments;
+
+  return segments.map(seg => {
+    const segStart = seg.start;
+    const segEnd = seg.end;
+
+    // Find sound events that overlap with this segment
+    const overlapping = soundEvents.filter(ev => {
+      if((ev.confidence || 0) < minConfidence) return false;
+      const evStart = ev.start || 0;
+      const evEnd = ev.end || evStart + 0.5;
+      // Check overlap
+      return evStart < segEnd && evEnd > segStart;
+    });
+
+    if(!overlapping.length) return seg;
+
+    // Group by type and get unique types
+    const types = [...new Set(overlapping.map(e => e.type || e.label))];
+
+    // Build sound tags string
+    const tags = types.map(t => `«${trGetSoundLabelPL(t)}»`).join(" ");
+
+    // Append to segment text
+    return {
+      ...seg,
+      text: (seg.text || "").trim() + " " + tags,
+      _soundEvents: overlapping // Keep reference for potential editing
+    };
+  });
+}
+
+// Apply sound events to current segments and re-render
+function trApplySoundEventsToText(){
+  if(!TR_SOUND_EVENTS.length || !TR.segments.length) return;
+
+  // Check if already applied (avoid double-adding)
+  const alreadyApplied = TR.segments.some(s => s._soundEvents);
+  if(alreadyApplied){
+    console.log("Sound events already applied to segments");
+    return;
+  }
+
+  TR.segments = trMergeSoundEventsIntoSegments(TR.segments, TR_SOUND_EVENTS, 0.5);
+  trRender();
+  console.log("Sound events merged into transcript text");
+}
+
+function trFilterSoundEvents(type){
+  // Highlight segments that overlap with sound events of this type
+  const events = TR_SOUND_EVENTS.filter(e => (e.type || e.label) === type);
+  console.log(`Sound events of type "${type}":`, events);
+
+  // Highlight matching segments in UI
+  if(events.length){
+    const blocks = document.querySelectorAll(".seg");
+    blocks.forEach((block, idx) => {
+      block.classList.remove("sound-highlight");
+      const seg = TR.segments[idx];
+      if(!seg) return;
+      // Check if segment overlaps with any event of this type
+      const hasMatch = events.some(ev => {
+        const evStart = ev.start || 0;
+        const evEnd = ev.end || evStart + 0.5;
+        return evStart < seg.end && evEnd > seg.start;
+      });
+      if(hasMatch) block.classList.add("sound-highlight");
+    });
+  }
+}
+
+window.trLoadSoundEvents = trLoadSoundEvents;
+window.trFilterSoundEvents = trFilterSoundEvents;
+window.trApplySoundEventsToText = trApplySoundEventsToText;
+window.SOUND_LABELS_PL = SOUND_LABELS_PL;
+
+
+// ========== ASR engine/model selectors (installed-only) ==========
+async function trInitAsrSelectors(){
+  const engEl = document.getElementById("tr_engine");
+  const modelEl = document.getElementById("tr_model");
+  const noModelsEl = document.getElementById("tr_asr_no_models");
+  const btn = document.getElementById("tr_btn");
+  const nemoHint = document.getElementById("tr_nemo_hint");
+  if(!engEl || !modelEl) return;
+
+  let state = null;
+  try{
+    state = await api("/api/asr/models_state");
+  }catch(e){
+    state = null;
+  }
+
+  function isInstalled(key, model){
+    try{
+      if(!state || !state[key]) return true; // fallback: show presets
+      return !!state[key][model];
+    }catch(e){
+      return true;
+    }
+  }
+
+  const installedWhisper = (TR_ASR_PRESETS.whisper||[]).filter(m=>isInstalled("whisper", m));
+  const installedNemo = (TR_ASR_PRESETS.nemo||[]).filter(m=>isInstalled("nemo", m));
+
+  function setHint(engine){
+    if(nemoHint) nemoHint.style.display = (engine === "nemo") ? "block" : "none";
+  }
+
+  function buildEngineOptions(){
+    engEl.innerHTML = "";
+    let any = false;
+    if(installedWhisper.length){
+      const o = document.createElement("option");
+      o.value = "whisper";
+      o.textContent = "Whisper";
+      engEl.appendChild(o);
+      any = true;
+    }
+    if(installedNemo.length){
+      const o = document.createElement("option");
+      o.value = "nemo";
+      o.textContent = "NeMo ASR";
+      engEl.appendChild(o);
+      any = true;
+    }
+
+    engEl.disabled = !any;
+    modelEl.disabled = !any;
+    if(noModelsEl) noModelsEl.style.display = any ? "none" : "block";
+
+    if(btn){
+      // Will be refined after model selection is built
+      btn.disabled = !(AISTATE.audioFile && any);
+    }
+
+    return any;
+  }
+
+  function buildModelOptions(engine){
+    modelEl.innerHTML = "";
+    const models = (engine === "nemo") ? installedNemo : installedWhisper;
+
+    if(!models.length){
+      const o = document.createElement("option");
+      o.value = "";
+      o.textContent = "—";
+      modelEl.appendChild(o);
+      modelEl.disabled = true;
+      return;
+    }
+
+    modelEl.disabled = false;
+    for(const m of models){
+      const o = document.createElement("option");
+      o.value = m;
+      o.textContent = m;
+      modelEl.appendChild(o);
+    }
+
+    // Try to restore last choice
+    let preferred = "";
+    try{ preferred = localStorage.getItem(`aistate_tr_model_${engine}`) || ""; }catch(e){}
+
+    if(!preferred && engine === "whisper") preferred = TR_ASR_DEFAULTS.whisper || "";
+
+    if(preferred && models.includes(preferred)){
+      modelEl.value = preferred;
+    } else {
+      modelEl.value = models[0];
+    }
+  }
+
+  const any = buildEngineOptions();
+  if(!any){
+    setHint("whisper");
+    if(btn) btn.disabled = true;
+    return;
+  }
+
+  let preferredEngine = "";
+  try{ preferredEngine = localStorage.getItem("aistate_tr_engine") || ""; }catch(e){}
+
+  if(preferredEngine === "nemo" && !installedNemo.length) preferredEngine = "";
+  if(preferredEngine === "whisper" && !installedWhisper.length) preferredEngine = "";
+
+  if(!preferredEngine){
+    preferredEngine = installedWhisper.length ? "whisper" : "nemo";
+  }
+
+  engEl.value = preferredEngine;
+  buildModelOptions(preferredEngine);
+  setHint(preferredEngine);
+
+  engEl.addEventListener("change", ()=>{
+    const eng = engEl.value || "whisper";
+    try{ localStorage.setItem("aistate_tr_engine", eng); }catch(e){}
+    buildModelOptions(eng);
+    setHint(eng);
+    if(btn) btn.disabled = !(AISTATE.audioFile && (modelEl.value||""));
+  });
+
+  modelEl.addEventListener("change", ()=>{
+    const eng = engEl.value || "whisper";
+    try{ localStorage.setItem(`aistate_tr_model_${eng}`, modelEl.value || ""); }catch(e){}
+    if(btn) btn.disabled = !(AISTATE.audioFile && (modelEl.value||""));
+  });
+
+  if(btn) btn.disabled = !(AISTATE.audioFile && (modelEl.value||""));
+}
+
+// Event listeners
+document.getElementById("tr_btn").addEventListener("click", async ()=>{
+  const fd = new FormData();
+  fd.append("lang", document.getElementById("tr_lang").value);
+  const eng = (document.getElementById("tr_engine")?.value || "whisper");
+  fd.append("asr_engine", eng);
+  fd.append("model", document.getElementById("tr_model").value);
+
+  // Sound detection parameters
+  const sdCheckbox = document.getElementById("tr_sound_detection_enabled");
+  const sdModel = document.getElementById("tr_sound_detection_model");
+  if(sdCheckbox && sdCheckbox.checked && sdModel && sdModel.value){
+    fd.append("sound_detection_enabled", "1");
+    fd.append("sound_detection_model", sdModel.value);
+  }
+
+  await startTask("tr", "/api/transcribe", fd, onDoneTranscribe);
+});
+
+const trReportSaveBtn = document.getElementById("tr_report_save_btn");
+if(trReportSaveBtn){
+  trReportSaveBtn.addEventListener("click", trSaveReports);
+}
+
+
+const notesGlobalTextarea = document.getElementById("tr_notes_global");
+if(notesGlobalTextarea){
+  notesGlobalTextarea.addEventListener("input", trUpdateGlobalNote);
+}
+
+// Notes buttons removed — auto-save handles persistence
+
+// Expose for app.js
+window.TR = TR;
+window.trRender = trRender;
+window.trBuildRawText = trBuildRawText;
+window.trOpenInlineEditor = trOpenInlineEditor;
+window.trCloseInlineEditor = trCloseInlineEditor;
+window.trScrollToBlock = trScrollToBlock;
+window.trDeleteBlockNote = trDeleteBlockNote;
+window.trOpenBlockNoteEditor = trOpenBlockNoteEditor;
+
+// Sound Detection UI handling
+const SOUND_MODELS_INFO = {
+  yamnet: "YAMNet",
+  panns_cnn6: "PANNs CNN6",
+  panns_cnn14: "PANNs CNN14",
+  beats: "BEATs"
+};
+
+async function trInitSoundDetection(){
+  try{
+    const state = await api('/api/sound-detection/models_state');
+    const sel = document.getElementById('tr_sound_detection_model');
+    const section = document.getElementById('tr_sound_detection_section');
+    if(!sel) return;
+
+    // Clear and populate with only installed models
+    sel.innerHTML = '';
+    let hasAny = false;
+
+    for(const [id, name] of Object.entries(SOUND_MODELS_INFO)){
+      if(state && state[id]){
+        hasAny = true;
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      }
+    }
+
+    // Hide section if no models installed
+    if(section){
+      section.style.display = hasAny ? '' : 'none';
+    }
+  }catch(e){ console.warn('Sound detection init failed', e); }
+}
+
+function trBindSoundDetectionUI(){
+  const cb = document.getElementById('tr_sound_detection_enabled');
+  const sel = document.getElementById('tr_sound_detection_model');
+  if(!cb || !sel) return;
+
+  cb.addEventListener('change', ()=>{
+    sel.disabled = !cb.checked;
+    if(cb.checked && !sel.value && sel.options.length > 0){
+      sel.value = sel.options[0].value;
+    }
+  });
+}
+
+// ========== Audio file upload ==========
+document.getElementById('tr_add_file_btn').addEventListener('click', () => {
+  document.getElementById('tr_file_input').click();
+});
+
+document.getElementById('tr_file_input').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+
+  let pid = AISTATE.projectId;
+  if(!pid){
+    e.target.value = '';
+    try { pid = await requireProjectId("transcription"); } catch(ex) { return; }
+  }
+
+  const btn = document.getElementById('tr_add_file_btn');
+  btn.disabled = true;
+
+  try {
+    const fd = new FormData();
+    fd.append('audio', file);
+    const res = await api(`/api/projects/${pid}/upload_audio`, {method:'POST', body: fd});
+    AISTATE.audioFile = res.audio_file || file.name;
+    document.getElementById('tr_file_name').textContent = AISTATE.audioFile;
+    await refreshCurrentProjectInfo();
+
+    // Re-init audio player with the new file
+    TR.audioUrl = trAudioUrl();
+    if(TR.audioUrl && window._trPlayer){
+      window._trPlayer.init();
+      if(window._trPlayer.audio) TR.audio = window._trPlayer.audio;
+    }
+
+    // Enable transcribe button
+    const trBtn = document.getElementById('tr_btn');
+    const modelEl = document.getElementById('tr_model');
+    if(trBtn) trBtn.disabled = !(AISTATE.projectId && AISTATE.audioFile && modelEl && modelEl.value);
+
+    showToast('Plik audio wgrany: ' + AISTATE.audioFile, 'success');
+  } catch(err) {
+    showToast('Błąd wgrywania: ' + (err.message || err), 'error');
+  } finally {
+    btn.disabled = false;
+    e.target.value = '';
+  }
+});
+
+// Initialize
+(async()=>{
+  await refreshCurrentProjectInfo();
+  await trInitAsrSelectors();
+  await trInitSoundDetection();
+  trBindSoundDetectionUI();
+
+  const btn = document.getElementById("tr_btn");
+  const modelEl = document.getElementById("tr_model");
+  if(btn) btn.disabled = !(AISTATE.audioFile && modelEl && modelEl.value);
+
+  // Show current audio file name
+  const fnEl = document.getElementById("tr_file_name");
+  if(fnEl && AISTATE.audioFile) fnEl.textContent = AISTATE.audioFile;
+
+  if(AISTATE.projectId){
+    await trLoadNotesFromProject();
+    await trLoadSoundEvents();
+  }
+
+  await resumeTask("tr", onDoneTranscribe);
+
+  // Load existing transcript - try segments.json first (has confidence), fallback to text
+  try{
+    const pid = AISTATE.projectId || "";
+    if(pid){
+      // Try to load segments with confidence first
+      let loaded = false;
+      try{
+        const segsData = await api(`/api/projects/${pid}/transcript_segments`);
+        if(segsData.segments && segsData.segments.length){
+          TR.segments = segsData.segments.map(s=>({
+            start: Number(s.start)||0,
+            end: Number(s.end)||0,
+            speaker: s.speaker || null,
+            text: String(s.text||"").trim(),
+            confidence: typeof s.confidence === "number" ? s.confidence : null,
+            no_speech: typeof s.no_speech === "number" ? s.no_speech : null
+          }));
+          trRender();
+          loaded = true;
+          console.log("Loaded transcript segments with confidence");
+        }
+      }catch(e){ /* segments.json doesn't exist, try text */ }
+
+      // Fallback to text parsing if segments not available
+      if(!loaded){
+        const txt = await api(`/api/projects/${pid}/download/transcript.txt`);
+        const parsed = trSegmentsFromTextTs(txt);
+        if(parsed.length){
+          TR.segments = parsed;
+          trRender();
+        } else {
+          document.getElementById("tr_out").value = txt || "";
+        }
+      }
+    }
+  }catch(e){ /* ignore */ }
+
+  // Initialize main audio player bar
+  if (typeof AudioPlayer === "function") {
+    window._trPlayer = new AudioPlayer({
+      containerId: "tr_audio_player",
+      getAudioUrl: trAudioUrl,
+      getSegments: function(){ return TR.segments || []; },
+      blocksContainerId: "tr_blocks"
+    });
+    window._trPlayer.init();
+    // Share audio element so hover-play and main player never overlap
+    if (window._trPlayer.audio) {
+      TR.audio = window._trPlayer.audio;
+    }
+  }
+
+  // Initialize seg_tools (search, click-to-seek, waveform map, merge/split)
+  if (typeof segTools !== "undefined") {
+    segTools.init({
+      page: "transcription",
+      blocksId: "tr_blocks",
+      getSegments: function () { return TR.segments || []; },
+      setSegments: function (s) {
+        TR.segments = s;
+        trRender();
+      },
+      getPlayer: function () { return window._trPlayer || null; },
+      stopHoverPlayback: function () { trStopPlayback(); },
+      onChanged: function () {
+        trSetRawTextarea();
+        scheduleAutoSave();
+      },
+      getNotes: function () { return TR.notes; },
+      setNotes: function (n) {
+        TR.notes = n;
+        trRenderBlockNotesList();
+        // Re-render to update note icons on segments
+        trRender();
+        scheduleAutoSave();
+      }
+    });
+    // Initial afterRender if segments already loaded
+    if (TR.segments && TR.segments.length) segTools.afterRender();
+  }
+})();
+</script>
+{% endblock %}

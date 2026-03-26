@@ -1,0 +1,825 @@
+"""API router for project workspaces, subprojects, members, invitations.
+
+Prefix: /api/workspaces
+
+NOTE: Static paths (like /invitations/mine) MUST be registered before
+parametric paths (/{workspace_id}) to avoid FastAPI matching "invitations"
+as a workspace_id.
+"""
+from __future__ import annotations
+
+import logging
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+
+log = logging.getLogger("aistate.workspaces")
+
+router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
+
+# Injected from server.py
+_STORE = None   # WorkspaceStore
+_USER_STORE = None
+
+
+def init(*, workspace_store, user_store) -> None:
+    global _STORE, _USER_STORE
+    _STORE = workspace_store
+    _USER_STORE = user_store
+
+
+def _uid(request: Request) -> str:
+    """Get current user ID (multiuser or default admin)."""
+    user = getattr(request.state, "user", None)
+    if user:
+        return user.user_id
+    from backend.db.engine import get_default_user_id
+    return get_default_user_id()
+
+
+def _uname(request: Request) -> str:
+    user = getattr(request.state, "user", None)
+    if user:
+        return user.display_name or user.username
+    return "admin"
+
+
+def _is_admin(request: Request) -> bool:
+    user = getattr(request.state, "user", None)
+    return bool(user and (user.is_admin or user.is_superadmin))
+
+
+def _default_subproject_type(request: Request) -> str:
+    """Determine default subproject type based on user's role."""
+    user = getattr(request.state, "user", None)
+    if not user or not getattr(user, "role", None):
+        return "analysis"
+    role = user.role
+    _ROLE_TYPE_MAP = {
+        "Transkryptor": "transcription",
+        "Lingwista": "translation",
+        "Analityk": "analysis",
+        "Dialogista": "chat",
+        "Strateg": "analysis",
+        "Mistrz Sesji": "analysis",
+    }
+    return _ROLE_TYPE_MAP.get(role, "analysis")
+
+
+def _ensure_data_dir(name: str, owner_id: str, encrypted: bool = False) -> str:
+    """Create a file-based project directory and return its relative path."""
+    import uuid
+    import json
+    from pathlib import Path
+    from datetime import datetime
+    import os
+
+    _root = Path(__file__).resolve().parents[2]
+    data_root = Path(
+        os.environ.get("AISTATEWEB_DATA_DIR")
+        or os.environ.get("AISTATEWWW_DATA_DIR")
+        or os.environ.get("AISTATE_DATA_DIR")
+        or str(_root / "data_www")
+    ).resolve()
+    projects_dir = data_root / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+
+    pid = uuid.uuid4().hex
+    pdir = projects_dir / pid
+    pdir.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "project_id": pid,
+        "name": name,
+        "created_at": datetime.now().isoformat(),
+        "owner_id": owner_id,
+    }
+
+    # If encryption requested, generate and store project key
+    if encrypted:
+        try:
+            from backend.encryption.project_io import get_managers
+            from backend.settings_store import load_settings
+            _, pkm = get_managers()
+            s = load_settings()
+            method = getattr(s, "encryption_method", "standard")
+            _, enc_meta = pkm.create_project_key(pid, method)
+            meta["encryption"] = enc_meta
+        except Exception:
+            # If encryption not initialized, skip silently
+            pass
+
+    meta_path = pdir / "project.json"
+    meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    return f"projects/{pid}"
+
+
+# =====================================================================
+# DIAGNOSTICS — debug why projects leak between users
+# =====================================================================
+
+@router.get("/debug/my-isolation")
+def debug_my_isolation(request: Request):
+    """Show exactly what this user sees and why.  Hit this from both user
+    accounts and compare to find the leak."""
+    uid = _uid(request)
+    uname = _uname(request)
+    is_admin = _is_admin(request)
+
+    from backend.db.engine import get_conn
+    with get_conn() as conn:
+        # 1. All workspaces this user OWNS
+        owned_rows = conn.execute(
+            "SELECT id, name, owner_id, status FROM project_workspaces WHERE owner_id = ?",
+            (uid,),
+        ).fetchall()
+        owned = [dict(r) for r in owned_rows]
+
+        # 2. All memberships for this user (raw DB state)
+        member_rows = conn.execute(
+            "SELECT m.workspace_id, m.role, m.status, w.name, w.owner_id "
+            "FROM project_members m "
+            "JOIN project_workspaces w ON w.id = m.workspace_id "
+            "WHERE m.user_id = ?",
+            (uid,),
+        ).fetchall()
+        memberships = []
+        for r in member_rows:
+            d = dict(r)
+            # Flag ghost memberships (no accepted invitation and not owner)
+            if d["owner_id"] != uid:
+                inv = conn.execute(
+                    "SELECT id FROM project_invitations "
+                    "WHERE workspace_id = ? AND invitee_id = ? AND status = 'accepted'",
+                    (d["workspace_id"], uid),
+                ).fetchone()
+                d["has_accepted_invitation"] = inv is not None
+                d["is_ghost"] = inv is None
+            else:
+                d["has_accepted_invitation"] = False
+                d["is_ghost"] = False
+            memberships.append(d)
+
+        # 3. Workspaces returned by list_workspaces (the actual API result)
+        api_workspaces = _STORE.list_workspaces(uid, "active")
+        api_ws_summary = [
+            {"id": w["id"], "name": w.get("name"), "owner_id": w.get("owner_id"),
+             "my_role": w.get("my_role"), "subproject_count": w.get("subproject_count", 0)}
+            for w in api_workspaces
+        ]
+
+        # 4. Subprojects visible through the API
+        visible_subprojects = []
+        for ws in api_workspaces:
+            sps = _STORE.list_subprojects(ws["id"])
+            for sp in sps:
+                visible_subprojects.append({
+                    "id": sp["id"], "name": sp.get("name"),
+                    "workspace_id": ws["id"], "workspace_name": ws.get("name"),
+                    "data_dir": sp.get("data_dir"), "created_by": sp.get("created_by"),
+                })
+
+        # 5. Ghost members in THIS user's workspaces (other users who shouldn't be there)
+        ghosts_in_mine = []
+        for ws in owned:
+            other_rows = conn.execute(
+                "SELECT m.user_id, m.role, m.status, u.username "
+                "FROM project_members m "
+                "LEFT JOIN users u ON u.id = m.user_id "
+                "WHERE m.workspace_id = ? AND m.user_id != ?",
+                (ws["id"], uid),
+            ).fetchall()
+            for r in other_rows:
+                d = dict(r)
+                inv = conn.execute(
+                    "SELECT id, status FROM project_invitations "
+                    "WHERE workspace_id = ? AND invitee_id = ?",
+                    (ws["id"], d["user_id"]),
+                ).fetchone()
+                d["workspace_id"] = ws["id"]
+                d["workspace_name"] = ws["name"]
+                d["invitation"] = dict(inv) if inv else None
+                d["is_ghost"] = inv is None or inv["status"] != "accepted"
+                ghosts_in_mine.append(d)
+
+        # 6. Invitations involving this user
+        inv_sent = conn.execute(
+            "SELECT id, workspace_id, invitee_id, role, status FROM project_invitations WHERE inviter_id = ?",
+            (uid,),
+        ).fetchall()
+        inv_received = conn.execute(
+            "SELECT id, workspace_id, inviter_id, role, status FROM project_invitations WHERE invitee_id = ?",
+            (uid,),
+        ).fetchall()
+
+        # 7. Total DB counts
+        total_members = conn.execute("SELECT COUNT(*) as c FROM project_members").fetchone()["c"]
+        total_invitations = conn.execute("SELECT COUNT(*) as c FROM project_invitations").fetchone()["c"]
+
+    return JSONResponse({
+        "user_id": uid,
+        "username": uname,
+        "is_admin": is_admin,
+        "owned_workspaces": owned,
+        "raw_memberships": memberships,
+        "api_workspaces": api_ws_summary,
+        "visible_subprojects": visible_subprojects,
+        "ghosts_in_my_workspaces": ghosts_in_mine,
+        "invitations_sent": [dict(r) for r in inv_sent],
+        "invitations_received": [dict(r) for r in inv_received],
+        "db_totals": {"members": total_members, "invitations": total_invitations},
+    })
+
+
+# =====================================================================
+# INVITATIONS — must be before /{workspace_id} to avoid route conflict
+# =====================================================================
+
+@router.get("/invitations/mine")
+def my_invitations(request: Request):
+    uid = _uid(request)
+    invitations = _STORE.list_invitations_for_user(uid)
+    return JSONResponse({"status": "ok", "invitations": invitations})
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_workspaces(request: Request):
+    """Delete multiple workspaces with all their subprojects and data directories."""
+    body = await request.json()
+    workspace_ids = body.get("workspace_ids", [])
+    wipe_method = (body.get("wipe_method") or "none").strip().lower()
+
+    if not workspace_ids or not isinstance(workspace_ids, list):
+        return JSONResponse({"status": "error", "message": "workspace_ids required"}, 400)
+
+    uid = _uid(request)
+    is_admin = _is_admin(request)
+    deleted = []
+    errors = []
+
+    for ws_id in workspace_ids:
+        # Verify ownership
+        role = _STORE.get_user_role(ws_id, uid)
+        if role != "owner" and not is_admin:
+            errors.append({"id": ws_id, "message": "Only owner can delete"})
+            continue
+
+        ws = _STORE.get_workspace(ws_id)
+        if ws is None:
+            errors.append({"id": ws_id, "message": "Not found"})
+            continue
+
+        # Delete all subproject data directories with wipe
+        subs = _STORE.list_subprojects(ws_id)
+        for sp in subs:
+            data_dir = sp.get("data_dir", "")
+            if data_dir:
+                dir_id = data_dir.replace("projects/", "")
+                if dir_id:
+                    try:
+                        _delete_project_data(dir_id, wipe_method)
+                    except Exception:
+                        pass  # best-effort
+
+        # Hard-delete workspace + all DB records
+        _STORE.hard_delete_workspace(ws_id)
+        deleted.append(ws_id)
+
+    return JSONResponse({
+        "status": "ok",
+        "deleted": deleted,
+        "errors": errors,
+    })
+
+
+def _delete_project_data(project_id: str, wipe_method: str = "none"):
+    """Delete a project data directory with optional secure wipe."""
+    import os
+    from pathlib import Path
+
+    _root = Path(__file__).resolve().parents[2]
+    data_root = Path(
+        os.environ.get("AISTATEWEB_DATA_DIR")
+        or os.environ.get("AISTATEWWW_DATA_DIR")
+        or os.environ.get("AISTATE_DATA_DIR")
+        or str(_root / "data_www")
+    ).resolve()
+    projects_dir = data_root / "projects"
+    pdir = (projects_dir / project_id).resolve()
+
+    if not pdir.exists() or not pdir.is_dir():
+        return
+    if projects_dir.resolve() not in pdir.parents:
+        return
+
+    try:
+        from webapp.server import secure_delete_project_dir
+        secure_delete_project_dir(pdir, wipe_method)
+    except ImportError:
+        import shutil
+        shutil.rmtree(pdir, ignore_errors=True)
+
+
+def _cleanup_aml_data(project_id: str):
+    """Delete AML DB data (cases, statements, transactions, etc.) for a project.
+
+    The project_id here is the UUID from subprojects.data_dir (projects/{uuid}).
+    It maps to cases.project_id -> projects.id in the AML database.
+    Deleting from `projects` cascades to cases -> statements -> transactions etc.
+    """
+    try:
+        from backend.db.engine import get_conn
+        with get_conn() as conn:
+            # Also clean up system_config entries for this project's statements
+            stmt_rows = conn.execute(
+                """SELECT s.id FROM statements s
+                   JOIN cases c ON s.case_id = c.id
+                   WHERE c.project_id = ?""",
+                (project_id,),
+            ).fetchall()
+            for row in stmt_rows:
+                sid = row["id"]
+                conn.execute("DELETE FROM system_config WHERE key = ?", (f"detected_accounts:{sid}",))
+                conn.execute("DELETE FROM system_config WHERE key = ?", (f"llm_prompt:{sid}",))
+            # Cascade delete: projects -> cases -> statements -> transactions,
+            #                  cases -> case_files, cases -> graph_nodes/edges
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        log.info("Cleaned up AML data for project %s (%d statements)", project_id[:8], len(stmt_rows))
+    except Exception as e:
+        log.warning("AML data cleanup failed for project %s: %s", project_id[:8], e)
+
+
+@router.post("/invitations/{invitation_id}/accept")
+def accept_invitation(request: Request, invitation_id: str):
+    uid = _uid(request)
+    ok = _STORE.respond_invitation(invitation_id, uid, accept=True)
+    if not ok:
+        return JSONResponse({"status": "error", "message": "Invitation not found or already responded"}, 404)
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/invitations/{invitation_id}/reject")
+def reject_invitation(request: Request, invitation_id: str):
+    uid = _uid(request)
+    ok = _STORE.respond_invitation(invitation_id, uid, accept=False)
+    if not ok:
+        return JSONResponse({"status": "error", "message": "Invitation not found or already responded"}, 404)
+    return JSONResponse({"status": "ok"})
+
+
+# =====================================================================
+# WORKSPACES
+# =====================================================================
+
+@router.get("")
+def list_workspaces(request: Request, status: str = "active", include: str = "",
+                    scope: str = ""):
+    uid = _uid(request)
+    want_subs = "subprojects" in include
+    # scope=admin → admin override: all workspaces (for admin panel only)
+    # any other value (empty, "mine", etc.) → user's own + member workspaces
+    use_admin_view = _is_admin(request) and scope == "admin"
+    if use_admin_view:
+        from backend.db.engine import get_conn
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM project_workspaces WHERE status = ? ORDER BY updated_at DESC",
+                (status,),
+            ).fetchall()
+            workspaces = []
+            for r in rows:
+                ws = dict(r)
+                ws["member_count"] = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM project_members WHERE workspace_id = ? AND status='accepted'",
+                    (ws["id"],),
+                ).fetchone()["cnt"]
+                ws["subproject_count"] = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM subprojects WHERE workspace_id = ?",
+                    (ws["id"],),
+                ).fetchone()["cnt"]
+                ws["my_role"] = _STORE.get_user_role(ws["id"], uid) or "admin"
+                ws["members"] = _STORE.list_members(ws["id"])
+                if want_subs:
+                    ws["subprojects"] = _STORE.list_subprojects(ws["id"])
+                workspaces.append(ws)
+        resp = JSONResponse({"status": "ok", "workspaces": workspaces})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    workspaces = _STORE.list_workspaces(uid, status)
+    if want_subs:
+        for ws in workspaces:
+            ws["subprojects"] = _STORE.list_subprojects(ws["id"])
+    resp = JSONResponse({"status": "ok", "workspaces": workspaces})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@router.post("")
+async def create_workspace(request: Request):
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JSONResponse({"status": "error", "message": "Name is required"}, 400)
+    uid = _uid(request)
+    ws = _STORE.create_workspace(
+        owner_id=uid,
+        name=name,
+        description=body.get("description", ""),
+        color=body.get("color", "#4a6cf7"),
+        icon=body.get("icon", "folder"),
+    )
+
+    # Return workspace — user picks subproject type via the UI modal
+    ws["subprojects"] = []
+
+    return JSONResponse({"status": "ok", "workspace": ws})
+
+
+# NOTE: /default MUST be before /{workspace_id} to avoid route conflict
+@router.get("/default")
+def get_default_workspace(request: Request):
+    """Return user's default (owned, PRIVATE) workspace for creating new projects.
+
+    Prefers a workspace that has NO other members (only owner).  This prevents
+    new projects from automatically appearing for users who were invited to
+    a different workspace.  If no private workspace exists, creates one.
+    """
+    uid = _uid(request)
+    workspaces = _STORE.list_workspaces(uid, status="active")
+
+    # Only use workspaces OWNED by this user
+    owned = [w for w in workspaces if w.get("owner_id") == uid]
+
+    # Prefer a PRIVATE workspace (member_count == 1 means only the owner)
+    private = [w for w in owned if w.get("member_count", 99) <= 1]
+
+    if private:
+        ws = _STORE.get_workspace(private[0]["id"])
+    elif owned:
+        # All owned workspaces are shared → create a new private one
+        log.info("User %s has no private workspace — creating one", uid[:8])
+        ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
+    else:
+        # No owned workspace at all → create one
+        ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
+    if ws is None:
+        return JSONResponse({"status": "error", "message": "Workspace error"}, 500)
+    # Safety: verify the workspace really belongs to this user
+    if ws.get("owner_id") != uid:
+        log.warning("Default workspace owner mismatch: ws=%s owner=%s user=%s — creating new",
+                     ws["id"][:8], ws.get("owner_id", "?")[:8], uid[:8])
+        ws = _STORE.create_workspace(owner_id=uid, name="Moje projekty")
+    ws["my_role"] = "owner"
+    ws["members"] = _STORE.list_members(ws["id"])
+    ws["subprojects"] = _STORE.list_subprojects(ws["id"])
+    ws["activity"] = _STORE.get_activity(ws["id"], limit=20)
+    resp = JSONResponse({"status": "ok", "workspace": ws})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@router.get("/{workspace_id}")
+def get_workspace(request: Request, workspace_id: str):
+    uid = _uid(request)
+    ws = _STORE.get_workspace(workspace_id)
+    if ws is None:
+        return JSONResponse({"status": "error", "message": "Not found"}, 404)
+    if not _STORE.can_user_access(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    ws["my_role"] = _STORE.get_user_role(workspace_id, uid) or ("admin" if _is_admin(request) else None)
+    ws["members"] = _STORE.list_members(workspace_id)
+    ws["subprojects"] = _STORE.list_subprojects(workspace_id)
+    ws["activity"] = _STORE.get_activity(workspace_id, limit=20)
+    return JSONResponse({"status": "ok", "workspace": ws})
+
+
+@router.patch("/{workspace_id}")
+async def update_workspace(request: Request, workspace_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_manage(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    body = await request.json()
+    ws = _STORE.update_workspace(workspace_id, **body)
+    if ws is None:
+        return JSONResponse({"status": "error", "message": "Not found"}, 404)
+    return JSONResponse({"status": "ok", "workspace": ws})
+
+
+@router.delete("/{workspace_id}")
+def delete_workspace(request: Request, workspace_id: str, wipe_method: str = "none"):
+    uid = _uid(request)
+    role = _STORE.get_user_role(workspace_id, uid)
+    if role != "owner" and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Only owner can delete"}, 403)
+
+    ws = _STORE.get_workspace(workspace_id)
+    ws_name = ws.get("name", "") if ws else ""
+
+    # Delete all subproject data directories + AML DB data before removing workspace
+    subs = _STORE.list_subprojects(workspace_id)
+    for sp in subs:
+        data_dir = sp.get("data_dir", "")
+        if data_dir:
+            dir_id = data_dir.replace("projects/", "")
+            if dir_id:
+                _cleanup_aml_data(dir_id)
+                try:
+                    _delete_project_data(dir_id, wipe_method)
+                except Exception:
+                    pass  # best-effort
+
+    # Hard-delete workspace + all subprojects/members/invitations/activity from DB
+    # so it disappears from admin view as well (not just soft-delete)
+    _STORE.hard_delete_workspace(workspace_id)
+
+    log.info("User '%s' deleted workspace '%s' (id=%s, wipe=%s, subprojects=%d)",
+             _uname(request), ws_name, workspace_id, wipe_method, len(subs))
+    return JSONResponse({"status": "ok"})
+
+
+# =====================================================================
+# SUBPROJECTS
+# =====================================================================
+
+@router.get("/{workspace_id}/subprojects")
+def list_subprojects(request: Request, workspace_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_access(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    subs = _STORE.list_subprojects(workspace_id)
+    return JSONResponse({"status": "ok", "subprojects": subs})
+
+
+@router.post("/{workspace_id}/subprojects")
+async def create_subproject(request: Request, workspace_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_edit(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JSONResponse({"status": "error", "message": "Name is required"}, 400)
+
+    sp_type = body.get("type", "analysis")
+    data_dir = body.get("data_dir", "")
+    audio_file = body.get("audio_file", "")
+    link_to = body.get("link_to", "")
+    encrypted = bool(body.get("encrypted", False))
+
+    # Check if encryption is forced by admin policy
+    try:
+        from backend.settings_store import load_settings as _load_s
+        _s = _load_s()
+        if getattr(_s, "encryption_force_new_projects", False) and getattr(_s, "encryption_enabled", False):
+            encrypted = True
+    except Exception:
+        pass
+
+    # Auto-create file-based project directory if not provided
+    if not data_dir:
+        data_dir = _ensure_data_dir(name, uid, encrypted=encrypted)
+
+    sp = _STORE.create_subproject(
+        workspace_id=workspace_id,
+        name=name,
+        subproject_type=sp_type,
+        data_dir=data_dir,
+        audio_file=audio_file,
+        created_by=uid,
+        user_name=_uname(request),
+    )
+
+    if link_to:
+        try:
+            _STORE.link_subprojects(sp["id"], link_to)
+        except Exception:
+            pass
+
+    return JSONResponse({"status": "ok", "subproject": sp})
+
+
+@router.get("/{workspace_id}/subprojects/{subproject_id}")
+def get_subproject(request: Request, workspace_id: str, subproject_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_access(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    sp = _STORE.get_subproject(subproject_id)
+    if sp is None:
+        return JSONResponse({"status": "error", "message": "Not found"}, 404)
+    return JSONResponse({"status": "ok", "subproject": sp})
+
+
+@router.patch("/{workspace_id}/subprojects/{subproject_id}")
+async def update_subproject(request: Request, workspace_id: str, subproject_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_edit(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    body = await request.json()
+    sp = _STORE.update_subproject(subproject_id, **body)
+    if sp is None:
+        return JSONResponse({"status": "error", "message": "Not found"}, 404)
+    _STORE.log_activity(workspace_id, subproject_id, uid, _uname(request), "updated")
+    return JSONResponse({"status": "ok", "subproject": sp})
+
+
+@router.delete("/{workspace_id}/subprojects/{subproject_id}")
+def delete_subproject(request: Request, workspace_id: str, subproject_id: str,
+                      wipe_method: str = "none"):
+    uid = _uid(request)
+    if not _STORE.can_user_edit(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    # Get subproject data_dir BEFORE deleting from DB so we can clean up files
+    sp = _STORE.get_subproject(subproject_id)
+    sp_name = sp.get("name", "") if sp else ""
+    data_dir = sp.get("data_dir", "") if sp else ""
+
+    # ── Clean up shared copies ───────────────────────────────────────
+    # When a project was shared, a copy subproject exists in a dedicated
+    # sharing workspace with the same data_dir.  Delete those copies and
+    # soft-delete the sharing workspace if it becomes empty.
+    if data_dir:
+        shared_copies = _STORE.find_subprojects_by_data_dir(data_dir, exclude_id=subproject_id)
+        for copy in shared_copies:
+            copy_ws = copy.get("workspace_id", "")
+            _STORE.delete_subproject(copy["id"])
+            # If the sharing workspace is now empty, soft-delete it
+            remaining = _STORE.list_subprojects(copy_ws)
+            if not remaining:
+                _STORE.delete_workspace(copy_ws)
+                log.info("Cleaned up empty sharing workspace %s", copy_ws[:8])
+
+    # Delete the project data files + AML DB data
+    if data_dir:
+        dir_id = data_dir.replace("projects/", "")
+        if dir_id:
+            _cleanup_aml_data(dir_id)
+            try:
+                _delete_project_data(dir_id, wipe_method)
+            except Exception:
+                pass  # best-effort
+    _STORE.delete_subproject(subproject_id)
+    _STORE.log_activity(workspace_id, None, uid, _uname(request), "subproject_deleted",
+                        {"name": sp_name, "wipe_method": wipe_method})
+    log.info("User '%s' deleted subproject '%s' (id=%s, workspace=%s, wipe=%s)",
+             _uname(request), sp_name, subproject_id, workspace_id, wipe_method)
+    return JSONResponse({"status": "ok"})
+
+
+# =====================================================================
+# LINKS
+# =====================================================================
+
+@router.post("/{workspace_id}/subprojects/{subproject_id}/links")
+async def link_subproject(request: Request, workspace_id: str, subproject_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_edit(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    body = await request.json()
+    target_id = body.get("target_id", "")
+    if not target_id:
+        return JSONResponse({"status": "error", "message": "target_id required"}, 400)
+    link = _STORE.link_subprojects(subproject_id, target_id,
+                                    body.get("link_type", "related"), body.get("note", ""))
+    _STORE.log_activity(workspace_id, subproject_id, uid, _uname(request), "linked",
+                        {"target_id": target_id})
+    return JSONResponse({"status": "ok", "link": link})
+
+
+@router.delete("/{workspace_id}/subprojects/{subproject_id}/links/{target_id}")
+def unlink_subproject(request: Request, workspace_id: str, subproject_id: str, target_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_edit(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    _STORE.unlink_subprojects(subproject_id, target_id)
+    return JSONResponse({"status": "ok"})
+
+
+# =====================================================================
+# MEMBERS
+# =====================================================================
+
+@router.get("/members/all")
+def list_all_members(request: Request):
+    """List all invited members across all OWNED workspaces (for management UI)."""
+    uid = _uid(request)
+    workspaces = _STORE.list_workspaces(uid, status="active")
+    owned = [w for w in workspaces if w.get("owner_id") == uid]
+    result = []
+    for ws in owned:
+        members = _STORE.list_members(ws["id"])
+        for m in members:
+            if m.get("role") == "owner":
+                continue  # skip the owner themselves
+            m["workspace_id"] = ws["id"]
+            m["workspace_name"] = ws.get("name", "?")
+            # Find which subprojects are in this workspace
+            subs = _STORE.list_subprojects(ws["id"])
+            m["project_names"] = [s.get("name", "?") for s in subs]
+            result.append(m)
+    return JSONResponse({"status": "ok", "members": result})
+
+
+@router.get("/{workspace_id}/members")
+def list_members(request: Request, workspace_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_access(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    members = _STORE.list_members(workspace_id)
+    return JSONResponse({"status": "ok", "members": members})
+
+
+@router.patch("/{workspace_id}/members/{member_user_id}")
+async def update_member(request: Request, workspace_id: str, member_user_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_manage(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    body = await request.json()
+    new_role = body.get("role", "")
+    if new_role not in ("manager", "editor", "viewer"):
+        return JSONResponse({"status": "error", "message": "Invalid role"}, 400)
+    _STORE.update_member_role(workspace_id, member_user_id, new_role)
+    _STORE.log_activity(workspace_id, None, uid, _uname(request), "member_updated",
+                        {"target_user": member_user_id, "new_role": new_role})
+    return JSONResponse({"status": "ok"})
+
+
+@router.delete("/{workspace_id}/members/{member_user_id}")
+def remove_member(request: Request, workspace_id: str, member_user_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_manage(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    _STORE.remove_member(workspace_id, member_user_id)
+    _STORE.log_activity(workspace_id, None, uid, _uname(request), "member_removed",
+                        {"target_user": member_user_id})
+    return JSONResponse({"status": "ok"})
+
+
+# =====================================================================
+# INVITE (POST under workspace path — no conflict with /{workspace_id})
+# =====================================================================
+
+@router.post("/{workspace_id}/invite")
+async def invite_user(request: Request, workspace_id: str):
+    uid = _uid(request)
+    if not _STORE.can_user_manage(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    body = await request.json()
+    username = (body.get("username") or "").strip()
+    role = body.get("role", "viewer")
+    message = body.get("message", "")
+    subproject_id = (body.get("subproject_id") or "").strip()
+
+    if not username:
+        return JSONResponse({"status": "error", "message": "Username required"}, 400)
+    if role not in ("manager", "editor", "viewer"):
+        return JSONResponse({"status": "error", "message": "Invalid role"}, 400)
+
+    target_user = _USER_STORE.get_by_username(username)
+    if target_user is None:
+        return JSONResponse({"status": "error", "message": f"User '{username}' not found"}, 404)
+
+    # ── Project-level isolation ──────────────────────────────────────
+    # When a SPECIFIC project is selected, create a dedicated workspace
+    # so the invited user sees ONLY that project, not all projects in
+    # the owner's workspace.
+    invite_ws_id = workspace_id
+    if subproject_id:
+        sp = _STORE.get_subproject(subproject_id)
+        if sp and sp.get("workspace_id") == workspace_id:
+            share_ws = _STORE.create_workspace(
+                owner_id=uid,
+                name=sp["name"],
+            )
+            _STORE.create_subproject(
+                workspace_id=share_ws["id"],
+                name=sp["name"],
+                subproject_type=sp.get("subproject_type", "analysis"),
+                data_dir=sp.get("data_dir", ""),
+                audio_file=sp.get("audio_file", ""),
+                metadata=sp.get("metadata") if isinstance(sp.get("metadata"), dict) else None,
+                created_by=uid,
+                user_name=_uname(request),
+            )
+            invite_ws_id = share_ws["id"]
+            log.info("Project-level share: created ws %s for subproject %s",
+                     share_ws["id"][:8], subproject_id[:8])
+
+    try:
+        inv = _STORE.create_invitation(invite_ws_id, uid, target_user.user_id, role, message)
+    except ValueError as e:
+        return JSONResponse({"status": "error", "message": str(e)}, 409)
+
+    _STORE.log_activity(workspace_id, subproject_id or None, uid, _uname(request),
+                        "invitation_sent", {"invitee": username, "role": role})
+    return JSONResponse({"status": "ok", "invitation": inv})
+
+
+# =====================================================================
+# ACTIVITY
+# =====================================================================
+
+@router.get("/{workspace_id}/activity")
+def get_activity(request: Request, workspace_id: str, limit: int = 30):
+    uid = _uid(request)
+    if not _STORE.can_user_access(workspace_id, uid) and not _is_admin(request):
+        return JSONResponse({"status": "error", "message": "Access denied"}, 403)
+    activity = _STORE.get_activity(workspace_id, limit)
+    return JSONResponse({"status": "ok", "activity": activity})

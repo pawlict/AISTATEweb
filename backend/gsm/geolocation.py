@@ -1,0 +1,1625 @@
+"""BTS-based geolocation for GSM billing records.
+
+Resolves billing records to geographic coordinates using:
+1. Direct coordinates from billing data (T-Mobile BTS X/Y)
+2. BTS database lookup by CID/LAC
+3. Sector positioning using azimuth data
+4. Location clustering for home/work detection
+5. Trip detection between clusters (inter-city travel)
+6. Border crossing / foreign travel detection (roaming + gap analysis)
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+import os
+import time
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field, asdict
+from datetime import datetime as _dt
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+try:
+    import httpx
+    _HAS_HTTPX = True
+except ImportError:
+    _HAS_HTTPX = False
+
+from .parsers.base import BillingRecord
+
+log = logging.getLogger(__name__)
+
+
+@dataclass
+class GeoPoint:
+    """Geographic point with metadata."""
+
+    lat: float = 0.0
+    lon: float = 0.0
+    accuracy_m: int = 1000  # estimated accuracy in meters
+    azimuth: Optional[float] = None
+    range_m: Optional[int] = None  # estimated coverage radius in meters
+    radio: str = ""  # radio technology: GSM, UMTS, LTE, 5G NR
+    lac: int = 0
+    cid: int = 0
+    city: str = ""
+    street: str = ""
+    source: str = ""  # 'billing', 'bts_db', 'estimated'
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @property
+    def is_valid(self) -> bool:
+        return self.lat != 0.0 or self.lon != 0.0
+
+
+@dataclass
+class GeoRecord:
+    """Billing record with resolved geographic location."""
+
+    datetime: str = ""
+    date: str = ""
+    time: str = ""
+    record_type: str = ""
+    callee: str = ""
+    duration_seconds: int = 0
+    point: Optional[GeoPoint] = None
+    raw_row: int = 0
+    roaming: bool = False
+    roaming_country: str = ""
+    weekday: int = -1  # 0=Mon..6=Sun, derived from date
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = {
+            "datetime": self.datetime,
+            "date": self.date,
+            "time": self.time,
+            "record_type": self.record_type,
+            "callee": self.callee,
+            "duration_seconds": self.duration_seconds,
+            "raw_row": self.raw_row,
+        }
+        if self.point:
+            d["point"] = self.point.to_dict()
+        return d
+
+
+@dataclass
+class LocationCluster:
+    """Cluster of geo points representing a frequently visited location."""
+
+    lat: float = 0.0
+    lon: float = 0.0
+    radius_m: int = 500
+    record_count: int = 0
+    unique_days: int = 0
+    first_seen: str = ""
+    last_seen: str = ""
+    hours_active: List[int] = field(default_factory=list)
+    hour_counts: Dict[int, int] = field(default_factory=dict)
+    weekday_counts: Dict[int, int] = field(default_factory=dict)
+    label: str = ""  # 'dom', 'praca', 'frequent', etc.
+    city: str = ""
+    street: str = ""
+    cells: List[Dict[str, Any]] = field(default_factory=list)
+    cluster_idx: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class PathSegment:
+    """Movement path segment between two geo points."""
+
+    from_point: GeoPoint = field(default_factory=GeoPoint)
+    to_point: GeoPoint = field(default_factory=GeoPoint)
+    from_datetime: str = ""
+    to_datetime: str = ""
+    distance_m: float = 0.0
+    duration_seconds: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "from_point": self.from_point.to_dict(),
+            "to_point": self.to_point.to_dict(),
+            "from_datetime": self.from_datetime,
+            "to_datetime": self.to_datetime,
+            "distance_m": round(self.distance_m),
+            "duration_seconds": self.duration_seconds,
+        }
+
+
+@dataclass
+class Trip:
+    """Detected inter-city movement between clusters."""
+
+    from_cluster_idx: int = 0
+    to_cluster_idx: int = 0
+    from_city: str = ""
+    to_city: str = ""
+    depart_datetime: str = ""
+    arrive_datetime: str = ""
+    distance_km: float = 0.0
+    duration_minutes: float = 0.0
+    speed_kmh: float = 0.0          # actual observed speed
+    travel_mode: str = ""           # 'car', 'plane', 'bts_hop', 'unknown'
+    est_car_minutes: float = 0.0    # estimated car drive time
+    est_flight_minutes: float = 0.0 # estimated total flight time (incl. airport)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class BorderCrossing:
+    """Detected border crossing / foreign travel event."""
+
+    last_domestic_datetime: str = ""
+    first_return_datetime: str = ""
+    last_domestic_city: str = ""
+    first_return_city: str = ""
+    absence_hours: float = 0.0
+    roaming_countries: List[str] = field(default_factory=list)
+    roaming_records: int = 0
+    roaming_confirmed: bool = False
+    # Enhanced fields for map visualization
+    last_domestic_lat: float = 0.0
+    last_domestic_lon: float = 0.0
+    first_return_lat: float = 0.0
+    first_return_lon: float = 0.0
+    border_travel_mode: str = ""  # 'plane', 'car', 'walk', 'unknown'
+    # Last 24h domestic path before departure: list of {lat, lon, datetime, city}
+    last_24h_path: List[Dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class GeoAnalysis:
+    """Complete geolocation analysis result."""
+
+    geo_records: List[GeoRecord] = field(default_factory=list)
+    clusters: List[LocationCluster] = field(default_factory=list)
+    path: List[PathSegment] = field(default_factory=list)
+    trips: List[Trip] = field(default_factory=list)
+    border_crossings: List[BorderCrossing] = field(default_factory=list)
+    home_cluster: Optional[LocationCluster] = None
+    work_cluster: Optional[LocationCluster] = None
+    total_records: int = 0
+    geolocated_records: int = 0
+    unique_cells: int = 0
+    center_lat: float = 0.0
+    center_lon: float = 0.0
+    bounds: Dict[str, float] = field(default_factory=dict)
+    debug: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        # Only include geolocated records (those with valid point)
+        # to avoid sending 20k+ empty records in the JSON response
+        geolocated = [r.to_dict() for r in self.geo_records
+                      if r.point and r.point.is_valid]
+        return {
+            "geo_records": geolocated,
+            "clusters": [c.to_dict() for c in self.clusters],
+            "path": [p.to_dict() for p in self.path],
+            "trips": [t.to_dict() for t in self.trips],
+            "border_crossings": [bc.to_dict() for bc in self.border_crossings],
+            "home_cluster": self.home_cluster.to_dict() if self.home_cluster else None,
+            "work_cluster": self.work_cluster.to_dict() if self.work_cluster else None,
+            "total_records": self.total_records,
+            "geolocated_records": self.geolocated_records,
+            "unique_cells": self.unique_cells,
+            "center_lat": self.center_lat,
+            "center_lon": self.center_lon,
+            "bounds": self.bounds,
+            "debug": self.debug,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Coordinate helpers
+# ---------------------------------------------------------------------------
+
+# Valid WGS84 range for European BTS (generous bounding box)
+_LAT_MIN, _LAT_MAX = 35.0, 72.0   # Europe: from southern Greece to northern Norway
+_LON_MIN, _LON_MAX = -12.0, 45.0  # Europe: from Atlantic coast to Ural
+
+
+def _is_plausible_wgs84(lat: float, lon: float) -> bool:
+    """Check if (lat, lon) falls within European bounds."""
+    return _LAT_MIN <= lat <= _LAT_MAX and _LON_MIN <= lon <= _LON_MAX
+
+
+def _ddmmss_to_decimal(val: float) -> Optional[float]:
+    """Convert DDMMSS integer to decimal degrees.
+
+    Polish telecom BTS coordinates use DDMMSS format:
+        190813 → 19°08'13" → 19.13694°
+        513507 → 51°35'07" → 51.58528°
+    """
+    ival = int(round(abs(val)))
+    sign = -1 if val < 0 else 1
+
+    ss = ival % 100
+    mm = (ival // 100) % 100
+    dd = ival // 10000
+
+    if mm > 59 or ss > 59 or dd > 180:
+        return None
+
+    return sign * (dd + mm / 60.0 + ss / 3600.0)
+
+
+def _parse_bts_value(raw) -> Optional[float]:
+    """Parse a raw BTS coordinate value to decimal degrees.
+
+    Supports:
+    - WGS84 decimal degrees (e.g., 19.0813 or 51.3507)
+    - DDMMSS integer format (e.g., 190813 → 19°08'13" → 19.1369°)
+
+    Rejects sentinel/null values used in billing (-1, 0, 999, etc.).
+    """
+    try:
+        val = float(str(raw).replace(",", "."))
+    except (ValueError, TypeError):
+        return None
+
+    # Reject common sentinel/null placeholder values in billing data
+    # T-Mobile uses -1 for "unknown", other operators may use 0, 999, etc.
+    if val in (0.0, -1.0, 1.0, 999.0, -999.0, 9999.0, -9999.0):
+        return None
+
+    # Already valid decimal degrees (fits in WGS84 range)
+    if -180.0 <= val <= 180.0:
+        return val
+
+    # Try DDMMSS integer format (common in Polish telecom billing)
+    return _ddmmss_to_decimal(val)
+
+
+def _detect_coord_order(
+    val_x: float, val_y: float,
+) -> Tuple[Optional[float], Optional[float]]:
+    """Auto-detect whether (val_x, val_y) is (lat, lon) or (lon, lat).
+
+    Polish geodetic convention: X = northing (latitude), Y = easting (longitude).
+    Programming/math convention: X = east (longitude), Y = north (latitude).
+
+    Returns (lat, lon) or (None, None) if neither ordering is valid.
+    """
+    # Try Polish geodetic convention first: X = lat, Y = lon
+    if _is_plausible_wgs84(val_x, val_y):
+        return val_x, val_y
+
+    # Try programming convention: X = lon, Y = lat
+    if _is_plausible_wgs84(val_y, val_x):
+        return val_y, val_x
+
+    # Neither ordering works — coordinates outside Europe
+    log.debug("Coordinate out of range: val_x=%s, val_y=%s", val_x, val_y)
+    return None, None
+
+
+# ---------------------------------------------------------------------------
+# Core geolocation
+# ---------------------------------------------------------------------------
+
+def _default_data_dir() -> Path:
+    """Determine default data directory for geocode cache."""
+    data_dir = os.environ.get("AISTATEWEB_DATA_DIR", "")
+    if data_dir:
+        return Path(data_dir) / "gsm"
+    # Fallback: data_www/gsm relative to project root
+    return Path(__file__).resolve().parent.parent.parent / "data_www" / "gsm"
+
+
+def geolocate_records(
+    records: List[BillingRecord],
+    bts_db=None,
+    data_dir: Optional[Path] = None,
+) -> GeoAnalysis:
+    """Resolve billing records to geographic coordinates and analyze.
+
+    Args:
+        records: Parsed billing records.
+        bts_db: Optional BTSDatabase instance for CID/LAC lookup.
+        data_dir: Optional data directory for geocode cache
+            (default: auto-detect from AISTATEWEB_DATA_DIR or data_www/gsm/).
+
+    Returns:
+        GeoAnalysis with geo_records, clusters, path, trips,
+        border_crossings, home/work.
+    """
+    analysis = GeoAnalysis(total_records=len(records))
+
+    if not records:
+        log.info("Geolocation: no records to process")
+        return analysis
+
+    log.info("Geolocation: processing %d records, bts_db=%s",
+             len(records), "available" if bts_db else "NONE")
+
+    # --- Batch pre-fetch: geocode text BTS addresses (Plus, etc.) ---
+    geocode_cache: Dict[str, Tuple[float, float]] = {}
+    addresses_to_geocode: List[str] = []
+    for r in records:
+        extra = r.extra or {}
+        has_bts_xy = bool((extra.get("bts_lat") or extra.get("bts_x")) and (extra.get("bts_lon") or extra.get("bts_y")))
+        has_lac = bool(r.location_lac)
+        has_cid = bool(r.location_cell_id)
+        if not has_bts_xy and not (has_lac and has_cid) and r.location:
+            addresses_to_geocode.append(r.location)
+
+    if addresses_to_geocode:
+        try:
+            from .geocoder import geocode_batch
+            cache_dir = data_dir or _default_data_dir()
+            geocode_cache = geocode_batch(
+                addresses_to_geocode, cache_dir,
+            )
+            log.info("Geocode pre-fetch: %d/%d addresses resolved",
+                     len(geocode_cache), len(set(addresses_to_geocode)))
+        except Exception as e:
+            log.warning("Geocode batch failed (continuing without): %s", e)
+
+    # Debug counters
+    has_direct_coords = 0
+    has_lac_cid = 0
+    no_location_data = 0
+    resolved_billing = 0
+    resolved_bts_db = 0
+    resolved_geocoded = 0
+    lookup_miss = 0
+    coord_rejected = 0  # coords outside valid range
+    sample_lac_cid: List[str] = []
+    sample_raw_bts: List[str] = []  # raw BTS X/Y values for debugging
+
+    geo_records: List[GeoRecord] = []
+    seen_cells: Set[Tuple[int, int]] = set()
+
+    for r in records:
+        gr = GeoRecord(
+            datetime=r.datetime,
+            date=r.date,
+            time=r.time,
+            record_type=r.record_type,
+            callee=r.callee or r.caller,
+            duration_seconds=r.duration_seconds,
+            raw_row=r.raw_row,
+            roaming=r.roaming,
+            roaming_country=r.roaming_country or "",
+        )
+
+        # Derive weekday from date
+        if r.date:
+            try:
+                gr.weekday = _dt.strptime(r.date, "%Y-%m-%d").weekday()
+            except (ValueError, TypeError):
+                pass
+
+        # Track what data each record has
+        extra = r.extra or {}
+        has_bts_xy = bool((extra.get("bts_lat") or extra.get("bts_x")) and (extra.get("bts_lon") or extra.get("bts_y")))
+        has_lac = bool(r.location_lac)
+        has_cid = bool(r.location_cell_id)
+
+        if has_bts_xy:
+            has_direct_coords += 1
+            if len(sample_raw_bts) < 3:
+                sample_raw_bts.append(
+                    f"BTS_LAT={extra.get('bts_lat') or extra.get('bts_x')},BTS_LON={extra.get('bts_lon') or extra.get('bts_y')}"
+                )
+        if has_lac and has_cid:
+            has_lac_cid += 1
+            if len(sample_lac_cid) < 5:
+                sample_lac_cid.append(f"LAC={r.location_lac},CID={r.location_cell_id}")
+        if not has_bts_xy and not (has_lac and has_cid):
+            no_location_data += 1
+
+        point = _resolve_point(r, bts_db, geocode_cache)
+        if point and point.is_valid:
+            gr.point = point
+            analysis.geolocated_records += 1
+            if point.source == "billing":
+                resolved_billing += 1
+            elif point.source == "bts_db":
+                resolved_bts_db += 1
+            elif point.source == "geocoded":
+                resolved_geocoded += 1
+            if point.lac and point.cid:
+                seen_cells.add((point.lac, point.cid))
+        elif has_bts_xy:
+            coord_rejected += 1
+        elif has_lac and has_cid:
+            lookup_miss += 1
+
+        geo_records.append(gr)
+
+    analysis.geo_records = geo_records
+    analysis.unique_cells = len(seen_cells)
+
+    # Log diagnostic summary
+    if sample_raw_bts:
+        log.info("Raw BTS X/Y samples: %s", "; ".join(sample_raw_bts))
+    log.info(
+        "Geolocation results: %d/%d resolved "
+        "(direct_coords=%d, bts_db=%d, geocoded=%d, no_data=%d, "
+        "lookup_miss=%d, coord_rejected=%d)",
+        analysis.geolocated_records, len(records),
+        has_direct_coords, resolved_bts_db, resolved_geocoded,
+        no_location_data, lookup_miss, coord_rejected,
+    )
+    if has_lac_cid and resolved_bts_db == 0 and has_direct_coords == 0:
+        log.warning(
+            "Geolocation: %d records had LAC/CID but 0 matched BTS database! "
+            "Sample: %s  — check if BTS database (OpenCelliD) is loaded.",
+            has_lac_cid, "; ".join(sample_lac_cid),
+        )
+
+    # Collect sample coordinates for debug
+    sample_coords: List[str] = []
+    for gr in geo_records:
+        if gr.point and gr.point.is_valid and len(sample_coords) < 3:
+            sample_coords.append(
+                f"lat={gr.point.lat:.6f},lon={gr.point.lon:.6f},src={gr.point.source}"
+            )
+
+    if sample_coords:
+        log.info("Geolocation sample coords: %s", "; ".join(sample_coords))
+
+    # Store debug info for frontend
+    analysis.debug = {
+        "has_direct_coords": has_direct_coords,
+        "has_lac_cid": has_lac_cid,
+        "no_location_data": no_location_data,
+        "resolved_billing": resolved_billing,
+        "resolved_bts_db": resolved_bts_db,
+        "resolved_geocoded": resolved_geocoded,
+        "lookup_miss": lookup_miss,
+        "coord_rejected": coord_rejected,
+        "sample_lac_cid": sample_lac_cid,
+        "sample_raw_bts": sample_raw_bts,
+        "sample_coords": sample_coords,
+    }
+
+    # Compute center and bounds
+    valid_points = [gr.point for gr in geo_records if gr.point and gr.point.is_valid]
+    if valid_points:
+        lats = [p.lat for p in valid_points]
+        lons = [p.lon for p in valid_points]
+        analysis.center_lat = sum(lats) / len(lats)
+        analysis.center_lon = sum(lons) / len(lons)
+        analysis.bounds = {
+            "min_lat": min(lats),
+            "max_lat": max(lats),
+            "min_lon": min(lons),
+            "max_lon": max(lons),
+        }
+
+    # Cluster analysis
+    analysis.clusters = _cluster_locations(geo_records)
+
+    # Reverse geocode clusters without city names
+    _reverse_geocode_clusters(analysis.clusters)
+
+    # Home/work detection
+    _detect_home_work(analysis)
+
+    # Transit location detection (commute waypoints)
+    _detect_transit(analysis, geo_records)
+
+    # Path reconstruction (fine-grained, within-cluster)
+    analysis.path = _build_path(geo_records)
+
+    # Trip detection (inter-city movements between clusters)
+    analysis.trips = _detect_trips(geo_records, analysis.clusters)
+
+    # Border crossing / foreign travel detection
+    analysis.border_crossings = _detect_border_crossings(geo_records, analysis.clusters)
+
+    log.info(
+        "Geolocation complete: %d clusters, %d path segments, %d trips, "
+        "%d border crossings, home=%s, work=%s",
+        len(analysis.clusters), len(analysis.path),
+        len(analysis.trips), len(analysis.border_crossings),
+        bool(analysis.home_cluster), bool(analysis.work_cluster),
+    )
+
+    return analysis
+
+
+def _resolve_point(
+    record: BillingRecord,
+    bts_db=None,
+    geocode_cache: Optional[Dict[str, Tuple[float, float]]] = None,
+) -> Optional[GeoPoint]:
+    """Resolve a single billing record to a geographic point."""
+    extra = record.extra or {}
+
+    # 1. Direct coordinates from billing (T-Mobile BTS X/Y)
+    #    T-Mobile Poland uses DDMMSS integer format:
+    #    BTS X = 190813 → 19°08'13" = 19.1369° (longitude for Łask)
+    #    BTS Y = 513507 → 51°35'07" = 51.5853° (latitude for Łask)
+    bts_x = extra.get("bts_lat", "") or extra.get("bts_x", "")
+    bts_y = extra.get("bts_lon", "") or extra.get("bts_y", "")
+    if bts_x and bts_y:
+        val_x = _parse_bts_value(bts_x)
+        val_y = _parse_bts_value(bts_y)
+
+        if val_x is not None and val_y is not None:
+            # Auto-detect coordinate order (handles both Polish geodetic
+            # convention X=lat,Y=lon and programming convention X=lon,Y=lat)
+            lat, lon = _detect_coord_order(val_x, val_y)
+
+            if lat is not None and lon is not None:
+                azimuth = None
+                az_str = extra.get("azimuth", "")
+                if az_str:
+                    try:
+                        azimuth = float(str(az_str).replace(",", "."))
+                    except (ValueError, TypeError):
+                        pass
+
+                lac_int = 0
+                cid_int = 0
+                try:
+                    lac_int = int(record.location_lac) if record.location_lac else 0
+                    cid_int = int(record.location_cell_id) if record.location_cell_id else 0
+                except (ValueError, TypeError):
+                    pass
+
+                return GeoPoint(
+                    lat=lat,
+                    lon=lon,
+                    accuracy_m=200 if azimuth is not None else 500,
+                    azimuth=azimuth,
+                    range_m=int(extra["bts_range"]) if extra.get("bts_range") else None,
+                    radio=extra.get("bts_radio", ""),
+                    lac=lac_int,
+                    cid=cid_int,
+                    city=extra.get("bts_city", ""),
+                    street=extra.get("bts_street", ""),
+                    source="billing",
+                )
+
+    # 2. BTS database lookup by CID/LAC
+    if bts_db and record.location_cell_id and record.location_lac:
+        try:
+            lac_int = int(record.location_lac)
+            cid_int = int(record.location_cell_id)
+            # Skip sentinel LAC/CID values
+            if lac_int <= 0 or cid_int <= 0:
+                return None
+            station = bts_db.lookup_best(lac_int, cid_int)
+            if station and _is_plausible_wgs84(station.lat, station.lon):
+                return GeoPoint(
+                    lat=station.lat,
+                    lon=station.lon,
+                    accuracy_m=200 if station.azimuth is not None else 500,
+                    azimuth=station.azimuth,
+                    range_m=station.range_m,
+                    radio=station.radio or "",
+                    lac=lac_int,
+                    cid=cid_int,
+                    city=station.city,
+                    street=station.street,
+                    source="bts_db",
+                )
+        except (ValueError, TypeError):
+            pass
+
+    # 3. Geocoded text address (Plus BTS addresses, etc.)
+    if geocode_cache and record.location:
+        coords = geocode_cache.get(record.location)
+        if coords and _is_plausible_wgs84(coords[0], coords[1]):
+            # Extract city from parsed address
+            city = ""
+            try:
+                from .geocoder import parse_plus_bts_address
+                _, _, city = parse_plus_bts_address(record.location)
+            except ImportError:
+                pass
+            return GeoPoint(
+                lat=coords[0],
+                lon=coords[1],
+                accuracy_m=1000,  # street-level geocoding, less precise
+                source="geocoded",
+                city=city,
+            )
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Clustering (DBSCAN-like, simplified)
+# ---------------------------------------------------------------------------
+
+def _cluster_locations(
+    geo_records: List[GeoRecord],
+    eps_m: float = 500,
+    min_records: int = 3,
+) -> List[LocationCluster]:
+    """Cluster geolocated records by proximity.
+
+    Uses a simplified grid-based approach (faster than full DBSCAN).
+    Collects frequency-weighted hour_counts and weekday_counts for
+    proper home/work scoring.
+    """
+    valid = [gr for gr in geo_records if gr.point and gr.point.is_valid]
+    if not valid:
+        return []
+
+    # Grid-based clustering: ~500m grid cells
+    grid_size = eps_m / 111000  # degrees (approx)
+    cells: Dict[Tuple[int, int], List[GeoRecord]] = defaultdict(list)
+
+    for gr in valid:
+        gx = int(gr.point.lat / grid_size)
+        gy = int(gr.point.lon / grid_size)
+        cells[(gx, gy)].append(gr)
+
+    # Merge adjacent grid cells
+    clusters: List[LocationCluster] = []
+    visited: Set[Tuple[int, int]] = set()
+
+    for key, recs in sorted(cells.items(), key=lambda x: -len(x[1])):
+        if key in visited:
+            continue
+        if len(recs) < min_records:
+            continue
+
+        # Collect this cell + neighbors
+        cluster_recs: List[GeoRecord] = list(recs)
+        visited.add(key)
+
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                nkey = (key[0] + dx, key[1] + dy)
+                if nkey != key and nkey in cells and nkey not in visited:
+                    cluster_recs.extend(cells[nkey])
+                    visited.add(nkey)
+
+        if len(cluster_recs) < min_records:
+            continue
+
+        # Compute cluster properties
+        lats = [gr.point.lat for gr in cluster_recs]
+        lons = [gr.point.lon for gr in cluster_recs]
+        center_lat = sum(lats) / len(lats)
+        center_lon = sum(lons) / len(lons)
+
+        dates = set()
+        hours: List[int] = []
+        hour_counts: Dict[int, int] = Counter()
+        weekday_counts: Dict[int, int] = Counter()
+        cells_in_cluster: Dict[Tuple[int, int], int] = Counter()
+        first = ""
+        last = ""
+        # Track city frequency to pick most common (not just first)
+        city_counter: Dict[str, int] = Counter()
+        street_counter: Dict[str, int] = Counter()
+
+        for gr in cluster_recs:
+            if gr.date:
+                dates.add(gr.date)
+                if not first or gr.date < first:
+                    first = gr.date
+                if not last or gr.date > last:
+                    last = gr.date
+            if gr.time:
+                try:
+                    h = int(gr.time.split(":")[0])
+                    hours.append(h)
+                    hour_counts[h] += 1
+                except (ValueError, IndexError):
+                    pass
+            if gr.weekday >= 0:
+                weekday_counts[gr.weekday] += 1
+            if gr.point:
+                cells_in_cluster[(gr.point.lac, gr.point.cid)] += 1
+                if gr.point.city:
+                    city_counter[gr.point.city] += 1
+                if gr.point.street:
+                    street_counter[gr.point.street] += 1
+
+        # Pick most common city/street
+        city = city_counter.most_common(1)[0][0] if city_counter else ""
+        street = street_counter.most_common(1)[0][0] if street_counter else ""
+
+        cluster = LocationCluster(
+            lat=center_lat,
+            lon=center_lon,
+            record_count=len(cluster_recs),
+            unique_days=len(dates),
+            first_seen=first,
+            last_seen=last,
+            hours_active=sorted(set(hours)),
+            hour_counts=dict(hour_counts),
+            weekday_counts=dict(weekday_counts),
+            city=city,
+            street=street,
+            cells=[
+                {"lac": lac, "cid": cid, "count": cnt}
+                for (lac, cid), cnt in cells_in_cluster.most_common(10)
+            ],
+        )
+        clusters.append(cluster)
+
+    # Sort by record count, assign indices
+    clusters.sort(key=lambda c: -c.record_count)
+    clusters = clusters[:30]  # cap at 30
+    for i, c in enumerate(clusters):
+        c.cluster_idx = i
+
+    return clusters
+
+
+def _detect_home_work(analysis: GeoAnalysis) -> None:
+    """Detect home and work locations from clusters.
+
+    Home: cluster with highest frequency-weighted night activity (22:00-07:00)
+          multiplied by unique_days.  Requires at least 3 unique days.
+    Work: cluster with highest frequency-weighted work-hour activity (8:00-16:00)
+          on weekdays (Mon-Fri), multiplied by unique_days and weekday ratio.
+          Must not be the same as home.  Requires at least 3 unique days.
+    """
+    if not analysis.clusters:
+        return
+
+    night_hours = {22, 23, 0, 1, 2, 3, 4, 5, 6}
+    work_hours = {8, 9, 10, 11, 12, 13, 14, 15, 16}
+
+    best_home = None
+    best_home_score = 0
+    best_work = None
+    best_work_score = 0
+
+    for cluster in analysis.clusters:
+        # Home: frequency-weighted night records × unique days
+        night_freq = sum(cluster.hour_counts.get(h, 0) for h in night_hours)
+        home_score = night_freq * max(1, cluster.unique_days)
+        if home_score > best_home_score and cluster.unique_days >= 3:
+            best_home_score = home_score
+            best_home = cluster
+
+        # Work: frequency-weighted work-hour records × weekday ratio × unique days
+        work_freq = sum(cluster.hour_counts.get(h, 0) for h in work_hours)
+        weekday_records = sum(cluster.weekday_counts.get(d, 0) for d in range(5))
+        total_records = sum(cluster.weekday_counts.values()) or 1
+        weekday_ratio = weekday_records / total_records
+        work_score = work_freq * max(1, cluster.unique_days) * weekday_ratio
+        if work_score > best_work_score and cluster.unique_days >= 3:
+            best_work_score = work_score
+            best_work = cluster
+
+    if best_home:
+        best_home.label = "dom"
+        analysis.home_cluster = best_home
+
+    if best_work and best_work != best_home:
+        best_work.label = "praca"
+        analysis.work_cluster = best_work
+
+
+# ---------------------------------------------------------------------------
+# Transit location detection (commute waypoints)
+# ---------------------------------------------------------------------------
+
+_COMMUTE_HOURS = {6, 7, 8, 9, 16, 17, 18, 19}
+
+
+def _detect_transit(
+    analysis: "GeoAnalysis",
+    geo_records: List[GeoRecord],
+) -> None:
+    """Detect transit/commute locations and label them.
+
+    A cluster is marked as 'tranzyt' (transit) if it scores high enough
+    across four independent signals:
+
+    1. Short dwell time — median visit duration < 15 minutes.
+    2. Commute-hour concentration — >70% of records fall within 6-9 / 16-19.
+    3. On the line between home and work (±30° angular tolerance).
+    4. Low records per visit — average ≤ 1.5 records per unique day.
+
+    Each signal contributes a score (0-25).  Total ≥ 50 → 'tranzyt'.
+    Only unlabelled clusters (not 'dom' or 'praca') are considered.
+    """
+    clusters = analysis.clusters
+    if not clusters:
+        return
+
+    home = analysis.home_cluster
+    work = analysis.work_cluster
+
+    # Pre-compute per-cluster visit dwell times from geo_records
+    # Group records by (cluster_idx, date) → list of datetimes
+    from collections import defaultdict as _dd
+
+    cluster_visits: Dict[int, Dict[str, List[str]]] = _dd(lambda: _dd(list))
+
+    for gr in geo_records:
+        if not gr.point or not gr.point.is_valid or not gr.date:
+            continue
+        # Find nearest cluster
+        best_idx = -1
+        best_dist = float("inf")
+        for i, c in enumerate(clusters):
+            d = _haversine(gr.point.lat, gr.point.lon, c.lat, c.lon)
+            if d < best_dist:
+                best_dist = d
+                best_idx = i
+        if best_idx < 0 or best_dist > 2000:  # within 2km of cluster center
+            continue
+        time_str = gr.time or ""
+        if time_str:
+            cluster_visits[best_idx][gr.date].append(time_str)
+
+    for cluster in clusters:
+        # Skip already labelled clusters (home, work)
+        if cluster.label in ("dom", "praca"):
+            continue
+
+        score = 0
+        idx = cluster.cluster_idx
+
+        # ── Signal 1: Short dwell time ──
+        visit_durations: List[int] = []
+        for date, times in cluster_visits.get(idx, {}).items():
+            if len(times) < 1:
+                continue
+            sorted_times = sorted(times)
+            try:
+                t_first = sorted_times[0].split(":")
+                t_last = sorted_times[-1].split(":")
+                first_min = int(t_first[0]) * 60 + int(t_first[1])
+                last_min = int(t_last[0]) * 60 + int(t_last[1])
+                dwell = last_min - first_min
+                visit_durations.append(max(0, dwell))
+            except (ValueError, IndexError):
+                continue
+
+        if visit_durations:
+            visit_durations.sort()
+            median_dwell = visit_durations[len(visit_durations) // 2]
+            if median_dwell < 15:
+                score += 25
+
+        # ── Signal 2: Commute-hour concentration ──
+        total_records = sum(cluster.hour_counts.values())
+        if total_records > 0:
+            commute_records = sum(
+                cluster.hour_counts.get(h, 0) for h in _COMMUTE_HOURS
+            )
+            commute_ratio = commute_records / total_records
+            if commute_ratio > 0.70:
+                score += 25
+
+        # ── Signal 3: On the line between home and work ──
+        if home and work and home != work:
+            import math as _math
+
+            # Angle from home to work
+            hw_bearing = _math.atan2(
+                work.lon - home.lon, work.lat - home.lat
+            )
+            # Angle from home to this cluster
+            hc_bearing = _math.atan2(
+                cluster.lon - home.lon, cluster.lat - home.lat
+            )
+            angle_diff = abs(_math.degrees(hw_bearing - hc_bearing)) % 360
+            if angle_diff > 180:
+                angle_diff = 360 - angle_diff
+
+            # Check if cluster is between home and work (distance-wise)
+            hw_dist = _haversine(home.lat, home.lon, work.lat, work.lon)
+            hc_dist = _haversine(home.lat, home.lon, cluster.lat, cluster.lon)
+            cw_dist = _haversine(cluster.lat, cluster.lon, work.lat, work.lon)
+
+            # Within ±30° and distance doesn't exceed home-work distance by >30%
+            if angle_diff <= 30 and hc_dist < hw_dist * 1.3 and cw_dist < hw_dist * 1.3:
+                score += 25
+
+        # ── Signal 4: Low records per visit ──
+        if cluster.unique_days > 0:
+            records_per_day = cluster.record_count / cluster.unique_days
+            if records_per_day <= 1.5:
+                score += 25
+
+        # Threshold: ≥ 50 → transit
+        if score >= 50:
+            cluster.label = "tranzyt"
+
+
+# ---------------------------------------------------------------------------
+# Trip detection (inter-city travel)
+# ---------------------------------------------------------------------------
+
+def _detect_trips(
+    geo_records: List[GeoRecord],
+    clusters: List[LocationCluster],
+    min_distance_km: float = 5.0,
+) -> List[Trip]:
+    """Detect inter-city trips as cluster-to-cluster transitions.
+
+    Algorithm:
+    1. Assign each geolocated record to its nearest cluster.
+    2. Walk chronologically — when cluster changes and distance > min_distance_km,
+       record a Trip.
+    3. Collapse consecutive same-cluster records to avoid noise.
+    4. Infer travel mode: car, plane, or BTS hop (false positive).
+    5. Filter out BTS hops (unrealistic speed with very short duration).
+    """
+    if not clusters or len(clusters) < 2:
+        return []
+
+    valid = [gr for gr in geo_records
+             if gr.point and gr.point.is_valid and gr.datetime]
+    if len(valid) < 2:
+        return []
+
+    valid.sort(key=lambda gr: gr.datetime)
+
+    def _nearest_cluster_idx(p: GeoPoint) -> int:
+        best_idx = 0
+        best_dist = float("inf")
+        for i, c in enumerate(clusters):
+            d = _haversine(p.lat, p.lon, c.lat, c.lon)
+            if d < best_dist:
+                best_dist = d
+                best_idx = i
+        return best_idx
+
+    raw_trips: List[Trip] = []
+    prev_idx = _nearest_cluster_idx(valid[0].point)
+    prev_record = valid[0]
+
+    for gr in valid[1:]:
+        idx = _nearest_cluster_idx(gr.point)
+        if idx != prev_idx:
+            # Cluster changed — check if it's a meaningful trip
+            dist = _haversine(
+                clusters[prev_idx].lat, clusters[prev_idx].lon,
+                clusters[idx].lat, clusters[idx].lon,
+            )
+            if dist >= min_distance_km * 1000:
+                dur_sec = _time_diff_seconds(prev_record.datetime, gr.datetime)
+                dist_km = dist / 1000
+                dur_min = dur_sec / 60 if dur_sec > 0 else 0.01
+                speed = (dist_km / (dur_min / 60)) if dur_min > 0 else 0
+
+                # Estimate realistic travel times
+                est_car = _estimate_car_time(dist_km)
+                est_flight = _estimate_flight_time(dist_km)
+
+                # Infer travel mode
+                mode = _infer_travel_mode(dist_km, dur_min, speed)
+
+                raw_trips.append(Trip(
+                    from_cluster_idx=prev_idx,
+                    to_cluster_idx=idx,
+                    from_city=clusters[prev_idx].city or f"Lokalizacja #{prev_idx + 1}",
+                    to_city=clusters[idx].city or f"Lokalizacja #{idx + 1}",
+                    depart_datetime=prev_record.datetime,
+                    arrive_datetime=gr.datetime,
+                    distance_km=round(dist_km, 1),
+                    duration_minutes=round(dur_min, 1),
+                    speed_kmh=round(speed, 0),
+                    travel_mode=mode,
+                    est_car_minutes=round(est_car, 0),
+                    est_flight_minutes=round(est_flight, 0),
+                ))
+            prev_idx = idx
+        prev_record = gr
+
+    # Filter out BTS hops (false positives)
+    trips = [t for t in raw_trips if t.travel_mode != "bts_hop"]
+    filtered = len(raw_trips) - len(trips)
+
+    log.info(
+        "Trip detection: %d trips (%d BTS hops filtered) between %d clusters "
+        "(min distance %.1f km)",
+        len(trips), filtered, len(clusters), min_distance_km,
+    )
+    return trips
+
+
+def _infer_travel_mode(
+    distance_km: float,
+    duration_min: float,
+    speed_kmh: float,
+) -> str:
+    """Infer travel mode based on distance, duration and speed.
+
+    Returns: 'bts_hop', 'car', 'plane', or 'unknown'.
+
+    BTS hop detection:
+    - Very short duration (< 10 min) with unrealistic speed (> 200 km/h)
+      for the distance — this is BTS tower switching, not real travel.
+    - Duration < 3 min for any distance > 5 km — physically impossible
+      by any transport mode in that timeframe.
+
+    Car detection:
+    - Speed between 20-160 km/h (average, including stops/traffic).
+    - Or duration roughly matches estimated car time (within 3x factor).
+
+    Plane detection:
+    - Distance > 200 km AND speed > 200 km/h.
+    - Or distance > 400 km and duration is much shorter than car time.
+    """
+    # BTS hop: unrealistically fast for short durations
+    if duration_min < 3 and distance_km > 5:
+        return "bts_hop"
+    if duration_min < 10 and speed_kmh > 300:
+        return "bts_hop"
+    if duration_min < 15 and speed_kmh > 500:
+        return "bts_hop"
+
+    # Plane: long distance with high speed
+    est_car = _estimate_car_time(distance_km)
+    if distance_km > 200 and speed_kmh > 200:
+        return "plane"
+    if distance_km > 400 and duration_min < est_car * 0.4:
+        return "plane"
+
+    # Car: reasonable speed range or duration matches estimate
+    if 10 <= speed_kmh <= 200:
+        return "car"
+    if duration_min > 0 and est_car > 0:
+        ratio = duration_min / est_car
+        if 0.3 <= ratio <= 4.0:
+            return "car"
+
+    return "unknown"
+
+
+def _estimate_car_time(distance_km: float) -> float:
+    """Estimate car travel time in minutes.
+
+    Uses tiered average speeds:
+    - Short trips (<30 km): ~40 km/h (city/suburban driving)
+    - Medium trips (30-150 km): ~70 km/h (mix of city and highway)
+    - Long trips (>150 km): ~90 km/h (mostly highway)
+    """
+    if distance_km <= 0:
+        return 0
+    if distance_km < 30:
+        return (distance_km / 40) * 60
+    if distance_km < 150:
+        return (distance_km / 70) * 60
+    return (distance_km / 90) * 60
+
+
+def _estimate_flight_time(distance_km: float) -> float:
+    """Estimate total flight travel time in minutes.
+
+    Includes:
+    - Airport overhead: ~90 min (check-in + security + boarding + taxi + deplane)
+    - Flight time: distance / 700 km/h (average jet cruise)
+    - Minimum 120 min total for any flight.
+
+    For distances < 200 km, flights are impractical — returns 0.
+    """
+    if distance_km < 200:
+        return 0
+    flight_min = (distance_km / 700) * 60
+    total = 90 + flight_min  # airport overhead + flight
+    return max(120, total)
+
+
+# ---------------------------------------------------------------------------
+# Border crossing / foreign travel detection
+# ---------------------------------------------------------------------------
+
+def _detect_border_crossings(
+    geo_records: List[GeoRecord],
+    clusters: List[LocationCluster],
+) -> List[BorderCrossing]:
+    """Detect border crossings using roaming data and activity gaps.
+
+    Strategy A (roaming-based): Track domestic → roaming → domestic transitions.
+    Strategy B (gap-based):     Detect long gaps (> 48h) with no records.
+    Results from both strategies are merged and deduplicated.
+    """
+    if not geo_records:
+        return []
+
+    sorted_records = sorted(
+        [gr for gr in geo_records if gr.datetime],
+        key=lambda gr: gr.datetime,
+    )
+    if not sorted_records:
+        return []
+
+    crossings: List[BorderCrossing] = []
+
+    # ── Strategy A: Roaming-based ──
+    roaming_any = any(gr.roaming for gr in sorted_records)
+    if roaming_any:
+        in_roaming = False
+        last_domestic: Optional[GeoRecord] = None
+        roaming_countries: List[str] = []
+        roaming_count = 0
+
+        for gr in sorted_records:
+            if gr.roaming:
+                if not in_roaming:
+                    # Transition: domestic → roaming
+                    in_roaming = True
+                    roaming_countries = []
+                    roaming_count = 0
+                if gr.roaming_country and gr.roaming_country not in roaming_countries:
+                    roaming_countries.append(gr.roaming_country)
+                roaming_count += 1
+            else:
+                if in_roaming:
+                    # Transition: roaming → domestic
+                    in_roaming = False
+                    absence = _time_diff_seconds(
+                        last_domestic.datetime if last_domestic else "",
+                        gr.datetime,
+                    )
+                    dep_lat, dep_lon = _coords_for_record(last_domestic) if last_domestic else (0.0, 0.0)
+                    ret_lat, ret_lon = _coords_for_record(gr)
+                    crossings.append(BorderCrossing(
+                        last_domestic_datetime=last_domestic.datetime if last_domestic else "",
+                        first_return_datetime=gr.datetime,
+                        last_domestic_city=_city_for_record(last_domestic, clusters) if last_domestic else "",
+                        first_return_city=_city_for_record(gr, clusters),
+                        absence_hours=round(absence / 3600, 1),
+                        roaming_countries=list(roaming_countries),
+                        roaming_records=roaming_count,
+                        roaming_confirmed=True,
+                        last_domestic_lat=dep_lat,
+                        last_domestic_lon=dep_lon,
+                        first_return_lat=ret_lat,
+                        first_return_lon=ret_lon,
+                    ))
+                last_domestic = gr
+
+        # If still in roaming at end of data
+        if in_roaming and last_domestic:
+            last_roaming = sorted_records[-1]
+            absence = _time_diff_seconds(
+                last_domestic.datetime, last_roaming.datetime,
+            )
+            dep_lat, dep_lon = _coords_for_record(last_domestic)
+            crossings.append(BorderCrossing(
+                last_domestic_datetime=last_domestic.datetime,
+                first_return_datetime="",  # not yet returned
+                last_domestic_city=_city_for_record(last_domestic, clusters),
+                first_return_city="",
+                absence_hours=round(absence / 3600, 1),
+                roaming_countries=list(roaming_countries),
+                roaming_records=roaming_count,
+                roaming_confirmed=True,
+                last_domestic_lat=dep_lat,
+                last_domestic_lon=dep_lon,
+            ))
+
+    # ── Strategy B: Gap-based (fallback when no roaming data) ──
+    if not roaming_any and len(sorted_records) >= 2:
+        gap_threshold_hours = 48
+        for i in range(1, len(sorted_records)):
+            prev = sorted_records[i - 1]
+            curr = sorted_records[i]
+            gap_sec = _time_diff_seconds(prev.datetime, curr.datetime)
+            gap_hours = gap_sec / 3600
+
+            if gap_hours >= gap_threshold_hours:
+                dep_lat, dep_lon = _coords_for_record(prev)
+                ret_lat, ret_lon = _coords_for_record(curr)
+                crossings.append(BorderCrossing(
+                    last_domestic_datetime=prev.datetime,
+                    first_return_datetime=curr.datetime,
+                    last_domestic_city=_city_for_record(prev, clusters),
+                    first_return_city=_city_for_record(curr, clusters),
+                    absence_hours=round(gap_hours, 1),
+                    roaming_countries=[],
+                    roaming_records=0,
+                    roaming_confirmed=False,
+                    last_domestic_lat=dep_lat,
+                    last_domestic_lon=dep_lon,
+                    first_return_lat=ret_lat,
+                    first_return_lon=ret_lon,
+                ))
+
+    # Sort by departure time
+    crossings.sort(key=lambda bc: bc.last_domestic_datetime)
+
+    # Merge consecutive crossings to the same country/region
+    crossings = _merge_consecutive_crossings(crossings)
+
+    # Infer travel mode for each crossing
+    for bc in crossings:
+        bc.border_travel_mode = _infer_border_travel_mode(bc)
+
+    # Build last 24h domestic path for each crossing
+    _populate_last_24h_paths(crossings, sorted_records)
+
+    log.info("Border crossing detection: %d crossings (roaming_data=%s)",
+             len(crossings), "yes" if roaming_any else "no (gap-based)")
+    return crossings
+
+
+def _merge_consecutive_crossings(
+    crossings: List[BorderCrossing],
+) -> List[BorderCrossing]:
+    """Merge consecutive crossings into single trips.
+
+    Two crossings are merged when the return datetime of the previous
+    crossing matches (or is very close to) the departure datetime of
+    the next one — this means there was only a brief domestic record
+    in between and the person didn't truly return home.
+
+    Also merges when the return and next departure are on the same day
+    or the next day and they share at least one roaming country.
+    """
+    if len(crossings) <= 1:
+        return crossings
+
+    merged: List[BorderCrossing] = [crossings[0]]
+
+    for bc in crossings[1:]:
+        prev = merged[-1]
+
+        can_merge = False
+        if prev.first_return_datetime and bc.last_domestic_datetime:
+            # Case 1: timestamps match exactly or are very close
+            # (same domestic record used as return and departure)
+            prev_return = prev.first_return_datetime
+            curr_depart = bc.last_domestic_datetime
+            if prev_return == curr_depart:
+                can_merge = True
+            else:
+                # Case 2: return and departure on the same / next day
+                prev_return_date = prev_return[:10]
+                curr_depart_date = curr_depart[:10]
+                try:
+                    from datetime import datetime as _dt
+                    pr = _dt.strptime(prev_return_date, "%Y-%m-%d")
+                    cd = _dt.strptime(curr_depart_date, "%Y-%m-%d")
+                    day_gap = (cd - pr).days
+                except (ValueError, TypeError):
+                    day_gap = 999
+
+                if day_gap <= 1:
+                    can_merge = True
+
+        if can_merge:
+            # Extend the previous crossing to cover the new one
+            prev.first_return_datetime = bc.first_return_datetime
+            prev.first_return_city = bc.first_return_city
+            prev.first_return_lat = bc.first_return_lat
+            prev.first_return_lon = bc.first_return_lon
+            # Recalculate total absence from original departure to final return
+            total_sec = _time_diff_seconds(
+                prev.last_domestic_datetime,
+                bc.first_return_datetime,
+            ) if bc.first_return_datetime else 0
+            if total_sec > 0:
+                prev.absence_hours = round(total_sec / 3600, 1)
+            else:
+                prev.absence_hours = round(prev.absence_hours + bc.absence_hours, 1)
+            prev.roaming_records += bc.roaming_records
+            # Merge country lists (preserving order, no duplicates)
+            for c in bc.roaming_countries:
+                if c not in prev.roaming_countries:
+                    prev.roaming_countries.append(c)
+            if bc.roaming_confirmed:
+                prev.roaming_confirmed = True
+        else:
+            merged.append(bc)
+
+    return merged
+
+
+def _populate_last_24h_paths(
+    crossings: List[BorderCrossing],
+    sorted_records: List[GeoRecord],
+) -> None:
+    """For each crossing, collect the last 24h of domestic BTS positions before departure.
+
+    This builds a path showing the user's movement in Poland before leaving.
+    Only includes records with valid geo coordinates, deduplicated by location.
+    """
+    for bc in crossings:
+        if not bc.last_domestic_datetime:
+            continue
+
+        dep_ts = _time_diff_seconds("2000-01-01 00:00:00", bc.last_domestic_datetime)
+        window_start_ts = dep_ts - 24 * 3600  # 24 hours before departure
+
+        path_points: List[Dict[str, Any]] = []
+        seen_locs: set = set()
+
+        for gr in sorted_records:
+            if gr.roaming:
+                continue
+            if not gr.point or not gr.point.is_valid:
+                continue
+            if not gr.datetime:
+                continue
+
+            rec_ts = _time_diff_seconds("2000-01-01 00:00:00", gr.datetime)
+            if rec_ts < window_start_ts:
+                continue
+            if rec_ts > dep_ts:
+                break
+
+            # Deduplicate by ~100m grid
+            loc_key = f"{gr.point.lat:.3f},{gr.point.lon:.3f}"
+            if loc_key in seen_locs:
+                continue
+            seen_locs.add(loc_key)
+
+            path_points.append({
+                "lat": gr.point.lat,
+                "lon": gr.point.lon,
+                "datetime": gr.datetime,
+                "city": gr.point.city or "",
+            })
+
+        bc.last_24h_path = path_points
+
+
+def _coords_for_record(gr: GeoRecord) -> Tuple[float, float]:
+    """Get (lat, lon) for a GeoRecord, or (0, 0) if unavailable."""
+    if gr and gr.point and gr.point.is_valid:
+        return gr.point.lat, gr.point.lon
+    return 0.0, 0.0
+
+
+# Polish airports: name → (lat, lon)
+_POLISH_AIRPORTS = {
+    "WAW": (52.1657, 20.9671),   # Warszawa Chopina
+    "WMI": (52.4511, 20.6517),   # Warszawa Modlin
+    "KRK": (50.0777, 19.7848),   # Kraków Balice
+    "GDN": (54.3776, 18.4662),   # Gdańsk
+    "KTW": (50.4743, 19.0800),   # Katowice Pyrzowice
+    "WRO": (51.1027, 16.8858),   # Wrocław
+    "POZ": (52.4211, 16.8263),   # Poznań Ławica
+    "RZE": (50.1100, 22.0190),   # Rzeszów Jasionka
+    "SZZ": (53.5847, 14.9022),   # Szczecin Goleniów
+    "BZG": (53.0968, 17.9777),   # Bydgoszcz
+    "LUZ": (51.2403, 22.7134),   # Lublin
+    "LCJ": (51.7219, 19.3981),   # Łódź Lublinek
+    "IEG": (51.9564, 15.7986),   # Zielona Góra Babimost
+    "RDO": (51.3892, 21.2133),   # Radom
+    "SZY": (53.4819, 20.9377),   # Olsztyn-Mazury
+}
+
+# Countries bordering Poland (reachable by land)
+_LAND_NEIGHBORS = {"DE", "CZ", "SK", "UA", "BY", "LT", "RU"}
+
+
+def _is_near_airport(lat: float, lon: float, threshold_km: float = 15.0) -> bool:
+    """Check if coordinates are within threshold_km of any Polish airport."""
+    for _, (alat, alon) in _POLISH_AIRPORTS.items():
+        dist = _haversine(lat, lon, alat, alon) / 1000
+        if dist <= threshold_km:
+            return True
+    return False
+
+
+def _infer_border_travel_mode(bc: BorderCrossing) -> str:
+    """Infer how the person left the country: plane, car, or walk.
+
+    Plane indicators:
+    - Last domestic BTS near a Polish airport (< 15 km)
+    - Short transition time (< 12 hours for distant countries)
+    - Destination not a direct land neighbor of Poland
+
+    Car indicators:
+    - Last BTS near a border area
+    - Moderate transition time
+    - Destination is a land neighbor
+
+    Walk indicators:
+    - Very slow movement near the border
+    - Short absence
+    """
+    countries = bc.roaming_countries or []
+    has_coords = bc.last_domestic_lat != 0.0 and bc.last_domestic_lon != 0.0
+
+    # Check if destination is a non-neighbor country (requires flight)
+    non_neighbor_countries = [c for c in countries if c not in _LAND_NEIGHBORS]
+    all_neighbors = all(c in _LAND_NEIGHBORS for c in countries) if countries else True
+
+    if has_coords:
+        near_airport = _is_near_airport(bc.last_domestic_lat, bc.last_domestic_lon)
+
+        # Plane: near airport + non-neighbor country
+        if near_airport and non_neighbor_countries:
+            return "plane"
+
+        # Plane: near airport + short absence for any country
+        if near_airport and bc.absence_hours < 12 and countries:
+            return "plane"
+
+    # Non-neighbor country with no airport data: likely plane anyway
+    if non_neighbor_countries and not all_neighbors:
+        return "plane"
+
+    # Very short absence at border: walk
+    if bc.absence_hours < 6 and all_neighbors:
+        return "walk"
+
+    # Default for neighbor countries: car
+    if all_neighbors and countries:
+        return "car"
+
+    return "unknown"
+
+
+def _city_for_record(
+    gr: GeoRecord,
+    clusters: List[LocationCluster],
+) -> str:
+    """Get city name for a GeoRecord — from its point or nearest cluster."""
+    if gr.point and gr.point.city:
+        return gr.point.city
+    if gr.point and gr.point.is_valid and clusters:
+        best_idx = 0
+        best_dist = float("inf")
+        for i, c in enumerate(clusters):
+            d = _haversine(gr.point.lat, gr.point.lon, c.lat, c.lon)
+            if d < best_dist:
+                best_dist = d
+                best_idx = i
+        if best_dist < 5000 and clusters[best_idx].city:
+            return clusters[best_idx].city
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Reverse geocoding for clusters without city names
+# ---------------------------------------------------------------------------
+
+def _reverse_geocode_clusters(clusters: List[LocationCluster]) -> None:
+    """Fill in missing city/street for clusters using Nominatim reverse geocoding.
+
+    Only geocodes clusters that have no city name.
+    Uses OpenStreetMap Nominatim API (free, 1 request/sec rate limit).
+    Modifies clusters in place.
+    """
+    if not _HAS_HTTPX:
+        log.debug("httpx not available — skipping reverse geocoding")
+        return
+
+    need_geocode = [c for c in clusters if not c.city and c.lat and c.lon]
+    if not need_geocode:
+        return
+
+    log.info("Reverse geocoding %d clusters without city names", len(need_geocode))
+
+    headers = {
+        "User-Agent": "AISTATEweb/3.2 (GSM billing analysis tool)",
+        "Accept-Language": "pl,en",
+    }
+
+    geocoded = 0
+    for cluster in need_geocode[:15]:  # cap at 15 requests to respect rate limits
+        try:
+            url = (
+                f"https://nominatim.openstreetmap.org/reverse"
+                f"?lat={cluster.lat:.6f}&lon={cluster.lon:.6f}"
+                f"&format=json&zoom=16&addressdetails=1"
+            )
+            resp = httpx.get(url, headers=headers, timeout=5.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                addr = data.get("address", {})
+
+                # Extract city (try multiple fields)
+                city = (
+                    addr.get("city")
+                    or addr.get("town")
+                    or addr.get("village")
+                    or addr.get("municipality")
+                    or addr.get("county", "")
+                )
+                # Extract street/area
+                street = addr.get("road", "")
+                suburb = addr.get("suburb") or addr.get("neighbourhood", "")
+
+                if city:
+                    cluster.city = city
+                    geocoded += 1
+                if street and not cluster.street:
+                    cluster.street = f"{street}" + (f", {suburb}" if suburb else "")
+                elif suburb and not cluster.street:
+                    cluster.street = suburb
+
+                log.debug(
+                    "Geocoded cluster #%d (%.4f,%.4f) → %s, %s",
+                    cluster.cluster_idx, cluster.lat, cluster.lon,
+                    cluster.city, cluster.street,
+                )
+
+            time.sleep(1.1)  # Nominatim rate limit: 1 req/sec
+        except Exception as e:
+            log.warning("Reverse geocoding failed for cluster #%d: %s",
+                        cluster.cluster_idx, e)
+
+    log.info("Reverse geocoding complete: %d/%d clusters resolved",
+             geocoded, len(need_geocode))
+
+
+# ---------------------------------------------------------------------------
+# Path reconstruction
+# ---------------------------------------------------------------------------
+
+def _build_path(geo_records: List[GeoRecord]) -> List[PathSegment]:
+    """Build movement path from chronologically ordered geo records."""
+    valid = [gr for gr in geo_records if gr.point and gr.point.is_valid]
+    if len(valid) < 2:
+        return []
+
+    # Sort by datetime
+    valid.sort(key=lambda gr: gr.datetime)
+
+    path: List[PathSegment] = []
+    prev = valid[0]
+
+    for curr in valid[1:]:
+        if not prev.point or not curr.point:
+            prev = curr
+            continue
+
+        dist = _haversine(prev.point.lat, prev.point.lon,
+                          curr.point.lat, curr.point.lon)
+
+        # Only add segment if there's meaningful movement (> 200m)
+        if dist > 200:
+            # Parse time difference
+            dur = _time_diff_seconds(prev.datetime, curr.datetime)
+
+            segment = PathSegment(
+                from_point=prev.point,
+                to_point=curr.point,
+                from_datetime=prev.datetime,
+                to_datetime=curr.datetime,
+                distance_m=dist,
+                duration_seconds=dur,
+            )
+            path.append(segment)
+
+        prev = curr
+
+    return path
+
+
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate distance between two points in meters (Haversine formula)."""
+    R = 6371000  # Earth radius in meters
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+
+    a = (math.sin(dphi / 2) ** 2 +
+         math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return R * c
+
+
+def _time_diff_seconds(dt1: str, dt2: str) -> int:
+    """Calculate time difference in seconds between two datetime strings."""
+    try:
+        fmt = "%Y-%m-%d %H:%M:%S"
+        t1 = _dt.strptime(dt1, fmt)
+        t2 = _dt.strptime(dt2, fmt)
+        return max(0, int((t2 - t1).total_seconds()))
+    except (ValueError, TypeError):
+        return 0

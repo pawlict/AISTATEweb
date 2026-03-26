@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+
+<defs><linearGradient id="gnllb" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#05657c"/><stop offset="50%" stop-color="#5628a5"/><stop offset="100%" stop-color="#a5326b"/></linearGradient><filter id="s3d_nllb"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#5628a5" stroke-width="1" fill="none" opacity="0.3" stroke-linecap="round"/>
+<circle cx="24" cy="22" r="15" stroke="url(#gnllb)" stroke-width="2.5" fill="none" fill-opacity="0.09" filter="url(#s3d_nllb)"/>
+<ellipse cx="24" cy="22" rx="7.5" ry="15" stroke="url(#gnllb)" stroke-width="1.2" fill="none" opacity=".4"/>
+<line x1="9" y1="22" x2="39" y2="22" stroke="url(#gnllb)" stroke-width="1" opacity=".35"/>
+<path d="M11 14h26" stroke="url(#gnllb)" stroke-width="0.8" opacity="0.3"/>
+<path d="M11 30h26" stroke="url(#gnllb)" stroke-width="0.8" opacity="0.3"/>
+<text x="24" y="24.5" text-anchor="middle" font-size="8" fill="#05657c" font-weight="900" opacity=".35">AI</text>
+
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

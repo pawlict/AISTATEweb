@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Login — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ app_version }}&_={{ static_ts }}"/>
+  <script src="/static/ui.js?v={{ app_version }}&_={{ static_ts }}"></script>
+  <style>
+    body { background: var(--bg, #f0f2f5); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: var(--font, 'Segoe UI', system-ui, sans-serif); }
+    .login-card { background: var(--card-bg, #fff); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 2.5rem 2rem; width: 100%; max-width: 400px; }
+    .login-logo { text-align: center; margin-bottom: 1.5rem; }
+    .login-logo img { height: 64px; }
+    .login-logo h1 { font-size: 1.3rem; margin: .5rem 0 0; color: var(--text, #1a1a2e); }
+    .login-logo .ver { font-size: .75rem; color: var(--muted, #888); }
+    .login-field { margin-bottom: 1rem; }
+    .login-field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .3rem; color: var(--text, #1a1a2e); }
+    .login-field .en { font-size: .595rem; font-weight: 400; color: var(--muted, #999); font-style: italic; margin-left: .3rem; }
+    .login-field input { width: 100%; padding: .6rem .75rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 8px; font-size: .95rem; box-sizing: border-box; outline: none; transition: border-color .2s; }
+    .login-field input:focus { border-color: var(--accent, #4a6cf7); }
+    .login-btn { width: 100%; padding: .7rem; border: none; border-radius: 8px; background: var(--accent, #4a6cf7); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+    .login-btn:hover { opacity: .9; }
+    .login-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .login-btn .en { font-size: .7rem; font-weight: 400; font-style: italic; margin-left: .4rem; }
+    .login-error { color: #e74c3c; font-size: .85rem; margin-top: .75rem; min-height: 1.2em; text-align: center; }
+    .login-pending { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: .75rem; margin-top: .75rem; font-size: .85rem; color: #92400e; text-align: center; display: none; }
+    .login-pending b { display: block; margin-bottom: .2rem; }
+    .login-pending .en { font-size: .595rem; color: #b8860b; font-style: italic; }
+    .login-pending .role-badges { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: center; margin-top: .4rem; }
+    .login-pending .role-badge { background: #fde68a; color: #92400e; padding: .2rem .5rem; border-radius: 5px; font-size: .78rem; font-weight: 600; }
+    .login-pending .role-badge .en { display: block; font-size: .55rem; font-weight: 400; margin-top: .05rem; }
+    .login-link { text-align: center; margin-top: 1rem; font-size: .85rem; }
+    .login-link a { color: var(--accent, #4a6cf7); text-decoration: none; font-weight: 600; }
+    .login-link .en { font-size: .595rem; color: var(--muted, #999); font-style: italic; }
+    .lang-switch { display: flex; justify-content: center; gap: .3rem; margin-bottom: 1rem; }
+    .lang-btn { padding: .25rem .6rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 6px; background: transparent; cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--muted, #888); transition: all .2s; }
+    .lang-btn.active { background: var(--accent, #4a6cf7); color: #fff; border-color: var(--accent, #4a6cf7); }
+    .lang-btn:hover:not(.active) { border-color: var(--accent, #4a6cf7); color: var(--accent, #4a6cf7); }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="/static/logo.png" alt="Logo"/>
+      <h1>{{ app_name }}</h1>
+      <div class="ver">{{ app_version }}</div>
+    </div>
+    <div class="lang-switch" id="langSwitch">
+      <button class="lang-btn active" data-lang="pl" id="langPl">PL</button>
+      <button class="lang-btn" data-lang="en" id="langEn">EN</button>
+      <button class="lang-btn" data-lang="ko" id="langKo">KO</button>
+    </div>
+    <form id="loginForm" autocomplete="on">
+      <div class="login-field">
+        <label for="username">Nazwa użytkownika <span class="en">Username</span></label>
+        <input type="text" id="username" name="username" autocomplete="username" required autofocus/>
+      </div>
+      <div class="login-field">
+        <label for="password">Hasło <span class="en">Password</span></label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required/>
+      </div>
+      <button type="submit" class="login-btn" id="loginBtn">Zaloguj się <span class="en">Log in</span></button>
+      <div class="login-error" id="loginError"></div>
+      <div class="login-pending" id="loginPending">
+        <b>Konto oczekuje na zatwierdzenie</b>
+        <span class="en">Account pending approval</span>
+        <div style="margin-top:.4rem;">Zatwierdzenia konta dokonuje:</div>
+        <div class="en">Account approval is handled by:</div>
+        <div class="role-badges" id="pendingApprovers"></div>
+      </div>
+    </form>
+    <div class="login-link">
+      <span>Nie masz konta?</span> <a href="/register">Zarejestruj się</a>
+      <div class="en">Don't have an account? <a href="/register" style="color:var(--accent,#4a6cf7);font-size:.595rem;">Register</a></div>
+    </div>
+    <div class="login-link" style="margin-top:.5rem;">
+      <a href="#" id="forgotPwLink">Zapomniałeś hasła? Wyślij info do Admina</a>
+      <div class="en"><a href="#" id="forgotPwLinkEn" style="color:var(--accent,#4a6cf7);font-size:.595rem;">Forgot password? Notify Admin</a></div>
+    </div>
+    <div id="forgotPwForm" style="display:none;margin-top:.8rem;padding:.8rem;border:1px solid var(--border,#d0d5dd);border-radius:8px;">
+      <div class="login-field" style="margin-bottom:.6rem;">
+        <label for="forgotUsername">Podaj nazwę użytkownika <span class="en">Enter your username</span></label>
+        <input type="text" id="forgotUsername" autocomplete="username"/>
+      </div>
+      <button type="button" class="login-btn" id="forgotSendBtn" style="font-size:.9rem;">Wyślij prośbę <span class="en">Send request</span></button>
+      <div id="forgotMsg" style="font-size:.85rem;margin-top:.5rem;min-height:1.2em;text-align:center;"></div>
+    </div>
+    <!-- Recovery by seed phrase -->
+    <div class="login-link" style="margin-top:.5rem;">
+      <a href="#" id="recoverPhraseLink">Odzyskaj konto frazą odzyskiwania <span class="en">Recover account with recovery phrase</span></a>
+    </div>
+    <div id="recoverPhraseForm" style="display:none;margin-top:.8rem;padding:.8rem;border:1px solid var(--border,#d0d5dd);border-radius:8px;">
+      <div class="login-field" style="margin-bottom:.6rem;">
+        <label for="recoverPhrase">Wpisz 12 słów frazy odzyskiwania <span class="en">Enter 12 recovery phrase words</span></label>
+        <textarea id="recoverPhrase" rows="3" style="width:100%;padding:.5rem .75rem;border:1.5px solid var(--border,#d0d5dd);border-radius:8px;font-size:.9rem;box-sizing:border-box;resize:vertical;font-family:monospace;" placeholder="word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12"></textarea>
+        <div id="recoverWordCount" style="font-size:.72rem;color:var(--muted,#888);margin-top:.2rem;">0 / 12</div>
+      </div>
+      <div class="login-field" style="margin-bottom:.6rem;">
+        <label for="recoverNewPw">Nowe hasło <span class="en">New password</span></label>
+        <input type="password" id="recoverNewPw" autocomplete="new-password"/>
+      </div>
+      <button type="button" class="login-btn" id="recoverPhraseBtn" style="font-size:.9rem;">Odzyskaj konto <span class="en">Recover account</span></button>
+      <div id="recoverMsg" style="font-size:.85rem;margin-top:.5rem;min-height:1.2em;text-align:center;"></div>
+    </div>
+  </div>
+
+  <!-- Overlay: Pending Recovery Phrase (shown for 3 min after login) -->
+  <div id="phraseOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9999;display:none;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg,#fff);border-radius:16px;padding:2rem;max-width:520px;width:95%;box-shadow:0 8px 40px rgba(0,0,0,.2);text-align:center;">
+      <h2 style="margin:0 0 .5rem;font-size:1.1rem;color:var(--text,#1a1a2e);">Nowa fraza odzyskiwania <span class="en" style="display:block;font-size:.8rem;">New Recovery Phrase</span></h2>
+      <p style="font-size:.82rem;color:#e67e22;line-height:1.5;margin:.5rem 0;">
+        Zapisz te słowa w bezpiecznym miejscu. Nie będą wyświetlone ponownie!
+        <span class="en" style="display:block;margin-top:.2rem;">Write these words down and keep them safe. They will not be shown again!</span>
+      </p>
+      <div id="phraseWords" style="background:#f8f9fa;border:2px dashed var(--border,#d0d5dd);border-radius:10px;padding:1rem;margin:1rem 0;font-family:monospace;font-size:1.1rem;font-weight:600;letter-spacing:.03em;word-spacing:.3em;line-height:1.8;user-select:all;color:var(--text,#1a1a2e);"></div>
+      <div id="phraseTimer" style="font-size:.82rem;color:#e74c3c;font-weight:600;margin:.5rem 0;"></div>
+      <label style="display:flex;align-items:center;justify-content:center;gap:.4rem;font-size:.82rem;margin:.8rem 0;cursor:pointer;">
+        <input type="checkbox" id="phraseConfirmCheck"/>
+        <span>Potwierdzam, że zapisałem frazę <span class="en">I confirm that I have saved the phrase</span></span>
+      </label>
+      <button class="login-btn" id="phraseCloseBtn" disabled style="max-width:200px;margin:0 auto;">OK</button>
+    </div>
+  </div>
+
+  <!-- Overlay: Password Change (shown after first login or password expiry) -->
+  <div id="changePwOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg,#fff);border-radius:16px;padding:2rem;max-width:420px;width:95%;box-shadow:0 8px 40px rgba(0,0,0,.2);">
+      <h2 style="margin:0 0 .5rem;font-size:1.1rem;color:var(--text,#1a1a2e);text-align:center;">
+        Zmiana hasła <span class="en" style="display:block;font-size:.8rem;">Change Password</span>
+      </h2>
+      <p id="changePwReason" style="font-size:.82rem;color:#e67e22;line-height:1.5;margin:.5rem 0;text-align:center;"></p>
+      <div class="login-field" style="margin-bottom:.8rem;">
+        <label for="changePwNew">Nowe hasło <span class="en">New password</span></label>
+        <input type="password" id="changePwNew" autocomplete="new-password"/>
+      </div>
+      <div class="login-field" style="margin-bottom:.8rem;">
+        <label for="changePwConfirm">Potwierdź nowe hasło <span class="en">Confirm new password</span></label>
+        <input type="password" id="changePwConfirm" autocomplete="new-password"/>
+      </div>
+      <div id="changePwError" style="color:#e74c3c;font-size:.82rem;min-height:1.2em;text-align:center;margin-bottom:.5rem;"></div>
+      <button class="login-btn" id="changePwBtn" style="max-width:250px;margin:0 auto;display:block;">Zmień hasło <span class="en">Change password</span></button>
+    </div>
+  </div>
+<script>
+(function(){
+  var roleEN = {
+    'G\u0142\u00f3wny Opiekun': 'Main Guardian',
+    'Strażnik Dostępu': 'Access Guardian',
+    'Architekt Funkcji': 'Function Architect'
+  };
+
+  /* Language toggle */
+  var curLang = localStorage.getItem('aistate_ui_lang') || 'pl';
+  function applyLang(lang) {
+    curLang = lang;
+    localStorage.setItem('aistate_ui_lang', lang);
+    document.querySelectorAll('.lang-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.lang === lang); });
+    /* In PL mode: show PL text, show .en subtitles small.
+       In EN mode: hide PL text, show .en as primary */
+    document.querySelectorAll('.en').forEach(function(el) {
+      if (lang === 'en') {
+        el.style.fontSize = '';
+        el.style.color = '';
+        el.style.fontStyle = 'normal';
+        el.style.fontWeight = '600';
+      } else {
+        el.style.fontSize = '';
+        el.style.color = '';
+        el.style.fontStyle = '';
+        el.style.fontWeight = '';
+      }
+    });
+    /* Toggle PL-only nodes */
+    document.querySelectorAll('[data-pl]').forEach(function(el) {
+      el.style.display = lang === 'en' ? 'none' : '';
+    });
+    document.querySelectorAll('[data-en-only]').forEach(function(el) {
+      el.style.display = lang === 'en' ? '' : 'none';
+    });
+  }
+  document.querySelectorAll('.lang-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { applyLang(btn.dataset.lang); });
+  });
+  applyLang(curLang);
+
+  /* Forgot password toggle + submit */
+  var forgotLinks = [document.getElementById('forgotPwLink'), document.getElementById('forgotPwLinkEn')];
+  var forgotForm = document.getElementById('forgotPwForm');
+  forgotLinks.forEach(function(el) {
+    if (el) el.addEventListener('click', function(e) {
+      e.preventDefault();
+      forgotForm.style.display = forgotForm.style.display === 'none' ? 'block' : 'none';
+    });
+  });
+
+  document.getElementById('forgotSendBtn').addEventListener('click', async function() {
+    var btn = this;
+    var msgEl = document.getElementById('forgotMsg');
+    var uname = document.getElementById('forgotUsername').value.trim();
+    if (!uname) { msgEl.style.color = '#e74c3c'; msgEl.textContent = 'Podaj nazwę użytkownika / Enter username'; return; }
+    btn.disabled = true;
+    msgEl.textContent = '';
+    try {
+      var res = await fetch('/api/auth/request-reset', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ username: uname }),
+      });
+      var data = await res.json();
+      if (res.ok) {
+        msgEl.style.color = '#27ae60';
+        msgEl.textContent = 'Prośba wysłana do administratora / Request sent to admin';
+        document.getElementById('forgotUsername').value = '';
+      } else {
+        msgEl.style.color = '#e74c3c';
+        msgEl.textContent = data.message || 'Error';
+      }
+    } catch (err) {
+      msgEl.style.color = '#e74c3c';
+      msgEl.textContent = 'Connection error';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /* Collect browser fingerprint for audit logging */
+  function _collectFingerprint() {
+    var fp = {};
+    try {
+      var ua = navigator.userAgent || '';
+      /* Extract browser name+version */
+      var bMatch = ua.match(/(Chrome|Firefox|Safari|Edge|OPR|Opera)[\/ ]([\d.]+)/);
+      if (bMatch) fp.browser = (bMatch[1] === 'OPR' ? 'Opera' : bMatch[1]) + ' ' + bMatch[2].split('.')[0];
+      else fp.browser = ua.slice(0, 60);
+      /* Extract OS */
+      var osMatch = ua.match(/\((.*?)\)/);
+      if (osMatch) {
+        var p = osMatch[1];
+        if (p.indexOf('Windows') >= 0) fp.os = p.match(/Windows[^;)]+/)?.[0] || 'Windows';
+        else if (p.indexOf('Mac') >= 0) fp.os = 'macOS';
+        else if (p.indexOf('Linux') >= 0) fp.os = 'Linux';
+        else if (p.indexOf('Android') >= 0) fp.os = 'Android';
+        else if (p.indexOf('iPhone') >= 0 || p.indexOf('iPad') >= 0) fp.os = 'iOS';
+        else fp.os = p.slice(0, 30);
+      }
+      fp.screen = screen.width + 'x' + screen.height;
+      fp.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      fp.language = navigator.language || '';
+      fp.platform = navigator.platform || '';
+    } catch(e) { /* ignore */ }
+    return fp;
+  }
+
+  /* Recovery phrase form toggle */
+  var recoverLink = document.getElementById('recoverPhraseLink');
+  var recoverForm = document.getElementById('recoverPhraseForm');
+  if (recoverLink) {
+    recoverLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      recoverForm.style.display = recoverForm.style.display === 'none' ? 'block' : 'none';
+    });
+  }
+
+  /* Word counter for recovery phrase */
+  var recoverTextarea = document.getElementById('recoverPhrase');
+  var wordCountEl = document.getElementById('recoverWordCount');
+  if (recoverTextarea && wordCountEl) {
+    recoverTextarea.addEventListener('input', function() {
+      var words = recoverTextarea.value.trim().split(/\s+/).filter(function(w) { return w.length > 0; });
+      wordCountEl.textContent = words.length + ' / 12';
+      wordCountEl.style.color = words.length === 12 ? '#27ae60' : 'var(--muted,#888)';
+    });
+  }
+
+  /* Recovery phrase submit */
+  document.getElementById('recoverPhraseBtn').addEventListener('click', async function() {
+    var btn = this;
+    var msgEl = document.getElementById('recoverMsg');
+    var phrase = document.getElementById('recoverPhrase').value.trim();
+    var newPw = document.getElementById('recoverNewPw').value;
+    var words = phrase.split(/\s+/).filter(function(w) { return w.length > 0; });
+
+    if (words.length !== 12) {
+      msgEl.style.color = '#e74c3c';
+      msgEl.textContent = curLang === 'en' ? 'Recovery phrase must be exactly 12 words' : 'Fraza musi zawierać dokładnie 12 słów';
+      return;
+    }
+    if (!newPw || newPw.length < 6) {
+      msgEl.style.color = '#e74c3c';
+      msgEl.textContent = curLang === 'en' ? 'Password must be at least 6 characters' : 'Hasło musi mieć min. 6 znaków';
+      return;
+    }
+
+    btn.disabled = true;
+    msgEl.textContent = '';
+    try {
+      var res = await fetch('/api/auth/recover-by-phrase', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ phrase: words.join(' '), new_password: newPw }),
+      });
+      var data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        msgEl.style.color = '#27ae60';
+        msgEl.innerHTML = (curLang === 'en'
+          ? 'Password reset successfully! You can now log in as <b>' + (data.username || '') + '</b>.'
+          : 'Hasło zostało zresetowane! Możesz się zalogować jako <b>' + (data.username || '') + '</b>.');
+        document.getElementById('recoverPhrase').value = '';
+        document.getElementById('recoverNewPw').value = '';
+      } else {
+        msgEl.style.color = '#e74c3c';
+        msgEl.textContent = data.message || 'Error';
+      }
+    } catch (err) {
+      msgEl.style.color = '#e74c3c';
+      msgEl.textContent = 'Connection error';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /* Show pending recovery phrase overlay (3 minutes = 180s) */
+  function showPhraseOverlay(phrase, onClose) {
+    var overlay = document.getElementById('phraseOverlay');
+    var wordsEl = document.getElementById('phraseWords');
+    var timerEl = document.getElementById('phraseTimer');
+    var confirmCb = document.getElementById('phraseConfirmCheck');
+    var closeBtn = document.getElementById('phraseCloseBtn');
+
+    wordsEl.textContent = phrase;
+    overlay.style.display = 'flex';
+
+    var remaining = 180; /* 3 minutes */
+    function formatTime(s) {
+      var m = Math.floor(s / 60);
+      var sec = s % 60;
+      return m + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+    function updateTimer() {
+      timerEl.textContent = (curLang === 'en'
+        ? 'This message will disappear in ' + formatTime(remaining)
+        : 'Ta wiadomość zniknie za ' + formatTime(remaining));
+    }
+    updateTimer();
+
+    var interval = setInterval(function() {
+      remaining--;
+      updateTimer();
+      if (remaining <= 0) {
+        clearInterval(interval);
+        overlay.style.display = 'none';
+        if (typeof onClose === 'function') onClose();
+        else location.href = '/';
+      }
+    }, 1000);
+
+    confirmCb.checked = false;
+    closeBtn.disabled = true;
+    confirmCb.onchange = function() {
+      closeBtn.disabled = !confirmCb.checked;
+    };
+    closeBtn.onclick = function() {
+      clearInterval(interval);
+      overlay.style.display = 'none';
+      if (typeof onClose === 'function') onClose();
+      else location.href = '/';
+    };
+  }
+
+  /* Show password change overlay */
+  function showChangePwOverlay(currentPassword, reason) {
+    var overlay = document.getElementById('changePwOverlay');
+    var reasonEl = document.getElementById('changePwReason');
+    var newPwEl = document.getElementById('changePwNew');
+    var confirmPwEl = document.getElementById('changePwConfirm');
+    var errEl = document.getElementById('changePwError');
+    var btn = document.getElementById('changePwBtn');
+
+    reasonEl.textContent = reason || '';
+    newPwEl.value = '';
+    confirmPwEl.value = '';
+    errEl.textContent = '';
+    overlay.style.display = 'flex';
+
+    btn.onclick = async function() {
+      errEl.textContent = '';
+      var newPw = newPwEl.value;
+      var confirmPw = confirmPwEl.value;
+
+      if (!newPw || newPw.length < 6) {
+        errEl.textContent = curLang === 'en' ? 'Password must be at least 6 characters' : 'Hasło musi mieć min. 6 znaków';
+        return;
+      }
+      if (newPw !== confirmPw) {
+        errEl.textContent = curLang === 'en' ? 'Passwords do not match' : 'Hasła nie są identyczne';
+        return;
+      }
+      if (newPw === currentPassword) {
+        errEl.textContent = curLang === 'en' ? 'New password must be different from the current one' : 'Nowe hasło musi się różnić od obecnego';
+        return;
+      }
+
+      btn.disabled = true;
+      try {
+        var res = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ current_password: currentPassword, new_password: newPw }),
+        });
+        var data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          overlay.style.display = 'none';
+          if (typeof showToast === 'function') {
+            showToast(curLang === 'en' ? 'Password changed!' : 'Hasło zmienione!', 'success');
+          }
+          location.href = '/';
+        } else {
+          errEl.textContent = data.message || 'Error';
+        }
+      } catch (e) {
+        errEl.textContent = curLang === 'en' ? 'Connection error' : 'Błąd połączenia';
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  }
+
+  document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('loginBtn');
+    var errEl = document.getElementById('loginError');
+    var pendingEl = document.getElementById('loginPending');
+    btn.disabled = true;
+    errEl.textContent = '';
+    pendingEl.style.display = 'none';
+
+    var enteredPassword = document.getElementById('password').value;
+
+    try {
+      var res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          username: document.getElementById('username').value.trim(),
+          password: enteredPassword,
+          fingerprint: _collectFingerprint(),
+        }),
+      });
+      var data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        /* Clear project state from previous user session to prevent stale data */
+        ['aistate_project_id','aistate_audio_file','aistate_workspace_id','aistate_subproject_name','aistate_last_task_id'].forEach(function(k){ localStorage.removeItem(k); });
+        /* Sync user's server-side language preference to localStorage */
+        if (data.language) localStorage.setItem('aistate_ui_lang', data.language);
+        /* Sync user's server-side theme preference to localStorage */
+        if (data.theme) localStorage.setItem('aistate_ui_theme', data.theme);
+
+        var needsPwChange = data.must_change_password || data.password_expired;
+        var pwChangeReason = data.must_change_password
+          ? (curLang === 'en' ? 'You must change your password on first login.' : 'Musisz zmienić hasło przy pierwszym logowaniu.')
+          : (curLang === 'en' ? 'Your password has expired. Please change it now.' : 'Twoje hasło wygasło. Zmień je teraz.');
+
+        /* Show pending recovery phrase if present */
+        if (data.recovery_phrase_pending) {
+          showPhraseOverlay(data.recovery_phrase_pending, function() {
+            /* After phrase overlay closes, check if password change is needed */
+            if (needsPwChange) {
+              showChangePwOverlay(enteredPassword, pwChangeReason);
+            } else {
+              location.href = '/';
+            }
+          });
+          btn.disabled = false;
+          return;
+        }
+
+        /* Password change required (expiry or first login) */
+        if (needsPwChange) {
+          showChangePwOverlay(enteredPassword, pwChangeReason);
+          btn.disabled = false;
+          return;
+        }
+
+        location.href = '/';
+      } else if (data.code === 'locked') {
+        errEl.textContent = data.message || 'Account locked';
+      } else if (data.code === 'pending') {
+        pendingEl.style.display = 'block';
+        var container = document.getElementById('pendingApprovers');
+        container.innerHTML = '';
+        var roles = data.approvers || [];
+        roles.forEach(function(role) {
+          var badge = document.createElement('div');
+          badge.className = 'role-badge';
+          badge.innerHTML = role + (roleEN[role] ? '<span class="en">' + roleEN[role] + '</span>' : '');
+          container.appendChild(badge);
+        });
+      } else {
+        errEl.textContent = data.message || 'Login failed';
+      }
+    } catch (err) {
+      errEl.textContent = 'Connection error';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

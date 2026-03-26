@@ -1,0 +1,757 @@
+{
+  "version": "1.0",
+  "purpose": "Wykrywanie nazw komunikatorów i platform społecznościowych w polach bilingu GSM (callee, caller, network, service, raw_text, extra).",
+  "assumptions": [
+    "Operatorzy GSM czasem wpisują nazwy usług (np. 'WhatsApp', 'Viber Out') zamiast numeru telefonu w polu callee/caller.",
+    "Rekordy DATA mogą mieć nazwy APN lub usług w polach opisu.",
+    "Szukamy case-insensitive, ale unikamy fałszywych trafień (np. 'line' samo w sobie jest zbyt ogólne — wymaga granic słowa).",
+    "Każdy wpis ma kategorię i wagę istotności (info/warning) zależną od kontekstu."
+  ],
+  "search_fields": [
+    "callee",
+    "caller",
+    "network",
+    "raw_text",
+    "extra.service",
+    "extra.description"
+  ],
+  "categories": {
+    "messenger_global": {
+      "label": "Komunikatory globalne",
+      "severity": "info",
+      "platforms": [
+        {
+          "name": "WhatsApp",
+          "patterns": ["whatsapp", "whats app", "whats_app", "wa.me"],
+          "regex": "\\bwhats?[_\\s]?app\\b|\\bwa\\.me\\b",
+          "note": "Najpopularniejszy komunikator na świecie (3 mld MAU)"
+        },
+        {
+          "name": "Facebook Messenger",
+          "patterns": ["messenger", "fb messenger", "facebook messenger"],
+          "regex": "\\b(?:facebook\\s*)?messenger\\b|\\bfb\\s*messenger\\b",
+          "note": "Komunikator Facebooka (1 mld+ MAU)"
+        },
+        {
+          "name": "Telegram",
+          "patterns": ["telegram"],
+          "regex": "\\btelegram\\b",
+          "note": "Szyfrowany komunikator (1 mld MAU)"
+        },
+        {
+          "name": "Viber",
+          "patterns": ["viber", "viber out", "rakuten viber"],
+          "regex": "\\bviber\\b|\\brakuten\\s*viber\\b",
+          "note": "Popularny w Europie Wschodniej"
+        },
+        {
+          "name": "Signal",
+          "patterns": ["signal"],
+          "regex": "\\bsignal\\b",
+          "note": "Komunikator szyfrowany end-to-end"
+        },
+        {
+          "name": "Skype",
+          "patterns": ["skype", "skype out", "skype for business"],
+          "regex": "\\bskype\\b",
+          "note": "Microsoft — zakończony w 2025"
+        },
+        {
+          "name": "Threema",
+          "patterns": ["threema"],
+          "regex": "\\bthreema\\b",
+          "note": "Szwajcarski szyfrowany komunikator"
+        },
+        {
+          "name": "Wire",
+          "patterns": ["wire"],
+          "regex": "\\bwire\\b(?!less|frame)",
+          "note": "Szyfrowany komunikator korporacyjny"
+        },
+        {
+          "name": "Element (Matrix)",
+          "patterns": ["element", "matrix"],
+          "regex": "\\belement\\b|\\bmatrix\\.org\\b",
+          "note": "Zdecentralizowany protokół komunikacji"
+        },
+        {
+          "name": "Session",
+          "patterns": ["session messenger"],
+          "regex": "\\bsession\\s*messenger\\b",
+          "note": "Anonimowy komunikator (Oxen/Lokinet)"
+        },
+        {
+          "name": "Wickr",
+          "patterns": ["wickr"],
+          "regex": "\\bwickr\\b",
+          "note": "Szyfrowany komunikator (AWS)"
+        },
+        {
+          "name": "Briar",
+          "patterns": ["briar"],
+          "regex": "\\bbriar\\b",
+          "note": "P2P komunikator (Tor, Wi-Fi, Bluetooth)"
+        },
+        {
+          "name": "Jami",
+          "patterns": ["jami"],
+          "regex": "\\bjami\\b",
+          "note": "GNU komunikator P2P"
+        },
+        {
+          "name": "Delta Chat",
+          "patterns": ["delta chat", "deltachat"],
+          "regex": "\\bdelta\\s*chat\\b",
+          "note": "Komunikator oparty na e-mail"
+        },
+        {
+          "name": "SimpleX",
+          "patterns": ["simplex", "simplex chat"],
+          "regex": "\\bsimplex\\b",
+          "note": "Komunikator bez identyfikatorów użytkownika"
+        },
+        {
+          "name": "Dust",
+          "patterns": ["dust", "cyber dust"],
+          "regex": "\\bcyber\\s*dust\\b|\\bdust\\s*app\\b",
+          "note": "Komunikator z autousuwaniem wiadomości"
+        },
+        {
+          "name": "Tox",
+          "patterns": ["tox"],
+          "regex": "\\btox\\s*(?:chat|messenger)?\\b",
+          "note": "P2P szyfrowany komunikator"
+        }
+      ]
+    },
+    "messenger_russian": {
+      "label": "Komunikatory rosyjskie / WNP",
+      "severity": "info",
+      "platforms": [
+        {
+          "name": "VKontakte (VK)",
+          "patterns": ["vkontakte", "vk.com", "vk messenger", "вконтакте"],
+          "regex": "\\bvkontakte\\b|\\bvk\\.com\\b|\\bvk\\s*messenger\\b|\\bвконтакте\\b",
+          "note": "Największa rosyjska sieć społecznościowa (92 mln MAU w Rosji)"
+        },
+        {
+          "name": "Odnoklassniki (OK.ru)",
+          "patterns": ["odnoklassniki", "ok.ru", "одноклассники"],
+          "regex": "\\bodnoklassniki\\b|\\bok\\.ru\\b|\\bодноклассники\\b",
+          "note": "Druga co do wielkości rosyjska sieć społecznościowa (40 mln MAU)"
+        },
+        {
+          "name": "Max (VK)",
+          "patterns": ["max messenger", "max vk"],
+          "regex": "\\bmax\\s*(?:messenger|vk)\\b",
+          "note": "Rosyjski 'państwowy komunikator' (następca TamTam/ICQ, 77 mln MAU)"
+        },
+        {
+          "name": "VK Messenger",
+          "patterns": ["vk messenger"],
+          "regex": "\\bvk\\s*messenger\\b",
+          "note": "Komunikator wbudowany w VKontakte (55 mln MAU)"
+        },
+        {
+          "name": "Yandex Messenger",
+          "patterns": ["yandex messenger", "яндекс мессенджер"],
+          "regex": "\\byandex\\s*messenger\\b|\\bяндекс\\s*мессенджер\\b",
+          "note": "Komunikator Yandex (niszowy)"
+        },
+        {
+          "name": "SaluteJazz",
+          "patterns": ["salutejazz", "salute jazz", "сбер джаз"],
+          "regex": "\\bsalute\\s*jazz\\b|\\bсбер\\s*джаз\\b",
+          "note": "Platforma wideokonferencji Sberbank"
+        },
+        {
+          "name": "TamTam",
+          "patterns": ["tamtam"],
+          "regex": "\\btamtam\\b|\\btam\\s*tam\\b",
+          "note": "Rosyjski komunikator VK (zamknięty 2026)"
+        },
+        {
+          "name": "ICQ",
+          "patterns": ["icq"],
+          "regex": "\\bicq\\b",
+          "note": "Klasyczny komunikator (zamknięty 2024)"
+        },
+        {
+          "name": "Mail.ru Agent",
+          "patterns": ["mail.ru agent", "mail.ru", "мой мир"],
+          "regex": "\\bmail\\.ru\\s*agent\\b|\\bмой\\s*мир\\b",
+          "note": "Komunikator Mail.ru Group"
+        },
+        {
+          "name": "Dzen",
+          "patterns": ["dzen", "дзен"],
+          "regex": "\\bdzen\\b|\\bдзен\\b",
+          "note": "Platforma treści VK (dawniej Yandex Zen)"
+        },
+        {
+          "name": "RUTUBE",
+          "patterns": ["rutube"],
+          "regex": "\\brutube\\b",
+          "note": "Rosyjska platforma wideo (80 mln MAU)"
+        }
+      ]
+    },
+    "messenger_chinese": {
+      "label": "Komunikatory chińskie",
+      "severity": "info",
+      "platforms": [
+        {
+          "name": "WeChat",
+          "patterns": ["wechat", "weixin", "微信"],
+          "regex": "\\bwechat\\b|\\bweixin\\b|微信",
+          "note": "Chiński 'super app' (1,4 mld MAU)"
+        },
+        {
+          "name": "QQ",
+          "patterns": ["tencent qq", "qq"],
+          "regex": "\\bqq\\b|\\btencent\\s*qq\\b",
+          "note": "Komunikator Tencent (532 mln MAU)"
+        },
+        {
+          "name": "Weibo",
+          "patterns": ["weibo", "sina weibo", "微博"],
+          "regex": "\\bweibo\\b|微博",
+          "note": "Chiński mikroblog (587 mln MAU)"
+        },
+        {
+          "name": "Douyin",
+          "patterns": ["douyin", "抖音"],
+          "regex": "\\bdouyin\\b|抖音",
+          "note": "Chińska wersja TikTok (1 mld MAU)"
+        },
+        {
+          "name": "Kuaishou",
+          "patterns": ["kuaishou", "快手"],
+          "regex": "\\bkuaishou\\b|快手",
+          "note": "Platforma short-video (714 mln MAU)"
+        },
+        {
+          "name": "Bilibili",
+          "patterns": ["bilibili"],
+          "regex": "\\bbilibili\\b",
+          "note": "Platforma wideo dla Gen Z (348 mln MAU)"
+        },
+        {
+          "name": "Xiaohongshu (RED)",
+          "patterns": ["xiaohongshu", "rednote", "小红书"],
+          "regex": "\\bxiaohongshu\\b|\\brednote\\b|小红书",
+          "note": "Platforma lifestyle (320 mln MAU)"
+        },
+        {
+          "name": "Baidu Tieba",
+          "patterns": ["baidu tieba", "tieba", "贴吧"],
+          "regex": "\\btieba\\b|\\bbaidu\\s*tieba\\b|贴吧",
+          "note": "Forum społecznościowe Baidu"
+        },
+        {
+          "name": "Zhihu",
+          "patterns": ["zhihu", "知乎"],
+          "regex": "\\bzhihu\\b|知乎",
+          "note": "Chiński Q&A (83 mln MAU)"
+        },
+        {
+          "name": "Toutiao",
+          "patterns": ["toutiao", "今日头条"],
+          "regex": "\\btoutiao\\b|今日头条",
+          "note": "Agregator newsów ByteDance"
+        },
+        {
+          "name": "Momo",
+          "patterns": ["momo"],
+          "regex": "\\bmomo\\b",
+          "note": "Chiński komunikator społecznościowy/randkowy"
+        },
+        {
+          "name": "Tantan",
+          "patterns": ["tantan"],
+          "regex": "\\btantan\\b",
+          "note": "Chińska aplikacja randkowa"
+        },
+        {
+          "name": "Youku",
+          "patterns": ["youku"],
+          "regex": "\\byouku\\b",
+          "note": "Chiński serwis wideo (Alibaba)"
+        }
+      ]
+    },
+    "messenger_regional_mideast": {
+      "label": "Komunikatory regionalne (Bliski Wschód / Azja)",
+      "severity": "info",
+      "platforms": [
+        {
+          "name": "Botim",
+          "patterns": ["botim"],
+          "regex": "\\bbotim\\b",
+          "note": "Popularny w ZEA/Katarze (50+ mln MAU)"
+        },
+        {
+          "name": "ToTok",
+          "patterns": ["totok"],
+          "regex": "\\btotok\\b",
+          "note": "Komunikator VoIP zatwierdzony przez rząd ZEA"
+        },
+        {
+          "name": "GoChat",
+          "patterns": ["gochat"],
+          "regex": "\\bgochat\\b",
+          "note": "Komunikator Etisalat (Dubaj)"
+        },
+        {
+          "name": "Tawasal",
+          "patterns": ["tawasal"],
+          "regex": "\\btawasal\\b",
+          "note": "Licencjonowany komunikator w ZEA"
+        },
+        {
+          "name": "Nimbuzz",
+          "patterns": ["nimbuzz"],
+          "regex": "\\bnimbuzz\\b",
+          "note": "Komunikator VoIP (spadek popularności)"
+        },
+        {
+          "name": "Zangi",
+          "patterns": ["zangi"],
+          "regex": "\\bzangi\\b",
+          "note": "Szyfrowany komunikator"
+        },
+        {
+          "name": "IMO",
+          "patterns": ["imo"],
+          "regex": "\\bimo\\b",
+          "note": "Popularny w Azji Południowej i Bliskim Wschodzie"
+        },
+        {
+          "name": "LINE",
+          "patterns": ["line"],
+          "regex": "\\bline\\s*(?:app|call|messenger|chat)\\b|\\bline\\.me\\b",
+          "note": "Japonia/Tajwan/Tajlandia (194 mln MAU)"
+        },
+        {
+          "name": "KakaoTalk",
+          "patterns": ["kakaotalk", "kakao talk", "kakao"],
+          "regex": "\\bkakao\\s*talk\\b|\\bkakao\\b",
+          "note": "Koreański komunikator (54 mln MAU)"
+        },
+        {
+          "name": "Zalo",
+          "patterns": ["zalo"],
+          "regex": "\\bzalo\\b",
+          "note": "Wietnamski komunikator"
+        },
+        {
+          "name": "Hike",
+          "patterns": ["hike"],
+          "regex": "\\bhike\\s*(?:messenger|sticker)?\\b",
+          "note": "Indyjski komunikator"
+        }
+      ]
+    },
+    "social_platform": {
+      "label": "Platformy społecznościowe z czatem/połączeniami",
+      "severity": "info",
+      "platforms": [
+        {
+          "name": "Facebook",
+          "patterns": ["facebook", "fb.com", "fb.me"],
+          "regex": "\\bfacebook\\b|\\bfb\\.(?:com|me)\\b",
+          "note": "Meta — największa sieć społecznościowa"
+        },
+        {
+          "name": "Instagram",
+          "patterns": ["instagram", "insta"],
+          "regex": "\\binstagram\\b",
+          "note": "Meta — platforma foto/wideo z DM i połączeniami"
+        },
+        {
+          "name": "TikTok",
+          "patterns": ["tiktok", "tik tok"],
+          "regex": "\\btik\\s*tok\\b",
+          "note": "ByteDance — platforma wideo z DM"
+        },
+        {
+          "name": "Snapchat",
+          "patterns": ["snapchat"],
+          "regex": "\\bsnapchat\\b",
+          "note": "Snap Inc. — komunikacja wizualna (932 mln MAU)"
+        },
+        {
+          "name": "X (Twitter)",
+          "patterns": ["twitter", "x.com"],
+          "regex": "\\btwitter\\b|\\bx\\.com\\b",
+          "note": "Platforma mikroblogowa z DM"
+        },
+        {
+          "name": "LinkedIn",
+          "patterns": ["linkedin"],
+          "regex": "\\blinkedin\\b",
+          "note": "Microsoft — sieć zawodowa z komunikatorem"
+        },
+        {
+          "name": "Pinterest",
+          "patterns": ["pinterest"],
+          "regex": "\\bpinterest\\b",
+          "note": "Platforma wizualna"
+        },
+        {
+          "name": "Reddit",
+          "patterns": ["reddit"],
+          "regex": "\\breddit\\b",
+          "note": "Platforma forumowa z chatem"
+        },
+        {
+          "name": "Discord",
+          "patterns": ["discord"],
+          "regex": "\\bdiscord\\b",
+          "note": "Platforma komunikacji głosowej/tekstowej"
+        },
+        {
+          "name": "Mastodon",
+          "patterns": ["mastodon"],
+          "regex": "\\bmastodon\\b",
+          "note": "Zdecentralizowana sieć społecznościowa (ActivityPub)"
+        },
+        {
+          "name": "Bluesky",
+          "patterns": ["bluesky", "bsky"],
+          "regex": "\\bbluesky\\b|\\bbsky\\b",
+          "note": "Zdecentralizowana platforma mikroblogowa"
+        },
+        {
+          "name": "MeWe",
+          "patterns": ["mewe"],
+          "regex": "\\bmewe\\b",
+          "note": "Prywatna sieć społecznościowa"
+        },
+        {
+          "name": "Parler",
+          "patterns": ["parler"],
+          "regex": "\\bparler\\b",
+          "note": "Alternatywna sieć społecznościowa"
+        },
+        {
+          "name": "Truth Social",
+          "patterns": ["truth social", "truthsocial"],
+          "regex": "\\btruth\\s*social\\b",
+          "note": "Sieć społecznościowa Trump Media"
+        }
+      ]
+    },
+    "social_polish": {
+      "label": "Polskie komunikatory i platformy",
+      "severity": "info",
+      "platforms": [
+        {
+          "name": "Gadu-Gadu (GG)",
+          "patterns": ["gadu-gadu", "gadu gadu", "gg"],
+          "regex": "\\bgadu[\\-\\s]?gadu\\b",
+          "note": "Klasyczny polski komunikator"
+        },
+        {
+          "name": "Tlen",
+          "patterns": ["tlen.pl", "tlen"],
+          "regex": "\\btlen(?:\\.pl)?\\b",
+          "note": "Polski komunikator (o2.pl)"
+        },
+        {
+          "name": "NK (Nasza Klasa)",
+          "patterns": ["nasza klasa", "nk.pl", "naszaklasa"],
+          "regex": "\\bnasza\\s*klasa\\b|\\bnk\\.pl\\b",
+          "note": "Polska sieć społecznościowa (historyczna)"
+        }
+      ]
+    },
+    "video_conference": {
+      "label": "Wideokonferencje i komunikatory korporacyjne",
+      "severity": "info",
+      "platforms": [
+        {
+          "name": "Microsoft Teams",
+          "patterns": ["microsoft teams", "ms teams", "teams"],
+          "regex": "\\b(?:ms|microsoft)\\s*teams\\b|\\bteams\\s*(?:call|meet)\\b",
+          "note": "Microsoft — komunikator korporacyjny"
+        },
+        {
+          "name": "Zoom",
+          "patterns": ["zoom"],
+          "regex": "\\bzoom\\b",
+          "note": "Platforma wideokonferencji"
+        },
+        {
+          "name": "Google Meet",
+          "patterns": ["google meet", "meet.google"],
+          "regex": "\\bgoogle\\s*meet\\b|\\bmeet\\.google\\b",
+          "note": "Google — wideokonferencje"
+        },
+        {
+          "name": "Google Duo",
+          "patterns": ["google duo"],
+          "regex": "\\bgoogle\\s*duo\\b",
+          "note": "Google — wideopołączenia (wchłonięty przez Meet)"
+        },
+        {
+          "name": "Google Chat",
+          "patterns": ["google chat", "hangouts chat"],
+          "regex": "\\bgoogle\\s*chat\\b",
+          "note": "Google — komunikator tekstowy"
+        },
+        {
+          "name": "Google Hangouts",
+          "patterns": ["hangouts"],
+          "regex": "\\bhangouts\\b",
+          "note": "Google — zamknięty, następca: Chat/Meet"
+        },
+        {
+          "name": "FaceTime",
+          "patterns": ["facetime"],
+          "regex": "\\bfacetime\\b",
+          "note": "Apple — wideopołączenia"
+        },
+        {
+          "name": "Slack",
+          "patterns": ["slack"],
+          "regex": "\\bslack\\b",
+          "note": "Salesforce — komunikator zespołowy"
+        },
+        {
+          "name": "Cisco Webex",
+          "patterns": ["webex", "cisco webex"],
+          "regex": "\\bwebex\\b|\\bcisco\\s*webex\\b",
+          "note": "Cisco — wideokonferencje korporacyjne"
+        },
+        {
+          "name": "GoToMeeting",
+          "patterns": ["gotomeeting", "goto meeting"],
+          "regex": "\\bgoto\\s*meeting\\b",
+          "note": "LogMeIn — wideokonferencje"
+        },
+        {
+          "name": "Mattermost",
+          "patterns": ["mattermost"],
+          "regex": "\\bmattermost\\b",
+          "note": "Open-source komunikator zespołowy"
+        },
+        {
+          "name": "Rocket.Chat",
+          "patterns": ["rocketchat", "rocket.chat", "rocket chat"],
+          "regex": "\\brocket[\\s.]?chat\\b",
+          "note": "Open-source komunikator"
+        },
+        {
+          "name": "Zulip",
+          "patterns": ["zulip"],
+          "regex": "\\bzulip\\b",
+          "note": "Open-source komunikator wątkowy"
+        }
+      ]
+    },
+    "voip_telecom": {
+      "label": "VoIP / telekomunikacja alternatywna",
+      "severity": "info",
+      "platforms": [
+        {
+          "name": "Vonage",
+          "patterns": ["vonage"],
+          "regex": "\\bvonage\\b",
+          "note": "Platforma VoIP (Ericsson)"
+        },
+        {
+          "name": "Rebtel",
+          "patterns": ["rebtel"],
+          "regex": "\\brebtel\\b",
+          "note": "Tanie połączenia międzynarodowe"
+        },
+        {
+          "name": "Libon",
+          "patterns": ["libon"],
+          "regex": "\\blibon\\b",
+          "note": "Aplikacja VoIP (Orange)"
+        },
+        {
+          "name": "PopTox",
+          "patterns": ["poptox"],
+          "regex": "\\bpoptox\\b",
+          "note": "Darmowe połączenia VoIP przez przeglądarkę"
+        },
+        {
+          "name": "TextNow",
+          "patterns": ["textnow"],
+          "regex": "\\btextnow\\b",
+          "note": "Darmowe SMS i połączenia (USA/Kanada)"
+        },
+        {
+          "name": "TextFree",
+          "patterns": ["textfree"],
+          "regex": "\\btextfree\\b",
+          "note": "Darmowe SMS z wirtualnym numerem"
+        },
+        {
+          "name": "Hushed",
+          "patterns": ["hushed"],
+          "regex": "\\bhushed\\b",
+          "note": "Prywatne numery telefonu"
+        },
+        {
+          "name": "Burner",
+          "patterns": ["burner"],
+          "regex": "\\bburner\\s*(?:app|phone)?\\b",
+          "note": "Tymczasowe numery telefonu"
+        },
+        {
+          "name": "2ndLine",
+          "patterns": ["2ndline"],
+          "regex": "\\b2nd\\s*line\\b",
+          "note": "Drugi numer telefonu"
+        },
+        {
+          "name": "Google Voice",
+          "patterns": ["google voice"],
+          "regex": "\\bgoogle\\s*voice\\b",
+          "note": "Google — wirtualny numer telefonu"
+        },
+        {
+          "name": "Dingtone",
+          "patterns": ["dingtone"],
+          "regex": "\\bdingtone\\b",
+          "note": "Darmowe połączenia i SMS"
+        },
+        {
+          "name": "TalkU",
+          "patterns": ["talku"],
+          "regex": "\\btalku\\b",
+          "note": "Darmowe połączenia VoIP"
+        },
+        {
+          "name": "FreeTone",
+          "patterns": ["freetone"],
+          "regex": "\\bfreetone\\b",
+          "note": "Darmowe połączenia i SMS"
+        },
+        {
+          "name": "magicApp",
+          "patterns": ["magicapp", "magic app", "magicjack"],
+          "regex": "\\bmagic\\s*(?:app|jack)\\b",
+          "note": "VoIP z wirtualnym numerem"
+        },
+        {
+          "name": "Nanu",
+          "patterns": ["nanu"],
+          "regex": "\\bnanu\\b",
+          "note": "Darmowe połączenia międzynarodowe"
+        }
+      ]
+    },
+    "gaming_communication": {
+      "label": "Gry / platformy z komunikacją",
+      "severity": "info",
+      "platforms": [
+        {
+          "name": "Steam Chat",
+          "patterns": ["steam", "steam chat"],
+          "regex": "\\bsteam\\s*chat\\b|\\bsteam\\b",
+          "note": "Valve — platforma gamingowa z komunikatorem"
+        },
+        {
+          "name": "Epic Games",
+          "patterns": ["epic games"],
+          "regex": "\\bepic\\s*games\\b",
+          "note": "Epic Games — platforma gamingowa"
+        },
+        {
+          "name": "Xbox Live",
+          "patterns": ["xbox live", "xbox"],
+          "regex": "\\bxbox\\s*live\\b|\\bxbox\\b",
+          "note": "Microsoft — komunikacja gamingowa"
+        },
+        {
+          "name": "PlayStation Network",
+          "patterns": ["playstation", "psn"],
+          "regex": "\\bplaystation\\b|\\bpsn\\b",
+          "note": "Sony — sieć gamingowa z czatem"
+        },
+        {
+          "name": "Battle.net",
+          "patterns": ["battle.net", "battlenet"],
+          "regex": "\\bbattle\\.?net\\b",
+          "note": "Blizzard — platforma gamingowa"
+        },
+        {
+          "name": "Twitch",
+          "patterns": ["twitch"],
+          "regex": "\\btwitch\\b",
+          "note": "Amazon — platforma streamingowa z czatem"
+        },
+        {
+          "name": "BIGO Live",
+          "patterns": ["bigo live", "bigo"],
+          "regex": "\\bbigo\\s*live\\b|\\bbigo\\b",
+          "note": "Platforma live streaming"
+        },
+        {
+          "name": "TeamSpeak",
+          "patterns": ["teamspeak"],
+          "regex": "\\bteamspeak\\b|\\bteam\\s*speak\\b",
+          "note": "Komunikacja głosowa dla graczy"
+        },
+        {
+          "name": "Mumble",
+          "patterns": ["mumble"],
+          "regex": "\\bmumble\\b",
+          "note": "Open-source komunikacja głosowa"
+        },
+        {
+          "name": "Ventrilo",
+          "patterns": ["ventrilo"],
+          "regex": "\\bventrilo\\b",
+          "note": "Komunikacja głosowa VoIP"
+        }
+      ]
+    },
+    "niche_alternative": {
+      "label": "Komunikatory niszowe / alternatywne",
+      "severity": "info",
+      "platforms": [
+        {
+          "name": "Kik",
+          "patterns": ["kik"],
+          "regex": "\\bkik\\b",
+          "note": "Anonimowy komunikator"
+        },
+        {
+          "name": "Omegle",
+          "patterns": ["omegle"],
+          "regex": "\\bomegle\\b",
+          "note": "Czat z losowymi osobami (zamknięty 2023)"
+        },
+        {
+          "name": "Chatroulette",
+          "patterns": ["chatroulette"],
+          "regex": "\\bchatroulette\\b",
+          "note": "Wideo-czat z losowymi użytkownikami"
+        }
+      ]
+    }
+  },
+  "engine_order": [
+    "Krok 1: Dla każdego rekordu bilingu pobierz pola: callee, caller, network, raw_text, extra.service.",
+    "Krok 2: Złącz wszystkie pola w jeden tekst do przeszukania (lowercase).",
+    "Krok 3: Sprawdź każdy wzorzec regex z każdej kategorii.",
+    "Krok 4: Jeżeli trafienie — zapisz: nazwa platformy, kategoria, rekord źródłowy (data, czas, typ).",
+    "Krok 5: Deduplikuj po (platforma, data) — zliczaj wystąpienia.",
+    "Krok 6: Sortuj wyniki wg liczby wystąpień malejąco."
+  ],
+  "implementation_warnings": [
+    "Unikaj fałszywych trafień: 'LINE' samo w sobie jest zbyt ogólne — wymaga kontekstu (line app, line call, line.me).",
+    "Wzorzec 'wire' nie może łapać 'wireless' — użyj \\bwire\\b(?!less|frame).",
+    "Nazwa 'Signal' może dawać fałszywe trafienia w kontekście sieci GSM — weryfikuj kontekst.",
+    "Wzorzec 'teams' sam w sobie jest zbyt ogólny — wymaga 'ms teams' lub 'microsoft teams'.",
+    "Wzorzec 'steam' sam w sobie może łapać inne konteksty — preferuj 'steam chat'.",
+    "Nie szukaj samego 'GG' (za krótkie/wieloznaczne) — wymagaj 'gadu-gadu' lub 'gadu gadu'.",
+    "Chińskie znaki (微信, 微博, etc.) — raczej nie pojawią się w polskich bilingach, ale zostawiono dla kompletności."
+  ]
+}

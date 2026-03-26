@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="ho" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#313b49"/><stop offset="100%" stop-color="#05657c"/></linearGradient><filter id="s3d_handoff"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs><path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#313b49" stroke-width="1" fill="none" opacity="0.22"/>
+<!-- left hand -->
+<path d="M4 26c4-2 8-2 10 0l2 4" stroke="url(#ho)" stroke-width="2.5" fill="none" filter="url(#s3d_handoff)"/>
+<path d="M4 22v8" stroke="url(#ho)" stroke-width="2.3"/>
+<!-- right hand -->
+<path d="M44 26c-4-2-8-2-10 0l-2 4" stroke="url(#ho)" stroke-width="2.5" fill="none"/>
+<path d="M44 22v8" stroke="url(#ho)" stroke-width="2.3"/>
+<!-- document being passed -->
+<rect x="16" y="16" width="16" height="20" rx="2" stroke="#05657c" stroke-width="2.1" fill="#05657c" fill-opacity="0.06"/>
+<line x1="20" y1="22" x2="28" y2="22" stroke="#05657c" stroke-width="1" opacity=".35"/>
+<line x1="20" y1="26" x2="26" y2="26" stroke="#05657c" stroke-width="1" opacity="0.38"/>
+<line x1="20" y1="30" x2="28" y2="30" stroke="#05657c" stroke-width="1" opacity="0.3"/>
+<!-- classified stamp -->
+<rect x="18" y="12" width="12" height="5" rx="1" stroke="#9a1a1a" stroke-width="1" fill="#9a1a1a" fill-opacity="0.09" stroke-dasharray="2 1"/>
+
+<path d="M12 10c5-4 14-6 22-2" stroke="#d1d5db" stroke-width="0.8" opacity=".15" fill="none"/>
+</svg>

@@ -1,0 +1,1733 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="analysis-page">
+
+  <div class="card analysis-toolbar" id="analysis_toolbar">
+    <div class="analysis-toolbar-left">
+      <div class="h1" style="margin:0"><i data-icon="analysis" data-size="40"></i> <span data-i18n="analysis.title">Analiza</span></div>
+    </div>
+
+    <div class="analysis-toolbar-right">
+
+      <!-- Sekcja 1: Generuj -->
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="an_generate_btn" title="Analizuj" data-i18n-title="analysis.generate_tooltip"><img src="/static/icons/akcje/generate_ai.svg" alt="Analizuj" draggable="false"></button>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 2: Modele -->
+      <div class="toolbar-section">
+        <div class="analysis-models" id="analysis_models">
+          <div class="analysis-model">
+            <label class="small" for="an_model_quick" data-i18n="analysis.model_quick">Quick</label>
+            <select class="input mini-select" id="an_model_quick" disabled>
+              <option data-i18n="analysis.models_loading">Ładowanie…</option>
+            </select>
+          </div>
+          <div class="analysis-model">
+            <label class="small" for="an_model_deep" data-i18n="analysis.model_deep">Deep</label>
+            <select class="input mini-select" id="an_model_deep" disabled>
+              <option data-i18n="analysis.models_loading">Ładowanie…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Sekcja 3: Raport -->
+      <div class="toolbar-section">
+        <div class="toolbar-group" id="analysis_report_formats">
+          <label class="toolbar-group-label" data-i18n="analysis.report"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="an_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="an_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="an_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+            <button class="btn pill-icon" id="an_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AML toolbar items (hidden by default, shown when AML tab active) -->
+    <div class="analysis-toolbar-right" id="aml_toolbar_items" style="display:none">
+      <!-- Upload PDF -->
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="aml_add_file_toolbar_btn" title="Dodaj wyciąg bankowy PDF"><img src="/static/icons/pliki/file_import.svg" alt="Dodaj PDF" draggable="false"></button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="aml_generate_btn" title="Generuj analizę narracyjną"><img src="/static/icons/akcje/generate_ai.svg" alt="Generuj" draggable="false"></button>
+      </div>
+      <div class="toolbar-section">
+        <div class="analysis-models">
+          <div class="analysis-model">
+            <label class="small" for="aml_llm_model_select">Model LLM</label>
+            <select class="input mini-select" id="aml_llm_model_select" disabled>
+              <option>Ładowanie…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GSM toolbar items (hidden by default, shown when GSM tab active) -->
+    <div class="analysis-toolbar-right" id="gsm_toolbar_items" style="display:none">
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="gsm_add_file_toolbar_btn" title="Wczytaj pliki GSM (biling, identyfikacja, ZIP)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj dane" draggable="false"></button>
+        <button class="btn pill-icon" id="gsm_add_folder_toolbar_btn" title="Wczytaj folder z danymi GSM"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></button>
+        <span class="toolbar-sep" style="height:22px;margin:0 6px"></span>
+        <button class="btn pill-icon" id="gsm_standalone_map_btn" title="Otwórz mapę (bez danych bilingowych)"><img src="/static/icons/inne/map.svg" alt="Mapa" width="20" height="20" draggable="false" style="opacity:.85"></button>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Analizuj -->
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="gsm_generate_btn" title="Generuj analizę GSM" data-i18n-title="gsm.generate_tooltip"><img src="/static/icons/akcje/generate_ai.svg" alt="Analizuj" draggable="false"></button>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Model LLM (deep) -->
+      <div class="toolbar-section">
+        <div class="analysis-models">
+          <div class="analysis-model">
+            <label class="small" for="gsm_model_deep">Model LLM</label>
+            <select class="input mini-select" id="gsm_model_deep" disabled>
+              <option data-i18n="analysis.models_loading">Ładowanie…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Raport -->
+      <div class="toolbar-section">
+        <div class="toolbar-group" id="gsm_report_formats">
+          <label class="toolbar-group-label" data-i18n="analysis.report"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="gsm_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport DOCX" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="gsm_report_fmt" value="docx"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOCX" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="gsm_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+            <button class="btn pill-icon" id="gsm_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+          </div>
+        </div>
+        <div class="toolbar-group">
+          <label class="toolbar-group-label"><img src="/static/icons/dokumenty/notes.svg" alt="" draggable="false"> Notatka</label>
+          <div class="toolbar-group-controls">
+            <button class="btn pill-icon" id="gsm_note_btn" title="Generuj notatkę analityczną (DOCX)"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOCX" draggable="false"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Crypto toolbar items (hidden by default, shown when Crypto tab active) -->
+    <div class="analysis-toolbar-right" id="crypto_toolbar_items" style="display:none">
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="crypto_add_file_toolbar_btn" title="Wczytaj dane Crypto (CSV, JSON)"><img src="/static/icons/pliki/file_import.svg" alt="Wczytaj dane" draggable="false"></button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-section">
+        <button class="btn pill-icon" id="crypto_generate_btn" title="Generuj analizę narracyjną"><img src="/static/icons/akcje/generate_ai.svg" alt="Analizuj" draggable="false"></button>
+      </div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-section">
+        <div class="analysis-models">
+          <div class="analysis-model">
+            <label class="small" for="crypto_model_deep">Model LLM</label>
+            <select class="input mini-select" id="crypto_model_deep" disabled>
+              <option data-i18n="analysis.models_loading">Ładowanie…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="toolbar-sep"></div>
+      <!-- Report (at end, like GSM) -->
+      <div class="toolbar-section">
+        <div class="toolbar-group" id="crypto_report_formats">
+          <label class="toolbar-group-label"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
+          <div class="toolbar-group-controls">
+            <label class="pill pill-icon" title="Dodaj raport HTML"><input type="checkbox" name="crypto_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport DOCX"><input type="checkbox" name="crypto_report_fmt" value="docx"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOCX" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj raport TXT"><input type="checkbox" name="crypto_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+            <button class="btn pill-icon" id="crypto_report_save_btn" title="Zapisz raport"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Tab bar -->
+  <div class="analysis-tabs" id="analysis_tabs">
+    <button class="analysis-tab active" data-tab="llm" id="tab_llm">
+      <span class="analysis-tab-icon"><i data-icon="brain" data-size="14"></i></span> Analiza LLM
+    </button>
+    <button class="analysis-tab" data-tab="aml" id="tab_aml">
+      <span class="analysis-tab-icon"><i data-icon="search" data-size="14"></i></span> Analiza AML
+    </button>
+    <button class="analysis-tab" data-tab="gsm" id="tab_gsm">
+      <span class="analysis-tab-icon"><i data-icon="phone" data-size="14"></i></span> Analiza GSM
+    </button>
+    <button class="analysis-tab" data-tab="crypto" id="tab_crypto">
+      <span class="analysis-tab-icon"><i data-icon="link" data-size="14"></i></span> Analiza Crypto
+    </button>
+  </div>
+
+  <!-- LLM Analysis content (existing) -->
+  <div class="analysis-tab-content" id="llm_content">
+  <div class="analysis-container">
+    <aside class="analysis-sidebar" id="analysis_sidebar">
+
+      <section class="card analysis-sidecard">
+        <div class="analysis-sidehdr">
+          <div class="h2" data-i18n="analysis.sources"><i data-icon="folder" data-size="16"></i> Źródła danych</div>
+        </div>
+
+        <div class="analysis-sidebody">
+          <label class="check"><input type="checkbox" id="src_transcript"> <span data-i18n="analysis.src_transcript">Transkrypcja</span></label>
+          <label class="check"><input type="checkbox" id="src_diarization"> <span data-i18n="analysis.src_diarization">Diaryzacja</span></label>
+          <label class="check"><input type="checkbox" id="src_notes_global"> <span data-i18n="analysis.src_notes_global">Notatki globalne</span></label>
+          <label class="check"><input type="checkbox" id="src_notes_blocks"> <span data-i18n="analysis.src_notes_blocks">Notatki do bloków</span></label>
+
+          <div class="analysis-docs">
+            <div class="analysis-docs-top">
+              <div class="h3" data-i18n="analysis.documents"><i data-icon="document" data-size="14"></i> Dokumenty</div>
+            </div>
+            <div class="small" id="docs_hint" data-i18n="analysis.docs_hint">Zaznacz dokumenty, które mają wejść do analizy.</div>
+            <div id="docs_list" class="docs-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card analysis-sidecard">
+        <div class="analysis-sidehdr">
+          <div class="h2" data-i18n="analysis.prompts"><i data-icon="deep_search" data-size="16"></i> Prompty</div>
+          <div class="small" id="an_selected_count">0</div>
+        </div>
+
+        <div class="analysis-sidebody">
+          <div id="prompts_box" class="prompts-box"></div>
+
+          <div class="analysis-side-actions">
+            <button class="btn secondary" id="prompt_new_btn">+ <span data-i18n="analysis.new_prompt">Nowy</span></button>
+            <button class="btn secondary" id="prompt_import_btn"><i data-icon="import" data-size="14"></i> <span data-i18n="analysis.import">Import</span></button>
+          </div>
+        </div>
+      </section>
+
+    </aside>
+
+    <main class="analysis-main">
+
+      <div class="card quick-analysis" id="quick_box">
+        <div class="analysis-sidehdr">
+          <div>
+            <div class="h2" data-i18n="analysis.quick">Szybka analiza</div>
+            <div class="small" id="quick_state"></div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center">
+            <label class="pill" title="Enable/disable background quick analysis">
+              <input type="checkbox" id="quick_enabled_toggle" checked>
+              <span data-i18n="analysis.quick_enabled">Auto</span>
+            </label>
+            <button class="btn secondary" id="quick_toggle_btn">−</button>
+          </div>
+        </div>
+        <div id="quick_body" class="quick-body">
+          <div class="small" data-i18n="analysis.quick_loading">Ładowanie…</div>
+        </div>
+      </div>
+
+      <div class="card custom-prompt" id="custom_prompt_box">
+        <div class="analysis-sidehdr">
+          <div>
+            <div class="h2" data-i18n="analysis.custom_prompt_title"><i data-icon="edit" data-size="16"></i> Własny prompt</div>
+            <div class="small muted" data-i18n="analysis.custom_prompt_desc">Szybkie polecenie dla głębokiej analizy. Jeśli puste – analiza działa jak dotychczas.</div>
+          </div>
+          <label class="pill" title="Combine with selected prompts">
+            <input type="checkbox" id="custom_prompt_use_templates" checked>
+            <span data-i18n="analysis.custom_prompt_use_templates">Połącz z zaznaczonymi promptami</span>
+          </label>
+        </div>
+        <div class="custom-prompt-body" style="margin-top:10px">
+          <textarea class="input" id="custom_prompt_text" style="min-height:120px" data-i18n-placeholder="analysis.custom_prompt_placeholder" placeholder="Np. Zrób formalny protokół spotkania z decyzjami i zadaniami…"></textarea>
+        </div>
+      </div>
+
+      <div class="card deep-analysis" id="deep_box">
+        <div class="analysis-sidehdr">
+          <div class="h2" data-i18n="analysis.deep"><i data-icon="search" data-size="14"></i> Głęboka analiza</div>
+          <div class="small" id="deep_state"></div>
+        </div>
+
+        <!-- Progress (similar to Transcription/Di... ) -->
+        <div class="an-progress" id="an_progress">
+          <div class="small"><span data-i18n="common.progress">Postęp</span>: <span id="an_prog_pct">0%</span></div>
+          <div class="progress"><div id="an_prog_bar"></div></div>
+        </div>
+
+        <div id="deep_result" class="deep-result">
+          <div class="small" data-i18n="analysis.deep_hint">Wybierz źródła i prompty, potem kliknij „Generuj”.</div>
+        </div>
+      </div>
+
+      <!-- Finance entities panel (visible only after finance analysis) -->
+      <div class="card" id="finance_entities_box" style="display:none;">
+        <div class="analysis-sidehdr">
+          <div class="h2"><i data-icon="finance" data-size="16"></i> <span data-i18n="finance.entities.title">Podmioty (Intelligence Memory)</span></div>
+          <button class="btn mini" id="finance_entities_refresh" title="Odśwież" data-i18n-title="btn.refresh">↻</button>
+        </div>
+        <div class="small" style="margin-bottom:8px;" data-i18n="finance.entities.hint">
+          Oznacz podmioty jako podejrzane — zostaną zapamiętane w przyszłych analizach.
+        </div>
+        <div id="finance_entities_list" class="finance-entities-list"></div>
+      </div>
+
+      <div class="analysis-actions" id="analysis_actions">
+        <button class="btn secondary" id="an_copy_btn"><i data-icon="copy" data-size="14"></i> <span data-i18n="analysis.copy">Kopiuj</span></button>
+        <button class="btn secondary" id="an_stop_btn" style="display:none"><i data-icon="stop" data-size="14"></i> <span data-i18n="analysis.stop">Stop</span></button>
+        <span id="an_download_slot"></span>
+      </div>
+
+    </main>
+  </div>
+
+  <button class="analysis-sidebar-toggle" id="analysis_sidebar_toggle" title="Toggle sidebar">◀︎</button>
+  </div><!-- /llm_content -->
+
+  <!-- AML Analysis content -->
+  <div class="analysis-tab-content" id="aml_content" style="display:none">
+  <div class="analyst-panel-layout">
+
+    <!-- Panel analityczny (collapsible left sidebar) -->
+    <aside class="analyst-panel collapsed" id="aml_analyst_panel">
+      <button class="analyst-panel-toggle" id="aml_panel_toggle" title="Panel analityczny">
+        <img src="/static/icons/akcje/sidebar_expand.svg" alt="" width="18" height="18" draggable="false">
+      </button>
+      <div class="analyst-panel-body">
+        <div class="analyst-panel-header">
+          <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
+            <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+            <span data-i18n="analyst_panel.title">Panel analityczny</span>
+          </div>
+          <button class="analyst-panel-toggle-inner" id="aml_panel_collapse" title="Zwiń panel">
+            <img src="/static/icons/akcje/sidebar_collapse.svg" alt="" width="16" height="16" draggable="false">
+          </button>
+        </div>
+
+        <!-- Global project search -->
+        <div class="analyst-panel-section analyst-panel-search-section">
+          <div class="analyst-panel-label" style="display:flex;align-items:center;gap:5px">
+            <img src="/static/icons/akcje/search.svg" alt="" width="14" height="14" draggable="false" onerror="this.style.display='none'">
+            <span>Szukaj w projekcie</span>
+          </div>
+          <input id="aml_panel_search" type="text" class="analyst-panel-search-input input" placeholder="Numer, tekst, opis&#8230;">
+          <div id="aml_panel_search_results" class="analyst-panel-search-results" style="display:none"></div>
+        </div>
+
+        <div class="analyst-panel-divider"></div>
+
+        <!-- Global note -->
+        <div class="analyst-panel-section">
+          <div class="analyst-panel-label">
+            <img src="/static/icons/inne/pin.svg" alt="" width="14" height="14" draggable="false">
+            <span data-i18n="analyst_panel.global_note">Notatka globalna</span>
+          </div>
+          <textarea class="analyst-panel-global-ta input" id="aml_analyst_global_note" data-i18n-placeholder="analyst_panel.global_placeholder" placeholder="Notatka do całej analizy AML..."></textarea>
+        </div>
+
+        <div class="analyst-panel-divider"></div>
+
+        <!-- Item notes -->
+        <div class="analyst-panel-section analyst-panel-items-section">
+          <div class="analyst-panel-label" style="display:flex;align-items:center;justify-content:space-between">
+            <span style="display:flex;align-items:center;gap:5px">
+              <img src="/static/icons/projekty/project_tag.svg" alt="" width="14" height="14" draggable="false">
+              <span data-i18n="analyst_panel.item_notes">Notatki do elementów</span>
+            </span>
+            <span class="analyst-panel-count" id="aml_notes_count">0</span>
+          </div>
+          <!-- Tag filter -->
+          <div class="analyst-panel-tag-filter" id="aml_tag_filter">
+            <select class="input mini-select" id="aml_tag_filter_select" style="font-size:12px">
+              <option value="" data-i18n="analyst_panel.all_tags">Wszystkie</option>
+              <option value="neutral">Neutralny</option>
+              <option value="legitimate">Poprawny</option>
+              <option value="suspicious">Podejrzany</option>
+              <option value="monitoring">Obserwacja</option>
+              <option value="custom1">Własny 1</option>
+              <option value="custom2">Własny 2</option>
+              <option value="custom3">Własny 3</option>
+              <option value="custom4">Własny 4</option>
+            </select>
+          </div>
+          <div class="analyst-panel-items" id="aml_notes_list">
+            <div class="analyst-panel-empty" data-i18n="analyst_panel.no_notes">Brak notatek. Użyj Ctrl+M aby dodać.</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- AML main content -->
+    <div class="analyst-panel-main">
+
+    <!-- Progress bar (like transcription) -->
+    <div class="an-progress" id="aml_progress">
+      <div class="small">Status: <b id="aml_status">—</b> <span id="aml_pct"></span></div>
+      <div class="progress"><div id="aml_bar"></div></div>
+    </div>
+
+    <!-- Batch progress panel (shown during multi-file upload) -->
+    <div class="card" id="aml_batch_panel" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Analiza wielu wyciągów</div>
+        <span class="small muted" id="aml_batch_counter"></span>
+      </div>
+      <div id="aml_batch_list" style="margin-top:8px"></div>
+      <!-- Cross-validation removed — handled per-statement after opening -->
+      <div id="aml_batch_validation" style="display:none"></div>
+    </div>
+
+    <!-- Results -->
+    <div id="aml_results" style="display:none">
+
+      <!-- Summary row: bank info -->
+      <div class="aml-summary-row">
+        <!-- Info cards wrapper (flex row for multi-statement) -->
+        <div id="aml_info_cards_wrap" style="display:flex;gap:12px;flex:1;min-width:0">
+          <div class="card aml-info-card" id="aml_info_card" style="flex:1">
+            <div class="h2">Informacje o wyciagu</div>
+            <div class="aml-info-grid" id="aml_info_grid"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Identified Cards (multi-statement: side by side) -->
+      <div id="aml_cards_wrap">
+        <div class="card" id="aml_cards_card" style="display:none">
+          <div class="analysis-sidehdr">
+            <div class="h2"><i data-icon="finance" data-size="16"></i> Zidentyfikowane karty</div>
+            <span class="small aml-badge" id="aml_cards_count">0</span>
+          </div>
+          <div id="aml_cards_container" class="aml-cards-container" style="margin-top:10px"></div>
+        </div>
+      </div>
+
+      <!-- Identified Accounts (multi-statement: stacked vertically) -->
+      <div id="aml_accounts_wrap">
+        <div class="card" id="aml_accounts_card" style="display:none">
+          <div class="analysis-sidehdr">
+            <div class="h2"><i data-icon="finance" data-size="16"></i> Zidentyfikowane rachunki</div>
+            <span class="small aml-badge" id="aml_accounts_count">0</span>
+          </div>
+          <div id="aml_accounts_container" class="aml-accounts-container" style="margin-top:10px"></div>
+          <div id="aml_removed_accounts_section" style="display:none;margin-top:12px">
+            <div id="aml_removed_accounts_toggle" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted,#94a3b8);padding:4px 0">
+              <span style="transition:transform .2s;display:inline-block" id="aml_removed_arrow">&#9654;</span>
+              <span>Usunięte rachunki</span>
+              <span class="small aml-badge" style="background:rgba(239,68,68,.15);color:#f87171" id="aml_removed_count">0</span>
+            </div>
+            <div id="aml_removed_accounts_container" class="aml-accounts-container" style="display:none;margin-top:8px;opacity:0.6"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <div class="card" id="aml_alerts_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Alerty</div>
+          <span class="small aml-badge" id="aml_alerts_count">0</span>
+        </div>
+        <div id="aml_alerts_list" style="margin-top:10px"></div>
+      </div>
+
+      <!-- Statement Header (editable review) -->
+      <div class="card" id="rv_header_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Nagłówek wyciągu</div>
+          <button class="btn mini" id="rv_header_save" title="Zapisz zmiany">Zapisz</button>
+        </div>
+        <div class="small muted" style="margin:6px 0">Sprawdź odczytane dane i popraw jeśli potrzeba. Zmiany tworzą reguły mapowania dla przyszłych importów.</div>
+        <div class="rv-header-grid" id="rv_header_grid"></div>
+        <div id="rv_header_warnings" style="margin-top:8px"></div>
+      </div>
+
+      <!-- Transaction Review (classification) -->
+      <div class="card" id="aml_review_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Przeglad i klasyfikacja transakcji</div>
+          <div class="rv-stats-bar" id="rv_stats_bar" style="flex:1;margin-left:12px;min-width:100px"></div>
+        </div>
+        <div class="rv-stats-legend" id="rv_stats_legend" style="margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+          <input class="input" id="rv_search" placeholder="Szukaj..." style="width:160px;padding:5px 10px;border-radius:10px">
+          <select class="input" id="rv_filter_class" style="padding:5px 8px;border-radius:10px;min-width:130px">
+            <option value="">Klasyfikacja: wszystkie</option>
+            <option value="neutral">Neutralne</option>
+            <option value="legitimate">Poprawne</option>
+            <option value="suspicious">Podejrzane</option>
+            <option value="monitoring">Obserwacja</option>
+          </select>
+          <select class="input" id="rv_filter_channel" style="padding:5px 8px;border-radius:10px;min-width:120px">
+            <option value="">Kanal: wszystkie</option>
+          </select>
+          <span class="small muted" id="rv_tx_count">0</span>
+        </div>
+        <div id="rv_table_wrap"></div>
+
+        <!-- Suspicious transactions summary (shown when any tx marked suspicious) -->
+        <div id="rv_suspicious_summary" style="display:none;margin-top:16px;padding-top:12px;border-top:2px solid var(--danger,#b91c1c)">
+          <div class="analysis-sidehdr" style="margin-bottom:8px">
+            <div class="h2" style="color:var(--danger,#b91c1c)">Podejrzane transakcje</div>
+            <span class="small aml-badge" id="rv_suspicious_count" style="background:var(--danger,#b91c1c);color:#fff">0</span>
+          </div>
+          <div class="small muted" style="margin-bottom:8px">Transakcje oznaczone jako podejrzane. Kontrahenci i dane sa zapamietywane w pamieci wewnetrznej dla przyszlych analiz.</div>
+          <div id="rv_suspicious_list"></div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="card" id="aml_charts_card">
+        <div class="analysis-sidehdr">
+          <div>
+            <div class="h2">Wykresy</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div id="aml_chart_zoom_bar" class="aml-chart-zoom-bar" style="display:none">
+              <button type="button" class="aml-chart-zoom-btn" id="aml_chart_zoom_out" title="Oddal">−</button>
+              <button type="button" class="aml-chart-zoom-btn" id="aml_chart_zoom_reset" title="Resetuj zoom">1:1</button>
+              <button type="button" class="aml-chart-zoom-btn" id="aml_chart_zoom_in" title="Przybliż">+</button>
+            </div>
+            <select class="input" id="aml_chart_select" style="padding:5px 8px;border-radius:10px;min-width:180px">
+              <option value="balance_timeline">Saldo w czasie</option>
+              <option value="category_distribution">Kategorie</option>
+              <option value="channel_distribution">Kanaly</option>
+              <option value="monthly_trend">Trend miesięczny</option>
+              <option value="daily_activity">Aktywnosc dzienna</option>
+              <option value="top_counterparties">Top kontrahenci</option>
+            </select>
+          </div>
+        </div>
+        <div id="aml_chart_scroll_wrap" class="aml-chart-scroll-wrap">
+          <div id="aml_chart_container" style="height:380px;position:relative">
+            <canvas id="aml_chart_canvas"></canvas>
+          </div>
+        </div>
+        <div id="aml_chart_range_wrap" class="aml-chart-range-wrap" style="display:none">
+          <input type="range" id="aml_chart_range" min="0" max="100" value="0" class="aml-chart-range">
+        </div>
+        <div id="aml_chart_gap_legend" class="aml-chart-gap-legend" style="display:none"></div>
+      </div>
+
+      <!-- ML Anomalies -->
+      <div class="card" id="aml_ml_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Anomalie ML</div>
+          <span class="small aml-badge" id="aml_ml_count">0</span>
+        </div>
+        <div class="small muted" style="margin:8px 0">Algorytm Isolation Forest wykrywa transakcje odstajace od typowego wzorca zachowan na koncie — nietypowe kwoty, czestotliwosci lub kontrahentow. Im wyzszy wynik (%) tym bardziej nietypowa transakcja.</div>
+        <div id="aml_ml_list" style="max-height:300px;overflow:auto;margin-top:6px">
+          <div class="small muted">Brak anomalii.</div>
+        </div>
+      </div>
+
+      <!-- Graph -->
+      <div class="card" id="aml_graph_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Graf przepływów</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <!-- Layout buttons -->
+            <div style="display:flex;gap:3px;background:var(--bg-secondary,#f1f5f9);border-radius:10px;padding:2px">
+              <button class="btn mini aml-graph-layout-btn" data-layout="flow" title="Wpływy → Konto → Wydatki" style="border-radius:8px;padding:4px 8px;font-size:12px;background:var(--primary);color:#fff">Przepływ</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="amount" title="Węzły wg kwoty — duzi kontrahenci bliżej centrum" style="border-radius:8px;padding:4px 8px;font-size:12px">Kwotowy</button>
+              <button class="btn mini aml-graph-layout-btn" data-layout="timeline" title="Oś czasu — kontrahenci wg daty pierwszej transakcji" style="border-radius:8px;padding:4px 8px;font-size:12px">Czasowy</button>
+            </div>
+            <!-- Risk filter -->
+            <select class="input" id="aml_graph_risk_filter" style="padding:5px 8px;border-radius:10px;min-width:130px">
+              <option value="">Wszystkie</option>
+              <option value="high">Wysokie ryzyko</option>
+              <option value="medium">Średnie</option>
+              <option value="low">Niskie</option>
+            </select>
+          </div>
+        </div>
+        <!-- Legend -->
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:#64748b">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#15803d;margin-right:3px"></span>Poprawna</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-right:3px"></span>Podejrzana</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ea580c;margin-right:3px"></span>Obserwacja</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#60a5fa;margin-right:3px"></span>Neutralna</span>
+          <span><span style="display:inline-block;width:10px;height:10px;transform:rotate(45deg);background:#1f5aa6;margin-right:3px"></span>Własne konto</span>
+          <span style="margin-left:8px;border-left:1px solid #cbd5e1;padding-left:8px">◇ Konto &nbsp; ▭ Sklep &nbsp; ⬡ Gotówka &nbsp; ● Kontrahent</span>
+          <span style="margin-left:8px;border-left:1px solid #cbd5e1;padding-left:8px">Rozmiar węzła = kwota</span>
+        </div>
+        <div id="aml_graph_container" style="height:420px;border:1px solid var(--border);border-radius:12px;margin-top:10px;background:rgba(15,23,42,.02)"></div>
+      </div>
+
+      <!-- User prompt for LLM -->
+      <div class="card" id="aml_user_prompt_card">
+        <div class="analysis-sidehdr">
+          <div class="h2"><i data-icon="edit" data-size="16"></i> Pytanie / instrukcja dla analizy</div>
+        </div>
+        <div class="small muted" style="margin:6px 0">Opcjonalnie wpisz pytanie lub instrukcję przed wygenerowaniem analizy. Możesz też dopytać po analizie.</div>
+        <textarea class="input" id="aml_user_prompt" style="min-height:80px;margin-top:6px" placeholder="Np. Sprawdź czy są jakieś raty kredytowe, Jakie są główne źródła dochodów?, Czy widać problemy finansowe?"></textarea>
+      </div>
+
+      <!-- LLM Analysis -->
+      <div class="card" id="aml_llm_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Analiza narracyjna (LLM)</div>
+        </div>
+        <div id="aml_llm_status" class="small muted" style="margin:8px 0">Wybierz model i kliknij przycisk Generuj na pasku narzędzi aby uzyskać analizę narracyjną (wymaga Ollama).</div>
+        <div id="aml_llm_progress" style="display:none;margin:8px 0">
+          <div class="an-progress">
+            <div class="progress"><div id="aml_llm_prog_bar" style="width:0%;transition:width 0.3s"></div></div>
+          </div>
+          <div class="small muted" id="aml_llm_prog_text" style="margin-top:4px">Laczenie z Ollama...</div>
+        </div>
+        <div id="aml_llm_result" style="display:none;margin-top:10px">
+          <div id="aml_llm_text" class="aml-llm-text"></div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="analysis-actions">
+        <button class="btn" id="aml_download_report">Pobierz raport HTML</button>
+        <button class="btn secondary" id="aml_new_analysis">Nowa analiza</button>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="card" id="aml_history_card" style="display:none">
+      <div class="analysis-sidehdr">
+        <div class="h2">Historia analiz AML</div>
+        <span class="small muted" id="aml_history_count"></span>
+      </div>
+      <div id="aml_history_list" style="margin-top:10px"></div>
+    </div>
+
+    </div><!-- /analyst-panel-main (AML) -->
+  </div><!-- /analyst-panel-layout (AML) -->
+
+  <!-- Empty state (before upload) — outside layout so logo is centered -->
+  <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  </div>
+
+  </div><!-- /aml_content -->
+
+  <!-- GSM Analysis content -->
+  <div class="analysis-tab-content" id="gsm_content" style="display:none">
+  <div class="analyst-panel-layout">
+
+    <!-- Panel analityczny (collapsible left sidebar) -->
+    <aside class="analyst-panel collapsed" id="gsm_analyst_panel">
+      <button class="analyst-panel-toggle" id="gsm_panel_toggle" title="Panel analityczny">
+        <img src="/static/icons/akcje/sidebar_expand.svg" alt="" width="18" height="18" draggable="false">
+      </button>
+      <div class="analyst-panel-body">
+        <div class="analyst-panel-header">
+          <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
+            <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+            <span data-i18n="analyst_panel.title">Panel analityczny</span>
+          </div>
+          <button class="analyst-panel-toggle-inner" id="gsm_panel_collapse" title="Zwiń panel">
+            <img src="/static/icons/akcje/sidebar_collapse.svg" alt="" width="16" height="16" draggable="false">
+          </button>
+        </div>
+
+        <!-- Global project search -->
+        <div class="analyst-panel-section analyst-panel-search-section">
+          <div class="analyst-panel-label" style="display:flex;align-items:center;gap:5px">
+            <img src="/static/icons/akcje/search.svg" alt="" width="14" height="14" draggable="false" onerror="this.style.display='none'">
+            <span>Szukaj w projekcie</span>
+          </div>
+          <input id="gsm_panel_search" type="text" class="analyst-panel-search-input input" placeholder="Numer, tekst, opis&#8230;">
+          <div id="gsm_panel_search_results" class="analyst-panel-search-results" style="display:none"></div>
+        </div>
+
+        <div class="analyst-panel-divider"></div>
+
+        <!-- Global note -->
+        <div class="analyst-panel-section">
+          <div class="analyst-panel-label">
+            <img src="/static/icons/inne/pin.svg" alt="" width="14" height="14" draggable="false">
+            <span data-i18n="analyst_panel.global_note">Notatka globalna</span>
+          </div>
+          <textarea class="analyst-panel-global-ta input" id="gsm_analyst_global_note" data-i18n-placeholder="analyst_panel.global_placeholder" placeholder="Notatka do całej analizy GSM..."></textarea>
+        </div>
+
+        <div class="analyst-panel-divider"></div>
+
+        <!-- Item notes -->
+        <div class="analyst-panel-section analyst-panel-items-section">
+          <div class="analyst-panel-label" style="display:flex;align-items:center;justify-content:space-between">
+            <span style="display:flex;align-items:center;gap:5px">
+              <img src="/static/icons/projekty/project_tag.svg" alt="" width="14" height="14" draggable="false">
+              <span data-i18n="analyst_panel.item_notes">Notatki do elementów</span>
+            </span>
+            <span class="analyst-panel-count" id="gsm_notes_count">0</span>
+          </div>
+          <!-- Tag filter -->
+          <div class="analyst-panel-tag-filter" id="gsm_tag_filter">
+            <select class="input mini-select" id="gsm_tag_filter_select" style="font-size:12px">
+              <option value="" data-i18n="analyst_panel.all_tags">Wszystkie</option>
+              <option value="neutral">Neutralny</option>
+              <option value="legitimate">Poprawny</option>
+              <option value="suspicious">Podejrzany</option>
+              <option value="monitoring">Obserwacja</option>
+              <option value="custom1">Własny 1</option>
+              <option value="custom2">Własny 2</option>
+              <option value="custom3">Własny 3</option>
+              <option value="custom4">Własny 4</option>
+            </select>
+          </div>
+          <div class="analyst-panel-items" id="gsm_notes_list">
+            <div class="analyst-panel-empty" data-i18n="analyst_panel.no_notes">Brak notatek. Użyj Ctrl+M aby dodać.</div>
+          </div>
+        </div>
+
+        <div class="analyst-panel-divider"></div>
+
+        <!-- Section layout manager -->
+        <div class="analyst-panel-section">
+          <div class="analyst-panel-label" style="display:flex;align-items:center;gap:5px">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+            <span>Układ sekcji</span>
+          </div>
+          <button class="gsm-layout-btn" id="gsm_layout_btn" title="Dostosuj układ sekcji — przeciągnij aby zmienić kolejność" style="width:100%">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+            Dostosuj układ
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- GSM main content -->
+    <div class="analyst-panel-main">
+
+    <!-- Progress bar -->
+    <div class="an-progress" id="gsm_progress" style="display:none">
+      <div class="small">Status: <b id="gsm_status">—</b></div>
+      <div class="progress"><div id="gsm_bar"></div></div>
+    </div>
+
+    <!-- Results -->
+    <div id="gsm_results" style="display:none">
+
+      <!-- Subscriber info -->
+      <div class="card" data-section-id="info">
+        <div class="h2">Informacje o bilingu</div>
+        <div class="gsm-info-grid" id="gsm_info_grid"></div>
+      </div>
+
+      <!-- Summary stats -->
+      <div class="card" data-section-id="summary">
+        <div class="h2">Podsumowanie</div>
+        <div class="gsm-summary-grid" id="gsm_summary_grid"></div>
+      </div>
+
+      <!-- Devices (IMEI / IMSI) -->
+      <div class="card" id="gsm_devices_card" data-section-id="devices" style="display:none">
+        <div class="h2">Urządzenia</div>
+        <div id="gsm_devices_body"></div>
+      </div>
+
+      <!-- Anomalies -->
+      <div class="card" id="gsm_anomalies_card" data-section-id="anomalies" style="display:none">
+        <div class="h2" style="display:inline-flex;align-items:center;gap:6px">Anomalie
+          <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="#gsm_anomalies_card" data-name="anomalies" title="Zrób zrzut">
+            <i data-icon="camera" data-size="22"></i>
+          </button>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div id="gsm_anomalies_body" style="flex:0 0 33%;min-width:280px;max-height:700px;overflow-y:auto"></div>
+          <div id="gsm_anomaly_map_wrap" style="flex:1;min-height:400px;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#e8e8e8;position:relative">
+            <div id="gsm_anomaly_map_header" style="padding:6px 12px;background:var(--card-bg,#fff);border-bottom:1px solid var(--border);font-size:13px;display:flex;align-items:center;gap:6px">
+              <i data-icon="map" data-size="14"></i>
+              <span id="gsm_anomaly_map_title" style="font-weight:600">Mapa BTS anomalii</span>
+              <span id="gsm_anomaly_map_stats" class="small muted" style="margin-left:auto"></span>
+              <button class="btn btn-icon gsm-card-screenshot-btn" id="gsm_anomaly_map_screenshot_btn" title="Zrób zrzut mapy anomalii" style="margin-left:4px">
+                <i data-icon="camera" data-size="18"></i>
+              </button>
+            </div>
+            <div id="gsm_anomaly_map_container" style="flex:1;min-height:350px"></div>
+            <div id="gsm_anomaly_id_table" style="max-height:200px;overflow-y:auto;border-top:1px solid var(--border);background:var(--card-bg,#fff)"></div>
+            <div class="gsm-graph-resize" id="gsm_anomaly_map_resize" title="Przeciągnij aby zmienić rozmiar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Analysis -->
+      <div class="card" id="gsm_analysis_card" data-section-id="analysis">
+        <div class="analysis-sidehdr">
+          <div class="h2">Analiza</div>
+        </div>
+        <div id="gsm_analysis_body"></div>
+      </div>
+
+      <!-- Special numbers -->
+      <div class="card" id="gsm_sn_card" data-section-id="special_numbers" style="display:none">
+        <div class="h2">Numery specjalne</div>
+        <div id="gsm_special_numbers_body"></div>
+      </div>
+
+      <!-- Contact relationship graph -->
+      <div class="card" id="gsm_graph_card" data-section-id="graph" style="display:none">
+        <div class="gsm-chart-header">
+          <span class="h3" style="margin:0;display:inline-flex;align-items:center;gap:6px">Top kontakty graf
+            <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="#gsm_graph_card" data-name="kontakty_graf" title="Zrób zrzut">
+              <i data-icon="camera" data-size="22"></i>
+            </button>
+          </span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="gsm_graph_top_n" class="gsm-period-select" style="min-width:60px">
+              <option value="5">Top 5</option>
+              <option value="10" selected>Top 10</option>
+              <option value="15">Top 15</option>
+              <option value="20">Top 20</option>
+            </select>
+            <select id="gsm_graph_filter" class="gsm-period-select" style="min-width:110px">
+              <option value="all">Wszystkie</option>
+              <option value="calls">Połączenia</option>
+              <option value="sms">SMS / MMS</option>
+              <option value="fwd">Przekierowania</option>
+            </select>
+          </div>
+        </div>
+        <div id="gsm_contact_graph"></div>
+        <div class="gsm-graph-resize" id="gsm_graph_resize" title="Przeciągnij aby zmienić rozmiar"></div>
+      </div>
+
+      <!-- Records table -->
+      <div class="card" id="gsm_records_card" data-section-id="records">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:10px">
+          <div class="h2" style="margin:0">Rekordy</div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:13px">
+            <span class="muted">Filtr:</span>
+            <span id="gsm_records_filter_badge" style="display:inline-flex;align-items:center;gap:5px">
+              <span id="gsm_records_filter_text" class="muted">brak</span>
+              <button id="gsm_records_filter_clear" style="display:none;background:none;border:none;cursor:pointer;font-size:.9em;color:var(--brand-blue,#2563eb);padding:0 2px" title="Wyczyść filtr">✕</button>
+            </span>
+          </div>
+          <button id="gsm_columns_btn" class="gsm-columns-btn" title="Zarządzaj kolumnami">Kolumny ☰</button>
+          <input id="gsm_records_search" type="text" placeholder="Szukaj numeru lub opisu&#8230;" class="gsm-records-search" style="display:none">
+          <span class="small muted" id="gsm_records_count" style="margin-left:auto"></span>
+        </div>
+        <div id="gsm_filter_chips" class="gsm-filter-chips" style="display:none"></div>
+        <div class="gsm-records-wrap" style="height:500px">
+          <div id="gsm_records_body" class="gsm-records-inner" style="height:100%;overflow:auto"></div>
+          <div class="gsm-records-resize" id="gsm_records_resize" title="Przeciągnij aby zmienić wysokość"></div>
+        </div>
+      </div>
+
+      <!-- Activity row: Heatmap + Night + Weekend (3-col grid) -->
+      <div id="gsm_activity_row" class="gsm-charts-row" data-section-id="activity">
+        <!-- Col 1: Heatmap -->
+        <div class="gsm-chart-card" id="gsm_heatmap_card" style="display:none">
+          <div class="gsm-chart-header" style="flex-wrap:wrap;gap:6px">
+            <span class="h3" style="margin:0;display:inline-flex;align-items:center;gap:6px">Rozkład aktywności
+              <button class="btn btn-icon gsm-map-screenshot-btn gsm-card-screenshot-btn" data-target="#gsm_heatmap_card" data-name="heatmap" title="Zrób zrzut">
+                <i data-icon="camera" data-size="22"></i>
+              </button>
+            </span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select id="gsm_hm_type" class="gsm-period-select" style="min-width:100px">
+                <option value="all">Wszystkie</option>
+                <option value="calls">Połączenia</option>
+                <option value="sms">SMS / MMS</option>
+                <option value="data">Sesje danych</option>
+              </select>
+              <select id="gsm_hm_month" class="gsm-period-select" style="min-width:120px">
+                <option value="all">Cały okres</option>
+              </select>
+            </div>
+          </div>
+          <div id="gsm_heatmap_body" style="overflow-x:auto;padding:4px 0"></div>
+          <div id="gsm_hm_filter_bar" class="gsm-slot-filter-bar" style="display:none;margin-top:6px">
+            <span class="small" id="gsm_hm_filter_label"></span>
+            <button class="gsm-slot-filter-clear" id="gsm_hm_filter_clear" title="Wyczyść filtr">✕</button>
+          </div>
+          <div id="gsm_hm_unique_numbers" class="gsm-contacts-panel" style="display:none;margin-top:6px">
+          </div>
+        </div>
+        <!-- Col 2+3: Night + Weekend (injected by JS) -->
+      </div>
+
+      <!-- BTS Map -->
+      <div class="card" id="gsm_map_card" data-section-id="map" style="display:none">
+        <div class="analysis-sidehdr">
+          <div class="h2" style="display:inline-flex;align-items:center;gap:6px"><i data-icon="map" data-size="16"></i> Mapa lokalizacji BTS
+            <button class="btn btn-icon gsm-map-screenshot-btn" id="gsm_map_screenshot_btn" title="Zrób zrzut">
+              <i data-icon="camera" data-size="22"></i>
+            </button>
+            <span class="toolbar-sep" style="height:22px;margin:0 4px"></span>
+            <button class="btn btn-icon" id="gsm_select_circle_btn" title="Zaznacz obszar koła — wybierz punkty BTS w okręgu">
+              <img src="/static/icons/akcje/select_circle.svg" alt="Zaznacz koło" width="22" height="22" draggable="false">
+            </button>
+            <button class="btn btn-icon" id="gsm_select_rect_btn" title="Zaznacz obszar prostokąta — wybierz punkty BTS w prostokącie">
+              <img src="/static/icons/akcje/select_rect.svg" alt="Zaznacz prostokąt" width="22" height="22" draggable="false">
+            </button>
+          </div>
+          <span class="small muted" id="gsm_map_stats"></span>
+        </div>
+        <div id="gsm_map_container" style="height:500px;border-radius:12px;border:1px solid var(--border);margin-top:10px;background:#e8e8e8;position:relative">
+          <!-- Floating layer panel (left side) -->
+          <div class="gsm-layer-panel" id="gsm_layer_panel">
+            <div class="gsm-lp-header" id="gsm_lp_header_toggle">
+              <span>&#9776; Warstwy</span>
+              <span class="gsm-lp-toggle">&#9664;</span>
+            </div>
+            <div class="gsm-lp-body">
+              <!-- Main map view layers -->
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Widok mapy</div>
+                <label class="gsm-lp-item active" data-layer="all">
+                  <input type="radio" name="gsm_map_layer" value="all" checked> Wszystkie punkty
+                </label>
+                <label class="gsm-lp-item" data-layer="path">
+                  <input type="radio" name="gsm_map_layer" value="path"> Ścieżka
+                </label>
+                <label class="gsm-lp-item" data-layer="clusters">
+                  <input type="radio" name="gsm_map_layer" value="clusters"> Klastry
+                </label>
+                <label class="gsm-lp-item" data-layer="trips">
+                  <input type="radio" name="gsm_map_layer" value="trips"> Podróże
+                </label>
+                <label class="gsm-lp-item" data-layer="border">
+                  <input type="radio" name="gsm_map_layer" value="border"> Granica
+                </label>
+                <label class="gsm-lp-item" data-layer="coverage">
+                  <input type="radio" name="gsm_map_layer" value="coverage"> Zasięg BTS
+                </label>
+                <label class="gsm-lp-item" data-layer="heatmap">
+                  <input type="radio" name="gsm_map_layer" value="heatmap"> Mapa cieplna
+                </label>
+                <label class="gsm-lp-item" data-layer="timeline">
+                  <input type="radio" name="gsm_map_layer" value="timeline"> Oś czasu
+                </label>
+              </div>
+              <!-- Coverage sub-options -->
+              <div id="gsm_coverage_opts" class="gsm-lp-cov-opts" style="display:none">
+                <label><input type="checkbox" id="gsm_cov_billing" checked> Stacje BTS billing</label>
+                <label><input type="checkbox" id="gsm_cov_other"> Stacje BTS inne</label>
+                <span class="small muted" id="gsm_cov_other_count"></span>
+                <div class="gsm-cov-mode" style="margin-top:6px">
+                  <span class="small muted">Tryb zasięgu:</span>
+                  <div class="gsm-cov-mode-radios">
+                    <label><input type="radio" name="gsm_cov_mode" value="full" checked> Pełny</label>
+                    <label><input type="radio" name="gsm_cov_mode" value="flat"> Płaski</label>
+                    <label><input type="radio" name="gsm_cov_mode" value="outline"> Kontury</label>
+                  </div>
+                </div>
+              </div>
+              <div class="gsm-lp-divider"></div>
+              <!-- Overlay layers -->
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Nakładki</div>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_overlay_military"> <span style="color:#b91c1c">&#9733;</span> Jednostki wojskowe
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_overlay_airports"> <span style="color:#2563eb">&#9992;</span> Lotniska cywilne
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_overlay_diplomacy"> <span style="color:#059669">&#9878;</span> Placówki dyplomatyczne
+                </label>
+                <!-- KML user overlays (dynamically populated) -->
+                <div id="gsm_kml_overlays"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="gsm-graph-resize" id="gsm_map_resize" title="Przeciągnij aby zmienić rozmiar"></div>
+        <!-- Timeline player v4 -->
+        <div id="gsm_timeline_wrap" style="display:none;margin-top:8px">
+          <div class="gsm-timeline-controls">
+            <button class="btn btn-sm" id="gsm_tl_play" title="Odtwórz / Pauza">▶</button>
+            <button class="btn btn-sm" id="gsm_tl_speed" title="Prędkość">1×</button>
+            <span class="small" id="gsm_tl_datetime" style="min-width:170px;text-align:center;font-weight:bold">—</span>
+            <span id="gsm_tl_mode_icon" style="font-size:20px;line-height:1" title=""></span>
+            <span class="small muted" id="gsm_tl_counter" style="margin-left:auto">0 / 0</span>
+          </div>
+          <div class="gsm-timeline-months" id="gsm_tl_months"></div>
+          <div class="gsm-timeline-day-controls">
+            <button class="btn btn-sm" id="gsm_tl_prev_day" title="Poprzedni dzień">◀ dzień</button>
+            <span class="small" id="gsm_tl_day_label" style="min-width:100px;text-align:center;font-weight:bold">—</span>
+            <button class="btn btn-sm" id="gsm_tl_next_day" title="Następny dzień">dzień ▶</button>
+            <span class="small muted" id="gsm_tl_day_info" style="margin-left:8px"></span>
+          </div>
+          <div class="gsm-timeline-range-wrap">
+            <input type="range" class="gsm-timeline-range" id="gsm_tl_slider" min="0" max="0" value="0">
+          </div>
+          <canvas id="gsm_tl_density" height="24" style="width:100%;cursor:pointer"></canvas>
+        </div>
+      </div>
+
+      <!-- Cluster info — separate card -->
+      <div class="card" id="gsm_cluster_info" data-section-id="clusters" style="display:none">
+        <div class="h3">Wykryte lokalizacje</div>
+        <div id="gsm_cluster_list"></div>
+      </div>
+
+      <!-- Border crossings — separate card -->
+      <div class="card" id="gsm_border_card" data-section-id="border" style="display:none">
+        <div class="h3">Przekroczenia granic / wyjazdy zagraniczne</div>
+        <div id="gsm_border_list"></div>
+      </div>
+
+      <!-- Overnight stays — separate card -->
+      <div class="card" id="gsm_overnight_card" data-section-id="overnight" style="display:none">
+        <div class="h3">Nocowanie poza domem</div>
+        <div id="gsm_overnight_header" class="small muted" style="margin-bottom:8px"></div>
+        <div id="gsm_overnight_list"></div>
+      </div>
+
+      <!-- User prompt for LLM -->
+      <div class="card" id="gsm_user_prompt_card" data-section-id="user_prompt">
+        <div class="analysis-sidehdr">
+          <div class="h2"><i data-icon="edit" data-size="16"></i> Pytanie / instrukcja dla analizy</div>
+        </div>
+        <div class="small muted" style="margin:6px 0">Opcjonalnie wpisz pytanie lub instrukcję przed wygenerowaniem analizy GSM.</div>
+        <textarea class="input" id="gsm_user_prompt" style="min-height:80px;margin-top:6px" placeholder="Np. Przeanalizuj wzorce komunikacji nocnej, Kto jest najczęstszym kontaktem?, Czy widać nietypowe zachowania?"></textarea>
+      </div>
+
+      <!-- LLM Narrative Analysis -->
+      <div class="card" id="gsm_llm_card" data-section-id="llm">
+        <div class="analysis-sidehdr">
+          <div class="h2">Analiza narracyjna (LLM)</div>
+        </div>
+        <div id="gsm_llm_status" class="small muted" style="margin:8px 0">Wybierz model LLM na pasku narzędzi i kliknij przycisk Generuj aby uzyskać analizę narracyjną (wymaga Ollama).</div>
+        <div id="gsm_llm_progress" style="display:none;margin:8px 0">
+          <div class="an-progress">
+            <div class="progress"><div id="gsm_llm_prog_bar" style="width:0%;transition:width 0.3s"></div></div>
+          </div>
+          <div class="small muted" id="gsm_llm_prog_text" style="margin-top:4px">Łączenie z Ollama...</div>
+        </div>
+        <div id="gsm_llm_result" style="display:none;margin-top:10px">
+          <div id="gsm_llm_text" class="aml-llm-text"></div>
+        </div>
+      </div>
+
+      <!-- Warnings -->
+      <div class="card" style="display:none">
+        <div class="h2">Ostrzeżenia parsera</div>
+        <div id="gsm_warnings_body"></div>
+      </div>
+
+    </div>
+
+    <!-- Standalone map overlay (no billing data) -->
+    <div id="gsm_standalone_map_overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)">
+      <div style="position:absolute;inset:12px;display:flex;flex-direction:column;background:var(--card-bg,#fff);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.25);overflow:hidden">
+        <!-- Header -->
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border)">
+          <i data-icon="map" data-size="18"></i>
+          <span class="h2" style="margin:0">Mapa</span>
+          <button class="btn btn-icon" id="gsm_smap_screenshot_btn" title="Zrób zrzut ekranu" style="margin-left:8px">
+            <i data-icon="camera" data-size="20"></i>
+          </button>
+          <span class="toolbar-sep" style="height:22px;margin:0 4px"></span>
+          <button class="btn btn-icon" id="gsm_smap_edit_btn" title="Edycja mapy — dodawanie i edycja punktów">
+            <img src="/static/icons/inne/map_edit.svg" alt="Edycja" width="20" height="20" draggable="false" style="opacity:.85">
+          </button>
+          <span id="gsm_smap_edit_indicator" class="small" style="display:none;color:var(--accent);font-weight:600">Tryb edycji</span>
+          <span style="flex:1"></span>
+          <button class="btn mini" id="gsm_smap_close_btn" title="Zamknij mapę" style="font-size:18px;line-height:1;padding:2px 8px">&times;</button>
+        </div>
+        <!-- Map container -->
+        <div id="gsm_smap_container" style="flex:1;position:relative;background:#e8e8e8">
+          <!-- Floating layer panel -->
+          <div class="gsm-layer-panel" id="gsm_smap_layer_panel">
+            <div class="gsm-lp-header" id="gsm_smap_lp_header_toggle">
+              <span>&#9776; Warstwy</span>
+              <span class="gsm-lp-toggle">&#9664;</span>
+            </div>
+            <div class="gsm-lp-body">
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Widok mapy</div>
+                <label class="gsm-lp-item active" data-layer="general">
+                  <input type="radio" name="gsm_smap_layer" value="general" checked> Ogólny
+                </label>
+                <label class="gsm-lp-item" data-layer="bts_coverage">
+                  <input type="radio" name="gsm_smap_layer" value="bts_coverage"> Zasięg BTS
+                </label>
+              </div>
+              <div class="gsm-lp-divider"></div>
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title">Nakładki</div>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_smap_overlay_military"> <span style="color:#b91c1c">&#9733;</span> Jednostki wojskowe
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_smap_overlay_airports"> <span style="color:#2563eb">&#9992;</span> Lotniska cywilne
+                </label>
+                <label class="gsm-lp-item">
+                  <input type="checkbox" id="gsm_smap_overlay_diplomacy"> <span style="color:#059669">&#9878;</span> Placówki dyplomatyczne
+                </label>
+                <div id="gsm_smap_kml_overlays"></div>
+              </div>
+              <div class="gsm-lp-divider"></div>
+              <!-- User layers (editable) -->
+              <div class="gsm-lp-section">
+                <div class="gsm-lp-section-title" style="display:flex;align-items:center;gap:4px">
+                  Warstwy użytkownika
+                  <button class="btn mini" id="gsm_smap_add_layer_btn" title="Nowa warstwa" style="margin-left:auto;font-size:11px;padding:1px 6px">+ Nowa</button>
+                </div>
+                <div id="gsm_smap_user_layers"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Unified location dialog (standalone map — point & polygon) -->
+    <dialog id="gsm_location_dialog" class="an-dialog" style="z-index:9500">
+      <form method="dialog" class="an-dialog-form" style="min-width:360px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:2px">
+          <div class="h2" id="gsm_loc_title" style="margin:0">Nowa Lokalizacja</div>
+          <span id="gsm_loc_type_label" class="small" style="background:var(--accent,#4a6cf7);color:#fff;padding:2px 8px;border-radius:10px;font-weight:600">Punkt</span>
+        </div>
+        <div>
+          <div class="label">Nazwa</div>
+          <input class="input" id="gsm_loc_name" placeholder="Np. Punkt obserwacyjny">
+        </div>
+        <div>
+          <div class="label">Opis</div>
+          <textarea class="input" id="gsm_loc_desc" placeholder="Opis..." style="min-height:60px"></textarea>
+        </div>
+        <!-- POINT ONLY: coordinates -->
+        <div id="gsm_loc_point_section" class="grid" style="grid-template-columns:1fr 1fr">
+          <div>
+            <div class="label">Szerokość (lat)</div>
+            <input class="input" id="gsm_loc_lat" type="number" step="any" readonly>
+          </div>
+          <div>
+            <div class="label">Długość (lon)</div>
+            <input class="input" id="gsm_loc_lon" type="number" step="any" readonly>
+          </div>
+        </div>
+        <!-- POLYGON ONLY: vertex count + opacity note -->
+        <div id="gsm_loc_polygon_section" style="display:none">
+          <div class="grid" style="grid-template-columns:1fr 1fr">
+            <div>
+              <div class="label">Wierzchołki</div>
+              <span class="small muted" id="gsm_loc_vertex_count" style="line-height:36px">0</span>
+            </div>
+            <div></div>
+          </div>
+          <p class="small muted" id="gsm_loc_opacity_note" style="margin:4px 0 0">Wypełnienie zawsze ma 30% przezroczystości.</p>
+        </div>
+        <!-- Color + Layer -->
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div>
+            <div class="label" id="gsm_loc_color_label">Kolor</div>
+            <input class="input" id="gsm_loc_color" type="color" value="#e63946" style="height:36px;padding:2px">
+          </div>
+          <div>
+            <div class="label">Warstwa</div>
+            <select class="input" id="gsm_loc_layer_select"></select>
+          </div>
+        </div>
+        <!-- Icon picker -->
+        <div>
+          <div class="label">Ikona <span class="muted small">(opcjonalnie)</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <div id="gsm_loc_icon_preview" style="width:40px;height:40px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg,#f5f5f5);flex-shrink:0;overflow:hidden"></div>
+            <button type="button" class="btn mini" id="gsm_loc_icon_pick_btn" style="white-space:nowrap">Wybierz ikonę</button>
+            <button type="button" class="btn mini" id="gsm_loc_icon_upload_btn" style="white-space:nowrap">Wczytaj SVG</button>
+            <button type="button" class="btn mini secondary" id="gsm_loc_icon_clear_btn" style="white-space:nowrap;display:none">Usuń</button>
+            <input type="file" id="gsm_loc_icon_file" accept=".svg,image/svg+xml" style="display:none">
+          </div>
+          <div id="gsm_loc_icon_picker" style="display:none;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:var(--bg,#f5f5f5)">
+            <div id="gsm_loc_icon_picker_body"></div>
+          </div>
+          <input type="hidden" id="gsm_loc_icon_data">
+        </div>
+        <div class="an-dialog-actions">
+          <button type="button" class="btn danger" id="gsm_loc_delete_btn" style="margin-right:auto;display:none">Usuń</button>
+          <button type="button" class="btn secondary" id="gsm_loc_cancel_btn">Anuluj</button>
+          <button type="submit" class="btn">Zapisz</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- New layer dialog -->
+    <dialog id="gsm_layer_dialog" class="an-dialog" style="z-index:9500">
+      <form method="dialog" class="an-dialog-form" style="min-width:300px">
+        <div class="h2">Nowa warstwa</div>
+        <div>
+          <div class="label">Nazwa warstwy</div>
+          <input class="input" id="gsm_layer_name" placeholder="Np. Moje punkty" required>
+        </div>
+        <div class="an-dialog-actions">
+          <button type="button" class="btn secondary" id="gsm_layer_cancel_btn">Anuluj</button>
+          <button type="submit" class="btn">Utwórz</button>
+        </div>
+      </form>
+    </dialog>
+
+    </div><!-- /analyst-panel-main (GSM) -->
+  </div><!-- /analyst-panel-layout (GSM) -->
+
+  <!-- Empty state (before upload) — outside layout so logo is centered -->
+  <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  </div>
+
+  </div><!-- /gsm_content -->
+
+  <!-- Crypto Analysis content -->
+  <div class="analysis-tab-content" id="crypto_content" style="display:none">
+
+    <!-- Progress bar -->
+    <div class="an-progress" id="crypto_progress" style="display:none">
+      <div class="small">Status: <b id="crypto_status">—</b></div>
+      <div class="progress"><div id="crypto_bar"></div></div>
+    </div>
+
+    <!-- Results (with analyst panel) -->
+    <div class="analyst-panel-layout" id="crypto_results" style="display:none">
+
+      <!-- Panel analityczny (collapsible left sidebar) -->
+      <aside class="analyst-panel collapsed" id="crypto_analyst_panel">
+        <button class="analyst-panel-toggle" id="crypto_panel_toggle" title="Panel analityczny">
+          <img src="/static/icons/akcje/sidebar_expand.svg" alt="" width="18" height="18" draggable="false">
+        </button>
+        <div class="analyst-panel-body">
+          <div class="analyst-panel-header">
+            <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
+              <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+              <span data-i18n="analyst_panel.title">Panel analityczny</span>
+            </div>
+            <button class="analyst-panel-toggle-inner" id="crypto_panel_collapse" title="Zwiń panel">
+              <img src="/static/icons/akcje/sidebar_collapse.svg" alt="" width="16" height="16" draggable="false">
+            </button>
+          </div>
+
+          <!-- Global project search -->
+          <div class="analyst-panel-section analyst-panel-search-section">
+            <div class="analyst-panel-label" style="display:flex;align-items:center;gap:5px">
+              <img src="/static/icons/akcje/search.svg" alt="" width="14" height="14" draggable="false" onerror="this.style.display='none'">
+              <span>Szukaj w projekcie</span>
+            </div>
+            <input id="crypto_panel_search" type="text" class="analyst-panel-search-input input" placeholder="Hash, adres, kwota&#8230;">
+            <div id="crypto_panel_search_results" class="analyst-panel-search-results" style="display:none"></div>
+          </div>
+
+          <div class="analyst-panel-divider"></div>
+
+          <!-- Global note -->
+          <div class="analyst-panel-section">
+            <div class="analyst-panel-label">
+              <img src="/static/icons/inne/pin.svg" alt="" width="14" height="14" draggable="false">
+              <span data-i18n="analyst_panel.global_note">Notatka globalna</span>
+            </div>
+            <textarea class="analyst-panel-global-ta input" id="crypto_analyst_global_note" data-i18n-placeholder="analyst_panel.global_placeholder" placeholder="Notatka do całej analizy Crypto..."></textarea>
+          </div>
+
+          <div class="analyst-panel-divider"></div>
+
+          <!-- Item notes -->
+          <div class="analyst-panel-section analyst-panel-items-section">
+            <div class="analyst-panel-label" style="display:flex;align-items:center;justify-content:space-between">
+              <span style="display:flex;align-items:center;gap:5px">
+                <img src="/static/icons/projekty/project_tag.svg" alt="" width="14" height="14" draggable="false">
+                <span data-i18n="analyst_panel.item_notes">Notatki do elementów</span>
+              </span>
+              <span class="analyst-panel-count" id="crypto_notes_count">0</span>
+            </div>
+            <!-- Tag filter -->
+            <div class="analyst-panel-tag-filter" id="crypto_tag_filter">
+              <select class="input mini-select" id="crypto_tag_filter_select" style="font-size:12px">
+                <option value="" data-i18n="analyst_panel.all_tags">Wszystkie</option>
+                <option value="neutral">Neutralny</option>
+                <option value="legitimate">Poprawny</option>
+                <option value="suspicious">Podejrzany</option>
+                <option value="monitoring">Obserwacja</option>
+                <option value="custom1">Własny 1</option>
+                <option value="custom2">Własny 2</option>
+                <option value="custom3">Własny 3</option>
+                <option value="custom4">Własny 4</option>
+              </select>
+            </div>
+            <div class="analyst-panel-items" id="crypto_notes_list">
+              <div class="analyst-panel-empty" data-i18n="analyst_panel.no_notes">Brak notatek. Użyj Ctrl+M aby dodać.</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="analyst-panel-main">
+
+      <!-- Summary card -->
+      <div class="card">
+        <div class="h2"><i data-icon="link" data-size="16"></i> Podsumowanie analizy</div>
+        <div class="crypto-info-grid" id="crypto_info_grid"></div>
+        <div class="crypto-summary-grid" id="crypto_summary_grid" style="margin-top:12px"></div>
+      </div>
+
+      <!-- Account owner info — right below summary -->
+      <div class="card" id="crypto_account_card" style="display:none">
+        <div class="h2">👤 Właściciel rachunku</div>
+        <div id="crypto_account_body"></div>
+      </div>
+
+      <!-- User behavior profile -->
+      <div class="card" id="crypto_behavior_card" style="display:none">
+        <div class="h2">🧠 Profil zachowania użytkownika</div>
+        <div id="crypto_behavior_body"></div>
+      </div>
+
+      <!-- Risk assessment -->
+      <div class="card" id="crypto_risk_card">
+        <div class="h2">Ocena ryzyka AML</div>
+        <div id="crypto_risk_body"></div>
+      </div>
+
+      <!-- Alerts -->
+      <div class="card" id="crypto_alerts_card" style="display:none">
+        <div class="h2">Wykryte wzorce podejrzane</div>
+        <div id="crypto_alerts_body"></div>
+      </div>
+
+      <!-- Forensic: Counterparties (Binance internal) -->
+      <div class="card" id="crypto_counterparties_card" style="display:none">
+        <div class="h2">🔗 Kontrahenci wewnętrzni Binance</div>
+        <div style="overflow-x:auto" id="crypto_counterparties_body"></div>
+      </div>
+
+      <!-- Forensic: Identified phone numbers -->
+      <div class="card" id="crypto_phones_card" style="display:none">
+        <div class="h2">📞 Zidentyfikowane numery telefonów</div>
+        <div style="overflow-x:auto" id="crypto_phones_body"></div>
+      </div>
+
+      <!-- Forensic: Binance Pay C2C -->
+      <div class="card" id="crypto_pay_c2c_card" style="display:none">
+        <div class="h2">💸 Binance Pay (C2C)</div>
+        <div style="overflow-x:auto" id="crypto_pay_c2c_body"></div>
+      </div>
+
+      <!-- Forensic: External addresses -->
+      <div class="card" id="crypto_ext_addresses_card" style="display:none">
+        <div class="h2">🌐 Adresy zewnętrzne (on-chain)</div>
+        <div style="overflow-x:auto" id="crypto_ext_addresses_body"></div>
+      </div>
+
+      <!-- Forensic: Pass-through detection -->
+      <div class="card" id="crypto_passthrough_card" style="display:none">
+        <div class="h2">⚡ Wykryte przeloty środków (pass-through)</div>
+        <div style="overflow-x:auto" id="crypto_passthrough_body"></div>
+      </div>
+
+      <!-- Forensic: Privacy coins -->
+      <div class="card" id="crypto_privacy_card" style="display:none">
+        <div class="h2">🔒 Kryptowaluty prywatności</div>
+        <div id="crypto_privacy_body"></div>
+      </div>
+
+      <!-- Forensic: Access logs & devices -->
+      <div class="card" id="crypto_access_card" style="display:none">
+        <div class="h2">📡 Logi dostępu / Urządzenia / Geolokalizacja</div>
+        <div id="crypto_access_body"></div>
+      </div>
+
+      <!-- Forensic: Card geo-timeline -->
+      <div class="card" id="crypto_card_timeline_card" style="display:none">
+        <div class="h2">💳 Karta płatnicza — ślad lokalizacyjny</div>
+        <div style="overflow-x:auto" id="crypto_card_timeline_body"></div>
+      </div>
+
+      <!-- Forensic: Temporal analysis -->
+      <div class="card" id="crypto_temporal_card" style="display:none">
+        <div class="h2">🕐 Analiza czasowa</div>
+        <div id="crypto_temporal_body"></div>
+      </div>
+
+      <!-- Forensic: Conversion chains -->
+      <div class="card" id="crypto_conversion_card" style="display:none">
+        <div class="h2">💱 Łańcuchy konwersji tokenów</div>
+        <div style="overflow-x:auto" id="crypto_conversion_body"></div>
+      </div>
+
+      <!-- Forensic: Structuring detection -->
+      <div class="card" id="crypto_structuring_card" style="display:none">
+        <div class="h2">🔍 Wykrywanie structuringu (smurfing)</div>
+        <div style="overflow-x:auto" id="crypto_structuring_body"></div>
+      </div>
+
+      <!-- Forensic: Wash trading -->
+      <div class="card" id="crypto_wash_card" style="display:none">
+        <div class="h2">🔄 Wash trading — wykrywanie</div>
+        <div style="overflow-x:auto" id="crypto_wash_body"></div>
+      </div>
+
+      <!-- Forensic: Fiat ramp analysis -->
+      <div class="card" id="crypto_fiat_ramp_card" style="display:none">
+        <div class="h2">💵 Analiza fiat on/off ramp</div>
+        <div id="crypto_fiat_ramp_body"></div>
+      </div>
+
+      <!-- Forensic: P2P analysis -->
+      <div class="card" id="crypto_p2p_card" style="display:none">
+        <div class="h2">🤝 Analiza P2P</div>
+        <div style="overflow-x:auto" id="crypto_p2p_body"></div>
+      </div>
+
+      <!-- Forensic: Velocity analysis -->
+      <div class="card" id="crypto_velocity_card" style="display:none">
+        <div class="h2">⏱️ Prędkość przepływu środków</div>
+        <div style="overflow-x:auto" id="crypto_velocity_body"></div>
+      </div>
+
+      <!-- Forensic: Fee analysis -->
+      <div class="card" id="crypto_fee_card" style="display:none">
+        <div class="h2">💰 Analiza opłat (fees)</div>
+        <div id="crypto_fee_body"></div>
+      </div>
+
+      <!-- Forensic: Network analysis -->
+      <div class="card" id="crypto_network_card" style="display:none">
+        <div class="h2">🌐 Analiza sieci blockchain</div>
+        <div style="overflow-x:auto" id="crypto_network_body"></div>
+      </div>
+
+      <!-- Forensic: Extended security -->
+      <div class="card" id="crypto_ext_security_card" style="display:none">
+        <div class="h2">🛡️ Rozszerzona analiza bezpieczeństwa</div>
+        <div id="crypto_ext_security_body"></div>
+      </div>
+
+      <!-- Exchange metadata (exchange only) -->
+      <div class="card" id="crypto_exchange_meta_card" style="display:none">
+        <div class="h2">Portfel tokenów</div>
+        <div style="overflow-x:auto" id="crypto_exchange_meta_body"></div>
+      </div>
+
+      <!-- Anomalies (like GSM) -->
+      <div class="card" id="crypto_anomalies_card" style="display:none">
+        <div class="h2">Wykryte anomalie</div>
+        <div id="crypto_anomalies_body"></div>
+      </div>
+
+      <!-- Transaction Review & Classification -->
+      <div class="card" id="crypto_review_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Przegląd i klasyfikacja transakcji</div>
+          <div class="crypto-rv-stats-bar" id="crypto_rv_stats_bar" style="flex:1;margin-left:12px;min-width:100px"></div>
+        </div>
+        <div id="crypto_rv_stats_legend" style="margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+          <input class="input" id="crypto_rv_search" placeholder="Szukaj..." style="width:160px;padding:5px 10px;border-radius:10px">
+          <select class="input" id="crypto_rv_filter_class" style="padding:5px 8px;border-radius:10px;min-width:130px">
+            <option value="">Klasyfikacja: wszystkie</option>
+            <option value="neutral">Neutralne</option>
+            <option value="legitimate">Poprawne</option>
+            <option value="suspicious">Podejrzane</option>
+            <option value="monitoring">Obserwacja</option>
+          </select>
+          <select class="input" id="crypto_rv_filter_risk" style="padding:5px 8px;border-radius:10px;min-width:120px">
+            <option value="">Ryzyko: wszystkie</option>
+            <option value="critical">Krytyczne</option>
+            <option value="high">Wysokie</option>
+            <option value="medium">Średnie</option>
+            <option value="low">Niskie</option>
+          </select>
+          <span class="small muted" id="crypto_rv_tx_count">0</span>
+        </div>
+        <div id="crypto_rv_table_wrap" style="overflow-x:auto"></div>
+      </div>
+
+      <!-- Charts — main with dropdown selector -->
+      <div class="card" id="crypto_charts_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Wykresy</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div id="crypto_chart_zoom_bar" class="crypto-chart-zoom-bar" style="display:none">
+              <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_out" title="Oddal">&minus;</button>
+              <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_reset" title="Resetuj zoom">1:1</button>
+              <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_in" title="Przybliż">+</button>
+            </div>
+            <select class="input" id="crypto_chart_select" style="padding:5px 8px;border-radius:10px;min-width:180px">
+              <option value="balance_timeline">Saldo w czasie</option>
+              <option value="monthly_volume">Wolumen miesięczny</option>
+              <option value="daily_tx_count">Aktywność dzienna</option>
+              <option value="top_counterparties">Top kontrahenci</option>
+            </select>
+          </div>
+        </div>
+        <div class="crypto-chart-scroll-wrap" id="crypto_chart_scroll_wrap">
+          <div class="crypto-chart-container" id="crypto_chart_container">
+            <canvas id="crypto_chart_main"></canvas>
+          </div>
+        </div>
+        <!-- Small charts row -->
+        <div class="crypto-charts-small-grid" id="crypto_charts_small_grid">
+          <div class="crypto-chart-small">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Typy transakcji</div>
+            <canvas id="crypto_chart_types"></canvas>
+          </div>
+          <div class="crypto-chart-small">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Wolumen miesięczny</div>
+            <canvas id="crypto_chart_volume_small"></canvas>
+          </div>
+          <div class="crypto-chart-small">
+            <div class="small" style="font-weight:600;margin-bottom:6px">Aktywność dzienna</div>
+            <canvas id="crypto_chart_daily_small"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Token breakdown card placeholder (exchange only) -->
+      <div class="card" id="crypto_token_breakdown_card" style="display:none"></div>
+
+      <!-- Transaction flow graph -->
+      <div class="card" id="crypto_graph_card">
+        <div class="h2">Graf przepływu transakcji</div>
+        <div id="crypto_graph_container" style="width:100%;height:500px;border:1px solid var(--border, #334155);border-radius:8px;background:var(--bg-card, #1e293b)"></div>
+      </div>
+
+      <!-- Wallets table -->
+      <div class="card" id="crypto_wallets_card">
+        <div class="h2">Portfele</div>
+        <div style="overflow-x:auto" id="crypto_wallets_body"></div>
+      </div>
+
+      <!-- LLM narrative analysis -->
+      <div class="card" id="crypto_llm_card">
+        <div class="analysis-sidehdr">
+          <div class="h2">Analiza narracyjna LLM</div>
+          <div class="small" id="crypto_llm_status"></div>
+        </div>
+        <div class="an-progress" id="crypto_llm_progress" style="display:none">
+          <div class="small" id="crypto_llm_progress_text">Generowanie...</div>
+          <div class="progress"><div id="crypto_llm_bar"></div></div>
+        </div>
+        <div id="crypto_llm_text" class="analysis-result-text" style="white-space:pre-wrap;line-height:1.6"></div>
+      </div>
+
+      </div><!-- /analyst-panel-main -->
+    </div><!-- /crypto_results -->
+
+    <!-- Empty state (before upload) -->
+    <div id="crypto_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+      <img src="/static/logo_crypto.png" alt="Moduł Crypto" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+    </div>
+
+  </div><!-- /crypto_content -->
+
+  <!-- Note editor modal (shared by GSM and AML) -->
+  <div class="analyst-note-overlay" id="analyst_note_overlay" style="display:none">
+    <div class="analyst-note-modal">
+      <div class="analyst-note-header">
+        <h3 id="analyst_note_modal_title">Nowa notatka</h3>
+        <button class="note-editor-close" id="analyst_note_close">&times;</button>
+      </div>
+      <div class="analyst-note-body">
+        <div class="analyst-note-element-label" id="analyst_note_element_label"></div>
+        <div class="analyst-note-field">
+          <div class="label" data-i18n="analyst_panel.note_text">Notatka</div>
+          <textarea class="input" id="analyst_note_text" style="min-height:100px" placeholder=""></textarea>
+        </div>
+        <div class="analyst-note-field">
+          <div class="label" data-i18n="analyst_panel.tags">Tagi</div>
+          <div class="analyst-note-tags" id="analyst_note_tags">
+            <button type="button" class="analyst-tag-btn" data-tag="neutral"><span class="analyst-tag-dot" style="background:#60a5fa"></span> <span class="analyst-tag-label">Neutralny</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="legitimate"><span class="analyst-tag-dot" style="background:#15803d"></span> <span class="analyst-tag-label">Poprawny</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="suspicious"><span class="analyst-tag-dot" style="background:#dc2626"></span> <span class="analyst-tag-label">Podejrzany</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="monitoring"><span class="analyst-tag-dot" style="background:#ea580c"></span> <span class="analyst-tag-label">Obserwacja</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom1"><span class="analyst-tag-dot" style="background:#8b5cf6"></span> <span class="analyst-tag-label" data-editable="1">Własny 1</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom2"><span class="analyst-tag-dot" style="background:#0d9488"></span> <span class="analyst-tag-label" data-editable="1">Własny 2</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom3"><span class="analyst-tag-dot" style="background:#ec4899"></span> <span class="analyst-tag-label" data-editable="1">Własny 3</span></button>
+            <button type="button" class="analyst-tag-btn" data-tag="custom4"><span class="analyst-tag-dot" style="background:#6366f1"></span> <span class="analyst-tag-label" data-editable="1">Własny 4</span></button>
+          </div>
+          <div class="note-editor-hint" style="margin-top:2px;font-size:10px;color:var(--text-muted,#94a3b8)">Kliknij dwukrotnie nazwę własnego tagu aby zmienić</div>
+        </div>
+        <div class="note-editor-hint">Ctrl+Enter = zapisz</div>
+      </div>
+      <div class="note-editor-footer">
+        <button class="note-btn note-btn-danger" id="analyst_note_delete" style="display:none">Usuń</button>
+        <span style="flex:1"></span>
+        <button class="note-btn" id="analyst_note_cancel">Anuluj</button>
+        <button class="note-btn note-btn-primary" id="analyst_note_save">Zapisz</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden file inputs -->
+  <input type="file" id="docs_file_input" style="display:none" multiple>
+  <input type="file" id="aml_file_input" accept=".pdf" multiple style="display:none">
+  <input type="file" id="gsm_file_input" accept=".xlsx,.xls,.csv,.txt,.zip" multiple style="display:none">
+  <input type="file" id="gsm_folder_input" webkitdirectory directory multiple style="display:none">
+  <input type="file" id="crypto_file_input" accept=".csv,.json,.txt,.pdf,.xlsx,.xls" style="display:none">
+  <input type="file" id="prompt_import_input" style="display:none" accept="application/json">
+
+  <!-- Prompt dialog -->
+  <dialog id="prompt_dialog" class="an-dialog">
+    <form method="dialog" class="an-dialog-form">
+      <div class="h2" id="prompt_dialog_title">Prompt</div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div>
+          <div class="label" data-i18n="analysis.prompt_name">Nazwa</div>
+          <input class="input" id="prompt_name" placeholder="Np. Mój raport" required>
+        </div>
+        <div>
+          <div class="label" data-i18n="analysis.prompt_icon">Ikona</div>
+          <input class="input" id="prompt_icon" placeholder="copy">
+        </div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div>
+          <div class="label" data-i18n="analysis.prompt_category">Kategoria</div>
+          <input class="input" id="prompt_category" placeholder="Biznesowe">
+        </div>
+        <div>
+          <div class="label" data-i18n="analysis.prompt_description">Opis</div>
+          <input class="input" id="prompt_description" placeholder="">
+        </div>
+      </div>
+
+      <div>
+        <div class="label" data-i18n="analysis.prompt_text">Treść promptu</div>
+        <textarea class="input" id="prompt_text" style="min-height:180px" placeholder="Wpisz treść promptu..."></textarea>
+      </div>
+
+      <div class="an-dialog-actions">
+        <button class="btn secondary" value="cancel" data-i18n="btn.cancel"><i data-icon="close" data-size="16"></i> Anuluj</button>
+        <button class="btn danger" id="prompt_delete_btn" type="button" style="display:none"><i data-icon="delete" data-size="14"></i> Usuń</button>
+        <button class="btn" id="prompt_save_btn" value="ok"><i data-icon="save" data-size="16"></i> Zapisz</button>
+      </div>
+    </form>
+  </dialog>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/analyst_notes.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/analysis.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/aml.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/review.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/gsm.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script src="/static/crypto.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script>
+(async()=>{
+  try{
+    // Tab switching
+    const tabs = document.querySelectorAll('.analysis-tab[data-tab]');
+    const llmContent = document.getElementById('llm_content');
+    const amlContent = document.getElementById('aml_content');
+    const gsmContent = document.getElementById('gsm_content');
+    const cryptoContent = document.getElementById('crypto_content');
+    const toolbar = document.getElementById('analysis_toolbar');
+    const sidebarToggle = document.getElementById('analysis_sidebar_toggle');
+
+    const allContents = [llmContent, amlContent, gsmContent, cryptoContent];
+    const llmToolbar = ['analysis_models','analysis_report_formats','an_generate_btn','an_report_save_btn'];
+    const amlToolbarEl = document.getElementById('aml_toolbar_items');
+    const gsmToolbarEl = document.getElementById('gsm_toolbar_items');
+    const cryptoToolbarEl = document.getElementById('crypto_toolbar_items');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', async () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const which = tab.getAttribute('data-tab');
+
+        // Save active tab per project so it restores on next open
+        const _pid = (typeof AISTATE !== 'undefined' && AISTATE && AISTATE.projectId) || '';
+        if(_pid && ['aml','gsm','crypto'].includes(which)){
+          localStorage.setItem('aistate_analysis_tab_' + _pid, which);
+        } else if(_pid && which === 'llm'){
+          localStorage.removeItem('aistate_analysis_tab_' + _pid);
+        }
+
+        // Hide all content and extra toolbars
+        allContents.forEach(c => { if(c) c.style.display = 'none'; });
+        if(amlToolbarEl) amlToolbarEl.style.display = 'none';
+        if(gsmToolbarEl) gsmToolbarEl.style.display = 'none';
+        if(cryptoToolbarEl) cryptoToolbarEl.style.display = 'none';
+
+        if(which === 'llm'){
+          llmContent.style.display = '';
+          llmToolbar.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = ''; });
+          if(sidebarToggle) sidebarToggle.style.display = '';
+        } else {
+          llmToolbar.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+          if(sidebarToggle) sidebarToggle.style.display = 'none';
+
+          if(which === 'aml'){
+            amlContent.style.display = '';
+            if(amlToolbarEl) amlToolbarEl.style.display = '';
+            if(window.AmlManager && !window.AmlManager._initialized){
+              await AmlManager.init();
+            }
+          } else if(which === 'gsm'){
+            gsmContent.style.display = '';
+            if(gsmToolbarEl) gsmToolbarEl.style.display = '';
+            if(window.GsmManager && !window.GsmManager._initialized){
+              await GsmManager.init();
+            }
+          } else if(which === 'crypto'){
+            cryptoContent.style.display = '';
+            if(cryptoToolbarEl) cryptoToolbarEl.style.display = '';
+            if(window.CryptoManager && !window.CryptoManager._initialized){
+              await CryptoManager.init();
+            }
+          }
+        }
+      });
+    });
+
+    // Unified upload button — delegates to LLM or AML file input based on active tab
+    const uploadBtn = document.getElementById('an_upload_btn');
+    if(uploadBtn){
+      uploadBtn.addEventListener('click', () => {
+        const activeTab = document.querySelector('.analysis-tab.active');
+        const which = activeTab ? activeTab.getAttribute('data-tab') : 'llm';
+        if(which === 'aml'){
+          const fi = document.getElementById('aml_file_input');
+          if(fi) fi.click();
+        } else {
+          const fi = document.getElementById('docs_file_input');
+          if(fi) fi.click();
+        }
+      });
+    }
+
+    if(window.AnalysisManager){
+      await AnalysisManager.init();
+    }
+
+    // Auto-activate the correct analysis tab based on subproject type or saved tab
+    const spType = localStorage.getItem('aistate_subproject_type') || '';
+    const pid = (typeof AISTATE !== 'undefined' && AISTATE && AISTATE.projectId) || '';
+    const savedTab = pid ? (localStorage.getItem('aistate_analysis_tab_' + pid) || '') : '';
+
+    // Determine which tab to auto-open:
+    // 1. Saved tab from previous session (most specific)
+    // 2. Subproject type mapping (finance → aml)
+    let autoTab = '';
+    if(savedTab && ['aml','gsm','crypto'].includes(savedTab)){
+      autoTab = savedTab;
+    } else if(spType === 'finance'){
+      autoTab = 'aml';
+    }
+
+    if(autoTab){
+      const tab = document.querySelector(`.analysis-tab[data-tab="${autoTab}"]`);
+      if(tab) tab.click();
+    }
+  }catch(e){
+    console.error(e);
+  }
+})();
+</script>
+{% endblock %}

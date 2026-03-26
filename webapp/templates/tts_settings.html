@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1 class="h1" data-i18n="tts.page_title">Ustawienia TTS (Lektor)</h1>
+
+  <div class="grid">
+    <div class="subcard">
+
+      <style>
+        .tts-model-row{ display:grid; grid-template-columns: minmax(360px, 520px) 1fr; gap:14px; align-items:start; }
+        .tts-model-left{ min-width: 0; }
+        .tts-model-right{ min-width: 0; }
+        .tts-info-box{
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(0,0,0,0.08);
+          border-radius: 10px;
+          padding: 10px 12px;
+        }
+        .tts-info-title{ font-weight:600; margin-bottom:6px; }
+        .tts-install-row{ display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+        .tts-install-row .small{ margin:0; }
+        .tts-kv{ display:grid; grid-template-columns: 140px 1fr; gap:4px 12px; }
+        .tts-kv .kv-h{ font-weight:600; opacity:.95; }
+        .tts-warn{
+          border: 1px solid rgba(185, 28, 28, 0.22);
+          background: rgba(185, 28, 28, 0.10);
+          border-radius: 10px;
+          padding: 8px 10px;
+          margin-top: 10px;
+          font-size: 12px;
+          color: var(--text);
+        }
+        .tts-test-row{ display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+        .tts-test-row input{ flex:1; min-width:180px; }
+        @media (max-width: 980px){
+          .tts-model-row{ grid-template-columns: 1fr; }
+        }
+      </style>
+
+      <!-- Task progress (top) -->
+      <div class="label" data-i18n="tts.task_title"><i data-icon="document" data-size="14"></i> Postęp zadania</div>
+      <div class="small"><span data-i18n="common.status">Status</span>: <span id="tts_task_status">—</span></div>
+      <div class="small"><span data-i18n="common.progress">Postęp</span>: <span id="tts_task_pct">0%</span></div>
+      <div class="progress" style="margin-top:10px"><div id="tts_task_bar"></div></div>
+
+      <div class="row" style="margin-top:10px; flex-wrap:wrap">
+        <a class="btn secondary" id="tts_task_open_logs" href="/logs" style="display:none" data-i18n="tts.open_logs">Otwórz logi</a>
+      </div>
+
+      <div class="hr"></div>
+
+      <!-- ================ PIPER TTS ================ -->
+      <div class="label"><i data-icon="generate" data-size="14"></i> Piper TTS</div>
+      <div class="small muted" data-i18n="tts.piper.desc">Najszybszy silnik TTS. Zoptymalizowany pod CPU, ~50 języków. Modele 15-60 MB. Licencja MIT.</div>
+
+      <div class="hr"></div>
+
+      <div class="tts-model-row">
+        <div class="tts-model-left">
+          <div class="label">Piper — <span data-i18n="tts.engine_status">Status silnika</span></div>
+          <div class="small" id="tts_piper_status">—</div>
+
+          <select id="tts_piper_voice" class="input" data-engine="piper">
+            <option value="pl_PL-gosia-medium">🇵🇱 Polski — Gosia (medium)</option>
+            <option value="en_US-amy-medium">🇬🇧 English — Amy (medium)</option>
+            <option value="en_US-lessac-medium">🇬🇧 English — Lessac (medium)</option>
+            <option value="ru_RU-irina-medium">🇷🇺 Русский — Irina (medium)</option>
+            <option value="uk_UA-ukrainian_tts-medium">🇺🇦 Українська (medium)</option>
+            <option value="de_DE-thorsten-medium">🇩🇪 Deutsch — Thorsten (medium)</option>
+            <option value="fr_FR-siwis-medium">🇫🇷 Français — Siwis (medium)</option>
+            <option value="es_ES-sharvard-medium">🇪🇸 Español — Sharvard (medium)</option>
+            <option value="it_IT-riccardo-x_low">🇮🇹 Italiano — Riccardo</option>
+            <option value="pt_BR-faber-medium">🇧🇷 Português — Faber (medium)</option>
+            <option value="zh_CN-huayan-medium">🇨🇳 中文 — Huayan (medium)</option>
+            <option value="ja_JP-kokoro-medium">🇯🇵 日本語 — Kokoro (medium)</option>
+            <option value="ko_KR-korean-medium">🇰🇷 한국어 (medium)</option>
+            <option value="tr_TR-dfki-medium">🇹🇷 Türkçe — DFKI (medium)</option>
+            <option value="nl_NL-mls-medium">🇳🇱 Nederlands (medium)</option>
+            <option value="cs_CZ-jirka-medium">🇨🇿 Čeština — Jirka (medium)</option>
+            <option value="sv_SE-nst-medium">🇸🇪 Svenska (medium)</option>
+            <option value="ar_JO-kareem-medium">🇸🇦 العربية — Kareem (medium)</option>
+            <option value="hi_IN-rohan-medium">🇮🇳 हिन्दी — Rohan (medium)</option>
+          </select>
+
+          <div class="tts-install-row">
+            <button class="btn primary mini" type="button" id="tts_piper_install_btn" data-engine="piper">
+              <i data-icon="install" data-size="14"></i> <span data-i18n="tts.btn.install">Instaluj silnik + głos</span>
+            </button>
+            <span class="small muted" id="tts_piper_inline">—</span>
+          </div>
+
+          <div class="tts-test-row">
+            <input type="text" id="tts_piper_test_text" class="input" placeholder="Tekst testowy..." value="Witaj, to jest test lektora.">
+            <button class="btn secondary mini" type="button" id="tts_piper_test_btn" data-engine="piper">
+              <i data-icon="speaker" data-size="14"></i> <span data-i18n="tts.btn.test">Test</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tts-model-right">
+          <div class="tts-info-box">
+            <div class="tts-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="tts.model_info">Informacje o silniku</span> — Piper</div>
+            <div class="tts-kv small">
+              <span class="kv-h" data-i18n="tts.info.languages">Języki</span> <span>~50</span>
+              <span class="kv-h" data-i18n="tts.info.quality">Jakość</span> <span data-i18n="tts.quality.good">Dobra (naturalny głos)</span>
+              <span class="kv-h" data-i18n="tts.info.speed">Szybkość</span> <span data-i18n="tts.speed.very_fast">Bardzo szybki (0.1x RT na CPU)</span>
+              <span class="kv-h" data-i18n="tts.info.model_size">Rozmiar</span> <span>15-60 MB / głos</span>
+              <span class="kv-h" data-i18n="tts.info.gpu">GPU</span> <span data-i18n="tts.gpu.minimal">Minimalny zysk (i tak szybki na CPU)</span>
+              <span class="kv-h" data-i18n="tts.info.license">Licencja</span> <span>MIT</span>
+              <span class="kv-h" data-i18n="tts.info.framework">Framework</span> <span>ONNX Runtime (VITS)</span>
+            </div>
+            <div class="small muted" style="margin-top:8px" data-i18n="tts.piper.recommendation">
+              Rekomendowany dla większości języków europejskich. Najlepszy stosunek jakość/szybkość.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <!-- ================ MMS-TTS ================ -->
+      <div class="label"><i data-icon="globe" data-size="16"></i> MMS-TTS (Meta)</div>
+      <div class="small muted" data-i18n="tts.mms.desc">Meta Massively Multilingual Speech — ponad 1100 języków. Najszersze pokrycie językowe. Automatyczny fallback dla rzadkich języków.</div>
+
+      <div class="hr"></div>
+
+      <div class="tts-model-row">
+        <div class="tts-model-left">
+          <div class="label">MMS — <span data-i18n="tts.engine_status">Status silnika</span></div>
+          <div class="small" id="tts_mms_status">—</div>
+
+          <select id="tts_mms_voice" class="input" data-engine="mms">
+            <option value="facebook/mms-tts-pol">🇵🇱 Polski (pol)</option>
+            <option value="facebook/mms-tts-eng">🇬🇧 English (eng)</option>
+            <option value="facebook/mms-tts-rus">🇷🇺 Русский (rus)</option>
+            <option value="facebook/mms-tts-ukr">🇺🇦 Українська (ukr)</option>
+            <option value="facebook/mms-tts-bel">🇧🇾 Беларуская (bel)</option>
+            <option value="facebook/mms-tts-deu">🇩🇪 Deutsch (deu)</option>
+            <option value="facebook/mms-tts-fra">🇫🇷 Français (fra)</option>
+            <option value="facebook/mms-tts-spa">🇪🇸 Español (spa)</option>
+            <option value="facebook/mms-tts-ita">🇮🇹 Italiano (ita)</option>
+            <option value="facebook/mms-tts-por">🇧🇷 Português (por)</option>
+            <option value="facebook/mms-tts-cmn">🇨🇳 中文 (cmn)</option>
+            <option value="facebook/mms-tts-jpn">🇯🇵 日本語 (jpn)</option>
+            <option value="facebook/mms-tts-kor">🇰🇷 한국어 (kor)</option>
+            <option value="facebook/mms-tts-tur">🇹🇷 Türkçe (tur)</option>
+            <option value="facebook/mms-tts-nld">🇳🇱 Nederlands (nld)</option>
+            <option value="facebook/mms-tts-ces">🇨🇿 Čeština (ces)</option>
+            <option value="facebook/mms-tts-swe">🇸🇪 Svenska (swe)</option>
+            <option value="facebook/mms-tts-arb">🇸🇦 العربية (arb)</option>
+            <option value="facebook/mms-tts-hin">🇮🇳 हिन्दी (hin)</option>
+          </select>
+
+          <div class="tts-install-row">
+            <button class="btn primary mini" type="button" id="tts_mms_install_btn" data-engine="mms">
+              <i data-icon="install" data-size="14"></i> <span data-i18n="tts.btn.install_voice">Instaluj silnik + głos</span>
+            </button>
+            <span class="small muted" id="tts_mms_inline">—</span>
+          </div>
+
+          <div class="tts-test-row">
+            <input type="text" id="tts_mms_test_text" class="input" placeholder="Tekst testowy..." value="Hello, this is a TTS test.">
+            <button class="btn secondary mini" type="button" id="tts_mms_test_btn" data-engine="mms">
+              <i data-icon="speaker" data-size="14"></i> <span data-i18n="tts.btn.test">Test</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tts-model-right">
+          <div class="tts-info-box">
+            <div class="tts-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="tts.model_info">Informacje o silniku</span> — MMS-TTS</div>
+            <div class="tts-kv small">
+              <span class="kv-h" data-i18n="tts.info.languages">Języki</span> <span>1100+</span>
+              <span class="kv-h" data-i18n="tts.info.quality">Jakość</span> <span data-i18n="tts.quality.ok">OK (syntetyczny, zrozumiały)</span>
+              <span class="kv-h" data-i18n="tts.info.speed">Szybkość</span> <span data-i18n="tts.speed.fast">Szybki (0.3x RT na CPU)</span>
+              <span class="kv-h" data-i18n="tts.info.model_size">Rozmiar</span> <span>~30 MB / język</span>
+              <span class="kv-h" data-i18n="tts.info.gpu">GPU</span> <span data-i18n="tts.gpu.moderate">Umiarkowany zysk (2-3x szybciej)</span>
+              <span class="kv-h" data-i18n="tts.info.license">Licencja</span> <span>CC-BY-NC-4.0</span>
+              <span class="kv-h" data-i18n="tts.info.framework">Framework</span> <span>HuggingFace Transformers (VITS)</span>
+            </div>
+            <div class="tts-warn" data-i18n="tts.mms.license_warn">
+              <i data-icon="warning" data-size="14"></i> Licencja CC-BY-NC — tylko do użytku niekomercyjnego.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <!-- ================ KOKORO ================ -->
+      <div class="label"><i data-icon="success" data-size="14"></i> Kokoro TTS</div>
+      <div class="small muted" data-i18n="tts.kokoro.desc">Bardzo szybki, najwyższa jakość głosu. Jeden model 82 MB obsługujący 9 języków. Apache 2.0.</div>
+
+      <div class="hr"></div>
+
+      <div class="tts-model-row">
+        <div class="tts-model-left">
+          <div class="label">Kokoro — <span data-i18n="tts.engine_status">Status silnika</span></div>
+          <div class="small" id="tts_kokoro_status">—</div>
+
+          <select id="tts_kokoro_voice" class="input" data-engine="kokoro">
+            <option value="af_heart">🇬🇧 English — Heart (female)</option>
+            <option value="am_adam">🇬🇧 English — Adam (male)</option>
+            <option value="bf_emma">🇩🇪 Deutsch — Emma (female)</option>
+            <option value="ff_siwis">🇫🇷 Français — Siwis (female)</option>
+            <option value="ef_dora">🇪🇸 Español — Dora (female)</option>
+            <option value="if_sara">🇮🇹 Italiano — Sara (female)</option>
+            <option value="jf_alpha">🇯🇵 日本語 — Alpha (female)</option>
+            <option value="kf_yuha">🇰🇷 한국어 — Yuha (female)</option>
+            <option value="zf_xiaobei">🇨🇳 中文 — Xiaobei (female)</option>
+            <option value="hf_alpha">🇮🇳 हिन्दी — Alpha (female)</option>
+          </select>
+
+          <div class="tts-install-row">
+            <button class="btn primary mini" type="button" id="tts_kokoro_install_btn" data-engine="kokoro">
+              <i data-icon="install" data-size="14"></i> <span data-i18n="tts.btn.install">Instaluj silnik + model</span>
+            </button>
+            <span class="small muted" id="tts_kokoro_inline">—</span>
+          </div>
+
+          <div class="tts-test-row">
+            <input type="text" id="tts_kokoro_test_text" class="input" placeholder="Test text..." value="Hello, this is a text-to-speech test.">
+            <button class="btn secondary mini" type="button" id="tts_kokoro_test_btn" data-engine="kokoro">
+              <i data-icon="speaker" data-size="14"></i> <span data-i18n="tts.btn.test">Test</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tts-model-right">
+          <div class="tts-info-box">
+            <div class="tts-info-title small"><i data-icon="info_circle" data-size="14"></i> <span data-i18n="tts.model_info">Informacje o silniku</span> — Kokoro</div>
+            <div class="tts-kv small">
+              <span class="kv-h" data-i18n="tts.info.languages">Języki</span> <span>9 (EN, DE, FR, ES, IT, JA, KO, ZH, HI)</span>
+              <span class="kv-h" data-i18n="tts.info.quality">Jakość</span> <span data-i18n="tts.quality.very_good">Bardzo dobra (naturalny, ekspresyjny)</span>
+              <span class="kv-h" data-i18n="tts.info.speed">Szybkość</span> <span data-i18n="tts.speed.very_fast">Bardzo szybki (0.15x RT na CPU)</span>
+              <span class="kv-h" data-i18n="tts.info.model_size">Rozmiar</span> <span>82 MB (jeden model, wszystkie języki)</span>
+              <span class="kv-h" data-i18n="tts.info.gpu">GPU</span> <span data-i18n="tts.gpu.moderate">Umiarkowany zysk</span>
+              <span class="kv-h" data-i18n="tts.info.license">Licencja</span> <span>Apache 2.0</span>
+              <span class="kv-h" data-i18n="tts.info.framework">Framework</span> <span>PyTorch (StyleTTS2)</span>
+            </div>
+            <div class="small muted" style="margin-top:8px" data-i18n="tts.kokoro.recommendation">
+              Najlepsza jakość głosu. Ograniczony zestaw języków (9), ale te obsługiwane brzmią bardzo naturalnie.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============ A.R.I.A. HUD Settings ============ -->
+{% if user and (user.is_admin or user.is_superadmin) %}
+<div class="card" style="margin-top:1rem;">
+  <h1 class="h1">A.R.I.A. — Asystent analityczny <span class="en" style="font-size:.7em;opacity:.6;">Analytical Assistant</span></h1>
+  <div class="grid">
+    <div class="subcard">
+
+      <div class="small muted" style="margin-bottom:.8rem;">
+        Wbudowany asystent AI dostępny jako pływający panel na każdej stronie. Wykorzystuje model LLM (Ollama) do odpowiadania na pytania i silnik Piper TTS do syntezy mowy.
+        <span class="en" style="display:block;margin-top:4px;">Built-in AI assistant available as a floating panel on every page. Uses Ollama LLM for answers and Piper TTS for speech synthesis.</span>
+      </div>
+
+      <div class="field" style="margin-bottom:.6rem;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
+          <input type="checkbox" id="ariaSettingsEnabled" onchange="saveAriaSetting('aria_enabled', this.checked)"/>
+          Włącz ARIA HUD <span class="en">Enable ARIA HUD</span>
+        </label>
+        <div class="small muted" style="margin-left:26px;">
+          Po włączeniu w prawym dolnym rogu każdej strony pojawi się przycisk ARIA.
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="field" style="margin-bottom:.6rem;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="ariaSettingsTts" onchange="saveAriaSetting('aria_tts_enabled', this.checked)"/>
+          Synteza mowy (TTS) <span class="en">Text-to-speech</span>
+        </label>
+        <div class="small muted" style="margin-left:26px;">
+          ARIA będzie odczytywać odpowiedzi głosem.
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:.6rem;">
+        <label class="small" style="font-weight:600;">Model głosu <span class="en">Voice model</span></label>
+        <select id="ariaSettingsVoice" style="margin-top:4px;" onchange="saveAriaSetting('aria_voice', this.value)">
+          <option value="pl_PL-gosia-medium">Gosia (żeński PL)</option>
+          <option value="pl_PL-darkman-medium">Darkman (męski PL)</option>
+        </select>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="field" style="margin-bottom:.6rem;">
+        <label class="small" style="font-weight:600;">Model LLM dla ARIA <span class="en">LLM model for ARIA</span></label>
+        <div class="small muted" style="margin-bottom:4px;">
+          Mały, szybki model jest zalecany (np. mistral:7b-instruct, qwen2.5:3b, phi3:mini).
+          Pusty = model szybkiej analizy.
+        </div>
+        <select id="ariaSettingsModel" style="margin-top:4px;" onchange="saveAriaSetting('aria_model', this.value)">
+          <option value="">— domyślny (qwen2.5:3b) —</option>
+        </select>
+      </div>
+
+      <div class="hr"></div>
+
+      <div id="ariaSettingsStatus" class="small muted" style="margin-top:.4rem;"></div>
+
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/tts_settings.js?v={{ app_version }}&_={{ static_ts }}"></script>
+<script>
+/* ARIA settings — save/load from security API */
+async function saveAriaSetting(key, value) {
+  var payload = {};
+  payload[key] = value;
+  try {
+    var r = await fetch('/api/settings/security', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (r.ok) {
+      var st = document.getElementById('ariaSettingsStatus');
+      if (st) { st.textContent = 'Zapisano.'; setTimeout(function(){ st.textContent=''; }, 2000); }
+      // ARIA HUD is conditionally loaded in base.html — reload needed to show/hide it
+      if (key === 'aria_enabled') {
+        var st2 = document.getElementById('ariaSettingsStatus');
+        if (st2) st2.textContent = value ? 'Włączono ARIA — przeładowanie strony...' : 'Wyłączono ARIA — przeładowanie strony...';
+        setTimeout(function() { location.reload(); }, 800);
+      }
+    } else {
+      var st = document.getElementById('ariaSettingsStatus');
+      if (st) { st.textContent = 'Błąd zapisu (' + r.status + ')'; setTimeout(function(){ st.textContent=''; }, 4000); }
+      console.error('saveAriaSetting: HTTP', r.status);
+    }
+  } catch(e) { console.error('saveAriaSetting', e); }
+}
+
+async function loadAriaSettings() {
+  try {
+    var r = await fetch('/api/settings/security');
+    if (!r.ok) return;
+    var d = await r.json();
+    var en = document.getElementById('ariaSettingsEnabled');
+    if (en) en.checked = !!d.aria_enabled;
+    var tts = document.getElementById('ariaSettingsTts');
+    if (tts) tts.checked = d.aria_tts_enabled !== false;
+    var voice = document.getElementById('ariaSettingsVoice');
+    if (voice) voice.value = d.aria_voice || 'pl_PL-gosia-medium';
+
+    // Load available Ollama models into ARIA model selector
+    var modelSel = document.getElementById('ariaSettingsModel');
+    if (modelSel) {
+      try {
+        var mr = await fetch('/api/ollama/models');
+        if (mr.ok) {
+          var md = await mr.json();
+          var models = md.models || md || [];
+          if (Array.isArray(models)) {
+            models.forEach(function(m) {
+              var name = typeof m === 'string' ? m : (m.name || '');
+              if (!name) return;
+              var opt = document.createElement('option');
+              opt.value = name;
+              opt.textContent = name;
+              modelSel.appendChild(opt);
+            });
+          }
+        }
+      } catch(e) {}
+      modelSel.value = d.aria_model || '';
+    }
+
+    // Show status info
+    var st = document.getElementById('ariaSettingsStatus');
+    if (st) {
+      fetch('/api/aria/status').then(function(r2){ return r2.json(); }).then(function(s){
+        var parts = [];
+        parts.push('Ollama: ' + (s.ollama ? '✓ online' : '✗ offline'));
+        parts.push('Piper: ' + (s.piper_installed ? '✓' : '✗'));
+        parts.push('Głos: ' + (s.voice_model ? '✓ ' + s.voice : '✗ brak modelu'));
+        if (s.manual_loaded) parts.push('Instrukcja: ✓ (' + Math.round(s.manual_size/1024) + ' KB)');
+        st.textContent = parts.join(' | ');
+      }).catch(function(){});
+    }
+  } catch(e) { console.error('loadAriaSettings', e); }
+}
+
+document.addEventListener('DOMContentLoaded', loadAriaSettings);
+</script>
+{% endblock %}
