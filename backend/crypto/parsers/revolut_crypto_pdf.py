@@ -116,7 +116,8 @@ def is_revolut_crypto_pdf(path) -> bool:
     if not lines:
         return False
 
-    head = "\n".join(lines[:60]).lower()
+    # Normalize non-breaking spaces (\xa0) to regular spaces for matching
+    head = "\n".join(lines[:60]).lower().replace("\xa0", " ")
     has_revolut_word = "revolut" in head or "digital assets europe" in head
     has_crypto_kw = any(kw in head for kw in (
         "digital assets", "kryptowalut", "crypto account",
