@@ -31,7 +31,8 @@
 }
 
 *{box-sizing:border-box}
-html,body{height:100%}
+html,body{height:100%;overscroll-behavior:none}
+html{background:var(--bg)}
 body{
   margin:0;
   font-family:var(--font);
