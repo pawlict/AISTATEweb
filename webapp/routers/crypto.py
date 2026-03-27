@@ -812,7 +812,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         sn += 1
         chart_html = ""
 
-        # Balance timeline chart (Chart.js)
+        # Balance timeline chart (Chart.js) with log-normalization
         if has_balance:
             import json as _json
             chart_html += (
@@ -825,12 +825,31 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                 'document.addEventListener("DOMContentLoaded",function(){'
                 'var c=document.getElementById("report_balance_chart");if(!c)return;'
                 'var colors=["#2563eb","#dc2626","#22c55e","#f59e0b","#8b5cf6","#ec4899","#14b8a6","#f97316","#06b6d4","#84cc16"];'
-                'var ds=(_btData.datasets||[]).map(function(d,i){'
+                # Normalization logic matching the program view
+                'var dsets=_btData.datasets||[];'
+                'var maxPer=dsets.map(function(d){return Math.max.apply(null,(d.data||[]).map(function(v){return Math.abs(v||0)}))|| 0.0001;});'
+                'var gMax=Math.max.apply(null,maxPer);var gMin=Math.min.apply(null,maxPer);'
+                'var needsNorm=gMax>0&&gMin>0&&(gMax/gMin)>50;'
+                'var ds,yOpts;'
+                'if(needsNorm){'
+                'var logMax=maxPer.map(function(m){return Math.log10(m+1);});'
+                'var logGMax=Math.max.apply(null,logMax);'
+                'ds=dsets.map(function(d,i){'
+                'var tMax=maxPer[i]||1;var ls=logMax[i]/(logGMax||1);var ceil=20+ls*80;'
+                'return{label:d.token+" (skala)",data:(d.data||[]).map(function(v){return((v||0)/tMax)*ceil;}),'
+                'borderColor:colors[i%colors.length],backgroundColor:"transparent",'
+                'borderWidth:Math.max(1,Math.min(3,ls*3)),pointRadius:0,tension:0.3};'
+                '});'
+                'yOpts={beginAtZero:true,max:105,title:{display:true,text:"Skala relatywna (log)"},ticks:{callback:function(v){return Math.round(v)+"%";},font:{size:10}}};'
+                '}else{'
+                'ds=dsets.map(function(d,i){'
                 'return{label:d.token,data:d.data,borderColor:colors[i%colors.length],backgroundColor:"transparent",borderWidth:1.5,pointRadius:0,tension:0.3};'
                 '});'
+                'yOpts={ticks:{font:{size:10}}};'
+                '}'
                 'new Chart(c,{type:"line",data:{labels:_btData.labels,datasets:ds},'
                 'options:{responsive:true,plugins:{legend:{position:"bottom",labels:{font:{size:10}}}},'
-                'scales:{x:{ticks:{maxTicksLimit:20,font:{size:9}}},y:{ticks:{font:{size:10}}}}}});'
+                'scales:{x:{ticks:{maxTicksLimit:20,font:{size:9}}},y:yOpts}}});'
                 '});'
                 '</script>'
             )
@@ -1767,20 +1786,47 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
             doc.add_heading("6. Wykresy", level=1)
 
             if has_balance:
+                import math as _math
                 fig, ax = plt.subplots(figsize=(8, 3.5))
                 labels = balance_data["labels"]
                 colors = ["#2563eb", "#dc2626", "#22c55e", "#f59e0b", "#8b5cf6",
                           "#ec4899", "#14b8a6", "#f97316", "#06b6d4", "#84cc16"]
-                for i, ds in enumerate(balance_data.get("datasets", [])):
-                    ax.plot(range(len(labels)), ds["data"],
-                            label=ds.get("token", "?"),
-                            color=colors[i % len(colors)], linewidth=1.2)
+                datasets = balance_data.get("datasets", [])
+                # Detect if normalization is needed (same logic as program view)
+                max_per = [max((abs(v) for v in ds.get("data", [])), default=0.0001) or 0.0001
+                           for ds in datasets]
+                g_max = max(max_per) if max_per else 1
+                g_min = min(max_per) if max_per else 1
+                needs_norm = g_max > 0 and g_min > 0 and (g_max / g_min) > 50
+                if needs_norm:
+                    log_max_per = [_math.log10(m + 1) for m in max_per]
+                    log_g_max = max(log_max_per) if log_max_per else 1
+                for i, ds in enumerate(datasets):
+                    raw = ds.get("data", [])
+                    token_label = ds.get("token", "?")
+                    if needs_norm:
+                        t_max = max_per[i] or 1
+                        log_scale = log_max_per[i] / (log_g_max or 1)
+                        ceiling = 20 + log_scale * 80
+                        plot_data = [((v or 0) / t_max) * ceiling for v in raw]
+                        lw = max(1, min(3, log_scale * 3))
+                        token_label += " (skala)"
+                    else:
+                        plot_data = raw
+                        lw = 1.2
+                    ax.plot(range(len(labels)), plot_data,
+                            label=token_label,
+                            color=colors[i % len(colors)], linewidth=lw)
                 # Show ~10 x-tick labels
                 step = max(1, len(labels) // 10)
                 ax.set_xticks(range(0, len(labels), step))
-                ax.set_xticklabels([labels[i] for i in range(0, len(labels), step)],
+                ax.set_xticklabels([labels[j] for j in range(0, len(labels), step)],
                                    rotation=45, fontsize=7, ha="right")
                 ax.set_title("Saldo w czasie", fontsize=11, fontweight="bold")
+                if needs_norm:
+                    ax.set_ylim(0, 105)
+                    ax.set_ylabel("Skala relatywna (log)", fontsize=8)
+                    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0f}%"))
                 ax.legend(fontsize=7, loc="upper left", ncol=3)
                 ax.tick_params(axis="y", labelsize=8)
                 ax.grid(True, alpha=0.3)
