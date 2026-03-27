@@ -993,6 +993,11 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                 'yOpts={ticks:{font:{size:10}}};'
                 '}'
                 'new Chart(c,{type:"line",data:{labels:_btData.labels,datasets:ds},'
+                'plugins:[{id:"wm",afterDraw:function(chart){var ctx=chart.ctx;ctx.save();ctx.font="bold 11px system-ui";'
+                'ctx.fillStyle="rgba(13,19,80,0.15)";ctx.fillText("AI",8,chart.height-6);'
+                'var w1=ctx.measureText("AI").width;ctx.fillStyle="rgba(41,70,183,0.15)";ctx.fillText("STATE",8+w1,chart.height-6);'
+                'var w2=ctx.measureText("STATE").width;ctx.fillStyle="rgba(16,150,244,0.15)";ctx.fillText("web",8+w1+w2,chart.height-6);'
+                'ctx.restore();}}],'
                 'options:{responsive:true,plugins:{legend:{position:"bottom",labels:{font:{size:10}}}},'
                 'scales:{x:{ticks:{maxTicksLimit:20,font:{size:9}}},y:yOpts}}});'
                 '});'
@@ -1029,7 +1034,11 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                     }})
                 chart_html += (
                     '<h3>Graf przepływu transakcji</h3>'
+                    '<div style="position:relative">'
                     '<div id="report_graph" style="width:100%;height:550px;background:#fafbfc;border:1px solid #e2e8f0;border-radius:8px"></div>'
+                    '<div style="position:absolute;bottom:8px;left:10px;font:bold 11px system-ui;opacity:0.15;pointer-events:none">'
+                    '<span style="color:#0d1350">AI</span><span style="color:#2946b7">STATE</span><span style="color:#1096f4">web</span>'
+                    '</div></div>'
                     '<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js"></script>'
                     '<script>'
                     f'var _gElems={_json2.dumps(cy_elements, ensure_ascii=False)};'
@@ -1478,7 +1487,7 @@ h4 {{ color: #64748b; margin-top: 14px; }}
 .data-table tr:nth-child(even) {{ background: #f8fafc; }}
 code {{ background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 11px; word-break: break-all; }}
 .muted {{ color: #94a3b8; font-size: 12px; }}
-.section-desc {{ color: #475569; font-size: 12px; line-height: 1.6; margin: 4px 0 14px; padding: 8px 12px; background: #f8fafc; border-left: 3px solid #cbd5e1; border-radius: 0 4px 4px 0; }}
+.section-desc {{ color: #475569; font-size: 12px; line-height: 1.6; margin: 4px 0 14px; padding: 8px 12px; background: #f8fafc; border-left: 3px solid #cbd5e1; border-radius: 0 4px 4px 0; text-align: justify; }}
 .profile-card {{ padding: 10px 14px; margin: 8px 0; background: #f8fafc; border-radius: 6px; }}
 .profile-card .desc {{ color: #64748b; font-size: 12px; margin-top: 2px; }}
 .profile-card ul {{ margin: 6px 0 0; padding-left: 18px; font-size: 12px; }}
@@ -2101,6 +2110,8 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
                 ax.legend(fontsize=7, loc="upper left", ncol=3)
                 ax.tick_params(axis="y", labelsize=8)
                 ax.grid(True, alpha=0.3)
+                fig.text(0.01, 0.01, "AISTATEweb", fontsize=8, fontweight="bold",
+                         color="#2946b7", alpha=0.15, transform=fig.transFigure)
                 fig.tight_layout()
                 buf = BytesIO()
                 fig.savefig(buf, format="png", dpi=150)
@@ -2143,6 +2154,8 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
                         nc = risk_cm.get(nd.get("risk_level", "low"), "#64748b")
                         ax.plot(x, y, "o", color=nc, markersize=8, markeredgecolor="white", markeredgewidth=0.5)
                         ax.text(x, y - 0.08, nd.get("label", nid[:8]), ha="center", fontsize=5, color="#334155")
+                fig.text(0.01, 0.01, "AISTATEweb", fontsize=8, fontweight="bold",
+                         color="#2946b7", alpha=0.15, transform=fig.transFigure)
                 fig.tight_layout()
                 buf = BytesIO()
                 fig.savefig(buf, format="png", dpi=150)
@@ -2373,6 +2386,294 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     if legend_items:
         doc.add_heading("Słownik typów transakcji", level=1)
         add_data_table(["Typ", "Opis"], legend_items)
+
+    # ── Wniosek końcowy ──
+    doc.add_heading("Wniosek końcowy", level=1)
+
+    tokens = r.get("tokens", {})
+    tc = r.get("token_classification", {}) or {}
+    em = r.get("exchange_meta", {}) or {}
+    txs_all = r.get("transactions", [])
+    date_from = (r.get("date_from", "") or "")[:10]
+    date_to = (r.get("date_to", "") or "")[:10]
+    risk_score = r.get("risk_score", 0)
+    exchange_name = (em.get("exchange_name", "") or r.get("source", "")).replace("_", " ")
+    holder_name = ""
+    _fr_c = r.get("forensic_report", {}) or {}
+    _ai_c = _fr_c.get("account_info", {}) or {}
+    _meta_c = r.get("metadata", {}) or {}
+    holder_name = _ai_c.get("holder_name", "") or _meta_c.get("account_holder", "") or ""
+
+    if risk_score >= 70:
+        risk_label = "KRYTYCZNE"
+    elif risk_score >= 50:
+        risk_label = "WYSOKIE"
+    elif risk_score >= 25:
+        risk_label = "SREDNIE"
+    else:
+        risk_label = "NISKIE"
+
+    # Gather buy/sell/withdrawal/staking data
+    buys = [t for t in txs_all if t.get("tx_type") == "buy"]
+    sells = [t for t in txs_all if t.get("tx_type") == "sell"]
+    withdrawals = [t for t in txs_all if t.get("tx_type") == "withdrawal"]
+    staking_txs = [t for t in txs_all if "staking" in (t.get("tx_type") or "")]
+
+    buy_by_tok: Dict[str, Dict[str, Any]] = {}
+    for t in buys:
+        tok = t.get("token", "?")
+        raw = t.get("raw", {})
+        val = abs(float(raw.get("fiat_value", 0) or raw.get("wartość", 0) or 0))
+        qty = float(t.get("amount", 0))
+        if tok not in buy_by_tok:
+            buy_by_tok[tok] = {"count": 0, "fiat": 0.0, "qty": 0.0, "first": t.get("timestamp", "z"), "last": ""}
+        buy_by_tok[tok]["count"] += 1
+        buy_by_tok[tok]["fiat"] += val
+        buy_by_tok[tok]["qty"] += qty
+        ts = t.get("timestamp", "")
+        if ts < buy_by_tok[tok]["first"]:
+            buy_by_tok[tok]["first"] = ts
+        if ts > buy_by_tok[tok]["last"]:
+            buy_by_tok[tok]["last"] = ts
+
+    sell_by_tok: Dict[str, Dict[str, Any]] = {}
+    for t in sells:
+        tok = t.get("token", "?")
+        raw = t.get("raw", {})
+        val = abs(float(raw.get("fiat_value", 0) or raw.get("wartość", 0) or 0))
+        qty = float(t.get("amount", 0))
+        if tok not in sell_by_tok:
+            sell_by_tok[tok] = {"count": 0, "fiat": 0.0, "qty": 0.0}
+        sell_by_tok[tok]["count"] += 1
+        sell_by_tok[tok]["fiat"] += val
+        sell_by_tok[tok]["qty"] += qty
+
+    total_buy_fiat = sum(v["fiat"] for v in buy_by_tok.values())
+    total_sell_fiat = sum(v["fiat"] for v in sell_by_tok.values())
+
+    # Medium/High/Critical tokens
+    risky_tokens = [(tok, tc.get(tok, {})) for tok in tokens if tc.get(tok, {}).get("alert_level", "NORMAL") not in ("NORMAL",)]
+
+    # Build conclusion paragraphs
+    def _add_justified(text: str) -> None:
+        p = doc.add_paragraph(text)
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p.paragraph_format.space_after = Pt(6)
+        for run in p.runs:
+            run.font.size = Pt(11)
+
+    period_str = f"od {date_from} do {date_to}" if date_from and date_to else "w badanym okresie"
+    platform_str = exchange_name or "platformy kryptowalutowej"
+    holder_str = f"podmiotu ({holder_name})" if holder_name else "badanego podmiotu"
+
+    _add_justified(
+        f"Przeprowadzona analiza rachunku kryptowalutowego prowadzonego za po\u015brednictwem platformy "
+        f"{platform_str} pozwoli\u0142a na ustalenie zakresu aktywno\u015bci {holder_str} w obszarze obrotu "
+        f"aktywami wirtualnymi, w szczeg\u00f3lno\u015bci w odniesieniu do rodzaju posiadanych kryptowalut, "
+        f"kierunk\u00f3w transfer\u00f3w, moment\u00f3w nabycia i zbycia aktyw\u00f3w oraz ewentualnej wymiany na waluty fiducjarne."
+    )
+
+    # Posiadane kryptowaluty
+    token_list = sorted(tokens.keys())
+    if token_list:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = p.add_run("Posiadane kryptowaluty. ")
+        run.bold = True
+        run.font.size = Pt(11)
+        run2 = p.add_run(
+            f"Na podstawie zgromadzonych danych ustalono, \u017ce analizowany podmiot posiada\u0142 {period_str} "
+            f"nast\u0119puj\u0105ce kryptowaluty, przechowywane za po\u015brednictwem platformy {platform_str}:"
+        )
+        run2.font.size = Pt(11)
+        p.paragraph_format.space_after = Pt(4)
+
+        for tok in token_list:
+            info = tc.get(tok, {})
+            cat = info.get("category", "")
+            alert = info.get("alert_level", "NORMAL")
+            desc = info.get("description", "")
+            s = tokens.get(tok, {})
+            qty_received = s.get("received", 0) or 0
+            qty_sent = s.get("sent", 0) or 0
+            tx_c = s.get("count", 0)
+            buy_info = buy_by_tok.get(tok, {})
+            buy_fiat = buy_info.get("fiat", 0)
+
+            line = f"{tok}"
+            if info.get("name"):
+                line += f" ({info['name']})"
+            if cat:
+                line += f" - {cat}"
+            line += f", {tx_c} transakcji"
+            if buy_fiat > 0:
+                line += f", nabyte za {buy_fiat:,.2f} PLN"
+            if alert not in ("NORMAL",):
+                line += f" [alert: {alert}]"
+            doc.add_paragraph(line, style="List Bullet")
+
+    # Nabycie
+    if buy_by_tok:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = p.add_run("Nabycie aktywów. ")
+        run.bold = True
+        run.font.size = Pt(11)
+        run2 = p.add_run(
+            "W toku analizy ustalono daty oraz wartości nabycia poszczególnych aktywów wirtualnych:"
+        )
+        run2.font.size = Pt(11)
+        p.paragraph_format.space_after = Pt(4)
+
+        for tok, v in sorted(buy_by_tok.items()):
+            period = f"{v['first'][:10]} - {v['last'][:10]}" if v["first"] != v["last"] else v["first"][:10]
+            doc.add_paragraph(
+                f"{tok}: {v['count']} transakcji zakupu w okresie {period}, "
+                f"łącznie {v['qty']:.6f} {tok} za {v['fiat']:,.2f} PLN",
+                style="List Bullet"
+            )
+
+        _add_justified(f"Łączna wartość środków zaangażowanych w zakup aktywów wirtualnych wyniosła {total_buy_fiat:,.2f} PLN.")
+
+    # Zbycie
+    if sell_by_tok:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = p.add_run("Zbycie aktywów. ")
+        run.bold = True
+        run.font.size = Pt(11)
+        run2 = p.add_run(
+            "W przypadku transakcji sprzedaży ustalono moment zbycia kryptowalut oraz wartość uzyskaną w chwili sprzedaży:"
+        )
+        run2.font.size = Pt(11)
+        p.paragraph_format.space_after = Pt(4)
+
+        for tok, v in sorted(sell_by_tok.items()):
+            doc.add_paragraph(
+                f"{tok}: {v['count']} transakcji sprzedaży, "
+                f"łącznie {v['qty']:.6f} {tok} za {v['fiat']:,.2f} PLN",
+                style="List Bullet"
+            )
+
+        _add_justified(f"Łączna wartość uzyskaną ze sprzedaży aktywów wyniosła {total_sell_fiat:,.2f} PLN.")
+
+    # Konwersja na FIAT
+    if total_sell_fiat > 0:
+        ratio = (total_sell_fiat / total_buy_fiat * 100) if total_buy_fiat > 0 else 0
+        if ratio > 80:
+            character = "mieszany - część środków została zmaterializowana w tradycyjnym systemie finansowym"
+        elif ratio > 20:
+            character = "częściowo inwestycyjny, z elementami materializacji środków w walucie fiducjarnej"
+        else:
+            character = "głównie inwestycyjny w obrębie rynku aktywów wirtualnych"
+
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = p.add_run("Konwersja na waluty FIAT. ")
+        run.bold = True
+        run.font.size = Pt(11)
+        run2 = p.add_run(
+            f"Analiza wykazała, ze dochodziło do konwersji aktywów wirtualnych na walute PLN. "
+            f"Łączna wartość środków uzyskanych z konwersji na FIAT wyniosła {total_sell_fiat:,.2f} PLN, "
+            f"co stanowi {ratio:.0f}% wartości zainwestowanego kapitalu. "
+            f"Pozwala to stwierdzić, ze obrot kryptowalutami miał charakter {character}."
+        )
+        run2.font.size = Pt(11)
+        p.paragraph_format.space_after = Pt(6)
+
+    # Transfery zewnętrzne
+    if withdrawals:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = p.add_run("Transfery zewnętrzne. ")
+        run.bold = True
+        run.font.size = Pt(11)
+        run2 = p.add_run(
+            "Analiza transferów wykazała, ze srodki były kierowane do następujących podmiotów lub usług:"
+        )
+        run2.font.size = Pt(11)
+        p.paragraph_format.space_after = Pt(4)
+
+        for t in withdrawals:
+            ts = (t.get("timestamp", "") or "")[:10]
+            tok = t.get("token", "")
+            qty = t.get("amount", 0)
+            dest = t.get("to_address", "") or t.get("counterparty", "") or "adres zewnętrzny"
+            doc.add_paragraph(f"{ts} - {tok} {qty:.6f} -> {dest}", style="List Bullet")
+
+    # Staking
+    if staking_txs:
+        staking_tokens = set(t.get("token", "") for t in staking_txs)
+        staking_first = min(t.get("timestamp", "")[:10] for t in staking_txs)
+        staking_last = max(t.get("timestamp", "")[:10] for t in staking_txs)
+
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = p.add_run("Staking. ")
+        run.bold = True
+        run.font.size = Pt(11)
+        run2 = p.add_run(
+            f"Ustalono, ze podmiot korzystał z mechanizmu stakingu tokena "
+            f"{', '.join(sorted(staking_tokens))}, otrzymując łącznie {len(staking_txs)} nagród stakingowych "
+            f"w okresie {staking_first} - {staking_last}, co potwierdza długoterminowy charakter inwestycji."
+        )
+        run2.font.size = Pt(11)
+        p.paragraph_format.space_after = Pt(6)
+
+    # Tokeny o podwyższonym ryzyku
+    if risky_tokens:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = p.add_run("Tokeny o podwyższonym ryzyku. ")
+        run.bold = True
+        run.font.size = Pt(11)
+        run2 = p.add_run(
+            "W portfelu zidentyfikowano następujące tokeny o podwyższonym poziomie alertu:"
+        )
+        run2.font.size = Pt(11)
+        p.paragraph_format.space_after = Pt(4)
+
+        for tok, info in risky_tokens:
+            alert = info.get("alert_level", "MEDIUM")
+            desc = info.get("description", "")
+            cat = info.get("category", "")
+            line = f"{tok}"
+            if info.get("name"):
+                line += f" ({info['name']})"
+            line += f" - poziom alertu {alert}"
+            if cat:
+                line += f", kategoria: {cat}"
+            if desc:
+                line += f". {desc}"
+            doc.add_paragraph(line, style="List Bullet")
+
+    # Podsumowanie
+    _add_justified(
+        "W konsekwencji należy stwierdzić, ze analiza rachunku kryptowalutowego umożliwia "
+        "odtworzenie podstawowego przebiegu aktywności finansowej badanego podmiotu w zakresie "
+        "aktywów wirtualnych, tj.:"
+    )
+    summary_points = [
+        "jakie kryptowaluty nabywał lub posiadał,",
+        "za pośrednictwem jakiej platformy operował,",
+    ]
+    if withdrawals:
+        summary_points.append("gdzie kierował srodki,")
+    if buy_by_tok:
+        summary_points.append("kiedy i za jaka kwotę nabywał aktywa,")
+    if sell_by_tok:
+        summary_points.append("kiedy i za jaka wartość je zbywał,")
+    if total_sell_fiat > 0:
+        summary_points.append("czy i w jakim zakresie dokonywał zamiany na waluty FIAT.")
+    for sp in summary_points:
+        doc.add_paragraph(sp, style="List Bullet")
+
+    _add_justified(f"Ocena ryzyka AML: {risk_score:.1f}/100 - {risk_label}.")
+
+    _add_justified(
+        "Uzyskane ustalenia stanowią podstawę do dalszej oceny charakteru transakcji, "
+        "skali zaangażowania finansowego oraz zgodności aktywności z deklarowanym źródłem pochodzenia środków."
+    )
 
     # Footer
     doc.add_paragraph("")
