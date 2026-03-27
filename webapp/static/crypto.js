@@ -463,7 +463,57 @@
   /* -- Token breakdown chart card ------------------------------------- */
 
   function _renderTokenBreakdown(r) {
+    const card = document.getElementById("crypto_token_breakdown_card");
+    if (!card) return;
     _show("crypto_token_breakdown_card");
+
+    // Build token portfolio table with descriptions from token_classification
+    const tokens = r.tokens || {};
+    const tc = r.token_classification || {};
+    const syms = Object.keys(tokens);
+    if (!syms.length) return;
+
+    // Sort by tx count desc, then alphabetically
+    syms.sort((a, b) => (tokens[b].count || 0) - (tokens[a].count || 0) || a.localeCompare(b));
+
+    const alertColors = {
+      "CRITICAL": "#dc2626", "HIGH": "#f97316", "MEDIUM": "#eab308", "NORMAL": "#22c55e"
+    };
+
+    let html = '<div class="h2">Portfel tokenów</div>';
+    html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:16px"><thead><tr>';
+    html += '<th>Symbol</th><th>Nazwa</th><th>Rank</th><th>Kategoria</th>';
+    html += '<th style="text-align:right">TX</th><th style="text-align:right">Otrzymano</th><th style="text-align:right">Wysłano</th>';
+    html += '<th>Alert</th><th>Opis</th>';
+    html += '</tr></thead><tbody>';
+
+    for (const sym of syms) {
+      const t = tokens[sym] || {};
+      const info = tc[sym] || {};
+      const name = info.name || "—";
+      const rank = info.rank ? `#${info.rank}` : "—";
+      const cat = info.category || "—";
+      const alert = info.alert_level || "NORMAL";
+      const ac = alertColors[alert] || "#94a3b8";
+      const desc = info.description || (info.known === false ? "Token spoza bazy TOP 200" : "");
+      const riskNote = info.risk_note || "";
+      const tooltip = riskNote ? ` title="${_esc(riskNote)}"` : "";
+
+      html += `<tr>`;
+      html += `<td><b>${_esc(sym)}</b></td>`;
+      html += `<td>${_esc(name)}</td>`;
+      html += `<td style="text-align:center">${_esc(rank)}</td>`;
+      html += `<td><span style="font-size:11px;padding:1px 6px;border-radius:3px;background:rgba(100,116,139,.1)">${_esc(cat)}</span></td>`;
+      html += `<td style="text-align:right">${t.count || 0}</td>`;
+      html += `<td style="text-align:right">${(t.received || 0).toFixed(4)}</td>`;
+      html += `<td style="text-align:right">${(t.sent || 0).toFixed(4)}</td>`;
+      html += `<td${tooltip}><span style="color:${ac};font-weight:600;font-size:11px">${_esc(alert)}</span></td>`;
+      html += `<td style="font-size:11px;color:var(--text-muted,#64748b);max-width:300px">${_esc(desc)}</td>`;
+      html += `</tr>`;
+    }
+
+    html += '</tbody></table>';
+    card.innerHTML = html;
     // Actual chart is rendered in _renderCharts
   }
 
