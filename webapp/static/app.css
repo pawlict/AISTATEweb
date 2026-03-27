@@ -31,7 +31,8 @@
 }
 
 *{box-sizing:border-box}
-html,body{height:100%}
+html,body{height:100%;overscroll-behavior:none}
+html{background:var(--bg)}
 body{
   margin:0;
   font-family:var(--font);
@@ -3601,6 +3602,27 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 }
 [data-theme="dark"] .nav a.active[data-icon] .nav-icon svg{
   filter: brightness(1) saturate(1.4) drop-shadow(0 2px 4px rgba(74,158,237,.35));
+}
+
+/* Global icon brightness normalization for dark mode.
+   Sidebar nav icons (inline SVG) have their own rules above.
+   All <img> icons from /static/icons/ need inversion for visibility. */
+[data-theme="dark"] img[src*="/icons/"]{
+  filter: invert(.85) hue-rotate(180deg);
+}
+/* Inline SVG icons (aiIcon / data-icon) — brighten gradients */
+[data-theme="dark"] i[data-icon-done] svg,
+[data-theme="dark"] .card i[data-icon-done] svg,
+[data-theme="dark"] .analysis-toolbar i[data-icon-done] svg,
+[data-theme="dark"] .transcription-toolbar i[data-icon-done] svg{
+  filter: brightness(2.5) saturate(.7);
+}
+/* Exclude icons that are already bright or have their own dark rules */
+[data-theme="dark"] .nav img[src$=".svg"],
+[data-theme="dark"] .nav i[data-icon-done] svg,
+[data-theme="dark"] #aria-trigger img,
+[data-theme="dark"] .logo img{
+  filter: none;
 }
 
 /* Project name badge in toolbar */

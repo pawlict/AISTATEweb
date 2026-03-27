@@ -928,6 +928,11 @@ const NOTE_TAGS = {
   monitoring: { label: "Obserwacja", color: "#ea580c", bg: "rgba(234,88,12,.10)" },
 };
 
+const TAG_COLORS = {
+  neutral: "#64748b", legitimate: "#22c55e", suspicious: "#ef4444",
+  monitoring: "#eab308",
+};
+
 // ========== Notes management ==========
 function _getNoteObj(idx) {
   const v = TR.notes.blocks[idx];
@@ -986,6 +991,10 @@ function _updateNoteIcon(idx) {
   icon.classList.toggle("has-note", has);
   const img = icon.querySelector("img");
   if (img) img.src = has ? "/static/icons/dokumenty/notes_filled.svg" : "/static/icons/dokumenty/notes.svg";
+  // Tag border on segment
+  const tags = _getNoteTags(idx);
+  const tc = tags.length ? (TAG_COLORS[tags[0]] || "") : "";
+  segEl.style.borderLeft = tc ? `4px solid ${tc}` : "";
 }
 
 function trOpenBlockNoteEditor(idx){
@@ -1154,7 +1163,7 @@ function trDeleteBlockNote(idx){
   _updateNoteIcon(idx);
   trRenderBlockNotesList();
   scheduleAutoSave();
-  if(typeof showToast === 'function') showToast('Notatka usunięta');
+  if(typeof showToast === 'function') showToast('Notatka usunięta', 'info');
 }
 
 function trUpdateGlobalNote(){
@@ -1167,23 +1176,31 @@ function trUpdateGlobalNote(){
 
 async function trLoadNotesFromProject(){
   if(!AISTATE.projectId) return;
-  
+
+  // Try localStorage draft first (instant, survives navigation)
+  const hasDraft = trLoadNotesFromDraft();
+
   try{
     const response = await fetch(`/api/projects/${AISTATE.projectId}/notes/transcription`);
     if(response.ok){
       const data = await response.json();
-      TR.notes.global = data.global || "";
-      TR.notes.blocks = data.blocks || {};
-      
-      const textarea = document.getElementById("tr_notes_global");
-      if(textarea) textarea.value = TR.notes.global;
-      
-      trRenderBlockNotesList();
-      trRender(); // Re-render to show note icons
+      const serverGlobal = data.global || "";
+      const serverBlocks = data.blocks || {};
+      const serverCount = Object.keys(serverBlocks).length + (serverGlobal ? 1 : 0);
+      const draftCount = Object.keys(TR.notes.blocks).length + (TR.notes.global ? 1 : 0);
+
+      // Use whichever has more content (draft may be newer)
+      if(!hasDraft || serverCount >= draftCount){
+        TR.notes.global = serverGlobal;
+        TR.notes.blocks = serverBlocks;
+        const textarea = document.getElementById("tr_notes_global");
+        if(textarea) textarea.value = TR.notes.global;
+        trRenderBlockNotesList();
+      }
       console.log("Loaded notes from project");
     }
   }catch(e){
-    console.log("No saved notes in project (OK for new projects)");
+    if(!hasDraft) console.log("No saved notes (OK for new projects)");
   }
 }
 
@@ -1206,7 +1223,7 @@ async function trSaveNotesToProject(){
     });
     
     if(response.ok){
-      showToast("Notatki zapisane w projekcie", 2000);
+      showToast("Notatki zapisane w projekcie", "success");
     } else {
       throw new Error("Failed to save notes");
     }
@@ -1273,7 +1290,11 @@ function trRender(){
     const d = document.createElement("div");
     d.className = "seg";
     d.dataset.idx = String(idx);
-    
+    // Tag border
+    const _initTags = _getNoteTags(idx);
+    const _initTc = _initTags.length ? (TAG_COLORS[_initTags[0]] || "") : "";
+    if (_initTc) d.style.borderLeft = `4px solid ${_initTc}`;
+
     // Note icon
     const noteIcon = document.createElement("span");
     noteIcon.className = "seg-note-icon" + (trHasBlockNote(idx) ? " has-note" : "");
@@ -1326,12 +1347,42 @@ function trRender(){
 // ========== Auto-save ==========
 let autoSaveTimer = null;
 
+// Instant draft save to localStorage (survives page navigation)
+function trSaveNotesToDraft(){
+  if(!AISTATE.projectId) return;
+  try{
+    const key = `aistateweb:notes_tr:${AISTATE.projectId}`;
+    trUpdateGlobalNote();
+    localStorage.setItem(key, JSON.stringify(TR.notes));
+  }catch(e){}
+}
+
+function trLoadNotesFromDraft(){
+  if(!AISTATE.projectId) return false;
+  try{
+    const key = `aistateweb:notes_tr:${AISTATE.projectId}`;
+    const data = localStorage.getItem(key);
+    if(data){
+      const parsed = JSON.parse(data);
+      TR.notes.global = parsed.global || "";
+      TR.notes.blocks = parsed.blocks || {};
+      const textarea = document.getElementById("tr_notes_global");
+      if(textarea) textarea.value = TR.notes.global;
+      trRenderBlockNotesList();
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
 function scheduleAutoSave(){
+  // Instant draft to localStorage
+  trSaveNotesToDraft();
+
   if(autoSaveTimer) clearTimeout(autoSaveTimer);
-  
   autoSaveTimer = setTimeout(async ()=>{
     if(!AISTATE.projectId) return;
-    
+
     try{
       // Save transcript
       const response = await fetch(`/api/projects/${AISTATE.projectId}/save/transcript`, {
@@ -1339,19 +1390,24 @@ function scheduleAutoSave(){
         headers: {"Content-Type": "text/plain"},
         body: trBuildRawText()
       });
-      
+
       if(response.ok){
         console.log("Auto-saved transcript");
       }
-      
-      // Save notes
+
+      // Save notes to server
       await trSaveNotesToProject();
-      
+
     }catch(e){
       console.error("Auto-save error:", e);
     }
   }, 2000);
 }
+
+// Save draft on page leave
+window.addEventListener("beforeunload", function(){
+  trSaveNotesToDraft();
+});
 
 // ========== Export reports (toolbar) ==========
 function trGetSelectedReportFormats(){
@@ -1431,7 +1487,7 @@ async function trSaveReports(){
       ? `Raport ${results[0]} wygenerowany`
       : `Raporty wygenerowane: ${results.join(", ")}`;
 
-    showToast(message + " i zapisane w projekcie", 3000);
+    showToast(message + " i zapisane w projekcie", "success");
 
   }catch(e){
     showToast(`Błąd generowania raportu: ${e.message}`, 'error');
@@ -1444,38 +1500,7 @@ async function trSaveReports(){
   }
 }
 
-// ========== Toast notification ==========
-function showToast(message, duration = 3000){
-  let toast = document.getElementById("tr_toast");
-  if(!toast){
-    toast = document.createElement("div");
-    toast.id = "tr_toast";
-    toast.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: rgba(33, 150, 243, 0.95);
-      color: white;
-      padding: 12px 18px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 500;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      z-index: 10000;
-      opacity: 0;
-      transition: opacity 0.3s;
-      pointer-events: none;
-    `;
-    document.body.appendChild(toast);
-  }
-  
-  toast.textContent = message;
-  toast.style.opacity = "1";
-  
-  setTimeout(()=>{
-    toast.style.opacity = "0";
-  }, duration);
-}
+// Toast: use global showToast from ui.js (top-right, auto-dismiss)
 
 // ========== Main initialization ==========
 function onDoneTranscribe(j){

@@ -78,23 +78,6 @@
     font-style: italic;
   }
   
-  #speaker_toast {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: rgba(33, 150, 243, 0.95);
-    color: white;
-    padding: 12px 18px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 10000;
-    opacity: 0;
-    transition: opacity 0.3s;
-    pointer-events: none;
-  }
-  
   /* Diarization blocks styling (like transcription) */
   .blocklist {
     display: flex;
@@ -901,6 +884,10 @@ const NOTE_TAGS = {
   suspicious: { label: "Podejrzany", color: "#dc2626", bg: "rgba(220,38,38,.10)" },
   monitoring: { label: "Obserwacja", color: "#ea580c", bg: "rgba(234,88,12,.10)" },
 };
+const TAG_COLORS = {
+  neutral: "#64748b", legitimate: "#22c55e", suspicious: "#ef4444",
+  monitoring: "#eab308",
+};
 
 function _getDiNoteObj(idx) {
   const v = DI.notes.blocks[String(idx)];
@@ -1138,7 +1125,7 @@ function deleteBlockNote(idx) {
   updateBlockNoteIconInSeg(idx);
   hideNoteTooltip();
   scheduleNotesSave();
-  showToast('Notatka usunięta');
+  showToast('Notatka usunięta', 'info');
 }
 
 function updateBlockNoteIconInSeg(idx) {
@@ -1160,6 +1147,10 @@ function updateBlockNoteIconInSeg(idx) {
   icon.innerHTML = `<img src="/static/icons/dokumenty/${_has ? "notes_filled" : "notes"}.svg" width="19" height="19" alt="Notatka">`;
   icon.classList.toggle('has-note', _has);
   icon.title = _has ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę';
+  // Tag border on segment
+  const _tags = _getDiNoteTags(idx);
+  const _tc = _tags.length ? (TAG_COLORS[_tags[0]] || "") : "";
+  seg.style.borderLeft = _tc ? `4px solid ${_tc}` : "";
 }
 
 async function saveNotesToProject() {
@@ -1176,7 +1167,7 @@ async function saveNotesToProject() {
       body: JSON.stringify(DI.notes)
     });
     
-    showToast('Notatki zapisane w projekcie');
+    showToast('Notatki zapisane w projekcie', 'success');
   } catch (e) {
     showToast('Błąd zapisu notatek: ' + e.message, 'error');
   }
@@ -1212,7 +1203,7 @@ function exportNotesAsJSON() {
   a.download = `notes_${AISTATE.projectId || 'export'}_${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('Notatki wyeksportowane');
+  showToast('Notatki wyeksportowane', 'success');
 }
 
 
@@ -1754,7 +1745,11 @@ function diRender(){
     const d = document.createElement("div");
     d.className = "seg " + getSpeakerColor(seg.speaker);
     d.dataset.idx = String(idx);
-    
+    // Tag border
+    const _initTags = _getDiNoteTags(idx);
+    const _initTc = _initTags.length ? (TAG_COLORS[_initTags[0]] || "") : "";
+    if (_initTc) d.style.borderLeft = `4px solid ${_initTc}`;
+
     // Ikona notatki
     const noteIcon = document.createElement('span');
     noteIcon.className = 'seg-note-icon' + (hasBlockNote(idx) ? ' has-note' : '');
@@ -1824,23 +1819,7 @@ function countSpeakerOccurrences(text, label){
 }
 
 // Show temporary toast notification
-function showToast(message, duration){
-  if(duration === undefined) duration = 2000;
-  let toast = document.getElementById('speaker_toast');
-  if(!toast){
-    toast = document.createElement('div');
-    toast.id = 'speaker_toast';
-    document.body.appendChild(toast);
-  }
-  
-  toast.textContent = message;
-  toast.style.opacity = '1';
-  
-  clearTimeout(toast._timer);
-  toast._timer = setTimeout(function(){
-    toast.style.opacity = '0';
-  }, duration);
-}
+// Toast: use global showToast from ui.js (top-right, auto-dismiss)
 
 // Render speaker mapping UI
 function renderSpeakerMappingUI(labels, outputText){
@@ -1904,7 +1883,7 @@ function renderSpeakerMappingUI(labels, outputText){
   });
   
   console.log('Wygenerowano UI dla ' + labels.length + ' mówców');
-  showToast('Zaktualizowano ' + labels.length + ' mówców');
+  showToast('Zaktualizowano ' + labels.length + ' mówców', 'success');
 }
 
 // Sync UI inputs to hidden JSON textarea
@@ -2747,7 +2726,7 @@ async function diSaveReports(){
       ? `Raport ${results[0]} wygenerowany`
       : `Raporty wygenerowane: ${results.join(', ')}`;
 
-    showToast(message + ' i zapisane w projekcie', 3000);
+    showToast(message + ' i zapisane w projekcie', 'success');
 
   }catch(e){
     showToast(`Błąd generowania raportu: ${e.message}`, 'error');
@@ -2921,7 +2900,7 @@ document.addEventListener('aistate:output-updated', function(e){
       const labels = extractSpeakerLabels(outEl.value);
       if(labels.length){
         mergeSpeakerMap(labels);
-        showToast('Wykryto ' + labels.length + ' mówców');
+        showToast('Wykryto ' + labels.length + ' mówców', 'success');
         console.log('Auto-refresh complete: ' + labels.length + ' speakers found:', labels);
       } else {
         console.warn('No speaker labels found in output');

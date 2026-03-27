@@ -25,19 +25,20 @@
   z-index: 9000;
   width: 56px;
   height: 56px;
-  cursor: pointer;
+  cursor: grab;
   background: none;
   border: none;
   padding: 0;
   outline: none;
   transition: transform 0.2s ease;
+  touch-action: none;
 }
-
 #aria-trigger:hover {
   transform: scale(1.08);
 }
 
 #aria-trigger:active {
+  cursor: grabbing;
   transform: scale(0.95);
 }
 
@@ -110,8 +111,8 @@
 
 #aria-hud {
   position: fixed;
-  bottom: 88px;
-  right: 20px;
+  bottom: auto;
+  right: auto;
   width: 380px;
   height: 500px;
   min-width: 300px;
