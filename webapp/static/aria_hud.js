@@ -142,6 +142,90 @@
     return banner;
   }
 
+  /* ---- Drag & Position Persistence ---- */
+  var _LS_POS_KEY = 'aistate_aria_trigger_pos';
+
+  function _initDrag(el) {
+    var startX, startY, startLeft, startTop, dragging = false, moved = false;
+
+    function onDown(e) {
+      if (e.button && e.button !== 0) return; // left button only
+      var ev = e.touches ? e.touches[0] : e;
+      dragging = true;
+      moved = false;
+      var rect = el.getBoundingClientRect();
+      startX = ev.clientX;
+      startY = ev.clientY;
+      startLeft = rect.left;
+      startTop = rect.top;
+      el.style.transition = 'none';
+      e.preventDefault();
+    }
+
+    function onMove(e) {
+      if (!dragging) return;
+      var ev = e.touches ? e.touches[0] : e;
+      var dx = ev.clientX - startX;
+      var dy = ev.clientY - startY;
+      if (!moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+      moved = true;
+      var newLeft = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, startLeft + dx));
+      var newTop = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, startTop + dy));
+      el.style.left = newLeft + 'px';
+      el.style.top = newTop + 'px';
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+    }
+
+    function onUp() {
+      if (!dragging) return;
+      dragging = false;
+      el.style.transition = '';
+      if (moved) {
+        AriaHUD._wasDragged = true;
+        _saveTriggerPosition();
+      }
+    }
+
+    el.addEventListener('mousedown', onDown);
+    el.addEventListener('touchstart', onDown, {passive: false});
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('touchmove', onMove, {passive: false});
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchend', onUp);
+  }
+
+  function _saveTriggerPosition() {
+    var el = AriaHUD.$trigger;
+    if (!el) return;
+    var rect = el.getBoundingClientRect();
+    try {
+      localStorage.setItem(_LS_POS_KEY, JSON.stringify({
+        left: Math.round(rect.left),
+        top: Math.round(rect.top)
+      }));
+    } catch(e) {}
+  }
+
+  function _restoreTriggerPosition() {
+    var el = AriaHUD.$trigger;
+    if (!el) return;
+    try {
+      var saved = localStorage.getItem(_LS_POS_KEY);
+      if (!saved) return;
+      var pos = JSON.parse(saved);
+      // Clamp to viewport
+      var maxX = window.innerWidth - el.offsetWidth;
+      var maxY = window.innerHeight - el.offsetHeight;
+      var x = Math.max(0, Math.min(pos.left || 0, maxX));
+      var y = Math.max(0, Math.min(pos.top || 0, maxY));
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+    } catch(e) {}
+  }
+
   /* ---- Init ---- */
   function init() {
     AriaHUD.$trigger       = document.getElementById('aria-trigger');
@@ -180,7 +264,13 @@
     var sesEl = document.getElementById('aria-st-ses');
     if (sesEl) sesEl.textContent = 'SES:' + AriaHUD.sessionId;
 
-    AriaHUD.$trigger.addEventListener('click', toggle);
+    AriaHUD.$trigger.addEventListener('click', function(e) {
+      // Only toggle if not a drag release
+      if (!AriaHUD._wasDragged) toggle();
+      AriaHUD._wasDragged = false;
+    });
+    _initDrag(AriaHUD.$trigger);
+    _restoreTriggerPosition();
     document.getElementById('aria-close')?.addEventListener('click', function () { setOpen(false); });
     AriaHUD.$sendBtn?.addEventListener('click', sendMessage);
     AriaHUD.$ttsBtn?.addEventListener('click', toggleTTS);
@@ -483,10 +573,46 @@
 
   var _compatShown = false;
 
+  function _positionHud() {
+    var hud = AriaHUD.$hud;
+    var trigger = AriaHUD.$trigger;
+    if (!hud || !trigger) return;
+
+    var tr = trigger.getBoundingClientRect();
+    var hw = hud.offsetWidth || 380;
+    var hh = hud.offsetHeight || 500;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var gap = 12;
+
+    // Prefer: above trigger, aligned to trigger's horizontal center
+    var left = tr.left + tr.width / 2 - hw / 2;
+    var top = tr.top - hh - gap;
+
+    // If not enough space above, try below
+    if (top < 0) {
+      top = tr.bottom + gap;
+    }
+    // If still overflows bottom, put at top of viewport
+    if (top + hh > vh) {
+      top = Math.max(0, vh - hh - gap);
+    }
+    // Clamp horizontal
+    if (left + hw > vw) left = vw - hw - gap;
+    if (left < 0) left = gap;
+
+    hud.style.left = Math.round(left) + 'px';
+    hud.style.top = Math.round(top) + 'px';
+    hud.style.right = 'auto';
+    hud.style.bottom = 'auto';
+    hud.style.transformOrigin = (tr.left < vw / 2) ? 'bottom left' : 'bottom right';
+  }
+
   function setOpen(state) {
     AriaHUD.open = state;
     if (AriaHUD.$hud) {
       AriaHUD.$hud.classList.toggle('hidden', !state);
+      if (state) _positionHud();
     }
     if (state) {
       if (AriaHUD.$input) {
