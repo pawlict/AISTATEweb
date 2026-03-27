@@ -434,48 +434,69 @@
 
     <div class="hr"></div>
 
-    <!-- 2-kolumnowy layout: Wynik + Notatki (EXACT COPY from diarization) -->
-  <div style="display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start">
-    <!-- Lewa kolumna: Wynik transkrypcji -->
-    <div>
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="tr.result.title"><i data-icon="document" data-size="16"></i> Wynik transkrypcji</div>
-      <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
-      <div id="tr_audio_player"></div>
-      <div id="tr_blocks" class="blocklist" style="display:none"></div>
-      <!-- Sound events panel -->
-      <div id="tr_sound_events" class="sound-events-panel" style="display:none"></div>
-      <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi się wynik…" data-i18n-placeholder="placeholder.result_here"></textarea>
-      <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
-        <i data-icon="info_circle" data-size="14"></i> <strong>Wszystkie zmiany zapisują się automatycznie</strong> - edytuj bloki, zmieniaj nazwy mówców, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
-      </div>
-    </div>
+    <!-- Analyst panel layout (matching GSM module) -->
+    <div class="analyst-panel-layout">
+      <!-- Panel analityczny (collapsible left sidebar) -->
+      <aside class="analyst-panel collapsed" id="tr_analyst_panel">
+        <button class="analyst-panel-toggle" id="tr_panel_toggle" title="Panel analityczny">
+          <img src="/static/icons/akcje/sidebar_expand.svg" alt="" width="18" height="18" draggable="false">
+        </button>
+        <div class="analyst-panel-body">
+          <div class="analyst-panel-header">
+            <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
+              <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+              <span data-i18n="analyst_panel.title">Panel analityczny</span>
+            </div>
+            <button class="analyst-panel-toggle-inner" id="tr_panel_collapse" title="Zwiń panel">
+              <img src="/static/icons/akcje/sidebar_collapse.svg" alt="" width="16" height="16" draggable="false">
+            </button>
+          </div>
 
-    <!-- Prawa kolumna: Notatki (EXACT COPY from diarization) -->
-    <div class="notes-panel">
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="notes.title"><i data-icon="notes" data-size="16"></i> Notatki</div>
-      
-      <!-- Notatka globalna -->
-      <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:6px" data-i18n="notes.global.title"><i data-icon="globe" data-size="16"></i> Notatka globalna</div>
-        <textarea id="tr_notes_global" placeholder="Notatka do całej transkrypcji (kontekst, cel, wnioski...)" data-i18n-placeholder="notes.global.placeholder" style="min-height:120px;width:100%;padding:10px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:13px;resize:vertical;background:var(--panel,#fff);color:var(--text,inherit)"></textarea>
-        <div class="small" style="margin-top:4px;opacity:0.7" data-i18n="notes.autosave"><i data-icon="success" data-size="12"></i> Auto-save</div>
-      </div>
+          <div class="analyst-panel-divider"></div>
 
-      <div class="hr" style="margin:12px 0"></div>
+          <!-- Global note -->
+          <div class="analyst-panel-section">
+            <div class="analyst-panel-label">
+              <img src="/static/icons/inne/pin.svg" alt="" width="14" height="14" draggable="false">
+              <span data-i18n="analyst_panel.global_note">Notatka globalna</span>
+            </div>
+            <textarea class="analyst-panel-global-ta input" id="tr_notes_global" data-i18n-placeholder="notes.global.placeholder" placeholder="Notatka do calej transkrypcji (kontekst, cel, wnioski...)"></textarea>
+          </div>
 
-      <!-- Notatki do bloków -->
-      <div class="notes-section">
-        <div class="label" style="font-size:13px;margin-bottom:8px" data-i18n="notes.blocks.title"><i data-icon="pin" data-size="16"></i> Notatki do bloków</div>
-        <div id="tr_block_notes_list" class="block-notes-list">
-          <div class="small" style="opacity:0.6;text-align:center;padding:20px" data-i18n-html="notes.blocks.empty_html">
-            ${t("notes.blocks.empty_html")}
+          <div class="analyst-panel-divider"></div>
+
+          <!-- Item notes (block notes) -->
+          <div class="analyst-panel-section analyst-panel-items-section">
+            <div class="analyst-panel-label" style="display:flex;align-items:center;justify-content:space-between">
+              <span style="display:flex;align-items:center;gap:5px">
+                <img src="/static/icons/projekty/project_tag.svg" alt="" width="14" height="14" draggable="false">
+                <span data-i18n="notes.blocks.title">Notatki do blokow</span>
+              </span>
+              <span class="analyst-panel-count" id="tr_notes_count">0</span>
+            </div>
+            <div class="analyst-panel-items" id="tr_block_notes_list">
+              <div class="analyst-panel-empty" data-i18n-html="notes.blocks.empty_html">Brak notatek. Kliknij ikone notatki na bloku aby dodac.</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main content -->
+      <div class="analyst-panel-main">
+        <div>
+          <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="tr.result.title"><i data-icon="document" data-size="16"></i> Wynik transkrypcji</div>
+          <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsluchac fragment • Prawy przycisk myszy: edycja.</div>
+          <div id="tr_audio_player"></div>
+          <div id="tr_blocks" class="blocklist" style="display:none"></div>
+          <!-- Sound events panel -->
+          <div id="tr_sound_events" class="sound-events-panel" style="display:none"></div>
+          <textarea id="tr_out" class="bigarea" placeholder="Tutaj pojawi sie wynik..." data-i18n-placeholder="placeholder.result_here"></textarea>
+          <div class="small" style="margin-top:6px" data-i18n-html="hint.autosave_all_html">
+            <i data-icon="info_circle" data-size="14"></i> <strong>Wszystkie zmiany zapisuja sie automatycznie</strong> - edytuj bloki, zmieniaj nazwy mowcow, wszystko jest synchronizowane z projektem w czasie rzeczywistym.
           </div>
         </div>
       </div>
-
-      <div class="small" style="margin-top:10px;color:#999">Notatki zapisywane automatycznie</div>
     </div>
-  </div>
 
 
 
