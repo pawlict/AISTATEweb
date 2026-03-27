@@ -1778,6 +1778,34 @@ def project_write_file(project_id: str, path: Path, content: str) -> None:
         tmp.replace(path)
 
 
+def _clear_stale_results(project_id: str) -> None:
+    """Remove old transcription/diarization results when a new audio file is uploaded."""
+    pdir = project_path(project_id)
+    stale_files = [
+        "transcript.txt", "transcript_segments.json",
+        "diarized.txt", "diarized_segments.json",
+        "waveform_peaks.json",
+        # encrypted variants
+        "transcript.txt.enc", "transcript_segments.json.enc",
+        "diarized.txt.enc", "diarized_segments.json.enc",
+        "waveform_peaks.json.enc",
+    ]
+    for fn in stale_files:
+        fp = pdir / fn
+        if fp.exists():
+            try:
+                fp.unlink()
+            except Exception:
+                pass
+    # Reset metadata flags
+    meta = read_project_meta(project_id)
+    for key in ("has_transcript", "has_diarized", "transcript_lang",
+                "transcript_engine", "transcript_model",
+                "diarization_engine", "diarization_model", "num_speakers"):
+        meta.pop(key, None)
+    write_project_meta(project_id, meta)
+
+
 def save_upload(project_id: str, upload: UploadFile) -> Path:
     pdir = project_path(project_id)
     fname = safe_filename(upload.filename or "audio")
@@ -1788,6 +1816,8 @@ def save_upload(project_id: str, upload: UploadFile) -> Path:
     else:
         with dst.open("wb") as f:
             shutil.copyfileobj(upload.file, f)
+    # Clear old results before updating metadata
+    _clear_stale_results(project_id)
     meta = read_project_meta(project_id)
     meta["audio_file"] = fname
     meta["updated_at"] = now_iso()
