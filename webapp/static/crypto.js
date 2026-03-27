@@ -182,6 +182,141 @@
     await _loadScript("https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js");
   }
 
+  async function _ensureHtml2Canvas() {
+    if (window.html2canvas) return;
+    await _loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Card screenshot with watermark (mirrors GSM implementation)       */
+  /* ------------------------------------------------------------------ */
+
+  const _CRYPTO_SCREENSHOT_HIDE = ".crypto-card-screenshot-btn, .crypto-screenshot-hide, .crypto-chart-zoom-bar, select.input";
+
+  /**
+   * Draw a watermark footer below the source canvas.
+   * "AISTATEweb" in brand gradient + timestamp.
+   */
+  function _cryptoDrawWatermark(srcCanvas, extraParts) {
+    const w = srcCanvas.width;
+    const barH = Math.round(Math.max(32, w * 0.032));
+    const fontSize = Math.round(barH * 0.44);
+    const totalH = srcCanvas.height + barH;
+
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = totalH;
+    const ctx = out.getContext("2d");
+
+    // Draw source content
+    ctx.drawImage(srcCanvas, 0, 0);
+
+    // White background for watermark row
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, srcCanvas.height, w, barH);
+
+    // Subtle separator
+    ctx.fillStyle = "rgba(0,0,0,0.08)";
+    ctx.fillRect(0, srcCanvas.height, w, 1);
+
+    ctx.textBaseline = "middle";
+    const cy = srcCanvas.height + barH / 2;
+    const pad = Math.round(barH * 0.45);
+
+    // "AI" in navy, "STATE" in brand-blue, "web" in sky
+    const parts = [
+      { text: "AI", color: "#0d1350" },
+      { text: "STATE", color: "#2946b7" },
+      { text: "web", color: "#1096f4" },
+    ];
+    let lx = pad;
+    ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+    for (const p of parts) {
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, lx, cy);
+      lx += ctx.measureText(p.text).width;
+    }
+
+    const now = new Date();
+    const dateStr = now.toLocaleString("pl-PL", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const grayColor = "rgba(0,0,0,0.38)";
+    ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = grayColor;
+
+    if (extraParts && extraParts.length) {
+      for (const part of extraParts) {
+        ctx.fillText(`  |  ${part}`, lx, cy);
+        lx += ctx.measureText(`  |  ${part}`).width;
+      }
+    }
+
+    const dateW = ctx.measureText(dateStr).width;
+    ctx.fillText(dateStr, w - pad - dateW, cy);
+
+    return out;
+  }
+
+  async function _takeCryptoCardScreenshot(btn) {
+    const targetSel = btn.dataset.target;
+    const name = btn.dataset.name || "screenshot";
+    const card = document.querySelector(targetSel);
+    if (!card) return;
+    btn.disabled = true;
+
+    try {
+      await _ensureHtml2Canvas();
+
+      const cardCanvas = await window.html2canvas(card, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        scale: 2,
+        logging: false,
+        onclone: (_doc, clonedCard) => {
+          // Hide buttons/selects in clone
+          clonedCard.querySelectorAll(_CRYPTO_SCREENSHOT_HIDE).forEach(el => {
+            el.style.display = "none";
+          });
+          // Force light background on graph container in clone
+          const graphEl = clonedCard.querySelector("#crypto_graph_container");
+          if (graphEl) graphEl.style.background = "#ffffff";
+        },
+      });
+
+      const extra = ["Crypto Analysis"];
+      const out = _cryptoDrawWatermark(cardCanvas, extra);
+
+      out.toBlob((blob) => {
+        if (!blob) return;
+        const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        const filename = `Crypto_${name}_${ts}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, "image/png");
+    } catch (e) {
+      console.error("[Crypto] Screenshot failed:", e);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function _bindCryptoScreenshotButtons() {
+    document.querySelectorAll(".crypto-card-screenshot-btn").forEach(btn => {
+      if (btn._screenshotBound) return;
+      btn._screenshotBound = true;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        _takeCryptoCardScreenshot(btn);
+      };
+    });
+  }
+
   /* ------------------------------------------------------------------ */
   /*  LLM model loading (shared pattern with GSM)                       */
   /* ------------------------------------------------------------------ */
@@ -361,6 +496,9 @@
 
     _renderGraph(r);
     if (!isExchange) _renderWallets(r);
+
+    // Bind screenshot buttons after all cards are rendered
+    _bindCryptoScreenshotButtons();
   }
 
   /* -- Summary (light fields like AML/GSM) ----------------------------- */
@@ -2967,7 +3105,7 @@
           style: {
             "background-color": "data(color)",
             "label": "data(label)",
-            "color": "#e2e8f0",
+            "color": "#1e293b",
             "font-size": "10px",
             "text-valign": "bottom",
             "text-margin-y": 4,
@@ -2975,7 +3113,7 @@
             "height": "data(size)",
             "shape": "data(shape)",
             "border-width": 1,
-            "border-color": "#334155",
+            "border-color": "#94a3b8",
           },
         },
         {
