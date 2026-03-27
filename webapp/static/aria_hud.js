@@ -148,18 +148,21 @@
   function _initDrag(el) {
     var startX, startY, startLeft, startTop, dragging = false, moved = false;
 
+    // Ensure all children don't steal pointer events during drag
+    el.style.touchAction = 'none';
+
     function onDown(e) {
-      if (e.button && e.button !== 0) return; // left button only
+      if (e.type === 'mousedown' && e.button !== 0) return;
       var ev = e.touches ? e.touches[0] : e;
       dragging = true;
       moved = false;
-      var rect = el.getBoundingClientRect();
       startX = ev.clientX;
       startY = ev.clientY;
+      // Convert CSS bottom/right to left/top if needed
+      var rect = el.getBoundingClientRect();
       startLeft = rect.left;
       startTop = rect.top;
-      el.style.transition = 'none';
-      e.preventDefault();
+      // Do NOT call e.preventDefault() here — it breaks click detection on buttons
     }
 
     function onMove(e) {
@@ -167,14 +170,21 @@
       var ev = e.touches ? e.touches[0] : e;
       var dx = ev.clientX - startX;
       var dy = ev.clientY - startY;
-      if (!moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+      if (!moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      // First real move — switch from CSS bottom/right to left/top
+      if (!moved) {
+        el.style.left = startLeft + 'px';
+        el.style.top = startTop + 'px';
+        el.style.right = 'auto';
+        el.style.bottom = 'auto';
+        el.style.transition = 'none';
+      }
       moved = true;
+      e.preventDefault(); // prevent text selection during drag
       var newLeft = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, startLeft + dx));
       var newTop = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, startTop + dy));
       el.style.left = newLeft + 'px';
       el.style.top = newTop + 'px';
-      el.style.right = 'auto';
-      el.style.bottom = 'auto';
     }
 
     function onUp() {
@@ -188,7 +198,7 @@
     }
 
     el.addEventListener('mousedown', onDown);
-    el.addEventListener('touchstart', onDown, {passive: false});
+    el.addEventListener('touchstart', onDown, {passive: true});
     document.addEventListener('mousemove', onMove);
     document.addEventListener('touchmove', onMove, {passive: false});
     document.addEventListener('mouseup', onUp);
