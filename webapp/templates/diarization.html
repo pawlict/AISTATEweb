@@ -897,9 +897,26 @@ function updateGlobalNote() {
   scheduleNotesSave();
 }
 
-function updateBlockNote(idx, text) {
+// Tag definitions
+const NOTE_TAGS = {
+  neutral:    { label: "Neutralny",  color: "#60a5fa", bg: "rgba(96,165,250,.12)" },
+  legitimate: { label: "Poprawny",   color: "#15803d", bg: "rgba(21,128,61,.10)" },
+  suspicious: { label: "Podejrzany", color: "#dc2626", bg: "rgba(220,38,38,.10)" },
+  monitoring: { label: "Obserwacja", color: "#ea580c", bg: "rgba(234,88,12,.10)" },
+};
+
+function _getDiNoteObj(idx) {
+  const v = DI.notes.blocks[String(idx)];
+  if (!v) return null;
+  if (typeof v === "string") return v.trim() ? { text: v, tags: [] } : null;
+  return (v.text && v.text.trim()) ? v : null;
+}
+function _getDiNoteText(idx) { const o = _getDiNoteObj(idx); return o ? o.text : ""; }
+function _getDiNoteTags(idx) { const o = _getDiNoteObj(idx); return o ? (o.tags || []) : []; }
+
+function updateBlockNote(idx, text, tags) {
   if (text && text.trim()) {
-    DI.notes.blocks[String(idx)] = text.trim();
+    DI.notes.blocks[String(idx)] = { text: text.trim(), tags: tags || [] };
   } else {
     delete DI.notes.blocks[String(idx)];
   }
@@ -908,13 +925,12 @@ function updateBlockNote(idx, text) {
   scheduleNotesSave();
 }
 
-
 function getBlockNote(idx) {
-  return DI.notes.blocks[String(idx)] || "";
+  return _getDiNoteText(idx);
 }
 
 function hasBlockNote(idx) {
-  return Boolean(DI.notes.blocks[String(idx)]);
+  return !!_getDiNoteObj(idx);
 }
 
 function scheduleNotesSave() {
@@ -964,39 +980,43 @@ function renderGlobalNote() {
 function renderBlockNotesList() {
   const container = document.getElementById('di_block_notes_list');
   if (!container) return;
-  
-  const noteEntries = Object.entries(DI.notes.blocks);
-  
+  const countEl = document.getElementById("di_notes_count");
+
+  const noteEntries = Object.entries(DI.notes.blocks).filter(([k,v]) => _getDiNoteObj(parseInt(k)));
+
+  if (countEl) countEl.textContent = noteEntries.length;
+
   if (noteEntries.length === 0) {
-    container.innerHTML = `
-      <div class="small" style="opacity:0.6;text-align:center;padding:20px;">
-        Brak notatek do bloków.<br>
-        Kliknij <img src="/static/icons/dokumenty/notes.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
-      </div>
-    `;
+    container.innerHTML = `<div class="analyst-panel-empty">
+      Brak notatek do bloków.<br>
+      Kliknij <img src="/static/icons/dokumenty/notes.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
+    </div>`;
     return;
   }
-  
-  container.innerHTML = '';
-  
-  noteEntries.forEach(([idx, text]) => {
-    const item = document.createElement('div');
-    item.className = 'block-note-item';
-    
+
+  container.innerHTML = noteEntries.map(([idx, v]) => {
+    const text = typeof v === "string" ? v : (v.text || "");
+    const tags = typeof v === "object" ? (v.tags || []) : [];
     const preview = text.length > 60 ? text.substring(0, 60) + '...' : text;
-    
-    item.innerHTML = `
-      <div><strong>Blok #${idx}</strong></div>
-      <div class="block-note-preview">${escapeHtml(preview)}</div>
-      <div class="block-note-actions">
-        <button onclick="scrollToBlock(${idx})">${aiIcon('deep_search',14)} Pokaż</button>
-        <button onclick="editBlockNote(${idx})">${aiIcon('edit',14)} Edytuj</button>
-        <button onclick="deleteBlockNote(${idx})">${aiIcon('delete',14)} Usuń</button>
+    const tagBadges = tags.map(t => {
+      const td = NOTE_TAGS[t];
+      return td ? `<span class="analyst-tag-badge" style="background:${td.bg};color:${td.color};font-size:10px;padding:1px 6px;border-radius:8px">${td.label}</span>` : "";
+    }).join(" ");
+    return `
+      <div class="analyst-note-item" data-idx="${idx}" style="cursor:pointer" onclick="editBlockNote(${idx})">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+          <img src="/static/icons/dokumenty/notes_filled.svg" width="14" height="14" alt="">
+          <strong style="font-size:12px">Blok #${idx}</strong>
+          ${tagBadges}
+        </div>
+        <div style="font-size:11px;color:var(--text-muted,#64748b);margin-bottom:4px">${escapeHtml(preview)}</div>
+        <div style="display:flex;gap:6px;font-size:11px">
+          <a href="#" onclick="event.stopPropagation();scrollToBlock(${idx});return false" style="color:#2563eb">Przejdź</a>
+          <a href="#" onclick="event.stopPropagation();deleteBlockNote(${idx});return false" style="color:#dc2626">Usuń</a>
+        </div>
       </div>
     `;
-    
-    container.appendChild(item);
-  });
+  }).join("");
 }
 
 function escapeHtml(text) {
@@ -1015,20 +1035,19 @@ function scrollToBlock(idx) {
 }
 
 function editBlockNote(idx) {
-  const currentNote = getBlockNote(idx);
-  _openNoteModal(idx, currentNote, function(newText) {
-    updateBlockNote(idx, newText);
+  const currentText = _getDiNoteText(idx);
+  const currentTags = _getDiNoteTags(idx);
+  _openNoteModal(idx, currentText, currentTags, function(newText, newTags) {
+    updateBlockNote(idx, newText, newTags);
     updateBlockNoteIconInSeg(idx);
   }, function() {
-    // delete callback
     updateBlockNote(idx, "");
     updateBlockNoteIconInSeg(idx);
   });
 }
 
-/** Styled note editor modal (replaces browser prompt) */
-function _openNoteModal(idx, currentText, onSave, onDelete) {
-  // Remove any existing modal
+/** Styled note editor modal with tags */
+function _openNoteModal(idx, currentText, currentTags, onSave, onDelete) {
   var existing = document.querySelector('.note-editor-overlay');
   if (existing) existing.remove();
 
@@ -1037,6 +1056,16 @@ function _openNoteModal(idx, currentText, onSave, onDelete) {
 
   var hasExisting = !!(currentText && currentText.trim());
   var title = hasExisting ? 'Edytuj notatkę — Blok #' + idx : 'Nowa notatka — Blok #' + idx;
+  var activeTags = currentTags || [];
+
+  var tagBtnsHtml = '';
+  for (var key in NOTE_TAGS) {
+    var t = NOTE_TAGS[key];
+    var isActive = activeTags.indexOf(key) >= 0 ? ' active' : '';
+    tagBtnsHtml += '<button type="button" class="analyst-tag-btn' + isActive + '" data-tag="' + key + '">' +
+      '<span class="analyst-tag-dot" style="background:' + t.color + '"></span> ' +
+      '<span class="analyst-tag-label">' + t.label + '</span></button>';
+  }
 
   overlay.innerHTML =
     '<div class="note-editor-modal">' +
@@ -1048,6 +1077,8 @@ function _openNoteModal(idx, currentText, onSave, onDelete) {
         '<textarea id="_note_editor_ta" placeholder="Wpisz notatkę do bloku…">' +
           (currentText || '').replace(/</g, '&lt;') +
         '</textarea>' +
+        '<div style="margin-top:8px"><div class="label" style="font-size:12px;margin-bottom:4px">Tagi</div>' +
+        '<div class="analyst-note-tags" id="_note_editor_tags">' + tagBtnsHtml + '</div></div>' +
         '<div class="note-editor-hint">Ctrl+Enter = zapisz</div>' +
       '</div>' +
       '<div class="note-editor-footer">' +
@@ -1059,6 +1090,10 @@ function _openNoteModal(idx, currentText, onSave, onDelete) {
 
   document.body.appendChild(overlay);
 
+  overlay.querySelectorAll('.analyst-tag-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { btn.classList.toggle('active'); });
+  });
+
   var ta = document.getElementById('_note_editor_ta');
   if (ta) {
     ta.focus();
@@ -1066,13 +1101,18 @@ function _openNoteModal(idx, currentText, onSave, onDelete) {
   }
 
   function close() { overlay.remove(); }
+  function collectTags() {
+    var tags = [];
+    overlay.querySelectorAll('.analyst-tag-btn.active').forEach(function(b) { tags.push(b.getAttribute('data-tag')); });
+    return tags;
+  }
   function save() {
     var text = ta ? ta.value : '';
+    var tags = collectTags();
     close();
-    if (onSave) onSave(text);
+    if (onSave) onSave(text, tags);
   }
 
-  // Event delegation
   overlay.addEventListener('click', function(e) {
     var action = e.target.getAttribute('data-action');
     if (action === 'save') { save(); return; }
@@ -1087,7 +1127,6 @@ function _openNoteModal(idx, currentText, onSave, onDelete) {
     }
   });
 
-  // Ctrl+Enter to save, Escape to close
   if (ta) {
     ta.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
@@ -1120,15 +1159,10 @@ function updateBlockNoteIconInSeg(idx) {
     }
   }
   
-  if (hasBlockNote(idx)) {
-    icon.innerHTML = '<img src="/static/icons/dokumenty/notes.svg" width="19" height="19" alt="Notatka">';
-    icon.classList.add('has-note');
-    icon.title = 'Ma notatkę - kliknij aby edytować';
-  } else {
-    icon.innerHTML = '<img src="/static/icons/dokumenty/notes.svg" width="19" height="19" alt="Notatka">';
-    icon.classList.remove('has-note');
-    icon.title = 'Dodaj notatkę';
-  }
+  const _has = hasBlockNote(idx);
+  icon.innerHTML = `<img src="/static/icons/dokumenty/${_has ? "notes_filled" : "notes"}.svg" width="19" height="19" alt="Notatka">`;
+  icon.classList.toggle('has-note', _has);
+  icon.title = _has ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę';
 }
 
 async function saveNotesToProject() {
@@ -1727,8 +1761,9 @@ function diRender(){
     // Ikona notatki
     const noteIcon = document.createElement('span');
     noteIcon.className = 'seg-note-icon' + (hasBlockNote(idx) ? ' has-note' : '');
-    noteIcon.innerHTML = '<img src="/static/icons/dokumenty/notes.svg" width="19" height="19" alt="Notatka">';
-    noteIcon.title = hasBlockNote(idx) ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę';
+    const _hasN = hasBlockNote(idx);
+    noteIcon.innerHTML = `<img src="/static/icons/dokumenty/${_hasN ? "notes_filled" : "notes"}.svg" width="19" height="19" alt="Notatka">`;
+    noteIcon.title = _hasN ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę';
     bindNoteIconEvents(noteIcon, idx);
     
     const timeDiv = document.createElement('div');
