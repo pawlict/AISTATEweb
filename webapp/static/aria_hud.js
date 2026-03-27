@@ -146,17 +146,17 @@
   var _LS_POS_KEY = 'aistate_aria_trigger_pos';
 
   function _initDrag(el) {
-    var startX, startY, startLeft, startTop;
+    var startX, startY, startLeft, startTop, dragging = false, moved = false;
 
     el.style.touchAction = 'none';
-    // Use shared drag state so click handler knows if we dragged
-    var ds = AriaHUD._dragState = AriaHUD._dragState || { dragging: false, moved: false };
+    // Prevent native click — we handle open/close in onUp
+    el.addEventListener('click', function(e) { e.stopPropagation(); e.preventDefault(); }, true);
 
     function onDown(e) {
       if (e.type === 'mousedown' && e.button !== 0) return;
       var ev = e.touches ? e.touches[0] : e;
-      ds.dragging = true;
-      ds.moved = false;
+      dragging = true;
+      moved = false;
       startX = ev.clientX;
       startY = ev.clientY;
       var rect = el.getBoundingClientRect();
@@ -165,20 +165,19 @@
     }
 
     function onMove(e) {
-      if (!ds.dragging) return;
+      if (!dragging) return;
       var ev = e.touches ? e.touches[0] : e;
       var dx = ev.clientX - startX;
       var dy = ev.clientY - startY;
-      if (!ds.moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
-      if (!ds.moved) {
-        // First real move — convert position
+      if (!moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      if (!moved) {
         el.style.left = startLeft + 'px';
         el.style.top = startTop + 'px';
         el.style.right = 'auto';
         el.style.bottom = 'auto';
         el.style.transition = 'none';
       }
-      ds.moved = true;
+      moved = true;
       e.preventDefault();
       var newLeft = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, startLeft + dx));
       var newTop = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, startTop + dy));
@@ -186,13 +185,18 @@
       el.style.top = newTop + 'px';
     }
 
-    function onUp() {
-      if (!ds.dragging) return;
-      ds.dragging = false;
+    function onUp(e) {
+      if (!dragging) return;
+      dragging = false;
       el.style.transition = '';
-      if (ds.moved) {
+      if (moved) {
+        // Was a drag — save position, don't toggle
         _saveTriggerPosition();
+      } else {
+        // Was a click (no movement) — toggle HUD
+        toggle();
       }
+      moved = false;
     }
 
     el.addEventListener('mousedown', onDown);
@@ -272,16 +276,6 @@
     var sesEl = document.getElementById('aria-st-ses');
     if (sesEl) sesEl.textContent = 'SES:' + AriaHUD.sessionId;
 
-    AriaHUD._dragState = { dragging: false, moved: false };
-    AriaHUD.$trigger.addEventListener('mousedown', function() {
-      AriaHUD._dragState.dragging = true;
-      AriaHUD._dragState.moved = false;
-    });
-    AriaHUD.$trigger.addEventListener('click', function(e) {
-      // Only toggle if mouse didn't move (not a drag)
-      if (!AriaHUD._dragState.moved) toggle();
-      AriaHUD._dragState.moved = false;
-    });
     _initDrag(AriaHUD.$trigger);
     _restoreTriggerPosition();
     document.getElementById('aria-close')?.addEventListener('click', function () { setOpen(false); });
