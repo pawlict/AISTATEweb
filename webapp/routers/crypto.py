@@ -993,10 +993,14 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                 'yOpts={ticks:{font:{size:10}}};'
                 '}'
                 'new Chart(c,{type:"line",data:{labels:_btData.labels,datasets:ds},'
-                'plugins:[{id:"wm",afterDraw:function(chart){var ctx=chart.ctx;ctx.save();ctx.font="bold 11px system-ui";'
-                'ctx.fillStyle="rgba(13,19,80,0.15)";ctx.fillText("AI",8,chart.height-6);'
-                'var w1=ctx.measureText("AI").width;ctx.fillStyle="rgba(41,70,183,0.15)";ctx.fillText("STATE",8+w1,chart.height-6);'
-                'var w2=ctx.measureText("STATE").width;ctx.fillStyle="rgba(16,150,244,0.15)";ctx.fillText("web",8+w1+w2,chart.height-6);'
+                'plugins:[{id:"wm",afterDraw:function(chart){var ctx=chart.ctx;ctx.save();'
+                'var fs=11;ctx.font="bold "+fs+"px system-ui,sans-serif";'
+                'var y=chart.height-6;var x=8;'
+                'var parts=[["AI","#0d1350"],["STATE","#2946b7"],["web","#1096f4"]];'
+                'for(var i=0;i<parts.length;i++){ctx.fillStyle=parts[i][1];ctx.fillText(parts[i][0],x,y);x+=ctx.measureText(parts[i][0]).width;}'
+                'ctx.font=fs+"px system-ui,sans-serif";ctx.fillStyle="rgba(0,0,0,0.38)";'
+                'var d=new Date();var ds=d.toLocaleString("pl-PL",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});'
+                'var dw=ctx.measureText(ds).width;ctx.fillText(ds,chart.width-dw-8,y);'
                 'ctx.restore();}}],'
                 'options:{responsive:true,plugins:{legend:{position:"bottom",labels:{font:{size:10}}}},'
                 'scales:{x:{ticks:{maxTicksLimit:20,font:{size:9}}},y:yOpts}}});'
@@ -1036,9 +1040,13 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                     '<h3>Graf przepływu transakcji</h3>'
                     '<div style="position:relative">'
                     '<div id="report_graph" style="width:100%;height:550px;background:#fafbfc;border:1px solid #e2e8f0;border-radius:8px"></div>'
-                    '<div style="position:absolute;bottom:8px;left:10px;font:bold 11px system-ui;opacity:0.15;pointer-events:none">'
+                    '<div style="position:absolute;bottom:8px;left:10px;font:bold 11px system-ui;pointer-events:none;display:flex;align-items:center;gap:0">'
                     '<span style="color:#0d1350">AI</span><span style="color:#2946b7">STATE</span><span style="color:#1096f4">web</span>'
-                    '</div></div>'
+                    '</div>'
+                    '<div style="position:absolute;bottom:8px;right:10px;font:11px system-ui;color:rgba(0,0,0,0.38);pointer-events:none" id="report_graph_date"></div>'
+                    '<script>document.getElementById("report_graph_date").textContent='
+                    'new Date().toLocaleString("pl-PL",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});</script>'
+                    '</div>'
                     '<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js"></script>'
                     '<script>'
                     f'var _gElems={_json2.dumps(cy_elements, ensure_ascii=False)};'
@@ -1472,7 +1480,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
 <title>Raport Crypto - {_resc(filename)}</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
-body {{ font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 1100px; margin: 0 auto; padding: 20px; color: #1e293b; font-size: 14px; }}
+body {{ font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 1100px; margin: 0 auto; padding: 20px; color: #1e293b; font-size: 14px; text-align: justify; }}
 h1 {{ border-bottom: 3px solid #2563eb; padding-bottom: 8px; color: #1e293b; }}
 h2 {{ color: #2563eb; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-top: 32px; page-break-after: avoid; }}
 h3 {{ color: #475569; margin-top: 20px; page-break-after: avoid; }}
@@ -2110,8 +2118,12 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
                 ax.legend(fontsize=7, loc="upper left", ncol=3)
                 ax.tick_params(axis="y", labelsize=8)
                 ax.grid(True, alpha=0.3)
+                from datetime import datetime as _dt_wm
+                _wm_date = _dt_wm.now().strftime("%d.%m.%Y %H:%M")
                 fig.text(0.01, 0.01, "AISTATEweb", fontsize=8, fontweight="bold",
-                         color="#2946b7", alpha=0.15, transform=fig.transFigure)
+                         color="#2946b7", alpha=0.35, transform=fig.transFigure)
+                fig.text(0.99, 0.01, _wm_date, fontsize=7, ha="right",
+                         color="#000000", alpha=0.25, transform=fig.transFigure)
                 fig.tight_layout()
                 buf = BytesIO()
                 fig.savefig(buf, format="png", dpi=150)
@@ -2154,8 +2166,12 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
                         nc = risk_cm.get(nd.get("risk_level", "low"), "#64748b")
                         ax.plot(x, y, "o", color=nc, markersize=8, markeredgecolor="white", markeredgewidth=0.5)
                         ax.text(x, y - 0.08, nd.get("label", nid[:8]), ha="center", fontsize=5, color="#334155")
+                from datetime import datetime as _dt_wm
+                _wm_date = _dt_wm.now().strftime("%d.%m.%Y %H:%M")
                 fig.text(0.01, 0.01, "AISTATEweb", fontsize=8, fontweight="bold",
-                         color="#2946b7", alpha=0.15, transform=fig.transFigure)
+                         color="#2946b7", alpha=0.35, transform=fig.transFigure)
+                fig.text(0.99, 0.01, _wm_date, fontsize=7, ha="right",
+                         color="#000000", alpha=0.25, transform=fig.transFigure)
                 fig.tight_layout()
                 buf = BytesIO()
                 fig.savefig(buf, format="png", dpi=150)
@@ -2442,11 +2458,16 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
         raw = t.get("raw", {})
         val = abs(float(raw.get("fiat_value", 0) or raw.get("wartość", 0) or 0))
         qty = float(t.get("amount", 0))
+        ts = t.get("timestamp", "")
         if tok not in sell_by_tok:
-            sell_by_tok[tok] = {"count": 0, "fiat": 0.0, "qty": 0.0}
+            sell_by_tok[tok] = {"count": 0, "fiat": 0.0, "qty": 0.0, "first": ts or "z", "last": ""}
         sell_by_tok[tok]["count"] += 1
         sell_by_tok[tok]["fiat"] += val
         sell_by_tok[tok]["qty"] += qty
+        if ts and ts < sell_by_tok[tok]["first"]:
+            sell_by_tok[tok]["first"] = ts
+        if ts and ts > sell_by_tok[tok]["last"]:
+            sell_by_tok[tok]["last"] = ts
 
     total_buy_fiat = sum(v["fiat"] for v in buy_by_tok.values())
     total_sell_fiat = sum(v["fiat"] for v in sell_by_tok.values())
@@ -2533,7 +2554,16 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
                 style="List Bullet"
             )
 
-        _add_justified(f"Łączna wartość środków zaangażowanych w zakup aktywów wirtualnych wyniosła {total_buy_fiat:,.2f} PLN.")
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = p.add_run("Łączna wartość środków zaangażowanych w zakup aktywów wirtualnych wyniosła ")
+        run.font.size = Pt(11)
+        run_b = p.add_run(f"{total_buy_fiat:,.2f} PLN")
+        run_b.bold = True
+        run_b.font.size = Pt(11)
+        run2 = p.add_run(".")
+        run2.font.size = Pt(11)
+        p.paragraph_format.space_after = Pt(6)
 
     # Zbycie
     if sell_by_tok:
@@ -2549,13 +2579,23 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
         p.paragraph_format.space_after = Pt(4)
 
         for tok, v in sorted(sell_by_tok.items()):
+            period = f"{v['first'][:10]} - {v['last'][:10]}" if v.get("first", "") != v.get("last", "") else v.get("first", "")[:10]
             doc.add_paragraph(
-                f"{tok}: {v['count']} transakcji sprzedaży, "
+                f"{tok}: {v['count']} transakcji sprzedaży w okresie {period}, "
                 f"łącznie {v['qty']:.6f} {tok} za {v['fiat']:,.2f} PLN",
                 style="List Bullet"
             )
 
-        _add_justified(f"Łączna wartość uzyskaną ze sprzedaży aktywów wyniosła {total_sell_fiat:,.2f} PLN.")
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = p.add_run(f"Łączna wartość uzyskana ze sprzedaży aktywów wyniosła ")
+        run.font.size = Pt(11)
+        run_b = p.add_run(f"{total_sell_fiat:,.2f} PLN")
+        run_b.bold = True
+        run_b.font.size = Pt(11)
+        run2 = p.add_run(".")
+        run2.font.size = Pt(11)
+        p.paragraph_format.space_after = Pt(6)
 
     # Konwersja na FIAT
     if total_sell_fiat > 0:
