@@ -391,7 +391,8 @@ def _extract_pdf_lines(path: Path) -> List[str]:
 
 def _detect_crypto_pdf_format(lines: List[str]) -> str:
     """Detect crypto exchange from PDF text lines."""
-    head = "\n".join(lines[:60]).lower()
+    # Normalize non-breaking spaces (\xa0) to regular spaces for matching
+    head = "\n".join(lines[:60]).lower().replace("\xa0", " ")
     if "binance" in head:
         return "binance_pdf"
     # Revolut: word "revolut" may be in logo (image) not in text,
