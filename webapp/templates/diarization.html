@@ -78,23 +78,6 @@
     font-style: italic;
   }
   
-  #speaker_toast {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: rgba(33, 150, 243, 0.95);
-    color: white;
-    padding: 12px 18px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 10000;
-    opacity: 0;
-    transition: opacity 0.3s;
-    pointer-events: none;
-  }
-  
   /* Diarization blocks styling (like transcription) */
   .blocklist {
     display: flex;
@@ -1142,7 +1125,7 @@ function deleteBlockNote(idx) {
   updateBlockNoteIconInSeg(idx);
   hideNoteTooltip();
   scheduleNotesSave();
-  showToast('Notatka usunięta');
+  showToast('Notatka usunięta', 'info');
 }
 
 function updateBlockNoteIconInSeg(idx) {
@@ -1184,7 +1167,7 @@ async function saveNotesToProject() {
       body: JSON.stringify(DI.notes)
     });
     
-    showToast('Notatki zapisane w projekcie');
+    showToast('Notatki zapisane w projekcie', 'success');
   } catch (e) {
     showToast('Błąd zapisu notatek: ' + e.message, 'error');
   }
@@ -1220,7 +1203,7 @@ function exportNotesAsJSON() {
   a.download = `notes_${AISTATE.projectId || 'export'}_${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('Notatki wyeksportowane');
+  showToast('Notatki wyeksportowane', 'success');
 }
 
 
@@ -1836,23 +1819,7 @@ function countSpeakerOccurrences(text, label){
 }
 
 // Show temporary toast notification
-function showToast(message, duration){
-  if(duration === undefined) duration = 2000;
-  let toast = document.getElementById('speaker_toast');
-  if(!toast){
-    toast = document.createElement('div');
-    toast.id = 'speaker_toast';
-    document.body.appendChild(toast);
-  }
-  
-  toast.textContent = message;
-  toast.style.opacity = '1';
-  
-  clearTimeout(toast._timer);
-  toast._timer = setTimeout(function(){
-    toast.style.opacity = '0';
-  }, duration);
-}
+// Toast: use global showToast from ui.js (top-right, auto-dismiss)
 
 // Render speaker mapping UI
 function renderSpeakerMappingUI(labels, outputText){
@@ -1916,7 +1883,7 @@ function renderSpeakerMappingUI(labels, outputText){
   });
   
   console.log('Wygenerowano UI dla ' + labels.length + ' mówców');
-  showToast('Zaktualizowano ' + labels.length + ' mówców');
+  showToast('Zaktualizowano ' + labels.length + ' mówców', 'success');
 }
 
 // Sync UI inputs to hidden JSON textarea
@@ -2759,7 +2726,7 @@ async function diSaveReports(){
       ? `Raport ${results[0]} wygenerowany`
       : `Raporty wygenerowane: ${results.join(', ')}`;
 
-    showToast(message + ' i zapisane w projekcie', 3000);
+    showToast(message + ' i zapisane w projekcie', 'success');
 
   }catch(e){
     showToast(`Błąd generowania raportu: ${e.message}`, 'error');
@@ -2933,7 +2900,7 @@ document.addEventListener('aistate:output-updated', function(e){
       const labels = extractSpeakerLabels(outEl.value);
       if(labels.length){
         mergeSpeakerMap(labels);
-        showToast('Wykryto ' + labels.length + ' mówców');
+        showToast('Wykryto ' + labels.length + ' mówców', 'success');
         console.log('Auto-refresh complete: ' + labels.length + ' speakers found:', labels);
       } else {
         console.warn('No speaker labels found in output');
