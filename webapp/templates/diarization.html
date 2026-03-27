@@ -640,6 +640,7 @@
 
     <!-- Result + Analyst Panel layout -->
     <div class="analyst-panel-layout">
+
       <!-- Panel analityczny (collapsible left sidebar) -->
       <aside class="analyst-panel collapsed" id="di_analyst_panel">
         <button class="analyst-panel-toggle" id="di_panel_toggle" title="Panel analityczny">
@@ -682,28 +683,24 @@
               <div class="analyst-panel-empty" data-i18n-html="notes.blocks.empty_html">Brak notatek. Kliknij ikonę notatki na bloku aby dodać.</div>
             </div>
           </div>
-
-          <div class="analyst-panel-divider"></div>
-
-          <!-- Speaker mapping (moved from main content) -->
-          <div class="analyst-panel-section">
-            <div class="analyst-panel-label" style="display:flex;align-items:center;gap:5px">
-              <i data-icon="transcription" data-size="14"></i>
-              <span data-i18n="diar.speakers.title">Nazwy mówców</span>
-            </div>
-            <div id="speaker_mapping_ui" class="speaker-mapping-container">
-              <div class="mapping-empty" data-i18n="diar.speakers.empty">Wykonaj diaryzację aby wykryć mówców.</div>
-            </div>
-            <textarea id="di_speaker_map" class="bigarea" placeholder='{"SPEAKER_00": "Jan", "SPEAKER_01": "Anna"}' style="display:none"></textarea>
-            <div style="margin-top:8px">
-              <button class="btn" id="di_apply_map" style="width:100%;font-size:12px" data-i18n-title="btn.apply_changes_hint" data-i18n="btn.apply_changes"><i data-icon="refresh" data-size="14"></i> Wprowadź zmiany</button>
-            </div>
-          </div>
         </div>
       </aside>
 
       <!-- Main content -->
       <div class="analyst-panel-main">
+        <!-- Speaker mapping (above diarization result) -->
+        <div class="subcard" style="margin-bottom:12px">
+          <div class="label" style="font-weight:800;font-size:14px;margin-bottom:8px" data-i18n="diar.speakers.title"><i data-icon="transcription" data-size="16"></i> Nazwy mówców</div>
+          <div id="speaker_mapping_ui" class="speaker-mapping-container">
+            <div class="mapping-empty" data-i18n="diar.speakers.empty">Wykonaj diaryzację aby wykryć mówców.</div>
+          </div>
+          <textarea id="di_speaker_map" class="bigarea" placeholder='{"SPEAKER_00": "Jan", "SPEAKER_01": "Anna"}' style="display:none"></textarea>
+          <div style="margin-top:8px">
+            <button class="btn" id="di_apply_map" style="font-size:12px" data-i18n-title="btn.apply_changes_hint" data-i18n="btn.apply_changes"><i data-icon="refresh" data-size="14"></i> Wprowadź zmiany</button>
+          </div>
+        </div>
+
+        <!-- Diarization result -->
         <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.result.title"><i data-icon="document" data-size="16"></i> Wynik diaryzacji</div>
         <div class="small" style="margin-bottom:8px" data-i18n="hint.click_to_play_edit">Kliknij na blok aby odsłuchać fragment • Prawy przycisk myszy: edycja.</div>
         <div id="di_audio_player"></div>
