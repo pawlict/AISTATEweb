@@ -49,6 +49,7 @@
   border: 2px solid var(--aria-cyan);
   opacity: 0;
   animation: ariaPulse 3s ease-in-out infinite;
+  pointer-events: none;
 }
 
 @keyframes ariaPulse {
@@ -60,6 +61,7 @@
   width: 56px;
   height: 56px;
   filter: drop-shadow(0 0 8px rgba(0, 212, 200, 0.35));
+  pointer-events: none;
 }
 
 #aria-hex-svg .hex-bg {
