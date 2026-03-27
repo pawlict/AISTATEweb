@@ -641,6 +641,15 @@ def parse_crypto_file(path: Path) -> ParsedCryptoData:
                 from .revolut_crypto_pdf import parse_revolut_crypto_pdf
                 return parse_revolut_crypto_pdf(path)
             else:
+                # Fallback: try dedicated Revolut detector (scans more broadly)
+                try:
+                    from .revolut_crypto_pdf import is_revolut_crypto_pdf, parse_revolut_crypto_pdf
+                    if is_revolut_crypto_pdf(lines):
+                        log.info("Revolut crypto PDF detected via fallback (is_revolut_crypto_pdf)")
+                        return parse_revolut_crypto_pdf(path)
+                except Exception as e:
+                    log.warning("Revolut fallback detection failed: %s", e)
+                log.warning("Unrecognized crypto PDF. First 10 lines: %s", lines[:10])
                 result.errors.append("Nierozpoznany format PDF giełdy kryptowalutowej.")
                 return result
 
