@@ -380,14 +380,11 @@
             <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="tr_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
             <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="tr_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
             <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="tr_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
-            <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes"><input type="checkbox" id="tr_include_notes" value="1"><img src="/static/icons/dokumenty/markdown.svg" alt="Notatki" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes"><input type="checkbox" id="tr_include_notes" value="1"><img src="/static/icons/dokumenty/notes.svg" alt="Notatki" draggable="false"></label>
             <button class="btn pill-icon" id="tr_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
           </div>
         </div>
       </div>
-
-      <!-- Optional: direct transcript download link (kept for compatibility) -->
-      <a class="btn secondary" id="tr_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
 
     </div>
   </div>
@@ -1071,7 +1068,7 @@ function trRenderBlockNotesList(){
   if(notes.length === 0){
     list.innerHTML = `<div class="small" style="opacity:0.6;text-align:center;padding:20px">
       Brak notatek do bloków.<br>
-      Kliknij <img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
+      Kliknij <img src="/static/icons/dokumenty/notes.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
     </div>`;
     return;
   }
@@ -1235,7 +1232,7 @@ function trRender(){
     // Note icon
     const noteIcon = document.createElement("span");
     noteIcon.className = "seg-note-icon" + (trHasBlockNote(idx) ? " has-note" : "");
-    noteIcon.innerHTML = '<img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" alt="Notatka">';
+    noteIcon.innerHTML = '<img src="/static/icons/dokumenty/notes.svg" width="19" height="19" alt="Notatka">';
     noteIcon.title = trHasBlockNote(idx) ? "Ma notatkę - kliknij aby edytować" : "Dodaj notatkę";
     trBindNoteIconEvents(noteIcon, idx);
     
