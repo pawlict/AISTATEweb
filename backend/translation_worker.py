@@ -83,9 +83,19 @@ def main() -> int:
         summary_detail = 5
     summary_detail = max(1, min(10, summary_detail))
 
-    # Make transformers fully offline by default for this worker.
-    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+    # Check if NLLB model is locally cached; if not, allow online download.
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+    try:
+        from huggingface_hub import try_to_load_from_cache
+        _cached = try_to_load_from_cache(nllb_model, "config.json")
+        if _cached is None or isinstance(_cached, type(None)):
+            eprint(f"translate: model '{nllb_model}' NOT in cache — enabling online download")
+            os.environ["TRANSFORMERS_OFFLINE"] = "0"
+        else:
+            os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+    except Exception:
+        # If check fails, allow online to be safe
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "0")
 
     # Respect GPU Resource Manager device assignment.
     # If AISTATE_GPU_DEVICE is "cpu", force CPU execution by hiding CUDA devices
@@ -139,8 +149,17 @@ def main() -> int:
     progress(5)
     eprint(f"translate: init NLLB model='{nllb_model}' mode={mode}")
 
-    # Load translator
-    tr = HybridTranslator(nllb_model=nllb_model)
+    # Load translator (model loading can take a while on first run)
+    progress(7)
+    eprint("translate: loading tokenizer...")
+    try:
+        tr = HybridTranslator(nllb_model=nllb_model)
+    except Exception as e:
+        eprint(f"translate: model load FAILED: {e}")
+        eprint("translate: hint - try running a 'fast' translation first to warm up the model cache")
+        raise
+    progress(15)
+    eprint("translate: model loaded successfully")
 
     # Optional glossary (term dictionary)
     glossary: Dict[str, Any] = {}

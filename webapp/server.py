@@ -1778,6 +1778,34 @@ def project_write_file(project_id: str, path: Path, content: str) -> None:
         tmp.replace(path)
 
 
+def _clear_stale_results(project_id: str) -> None:
+    """Remove old transcription/diarization results when a new audio file is uploaded."""
+    pdir = project_path(project_id)
+    stale_files = [
+        "transcript.txt", "transcript_segments.json",
+        "diarized.txt", "diarized_segments.json",
+        "waveform_peaks.json",
+        # encrypted variants
+        "transcript.txt.enc", "transcript_segments.json.enc",
+        "diarized.txt.enc", "diarized_segments.json.enc",
+        "waveform_peaks.json.enc",
+    ]
+    for fn in stale_files:
+        fp = pdir / fn
+        if fp.exists():
+            try:
+                fp.unlink()
+            except Exception:
+                pass
+    # Reset metadata flags
+    meta = read_project_meta(project_id)
+    for key in ("has_transcript", "has_diarized", "transcript_lang",
+                "transcript_engine", "transcript_model",
+                "diarization_engine", "diarization_model", "num_speakers"):
+        meta.pop(key, None)
+    write_project_meta(project_id, meta)
+
+
 def save_upload(project_id: str, upload: UploadFile) -> Path:
     pdir = project_path(project_id)
     fname = safe_filename(upload.filename or "audio")
@@ -1788,6 +1816,8 @@ def save_upload(project_id: str, upload: UploadFile) -> Path:
     else:
         with dst.open("wb") as f:
             shutil.copyfileobj(upload.file, f)
+    # Clear old results before updating metadata
+    _clear_stale_results(project_id)
     meta = read_project_meta(project_id)
     meta["audio_file"] = fname
     meta["updated_at"] = now_iso()
@@ -3151,8 +3181,7 @@ async def api_translation_translate(
     ]
 
     env = {
-        # Prefer offline behaviour: if model is not cached, worker will fail fast.
-        "TRANSFORMERS_OFFLINE": os.environ.get("TRANSFORMERS_OFFLINE", "1"),
+        # Worker checks model cache and enables online download if needed.
         "HF_HUB_DISABLE_TELEMETRY": os.environ.get("HF_HUB_DISABLE_TELEMETRY", "1"),
         # Ensure local imports (backend.*) work in subprocess even without PYTHONPATH set.
         "PYTHONPATH": os.environ.get("PYTHONPATH", str(ROOT)),
@@ -3266,6 +3295,31 @@ async def api_translation_export(
 
     raw = (text or "").strip()
 
+    def _preserve_newlines_for_md(txt: str) -> str:
+        """Convert single newlines to double for markdown paragraph breaks.
+
+        Preserves existing double newlines, list items, and headings.
+        This ensures translated text with line breaks renders as
+        separate paragraphs in HTML/DOCX instead of one big block.
+        """
+        import re as _re
+        lines = txt.split("\n")
+        out = []
+        for i, line in enumerate(lines):
+            out.append(line)
+            # Add extra newline after non-empty lines that are followed by
+            # another non-empty line (unless already a blank line separator)
+            if (line.strip()
+                    and i + 1 < len(lines)
+                    and lines[i + 1].strip()
+                    and not _re.match(r'^#{1,6}\s', line)          # not a heading
+                    and not _re.match(r'^#{1,6}\s', lines[i + 1])  # next is not heading
+                    and not _re.match(r'^[-*+]\s', lines[i + 1])   # next is not list item
+                    and not _re.match(r'^\d+\.\s', lines[i + 1])   # next is not numbered list
+                    ):
+                out.append("")  # extra blank line = paragraph break in markdown
+        return "\n".join(out)
+
     # ---- TXT: plain text with typographic cleanup ----
     if fmt == "txt":
         try:
@@ -3283,7 +3337,7 @@ async def api_translation_export(
     if fmt == "html":
         from backend.report_generator import _md_to_html
 
-        body_html = _typographic_cleanup_html(_md_to_html(raw))
+        body_html = _typographic_cleanup_html(_md_to_html(_preserve_newlines_for_md(raw)))
         out_html = f"""<!doctype html>
 <html lang="pl">
 <head>
@@ -3342,7 +3396,7 @@ async def api_translation_export(
     if fmt == "docx":
         from backend.report_generator import save_docx_from_markdown
 
-        cleaned = _typographic_cleanup(raw)
+        cleaned = _typographic_cleanup(_preserve_newlines_for_md(raw))
         with _tmpmod.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
             tmp_path = _Path(tmp.name)
         try:
@@ -6748,7 +6802,10 @@ def _gather_report_notes(meta: Dict[str, Any], notes_key: str) -> Dict[str, Any]
     blocks: Dict[str, str] = {}
     if isinstance(blocks_raw, dict):
         for k, v in blocks_raw.items():
-            txt = str(v or "").strip()
+            if isinstance(v, dict):
+                txt = str(v.get("text", "") or "").strip()
+            else:
+                txt = str(v or "").strip()
             if txt:
                 blocks[str(k)] = txt
     if not global_note and not blocks:
@@ -6961,6 +7018,7 @@ def _probe_audio_basic(path: Path) -> tuple[str, str]:
     duration = ""
     specs = size_mb
 
+    # Try WAV first (stdlib)
     try:
         with wave.open(str(path), "rb") as wf:
             fr = wf.getframerate()
@@ -6972,6 +7030,42 @@ def _probe_audio_basic(path: Path) -> tuple[str, str]:
             specs = (specs2 + ((" • " + size_mb) if size_mb else "")).strip(" •")
     except Exception:
         pass
+
+    # Fallback: try mutagen for MP3/OGG/FLAC/etc.
+    if not duration:
+        try:
+            import mutagen  # type: ignore[import-untyped]
+            af = mutagen.File(str(path))
+            if af and af.info and af.info.length:
+                dur_s = af.info.length
+                m, s = divmod(int(dur_s), 60)
+                h, m = divmod(m, 60)
+                if h:
+                    duration = f"{h}:{m:02d}:{s:02d}"
+                else:
+                    duration = f"{m}:{s:02d}"
+        except Exception:
+            pass
+
+    # Fallback: ffprobe
+    if not duration:
+        try:
+            import subprocess
+            r = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+                capture_output=True, text=True, timeout=10)
+            if r.returncode == 0 and r.stdout.strip():
+                dur_s = float(r.stdout.strip())
+                m, s = divmod(int(dur_s), 60)
+                h, m = divmod(m, 60)
+                if h:
+                    duration = f"{h}:{m:02d}:{s:02d}"
+                else:
+                    duration = f"{m}:{s:02d}"
+        except Exception:
+            pass
+
     return duration, specs
 
 
