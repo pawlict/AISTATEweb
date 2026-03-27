@@ -194,22 +194,7 @@
     display: none;
   }
 
-  /* Notes panel (right column - sticky) */
-  .notes-panel {
-    background: var(--panel2, #f8f9fa);
-    border: 1px solid var(--border, #e0e0e0);
-    border-radius: 12px;
-    padding: 16px;
-    position: sticky;
-    top: 20px;
-    max-height: calc(100vh - 140px);
-    overflow-y: auto;
-  }
-
-  .notes-section {
-    margin-bottom: 12px;
-  }
-
+  /* Block notes list (used in analyst panel) */
   .block-notes-list {
     max-height: 320px;
     overflow-y: auto;
@@ -320,18 +305,7 @@
     border-color: rgba(20,20,20,0.92) transparent transparent transparent;
   }
 
-  /* Responsywność notatek */
-  @media (max-width: 1200px) {
-    div[style*="grid-template-columns:1fr 380px"] {
-      grid-template-columns: 1fr !important;
-    }
-    .notes-panel {
-      position: relative;
-      top: 0;
-      max-height: none;
-      margin-top: 16px;
-    }
-  }
+  /* Responsywność - handled by analyst-panel CSS in app.css */
 </style>
 
 <div class="analysis-page transcription-page">
@@ -527,6 +501,24 @@ const TR = {
     blocks: {} // {idx: "note text"}
   }
 };
+
+// ========== Analyst Panel Toggle ==========
+(function() {
+  const panel = document.getElementById("tr_analyst_panel");
+  const toggleBtn = document.getElementById("tr_panel_toggle");
+  const collapseBtn = document.getElementById("tr_panel_collapse");
+  if (!panel) return;
+  const lsKey = "aistate_analyst_panel_tr";
+  if (localStorage.getItem(lsKey) === "open") panel.classList.remove("collapsed");
+  toggleBtn?.addEventListener("click", () => {
+    panel.classList.remove("collapsed");
+    localStorage.setItem(lsKey, "open");
+  });
+  collapseBtn?.addEventListener("click", () => {
+    panel.classList.add("collapsed");
+    localStorage.setItem(lsKey, "collapsed");
+  });
+})();
 
 // ========== ASR presets (UI-only; installed models are filtered via /api/asr/models_state) ==========
 const TR_ASR_PRESETS = {

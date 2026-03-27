@@ -743,6 +743,24 @@ const DI = {
   }
 };
 
+// ========== Analyst Panel Toggle ==========
+(function() {
+  const panel = document.getElementById("di_analyst_panel");
+  const toggleBtn = document.getElementById("di_panel_toggle");
+  const collapseBtn = document.getElementById("di_panel_collapse");
+  if (!panel) return;
+  const lsKey = "aistate_analyst_panel_di";
+  if (localStorage.getItem(lsKey) === "open") panel.classList.remove("collapsed");
+  toggleBtn?.addEventListener("click", () => {
+    panel.classList.remove("collapsed");
+    localStorage.setItem(lsKey, "open");
+  });
+  collapseBtn?.addEventListener("click", () => {
+    panel.classList.add("collapsed");
+    localStorage.setItem(lsKey, "collapsed");
+  });
+})();
+
 // ========== Auto-save ==========
 let autoSaveTimeout = null;
 let hasUnsavedChanges = false;
