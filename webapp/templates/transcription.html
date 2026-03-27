@@ -920,9 +920,26 @@ document.addEventListener("contextmenu", (ev)=>{
   }catch(e){}
 }, true);
 
-// ========== Notes management (EXACT COPY from diarization) ==========
+// ========== Tag definitions ==========
+const NOTE_TAGS = {
+  neutral:    { label: "Neutralny",  color: "#60a5fa", bg: "rgba(96,165,250,.12)" },
+  legitimate: { label: "Poprawny",   color: "#15803d", bg: "rgba(21,128,61,.10)" },
+  suspicious: { label: "Podejrzany", color: "#dc2626", bg: "rgba(220,38,38,.10)" },
+  monitoring: { label: "Obserwacja", color: "#ea580c", bg: "rgba(234,88,12,.10)" },
+};
+
+// ========== Notes management ==========
+function _getNoteObj(idx) {
+  const v = TR.notes.blocks[idx];
+  if (!v) return null;
+  if (typeof v === "string") return v.trim() ? { text: v, tags: [] } : null;
+  return (v.text && v.text.trim()) ? v : null;
+}
+function _getNoteText(idx) { const o = _getNoteObj(idx); return o ? o.text : ""; }
+function _getNoteTags(idx) { const o = _getNoteObj(idx); return o ? (o.tags || []) : []; }
+
 function trHasBlockNote(idx){
-  return !!(TR.notes.blocks[idx] && TR.notes.blocks[idx].trim());
+  return !!_getNoteObj(idx);
 }
 
 function trBindNoteIconEvents(icon, idx){
@@ -934,7 +951,7 @@ function trBindNoteIconEvents(icon, idx){
   
   icon.addEventListener("mouseenter", (ev)=>{
     if(trHasBlockNote(idx)){
-      trShowNoteTooltip(ev, TR.notes.blocks[idx]);
+      trShowNoteTooltip(ev, _getNoteText(idx));
     }
   });
   
@@ -960,40 +977,39 @@ function trHideNoteTooltip(){
   if(tooltip) tooltip.style.display = "none";
 }
 
+function _updateNoteIcon(idx) {
+  const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
+  if (!segEl) return;
+  const icon = segEl.querySelector(".seg-note-icon");
+  if (!icon) return;
+  const has = trHasBlockNote(idx);
+  icon.classList.toggle("has-note", has);
+  const img = icon.querySelector("img");
+  if (img) img.src = has ? "/static/icons/dokumenty/notes_filled.svg" : "/static/icons/dokumenty/notes.svg";
+}
+
 function trOpenBlockNoteEditor(idx){
-  const currentNote = TR.notes.blocks[idx] || "";
-  _openNoteModal(idx, currentNote, function(newText) {
+  const currentText = _getNoteText(idx);
+  const currentTags = _getNoteTags(idx);
+  _openNoteModal(idx, currentText, currentTags, function(newText, newTags) {
     if(newText && newText.trim()){
-      TR.notes.blocks[idx] = newText.trim();
+      TR.notes.blocks[idx] = { text: newText.trim(), tags: newTags || [] };
     } else {
       delete TR.notes.blocks[idx];
     }
-    // Update icon
-    const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
-    if(segEl){
-      const icon = segEl.querySelector(".seg-note-icon");
-      if(icon){
-        if(trHasBlockNote(idx)) icon.classList.add("has-note");
-        else icon.classList.remove("has-note");
-      }
-    }
+    _updateNoteIcon(idx);
     trRenderBlockNotesList();
     scheduleAutoSave();
   }, function() {
-    // delete
     delete TR.notes.blocks[idx];
-    const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
-    if(segEl){
-      const icon = segEl.querySelector(".seg-note-icon");
-      if(icon) icon.classList.remove("has-note");
-    }
+    _updateNoteIcon(idx);
     trRenderBlockNotesList();
     scheduleAutoSave();
   });
 }
 
-/** Styled note editor modal (replaces browser prompt) */
-function _openNoteModal(idx, currentText, onSave, onDelete) {
+/** Styled note editor modal with tags */
+function _openNoteModal(idx, currentText, currentTags, onSave, onDelete) {
   var existing = document.querySelector('.note-editor-overlay');
   if (existing) existing.remove();
 
@@ -1002,6 +1018,16 @@ function _openNoteModal(idx, currentText, onSave, onDelete) {
 
   var hasExisting = !!(currentText && currentText.trim());
   var title = hasExisting ? 'Edytuj notatkę — Blok #' + idx : 'Nowa notatka — Blok #' + idx;
+  var activeTags = currentTags || [];
+
+  var tagBtnsHtml = '';
+  for (var key in NOTE_TAGS) {
+    var t = NOTE_TAGS[key];
+    var isActive = activeTags.indexOf(key) >= 0 ? ' active' : '';
+    tagBtnsHtml += '<button type="button" class="analyst-tag-btn' + isActive + '" data-tag="' + key + '">' +
+      '<span class="analyst-tag-dot" style="background:' + t.color + '"></span> ' +
+      '<span class="analyst-tag-label">' + t.label + '</span></button>';
+  }
 
   overlay.innerHTML =
     '<div class="note-editor-modal">' +
@@ -1013,6 +1039,8 @@ function _openNoteModal(idx, currentText, onSave, onDelete) {
         '<textarea id="_note_editor_ta" placeholder="Wpisz notatkę do bloku…">' +
           (currentText || '').replace(/</g, '&lt;') +
         '</textarea>' +
+        '<div style="margin-top:8px"><div class="label" style="font-size:12px;margin-bottom:4px">Tagi</div>' +
+        '<div class="analyst-note-tags" id="_note_editor_tags">' + tagBtnsHtml + '</div></div>' +
         '<div class="note-editor-hint">Ctrl+Enter = zapisz</div>' +
       '</div>' +
       '<div class="note-editor-footer">' +
@@ -1024,6 +1052,11 @@ function _openNoteModal(idx, currentText, onSave, onDelete) {
 
   document.body.appendChild(overlay);
 
+  // Tag toggle
+  overlay.querySelectorAll('.analyst-tag-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { btn.classList.toggle('active'); });
+  });
+
   var ta = document.getElementById('_note_editor_ta');
   if (ta) {
     ta.focus();
@@ -1031,10 +1064,16 @@ function _openNoteModal(idx, currentText, onSave, onDelete) {
   }
 
   function close() { overlay.remove(); }
+  function collectTags() {
+    var tags = [];
+    overlay.querySelectorAll('.analyst-tag-btn.active').forEach(function(b) { tags.push(b.getAttribute('data-tag')); });
+    return tags;
+  }
   function save() {
     var text = ta ? ta.value : '';
+    var tags = collectTags();
     close();
-    if (onSave) onSave(text);
+    if (onSave) onSave(text, tags);
   }
 
   overlay.addEventListener('click', function(e) {
@@ -1062,27 +1101,39 @@ function _openNoteModal(idx, currentText, onSave, onDelete) {
 function trRenderBlockNotesList(){
   const list = document.getElementById("tr_block_notes_list");
   if(!list) return;
-  
-  const notes = Object.entries(TR.notes.blocks).filter(([k,v])=>v && v.trim());
-  
+  const countEl = document.getElementById("tr_notes_count");
+
+  const notes = Object.entries(TR.notes.blocks).filter(([k,v])=>_getNoteObj(parseInt(k)));
+
+  if(countEl) countEl.textContent = notes.length;
+
   if(notes.length === 0){
-    list.innerHTML = `<div class="small" style="opacity:0.6;text-align:center;padding:20px">
+    list.innerHTML = `<div class="analyst-panel-empty">
       Brak notatek do bloków.<br>
       Kliknij <img src="/static/icons/dokumenty/notes.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
     </div>`;
     return;
   }
-  
-  list.innerHTML = notes.map(([idx, note])=>{
-    const preview = note.length > 60 ? note.substring(0,60) + "..." : note;
+
+  list.innerHTML = notes.map(([idx, v])=>{
+    const text = typeof v === "string" ? v : (v.text || "");
+    const tags = typeof v === "object" ? (v.tags || []) : [];
+    const preview = text.length > 60 ? text.substring(0,60) + "..." : text;
+    const tagBadges = tags.map(t => {
+      const td = NOTE_TAGS[t];
+      return td ? `<span class="analyst-tag-badge" style="background:${td.bg};color:${td.color};font-size:10px;padding:1px 6px;border-radius:8px">${td.label}</span>` : "";
+    }).join(" ");
     return `
-      <div class="block-note-item" data-idx="${idx}">
-        <strong>Blok #${idx}</strong>
-        <div class="block-note-preview">${preview}</div>
-        <div class="block-note-actions">
-          <button onclick="trScrollToBlock(${idx})">↓ Przejdź</button>
-          <button onclick="trOpenBlockNoteEditor(${idx})">${aiIcon('edit',14)} Edytuj</button>
-          <button onclick="trDeleteBlockNote(${idx})">${aiIcon('delete',14)} Usuń</button>
+      <div class="analyst-note-item" data-idx="${idx}" style="cursor:pointer" onclick="trOpenBlockNoteEditor(${idx})">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+          <img src="/static/icons/dokumenty/notes_filled.svg" width="14" height="14" alt="">
+          <strong style="font-size:12px">Blok #${idx}</strong>
+          ${tagBadges}
+        </div>
+        <div style="font-size:11px;color:var(--text-muted,#64748b);margin-bottom:4px">${preview}</div>
+        <div style="display:flex;gap:6px;font-size:11px">
+          <a href="#" onclick="event.stopPropagation();trScrollToBlock(${idx});return false" style="color:#2563eb">Przejdź</a>
+          <a href="#" onclick="event.stopPropagation();trDeleteBlockNote(${idx});return false" style="color:#dc2626">Usuń</a>
         </div>
       </div>
     `;
@@ -1100,13 +1151,7 @@ function trScrollToBlock(idx){
 
 function trDeleteBlockNote(idx){
   delete TR.notes.blocks[idx];
-
-  const segEl = document.querySelector(`#tr_blocks .seg[data-idx="${idx}"]`);
-  if(segEl){
-    const icon = segEl.querySelector(".seg-note-icon");
-    if(icon) icon.classList.remove("has-note");
-  }
-
+  _updateNoteIcon(idx);
   trRenderBlockNotesList();
   scheduleAutoSave();
   if(typeof showToast === 'function') showToast('Notatka usunięta');
@@ -1232,8 +1277,9 @@ function trRender(){
     // Note icon
     const noteIcon = document.createElement("span");
     noteIcon.className = "seg-note-icon" + (trHasBlockNote(idx) ? " has-note" : "");
-    noteIcon.innerHTML = '<img src="/static/icons/dokumenty/notes.svg" width="19" height="19" alt="Notatka">';
-    noteIcon.title = trHasBlockNote(idx) ? "Ma notatkę - kliknij aby edytować" : "Dodaj notatkę";
+    const _hasN = trHasBlockNote(idx);
+    noteIcon.innerHTML = `<img src="/static/icons/dokumenty/${_hasN ? "notes_filled" : "notes"}.svg" width="19" height="19" alt="Notatka">`;
+    noteIcon.title = _hasN ? "Ma notatkę - kliknij aby edytować" : "Dodaj notatkę";
     trBindNoteIconEvents(noteIcon, idx);
     
     const timeDiv = document.createElement("div");

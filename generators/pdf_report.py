@@ -348,8 +348,7 @@ def generate_pdf_report(data: Dict[str, Any], logs: bool = False, output_path: s
         canvas.setFont(base_sans, 8)
         canvas.setFillColor(colors.grey)
         footer_left = f"{L['generated']}: {app_name} {app_version}".strip()
-        footer_left += f" | {L['author']}: {author}"
-        footer_left += f" | {L['license']}: {license_name} | AS IS"
+        footer_left += f" | {L['license']}: {license_name}"
         canvas.drawString(doc.leftMargin, 10 * mm, footer_left)
         canvas.drawRightString(page_w - doc.rightMargin, 10 * mm, f"{_doc.page}")
         canvas.restoreState()
@@ -369,16 +368,15 @@ def generate_pdf_report(data: Dict[str, Any], logs: bool = False, output_path: s
 
     models_line = f"Whisper: {whisper_model} | {L['language']}: {language} | pyannote: {pyannote_model}"
 
+    _spk_display = html_escape(speakers_count) if speakers_count else "brak"
+    _talk_display = html_escape(speaker_times_str) if speaker_times_str else (html_escape(audio_duration) if audio_duration else "—")
     meta_rows = [
         [Paragraph(f"<b>{html_escape(meta_title)}</b>", body_style)],
-        [Paragraph(f"{html_escape(L['author'])}: {html_escape(author)}", body_style)],
-        [Paragraph(f"{html_escape(L['processed'])}: {html_escape(processed)}", body_style)],
         [Paragraph(f"{html_escape(L['file'])}: {html_escape(file_line)}", body_style)],
         [Paragraph(f"{html_escape(L['models'])}: {html_escape(models_line)}", body_style)],
-        [Paragraph(f"{html_escape(L['speakers'])}: {html_escape(speakers_count)}", body_style)],
-        [Paragraph(f"{html_escape(L['segments'])}: {html_escape(segments_count)} &nbsp;&nbsp;|&nbsp;&nbsp; {html_escape(L['talk'])}: {html_escape(speaker_times_str)}", body_style)],
-        [Paragraph(f"{html_escape(L['export'])}: {html_escape(export_str)}", body_style)],
-        [Paragraph(f"{html_escape(L['license'])}: {html_escape(license_name)} &nbsp;&nbsp;|&nbsp;&nbsp; AS IS", body_style)],
+        [Paragraph(f"{html_escape(L['speakers'])}: {_spk_display}", body_style)],
+        [Paragraph(f"{html_escape(L['segments'])}: {html_escape(segments_count)} &nbsp;&nbsp;|&nbsp;&nbsp; {html_escape(L['talk'])}: {_talk_display}", body_style)],
+        [Paragraph(f"{html_escape(L['license'])}: {html_escape(license_name)}", body_style)],
     ]
     meta_tbl = Table(meta_rows, colWidths=[content_w])
     meta_tbl.setStyle(

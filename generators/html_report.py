@@ -219,12 +219,6 @@ def generate_html_report(data: Dict[str, Any], logs: bool = False, output_path: 
             + "</div>"
         )
 
-    fmt_html = ""
-    if out_formats:
-        fmt_html = "<div class='extras'><b>" + _esc(L["export"]) + ":</b> " + "/".join(
-            [str(x).upper() for x in out_formats]
-        ) + "</div>"
-
     logs_html = ""
     if logs and data.get("logs"):
         logs_html = (
@@ -370,13 +364,10 @@ def generate_html_report(data: Dict[str, Any], logs: bool = False, output_path: 
 
   <div class="meta-card">
     <div class="meta-title">{_esc(title)}</div>
-    <div class="meta-line"><span class="k">{_esc(L["author"])}:</span> {_esc(author)}</div>
-    <div class="meta-line"><span class="k">{_esc(L["processed"])}:</span> {_esc(dt)}</div>
     <div class="meta-line"><span class="k">{_esc(L["file"])}:</span> {_esc(file_line)}</div>
     <div class="meta-line"><span class="k">{_esc(L["models"])}:</span> {_esc(f"Whisper: {whisper_model} | {lang_label}: {language} | pyannote: {pyannote_model}")}</div>
-    <div class="meta-line"><span class="k">{_esc(L["speakers"])}:</span> {_esc(speakers_count)}</div>
-    <div class="meta-line"><span class="k">{_esc(L["segments"])}:</span> {_esc(segments_count)} | <span class="k">{_esc(L["talk"])}:</span> {_esc(talk_line)}</div>
-    <div class="meta-line"><span class="k">{_esc(L["export"])}:</span> {"/".join([_esc(str(x).upper()) for x in out_formats])}</div>
+    <div class="meta-line"><span class="k">{_esc(L["speakers"])}:</span> {_esc(speakers_count) if speakers_count else 'brak'}</div>
+    <div class="meta-line"><span class="k">{_esc(L["segments"])}:</span> {_esc(segments_count)} | <span class="k">{_esc(L["talk"])}:</span> {_esc(talk_line) if talk_line else _esc(audio_duration) if audio_duration else '—'}</div>
   </div>
 
   <div class="section-title">{_esc(section_title)}</div>
@@ -384,11 +375,10 @@ def generate_html_report(data: Dict[str, Any], logs: bool = False, output_path: 
   <div class="segments">
     {''.join(seg_html) if seg_html else '<div class="seg">(brak)</div>'}
     {nv_html}
-    {fmt_html}
     {logs_html}
   </div>
 
-  <div class="footer">{_esc(L['generated'])}: {_esc(program_name)} {_esc(version)} • {_esc(L['author'])}: {_esc(author)} • {_esc(L['license'])}: {_esc(lic)} • AS IS</div>
+  <div class="footer">{_esc(L['generated'])}: {_esc(program_name)} {_esc(version)} • {_esc(L['license'])}: {_esc(lic)}</div>
 
 </body>
 </html>

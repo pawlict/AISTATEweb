@@ -75,14 +75,13 @@ def generate_txt_report(data: Dict[str, Any], logs: bool = False, output_path: s
     speaker_times = data.get("speaker_times") or {}
     speaker_times_str = ", ".join([f"{k}={v}" for k, v in speaker_times.items()]) if speaker_times else ""
 
+    speakers_str = str(data.get('speakers_count', '')) or 'brak'
+    talk_str = speaker_times_str or (data.get('audio_duration', '') or '—')
     header = [
         program_line,
-        f"{L['author']}: {author_line}".strip(),
-        f"{L['processed']}: {data.get('datetime','')}".strip(),
         f"{L['file']}: {data.get('audio_file','')} ({data.get('audio_duration','')}, {data.get('audio_specs','')})".strip(),
         f"{L['whisper']}: {data.get('whisper_model','')} | {L['lang']}: {data.get('language','')} | {L['pyannote']}: {data.get('pyannote_model','')}".strip(),
-        f"{L['speakers']}: {data.get('speakers_count','')} | {L['segments']}: {data.get('segments_count','')} | {L['talk']}: {speaker_times_str}".strip(),
-        f"{L['export']}: {'/'.join([str(x).upper() for x in (data.get('export_formats') or data.get('formats') or ['TXT','PDF','HTML'])])}".strip(),
+        f"{L['speakers']}: {speakers_str} | {L['segments']}: {data.get('segments_count','')} | {L['talk']}: {talk_str}".strip(),
         "",
         section_title,
     ]
@@ -124,7 +123,7 @@ def generate_txt_report(data: Dict[str, Any], logs: bool = False, output_path: s
 
     # Attribution/footer (explicitly requested)
     lic = (data.get("license_name") or DEFAULT_LICENSE_NAME).strip()
-    out += "\n" + f"{L['generated']}: {program_line} • {L['author']}: {author_line} • {L['license']}: {lic} • AS IS" + "\n"
+    out += "\n" + f"{L['generated']}: {program_line} • {L['license']}: {lic}" + "\n"
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(out)
