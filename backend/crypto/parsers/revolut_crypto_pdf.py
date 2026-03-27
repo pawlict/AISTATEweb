@@ -675,8 +675,17 @@ def parse_revolut_crypto_pdf(path: Path) -> ParsedCryptoData:
         },
     )
 
+    # Build token name lookup from portfolio positions
+    _token_names: Dict[str, str] = {}
+    for pos in positions:
+        if pos.symbol and pos.token_name:
+            _token_names[pos.symbol.upper()] = pos.token_name
+
     crypto_txs: List[CryptoTransaction] = []
     for row in transactions:
+        # Populate token_name from portfolio if not set on the row
+        if not row.token_name and row.symbol:
+            row.token_name = _token_names.get(row.symbol.upper(), "")
         rodzaj_key = row.rodzaj.lower().strip()
         tx_type = _RODZAJ_TO_TX_TYPE.get(rodzaj_key, "unknown")
 
@@ -691,6 +700,7 @@ def parse_revolut_crypto_pdf(path: Path) -> ParsedCryptoData:
             counterparty="Revolut Digital Assets Europe Ltd",
             raw={
                 "symbol": row.symbol,
+                "token_name": row.token_name,
                 "rodzaj": row.rodzaj,
                 "ilosc": str(row.ilosc),
                 "cena": str(row.cena) if row.cena is not None else None,

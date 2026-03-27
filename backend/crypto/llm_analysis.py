@@ -28,12 +28,14 @@ def build_crypto_prompt(
     user_prompt: str = "",
     source_type: str = "blockchain",
     metadata: Optional[Dict[str, Any]] = None,
+    token_classification: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> str:
     """Build a structured prompt for LLM analysis of crypto transactions."""
     if source_type == "exchange":
         return _build_exchange_prompt(
             txs, alerts, risk_score, risk_reasons, source, user_prompt,
             metadata=metadata,
+            token_classification=token_classification,
         )
     return _build_blockchain_prompt(
         txs, wallets, alerts, risk_score, risk_reasons, source, chain, user_prompt,
@@ -50,6 +52,7 @@ def _build_exchange_prompt(
     source: str,
     user_prompt: str,
     metadata: Optional[Dict[str, Any]] = None,
+    token_classification: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> str:
     lines: List[str] = []
 
@@ -110,6 +113,58 @@ def _build_exchange_prompt(
         net = s["in"] - s["out"]
         lines.append(f"| {tok} | {s['in']:.4f} | {s['out']:.4f} | {net:+.4f} | {s['count']} |")
     lines.append("")
+
+    # Token classification (known vs unknown from database)
+    tc = token_classification or {}
+    if tc:
+        # Compute per-token fiat volume and tx count
+        per_token_fiat: Dict[str, float] = defaultdict(float)
+        per_token_count: Dict[str, int] = defaultdict(int)
+        for tx in txs:
+            sym = (tx.token or "").upper()
+            if not sym:
+                continue
+            per_token_count[sym] += 1
+            fv_str = tx.raw.get("fiat_value") or tx.raw.get("wartosc")
+            if fv_str:
+                try:
+                    per_token_fiat[sym] += abs(float(fv_str))
+                except (ValueError, TypeError):
+                    pass
+
+        unknown = {sym: info for sym, info in tc.items() if not info.get("known")}
+        known_flagged = {sym: info for sym, info in tc.items()
+                         if info.get("known") and info.get("alert_level") in ("HIGH", "MEDIUM")}
+
+        if unknown:
+            lines.append("## Nowe / nieznane tokeny (spoza bazy TOP 200)")
+            lines.append("| Token | Nazwa | Liczba tx | Wolumen (szt.) | Wartość fiat |")
+            lines.append("|---|---|---|---|---|")
+            for sym, info in sorted(unknown.items()):
+                cnt = per_token_count.get(sym, 0)
+                vol = token_stats.get(sym, {}).get("in", 0) + token_stats.get(sym, {}).get("out", 0)
+                fiat = per_token_fiat.get(sym, 0)
+                fiat_str = f"{fiat:,.2f} PLN" if fiat else "—"
+                lines.append(f"| {sym} | {info['name']} | {cnt} | {vol:.4f} | {fiat_str} |")
+            lines.append("")
+
+        lines.append("## Klasyfikacja tokenów z bazy")
+        lines.append("| Token | Nazwa | Rank | Kategoria | Alert | Liczba tx | Wartość fiat |")
+        lines.append("|---|---|---|---|---|---|---|")
+        for sym in sorted(tc.keys()):
+            info = tc[sym]
+            cnt = per_token_count.get(sym, 0)
+            fiat = per_token_fiat.get(sym, 0)
+            fiat_str = f"{fiat:,.2f} PLN" if fiat else "—"
+            rank = info.get("rank", 0)
+            rank_str = f"#{rank}" if rank and rank < 999 else "—"
+            status = "ZNANY" if info.get("known") else "NOWY"
+            lines.append(
+                f"| {sym} | {info['name']} | {rank_str} | "
+                f"{info.get('category', '—')} | {info.get('alert_level', '—')} | "
+                f"{cnt} | {fiat_str} |"
+            )
+        lines.append("")
 
     # Fiat summary
     fiat_in = sum(s["in"] for t, s in token_stats.items() if t in _FIAT)

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .parsers import parse_crypto_file, CryptoTransaction, WalletInfo, ParsedCryptoData
-from .risk_rules import classify_transactions, compute_overall_risk, detect_all_patterns
+from .risk_rules import classify_transactions, compute_overall_risk, detect_all_patterns, classify_tokens
 from .charts import generate_all_charts
 from .graph import build_crypto_graph
 from .llm_analysis import build_crypto_prompt
@@ -183,6 +183,9 @@ def run_crypto_pipeline(
     # 2. Classify transactions (risk rules — mode-aware)
     txs = classify_transactions(txs, source_type=source_type)
 
+    # 2b. Classify tokens (known vs unknown)
+    token_classification = classify_tokens(txs)
+
     # 3. Detect patterns (mode-aware)
     alerts = detect_all_patterns(txs, source_type=source_type)
 
@@ -220,6 +223,7 @@ def run_crypto_pipeline(
         chain=parsed.chain,
         source_type=source_type,
         metadata=parsed.metadata,
+        token_classification=token_classification,
     )
 
     # 9. Summary statistics
@@ -347,6 +351,7 @@ def run_crypto_pipeline(
         "graph": graph,
         "exchange_meta": exchange_meta,
         "fiat_summary": fiat_summary,
+        "token_classification": token_classification,
         "wallets": [
             {
                 "address": w.address,
