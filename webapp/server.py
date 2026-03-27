@@ -6778,7 +6778,10 @@ def _gather_report_notes(meta: Dict[str, Any], notes_key: str) -> Dict[str, Any]
     blocks: Dict[str, str] = {}
     if isinstance(blocks_raw, dict):
         for k, v in blocks_raw.items():
-            txt = str(v or "").strip()
+            if isinstance(v, dict):
+                txt = str(v.get("text", "") or "").strip()
+            else:
+                txt = str(v or "").strip()
             if txt:
                 blocks[str(k)] = txt
     if not global_note and not blocks:
@@ -6991,6 +6994,7 @@ def _probe_audio_basic(path: Path) -> tuple[str, str]:
     duration = ""
     specs = size_mb
 
+    # Try WAV first (stdlib)
     try:
         with wave.open(str(path), "rb") as wf:
             fr = wf.getframerate()
@@ -7002,6 +7006,42 @@ def _probe_audio_basic(path: Path) -> tuple[str, str]:
             specs = (specs2 + ((" • " + size_mb) if size_mb else "")).strip(" •")
     except Exception:
         pass
+
+    # Fallback: try mutagen for MP3/OGG/FLAC/etc.
+    if not duration:
+        try:
+            import mutagen  # type: ignore[import-untyped]
+            af = mutagen.File(str(path))
+            if af and af.info and af.info.length:
+                dur_s = af.info.length
+                m, s = divmod(int(dur_s), 60)
+                h, m = divmod(m, 60)
+                if h:
+                    duration = f"{h}:{m:02d}:{s:02d}"
+                else:
+                    duration = f"{m}:{s:02d}"
+        except Exception:
+            pass
+
+    # Fallback: ffprobe
+    if not duration:
+        try:
+            import subprocess
+            r = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+                capture_output=True, text=True, timeout=10)
+            if r.returncode == 0 and r.stdout.strip():
+                dur_s = float(r.stdout.strip())
+                m, s = divmod(int(dur_s), 60)
+                h, m = divmod(m, 60)
+                if h:
+                    duration = f"{h}:{m:02d}:{s:02d}"
+                else:
+                    duration = f"{m}:{s:02d}"
+        except Exception:
+            pass
+
     return duration, specs
 
 
