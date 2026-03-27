@@ -928,6 +928,11 @@ const NOTE_TAGS = {
   monitoring: { label: "Obserwacja", color: "#ea580c", bg: "rgba(234,88,12,.10)" },
 };
 
+const TAG_COLORS = {
+  neutral: "#64748b", legitimate: "#22c55e", suspicious: "#ef4444",
+  monitoring: "#eab308",
+};
+
 // ========== Notes management ==========
 function _getNoteObj(idx) {
   const v = TR.notes.blocks[idx];
@@ -986,6 +991,10 @@ function _updateNoteIcon(idx) {
   icon.classList.toggle("has-note", has);
   const img = icon.querySelector("img");
   if (img) img.src = has ? "/static/icons/dokumenty/notes_filled.svg" : "/static/icons/dokumenty/notes.svg";
+  // Tag border on segment
+  const tags = _getNoteTags(idx);
+  const tc = tags.length ? (TAG_COLORS[tags[0]] || "") : "";
+  segEl.style.borderLeft = tc ? `4px solid ${tc}` : "";
 }
 
 function trOpenBlockNoteEditor(idx){
@@ -1273,7 +1282,11 @@ function trRender(){
     const d = document.createElement("div");
     d.className = "seg";
     d.dataset.idx = String(idx);
-    
+    // Tag border
+    const _initTags = _getNoteTags(idx);
+    const _initTc = _initTags.length ? (TAG_COLORS[_initTags[0]] || "") : "";
+    if (_initTc) d.style.borderLeft = `4px solid ${_initTc}`;
+
     // Note icon
     const noteIcon = document.createElement("span");
     noteIcon.className = "seg-note-icon" + (trHasBlockNote(idx) ? " has-note" : "");
