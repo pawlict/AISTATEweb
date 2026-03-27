@@ -1446,16 +1446,21 @@
       </div>
 
       <!-- Charts — main with dropdown selector -->
+      <!-- Main chart card (switchable: Saldo/Wolumen/Aktywność/etc.) -->
       <div class="card" id="crypto_charts_card">
         <div class="analysis-sidehdr">
-          <div class="h2">Wykresy</div>
+          <div class="h2" style="display:inline-flex;align-items:center;gap:6px">Wykresy
+            <button class="btn btn-icon crypto-card-screenshot-btn" data-target="#crypto_charts_card" data-name="chart_main" title="Zrób zrzut wykresu">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="cam-crypto-main" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1096f4"/><stop offset="100%" stop-color="#8426a4"/></linearGradient></defs><path d="M4 8h3l2-3h6l2 3h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" stroke="url(#cam-crypto-main)" fill="none"/><circle cx="12" cy="14" r="4" stroke="url(#cam-crypto-main)" fill="none"/></svg>
+            </button>
+          </div>
           <div style="display:flex;gap:8px;align-items:center">
             <div id="crypto_chart_zoom_bar" class="crypto-chart-zoom-bar" style="display:none">
               <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_out" title="Oddal">&minus;</button>
               <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_reset" title="Resetuj zoom">1:1</button>
               <button type="button" class="crypto-chart-zoom-btn" id="crypto_chart_zoom_in" title="Przybliż">+</button>
             </div>
-            <select class="input" id="crypto_chart_select" style="padding:5px 8px;border-radius:10px;min-width:180px">
+            <select class="input crypto-screenshot-hide" id="crypto_chart_select" style="padding:5px 8px;border-radius:10px;min-width:180px">
               <option value="balance_timeline">Saldo w czasie</option>
               <option value="monthly_volume">Wolumen miesięczny</option>
               <option value="daily_tx_count">Aktywność dzienna</option>
@@ -1468,7 +1473,15 @@
             <canvas id="crypto_chart_main"></canvas>
           </div>
         </div>
-        <!-- Small charts row -->
+      </div>
+
+      <!-- Small charts card (3 static mini-charts) -->
+      <div class="card" id="crypto_small_charts_card">
+        <div class="h2" style="display:inline-flex;align-items:center;gap:6px">Podsumowanie wykresów
+          <button class="btn btn-icon crypto-card-screenshot-btn" data-target="#crypto_small_charts_card" data-name="chart_summary" title="Zrób zrzut podsumowania">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="cam-crypto-sm" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1096f4"/><stop offset="100%" stop-color="#8426a4"/></linearGradient></defs><path d="M4 8h3l2-3h6l2 3h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" stroke="url(#cam-crypto-sm)" fill="none"/><circle cx="12" cy="14" r="4" stroke="url(#cam-crypto-sm)" fill="none"/></svg>
+          </button>
+        </div>
         <div class="crypto-charts-small-grid" id="crypto_charts_small_grid">
           <div class="crypto-chart-small">
             <div class="small" style="font-weight:600;margin-bottom:6px">Typy transakcji</div>
@@ -1490,8 +1503,12 @@
 
       <!-- Transaction flow graph -->
       <div class="card" id="crypto_graph_card">
-        <div class="h2">Graf przepływu transakcji</div>
-        <div id="crypto_graph_container" style="width:100%;height:500px;border:1px solid var(--border, #334155);border-radius:8px;background:var(--bg-card, #1e293b)"></div>
+        <div class="h2" style="display:inline-flex;align-items:center;gap:6px">Graf przepływu transakcji
+          <button class="btn btn-icon crypto-card-screenshot-btn" data-target="#crypto_graph_card" data-name="graph" title="Zrób zrzut grafu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="cam-crypto-graph" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1096f4"/><stop offset="100%" stop-color="#8426a4"/></linearGradient></defs><path d="M4 8h3l2-3h6l2 3h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" stroke="url(#cam-crypto-graph)" fill="none"/><circle cx="12" cy="14" r="4" stroke="url(#cam-crypto-graph)" fill="none"/></svg>
+          </button>
+        </div>
+        <div id="crypto_graph_container" style="width:100%;height:500px;border:1px solid var(--border, #e2e8f0);border-radius:8px;background:#ffffff"></div>
       </div>
 
       <!-- Wallets table -->
